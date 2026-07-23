@@ -19,6 +19,8 @@ import { type Ref, type Resource, ResourceCell, windDownAll } from "./resources.
 import type { Contract, RestSpec, VectorSpec } from "./symbol.js";
 import type {
   BakeRuntimeOpts,
+  ContourResult,
+  CrossingResult,
   DecodedArgsWithRest,
   DecodedReturn,
   DefineSymbolDef,
@@ -217,7 +219,10 @@ type ImplWithThis<I extends VectorSpec, O extends VectorSpec, Rest extends RestS
 
 /** The injected `symbol.rosetta` — byte-identical to the module-singleton `rosetta()` factory
  *  (`./symbols/rosetta.js`) except the impl's `this` is {@link ImplThis}`<Config,Resources>`
- *  instead of the bare `CallCtx` every OTHER call site sees. */
+ *  instead of the bare `CallCtx` every OTHER call site sees. Return type is
+ *  `CrossingResult<I,O,Rest,ARosettaProcedure>` (`_bake.ts`), matching `rosetta()`'s own —
+ *  the compile-time `z.schemeValue`-in-rosetta ban (V ruling, mid-Phase-A) applies through
+ *  THIS injected factory too, not only the module-singleton one. */
 export interface RosettaTag<Config, Resources> {
   (
     tpl: TemplateStringsArray,
@@ -226,12 +231,13 @@ export interface RosettaTag<Config, Resources> {
     contract: Contract<I, O, Rest>,
     impl: ImplWithThis<I, O, Rest, "js", ImplThis<Config, Resources>>,
     opts?: BakeRuntimeOpts,
-  ) => ARosettaProcedure;
+  ) => CrossingResult<I, O, Rest, ARosettaProcedure>;
 }
 
 /** The injected `symbol.native` — same relationship to `native()` (`./symbols/native.js`) as
  *  {@link RosettaTag} bears to `rosetta()`; projects the SCHEME face (`"scheme"`), matching
- *  `native()`'s own `Impl<…, "scheme">`. */
+ *  `native()`'s own `Impl<…, "scheme">`. Return type is `ContourResult<I,O,Rest,ANativeProcedure>`
+ *  — the compile-time `z.dynamic`-in-native ban, same rationale as {@link RosettaTag}. */
 export interface NativeTag<Config, Resources> {
   (
     tpl: TemplateStringsArray,
@@ -240,7 +246,7 @@ export interface NativeTag<Config, Resources> {
     contract: Contract<I, O, Rest>,
     impl: ImplWithThis<I, O, Rest, "scheme", ImplThis<Config, Resources>>,
     opts?: { metadata?: MetadataRecord },
-  ) => ANativeProcedure;
+  ) => ContourResult<I, O, Rest, ANativeProcedure>;
 }
 
 /** The factory `EnvCapability.define`'s `symbols` callback is invoked with. `rosetta`/`native`

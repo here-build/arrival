@@ -10,7 +10,7 @@
  * typed `Pair | Nil` (the proper-list domain; the defensive improper-list
  * passthrough is robustness, not the declared domain), indices are the
  * `schemeNumber` tower, the searched object and copied/returned cells are
- * representation-blind (`z.value`), and the optional user comparator is the
+ * representation-blind (`z.schemeValue`), and the optional user comparator is the
  * types-only `z.custom` binary predicate.
  */
 //
@@ -455,16 +455,16 @@ export default EnvCapability.define("scheme/lists", {
       // `symbol.sequence`'s factory type has no Rest generic, so a hand-authored
       // z.tuple(fixed, rest) is the only available shape (srfi-1.ts's filter, the
       // one-time sibling example, has since narrowed to a plain fixed 2-tuple).
-      // The rest is z.value, NOT z.union([z.pair, z.nil]): a further "list" argument here
+      // The rest is z.schemeValue, NOT z.union([z.pair, z.nil]): a further "list" argument here
       // is any sequence answering arrival/tagless-final/map (Pair, Nil, OR Vector — see
       // the impl's single-list dispatch below), so a pair|nil union would wrongly exclude
-      // the vector case. Output is z.value: both dispatch paths (the tf("map") protocol
+      // the vector case. Output is z.schemeValue: both dispatch paths (the tf("map") protocol
       // member, and multiListMap) declare SchemeValue | Promise<SchemeValue>, never a
       // raw-primitive leak.
       // Harvest: faithful List|vector dual generics (inline type:), not R[]/unknown.
       {
-        input: z.tuple([z.lambda], z.value),
-        output: [z.value],
+        input: z.tuple([z.lambda], z.schemeValue),
+        output: [z.schemeValue],
         provenance: "fan",
         type: dedent`
           {
@@ -507,7 +507,7 @@ export default EnvCapability.define("scheme/lists", {
       // mirrors apply's own head/rest split, using the callable-schema convention
       // (z.custom<(...args) => T>()) established by vector-map/vector-for-each/curry. Each
       // rest element is genuinely a proper list (typecheck'd below), so inputRest is
-      // z.union([z.pair, z.nil]) — NOT map's agnostic z.value, since for-each is list-only.
+      // z.union([z.pair, z.nil]) — NOT map's agnostic z.schemeValue, since for-each is list-only.
       // Output is UNSPECIFIED (R7RS §6.4) — z.undefinedResult, matching string-for-each/
       // vector-for-each.
       {
@@ -539,9 +539,9 @@ export default EnvCapability.define("scheme/lists", {
     // R7RS 6.4 Pairs and lists
     cons: symbol.native`cons: a pair (car . cdr) — the fundamental list constructor`(
       // car/cdr are any scheme value — the whole point of cons is to hold arbitrary
-      // scheme values, so z.value (SchemeValue identity) is the honest domain.
+      // scheme values, so z.schemeValue (SchemeValue identity) is the honest domain.
       {
-        input: [z.value, z.value],
+        input: [z.schemeValue, z.schemeValue],
         output: [z.pair],
         // Harvest mirrors carriers.ts: list-prepend vs dotted pair.
         type: dedent`
@@ -565,8 +565,8 @@ export default EnvCapability.define("scheme/lists", {
     // head only.
     list: symbol.native`list: a proper list of its arguments`(
       {
-        input: z.array(z.value),
-        output: [z.value],
+        input: z.array(z.schemeValue),
+        output: [z.schemeValue],
         type: dedent`
           {
             <T>(...xs: T[]): List<T>;
@@ -592,7 +592,7 @@ export default EnvCapability.define("scheme/lists", {
     // still-filling speculative carrier.
     length: symbol.native`length: the number of elements in a proper list (or any .length carrier)`(
       {
-        input: [z.value],
+        input: [z.schemeValue],
         output: [z.schemeNumber],
         // carriers.ts length over List | vector | string.
         type: dedent`
@@ -613,8 +613,8 @@ export default EnvCapability.define("scheme/lists", {
       // The last tail element is the list to splice; everything before it is prepended verbatim.
       {
         input: [z.lambda],
-        inputRest: z.value,
-        output: [z.value],
+        inputRest: z.schemeValue,
+        output: [z.schemeValue],
         type: dedent`
           {
             <R>(proc: () => R, args: List<never>): R;
@@ -642,14 +642,14 @@ export default EnvCapability.define("scheme/lists", {
     ),
 
     "make-list": symbol.native`make-list: build a list of k copies of fill (default #f)`(
-      // fill is any scheme value (z.value) — matches cons's car/cdr reasoning. Output is
-      // z.union([z.pair, z.nil]), not the wider z.value: make-list is a CONSTRUCTOR that
+      // fill is any scheme value (z.schemeValue) — matches cons's car/cdr reasoning. Output is
+      // z.union([z.pair, z.nil]), not the wider z.schemeValue: make-list is a CONSTRUCTOR that
       // ALWAYS produces a well-formed proper list (nil when k=0, else a pair chain) —
       // unlike list-tail/list-copy (which can inherit an improper tail from their INPUT) or
       // list-ref (which extracts a single element), so pair|nil is the honest, runtime-
       // testable ceiling (see lists-contract-precision.test.ts).
       {
-        input: [z.schemeNumber, z.value.optional()],
+        input: [z.schemeNumber, z.schemeValue.optional()],
         output: [z.union([z.pair, z.nil])],
         type: dedent`
           {
@@ -673,13 +673,13 @@ export default EnvCapability.define("scheme/lists", {
     ),
 
     "list-tail": symbol.native`list-tail: the sublist obtained by dropping the first k elements`(
-      // Output is z.value, NOT narrowed to z.union([z.pair, z.nil]): the walked-to position
+      // Output is z.schemeValue, NOT narrowed to z.union([z.pair, z.nil]): the walked-to position
       // can be an IMPROPER list's dangling tail (e.g. (list-tail '(1 2 . 3) 2) => 3, a bare
-      // number), so z.value is the honest ceiling (matches list-ref/list-copy below).
+      // number), so z.schemeValue is the honest ceiling (matches list-ref/list-copy below).
       // Harvest models the proper-list case (List<T>); improper tails stay a runtime residue.
       {
         input: [z.listAlike, z.schemeNumber],
-        output: [z.value],
+        output: [z.schemeValue],
         type: dedent`
           {
             <T>(xs: List<T>, k: number): List<T>;
@@ -698,11 +698,11 @@ export default EnvCapability.define("scheme/lists", {
     ),
 
     "list-ref": symbol.native`list-ref: the element at index k`(
-      // Output is z.value: the element at an index is any scheme value (e.g.
+      // Output is z.schemeValue: the element at an index is any scheme value (e.g.
       // (list-ref '(1 2 3) 0) => 1, a bare number, not a list), not a pair|nil union.
       {
         input: [z.listAlike, z.schemeNumber],
-        output: [z.value],
+        output: [z.schemeValue],
         type: dedent`
           {
             <T>(xs: List<T>, k: number): T;
@@ -729,11 +729,11 @@ export default EnvCapability.define("scheme/lists", {
     "list-set!": symbol.notImplemented`list-set!: every value is frozen by design — mutating a list in place would falsify the provenance lineage its spine carries; build the updated list instead (e.g. (append (list-head lst k) (list obj) (list-tail lst (+ k 1))))`,
 
     "list-copy": symbol.native`list-copy: a fresh copy of the list spine (R7RS freshness)`(
-      // Output is z.value: like list-tail, list-copy explicitly tolerates an IMPROPER
+      // Output is z.schemeValue: like list-tail, list-copy explicitly tolerates an IMPROPER
       // list (the !(lst instanceof APair) branch below returns the dangling tail as-is).
       {
         input: [z.listAlike],
-        output: [z.value],
+        output: [z.schemeValue],
         type: dedent`
           {
             <T>(xs: List<T>): List<T>;
@@ -764,15 +764,15 @@ export default EnvCapability.define("scheme/lists", {
     //
     // memq/memv/assq/assv/member/assoc's output — all six — unions the match arm with
     // z.booleanFalse (memq narrows its match arm to z.pair, the matched sublist; the
-    // other five use z.value), never a bare match arm: each returns EITHER a matched
+    // other five use z.schemeValue), never a bare match arm: each returns EITHER a matched
     // sublist/entry OR a raw, unboxed JS `false` sentinel on no-match (the interpreter
     // boxes it downstream — the same pattern used pervasively across this codebase).
     // The match arm alone would silently exclude the real false-return path.
     memq: symbol.native`memq: first sublist whose car is eq? to obj, else #f`(
-      // obj stays z.value BY DESIGN: eq?'s raw === identity compare is the canonical
+      // obj stays z.schemeValue BY DESIGN: eq?'s raw === identity compare is the canonical
       // representation-blind case — not imprecision to fix.
       {
-        input: [z.value],
+        input: [z.schemeValue],
         inputRest: z.pair,
         output: [z.union([z.pair, z.booleanFalse])],
         type: dedent`
@@ -795,11 +795,11 @@ export default EnvCapability.define("scheme/lists", {
     ),
 
     memv: symbol.native`memv: first sublist whose car is eqv? to obj, else #f`(
-      // `eqv` compares Scheme values, so the search key is `z.value` — the same
+      // `eqv` compares Scheme values, so the search key is `z.schemeValue` — the same
       // schema memq declares, there read representation-blind for its `===` identity test.
       {
-        input: [z.value, z.listAlike],
-        output: [z.union([z.value, z.booleanFalse])],
+        input: [z.schemeValue, z.listAlike],
+        output: [z.union([z.schemeValue, z.booleanFalse])],
         type: dedent`
           {
             <T>(obj: T, list: List<T>): List<T> | false;
@@ -822,10 +822,10 @@ export default EnvCapability.define("scheme/lists", {
     ),
 
     assq: symbol.native`assq: first alist entry whose car is eq? to obj, else #f`(
-      // obj stays z.value BY DESIGN — same eq? reasoning as memq above.
+      // obj stays z.schemeValue BY DESIGN — same eq? reasoning as memq above.
       {
-        input: [z.value, z.listAlike],
-        output: [z.union([z.value, z.booleanFalse])],
+        input: [z.schemeValue, z.listAlike],
+        output: [z.union([z.schemeValue, z.booleanFalse])],
         type: dedent`
           {
             <K, V>(obj: K, alist: List<[K, V]>): [K, V] | false;
@@ -863,10 +863,10 @@ export default EnvCapability.define("scheme/lists", {
     ),
 
     assv: symbol.native`assv: first alist entry whose car is eqv? to obj, else #f`(
-      // `eqv` compares Scheme values → the search key is `z.value` (cf. assq's `===`).
+      // `eqv` compares Scheme values → the search key is `z.schemeValue` (cf. assq's `===`).
       {
-        input: [z.value, z.listAlike],
-        output: [z.union([z.value, z.booleanFalse])],
+        input: [z.schemeValue, z.listAlike],
+        output: [z.union([z.schemeValue, z.booleanFalse])],
         type: dedent`
           {
             <K, V>(obj: K, alist: List<[K, V]>): [K, V] | false;
@@ -888,15 +888,15 @@ export default EnvCapability.define("scheme/lists", {
       },
     ),
 
-    // member uses equal? (deep structural equality) — obj is z.value, matching memv/assv
+    // member uses equal? (deep structural equality) — obj is z.schemeValue, matching memv/assv
     // (unlike memq/assq's raw === identity). compare's declared return is `unknown`, not
     // `boolean`: a user-supplied Scheme predicate returns a boxed SchemeBool post-L1 (a
     // truthy JS object), so the body routes it through is_false rather than trusting it
     // as a raw JS boolean.
     member: symbol.native`member: first sublist whose car is equal? to obj (or per compare), else #f`(
       {
-        input: [z.value, z.listAlike, z.lambda.optional()],
-        output: [z.union([z.value, z.booleanFalse])],
+        input: [z.schemeValue, z.listAlike, z.lambda.optional()],
+        output: [z.union([z.schemeValue, z.booleanFalse])],
         // The optional z.custom compare collapses signatureOf to the catch-all; `type` restores
         // the real shape — same as the non-degraded memq/memv siblings (obj + `Cons<unknown> |
         // null` list → `unknown | false`), plus the optional binary comparator.
@@ -938,8 +938,8 @@ export default EnvCapability.define("scheme/lists", {
     // structural-equality member of the trio, not a LIPS extension.
     assoc: symbol.native`assoc: first alist entry whose car is equal? to obj (or per compare), else #f`(
       {
-        input: [z.value, z.listAlike, z.lambda.optional()],
-        output: [z.union([z.value, z.booleanFalse])],
+        input: [z.schemeValue, z.listAlike, z.lambda.optional()],
+        output: [z.union([z.schemeValue, z.booleanFalse])],
         // Same degrade + author-assertion as `member` above (the alist search twin).
         type: dedent`
           {
@@ -973,8 +973,8 @@ export default EnvCapability.define("scheme/lists", {
 
     append: symbol.native`append: a fresh list splicing all argument lists (R7RS, last arg may be improper)`(
       {
-        input: z.array(z.value),
-        output: [z.value],
+        input: z.array(z.schemeValue),
+        output: [z.schemeValue],
         // Proper-list zip is List<T>; improper last arg is the R7RS residue (second arm).
         type: dedent`
           {
@@ -990,7 +990,7 @@ export default EnvCapability.define("scheme/lists", {
         // sibling, is doored above; this inlines its splice logic over clones instead).
         const is_list = isProperList;
         // Spine adoption, applied HERE rather than by the bake-time slot adopter: append's contract
-        // is `z.array(z.value)` — a variadic of ANY value, because R7RS §6.4 lets the last argument
+        // is `z.array(z.schemeValue)` — a variadic of ANY value, because R7RS §6.4 lets the last argument
         // be a non-list (the improper-tail form). There is no per-slot schema to mark, so the
         // reading is chosen where the verb's own semantics state it.
         //
@@ -1030,7 +1030,7 @@ export default EnvCapability.define("scheme/lists", {
           // concatPair's `Cdr extends AListAlike` bound is narrower than its actual behavior:
           // its body embeds `b` as an opaque tail (`let result: AListAlike = b ?? nil`, then
           // conses onto it — APair.ts) without ever inspecting its shape. append's own contract
-          // (z.array(z.value)) genuinely allows a non-list LAST argument (R7RS §6.4's improper-
+          // (z.array(z.schemeValue)) genuinely allows a non-list LAST argument (R7RS §6.4's improper-
           // tail form), so `item` here can be a bare SchemeValue — the cast matches concatPair's
           // real runtime contract, not just its (over-narrow) declared one.
           return concatPair(acc, item as AListAlike);
@@ -1041,10 +1041,10 @@ export default EnvCapability.define("scheme/lists", {
     reverse: symbol.native`reverse: the list reversed`(
       // pair | nil ONLY — the impl below has no raw-array branch (unlike nth/array->list),
       // so z.union([z.nil, z.pair]) is the honest input domain, not a representation-blind
-      // z.value; a bare array throws (the impl's own final `else` branch).
+      // z.schemeValue; a bare array throws (the impl's own final `else` branch).
       {
         input: [z.listAlike],
-        output: [z.value],
+        output: [z.schemeValue],
         type: dedent`
           {
             <T>(xs: List<T>): List<T>;
@@ -1064,17 +1064,17 @@ export default EnvCapability.define("scheme/lists", {
     ),
 
     nth: symbol.native`nth: the element at index (LIPS-polymorphic over array/pair)`(
-      // index is z.schemeNumber (not z.value) — it's coerced via Number(index) below,
+      // index is z.schemeNumber (not z.schemeValue) — it's coerced via Number(index) below,
       // exactly the same domain list-tail/list-ref's own k argument already uses.
-      // obj (2nd arg) and the output STAY z.value: nth is genuinely LIPS-polymorphic over
+      // obj (2nd arg) and the output STAY z.schemeValue: nth is genuinely LIPS-polymorphic over
       // pair | raw JS array, and the array branch (`obj[idx]`, `Array.isArray(obj)`) can
       // return arbitrary host data (a borrowed array isn't a SchemeValue) — unlike
       // `reverse` above (pair|nil only; its raw-array branch is gone), nth keeps its
       // array branch, so a pair|nil narrowing would be dishonest here (it would
       // silently exclude that real array path).
       {
-        input: [z.schemeNumber, z.value],
-        output: [z.value],
+        input: [z.schemeNumber, z.schemeValue],
+        output: [z.schemeValue],
         type: dedent`
           {
             <T>(index: number, list: List<T>): T | null;

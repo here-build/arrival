@@ -50,7 +50,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-// The SCHEME-facing contract vocabulary (`sz.value`, the `symbol.native` input/output
+// The SCHEME-facing contract vocabulary (`sz.schemeValue`, the `symbol.native` input/output
 // vectors) is a DIFFERENT module than JS `zod` (config schemas use real `zod`) — aliased
 // so both are usable in the same file without shadowing, matching every other test that
 // declares both a capability's `configuration` (JS zod) and a native's contract (scheme-zod).
@@ -155,7 +155,7 @@ function fixtureCapability(name: string): EnvCapability<any, any> {
     },
     symbols: (symbol) => ({
       "fixture/verb": symbol.native`fixture/verb: reads via the fs`(
-        { input: [], output: [sz.value], requiresConfig: ["fs"] },
+        { input: [], output: [sz.schemeValue], requiresConfig: ["fs"] },
         () => nil,
       ),
     }),

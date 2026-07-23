@@ -22,7 +22,7 @@
 //
 // FOLLOW-UP (contract-layer gap this pack exercises hardest): scheme-zod has no
 // element-typed list schema, so `string-join`/`string-tokenize`/`string-split`
-// carry author-asserted `type:` strings (`List<string>`) over `z.value` contracts.
+// carry author-asserted `type:` strings (`List<string>`) over `z.schemeValue` contracts.
 // When scheme-zod grows a `z.list(z.string)` codec, the three author assertions
 // here retire — the honest images become derivable.
 //
@@ -262,7 +262,7 @@ export default EnvCapability.define("scheme/srfi-13", {
     "string-index":
       symbol.native`string-index: index of the first char matching a char or one-arg predicate, or #f (SRFI-13; no charsets)`(
         {
-          input: [z.string, z.value],
+          input: [z.string, z.schemeValue],
           output: [z.union([z.exact, z.boolean])],
           type: dedent`
           {
@@ -283,7 +283,7 @@ export default EnvCapability.define("scheme/srfi-13", {
     "string-count":
       symbol.native`string-count: how many chars match a char or one-arg predicate (SRFI-13; no charsets)`(
         {
-          input: [z.string, z.value],
+          input: [z.string, z.schemeValue],
           output: [z.exact],
           type: dedent`
           {
@@ -361,13 +361,13 @@ export default EnvCapability.define("scheme/srfi-13", {
     // string-trim-left is a non-index synonym of official left trim (compat).
     "string-trim":
       symbol.native`string-trim: the left end shed of whitespace, or of chars matching a char/one-arg predicate (SRFI-13; no charsets)`(
-        { input: [z.string, z.value.optional()], output: [z.string] },
+        { input: [z.string, z.schemeValue.optional()], output: [z.string] },
         trimImpl("string-trim", "left"),
       ),
 
     "string-trim-both":
       symbol.native`string-trim-both: both ends shed of whitespace, or of chars matching a char/one-arg predicate (SRFI-13; no charsets)`(
-        { input: [z.string, z.value.optional()], output: [z.string] },
+        { input: [z.string, z.schemeValue.optional()], output: [z.string] },
         trimImpl("string-trim-both", "both"),
       ),
 
@@ -375,7 +375,7 @@ export default EnvCapability.define("scheme/srfi-13", {
 
     "string-trim-right":
       symbol.native`string-trim-right: the right end shed of whitespace, or of chars matching a char/one-arg predicate (SRFI-13; no charsets)`(
-        { input: [z.string, z.value.optional()], output: [z.string] },
+        { input: [z.string, z.schemeValue.optional()], output: [z.string] },
         trimImpl("string-trim-right", "right"),
       ),
 
@@ -423,7 +423,7 @@ export default EnvCapability.define("scheme/srfi-13", {
         {
           input: [z.listAlike, z.string.optional()],
           output: [z.union([z.string, z.string])],
-          // scheme-zod has no element-typed list schema, so the list input is `z.value` (→ `unknown`)
+          // scheme-zod has no element-typed list schema, so the list input is `z.schemeValue` (→ `unknown`)
           // and the output union images to the redundant `string | string`. Author-assert what the
           // impl proves by eye: it `to_array`s the input and typechecks each element is a string, and
           // folds to one string. `List<string>` (carriers.ts vocabulary) is the honest, informative image.
@@ -443,9 +443,9 @@ export default EnvCapability.define("scheme/srfi-13", {
     "string-tokenize":
       symbol.native`string-tokenize: the list of maximal runs of token chars — default non-whitespace, or chars matching a char/one-arg predicate (SRFI-13; no charsets)`(
         {
-          input: [z.string, z.value.optional()],
-          output: [z.value],
-          // Output `z.value` images to `unknown`, but the impl `APair.fromArray`s the tokens — it
+          input: [z.string, z.schemeValue.optional()],
+          output: [z.schemeValue],
+          // Output `z.schemeValue` images to `unknown`, but the impl `APair.fromArray`s the tokens — it
           // returns a proper list of token strings. Author-assert `List<string>`. criterion stays
           // `unknown` (a char OR a one-arg predicate — a char's `string` image would misread as "a
           // whole string"; the docstring teaches the domain), matching the sibling trim/index ops.
@@ -493,8 +493,8 @@ export default EnvCapability.define("scheme/srfi-13", {
       symbol.native`string-split: the list of the string's pieces around a literal delimiter — a string, or a single character (Gauche/Guile/MIT accept a char delimiter too); empty string yields '() (SRFI-152)`(
         {
           input: [z.string, z.union([z.string, z.char])],
-          output: [z.value],
-          // Output `z.value` images to `unknown`, but the impl `APair.fromArray`s the pieces — a proper
+          output: [z.schemeValue],
+          // Output `z.schemeValue` images to `unknown`, but the impl `APair.fromArray`s the pieces — a proper
           // list of strings (`List<string>`). The `string | char` delimiter images to the redundant
           // `string | string` (string and schemeChar both print `string`); the honest image is a
           // single `string` delimiter. Both recovered by the author assertion.

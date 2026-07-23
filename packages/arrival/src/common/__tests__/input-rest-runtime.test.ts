@@ -104,6 +104,6 @@ describe("Contract.inputRest runtime — bake-time GUARD: inputRest requires a f
   // INVARIANT: combining inputRest with a non-tuple (bare single-schema) input throws a
   // contract-authoring error rather than silently ignoring it.
   it("throws when inputRest is combined with a NON-tuple (bare single-schema) input — contract-authoring error, not a silent ignore", () => {
-    expect(() => normalizeInputVector(z.array(z.value), z.value)).toThrow(/fixed positional tuple/);
+    expect(() => normalizeInputVector(z.array(z.schemeValue), z.schemeValue)).toThrow(/fixed positional tuple/);
   });
 });

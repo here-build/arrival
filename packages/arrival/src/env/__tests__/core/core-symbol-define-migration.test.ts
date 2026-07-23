@@ -65,7 +65,7 @@ describe("scheme/core — the §2.1 bake FV locality law", () => {
       symbols: (symbol, z) => ({
         "bad-single":
           symbol.define`bad-single: reproduces the pre-migration scheme/core bug (no declared dep on pair?/not)`(
-            { input: [z.value], output: [z.boolean] },
+            { input: [z.schemeValue], output: [z.boolean] },
             `(lambda (list) (and (pair? list) (not (cdr list))))`,
           ),
       }),

@@ -6,7 +6,7 @@
 // conformance/chibi-r7rs-v2.spec.ts`, section "6.11 Exceptions" — 651/651 EXACT after this
 // migration, including
 // two rows this migration itself had to fix: `error-object-irritants` round-tripping
-// (the R7RSError-vs-z.value contract gap, §1.2) and `raise-continuable`'s handler
+// (the R7RSError-vs-z.schemeValue contract gap, §1.2) and `raise-continuable`'s handler
 // return-value passthrough (the `RunContext`-identity landed-machinery bug named in
 // exceptions.ts's header, gap (3)). This file's rows are the ones NOT already exercised
 // there: contract-enforcement teaching errors (new — the prelude had none), the bake-time
@@ -83,7 +83,7 @@ describe("scheme/r7rs/exceptions — contract enforcement (§1.2, teaching error
     await expect(exec(`(with-exception-handler (lambda (e) e) 42)`, { env })).rejects.toThrow();
   });
 
-  it("raise: a real R7RSError condition object round-trips through the ENFORCED contract (the `raisable = z.union([z.value, z.error])` fix, §1.2 — z.value alone rejects R7RSError, see exceptions.ts's contract comment)", async () => {
+  it("raise: a real R7RSError condition object round-trips through the ENFORCED contract (the `raisable = z.union([z.schemeValue, z.error])` fix, §1.2 — z.schemeValue alone rejects R7RSError, see exceptions.ts's contract comment)", async () => {
     const env = await freshEnv();
     const [msg] = await exec(
       `(guard (exn (else (error-object-message exn))) (error "BOOM!"))`,
@@ -94,7 +94,7 @@ describe("scheme/r7rs/exceptions — contract enforcement (§1.2, teaching error
 });
 
 describe("scheme/r7rs/exceptions — semantic equivalence regression rows (the two bugs THIS migration introduced and fixed, kept local for a fast repro)", () => {
-  it("error-object-irritants round-trips the full irritant list through guard (regression: %error-object-from-irritants losing irritants when `error`'s output contract was z.value-only)", async () => {
+  it("error-object-irritants round-trips the full irritant list through guard (regression: %error-object-from-irritants losing irritants when `error`'s output contract was z.schemeValue-only)", async () => {
     const env = await freshEnv();
     const [irritants] = await exec(
       `(error-object-irritants (guard (exn (else exn)) (error "BOOM!" 1 2 3)))`,

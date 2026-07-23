@@ -12,6 +12,7 @@ import {
   type CallbackRoles,
   CallCtx,
   type Contract,
+  type ContourResult,
   DecodedArgs,
   DecodedReturn,
   MaybePromise,
@@ -27,14 +28,17 @@ import {
 /** Ctx-aware host op — impl gets (schemeArgs, runCtx). For kernel-logic-bearing ops
  *  (heap-charge, run-strict) that aren't pure per-receiver dispatch. `impl`'s args/return are
  *  checked against the contract via `SequenceImpl<I,O>`, the same erasure boundary `inputRest`
- *  closes for native/rosetta. */
+ *  closes for native/rosetta.
+ *
+ *  Declared return type is `ContourResult<I,O,undefined,ANativeProcedure>` (`_bake.ts`) — the
+ *  compile-time ban on a `z.dynamic` slot, same mechanism as native.ts/rosetta.ts. */
 export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
   const { name, doc } = parseNameDoc(tpl, sub);
   return <const I extends VectorSpec, const O extends VectorSpec>(
     contract: Contract<I, O>,
     impl: SequenceImpl<I, O>,
     opts: { metadata?: MetadataRecord } = {},
-  ): ANativeProcedure => {
+  ): ContourResult<I, O, undefined, ANativeProcedure> => {
     const inSchema = normalizeVector(contract.input);
     const outSchema = normalizeVector(contract.output);
     // Resolve the declared role (default "pipe" — see Contract.provenance); capability.ts
@@ -86,6 +90,7 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
     (proc as { provenanceRole?: ProvenanceRole }).provenanceRole = provenance;
     if (cacheClass !== undefined) (proc as { cacheClass?: CacheClass }).cacheClass = cacheClass;
     if (callbackRoles !== undefined) (proc as { callbackRoles?: CallbackRoles }).callbackRoles = callbackRoles;
-    return proc;
+    // ERASE ONCE here — see native.ts's matching note.
+    return proc as ContourResult<I, O, undefined, ANativeProcedure>;
   };
 }

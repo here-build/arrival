@@ -28,22 +28,22 @@
 // Contract choices:
 //   - Maybe/Either VALUES themselves (the tagged lists `(just x)`/`(nothing)`/
 //     `(left x)`/`(right x)` build and every predicate/accessor/combinator reads) are
-//     `z.value` — scheme-zod.ts has no dedicated "tagged variant" vocabulary item (the
+//     `z.schemeValue` — scheme-zod.ts has no dedicated "tagged variant" vocabulary item (the
 //     same "no dedicated vocabulary item" reasoning r7rs/exceptions.ts's own
 //     `%current-handlers` stack slot documents), and a fixed-heads `z.list([z.symbol,
-//     z.value])` would force a symbol-codec round-trip (JS `symbol` ↔ `ASymbol`) onto
-//     a purely-internal tag no consumer ever needs decoded — `z.value`'s
+//     z.schemeValue])` would force a symbol-codec round-trip (JS `symbol` ↔ `ASymbol`) onto
+//     a purely-internal tag no consumer ever needs decoded — `z.schemeValue`'s
 //     representation-blind identity is the honest ceiling here, matching every other
 //     "no vocabulary item" slot in this codebase.
-//   - `maybe->list`/`either->list` are the one place a TIGHTER contract than `z.value`
+//   - `maybe->list`/`either->list` are the one place a TIGHTER contract than `z.schemeValue`
 //     is both correct and free: their body ALWAYS returns a genuine 0-or-1-element
-//     proper scheme list (`(list …)` or `'()`) — `z.list(z.value)` (scheme-zod.ts's own
+//     proper scheme list (`(list …)` or `'()`) — `z.list(z.schemeValue)` (scheme-zod.ts's own
 //     `AListAlike` codec) documents that honestly. Contract enforcement is VALIDATE-
 //     ONLY (`define-bake.ts`'s `buildDefineProcedure`: `z.decode`'s result is discarded,
 //     the original scheme value flows through unchanged) — `z.list`'s codec never
 //     actually converts the returned value to a JS array at the call boundary, so this
 //     tightening costs nothing but a spine-shape check.
-//   - `list->maybe`'s `lst` input is `z.list(z.value)` for the same reason (the body's
+//   - `list->maybe`'s `lst` input is `z.list(z.schemeValue)` for the same reason (the body's
 //     own `null?`/`car` calls already assume a proper list; only the FIRST element is
 //     read, so no fixed-length constraint, just "proper list").
 //   - `maybe-ref`/`either-ref`'s optional `failure` procedure is `inputRest: z.lambda`
@@ -67,108 +67,108 @@ export default EnvCapability.define("scheme/srfi-189", {
   symbols: (symbol, z) => ({
     // ── constructors ──────────────────────────────────────────────────────────
     just: symbol.define`just: SRFI-189 — wrap x as a Just (the present/success case of Maybe)`(
-      { input: [z.value], output: [z.value] },
+      { input: [z.schemeValue], output: [z.schemeValue] },
       `(lambda (x) (list 'just x))`,
     ),
     nothing: symbol.define`nothing: SRFI-189 — the absent Maybe (Nothing); a 0-argument constructor`(
-      { input: [], output: [z.value] },
+      { input: [], output: [z.schemeValue] },
       `(lambda () (list 'nothing))`,
     ),
     left: symbol.define`left: SRFI-189 — wrap x as a Left (conventionally the failure/error case of Either)`(
-      { input: [z.value], output: [z.value] },
+      { input: [z.schemeValue], output: [z.schemeValue] },
       `(lambda (x) (list 'left x))`,
     ),
     right: symbol.define`right: SRFI-189 — wrap x as a Right (conventionally the success case of Either)`(
-      { input: [z.value], output: [z.value] },
+      { input: [z.schemeValue], output: [z.schemeValue] },
       `(lambda (x) (list 'right x))`,
     ),
 
     // ── predicates ────────────────────────────────────────────────────────────
     "just?": symbol.define`just?: #t iff m is a Just`(
-      { input: [z.value], output: [z.boolean] },
+      { input: [z.schemeValue], output: [z.boolean] },
       `(lambda (m) (and (pair? m) (eq? (car m) 'just)))`,
     ),
     "nothing?": symbol.define`nothing?: #t iff m is Nothing`(
-      { input: [z.value], output: [z.boolean] },
+      { input: [z.schemeValue], output: [z.boolean] },
       `(lambda (m) (and (pair? m) (eq? (car m) 'nothing)))`,
     ),
     "maybe?": symbol.define`maybe?: #t iff m is a Just or Nothing`(
-      { input: [z.value], output: [z.boolean] },
+      { input: [z.schemeValue], output: [z.boolean] },
       `(lambda (m) (or (just? m) (nothing? m)))`,
     ),
     "left?": symbol.define`left?: #t iff e is a Left`(
-      { input: [z.value], output: [z.boolean] },
+      { input: [z.schemeValue], output: [z.boolean] },
       `(lambda (e) (and (pair? e) (eq? (car e) 'left)))`,
     ),
     "right?": symbol.define`right?: #t iff e is a Right`(
-      { input: [z.value], output: [z.boolean] },
+      { input: [z.schemeValue], output: [z.boolean] },
       `(lambda (e) (and (pair? e) (eq? (car e) 'right)))`,
     ),
     "either?": symbol.define`either?: #t iff e is a Left or Right`(
-      { input: [z.value], output: [z.boolean] },
+      { input: [z.schemeValue], output: [z.boolean] },
       `(lambda (e) (or (left? e) (right? e)))`,
     ),
 
     // ── Maybe accessors / combinators ────────────────────────────────────────
     "maybe-ref": symbol.define`maybe-ref: unwrap a Just; on Nothing call the optional failure thunk (default: error)`(
-      { input: [z.value], inputRest: z.lambda, output: [z.value] },
+      { input: [z.schemeValue], inputRest: z.lambda, output: [z.schemeValue] },
       `(lambda (m . failure)
          (cond ((just? m) (car (cdr m)))
                ((pair? failure) ((car failure)))
                (else (error "maybe-ref: Nothing"))))`,
     ),
     "maybe-ref/default": symbol.define`maybe-ref/default: unwrap a Just, or return default on Nothing`(
-      { input: [z.value, z.value], output: [z.value] },
+      { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
       `(lambda (m default) (if (just? m) (car (cdr m)) default))`,
     ),
     "maybe-bind": symbol.define`maybe-bind: monadic bind — apply f to the wrapped value; Nothing short-circuits`(
-      { input: [z.value, z.lambda], output: [z.value] },
+      { input: [z.schemeValue, z.lambda], output: [z.schemeValue] },
       `(lambda (m f) (if (just? m) (f (car (cdr m))) m))`,
     ),
     "maybe-map": symbol.define`maybe-map: map f over the wrapped value, preserving Nothing`(
-      { input: [z.lambda, z.value], output: [z.value] },
+      { input: [z.lambda, z.schemeValue], output: [z.schemeValue] },
       `(lambda (f m) (if (just? m) (just (f (car (cdr m)))) m))`,
     ),
     "maybe->list": symbol.define`maybe->list: a Just becomes a 1-element list; Nothing becomes '()`(
-      { input: [z.value], output: [z.list(z.value)] },
+      { input: [z.schemeValue], output: [z.list(z.schemeValue)] },
       `(lambda (m) (if (just? m) (list (car (cdr m))) '()))`,
     ),
     "list->maybe": symbol.define`list->maybe: the empty list becomes Nothing; else Just of the first element`(
-      { input: [z.list(z.value)], output: [z.value] },
+      { input: [z.list(z.schemeValue)], output: [z.schemeValue] },
       `(lambda (lst) (if (null? lst) (nothing) (just (car lst))))`,
     ),
     "maybe->either": symbol.define`maybe->either: a Just becomes Right; Nothing becomes Left of no-just`(
-      { input: [z.value, z.value], output: [z.value] },
+      { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
       `(lambda (m no-just) (if (just? m) (right (car (cdr m))) (left no-just)))`,
     ),
 
     // ── Either accessors / combinators ───────────────────────────────────────
     "either-ref":
       symbol.define`either-ref: unwrap a Right; on Left call the optional failure procedure with the left value (default: error)`(
-        { input: [z.value], inputRest: z.lambda, output: [z.value] },
+        { input: [z.schemeValue], inputRest: z.lambda, output: [z.schemeValue] },
         `(lambda (e . failure)
          (cond ((right? e) (car (cdr e)))
                ((pair? failure) ((car failure) (car (cdr e))))
                (else (error "either-ref: Left"))))`,
       ),
     "either-ref/default": symbol.define`either-ref/default: unwrap a Right, or return default on Left`(
-      { input: [z.value, z.value], output: [z.value] },
+      { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
       `(lambda (e default) (if (right? e) (car (cdr e)) default))`,
     ),
     "either-bind": symbol.define`either-bind: monadic bind — apply f to the Right value; Left short-circuits`(
-      { input: [z.value, z.lambda], output: [z.value] },
+      { input: [z.schemeValue, z.lambda], output: [z.schemeValue] },
       `(lambda (e f) (if (right? e) (f (car (cdr e))) e))`,
     ),
     "either-map": symbol.define`either-map: map f over a Right, preserving Left`(
-      { input: [z.lambda, z.value], output: [z.value] },
+      { input: [z.lambda, z.schemeValue], output: [z.schemeValue] },
       `(lambda (f e) (if (right? e) (right (f (car (cdr e)))) e))`,
     ),
     "either->list": symbol.define`either->list: a Right becomes a 1-element list; Left becomes '()`(
-      { input: [z.value], output: [z.list(z.value)] },
+      { input: [z.schemeValue], output: [z.list(z.schemeValue)] },
       `(lambda (e) (if (right? e) (list (car (cdr e))) '()))`,
     ),
     "either-swap": symbol.define`either-swap: swap a Left and a Right (errors on a non-Either)`(
-      { input: [z.value], output: [z.value] },
+      { input: [z.schemeValue], output: [z.schemeValue] },
       `(lambda (e)
          (cond ((left? e) (right (car (cdr e))))
                ((right? e) (left (car (cdr e))))

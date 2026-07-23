@@ -14,8 +14,8 @@
 // change. The behavioral byte-identical proof is the pre-existing `polyglot.test.ts` suite,
 // run unmodified before/after.
 //
-// ★NOT COVERED HERE: `@` (readMember)'s fix (`z.unknown()` → `z.value`) has NO
-// runtime-observable counterpart. `z.value` is `z.custom<SchemeValue>()` with NO refinement
+// ★NOT COVERED HERE: `@` (readMember)'s fix (`z.unknown()` → `z.schemeValue`) has NO
+// runtime-observable counterpart. `z.schemeValue` is `z.custom<SchemeValue>()` with NO refinement
 // predicate (see scheme-zod.ts's own doc comment on `value`), so it accepts anything at
 // runtime — byte-identical to `z.unknown()`. That fix is a pure static-inference
 // improvement; it cannot RED/GREEN via `.safeParse`/`.safeEncode` no matter the schema

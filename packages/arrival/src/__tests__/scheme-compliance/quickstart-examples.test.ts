@@ -56,7 +56,7 @@ describe("Quick Start Examples", () => {
 
   it("Working with complex data", async () => {
     // Register function that filters objects — arbitrary-shaped JS data (an array of
-    // `{id, priority}` records), so both slots stay `z.value` (the rosetta escape
+    // `{id, priority}` records), so both slots stay `z.dynamic` (the rosetta escape
     // hatch: "impl receives/returns raw scheme value, does its own schemeToJs/
     // jsToScheme" — scheme-zod.ts's own doc) and the impl does the conversion inline,
     // exactly what the legacy `defineRosetta` wrapper did automatically for every call.
@@ -64,7 +64,7 @@ describe("Quick Start Examples", () => {
       EnvCapability.define("test/high-priority-users", {
         symbols: (symbol, z) => ({
           "high-priority-users": symbol.rosetta`high-priority-users: filters users by priority`(
-            { input: [z.value], output: [z.value] },
+            { input: [z.dynamic], output: [z.dynamic] },
             (rawUsers) => {
               const users = schemeToJsUntyped(rawUsers) as Array<{ id: string; priority: number }>;
               return jsToScheme(

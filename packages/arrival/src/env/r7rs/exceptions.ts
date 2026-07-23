@@ -58,10 +58,10 @@ const handlersByRun = new WeakMap<RunContext, SchemeValue>();
 
 // R7RS raise/raise-continuable/error carry ARBITRARY data (§6.11: "obj may be any
 // object") — critically INCLUDING the R7RSError condition objects `error`/
-// `make-error-object` construct. `z.value`'s `isSchemeValue` predicate is
+// `make-error-object` construct. `z.schemeValue`'s `isSchemeValue` predicate is
 // `instanceof AValue` (membrane.ts) — an `R7RSError` is a raw host `Error`
 // subclass, deliberately NOT an `AValue` box (`z.error`'s own codec exists
-// precisely because it isn't one), so `z.value` alone REJECTS a condition object.
+// precisely because it isn't one), so `z.schemeValue` alone REJECTS a condition object.
 // A bare `native` contract never enforced this (native contracts are types-only)
 // — but `symbol.define`'s contract IS enforced at the call boundary, so this
 // pack's own condition objects must be an explicit member of every slot that can
@@ -73,10 +73,10 @@ export default EnvCapability.define("scheme/r7rs/exceptions", {
     // the original object type for R7RS exception handling.
     "%raise": symbol.native`%raise: throw obj directly (machinery — the R7RS forms build on this)`(
       // `obj` is genuinely ANY scheme value (raise accepts arbitrary data, R7RS §6.11) —
-      // `z.value` is the typed, representation-blind replacement for `z.value` at this
+      // `z.schemeValue`, the honest top type, is the representation-blind fit for this
       // kind of slot (scheme-zod.ts's own documented convention). Output is `z.never()`:
       // the impl's own declared return type is `never` — it always throws.
-      { input: [z.value], output: [z.undefinedResult] },
+      { input: [z.schemeValue], output: [z.undefinedResult] },
       function (this: CallCtx, obj) {
         throw obj;
       },
@@ -87,8 +87,8 @@ export default EnvCapability.define("scheme/r7rs/exceptions", {
     "%current-handlers": symbol.native`%current-handlers: read the exception-handler stack (machinery)`(
       // The stack is a proper scheme list (nil, or a pair of a handler procedure + the rest
       // of the stack) — scheme-zod has no dedicated "list of procedures" vocabulary item, so
-      // `z.value` (representation-blind scheme-value identity) is the honest ceiling here.
-      { input: [], output: [z.value] },
+      // `z.schemeValue` (representation-blind scheme-value identity) is the honest ceiling here.
+      { input: [], output: [z.schemeValue] },
       // Non-arrow: `this.runCtx` is the CallCtx receiver `symbol.native` dispatches
       // with (the same convention `%push-handler` below already uses) — the WeakMap
       // key. Absent entry ⇒ this run has never pushed a handler yet ⇒ empty stack.
@@ -100,7 +100,7 @@ export default EnvCapability.define("scheme/r7rs/exceptions", {
       // Input is the same list shape `%current-handlers` reads (see above). Output is
       // ALWAYS `nil` (the impl's own `return nil`) — `z.nil` is the exact honest type here,
       // not merely a wide one.
-      { input: [z.value], output: [z.nil] },
+      { input: [z.schemeValue], output: [z.nil] },
       function (handlers) {
         handlersByRun.set(this.runCtx, handlers as SchemeValue);
         return nil;
@@ -108,13 +108,13 @@ export default EnvCapability.define("scheme/r7rs/exceptions", {
     ),
     "make-error-object": symbol.native`make-error-object: build an R7RS error object from a message and irritants`(
       // `message` is display-rendered via `.valueOf()`/`String()` regardless of scheme type
-      // (see the impl) — `z.value`. `irritants` are carried through untouched (any scheme
-      // values, stored as-is on the error object) — `z.value` for the rest too. Output is a
+      // (see the impl) — `z.schemeValue`. `irritants` are carried through untouched (any scheme
+      // values, stored as-is on the error object) — `z.schemeValue` for the rest too. Output is a
       // real validator (`instanceof R7RSError`): the impl always returns this ONE concrete
       // host `Error` subclass, never an arbitrary scheme value.
       {
         input: [z.string],
-        inputRest: z.value,
+        inputRest: z.schemeValue,
         output: [z.error],
       },
       function (this: CallCtx, message, ...irritants) {
@@ -128,27 +128,27 @@ export default EnvCapability.define("scheme/r7rs/exceptions", {
     // solely so the `symbol.define` bodies below never reference bare
     // `car`/`cdr`/`cons` directly (see the file header).
     "%handlers-empty?": symbol.native`%handlers-empty?: is the exception-handler stack empty (machinery)`(
-      { input: [z.value], output: [z.boolean] },
+      { input: [z.schemeValue], output: [z.boolean] },
       function (this: CallCtx, stack) {
         return bool(stack instanceof ANil);
       },
     ),
     "%handler-car": symbol.native`%handler-car: the top handler of a non-empty exception-handler stack (machinery)`(
-      { input: [z.value], output: [z.value] },
+      { input: [z.schemeValue], output: [z.schemeValue] },
       function (this: CallCtx, stack) {
         invariant(stack instanceof APair, "%handler-car: the exception-handler stack is empty");
         return stack.car as SchemeValue;
       },
     ),
     "%handler-cdr": symbol.native`%handler-cdr: the exception-handler stack minus its top handler (machinery)`(
-      { input: [z.value], output: [z.value] },
+      { input: [z.schemeValue], output: [z.schemeValue] },
       function (this: CallCtx, stack) {
         invariant(stack instanceof APair, "%handler-cdr: the exception-handler stack is empty");
         return stack.cdr as SchemeValue;
       },
     ),
     "%push-handler": symbol.native`%push-handler: prepend handler onto the exception-handler stack (machinery)`(
-      { input: [z.value, z.value], output: [z.value] },
+      { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
       function (handler, stack) {
         return new APair(handler as SchemeValue, stack as SchemeValue);
       },
@@ -159,7 +159,7 @@ export default EnvCapability.define("scheme/r7rs/exceptions", {
     // accordingly.
     "%with-restore":
       symbol.native`%with-restore: call thunk, always calling restore afterward — even if thunk throws (machinery)`(
-        { input: [z.lambda, z.lambda], output: [z.value] },
+        { input: [z.lambda, z.lambda], output: [z.schemeValue] },
         function (thunk, restore) {
           // `this` IS the whole CallCtx `%with-restore` was dispatched with — thread it, not
           // just `this.runCtx`.
@@ -196,7 +196,7 @@ export default EnvCapability.define("scheme/r7rs/exceptions", {
     // logic.
     "%error-object-from-irritants":
       symbol.native`%error-object-from-irritants: build an R7RS error object from a message and a scheme list of irritants (machinery)`(
-        { input: [z.string, z.value], output: [z.error] },
+        { input: [z.string, z.schemeValue], output: [z.error] },
         function (this: CallCtx, message, irritantsList) {
           const msg = message instanceof AString ? message.valueOf() : String(message);
           const irritants = to_array("error")(irritantsList as SchemeValue);
@@ -213,7 +213,7 @@ export default EnvCapability.define("scheme/r7rs/exceptions", {
     // environment (the popped stack still in place).
     raise:
       symbol.define`raise: invoke the current exception handler with obj (R7RS §6.11) — pops the handler first so a raise inside it can't loop on the same entry`(
-        { input: [z.union([z.value, z.error])], output: [z.undefinedResult] },
+        { input: [z.union([z.schemeValue, z.error])], output: [z.undefinedResult] },
         `(lambda (obj)
          (if (%handlers-empty? (%current-handlers))
              (%raise obj)
@@ -232,7 +232,7 @@ export default EnvCapability.define("scheme/r7rs/exceptions", {
     // out so the value flows back into the original dynamic environment.
     "raise-continuable":
       symbol.define`raise-continuable: like raise, but the handler's return value flows back to raise-continuable's own call site (R7RS §6.11)`(
-        { input: [z.union([z.value, z.error])], output: [z.union([z.value, z.error])] },
+        { input: [z.union([z.schemeValue, z.error])], output: [z.union([z.schemeValue, z.error])] },
         `(lambda (obj)
          (if (%handlers-empty? (%current-handlers))
              (%raise obj)
@@ -251,7 +251,7 @@ export default EnvCapability.define("scheme/r7rs/exceptions", {
     // outer handler (double delivery).
     "with-exception-handler":
       symbol.define`with-exception-handler: install handler for the dynamic extent of thunk, removed on the way out (R7RS §6.11)`(
-        { input: [z.lambda, z.lambda], output: [z.value] },
+        { input: [z.lambda, z.lambda], output: [z.schemeValue] },
         `(lambda (handler thunk)
          (let ((old-handlers (%current-handlers)))
            (%set-handlers! (%push-handler handler old-handlers))
@@ -260,7 +260,7 @@ export default EnvCapability.define("scheme/r7rs/exceptions", {
       ),
 
     error: symbol.define`error: raise a new error object built from message and irritants (R7RS §6.11)`(
-      { input: [z.string], inputRest: z.union([z.value, z.error]), output: [z.undefinedResult] },
+      { input: [z.string], inputRest: z.union([z.schemeValue, z.error]), output: [z.undefinedResult] },
       `(lambda (message . irritants)
          (raise (%error-object-from-irritants message irritants)))`,
     ),

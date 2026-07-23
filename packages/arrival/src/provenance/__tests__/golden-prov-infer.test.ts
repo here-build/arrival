@@ -69,7 +69,7 @@ const OTHER_ID = 701; // infer-dict's `other` slot id (must be PRUNED by the pro
 // independent of the (literal) input. Mirrors lineage-assumptions.test.ts's own
 // capability-authored fixtures (`_lineage-test-helpers.ts`).
 //
-// `output: [z.value]` (the rosetta escape hatch — "impl returns raw, does its own
+// `output: [z.dynamic]` (the rosetta escape hatch — "impl returns raw, does its own
 // conversion") is load-bearing here, not cosmetic: it makes `run()` (common/symbols/
 // rosetta.ts) skip `z.encode` for this slot and hand the impl's return straight to
 // `jsToScheme(runCtx, result, {}, resultProvenance)` — the EXACT spine
@@ -86,23 +86,23 @@ const inferSources: EnvSetup = async (env) => {
     symbols: (symbol, z) => ({
       // infer-x / infer-y: scalar sources, each minting a single fixed leaf.
       "infer-x": symbol.rosetta`infer-x: fake Rosetta-IN scalar source (X)`(
-        { input: [z.string], output: [z.value] },
+        { input: [z.string], output: [z.dynamic] },
         () => sStr("RESULT-X", MINT_X),
       ),
       "infer-y": symbol.rosetta`infer-y: fake Rosetta-IN scalar source (Y)`(
-        { input: [z.string], output: [z.value] },
+        { input: [z.string], output: [z.dynamic] },
         () => sStr("RESULT-Y", MINT_Y),
       ),
       // infer-dict: a structured source whose fields carry DISTINCT per-field ids, so a
       // field projection has something to narrow FROM (two ids) TO (one id). The raw
-      // `{ field, other }` object isn't itself a `SchemeValue` (TS needs one for a `z.value`
+      // `{ field, other }` object isn't itself a `SchemeValue` (TS needs one for a `z.dynamic`
       // slot) — `jsToScheme(CONSTANT_CTX, …)` at its default EMPTY provenance borrows it as
       // an AJSObject WITHOUT touching the already-stamped field values (a shallow, lazy-
       // entries wrap), so this pre-wrap is representationally a no-op vs. handing the raw
       // object straight to `run()`'s own final `jsToScheme` call (which would otherwise do
       // the identical borrow itself).
       "infer-dict": symbol.rosetta`infer-dict: fake Rosetta-IN structured source`(
-        { input: [z.string], output: [z.value] },
+        { input: [z.string], output: [z.dynamic] },
         () => jsToScheme(CONSTANT_CTX, { field: sStr("FV", FIELD_ID), other: sStr("OV", OTHER_ID) }),
       ),
     }),

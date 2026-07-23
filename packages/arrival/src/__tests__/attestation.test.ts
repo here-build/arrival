@@ -38,18 +38,19 @@ function rosettaContract(v: { contract: unknown }): RosettaSymbolDef {
  *  called direct-JS (no evaluator ctx) exercises exactly the _bake step-4 walk.
  *  REBASELINE (v1→v2 scheme-zod swap, 4ebe73abbe, 2026-07-08): `z.value` used to be a UNION
  *  of auto-boxing codecs (v1's `value = z.union([number, string, boolean, …])`), so a raw JS
- *  return auto-boxed via whichever union member matched. v2's `value` is a bare
- *  `z.custom(isSchemeValue)` predicate — a real "no automatic transform" escape hatch (see its
- *  doc comment: "the impl receives/returns the raw scheme value and does its own
- *  schemeToJs/jsToScheme"). The impl must now box its own return, exactly like the one real
- *  production consumer of this pattern (env/overridable/overridable.ts's `overridable/resolve`, which ends
- *  `return jsToScheme(CONSTANT_CTX, outcome.data)`). */
+ *  return auto-boxed via whichever union member matched. v2's `value` (Q1 split: `z.dynamic`,
+ *  the rosetta escape hatch — docs/plans/stage-c-corpse-deletion.md §"z.value retirement
+ *  campaign") is a bare `z.custom(isSchemeValue)` predicate — a real "no automatic transform"
+ *  escape hatch (see its doc comment: "the impl receives/returns the raw scheme value and does
+ *  its own schemeToJs/jsToScheme"). The impl must now box its own return, exactly like the one
+ *  real production consumer of this pattern (env/overridable/overridable.ts's
+ *  `overridable/resolve`, which ends `return jsToScheme(CONSTANT_CTX, outcome.data)`). */
 const source = (impl: () => unknown) =>
-  symbol.rosetta`t: test source`({ input: [], output: [z.value] }, () => jsToScheme(CONSTANT_CTX, impl()));
+  symbol.rosetta`t: test source`({ input: [], output: [z.dynamic] }, () => jsToScheme(CONSTANT_CTX, impl()));
 
 /** A SOURCE rosetta echoing its scheme argument — the identity fast path through
  *  jsToScheme returns the very same box, which the return walk then deep-attests. */
-const echo = symbol.rosetta`echo: identity`({ input: [z.value], output: [z.value] }, (v) => v);
+const echo = symbol.rosetta`echo: identity`({ input: [z.dynamic], output: [z.dynamic] }, (v) => v);
 
 describe("attestation registry (attest / isAttested / freshIfSingleton)", () => {
   /** Exempt singletons (nil, void, interned symbols, #t/#f) are never marked attested;

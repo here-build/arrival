@@ -10,6 +10,15 @@
 // emitted TS is inference-only) so the bite-guards under __tests__/ import the same
 // vocabulary the harvest emits against — one source of truth, no drift.
 
+/** The honest top type for `z.schemeValue` (common/scheme-zod.ts's Q1 split,
+ *  docs/plans/stage-c-corpse-deletion.md §"z.value retirement campaign") — "any boxed
+ *  scheme value", the R7RS-polymorphic domain of car/eq?/filter/vector elements. `unknown`
+ *  IS the honest bound (a native/contour slot genuinely admits anything), but printing the
+ *  bare keyword would erase the intent that this slot is DELIBERATELY unconstrained (vs. an
+ *  unmapped/unregistered schema falling through to `unknown` by DEFAULT) — a distinct named
+ *  alias keeps that distinction visible in a harvested signature. */
+export type SchemeValue = unknown;
+
 declare const LIST_BRAND: unique symbol;
 
 /** Opaque proper-list cons cell — the element type rides the phantom brand; the cons

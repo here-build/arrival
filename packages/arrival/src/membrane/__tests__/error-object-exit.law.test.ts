@@ -102,7 +102,7 @@ describe("host Error inbound — stack collapses to absent", () => {
     const errCap = EnvCapability.define("test/host-error", {
       symbols: (symbol, z) => ({
         "host-error": symbol.rosetta`host-error: a host Error object`(
-          { input: [], output: [z.value] },
+          { input: [], output: [z.dynamic] },
           // The impl returns a raw host Error, which crosses BORROWED (AJSObject
           // wrapper) — the cast names the post-crossing truth the borrow performs.
           async () => new Error("host-boom") as unknown as SchemeValue,

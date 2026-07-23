@@ -34,26 +34,26 @@ export default EnvCapability.define("scheme/polyglot-lisp", {
     return {
       // mapcar — Common Lisp: identical argument order to R7RS map (proc, then one
       // or more lists), so it is a direct alias. `f` passes through to map's own
-      // dispatch (z.value); the lists are real list spines (CL mapcar is list-only,
+      // dispatch (z.schemeValue); the lists are real list spines (CL mapcar is list-only,
       // and map over lists yields a list — the honest output).
       mapcar:
         symbol.define`mapcar: Common Lisp — identical argument order to R7RS map (proc, then one or more lists); a direct alias`(
-          { input: [z.value], inputRest: z.list(), output: [z.list()] },
+          { input: [z.schemeValue], inputRest: z.list(), output: [z.list()] },
           `(lambda (f . lists) (apply map (cons f lists)))`,
         ),
       // remove-if / remove-if-not — Common Lisp: filter, with the sense of the
       // predicate flipped / kept. remove-if APPLIES pred itself (the negating
       // wrapper) → applicable; remove-if-not passes pred straight through to filter
-      // (whose dispatch owns the callable-or-RegExp polymorphism) → z.value. The
-      // sequence stays z.value both times: filter is term-dispatched (a vector is a
+      // (whose dispatch owns the callable-or-RegExp polymorphism) → z.schemeValue. The
+      // sequence stays z.schemeValue both times: filter is term-dispatched (a vector is a
       // legal receiver returning a vector), so `z.list()` in/out would narrow it.
       "remove-if":
         symbol.define`remove-if: Common Lisp — keep the elements NOT satisfying pred (filter with the sense flipped)`(
-          { input: [applicable, z.value], output: [z.value] },
+          { input: [applicable, z.schemeValue], output: [z.schemeValue] },
           `(lambda (pred lst) (filter (lambda (x) (not (pred x))) lst))`,
         ),
       "remove-if-not": symbol.define`remove-if-not: Common Lisp — keep the elements satisfying pred (a filter alias)`(
-        { input: [z.value, z.value], output: [z.value] },
+        { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
         `(lambda (pred lst) (filter pred lst))`,
       ),
     };

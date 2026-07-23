@@ -15,8 +15,8 @@
 //   3. `string-append`     — homogeneous variadic strings: z.array(z.unknown()) → z.array(z.schemeString)
 //   4. `string->list`      — output is a proper list of chars: [z.unknown()] → [z.union([z.pair, z.nil])]
 //   5. `list->string`      — input walks a Pair (a list of chars): [z.unknown()] → [z.union([z.pair, z.nil])]
-//   6. `join`               — 2nd arg is a list: z.value → z.union([z.pair, z.nil])
-//   7. `concat`             — args are strings: z.array(z.value) → z.array(z.schemeString)
+//   6. `join`               — 2nd arg is a list: z.schemeValue → z.union([z.pair, z.nil])
+//   7. `concat`             — args are strings: z.array(z.schemeValue) → z.array(z.schemeString)
 //
 // (item #8, `split`'s output-side fix, was a stale/misfiled reference in the original audit —
 // no `split` symbol is bound in this pack; LIPS's `string-split` lives in `scheme/srfi-13`.)
@@ -127,7 +127,7 @@ describe("scheme/strings Contract precision — 2026-07-05 audit: 8 fixes on the
   });
 
   // INVARIANT: join's second argument must be a proper list, rejecting a raw string
-  it("join: 2nd arg must be a proper list (Pair|Nil) — a raw string no longer satisfies it (was z.value)", () => {
+  it("join: 2nd arg must be a proper list (Pair|Nil) — a raw string no longer satisfies it (was z.schemeValue)", () => {
     const def = nativeDef("join");
     expect(def.in.safeParse([str(", "), properList()]).success).toBe(true);
     expect(def.in.safeParse([str(", "), nil]).success).toBe(true);
@@ -136,7 +136,7 @@ describe("scheme/strings Contract precision — 2026-07-05 audit: 8 fixes on the
 
   // INVARIANT: concat (migrated to symbol.rosetta) accepts real AString elements,
   // rejecting raw JS strings
-  it("concat: accepts real strings, rejects raw JS strings as elements (was z.array(z.value)) — since migrated to symbol.rosetta", () => {
+  it("concat: accepts real strings, rejects raw JS strings as elements (was z.array(z.schemeValue)) — since migrated to symbol.rosetta", () => {
     const def = rosettaDef("concat");
     expect(def.in.safeParse([str("a"), str("b")]).success).toBe(true);
     expect(def.in.safeParse(["a", "b"]).success).toBe(false);

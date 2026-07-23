@@ -11,7 +11,7 @@
  * empty-provenance; `structuralEqual` treats them identically). Inputs stay
  * REPRESENTATION-BLIND by design (a boxed SchemeBool/SchemeSymbol OR a raw JS
  * value that arrived via rosetta unwrapping — see laws/equality.law.test.ts),
- * so the honest input term is `z.value`.
+ * so the honest input term is `z.schemeValue`.
  *
  * ALSO HOLDS the R7RS TYPE predicates `string?` / `pair?` / `null?` / `boolean?` /
  * `symbol?` / `list?` — the value-domain-agnostic type tests (a string/pair/symbol
@@ -145,21 +145,21 @@ export default EnvCapability.define("scheme/equality", {
   symbols: (symbol, z) => ({
     // R7RS 6.3 Booleans
     "boolean=?": symbol.native`boolean=?: typed equivalence over booleans`(
-      // Input stays z.value (representation-blind), NOT z.boolean — the impl's own unwrap()
+      // Input stays z.schemeValue (representation-blind), NOT z.boolean — the impl's own unwrap()
       // below branches on raw JS boolean vs boxed ABool, so blindness is load-bearing here
       // (unlike symbol=?, a bare instanceof check with no such branch). `z.boolean`'s codec
       // `safeParse`s ONLY its scheme face (ABool instances) regardless of native/rosetta Face
       // projection — using it here would silently reject the raw-JS-boolean half the impl
       // genuinely accepts. Output stays z.boolean: the RETURN is always a real ABool (the
       // schemeBool flyweight), never representation-blind.
-      { input: [], inputRest: z.value, output: [z.boolean] },
+      { input: [], inputRest: z.schemeValue, output: [z.boolean] },
       function (this: CallCtx, ...bools) {
         if (bools.length < 2) return schemeTrue;
         // L1 boxes `#t` / `#f` as SchemeBool — unwrap before comparing, otherwise
         // `(boolean=? #t #t)` would compare two distinct singletons and pass, but
         // the type-guard one line up would already have rejected the schemeTrue
         // singleton as `typeof !== "boolean"`. Mirror `boolean?`'s post-L1 fix.
-        // Both representations are load-bearing here (the contract's own `z.value`
+        // Both representations are load-bearing here (the contract's own `z.schemeValue`
         // input + this file's header doc both still document "booleans cross the
         // rosetta membrane unboxed"), so a raw JS boolean must unwrap too, not just
         // a boxed ABool.
@@ -180,7 +180,7 @@ export default EnvCapability.define("scheme/equality", {
     // scheme-zod.ts, unlike string/boolean/char/number — see laws/equality.law.test.ts's
     // own "always boxed in practice" note for characters & symbols). So `z.symbol` (the SAME
     // identity primitive `symbol->string`/`string->symbol` below already use) is the honest
-    // domain, not `z.value` — this is a precision fix, not a blindness removal.
+    // domain, not `z.schemeValue` — this is a precision fix, not a blindness removal.
     "symbol=?": symbol.native`symbol=?: typed equivalence over symbols`(
       { input: [z.symbol, z.symbol], inputRest: z.symbol, output: [z.boolean] },
       function (this: CallCtx, ...syms) {
@@ -220,7 +220,7 @@ export default EnvCapability.define("scheme/equality", {
     "procedure?": symbol.native`procedure?: callable, excluding macros`(
       // Total type predicate: any value in, #f on non-callables. Dual type-guard harvest.
       {
-        input: [z.value],
+        input: [z.schemeValue],
         output: [z.boolean],
         type: dedent`
           {
@@ -243,7 +243,7 @@ export default EnvCapability.define("scheme/equality", {
     // cluster. (DEFERRED: the 2-arg `(repr x write?)` write-mode form is not honored —
     // `printValue` has no write-mode flag. Matches the current 1-arg behavior.)
     repr: symbol.native`repr: render a value to its external representation string`(
-      { input: [z.value], output: [z.string] },
+      { input: [z.schemeValue], output: [z.string] },
       function (this: CallCtx, obj) {
         return new AString(printValue(obj));
       },
@@ -255,7 +255,7 @@ export default EnvCapability.define("scheme/equality", {
     "equal?": symbol.native`equal?: representation-blind structural equality`(
       // Compiler-facing (constitution §4.1) — the primitive-proven gate (see
       // `equalQEmitRule`'s own doc comment above for the full soundness argument).
-      { input: [z.value, z.value], output: [z.boolean], emit: equalQEmitRule },
+      { input: [z.schemeValue, z.schemeValue], output: [z.boolean], emit: equalQEmitRule },
       function (this: CallCtx, a, b) {
         return mintVerdict([a, b], structuralEqual(a, b));
       },
@@ -266,14 +266,14 @@ export default EnvCapability.define("scheme/equality", {
     // already routed through each scalar's Setoid inside `eq`); both delegate to
     // the single comparison home in `structural-equal.ts`.
     "eq?": symbol.native`eq?: pointer/scalar-grade identity`(
-      { input: [z.value, z.value], output: [z.boolean] },
+      { input: [z.schemeValue, z.schemeValue], output: [z.boolean] },
       function (this: CallCtx, x, y) {
         return mintVerdict([x, y], eq(x, y));
       },
     ),
 
     "eqv?": symbol.native`eqv?: eq? plus explicit number/char equality`(
-      { input: [z.value, z.value], output: [z.boolean] },
+      { input: [z.schemeValue, z.schemeValue], output: [z.boolean] },
       function (this: CallCtx, x, y) {
         return mintVerdict([x, y], eqv(x, y));
       },
@@ -284,7 +284,7 @@ export default EnvCapability.define("scheme/equality", {
     // binding order is load-order-safe.
     not: symbol.native`not: #t iff value is #f (the only scheme-falsy)`(
       // Compiler-facing (constitution §4.1) — the Phase-2 relocation drill.
-      { input: [z.value], output: [z.boolean], emit: notEmitRule },
+      { input: [z.schemeValue], output: [z.boolean], emit: notEmitRule },
       // R7RS: only #f is falsy. Post-L1 `#f` parses to `SchemeBool(false)`
       // (a truthy object in JS), so `!value` would wrongly return false here.
       // `is_false` is the canonical scheme-falsy predicate (`guards.ts`).
@@ -299,7 +299,7 @@ export default EnvCapability.define("scheme/equality", {
     // `string | List<number>` keeps List<number> after list?, not List<unknown>.
     "string?": symbol.native`string?: boxed-or-raw string test`(
       {
-        input: [z.value],
+        input: [z.schemeValue],
         output: [z.boolean],
         type: dedent`
           {
@@ -333,7 +333,7 @@ export default EnvCapability.define("scheme/equality", {
 
     "null?": symbol.native`null?: empty-list test`(
       {
-        input: [z.value],
+        input: [z.schemeValue],
         output: [z.boolean],
         type: dedent`
           {
@@ -380,7 +380,7 @@ export default EnvCapability.define("scheme/equality", {
 
     "boolean?": symbol.native`boolean?: boxed-or-raw boolean test`(
       {
-        input: [z.value],
+        input: [z.schemeValue],
         output: [z.boolean],
         type: dedent`
           {
@@ -418,7 +418,7 @@ export default EnvCapability.define("scheme/equality", {
     "dict?":
       symbol.native`dict?: #t iff obj is a dict — a native open-key record ({…} / (dict …)), not a list, string, vector, or foreign class instance`(
         {
-          input: [z.value],
+          input: [z.schemeValue],
           output: [z.boolean],
           type: dedent`
           {
@@ -434,7 +434,7 @@ export default EnvCapability.define("scheme/equality", {
 
     "list?": symbol.native`list?: proper-list test (cycle-safe)`(
       {
-        input: [z.value],
+        input: [z.schemeValue],
         output: [z.boolean],
         type: dedent`
           {

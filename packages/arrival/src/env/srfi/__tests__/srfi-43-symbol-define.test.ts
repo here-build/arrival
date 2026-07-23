@@ -149,7 +149,7 @@ describe("scheme/srfi-43 — the §2.1 bake FV law passes for this pack AS MIGRA
       symbols: (symbol, z) => ({
         "bad-vector-empty?":
           symbol.define`bad-vector-empty?: reproduces the pre-migration srfi-43 bug (no declared dep on vector-length/scheme/numeric's =)`(
-            { input: [z.vector(z.value)], output: [z.boolean] },
+            { input: [z.vector(z.schemeValue)], output: [z.boolean] },
             `(lambda (vec) (= (vector-length vec) 0))`,
           ),
       }),

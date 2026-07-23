@@ -370,8 +370,9 @@ export class ProvenanceRoleShapeError extends ArrivalError {
 //
 // A symbol declares the `view` cache class (Solidity vocabulary — cacheable ACROSS
 // runs, a boundary snapshot worth persisting) but its own contract is structurally
-// non-serializable: a `z.lambda` arm (a callable can't be a snapshot) or a `z.value`
-// slot (the declared raw escape hatch — raw crossings don't serialize). Thrown at
+// non-serializable: a `z.lambda` arm (a callable can't be a snapshot) or a raw-scheme-value
+// slot (`z.schemeValue`/`z.dynamic`/the deprecated `z.value` alias — none carry a
+// serialization story). Thrown at
 // ASSEMBLY (bake time — `common/symbols/{native,rosetta,sequence}.ts`, via
 // `assertCacheClassShape` in `_bake.ts`, beside `assertProvenanceRoleShape`), never
 // at call time. `pure` gets NO shape gate — its recovery is re-call, nothing of it

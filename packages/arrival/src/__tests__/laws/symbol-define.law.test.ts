@@ -165,7 +165,7 @@ describe("symbol.define — the §2.1 bake FV locality law (the drift door)", ()
     const cap = EnvCapability.define("test/define-cxr-car", {
       symbols: (symbol, z) => ({
         "first-of-pair": symbol.define`first-of-pair: bare car, no deps`(
-          { input: [z.value], output: [z.value] },
+          { input: [z.schemeValue], output: [z.schemeValue] },
           `(lambda (p) (car p))`,
         ),
       }),
@@ -178,7 +178,7 @@ describe("symbol.define — the §2.1 bake FV locality law (the drift door)", ()
     const cap = EnvCapability.define("test/define-cxr-cadr", {
       symbols: (symbol, z) => ({
         "second-of-pair": symbol.define`second-of-pair: bare cadr, no deps`(
-          { input: [z.value], output: [z.value] },
+          { input: [z.schemeValue], output: [z.schemeValue] },
           `(lambda (p) (cadr p))`,
         ),
       }),
@@ -192,7 +192,7 @@ describe("symbol.define — the §2.1 bake FV locality law (the drift door)", ()
     // over-forgiven by the new allowlist branch.
     const cap = EnvCapability.define("test/define-cxr-lookalike", {
       symbols: (symbol, z) => ({
-        "bad-cxr-lookalike": symbol.define`bad-cxr-lookalike: "cars" is not a real cxr name`(z.value, `cars`),
+        "bad-cxr-lookalike": symbol.define`bad-cxr-lookalike: "cars" is not a real cxr name`(z.schemeValue, `cars`),
       }),
     });
     await expect(applyCapability(env, [cap])).rejects.toThrow(DefineLocalityError);

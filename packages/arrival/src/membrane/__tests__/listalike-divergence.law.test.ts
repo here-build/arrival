@@ -206,7 +206,7 @@ describe("LAW: a coercion helper refuses, it never invents (charValue — B1's s
 // This caught a live, pre-existing bug that had nothing to do with the list rework. `z.vector` is a
 // union of two codecs, and they decoded into DIFFERENT WORLDS: the `AVector` arm yielded `__vector__`
 // (boxed AValues, which the element codec can then decode), while the `AJSArray` arm yielded the raw
-// `.source`. Since the element schema is a SCHEME-face codec (`z.value` demands an AValue), raw JSON
+// `.source`. Since the element schema is a SCHEME-face codec (`z.schemeValue` demands an AValue), raw JSON
 // elements failed validation every time — so every `symbol.define` verb contracted on `z.vector`
 // (SRFI-43's vector-fold / vector-count / vector-index / vector-any / …) threw a raw ZodError on ANY
 // tool-returned array, while working fine on a literal. The vector NATIVES (vector-ref/-length/-map)

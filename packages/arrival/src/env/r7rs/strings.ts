@@ -319,7 +319,7 @@ export default EnvCapability.define("scheme/strings", {
     // apply's head/rest split. The head uses the established callable-schema convention
     // (z.custom<(...args) => T>(), matching vector-map/vector-for-each/curry); the rest is
     // z.string (this file's own string-identity schema, not the representation-blind
-    // z.value) so proc/strings arrive as real typed parameters — no manual destructure-
+    // z.schemeValue) so proc/strings arrive as real typed parameters — no manual destructure-
     // and-cast needed at the call site.
     "string-map": symbol.native`string-map: map a procedure across the strings' characters`(
       // The z.custom callable head collapses signatureOf to the catch-all `(...args: unknown[])

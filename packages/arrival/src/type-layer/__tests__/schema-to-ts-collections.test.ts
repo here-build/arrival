@@ -14,9 +14,11 @@ describe("printType — named-generic collections (List<T> / Pair<Car, Cdr>)", (
     expect(printType(z.list(z.string))).toBe("List<string>");
   });
 
-  // INVARIANT: bare z.list() prints "List<unknown>" (element defaults to `value`).
-  it("prints bare list() as List<unknown> (element defaults to `value`)", () => {
-    expect(printType(z.list())).toBe("List<unknown>");
+  // INVARIANT: bare z.list() prints "List<SchemeValue>" (element defaults to
+  // `schemeValue`, the honest top type — Q1 split, docs/plans/stage-c-corpse-deletion.md
+  // §"z.value retirement campaign"; was `List<unknown>` when the default was `value`).
+  it("prints bare list() as List<SchemeValue> (element defaults to `schemeValue`)", () => {
+    expect(printType(z.list())).toBe("List<SchemeValue>");
   });
 
   // INVARIANT: z.list(z.char) prints "List<string>" (char's JS image is a 1-char string).

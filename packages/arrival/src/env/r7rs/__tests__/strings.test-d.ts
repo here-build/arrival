@@ -7,7 +7,7 @@
 //
 // HONEST CAVEAT (unlike numeric.test-d.ts's z.numberOrBigint case): none of this round's
 // fixes introduce a brand-new scheme-zod.ts export — z.schemeChar/z.schemeString/z.pair/
-// z.nil/z.value all already exist, and the DecodedArgs/DecodedArgsWithRest/DecodedReturn
+// z.nil/z.schemeValue all already exist, and the DecodedArgs/DecodedArgsWithRest/DecodedReturn
 // mechanism is already proven correct (symbol.test-d.ts). So, exactly like the sibling
 // symbol.test-d.ts "2026-07-05 audit" section for for-each/string-map/string-for-each/
 // filter/typecheck, these OLD-vs-NEW pairs compile/pass regardless of strings.ts's fix

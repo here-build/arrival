@@ -122,10 +122,10 @@ describe("symbol contract — inputRest: a fixed head + a separately-typed varia
     expectTypeOf<DecodedArgsWithRest<[typeof z.string], typeof z.number>>().toEqualTypeOf<[string, ...number[]]>();
   });
 
-  test("native-identity flavored: a Pair head + a SchemeValue (z.value) rest", () => {
+  test("native-identity flavored: a Pair head + a SchemeValue (z.schemeValue) rest", () => {
     // "scheme" face — z.pair is a real codec now (cons(value,value)); its default (js) face
     // decodes to a [SchemeValue,SchemeValue] tuple, not APair. The scheme face is still APair.
-    expectTypeOf<DecodedArgsWithRest<[typeof z.pair], typeof z.value, "scheme">>().toEqualTypeOf<
+    expectTypeOf<DecodedArgsWithRest<[typeof z.pair], typeof z.schemeValue, "scheme">>().toEqualTypeOf<
       [AListAlike, ...SchemeValue[]]
     >();
   });
@@ -140,11 +140,11 @@ describe("symbol contract — inputRest: a fixed head + a separately-typed varia
   });
 
   test("apply's own declared shape: a SchemeValue head + a SchemeValue... tail", () => {
-    // Mirrors apply's real migrated contract exactly: { input: [z.value], inputRest: z.value, output: [z.value] }.
+    // Mirrors apply's real migrated contract exactly: { input: [z.schemeValue], inputRest: z.schemeValue, output: [z.schemeValue] }.
     // (Native SymbolDef erases the concrete Contract type on its return, so the real bound `apply`
     // export can't be re-inspected at the type level — this synthetic contract IS apply's declared
     // shape, proving the mechanism computes the right decoded-args type for it.)
-    expectTypeOf<DecodedArgsWithRest<[typeof z.value], typeof z.value>>().toEqualTypeOf<[SchemeValue, ...SchemeValue[]]>();
+    expectTypeOf<DecodedArgsWithRest<[typeof z.schemeValue], typeof z.schemeValue>>().toEqualTypeOf<[SchemeValue, ...SchemeValue[]]>();
   });
 
   test("wrong-typed rest param must NOT compile", () => {
@@ -172,9 +172,9 @@ describe("symbol contract — inputRest: a fixed head + a separately-typed varia
 // established convention for "this position is invoked as a JS-callable" (vector-map's
 // proc, vector-for-each's proc, curry's fn, call-with-values's producer/consumer,
 // member/assoc's compare predicate all already use this shape: 7 call sites across 4
-// files). `apply`'s plain `z.value` head is the outlier — its own doc comment frames
-// that choice as "both happen to be z.value here" (illustrating the head/rest SPLIT,
-// not a deliberate "callables are z.value" rule), and apply's body does its own runtime
+// files). `apply`'s plain `z.schemeValue` head is the outlier — its own doc comment frames
+// that choice as "both happen to be z.schemeValue here" (illustrating the head/rest SPLIT,
+// not a deliberate "callables are z.schemeValue" rule), and apply's body does its own runtime
 // `typecheck(...,"function")` + narrowing rather than leaning on the schema for shape.
 // ─────────────────────────────────────────────────────────────────────────────
 describe("symbol contract — 2026-07-05 audit: for-each / string-map / string-for-each head+rest precision", () => {
@@ -213,9 +213,9 @@ describe("symbol contract — 2026-07-05 audit: for-each / string-map / string-f
 describe("symbol contract — 2026-07-05 audit: filter's contract narrows to a fixed 2-tuple", () => {
   // OLD filter shape row DELETED (same sweep/rationale).
   test("NEW shape: a bare 2-element array literal decodes to a FIXED [pred, seq] tuple", () => {
-    // Mirrors filter's real migrated contract: { input: [predSchema, z.value], output: [z.unknown()], fanout: true }.
+    // Mirrors filter's real migrated contract: { input: [predSchema, z.schemeValue], output: [z.unknown()], fanout: true }.
     const predSchema = z.lambda;
-    expectTypeOf<DecodedArgs<[typeof predSchema, typeof z.value]>>().toEqualTypeOf<
+    expectTypeOf<DecodedArgs<[typeof predSchema, typeof z.schemeValue]>>().toEqualTypeOf<
       [(...args: unknown[]) => unknown, SchemeValue]
     >();
   });
@@ -235,15 +235,15 @@ describe("symbol contract — 2026-07-05 audit: find's predicate + return precis
   });
 
   // OLD output-shape row DELETED (same sweep/rationale).
-  test("NEW output z.value collapses to SchemeValue — mirrors vectors.ts's vector-ref/vector->list z.unknown()→z.value fix (vectors.test-d.ts)", () => {
-    expectTypeOf<DecodedReturn<[typeof z.value]>>().toEqualTypeOf<SchemeValue>();
+  test("NEW output z.schemeValue collapses to SchemeValue — mirrors vectors.ts's vector-ref/vector->list z.unknown()→z.schemeValue fix (vectors.test-d.ts)", () => {
+    expectTypeOf<DecodedReturn<[typeof z.schemeValue]>>().toEqualTypeOf<SchemeValue>();
   });
 
   test("wrong-typed impl: a bare string return (not a member of the SchemeValue union) must NOT satisfy the fixed contract", () => {
     const RUN = false as boolean;
     if (RUN) {
       symbol.native`find: proof`(
-        { input: [z.lambda, listOrNil], output: [z.value] },
+        { input: [z.lambda, listOrNil], output: [z.schemeValue] },
         // @ts-expect-error — output decodes to SchemeValue; a bare string literal is not a member of that union
         (pred, list) => {
           void pred;
@@ -263,8 +263,8 @@ describe("symbol contract — 2026-07-05 audit: typecheck's contract narrows to 
 
   // OLD typecheck shape row DELETED (same sweep/rationale).
   test("NEW shape: a plain 4-element array — the 4th slot's VALUE admits undefined, but there are EXACTLY 4 positions", () => {
-    // Mirrors typecheck's real migrated contract exactly (2nd slot z.value per the audit's other fix).
-    expectTypeOf<DecodedArgs<[typeof s1, typeof z.value, typeof s3, typeof s4]>>().toEqualTypeOf<
+    // Mirrors typecheck's real migrated contract exactly (2nd slot z.schemeValue per the audit's other fix).
+    expectTypeOf<DecodedArgs<[typeof s1, typeof z.schemeValue, typeof s3, typeof s4]>>().toEqualTypeOf<
       [{ valueOf(): unknown }, SchemeValue, { valueOf(): unknown } | Function, number | null | undefined]
     >();
   });
@@ -273,7 +273,7 @@ describe("symbol contract — 2026-07-05 audit: typecheck's contract narrows to 
     const RUN = false as boolean;
     if (RUN) {
       symbol.native`tc: proof`(
-        { input: [s1, z.value, s3, s4], output: [z.undefinedResult] },
+        { input: [s1, z.schemeValue, s3, s4], output: [z.undefinedResult] },
         // @ts-expect-error — the contract is a fixed 4-tuple; a 5th param has no corresponding decoded arg
         (a, b, c, d, e) => {
           void a;
@@ -316,22 +316,22 @@ describe("symbol contract — 2026-07-05 audit: negative proofs", () => {
 // of the 7 call sites: vector-map/vector-for-each's proc, call-with-values's producer/
 // consumer, member/assoc's compare predicate, and curry's fn). Its OLD contract authored
 // the whole input as ONE manually-built `z.tuple([head], z.unknown())` (no `inputRest`
-// field at all); the fix splits it into `input: [head], inputRest: z.value` — mirroring
+// field at all); the fix splits it into `input: [head], inputRest: z.schemeValue` — mirroring
 // apply's own migrated shape (a fixed callable head + a SchemeValue... tail), matching the
 // leading-args being partially-applied are real scheme terms, not representation-blind
 // `unknown`. A runtime proof lives alongside it (`env/srfi/__tests__/srfi-235.test.ts`) —
 // bakeNative erases the contract's static I/O/Rest on `NativeSymbolDef.in`/`.out`, but the
 // WIRED zod schema is NOT erased, so that test reads the real baked def's rest schema off
-// the actual srfi-235.ts export (reference-equal to `z.value` after the fix) rather than a
+// the actual srfi-235.ts export (reference-equal to `z.schemeValue` after the fix) rather than a
 // synthetic mirror — the two proofs cover what each layer can actually observe.
 // ─────────────────────────────────────────────────────────────────────────────
 describe("symbol contract — 2026-07-05 audit: curry's contract narrows the leading-args tail to SchemeValue (srfi-235.ts)", () => {
   const curryHead = z.lambda;
 
   // OLD curry shape row DELETED (same sweep/rationale).
-  test("NEW curry shape: input=[head], inputRest=z.value — leading args decode as SchemeValue, not unknown", () => {
-    // Mirrors curry's real migrated contract: { input: [z.custom<...>()], inputRest: z.value, output: [z.custom<...>()] }.
-    expectTypeOf<DecodedArgsWithRest<[typeof curryHead], typeof z.value>>().toEqualTypeOf<
+  test("NEW curry shape: input=[head], inputRest=z.schemeValue — leading args decode as SchemeValue, not unknown", () => {
+    // Mirrors curry's real migrated contract: { input: [z.custom<...>()], inputRest: z.schemeValue, output: [z.custom<...>()] }.
+    expectTypeOf<DecodedArgsWithRest<[typeof curryHead], typeof z.schemeValue>>().toEqualTypeOf<
       [(...args: unknown[]) => unknown, ...SchemeValue[]]
     >();
   });
@@ -340,8 +340,8 @@ describe("symbol contract — 2026-07-05 audit: curry's contract narrows the lea
     const RUN = false as boolean;
     if (RUN) {
       symbol.native`curry2: proof`(
-        { input: [curryHead], inputRest: z.value, output: [curryHead] },
-        // @ts-expect-error — rest args decode via z.value (SchemeValue), annotating them string is wrong
+        { input: [curryHead], inputRest: z.schemeValue, output: [curryHead] },
+        // @ts-expect-error — rest args decode via z.schemeValue (SchemeValue), annotating them string is wrong
         (fn: (...args: unknown[]) => unknown, ...args: string[]) => fn,
       );
     }

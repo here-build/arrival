@@ -4,15 +4,15 @@
 // left alone (a regression guard below asserts a representative sample stays zod-derived).
 //
 // The three overridden ops all share the same root defect: an op that genuinely returns / consumes a
-// LIST-OF-STRINGS, but whose zod contract can only spell the list slot as `z.value` (→ `unknown`) —
+// LIST-OF-STRINGS, but whose zod contract can only spell the list slot as `z.schemeValue` (→ `unknown`) —
 // scheme-zod has no element-typed list schema — so the harvest loses the element type. The author
 // knows it: each impl `to_array`s / `APair.fromArray`s strings. `List<string>` (from carriers.ts's
 // ambient vocabulary) is the honest, informative image.
-//   • string-join     — `z.value` list input → `unknown`; `z.union([z.string,z.schemeString])` output
+//   • string-join     — `z.schemeValue` list input → `unknown`; `z.union([z.string,z.schemeString])` output
 //                        → the redundant `string | string`. Both collapse to `(list: List<string>,
 //                        delimiter?: string) => string`.
-//   • string-tokenize — `z.value` output → `unknown`, but it returns a proper list of token strings.
-//   • string-split    — `z.value` output → `unknown` (list of pieces); the `string | char` delimiter
+//   • string-tokenize — `z.schemeValue` output → `unknown`, but it returns a proper list of token strings.
+//   • string-split    — `z.schemeValue` output → `unknown` (list of pieces); the `string | char` delimiter
 //                        images to the redundant `string | string` (both print `string`).
 import { describe, expect, it } from "vitest";
 import srfi13 from "../srfi-13.js";
@@ -27,22 +27,22 @@ function def(name: string): AEntity {
   return d;
 }
 
-describe("scheme/srfi-13 Contract harvest precision — author-asserted `type:` recovers the List-of-string domain z.value erases", () => {
+describe("scheme/srfi-13 Contract harvest precision — author-asserted `type:` recovers the List-of-string domain z.schemeValue erases", () => {
   // INVARIANT: string-join's harvested signature is (list: List<string>, delimiter?: string)
   // => string via override (pins implementation, not behavior)
-  it("string-join: List<string> input (was z.value → unknown) + string output (was the redundant string | string)", () => {
+  it("string-join: List<string> input (was z.schemeValue → unknown) + string output (was the redundant string | string)", () => {
     expect(signatureOf(def("string-join"))).toBe("(list: List<string>, delimiter?: string) => string");
   });
 
   // INVARIANT: string-tokenize's harvested signature returns List<string> via override
   // (pins implementation, not behavior)
-  it("string-tokenize: List<string> output (was z.value → unknown — it returns a proper list of token strings)", () => {
+  it("string-tokenize: List<string> output (was z.schemeValue → unknown — it returns a proper list of token strings)", () => {
     expect(signatureOf(def("string-tokenize"))).toBe("(str: string, criterion?: unknown) => List<string>");
   });
 
   // INVARIANT: string-split's harvested signature returns List<string> via override
   // (pins implementation, not behavior)
-  it("string-split: List<string> output (was z.value → unknown) + string delimiter (was the redundant string | string)", () => {
+  it("string-split: List<string> output (was z.schemeValue → unknown) + string delimiter (was the redundant string | string)", () => {
     expect(signatureOf(def("string-split"))).toBe("(str: string, delimiter: string) => List<string>");
   });
 });

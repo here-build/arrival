@@ -5,7 +5,7 @@
  * The vocabulary is Solidity's, declared, never derived from the lineage role:
  *   - `view`  = cacheable ACROSS runs (a boundary snapshot worth persisting) — demands a
  *               SERIALIZABLE contract (the bake-time shape gate beside
- *               `assertProvenanceRoleShape`): no z.lambda arms, no z.value slots.
+ *               `assertProvenanceRoleShape`): no z.lambda arms, no z.dynamic slots.
  *   - `pure`  = regenerateable (deterministic from decoded args; recovery = re-call;
  *               never persisted) — NO shape gate.
  *   - absent  = regenerateable, the SAFE default (kills the rosetta default-`source`
@@ -43,9 +43,9 @@ describe("cache class — declaration + resolution (never derived, absent = rege
     expect(contractOf<RosettaSymbolDef>(def).cacheClass).toBe("view");
   });
 
-  it("a declared `pure` resolves onto the baked def — ungated (z.value slots allowed)", () => {
+  it("a declared `pure` resolves onto the baked def — ungated (z.dynamic slots allowed)", () => {
     const def = symbol.rosetta`cc-pure: contractually deterministic`(
-      { input: z.array(z.value), output: [z.value], cacheClass: "pure" },
+      { input: z.array(z.dynamic), output: [z.dynamic], cacheClass: "pure" },
       (v) => v,
     );
     expect(contractOf<RosettaSymbolDef>(def).cacheClass).toBe("pure");
@@ -80,26 +80,26 @@ describe("the `view` shape gate — a cache entry must serialize (bake-time door
     ).toThrow(CacheClassShapeError);
   });
 
-  it("a `view` with a z.value OUTPUT slot throws at bake — the raw escape hatch doesn't serialize", () => {
+  it("a `view` with a z.dynamic OUTPUT slot throws at bake — the raw escape hatch doesn't serialize", () => {
     expect(() =>
-      symbol.rosetta`cc-view-value-out: `({ input: [z.string], output: [z.value], cacheClass: "view" }, (): never => {
+      symbol.rosetta`cc-view-value-out: `({ input: [z.string], output: [z.dynamic], cacheClass: "view" }, (): never => {
         throw new Error("unreachable — the bake-time gate throws before any impl can run");
       }),
     ).toThrow(CacheClassShapeError);
   });
 
-  it("a `view` with a z.value INPUT slot throws at bake — the cache KEY must canonicalize too", () => {
+  it("a `view` with a z.dynamic INPUT slot throws at bake — the cache KEY must canonicalize too", () => {
     expect(() =>
-      symbol.rosetta`cc-view-value-in: `({ input: [z.value], output: [z.string], cacheClass: "view" }, (v) =>
+      symbol.rosetta`cc-view-value-in: `({ input: [z.dynamic], output: [z.string], cacheClass: "view" }, (v) =>
         String(v),
       ),
     ).toThrow(CacheClassShapeError);
   });
 
-  it("a `view` kwargs contract gates PER FIELD — a z.value field inside the kwargs object throws", () => {
+  it("a `view` kwargs contract gates PER FIELD — a z.dynamic field inside the kwargs object throws", () => {
     expect(() =>
       symbol.rosetta`cc-view-kwargs-value: `(
-        { input: [], inputRest: { raw: z.value }, output: [z.string], cacheClass: "view" },
+        { input: [], inputRest: { raw: z.dynamic }, output: [z.string], cacheClass: "view" },
         (kw: { raw: unknown }) => String(kw.raw),
       ),
     ).toThrow(CacheClassShapeError);
@@ -118,7 +118,7 @@ describe("the `view` shape gate — a cache entry must serialize (bake-time door
     expect(
       contractOf<RosettaSymbolDef>(
         symbol.rosetta`cc-pure-ungated: `(
-          { input: [z.lambda, z.value], output: [z.value], cacheClass: "pure" },
+          { input: [z.lambda, z.dynamic], output: [z.dynamic], cacheClass: "pure" },
           (_f, v) => v,
         ),
       ).cacheClass,
@@ -144,7 +144,7 @@ describe("the `sink` gate — void-family output (the tombstone-skip's soundness
     ).toBe("sink");
     expect(
       contractOf<NativeSymbolDef>(
-        symbol.native`cc-sink-empty: `({ input: [z.value], output: [], provenance: "sink" }, (): [] => []),
+        symbol.native`cc-sink-empty: `({ input: [z.schemeValue], output: [], provenance: "sink" }, (): [] => []),
       ).provenance,
     ).toBe("sink");
   });
@@ -153,7 +153,7 @@ describe("the `sink` gate — void-family output (the tombstone-skip's soundness
 describe("lineage ⊥ cache — the infer coexistence law (Ruling B)", () => {
   it("a `pure` cache class coexists with the `source` lineage default — neither axis moves the other", () => {
     const def = symbol.rosetta`cc-infer-shaped: source that declares pure`(
-      { input: z.array(z.value), output: [z.value], cacheClass: "pure" },
+      { input: z.array(z.dynamic), output: [z.dynamic], cacheClass: "pure" },
       (v) => v,
     );
     expect(contractOf<RosettaSymbolDef>(def).provenance).toBe("source"); // lineage: mints (the result is new information)

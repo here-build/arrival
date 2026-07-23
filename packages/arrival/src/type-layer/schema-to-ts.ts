@@ -55,9 +55,9 @@ import type { AEntity } from "../common/symbol.js";
 //
 // The harvest re-presents each scheme primitive as the TS type the lens narrows against:
 // the membrane makes a boundary value its plain JS type, and list/pair/vector project to
-// the carrier vocabulary. Keyed by SCHEMA IDENTITY. `z.pair` is `cons(value, value)` (see
+// the carrier vocabulary. Keyed by SCHEMA IDENTITY. `z.pair` is `cons(schemeValue, schemeValue)` (see
 // scheme-zod.ts's own doc comment on `pair`) — it carries the name "cons", not "pair", so
-// it prints via the named-generic pre-check below as `Pair<unknown, unknown>`, not through
+// it prints via the named-generic pre-check below as `Pair<SchemeValue, SchemeValue>`, not through
 // this table. An unmapped custom/instanceof scheme primitive degrades to `unknown`
 // (robust default — never throw; the total-harvest contract, e.g. a future zod primitive).
 // ─────────────────────────────────────────────────────────────────────────────
@@ -71,6 +71,11 @@ const booleanNode: NodeBuilder = (ts) => ts.factory.createKeywordTypeNode(ts.Syn
 const nullNode: NodeBuilder = (ts) => ts.factory.createLiteralTypeNode(ts.factory.createNull());
 const uint8ArrayNode: NodeBuilder = (ts) => ts.factory.createTypeReferenceNode("Uint8Array", undefined);
 const voidNode: NodeBuilder = (ts) => ts.factory.createKeywordTypeNode(ts.SyntaxKind.VoidKeyword);
+/** `SchemeValue` — the honest top type `z.schemeValue` prints (carriers.ts's own
+ *  declaration, ambient in the lens's prelude — see prelude.ts's `carrierVocabulary`), NOT
+ *  the bare `unknown` keyword: distinct from an unmapped/unregistered schema's `unknown`
+ *  DEFAULT, this is a DELIBERATE unconstrained slot. */
+const schemeValueNode: NodeBuilder = (ts) => ts.factory.createTypeReferenceNode("SchemeValue", undefined);
 /** `(...args: unknown[]) => unknown` — z.lambda's callable image. */
 const lambdaNode: NodeBuilder = (ts) => {
   const restParam = ts.factory.createParameterDeclaration(
@@ -92,8 +97,8 @@ const lambdaNode: NodeBuilder = (ts) => {
 // this file only needs to know how to PRINT
 // a given name, not how to RECOGNIZE one.
 const IMAGE_BY_NAME: ReadonlyMap<string, NodeBuilder> = new Map<string, NodeBuilder>([
-  // NOTE: no "pair" entry — `z.pair` is `cons(value, value)`, named "cons", and prints via
-  // the named-generic pre-check as `Pair<unknown, unknown>` before this table is ever consulted.
+  // NOTE: no "pair" entry — `z.pair` is `cons(schemeValue, schemeValue)`, named "cons", and prints via
+  // the named-generic pre-check as `Pair<SchemeValue, SchemeValue>` before this table is ever consulted.
   ["string", stringNode],
   ["exact", numberNode],
   ["inexact", numberNode],
@@ -117,6 +122,14 @@ const IMAGE_BY_NAME: ReadonlyMap<string, NodeBuilder> = new Map<string, NodeBuil
   ["nil", nullNode],
   ["boolean", booleanNode],
   ["char", stringNode],
+  // The Q1 split (docs/plans/stage-c-corpse-deletion.md §"z.value retirement campaign"):
+  // "schemeValue" (the honest top type, native/contour contracts) prints the real
+  // `SchemeValue` alias; "dynamic" (the rosetta escape hatch) and the deprecated legacy
+  // "value" alias both print the bare `unknown` keyword — same runtime shape, but
+  // deliberately NOT the named alias (a rosetta `z.dynamic` slot's shape is genuinely
+  // unknowable, not "any scheme value" in the native/contour sense).
+  ["schemeValue", schemeValueNode],
+  ["dynamic", unknownNode],
   ["value", unknownNode],
   ["lambda", lambdaNode],
   ["undefinedResult", voidNode], // R7RS's "unspecified" return — the honest TS analog is void

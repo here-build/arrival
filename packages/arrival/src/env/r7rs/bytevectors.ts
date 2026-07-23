@@ -11,7 +11,7 @@
  * validation — "zod for TYPES purely") and an impl bound raw. The bytevector
  * args declare `z.bytevector` (the op's semantic domain); the raw-binary
  * polymorphism stays a runtime property of `asBytevector`, unaffected by the
- * types-only schema. `bytevector?` keeps `z.value` since it deliberately
+ * types-only schema. `bytevector?` keeps `z.schemeValue` since it deliberately
  * classifies ANY value.
  */
 
@@ -27,7 +27,7 @@ export default EnvCapability.define("scheme/bytevectors", {
   symbols: (symbol, z) => ({
     "bytevector?": symbol.native`bytevector?: #t iff the object is a bytevector (boxed or raw binary)`(
       {
-        input: [z.value],
+        input: [z.schemeValue],
         output: [z.boolean],
         type: dedent`
           {

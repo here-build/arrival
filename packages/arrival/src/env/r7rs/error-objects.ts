@@ -61,29 +61,29 @@ export const wrappedOps = {
 
 /** DELIBERATELY dumb roster: one literal `symbol.native` declaration per verb, no
  *  filter/Set indirection — this object IS the complete roster, read top-to-bottom.
- *  Every input is representation-blind (`z.value`, matching each verb's own
+ *  Every input is representation-blind (`z.schemeValue`, matching each verb's own
  *  `unknown`-typed param) except the genuinely-boolean/string returns, which get the
  *  concrete codec so the contract documents them honestly. */
 export default EnvCapability.define("scheme/exceptions", {
   symbols: (symbol, z) => ({
     "error-object?": symbol.native`error-object?: #t iff obj is an R7RS error object`(
-      { input: [z.value], output: [z.boolean] },
+      { input: [z.schemeValue], output: [z.boolean] },
       wrappedOps["error-object?"],
     ),
     "error-object-message": symbol.native`error-object-message: the error object's message string`(
-      { input: [z.value], output: [z.string] },
+      { input: [z.schemeValue], output: [z.string] },
       wrappedOps["error-object-message"],
     ),
     "error-object-irritants": symbol.native`error-object-irritants: the error object's irritants as a list`(
-      { input: [z.value], output: [z.value] },
+      { input: [z.schemeValue], output: [z.schemeValue] },
       wrappedOps["error-object-irritants"],
     ),
     "read-error?": symbol.native`read-error?: #t iff obj is a read error`(
-      { input: [z.value], output: [z.boolean] },
+      { input: [z.schemeValue], output: [z.boolean] },
       wrappedOps["read-error?"],
     ),
     "file-error?": symbol.native`file-error?: #t iff obj is a file error`(
-      { input: [z.value], output: [z.boolean] },
+      { input: [z.schemeValue], output: [z.boolean] },
       wrappedOps["file-error?"],
     ),
   }),

@@ -86,12 +86,17 @@ export const overridableCapability = EnvCapability.define("arrival/overridable",
   symbols: (symbol, sz) => ({
     "overridable/resolve":
       symbol.rosetta`overridable/resolve: resolves a parameter, preferring a host override over the form default (validated against the declared type)`(
-        // `name` stays `sz.value` (the raw ASymbol), NOT `sz.symbol`: sz.symbol decodes to an
+        // `name` stays `sz.dynamic` (the raw ASymbol), NOT `sz.symbol`: sz.symbol decodes to an
         // opaque host JS symbol whose toString prints the wrapper description, not the bare
-        // name. Errors name the binding, so read the ASymbol directly via `.literal()`.
+        // name. Errors name the binding, so read the ASymbol directly via `.literal()`. This is
+        // the ONE legitimate rosetta `dynamic` use in arrival core (Q1 split,
+        // docs/plans/stage-c-corpse-deletion.md §"z.value retirement campaign") — `name`/
+        // `type`/`default` genuinely cannot be typed (a scheme-DSL type tag is arbitrarily
+        // recursive, evaluated as raw scheme data, not a marshaled JS shape); no dedicated
+        // no-decode symbol-identity codec is invented this phase, per that campaign's own note.
         {
-          input: [sz.value, sz.value, sz.value],
-          output: [sz.value],
+          input: [sz.dynamic, sz.dynamic, sz.dynamic],
+          output: [sz.dynamic],
           type: "(name: symbol, type: string|list, default: any): any",
         },
         function (nameSym, typeTag, defaultVal) {

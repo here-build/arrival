@@ -124,12 +124,12 @@ describe("LAW 3 — static validation on the vocabulary path", () => {
     const cap = EnvCapability.define("law/b3-static-validation", {
       configuration: { fs: z.custom<{ x: number }>(() => true).optional() },
       symbols: (symbol, sz) => ({
-        "probe!": symbol.native`probe!: JS-side effect marker`({ input: [], output: [sz.value] }, () => {
+        "probe!": symbol.native`probe!: JS-side effect marker`({ input: [], output: [sz.schemeValue] }, () => {
           ran = true;
           return nil;
         }),
         "gated/verb": symbol.native`gated/verb: requires fs`(
-          { input: [], output: [sz.value], requiresConfig: ["fs"] },
+          { input: [], output: [sz.schemeValue], requiresConfig: ["fs"] },
           () => nil,
         ),
       }),
@@ -152,7 +152,7 @@ describe("LAW 3 — static validation on the vocabulary path", () => {
       configuration: { fs: z.custom<{ x: number }>(() => true).optional() },
       symbols: (symbol, sz) => ({
         "gated/verb": symbol.native`gated/verb: requires fs`(
-          { input: [], output: [sz.value], requiresConfig: ["fs"] },
+          { input: [], output: [sz.schemeValue], requiresConfig: ["fs"] },
           () => nil,
         ),
       }),

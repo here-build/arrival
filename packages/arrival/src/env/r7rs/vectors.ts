@@ -9,13 +9,13 @@
  *
  * Each op declares a SCHEME-IDENTITY zod contract (no codec, no runtime
  * validation — "zod for types purely") and an impl bound raw. Vector args are
- * \`z.vector(z.value)\`, indices the \`schemeNumber\` tower, predicate/length returns the
+ * \`z.vector(z.schemeValue)\`, indices the \`schemeNumber\` tower, predicate/length returns the
  * JS-boolean/number scheme-zod codecs. The representation-blind boundaries —
  * element/list returns (\`vector\`'s elements, \`vector-ref\`/\`vector->list\`'s
- * returns) — are \`z.value\` (same runtime acceptance, precise static output
+ * returns) — are \`z.schemeValue\` (same runtime acceptance, precise static output
  * \`SchemeValue\`). The HOF callback is the types-only \`z.custom\` procedure; its
  * variadic vector rest (\`vector-map\`/\`vector-for-each\`) and \`vector-append\`'s
- * args are \`inputRest\`/\`z.array\` over \`z.vector(z.value)\` (see the sibling
+ * args are \`inputRest\`/\`z.array\` over \`z.vector(z.schemeValue)\` (see the sibling
  * \`__tests__/vectors-contract-precision.test.ts\` / \`vectors.test-d.ts\`).
  */
 
@@ -51,8 +51,8 @@ export default EnvCapability.define("scheme/vectors", {
   symbols: (symbol, z) => ({
     "make-vector": symbol.native`make-vector: a vector of length k, each slot fill`(
       {
-        input: [z.schemeNumber, z.value.optional()],
-        output: [z.vector(z.value)],
+        input: [z.schemeNumber, z.schemeValue.optional()],
+        output: [z.vector(z.schemeValue)],
         // Harvest: fill T → readonly T[] (zod prints undeduped unknown[] | unknown[]).
         type: dedent`
           {
@@ -67,7 +67,7 @@ export default EnvCapability.define("scheme/vectors", {
         // for >10s.
         assertAllocatable(len, "make-vector");
         // Materialize the fill into every slot AT construction. The fill slot takes any
-        // scheme value by design (z.value / SchemeValue) — a provided fill has crossed
+        // scheme value by design (z.schemeValue / SchemeValue) — a provided fill has crossed
         // the membrane (JS null→nil), and the no-fill case maps each slot to \`theVoid\`
         // (the membrane's own undefined→theVoid image) rather than a raw \`undefined\`,
         // which would leak an unboxed slot. Folding the slot into \`Array.from\`'s map
@@ -82,10 +82,10 @@ export default EnvCapability.define("scheme/vectors", {
 
     vector: symbol.native`vector: a vector of the given objects`(
       // Elements are scheme values by design (any object may sit in a vector slot) — the
-      // typed z.value replacement, matching make-vector's own fill-slot convention.
+      // typed z.schemeValue replacement, matching make-vector's own fill-slot convention.
       {
-        input: z.array(z.value),
-        output: [z.vector(z.value)],
+        input: z.array(z.schemeValue),
+        output: [z.vector(z.schemeValue)],
         type: dedent`
           {
             <T>(...xs: T[]): readonly T[];
@@ -98,11 +98,11 @@ export default EnvCapability.define("scheme/vectors", {
     ),
 
     "vector-append": symbol.native`vector-append: concatenation of the given vectors`(
-      // Args are vectors, not representation-blind values — z.vector(z.value), matching every other
+      // Args are vectors, not representation-blind values — z.vector(z.schemeValue), matching every other
       // accessor in this file (vector-length/vector-copy/vector->string/…).
       {
-        input: z.array(z.vector(z.value)),
-        output: [z.vector(z.value)],
+        input: z.array(z.vector(z.schemeValue)),
+        output: [z.vector(z.schemeValue)],
         // Homogeneous concat — vectors have no dotted-tail residue (unlike list append).
         type: dedent`
           {
@@ -133,7 +133,7 @@ export default EnvCapability.define("scheme/vectors", {
 
     "vector-length": symbol.native`vector-length: number of elements in vec`(
       {
-        input: [z.vector(z.value)],
+        input: [z.vector(z.schemeValue)],
         output: [z.number],
         // Monomorphic; override mainly kills unknown[] | unknown[] printer gap + readonly.
         type: dedent`
@@ -148,12 +148,12 @@ export default EnvCapability.define("scheme/vectors", {
     ),
 
     "vector-ref": symbol.native`vector-ref: the element of vec at index k`(
-      // vec is a vector (z.vector(z.value)); the returned element is a scheme value,
-      // representation-blind by design (z.value) — same precision as vector->list's
+      // vec is a vector (z.vector(z.schemeValue)); the returned element is a scheme value,
+      // representation-blind by design (z.schemeValue) — same precision as vector->list's
       // element output.
       {
-        input: [z.vector(z.value), z.schemeNumber],
-        output: [z.value],
+        input: [z.vector(z.schemeValue), z.schemeNumber],
+        output: [z.schemeValue],
         type: dedent`
           {
             <T>(v: readonly T[], k: number): T;
@@ -187,11 +187,11 @@ export default EnvCapability.define("scheme/vectors", {
     "vector-copy!": symbol.notImplemented`vector-copy!: every value is frozen by design — mutating its destination would falsify the provenance lineage it carries; construct a new value instead (vector-copy returns a fresh vector)`,
 
     "vector->list": symbol.native`vector->list: a list of vec's elements in [start, end)`(
-      // A list of scheme values, representation-blind by design — z.value, matching
+      // A list of scheme values, representation-blind by design — z.schemeValue, matching
       // vector-ref's own element-output convention.
       {
-        input: [z.vector(z.value), z.schemeNumber.optional(), z.schemeNumber.optional()],
-        output: [z.value],
+        input: [z.vector(z.schemeValue), z.schemeNumber.optional(), z.schemeNumber.optional()],
+        output: [z.schemeValue],
         type: dedent`
           {
             <T>(v: readonly T[], start?: number, end?: number): List<T>;
@@ -213,7 +213,7 @@ export default EnvCapability.define("scheme/vectors", {
     "list->vector": symbol.native`list->vector: a vector of the list's elements`(
       {
         input: [z.listAlike],
-        output: [z.vector(z.value)],
+        output: [z.vector(z.schemeValue)],
         type: dedent`
           {
             <T>(xs: List<T>): readonly T[];
@@ -233,7 +233,7 @@ export default EnvCapability.define("scheme/vectors", {
 
     "vector->string": symbol.native`vector->string: a string from vec's character elements in [start, end)`(
       {
-        input: [z.vector(z.value), z.schemeNumber.optional(), z.schemeNumber.optional()],
+        input: [z.vector(z.schemeValue), z.schemeNumber.optional(), z.schemeNumber.optional()],
         output: [z.string],
         // Char face is string in the carrier vocab (same as z.char / printType).
         type: dedent`
@@ -258,7 +258,7 @@ export default EnvCapability.define("scheme/vectors", {
     "string->vector": symbol.native`string->vector: a vector of str's characters in [start, end)`(
       {
         input: [z.string, z.schemeNumber.optional(), z.schemeNumber.optional()],
-        output: [z.vector(z.value)],
+        output: [z.vector(z.schemeValue)],
         type: dedent`
           {
             (s: string, start?: number, end?: number): readonly string[];
@@ -279,8 +279,8 @@ export default EnvCapability.define("scheme/vectors", {
 
     "vector-copy": symbol.native`vector-copy: a fresh copy of vec over [start, end)`(
       {
-        input: [z.vector(z.value), z.schemeNumber.optional(), z.schemeNumber.optional()],
-        output: [z.vector(z.value)],
+        input: [z.vector(z.schemeValue), z.schemeNumber.optional(), z.schemeNumber.optional()],
+        output: [z.vector(z.schemeValue)],
         type: dedent`
           {
             <T>(v: readonly T[], start?: number, end?: number): readonly T[];
@@ -301,11 +301,11 @@ export default EnvCapability.define("scheme/vectors", {
     "vector-map": symbol.native`vector-map: apply proc across the vectors, collecting results into a new vector`(
       // proc is the fixed HEAD (`input`); the spread vectors are the variadic TAIL
       // (`inputRest`) — mirrors apply/for-each/string-map's own head/rest split. The rest
-      // is z.vector(z.value) (this file's own vector-identity schema), not representation-blind.
+      // is z.vector(z.schemeValue) (this file's own vector-identity schema), not representation-blind.
       {
         input: [z.lambda],
-        inputRest: z.vector(z.value),
-        output: [z.vector(z.value)],
+        inputRest: z.vector(z.schemeValue),
+        output: [z.vector(z.schemeValue)],
         provenance: "fan",
         type: dedent`
           {
@@ -340,10 +340,10 @@ export default EnvCapability.define("scheme/vectors", {
     ),
 
     "vector-for-each": symbol.native`vector-for-each: apply proc across the vectors for effect`(
-      // Same head/rest migration as vector-map above (callable head, z.vector(z.value) rest).
+      // Same head/rest migration as vector-map above (callable head, z.vector(z.schemeValue) rest).
       {
         input: [z.lambda],
-        inputRest: z.vector(z.value),
+        inputRest: z.vector(z.schemeValue),
         output: [z.undefinedResult],
         type: dedent`
           {

@@ -98,8 +98,8 @@ export class RecordingRegistry {
    *  (retrospective side) — see the module header's design call.
    *
    *  Migrated off the retired `env.defineRosetta` onto a test-local `EnvCapability`
-   *  (`symbol.rosetta` verb — the migration target), same `inputRest: z.value` /
-   *  `output: [z.value]` untyped-source shape w1-harness.ts's `SourceRegistry.register`
+   *  (`symbol.rosetta` verb — the migration target), same `inputRest: z.dynamic` /
+   *  `output: [z.dynamic]` untyped-source shape w1-harness.ts's `SourceRegistry.register`
    *  uses: args decode to the raw scheme value (no automatic JS conversion), so this
    *  impl runs `schemeToJs` on each arg itself — mirroring the retired wrapper's
    *  automatic conversion exactly (research-env.ts's `buildResearchScope` idiom) — and
@@ -110,9 +110,9 @@ export class RecordingRegistry {
       EnvCapability.define(`test/q16-source-${op}`, {
       symbols: (symbol) => ({
         [op]: symbol.rosetta`${op}: Q16 harness recording source`(
-          { input: [], inputRest: z.value, output: [z.value] },
+          { input: [], inputRest: z.dynamic, output: [z.dynamic] },
           // `any[]` rest param — the research-env.ts `buildResearchScope` boundary: a
-          // `z.value` slot decodes to the raw SchemeValue, and `schemeToJs`'s generic
+          // `z.dynamic` slot decodes to the raw SchemeValue, and `schemeToJs`'s generic
           // constraint (`T extends SchemeValue | null | undefined`) can't be satisfied by
           // an `unknown`-typed rest param without a cast; `any` here is the SAME erasure
           // `symbol.rosetta`'s own `rawImpl` boundary already performs one layer down.

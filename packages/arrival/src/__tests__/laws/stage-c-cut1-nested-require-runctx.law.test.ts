@@ -55,7 +55,7 @@ function makeUpperExtCapability(name: string, suffix: string, resolverName: stri
     deps: [arrivalLoaderCapability],
     symbols: (symbol, z) => ({
       [resolverName]: symbol.native`${resolverName}: uppercases module contents (ResolverResult value kind)`(
-        { input: [z.value, z.value], output: [z.value] },
+        { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
         (contents: unknown) => ({ kind: "value", value: String(contents).toUpperCase() }) as never,
       ),
     }),

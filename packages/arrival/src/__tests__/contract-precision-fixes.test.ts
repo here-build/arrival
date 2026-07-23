@@ -14,7 +14,7 @@
 // semantics (a `.optional()` trailing slot DOES allow a shorter array; a bare
 // `z.custom<T>()`/`z.unknown()` slot accepts anything INCLUDING a missing/undefined
 // slot — neither by itself creates an arity floor). The genuine, testable signal in
-// every case is: a value that used to slip through an unconstrained `z.value`/
+// every case is: a value that used to slip through an unconstrained `z.schemeValue`/
 // `z.unknown()` rest (or an unbounded `z.tuple(fixed, rest)` tail) now correctly fails.
 import { describe, expect, it } from "vitest";
 import listsPack from "../env/r7rs/lists.js";
@@ -55,7 +55,7 @@ const realString = new AString("abc");
 
 describe("2026-07-05 audit — runtime Contract precision on the REAL exported ops", () => {
   // INVARIANT: for-each's rest-argument schema requires a proper list (Pair|Nil); a non-list is rejected
-  it("for-each: rest elements must now be a proper list (Pair|Nil) — a non-list used to slip through the old z.array(z.value)", () => {
+  it("for-each: rest elements must now be a proper list (Pair|Nil) — a non-list used to slip through the old z.array(z.schemeValue)", () => {
     const def = contractDef(listsPack, "for-each");
     expect(def.in.safeParse([fn, properList]).success).toBe(true);
     expect(def.in.safeParse([fn, nil]).success).toBe(true);
@@ -119,20 +119,20 @@ describe("2026-07-05 audit — scheme/equality: symbol=? input precision (boolea
   });
 
   // REBASELINE: the uniform-scheme-zod-vocabulary migration retired z.unknown() from this env
-  // layer entirely (scheme-zod.ts v2 doesn't re-export it — see srfi-95.ts's own note: "z.value
+  // layer entirely (scheme-zod.ts v2 doesn't re-export it — see srfi-95.ts's own note: "z.schemeValue
   // is the typed replacement for z.unknown() at exactly this kind of native scheme-value slot").
-  // boolean=?'s contract is `inputRest: z.value` (isSchemeValue: instanceof AValue or a
+  // boolean=?'s contract is `inputRest: z.schemeValue` (isSchemeValue: instanceof AValue or a
   // function) — genuinely NOT host-blind at the schema level (a raw JS boolean fails it), even
   // though the impl's own unwrap() still handles both representations at RUNTIME (native ops
   // never validate — see this file's own header note). The mixed-representation runtime
   // behavior stays load-bearing (equality.ts's unwrap()); only the zod schema's acceptance
   // domain is now honestly "boxed scheme value," matching every other slot this migration
   // touched.
-  // INVARIANT: boolean=?'s input schema is z.value (a raw JS boolean is rejected at the schema
+  // INVARIANT: boolean=?'s input schema is z.schemeValue (a raw JS boolean is rejected at the schema
   // level); the impl's own unwrap() still branches on boxed ABool vs raw JS boolean and accepts
   // both at runtime, since native ops never validate against their own schema (pins implementation, not behavior —
   // supersedes the historical "schema deliberately stays z.unknown()" shape)
-  it("boolean=?: input is z.value — a raw JS boolean is genuinely rejected by the schema (though the impl's own unwrap() still accepts both representations at runtime)", () => {
+  it("boolean=?: input is z.schemeValue — a raw JS boolean is genuinely rejected by the schema (though the impl's own unwrap() still accepts both representations at runtime)", () => {
     const def = contractDef(equalityPack, "boolean=?");
     expect(def.in.safeParse([true, false]).success).toBe(false);
     expect(def.in.safeParse([new ABool(true), new ABool(false)]).success).toBe(true);

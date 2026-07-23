@@ -32,7 +32,7 @@
 //   5. faithfulness: `maybe-ref`/`either-ref`'s default failure path calls the REAL
 //      scheme `error` procedure (not a bare JS throw) — it integrates with
 //      `with-exception-handler`'s handler-stack machinery, exactly as pre-migration.
-//   6. `maybe->list`/`either->list`'s tightened `z.list(z.value)` output contract is
+//   6. `maybe->list`/`either->list`'s tightened `z.list(z.schemeValue)` output contract is
 //      VALIDATE-ONLY — the returned value is still a real scheme list a sibling
 //      `(car …)`/`(cdr …)` can walk, never a decoded JS array leaking through.
 import { describe, expect, it } from "vitest";
@@ -245,7 +245,7 @@ describe("scheme/srfi-189 — the §2.1 bake FV law passes for this pack AS MIGR
       symbols: (symbol, z) => ({
         "bad-just":
           symbol.define`bad-just: reproduces the pre-migration srfi-189 bug (no declared dep on scheme/lists' list)`(
-            { input: [z.value], output: [z.value] },
+            { input: [z.schemeValue], output: [z.schemeValue] },
             `(lambda (x) (list 'just x))`,
           ),
       }),

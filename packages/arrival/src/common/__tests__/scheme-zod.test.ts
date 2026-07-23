@@ -5,7 +5,7 @@
 //
 // This is deliberately *lower level* than attestation.test.ts (which exercises
 // full rosetta + membrane + attestation spine walking on pairs/vectors at a higher
-// system level using mostly z.value contracts). Here we test the codecs in isolation,
+// system level using mostly z.dynamic contracts). Here we test the codecs in isolation,
 // roundtrips with typed elements, and (in the companion .test-d.ts) the Face projections
 // (interpreter/Scheme side vs JS side).
 
@@ -305,7 +305,7 @@ describe("scheme-zod z.dict(shape)/z.dict() — keyed to ADict.get()'s own proto
   it("z.dict() bare (open-record) is the shallow BOXED record — the inside-the-sandbox shape, NOT the membrane exit", () => {
     // Rebaselined for R9 (RULINGS.md R9): `arrival/toJS` now egresses a lazy
     // proxy with values already unwrapped to plain JS — the OUTSIDE shape. This codec
-    // feeds its out-schema (`z.record(z.string(), value)`) per-field, so its decode
+    // feeds its out-schema (`z.record(z.string(), schemeValue)`) per-field, so its decode
     // builds the boxed record from keys()/get() directly and must NOT route through the
     // membrane exit.
     const a = makeExact(1);
@@ -391,10 +391,22 @@ describe("scheme-zod z.procedure — contract-aware marshaling", () => {
   });
 });
 
-describe("scheme-zod z.value — exhaustive predicate, passthrough on both faces", () => {
-  // INVARIANT: z.value accepts every concrete scheme value kind, including
-  // symbol/dict/vector/bytevector (completeness).
-  it("accepts every concrete scheme value kind (the completeness fix: symbol/dict/vector/bytevector included)", () => {
+// Q1 SPLIT (docs/plans/stage-c-corpse-deletion.md §"z.value retirement campaign"): the ONE
+// `isSchemeValue` predicate now mints under THREE names — `z.schemeValue` (the honest top
+// type, native/contour contracts), `z.dynamic` (the rosetta escape hatch), and the deprecated
+// `z.value` alias (Phase B deletes it) — each its OWN schema instance (distinct object
+// identity), so `z.lookupName` resolves each to its OWN registered name even though all three
+// share byte-identical runtime behavior (same predicate, same identity-passthrough decode).
+describe("scheme-zod z.schemeValue / z.dynamic / z.value — exhaustive predicate, passthrough on both faces", () => {
+  const trio = [
+    ["schemeValue", z.schemeValue] as const,
+    ["dynamic", z.dynamic] as const,
+    ["value", z.value] as const,
+  ];
+
+  // INVARIANT: all three accept every concrete scheme value kind, including
+  // symbol/dict/vector/bytevector (completeness) — the SAME `isSchemeValue` predicate.
+  it.each(trio)("z.%s accepts every concrete scheme value kind (symbol/dict/vector/bytevector included)", (_name, schema) => {
     const instances: unknown[] = [
       makeBool(true),
       makeChar("x"),
@@ -412,21 +424,39 @@ describe("scheme-zod z.value — exhaustive predicate, passthrough on both faces
       new APair(makeExact(1), nil),
     ];
     for (const v of instances) {
-      expect(() => z.value.parse(v)).not.toThrow();
+      expect(() => schema.parse(v)).not.toThrow();
     }
   });
 
-  // INVARIANT: z.decode(z.value, x) === x — passthrough only, z.value never transforms.
-  it("z.decode(value, x) === x — passthrough only, never transforms", () => {
+  // INVARIANT: z.decode(schema, x) === x for all three — passthrough only, never transforms.
+  it.each(trio)("z.decode(%s, x) === x — passthrough only, never transforms", (_name, schema) => {
     const sym = makeExact(7);
-    expect(z.decode(z.value, sym)).toBe(sym);
+    expect(z.decode(schema, sym)).toBe(sym);
   });
 
-  // printType(z.value) === "unknown" — NOT tested here. schema-to-ts.ts (the printer) still
-  // imports v1's `common/scheme-zod.js`, not this file; wiring it to v2 is owned by the
-  // parallel schema-to-ts workstream (steps 11a/11b) and that file is out of scope for this
-  // pass. v1's own IMAGE_BY_NAME already maps "value" → unknownNode, so the printed-image
-  // behavior isn't a gap in practice — just not yet reachable from v2's own exports.
+  // LAW (b) — z.schemeValue prints as the honest top type in the harvest, not "unknown"; see
+  // type-layer/__tests__/schema-to-ts.test.ts for the printer-level pin (schemeValue →
+  // "SchemeValue", dynamic/value → "unknown").
+  it("z.lookupName distinguishes all three, despite identical runtime predicates", () => {
+    expect(z.lookupName(z.schemeValue)).toBe("schemeValue");
+    expect(z.lookupName(z.dynamic)).toBe("dynamic");
+    expect(z.lookupName(z.value)).toBe("value");
+    // Distinct schema INSTANCES (object identity) — `value` is NOT a re-export of `dynamic`
+    // (see scheme-zod.ts's own doc on why sharing the object would also share the NAME,
+    // since NAMES is keyed by identity).
+    expect(z.schemeValue).not.toBe(z.dynamic);
+    expect(z.schemeValue).not.toBe(z.value);
+    expect(z.dynamic).not.toBe(z.value);
+  });
+
+  // LAW (d) — the deprecated z.value alias still functions exactly as it always did
+  // (Phase-B-deletes pin: this test is the tripwire that MUST be deleted alongside z.value
+  // itself when Phase B lands).
+  it("the deprecated z.value alias still functions — same predicate, same identity passthrough", () => {
+    const v = makeString("still works");
+    expect(() => z.value.parse(v)).not.toThrow();
+    expect(z.decode(z.value, v)).toBe(v);
+  });
 });
 
 describe("scheme-zod z.nil", () => {

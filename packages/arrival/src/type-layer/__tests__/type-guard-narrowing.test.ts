@@ -150,7 +150,7 @@ describe("dual guard control-flow narrowing (lens-critical)", () => {
 
   it("signatureOf passes dual type: through unchanged", () => {
     const def = symbol.native`list?: pin`(
-      { input: [z.value], output: [z.boolean], type: LIST_DUAL },
+      { input: [z.schemeValue], output: [z.boolean], type: LIST_DUAL },
       () => true,
     );
     expect(norm(signatureOf(contractOf(def)!))).toBe(norm(LIST_DUAL));

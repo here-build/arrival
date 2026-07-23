@@ -307,6 +307,91 @@ export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest exten
   readonly refPolicy?: RefPolicy;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 1.7 Contract-KIND capability check (V ruling, mid-Phase-A — supersedes an earlier
+//     bake-time teaching-door draft of this same ban; docs/plans/
+//     stage-c-corpse-deletion.md §"z.value retirement campaign"). A rosetta contract's
+//     slots may never be `z.schemeValue` (the honest top type has no encode/decode
+//     story across the membrane — a real codec, `z.procedure`, or `z.dynamic` is
+//     required instead); a native/sequence/tagless/define contract's slots may never be
+//     `z.dynamic` (those contours never cross the membrane, so the rosetta escape hatch
+//     is meaningless there — `z.schemeValue` or a real codec is always the honest
+//     choice). Enforced HERE, at the author's KEYBOARD (a compile error), not at bake —
+//     see scheme-zod.ts's own `ContourOnly`/`CrossingOnly` doc for the phantom-brand
+//     mechanism.
+//
+//     MECHANISM, precisely (and why it is shaped this way): the naive version — transform
+//     `contract.input`/`.output`'s OWN declared type via a mapped/conditional substitution
+//     — was tried and empirically breaks generic inference (confirmed against tsc: a
+//     tuple's per-position literal types collapse to a union once the parameter type stops
+//     being the bare inferred tuple), which would have silently widened `impl`'s arg types
+//     everywhere. So the check does NOT touch the `contract` parameter's type at all —
+//     `I`/`O`/`Rest` infer exactly as before, byte-identical to pre-ruling behavior. Instead
+//     `HasBrand` below inspects the ALREADY-RESOLVED `I`/`O`/`Rest` (used only in the
+//     FACTORY'S OWN RETURN TYPE, checked strictly AFTER inference completes) and collapses
+//     the return type to a nominally-foreign `ContractKindMismatch` shape when poisoned.
+//     Assigning that into a `symbols` record (typed `Record<string, SymbolDeclaration>`)
+//     then fails with an ordinary "missing property" mismatch, at the exact declaration —
+//     no custom diagnostic machinery, and (confirmed against tsc) zero effect on `impl`'s
+//     inferred argument types in the unpoisoned (overwhelming-majority) case, where the
+//     conditional collapses straight through to the real return type.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Does a VectorSpec/RestSpec carry a `Tag`-branded slot ANYWHERE at its TOP level (a
+ *  tuple's own elements / a kwargs shape's own field schemas / a bare single schema
+ *  itself)? Evaluated against an ALREADY-CONCRETE `T` (see the section header — never
+ *  applied to drive inference, only to validate a resolved `I`/`O`/`Rest`). Order
+ *  matters: a real schema is checked via `T extends z.ZodTypeAny` BEFORE the kwargs-record
+ *  arm, mirroring the SAME `instanceof ZodType` discriminator `normalizeInputVector`/
+ *  `rosetta()` use at runtime — a plain kwargs shape record never itself satisfies
+ *  `z.ZodTypeAny`, so it can't be mistaken for one. */
+type HasBrand<T, Tag> = T extends readonly unknown[]
+  ? true extends { readonly [K in keyof T]: T[K] extends Tag ? true : false }[number]
+    ? true
+    : false
+  : T extends z.ZodTypeAny
+    ? T extends Tag
+      ? true
+      : false
+    : T extends Record<string, z.ZodTypeAny>
+      ? true extends { readonly [K in keyof T]: T[K] extends Tag ? true : false }[keyof T]
+        ? true
+        : false
+      : false;
+
+/** A CONTRACT-KIND MISMATCH — the shape a factory's call resolves to instead of its real
+ *  runtime type (`ARosettaProcedure`/`ANativeProcedure`) when `HasBrand` above catches a
+ *  poisoned slot. Nominal (nothing else structurally matches it), so it never silently
+ *  satisfies `SymbolDeclaration` by accident. */
+export interface ContractKindMismatch<Msg extends string> {
+  readonly "arrival/contract-kind-mismatch": Msg;
+}
+
+/** A rosetta contract's result: `Real` (the genuine `ARosettaProcedure`) unless
+ *  input/inputRest/output carries a `z.schemeValue` slot, in which case a
+ *  `ContractKindMismatch` steering toward a real codec / `z.procedure` / `z.dynamic`. */
+export type CrossingResult<I extends VectorSpec, O extends VectorSpec, Rest extends RestSpec, Real> =
+  HasBrand<I, z.ContourOnly<unknown>> extends true
+    ? ContractKindMismatch<"z.schemeValue is not legal in a rosetta contract's input — rosetta crosses the membrane, so this slot needs a real codec, z.procedure (callables), or z.dynamic (genuinely-runtime-shaped data)">
+    : HasBrand<Rest, z.ContourOnly<unknown>> extends true
+      ? ContractKindMismatch<"z.schemeValue is not legal in a rosetta contract's inputRest — same rule as input, see z.schemeValue's own doc">
+      : HasBrand<O, z.ContourOnly<unknown>> extends true
+        ? ContractKindMismatch<"z.schemeValue is not legal in a rosetta contract's output — same rule as input, see z.schemeValue's own doc">
+        : Real;
+
+/** A native/sequence/tagless/define contract's result: `Real` unless input/inputRest/output
+ *  carries a `z.dynamic` slot (the rosetta escape hatch has no meaning where nothing
+ *  crosses the membrane), in which case a `ContractKindMismatch` steering toward
+ *  `z.schemeValue` (the honest top type) or a real codec. */
+export type ContourResult<I extends VectorSpec, O extends VectorSpec, Rest extends RestSpec, Real> =
+  HasBrand<I, z.CrossingOnly<unknown>> extends true
+    ? ContractKindMismatch<"z.dynamic is not legal in a native/sequence/tagless/define contract's input — this contour never crosses the membrane, so z.schemeValue (the honest top type) or a real codec is always the honest choice">
+    : HasBrand<Rest, z.CrossingOnly<unknown>> extends true
+      ? ContractKindMismatch<"z.dynamic is not legal in a native/sequence/tagless/define contract's inputRest — same rule as input, see z.dynamic's own doc">
+      : HasBrand<O, z.CrossingOnly<unknown>> extends true
+        ? ContractKindMismatch<"z.dynamic is not legal in a native/sequence/tagless/define contract's output — same rule as input, see z.dynamic's own doc">
+        : Real;
+
 // `CallCtx`/`makeCallCtx` live in run/CallCtx.ts, not here: ACallable.ts needs `makeCallCtx`
 // as a real call value, and importing it from this file would close a cycle
 // (ACallable.ts → scheme-zod.ts → _bake.ts) that can leave a `z.instanceof(...)` codec's
@@ -446,12 +531,12 @@ export interface TaglessSymbolDef {
   readonly provenance: ProvenanceRole;
   /**
    * Author-asserted harvest signature — same role as `Contract.type` / TaglessGuardSymbolDef.type.
-   * Tagless ops are shapeless at the binder (`z.array(z.value)`); HOF generics (reduce,
+   * Tagless ops are shapeless at the binder (`z.array(z.schemeValue)`); HOF generics (reduce,
    * take-while, …) set this so the lens sees List/vector dual overloads, not unknown.
    */
   readonly type?: string;
   /** DECLARED per-callable-arg callback roles. A tagless def's contract is shapeless by
-   *  construction (`in: z.array(z.value)` — the real per-op types live on the receiver
+   *  construction (`in: z.array(z.schemeValue)` — the real per-op types live on the receiver
    *  terms), so shape can NEVER extract here; `withCallbackRoles` below is the declaration
    *  channel (srfi-1's `reduce` declares its acc chain through it — the "fold declares acc
    *  chain" case). */
@@ -484,7 +569,7 @@ export interface TaglessGuardSymbolDef {
    * Author-asserted harvest signature — same role as `Contract.type` on native/rosetta.
    * Tagless guards have no Contract bag; type predicates set this so the lens sees a TS
    * type-guard (`(x: unknown) => x is T`) instead of the shapeless `(...args: unknown[]) => unknown`
-   * that `z.array(z.value)`/`z.value` would print.
+   * that `z.array(z.schemeValue)`/`z.schemeValue` would print.
    */
   readonly type?: string;
   /** See `TaglessSymbolDef.callbackRoles` — same shapeless-contract rationale. */
@@ -878,9 +963,9 @@ export function isSingleOutput(output: VectorSpec): boolean {
  *  `type-layer/schema-to-ts.ts`'s `signatureOf` already introspects (verified there); a local
  *  copy because that module wants a differently-shaped return (printer-facing `TupleDef`/
  *  `ArrayDef`) and importing it here would pull the harvest/printer world into the bake layer.
- *  EXPORTED (beyond this module's own gates below) for `rosetta.ts`'s z.value-callable door —
+ *  EXPORTED (beyond this module's own gates below) for `rosetta.ts`'s z.dynamic-callable door —
  *  it reads the SAME shallow slot view
- *  `contractMayCarryCallable` reads, to find which top-level positions are bare `z.value`. */
+ *  `contractMayCarryCallable` reads, to find which top-level positions are bare `z.dynamic`. */
 export function topLevelSchemas(schema: z.ZodTypeAny): readonly z.ZodTypeAny[] | undefined {
   const def = (
     schema as {
@@ -973,10 +1058,13 @@ function cacheGateSlots(schema: z.ZodTypeAny): readonly z.ZodTypeAny[] {
  *    under `DETACHED_SCOPE.runCtx` (`CONSTANT_CTX`), NOT the live run's context, which is
  *    exactly the burst-bypass hole this gate exists to close (a lambda calling a sink verb
  *    would fire the sink inline instead of enqueueing under the live run's `effects`).
- *  - `z.value` — the declared RAW escape hatch ("impl does its own conversion", scheme-zod.ts's
- *    own doc on `value`): decode performs NO transform, so the impl receives the raw scheme
+ *  - `z.dynamic` — the declared RAW escape hatch ("impl does its own conversion", scheme-zod.ts's
+ *    own doc on `dynamic`): decode performs NO transform, so the impl receives the raw scheme
  *    value untouched and MAY itself call `schemeToJs`/`applyCallback` on it if it happens to be
- *    a callable — reading the SAME ambient scope `z.procedure`'s decode reads.
+ *    a callable — reading the SAME ambient scope `z.procedure`'s decode reads. (The deprecated
+ *    `z.value` alias registers under its OWN name — `"value"`, not `"dynamic"` — so a
+ *    not-yet-migrated downstream declaration is NOT gated here; see that export's own doc,
+ *    Phase B deletes it.)
  *
  *  Used by `rosetta()` (rosetta.ts) to decide, ONCE at bake, whether its baked `run` wrapper
  *  needs to open a region scope around a call at all — mirroring the legacy
@@ -985,12 +1073,12 @@ function cacheGateSlots(schema: z.ZodTypeAny): readonly z.ZodTypeAny[] {
  *  data-in/data-out rosetta) never mints a scope, never touches the WeakMap wrapper cache —
  *  zero cost, byte-identical to before this ruling landed.
  *
- *  `z.value` is included per an explicit adjudication, not an oversight: contract SHAPE cannot
- *  see whether a raw value passing through a `z.value` slot happens to be a callable the impl
+ *  `z.dynamic` is included per an explicit adjudication, not an oversight: contract SHAPE cannot
+ *  see whether a raw value passing through a `z.dynamic` slot happens to be a callable the impl
  *  later hands to a reverse crossing — under-gating there would silently reopen the exact hole
- *  this function exists to close for a small, real family of verbs (the manifold/infer `value`
+ *  this function exists to close for a small, real family of verbs (the manifold/infer `dynamic`
  *  slots documented in scheme-zod.ts). The ruling errs toward scoping: correctness over the
- *  micro-cost of an unused scope on the rarer verb that declares `z.value` for something
+ *  micro-cost of an unused scope on the rarer verb that declares `z.dynamic` for something
  *  genuinely non-callable.
  *
  *  Checked on the INPUT side only — `z.procedure`'s own doc bans the OTHER direction ("rosetta
@@ -1001,20 +1089,21 @@ function cacheGateSlots(schema: z.ZodTypeAny): readonly z.ZodTypeAny[] {
 export function contractMayCarryCallable(inSchema: z.ZodTypeAny): boolean {
   return cacheGateSlots(inSchema).some((slot) => {
     const slotName = z.lookupName(slot);
-    return slotName === "procedure" || slotName === "value";
+    return slotName === "procedure" || slotName === "dynamic";
   });
 }
 
 /** THE `view` SHAPE GATE (errors-as-doors, beside `assertProvenanceRoleShape` — the same
  *  bake-time pattern): a `view` cache class demands a SERIALIZABLE contract — no `z.lambda`
- *  arms (a callable can't be a boundary snapshot), no `z.value` slots (the declared raw escape
- *  hatch, by definition not serializable). This is the bake-time half of view serializability
- *  (docs/execution.md §CHOKEPOINT — a cache entry must serialize). A contradiction throws
- *  `CacheClassShapeError` at BAKE; the author's way out is declaring `pure` (or nothing).
- *  `pure` has NO shape gate: recovery is re-call, nothing of it is persisted. Called by
- *  `native()`/`rosetta()`/`sequence()` on the schemas each already normalizes.
+ *  arms (a callable can't be a boundary snapshot), no raw-scheme-value slots (`z.schemeValue`/
+ *  `z.dynamic`/the deprecated `z.value` alias — none of the three carry a serialization story).
+ *  This is the bake-time half of view serializability (docs/execution.md §CHOKEPOINT — a cache
+ *  entry must serialize). A contradiction throws `CacheClassShapeError` at BAKE; the author's
+ *  way out is declaring `pure` (or nothing). `pure` has NO shape gate: recovery is re-call,
+ *  nothing of it is persisted. Called by `native()`/`rosetta()`/`sequence()` on the schemas
+ *  each already normalizes.
  *
- *  Checked on BOTH vectors: an input `z.value`/`z.lambda` breaks the cache KEY (decoded
+ *  Checked on BOTH vectors: an input raw-value/`z.lambda` slot breaks the cache KEY (decoded
  *  args must canonicalize to JSON — run-cache.ts's `canonicalJson`), an output one breaks
  *  the cache ENTRY (the decoded-face value must serialize). `z.lookupName` resolves
  *  through `.optional()` wrappers, so an optional lambda arm still gates. */
@@ -1039,12 +1128,12 @@ export function assertCacheClassShape(
             `a callable is not a boundary snapshot; declare "pure" (recovery = re-call) or drop the declaration`,
         );
       }
-      if (slotName === "value") {
+      if (slotName === "schemeValue" || slotName === "dynamic" || slotName === "value") {
         throw new CacheClassShapeError(
           name,
           cacheClass,
-          `a view's cache entry must serialize, but this contract's ${side} vector carries a z.value slot ` +
-            `(the declared raw escape hatch — raw crossings don't serialize); declare "pure" (recovery = ` +
+          `a view's cache entry must serialize, but this contract's ${side} vector carries a z.${slotName} slot ` +
+            `(a raw scheme-value slot — raw crossings don't serialize); declare "pure" (recovery = ` +
             `re-call) or narrow the slot to a data codec`,
         );
       }
@@ -1127,7 +1216,7 @@ export function extractCallbackRoles(
 }
 
 /** DECLARATION channel for the contract-LESS kinds (tagless/tagless-guard): their `in` is
- *  the shapeless `z.array(z.value)` (the real per-op algebra lives on the receiver terms),
+ *  the shapeless `z.array(z.schemeValue)` (the real per-op algebra lives on the receiver terms),
  *  so `extractCallbackRoles` can never see their callbacks — declaration is the ONLY
  *  channel, and there is no shape for a declaration to contradict (no drift door here BY
  *  CONSTRUCTION, not by leniency). Roles align with the op's callable args in call order.

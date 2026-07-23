@@ -80,7 +80,7 @@ export function createChibiHarnessV2(): { capability: EnvCapability; sink: Outco
       // only) via the class-owned print protocol, never `String(...)`.
       "js-run-test":
         symbol.native`js-run-test: run expected/actual thunks, compare via the scheme comparator, sink the outcome`(
-          { input: [z.value, z.lambda, z.lambda], output: [z.undefinedResult] },
+          { input: [z.schemeValue, z.lambda, z.lambda], output: [z.undefinedResult] },
           async (_name, expectedThunk, actualThunk): Promise<AVoid> => {
             let expected: SchemeValue;
             try {

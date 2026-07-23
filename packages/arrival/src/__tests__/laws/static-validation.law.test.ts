@@ -91,16 +91,16 @@ function loaderLike(name: string, onProbe: () => void): EnvCapability<any, any> 
       fs: z.custom<{ readFile: (p: string) => Promise<string> }>((v) => v !== null && typeof v === "object").optional(),
     },
     symbols: (symbol) => ({
-      "probe!": symbol.native`probe!: JS-side effect counter`({ input: [], output: [sz.value] }, () => {
+      "probe!": symbol.native`probe!: JS-side effect counter`({ input: [], output: [sz.schemeValue] }, () => {
         onProbe();
         return nil;
       }),
       require: symbol.native`require: no-op (satisfied fixture)`(
-        { input: [sz.value], output: [sz.value], requiresConfig: ["fs"] },
+        { input: [sz.schemeValue], output: [sz.schemeValue], requiresConfig: ["fs"] },
         () => nil,
       ),
       "require/extension": symbol.native`require/extension: no-op (satisfied fixture)`(
-        { input: [sz.value], output: [sz.value], requiresConfig: ["fs"] },
+        { input: [sz.schemeValue], output: [sz.schemeValue], requiresConfig: ["fs"] },
         () => nil,
       ),
     }),

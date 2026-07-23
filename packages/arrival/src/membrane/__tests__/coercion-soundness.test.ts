@@ -338,7 +338,7 @@ const vectorSymbols = harvestContracts(vectorsCap.spec.symbols) as Record<
 >;
 describe("vector? / vector-ref dispatch via the tagless protocol (no instanceof reach-around)", () => {
   // R8 mint (RULINGS.md R8): taglessGuard's `run` now boxes its verdict (mintVerdict) —
-  // out: z.value skips any generic codec crossing here, so this WAS the one raw-boolean
+  // out: z.schemeValue skips any generic codec crossing here, so this WAS the one raw-boolean
   // escape hatch a taglessGuard predicate had; `.valueOf()` reads the boxed truth.
   it("vector? (taglessGuard): a SchemeVector and a borrowed AJSArray both answer #t", async () => {
     expect(((await vectorSymbols["vector?"].run!(mkVec())) as ABool).valueOf()).toBe(true);

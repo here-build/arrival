@@ -96,7 +96,7 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
     const extCap = EnvCapability.define("test/ext-upper", {
       symbols: (symbol, z) => ({
         "test/upper-resolve": symbol.native`test/upper-resolve: uppercases module contents (ResolverResult value kind)`(
-          { input: [z.value, z.value], output: [z.value] },
+          { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
           (contents: unknown) => ({ kind: "value", value: String(contents).toUpperCase() }) as never,
         ),
       }),

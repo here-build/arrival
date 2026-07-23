@@ -7,7 +7,7 @@
 // validation during evaluation, so this is a HARVEST/type-surface proof, not a behavior change.
 //
 // ★A genuine zod subtlety, calibrated empirically against the pinned 4.3.6 (`node -e` against
-// the real package, not assumed): `z.value` (`z.custom<SchemeValue>()`, called with NO
+// the real package, not assumed): `z.schemeValue` (`z.custom<SchemeValue>()`, called with NO
 // predicate) accepts EVERYTHING at runtime — byte-identical to the `z.unknown()` it replaces
 // (scheme-zod.ts's own doc comment on `value` says this explicitly). So three of the six
 // vectors.ts fixes — `vector`'s elements, and `vector-ref`/`vector->list`'s RETURN — have NO
@@ -75,7 +75,7 @@ describe("scheme/vectors Contract precision — the real exported ops reject wro
 });
 
 describe("scheme/vectors Contract precision — sanity: the six fixed ops still accept well-formed calls", () => {
-  // Not a RED/GREEN precision proof (z.value has no predicate — see the file header) — just
+  // Not a RED/GREEN precision proof (z.schemeValue has no predicate — see the file header) — just
   // confirming the schema tightening didn't accidentally reject a legitimate call shape.
   // INVARIANT: vector still accepts a flat list of scheme values (static-only precision gain)
   it("vector: accepts a flat list of scheme values", () => {

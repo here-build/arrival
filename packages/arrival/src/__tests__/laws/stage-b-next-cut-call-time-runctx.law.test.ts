@@ -12,7 +12,7 @@
  * call-time `callCtx` (the CallCtx every dispatch site threads via `makeCallCtx(ctx.runCtx,…)`).
  *
  * The cross-run channel here is a JS-side holder (`held`): a `capture!` verb stashes a raw
- * scheme closure (`sz.value` — never crossing the membrane, so the stored value is the RAW
+ * scheme closure (`sz.schemeValue` — never crossing the membrane, so the stored value is the RAW
  * ALambda), and an `invoke-held` verb applies it through THIS dispatch's own CallCtx
  * (`applyCallback(held, [], this)` — the same seam every HOF uses). `capture!` runs in run A,
  * `invoke-held` in run B; the two verb impls close over the same JS `held`, so the closure
@@ -45,14 +45,14 @@ function crossRunCapability() {
         },
       ),
       "capture!": symbol.native`capture!: stash a raw scheme closure into a cross-run JS holder`(
-        { input: [sz.value], output: [sz.value] },
+        { input: [sz.schemeValue], output: [sz.schemeValue] },
         function (closure) {
           held = closure;
           return closure;
         },
       ),
       "invoke-held": symbol.native`invoke-held: apply the stashed closure through THIS dispatch's own runCtx`(
-        { input: [], output: [sz.value] },
+        { input: [], output: [sz.schemeValue] },
         function (this: CallCtx) {
           if (held === undefined) throw new Error("nothing held");
           return applyCallback(held, [], this) as unknown as never;
@@ -62,7 +62,7 @@ function crossRunCapability() {
       // prove a lambda MINTED DURING run B's call (the arg is minted by run B's body) also
       // observes B (its def-time ctx.runCtx is the substituted bodyCtx = B).
       "apply-now": symbol.native`apply-now: apply the given lambda immediately through THIS dispatch's runCtx`(
-        { input: [sz.value], output: [sz.value] },
+        { input: [sz.schemeValue], output: [sz.schemeValue] },
         function (this: CallCtx, thunk) {
           return applyCallback(thunk, [], this) as unknown as never;
         },

@@ -40,16 +40,37 @@ import type { AList, AListAlike, SchemeValue } from "../values/types.js";
 /**
  * The codec vocabulary — the membrane's per-arg codecs. docs/environments.md §CONTRACT frames the
  * two faces this table's columns carry (`z.input` = the SCHEME face, `z.output` = the JS face)
- * and the `z.value` no-transform escape hatch; the codec mechanics below are the membrane model
+ * and the `z.dynamic` no-transform escape hatch; the codec mechanics below are the membrane model
  * (its own doc), kept in full here.
  *
  * Every primitive has a scheme value (always) and maybe a JS codec. That "maybe" is
  * the whole design. Primitive names are deliberately ambiguous — different from both
  * Scheme (`AExact`) and JS (`bigint`) — to highlight they aren't tied to either ontology.
  *
+ * `value` split in two (Q1, docs/plans/stage-c-corpse-deletion.md §"z.value RETIRES"): the SAME
+ * `isSchemeValue` predicate now mints under TWO honest names, plus a deprecated compatibility
+ * alias —
+ *
+ * | name          | role                                            | rosetta?                  |
+ * |---------------|--------------------------------------------------|---------------------------|
+ * | `schemeValue` | the HONEST TOP TYPE — native/contour/define/     | BANNED at bake (structural|
+ * |               | sequence/tagless contracts only (car/eq?/filter  | ban — see rosetta.ts);    |
+ * |               | are polymorphic BY R7RS SPEC, never cross the    | never crosses the membrane|
+ * |               | membrane). Prints `SchemeValue` (a real top type,| so a rosetta slot needs a |
+ * |               | not `unknown`).                                  | real codec instead.       |
+ * | `dynamic`     | the sanctioned rosetta ESCAPE HATCH — identity   | ✅ (the one legitimate    |
+ * |               | crossing for a slot whose shape genuinely cannot | no-transform door)        |
+ * |               | be known statically (remote JSON-schema params,  |                           |
+ * |               | dynamic HTTP/SQL payloads, echo verbs). Prints   |                           |
+ * |               | `unknown` (honest — it really is unknown here).  |                           |
+ * | `value`       | DEPRECATED alias of `dynamic`'s runtime behavior,| ✅ (unchanged, legacy)    |
+ * |               | own registration (prints legacy `"value"`, never |                           |
+ * |               | the new names) — Phase B deletes it. Migrate to  |                           |
+ * |               | `schemeValue` (native contracts) or `dynamic`    |                           |
+ * |               | (rosetta) or a real codec.                       |                           |
+ *
  * | primitive     | scheme value         | JS image (codec side)     | rosetta-usable?         |
  * |---------------|----------------------|---------------------------|-------------------------|
- * | `value`       | any `SchemeValue`    | — (opaque, no transform)  | passthrough only        |
  * | `boolean`     | `ABool`              | `boolean`                 | ✅                      |
  * | `integer`     | `AExact`/`AInexact`  | `number` (int)            | ✅                      |
  * | `inexact`     | `AInexact`           | `number`                  | ✅ (lossy acknowledged) |
@@ -157,10 +178,12 @@ export function lookupCollectionElement(
 }
 
 // ---------------------------------------------------------------------------
-// :: value — the untransforming passthrough (defined early: `list` defaults its element to it)
+// :: schemeValue / dynamic / value — the untransforming passthrough, split in two (Q1) plus
+//    a deprecated compatibility alias (defined early: `list`/`vector` default their element
+//    to `schemeValue`)
 // ---------------------------------------------------------------------------
 
-// `value` stays a PREDICATE, never a union: a union makes `z.decode(value, x)` match a
+// All three stay a PREDICATE, never a union: a union makes `z.decode(schema, x)` match a
 // branch and TRANSFORM x (collapse AExact → bare bigint) — wrong for a slot whose whole
 // meaning is "hand back this scheme value untouched" (identity on both faces). Predicate
 // covers every concrete `A*` kind via `instanceof AValue`
@@ -168,9 +191,69 @@ export function lookupCollectionElement(
 function isSchemeValue(x: unknown): x is SchemeValue {
   return x instanceof AValue || typeof x === "function";
 }
-// Rosetta escape hatch: `value` in a rosetta slot means "no automatic transform — impl
-// receives/returns raw scheme value, does its own schemeToJs/jsToScheme" (single legitimate
-// rosetta use: env/overridable/overridable.ts's dynamic `overridable/resolve`).
+
+// ---------------------------------------------------------------------------
+// :: Contract-KIND capability brands (V ruling, mid-Phase-A — supersedes an earlier
+//    bake-time teaching-door draft of this same ban). Phantom, type-only, ERASED at
+//    compile: NEITHER symbol below is a real runtime property — `as` casts two doc-
+//    identical schemas into two distinct nominal types, nothing more. A rosetta contract
+//    slot's generic bound (`CrossingSlot`, in _bake.ts) rejects a schema branded
+//    `ContourOnly` (`z.schemeValue`) — a compile error at the AUTHOR's keyboard, not a
+//    runtime throw. A native/sequence/tagless/define contract slot's bound
+//    (`ContourSlot`) symmetrically rejects `CrossingOnly` (`z.dynamic`).
+//
+//    Every OTHER schema in this vocabulary (string/number/dict/list/procedure/error/…),
+//    and every bare zod combinator (`union`/`array`/`tuple`/`object`) built over them,
+//    carries NEITHER brand — so it is legal in BOTH contract kinds, exactly as before
+//    this ruling. Only these two specific exports are singled out, each poisoned OUT of
+//    the other kind's slot type. (A positive "every codec double-tagged" design was
+//    considered and rejected: it would additionally require re-typing the raw zod
+//    `union`/`array`/`tuple`/`object` re-exports below to propagate the tag, breaking
+//    green code with zero behavioral gain — the negative/poison form here produces the
+//    IDENTICAL observable contract, "schemeValue banned from rosetta, dynamic banned from
+//    native/contour", for a fraction of the surface.)
+// ---------------------------------------------------------------------------
+declare const CONTOUR_ONLY: unique symbol;
+declare const CROSSING_ONLY: unique symbol;
+
+/** `z.schemeValue`'s own nominal tag. Never intersected onto anything else — see the
+ *  section header above. */
+export type ContourOnly<S> = S & { readonly [CONTOUR_ONLY]: true };
+/** `z.dynamic`'s own nominal tag. Never intersected onto anything else. */
+export type CrossingOnly<S> = S & { readonly [CROSSING_ONLY]: true };
+
+// The HONEST TOP TYPE: "any boxed scheme value", the R7RS-polymorphic domain of car/eq?/
+// filter/vector elements — native/contour/define/sequence/tagless contracts only. STRUCTURALLY
+// BANNED from a `symbol.rosetta` contract slot AT COMPILE TIME (the `ContourOnly` brand above +
+// `CrossingSlot` in _bake.ts) — rosetta crosses the membrane, so a slot must declare a real
+// codec, `z.procedure` for callables, or `z.dynamic` for genuinely-runtime-shaped data. Prints
+// `SchemeValue` (a real top type — see schema-to-ts.ts), never `unknown`.
+const schemeValueSchema = named("schemeValue", z.custom<SchemeValue>(isSchemeValue));
+export const schemeValue = schemeValueSchema as ContourOnly<typeof schemeValueSchema>;
+
+// The sanctioned rosetta ESCAPE HATCH: `dynamic` in a rosetta slot means "no automatic
+// transform — impl receives/returns raw scheme value, does its own schemeToJs/jsToScheme"
+// (single legitimate rosetta use today: env/overridable/overridable.ts's `overridable/resolve`,
+// whose `name`/`type`/`default` slots genuinely cannot be typed — see that file's own comment).
+// STRUCTURALLY BANNED from a native/sequence/tagless/define contract slot AT COMPILE TIME (the
+// `CrossingOnly` brand above + `ContourSlot` in _bake.ts) — those never cross the membrane, so
+// `z.schemeValue` (or a real codec) is always the honest choice there. A future
+// genuinely-live-object-holding rosetta slot (the whiteroom's `sz.instance`) is a THIRD arm of
+// this same family, not yet built — `escapeSlots`/the RUNTIME callable door (rosetta.ts, which
+// guards against a runtime VALUE a type can't see) key off THIS name (`"dynamic"`) in a way
+// that stays easy to widen to `"instance"` too when that arm lands. Prints `unknown` — honest,
+// it really is unknown here.
+const dynamicSchema = named("dynamic", z.custom<SchemeValue>(isSchemeValue));
+export const dynamic = dynamicSchema as CrossingOnly<typeof dynamicSchema>;
+
+/** @deprecated Phase B deletes this alias (docs/plans/stage-c-corpse-deletion.md
+ *  §"z.value retirement campaign"). Same runtime behavior `dynamic` has (identity predicate,
+ *  no transform) — kept ONLY so a downstream package not yet migrated off `z.value` keeps
+ *  compiling — but registered under ITS OWN name so it keeps printing legacy `"value"`
+ *  (NOT `SchemeValue`, NOT `unknown`): a fresh `z.custom` instance, not a re-export of
+ *  `dynamic`, because `NAMES` is keyed by object identity — sharing the object would also
+ *  share (and overwrite) the registered name. New code: `z.schemeValue` (native contracts) or
+ *  `z.dynamic` (rosetta) or a real codec — never this. */
 export const value = named("value", z.custom<SchemeValue>(isSchemeValue));
 
 // ---------------------------------------------------------------------------
@@ -327,12 +410,12 @@ export const undefinedResult = named(
 );
 
 /** A `(values a b …)` multiple-values carrier (≥2 values — `Values.from` unwraps 0/1).
- *  A PLAIN predicate schema like `value` itself, not a codec: multi-values are a
- *  scheme-plane construct that never crosses the membrane as a JS shape. Needed
- *  because `Values` is a non-AValue orphan (types.ts's own words) that `value`'s
+ *  A PLAIN predicate schema like `schemeValue`/`dynamic` themselves, not a codec: multi-values
+ *  are a scheme-plane construct that never crosses the membrane as a JS shape. Needed because
+ *  `Values` is a non-AValue orphan (types.ts's own words) that `isSchemeValue`'s
  *  `instanceof AValue` predicate rejects at runtime despite `SchemeValue` declaring
  *  it — the same orphan gap `error` (below) closes for `R7RSError` (exceptions.ts's
- *  header): a dedicated named schema, never a silent widening of `value`'s predicate. */
+ *  header): a dedicated named schema, never a silent widening of `schemeValue`'s predicate. */
 export const values = named(
   "values",
   z.custom<Values>((x) => x instanceof Values),
@@ -596,27 +679,27 @@ function spineToArray(l: AListAlike): unknown[] {
 
 /**
  * A proper list, printed as `List<T>` (see `list([A,B])` for fixed-heterogeneous form):
- * - `list()` / `list(E)` — homogeneous unbounded list of E (E defaults to `value`).
+ * - `list()` / `list(E)` — homogeneous unbounded list of E (E defaults to `schemeValue`).
  * - `list([A, B])` — exactly A then B, nil-terminated (no tail).
  * - `list([A, B], E)` — fixed heads A, B, then zero-or-more E, nil-terminated.
  *
  * NOT `cons`: `list([carE])` is proper list `(a)` = `(a . ())`, whereas `cons(a, b)` is a
  * dotted pair whose cdr need not be nil-terminated.
  */
-export function list<E extends z.ZodTypeAny = typeof value>(
+export function list<E extends z.ZodTypeAny = typeof schemeValue>(
   element?: E,
 ): z.ZodCodec<z.ZodCustom<AListAlike, AListAlike>, z.ZodArray<E>>;
 export function list(
   heads: readonly z.ZodTypeAny[],
   tail?: z.ZodTypeAny,
 ): z.ZodCodec<z.ZodCustom<AListAlike, AListAlike>, z.ZodType>;
-export function list(headsOrElement: z.ZodTypeAny | readonly z.ZodTypeAny[] = value, tail?: z.ZodTypeAny) {
+export function list(headsOrElement: z.ZodTypeAny | readonly z.ZodTypeAny[] = schemeValue, tail?: z.ZodTypeAny) {
   const heads = Array.isArray(headsOrElement) ? (headsOrElement as readonly z.ZodTypeAny[]) : [];
   // Bare / single-arg form: lone schema is homogeneous tail, not a head.
   const effectiveTail = Array.isArray(headsOrElement) ? tail : (tail ?? (headsOrElement as z.ZodTypeAny));
   const out: z.ZodType =
     heads.length === 0
-      ? z.array(effectiveTail ?? value)
+      ? z.array(effectiveTail ?? schemeValue)
       : effectiveTail
         ? z.tuple(heads as [z.ZodTypeAny, ...z.ZodTypeAny[]], effectiveTail)
         : z.tuple(heads as [z.ZodTypeAny, ...z.ZodTypeAny[]]);
@@ -638,7 +721,7 @@ export function list(headsOrElement: z.ZodTypeAny | readonly z.ZodTypeAny[] = va
   // Homogeneous form carries single element schema → prints `List<E>`. Fixed-heads
   // `list([A,B])` has NO single element, registers nothing, falls through to structural
   // tuple print — honest for heterogeneous fixed-length list.
-  if (heads.length === 0) COLLECTION_ELEMENT.set(schema, effectiveTail ?? value);
+  if (heads.length === 0) COLLECTION_ELEMENT.set(schema, effectiveTail ?? schemeValue);
   return schema as z.ZodCodec<z.ZodCustom<AListAlike, AListAlike>, z.ZodType>;
 }
 
@@ -668,7 +751,7 @@ export function cons<C extends z.ZodTypeAny, D extends z.ZodTypeAny>(carE: C, cd
   return schema;
 }
 
-// `pair` is `cons(value, value)`, not hand-rolled bare instanceof — every OTHER primitive in
+// `pair` is `cons(schemeValue, schemeValue)`, not hand-rolled bare instanceof — every OTHER primitive in
 // this vocabulary is a real codec; a bare `z.instanceof(APair)` never decodes, so a rosetta
 // contract typed `z.pair` would still hand its impl a raw APair (the exact "impl touches
 // interpreter internals" failure the whole codec vocabulary exists to prevent). The scheme
@@ -679,7 +762,7 @@ export function cons<C extends z.ZodTypeAny, D extends z.ZodTypeAny>(carE: C, cd
 // (define-bake.ts), so the gate judges the projected view — a non-empty array passes, and an empty
 // one adopts to `nil` and is correctly rejected. Without the mark, `(last (some-tool …))` fails on a
 // ZodError against a spine it could have walked.
-export const pair = markSpineAdopting(cons(value, value));
+export const pair = markSpineAdopting(cons(schemeValue, schemeValue));
 
 /**
  * `listAlike` — the LIST IDENTITY of an argument: "I read this as a SPINE."
@@ -730,7 +813,7 @@ export const listAlike = markSpineAdopting(
 
 // `vector` — representation-blind `AVector | AJSArray` union codec; encode canonically
 // produces AVector (first union branch).
-export function vector<E extends z.ZodTypeAny = typeof value>(element: E = value as unknown as E) {
+export function vector<E extends z.ZodTypeAny = typeof schemeValue>(element: E = schemeValue as unknown as E) {
   return named(
     "vector",
     z.union([
@@ -759,7 +842,7 @@ export function vector<E extends z.ZodTypeAny = typeof value>(element: E = value
         // Decodes to the BOXED elements (`__vector__`), NOT the raw `.source` — so both arms of this
         // union present the SAME scheme face, the only thing that makes it genuinely
         // representation-blind rather than merely claiming to be. The element schema is a SCHEME-face
-        // codec (`z.value` demands an AValue, `z.number` an AExact), so raw JSON elements off
+        // codec (`z.schemeValue` demands an AValue, `z.number` an AExact), so raw JSON elements off
         // `.source` would fail validation every time (only `symbol.define` validates — a
         // `symbol.native` never does, which is why vector natives never hit this face).
         //
@@ -801,7 +884,7 @@ export function dict<S extends Record<string, z.ZodTypeAny>>(shape: S = {} as S)
       // AJSObject's re-boxing path (builds ADict directly from encoded pairs), so the
       // provenance bug that path had cannot recur here.
       z.union([z.instanceof(ADict), z.instanceof(AJSObject).refine((o) => isDictShaped(o.source))]),
-      keys.length ? z.object(shape) : z.record(z.string(), value),
+      keys.length ? z.object(shape) : z.record(z.string(), schemeValue),
       {
         // Transform ONLY crosses container boundary (ADict ↔ raw-scheme record) — out-schema
         // (`z.object(shape)`/`z.record`) owns per-field marshaling, exactly like `list`/

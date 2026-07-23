@@ -16,10 +16,10 @@ function sig(def: Parameters<typeof contractOf>[0]): string {
 }
 
 describe("printType — native identity primitives (scheme primitive → plain-TS image)", () => {
-  // REBASELINE (fe2c848ee7, 2026-07-08): `z.pair` is now `cons(value, value)` — a real codec
-  // named "cons", not a bare-instanceof "pair" — so it prints via the named-generic pre-check
-  // as `Pair<unknown, unknown>`, same as any other `cons(A, B)`; `z.union([z.pair, z.nil])`
-  // composes structurally member-by-member (no more "pair"→List-style name override).
+  // REBASELINE (fe2c848ee7, 2026-07-08): `z.pair` is now `cons(schemeValue, schemeValue)` — a
+  // real codec named "cons", not a bare-instanceof "pair" — so it prints via the named-generic
+  // pre-check as `Pair<SchemeValue, SchemeValue>`, same as any other `cons(A, B)`; `z.union([z.pair,
+  // z.nil])` composes structurally member-by-member (no more "pair"→List-style name override).
   // The numeric tower: exact and inexact both print "number" via the name-keyed image, not
   // the raw union — z.bigint is retired (exact is a safe-integer ratio of `number`s per
   // docs/design-history/arrival-one-number-rework.md §2.3). schemeNumber has no name-image of
@@ -27,9 +27,9 @@ describe("printType — native identity primitives (scheme primitive → plain-T
   // below, ledger/index.law.test.ts GAPS: "schema-to-ts vector union not deduped").
   it.each([
     {
-      name: "z.pair → Pair<unknown, unknown> (cons(value, value), not a standalone name)",
+      name: "z.pair → Pair<SchemeValue, SchemeValue> (cons(schemeValue, schemeValue), not a standalone name)",
       schema: z.pair,
-      expected: "Pair<unknown, unknown>",
+      expected: "Pair<SchemeValue, SchemeValue>",
     },
     { name: "z.string → string", schema: z.string, expected: "string" },
     { name: "z.bigint (exact) → number", schema: z.bigint, expected: "number" },
@@ -39,7 +39,14 @@ describe("printType — native identity primitives (scheme primitive → plain-T
     { name: "z.nil → null", schema: z.nil, expected: "null" },
     { name: "z.boolean → boolean", schema: z.boolean, expected: "boolean" },
     { name: "z.char → string", schema: z.char, expected: "string" },
-    { name: "z.value (representation-blind) → unknown", schema: z.value, expected: "unknown" },
+    // Q1 SPLIT (docs/plans/stage-c-corpse-deletion.md §"z.value retirement campaign"): the ONE
+    // `isSchemeValue` predicate now mints under THREE names, printing DIFFERENTLY despite
+    // identical runtime behavior — `schemeValue` is the HONEST TOP TYPE (a real type
+    // reference, `SchemeValue`, not the bare keyword); `dynamic` (the rosetta escape hatch)
+    // and the deprecated `value` alias both print the honest-but-generic `unknown`.
+    { name: "z.schemeValue (the honest top type) → SchemeValue", schema: z.schemeValue, expected: "SchemeValue" },
+    { name: "z.dynamic (the rosetta escape hatch) → unknown", schema: z.dynamic, expected: "unknown" },
+    { name: "z.value (deprecated alias, representation-blind) → unknown", schema: z.value, expected: "unknown" },
     {
       name: "z.lambda → a callable signature, not degraded to unknown",
       schema: z.lambda,
@@ -51,9 +58,9 @@ describe("printType — native identity primitives (scheme primitive → plain-T
       expected: "number | number",
     },
     {
-      name: "the list union z.pair | z.nil → Pair<unknown, unknown> | null",
+      name: "the list union z.pair | z.nil → Pair<SchemeValue, SchemeValue> | null",
       schema: z.union([z.pair, z.nil]),
-      expected: "Pair<unknown, unknown> | null",
+      expected: "Pair<SchemeValue, SchemeValue> | null",
     },
   ])("prints $name", ({ schema, expected }) => {
     expect(printType(schema)).toBe(expected);
@@ -65,8 +72,8 @@ describe("printType — native identity primitives (scheme primitive → plain-T
   // duplicated `unknown[] | unknown[]`. TS collapses it to `unknown[]` at the type level; the
   // IDEAL is a harvest union-member dedup that cleans the printed string to match. Flips green
   // when that dedup lands.
-  it.fails("prints z.vector(z.value) deduped as 'unknown[]', not the duplicated union branches", () => {
-    expect(printType(z.vector(z.value))).toBe("unknown[]");
+  it.fails("prints z.vector(z.dynamic) deduped as 'unknown[]', not the duplicated union branches", () => {
+    expect(printType(z.vector(z.dynamic))).toBe("unknown[]");
   });
 });
 
@@ -113,7 +120,7 @@ describe("printType — rosetta codecs (decoded JS side, io:output)", () => {
 
 describe("printType — compounds", () => {
   // REBASELINE (fe2c848ee7): see the native-identity describe's top note on
-  // z.pair → Pair<unknown, unknown>.
+  // z.pair → Pair<SchemeValue, SchemeValue>.
   it.each([
     {
       name: "z.object as a single-line member list (no dangling semicolon)",
@@ -128,13 +135,13 @@ describe("printType — compounds", () => {
     {
       name: "z.array of an identity primitive as 'T[]'",
       schema: z.array(z.pair),
-      expected: "Pair<unknown, unknown>[]",
+      expected: "Pair<SchemeValue, SchemeValue>[]",
     },
     { name: "a tuple as '[A, B]'", schema: z.tuple([z.string, z.number]), expected: "[string, number]" },
     {
       name: "a tuple mixing codec + identity members",
       schema: z.tuple([z.pair, z.string]),
-      expected: "[Pair<unknown, unknown>, string]",
+      expected: "[Pair<SchemeValue, SchemeValue>, string]",
     },
     { name: "a union as 'A | B'", schema: z.union([z.string, z.number]), expected: "string | number" },
   ])("prints $name", ({ schema, expected }) => {
@@ -190,7 +197,7 @@ describe("signatureOf — the args-vector → function-signature composer", () =
   // not behavior).
   it("honors an author-asserted `type` override on the contract — the zod schema stays the MEMBRANE description (runtime decode/validate), `type` is a separate, decoupled TYPE-LEVEL narrowing for the harvest (mirrors legacy RosettaSpec.type/RosettaFunction.type)", () => {
     const def = symbol.native`typed-override: proof`(
-      { input: [z.value], output: [z.value], type: "(ip: SchemeIP) => SchemeIP" },
+      { input: [z.schemeValue], output: [z.schemeValue], type: "(ip: SchemeIP) => SchemeIP" },
       (a) => a,
     );
     expect(sig(def)).toBe("(ip: SchemeIP) => SchemeIP");
@@ -201,7 +208,7 @@ describe("signatureOf — the args-vector → function-signature composer", () =
     const dual =
       "{ (x: unknown): x is string; <T>(x: T): x is Extract<T, string>; }";
     const def = symbol.native`string?: proof`(
-      { input: [z.value], output: [z.boolean], type: dual },
+      { input: [z.schemeValue], output: [z.boolean], type: dual },
       () => true,
     );
     expect(sig(def)).toBe(dual);
@@ -221,7 +228,7 @@ describe("signatureOf — the args-vector → function-signature composer", () =
       (a) => a,
     );
     expect(sig(def)).toBe(
-      "(a: Pair<unknown, unknown>, b: Pair<unknown, unknown>) => Pair<unknown, unknown>",
+      "(a: Pair<SchemeValue, SchemeValue>, b: Pair<SchemeValue, SchemeValue>) => Pair<SchemeValue, SchemeValue>",
     );
   });
 
@@ -250,7 +257,7 @@ describe("signatureOf — the args-vector → function-signature composer", () =
       (p) => [p, p] as [typeof p, typeof p],
     );
     expect(sig(def)).toBe(
-      "(a: Pair<unknown, unknown>) => [Pair<unknown, unknown>, Pair<unknown, unknown>]",
+      "(a: Pair<SchemeValue, SchemeValue>) => [Pair<SchemeValue, SchemeValue>, Pair<SchemeValue, SchemeValue>]",
     );
   });
 

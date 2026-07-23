@@ -102,17 +102,17 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
       // Genuinely variadic-any input (any value has a display form); the output
       // is unconditionally a string.
       str: symbol.define`str: Clojure — concatenate the display form of every arg (strings as-is, everything else via repr)`(
-        { input: [], inputRest: z.value, output: [z.string] },
+        { input: [], inputRest: z.schemeValue, output: [z.string] },
         `(lambda args
          (apply string-append (map (lambda (x) (if (string? x) x (repr x))) args)))`,
       ),
       // get-in — Clojure: read a value nested ks-deep through dicts (or anything
       // `@` reads), nil if any step misses. `obj` is origin-agnostic BY DESIGN (the
       // `@` read protocol's whole point) and the result is whatever is stored — both
-      // honestly `z.value`.
+      // honestly `z.schemeValue`.
       "get-in":
         symbol.define`get-in: Clojure — read a value nested ks-deep through dicts (or anything @ reads); nil if any step misses`(
-          { input: [z.value, z.list()], output: [z.value] },
+          { input: [z.schemeValue, z.list()], output: [z.schemeValue] },
           `(lambda (obj ks)
          (if (null? ks)
              obj
@@ -120,11 +120,11 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
         ),
       // assoc-in — Clojure: a NEW obj with the value at nested path ks set to v,
       // building missing intermediate dicts as needed (see %dict-set). Output is
-      // `z.value`, not `z.dict()`: with an EMPTY path the result is v itself —
+      // `z.schemeValue`, not `z.dict()`: with an EMPTY path the result is v itself —
       // any value — by definition.
       "assoc-in":
         symbol.define`assoc-in: Clojure — a NEW obj with the value at nested path ks set to v, minting missing intermediate dicts on demand`(
-          { input: [z.value, z.list(), z.value], output: [z.value] },
+          { input: [z.schemeValue, z.list(), z.schemeValue], output: [z.schemeValue] },
           `(lambda (obj ks v)
          (if (null? ks)
              v
@@ -136,8 +136,8 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
       "update-in":
         symbol.define`update-in: Clojure — assoc-in the result of applying f to the value currently at nested path ks`(
           {
-            input: [z.value, z.list(), applicable],
-            output: [z.value],
+            input: [z.schemeValue, z.list(), applicable],
+            output: [z.schemeValue],
             type: dedent`
           {
             (obj: unknown, ks: List<unknown>, f: (cur: unknown) => unknown): unknown;
@@ -165,7 +165,7 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
       frequencies:
         symbol.define`frequencies: Clojure — a dict of each distinct element to its occurrence count (non-string elements key by repr)`(
           {
-            input: [z.value],
+            input: [z.schemeValue],
             output: [z.dict()],
             type: dedent`
           {
@@ -187,7 +187,7 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
       "group-by":
         symbol.define`group-by: Clojure — a dict of (f element) to the list of elements that produced it, in original order`(
           {
-            input: [applicable, z.value],
+            input: [applicable, z.schemeValue],
             output: [z.dict()],
             type: dedent`
           {
@@ -211,7 +211,7 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
       partial: symbol.define`partial: Clojure — fix the leading args of f, returning a function of the rest`(
         {
           input: [applicable],
-          inputRest: z.value,
+          inputRest: z.schemeValue,
           output: [z.lambda],
           type: dedent`
           {
@@ -247,12 +247,12 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
          (lambda args
            (map (lambda (f) (apply f args)) fns)))`,
       ),
-      // mapv / filterv — map/filter + list->vector. f/pred stay z.value (map/filter own
+      // mapv / filterv — map/filter + list->vector. f/pred stay z.schemeValue (map/filter own
       // callable-or-matcher); spines z.list(); output always vector.
       // type: list-only in (contract), vector out — no vector dual.
       mapv: symbol.define`mapv: Clojure — map with a vector result instead of a list`(
         {
-          input: [z.value],
+          input: [z.schemeValue],
           inputRest: z.list(),
           output: [z.vector()],
           type: dedent`
@@ -267,7 +267,7 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
       ),
       filterv: symbol.define`filterv: Clojure — filter with a vector result instead of a list`(
         {
-          input: [z.value, z.list()],
+          input: [z.schemeValue, z.list()],
           output: [z.vector()],
           type: dedent`
           {
@@ -278,12 +278,12 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
         },
         `(lambda (pred lst) (list->vector (filter pred lst)))`,
       ),
-      // %conj-list — conj's list arm (private helper). `z.value` both sides —
+      // %conj-list — conj's list arm (private helper). `z.schemeValue` both sides —
       // self-recursive per item (the %interleave perf reasoning) and coll is the
       // accumulating polymorphic result.
       "%conj-list":
         symbol.define`%conj-list: conj's list arm — cons each item onto coll in order, so the LAST item passed ends up FIRST (private helper)`(
-          { input: [z.value, z.value], output: [z.value] },
+          { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
           `(lambda (coll items)
          (if (null? items)
              coll
@@ -295,7 +295,7 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
       // GENUINELY SHAPELESS: coll is list-or-vector and the result is in coll's
       // OWN representation — no single richer type is honest.
       conj: symbol.define`conj: Clojure — add items at the collection's natural growth position (front for a list, end for a vector)`(
-        { input: [z.value], inputRest: z.value, output: [z.value] },
+        { input: [z.schemeValue], inputRest: z.schemeValue, output: [z.schemeValue] },
         `(lambda (coll . items)
          (if (vector? coll)
              (list->vector (append (vector->list coll) items))
@@ -305,15 +305,15 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
       // order. SHAPELESS carve-out on both collections (conj's representation
       // polymorphism + reduce's term dispatch).
       into: symbol.define`into: Clojure — pour every element of from into to via conj, in from's order`(
-        { input: [z.value, z.value], output: [z.value] },
+        { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
         `(lambda (to from)
          (reduce (lambda (x acc) (conj acc x)) to from))`,
       ),
       // rest — cdr that tolerates non-pair → '(). type: List arm + tolerant unknown arm.
       rest: symbol.define`rest: Clojure — cdr that tolerates a non-pair (returns '()) instead of erroring`(
         {
-          input: [z.value],
-          output: [z.value],
+          input: [z.schemeValue],
+          output: [z.schemeValue],
           type: dedent`
           {
             <T>(xs: List<T>): List<T>;
@@ -326,7 +326,7 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
       // empty? — list/string/vector/dict. OUTPUT z.boolean: every arm is ABool (`=` boxes via applyNumeric).
       "empty?": symbol.define`empty?: Clojure — #t iff the list / string / vector / dict has no elements`(
         {
-          input: [z.value],
+          input: [z.schemeValue],
           output: [z.boolean],
           type: dedent`
           {
@@ -347,7 +347,7 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
       // (dicts are immutable — see HASH_TABLE_REASON in srfi-stubs.ts). Applied to nil
       // it builds a fresh single-key dict (@keys nil = '()), which is exactly what
       // assoc-in needs to create missing intermediate maps on demand — so `d` is
-      // honestly `z.value` (dict OR nil), never `z.dict()`. `@keys` returns a raw JS
+      // honestly `z.schemeValue` (dict OR nil), never `z.dict()`. `@keys` returns a raw JS
       // array (not a scheme list — filter/map need the term protocol), so
       // `vector->list` (R7RS §6.8 — a raw JS array is representation-blind as a
       // vector here, per z.vector) lifts it first.
@@ -361,7 +361,7 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
         symbol.define`%dict-set: a NEW dict with key k set to v, everything else preserved; applied to nil it mints a fresh single-key dict (private helper)`(
           // k: keyword/symbol/string (dict's own normalization is the semantics);
           // v: anything. Output IS unconditionally a dict.
-          { input: [z.value, z.value, z.value], output: [z.dict()] },
+          { input: [z.schemeValue, z.schemeValue, z.schemeValue], output: [z.dict()] },
           `(lambda (d k v)
          (let* ((ks (vector->list (@keys d)))
                 (vs (map (lambda (key) (@ d key)) ks)))

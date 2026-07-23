@@ -81,11 +81,11 @@ export class SourceRegistry {
    *  times a fan/loop calls it (golden-prov-infer.test.ts's rationale, restated).
    *
    *  Migrated off the retired `env.defineRosetta` onto a test-local `EnvCapability`
-   *  (`symbol.rosetta` verb — the migration target). `inputRest: z.value` + `output:
-   *  [z.value]` is the untyped-source shape (research-env.ts's `buildResearchScope`
+   *  (`symbol.rosetta` verb — the migration target). `inputRest: z.dynamic` + `output:
+   *  [z.dynamic]` is the untyped-source shape (research-env.ts's `buildResearchScope`
    *  idiom): args are ignored anyway (the legacy `void args`), and the return is an
    *  ALREADY-STAMPED `AValue` (`stampedNum`/`stampedStr`) whose mint id must survive
-   *  untouched — `z.value` on the output side is the declared no-transform escape
+   *  untouched — `z.dynamic` on the output side is the declared no-transform escape
    *  hatch that skips `z.encode` and hands the impl's return straight to `jsToScheme`
    *  (golden-prov-infer.test.ts's `inferSources` rationale, restated). */
   async register(env: AmbientRuntime, op: string, shape: SourceShape): Promise<void> {
@@ -94,7 +94,7 @@ export class SourceRegistry {
       EnvCapability.define(`test/w1-source-${op}`, {
         symbols: (symbol) => ({
           [op]: symbol.rosetta`${op}: W1 harness fake Rosetta-IN source`(
-            { input: [], inputRest: z.value, output: [z.value] },
+            { input: [], inputRest: z.dynamic, output: [z.dynamic] },
             (..._args: unknown[]): unknown => {
               if (shape === "num") {
                 const id = mint(op);

@@ -250,8 +250,8 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
     require:
       symbol.native`require: loads a module by specifier and returns its value or spills its defines into the environment`(
         {
-          input: [z.value],
-          output: [z.value],
+          input: [z.schemeValue],
+          output: [z.schemeValue],
           // ANY-OF door gate (the disjunctive `requiresConfig` form): `require` is callable
           // while EITHER `fs` (the loader is derived) or a pre-built `loader` is armed; with
           // both absent it binds a DoorProcedure naming the pair — the static gate's
@@ -421,8 +421,8 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
     "require/extension":
       symbol.native`require/extension: applies a host-registered extension pack (by :name) to the current env`(
         {
-          input: [z.value],
-          output: [z.value],
+          input: [z.schemeValue],
+          output: [z.schemeValue],
           // Same static-gate posture as `require`'s fs/loader door: absent registry ⇒ a
           // cause-carrying door naming `extensionRegistry` instead of withholding the symbol.
           requiresConfig: ["extensionRegistry"],

@@ -24,17 +24,17 @@ export default EnvCapability.define("scheme/srfi-95", {
       {
         // seq: representation-blind at the SCHEME level (any receiver answering the
         // arrival/tagless-final/sort protocol — APair/AVector/AJSArray, every SchemeValue
-        // member this dispatch could ever see), not host-blind — z.value is the typed
+        // member this dispatch could ever see), not host-blind — z.schemeValue is the typed
         // replacement for z.unknown() at exactly this kind of native scheme-value slot
         // (scheme-zod.ts), matching the sibling term-dispatch receiver `length` (lists.ts).
         // comparator: a callable predicate, not bare unknown — AValue.ts's single source of
         // truth declares `arrival/tagless-final/sort`'s own param as exactly
         // `(a: unknown, b: unknown) => unknown` (mirrored by deriveSortCompare, op-helpers.ts),
-        // so the contract states the SAME signature rather than a blanket z.value.
-        input: [z.value, z.lambda.optional()],
+        // so the contract states the SAME signature rather than a blanket z.schemeValue.
+        input: [z.schemeValue, z.lambda.optional()],
         // output: the sorted sequence is a SchemeValue (APair | ANil for a list, AVector for a
-        // vector) — z.value again, matching the term algebra's own declared return type.
-        output: [z.value],
+        // vector) — z.schemeValue again, matching the term algebra's own declared return type.
+        output: [z.schemeValue],
         // The z.custom optional comparator is unrepresentable to the harvest printer, collapsing the
         // whole signature to the degrade path `(...args: unknown[]) => unknown`. Author-assert the
         // real shape: seq + optional binary comparator. Representation-agnosticism is stated as an

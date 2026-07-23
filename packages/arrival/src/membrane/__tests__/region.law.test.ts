@@ -20,7 +20,7 @@
  * wrapper (common/symbols/rosetta.ts) did not, so a `z.procedure` slot's decode fell back to
  * the shared, never-closing `DETACHED_SCOPE` (`DETACHED_SCOPE.runCtx = CONSTANT_CTX`) for
  * every capability verb. That gap is CLOSED: `run` now opens a region scope itself, gated on
- * `contractMayCarryCallable` (_bake.ts) — a bake-time check for a `z.procedure`/`z.value`
+ * `contractMayCarryCallable` (_bake.ts) — a bake-time check for a `z.procedure`/`z.dynamic`
  * input slot — with `runCtx: this.runCtx` (the invocation's LIVE context). The
  * "region-law-trace-nesting" row below is migrated off `env.defineRosetta` onto
  * `EnvCapability` + `symbol.rosetta` accordingly; a new "burst-bypass" row pins the concrete
@@ -118,7 +118,7 @@ describe("a reverse lambda is region-bound to its invocation", () => {
     let result: unknown;
     // MIGRATED (openRegionScope-gap Ruling A, 2026-07-11): `symbol.rosetta`'s baked `run`
     // wrapper (common/symbols/rosetta.ts) now opens a region scope itself, gated on
-    // `contractMayCarryCallable` (_bake.ts) finding a `z.procedure`/`z.value` input slot — so
+    // `contractMayCarryCallable` (_bake.ts) finding a `z.procedure`/`z.dynamic` input slot — so
     // a `z.procedure()` arg's decode (scheme-zod.ts) closes over a REAL per-invocation scope
     // instead of falling back to the shared, never-closing `DETACHED_SCOPE`. This capability
     // verb declares exactly that slot, restoring the discipline this row exercises.

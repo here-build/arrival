@@ -1067,7 +1067,7 @@ const lcmSpec: NumSpec = {
  *  scheme-plane box-class fact, not a JS shape one), so `NUMBER_GUARD`/`EXACT_GUARD`
  *  both narrow to `number`, never `bigint`. */
 const NUMBER_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
-  input: [z.value],
+  input: [z.schemeValue],
   output: [z.boolean],
   type: dedent`
           {
@@ -1077,7 +1077,7 @@ const NUMBER_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
         `,
 };
 const EXACT_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
-  input: [z.value],
+  input: [z.schemeValue],
   output: [z.boolean],
   type: dedent`
           {
@@ -1087,7 +1087,7 @@ const EXACT_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
         `,
 };
 const INEXACT_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
-  input: [z.value],
+  input: [z.schemeValue],
   output: [z.boolean],
   type: dedent`
           {

@@ -1,7 +1,8 @@
 /**
- * LAW — the z.value-callable door (Ruling A).
+ * LAW — the z.dynamic-callable door (Ruling A; retargeted off `z.value` at the Q1 split —
+ * docs/plans/stage-c-corpse-deletion.md §"z.value retirement campaign").
  *
- * The hole this closes: a `z.value` slot is the declared raw escape hatch — its decode
+ * The hole this closes: a `z.dynamic` slot is the declared raw escape hatch — its decode
  * performs NO transform, so an impl receiving a raw callable through it does its OWN
  * schemeToJs/applyCallback marshaling, possibly AFTER its own first `await`. By then
  * `withRegionScope`'s synchronous save/restore (region-scope.ts) has already reverted the
@@ -10,46 +11,53 @@
  * gate (see `region.law.test.ts`'s "BURST-BYPASS CLOSED" row) exists to close. `z.procedure`
  * is safe because its wrapper is minted SYNCHRONOUSLY at decode, under the live scope.
  *
- * The fix (common/symbols/rosetta.ts's `buildValueSlotCheck` / `assertNotBareCallableInValueSlot`):
- * make the unsafe shape UNAUTHORED — a callable landing in a bare top-level `z.value` slot
+ * The fix (common/symbols/rosetta.ts's `buildDynamicSlotCheck` / `assertNotBareCallableInDynamicSlot`):
+ * make the unsafe shape UNAUTHORED — a callable landing in a bare top-level `z.dynamic` slot
  * throws a teaching door instead of silently marshaling under a scope that may already be gone.
+ *
+ * SCOPE, named (the Q1 retarget): this door is keyed on `"dynamic"` ONLY — neither the banned
+ * `z.schemeValue` (structurally excluded from a rosetta contract at COMPILE time now, see
+ * `_bake.ts`'s `CrossingResult`/`ContourResult` + `common/__tests__/scheme-zod.test-d.ts`) nor the
+ * deprecated `z.value` alias (Phase B deletes it; a not-yet-migrated downstream declaration is
+ * this door's own documented non-concern until then — see `rosetta.ts`'s own doc on
+ * `assertNotBareCallableInDynamicSlot`).
  */
 import { describe, expect, it } from "vitest";
 import { EnvCapability } from "../../common/capability.js";
 import { exec } from "../../eval/generator-exec.js";
 
-describe("the z.value-callable door", () => {
-  it("a bare z.value slot receiving a lambda throws the teaching door, steering to z.procedure", async () => {
-    const cap = EnvCapability.define("test/value-slot-callable-door", {
+describe("the z.dynamic-callable door", () => {
+  it("a bare z.dynamic slot receiving a lambda throws the teaching door, steering to z.procedure", async () => {
+    const cap = EnvCapability.define("test/dynamic-slot-callable-door", {
       symbols: (symbol, z) => ({
-        "echo-value": symbol.rosetta`echo-value: hands its raw z.value arg back untouched`(
-          { input: [z.value], output: [z.value] },
-          function (v: unknown) {
+        "echo-dynamic": symbol.rosetta`echo-dynamic: hands its raw z.dynamic arg back untouched`(
+          { input: [z.dynamic], output: [z.dynamic] },
+          function (v) {
             return v;
           },
         ),
       }),
     });
 
-    await expect(exec("(echo-value (lambda (x) x))", { capabilities: [cap] })).rejects.toThrow(
-      /a callable argument crossed a z\.value slot/,
+    await expect(exec("(echo-dynamic (lambda (x) x))", { capabilities: [cap] })).rejects.toThrow(
+      /a callable argument crossed a z\.dynamic slot/,
     );
-    await expect(exec("(echo-value (lambda (x) x))", { capabilities: [cap] })).rejects.toThrow(/z\.procedure/);
+    await expect(exec("(echo-dynamic (lambda (x) x))", { capabilities: [cap] })).rejects.toThrow(/z\.procedure/);
   });
 
   it("the SAME verb called with a non-callable value works — the door is callable-specific, not a value ban", async () => {
-    const cap = EnvCapability.define("test/value-slot-non-callable-ok", {
+    const cap = EnvCapability.define("test/dynamic-slot-non-callable-ok", {
       symbols: (symbol, z) => ({
-        "echo-value": symbol.rosetta`echo-value: hands its raw z.value arg back untouched`(
-          { input: [z.value], output: [z.value] },
-          function (v: unknown) {
+        "echo-dynamic": symbol.rosetta`echo-dynamic: hands its raw z.dynamic arg back untouched`(
+          { input: [z.dynamic], output: [z.dynamic] },
+          function (v) {
             return v;
           },
         ),
       }),
     });
 
-    const [result] = await exec("(echo-value 42)", { capabilities: [cap] });
+    const [result] = await exec("(echo-dynamic 42)", { capabilities: [cap] });
     expect(Number(result)).toBe(42);
   });
 
@@ -72,12 +80,12 @@ describe("the z.value-callable door", () => {
     expect(called).toBe(true);
   });
 
-  it("a kwargs z.value field receiving a lambda also throws the door, naming the keyword", async () => {
-    const cap = EnvCapability.define("test/value-slot-kwargs-door", {
+  it("a kwargs z.dynamic field receiving a lambda also throws the door, naming the keyword", async () => {
+    const cap = EnvCapability.define("test/dynamic-slot-kwargs-door", {
       symbols: (symbol, z) => ({
         "echo-kwargs": symbol.rosetta`echo-kwargs: hands its raw kwargs value back untouched`(
-          { input: [], inputRest: { v: z.value }, output: [z.value] },
-          function (args: { v: unknown }) {
+          { input: [], inputRest: { v: z.dynamic }, output: [z.dynamic] },
+          function (args) {
             return args.v;
           },
         ),
@@ -85,16 +93,16 @@ describe("the z.value-callable door", () => {
     });
 
     await expect(exec("(echo-kwargs :v (lambda (x) x))", { capabilities: [cap] })).rejects.toThrow(
-      /a callable argument crossed a z\.value slot \(keyword argument :v\)/,
+      /a callable argument crossed a z\.dynamic slot \(keyword argument :v\)/,
     );
   });
 
-  it("a kwargs z.value field receiving a non-callable value still works", async () => {
-    const cap = EnvCapability.define("test/value-slot-kwargs-ok", {
+  it("a kwargs z.dynamic field receiving a non-callable value still works", async () => {
+    const cap = EnvCapability.define("test/dynamic-slot-kwargs-ok", {
       symbols: (symbol, z) => ({
         "echo-kwargs": symbol.rosetta`echo-kwargs: hands its raw kwargs value back untouched`(
-          { input: [], inputRest: { v: z.value }, output: [z.value] },
-          function (args: { v: unknown }) {
+          { input: [], inputRest: { v: z.dynamic }, output: [z.dynamic] },
+          function (args) {
             return args.v;
           },
         ),
@@ -103,5 +111,24 @@ describe("the z.value-callable door", () => {
 
     const [result] = await exec('(echo-kwargs :v "hello")', { capabilities: [cap] });
     expect(result).toBe("hello");
+  });
+
+  // LAW (c) — z.dynamic in rosetta behaves IDENTICALLY to the old undifferentiated z.value:
+  // identity crossing (no transform) PLUS the callable door above. This row pins the identity-
+  // crossing half directly (the door rows above already pin the callable half).
+  it("LAW (c): z.dynamic is identity-crossing — a dict/list/whatever raw scheme value crosses untouched", async () => {
+    const cap = EnvCapability.define("test/dynamic-identity-crossing", {
+      symbols: (symbol, z) => ({
+        "echo-dynamic": symbol.rosetta`echo-dynamic: identity crossing`(
+          { input: [z.dynamic], output: [z.dynamic] },
+          function (v) {
+            return v;
+          },
+        ),
+      }),
+    });
+
+    const [result] = await exec('(echo-dynamic (list 1 2 "three"))', { capabilities: [cap] });
+    expect(result).toBeTruthy();
   });
 });

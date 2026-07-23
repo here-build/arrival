@@ -45,14 +45,14 @@
 //     `z.list`: list codec walks the spine (O(n)) and throws on circular/improper, but
 //     `length+` answers circular lists and SRFI-1 blesses dotted tails for take/drop.
 //   - xs slots that tolerate ANY value by spec (%list-nth not-a-pair→error, first?/first-or):
-//     `z.value`. take/drop also use `z.value` for tagless dispatch (not SRFI any-at-n=0).
+//     `z.schemeValue`. take/drop also use `z.schemeValue` for tagless dispatch (not SRFI any-at-n=0).
 //   - two-list products (span/break/partition): `output: [listAlike]` — `(list a b)`.
 //   - fresh-list outputs via reverse/cons: `z.union([z.pair, z.nil])`. Tail-returning
-//     (drop/drop-while/append-reverse/concatenate): `z.value` when embedding caller tails.
+//     (drop/drop-while/append-reverse/concatenate): `z.schemeValue` when embedding caller tails.
 //   - counts/indices: `z.exact` from exact arithmetic; `z.schemeNumber` when re-exporting
 //     another verb's numeric output (count ← length).
 //   - any?/every?/some: `z.boolean` — HONEST #t/#f predicates. Bare any/every:
-//     `z.value` — SRFI-1's own value-returning result (see DEVIATIONS).
+//     `z.schemeValue` — SRFI-1's own value-returning result (see DEVIATIONS).
 //
 // PERF PROTOCOL: contract costs one decode + async hop PER BOUND CALL. Named-let
 // recursion never re-crosses the boundary (one cold decode per outer call). %list-nth /
@@ -283,16 +283,16 @@ export default EnvCapability.define("scheme/srfi-1", {
       Object.entries(DOORS).map(([name, reason]) => [name, symbol.notImplemented`${name}: ${reason}`]),
     );
     return {
-      // input is a plain FIXED 2-tuple (pred, seq) — NOT z.tuple([z.value], z.value)'s
+      // input is a plain FIXED 2-tuple (pred, seq) — NOT z.tuple([z.schemeValue], z.schemeValue)'s
       // unbounded rest (filter's impl is strictly binary: `const [pred, seq] = args`, always
       // exactly 2). pred uses the established callable-schema convention (z.custom<(...args)
-      // => T>(), matching vector-map/vector-for-each); seq stays z.value — it's dispatched
+      // => T>(), matching vector-map/vector-for-each); seq stays z.schemeValue — it's dispatched
       // via tf("filter") term-lookup, representation-agnostic. `symbol.sequence`'s impl signature
       // is always `(args: unknown[], runCtx)` regardless of the contract shape (see
       // SequenceImpl in _bake.ts), so this is a declaration-only fix — the impl is unchanged.
       filter:
         symbol.sequence`filter: keep elements matching a pred (or RegExp); term-dispatch, totalic — the term charges its own heap`(
-          // Output is `z.value` (the representation-BLIND scheme-value identity), NOT a "proper
+          // Output is `z.schemeValue` (the representation-BLIND scheme-value identity), NOT a "proper
           // list" type: `filter` is genuinely polymorphic over the RECEIVER's own representation
           // (list, vector, …) — it dispatches to whatever `arrival/tagless-final/filter` term the
           // `seq` operand implements and returns a value in THAT SAME representation, so there is
@@ -303,8 +303,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           // membership (a length-changing verb), the merged selector+decision role
           // this codebase calls `control`.
           {
-            input: [z.lambda, z.value],
-            output: [z.value],
+            input: [z.lambda, z.schemeValue],
+            output: [z.schemeValue],
             provenance: "fan",
             callbackRoles: ["control"],
             type: dedent`
@@ -341,7 +341,7 @@ export default EnvCapability.define("scheme/srfi-1", {
       // fold-shaped `accumulator` callback,
       // the source of CHAINED track composition (`egress(Tᵢ) → ingress(Tᵢ₊₁)`, the only
       // sanctioned inter-track edge — the track-separation law's one exception). A tagless
-      // def is contract-less (shapeless `z.array(z.value)` in), so declaration is the ONLY
+      // def is contract-less (shapeless `z.array(z.schemeValue)` in), so declaration is the ONLY
       // channel — `withCallbackRoles`, not a Contract field.
       reduce: withCallbackRoles(
         withContractFields(symbol.tagless`reduce: left fold in scheme convention fn(element, acc); ridentity if empty`, {
@@ -364,7 +364,7 @@ export default EnvCapability.define("scheme/srfi-1", {
       find: symbol.native`find: first list element matching the predicate, else nil`(
         {
           input: [z.lambda, z.listAlike],
-          output: [z.value],
+          output: [z.schemeValue],
           // Dual generic + type-guard overload; miss → null (nil). Runtime still returns ANil.
           type: dedent`
           {
@@ -436,7 +436,7 @@ export default EnvCapability.define("scheme/srfi-1", {
       // the type gate — a receiver declaring no `arrival/tagless-final/take|drop` term
       // crashes loudly (TypeError), never a silent '() on a non-pair (`pair?` is #f on a
       // vector, the same hazard take-while/drop-while guard against above). The receiver
-      // slot stays `z.value` (filter/map's representation-agnostic idiom): the result is
+      // slot stays `z.schemeValue` (filter/map's representation-agnostic idiom): the result is
       // in the RECEIVER'S OWN representation (list or vector), so no richer scheme-zod
       // collection type is honest for every call site. `n` normalizes via `.valueOf()`,
       // the vectors.ts `vector-ref` idiom.
@@ -446,8 +446,8 @@ export default EnvCapability.define("scheme/srfi-1", {
       // error, not '() (see the file header's DEVIATIONS).
       take: symbol.sequence`take: the first n elements of xs, in xs's own representation (list→fresh list, dotted tails tolerated per SRFI-1; vector→fresh vector)`(
         {
-          input: [z.value, z.schemeNumber],
-          output: [z.value],
+          input: [z.schemeValue, z.schemeNumber],
+          output: [z.schemeValue],
           type: dedent`
           {
             <T>(xs: List<T>, n: number): List<T>;
@@ -472,14 +472,14 @@ export default EnvCapability.define("scheme/srfi-1", {
       ),
 
       // drop — the take remainder; same dispatcher/loud-crash/behavior-change reasoning
-      // as take directly above (see that comment). Output stays z.value (not listAlike):
+      // as take directly above (see that comment). Output stays z.schemeValue (not listAlike):
       // list drop returns the n-th cdr of xs ITSELF (shares structure), vector drop
       // returns a fresh vector — both are the receiver's own representation, never a
       // guaranteed pair-or-nil shape.
       drop: symbol.sequence`drop: xs after the first n elements, in xs's own representation (list: the n-th cdr — shares structure with xs; vector→fresh vector)`(
         {
-          input: [z.value, z.schemeNumber],
-          output: [z.value],
+          input: [z.schemeValue, z.schemeNumber],
+          output: [z.schemeValue],
           type: dedent`
           {
             <T>(xs: List<T>, n: number): List<T>;
@@ -593,7 +593,7 @@ export default EnvCapability.define("scheme/srfi-1", {
       last: symbol.define`last: the last element of a non-empty proper list`(
         {
           input: [z.pair],
-          output: [z.value],
+          output: [z.schemeValue],
           type: dedent`
           {
             <T>(xs: List<T>): T;
@@ -604,7 +604,7 @@ export default EnvCapability.define("scheme/srfi-1", {
       ),
 
       // %list-nth — private walker behind first…tenth: walks k cdrs, reports the
-      // accessor's name on underflow. xs is z.value (its not-a-pair→error branch IS the
+      // accessor's name on underflow. xs is z.schemeValue (its not-a-pair→error branch IS the
       // teaching surface first…tenth rely on). Named-let idiom (see the file header's
       // PERF PROTOCOL note); enforcement stays on.
       //
@@ -621,7 +621,7 @@ export default EnvCapability.define("scheme/srfi-1", {
       // the `(not (pair? xs))` teaching error, first…tenth's own error surface.
       "%list-nth":
         symbol.define`%list-nth: the k-th element of xs, or (error msg) when xs is too short (private walker for first…tenth)`(
-          { input: [z.value, z.schemeNumber, z.string], output: [z.value] },
+          { input: [z.schemeValue, z.schemeNumber, z.string], output: [z.schemeValue] },
           `(lambda (xs k msg)
          (let loop ((xs (if (vector? xs) (vector->list xs) xs)) (k k))
            (cond ((not (pair? xs)) (error msg))
@@ -639,7 +639,7 @@ export default EnvCapability.define("scheme/srfi-1", {
       first: symbol.define`first: the 1st element of a proper list (errors if too short)`(
         {
           input: [listAlike],
-          output: [z.value],
+          output: [z.schemeValue],
           type: dedent`
           {
             <T>(xs: List<T>): T;
@@ -651,7 +651,7 @@ export default EnvCapability.define("scheme/srfi-1", {
       second: symbol.define`second: the 2nd element of a proper list (errors if too short)`(
         {
           input: [listAlike],
-          output: [z.value],
+          output: [z.schemeValue],
           type: dedent`
           {
             <T>(xs: List<T>): T;
@@ -663,7 +663,7 @@ export default EnvCapability.define("scheme/srfi-1", {
       third: symbol.define`third: the 3rd element of a proper list (errors if too short)`(
         {
           input: [listAlike],
-          output: [z.value],
+          output: [z.schemeValue],
           type: dedent`
           {
             <T>(xs: List<T>): T;
@@ -675,7 +675,7 @@ export default EnvCapability.define("scheme/srfi-1", {
       fourth: symbol.define`fourth: the 4th element of a proper list (errors if too short)`(
         {
           input: [listAlike],
-          output: [z.value],
+          output: [z.schemeValue],
           type: dedent`
           {
             <T>(xs: List<T>): T;
@@ -687,7 +687,7 @@ export default EnvCapability.define("scheme/srfi-1", {
       fifth: symbol.define`fifth: the 5th element of a proper list (errors if too short)`(
         {
           input: [listAlike],
-          output: [z.value],
+          output: [z.schemeValue],
           type: dedent`
           {
             <T>(xs: List<T>): T;
@@ -699,7 +699,7 @@ export default EnvCapability.define("scheme/srfi-1", {
       sixth: symbol.define`sixth: the 6th element of a proper list (errors if too short)`(
         {
           input: [listAlike],
-          output: [z.value],
+          output: [z.schemeValue],
           type: dedent`
           {
             <T>(xs: List<T>): T;
@@ -711,7 +711,7 @@ export default EnvCapability.define("scheme/srfi-1", {
       seventh: symbol.define`seventh: the 7th element of a proper list (errors if too short)`(
         {
           input: [listAlike],
-          output: [z.value],
+          output: [z.schemeValue],
           type: dedent`
           {
             <T>(xs: List<T>): T;
@@ -723,7 +723,7 @@ export default EnvCapability.define("scheme/srfi-1", {
       eighth: symbol.define`eighth: the 8th element of a proper list (errors if too short)`(
         {
           input: [listAlike],
-          output: [z.value],
+          output: [z.schemeValue],
           type: dedent`
           {
             <T>(xs: List<T>): T;
@@ -735,7 +735,7 @@ export default EnvCapability.define("scheme/srfi-1", {
       ninth: symbol.define`ninth: the 9th element of a proper list (errors if too short)`(
         {
           input: [listAlike],
-          output: [z.value],
+          output: [z.schemeValue],
           type: dedent`
           {
             <T>(xs: List<T>): T;
@@ -747,7 +747,7 @@ export default EnvCapability.define("scheme/srfi-1", {
       tenth: symbol.define`tenth: the 10th element of a proper list (errors if too short)`(
         {
           input: [listAlike],
-          output: [z.value],
+          output: [z.schemeValue],
           type: dedent`
           {
             <T>(xs: List<T>): T;
@@ -774,8 +774,8 @@ export default EnvCapability.define("scheme/srfi-1", {
 
       "fold-right": symbol.define`fold-right: right-associative fold — (f x0 (f x1 … (f xn knil)))`(
         {
-          input: [z.lambda, z.value, listAlike],
-          output: [z.value],
+          input: [z.lambda, z.schemeValue, listAlike],
+          output: [z.schemeValue],
           type: dedent`
           {
             <T, A>(f: (x: T, acc: A) => A, knil: A, xs: List<T>): A;
@@ -790,8 +790,8 @@ export default EnvCapability.define("scheme/srfi-1", {
       "reduce-right": symbol.define`reduce-right: fold-right with the last element as the seed; ridentity if empty`(
         // Same f/knil/xs shape as fold-right for the non-empty path; empty uses ridentity.
         {
-          input: [z.lambda, z.value, listAlike],
-          output: [z.value],
+          input: [z.lambda, z.schemeValue, listAlike],
+          output: [z.schemeValue],
           type: dedent`
           {
             <T, A>(f: (x: T, acc: A) => A, knil: A, xs: List<T>): A;
@@ -807,12 +807,12 @@ export default EnvCapability.define("scheme/srfi-1", {
                    (f (car xs) (loop (cdr xs)))))))`,
       ),
 
-      // Output z.value: append's R7RS contract lets the LAST list be improper (the
+      // Output z.schemeValue: append's R7RS contract lets the LAST list be improper (the
       // result then embeds that tail) — the shallow input union can't rule it out.
       concatenate: symbol.define`concatenate: append a list of lists into one list`(
         {
           input: [listAlike],
-          output: [z.value],
+          output: [z.schemeValue],
           type: dedent`
           {
             <T>(lists: List<List<T>>): List<T>;
@@ -822,12 +822,12 @@ export default EnvCapability.define("scheme/srfi-1", {
         `(lambda (lists) (apply append lists))`,
       ),
 
-      // Output z.value: the result is (reverse rev) grafted onto the caller's tail —
+      // Output z.schemeValue: the result is (reverse rev) grafted onto the caller's tail —
       // tail-typed, and SRFI-1 allows any tail object.
       "append-reverse": symbol.define`append-reverse: (append (reverse rev) tail), accumulator-friendly`(
         {
-          input: [listAlike, z.value],
-          output: [z.value],
+          input: [listAlike, z.schemeValue],
+          output: [z.schemeValue],
           type: dedent`
           {
             <T, U>(rev: List<T>, tail: U): List<T> | U;
@@ -841,7 +841,7 @@ export default EnvCapability.define("scheme/srfi-1", {
 
       delete: symbol.define`delete: remove all elements equal? to x from xs, as a fresh list`(
         {
-          input: [z.value, listAlike],
+          input: [z.schemeValue, listAlike],
           output: [listAlike],
           type: dedent`
           {
@@ -859,14 +859,14 @@ export default EnvCapability.define("scheme/srfi-1", {
       // remove — SRFI-1: keep the elements that do NOT satisfy pred (the predicate twin of
       // delete). The base sandbox carries no external collection library, so this is the sole
       // remove binding; the inference plane copies it by name (bridge.ts). Contract mirrors
-      // `filter`'s representation-BLIND shape (z.value seq/out), NOT listAlike: the body
+      // `filter`'s representation-BLIND shape (z.schemeValue seq/out), NOT listAlike: the body
       // delegates to filter's term dispatch, so remove inherits filter's polymorphism over
       // the receiver's own representation — narrowing here would break what delegation buys.
       remove:
         symbol.define`remove: keep the elements NOT satisfying pred (predicate twin of delete; delegates to filter's term dispatch)`(
           {
-            input: [z.lambda, z.value],
-            output: [z.value],
+            input: [z.lambda, z.schemeValue],
+            output: [z.schemeValue],
             type: dedent`
           {
             <T, S extends T>(p: (x: T) => x is S, xs: List<T>): List<S>;
@@ -890,13 +890,13 @@ export default EnvCapability.define("scheme/srfi-1", {
       // on-empty contract is the load-bearing semantics, and car cannot supply it — these are
       // the safe twins of SRFI-1 `first`, not crash-avoidance vestiges. (first-or is the
       // defaulted twin; it earns the same one-line home rather than a wrong (or (car xs) default)
-      // derivation, which would mask a genuinely-falsy first element.) xs is z.value — TOTAL
+      // derivation, which would mask a genuinely-falsy first element.) xs is z.schemeValue — TOTAL
       // tolerance (any non-pair → the sentinel) is the whole point, so it is the contract.
       "first?":
         symbol.define`first?: the head of xs, or #f (falsy!) when xs is not a pair — the safe guard twin of first`(
           {
-            input: [z.value],
-            output: [z.value],
+            input: [z.schemeValue],
+            output: [z.schemeValue],
             type: dedent`
           {
             <T>(xs: List<T> | unknown): T | false;
@@ -908,8 +908,8 @@ export default EnvCapability.define("scheme/srfi-1", {
       "first-or":
         symbol.define`first-or: the head of xs, or default when xs is not a pair — the defaulted twin of first?`(
           {
-            input: [z.value, z.value],
-            output: [z.value],
+            input: [z.schemeValue, z.schemeValue],
+            output: [z.schemeValue],
             type: dedent`
           {
             <T, D>(xs: List<T> | unknown, default: D): T | D;
@@ -1026,12 +1026,12 @@ export default EnvCapability.define("scheme/srfi-1", {
          (length (filter (lambda (b) b) (apply map pred lists))))`,
       ),
 
-      // Output z.value, as concatenate: the appended results may embed an improper tail.
+      // Output z.schemeValue, as concatenate: the appended results may embed an improper tail.
       "append-map": symbol.define`append-map: map then append the result lists`(
         {
           input: [z.lambda],
           inputRest: listAlike,
-          output: [z.value],
+          output: [z.schemeValue],
           type: dedent`
           {
             <T, B>(f: (x: T) => List<B>, xs: List<T>): List<B>;
@@ -1107,7 +1107,7 @@ export default EnvCapability.define("scheme/srfi-1", {
 
       "%any":
         symbol.define`%any: first truthy predicate RESULT across the parallel lists, or #f (private helper for any)`(
-          { input: [z.lambda, listAlike], output: [z.value] },
+          { input: [z.lambda, listAlike], output: [z.schemeValue] },
           `(lambda (fn lists)
          (let loop ((lists lists))
            (if (or (null? lists) (%any-null? lists))
@@ -1122,7 +1122,7 @@ export default EnvCapability.define("scheme/srfi-1", {
         {
           input: [z.lambda],
           inputRest: listAlike,
-          output: [z.value],
+          output: [z.schemeValue],
           type: dedent`
           {
             <T, R>(p: (x: T) => R, xs: List<T>): R | false;
@@ -1167,7 +1167,7 @@ export default EnvCapability.define("scheme/srfi-1", {
 
       "%every-value":
         symbol.define`%every-value: the LAST predicate RESULT if every element-tuple is truthy, #t on the empty list, #f on the first falsy result (private helper for every)`(
-          { input: [z.lambda, listAlike], output: [z.value] },
+          { input: [z.lambda, listAlike], output: [z.schemeValue] },
           `(lambda (fn lists)
          (let loop ((lists lists) (last #t))
            (if (or (null? lists) (%any-null? lists))
@@ -1187,7 +1187,7 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             input: [z.lambda],
             inputRest: listAlike,
-            output: [z.value],
+            output: [z.schemeValue],
             type: dedent`
           {
             <T, R>(p: (x: T) => R, xs: List<T>): R | boolean;
@@ -1248,7 +1248,7 @@ export default EnvCapability.define("scheme/srfi-1", {
       // (head . next) or #f to stop), preserved 1:1.
       unfold: symbol.define`unfold: build a list by iterating fn from init; fn returns (head . next) or #f to stop`(
         {
-          input: [z.lambda, z.value],
+          input: [z.lambda, z.schemeValue],
           output: [listAlike],
           type: dedent`
           {

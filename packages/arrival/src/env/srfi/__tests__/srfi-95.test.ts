@@ -7,7 +7,7 @@
 // `.test-d.ts` mechanism proof would be a synthetic mirror only (see symbol.test-d.ts's
 // existing "2026-07-05 audit" section for that convention on other ops).
 //
-// `sort`'s fix (z.unknown() → z.value/callable) is ALSO not `.safeParse()`-observable:
+// `sort`'s fix (z.unknown() → z.schemeValue/callable) is ALSO not `.safeParse()`-observable:
 // z.custom<T>() with no refinement is byte-identical to z.unknown() at runtime (both
 // accept anything) — the only genuine, provable signal is STRUCTURAL: which zod schema
 // kind is actually wired into the baked def. `._zod.def.type` distinguishes "unknown"
@@ -49,9 +49,9 @@ function tupleItems(s: unknown): unknown[] {
 }
 
 describe("2026-07-06 audit — scheme/srfi-95: sort's element precision (real exported op)", () => {
-  // INVARIANT: sort's seq slot is wired to a custom (z.value) schema, not the old bare
+  // INVARIANT: sort's seq slot is wired to a custom (z.schemeValue) schema, not the old bare
   // unknown (pins implementation, not behavior)
-  it("seq (slot 0) is z.value (custom), not the old bare z.unknown()", () => {
+  it("seq (slot 0) is z.schemeValue (custom), not the old bare z.unknown()", () => {
     const def = contractDef(srfi95Pack, "sort");
     const tuple = tupleItems(def.in);
     expect(schemaKind(tuple[0])).toBe("custom");
@@ -65,11 +65,11 @@ describe("2026-07-06 audit — scheme/srfi-95: sort's element precision (real ex
     expect(schemaKind(tuple[1])).toBe("custom");
   });
 
-  // INVARIANT: sort's output is wired to a custom (z.value) schema, not the old bare
+  // INVARIANT: sort's output is wired to a custom (z.schemeValue) schema, not the old bare
   // unknown (pins implementation, not behavior)
-  it("output is z.value (custom), not the old bare z.unknown()", () => {
+  it("output is z.schemeValue (custom), not the old bare z.unknown()", () => {
     const def = contractDef(srfi95Pack, "sort");
-    // 1-tuple output normalizes the same way as input — z.tuple([z.value]).
+    // 1-tuple output normalizes the same way as input — z.tuple([z.schemeValue]).
     const outTuple = tupleItems(def.out);
     expect(schemaKind(outTuple[0])).toBe("custom");
   });

@@ -30,6 +30,7 @@ import {
   CallCtx,
   collectKwargsObject,
   type Contract,
+  type CrossingResult,
   type Impl,
   isSingleOutput,
   normalizeInputVector,
@@ -42,22 +43,29 @@ import {
   type VectorSpec,
 } from "./_bake.js";
 
-/** THE Z.VALUE-CALLABLE DOOR (Ruling A) — a plain teaching throw, deliberately NOT a
- *  class: the errors-as-doors corpus is migrating to individual classes elsewhere;
- *  staying a bare `throw new Error` here lets that migration absorb it later without a
- *  merge collision.
+/** THE Z.DYNAMIC-CALLABLE DOOR (Ruling A; retargeted off `z.value` at the Q1 split —
+ *  docs/plans/stage-c-corpse-deletion.md §"z.value retirement campaign") — a plain teaching
+ *  throw, deliberately NOT a class: the errors-as-doors corpus is migrating to individual
+ *  classes elsewhere; staying a bare `throw new Error` here lets that migration absorb it
+ *  later without a merge collision.
  *
  *  The hazard and why the fix is to make the shape UNAUTHORED (steer to `z.procedure`, whose decode
- *  marshals synchronously under the live scope) is docs/membrane.md §REGION (the `z.value`
- *  burst-bypass hazard): a callable marshaled from a `z.value` slot AFTER the impl's first `await`
- *  — past `withRegionScope`'s synchronous save/restore — binds `DETACHED_SCOPE`/`CONSTANT_CTX` and
- *  bypasses the effect burst. So this gate never lets one land there in the first place. */
-function assertNotBareCallableInValueSlot(symbolName: string, value: unknown, position: string): void {
+ *  marshals synchronously under the live scope) is docs/membrane.md §REGION (the `z.dynamic`
+ *  burst-bypass hazard): a callable marshaled from a `z.dynamic` slot AFTER the impl's first
+ *  `await` — past `withRegionScope`'s synchronous save/restore — binds `DETACHED_SCOPE`/
+ *  `CONSTANT_CTX` and bypasses the effect burst. So this gate never lets one land there in the
+ *  first place. Checked against `"dynamic"` only, not the deprecated `"value"` alias — a
+ *  not-yet-migrated downstream `z.value` slot is untouched by this door (Phase B's own concern);
+ *  `z.schemeValue` never reaches here at all — banned from a rosetta contract's slot types
+ *  entirely, at COMPILE time (`CrossingContract`, `_bake.ts` — the type never round-trips the
+ *  argument to a live call in the first place). This RUNTIME door guards what a type cannot see:
+ *  a callable VALUE landing in a legitimate `z.dynamic`/deprecated-`z.value` slot at runtime. */
+function assertNotBareCallableInDynamicSlot(symbolName: string, value: unknown, position: string): void {
   if (typeof value === "function" || is_callable_value(value)) {
     throw new Error(
-      `${symbolName}: a callable argument crossed a z.value slot (${position}) — declare this parameter ` +
+      `${symbolName}: a callable argument crossed a z.dynamic slot (${position}) — declare this parameter ` +
         `z.procedure so its host-fn wrapper is minted at decode, synchronously, under the live region scope. ` +
-        `A callable marshaled from a z.value slot after an await binds a detached scope and can bypass the ` +
+        `A callable marshaled from a z.dynamic slot after an await binds a detached scope and can bypass the ` +
         `effect burst.`,
     );
   }
@@ -65,69 +73,85 @@ function assertNotBareCallableInValueSlot(symbolName: string, value: unknown, po
 
 /** Bake-time-only: which of `inSchema`'s TOP-LEVEL slots (the SAME shallow view
  *  `contractMayCarryCallable` reads — fixed tuple items / a homogeneous array's lone element /
- *  kwargs object fields) are bare `z.value` — and a runtime closure that checks a call's
- *  DECODED args at exactly those positions. `undefined` when the contract carries no `z.value`
+ *  kwargs object fields) are bare `z.dynamic` — and a runtime closure that checks a call's
+ *  DECODED args at exactly those positions. `undefined` when the contract carries no `z.dynamic`
  *  slot at all (the overwhelming majority — zero cost). Deliberately scoped IDENTICAL to
  *  `contractMayCarryCallable`'s own shallow slots: a callable buried inside a CONTAINER argument
- *  (`z.list(z.value)`, `z.vector(z.value)`, a dict field) is the shallow-gate-recursion gap —
- *  a separate, already-tracked finding, not this door's job to catch. */
-function buildValueSlotCheck(
+ *  (`z.list(z.dynamic)`, `z.vector(z.dynamic)`, a dict field) is the shallow-gate-recursion gap —
+ *  a separate, already-tracked finding, not this door's job to catch. Named `"dynamic"` only —
+ *  see this function's own doc for why the deprecated `"value"` alias and the banned
+ *  `"schemeValue"` name are both out of scope here. REFACTOR-READY: a future `sz.instance` arm
+ *  (the whiteroom's live-object-holding identity crossing) is the same family and would extend
+ *  the name check below, not replace it. */
+function buildDynamicSlotCheck(
   symbolName: string,
   inSchema: z.ZodTypeAny,
   kwargsShape: Record<string, z.ZodTypeAny> | undefined,
 ): ((decodedArgs: readonly unknown[]) => void) | undefined {
   if (kwargsShape) {
-    const valueKeys = Object.entries(kwargsShape)
-      .filter(([, slot]) => z.lookupName(slot) === "value")
+    const dynamicKeys = Object.entries(kwargsShape)
+      .filter(([, slot]) => z.lookupName(slot) === "dynamic")
       .map(([key]) => key);
-    if (valueKeys.length === 0) return undefined;
+    if (dynamicKeys.length === 0) return undefined;
     return (decodedArgs) => {
       const obj = decodedArgs[0] as Record<string, unknown>;
-      for (const key of valueKeys) assertNotBareCallableInValueSlot(symbolName, obj[key], `keyword argument :${key}`);
+      for (const key of dynamicKeys)
+        assertNotBareCallableInDynamicSlot(symbolName, obj[key], `keyword argument :${key}`);
     };
   }
   const items = topLevelSchemas(inSchema);
   if (items === undefined) return undefined;
   // A homogeneous array-ish input's `topLevelSchemas` is always a ONE-item result standing for
   // EVERY decoded position (its own "array" branch); a fixed multi-item tuple's items map 1:1 to
-  // positions. A one-item result is checked identically either way — a single fixed z.value arg
+  // positions. A one-item result is checked identically either way — a single fixed z.dynamic arg
   // has exactly one decoded position, the same as "check the array's one element type at every
   // position" when there happens to be exactly one position.
   if (items.length === 1) {
-    if (z.lookupName(items[0]) !== "value") return undefined;
+    if (z.lookupName(items[0]) !== "dynamic") return undefined;
     return (decodedArgs) =>
-      decodedArgs.forEach((a, i) => assertNotBareCallableInValueSlot(symbolName, a, `argument ${i + 1}`));
+      decodedArgs.forEach((a, i) => assertNotBareCallableInDynamicSlot(symbolName, a, `argument ${i + 1}`));
   }
-  const valueIndices = items.flatMap((item, i) => (z.lookupName(item) === "value" ? [i] : []));
-  if (valueIndices.length === 0) return undefined;
+  const dynamicIndices = items.flatMap((item, i) => (z.lookupName(item) === "dynamic" ? [i] : []));
+  if (dynamicIndices.length === 0) return undefined;
   return (decodedArgs) =>
-    valueIndices.forEach((i) => assertNotBareCallableInValueSlot(symbolName, decodedArgs[i], `argument ${i + 1}`));
+    dynamicIndices.forEach((i) => assertNotBareCallableInDynamicSlot(symbolName, decodedArgs[i], `argument ${i + 1}`));
 }
 
 /** Rosetta host fn in JS-LAND (decoded via the contract codecs). ctx-free for this step.
  *  `Rest` (inferred from `contract.inputRest`, defaulting to `undefined`) is the FIXED-prefix-
  *  plus-rest split — see `Contract`/`Impl` in `_bake.ts`. Absent `inputRest` ⇒ `Rest` stays
- *  `undefined` and `impl`'s signature is the plain fixed-arity form. */
+ *  `undefined` and `impl`'s signature is the plain fixed-arity form.
+ *
+ *  Declared return type is `CrossingResult<I,O,Rest,ARosettaProcedure>` (`_bake.ts`), not bare
+ *  `ARosettaProcedure`: the AUTHOR-facing compile-time ban on a `z.schemeValue` slot (V ruling,
+ *  mid-Phase-A — see `_bake.ts`'s own §1.7 doc for the full mechanism + why it lives on the
+ *  RETURN type rather than transforming `contract`'s parameter type). `contract` itself stays
+ *  the plain, UNTRANSFORMED `Contract<I,O,Rest>` — inference of I/O/Rest from the real call-site
+ *  argument is byte-identical to before this ruling; only the computed RETURN type can collapse
+ *  to a `ContractKindMismatch` shape. */
 export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) {
   const { name, doc } = parseNameDoc(tpl, sub);
   return <const I extends VectorSpec, const O extends VectorSpec, const Rest extends RestSpec = undefined>(
     contract: Contract<I, O, Rest>,
     impl: Impl<I, O, Rest>,
     opts: BakeRuntimeOpts = {},
-  ): ARosettaProcedure => {
+  ): CrossingResult<I, O, Rest, ARosettaProcedure> => {
     const inSchema = normalizeInputVector(contract.input, contract.inputRest);
     const outSchema = normalizeVector(contract.output);
     const singleOut = isSingleOutput(contract.output);
-    // `value` OUTPUT slots are the declared NO-TRANSFORM escape hatch ("impl returns raw,
-    // does its own conversion" — z.value's own doc): running them through `z.encode` would
+    // `dynamic` OUTPUT slots are the declared NO-TRANSFORM escape hatch ("impl returns raw,
+    // does its own conversion" — z.dynamic's own doc): running them through `z.encode` would
     // apply the scheme-side check to the RAW return BEFORE step 4's jsToScheme ever boxes
     // it, rejecting every impl that returns a plain JS object (the llm/mcp DerivableEntity
     // family — the (infer …) outage this flag fixes). Boxing IS their validation now: the
     // inbound-claims registry (rosetta.ts) totalizes the crossing (exotics borrow loudly,
     // bare promises door). Computed at bake, per slot, tuple-shaped outputs only — a
-    // variadic array-ish output keeps the plain encode (no live `value` variadic exists).
+    // variadic array-ish output keeps the plain encode (no live `dynamic` variadic exists).
+    // Keyed off `"dynamic"` only (not the deprecated `"value"` alias, not the banned
+    // `"schemeValue"`) — REFACTOR-READY for a future `sz.instance` arm (the whiteroom's
+    // live-object-holding identity crossing), which would extend this name check, not replace it.
     const escapeSlots: readonly boolean[] = Array.isArray(contract.output)
-      ? (contract.output as readonly unknown[]).map((slot) => z.lookupName(slot) === "value")
+      ? (contract.output as readonly unknown[]).map((slot) => z.lookupName(slot) === "dynamic")
       : [];
     // Default "source" — see Contract.provenance. "source" MINTS a fresh point; "pipe" is a
     // TRANSFORM that forwards input provenance — the load-bearing choice applied at step 3 below.
@@ -154,22 +178,26 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
 
     // THE REGION-SCOPE GATE (openRegionScope-gap Ruling A) — computed ONCE at bake, off the
     // SAME normalized `inSchema` every other bake-time gate above already reads. `true` only
-    // for a contract that can hand the impl a live callable (`z.procedure`/`z.value` input
-    // slot — see `contractMayCarryCallable`'s doc for the full gate + the z.value
+    // for a contract that can hand the impl a live callable (`z.procedure`/`z.dynamic` input
+    // slot — see `contractMayCarryCallable`'s doc for the full gate + the z.dynamic
     // adjudication); every other verb's `run` below skips the scope entirely — zero cost.
     const carriesCallable = contractMayCarryCallable(inSchema);
 
     // kwargs input: a plain-record `contract.inputRest` (its VALUES are ZodType, the CONTAINER
     // is not) marks a trailing kwargs OBJECT — hoisted here (bake-invariant off `contract.
-    // inputRest` alone) so both the z.value-callable door below and `run`'s own decode step
+    // inputRest` alone) so both the z.dynamic-callable door below and `run`'s own decode step
     // (§1) read the SAME computed shape instead of re-deriving it per call.
     const bakedInputRest: RestSpec = contract.inputRest;
     const kwargsShape = bakedInputRest !== undefined && !(bakedInputRest instanceof ZodType) ? bakedInputRest : undefined;
 
-    // THE Z.VALUE-CALLABLE DOOR (Ruling A, see `buildValueSlotCheck`'s own doc above) —
+    // THE ROSETTA SCHEMEVALUE BAN lives at COMPILE TIME now (`CrossingContract`, `_bake.ts` —
+    // V ruling, mid-Phase-A) — `contract`'s own parameter type already rejects a `z.schemeValue`
+    // slot at the author's keyboard; nothing to check here at bake.
+
+    // THE Z.DYNAMIC-CALLABLE DOOR (Ruling A, see `buildDynamicSlotCheck`'s own doc above) —
     // computed ONCE at bake, `undefined` (zero cost) for the overwhelming majority of contracts
-    // that carry no `z.value` input slot at all.
-    const checkValueSlots = buildValueSlotCheck(name, inSchema, kwargsShape);
+    // that carry no `z.dynamic` input slot at all.
+    const checkDynamicSlots = buildDynamicSlotCheck(name, inSchema, kwargsShape);
 
     // The interpretive wrapper. Mirrors createRosettaWrapper's spine
     // (schemeToJs → fn → jsToScheme), with the contract codecs standing in for the
@@ -224,7 +252,7 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
         // `z.ZodType` `inputRest` (variadic tail) or none stays the ordinary array-shaped decode
         // against `inSchema`. instanceof is the SOUND discriminator: no combinator can make a plain
         // record satisfy `instanceof ZodType` — a record whose values are ZodType is not itself one.
-        // (`kwargsShape` itself is bake-time-hoisted above, beside `checkValueSlots`.)
+        // (`kwargsShape` itself is bake-time-hoisted above, beside `checkDynamicSlots`.)
         // STRICT + humanized (kwargs-rejection.ts, args-error-reporting-v2.md §2.5): unknown
         // keys reject instead of silently stripping, and a ZodError rethrows in the frozen
         // `<name>: arguments rejected — N problem(s):` grammar.
@@ -274,12 +302,12 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
         // minted host-fn wrapper closes over THIS scope instead of falling back to the shared
         // `DETACHED_SCOPE`.
         const decodedArgs: readonly unknown[] = scope ? withRegionScope(scope, decode) : decode();
-        // THE Z.VALUE-CALLABLE DOOR fires HERE — right after decode, before the impl ever runs
-        // (so a bad call never fires a partial effect first). `value`'s decode is an identity
+        // THE Z.DYNAMIC-CALLABLE DOOR fires HERE — right after decode, before the impl ever runs
+        // (so a bad call never fires a partial effect first). `dynamic`'s decode is an identity
         // predicate (no transform), so checking post-decode is equivalent to checking the raw
-        // scheme arg; see `buildValueSlotCheck`'s own doc above for the full mechanism + why
+        // scheme arg; see `buildDynamicSlotCheck`'s own doc above for the full mechanism + why
         // this is scoped to bare top-level slots only.
-        checkValueSlots?.(decodedArgs);
+        checkDynamicSlots?.(decodedArgs);
 
         // 2. RUN the impl with a per-call **invocation `this`** — the SAME flat `CallCtx` the
         //    dispatch level already handed this wrapper, forwarded straight through (no second
@@ -307,7 +335,7 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
         const runEffects = this.runCtx.effects;
         const runReads = this.runCtx.reads;
         // Also wrapped in `withRegionScope` (belt-and-suspenders beside decode above): covers
-        // the impl's own SYNCHRONOUS prefix (up to its first `await`) for a `z.value` slot,
+        // the impl's own SYNCHRONOUS prefix (up to its first `await`) for a `z.dynamic` slot,
         // whose decode does NOT marshal — an impl that calls `schemeToJs`/`applyCallback` on
         // the raw value itself, synchronously, sees the live scope too. A `z.procedure` slot's
         // wrapper is already bound to `scope` from decode above; this only matters for the
@@ -367,7 +395,7 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       //    empty-provenance fast path, and the program-wide singletons must never attest.)
       if (singleOut) {
         // 1-tuple output: the impl returned a single value; encode it as a 1-vector.
-        // A `value` slot skips the codec entirely (see escapeSlots above).
+        // A `dynamic` slot skips the codec entirely (see escapeSlots above).
         const encoded = escapeSlots[0] ? result : z.encode(outSchema, [result])[0];
         const boxed: unknown = jsToScheme(this.runCtx, encoded, {}, resultProvenance);
         return forwards ? boxed : attestDeep(freshIfSingleton(boxed));
@@ -427,6 +455,9 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
     (proc as { provenanceRole?: ProvenanceRole }).provenanceRole = provenance;
     if (cacheClass !== undefined) (proc as { cacheClass?: CacheClass }).cacheClass = cacheClass;
     if (callbackRoles !== undefined) (proc as { callbackRoles?: CallbackRoles }).callbackRoles = callbackRoles;
-    return proc;
+    // ERASE ONCE here: the runtime value is ALWAYS a real `ARosettaProcedure` — the
+    // `CrossingResult` conditional is a caller-facing compile-time check only (see this
+    // function's own doc + `_bake.ts`'s §1.7), never something this implementation computes.
+    return proc as CrossingResult<I, O, Rest, ARosettaProcedure>;
   };
 }

@@ -66,7 +66,7 @@ describe("buildVocabulary — requiresConfig doors + degraded surfacing", () => 
       },
       symbols: (symbol) => ({
         "fixture/verb": symbol.native`fixture/verb: reads via the fs`(
-          { input: [], output: [sz.value], requiresConfig: ["fs"] },
+          { input: [], output: [sz.schemeValue], requiresConfig: ["fs"] },
           () => nil,
         ),
       }),
@@ -120,7 +120,7 @@ describe("buildVocabulary — key===name violation", () => {
     const cap = EnvCapability.define("test/vocab-key-mismatch", {
       symbols: (symbol, z) => ({
         // Declared under "right-name" but placed under a DIFFERENT record key.
-        "wrong-key": symbol.native`right-name: doc`({ input: [], output: [z.value] }, () => nil),
+        "wrong-key": symbol.native`right-name: doc`({ input: [], output: [z.schemeValue] }, () => nil),
       }),
     });
     await expect(buildVocabulary([cap], undefined, noopEvalScheme)).rejects.toBeInstanceOf(SymbolKeyMismatchError);
@@ -235,7 +235,7 @@ describe("exec — vocabularyPath end-to-end integration", () => {
           return `${this.configuration.greeting} ${s}`;
         }),
         "fixture/verb": symbol.native`fixture/verb: gated on fs`(
-          { input: [], output: [sz.value], requiresConfig: ["fs"] },
+          { input: [], output: [sz.schemeValue], requiresConfig: ["fs"] },
           () => nil,
         ),
       }),

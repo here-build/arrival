@@ -20,6 +20,7 @@ import {
   type CallbackRoles,
   type CallCtx,
   type Contract,
+  type ContourResult,
   type Impl,
   type MetadataRecord,
   type NativeSymbolDef,
@@ -32,14 +33,19 @@ import {
  *  projects the contract's SCHEME face (`Impl<…, "scheme">` — see `Face` in `_bake.ts`), so a
  *  codec-vocabulary schema (e.g. `z.string` = AString⇄string) types the native impl's arg as the
  *  SCHEME value (AString), never the JS image. `Rest` (from `contract.inputRest`, default
- *  `undefined`) is the fixed-prefix-plus-rest split — see `Contract`/`Impl` in `_bake.ts`. */
+ *  `undefined`) is the fixed-prefix-plus-rest split — see `Contract`/`Impl` in `_bake.ts`.
+ *
+ *  Declared return type is `ContourResult<I,O,Rest,ANativeProcedure>` (`_bake.ts`), not bare
+ *  `ANativeProcedure`: the AUTHOR-facing compile-time ban on a `z.dynamic` slot (V ruling,
+ *  mid-Phase-A — see `_bake.ts`'s §1.7 doc and `rosetta.ts`'s matching `CrossingResult` for the
+ *  full mechanism). `contract` itself stays the plain, UNTRANSFORMED `Contract<I,O,Rest>`. */
 export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
   const { name, doc } = parseNameDoc(tpl, sub);
   return <const I extends VectorSpec, const O extends VectorSpec, const Rest extends RestSpec = undefined>(
     contract: Contract<I, O, Rest>,
     impl: Impl<I, O, Rest, "scheme">,
     opts: { metadata?: MetadataRecord } = {},
-  ): ANativeProcedure => {
+  ): ContourResult<I, O, Rest, ANativeProcedure> => {
     const inSchema = normalizeInputVector(contract.input, contract.inputRest);
     const outSchema = normalizeVector(contract.output);
     // Default "pipe" — see Contract.provenance (kind-default table + how capability.ts stamps
@@ -108,6 +114,9 @@ export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
     (proc as { provenanceRole?: ProvenanceRole }).provenanceRole = provenance;
     if (cacheClass !== undefined) (proc as { cacheClass?: CacheClass }).cacheClass = cacheClass;
     if (callbackRoles !== undefined) (proc as { callbackRoles?: CallbackRoles }).callbackRoles = callbackRoles;
-    return proc;
+    // ERASE ONCE here: the runtime value is ALWAYS a real `ANativeProcedure` — the
+    // `ContourResult` conditional is a caller-facing compile-time check only (see this
+    // function's own doc + `_bake.ts`'s §1.7).
+    return proc as ContourResult<I, O, Rest, ANativeProcedure>;
   };
 }

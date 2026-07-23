@@ -100,7 +100,7 @@ describe("W0 span totality — behavioral (expanded forms are trace-visible)", (
 describe("W1 span totality — a symbol.define body is fully located, source-labeled capability#name", () => {
   it("every Pair in a parsed define body carries a span, sourced `«capability»#«name»`", async () => {
     const def = symbol.define`fold-right-ish: a nested body worth walking`(
-      { input: [z.value, z.value, z.value], output: [z.value] },
+      { input: [z.schemeValue, z.schemeValue, z.schemeValue], output: [z.schemeValue] },
       `(lambda (kons knil lst) (if (null? lst) knil (kons (car lst) (fold-right-ish kons knil (cdr lst)))))`,
     );
     const form = await parseDefineBody("scheme/srfi-1", def);
@@ -111,7 +111,7 @@ describe("W1 span totality — a symbol.define body is fully located, source-lab
   });
 
   it("the parse is MEMOIZED per def object — a second call returns the SAME (===) form", async () => {
-    const def = symbol.define`memo-check: a trivial constant`(z.value, `42`);
+    const def = symbol.define`memo-check: a trivial constant`(z.schemeValue, `42`);
     const first = await parseDefineBody("test/memo-cap", def);
     const second = await parseDefineBody("test/memo-cap", def);
     expect(second).toBe(first);

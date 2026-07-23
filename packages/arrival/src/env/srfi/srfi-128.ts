@@ -15,14 +15,14 @@
 // block (see base-packs.ts's own header).
 //
 // Contract choices:
-//   - `comparator` is modeled precisely, not as opaque `z.value`: SRFI-128's own
+//   - `comparator` is modeled precisely, not as opaque `z.schemeValue`: SRFI-128's own
 //     representation here is `(list 'comparator type-test equality ordering)` — a
 //     FIXED 4-element proper list (tag symbol + 3 procedures) — so `comparatorSchema
 //     = z.list([z.symbol, z.lambda, z.lambda, z.lambda])` is the honest structural
 //     contract, catching a malformed/foreign comparator at the call boundary instead
 //     of an opaque `cadr`-on-wrong-shape crash deep inside an accessor body.
 //   - `comparator?` is the one exception: a type PREDICATE must accept arbitrary
-//     values (that is its entire job) — `{ input: [z.value], output: [z.boolean] }`,
+//     values (that is its entire job) — `{ input: [z.schemeValue], output: [z.boolean] }`,
 //     mirroring r7rs/equality.ts's own `null?`/`boolean?` convention. Using the
 //     strict `comparatorSchema` here would make `(comparator? 5)` THROW instead of
 //     answering `#f` — the opposite of a predicate's contract.
@@ -35,7 +35,7 @@
 //     proper, possibly-empty list of arbitrary values — walked via `car`/`cdr`/
 //     `null?`, never indexed), not the shapeless shortcut.
 //   - `=?`/`<?`/`>?`/`<=?`/`>=?` share the `c a b . rest` shape: fixed
-//     `[comparatorSchema, z.value, z.value]` + `inputRest: z.value` (the chain can
+//     `[comparatorSchema, z.schemeValue, z.schemeValue]` + `inputRest: z.schemeValue` (the chain can
 //     hold arbitrarily many further elements of any type — the comparator's own
 //     predicates judge them, not this contract) + `output: [z.boolean]`.
 //   - `%type-rank` returns one of the literal exact integers 0..7 — `z.exact`, not
@@ -64,7 +64,7 @@ export default EnvCapability.define("scheme/srfi-128", {
           // legal call `(make-comparator t eq #f)`.
           {
             input: [z.lambda, z.lambda, z.union([z.lambda, z.booleanFalse])],
-            inputRest: z.value,
+            inputRest: z.schemeValue,
             output: [comparatorSchema],
           },
           `(lambda (type-test equality ordering . hash)
@@ -72,7 +72,7 @@ export default EnvCapability.define("scheme/srfi-128", {
         ),
 
       "comparator?": symbol.define`comparator?: #t iff obj is a comparator built by make-comparator`(
-        { input: [z.value], output: [z.boolean] },
+        { input: [z.schemeValue], output: [z.boolean] },
         `(lambda (x) (and (pair? x) (eq? (car x) 'comparator)))`,
       ),
 
@@ -102,7 +102,7 @@ export default EnvCapability.define("scheme/srfi-128", {
 
       "%chain-rel":
         symbol.define`%chain-rel: rel holds for every adjacent pair in (a b . rest) — the shared chain-comparison engine behind =?/<?/>?/<=?/>=?`(
-          { input: [z.lambda, z.value, z.value, z.list()], output: [z.boolean] },
+          { input: [z.lambda, z.schemeValue, z.schemeValue, z.list()], output: [z.boolean] },
           `(lambda (rel a b rest)
            (if (rel a b)
                (if (null? rest) #t (%chain-rel rel b (car rest) (cdr rest)))
@@ -110,36 +110,36 @@ export default EnvCapability.define("scheme/srfi-128", {
         ),
 
       "=?": symbol.define`=?: c's equality predicate holds for every adjacent pair in (a b . rest)`(
-        { input: [comparatorSchema, z.value, z.value], inputRest: z.value, output: [z.boolean] },
+        { input: [comparatorSchema, z.schemeValue, z.schemeValue], inputRest: z.schemeValue, output: [z.boolean] },
         `(lambda (c a b . rest) (%chain-rel (comparator-equality-predicate c) a b rest))`,
       ),
 
       "<?": symbol.define`<?: c's ordering predicate holds for every adjacent pair in (a b . rest)`(
-        { input: [comparatorSchema, z.value, z.value], inputRest: z.value, output: [z.boolean] },
+        { input: [comparatorSchema, z.schemeValue, z.schemeValue], inputRest: z.schemeValue, output: [z.boolean] },
         `(lambda (c a b . rest) (%chain-rel (comparator-ordering-predicate c) a b rest))`,
       ),
 
       ">?": symbol.define`>?: c's ordering predicate holds, reversed, for every adjacent pair in (a b . rest)`(
-        { input: [comparatorSchema, z.value, z.value], inputRest: z.value, output: [z.boolean] },
+        { input: [comparatorSchema, z.schemeValue, z.schemeValue], inputRest: z.schemeValue, output: [z.boolean] },
         `(lambda (c a b . rest)
          (let ((lt (comparator-ordering-predicate c))) (%chain-rel (lambda (x y) (lt y x)) a b rest)))`,
       ),
 
       "<=?": symbol.define`<=?: c's ordering predicate never holds in reverse for every adjacent pair in (a b . rest)`(
-        { input: [comparatorSchema, z.value, z.value], inputRest: z.value, output: [z.boolean] },
+        { input: [comparatorSchema, z.schemeValue, z.schemeValue], inputRest: z.schemeValue, output: [z.boolean] },
         `(lambda (c a b . rest)
            (let ((lt (comparator-ordering-predicate c))) (%chain-rel (lambda (x y) (not (lt y x))) a b rest)))`,
       ),
 
       ">=?": symbol.define`>=?: c's ordering predicate never holds forward for every adjacent pair in (a b . rest)`(
-        { input: [comparatorSchema, z.value, z.value], inputRest: z.value, output: [z.boolean] },
+        { input: [comparatorSchema, z.schemeValue, z.schemeValue], inputRest: z.schemeValue, output: [z.boolean] },
         `(lambda (c a b . rest)
            (let ((lt (comparator-ordering-predicate c))) (%chain-rel (lambda (x y) (not (lt x y))) a b rest)))`,
       ),
 
       "%type-rank":
         symbol.define`%type-rank: a type's position in the default total order (boolean < number < char < string < symbol < null < pair < other)`(
-          { input: [z.value], output: [z.exact] },
+          { input: [z.schemeValue], output: [z.exact] },
           `(lambda (x)
            (cond ((boolean? x) 0) ((number? x) 1) ((char? x) 2) ((string? x) 3)
                  ((symbol? x) 4) ((null? x) 5) ((pair? x) 6) (else 7)))`,
@@ -147,7 +147,7 @@ export default EnvCapability.define("scheme/srfi-128", {
 
       "%default-less":
         symbol.define`%default-less: the default-comparator's total order — by type rank, then the native within-type order`(
-          { input: [z.value, z.value], output: [z.boolean] },
+          { input: [z.schemeValue, z.schemeValue], output: [z.boolean] },
           `(lambda (a b)
            (let ((ra (%type-rank a)) (rb (%type-rank b)))
              (if (not (= ra rb)) (< ra rb)

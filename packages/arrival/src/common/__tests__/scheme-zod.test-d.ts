@@ -12,7 +12,7 @@
 //
 // This is the *type-level* counterpart to the higher-level runtime exercising
 // done in attestation.test.ts (which walks real pair/vector spines produced
-// through full rosetta + membrane using mostly z.value contracts).
+// through full rosetta + membrane using mostly z.schemeValue contracts).
 //
 // These tests use the same Face machinery (_bake.ts) that real contracts rely on.
 
@@ -101,8 +101,8 @@ describe("scheme-zod collection faces (interpreter vs JS)", () => {
   test("using with real contract shapes (mirrors env/r7rs usage)", () => {
     // A typical "list input, vector output" shape
     const listInVecOut = {
-      input: [z.list(z.value)],
-      output: [z.vector(z.value)],
+      input: [z.list(z.schemeValue)],
+      output: [z.vector(z.schemeValue)],
     } as const;
 
     // Native impls receive the SCHEME face (raw containers); rosetta impls the JS face.
@@ -111,7 +111,7 @@ describe("scheme-zod collection faces (interpreter vs JS)", () => {
 
     expectTypeOf<In>().toExtend<[AListAlike]>();
     // NOT `any[]` — that's vacuous (any[] accepts almost anything, so this would pass
-    // even if the decode type were wrong). z.vector(z.value)'s JS face is SchemeValue[].
+    // even if the decode type were wrong). z.vector(z.schemeValue)'s JS face is SchemeValue[].
     expectTypeOf<Out>().toExtend<[SchemeValue[]]>();
   });
 

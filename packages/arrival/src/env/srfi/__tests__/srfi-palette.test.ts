@@ -199,12 +199,12 @@ function tupleItems(schema: ZodTypeAny): readonly ZodTypeAny[] {
 
 describe("SRFI-95 sort — contract element precision", () => {
   // INVARIANT: sort's receiver is declared as the representation-blind scheme identity
-  // (z.value) (pins implementation, not behavior)
-  it("declares the receiver as the representation-blind SCHEME identity (z.value), not host-blind z.unknown()", () => {
+  // (z.schemeValue) (pins implementation, not behavior)
+  it("declares the receiver as the representation-blind SCHEME identity (z.schemeValue), not host-blind z.unknown()", () => {
     const items = tupleItems(bakedSort().in);
-    // Reference-identity (not just shape) — z.value is the shared module singleton, so this
+    // Reference-identity (not just shape) — z.schemeValue is the shared module singleton, so this
     // proves the FILE chose it deliberately, not merely "some schema that happens to accept anything".
-    expect(items[0]).toBe(z.value);
+    expect(items[0]).toBe(z.schemeValue);
   });
 
   // INVARIANT: sort's comparator is declared as an optional callable predicate schema, not
@@ -221,10 +221,10 @@ describe("SRFI-95 sort — contract element precision", () => {
   });
 
   // INVARIANT: sort's output is declared as the representation-blind scheme identity
-  // (z.value) (pins implementation, not behavior)
-  it("declares the output as the representation-blind scheme identity (z.value), matching the receiver algebra's declared SchemeValue return", () => {
+  // (z.schemeValue) (pins implementation, not behavior)
+  it("declares the output as the representation-blind scheme identity (z.schemeValue), matching the receiver algebra's declared SchemeValue return", () => {
     const items = tupleItems(bakedSort().out);
-    expect(items[0]).toBe(z.value);
+    expect(items[0]).toBe(z.schemeValue);
   });
 });
 

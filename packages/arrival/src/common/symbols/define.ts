@@ -25,6 +25,7 @@ import {
   parseNameDoc,
   type BakeRuntimeOpts,
   type Contract,
+  type ContourResult,
   type DefineSymbolDef,
   type DefineSyntaxSymbolDef,
   type RestSpec,
@@ -81,14 +82,21 @@ function contractText(c: unknown): string {
  *  `instanceof z.ZodType` split `RestSpec` already uses): a `Contract<I,O,Rest>`
  *  record authors a PROCEDURE (contract-enforced callable, bound as a validating
  *  wrapper at bake); a bare `ZodTypeAny` authors a CONSTANT (a single value schema,
- *  validated ONCE at bake, bound as a plain value — no wrapper). */
+ *  validated ONCE at bake, bound as a plain value — no wrapper). Both return
+ *  `ContourResult<…, DefineSymbolDef>` (`_bake.ts`) — the compile-time ban on a
+ *  `z.dynamic` slot, same mechanism as native.ts/sequence.ts/rosetta.ts: a
+ *  `symbol.define` body never crosses the membrane either. */
 type DefineFactory = {
   <const I extends VectorSpec, const O extends VectorSpec, const Rest extends RestSpec = undefined>(
     contract: Contract<I, O, Rest>,
     body: string,
     opts?: BakeRuntimeOpts,
-  ): DefineSymbolDef;
-  <const S extends z.ZodTypeAny>(contract: S, body: string, opts?: BakeRuntimeOpts): DefineSymbolDef;
+  ): ContourResult<I, O, Rest, DefineSymbolDef>;
+  <const S extends z.ZodTypeAny>(
+    contract: S,
+    body: string,
+    opts?: BakeRuntimeOpts,
+  ): ContourResult<readonly [], readonly [S], undefined, DefineSymbolDef>;
 };
 
 /** `symbol.define\`name: description\`(contract, bodyString)` — a scheme-bodied

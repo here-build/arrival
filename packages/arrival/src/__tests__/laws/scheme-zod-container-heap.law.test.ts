@@ -63,20 +63,20 @@ describe.skip("LAW — list/vector/dict codec ENCODE mints under the crossing's 
   it("encoding a large array into a list under a tight budget dies on the budget door", () => {
     const ctx = new RunContext({ heapBudget: TIGHT_BUDGET });
     const elements: SchemeValue[] = Array.from({ length: 500 }, (_, i) => new AExact(i));
-    expect(() => z.encode(z.list(z.value), elements)).toThrow(/heap budget exceeded/);
+    expect(() => z.encode(z.list(z.schemeValue), elements)).toThrow(/heap budget exceeded/);
   });
 
   it("encoding a small array into a list under the SAME tight budget is unaffected", () => {
     const ctx = new RunContext({ heapBudget: TIGHT_BUDGET });
     const elements: SchemeValue[] = [new AExact(1), new AExact(2)];
-    const result = z.encode(z.list(z.value), elements);
+    const result = z.encode(z.list(z.schemeValue), elements);
     expect(result).toBeInstanceOf(APair);
   });
 
   it("encoding a large array into a vector under a tight budget dies on the budget door", () => {
     const ctx = new RunContext({ heapBudget: TIGHT_BUDGET });
     const elements: SchemeValue[] = Array.from({ length: 500 }, (_, i) => new AExact(i));
-    expect(() => z.encode(z.vector(z.value), elements)).toThrow(/heap budget exceeded/);
+    expect(() => z.encode(z.vector(z.schemeValue), elements)).toThrow(/heap budget exceeded/);
   });
 
   it("encoding a large record into a dict under a tight budget dies on the budget door", () => {
@@ -102,8 +102,8 @@ describe.skip("LAW — list/vector/dict codec ENCODE mints under the crossing's 
   });
 
   it("an EMPTY container has no element to inherit a run from — mints under CONSTANT_CTX (no meter), never throws", () => {
-    expect(() => z.encode(z.list(z.value), [] as SchemeValue[])).not.toThrow();
-    expect(() => z.encode(z.vector(z.value), [] as SchemeValue[])).not.toThrow();
+    expect(() => z.encode(z.list(z.schemeValue), [] as SchemeValue[])).not.toThrow();
+    expect(() => z.encode(z.vector(z.schemeValue), [] as SchemeValue[])).not.toThrow();
     expect(() => z.encode(z.dict(), {})).not.toThrow();
   });
 });

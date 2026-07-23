@@ -136,7 +136,7 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
 
     it("should work with complex data structures", async () => {
       // Arbitrary-shaped JS data (records with a `.value` field) — both slots stay
-      // `z.value` (the rosetta escape hatch: "impl receives/returns raw scheme value,
+      // `z.dynamic` (the rosetta escape hatch: "impl receives/returns raw scheme value,
       // does its own schemeToJs/jsToScheme" — scheme-zod.ts's own doc) and the impl
       // does the conversion inline, exactly what the legacy `defineRosetta` wrapper
       // did automatically for every call. The manual `jsToScheme` wrap on the way out
@@ -148,7 +148,7 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
         EnvCapability.define("test/extract-values", {
         symbols: (symbol, z) => ({
           "extract-values": symbol.rosetta`extract-values: plucks .value off every element`(
-            { input: [z.value], output: [z.value] },
+            { input: [z.dynamic], output: [z.dynamic] },
             (rawObjects) => {
               const objects = schemeToJsUntyped(rawObjects) as Array<{ value: unknown }>;
               return jsToScheme(
@@ -191,7 +191,7 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
         symbols: (symbol, z) => ({
           "filter-by-css-property":
             symbol.rosetta`filter-by-css-property: filters nodes whose style[property] === value`(
-              { input: [z.value, z.string, z.string], output: [z.value] },
+              { input: [z.dynamic, z.string, z.string], output: [z.dynamic] },
               (rawNodes, property, value) => {
                 const nodes = schemeToJsUntyped(rawNodes) as Array<{ style?: Record<string, string> }>;
                 return jsToScheme(
@@ -235,7 +235,7 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
         EnvCapability.define("test/css-property-stats", {
         symbols: (symbol, z) => ({
           "css-property-stats": symbol.rosetta`css-property-stats: aggregates node style property:value counts`(
-            { input: [z.value], output: [z.value] },
+            { input: [z.dynamic], output: [z.dynamic] },
             (rawNodes) => {
               const nodes = schemeToJsUntyped(rawNodes) as Array<{ style?: Record<string, string> }>;
               const stats: Record<string, number> = {};

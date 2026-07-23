@@ -14,7 +14,7 @@ import { type SchemeValue } from "../../values/types.js";
  *  `tagless` (a Record keyed by the closed algebra), the name is FREE — a per-type predicate
  *  (`vector?`, `null?`-style), not a declared sequence op.
  *
- *  R8 mint (op-helpers.mintVerdict): `out: z.value` below is representation-blind (no codec
+ *  R8 mint (op-helpers.mintVerdict): `out: z.schemeValue` below is representation-blind (no codec
  *  crossing), and capability.ts binds a tagless-guard's `run` directly (no generic
  *  encode/mint step) — so THIS is the one boxing point for every taglessGuard predicate
  *  (`pair?`/`symbol?`/`char?`/`vector?`), whose own `arrival/tagless-final/*?` algebra
@@ -40,8 +40,8 @@ export function taglessGuard(tpl: TemplateStringsArray, ...sub: unknown[]): ANat
     kind: "tagless-guard",
     name,
     doc,
-    in: z.array(z.value),
-    out: z.value,
+    in: z.array(z.schemeValue),
+    out: z.schemeValue,
     run,
     provenance: "pipe",
   };

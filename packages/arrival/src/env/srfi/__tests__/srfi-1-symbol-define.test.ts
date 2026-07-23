@@ -220,7 +220,7 @@ describe("scheme/srfi-1 — behavior equivalence (§4.2 gate), weighted toward t
     const [fo] = await execOverFrame("(first-or '() 9)", { env });
     expect(fq).toBe(false);
     expect(fqVal).toBe(7);
-    expect(fqNonList).toBe(false); // z.value input: TOTAL tolerance is the contract
+    expect(fqNonList).toBe(false); // z.schemeValue input: TOTAL tolerance is the contract
     expect(fo).toBe(9);
     const [len] = await execOverFrame("(length+ '(1 2 3))", { env });
     const [lenDotted] = await execOverFrame("(length+ '(1 2 . 3))", { env });

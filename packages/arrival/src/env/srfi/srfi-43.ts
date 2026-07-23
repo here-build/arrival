@@ -9,14 +9,14 @@
 // base-packs.ts is needed for this pack.
 //
 // Contract choices:
-//   - vec slots: `z.vector(z.value)` (representation-blind, matches r7rs/vectors.ts's own
+//   - vec slots: `z.vector(z.schemeValue)` (representation-blind, matches r7rs/vectors.ts's own
 //     vocabulary for this exact domain).
 //   - kons/pred/cmp slots: `z.lambda` (a callable value; no `type:` harvest override
 //     needed the way `vector-map`'s inputRest'd HOF needed one — none of these eight
 //     ops has an `inputRest`, so `signatureOf` loses nothing `symbol.define`'s
 //     contract-derived harvest needs).
 //   - knil/value slots (vector-fold['s knil], vector-binary-search's search value):
-//     arbitrary accumulator/comparison target — `z.value`.
+//     arbitrary accumulator/comparison target — `z.schemeValue`.
 //   - count/index outputs (vector-count, vector-index, vector-binary-search): the
 //     bodies build these PURELY from `0`/`1`/`vector-length`/`+`/`-`/`quotient` over
 //     exact literals, so the runtime value is ALWAYS `AExact` — `z.exact` (not the
@@ -26,7 +26,7 @@
 //   - vector-index / vector-binary-search: index-or-#f — `z.union([z.exact,
 //     z.booleanFalse])`, mirroring r7rs/lists.ts's own `z.union([…, z.booleanFalse])`
 //     convention for "found or #f" outputs (member/assoc family).
-//   - vector-any / vector-every: arbitrary-pred-result-or-#f — `z.union([z.value,
+//   - vector-any / vector-every: arbitrary-pred-result-or-#f — `z.union([z.schemeValue,
 //     z.booleanFalse])`, same lists.ts convention, generalized to an arbitrary value
 //     (the predicate's own truthy return, not just an index).
 //   - vector-empty?: a DEFINITE #t/#f (the body's whole result is `(= … 0)`, always an
@@ -42,8 +42,8 @@ export default EnvCapability.define("scheme/srfi-43", {
   symbols: (symbol, z) => ({
     "vector-fold": symbol.define`vector-fold: left fold over a vector — (kons acc elt) folded across indices 0..n-1`(
       {
-        input: [z.lambda, z.value, z.vector(z.value)],
-        output: [z.value],
+        input: [z.lambda, z.schemeValue, z.vector(z.schemeValue)],
+        output: [z.schemeValue],
         type: dedent`
           {
             <T, A>(kons: (acc: A, elt: T) => A, knil: A, vec: readonly T[]): A;
@@ -60,8 +60,8 @@ export default EnvCapability.define("scheme/srfi-43", {
     "vector-fold-right":
       symbol.define`vector-fold-right: right fold over a vector — (kons acc elt) across indices n-1..0`(
         {
-          input: [z.lambda, z.value, z.vector(z.value)],
-          output: [z.value],
+          input: [z.lambda, z.schemeValue, z.vector(z.schemeValue)],
+          output: [z.schemeValue],
           type: dedent`
           {
             <T, A>(kons: (acc: A, elt: T) => A, knil: A, vec: readonly T[]): A;
@@ -76,7 +76,7 @@ export default EnvCapability.define("scheme/srfi-43", {
 
     "vector-count": symbol.define`vector-count: number of indices where (pred elt) is truthy`(
       {
-        input: [z.lambda, z.vector(z.value)],
+        input: [z.lambda, z.vector(z.schemeValue)],
         output: [z.exact],
         type: dedent`
           {
@@ -93,7 +93,7 @@ export default EnvCapability.define("scheme/srfi-43", {
 
     "vector-index": symbol.define`vector-index: first index where (pred elt) is truthy, else #f`(
       {
-        input: [z.lambda, z.vector(z.value)],
+        input: [z.lambda, z.vector(z.schemeValue)],
         output: [z.union([z.exact, z.booleanFalse])],
         type: dedent`
           {
@@ -112,7 +112,7 @@ export default EnvCapability.define("scheme/srfi-43", {
     "vector-binary-search":
       symbol.define`vector-binary-search: index of value equal under (cmp elt value)=0 in sorted vec, else #f`(
         {
-          input: [z.vector(z.value), z.value, z.lambda],
+          input: [z.vector(z.schemeValue), z.schemeValue, z.lambda],
           output: [z.union([z.exact, z.booleanFalse])],
           type: dedent`
           {
@@ -131,14 +131,14 @@ export default EnvCapability.define("scheme/srfi-43", {
       ),
 
     "vector-empty?": symbol.define`vector-empty?: #t iff the vector has length 0`(
-      { input: [z.vector(z.value)], output: [z.boolean] },
+      { input: [z.vector(z.schemeValue)], output: [z.boolean] },
       `(lambda (vec) (= (vector-length vec) 0))`,
     ),
 
     "vector-any": symbol.define`vector-any: first truthy (pred elt), scanning left to right, else #f`(
       {
-        input: [z.lambda, z.vector(z.value)],
-        output: [z.union([z.value, z.booleanFalse])],
+        input: [z.lambda, z.vector(z.schemeValue)],
+        output: [z.union([z.schemeValue, z.booleanFalse])],
         type: dedent`
           {
             <T, R>(pred: (elt: T) => R, vec: readonly T[]): R | false;
@@ -155,8 +155,8 @@ export default EnvCapability.define("scheme/srfi-43", {
 
     "vector-every": symbol.define`vector-every: last (pred elt) if all truthy, else #f (short-circuits on #f)`(
       {
-        input: [z.lambda, z.vector(z.value)],
-        output: [z.union([z.value, z.booleanFalse])],
+        input: [z.lambda, z.vector(z.schemeValue)],
+        output: [z.union([z.schemeValue, z.booleanFalse])],
         type: dedent`
           {
             <T, R>(pred: (elt: T) => R, vec: readonly T[]): R | true | false;

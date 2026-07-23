@@ -37,7 +37,8 @@ describe("symbol.native — scheme-identity, no validation", () => {
     const def = symbol.native`pair-id: identity on a pair`(
       { input: [z.pair], output: [z.pair] },
       (p) => {
-        // z.pair is cons(value, value) where value is z.value (AValue codec). The decoded
+        // z.pair is cons(schemeValue, schemeValue) where schemeValue is z.schemeValue (AValue
+        // codec). The decoded
         // param type is `APair<AValue, AValue>` — AValue satisfies SchemeValue and preserves
         // the withProvenance method signature (unlike `any`/`unknown`).
         expectTypeOf(p).toEqualTypeOf<APair<AValue, AValue>>();

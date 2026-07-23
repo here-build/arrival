@@ -184,14 +184,14 @@ describe("assembleRun — preludeOnly overlay: invisible from user code, visible
           () => "SECRET-42",
         ),
         "store-closure!": symbol.native`store-closure!: stash a prelude-minted closure (raw scheme value) into this run's resources`(
-          { input: [sz.value], output: [sz.value], preludeOnly: true },
+          { input: [sz.schemeValue], output: [sz.schemeValue], preludeOnly: true },
           function (closure) {
             this.resources.closure = closure;
             return closure;
           },
         ),
         "run-stored-closure": symbol.native`run-stored-closure: apply the resource-stashed closure through THIS dispatch's own runCtx`(
-          { input: [], output: [sz.value] },
+          { input: [], output: [sz.schemeValue] },
           function () {
             const stored = this.resources.closure;
             if (stored === undefined) throw new Error("no closure stored");

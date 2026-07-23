@@ -53,7 +53,7 @@ export default EnvCapability.define("scheme/srfi-235", {
     // `constantly` is variadic over values; arrival only ever uses the single-value form.)
     constantly: symbol.define`constantly: SRFI-235 — the K combinator (ignore args, return the constant x)`(
       {
-        input: [z.value],
+        input: [z.schemeValue],
         output: [z.lambda],
         type: dedent`
           {
@@ -68,7 +68,7 @@ export default EnvCapability.define("scheme/srfi-235", {
     always: symbol.define`always: SRFI-235 — ignore args, return #t`(
       {
         input: [],
-        inputRest: z.value,
+        inputRest: z.schemeValue,
         output: [z.boolean],
         type: dedent`
           (...args: unknown[]) => boolean
@@ -79,7 +79,7 @@ export default EnvCapability.define("scheme/srfi-235", {
     never: symbol.define`never: SRFI-235 — ignore args, return #f`(
       {
         input: [],
-        inputRest: z.value,
+        inputRest: z.schemeValue,
         output: [z.boolean],
         type: dedent`
           (...args: unknown[]) => boolean
@@ -95,15 +95,15 @@ export default EnvCapability.define("scheme/srfi-235", {
     // branch returns a `lambda` — a real ALambda minted through evalLambda, so every recursive
     // partial application is a first-class scheme value with the reverse membrane's guarantees
     // (ctx, trampoline, print repr), not a bare JS closure escaping into value space.
-    // `fn` is the fixed head; `args`/`more` are genuinely variadic (`inputRest: z.value`) —
+    // `fn` is the fixed head; `args`/`more` are genuinely variadic (`inputRest: z.schemeValue`) —
     // curry's own return is either fn's (arbitrary) result or a new lambda continuation, so
-    // the output stays the honest shapeless `z.value` (a SRFI-235-adjacent polyglot alias,
+    // the output stays the honest shapeless `z.schemeValue` (a SRFI-235-adjacent polyglot alias,
     // not a fixed-shape procedure — some polyglot aliases ARE genuinely shapeless).
     curry: symbol.define`curry: arrival's arity-aware partial application (combinator kin, not SRFI-235 itself)`(
       {
         input: [z.lambda],
-        inputRest: z.value,
-        output: [z.value],
+        inputRest: z.schemeValue,
+        output: [z.schemeValue],
         type: dedent`
           {
             <A, R>(fn: (a: A) => R): (a: A) => R;

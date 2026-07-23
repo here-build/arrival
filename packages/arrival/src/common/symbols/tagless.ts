@@ -46,7 +46,7 @@ export function tagless(tpl: TemplateStringsArray, ...sub: unknown[]): ANativePr
     return await fn.call(receiver, ...leading, runCtx);
   };
   // No `Contract` param here (see `TaglessSymbolDef.provenance`'s doc) — always "pipe".
-  const def: TaglessSymbolDef = { kind: "tagless", name, doc, in: z.array(z.value), out: z.value, run, provenance: "pipe" };
+  const def: TaglessSymbolDef = { kind: "tagless", name, doc, in: z.array(z.schemeValue), out: z.schemeValue, run, provenance: "pipe" };
   // Stage A2 — mint the ANativeProcedure directly (tagless shares native's class per D1).
   // `withCallbackRoles` (declared BESIDE this factory in `_bake.ts`) stamps `callbackRoles`
   // onto the minted value in place — a caller declaring the acc-chain marker (srfi-1's

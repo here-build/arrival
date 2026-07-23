@@ -83,7 +83,7 @@ describe("numeric Contract precision — regression guard: the shared mechanism 
     // Mirrors symbol.test-d.ts's own "apply's own declared shape" test byte-for-byte — a
     // canary that the numeric-pack-local additions (CODEC_SCHEMA, contractFromSpec, the
     // z.schemeNumber-based NumSpecs above) cannot have perturbed the shared inputRest mechanism itself.
-    expectTypeOf<DecodedArgsWithRest<[typeof z.value], typeof z.value>>().toEqualTypeOf<
+    expectTypeOf<DecodedArgsWithRest<[typeof z.schemeValue], typeof z.schemeValue>>().toEqualTypeOf<
       [import("../../../values/types.js").SchemeValue, ...import("../../../values/types.js").SchemeValue[]]
     >();
   });

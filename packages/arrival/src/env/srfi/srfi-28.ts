@@ -99,10 +99,10 @@ export default EnvCapability.define("scheme/srfi-28", {
         // only false", and `symbol.native` never runtime-validates its contract
         // anyway (`_bake.ts`: "zod for TYPES purely" — no z.decode fires here), so
         // the union costs nothing beyond the .d.ts/static-arity precision it buys:
-        // it statically pins format at ≥1 argument. `inputRest` is `z.value` — the
+        // it statically pins format at ≥1 argument. `inputRest` is `z.schemeValue` — the
         // representation-BLIND scheme-value identity — since a directive-fill arg
         // can be ANY scheme value (rendered via `displayOf`/`writeOf`).
-        { input: [z.union([z.string, z.boolean])], inputRest: z.value, output: [z.string] },
+        { input: [z.union([z.string, z.boolean])], inputRest: z.schemeValue, output: [z.string] },
         function (this: CallCtx, head: AString | ABool | undefined, ...tail: unknown[]): AString {
           // ── Resolve destination vs format string ───────────────────────────────
           // SRFI-28: `head` IS the format string. SRFI-48/CL: `head` is a

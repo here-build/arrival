@@ -12,8 +12,8 @@
 // REJECT what it used to silently accept) lives in the sibling
 // `polyglot-contract-precision.test.ts`.
 //
-// ★HONEST ACCOUNTING (see the audit report): `@`'s fix (`z.custom<unknown>()` → `z.value`) has NO
-// mechanical red/green of ANY kind — `z.value` is `z.custom<SchemeValue>()` with no
+// ★HONEST ACCOUNTING (see the audit report): `@`'s fix (`z.custom<unknown>()` → `z.schemeValue`) has NO
+// mechanical red/green of ANY kind — `z.schemeValue` is `z.custom<SchemeValue>()` with no
 // refinement, runtime-identical to `z.custom<unknown>()` (scheme-zod.ts's own doc comment), and
 // `readMember`'s real impl was ALREADY typed `SchemeValue`-returning, so tightening the
 // annotation causes no compile transition either. The proof below for `@` is a pure
@@ -28,8 +28,8 @@ import type { SchemeValue } from "../../../values/types.js";
 
 describe("scheme/polyglot Contract precision — representative fixes decode precisely", () => {
   // INVARIANT: @ (readMember)'s contract decodes to SchemeValue, not unknown
-  test("@ (readMember): out z.value — decodes to SchemeValue, not unknown (matches readMember's own (obj, key) => SchemeValue)", () => {
-    expectTypeOf<DecodedReturn<[typeof z.value]>>().toEqualTypeOf<SchemeValue>();
+  test("@ (readMember): out z.schemeValue — decodes to SchemeValue, not unknown (matches readMember's own (obj, key) => SchemeValue)", () => {
+    expectTypeOf<DecodedReturn<[typeof z.schemeValue]>>().toEqualTypeOf<SchemeValue>();
   });
 
   // INVARIANT: @? (hasMember)'s contract decodes to boolean, not unknown
@@ -94,12 +94,12 @@ describe("scheme/polyglot Contract precision — wrong-typed impls must NOT comp
     expectTypeOf<true>().toEqualTypeOf<true>();
   });
 
-  // INVARIANT: a non-SchemeValue-returning impl must not compile against a z.value output contract
+  // INVARIANT: a non-SchemeValue-returning impl must not compile against a z.schemeValue output contract
   // (pins implementation, not behavior)
-  test("@-shaped (documentation only — see the honest accounting above): a non-SchemeValue return must NOT compile against z.value output", () => {
+  test("@-shaped (documentation only — see the honest accounting above): a non-SchemeValue return must NOT compile against z.schemeValue output", () => {
     if (RUN) {
       symbol.native`readmember-proof: proof`(
-        { input: [z.custom<unknown>(), z.custom<unknown>()], output: [z.value] },
+        { input: [z.custom<unknown>(), z.custom<unknown>()], output: [z.schemeValue] },
         // @ts-expect-error — must return SchemeValue, not a bare number
         (obj: unknown, key: unknown): number => 42,
       );

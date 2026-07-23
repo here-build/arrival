@@ -126,7 +126,7 @@ export default EnvCapability.define("scheme/polyglot", {
       // ═══════════════════════════════════════════════════════════════════════════
       // MEMBER-ACCESS PROTOCOL (every dialect reads through this)
       // ═══════════════════════════════════════════════════════════════════════════
-      // `obj`/`key` stay `z.value` on BOTH `@`/`@?`/`@keys` — genuinely host-blind inputs:
+      // `obj`/`key` stay `z.schemeValue` on BOTH `@`/`@?`/`@keys` — genuinely host-blind inputs:
       // the verbs normalize the key (normalizeMemberKey, above) and dispatch DIRECTLY to
       // the receiver's own `arrival/tagless-final/get|has|keys` terms (ADict/AJSObject/
       // AJSArray); a term-less receiver answers nil/false/() — absence IS the semantics.
@@ -137,9 +137,9 @@ export default EnvCapability.define("scheme/polyglot", {
         // AJSArray-wrapped array) — never something OUTSIDE SchemeValue — or, for a
         // Promise-valued entry, its lazy pending cell (a Promise OF the settled box —
         // pending-entry.ts), which the async dispatch wrapper awaits before encoding.
-        // `z.value` is the identity term for "a polymorphic accessor's operand"
+        // `z.schemeValue` is the identity term for "a polymorphic accessor's operand"
         // (scheme-zod.ts's own worked example).
-        { input: [z.value, z.value], output: [z.value] },
+        { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
         function (this: CallCtx, obj: unknown, key: unknown): SchemeValue | Promise<SchemeValue> {
           if (obj == null) return nil;
           const keyStr = normalizeMemberKey(key);
@@ -151,7 +151,7 @@ export default EnvCapability.define("scheme/polyglot", {
       "@?": symbol.native`@?: #t iff obj has the member key`(
         // The verdict is the boxed scheme face (schemeBool flyweight — Face split; the
         // raw JS boolean the has term returns is a protocol-layer detail).
-        { input: [z.value, z.value], output: [z.boolean] },
+        { input: [z.schemeValue, z.schemeValue], output: [z.boolean] },
         function (this: CallCtx, obj: unknown, key: unknown) {
           if (obj == null) return schemeBool(false);
           const keyStr = normalizeMemberKey(key);
@@ -163,7 +163,7 @@ export default EnvCapability.define("scheme/polyglot", {
       "@keys": symbol.native`@keys: the own member keys of obj`(
         // The keys term returns raw JS strings; the scheme face boxes each to AString
         // (z.array(z.string)'s scheme side — Face split).
-        { input: [z.value], output: [z.array(z.string)] },
+        { input: [z.schemeValue], output: [z.array(z.string)] },
         function (this: CallCtx, obj: unknown) {
           const keys = obj == null ? undefined : (obj as Partial<AValue>)["arrival/tagless-final/keys"];
           const names = typeof keys === "function" ? keys.call(obj) : [];
@@ -182,7 +182,7 @@ export default EnvCapability.define("scheme/polyglot", {
       // and arrival-chain-view transpiles it to a JS/Python object literal. (Plain
       // `symbol.native`: dict reads no membrane primitive, so it needs no deferral.)
       dict: symbol.native`dict: an open-key map built from interleaved :key value pairs`(
-        // Input stays flat `z.value` — each interleaved position is genuinely either a
+        // Input stays flat `z.schemeValue` — each interleaved position is genuinely either a
         // key (a self-evaluating keyword symbol, a bare symbol, or a string) or an
         // arbitrary stored value; there's no well-typed way to express the alternation
         // over a flat variadic without a shape that no longer matches the real call
@@ -190,7 +190,7 @@ export default EnvCapability.define("scheme/polyglot", {
         // builds) an ADict.
         // The output contract is `dict()` — the open/homogeneous ADict codec — because
         // this op always builds an open-key ADict.
-        { input: z.array(z.value), output: [z.dict()] },
+        { input: z.array(z.schemeValue), output: [z.dict()] },
         // Duplicate keys are last-write-wins: a Map re-set on an existing fold-name
         // updates the value but keeps the FIRST occurrence's iteration position. ADict's
         // own constructor requires unique fold-names up front (throws otherwise), so
@@ -298,14 +298,14 @@ export default EnvCapability.define("scheme/polyglot", {
       // alist->dict), so it stays HERE rather than traveling with any one dialect.
       // ═══════════════════════════════════════════════════════════════════════════
       // %interleave — zip two equal-length lists into a flat (k v k v …) sequence,
-      // the shape `dict`/`apply` expect. CONTRACT: `z.value` on both lists AND the
+      // the shape `dict`/`apply` expect. CONTRACT: `z.schemeValue` on both lists AND the
       // output — deliberate: the helper self-recurses through its own contract
       // boundary once per element, so a `z.list()` codec (an O(n) spine decode)
-      // would turn one interleave into O(n²) decode work; `z.value`'s instanceof
+      // would turn one interleave into O(n²) decode work; `z.schemeValue`'s instanceof
       // check keeps the recursive boundary flat.
       "%interleave":
         symbol.define`%interleave: zip ks and vs into a flat (k v k v …) list — the dict/apply argument shape (private helper)`(
-          { input: [z.value, z.value], output: [z.value] },
+          { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
           `(lambda (ks vs)
          (if (or (null? ks) (null? vs))
              '()

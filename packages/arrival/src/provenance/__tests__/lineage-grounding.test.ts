@@ -49,7 +49,7 @@ const MINT_A = 500;
 const MINT_B = 600;
 
 // Deterministic fake Rosetta-IN sources, wired via a test-local `EnvCapability`;
-// see golden-prov-infer.test.ts's `inferSources` for the full `z.value`-escape-hatch
+// see golden-prov-infer.test.ts's `inferSources` for the full `z.dynamic`-escape-hatch
 // rationale: it's what keeps a source fixture's ALREADY-stamped return value from
 // being re-encoded, so the mint id it carries survives untouched). Each ignores its
 // arg and returns an already-stamped value (the mint), so grounding is reproducible
@@ -58,10 +58,10 @@ const MINT_B = 600;
 const sources: EnvSetup = async (env) => {
   const cap = EnvCapability.define("test/grounding-sources", {
     symbols: (symbol, z) => ({
-      "source-a": symbol.rosetta`source-a: fake Rosetta-IN source (A)`({ input: [z.string], output: [z.value] }, () =>
+      "source-a": symbol.rosetta`source-a: fake Rosetta-IN source (A)`({ input: [z.string], output: [z.dynamic] }, () =>
         sStr("SRC-A", MINT_A),
       ),
-      "source-b": symbol.rosetta`source-b: fake Rosetta-IN source (B)`({ input: [z.string], output: [z.value] }, () =>
+      "source-b": symbol.rosetta`source-b: fake Rosetta-IN source (B)`({ input: [z.string], output: [z.dynamic] }, () =>
         sStr("SRC-B", MINT_B),
       ),
     }),

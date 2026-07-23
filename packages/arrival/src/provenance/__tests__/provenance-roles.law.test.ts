@@ -121,7 +121,7 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       // set every scheme value carries), a same-named but semantically unrelated field.
       expect(
         contractOf<NativeSymbolDef>(
-          symbol.native`v1-default-native: `({ input: [z.value], output: [z.value] }, (v) => v),
+          symbol.native`v1-default-native: `({ input: [z.schemeValue], output: [z.schemeValue] }, (v) => v),
         ).provenance,
       ).toBe("pipe");
       expect(
@@ -131,7 +131,7 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       ).toBe("source");
       expect(
         contractOf<SequenceSymbolDef>(
-          symbol.sequence`v1-default-sequence: `({ input: [z.value], output: [z.value] }, (args) => args[0]),
+          symbol.sequence`v1-default-sequence: `({ input: [z.schemeValue], output: [z.schemeValue] }, (args) => args[0]),
         ).provenance,
       ).toBe("pipe");
       expect(contractOf<TaglessSymbolDef>(symbol.tagless`v1-default-tagless: `).provenance).toBe("pipe");
@@ -146,13 +146,13 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       // doesn't (pipe/source/loop/opaque carry no shape constraint at all).
       expect(
         contractOf<NativeSymbolDef>(
-          symbol.native`v1-role-pipe: `({ input: [z.value], output: [z.value], provenance: "pipe" }, (v) => v),
+          symbol.native`v1-role-pipe: `({ input: [z.schemeValue], output: [z.schemeValue], provenance: "pipe" }, (v) => v),
         ).provenance,
       ).toBe("pipe");
       expect(
         contractOf<NativeSymbolDef>(
           symbol.native`v1-role-fan: `(
-            { input: [z.lambda, z.value], output: [z.value], provenance: "fan" },
+            { input: [z.lambda, z.schemeValue], output: [z.schemeValue], provenance: "fan" },
             (f, v) => v,
           ),
         ).provenance,
@@ -167,23 +167,23 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       ).toBe("source");
       expect(
         contractOf<NativeSymbolDef>(
-          symbol.native`v1-role-loop: `({ input: [z.value], output: [z.value], provenance: "loop" }, (v) => v),
+          symbol.native`v1-role-loop: `({ input: [z.schemeValue], output: [z.schemeValue], provenance: "loop" }, (v) => v),
         ).provenance,
       ).toBe("loop");
       expect(
         contractOf<NativeSymbolDef>(
-          symbol.native`v1-role-opaque: `({ input: [z.value], output: [z.value], provenance: "opaque" }, (v) => v),
+          symbol.native`v1-role-opaque: `({ input: [z.schemeValue], output: [z.schemeValue], provenance: "opaque" }, (v) => v),
         ).provenance,
       ).toBe("opaque");
       expect(
         contractOf<NativeSymbolDef>(
-          symbol.native`v1-role-sink: `({ input: [z.value], output: [], provenance: "sink" }, (): [] => []),
+          symbol.native`v1-role-sink: `({ input: [z.schemeValue], output: [], provenance: "sink" }, (): [] => []),
         ).provenance,
       ).toBe("sink");
       expect(
         contractOf<NativeSymbolDef>(
           symbol.native`v1-role-transparent: `(
-            { input: [z.value], output: [], provenance: "transparent" },
+            { input: [z.schemeValue], output: [], provenance: "transparent" },
             (): [] => [],
           ),
         ).provenance,
@@ -194,7 +194,7 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       // guess. Left commented (a live `@ts-expect-error` line would itself need to
       // stay a type error forever to keep passing, which is more fragile than the
       // comment) — the type declaration below is the load-bearing proof:
-      // symbol.native`v1-role-bogus: `({ input: [z.value], output: [z.value], provenance: "bogus" }, (v) => v);
+      // symbol.native`v1-role-bogus: `({ input: [z.schemeValue], output: [z.schemeValue], provenance: "bogus" }, (v) => v);
       //                                                                        ^ not assignable to ProvenanceRole
       const _exhaustive: ProvenanceRole[] = ["pipe", "fan", "source", "sink", "transparent", "loop", "opaque"];
       expect(_exhaustive).toHaveLength(7);
@@ -255,10 +255,10 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       // Stage A2: each factory now mints the runtime A-value directly — `contractOf`
       // pulls the baked CONTRACT (still non-optional `provenance`) back off it.
       const defs: { provenance: ProvenanceRole }[] = [
-        contractOf(symbol.native`v1-complete-native: `({ input: [z.value], output: [z.value] }, (v) => v)),
+        contractOf(symbol.native`v1-complete-native: `({ input: [z.schemeValue], output: [z.schemeValue] }, (v) => v)),
         contractOf(symbol.rosetta`v1-complete-rosetta: `({ input: [z.string], output: [z.string] }, (s) => s)),
         contractOf(
-          symbol.sequence`v1-complete-sequence: `({ input: [z.value], output: [z.value] }, (args) => args[0]),
+          symbol.sequence`v1-complete-sequence: `({ input: [z.schemeValue], output: [z.schemeValue] }, (args) => args[0]),
         ),
         contractOf(symbol.tagless`v1-complete-tagless: `),
         contractOf(symbol.taglessGuard`v1-complete-taglessguard: `),
@@ -301,13 +301,13 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       //    output vector carries a real return schema contradicts that.
       expect(() =>
         symbol.native`v1-drift-sink-egress: sink declaring a real return`(
-          { input: [z.value], output: [z.value], provenance: "sink" },
+          { input: [z.schemeValue], output: [z.schemeValue], provenance: "sink" },
           (v) => v,
         ),
       ).toThrow(ProvenanceRoleShapeError);
       expect(() =>
         symbol.native`v1-drift-transparent-egress: transparent declaring a real return`(
-          { input: [z.value], output: [z.value], provenance: "transparent" },
+          { input: [z.schemeValue], output: [z.schemeValue], provenance: "transparent" },
           (v) => v,
         ),
       ).toThrow(ProvenanceRoleShapeError);
@@ -315,7 +315,7 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       expect(
         contractOf<NativeSymbolDef>(
           symbol.native`v1-drift-sink-ok: sink with no egress wire`(
-            { input: [z.value], output: [], provenance: "sink" },
+            { input: [z.schemeValue], output: [], provenance: "sink" },
             (): [] => [],
           ),
         ).provenance,
@@ -325,7 +325,7 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       //    vector has no z.lambda arm has no proc to apply.
       expect(() =>
         symbol.native`v1-drift-fan-no-lambda: fan with no proc to apply`(
-          { input: [z.value], output: [z.value], provenance: "fan" },
+          { input: [z.schemeValue], output: [z.schemeValue], provenance: "fan" },
           (v) => v,
         ),
       ).toThrow(ProvenanceRoleShapeError);
@@ -333,7 +333,7 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       expect(
         contractOf<NativeSymbolDef>(
           symbol.native`v1-drift-fan-ok: fan with a proc to apply`(
-            { input: [z.lambda, z.value], output: [z.value], provenance: "fan" },
+            { input: [z.lambda, z.schemeValue], output: [z.schemeValue], provenance: "fan" },
             (f, v) => v,
           ),
         ).provenance,
@@ -348,7 +348,7 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       // Verified below as a NON-throw — the machinery is not bent to make it throw.
       expect(() =>
         symbol.native`v1-drift-pipe-with-lambda: pipe host, real lambda arg — not a contradiction`(
-          { input: [z.lambda, z.value], output: [z.value], provenance: "pipe" },
+          { input: [z.lambda, z.schemeValue], output: [z.schemeValue], provenance: "pipe" },
           (f, v) => v,
         ),
       ).not.toThrow();
@@ -498,7 +498,7 @@ describe("V2 — declaration-driven classifier (§2; PROVENANCE-PLAN.md Q3)", ()
       // UNDERDETERMINED + UNDECLARED = honest holes, never guesses:
       // call-with-values was the classic two-lambda underdetermined host — multi-return
       // is now a purity door (no contract/callbackRoles). procedure?'s subject arg is
-      // z.value (the callable question rides the type-guard `type:` override, not the
+      // z.schemeValue (the callable question rides the type-guard `type:` override, not the
       // schema) — no z.lambda arm in the contract ⇒ no callbackRoles field content,
       // exactly the cons rule below.
       expect(rolesOf(binding, "call-with-values")).toBeUndefined(); // door — no arms
@@ -545,7 +545,7 @@ describe("V2-Q4 — callback-role drift door + acc chain + stamp path (§2/§3; 
       // MORE roles than lambda arms → door (same phantom-callback contradiction).
       expect(() =>
         symbol.native`q4-excess: two roles, one lambda arm`(
-          { input: [z.lambda, z.value], output: [z.value], callbackRoles: ["control", "control"] },
+          { input: [z.lambda, z.schemeValue], output: [z.schemeValue], callbackRoles: ["control", "control"] },
           (f, v) => v,
         ),
       ).toThrow(ProvenanceRoleShapeError);
@@ -554,7 +554,7 @@ describe("V2-Q4 — callback-role drift door + acc chain + stamp path (§2/§3; 
       expect(
         contractOf<NativeSymbolDef>(
           symbol.native`q4-fan-override: fan default overridden to control`(
-            { input: [z.lambda, z.value], output: [z.value], provenance: "fan", callbackRoles: ["control"] },
+            { input: [z.lambda, z.schemeValue], output: [z.schemeValue], provenance: "fan", callbackRoles: ["control"] },
             (f, v) => v,
           ),
         ).callbackRoles,
@@ -608,7 +608,7 @@ describe("V2-Q4 — callback-role drift door + acc chain + stamp path (§2/§3; 
         EnvCapability.define("test/q4-stamp", {
           symbols: (symbol, z) => ({
             "q4-stamp": symbol.native`q4-stamp: synthetic fan`(
-              { input: [z.lambda, z.value], output: [z.value], provenance: "fan" },
+              { input: [z.lambda, z.schemeValue], output: [z.schemeValue], provenance: "fan" },
               (f, v) => v,
             ),
           }),
