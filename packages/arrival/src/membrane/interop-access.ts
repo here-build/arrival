@@ -314,6 +314,34 @@ export function markInteropBoundary(target: object | Function): void {
  *
  *   @arrival.private class Ip { #bytes; get bytes() { … } }   // decorator
  *   arrival.private(Ip)                                        // equivalent call
+ *
+ * THE FULL CONTRACT (V's ruling, docs/plans/infer-whiteroom-design.md §"V'S API
+ * RULING" — the opaque-crossing contract): marking a class this way does more than
+ * seal prototype reads today. A `@arrival.private` instance crossing the membrane
+ * gains FULL semi-opaque semantics, symmetric in both directions:
+ *
+ *   - SCHEME-WARD (a rosetta impl returns an instance, or one rides inside a returned
+ *     container): the instance crosses as an OPAQUE HANDLE (`AOpaqueHandle`, values/
+ *     primitives/AOpaqueHandle.ts) — identity-preserving (same instance -> same
+ *     handle, within one run; `eq?`/`equal?` hold via the handle's own Setoid),
+ *     printable as its class face (`#<McpServer>`), and exposing NOTHING structurally:
+ *     the handle declares no reader term at all, so `(:field handle)` doors with a
+ *     TypeError (no silent nil — a value with no member protocol at all is a type
+ *     error, not an absent field) on top of this seal's own prototype-read block.
+ *     Minted by membrane/rosetta.ts's `jsToScheme` inbound-claims registry, which
+ *     recognizes the brand via {@link isMarkedInteropPrivate} below.
+ *   - HOST-WARD (the handle arrives as a rosetta impl ARG, directly or inside a
+ *     container): UNWRAPS to the raw instance — the impl receives the real object,
+ *     never the handle, uniformly across every slot kind (`z.dynamic`'s identity
+ *     escape hatch, a typed `scheme-zod.ts` `instance(Ctor)` slot, or a container
+ *     built from either). See common/symbols/rosetta.ts's `buildOpaqueHandleUnwrap`
+ *     and scheme-zod.ts's `instance` codec for the two chokepoints.
+ *   - ROUND-TRIP: out then in is the SAME instance (`===`) — `AOpaqueHandle` holds
+ *     `.instance` by reference, never a copy.
+ *
+ * An UNbranded class instance is completely unaffected — it keeps today's behavior
+ * (borrows as an AJSObject, or the unrecognized-shape door). The brand is the sole
+ * opt-in; nothing here is ambient.
  */
 export function markInteropPrivate<T extends Function>(target: T, _context?: unknown): T {
   markInteropBoundary(target);
@@ -322,6 +350,53 @@ export function markInteropPrivate<T extends Function>(target: T, _context?: unk
 
 /** The `arrival` namespace surface for the decorator ergonomic — `@arrival.private`. */
 export const arrival = { private: markInteropPrivate };
+
+/**
+ * Does `value`'s own class (or an ancestor in its chain) carry the EXPLICIT
+ * `@arrival.private`/`markInteropPrivate` stamp — the whiteroom opaque-crossing
+ * contract's recognition test (membrane/rosetta.ts's inbound-claims registry).
+ *
+ * Deliberately NARROWER than {@link isInteropBoundary}: that function ALSO answers
+ * true for every JS built-in prototype, `null` (chain end), and the nominal
+ * `AValue`/`ArrivalError` FAMILY rules — it answers "does the READ POLICY stop here",
+ * a much broader question than "did an author explicitly opt this HOST class into the
+ * semi-opaque contract". This walks the SAME two explicit-marker arms
+ * `isInteropBoundary` checks (the own-prototype stamp, and the own-static-field class
+ * stamp) — never the built-in list, the global-constructor generalization, or either
+ * nominal family — so a plain object, a built-in instance (Date/Map/…), or any OTHER
+ * arrival-internal class outside the AValue/ArrivalError families never answers true
+ * here unless IT SPECIFICALLY carries the marker.
+ *
+ * The AValue/ArrivalError families DO also carry (or inherit) this marker — this
+ * function does not attempt to exclude them structurally. That is harmless in
+ * practice: every caller of this function (the inbound-claims registry) places its
+ * check AFTER the rows that already claim AValue instances and the scheme-orphan
+ * classes (EOF/Values/R7RSError) — order, not this predicate, is what keeps this
+ * function's use scoped to genuinely-new host classes. See that registry's own doc
+ * for the ordering argument.
+ */
+export function isMarkedInteropPrivate(value: object): boolean {
+  let proto: object | null = Reflect.getPrototypeOf(value);
+  while (proto !== null) {
+    if (
+      Object.prototype.hasOwnProperty.call(proto, INTEROP_BOUNDARY) &&
+      (proto as Record<symbol, unknown>)[INTEROP_BOUNDARY] === true
+    ) {
+      return true;
+    }
+    const ctor = Reflect.getOwnPropertyDescriptor(proto, "constructor")?.value;
+    if (
+      ctor &&
+      typeof ctor === "function" &&
+      Object.prototype.hasOwnProperty.call(ctor, INTEROP_BOUNDARY) &&
+      (ctor as unknown as Record<symbol, unknown>)[INTEROP_BOUNDARY] === true
+    ) {
+      return true;
+    }
+    proto = Reflect.getPrototypeOf(proto);
+  }
+  return false;
+}
 
 // ============================================================================
 // Sentinel Value

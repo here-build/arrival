@@ -18,6 +18,8 @@ import { theVoid } from "../values/primitives/AVoid.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { EOF } from "../values/primitives/EOF.js";
 import { Values } from "../values/primitives/Values.js";
+import { AOpaqueHandle } from "../values/primitives/AOpaqueHandle.js";
+import { isMarkedInteropPrivate } from "./interop-access.js";
 import { R7RSError, UnrecognizedCrossingError, AsyncCrossingError } from "../errors.js";
 import { is_promise } from "../eval/guards.js";
 import { is_callable_value } from "../values/value-guards.js";
@@ -466,6 +468,26 @@ export const INBOUND_CLAIMS: readonly InboundClaim[] = [
     claims: (v) => is_promise(v),
     box: () => {
       throw jsToSchemeAsyncDoor();
+    },
+  },
+  {
+    // Branded HOST class instance (`@arrival.private`/`markInteropPrivate` — the
+    // whiteroom opaque-crossing contract, docs/plans/infer-whiteroom-design.md §"V'S
+    // API RULING", interop-access.ts's `markInteropPrivate` doc has the full statement):
+    // mint-or-reuse THIS RUN's canonical `AOpaqueHandle` via its own cache
+    // (`AOpaqueHandle.for` — run-scoped, see that class's header for why not global).
+    // Ordered here, immediately before the residual "exotic object" catch-all below,
+    // which this row NARROWS: an UNbranded class instance still falls through to that
+    // row unchanged (today's behavior, pinned). Ordered AFTER every row above that
+    // already claims a MORE SPECIFIC shape sharing the same marker mechanism — row 3
+    // ("AValue → identity") claims every AValue instance first (AValue itself carries
+    // the marker), and the "scheme orphan" row claims EOF/Values first (both carry it
+    // too) — so this row is reached only by objects NEITHER of those already took.
+    name: "branded host instance → opaque handle (mint/reuse, whiteroom contract)",
+    claims: (v) => typeof v === "object" && v !== null && isMarkedInteropPrivate(v),
+    box: (ctx, v, p) => {
+      invariant(typeof v === "object" && v !== null, "inbound claim 'branded host instance': box called off its predicate");
+      return AOpaqueHandle.for(ctx, v, p);
     },
   },
   {

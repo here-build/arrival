@@ -64,6 +64,7 @@ describe("inbound registry — the declared, ordered claim table IS the law", ()
       "bigint → raw passthrough (opaque host value, not a scheme number)",
       "binary (Uint8Array/ArrayBuffer/DataView/Buffer) → raw passthrough (declared)",
       "promise → door (settle first; container entries settle lazily)",
+      "branded host instance → opaque handle (mint/reuse, whiteroom contract)",
       "exotic object → borrowed AJSObject (warn)",
     ]);
   });

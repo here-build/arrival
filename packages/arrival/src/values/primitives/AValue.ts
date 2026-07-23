@@ -63,7 +63,10 @@ export type AKind =
   | "bytevector"
   | "void"
   | "keyword"
-  | "dict";
+  | "dict"
+  // The opaque-crossing contract's scheme-side face (AOpaqueHandle.ts) — a branded HOST
+  // class instance (`@arrival.private`) wrapped identity-preserving, no structural access.
+  | "opaque";
 
 export abstract class AValue {
   static [INTEROP_BOUNDARY] = true;

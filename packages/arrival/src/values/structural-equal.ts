@@ -4,6 +4,7 @@ import { AExact } from "./primitives/AExact.js";
 import { AInexact } from "./primitives/AInexact.js";
 import { ANil } from "./primitives/ANil.js";
 import { ACharacter } from "./primitives/ACharacter.js";
+import { AOpaqueHandle } from "./primitives/AOpaqueHandle.js";
 import { tf } from "./tagless-final.js";
 
 /**
@@ -149,6 +150,11 @@ export function eq(x: unknown, y: unknown): boolean {
     return x[tf("equals")](y);
   }
   if (x instanceof ABool) return y instanceof ABool && x[tf("equals")](y);
+  // AOpaqueHandle is the SAME provenance-clone trap: `withProvenance` mints a fresh
+  // wrapper on re-stamp (AValue's immutability rule), so two independently-minted
+  // handles over the SAME host instance must still compare `eq?` true — routed through
+  // its Setoid (`.instance` identity), never the wrapper's own `===`.
+  if (x instanceof AOpaqueHandle) return x[tf("equals")](y);
   // Everything else (Pair, vector/Array, SchemeString, plain objects) keeps
   // strict pointer-grade — distinct heap instances answer #f (the === above is
   // the only true case).

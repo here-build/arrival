@@ -13,6 +13,7 @@ import { decodeKwargsStrict, drainDroppedKwargNotes } from "../kwargs-rejection.
 import { formatPositionalRejection } from "./positional-rejection.js";
 import { attestDeep, freshIfSingleton } from "../../values/attestation.js";
 import { AValue, pointProvenance, unionProvenance } from "../../values/primitives/AValue.js";
+import { AOpaqueHandle } from "../../values/primitives/AOpaqueHandle.js";
 import { jsToScheme } from "../../membrane/rosetta.js";
 import { penetrateThroughCache } from "../../run/run-cache.js";
 import { closeRegionScope, openRegionScope, withRegionScope } from "../../membrane/region-scope.js";
@@ -71,33 +72,34 @@ function assertNotBareCallableInDynamicSlot(symbolName: string, value: unknown, 
   }
 }
 
-/** Bake-time-only: which of `inSchema`'s TOP-LEVEL slots (the SAME shallow view
+/** Bake-time-only: WHICH of `inSchema`'s TOP-LEVEL slots (the SAME shallow view
  *  `contractMayCarryCallable` reads — fixed tuple items / a homogeneous array's lone element /
- *  kwargs object fields) are bare `z.dynamic` — and a runtime closure that checks a call's
- *  DECODED args at exactly those positions. `undefined` when the contract carries no `z.dynamic`
- *  slot at all (the overwhelming majority — zero cost). Deliberately scoped IDENTICAL to
- *  `contractMayCarryCallable`'s own shallow slots: a callable buried inside a CONTAINER argument
- *  (`z.list(z.dynamic)`, `z.vector(z.dynamic)`, a dict field) is the shallow-gate-recursion gap —
- *  a separate, already-tracked finding, not this door's job to catch. Named `"dynamic"` only —
- *  see this function's own doc for why the deprecated `"value"` alias and the banned
- *  `"schemeValue"` name are both out of scope here. REFACTOR-READY: a future `sz.instance` arm
- *  (the whiteroom's live-object-holding identity crossing) is the same family and would extend
- *  the name check below, not replace it. */
-function buildDynamicSlotCheck(
-  symbolName: string,
+ *  kwargs object fields) are bare `z.dynamic`. Shared position-detection behind BOTH runtime
+ *  passes below that need it (`buildDynamicSlotCheck`'s callable ban, `buildOpaqueHandleUnwrap`'s
+ *  handle unwrap) — one bake-time walk, one shape, no drift between the two consumers. Deliberately
+ *  scoped IDENTICAL to `contractMayCarryCallable`'s own shallow slots: a callable (or a handle)
+ *  buried inside a CONTAINER argument (`z.list(z.dynamic)`, `z.vector(z.dynamic)`, a dict field) is
+ *  the shallow-gate-recursion gap — a separate, already-tracked finding neither consumer catches
+ *  (a container BUILT FROM a real element codec, e.g. `z.list(z.instance(Ctor))`, needs no help
+ *  from either pass: its own per-element codec already unwraps/bans at the container's normal
+ *  decode). Named `"dynamic"` only — see `assertNotBareCallableInDynamicSlot`'s own doc for why the
+ *  deprecated `"value"` alias and the banned `"schemeValue"` name are both out of scope here.
+ *  `undefined` when the contract carries no `z.dynamic` slot at all (the overwhelming majority —
+ *  zero cost at either call site). */
+type DynamicSlotPositions =
+  | { readonly kind: "kwargs"; readonly keys: readonly string[] }
+  | { readonly kind: "all-positional" }
+  | { readonly kind: "indices"; readonly indices: readonly number[] };
+
+function dynamicSlotPositions(
   inSchema: z.ZodTypeAny,
   kwargsShape: Record<string, z.ZodTypeAny> | undefined,
-): ((decodedArgs: readonly unknown[]) => void) | undefined {
+): DynamicSlotPositions | undefined {
   if (kwargsShape) {
-    const dynamicKeys = Object.entries(kwargsShape)
+    const keys = Object.entries(kwargsShape)
       .filter(([, slot]) => z.lookupName(slot) === "dynamic")
       .map(([key]) => key);
-    if (dynamicKeys.length === 0) return undefined;
-    return (decodedArgs) => {
-      const obj = decodedArgs[0] as Record<string, unknown>;
-      for (const key of dynamicKeys)
-        assertNotBareCallableInDynamicSlot(symbolName, obj[key], `keyword argument :${key}`);
-    };
+    return keys.length === 0 ? undefined : { kind: "kwargs", keys };
   }
   const items = topLevelSchemas(inSchema);
   if (items === undefined) return undefined;
@@ -107,14 +109,72 @@ function buildDynamicSlotCheck(
   // has exactly one decoded position, the same as "check the array's one element type at every
   // position" when there happens to be exactly one position.
   if (items.length === 1) {
-    if (z.lookupName(items[0]) !== "dynamic") return undefined;
-    return (decodedArgs) =>
-      decodedArgs.forEach((a, i) => assertNotBareCallableInDynamicSlot(symbolName, a, `argument ${i + 1}`));
+    return z.lookupName(items[0]) !== "dynamic" ? undefined : { kind: "all-positional" };
   }
-  const dynamicIndices = items.flatMap((item, i) => (z.lookupName(item) === "dynamic" ? [i] : []));
-  if (dynamicIndices.length === 0) return undefined;
-  return (decodedArgs) =>
-    dynamicIndices.forEach((i) => assertNotBareCallableInDynamicSlot(symbolName, decodedArgs[i], `argument ${i + 1}`));
+  const indices = items.flatMap((item, i) => (z.lookupName(item) === "dynamic" ? [i] : []));
+  return indices.length === 0 ? undefined : { kind: "indices", indices };
+}
+
+/** The runtime closure that checks a call's DECODED args at exactly the `z.dynamic` positions
+ *  `dynamicSlotPositions` found, banning a bare callable there (see
+ *  `assertNotBareCallableInDynamicSlot`'s own doc for the hazard). `undefined` (zero cost) when
+ *  `positions` is. */
+function buildDynamicSlotCheck(
+  symbolName: string,
+  positions: DynamicSlotPositions | undefined,
+): ((decodedArgs: readonly unknown[]) => void) | undefined {
+  if (positions === undefined) return undefined;
+  switch (positions.kind) {
+    case "kwargs": {
+      const { keys } = positions;
+      return (decodedArgs) => {
+        const obj = decodedArgs[0] as Record<string, unknown>;
+        for (const key of keys) assertNotBareCallableInDynamicSlot(symbolName, obj[key], `keyword argument :${key}`);
+      };
+    }
+    case "all-positional":
+      return (decodedArgs) =>
+        decodedArgs.forEach((a, i) => assertNotBareCallableInDynamicSlot(symbolName, a, `argument ${i + 1}`));
+    case "indices": {
+      const { indices } = positions;
+      return (decodedArgs) =>
+        indices.forEach((i) => assertNotBareCallableInDynamicSlot(symbolName, decodedArgs[i], `argument ${i + 1}`));
+    }
+  }
+}
+
+/** THE HOST-WARD UNWRAP CHOKEPOINT for `z.dynamic` slots (whiteroom opaque-crossing contract,
+ *  interop-access.ts's `markInteropPrivate` doc has the full statement): `z.dynamic`'s decode is
+ *  pure identity (no transform — its whole contract is "impl does its own conversion"), so an
+ *  `AOpaqueHandle` landing there crosses UNDECODED unless this pass catches it. Every OTHER slot
+ *  kind already unwraps at its OWN codec's decode — a real codec's scheme face is never
+ *  `AOpaqueHandle` unless it explicitly says so (`z.instance(Ctor)`, whose own decode does this
+ *  same unwrap+assert) — so this is the ONE place a bare `z.dynamic` slot needs help. Scoped
+ *  IDENTICAL to `buildDynamicSlotCheck` (see `dynamicSlotPositions`'s own doc for the shared-scope
+ *  rationale and the shallow-gate-recursion gap this shares with it). `undefined` (zero cost) when
+ *  `positions` is. */
+function buildOpaqueHandleUnwrap(
+  positions: DynamicSlotPositions | undefined,
+): ((decodedArgs: readonly unknown[]) => readonly unknown[]) | undefined {
+  if (positions === undefined) return undefined;
+  const unwrap = (v: unknown): unknown => (v instanceof AOpaqueHandle ? v.instance : v);
+  switch (positions.kind) {
+    case "kwargs": {
+      const { keys } = positions;
+      return (decodedArgs) => {
+        const obj = decodedArgs[0] as Record<string, unknown>;
+        const next: Record<string, unknown> = { ...obj };
+        for (const key of keys) next[key] = unwrap(obj[key]);
+        return [next];
+      };
+    }
+    case "all-positional":
+      return (decodedArgs) => decodedArgs.map(unwrap);
+    case "indices": {
+      const idx = new Set(positions.indices);
+      return (decodedArgs) => decodedArgs.map((a, i) => (idx.has(i) ? unwrap(a) : a));
+    }
+  }
 }
 
 /** Rosetta host fn in JS-LAND (decoded via the contract codecs). ctx-free for this step.
@@ -148,8 +208,10 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
     // bare promises door). Computed at bake, per slot, tuple-shaped outputs only — a
     // variadic array-ish output keeps the plain encode (no live `dynamic` variadic exists).
     // Keyed off `"dynamic"` only (not the deprecated `"value"` alias, not the banned
-    // `"schemeValue"`) — REFACTOR-READY for a future `sz.instance` arm (the whiteroom's
-    // live-object-holding identity crossing), which would extend this name check, not replace it.
+    // `"schemeValue"`) — the whiteroom's `instance(Ctor)` codec (scheme-zod.ts, the
+    // live-object-holding identity crossing) does NOT extend this check: unlike `dynamic`, it is
+    // a REAL codec with its own `encode` (`AOpaqueHandle.for`), so an `instance`-typed output
+    // slot goes through the ordinary `z.encode` path below like any other typed output.
     const escapeSlots: readonly boolean[] = Array.isArray(contract.output)
       ? (contract.output as readonly unknown[]).map((slot) => z.lookupName(slot) === "dynamic")
       : [];
@@ -194,10 +256,14 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
     // V ruling, mid-Phase-A) — `contract`'s own parameter type already rejects a `z.schemeValue`
     // slot at the author's keyboard; nothing to check here at bake.
 
-    // THE Z.DYNAMIC-CALLABLE DOOR (Ruling A, see `buildDynamicSlotCheck`'s own doc above) —
-    // computed ONCE at bake, `undefined` (zero cost) for the overwhelming majority of contracts
-    // that carry no `z.dynamic` input slot at all.
-    const checkDynamicSlots = buildDynamicSlotCheck(name, inSchema, kwargsShape);
+    // THE Z.DYNAMIC-CALLABLE DOOR (Ruling A, see `buildDynamicSlotCheck`'s own doc above) AND
+    // the whiteroom opaque-handle host-ward unwrap (`buildOpaqueHandleUnwrap`'s own doc) — both
+    // computed ONCE at bake off the SAME shared position detection (`dynamicSlotPositions`),
+    // `undefined` (zero cost) for the overwhelming majority of contracts that carry no
+    // `z.dynamic` input slot at all.
+    const dynSlots = dynamicSlotPositions(inSchema, kwargsShape);
+    const checkDynamicSlots = buildDynamicSlotCheck(name, dynSlots);
+    const unwrapOpaqueHandles = buildOpaqueHandleUnwrap(dynSlots);
 
     // The interpretive wrapper. Mirrors createRosettaWrapper's spine
     // (schemeToJs → fn → jsToScheme), with the contract codecs standing in for the
@@ -301,7 +367,12 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
         // `z.procedure` arm's decode reads via `currentRegionScope()` (scheme-zod.ts), so the
         // minted host-fn wrapper closes over THIS scope instead of falling back to the shared
         // `DETACHED_SCOPE`.
-        const decodedArgs: readonly unknown[] = scope ? withRegionScope(scope, decode) : decode();
+        let decodedArgs: readonly unknown[] = scope ? withRegionScope(scope, decode) : decode();
+        // THE WHITEROOM OPAQUE-HANDLE UNWRAP fires HERE — right after decode, same reasoning as
+        // the callable door below: `dynamic`'s decode is identity, so an `AOpaqueHandle` landing
+        // in a bare `z.dynamic` slot is otherwise handed to the impl UNDECODED. See
+        // `buildOpaqueHandleUnwrap`'s own doc for the mechanism + scope.
+        if (unwrapOpaqueHandles) decodedArgs = unwrapOpaqueHandles(decodedArgs);
         // THE Z.DYNAMIC-CALLABLE DOOR fires HERE — right after decode, before the impl ever runs
         // (so a bad call never fires a partial effect first). `dynamic`'s decode is an identity
         // predicate (no transform), so checking post-decode is equivalent to checking the raw
@@ -393,10 +464,26 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       //    chose to attest (the manifold's `s/*` validators attest their identity-returns this
       //    way). (`freshIfSingleton` first: `fromJs` reuses the shared #t/#f flyweights on the
       //    empty-provenance fast path, and the program-wide singletons must never attest.)
+      //
+      //    THE ENCODE STEP RUNS UNDER `withMarshalCtx(this.runCtx, …)` — a codec whose `encode`
+      //    mints a fresh AValue with no already-boxed operand to derive a ctx from (`list`/
+      //    `vector`/`dict`'s own `firstCtx` covers the container case; the whiteroom's
+      //    `instance(Ctor)` codec has NO operand at all, a raw class instance) reads
+      //    `scheme-zod.ts`'s ambient `marshalCtx()` — by the time step 4 runs, any region scope
+      //    opened for step 1/2 has already been closed (the `finally` above), so without this
+      //    wrap `marshalCtx()` would fall to `CONSTANT_CTX`, and an `AOpaqueHandle` minted there
+      //    would land in `CONSTANT_CTX`'s cache bucket for EVERY run — defeating the run-scoped
+      //    identity `AOpaqueHandle.for` exists to hold (see that class's own header). Wrapping
+      //    here is a strict improvement for every OTHER codec too: it's a no-op for scalars
+      //    (never read ctx) and for containers' own `firstCtx` (which only falls to `marshalCtx()`
+      //    on an EMPTY container, where the correct-vs-CONSTANT_CTX distinction is unobservable —
+      //    a zero-length heap charge either way).
       if (singleOut) {
         // 1-tuple output: the impl returned a single value; encode it as a 1-vector.
         // A `dynamic` slot skips the codec entirely (see escapeSlots above).
-        const encoded = escapeSlots[0] ? result : z.encode(outSchema, [result])[0];
+        const encoded = escapeSlots[0]
+          ? result
+          : z.withMarshalCtx(this.runCtx, () => z.encode(outSchema, [result]))[0];
         const boxed: unknown = jsToScheme(this.runCtx, encoded, {}, resultProvenance);
         return forwards ? boxed : attestDeep(freshIfSingleton(boxed));
       }
@@ -404,11 +491,13 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       // by the multi-output contract — `DecodedReturn` is the values-vector when output isn't a
       // 1-tuple), so it IS the `readonly unknown[]` the output codec encodes.
       const resultVector = result as readonly unknown[];
-      const encoded = escapeSlots.some(Boolean)
-        ? resultVector.map((v, i) =>
-            escapeSlots[i] ? v : z.encode(normalizeVector([contract.output[i] as never]), [v])[0],
-          )
-        : z.encode(outSchema, resultVector);
+      const encoded = z.withMarshalCtx(this.runCtx, () =>
+        escapeSlots.some(Boolean)
+          ? resultVector.map((v, i) =>
+              escapeSlots[i] ? v : z.encode(normalizeVector([contract.output[i] as never]), [v])[0],
+            )
+          : z.encode(outSchema, resultVector),
+      );
       return encoded.map((v) => {
         const boxed: unknown = jsToScheme(this.runCtx, v, {}, resultProvenance);
         return forwards ? boxed : attestDeep(freshIfSingleton(boxed));

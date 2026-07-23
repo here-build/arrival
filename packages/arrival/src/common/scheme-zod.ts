@@ -18,6 +18,7 @@ import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
 import { AVoid } from "../values/primitives/AVoid.js";
 import { AValue, ctxOf } from "../values/primitives/AValue.js";
+import { AOpaqueHandle } from "../values/primitives/AOpaqueHandle.js";
 import { ADict, isDictShaped, type DictKey } from "../values/primitives/ADict.js";
 import { AJSObject } from "../membrane/AJSObject.js";
 import { AJSArray } from "../membrane/AJSArray.js";
@@ -237,12 +238,13 @@ export const schemeValue = schemeValueSchema as ContourOnly<typeof schemeValueSc
 // whose `name`/`type`/`default` slots genuinely cannot be typed — see that file's own comment).
 // STRUCTURALLY BANNED from a native/sequence/tagless/define contract slot AT COMPILE TIME (the
 // `CrossingOnly` brand above + `ContourSlot` in _bake.ts) — those never cross the membrane, so
-// `z.schemeValue` (or a real codec) is always the honest choice there. A future
-// genuinely-live-object-holding rosetta slot (the whiteroom's `sz.instance`) is a THIRD arm of
-// this same family, not yet built — `escapeSlots`/the RUNTIME callable door (rosetta.ts, which
-// guards against a runtime VALUE a type can't see) key off THIS name (`"dynamic"`) in a way
-// that stays easy to widen to `"instance"` too when that arm lands. Prints `unknown` — honest,
-// it really is unknown here.
+// `z.schemeValue` (or a real codec) is always the honest choice there. The genuinely-live-object-
+// holding rosetta slot is `instance(Ctor)` below (the whiteroom opaque-crossing contract) — a
+// THIRD arm of this same family, but a REAL codec (its own encode/decode), unlike `dynamic`'s
+// bare identity predicate: `escapeSlots`/the RUNTIME callable door (common/symbols/rosetta.ts)
+// key off THIS name (`"dynamic"`) specifically and do NOT need to widen for `instance` — an
+// `instance`-typed slot has its own decode/encode, so it never reaches either of those
+// dynamic-specific mechanisms. Prints `unknown` — honest, it really is unknown here.
 const dynamicSchema = named("dynamic", z.custom<SchemeValue>(isSchemeValue));
 export const dynamic = dynamicSchema as CrossingOnly<typeof dynamicSchema>;
 
@@ -268,14 +270,19 @@ export const value = named("value", z.custom<SchemeValue>(isSchemeValue));
 //
 // The channel, in priority order:
 //
-//   1. `_marshalRunCtx` — an ambient THIS FILE installs and reads (below). Its one
-//      caller today is `procedure()`'s own encode/decode arms, which — unlike every
-//      OTHER codec here — genuinely hold a live RunContext directly (the `impl`'s
-//      own `callCtx.runCtx`, ACallable.ts's `CallableImpl` contract; or the
-//      closed-over `scope.runCtx`), not a re-read of ambient state. Installing it
-//      for the synchronous window of a nested z.decode/z.encode call is strictly
-//      more honest than letting those nested codecs guess from (2) — this ctx is
-//      the actual invocation's, not whatever happens to be ambient right now.
+//   1. `_marshalRunCtx` — an ambient THIS FILE installs and reads (below). Its
+//      callers hold a live RunContext directly rather than re-reading ambient state:
+//      `procedure()`'s own encode/decode arms (the `impl`'s own `callCtx.runCtx`,
+//      ACallable.ts's `CallableImpl` contract; or the closed-over `scope.runCtx`),
+//      and `common/symbols/rosetta.ts`'s `run()` step 4 (`this.runCtx`, wrapping its
+//      whole output-encode step — the `instance(Ctor)` codec's `encode` below needs
+//      this SAME channel: minting/reusing an `AOpaqueHandle` is run-scoped, and a raw
+//      class instance carries no already-boxed operand `firstCtx`-style codecs could
+//      derive a ctx from). Installing it for the synchronous window of a nested
+//      z.decode/z.encode call is strictly more honest than letting those nested
+//      codecs guess from (2) — this ctx is the actual invocation's, not whatever
+//      happens to be ambient right now. EXPORTED (beyond this module's own callers)
+//      for exactly that `common/symbols/rosetta.ts` call site.
 //   2. `currentRegionScope()?.runCtx` (membrane/region-scope.ts) — the
 //      SAME ambient `z.procedure`'s reverse-crossing decode reads for its wrapper
 //      identity cache. Populated for exactly the crossings `common/symbols/
@@ -293,7 +300,7 @@ let _marshalRunCtx: RunContext | undefined;
  *  `fn` — save/restore, the same idiom `region-scope.ts`'s `withRegionScope` uses
  *  (single-threaded JS + save/restore makes a module holder safe; nesting works by
  *  construction, an inner install restoring the outer's ctx on the way out). */
-function withMarshalCtx<T>(ctx: RunContext, fn: () => T): T {
+export function withMarshalCtx<T>(ctx: RunContext, fn: () => T): T {
   const saved = _marshalRunCtx;
   _marshalRunCtx = ctx;
   try {
@@ -933,6 +940,62 @@ export const box = named(
     encode: (o) => new AJSObject(o),
   }),
 );
+
+// ---------------------------------------------------------------------------
+// :: instance — the whiteroom opaque-crossing contract's TYPED codec (docs/plans/
+//    infer-whiteroom-design.md §"V'S API RULING")
+// ---------------------------------------------------------------------------
+
+/**
+ * `instance(Ctor)` — a TYPED rosetta slot over a `@arrival.private`-branded host class:
+ * "this parameter/return MUST be a `Ctor` instance", e.g. `instance(LLMModel)` for
+ * `(chat/completion model ...)`. Scheme face is `z.instanceof(AOpaqueHandle)` (the brand's
+ * own membrane-side box, membrane/rosetta.ts's inbound claim mints one from any bare
+ * branded instance reaching `jsToScheme`); JS face is `z.instanceof(Ctor)` (real zod).
+ *
+ * `decode` unwraps + asserts: a handle wrapping the WRONG class (a `ChatSession` handle
+ * reaching a slot declared `instance(LLMModel)`) doors with a humanized rejection, naming
+ * both the expected and actual class faces — never a bare `instanceof` throw. `encode`
+ * mints/reuses the run-scoped handle via `AOpaqueHandle.for` — needs the LIVE run's
+ * `RunContext` (no already-boxed operand exists to derive one from, unlike `list`/
+ * `vector`/`dict`'s `firstCtx`), so it reads the SAME `marshalCtx()` ambient channel those
+ * container codecs' scalar sibling reads — see this file's own "Marshal ctx" section for
+ * why `common/symbols/rosetta.ts` wraps its output-encode step in `withMarshalCtx`.
+ *
+ * CROSSING-ONLY (branded `CrossingOnly`, exactly like `dynamic`): a semi-opaque handle is
+ * a MEMBRANE concept — it describes a HOST class crossing, so it is structurally banned
+ * from a native/sequence/tagless/define contract slot at compile time (`_bake.ts`'s
+ * `ContourResult`/`ContourSlot`, unchanged — the SAME brand this codec carries is what
+ * that machinery already gates on).
+ *
+ * Container composition is free: `list(instance(Ctor))`/`vector(instance(Ctor))`/
+ * `dict({ tool: instance(Ctor) })` decode/encode each element through THIS codec via the
+ * container's own per-element marshaling — no extra unwrap step needed for a typed
+ * container of handles (unlike a BARE `z.dynamic` slot, whose own identity-crossing
+ * needs `common/symbols/rosetta.ts`'s separate `buildOpaqueHandleUnwrap` chokepoint).
+ */
+export function instance<T extends object>(Ctor: new (...args: any[]) => T) {
+  const schema = named(
+    "instance",
+    // Scheme face: a PREDICATE (`z.custom`), not `z.instanceof(AOpaqueHandle)` — that class's
+    // constructor is deliberately PRIVATE (mint-or-reuse ONLY through `AOpaqueHandle.for`, this
+    // file's own header on other codecs' `z.instanceof(...)` calls), and a private constructor
+    // cannot satisfy the `new (...args) => T` shape `z.instanceof`'s type signature demands.
+    z.codec(z.custom<AOpaqueHandle>((v) => v instanceof AOpaqueHandle), z.instanceof(Ctor), {
+      decode: (handle) => {
+        if (!(handle.instance instanceof Ctor)) {
+          throw new CodecFidelityError(
+            "instance",
+            `expected an opaque handle wrapping ${Ctor.name}, got #<${handle.className}>`,
+          );
+        }
+        return handle.instance;
+      },
+      encode: (inst) => AOpaqueHandle.for(marshalCtx(), inst),
+    }),
+  );
+  return schema as CrossingOnly<typeof schema>;
+}
 
 // ---------------------------------------------------------------------------
 // :: procedure — contract-aware marshaling (parametrized), not just reference-wrapping

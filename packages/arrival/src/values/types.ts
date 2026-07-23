@@ -22,6 +22,7 @@ import type { AVoid } from "./primitives/AVoid.js";
 import type { AJSArray } from "../membrane/AJSArray.js";
 import type { AJSObject } from "../membrane/AJSObject.js";
 import type { ADict } from "./primitives/ADict.js";
+import type { AOpaqueHandle } from "./primitives/AOpaqueHandle.js";
 import type { EOF } from "./primitives/EOF.js";
 import type { Values } from "./primitives/Values.js";
 import type { AKernelKeyword } from "./AKernelKeyword.js";
@@ -100,6 +101,7 @@ export type SchemeValue =
   | AJSArray
   | AJSObject
   | ADict
+  | AOpaqueHandle
   | AKernelKeyword
   | EOF
   | Values

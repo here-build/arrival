@@ -11,6 +11,13 @@
 // transformed parameter type: the naive parameter-transform approach was tried and
 // empirically breaks generic inference for every OTHER, unrelated contract).
 //
+// LAW (b) (the whiteroom opaque-crossing contract, docs/plans/infer-whiteroom-design.md §"V'S
+// API RULING"): `z.instance(Ctor)` carries the SAME `CrossingOnly` brand as `z.dynamic` — a
+// semi-opaque handle is a membrane concept (it describes a HOST class crossing), so it is
+// banned from native/sequence/define contracts identically. No new machinery: `_bake.ts`'s
+// `ContourResult`/`ContourSlot` gates on the brand, not the schema's name, so this law falls
+// out of LAW (a)'s existing mechanism for free.
+//
 // NEGATIVE proofs (a banned schema in that position must NOT compile) use `@ts-expect-error`
 // over the live factories, exactly like symbol.test-d.ts's own convention — vitest's
 // typecheck mode honors `@ts-expect-error`, so each marked line reds if it ever starts
@@ -23,6 +30,11 @@
 
 import { describe, test } from "vitest";
 import { EnvCapability } from "../capability.js";
+
+// A plain fixture class — `z.instance(Ctor)`'s type-level ban doesn't need a REAL
+// `@arrival.private` brand (that's a runtime-only fact); any constructor shape suffices to
+// pin the CONTRACT-KIND type check these proofs are actually about.
+class FixtureHandle {}
 
 describe("Q1 compile-time contract-kind ban — z.schemeValue banned from rosetta, z.dynamic banned from native/sequence/define", () => {
   test("z.schemeValue in a rosetta input slot must NOT compile", () => {
@@ -110,6 +122,51 @@ describe("Q1 compile-time contract-kind ban — z.schemeValue banned from rosett
     EnvCapability.define("test/ok-dynamic-rosetta", {
       symbols: (symbol, z) => ({
         "ok-rosetta": symbol.rosetta`ok-rosetta: dynamic is legal here`({ input: [z.dynamic], output: [z.dynamic] }, (v) => v),
+      }),
+    });
+  });
+
+  test("z.instance(Ctor) in a native input slot must NOT compile", () => {
+    EnvCapability.define("test/ban-instance-native-input", {
+      symbols: (symbol, z) => ({
+        // @ts-expect-error — z.instance(Ctor) is not legal in a native contract's input; a
+        // native contour never crosses the membrane, so z.schemeValue (or a real codec) is
+        // the honest choice there — same rule z.dynamic's own ban above pins.
+        bad: symbol.native`bad: instance in native input`({ input: [z.instance(FixtureHandle)], output: [z.boolean] }, function () {
+          return true;
+        }),
+      }),
+    });
+  });
+
+  test("z.instance(Ctor) in a native output slot must NOT compile", () => {
+    EnvCapability.define("test/ban-instance-native-output", {
+      symbols: (symbol, z) => ({
+        // @ts-expect-error — same rule, output side.
+        bad: symbol.native`bad: instance in native output`({ input: [z.string], output: [z.instance(FixtureHandle)] }, function (s) {
+          return s;
+        }),
+      }),
+    });
+  });
+
+  test("z.instance(Ctor) in a symbol.define constant contract must NOT compile", () => {
+    EnvCapability.define("test/ban-instance-define-constant", {
+      symbols: (symbol, z) => ({
+        // @ts-expect-error — z.instance(Ctor) constant: symbol.define bodies are contour,
+        // never a membrane crossing.
+        bad: symbol.define`bad: instance constant`(z.instance(FixtureHandle), `42`),
+      }),
+    });
+  });
+
+  test("POSITIVE: z.instance(Ctor) in rosetta compiles clean (the semi-opaque handle is home there)", () => {
+    EnvCapability.define("test/ok-instance-rosetta", {
+      symbols: (symbol, z) => ({
+        "ok-rosetta": symbol.rosetta`ok-rosetta: instance(Ctor) is legal here`(
+          { input: [z.instance(FixtureHandle)], output: [z.instance(FixtureHandle)] },
+          (v) => v,
+        ),
       }),
     });
   });
