@@ -1062,9 +1062,8 @@ function cacheGateSlots(schema: z.ZodTypeAny): readonly z.ZodTypeAny[] {
  *    own doc on `dynamic`): decode performs NO transform, so the impl receives the raw scheme
  *    value untouched and MAY itself call `schemeToJs`/`applyCallback` on it if it happens to be
  *    a callable — reading the SAME ambient scope `z.procedure`'s decode reads. (The deprecated
- *    `z.value` alias registers under its OWN name — `"value"`, not `"dynamic"` — so a
- *    not-yet-migrated downstream declaration is NOT gated here; see that export's own doc,
- *    Phase B deletes it.)
+ *    `z.value` alias, which used to register under its OWN name — `"value"`, not `"dynamic"` —
+ *    is GONE; Phase B deleted it, so every rosetta declaration is `z.dynamic` or a real codec now.)
  *
  *  Used by `rosetta()` (rosetta.ts) to decide, ONCE at bake, whether its baked `run` wrapper
  *  needs to open a region scope around a call at all — mirroring the legacy
@@ -1096,7 +1095,7 @@ export function contractMayCarryCallable(inSchema: z.ZodTypeAny): boolean {
 /** THE `view` SHAPE GATE (errors-as-doors, beside `assertProvenanceRoleShape` — the same
  *  bake-time pattern): a `view` cache class demands a SERIALIZABLE contract — no `z.lambda`
  *  arms (a callable can't be a boundary snapshot), no raw-scheme-value slots (`z.schemeValue`/
- *  `z.dynamic`/the deprecated `z.value` alias — none of the three carry a serialization story).
+ *  `z.dynamic` — neither carries a serialization story).
  *  This is the bake-time half of view serializability (docs/execution.md §CHOKEPOINT — a cache
  *  entry must serialize). A contradiction throws `CacheClassShapeError` at BAKE; the author's
  *  way out is declaring `pure` (or nothing). `pure` has NO shape gate: recovery is re-call,
@@ -1128,7 +1127,7 @@ export function assertCacheClassShape(
             `a callable is not a boundary snapshot; declare "pure" (recovery = re-call) or drop the declaration`,
         );
       }
-      if (slotName === "schemeValue" || slotName === "dynamic" || slotName === "value") {
+      if (slotName === "schemeValue" || slotName === "dynamic") {
         throw new CacheClassShapeError(
           name,
           cacheClass,

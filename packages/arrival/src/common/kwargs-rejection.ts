@@ -17,8 +17,7 @@
 //     where a field declares a plain-JS shape "passes" by stripping to `{}` → the
 //     scheme-face guard below rejects it (an AValue can only be consumed by a schema
 //     with a scheme face, i.e. one registered in scheme-zod's name registry — every
-//     codec and `z.schemeValue`/`z.dynamic`/the deprecated `z.value` alias are; plain
-//     `z.object`/`z.record` are not).
+//     codec and `z.schemeValue`/`z.dynamic` are; plain `z.object`/`z.record` are not).
 
 import { ZodError, ZodType, type ZodRawShape } from "zod";
 import * as z from "./scheme-zod.js";
@@ -152,7 +151,7 @@ export class KwargsRejectionError extends ArrivalError {
 }
 
 /** A field schema with no scheme face cannot consume a boxed scheme value: codecs and
- *  `z.schemeValue`/`z.dynamic`/`z.value` are registered in scheme-zod's name registry (resolved through optional/
+ *  `z.schemeValue`/`z.dynamic` are registered in scheme-zod's name registry (resolved through optional/
  *  pipe wrappers by `lookupName`); a plain `z.object`/`z.record`/`z.enum` is not — an
  *  AValue reaching one would be silently mangled (strip-to-`{}`) or rejected with a
  *  JS-face message that misnames the value. Door it here with the scheme-face words. */

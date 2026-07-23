@@ -41,7 +41,7 @@ import { AString } from "../../values/primitives/AString.js";
 import { AJSArray } from "../AJSArray.js";
 import listsCap from "../../env/r7rs/lists.js";
 import vectorsCap from "../../env/r7rs/vectors.js";
-import { vector, value } from "../../common/scheme-zod.js";
+import { vector, schemeValue } from "../../common/scheme-zod.js";
 import type { EnvCapability } from "../../common/capability.js";
 import { nil } from "../../values/primitives/ANil.js";
 import { provOf } from "../../provenance/lineage.js";
@@ -376,7 +376,7 @@ describe("vector? / vector-ref dispatch via the tagless protocol (no instanceof 
     // `z.vector` is a union of two codecs, and they used to decode into DIFFERENT WORLDS: the
     // AVector arm yielded `__vector__` (BOXED elements, which the element codec can then decode),
     // while the AJSArray arm yielded the RAW `.source`. The element schema is a SCHEME-face codec
-    // (`value` demands an AValue; `z.number` demands an AExact), so raw JSON elements failed
+    // (`schemeValue` demands an AValue; `z.number` demands an AExact), so raw JSON elements failed
     // validation every single time. Every `symbol.define` verb contracted on `z.vector` — SRFI-43's
     // vector-fold / vector-fold-right / vector-count / vector-index / vector-any — therefore threw a
     // raw ZodError on ANY tool-returned JSON array, while working fine on a `#(1 2 3)` literal.
@@ -389,9 +389,9 @@ describe("vector? / vector-ref dispatch via the tagless protocol (no instanceof 
     // the bug. The borrowed arm now decodes to `__vector__` like its sibling, so the union is
     // genuinely representation-blind and this row is true again, for the right reason.
     // Pinned end-to-end in `listalike-divergence.law.test.ts` (the vector-surface block).
-    expect(vector(value).safeParse(mkArr()).success).toBe(true);
-    expect(vector(value).safeParse(mkVec()).success).toBe(true);
-    expect(vector(value).safeParse(mkPair()).success).toBe(false);
+    expect(vector(schemeValue).safeParse(mkArr()).success).toBe(true);
+    expect(vector(schemeValue).safeParse(mkVec()).success).toBe(true);
+    expect(vector(schemeValue).safeParse(mkPair()).success).toBe(false);
   });
 });
 

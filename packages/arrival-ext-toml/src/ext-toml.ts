@@ -45,7 +45,7 @@ export const arrivalTomlCapability = EnvCapability.define("ext/toml", {
   deps: [arrivalLoaderCapability],
   symbols: (symbol, z) => ({
     [RESOLVE]: symbol.native`ext/toml/resolve: resolves .toml module contents to a ResolverResult (loader registry verb)`(
-      { input: [z.value, z.value], output: [z.value] },
+      { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
       resolveToml as never,
     ),
   }),

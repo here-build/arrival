@@ -10,7 +10,7 @@
 //
 // Each tool's contract is a single `z.kwargs(shape)` object: arrival's kwargs runtime folds
 // a call's `:key value` pairs into an object and decodes every property through the
-// scheme-identity codec (`z.value`). No per-type dispatch.
+// scheme-identity codec (`z.dynamic`). No per-type dispatch.
 
 import { jsToScheme, LexicalScope, schemeToJs, z, type SchemeValue } from "@inhuman.tools/arrival";
 import { freshIfSingleton, isAttested } from "@inhuman.tools/arrival/attestation";
@@ -170,7 +170,7 @@ export function resolveBypass(
 }
 
 /** Captured for `assembleManifoldPrelude` (json-schema-to-ts.ts) — `ambient` is the
- *  `z.value`-erased source; schemas survive here on a module-level WeakMap keyed by
+ *  `z.dynamic`-erased source; schemas survive here on a module-level WeakMap keyed by
  *  the returned ambient. Never mutated externally; only `toolSchemasForAmbient` reads. */
 type ToolSchemaEntry = readonly [name: string, input: ToolJsonSchema | undefined, output: ToolJsonSchema | undefined];
 const toolSchemasByAmbient = new WeakMap<AssembledAmbient, readonly ToolSchemaEntry[]>();
@@ -281,7 +281,7 @@ function alistShapedObject(value: unknown): Record<string, unknown> | undefined 
 
 function validatorDef(name: ValidatorName): SymbolDeclaration {
   const { article, test } = VALIDATORS[name];
-  const impl = (decoded: z.output<typeof z.value>): z.output<typeof z.value> => {
+  const impl = (decoded: z.output<typeof z.dynamic>): z.output<typeof z.dynamic> => {
     const jsValue = schemeToJs(decoded);
     if (test(jsValue)) return freshIfSingleton(decoded);
     throw new Error(`s/${name}: expected ${article} ${name}, got ${typeNameOf(jsValue)}: ${previewOf(jsValue)}`);
@@ -290,7 +290,7 @@ function validatorDef(name: ValidatorName): SymbolDeclaration {
     NAME_DOC_TEMPLATE,
     `s/${name}`,
     `Type assertion: returns its argument unchanged if it is ${article} ${name}, else a recoverable Error.`,
-  )({ input: [z.value], output: [z.value] }, impl);
+  )({ input: [z.dynamic], output: [z.dynamic] }, impl);
 }
 
 const VALIDATOR_NAMES = Object.keys(VALIDATORS) as readonly ValidatorName[];
@@ -323,7 +323,7 @@ function validatorSymbols(): Record<string, SymbolDeclaration> {
  *  no attestation and no ARGS_REJECTION metadata — a parser throw is an ordinary
  *  in-REPL condition, never a tool.invoke rejection. */
 function normalizerDef(entry: NormalizerPreludeSymbol): SymbolDeclaration {
-  const impl = function (this: CallCtx, decoded: z.output<typeof z.value>): SchemeValue {
+  const impl = function (this: CallCtx, decoded: z.output<typeof z.dynamic>): SchemeValue {
     const jsValue = schemeToJs(decoded);
     if (typeof jsValue !== "string") {
       throw new TypeError(`${entry.name}: expected a string, got ${typeNameOf(jsValue)}: ${previewOf(jsValue)}`);
@@ -334,7 +334,7 @@ function normalizerDef(entry: NormalizerPreludeSymbol): SymbolDeclaration {
     NAME_DOC_TEMPLATE,
     entry.name,
     entry.description,
-  )({ input: [z.value], output: [z.value] }, impl);
+  )({ input: [z.dynamic], output: [z.dynamic] }, impl);
 }
 
 /** Build the normalizer-parser family (present in EVERY attestation mode — parsing is
@@ -457,14 +457,14 @@ function rosettaDef(
   argsTracker: ArgsFailureTracker | undefined,
 ): SymbolDeclaration {
   const shape: Record<string, z.ZodTypeAny> = {};
-  for (const p of signature.params) shape[p.name] = p.optional ? z.value.optional() : z.value;
+  for (const p of signature.params) shape[p.name] = p.optional ? z.dynamic.optional() : z.dynamic;
   const impl = async function (this: CallCtx, decoded: Record<string, unknown>): Promise<SchemeValue> {
     const args: Record<string, unknown> = {};
     const unattested: string[] = [];
     for (const p of signature.params) {
       if (p.name in decoded) {
         // `decoded` is typed Record<string, unknown> at the rosetta seam, but every value
-        // came through the z.value codec — SchemeValue by construction.
+        // came through the z.dynamic codec — SchemeValue by construction.
         // If the tool DECLARES this param an object and the value crossed as an alist-shaped array,
         // read it as the slot says — see `alistShapedObject` above. Everything else is untouched.
         const crossed = schemeToJs(decoded[p.name] as SchemeValue);
@@ -492,7 +492,7 @@ function rosettaDef(
     // Reset-on-success (args-error-reporting-v2 §2.4): the model holds a working shape for
     // this tool now — its next misuse failure starts a fresh L1 lesson, never an inherited L3.
     argsTracker?.recordSuccess(qualifiedName);
-    // `output: [z.value]` is the scheme-identity codec (js face IS SchemeValue) — the
+    // `output: [z.dynamic]` is the scheme-identity codec (js face IS SchemeValue) — the
     // MCP tool's raw JS result needs lifting, mirroring the schemeToJs decode above.
     return jsToScheme(this.runCtx, result);
   };
@@ -500,7 +500,7 @@ function rosettaDef(
     NAME_DOC_TEMPLATE,
     qualifiedName,
     tool.description ?? "",
-  )({ input: [], inputRest: shape, output: [z.value] }, impl);
+  )({ input: [], inputRest: shape, output: [z.dynamic] }, impl);
 }
 
 /** Build the ONE assembled ambient for every connected server (plus a fresh session

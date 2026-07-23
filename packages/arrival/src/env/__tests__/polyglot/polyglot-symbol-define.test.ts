@@ -14,7 +14,7 @@
 //      since each dialect pack reaches a DIFFERENT BASE_PACKS-only capability
 //      (clojure→srfi-1's reduce, lisp→srfi-1's filter, racket→exceptions' error).
 //   3. contract enforcement fires at the call boundary — and, mirrored, the
-//      dict-family's `z.value` input judgment PRESERVES the %dict-guard teaching
+//      dict-family's `z.schemeValue` input judgment PRESERVES the %dict-guard teaching
 //      door (a `z.dict()` input contract would have preempted it with a bare zod
 //      error — the door is polyglot-racket's own errors-as-doors surface).
 //   4. the §2.1 bake FV law passes as migrated, per pack; a local reproduction of
@@ -148,7 +148,7 @@ describe("scheme/polyglot family — contract ENFORCEMENT fires at the call boun
     expect(String(grouped)).toBeTruthy(); // a keyword accessor as group-by's f — applicable, not z.lambda
   });
 
-  it("JUDGMENT PIN — the dict family's `d` stays z.value so polyglot-racket's %dict-guard TEACHING door survives (never preempted by a zod boundary error)", async () => {
+  it("JUDGMENT PIN — the dict family's `d` stays z.schemeValue so polyglot-racket's %dict-guard TEACHING door survives (never preempted by a zod boundary error)", async () => {
     const env = await freshEnv();
     await expect(execStateOverFrame("(dict-ref (list 1 2) :a)", { env })).rejects.toThrow(
       /dict-ref: expected a dict .* got a pair\/list.*use @ for an origin-agnostic read/,

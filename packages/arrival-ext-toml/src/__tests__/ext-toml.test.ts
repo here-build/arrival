@@ -47,7 +47,7 @@ describe("arrivalTomlCapability — .toml on the vocabulary (default) path", () 
       deps: [arrivalTomlCapability],
       symbols: (symbol, z) => ({
         "test/other-toml-resolve": symbol.native`test/other-toml-resolve: rival .toml handler`(
-          { input: [z.value, z.value], output: [z.value] },
+          { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
           (() => ({ kind: "value", value: "rival" })) as never,
         ),
       }),

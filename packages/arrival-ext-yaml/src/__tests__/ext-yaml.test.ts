@@ -54,7 +54,7 @@ describe("arrivalYamlCapability — .yaml/.yml on the vocabulary (default) path"
       deps: [arrivalYamlCapability],
       symbols: (symbol, z) => ({
         "test/other-yaml-resolve": symbol.native`test/other-yaml-resolve: rival .yaml handler`(
-          { input: [z.value, z.value], output: [z.value] },
+          { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
           (() => ({ kind: "value", value: "rival" })) as never,
         ),
       }),

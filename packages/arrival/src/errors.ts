@@ -371,7 +371,7 @@ export class ProvenanceRoleShapeError extends ArrivalError {
 // A symbol declares the `view` cache class (Solidity vocabulary — cacheable ACROSS
 // runs, a boundary snapshot worth persisting) but its own contract is structurally
 // non-serializable: a `z.lambda` arm (a callable can't be a snapshot) or a raw-scheme-value
-// slot (`z.schemeValue`/`z.dynamic`/the deprecated `z.value` alias — none carry a
+// slot (`z.schemeValue`/`z.dynamic` — neither carries a
 // serialization story). Thrown at
 // ASSEMBLY (bake time — `common/symbols/{native,rosetta,sequence}.ts`, via
 // `assertCacheClassShape` in `_bake.ts`, beside `assertProvenanceRoleShape`), never
@@ -527,21 +527,6 @@ export class VocabularyCapabilityConflictError extends Error {
         `import the SAME module-singleton instance.`,
     );
     this.name = "VocabularyCapabilityConflictError";
-  }
-}
-export class VocabularyLegacyCapabilityError extends Error {
-  constructor(
-    public readonly capabilityName: string,
-    public readonly verb: string,
-  ) {
-    super(
-      `capability "${capabilityName}" declares "${verb}" as a legacy \`{ fn }\` record — the vocabulary ` +
-        `builder (Stage B1) only mints from the symbol.* factory / define/defineSyntax/alias family. ` +
-        `Legacy \`{ fn }\` capabilities (McpEnvCapability's authoring shape) stay on the old lower()/ ` +
-        `assembleEnv path — pass this capability to \`exec\`/\`assembleAmbient\` without opting into the ` +
-        `vocabulary path.`,
-    );
-    this.name = "VocabularyLegacyCapabilityError";
   }
 }
 export class RunContextVocabularyMismatchError extends Error {

@@ -18,11 +18,12 @@
 // negative assertions below keep the retirement from silently regressing.
 //
 // STAGE C CUT 4 PIN (2026-07-23, docs/plans/stage-c-corpse-deletion.md): the legacy `{ fn }`
-// record arm is ALSO dropped from the union — `lower()`, its sole BINDER, is retired, and
-// `isSymbolSpec`/`VocabularyLegacyCapabilityError` (capability.ts / env/vocabulary.ts) now
-// exist purely as a RUNTIME refusal check for a capability that reaches the vocabulary path
-// with this shape (McpEnvCapability's downstream authoring surface, until the postponed MCP
-// rework), never as a type a TS-authored `symbols` record can still declare.
+// record arm is ALSO dropped from the union — `lower()`, its sole BINDER, is retired. Phase B
+// (§"bans live at the TYPE level") went further: `isSymbolSpec`/`VocabularyLegacyCapabilityError`
+// (the runtime refusal check that used to guard `env/vocabulary.ts`'s bind loop against this
+// shape) are DELETED — compat theater for a shape this very type-level pin already rejects.
+// An untyped author reaching for `{ fn }` now gets a TS error at the keyboard, never a runtime
+// door; this test is that error's proof.
 import { describe, expectTypeOf, test } from "vitest";
 import type { SymbolDeclaration } from "../capability.js";
 import type { DefineSymbolDef, DefineSyntaxSymbolDef, MacroSymbolDef, NativeSymbolDef } from "../symbols/_bake.js";
@@ -68,10 +69,11 @@ describe("SymbolDeclaration — the raw authoring-time union, post Stage-A2 mint
     expectTypeOf<(...args: unknown[]) => unknown>().not.toExtend<SymbolDeclaration>();
   });
 
-  // INVARIANT (Stage C Cut 4 retirement pin): the legacy `{ fn }` record is NO LONGER
-  // assignable — `lower()` (its sole binder) is retired; a capability reaching the
-  // vocabulary path with this shape is refused at runtime (`isSymbolSpec`/
-  // `VocabularyLegacyCapabilityError`), not accepted at the type level.
+  // INVARIANT (Stage C Cut 4 retirement pin, Phase B RETROACTIVE): the legacy `{ fn }` record
+  // is NO LONGER assignable — `lower()` (its sole binder) is retired, and there is no runtime
+  // refusal check left either (`isSymbolSpec`/`VocabularyLegacyCapabilityError` are deleted,
+  // docs/plans/stage-c-corpse-deletion.md §"bans live at the TYPE level") — this compile-time
+  // rejection IS the whole contract now.
   test("an explicit { fn } record is NOT assignable to SymbolDeclaration (retired arm)", () => {
     expectTypeOf<{ fn: (...args: unknown[]) => unknown }>().not.toExtend<SymbolDeclaration>();
   });

@@ -18,9 +18,9 @@
  * SCOPE, named (the Q1 retarget): this door is keyed on `"dynamic"` ONLY — neither the banned
  * `z.schemeValue` (structurally excluded from a rosetta contract at COMPILE time now, see
  * `_bake.ts`'s `CrossingResult`/`ContourResult` + `common/__tests__/scheme-zod.test-d.ts`) nor the
- * deprecated `z.value` alias (Phase B deletes it; a not-yet-migrated downstream declaration is
- * this door's own documented non-concern until then — see `rosetta.ts`'s own doc on
- * `assertNotBareCallableInDynamicSlot`).
+ * deprecated `z.value` alias, now DELETED (Phase B, this campaign) — a not-yet-migrated downstream
+ * declaration was this door's own documented non-concern until the alias was retired — see
+ * `rosetta.ts`'s own doc on `assertNotBareCallableInDynamicSlot`.
  */
 import { describe, expect, it } from "vitest";
 import { EnvCapability } from "../../common/capability.js";

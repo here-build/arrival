@@ -28,7 +28,9 @@ export const arrivalHandlebarsCapability = EnvCapability.define("arrival/handleb
     "template/handlebars":
       symbol.rosetta`template/handlebars: renders a handlebars template source string against the given args`(
         {
-          input: [z.string, z.value],
+          // `args` is genuinely runtime-shaped (any dict/array a caller hands the template) —
+          // the rosetta escape hatch, not a real codec.
+          input: [z.string, z.dynamic],
           type: "(source: string, args: unknown): string",
           output: [z.string],
           provenance: "pipe",
@@ -43,7 +45,7 @@ export const arrivalHandlebarsCapability = EnvCapability.define("arrival/handleb
     // retired): `require` dispatches its apply term with `(contents, {path}) → ResolverResult`,
     // raw either way (a native never marshals).
     "ext/handlebars/resolve": symbol.native`ext/handlebars/resolve: resolves .hbs module contents to a ResolverResult (loader registry verb)`(
-      { input: [z.value, z.value], output: [z.value] },
+      { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
       (async (contents: unknown) => ({
         kind: "eval" as const,
         forms: await parse(hbsContentsToSchemeSource(String(contents))),
@@ -52,7 +54,11 @@ export const arrivalHandlebarsCapability = EnvCapability.define("arrival/handleb
     "handlebars/parse": symbol.rosetta`handlebars/parse: compiles a handlebars template source once (cached by source)`(
       {
         input: [z.string],
-        output: [z.value],
+        // TODO(@arrival.private): `CompiledTemplate` is a plain interface (render fn + info),
+        // not yet a branded class — once it is, this becomes `instance(CompiledTemplateClass)`
+        // (a real codec, the whiteroom opaque-crossing contract). Until then z.dynamic is the
+        // honest escape hatch: the raw box crosses untouched (jsToScheme/schemeToJsUntyped).
+        output: [z.dynamic],
         provenance: "pipe",
         type: "(source: string): CompiledTemplate",
         emit: runtimeEmit("handlebars/parse"),
@@ -63,7 +69,10 @@ export const arrivalHandlebarsCapability = EnvCapability.define("arrival/handleb
     ),
     "handlebars/run": symbol.rosetta`handlebars/run: renders a previously compiled handlebars template with args`(
       {
-        input: [z.value, z.value],
+        // TODO(@arrival.private): `compiled` is the same not-yet-branded CompiledTemplate handle
+        // as handlebars/parse's output (see that comment); `args` is genuinely runtime-shaped.
+        // Both z.dynamic — the rosetta escape hatch, not real codecs.
+        input: [z.dynamic, z.dynamic],
         output: [z.string],
         provenance: "pipe",
         type: "(compiled: CompiledTemplate, args: unknown): string",

@@ -13,7 +13,7 @@
 //   2. Harvest those schemas into an ambient TS prelude via `assembleManifoldPrelude`
 //      (json-schema-to-ts.ts) — the tool's ACTUAL declared shape, not the zod-erased
 //      `SymbolDef` harvest bind.ts binds into the env (every property there decodes through
-//      the scheme-identity codec `z.value`, so it types `unknown` and gives the checker
+//      the scheme-identity codec `z.dynamic`, so it types `unknown` and gives the checker
 //      nothing to narrow against — the whole reason this harvest exists).
 //   3. Build one `DiagnoseLens` (arrival's whole-program probe) over that prelude, and adapt
 //      its `diagnose()` to the frozen `TypeHintLens` shape: async, tuple spans → `SchemeSpan`

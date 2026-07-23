@@ -39,12 +39,15 @@
 // unshared second Vocabulary, never wrongly shares one). The memo stores the in-flight PROMISE, not
 // the settled value, so concurrent callers of the same tuple await the SAME build.
 //
-// LEGACY `{ fn }` CAPABILITIES (McpEnvCapability's authoring shape) are OUT OF SCOPE for this
-// artifact — refused outright (see `VocabularyLegacyCapabilityError`, below); callers decide
-// whether a given capability set is vocabulary-eligible BEFORE calling this. (Stage C Cut 4:
-// there is no other home for a `{ fn }` capability anymore — `lower()`/`assembleEnv` are both
-// retired — so a legacy capability reaching here has nowhere production-sanctioned left to go
-// until the postponed MCP rework gives it one.)
+// LEGACY `{ fn }` CAPABILITIES (McpEnvCapability's old authoring shape) are OUT OF SCOPE for this
+// artifact — but no runtime refusal check remains here (V ruling, docs/plans/
+// stage-c-corpse-deletion.md §"bans live at the TYPE level"): `{fn}` was retired from the
+// `SymbolDeclaration` union itself (Stage C Cut 4), so `SymbolDeclaration`'s own type already
+// rejects the shape at the author's keyboard — a runtime `isSymbolSpec`/
+// `VocabularyLegacyCapabilityError` door was compat theater for a shape that can no longer be
+// constructed under the type. There is no other home for a `{ fn }` capability anymore —
+// `lower()`/`assembleEnv` are both retired — so an untyped author now gets a TS error, which
+// IS the contract.
 
 import { z } from "zod";
 import invariant from "tiny-invariant";
@@ -54,7 +57,6 @@ import {
   contractOf,
   isAliasDef,
   isDeclarativeDef,
-  isSymbolSpec,
   missingRequiresConfig,
   requiresConfigNeeds,
   requiresConfigReason,
@@ -86,7 +88,6 @@ import {
   AssembleLinearizationError,
   SymbolKeyMismatchError,
   VocabularyCapabilityConflictError,
-  VocabularyLegacyCapabilityError,
 } from "../errors.js";
 import { bindValue, mintResolvingFrame, type AmbientValue, type ResolvingAmbient } from "./AmbientRuntime.js";
 
@@ -212,11 +213,6 @@ async function processCapability(
   const capabilityName = cap.name;
   const spec = cap.spec;
   const symbolsRec = (spec.symbols ?? {}) as Record<string, SymbolDeclaration>;
-
-  // Deliverable 5 — legacy `{ fn }` capabilities never reach the vocabulary path.
-  for (const [verb, rawDef] of Object.entries(symbolsRec)) {
-    if (isSymbolSpec(rawDef)) throw new VocabularyLegacyCapabilityError(capabilityName, verb);
-  }
 
   const schema = spec.configuration ? z.object(spec.configuration as Record<string, z.ZodTypeAny>) : z.object({});
   const configuration = schema.parse(config ?? {}) as Record<string, unknown>;

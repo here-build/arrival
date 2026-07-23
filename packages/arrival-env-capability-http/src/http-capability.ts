@@ -21,7 +21,7 @@ export const arrivalHttpCapability = EnvCapability.define("arrival/http", {
   // time — config-independent — so the host `http` resolver can't be resolved out here. Each impl
   // re-reads it from `this.configuration.http` at REAL DISPATCH instead (the injected
   // `symbol.rosetta`'s typed `this` — `this.invocation` rides the same CallCtx channel it always
-  // did). VARIADIC identity input (`z.array(z.value)`) keeps the legacy ARITY TOLERANCE (opts
+  // did). VARIADIC identity input (`z.array(z.dynamic)`) keeps the legacy ARITY TOLERANCE (opts
   // may be omitted). Each arg is `schemeToJs`'d explicitly inside the impl — byte-identical to the
   // legacy generic membrane's automatic `schemeToJs` pass every `defineRosetta` arg went through.
   // Each verb is a `symbol.rosetta` SOURCE (no `pure` ⇒ mints a fresh provenance point at the
@@ -29,8 +29,8 @@ export const arrivalHttpCapability = EnvCapability.define("arrival/http", {
   symbols: (symbol) => {
     const httpVerb = (method: HttpMethod, name: "http/get" | "http/post") =>
       symbol.rosetta`${name}: performs an ${method} request via the http effect resolver`(
-        { input: z.array(z.value), output: [z.value], type: "(label: string, path: string, opts?: unknown): unknown" },
-        // Boundary assert: the resolver returns unknown by design (host data); the z.value
+        { input: z.array(z.dynamic), output: [z.dynamic], type: "(label: string, path: string, opts?: unknown): unknown" },
+        // Boundary assert: the resolver returns unknown by design (host data); the z.dynamic
         // contract demands SchemeValue — asserted at the verb table, same as arrival-reflect.
         function (...args: unknown[]) {
           const resolve = this.configuration.http ?? inertHttpResolver;
@@ -39,7 +39,7 @@ export const arrivalHttpCapability = EnvCapability.define("arrival/http", {
           // the boundary-assert return cast below.
           const [label, path, opts] = args as (SchemeValue | undefined)[];
           // Boundary assert: the resolver returns `Promise<unknown>` by design (host data); the
-          // z.value contract demands `MaybePromise<SchemeValue>` — asserted at the return, same
+          // z.dynamic contract demands `MaybePromise<SchemeValue>` — asserted at the return, same
           // as arrival-reflect (kept narrow to the return value so the impl's `this` still
           // contextually infers as `ImplThis<Config, Resources>` off the injected `symbol.rosetta`).
           return resolve(this.invocation, {

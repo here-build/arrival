@@ -316,7 +316,7 @@ describe("Frozen args-misuse line-heads (docs/args-error-reporting-v2.md §3)", 
   );
 
   // The own-decode humanizer's frozen first line, at OUR (manifold) kwargs layer. Exercised
-  // via a REQUIRED kwarg omitted entirely: the manifold's tool contracts are z.value-per-param,
+  // via a REQUIRED kwarg omitted entirely: the manifold's tool contracts are z.dynamic-per-param,
   // so a missing-required arg is the case this layer's own-decode humanizer fires for.
   it(
     "own-decode humanizer's new frozen first line: 'Error: <name>: arguments rejected — <n> problem(s):' + " +

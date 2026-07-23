@@ -43,7 +43,7 @@ function fnv1a(prefix: string, canonical: string): string {
 
 /** `hash(sessionId ‖ statementIndex ‖ canonicalJson(effect list + decoded args))`.
  *  `canonicalJson` throws on non-JSON-representable decoded args (a
- *  class instance, a function slipped through a `z.value` escape hatch); the
+ *  class instance, a function slipped through a `z.dynamic` escape hatch); the
  *  fallback keys on verb NAMES only — coarser (two structurally-different calls to
  *  the same verb could collide), but still a real digest, never a thrown 500 from
  *  a confirmation artifact whose whole job is to be inspectable. */

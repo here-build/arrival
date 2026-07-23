@@ -131,7 +131,7 @@ export interface NormalizerPreludeSymbol {
  * toon.ts/python-literal.ts/detect.ts export plain functions over `ParseOutcome`, no
  * `SymbolDeclaration` in sight): plain named functions above, plus this descriptor array
  * naming the scheme identifier and teaching line for each. The maintainer's binder maps
- * each entry through its own `symbol.rosetta(...)({input:[z.value], output:[z.value]}, fn)`
+ * each entry through its own `symbol.rosetta(...)({input:[z.dynamic], output:[z.dynamic]}, fn)`
  * (or whatever the manifold's next capability-assembly pass consumes) exactly the way
  * `validatorDef` does for `s/*` today. */
 export const NORMALIZER_PRELUDE_SYMBOLS: readonly NormalizerPreludeSymbol[] = [

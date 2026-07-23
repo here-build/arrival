@@ -15,7 +15,7 @@ import { exec, execInFrame } from "../../eval/generator-exec.js";
 import { isAmbientRuntime } from "../AmbientRuntime.js";
 import { toJS } from "../../membrane/membrane.js";
 import { ANativeProcedure, DoorProcedure } from "../../values/primitives/ACallable.js";
-import { PurityError, SymbolKeyMismatchError, VocabularyLegacyCapabilityError } from "../../errors.js";
+import { PurityError, SymbolKeyMismatchError } from "../../errors.js";
 import { nil } from "../../values/primitives/ANil.js";
 import type { DefineSymbolDef } from "../../common/symbols/_bake.js";
 
@@ -188,16 +188,12 @@ describe("buildVocabulary — the diamond-DAG single-execution law (prelude coll
   });
 });
 
-describe("buildVocabulary — legacy `{ fn }` capabilities refuse", () => {
-  // INVARIANT: a capability carrying a legacy `{ fn }` record (McpEnvCapability's shape) is
-  // rejected with a teaching error naming the MCP shim — it stays on lower()/assembleEnv.
-  it("throws VocabularyLegacyCapabilityError for a legacy { fn } record", async () => {
-    const legacy = new EnvCapability("test/vocab-legacy", {
-      symbols: { legacyVerb: { fn: () => undefined } as never },
-    });
-    await expect(buildVocabulary([legacy], undefined, noopEvalScheme)).rejects.toBeInstanceOf(VocabularyLegacyCapabilityError);
-  });
-});
+// The former "buildVocabulary — legacy `{ fn }` capabilities refuse" runtime test is GONE
+// (Phase B RETROACTIVE, docs/plans/stage-c-corpse-deletion.md §"bans live at the TYPE level"):
+// `isSymbolSpec`/`VocabularyLegacyCapabilityError` (the runtime refusal it exercised) are
+// deleted — compat theater for a shape `SymbolDeclaration`'s own type already rejects. The law
+// now lives as a type-level pin: `common/__tests__/capability.test-d.ts`'s "an explicit { fn }
+// record is NOT assignable to SymbolDeclaration" test.
 
 describe("assembleRun", () => {
   // INVARIANT: the minted RunContext carries the vocabulary + degraded surface + a

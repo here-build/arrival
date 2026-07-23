@@ -28,7 +28,7 @@
 // value is handed back UNCHANGED. So as long as no schema below REJECTS a value a body produces,
 // the wire format cannot drift by construction — which sets the contract-choices rule below:
 // model the real structure each body reads/produces, over-approximate rather than under, and
-// leave positions a body forwards opaquely as z.value.
+// leave positions a body forwards opaquely as z.schemeValue.
 //
 // DEPS: cons/list (scheme/lists), pair?/null? (scheme/equality), string-append (scheme/strings),
 // = (scheme/numeric), error (scheme/r7rs/exceptions) are every cross-capability free name the
@@ -41,12 +41,12 @@ import strings from "../r7rs/strings.js";
 import numeric from "../r7rs/numeric.js";
 import exceptions from "../r7rs/exceptions.js";
 
-// A schema-DSL type tag: z.union([z.string, z.cons(z.string, z.value)]) — one level of real
+// A schema-DSL type tag: z.union([z.string, z.cons(z.string, z.schemeValue)]) — one level of real
 // structure, exactly what s/optional's body branches on (pair?, then (car tag) fed to
-// string-append, which demands a string head). The cdr stays z.value: a tag's inner shape is
+// string-append, which demands a string head). The cdr stays z.schemeValue: a tag's inner shape is
 // arbitrarily recursive and no body here reads past that one level. Shared by s/optional and
 // s/array's element; s/field's `type` and s/field/_composite's `rest` forward opaquely, so they
-// stay z.value, not tag.
+// stay z.schemeValue, not tag.
 // DEPS ORDER (Stage C Cut 2): `equality, numeric, exceptions, strings, lists` — matching the
 // partial order every BASE_PACKS member reaching these same nodes already agrees on (`equality`
 // before `numeric` before `scheme/r7rs/exceptions` before `strings` before `lists` last — the
@@ -63,25 +63,25 @@ import exceptions from "../r7rs/exceptions.js";
 export const schemaCapability = EnvCapability.define("arrival/schema", {
   deps: [equality, numeric, exceptions, strings, lists],
   symbols: (symbol, z) => {
-    const tag = z.union([z.string, z.cons(z.string, z.value)]);
+    const tag = z.union([z.string, z.cons(z.string, z.schemeValue)]);
     // The s/field-shape output every s/field* body returns: two fixed heads (name, type) then a
     // string tail. Over-approximates (tolerates >1 trailing desc, none produced) rather than under —
     // never rejecting a value a body returns.
-    const fieldShape = z.list([z.string, z.value], z.string);
+    const fieldShape = z.list([z.string, z.schemeValue], z.string);
     return {
       "s/object":
         symbol.define`s/object: an object type tag from field-tag entries — (s/object (s/field name type)...)`(
-          { input: z.array(z.value), output: [z.list([z.string], z.value)] },
+          { input: z.array(z.schemeValue), output: [z.list([z.string], z.schemeValue)] },
           `(lambda fields (cons "object" fields))`,
         ),
 
       "s/array": symbol.define`s/array: an array type tag whose elements are all shaped by element — (s/array tag)`(
-        { input: [tag], output: [z.list([z.string, z.value])] },
+        { input: [tag], output: [z.list([z.string, z.schemeValue])] },
         `(lambda (element) (list "array" element))`,
       ),
 
       "s/enum": symbol.define`s/enum: an enum type tag over the given literal values — (s/enum value...)`(
-        { input: z.array(z.value), output: [z.list([z.string], z.value)] },
+        { input: z.array(z.schemeValue), output: [z.list([z.string], z.schemeValue)] },
         `(lambda values (cons "enum" values))`,
       ),
 
@@ -98,7 +98,7 @@ export const schemaCapability = EnvCapability.define("arrival/schema", {
       ),
 
       "s/field": symbol.define`s/field: (name type [description]) — an object field entry for s/object`(
-        { input: [z.string, z.value], inputRest: z.string, output: [fieldShape] },
+        { input: [z.string, z.schemeValue], inputRest: z.string, output: [fieldShape] },
         `(lambda (name type . desc)
          (if (null? desc) (list name type) (list name type (car desc))))`,
       ),
@@ -142,7 +142,7 @@ export const schemaCapability = EnvCapability.define("arrival/schema", {
 
       "s/field/_composite":
         symbol.define`s/field/_composite: (name config) or (name desc config) — shared dispatcher for the composite s/field/<type> shortcuts`(
-          { input: [z.string], inputRest: z.value, output: [fieldShape] },
+          { input: [z.string], inputRest: z.schemeValue, output: [fieldShape] },
           `(lambda (name . rest)
          (cond ((= (length rest) 1) (s/field name (car rest)))
                ((= (length rest) 2) (s/field name (cadr rest) (car rest)))
@@ -151,17 +151,17 @@ export const schemaCapability = EnvCapability.define("arrival/schema", {
 
       "s/field/object":
         symbol.define`s/field/object: (s/field name (s/object ...)) / (s/field name description (s/object ...)) shortcut`(
-          { input: z.array(z.value), output: [fieldShape] },
+          { input: z.array(z.schemeValue), output: [fieldShape] },
           `(lambda args (apply s/field/_composite args))`,
         ),
       "s/field/array":
         symbol.define`s/field/array: (s/field name (s/array ...)) / (s/field name description (s/array ...)) shortcut`(
-          { input: z.array(z.value), output: [fieldShape] },
+          { input: z.array(z.schemeValue), output: [fieldShape] },
           `(lambda args (apply s/field/_composite args))`,
         ),
       "s/field/enum":
         symbol.define`s/field/enum: (s/field name (s/enum ...)) / (s/field name description (s/enum ...)) shortcut`(
-          { input: z.array(z.value), output: [fieldShape] },
+          { input: z.array(z.schemeValue), output: [fieldShape] },
           `(lambda args (apply s/field/_composite args))`,
         ),
     };

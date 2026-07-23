@@ -45,7 +45,7 @@ describe("arrivalHandlebarsCapability — .hbs on the vocabulary (default) path"
       deps: [arrivalHandlebarsCapability],
       symbols: (symbol, z) => ({
         "test/other-hbs-resolve": symbol.native`test/other-hbs-resolve: rival .hbs handler`(
-          { input: [z.value, z.value], output: [z.value] },
+          { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
           (() => ({ kind: "value", value: "rival" })) as never,
         ),
       }),

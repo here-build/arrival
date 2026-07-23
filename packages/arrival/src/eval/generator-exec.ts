@@ -389,9 +389,13 @@ function sealedVocabularyChain(vocabulary: Vocabulary): {
  * double duty was the legacy sin, not a feature worth preserving). A caller wanting cross-call
  * continuity passes `scope` (or reuses `runCtx`) explicitly.
  *
- * A capability whose record contains a legacy `{ fn }` entry throws
- * `VocabularyLegacyCapabilityError` (`buildVocabulary`'s own refusal) — this function does not
- * fall back silently; a caller is asserting its capability set is vocabulary-eligible.
+ * A capability whose record contains a legacy `{ fn }` entry cannot reach this function at
+ * all — `SymbolDeclaration`'s own type rejects the shape at the author's keyboard (Phase B,
+ * docs/plans/stage-c-corpse-deletion.md §"bans live at the TYPE level"; the runtime refusal
+ * `buildVocabulary` used to throw, `VocabularyLegacyCapabilityError`, is deleted along with the
+ * check that threw it — compat theater for a shape the type already banned). A caller is
+ * asserting its capability set is vocabulary-eligible; this function does not fall back
+ * silently.
  */
 export async function execState(code: string | SchemeValue, options: ExecOptions = {}): Promise<ExecState> {
   const {

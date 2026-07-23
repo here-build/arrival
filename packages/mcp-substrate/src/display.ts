@@ -137,7 +137,7 @@ function annotateNestedDisplays(form: SchemeValue): SchemeValue {
  */
 export function displaySymbol(): SymbolDeclaration {
   return symbol.native`${DISPLAY_INTERNAL}: identity — records its argument for the host to echo`(
-    { input: [z.value, z.string], output: [z.value] },
+    { input: [z.schemeValue, z.string], output: [z.schemeValue] },
     function (this: CallCtx, value, src) {
       this.runCtx.display?.push({ src: String(src.valueOf()), value });
       return value;

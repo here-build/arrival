@@ -392,21 +392,23 @@ describe("scheme-zod z.procedure — contract-aware marshaling", () => {
 });
 
 // Q1 SPLIT (docs/plans/stage-c-corpse-deletion.md §"z.value retirement campaign"): the ONE
-// `isSchemeValue` predicate now mints under THREE names — `z.schemeValue` (the honest top
-// type, native/contour contracts), `z.dynamic` (the rosetta escape hatch), and the deprecated
-// `z.value` alias (Phase B deletes it) — each its OWN schema instance (distinct object
-// identity), so `z.lookupName` resolves each to its OWN registered name even though all three
-// share byte-identical runtime behavior (same predicate, same identity-passthrough decode).
-describe("scheme-zod z.schemeValue / z.dynamic / z.value — exhaustive predicate, passthrough on both faces", () => {
-  const trio = [
+// `isSchemeValue` predicate mints under TWO names — `z.schemeValue` (the honest top type,
+// native/contour contracts) and `z.dynamic` (the rosetta escape hatch) — each its OWN schema
+// instance (distinct object identity), so `z.lookupName` resolves each to its OWN registered
+// name even though both share byte-identical runtime behavior (same predicate, same
+// identity-passthrough decode). A THIRD name, the deprecated `z.value` alias, existed as a
+// compatibility bridge (own registration, printed legacy `"value"`) until Phase B deleted it —
+// see this file's git history for the retired trio-form pins (the "deprecated z.value alias
+// still functions" tripwire test and the third `trio` row) this describe block used to carry.
+describe("scheme-zod z.schemeValue / z.dynamic — exhaustive predicate, passthrough on both faces", () => {
+  const duo = [
     ["schemeValue", z.schemeValue] as const,
     ["dynamic", z.dynamic] as const,
-    ["value", z.value] as const,
   ];
 
-  // INVARIANT: all three accept every concrete scheme value kind, including
+  // INVARIANT: both accept every concrete scheme value kind, including
   // symbol/dict/vector/bytevector (completeness) — the SAME `isSchemeValue` predicate.
-  it.each(trio)("z.%s accepts every concrete scheme value kind (symbol/dict/vector/bytevector included)", (_name, schema) => {
+  it.each(duo)("z.%s accepts every concrete scheme value kind (symbol/dict/vector/bytevector included)", (_name, schema) => {
     const instances: unknown[] = [
       makeBool(true),
       makeChar("x"),
@@ -428,34 +430,28 @@ describe("scheme-zod z.schemeValue / z.dynamic / z.value — exhaustive predicat
     }
   });
 
-  // INVARIANT: z.decode(schema, x) === x for all three — passthrough only, never transforms.
-  it.each(trio)("z.decode(%s, x) === x — passthrough only, never transforms", (_name, schema) => {
+  // INVARIANT: z.decode(schema, x) === x for both — passthrough only, never transforms.
+  it.each(duo)("z.decode(%s, x) === x — passthrough only, never transforms", (_name, schema) => {
     const sym = makeExact(7);
     expect(z.decode(schema, sym)).toBe(sym);
   });
 
   // LAW (b) — z.schemeValue prints as the honest top type in the harvest, not "unknown"; see
   // type-layer/__tests__/schema-to-ts.test.ts for the printer-level pin (schemeValue →
-  // "SchemeValue", dynamic/value → "unknown").
-  it("z.lookupName distinguishes all three, despite identical runtime predicates", () => {
+  // "SchemeValue", dynamic → "unknown").
+  it("z.lookupName distinguishes both, despite identical runtime predicates", () => {
     expect(z.lookupName(z.schemeValue)).toBe("schemeValue");
     expect(z.lookupName(z.dynamic)).toBe("dynamic");
-    expect(z.lookupName(z.value)).toBe("value");
-    // Distinct schema INSTANCES (object identity) — `value` is NOT a re-export of `dynamic`
-    // (see scheme-zod.ts's own doc on why sharing the object would also share the NAME,
-    // since NAMES is keyed by identity).
+    // Distinct schema INSTANCES (object identity), never the same object under two names.
     expect(z.schemeValue).not.toBe(z.dynamic);
-    expect(z.schemeValue).not.toBe(z.value);
-    expect(z.dynamic).not.toBe(z.value);
   });
 
-  // LAW (d) — the deprecated z.value alias still functions exactly as it always did
-  // (Phase-B-deletes pin: this test is the tripwire that MUST be deleted alongside z.value
-  // itself when Phase B lands).
-  it("the deprecated z.value alias still functions — same predicate, same identity passthrough", () => {
-    const v = makeString("still works");
-    expect(() => z.value.parse(v)).not.toThrow();
-    expect(z.decode(z.value, v)).toBe(v);
+  // PHASE-B-DELETES PIN, FLIPPED: `z.value` (the deprecated compatibility alias — same
+  // predicate, same identity passthrough, its own registration printing legacy "value") is
+  // now GONE from the public surface entirely — asserted at the type level (no runtime
+  // tripwire needed: a reference to `z.value` is a compile error, not a passing test).
+  it("the deprecated z.value alias is GONE — not a property of the scheme-zod namespace", () => {
+    expect((z as Record<string, unknown>).value).toBeUndefined();
   });
 });
 

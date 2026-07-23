@@ -54,7 +54,7 @@ export const arrivalYamlCapability = EnvCapability.define("ext/yaml", {
   deps: [arrivalLoaderCapability],
   symbols: (symbol, z) => ({
     "ext/yaml/resolve": symbol.native`ext/yaml/resolve: resolves .yaml/.yml module contents to a ResolverResult (loader registry verb)`(
-      { input: [z.value, z.value], output: [z.value] },
+      { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
       resolveYaml as never,
     ),
   }),

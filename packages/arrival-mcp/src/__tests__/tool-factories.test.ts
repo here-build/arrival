@@ -39,19 +39,19 @@ describe("tool.view — cacheClass stamping", () => {
     expect((out as AString)["arrival/toJS"]()).toBe("hi");
   });
 
-  it("a view whose output carries the raw z.value escape hatch throws at bake — the landed shape gate fires through this factory too", () => {
-    expect(() => tool.view`bad-view: `({ shape: {}, output: [z.value] }, () => ({}))).toThrow();
+  it("a view whose output carries the raw z.dynamic escape hatch throws at bake — the landed shape gate fires through this factory too", () => {
+    expect(() => tool.view`bad-view: `({ shape: {}, output: [z.dynamic] }, () => ({}))).toThrow();
   });
 });
 
 describe("tool.pure — cacheClass stamping", () => {
-  it('bakes cacheClass: "pure" and defaults output to the [sz.value] escape hatch when omitted', () => {
+  it('bakes cacheClass: "pure" and defaults output to the [sz.dynamic] escape hatch when omitted', () => {
     const def = tool.pure`compute: a pure computation`({ shape: {} }, () => 42);
     expect(def.cacheClass).toBe("pure" satisfies CacheClass);
   });
 
-  it("a pure verb accepts a z.value output with NO shape gate (nothing of it is persisted)", () => {
-    expect(() => tool.pure`raw-pure: `({ shape: {}, output: [z.value] }, () => 1)).not.toThrow();
+  it("a pure verb accepts a z.dynamic output with NO shape gate (nothing of it is persisted)", () => {
+    expect(() => tool.pure`raw-pure: `({ shape: {}, output: [z.dynamic] }, () => 1)).not.toThrow();
   });
 
   it("runs end to end with a declared output codec", async () => {

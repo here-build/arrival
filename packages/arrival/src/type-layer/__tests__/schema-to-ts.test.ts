@@ -40,13 +40,13 @@ describe("printType — native identity primitives (scheme primitive → plain-T
     { name: "z.boolean → boolean", schema: z.boolean, expected: "boolean" },
     { name: "z.char → string", schema: z.char, expected: "string" },
     // Q1 SPLIT (docs/plans/stage-c-corpse-deletion.md §"z.value retirement campaign"): the ONE
-    // `isSchemeValue` predicate now mints under THREE names, printing DIFFERENTLY despite
-    // identical runtime behavior — `schemeValue` is the HONEST TOP TYPE (a real type
-    // reference, `SchemeValue`, not the bare keyword); `dynamic` (the rosetta escape hatch)
-    // and the deprecated `value` alias both print the honest-but-generic `unknown`.
+    // `isSchemeValue` predicate mints under TWO names, printing DIFFERENTLY despite identical
+    // runtime behavior — `schemeValue` is the HONEST TOP TYPE (a real type reference,
+    // `SchemeValue`, not the bare keyword); `dynamic` (the rosetta escape hatch) prints the
+    // honest-but-generic `unknown`. The deprecated `value` alias (a third name, same printer
+    // arm) is GONE — Phase B deleted it, scheme-zod.ts's own registration along with it.
     { name: "z.schemeValue (the honest top type) → SchemeValue", schema: z.schemeValue, expected: "SchemeValue" },
     { name: "z.dynamic (the rosetta escape hatch) → unknown", schema: z.dynamic, expected: "unknown" },
-    { name: "z.value (deprecated alias, representation-blind) → unknown", schema: z.value, expected: "unknown" },
     {
       name: "z.lambda → a callable signature, not degraded to unknown",
       schema: z.lambda,

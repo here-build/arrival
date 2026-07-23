@@ -1,6 +1,6 @@
 // json-schema-to-ts — pinned-mapping tests + an end-to-end diagnose integration proving the
 // harvest actually gives the TS checker something to narrow against (the S2 gap this file
-// closes: bind.ts's SymbolDef harvest is `z.value`-erased to `unknown`, so it produces ZERO
+// closes: bind.ts's SymbolDef harvest is `z.dynamic`-erased to `unknown`, so it produces ZERO
 // diagnostics; this harvest reads the tool's JSON Schema directly).
 //
 // ─────────────────────────────────────────────────────────────────────────────────────────────

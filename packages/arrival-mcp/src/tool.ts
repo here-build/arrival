@@ -37,7 +37,7 @@ export interface ToolMeta {
 //
 // Every verb authored through this bare arm is deliberately UNCLASSIFIED: re-runs on replay,
 // never cache-absorbed. `view` is structurally barred here — this arm hardcodes
-// `output: [sz.value]` (the raw escape hatch), which the bake-time shape gate
+// `output: [sz.dynamic]` (the raw escape hatch), which the bake-time shape gate
 // (`assertCacheClassShape`) rejects for a serializable cache entry. A verb wanting `view`/
 // `pure`/`effect` semantics reaches for the matching `tool.*` arm below instead — unclassified
 // is the CORRECT default here, not a gap this file needs to close.
@@ -64,7 +64,7 @@ function toolFn<S extends z.ZodRawShape, const O extends VectorSpec, M extends R
       {
         input: [],
         inputRest: hasArgs ? shape : {},
-        output: [sz.value],
+        output: [sz.dynamic],
       },
       (argsObj: any) => impl(argsObj),
       {
@@ -82,9 +82,9 @@ function toolFn<S extends z.ZodRawShape, const O extends VectorSpec, M extends R
 
 /** `tool.view`` — a boundary snapshot worth persisting (cross-run cacheable, inheriting the
  *  substrate whole: record-mode overwrite, replay-mode serve, single-flight). DEMANDS a real
- *  output codec vector — unlike bare `tool``, `output` is REQUIRED here, never the `[sz.value]`
+ *  output codec vector — unlike bare `tool``, `output` is REQUIRED here, never the `[sz.dynamic]`
  *  escape hatch, because the `assertCacheClassShape` gate throws at bake on a `view`
- *  whose contract carries a `z.value`/`z.lambda` slot (a cache entry must serialize). */
+ *  whose contract carries a `z.dynamic`/`z.lambda` slot (a cache entry must serialize). */
 function toolView<S extends z.ZodRawShape, const O extends VectorSpec>(
   tpl: TemplateStringsArray,
   ...sub: (string | number)[]
@@ -109,7 +109,7 @@ function toolView<S extends z.ZodRawShape, const O extends VectorSpec>(
 /** `tool.pure`` — deterministic from decoded args (contractually where needed — `infer`'s own
  *  shape is the canon: a provenance SOURCE declaring `cacheClass: "pure"`). Recovery = re-call;
  *  NEVER persisted cross-run. No shape gate (nothing of it is stored) — `output` stays optional
- *  and defaults to the `[sz.value]` escape hatch, same default bare `tool`` hardcodes, for a
+ *  and defaults to the `[sz.dynamic]` escape hatch, same default bare `tool`` hardcodes, for a
  *  verb with nothing narrower to declare. */
 function toolPure<S extends z.ZodRawShape, const O extends VectorSpec>(
   tpl: TemplateStringsArray,
@@ -123,7 +123,7 @@ function toolPure<S extends z.ZodRawShape, const O extends VectorSpec>(
       {
         input: [],
         inputRest: hasArgs ? shape : {},
-        output: contract.output ?? [sz.value],
+        output: contract.output ?? [sz.dynamic],
         cacheClass: "pure",
       },
       (argsObj: any) => impl(argsObj),

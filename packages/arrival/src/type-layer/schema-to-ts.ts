@@ -124,13 +124,13 @@ const IMAGE_BY_NAME: ReadonlyMap<string, NodeBuilder> = new Map<string, NodeBuil
   ["char", stringNode],
   // The Q1 split (docs/plans/stage-c-corpse-deletion.md §"z.value retirement campaign"):
   // "schemeValue" (the honest top type, native/contour contracts) prints the real
-  // `SchemeValue` alias; "dynamic" (the rosetta escape hatch) and the deprecated legacy
-  // "value" alias both print the bare `unknown` keyword — same runtime shape, but
-  // deliberately NOT the named alias (a rosetta `z.dynamic` slot's shape is genuinely
-  // unknowable, not "any scheme value" in the native/contour sense).
+  // `SchemeValue` alias; "dynamic" (the rosetta escape hatch) prints the bare `unknown`
+  // keyword — same runtime shape, but deliberately NOT the named alias (a rosetta
+  // `z.dynamic` slot's shape is genuinely unknowable, not "any scheme value" in the
+  // native/contour sense). The deprecated legacy "value" alias's own print arm is GONE —
+  // Phase B deleted the alias itself, so no schema ever registers under that name again.
   ["schemeValue", schemeValueNode],
   ["dynamic", unknownNode],
-  ["value", unknownNode],
   ["lambda", lambdaNode],
   ["undefinedResult", voidNode], // R7RS's "unspecified" return — the honest TS analog is void
   // "error" has NO entry here on purpose: an unmapped NAME still falls through to the
@@ -290,7 +290,7 @@ function paramList(input: z.ZodTypeAny): string {
     const items = def.items ?? [];
     const params = items.map((item, i) => `${paramName(i)}: ${printType(item)}`);
     // A variadic tail (z.tuple([...], rest)) → a trailing rest param. A ZERO-item tuple+rest
-    // (e.g. `{input: [], inputRest: z.value}`) has no fixed prefix at all — structurally the
+    // (e.g. `{input: [], inputRest: z.dynamic}`) has no fixed prefix at all — structurally the
     // same "purely variadic" shape as the array-ish branch below, so it gets the same "args"
     // name; only a genuine fixed-head-plus-tail earns the "rest" name.
     if (def.rest != null) params.push(`...${items.length === 0 ? "args" : "rest"}: ${printType(def.rest)}[]`);

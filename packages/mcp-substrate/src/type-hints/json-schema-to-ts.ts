@@ -2,7 +2,7 @@
 // tool's declared shape → its full arrow signature. This SUPERSEDES the zod harvest
 // (`@inhuman.tools/arrival/type-layer`'s `assembleHarvestedPrelude(SymbolDef entries)`) for
 // manifold's own type-hint prelude: bind.ts's kwargs contract decodes every property through
-// the scheme-identity codec (`z.value`) — every `SymbolDef.in`/`.out` is `unknown`-typed by
+// the scheme-identity codec (`z.dynamic`) — every `SymbolDef.in`/`.out` is `unknown`-typed by
 // design (bind.ts: "Every property decodes through the scheme-identity codec — we call
 // `schemeToJs` ourselves"), so harvesting from the SymbolDef gives the checker nothing to
 // narrow against (zero diagnostics — the S2 gap this file exists to close). The tool's JSON

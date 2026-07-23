@@ -82,10 +82,11 @@ export interface Activation<C extends ZodMap, R extends Record<string, Resource<
  *  this union — `lower()`, its sole BINDER, is retired. It is still load-bearing OUTSIDE
  *  arrival (`McpEnvCapability`'s whole inline-annotation design is built on it, and the
  *  here.build discovery servers author verbs this way) — but a TS-authored `symbols` record
- *  inside THIS package can no longer declare it; `isSymbolSpec`/`VocabularyLegacyCapabilityError`
- *  (env/vocabulary.ts) keep a RUNTIME refusal check for a capability that reaches the
- *  vocabulary path with this shape anyway (a stale dist build, an untyped JS author), teaching
- *  toward the postponed MCP rework rather than dead code.
+ *  inside THIS package can no longer declare it. Phase B (§"bans live at the TYPE level") went
+ *  further: there is no RUNTIME refusal check left either — `isSymbolSpec`/
+ *  `VocabularyLegacyCapabilityError` (env/vocabulary.ts) are DELETED, compat theater for a
+ *  shape this union's own type already rejects. An untyped author reaching for `{ fn }` gets a
+ *  TS error at the keyboard now, which IS the contract.
  *
  *  Named `SymbolDeclaration`, not `SymbolDef`: the wider authoring shape a `symbols` record
  *  entry can literally BE, vs. `symbol.js`'s narrower `AEntity` (now a CONTRACT-data type only
@@ -117,7 +118,7 @@ export type SymbolDeclaration =
  *  excluded. See that type's own doc. */
 type Fn = (...args: any[]) => unknown;
 
-// `isSymbolSpec`/`isAliasDef`/`isDeclarativeDef`/`contractOf`/`missingRequiresConfig`/
+// `isAliasDef`/`isDeclarativeDef`/`contractOf`/`missingRequiresConfig`/
 // `requiresConfigNeeds`/`requiresConfigReason`/`collectRequiresConfigDegraded`/
 // `mergeDegraded`/`collectPrelude`/`collectSymbolDefines` — the bind-loop helper family
 // `env/vocabulary.ts` (+ `type-layer/prelude.ts`'s `contractOf` read) consumes — relocated to

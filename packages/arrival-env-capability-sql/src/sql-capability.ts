@@ -21,15 +21,15 @@ export const arrivalSqlCapability = EnvCapability.define("arrival/sql", {
   // time — config-independent — so the host `sql` resolver can't be resolved out here. The impl
   // re-reads it from `this.configuration.sql` at REAL DISPATCH instead (the injected
   // `symbol.rosetta`'s typed `this` — `this.invocation` rides the same CallCtx channel it always
-  // did). VARIADIC identity input (`z.array(z.value)`) keeps the legacy ARITY TOLERANCE (params
+  // did). VARIADIC identity input (`z.array(z.dynamic)`) keeps the legacy ARITY TOLERANCE (params
   // may be omitted). Each arg is `schemeToJs`'d explicitly inside the impl — byte-identical to the
   // legacy generic membrane's automatic `schemeToJs` pass every `defineRosetta` arg went through.
   // The verb is a `symbol.rosetta` SOURCE (no `pure` ⇒ mints a fresh provenance point at the
   // membrane crossing, exactly as the former `withContext` rosettas did).
   symbols: (symbol) => ({
     "sql/query": symbol.rosetta`sql/query: executes a sql query via the sql effect resolver`(
-      { input: z.array(z.value), output: [z.value], type: "(label: string, query: string, params?: unknown): unknown" },
-      // Boundary assert: the resolver returns unknown by design (host data); the z.value
+      { input: z.array(z.dynamic), output: [z.dynamic], type: "(label: string, query: string, params?: unknown): unknown" },
+      // Boundary assert: the resolver returns unknown by design (host data); the z.dynamic
       // contract demands SchemeValue — asserted at the verb table, same as arrival-reflect.
       function (...args: unknown[]) {
         const resolve = this.configuration.sql ?? inertSqlResolver;
@@ -38,7 +38,7 @@ export const arrivalSqlCapability = EnvCapability.define("arrival/sql", {
         // the boundary-assert return cast below.
         const [label, query, params] = args as (SchemeValue | undefined)[];
         // Boundary assert: the resolver returns `Promise<unknown>` by design (host data); the
-        // z.value contract demands `MaybePromise<SchemeValue>` — asserted at the return, same
+        // z.dynamic contract demands `MaybePromise<SchemeValue>` — asserted at the return, same
         // as arrival-reflect (kept narrow to the return value so the impl's `this` still
         // contextually infers as `ImplThis<Config, Resources>` off the injected `symbol.rosetta`).
         return resolve(this.invocation, {

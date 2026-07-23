@@ -28,7 +28,7 @@
 // this pack's own dict-* family, so it travels with them rather than sitting in
 // core as a single-consumer helper.
 //
-// CONTRACT JUDGMENT for the whole dict-* family: `d` is `z.value` ON PURPOSE,
+// CONTRACT JUDGMENT for the whole dict-* family: `d` is `z.schemeValue` ON PURPOSE,
 // never `z.dict()` — the %dict-guard TEACHING DOOR is this pack's own
 // errors-as-doors surface (fact + why + action, naming `@` as the origin-agnostic
 // alternative), and a `z.dict()` input contract would preempt it with a bare zod
@@ -79,7 +79,7 @@ export default EnvCapability.define("scheme/polyglot-racket", {
     // %dict-guard — internal: the dict? guard shared by the whole family below.
     "%dict-guard":
       symbol.define`%dict-guard: the dict? teaching guard shared by the dict-* family — returns d when dict-shaped, else throws the fact+why+action door (private helper)`(
-        { input: [z.string, z.value], output: [z.dict()] },
+        { input: [z.string, z.schemeValue], output: [z.dict()] },
         `(lambda (who d)
          (if (dict? d)
              d
@@ -104,7 +104,7 @@ export default EnvCapability.define("scheme/polyglot-racket", {
     // (0-or-1 rest arg — the scheme rest-parameter shape).
     "dict-ref":
       symbol.define`dict-ref: Racket — the value at key in d, or the optional default (nil when absent and no default); keys normalize like @/:key`(
-        { input: [z.value, z.value], inputRest: z.value, output: [z.value] },
+        { input: [z.schemeValue, z.schemeValue], inputRest: z.schemeValue, output: [z.schemeValue] },
         `(lambda (d key . default)
          (%dict-guard "dict-ref" d)
          (if (@? d key)
@@ -114,7 +114,7 @@ export default EnvCapability.define("scheme/polyglot-racket", {
     // dict-has-key? — Racket: #t iff key resolves in d. A dict-guarded alias of @?
     // (whose verdict is the boxed schemeBool — hence a real z.boolean output).
     "dict-has-key?": symbol.define`dict-has-key?: Racket — #t iff key resolves in d; a dict-guarded alias of @?`(
-      { input: [z.value, z.value], output: [z.boolean] },
+      { input: [z.schemeValue, z.schemeValue], output: [z.boolean] },
       `(lambda (d key)
          (%dict-guard "dict-has-key?" d)
          (@? d key))`,
@@ -126,14 +126,14 @@ export default EnvCapability.define("scheme/polyglot-racket", {
     // boxed AString keys `@keys` mints → z.list(z.string).
     "dict-keys":
       symbol.define`dict-keys: Racket — d's own keys as a proper scheme list (the @keys array lifted via vector->list)`(
-        { input: [z.value], output: [z.list(z.string)] },
+        { input: [z.schemeValue], output: [z.list(z.string)] },
         `(lambda (d)
          (%dict-guard "dict-keys" d)
          (vector->list (@keys d)))`,
       ),
     // dict-values — Racket: the value at each of d's keys, in dict-keys order.
     "dict-values": symbol.define`dict-values: Racket — the value at each of d's keys, in dict-keys order`(
-      { input: [z.value], output: [z.list()] },
+      { input: [z.schemeValue], output: [z.list()] },
       `(lambda (d)
          (%dict-guard "dict-values" d)
          (map (lambda (k) (@ d k)) (dict-keys d)))`,
@@ -141,7 +141,7 @@ export default EnvCapability.define("scheme/polyglot-racket", {
     // dict-count — Racket: the number of keys in d. `length` over a proper list
     // always yields an exact count (its own term boxes an AExact) → z.exact.
     "dict-count": symbol.define`dict-count: Racket — the number of keys in d`(
-      { input: [z.value], output: [z.exact] },
+      { input: [z.schemeValue], output: [z.exact] },
       `(lambda (d)
          (%dict-guard "dict-count" d)
          (length (dict-keys d)))`,
@@ -150,7 +150,7 @@ export default EnvCapability.define("scheme/polyglot-racket", {
     // order. The inverse of alist->dict.
     "dict->alist":
       symbol.define`dict->alist: d's entries as an alist of (key . value) pairs, in dict-keys order — the inverse of alist->dict`(
-        { input: [z.value], output: [z.list(z.pair)] },
+        { input: [z.schemeValue], output: [z.list(z.pair)] },
         `(lambda (d)
          (%dict-guard "dict->alist" d)
          (map (lambda (k) (cons k (@ d k))) (dict-keys d)))`,
@@ -175,7 +175,7 @@ export default EnvCapability.define("scheme/polyglot-racket", {
     // consumed and no output is ever produced — a fixed contract would be fiction.
     "dict-set":
       symbol.define`dict-set: a teaching DOOR — dicts are immutable here; build a NEW dict via assoc-in and bind it`(
-        { input: [], inputRest: z.value, output: [z.value] },
+        { input: [], inputRest: z.schemeValue, output: [z.schemeValue] },
         `(lambda _args
          (error (str "dict-set is not provided — dicts are immutable here, and a 'set' "
                      "verb implies in-place mutation, which never happens. Build a NEW "
@@ -184,7 +184,7 @@ export default EnvCapability.define("scheme/polyglot-racket", {
       ),
     "dict-update":
       symbol.define`dict-update: a teaching DOOR — dicts are immutable here; build a NEW dict via update-in and bind it`(
-        { input: [], inputRest: z.value, output: [z.value] },
+        { input: [], inputRest: z.schemeValue, output: [z.schemeValue] },
         `(lambda _args
          (error (str "dict-update is not provided — dicts are immutable here, and an "
                      "'update' verb implies in-place mutation, which never happens. "
@@ -199,10 +199,10 @@ export default EnvCapability.define("scheme/polyglot-racket", {
     // assoc-ref — Guile/Emacs Lisp: read by key, same polyglot-idiom principle as
     // the threading family — a model reaches for whichever accessor name it
     // already knows) — an alias of dict-ref, not a second read convention. Mirrors
-    // dict-ref's contract exactly (including the z.value door-preserving d).
+    // dict-ref's contract exactly (including the z.schemeValue door-preserving d).
     "assoc-ref":
       symbol.define`assoc-ref: Guile/Emacs Lisp — read by key with an optional default; an alias of dict-ref, not a second read convention`(
-        { input: [z.value, z.value], inputRest: z.value, output: [z.value] },
+        { input: [z.schemeValue, z.schemeValue], inputRest: z.schemeValue, output: [z.schemeValue] },
         `(lambda (d key . default)
          (apply dict-ref (cons d (cons key default))))`,
       ),

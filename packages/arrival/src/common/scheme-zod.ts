@@ -49,8 +49,10 @@ import type { AList, AListAlike, SchemeValue } from "../values/types.js";
  * Scheme (`AExact`) and JS (`bigint`) — to highlight they aren't tied to either ontology.
  *
  * `value` split in two (Q1, docs/plans/stage-c-corpse-deletion.md §"z.value RETIRES"): the SAME
- * `isSchemeValue` predicate now mints under TWO honest names, plus a deprecated compatibility
- * alias —
+ * `isSchemeValue` predicate mints under TWO honest names. (A THIRD, deprecated compatibility
+ * alias — literally named `value`, printing legacy `"value"` — bridged downstream callers
+ * during the retirement campaign; Phase B deleted it once the sweep finished. New code never
+ * sees it.)
  *
  * | name          | role                                            | rosetta?                  |
  * |---------------|--------------------------------------------------|---------------------------|
@@ -64,11 +66,6 @@ import type { AList, AListAlike, SchemeValue } from "../values/types.js";
  * |               | be known statically (remote JSON-schema params,  |                           |
  * |               | dynamic HTTP/SQL payloads, echo verbs). Prints   |                           |
  * |               | `unknown` (honest — it really is unknown here).  |                           |
- * | `value`       | DEPRECATED alias of `dynamic`'s runtime behavior,| ✅ (unchanged, legacy)    |
- * |               | own registration (prints legacy `"value"`, never |                           |
- * |               | the new names) — Phase B deletes it. Migrate to  |                           |
- * |               | `schemeValue` (native contracts) or `dynamic`    |                           |
- * |               | (rosetta) or a real codec.                       |                           |
  *
  * | primitive     | scheme value         | JS image (codec side)     | rosetta-usable?         |
  * |---------------|----------------------|---------------------------|-------------------------|
@@ -179,12 +176,11 @@ export function lookupCollectionElement(
 }
 
 // ---------------------------------------------------------------------------
-// :: schemeValue / dynamic / value — the untransforming passthrough, split in two (Q1) plus
-//    a deprecated compatibility alias (defined early: `list`/`vector` default their element
-//    to `schemeValue`)
+// :: schemeValue / dynamic — the untransforming passthrough, split in two (Q1); defined
+//    early: `list`/`vector` default their element to `schemeValue`
 // ---------------------------------------------------------------------------
 
-// All three stay a PREDICATE, never a union: a union makes `z.decode(schema, x)` match a
+// Both stay a PREDICATE, never a union: a union makes `z.decode(schema, x)` match a
 // branch and TRANSFORM x (collapse AExact → bare bigint) — wrong for a slot whose whole
 // meaning is "hand back this scheme value untouched" (identity on both faces). Predicate
 // covers every concrete `A*` kind via `instanceof AValue`
@@ -247,16 +243,6 @@ export const schemeValue = schemeValueSchema as ContourOnly<typeof schemeValueSc
 // dynamic-specific mechanisms. Prints `unknown` — honest, it really is unknown here.
 const dynamicSchema = named("dynamic", z.custom<SchemeValue>(isSchemeValue));
 export const dynamic = dynamicSchema as CrossingOnly<typeof dynamicSchema>;
-
-/** @deprecated Phase B deletes this alias (docs/plans/stage-c-corpse-deletion.md
- *  §"z.value retirement campaign"). Same runtime behavior `dynamic` has (identity predicate,
- *  no transform) — kept ONLY so a downstream package not yet migrated off `z.value` keeps
- *  compiling — but registered under ITS OWN name so it keeps printing legacy `"value"`
- *  (NOT `SchemeValue`, NOT `unknown`): a fresh `z.custom` instance, not a re-export of
- *  `dynamic`, because `NAMES` is keyed by object identity — sharing the object would also
- *  share (and overwrite) the registered name. New code: `z.schemeValue` (native contracts) or
- *  `z.dynamic` (rosetta) or a real codec — never this. */
-export const value = named("value", z.custom<SchemeValue>(isSchemeValue));
 
 // ---------------------------------------------------------------------------
 // :: Marshal ctx — what a codec mints under when no boxed operand exists

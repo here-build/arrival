@@ -15,17 +15,13 @@ import type { DegradedCapability, DegradedNeed } from "./degradation.js";
 import { AKernelKeyword } from "../values/AKernelKeyword.js";
 import { ANativeProcedure, ARosettaProcedure, DoorProcedure } from "../values/primitives/ACallable.js";
 
-type Fn = (...args: any[]) => unknown;
-
-// ── LEGACY-form RUNTIME refusal guard (Stage C Cut 4): `{ fn }` is no longer a
-// `SymbolDeclaration` union member (see capability.ts's own doc) — `env/vocabulary.ts`'s
-// `buildVocabulary` still calls this against a runtime-cast `SymbolDeclaration` record to
-// refuse a legacy-shaped capability with `VocabularyLegacyCapabilityError` instead of
-// silently mis-binding it (a stale-dist or untyped-JS producer can still hand one in, past
-// the type system). Structural, not `SymbolDeclaration`-narrowing anymore — the predicate
-// type below is deliberately wider than the (now `{fn}`-free) parameter type. */
-export const isSymbolSpec = (m: SymbolDeclaration): m is SymbolDeclaration & { fn: Fn } =>
-  typeof m === "object" && m !== null && "fn" in m;
+// ── LEGACY-form RUNTIME refusal guard: RETIRED (V ruling, docs/plans/
+// stage-c-corpse-deletion.md §"bans live at the TYPE level" — the {fn} refusal was compat
+// theater for a shape SymbolDeclaration's type already rejects; see vocabulary.ts's own
+// header for the full argument). `isSymbolSpec`/`VocabularyLegacyCapabilityError` are gone —
+// `{ fn }` is no longer a `SymbolDeclaration` union member (see capability.ts's own doc), so
+// there is nothing left to structurally detect at runtime; an untyped author now gets a TS
+// error at the author's keyboard, which IS the contract.
 
 /** `symbol.alias`'s marker — see `alias.ts`'s header for the full dissolution-semantics
  *  contract. Checked BEFORE every other dispatch in the apply loop (its `kind` — `"alias"` —

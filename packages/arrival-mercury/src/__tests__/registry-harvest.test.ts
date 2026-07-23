@@ -173,11 +173,11 @@ describe("row shape and precedence", () => {
     const rule: EmitRule = { call: (args) => args[0] };
     const cap = EnvCapability.define("test/fields", {
       symbols: (sym, z) => ({
-        plain: sym.native`plain: identity`({ input: [z.value], output: [z.value] }, (x) => x),
+        plain: sym.native`plain: identity`({ input: [z.schemeValue], output: [z.schemeValue] }, (x) => x),
         ruled: sym.native`ruled: identity with a rule`(
           {
-            input: [z.value],
-            output: [z.value],
+            input: [z.schemeValue],
+            output: [z.schemeValue],
             emit: rule,
             refPolicy: "eta",
             narrows: { witness: "plain" },

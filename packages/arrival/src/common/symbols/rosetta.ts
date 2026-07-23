@@ -55,12 +55,13 @@ import {
  *  burst-bypass hazard): a callable marshaled from a `z.dynamic` slot AFTER the impl's first
  *  `await` — past `withRegionScope`'s synchronous save/restore — binds `DETACHED_SCOPE`/
  *  `CONSTANT_CTX` and bypasses the effect burst. So this gate never lets one land there in the
- *  first place. Checked against `"dynamic"` only, not the deprecated `"value"` alias — a
- *  not-yet-migrated downstream `z.value` slot is untouched by this door (Phase B's own concern);
- *  `z.schemeValue` never reaches here at all — banned from a rosetta contract's slot types
- *  entirely, at COMPILE time (`CrossingContract`, `_bake.ts` — the type never round-trips the
- *  argument to a live call in the first place). This RUNTIME door guards what a type cannot see:
- *  a callable VALUE landing in a legitimate `z.dynamic`/deprecated-`z.value` slot at runtime. */
+ *  first place. Checked against `"dynamic"` only — the deprecated `"value"` alias this door used
+ *  to also need to stay agnostic of is GONE (Phase B deleted it; every rosetta declaration is
+ *  `z.dynamic` or a real codec now). `z.schemeValue` never reaches here at all — banned from a
+ *  rosetta contract's slot types entirely, at COMPILE time (`CrossingContract`, `_bake.ts` — the
+ *  type never round-trips the argument to a live call in the first place). This RUNTIME door
+ *  guards what a type cannot see: a callable VALUE landing in a legitimate `z.dynamic` slot at
+ *  runtime. */
 function assertNotBareCallableInDynamicSlot(symbolName: string, value: unknown, position: string): void {
   if (typeof value === "function" || is_callable_value(value)) {
     throw new Error(
