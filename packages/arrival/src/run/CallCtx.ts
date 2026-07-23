@@ -81,6 +81,54 @@ export function associateCapability(value: object, capability: object, readsReso
   capabilityByValue.set(value, { capability, readsResources });
 }
 
+/** Read `value`'s owning capability, if any — the run-reader door's DISCOVERY-side query (V's
+ *  DI ruling, docs/plans/rework-zone-guidelines.md §"run-reader door": "discovery takes run
+ *  context, extracts each symbol whose owning capability is an mcp capability, renders it in
+ *  prelude"). A plain lookup mirroring {@link associateCapability}'s own write: `undefined` for
+ *  anything never bound through the bind loop (a lambda, a root-scope `define`, a bare JS value)
+ *  — a query, never an assertion, so it never throws. Exported via `/host-internals` for the
+ *  packages composing catalogs/preludes over a run (arrival-mcp's DiscoveryTool and kin);
+ *  {@link symbolsOwnedBy}, below, is the consumer-shaped composition most of them actually
+ *  want. */
+export function ownerOf(value: unknown): object | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  return capabilityByValue.get(value)?.capability;
+}
+
+/** The consumer-shaped run-reader query (same DI ruling as {@link ownerOf}): every vocabulary
+ *  NAME this run resolves whose bound value is owned by `capability`. Walks
+ *  `runCtx.vocabulary` — the run's own frozen name→value artifact (`RunContext.vocabulary`,
+ *  filled once at mint from `env/vocabulary.ts`'s `Vocabulary.map`, kept `unknown` here so this
+ *  leaf file never imports the env layer) — keeping only the entries {@link ownerOf} attributes
+ *  to `capability`. Plain data out (a fresh `ReadonlyMap`, not a live view over the vocabulary).
+ *
+ *  A run with no vocabulary handle at all (`CONSTANT_CTX`, the internal live-frame family — see
+ *  `RunContext.vocabulary`'s own doc) answers the empty map — the same "facility off" posture a
+ *  resource-less/configuration-less capability already has elsewhere on such a run.
+ *
+ *  Two capabilities in the SAME run never collide: `associateCapability` throws at bind time on
+ *  a re-attributed value, so a name's bound value has exactly one owner — the other capability's
+ *  verbs, and the base roster's, are silently excluded here, never double-counted. A root-scope
+ *  `(define ...)` lands in the run's LEXICAL `scope`, never in `vocabulary` (Stage B1's own
+ *  split) — such a value is never even a candidate here, let alone falsely attributed to an
+ *  owner.
+ *
+ *  Reused across REPL passes for free: the SAME `runCtx` (or any `runCtx` sharing the same
+ *  memoized `Vocabulary` tuple, `env/vocabulary.ts`) always answers the identical map, since
+ *  `vocabulary` never mutates after mint.
+ *
+ *  Contract/introspection data (a symbol's `.contract`) is a DIFFERENT door — `contractOf`
+ *  (`/lsp-internals`) — deliberately not folded in here: this door answers "who owns this
+ *  name", not "what does it mean". */
+export function symbolsOwnedBy(runCtx: RunContext, capability: object): ReadonlyMap<string, unknown> {
+  const owned = new Map<string, unknown>();
+  if (runCtx.vocabulary === undefined) return owned;
+  for (const [name, value] of runCtx.vocabulary) {
+    if (ownerOf(value) === capability) owned.set(name, value);
+  }
+  return owned;
+}
+
 /** Build the `this` every callable body (native/rosetta/tagless/tagless-guard/sequence impl,
  *  or any raw fn bound straight into env) is invoked with. The ONE construction site — every
  *  dispatch site calls this instead of hand-building the shape. `runCtx` has NO default (the

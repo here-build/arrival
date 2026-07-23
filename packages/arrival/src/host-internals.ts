@@ -22,6 +22,15 @@ export { is_callable_value } from "./values/value-guards.js";
 export { CONSTANT_CTX, type HeapMeter } from "./run/RunContext.js";
 export { type EvalContext, type StackFrame } from "./eval/evaluator.js";
 
+// THE RUN-READER DOOR (V's DI ruling, docs/plans/rework-zone-guidelines.md §"run-reader door":
+// "discovery takes run context, extracts each symbol whose owning capability is an mcp
+// capability, renders it in prelude") — the cross-cutting prerequisite for the MCP DI rework.
+// `ownerOf` answers "who owns this minted symbol value"; `symbolsOwnedBy` composes it against a
+// run's own vocabulary into the consumer-shaped catalog/prelude query. Contract/introspection
+// data for a symbol still comes from `contractOf` (`/lsp-internals`) — this door is ownership
+// only.
+export { ownerOf, symbolsOwnedBy } from "./run/CallCtx.js";
+
 // The first-class run cache: a run's durable twin is (program, cache); `exec(src, { cache })`
 // threads it onto the run's RunContext, and the baked rosetta membrane records/replays through it.
 export { MemoryRunCache, canonicalJson, runCacheKey, type RunCache, type RunCacheEntry } from "./run/run-cache.js";
