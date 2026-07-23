@@ -28,7 +28,7 @@
 
 import { describe, expectTypeOf, test } from "vitest";
 import * as z from "../../../common/scheme-zod.js";
-import type { DecodedArgs, DecodedArgsWithRest, DecodedReturn } from "../../../common/symbol.js";
+import type { DecodedArgs, DecodedArgsWithRest, DecodedReturn } from "../../../common/symbols/_bake.js";
 import type { ANumeric } from "../../../values/numbers.js";
 
 describe("numeric Contract precision — representative NumSpec shapes decode precisely", () => {

@@ -20,13 +20,9 @@ import { describe, expect, it } from "vitest";
 import { z as hostZod } from "zod";
 
 import * as z from "../../common/scheme-zod.js";
-import {
-  resolveMetadata,
-  staticMetadata,
-  symbol,
-  type NativeSymbolDef,
-  type RosettaSymbolDef,
-} from "../../common/symbol.js";
+import { symbol } from "../../common/symbol.js";
+import { resolveMetadata, staticMetadata } from "../../common/symbols/metadata.js";
+import type { NativeSymbolDef, RosettaSymbolDef } from "../../common/symbols/_bake.js";
 import type { Activation } from "../../common/capability.js";
 
 const zz = { string: z.string, number: z.number };

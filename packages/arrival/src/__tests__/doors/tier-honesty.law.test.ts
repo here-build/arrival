@@ -25,7 +25,8 @@ import { replayGraphEgress, ReplayScopeError } from "../../provenance/replay.js"
 import { answerQuery, ReplayMemo, type ReplayMemoKey } from "../../provenance/replay-memo.js";
 import { recordRun } from "../provenance/q16-harness.js";
 import type { EvidenceTier } from "../../provenance/store/index.js";
-import { PayloadStoreFake, PayloadTierMachine } from "../../provenance/store/index.js";
+import { PayloadStoreFake } from "../../provenance/store/fakes.js";
+import { PayloadTierMachine } from "../../provenance/store/tiering.js";
 
 // A single-source, straight-line wire — no fan/mux needed to exercise the
 // envelope's tier composition. Shared by every Q17 row below.

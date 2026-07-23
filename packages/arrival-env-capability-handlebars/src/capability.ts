@@ -9,7 +9,7 @@
  * Compiler: Contract.emit → RuntimeRef; RUNTIME_MANIFEST maps those symbols to
  * this package's `/runtime` subpath (the mercury reference example).
  */
-import { EnvCapability, jsToScheme, parseGenerator as parse, schemeToJsUntyped } from "@inhuman.tools/arrival";
+import { EnvCapability, jsToScheme, parse, schemeToJsUntyped } from "@inhuman.tools/arrival";
 import { Call, type EmitRule, type R } from "@inhuman.tools/arrival/emit";
 import { arrivalLoaderCapability } from "@inhuman.tools/arrival/loader";
 

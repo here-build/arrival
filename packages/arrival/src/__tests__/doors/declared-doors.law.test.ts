@@ -32,7 +32,7 @@ import { describe, expect, it } from "vitest";
 import { exec } from "../../index.js";
 import { PurityError } from "../../errors.js";
 import { BASE_PACKS } from "../../env/base-packs.js";
-import { contractOf } from "../../common/capability.js";
+import { contractOf } from "../../common/capability-internals.js";
 
 /** Every `symbol.notImplemented` door declared by a BASE_PACKS capability, as
  *  {name, reason, pack}. Builder-form `symbols`

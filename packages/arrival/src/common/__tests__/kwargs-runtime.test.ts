@@ -28,7 +28,8 @@ import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
-import { symbol, testCallCtx, type RosettaSymbolDef } from "../symbol.js";
+import { symbol, testCallCtx } from "../symbol.js";
+import { type RosettaSymbolDef } from "../symbols/_bake.js";
 
 /** Test-only cast — see symbol.test.ts's own copy of this helper for the full rationale
  *  (Stage A2: `symbol.rosetta` mints the ARosettaProcedure directly; `.run` rides `.contract`). */

@@ -10,7 +10,7 @@
 
 import { CONSTANT_CTX } from "@inhuman.tools/arrival";
 import { symbol, testCallCtx, type CacheClass } from "@inhuman.tools/arrival/symbol";
-import * as z from "@inhuman.tools/arrival/scheme-zod";
+import { z } from "@inhuman.tools/arrival";
 import { AInexact } from "@inhuman.tools/arrival";
 import { AString } from "@inhuman.tools/arrival";
 import { ASymbol } from "@inhuman.tools/arrival";

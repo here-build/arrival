@@ -61,7 +61,7 @@ import { buildVocabulary } from "../../env/vocabulary.js";
 import { missingOptionalKeys } from "../../common/degradation.js";
 import { DoorProcedure } from "../../values/primitives/ACallable.js";
 import { PurityError } from "../../errors.js";
-import { nil } from "../../index.js";
+import { nil } from "../../values/primitives/ANil.js";
 import { bindValue, ResolvingAmbient, mintResolvingFrame } from "../../env/AmbientRuntime.js";
 import { execInFrame } from "../../eval/generator-exec.js";
 

@@ -16,19 +16,22 @@
 
 export { EvalTrace, Invocation, NodeRecord, DEFAULT_TRACE_CAP, type InvocationState } from "./trace.js";
 export { snapshotTrace, type PlainTrace, type PlainInv } from "./trace-snapshot.js";
-export { headOf, scopeId, userCallSite, DOTPROMPT_SOURCE_MARKER, type ScopedParented } from "./scope-id.js";
+// `userCallSite`/`DOTPROMPT_SOURCE_MARKER`/`ScopedParented` unexported (export restructure,
+// docs/plans/stage-c-corpse-deletion.md §"Export restructure") — module-internal to
+// arrival-provenance's own analysis stack, never a sibling-package read; `headOf`/`scopeId`
+// stay (arrival-provenance's `/analysis` entry re-exports them).
+export { headOf, scopeId } from "./scope-id.js";
 
 // ── Primitive analysis layer (arrival-provenance's default entry) ──
 export { extractDefines, type DefineInfo, type SourceLocation } from "../reader/extract-defines.js";
+// `STRUCTURAL_FORMS`/`staticRecursiveHeads`/`staticLoopBodyScopes` unexported — internal to the
+// forest builder's own recursion-detection pass, never read by a sibling package.
 export {
   traceToForest,
   type ForestOptions,
   type CandidateBox,
   type BoxType,
   type Decision,
-  STRUCTURAL_FORMS,
-  staticRecursiveHeads,
-  staticLoopBodyScopes,
 } from "./trace-to-forest.js";
 export { traceToRegions, type Region, type RegionGraph } from "./trace-to-regions.js";
 export { TraceRegionFold } from "./trace-region-fold.js";
@@ -79,27 +82,33 @@ export {
   resolveReadIds,
   type Slice,
 } from "./slice.js";
-export { buildUneval, unevalWire, type Uneval, type UnevalContainer, type WireEmission } from "./uneval.js";
-export * from "./wireframe/index.js";
+// `unevalWire`/`WireEmission` unexported — the wireframe builder's own internal emission
+// leaves (export restructure, docs/plans/stage-c-corpse-deletion.md §"Export restructure");
+// `buildUneval`/`Uneval`/`UnevalContainer` stay (arrival-provenance's `/analysis` entry
+// re-exports them).
+export { buildUneval, type Uneval, type UnevalContainer } from "./uneval.js";
 export {
-  classifyProgramPrelude,
-  assertPreludeEligible,
-  buildPreludeSource,
-  reachesPort,
-  type PreludeMembership,
-} from "./prelude.js";
-export { hermeticEnv, type HermeticEnv, type IngressBindings } from "./hermetic-env.js";
+  type DefineTemplate,
+  type EmittedWire,
+  type Wire,
+  type WireConsumer,
+  type WireFact,
+  type WireParam,
+  type WireSlot,
+  type WireframeGraph,
+  type WireframeNode,
+  type WireframeProgram,
+} from "./wireframe/types.js";
+export { buildWireframe, type WireframeBuildOptions } from "./wireframe/builder.js";
+// `classifyProgramPrelude`/`assertPreludeEligible`/`buildPreludeSource`/`reachesPort`/
+// `PreludeMembership` (prelude-analysis) and `hermeticEnv`/`HermeticEnv`/`IngressBindings`
+// unexported — the replay/hermetic-env machinery's own internals, never a sibling-package
+// read (`hermeticApply`/`HermeticApplyOptions`, gamma.ts's own public verb, stays).
 export { hermeticApply, type HermeticApplyOptions } from "./gamma.js";
 
-// ── Replay drivers — the "every crossing answered from the recorded payload stream" claim,
-// exported as real API (a `src/…` path is never customer surface).
-// `replayProgramWithPlayback` is the whole-program face: re-run under a hermetic env whose
-// only membrane ops are playback sources, silent region, queue underflow = teaching door
-// (never a live re-fetch).
-export {
-  replayProgramWithPlayback,
-  ReplayScopeError,
-  type PlaybackReplayOptions,
-  type ReplayedValue,
-} from "./replay.js";
-export type { Payload } from "./store/interfaces.js";
+// `replayProgramWithPlayback`/`PlaybackReplayOptions`/`ReplayedValue` unexported — the
+// whole-program replay driver is arrival's own replay-testing machinery, never a sibling-
+// package read (nothing outside this package constructs a playback replay). `ReplayScopeError`
+// stays off this list too (thrown only from inside that same driver). The stray `Payload`
+// re-export (store/interfaces.js) is dropped too — `/provenance/store` is the one sanctioned
+// door to the store's types now.

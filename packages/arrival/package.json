@@ -30,25 +30,25 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./oracle": {
-      "types": "./dist/oracle/index.d.ts",
-      "import": "./dist/oracle/index.js"
+    "./reflect-internals": {
+      "types": "./dist/reflect-internals.d.ts",
+      "default": "./dist/reflect-internals.js"
     },
-    "./env": {
-      "types": "./dist/env/index.d.ts",
-      "default": "./dist/env/index.js"
+    "./lsp-internals": {
+      "types": "./dist/lsp-internals.d.ts",
+      "default": "./dist/lsp-internals.js"
+    },
+    "./host-internals": {
+      "types": "./dist/host-internals.d.ts",
+      "default": "./dist/host-internals.js"
     },
     "./capability": {
       "types": "./dist/common/capability.d.ts",
       "default": "./dist/common/capability.js"
     },
     "./resources": {
-      "types": "./dist/common/resources.d.ts",
-      "default": "./dist/common/resources.js"
-    },
-    "./scheme-env": {
-      "types": "./dist/common/scheme-env.d.ts",
-      "default": "./dist/common/scheme-env.js"
+      "types": "./dist/common/resources-surface.d.ts",
+      "default": "./dist/common/resources-surface.js"
     },
     "./symbol": {
       "types": "./dist/common/symbol.d.ts",
@@ -58,17 +58,13 @@
       "types": "./dist/emit/index.d.ts",
       "default": "./dist/emit/index.js"
     },
-    "./scheme-zod": {
-      "types": "./dist/common/scheme-zod.d.ts",
-      "default": "./dist/common/scheme-zod.js"
-    },
     "./schema-tag": {
       "types": "./dist/common/schema-tag.d.ts",
       "default": "./dist/common/schema-tag.js"
     },
     "./attestation": {
-      "types": "./dist/values/attestation.d.ts",
-      "default": "./dist/values/attestation.js"
+      "types": "./dist/values/attestation-surface.d.ts",
+      "default": "./dist/values/attestation-surface.js"
     },
     "./provenance": {
       "types": "./dist/provenance/index.d.ts",
@@ -85,10 +81,6 @@
     "./loader": {
       "types": "./dist/loader/index.d.ts",
       "default": "./dist/loader/index.js"
-    },
-    "./srfi": {
-      "types": "./dist/env/srfi/index.d.ts",
-      "default": "./dist/env/srfi/index.js"
     },
     "./overridable": {
       "types": "./dist/env/overridable/overridable.d.ts",

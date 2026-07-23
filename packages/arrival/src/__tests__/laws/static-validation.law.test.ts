@@ -59,7 +59,7 @@ import { CompiledResolutionChain } from "../../eval/CompiledResolutionChain.js";
 import { DoorProcedure } from "../../values/primitives/ACallable.js";
 import { AKernelKeyword } from "../../values/AKernelKeyword.js";
 import { Macro } from "../../eval/Macro.js";
-import { nil } from "../../index.js";
+import { nil } from "../../values/primitives/ANil.js";
 import { StaticValidationError, validateProgram } from "../../static-validation/validate-program.js";
 import { vocabularyFromChain } from "../../static-validation/vocabulary.js";
 import type { AmbientValue } from "../../env/AmbientRuntime.js";

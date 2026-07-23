@@ -49,8 +49,8 @@
 import { z } from "zod";
 import invariant from "tiny-invariant";
 
+import { EnvCapability, type SymbolDeclaration } from "../common/capability.js";
 import {
-  EnvCapability,
   contractOf,
   isAliasDef,
   isDeclarativeDef,
@@ -60,12 +60,11 @@ import {
   requiresConfigReason,
   collectRequiresConfigDegraded,
   mergeDegraded,
-  type SymbolDeclaration,
-} from "../common/capability.js";
+} from "../common/capability-internals.js";
 import { buildDegradationInfo, collectDegraded, type DegradedCapability } from "../common/degradation.js";
 import { bindCapabilityDefines } from "../common/symbols/define-bake.js";
+import type { AEntity } from "../common/symbol.js";
 import type {
-  AEntity,
   DefineSymbolDef,
   DefineSyntaxSymbolDef,
   NativeSymbolDef,
@@ -73,7 +72,7 @@ import type {
   SequenceSymbolDef,
   TaglessGuardSymbolDef,
   TaglessSymbolDef,
-} from "../common/symbol.js";
+} from "../common/symbols/_bake.js";
 import type { AliasSymbolDef } from "../common/symbols/alias.js";
 import type { PreludeBindTarget } from "../common/kernel.js";
 import { linearizeDag } from "../common/dag-linearize.js";

@@ -17,7 +17,7 @@
 
 import { symbol } from "@inhuman.tools/arrival";
 import { port, type Resource } from "@inhuman.tools/arrival/resources";
-import * as sz from "@inhuman.tools/arrival/scheme-zod";
+import { z as sz } from "@inhuman.tools/arrival";
 import { createInMemorySessionStore } from "@inhuman.tools/mcp-substrate";
 import { describe, expect, it, vi } from "vitest";
 import * as z from "zod";

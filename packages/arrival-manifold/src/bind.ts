@@ -12,12 +12,11 @@
 // a call's `:key value` pairs into an object and decodes every property through the
 // scheme-identity codec (`z.value`). No per-type dispatch.
 
-import { jsToScheme, LexicalScope, schemeToJs, type SchemeValue } from "@inhuman.tools/arrival";
+import { jsToScheme, LexicalScope, schemeToJs, z, type SchemeValue } from "@inhuman.tools/arrival";
 import { freshIfSingleton, isAttested } from "@inhuman.tools/arrival/attestation";
 import { EnvCapability, type SymbolDeclaration } from "@inhuman.tools/arrival/capability";
 import { assembleAmbient, type AssembledAmbient } from "@inhuman.tools/arrival/env";
 import { EvalTrace } from "@inhuman.tools/arrival/provenance";
-import * as z from "@inhuman.tools/arrival/scheme-zod";
 import { symbol, type CallCtx } from "@inhuman.tools/arrival/symbol";
 import {
   normalizeSymbolName,

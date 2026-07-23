@@ -21,7 +21,8 @@
 
 import { describe, expectTypeOf, test } from "vitest";
 import * as z from "../../../common/scheme-zod.js";
-import { symbol, type DecodedArgs } from "../../../common/symbol.js";
+import { symbol } from "../../../common/symbol.js";
+import { type DecodedArgs } from "../../../common/symbols/_bake.js";
 import type { ANumeric } from "../../../values/numbers.js";
 import type { ABytevector } from "../../../values/primitives/ABytevector.js";
 

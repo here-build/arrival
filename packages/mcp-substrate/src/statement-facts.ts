@@ -10,7 +10,8 @@
 // — a reader-minted `{...}` literal is a real ADict carrying `literalForms`, the exact twin of
 // AVector's `evalElements` + payload-of-forms. AJSObject (the borrowed-foreign-JS wrapper) never
 // appears in a parsed-but-unevaluated statement AST, so it has no business in this walk.
-import { ADict, ANil, APair, ASymbol, AVector, type SchemeValue } from "@inhuman.tools/arrival";
+import { ANil, type SchemeValue } from "@inhuman.tools/arrival";
+import { ADict, APair, ASymbol, AVector } from "@inhuman.tools/arrival/reflect-internals";
 
 export interface StatementFacts {
   /** True iff this statement's own top-level form is `(define ...)` — a bare SHAPE check.

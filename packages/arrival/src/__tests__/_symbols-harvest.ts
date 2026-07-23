@@ -17,7 +17,8 @@
 // An entry with NO contract to show (`symbol.alias`'s unresolved marker, the legacy
 // `{ fn }` arm, `symbol.value`'s raw boxed data) is silently OMITTED from the returned
 // record — exactly like `eval/exec-phases.ts`'s `rosterEntries` already treats those.
-import { contractOf, type SymbolDeclaration } from "../common/capability.js";
+import type { SymbolDeclaration } from "../common/capability.js";
+import { contractOf } from "../common/capability-internals.js";
 import type { AEntity } from "../common/symbol.js";
 
 export function harvestContracts(symbols: Record<string, SymbolDeclaration> | unknown): Record<string, AEntity> {

@@ -31,7 +31,8 @@
 // only here, at the type level.
 import { describe, expectTypeOf, test } from "vitest";
 import * as z from "../../../common/scheme-zod.js";
-import { type DecodedArgs, type DecodedArgsWithRest, type DecodedReturn, symbol } from "../../../common/symbol.js";
+import { symbol } from "../../../common/symbol.js";
+import { type DecodedArgs, type DecodedArgsWithRest, type DecodedReturn } from "../../../common/symbols/_bake.js";
 import type { AVector } from "../../../values/primitives/AVector.js";
 import type { AExact } from "../../../values/primitives/AExact.js";
 import type { AInexact } from "../../../values/primitives/AInexact.js";

@@ -5,7 +5,8 @@
 // this fixes: `define/overridable`'s macro read as unresolved in studio's live editor
 // because the caller named two capabilities' preludes by hand instead of walking the set).
 import { describe, expect, it } from "vitest";
-import { EnvCapability, collectPrelude } from "../capability.js";
+import { EnvCapability } from "../capability.js";
+import { collectPrelude } from "../capability-internals.js";
 
 describe("collectPrelude", () => {
   // INVARIANT: returns a single capability's own prelude verbatim.

@@ -9,17 +9,16 @@
 // teaching state survives world rebuilds (e.g. tools/listChanged). It is env-lifecycle-agnostic
 // and model-agnostic.
 
-import { createDisplaySink,
-  createNoteSink,
-  APair,
-  AVoid,
+import {
   execState,
   parse,
-  tokenize,
   type EvalTap,
   type LexicalScope,
   type SchemeValue,
 } from "@inhuman.tools/arrival";
+import { createDisplaySink, createNoteSink } from "@inhuman.tools/arrival/host-internals";
+import { tokenize } from "@inhuman.tools/arrival/lsp-internals";
+import { APair, AVoid } from "@inhuman.tools/arrival/reflect-internals";
 import type { AssembledAmbient } from "@inhuman.tools/arrival/env";
 import { toSExprString, toSExprStringWithElisions, type ElisionRecord } from "@inhuman.tools/arrival-serializer";
 

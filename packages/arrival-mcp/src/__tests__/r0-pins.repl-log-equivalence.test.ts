@@ -16,7 +16,7 @@
 //     above hold even for verbs that penetrate the membrane.
 
 import { symbol } from "@inhuman.tools/arrival";
-import * as sz from "@inhuman.tools/arrival/scheme-zod";
+import { z as sz } from "@inhuman.tools/arrival";
 import { describe, expect, it } from "vitest";
 
 import { DiscoveryTool } from "../DiscoveryTool.js";

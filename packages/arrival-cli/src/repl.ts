@@ -21,7 +21,7 @@
 import readline from "node:readline";
 
 import { execState, schemeToJs } from "@inhuman.tools/arrival";
-import { scan } from "@inhuman.tools/arrival/oracle";
+import { scan } from "@inhuman.tools/arrival/lsp-internals";
 import { EMPTY_REPL_MODEL, foldReplEvent, type ReplBlock, type ReplFoldModel } from "@inhuman.tools/mcp-substrate";
 
 import type { ArmedCapabilities } from "./capabilities.js";

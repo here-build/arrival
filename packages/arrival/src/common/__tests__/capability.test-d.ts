@@ -25,7 +25,7 @@
 // rework), never as a type a TS-authored `symbols` record can still declare.
 import { describe, expectTypeOf, test } from "vitest";
 import type { SymbolDeclaration } from "../capability.js";
-import type { DefineSymbolDef, DefineSyntaxSymbolDef, MacroSymbolDef, NativeSymbolDef } from "../symbol.js";
+import type { DefineSymbolDef, DefineSyntaxSymbolDef, MacroSymbolDef, NativeSymbolDef } from "../symbols/_bake.js";
 import { ANativeProcedure, ARosettaProcedure, DoorProcedure } from "../../values/primitives/ACallable.js";
 import { AKernelKeyword } from "../../values/AKernelKeyword.js";
 

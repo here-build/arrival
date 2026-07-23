@@ -35,8 +35,10 @@ import { AString } from "../../../values/primitives/AString.js";
 import { buildVocabulary } from "../../vocabulary.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
 import { overridableCapability } from "../../overridable/overridable.js";
-import type { AEntity, DefineSyntaxSymbolDef } from "../../../common/symbol.js";
-import { contractOf, type SymbolDeclaration } from "../../../common/capability.js";
+import type { AEntity } from "../../../common/symbol.js";
+import type { DefineSyntaxSymbolDef } from "../../../common/symbols/_bake.js";
+import type { SymbolDeclaration } from "../../../common/capability.js";
+import { contractOf } from "../../../common/capability-internals.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 
 const capabilities = [overridableCapability];

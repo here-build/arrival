@@ -1,17 +1,22 @@
 /**
  * LAW (V0→V5) — the environment-privatization design.
- * Pinned surface, updated at the V5 atomic cut (D5 hard delete executed); re-pinned again at
+ * Pinned surface, updated at the V5 atomic cut (D5 hard delete executed); re-pinned at
  * STAGE C CUT 3b (docs/plans/stage-c-corpse-deletion.md, "the massacre"), which retired the
- * PUBLIC glass option (`ExecOptions.env`) and the `override` sugar ENTIRELY — not a retype, a
- * full removal:
+ * PUBLIC glass option (`ExecOptions.env`) and the `override` sugar ENTIRELY; re-pinned AGAIN
+ * at the STAGE C EXPORT RESTRUCTURE (same doc, §"Export restructure" — V's minimal-surface
+ * ruling), which is the SANCTIONED place this restructure records itself: the pin below IS the
+ * root barrel's contract documentation now, not just a regression check.
  *
  *   1. Barrel surface pin — `global_env`/`env` are GONE (V1's zero-consumer cut);
- *      `sandboxedEnv` is GONE (V5's atomic cut — every external consumer migrated to
- *      `capabilities`/`scope` in the same wave); `LexicalScope.fresh` exists (V1's one new
+ *      `sandboxedEnv` is GONE (V5's atomic cut). `LexicalScope.fresh` exists (V1's one new
  *      API); `SessionScope` names the refinement it mints (root frame carries the structural
  *      SchemeEnv contract — the V4 session products type against it). The barrel exports ZERO
- *      AmbientRuntime instances; `rosettaTypesOf` deliberately SURVIVES this cut (WO-1
- *      territory — rosetta-registry-dissolution.md owns its death, keyed now on scope frames).
+ *      AmbientRuntime instances. `rosettaTypesOf` DOES NOT survive the export restructure —
+ *      unlike the V1-era cuts above (a zero-consumer removal), this one is a DELIBERATE
+ *      relocation: it moved to `/lsp-internals` (a sibling-contract subpath, not this tier) as
+ *      part of shrinking the root barrel to the three-concern surface (eval + capability
+ *      authoring + provenance-as-data) V's minimal-surface ruling calls for. Root is now
+ *      EXACTLY 24 names — see the full-set pin below for the enumerated list.
  *   2. Glass byte-identity — DROPPED (Cut 3b): `ExecOptions.env` no longer exists at all, so
  *      there is nothing left to pin byte-identity against. The internal live-frame seam
  *      (`execStateOverFrame`/`execOverFrame`, generator-exec.ts) is the narrow, non-public
@@ -53,8 +58,8 @@ describe("V0 pin — barrel surface", () => {
     expect(Object.keys(arrival)).not.toContain("sandboxedEnv");
   });
 
-  it("rosettaTypesOf SURVIVES the cut (WO-1 owns its death, not this wave)", () => {
-    expect(typeof arrival.rosettaTypesOf).toBe("function");
+  it("rosettaTypesOf is OFF the root barrel (export restructure — relocated to /lsp-internals, not a zero-consumer cut)", () => {
+    expect(Object.keys(arrival)).not.toContain("rosettaTypesOf");
   });
 
   it("LexicalScope.fresh exists (V1's one new public API, D6) and mints a SchemeEnv-contract root frame (V4)", () => {
@@ -65,9 +70,34 @@ describe("V0 pin — barrel surface", () => {
     expect(typeof (scope.env as { registerResolver?: unknown }).registerResolver).toBe("function");
   });
 
-  it("the full exported-name set is otherwise unchanged by this round (pin — update deliberately, on purpose, never by accident)", () => {
+  it("the root barrel is EXACTLY the 24-name minimal surface (export restructure pin — this enumeration IS the contract; update deliberately, on purpose, never by accident)", () => {
+    // Three concerns only (docs/plans/stage-c-corpse-deletion.md §"V's minimal-surface
+    // ruling" + §"Export restructure"): EVAL, CAPABILITY AUTHORING, PROVENANCE AS DATA — plus
+    // the error root and the two structural types a capability author's own signatures name.
+    // Type-only exports (ExecState, ExecOptions, SessionScope, SymbolDeclaration,
+    // RosettaSymbolDef, EvalTap, SchemeValue, Invocation) erase at emit and never appear in
+    // `Object.keys` — this list is the RUNTIME-VISIBLE subset of the 24.
     const names = Object.keys(arrival).sort();
-    expect(names).toMatchSnapshot();
+    expect(names).toEqual(
+      [
+        "ANil",
+        "ArrivalError",
+        "EMPTY_PROVENANCE",
+        "EnvCapability",
+        "LexicalScope",
+        "RunContext",
+        "deepProvenance",
+        "disposeRunContext",
+        "exec",
+        "execState",
+        "jsToScheme",
+        "parse",
+        "schemeToJs",
+        "schemeToJsUntyped",
+        "symbol",
+        "z",
+      ].sort(),
+    );
   });
 });
 

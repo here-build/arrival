@@ -1,17 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { toSExprString } from "../serializer";
 // Import what we can from lips
-import {
-  exec,
-  AExact,
-  EnvCapability,
-  schemeToJs,
-  AString,
-  ASymbol,
-  ANil,
-  APair,
-  LexicalScope,
-} from "@inhuman.tools/arrival";
+import { exec, EnvCapability, schemeToJs, ANil, LexicalScope } from "@inhuman.tools/arrival";
+import { AExact, AString, ASymbol, APair } from "@inhuman.tools/arrival/reflect-internals";
 // Import custom matchers
 import "@inhuman.tools/arrival";
 

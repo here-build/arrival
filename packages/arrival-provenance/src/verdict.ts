@@ -46,7 +46,8 @@
  * Deliberate divergences from sift are noted inline where they occur.
  */
 
-import { AValue, APair, ANil, AVoid, ABool, AString, AVector, ADict, ASymbol } from "@inhuman.tools/arrival";
+import { ANil } from "@inhuman.tools/arrival";
+import { AValue, APair, AVoid, ABool, AString, AVector, ADict, ASymbol } from "@inhuman.tools/arrival/reflect-internals";
 import { isAttested } from "@inhuman.tools/arrival/attestation";
 
 import { buildSlice, writeForm, defineNameOf, lastTopLevelForm, resolveReadIds } from "./analysis.js";

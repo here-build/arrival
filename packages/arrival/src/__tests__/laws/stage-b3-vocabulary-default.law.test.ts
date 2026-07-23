@@ -36,7 +36,7 @@ import { disposeRunContext } from "../../run/run-lifecycle.js";
 import { RunContext } from "../../run/RunContext.js";
 import { RunContextVocabularyMismatchError } from "../../errors.js";
 import { StaticValidationError } from "../../static-validation/validate-program.js";
-import { nil } from "../../index.js";
+import { nil } from "../../values/primitives/ANil.js";
 
 // The internal bake seam (Stage C Cut 3b) — never the public exec surface.
 const realEvalScheme: EvalSchemeInto = (env, src) => {

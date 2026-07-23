@@ -24,7 +24,8 @@ import { EvalTrace } from "../../provenance/trace.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { schemeToJs } from "../../membrane/rosetta.js";
 import { withRecordCoordinateAsync, type EmissionSink, type RecordCoordinate } from "../../eval/provenance-hooks.js";
-import { PayloadStoreFake, ProvenanceStoreFake, setEmissionEnabled } from "../../provenance/store/index.js";
+import { PayloadStoreFake, ProvenanceStoreFake } from "../../provenance/store/fakes.js";
+import { setEmissionEnabled } from "../../provenance/store/emit.js";
 import { EnvCapability } from "../../common/capability.js";
 import { applyCapability } from "../../__tests__/_fresh-env.js";
 

@@ -12,7 +12,7 @@
 //
 // SINGLE SOURCE: `srfi/index.ts` adds this to `allSrfi`, so `base-packs.ts` assembles it.
 import dedent from "dedent";
-import { resolveMethod, type MaybePromise } from "../../common/symbol.js";
+import { resolveMethod, type MaybePromise } from "../../common/symbols/_bake.js";
 import { EnvCapability } from "../../common/capability.js";
 import { attachOffendingValue } from "../../errors.js";
 import { tf } from "../../values/tagless-final.js";

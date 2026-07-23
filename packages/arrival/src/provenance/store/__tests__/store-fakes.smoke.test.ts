@@ -8,7 +8,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { MintRecord, RecordId } from "../index.js";
-import { PayloadStoreFake, ProvenanceStoreFake, ProvenanceWriteFailure, recordIdKey } from "../index.js";
+import { PayloadStoreFake, ProvenanceStoreFake, ProvenanceWriteFailure } from "../fakes.js";
+import { recordIdKey } from "../ids.js";
 
 function mintRecord(id: RecordId, seq: number, payloadHash: string): MintRecord {
   return { kind: "mint", id, seq, payloadHash };

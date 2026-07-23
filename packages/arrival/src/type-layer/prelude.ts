@@ -12,7 +12,8 @@
 // arrow. The harvest stays one-directional (defs → prelude text), entirely in this package.
 
 import { escapeName, isTsIdentifier } from "./name-escape.js";
-import { contractOf, type SymbolDeclaration } from "../common/capability.js";
+import type { SymbolDeclaration } from "../common/capability.js";
+import { contractOf } from "../common/capability-internals.js";
 import { signatureOf } from "./schema-to-ts.js";
 import { CARRIERS_TEXT } from "./carriers-text.generated.js";
 

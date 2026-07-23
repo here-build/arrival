@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import * as z from "../../common/scheme-zod.js";
 import { symbol, withContractFields } from "../../common/symbol.js";
-import { contractOf } from "../../common/capability.js";
+import { contractOf } from "../../common/capability-internals.js";
 import { printType, signatureOf, sTagToTsType } from "../schema-to-ts.js";
 
 /** Test-only cast — `signatureOf` reads an `AEntity` CONTRACT; Stage A2's factories mint

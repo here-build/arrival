@@ -1,17 +1,30 @@
 // symbol — the stable entry for the `arrival.symbol*` EnvCapability symbol-definition API.
 //
 // This module is the package's public seam (`@inhuman.tools/arrival/symbol` subpath + the root
-// re-export). Everything below is re-exported HERE, rather than from its defining module, so a
-// consumer imports from this ONE stable specifier; each group's note adds only what is non-obvious
-// about that group, never the stable-path reason again. It surfaces TWO things:
+// re-export). CURATED (export restructure, docs/plans/stage-c-corpse-deletion.md
+// §"Export restructure" — V's minimal-surface ruling): the ~12-name keep-set below is the
+// capability-authoring contract a `symbols` callback's impl signature actually needs to name.
+// Everything else this module used to re-export (the per-kind `*SymbolDef` record types, the
+// tagless/rest/decode machinery, the metadata read-side, `symbol.alias`'s marker) is `_bake.js`/
+// `metadata.js`/`alias.js`'s OWN surface now — an internal consumer imports those leaf modules
+// directly (relative import; they were never barrel-exported to EXTERNAL consumers in the first
+// place, since `_bake.ts`'s underscore prefix already signals "not a stable import path").
+//
+// It surfaces TWO things:
 //
 //   • the `symbol` NAMESPACE — `export * as symbol from "./symbols/index.js"`, one factory
 //     module per tag (`native`/`rosetta`/`tagless`/…), barrel-re-exported so the bundler can
 //     drop the tags a consumer doesn't touch (`sideEffects:false` tree-shaking).
 //
-//   • the contract/`AEntity` TYPES — re-exported from `./symbols/_bake.js` (the shared machinery
-//     the factory files stand on), imported by `capability.ts` (`SymbolDeclaration`), the
-//     type-layer printer (`AEntity`), and the `symbol.test-d.ts` proofs (`DecodedArgs`/`DecodedReturn`).
+//   • the contract/`AEntity` TYPES an impl signature names — `AEntity` (the type-layer
+//     printer's + `SymbolDeclaration`'s contract-view type), `CallCtx` (a rosetta/native impl's
+//     `this`), `Contract`/`VectorSpec`/`RestSpec` (the zod-tuple-to-decoded-args machinery an
+//     impl signature is generic over), `CacheClass`/`ProvenanceRole` (the provenance/caching
+//     declaration vocabulary), `DoorSymbolDef` (a door's own record shape, named directly by a
+//     capability composing doors), `makeCallCtx`/`testCallCtx` (constructing a `CallCtx` by
+//     hand — a capability composing a rosetta/native call outside the normal apply loop, and
+//     the shared test harness constructor), `withContractFields` (attaching provenance-role
+//     metadata to a contract).
 //
 // TYPE-LEVEL PROOFS of the contract inference (a zod contract → the decoded impl arg/return types)
 // live in the vitest TYPE-TEST `src/__tests__/symbol.test-d.ts`, run under `vitest --typecheck`
@@ -25,62 +38,8 @@
 // the package root) → `symbol.native` + a `name: doc` template + `(contract, impl)`.
 export * as symbol from "./symbols/index.js";
 
-// `resolveMethod` — the shared tagless-final dispatch primitive `bakeTagless`/`bakeTaglessGuard`
-// stand on. Also the intended shared primitive for a `symbol.sequence` impl that dispatches to a
-// receiver's own term method (map/filter/sort) — surfaced here so those call sites reuse ONE
-// resolver instead of each hand-rolling the identical `receiver as Record<string,unknown>` cast.
-export { resolveMethod } from "./symbols/_bake.js";
-
-// The contract machinery + the baked `AEntity` union and its members.
-export type {
-  VectorSpec,
-  SpecInfer,
-  DecodedArgs,
-  RestSpec,
-  DecodedArgsWithRest,
-  DecodedReturn,
-  MaybePromise,
-  Contract,
-  Impl,
-  ProvenanceRole,
-  CacheClass,
-  CallbackRole,
-  CallbackRoles,
-  NativeSymbolDef,
-  RosettaSymbolDef,
-  TaglessSymbolDef,
-  TaglessGuardSymbolDef,
-  SequenceSymbolDef,
-  DoorSymbolDef,
-  DoorCause,
-  KeywordSymbolDef,
-  MacroSymbolDef,
-  DefineSymbolDef,
-  DefineSyntaxSymbolDef,
-  AEntity,
-  BakeRuntimeOpts,
-  CallCtx,
-} from "./symbols/_bake.js";
+// The contract machinery + the baked `AEntity` union — the keep-set (see the header above for
+// why each name stays).
+export type { VectorSpec, RestSpec, Contract, ProvenanceRole, CacheClass, DoorSymbolDef, AEntity, CallCtx } from "./symbols/_bake.js";
 export { makeCallCtx, testCallCtx } from "./symbols/_bake.js";
-
-// Callback-role machinery (docs/PROVENANCE.md §2): `withCallbackRoles` is the
-// declaration channel for the contract-less kinds (tagless/tagless-guard — reduce's
-// acc-chain marker rides it); `declaresAccChain` is the data-read for the chained
-// track-composition operator (spec §3); `extractCallbackRoles` is surfaced for the
-// law suite (the factories call it internally at bake).
-export { withCallbackRoles, withContractFields, declaresAccChain, extractCallbackRoles } from "./symbols/_bake.js";
-
-// Re-export the generic form for convenience when using metadata.
-export type { RosettaSymbolDef as RosettaSymbolDefWithMeta } from "./symbols/_bake.js";
-
-// The per-FIELD static-or-dynamic metadata vocabulary (exec-phases-and-dynamic-metadata.md
-// Part II): the field union + record type live with the def machinery (`_bake.ts`); the
-// READ-time resolver (`resolveMetadata` — lazily, per read, against the assembly's
-// activation) lives in its own leaf so nothing at bake time can accidentally pull it.
-export type { MetadataField, MetadataRecord } from "./symbols/_bake.js";
-export { resolveMetadata, staticMetadata, type ResolvedMetadata } from "./symbols/metadata.js";
-
-// `symbol.alias` — dissolution-semantics duplicate binding. The marker type is surfaced here
-// (not just consumed internally by `capability.ts`) so a capability author can name it when
-// widening a `SymbolDeclaration`-adjacent type of their own.
-export type { AliasSymbolDef } from "./symbols/alias.js";
+export { withContractFields } from "./symbols/_bake.js";

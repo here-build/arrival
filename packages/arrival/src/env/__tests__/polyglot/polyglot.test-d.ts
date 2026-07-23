@@ -22,7 +22,8 @@
 
 import { describe, expectTypeOf, test } from "vitest";
 import * as z from "../../../common/scheme-zod.js";
-import { symbol, type DecodedReturn } from "../../../common/symbol.js";
+import { symbol } from "../../../common/symbol.js";
+import { type DecodedReturn } from "../../../common/symbols/_bake.js";
 import type { SchemeValue } from "../../../values/types.js";
 
 describe("scheme/polyglot Contract precision — representative fixes decode precisely", () => {

@@ -17,7 +17,7 @@
 // observable via zod's own `.safeParse`, per that file's own header note).
 import { describe, expectTypeOf, test } from "vitest";
 import * as z from "../../../common/scheme-zod.js";
-import type { DecodedArgs, DecodedArgsWithRest, DecodedReturn } from "../../../common/symbol.js";
+import type { DecodedArgs, DecodedArgsWithRest, DecodedReturn } from "../../../common/symbols/_bake.js";
 import type { SchemeValue } from "../../../values/types.js";
 import type { APair } from "../../../values/primitives/APair.js";
 

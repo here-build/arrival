@@ -75,8 +75,11 @@ interface Frame {
   quoted: boolean;
 }
 
-/** The raw structural scan result — every field a pure function of the prefix. */
-interface ScanResult {
+/** The raw structural scan result — every field a pure function of the prefix. Exported (was
+ *  file-local while `scan` itself already returned it — a malformed public surface fixed as
+ *  part of the export restructure, docs/plans/stage-c-corpse-deletion.md §"the /oracle kill":
+ *  it now travels properly on `/lsp-internals` alongside `scan`. */
+export interface ScanResult {
   depth: number;
   inString: boolean;
   inComment: boolean;

@@ -12,7 +12,8 @@
 // ("provenance-clone trap: x === y is NOT sufficient... use instance-aware checks") — the
 // runner was the one place that ignored its own rule.
 
-import { AValue, LexicalScope, type EvalTap } from "@inhuman.tools/arrival";
+import { LexicalScope, type EvalTap } from "@inhuman.tools/arrival";
+import { AValue } from "@inhuman.tools/arrival/reflect-internals";
 import { assembleAmbient, type AssembledAmbient } from "@inhuman.tools/arrival/env";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 

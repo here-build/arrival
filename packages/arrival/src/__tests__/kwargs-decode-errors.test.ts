@@ -19,7 +19,8 @@ import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../run/RunContext.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
-import { symbol, testCallCtx, type RosettaSymbolDef } from "../common/symbol.js";
+import { symbol, testCallCtx } from "../common/symbol.js";
+import { type RosettaSymbolDef } from "../common/symbols/_bake.js";
 
 /** Test-only cast — see symbol.test.ts's own copy of this helper for the full rationale
  *  (Stage A2: `symbol.rosetta` mints the ARosettaProcedure directly; `.run` rides `.contract`). */

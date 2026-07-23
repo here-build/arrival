@@ -4,7 +4,7 @@
 // (`log-note`, tool.effect) drives every scenario: the hold rule fires only when a RISKY row
 // is present — any risky row present ⇒ the ENTIRE burst holds — never on plain effects.
 
-import * as z from "@inhuman.tools/arrival/scheme-zod";
+import { z } from "@inhuman.tools/arrival";
 import { describe, expect, it } from "vitest";
 
 import { ConfirmBurstTool } from "../confirm-burst.js";

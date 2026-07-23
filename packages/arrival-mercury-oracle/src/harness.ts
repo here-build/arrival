@@ -59,7 +59,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { execState, LexicalScope, parseGenerator, schemeToJsUntyped } from "@inhuman.tools/arrival";
+import { execState, LexicalScope, parse as parseGenerator, schemeToJsUntyped } from "@inhuman.tools/arrival";
 import { register } from "tsx/esm/api";
 
 import {

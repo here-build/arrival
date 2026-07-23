@@ -16,8 +16,8 @@ import { isAmbientRuntime } from "../AmbientRuntime.js";
 import { toJS } from "../../membrane/membrane.js";
 import { ANativeProcedure, DoorProcedure } from "../../values/primitives/ACallable.js";
 import { PurityError, SymbolKeyMismatchError, VocabularyLegacyCapabilityError } from "../../errors.js";
-import { nil } from "../../index.js";
-import type { DefineSymbolDef } from "../../common/symbol.js";
+import { nil } from "../../values/primitives/ANil.js";
+import type { DefineSymbolDef } from "../../common/symbols/_bake.js";
 
 /** A stub `evalScheme` for fixtures with no `symbol.define`/prelude BODY evaluation — B1 never
  *  invokes it in that case (prelude text is only COLLECTED; defines are the only bake-time

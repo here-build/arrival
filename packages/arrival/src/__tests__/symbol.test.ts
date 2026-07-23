@@ -20,7 +20,7 @@ import { AString } from "../values/primitives/AString.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
 import { nil } from "../values/primitives/ANil.js";
-import type { NativeSymbolDef, RosettaSymbolDef } from "../common/symbol.js";
+import type { NativeSymbolDef, RosettaSymbolDef } from "../common/symbols/_bake.js";
 
 const { symbol } = arrival;
 

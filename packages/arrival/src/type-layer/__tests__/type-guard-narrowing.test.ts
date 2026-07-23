@@ -8,7 +8,7 @@ import { signatureOf } from "../schema-to-ts.js";
 import equality from "../../env/r7rs/equality.js";
 import vectors from "../../env/r7rs/vectors.js";
 import { symbol } from "../../common/symbol.js";
-import { contractOf } from "../../common/capability.js";
+import { contractOf } from "../../common/capability-internals.js";
 import { harvestContracts } from "../../__tests__/_symbols-harvest.js";
 import * as z from "../../common/scheme-zod.js";
 

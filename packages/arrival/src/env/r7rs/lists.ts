@@ -30,9 +30,7 @@ import { adoptSpine } from "../../membrane/adopt-spine.js";
 import dedent from "dedent";
 import { type RunContext } from "../../run/RunContext.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
-import { CallCtx } from "../../common/symbols/_bake.js";
-
-import { type MaybePromise, resolveMethod } from "../../common/symbol.js";
+import { CallCtx, type MaybePromise, resolveMethod } from "../../common/symbols/_bake.js";
 import { withInputProvenance } from "../../values/op-helpers.js";
 import { schemeFalse } from "../../values/primitives/ABool.js";
 import invariant from "tiny-invariant";

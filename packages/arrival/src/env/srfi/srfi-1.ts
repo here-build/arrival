@@ -58,14 +58,8 @@
 // recursion never re-crosses the boundary (one cold decode per outer call). %list-nth /
 // %any-null? / %some / %any / %every / %every-value / zip use that idiom. take/drop are
 // tagless dispatchers. validate:false unused — evidence-gated only.
-import {
-  type CallCtx,
-  type MaybePromise,
-  makeCallCtx,
-  resolveMethod,
-  withCallbackRoles,
-  withContractFields,
-} from "../../common/symbol.js";
+import { type CallCtx, makeCallCtx, withContractFields } from "../../common/symbol.js";
+import { type MaybePromise, resolveMethod, withCallbackRoles } from "../../common/symbols/_bake.js";
 import dedent from "dedent";
 import { EnvCapability } from "../../common/capability.js";
 import type { EmitCtx, EmitRule } from "../../emit/emit-rule.js";

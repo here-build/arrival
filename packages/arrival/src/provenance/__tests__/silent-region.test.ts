@@ -45,7 +45,8 @@ import {
 import { ANativeProcedure } from "../../values/primitives/ACallable.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AExact } from "../../values/primitives/AExact.js";
-import { PayloadStoreFake, ProvenanceStoreFake, setEmissionEnabled } from "../../provenance/store/index.js";
+import { PayloadStoreFake, ProvenanceStoreFake } from "../../provenance/store/fakes.js";
+import { setEmissionEnabled } from "../../provenance/store/emit.js";
 import { hermeticApply } from "../../provenance/gamma.js";
 import type { EmittedWire } from "../../provenance/wireframe/types.js";
 import { EnvCapability } from "../../common/capability.js";

@@ -11,7 +11,7 @@
  * shapes are structurally unrelated by design; this union is the one shared
  * vocabulary between them.
  */
-import type { ErrorClass } from "@inhuman.tools/arrival";
+import type { ErrorClass } from "@inhuman.tools/arrival/reflect-internals";
 export type { ErrorClass };
 
 const nameOf = (e: unknown): string => (e instanceof Error ? e.name : "");

@@ -25,7 +25,7 @@ import { symbol, testCallCtx } from "../../common/symbol.js";
  *  class) back to its RosettaSymbolDef shape, for direct `.run` invocation — Stage A2\'s
  *  `symbol.rosetta` mints the ARosettaProcedure directly; the def it used to RETURN rides
  *  `.contract` on it. */
-import type { RosettaSymbolDef } from "../../common/symbol.js";
+import type { RosettaSymbolDef } from "../../common/symbols/_bake.js";
 function rosettaContract(v: { contract: unknown }): RosettaSymbolDef {
   return v.contract as RosettaSymbolDef;
 }

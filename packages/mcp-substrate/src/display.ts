@@ -41,8 +41,8 @@
 // `(if c (display a) (display b))` has two display forms and exactly one firing, so any positional
 // zip silently misattributes.
 
-import { APair, ASymbol, AString, type SchemeValue } from "@inhuman.tools/arrival";
-import * as z from "@inhuman.tools/arrival/scheme-zod";
+import { type SchemeValue, z } from "@inhuman.tools/arrival";
+import { APair, ASymbol, AString } from "@inhuman.tools/arrival/reflect-internals";
 import { symbol, type CallCtx } from "@inhuman.tools/arrival/symbol";
 import type { SymbolDeclaration } from "@inhuman.tools/arrival/capability";
 // `writeForm` is the SOURCE writer (provenance/slice.ts) — it renders a parsed form back to the

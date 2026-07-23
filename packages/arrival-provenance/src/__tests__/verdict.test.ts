@@ -16,17 +16,14 @@
  * tools, fully deterministic.
  */
 import {
-  APair,
-  AString,
-  CONSTANT_CTX,
   deepProvenance,
   EnvCapability,
   execState,
   initBridge,
   LexicalScope,
-  nil,
 } from "@inhuman.tools/arrival";
-import { attestDeep } from "@inhuman.tools/arrival/attestation";
+import { APair, AString, attestDeep, nil } from "@inhuman.tools/arrival/reflect-internals";
+import { CONSTANT_CTX } from "@inhuman.tools/arrival/host-internals";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { EvalTrace } from "../index.js";

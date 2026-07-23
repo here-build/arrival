@@ -31,7 +31,7 @@ import * as z from "../../common/scheme-zod.js";
 import { EnvCapability } from "../../common/capability.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { emitMint, setEmissionEnabled } from "../../provenance/store/emit.js";
-import { PayloadStoreFake, ProvenanceStoreFake } from "../../provenance/store/index.js";
+import { PayloadStoreFake, ProvenanceStoreFake } from "../../provenance/store/fakes.js";
 import { FrozenMints } from "../../provenance/replay.js";
 import type { Payload } from "../../provenance/store/interfaces.js";
 import type { MintRecord } from "../../provenance/store/records.js";

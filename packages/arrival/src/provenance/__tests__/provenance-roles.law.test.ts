@@ -61,22 +61,20 @@ import {
 import { classifierFromEnv } from "../../provenance/lineage-classifier-from-env.js";
 import { buildWireframe } from "../../provenance/wireframe/builder.js";
 import * as z from "../../common/scheme-zod.js";
+import { symbol, type AEntity, type ProvenanceRole } from "../../common/symbol.js";
+import { EnvCapability } from "../../common/capability.js";
 import {
   declaresAccChain,
-  symbol,
   withCallbackRoles,
-  type AEntity,
   type CallbackRoles,
-  type ProvenanceRole,
-} from "../../common/symbol.js";
-import { EnvCapability } from "../../common/capability.js";
+} from "../../common/symbols/_bake.js";
 import type {
   NativeSymbolDef,
   RosettaSymbolDef,
   SequenceSymbolDef,
   TaglessGuardSymbolDef,
   TaglessSymbolDef,
-} from "../../common/symbol.js";
+} from "../../common/symbols/_bake.js";
 
 /** Test-only cast: pull a minted value's `.contract` (typed `unknown` on the class — see
  *  ACallable.ts) back to its known CONTRACT shape. Stage A2: the factories mint the

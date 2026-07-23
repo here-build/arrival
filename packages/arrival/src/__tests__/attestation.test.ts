@@ -23,7 +23,8 @@ import { tf } from "../values/tagless-final.js";
 import { AListAlike } from "../values/types.js";
 import { jsToScheme } from "../membrane/rosetta.js";
 import { CONSTANT_CTX } from "../run/RunContext.js";
-import { testCallCtx, type RosettaSymbolDef } from "../common/symbol.js";
+import { testCallCtx } from "../common/symbol.js";
+import { type RosettaSymbolDef } from "../common/symbols/_bake.js";
 
 /** Test-only cast: pull a minted ARosettaProcedure's `.contract` (typed `unknown` on the
  *  class) back to its RosettaSymbolDef shape, for direct `.run` invocation — Stage A2's

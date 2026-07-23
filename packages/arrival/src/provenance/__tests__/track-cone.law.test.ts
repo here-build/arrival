@@ -37,7 +37,7 @@ import { buildWireframe } from "../../provenance/wireframe/builder.js";
 import { reachableNodesForDemand } from "../../provenance/wireframe/loops.js";
 import { FrozenMints, boxPayload, replayBetweenRecords, replayGraphEgress } from "../../provenance/replay.js";
 import { setEmissionEnabled } from "../../provenance/store/emit.js";
-import { ProvenanceStoreFake } from "../../provenance/store/index.js";
+import { ProvenanceStoreFake } from "../../provenance/store/fakes.js";
 import { foldRegionStream } from "../../provenance/store/fold.js";
 import {
   closeRegionScope,

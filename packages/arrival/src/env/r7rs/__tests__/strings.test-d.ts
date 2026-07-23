@@ -18,7 +18,8 @@
 
 import { describe, expectTypeOf, test } from "vitest";
 import * as z from "../../../common/scheme-zod.js";
-import { symbol, type DecodedArgs, type DecodedReturn } from "../../../common/symbol.js";
+import { symbol } from "../../../common/symbol.js";
+import { type DecodedArgs, type DecodedReturn } from "../../../common/symbols/_bake.js";
 import type { AList, AListAlike, SchemeValue } from "../../../values/types.js";
 import type { APair } from "../../../values/primitives/APair.js";
 import type { ACharacter } from "../../../values/primitives/ACharacter.js";

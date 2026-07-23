@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import type { EnvCapability } from "../../../common/capability.js";
 import * as z from "../../../common/scheme-zod.js";
 import { ZodTuple, type ZodOptional, type ZodTypeAny } from "zod";
-import type { SequenceSymbolDef } from "../../../common/symbol.js";
+import type { SequenceSymbolDef } from "../../../common/symbols/_bake.js";
 import type { ANativeProcedure } from "../../../values/primitives/ACallable.js";
 import core from "../../core/core.js";
 
