@@ -765,6 +765,38 @@ export class AsyncCrossingError extends ArrivalError {
   }
 }
 
+/** jsToScheme's INCOMPATIBILITY DOOR (V's ruling, 2026-07-23, verbatim: "the js >
+ *  scheme membrane is pretty simple — it's always either having the proper lens or
+ *  not, all the concepts are either familiar or explicitly incompatible" —
+ *  rosetta.ts's `INCOMPATIBILITY_DOOR_CLAIMS`, the third phase of `INBOUND_CLAIMS`).
+ *  Every inbound value crosses through an OWNED-ARTIFACT mark, a FOREIGN LENS (a
+ *  defined shape → AValue crossing), or here: no lens exists for it. The
+ *  warn-and-degrade middle tier this ruling retires (undefined→#void+warn,
+ *  unique-symbol→#void+warn, unbranded-class→borrowed-AJSObject+warn) either became
+ *  a plain lens (undefined) or a door (the two kinds below) — never a silent
+ *  degrade. Each kind names its own cure. */
+export class NoLensError extends ArrivalError {
+  public readonly name = "NoLensError";
+  readonly "arrival/error-category": ErrorClass = "other";
+
+  constructor(
+    public readonly kind: "unique-symbol" | "unbranded-class",
+    /** unbranded-class only: `value.constructor?.name` (or the anonymous-object fallback). */
+    public readonly className?: string,
+  ) {
+    super(
+      kind === "unique-symbol"
+        ? "jsToScheme: no lens for a unique JS symbol — it has no portable Scheme representation " +
+          "and no identity a Scheme program could reconstruct across a crossing. Register it " +
+          "(`Symbol.for(name)`) to cross as a `:keyword`, or pass a string/keyword directly instead."
+        : `jsToScheme: no lens for a ${className} instance — arrival's foreign-lens table recognizes ` +
+          "plain data (arrays / plain objects / primitives) and explicitly-branded handles only. Mark " +
+          "the class `@arrival.private` (interop-access.ts's markInteropPrivate) to cross it as an " +
+          "opaque handle, or hand plain data (a plain object/array built from its fields) instead.",
+    );
+  }
+}
+
 /** `fromJS`/`toJS` received a value already on the OTHER side of the membrane it
  *  guards — an already-boxed scheme value reaching `fromJS`, or a raw JS value
  *  reaching `toJS`. STRICT one-way doors: the caller is confused about which side

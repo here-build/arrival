@@ -3,11 +3,13 @@
  * pending cells (values/primitives/pending-entry.ts).
  *
  * 1. REGISTRY ORDER IS LAW: jsToScheme's whole value-kind algebra is one declared,
- *    ordered table — first claiming row wins, and the order is semantic
- *    (null/undefined sentinels first, AValue identity before shapes, arrays before
- *    plain objects, plain objects before the promise door so a plain thenable stays
- *    a dict-shaped borrow). This file pins the names IN ORDER so a reorder (or a
- *    silently added/removed claim) is a diff in a law test, never an accident.
+ *    ordered table — first claiming row wins. The table is now three PHASES
+ *    (rosetta.ts's own doc on OWNED_ARTIFACT_CLAIMS/FOREIGN_LENS_CLAIMS/
+ *    INCOMPATIBILITY_DOOR_CLAIMS is the law): phase 1 (owned-artifact recognition)
+ *    entirely before phase 2 (the foreign lens table) entirely before phase 3 (the
+ *    incompatibility door). This file pins the flat concatenation's names IN ORDER
+ *    so a reorder (or a silently added/removed claim) is a diff in a law test,
+ *    never an accident.
  *
  * 2. PENDING CELLS: a Promise VALUE inside a structure (AJSObject/ADict entry,
  *    AJSArray element) is held INERT and settles lazily on FIRST ACCESS (maybeThen
@@ -16,13 +18,18 @@
  *    provenance. A bare Promise reaching jsToScheme directly DOORS
  *    (jsToSchemeAsyncDoor — crossing.law.test.ts owns that violation row).
  *
- * 3. THE EXOTIC LEAK IS CLOSED: a residual exotic object (class instance / Map /
- *    Date / Error) no longer passes through RAW — it borrows as an AJSObject,
- *    loudly (crossing.law.test.ts owns the crossing row; here we pin "nothing
- *    non-scheme escapes the router" over a sweep of exotic shapes).
+ * 3. THE BINARY MEMBRANE (V's ruling, 2026-07-23): the warn-and-degrade middle tier
+ *    is RETIRED. `undefined` is now a plain lens (no warn). A unique JS symbol and
+ *    an unbranded/exotic class instance (Date/Map/Set/RegExp/a plain class) now
+ *    DOOR (`NoLensError`) instead of silently degrading to `#void` or borrowing as
+ *    an untethered AJSObject with a console warning — crossing.law.test.ts owns the
+ *    per-shape crossing rows; here we pin "nothing non-scheme escapes the router
+ *    UNCLAIMED" over a sweep of exotic shapes (a host `Error` is its own declared
+ *    lens, carved out of the sweep — error-object-exit.law.test.ts owns that law).
  */
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { INBOUND_CLAIMS, jsToScheme } from "../rosetta.js";
+import { NoLensError } from "../../errors.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { AString } from "../../values/primitives/AString.js";
@@ -38,35 +45,28 @@ import type { SchemeValue } from "../../values/types.js";
 
 const PROV = new Set<number>([4242]);
 
-/** Every warn-mute helper in one place — the exotic/function/undefined claims warn
- *  by design; these laws assert VALUES, the warn text is crossing.law's business. */
-function muted<T>(body: () => T): T {
-  const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
-  try {
-    return body();
-  } finally {
-    spy.mockRestore();
-  }
-}
-
 describe("inbound registry — the declared, ordered claim table IS the law", () => {
   it("pins the claim names in their declared order (a reorder is a law diff, not an accident)", () => {
     expect(INBOUND_CLAIMS.map((c) => c.name)).toEqual([
-      "null → nil",
-      "undefined → #void (warn)",
+      // PHASE 1 — owned-artifact recognition.
       "AValue → identity / provenance re-stamp (class term)",
       "R9 egress proxy → original box (re-admission)",
-      "array → borrowed AJSArray",
-      "plain object → borrowed AJSObject",
-      "scalar → boxer table (fromJs)",
-      "symbol → :keyword (registered) / #void (unique, warn)",
-      "function → #void (warn)",
       "scheme orphan (EOF/Values/R7RSError) → identity",
+      "branded host instance → opaque handle (mint/reuse, whiteroom contract)",
+      // PHASE 2 — the foreign lens table.
+      "null → nil",
+      "undefined → #void (lens)",
+      "object → array/plain-object containment ladder",
+      "host Error → borrowed AJSObject (declared lens)",
+      "scalar → boxer table (fromJs)",
+      "symbol → :keyword (registered)",
       "bigint → raw passthrough (opaque host value, not a scheme number)",
       "binary (Uint8Array/ArrayBuffer/DataView/Buffer) → raw passthrough (declared)",
+      "function → #void (warn) [TODO(V-fork): lens-to-callable vs door — pending ruling]",
+      // PHASE 3 — the incompatibility door.
       "promise → door (settle first; container entries settle lazily)",
-      "branded host instance → opaque handle (mint/reuse, whiteroom contract)",
-      "exotic object → borrowed AJSObject (warn)",
+      "unique symbol → door (no lens)",
+      "unbranded/exotic object → door (no lens)",
     ]);
   });
 
@@ -83,14 +83,23 @@ describe("inbound registry — the declared, ordered claim table IS the law", ()
     expect(jsToScheme(CONSTANT_CTX, eof, {}, PROV)).toBe(eof);
   });
 
-  it("nothing non-scheme escapes the router raw except the DECLARED binary passthrough (exotic sweep)", () => {
-    muted(() => {
-      for (const exotic of [new Date(0), new Map([["k", 1]]), new Set([1]), new Error("boom"), /re/]) {
-        const entered: unknown = jsToScheme(CONSTANT_CTX, exotic);
-        expect(entered).toBeInstanceOf(AJSObject);
-        expect((entered as AJSObject).source).toBe(exotic);
+  it("no lens ⇒ a loud door, never a silent raw leak (exotic sweep — the binary membrane's phase 3)", () => {
+    for (const exotic of [new Date(0), new Map([["k", 1]]), new Set([1]), /re/]) {
+      expect(() => jsToScheme(CONSTANT_CTX, exotic)).toThrow(NoLensError);
+      try {
+        jsToScheme(CONSTANT_CTX, exotic);
+      } catch (e) {
+        expect(e).toBeInstanceOf(NoLensError);
+        expect((e as NoLensError).kind).toBe("unbranded-class");
       }
-    });
+    }
+    // A host Error is its OWN declared lens (phase 2, no warn), carved out of the
+    // sweep — error-object-exit.law.test.ts owns the full law (stack hidden, message
+    // readable).
+    const err = new Error("boom");
+    const entered = jsToScheme(CONSTANT_CTX, err);
+    expect(entered).toBeInstanceOf(AJSObject);
+    expect((entered as AJSObject).source).toBe(err);
     // The declared exception, by name: binary FFI identity.
     const u8 = new Uint8Array([1]);
     expect(jsToScheme(CONSTANT_CTX, u8)).toBe(u8);

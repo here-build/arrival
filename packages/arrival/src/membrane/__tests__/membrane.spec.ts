@@ -96,14 +96,15 @@ describe("Wrapper Layer", () => {
     });
 
     // INVARIANT: JS primitives (bool/number/string) materialize into boxed AValue subtypes,
-    // never a raw leak; a registered symbol (Symbol.for) materializes to ASymbol, a unique symbol
-    // to #void. bigint is the one exception — see the dedicated test right below.
+    // never a raw leak; a registered symbol (Symbol.for) materializes to ASymbol. bigint is
+    // the one exception — see the dedicated test right below. A UNIQUE symbol has no lens
+    // (V's ruling, 2026-07-23) — it DOORS, it does not materialize to anything.
     it("MATERIALIZES primitives to boxed AValues (host-agnostic — never a raw leak)", () => {
       expect(fromJS(true)).toBeInstanceOf(ABool);
       expect(fromJS(42)).toBeInstanceOf(AExact);
       expect(fromJS("hello")).toBeInstanceOf(AString);
-      // a UNIQUE symbol has no portable identity → #void; a REGISTERED one → the keyword :test
-      expect(fromJS(Symbol("test"))).toBe(theVoid);
+      // a UNIQUE symbol has no lens (no portable identity) → door; a REGISTERED one → the keyword :test
+      expect(() => fromJS(Symbol("test"))).toThrow(/no lens for a unique JS symbol/);
       expect(fromJS(Symbol.for("test"))).toBeInstanceOf(ASymbol);
     });
 
@@ -158,14 +159,14 @@ describe("Wrapper Layer", () => {
     });
 
     // INVARIANT: a non-portable-value materialization emits a console.warn; setMembraneWarnings(false)
-    // silences it (pins implementation, not behavior)
+    // silences it (pins implementation, not behavior). V's ruling (2026-07-23) retired the
+    // warn tier for undefined (now a plain lens) and a unique symbol (now a door) — the
+    // ONLY row left that still warns is the bare host function (V's open fork, unresolved).
     it("warns when a non-portable value materializes to #void; setMembraneWarnings(false) silences it", () => {
       const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
       try {
-        fromJS(() => 42); // a function
-        fromJS(undefined); // undefined
-        fromJS(Symbol("x")); // a unique symbol
-        expect(spy).toHaveBeenCalledTimes(3);
+        fromJS(() => 42); // a function — the one row the binary ruling leaves unresolved
+        expect(spy).toHaveBeenCalledTimes(1);
         spy.mockClear();
         setMembraneWarnings(false);
         fromJS(() => 42);

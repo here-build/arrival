@@ -38,7 +38,8 @@ import { RegionEscapeError } from "../../errors.js";
 import { AJSArray } from "../AJSArray.js";
 import { AJSObject } from "../AJSObject.js";
 import type { SchemeValue } from "../../values/types.js";
-import { isInteropBoundary } from "../interop-access.js";
+import { isInteropBoundary, markInteropPrivate } from "../interop-access.js";
+import { AOpaqueHandle } from "../../values/primitives/AOpaqueHandle.js";
 
 const PROV = new Set<number>([777]);
 
@@ -238,16 +239,14 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
 
     case "undefined": {
       it(entryTitle, () => {
+        // V's ruling (2026-07-23): undefined is a FAMILIAR concept (the other host
+        // bottom, alongside null → nil) — a plain LENS now, never a warn. The old
+        // warn-then-void tolerance is retired.
         const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
         try {
           expect(fromJS(undefined)).toBe(theVoid);
-          expect(spy).toHaveBeenCalledTimes(1);
-          spy.mockClear();
-          setMembraneWarnings(false);
-          expect(fromJS(undefined)).toBe(theVoid);
           expect(spy).not.toHaveBeenCalled();
         } finally {
-          setMembraneWarnings(true);
           spy.mockRestore();
         }
       });
@@ -302,25 +301,22 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
     }
 
     case "unique symbol": {
+      // V's ruling (2026-07-23): a unique (unregistered) symbol has no portable
+      // cross-realm key — no lens exists for it in the algebra. The old
+      // warn-then-void tolerance is retired; it now DOORS (NoLensError), naming the
+      // cure (register it, or pass a string/keyword instead).
       it(entryTitle, () => {
-        const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
-        try {
-          expect(fromJS(Symbol("test"))).toBe(theVoid);
-          expect(spy).toHaveBeenCalledTimes(1);
-        } finally {
-          spy.mockRestore();
-        }
+        expect(() => fromJS(Symbol("test"))).toThrow(/no lens for a unique JS symbol/);
       });
-      // exitForm: "n/a" — no exit cell for this row.
+      // exitForm: "n/a" — no exit cell for this row (the crossing doors before any
+      // box exists to exit).
       it(roundTripTitle, () => {
-        expect(exitJS(fromJS(Symbol("x")))).toBe(undefined);
+        expect(() => fromJS(Symbol("x"))).toThrow(/no lens for a unique JS symbol/);
       });
       it(provenanceTitle, () => {
-        // Same theVoid-singleton shed as `undefined` above — a unique symbol has no
-        // portable payload, so there is nothing for a provenance stamp to attach to.
-        const stamped = jsToScheme(CONSTANT_CTX, Symbol("test"), {}, PROV);
-        expect(stamped).toBe(theVoid);
-        expect(stamped.provenance.size).toBe(0);
+        // No carrier to stamp: the crossing doors BEFORE any box could carry a
+        // provenance set — loud at the crossing, never a stray degrade (P5).
+        expect(() => jsToScheme(CONSTANT_CTX, Symbol("test"), {}, PROV)).toThrow(/no lens for a unique JS symbol/);
       });
       break;
     }
@@ -465,53 +461,47 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
     }
 
     case "exotic object (class instance)": {
+      // V's ruling (2026-07-23): the binary membrane. An unbranded class instance has
+      // NO lens in the algebra (unlike a host `Error`, which is its own declared
+      // lens — error-object-exit.law.test.ts) — the old warn-and-borrow tolerance
+      // tier (an AJSObject wrap with a console warning) is retired, replaced by a
+      // loud door naming the two cures: brand the class `@arrival.private`, or hand
+      // plain data instead.
       class Widget {
         constructor(readonly size: number) {}
       }
       it(entryTitle, () => {
-        const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
-        try {
-          const w = new Widget(7);
-          const entered = jsToScheme(CONSTANT_CTX, w);
-          // The old exotic passthrough leaked `w` RAW into scheme space, silently.
-          // Closed: it borrows as an AJSObject (source kept by reference), loudly.
-          expect(entered).toBeInstanceOf(AJSObject);
-          expect(entered.source).toBe(w);
-          expect(spy).toHaveBeenCalledTimes(1);
-          expect(String(spy.mock.calls[0]?.[0])).toMatch(/Widget instance/);
-        } finally {
-          spy.mockRestore();
-        }
+        const w = new Widget(7);
+        expect(() => jsToScheme(CONSTANT_CTX, w)).toThrow(/no lens for a Widget instance/);
       });
       it(exitTitle, () => {
-        const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
-        try {
-          const w = new Widget(7);
-          expect(exitJS(jsToScheme(CONSTANT_CTX, w))).toBe(w);
-        } finally {
-          spy.mockRestore();
-        }
+        // exitForm: "n/a" — the crossing doors before any box exists to exit.
+        const w = new Widget(7);
+        expect(() => jsToScheme(CONSTANT_CTX, w)).toThrow(/no lens for a Widget instance/);
       });
       it(roundTripTitle, () => {
-        const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
-        try {
-          const w = new Widget(7);
-          expect(exitJS(jsToScheme(CONSTANT_CTX, w))).toBe(w);
-        } finally {
-          spy.mockRestore();
-        }
+        const w = new Widget(7);
+        expect(() => jsToScheme(CONSTANT_CTX, w)).toThrow(/no lens for a Widget instance/);
       });
       it(provenanceTitle, () => {
-        const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
-        try {
-          const w = new Widget(7);
-          const stamped = jsToScheme(CONSTANT_CTX, w, {}, PROV);
-          expect(stamped).toBeInstanceOf(AJSObject);
-          expect([...stamped.provenance]).toEqual([...PROV]);
-          expectNoProvenanceProperty(toJS(stamped));
-        } finally {
-          spy.mockRestore();
+        // No carrier to stamp: the crossing doors BEFORE any box could carry a
+        // provenance set — loud at the crossing, never a stray degrade (P5).
+        const w = new Widget(7);
+        expect(() => jsToScheme(CONSTANT_CTX, w, {}, PROV)).toThrow(/no lens for a Widget instance/);
+      });
+      it("marking the class @arrival.private is the escape hatch — it crosses as an opaque handle instead of dooring", () => {
+        class BrandedWidget {
+          constructor(readonly size: number) {}
         }
+        markInteropPrivate(BrandedWidget);
+        const w = new BrandedWidget(7);
+        // `<unknown>`: an explicit class T isn't in jsToScheme's known-input union, so its
+        // static AWrap<T> fallback isn't AOpaqueHandle-shaped; widening to `unknown` collapses
+        // AWrap to the honest SchemeValue union (which AOpaqueHandle is a member of) — same
+        // technique opaque-crossing.law.test.ts's own `mintHandle` helper uses.
+        const entered = jsToScheme<unknown>(CONSTANT_CTX, w);
+        expect(entered).toBeInstanceOf(AOpaqueHandle);
+        expect((entered as AOpaqueHandle).instance).toBe(w);
       });
       break;
     }

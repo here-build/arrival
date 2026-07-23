@@ -37,9 +37,21 @@ they defer to (proxies, region discipline, egress projection) are here.
 wrapper.** A host function is a value-layer-only term (P1): exposing it as callable
 would hand Scheme a region the provenance interpreter cannot enter, and let the
 sandbox escape into uncontrolled host JS. So the boxing membrane materializes it to
-`#void` — which is not callable — and emits a bounded membrane warning (§DOORS). The
-same non-portable-value rule governs `undefined` and a unique (non-registered) symbol:
-no faithful Scheme representation, so `#void` + warn.
+`#void` — which is not callable — and emits a bounded membrane warning (§DOORS). This
+is the ONE row the binary membrane ruling below (§INBOUND) leaves unresolved — V has
+an open fork (lens-to-callable vs door) — so it alone still warns; every other
+non-portable shape below now either has a lens or doors.
+
+**`undefined` is a LENS, not a warn (V's ruling, 2026-07-23).** It has no faithful
+Scheme representation any more than `null` does, but it IS a familiar host concept —
+the other host bottom, alongside `null → nil` (§HYGIENE/§INBOUND never collapse the
+two). It materializes to `#void` silently, same as any other declared crossing.
+
+**A unique (non-registered) symbol has NO LENS — it doors.** It carries no portable
+cross-realm key and no identity a Scheme program could reconstruct across a crossing,
+so `jsToScheme`/`fromJS` refuse it loudly (`NoLensError`) instead of degrading to
+`#void`: register it (`Symbol.for(name)`) to cross as a `:keyword`, or pass a
+string/keyword directly.
 
 **The one exception is a DECLARED crossing.** The void rule governs the
 *undeclared* crossing — a function reaching the generic membrane (`fromJS`,
@@ -116,14 +128,16 @@ registry in `rosetta.ts` (§INBOUND):
 
 **Two host bottoms map to two Scheme absences, never collapsing to one:** JS `null` →
 `nil` (the empty list — the list-end bottom), JS `undefined` → `#void` (the
-no-value bottom, loudly). A membrane that folded them together would make
-`(null? x)` and a void check indistinguishable at the boundary.
+no-value bottom, silently — a lens, not a warn; see THE VOID RULE above). A membrane
+that folded them together would make `(null? x)` and a void check indistinguishable
+at the boundary.
 
 The BOXED/RAW split is why `bigint` is the one `typeof` tag `boxing.ts` returns
 unboxed: it widens the boxer's return by exactly one member (`AValue | bigint`), and
-every caller already treats the result as a cast target. `undefined`, a bare function,
-and a unique symbol all take THE VOID RULE's `#void` exit; a registered symbol
-(`Symbol.for("x")`) has a portable key and boxes to the keyword `:x`.
+every caller already treats the result as a cast target. `undefined` and a bare
+function take THE VOID RULE's `#void` exit (the function row alone still warns — V's
+open fork, unresolved); a registered symbol (`Symbol.for("x")`) has a portable key and
+boxes to the keyword `:x`; a UNIQUE symbol has no lens at all and doors (§INBOUND).
 
 **The freeze contract, stated once.** A borrowed source is frozen
 (`Object.freeze`) on the *first Scheme read* of its wrapper, so a `pure` rosetta — one
@@ -201,24 +215,44 @@ outbound dispatch lands on *our* classes (the term lives on the receiver, P7), i
 dispatch faces JS shapes with no receiver yet — so each claim pairs a predicate with a
 constructor, and the router is the fold.
 
-The row order encodes the law:
+**THE BINARY MEMBRANE (V's ruling, 2026-07-23, verbatim): "the js > scheme membrane is
+pretty simple — it's always either having the proper lens or not, all the concepts are
+either familiar or explicitly incompatible."** `INBOUND_CLAIMS` is the concatenation of
+three phases — `OWNED_ARTIFACT_CLAIMS` then `FOREIGN_LENS_CLAIMS` then
+`INCOMPATIBILITY_DOOR_CLAIMS` — and the phase boundary is itself semantic (phase 1 runs
+to completion before phase 2, phase 2 before phase 3's catch-all doors):
 
-1. the two host bottoms first (`null → nil`; `undefined → #void`, loudly);
-2. an already-`AValue` passes by identity on the same/empty-provenance fast path, else
-   re-stamps through ITS OWN protocol (deep on spine carriers via
-   `arrival/withProvenanceDeep`, shallow elsewhere) — per-class knowledge stays on the
-   classes, not in the router;
-3. arrays claim BEFORE plain objects (an array is `typeof "object"` too);
-4. a plain-prototype object claims BEFORE the promise row, so a plain thenable stays a
-   dict-shaped borrow;
-5. scalars route to the `boxing.ts` boxer table; `bigint` is deliberately NOT among
-   them (it would be minted into an `AExact`, the silent reinterpretation the raw lane
-   forbids);
-6. non-`AValue` Scheme orphans (`EOF`/`Values`/`R7RSError`) pass by identity;
-7–10. the two DECLARED raw-identity lanes (binary FFI; `bigint`), a bare `Promise`
-   DOORS, and every residual exotic (a `Map`, `Date`, class instance, …) re-presents
-   as a borrowed `AJSObject` LOUDLY — never a silent raw pass-through, member reads keep
-   working through the interop policy, and it round-trips to source identity on exit.
+1. **PHASE 1 — owned-artifact recognition.** A thing already MARKED as ours: an
+   already-`AValue` (passes by identity on the same/empty-provenance fast path, else
+   re-stamps through ITS OWN protocol — deep on spine carriers via
+   `arrival/withProvenanceDeep`, shallow elsewhere); a re-admitted R9 egress proxy
+   (re-dispatches with the ORIGINAL box, not a fresh borrow — checked before phase 2's
+   array row, since a proxy over a vector is `Array.isArray`-true); a non-`AValue`
+   scheme orphan (`EOF`/`Values`/`R7RSError`, by identity); a branded
+   `@arrival.private` host instance (mints/reuses a run-scoped `AOpaqueHandle`, the
+   whiteroom opaque-crossing contract). The scheme-orphan row MUST precede the
+   branded-instance row: `isMarkedInteropPrivate` reads the same `INTEROP_BOUNDARY`
+   stamp our own orphan classes carry for an unrelated reason (the read-policy walk),
+   so checking brand-first would mis-mint an orphan as a handle.
+2. **PHASE 2 — the foreign lens table.** Every remaining row is a declared LENS, keyed
+   by a distinct `typeof` tag: `null → nil`; `undefined → #void` (a lens now, no warn —
+   the other host bottom, never collapsed with `null`); the array/plain-object
+   containment ladder (one row, Array.isArray checked first — not two order-dependent
+   siblings); a host `Error` (borrowed `AJSObject`, `stack` hidden by the interop
+   policy — its own declared lens, not a Date/Map-style exotic); scalars to the
+   `boxing.ts` boxer table (`bigint` deliberately excluded — it would be minted into
+   an `AExact`, the silent reinterpretation the raw lane forbids); a REGISTERED symbol
+   to the keyword `:x`; the two DECLARED raw-identity lanes (binary FFI; `bigint`);
+   and — the one row this ruling leaves unresolved (V has an open fork: lens-to-
+   callable vs door) — a bare host function, unchanged, `#void` + warn.
+3. **PHASE 3 — the incompatibility door.** Reached only when phases 1-2 both miss.
+   Every remaining shape is EXPLICITLY INCOMPATIBLE, never a silent degrade: a bare
+   `Promise` doors (settle first; a Promise INSIDE a structure never reaches here —
+   the holding container settles it lazily on entry read); a UNIQUE (unregistered)
+   symbol doors (no portable cross-realm key); an unbranded/exotic object (`Date`,
+   `Map`, `Set`, `RegExp`, a plain class instance, …) doors, naming its two cures
+   (brand the class `@arrival.private`, or hand plain data instead) — the flip from
+   the old warn-and-borrow tolerance tier, which this ruling retires.
 
 The fold is total by construction; a miss is a programmer error (`invariant`, not a
 silent leak). A `seen: WeakSet` shortcut is router infrastructure, not a claim: a
@@ -446,6 +480,7 @@ doors, by crossing:
 | Redundant crossing (strict one-way) | an already-boxed value reaches `fromJS`, or a raw JS value reaches `toJS` — the caller is confused about which side it stands on | `RedundantCrossingError` |
 | Unrecognized (P5 terminal) | `schemeToJs` reaches a boxed shape with no `arrival/toJS` branch — a silent return would leak internal representation | `UnrecognizedCrossingError` |
 | Async | a *bare* `Promise` reaches `jsToScheme` directly (every sanctioned path settles first; a Promise inside a structure settles lazily) | `AsyncCrossingError` |
+| No lens (the binary membrane, §INBOUND phase 3) | a unique JS symbol, or an unbranded/exotic class instance, has no defined crossing into the algebra — names its cure (register the symbol; brand the class `@arrival.private`, or hand plain data) | `NoLensError` |
 | Region escape / incomplete | a reverse lambda outlives its invocation, or an invocation returns with calls in flight (§REGION) | `RegionEscapeError` / `RegionIncompleteError` |
 | Raw crossing | a raw JS scalar surfaces on an env read — a writer bypassed the storage membrane (`environments.md §HERMETIC`) | `RawCrossingError` |
 | `z.value` callable | a callable crosses a `z.value` slot (§REGION) | teaching throw |

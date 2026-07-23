@@ -30,7 +30,9 @@ import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
 import { APair } from "../values/primitives/APair.js";
 import { jsToScheme, egressAValue, errorToHost, schemeToJsUntyped } from "./rosetta.js";
-import { R7RSError, RedundantCrossingError } from "../errors.js";
+import { R7RSError, RedundantCrossingError, NoLensError } from "../errors.js";
+import { isMarkedInteropPrivate } from "./interop-access.js";
+import { AOpaqueHandle } from "../values/primitives/AOpaqueHandle.js";
 import { Syntax } from "../eval/Syntax.js";
 import { type SchemeValue } from "../values/types.js";
 import { type ACallable } from "../values/primitives/ACallable.js";
@@ -81,6 +83,7 @@ export type BoxedSchemeValue =
   | AExact
   | AInexact
   | ABool
+  | AOpaqueHandle
   | Macro
   | Syntax
   | LambdaContext
@@ -202,11 +205,28 @@ export function fromJS<T>(value: [T] extends [AValue] ? never : T): FromJSResult
   if (isBytevectorLike(value)) return value;
   if (value instanceof Promise) return value;
   if (value !== null && typeof value === "object") {
-    return jsToWrapper.get(value as object);
+    // The binary membrane (V's ruling, rosetta.ts's INBOUND_CLAIMS doc): this arm used
+    // to wrap EVERY object shape here — plain data AND exotic instances alike — as a
+    // borrowed AJSObject, silently (no warn even, unlike jsToScheme's old tolerance
+    // tier). That silent tolerance is retired: a branded `@arrival.private` instance
+    // has an explicit LENS elsewhere in the algebra (OWNED_ARTIFACT_CLAIMS) — honor it
+    // here too, via the same run-scoped AOpaqueHandle cache, rather than silently
+    // re-presenting it as a structurally-open AJSObject. A plain-prototype object is
+    // the OTHER lens (borrowed, identity-cached below, unchanged). Anything else
+    // (Date/Map/Set/RegExp/an unbranded class instance) is EXPLICITLY INCOMPATIBLE —
+    // no silent tolerance tier, same NoLensError rosetta.ts's registry throws.
+    if (isMarkedInteropPrivate(value)) {
+      return AOpaqueHandle.for(CONSTANT_CTX, value as object, EMPTY_PROVENANCE);
+    }
+    if (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null) {
+      return jsToWrapper.get(value as object);
+    }
+    throw new NoLensError("unbranded-class", (value as object).constructor?.name ?? "<anonymous object>");
   }
 
-  // Leaves go through jsToScheme: primitives box, null→nil, undefined/function/unique-symbol→
-  // #void+warn, Symbol.for→:keyword. A borrowed JS function is #void, not callable — docs/membrane.md §VOID-RULE.
+  // Leaves go through jsToScheme: primitives box, null→nil, undefined→#void (lens,
+  // no warn), function→#void+warn (V-fork TODO, unresolved), Symbol.for→:keyword, a
+  // unique symbol doors (NoLensError) — docs/membrane.md §VOID-RULE / §INBOUND.
   // Cast, not a narrowing gap: jsToScheme's honest `AWrap<T>` (values/types.ts) is exactly
   // this leaf case (the array/bytevector/Promise/object arms above already returned), but TS
   // can't thread that proof through the `[T] extends [AValue] ? never : T` conditional

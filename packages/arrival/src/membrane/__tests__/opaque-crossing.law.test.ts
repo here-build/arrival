@@ -12,7 +12,10 @@
  *      `z.instance(Ctor)` slot, or inside a typed container) UNWRAPS to the raw
  *      instance uniformly — the impl never sees the handle itself.
  *   3. ROUND-TRIP: out then in is the SAME instance (`===`).
- *   4. UNBRANDED classes are unaffected — today's borrowed-AJSObject behavior, pinned.
+ *   4. UNBRANDED classes have NO LENS (V's ruling, 2026-07-23 — the binary membrane):
+ *      the old borrowed-AJSObject-with-a-warning tolerance is retired; an unbranded
+ *      class instance now DOORS (`NoLensError`), naming the two cures (brand the
+ *      class `@arrival.private`, or hand plain data instead).
  *
  * Rows 1 (identity/print/no-structural-access) are pinned at the `jsToScheme`/value
  * level directly (mirroring inbound-registry.law.test.ts's own style) — a rosetta
@@ -23,7 +26,7 @@
  * the only place it is ever actually a handle. Rows 2-4 are pinned through `exec()`
  * end-to-end, since they are precisely about what a running program observes.
  */
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { EnvCapability } from "../../common/capability.js";
 import { exec } from "../../eval/generator-exec.js";
 import { jsToScheme } from "../rosetta.js";
@@ -41,7 +44,7 @@ class Widget {
 }
 markInteropPrivate(Widget);
 
-// An UNbranded sibling — same shape, no opt-in. Pins row 4 (today's behavior unchanged).
+// An UNbranded sibling — same shape, no opt-in. Pins row 4: NO LENS, doors (NoLensError).
 class PlainWidget {
   constructor(public readonly id: string) {}
 }
@@ -49,17 +52,6 @@ class PlainWidget {
 // A SECOND branded class — used to pin the `instance(Ctor)` codec's wrong-class rejection.
 class OtherHandleClass {}
 markInteropPrivate(OtherHandleClass);
-
-/** Every warn-mute helper — the exotic/unbranded-class inbound claim warns by design
- *  (rosetta.ts's "exotic object" row); these laws assert VALUES, not console noise. */
-function muted<T>(body: () => T): T {
-  const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
-  try {
-    return body();
-  } finally {
-    spy.mockRestore();
-  }
-}
 
 /** `jsToScheme`'s static return type is `AWrap<T>` — for a plain class T (branding is a
  *  RUNTIME fact, invisible to the type system) that's the generic `AJSObject` fallback, same
@@ -139,12 +131,10 @@ describe("opaque-crossing contract — row 1: scheme-ward mint (jsToScheme level
     expect(handle["arrival/tagless-final/get"]).toBeUndefined();
   });
 
-  it("an UNbranded class instance keeps today's behavior — borrowed AJSObject, not a handle", () => {
-    muted(() => {
-      const boxed = jsToScheme<unknown>(CONSTANT_CTX, new PlainWidget("plain"));
-      expect(boxed).not.toBeInstanceOf(AOpaqueHandle);
-      expect(type(boxed)).toBe("js-object");
-    });
+  it("an UNbranded class instance has NO LENS — it doors (NoLensError), naming the cure", () => {
+    expect(() => jsToScheme<unknown>(CONSTANT_CTX, new PlainWidget("plain"))).toThrow(
+      /no lens for a PlainWidget instance/,
+    );
   });
 });
 
@@ -245,11 +235,10 @@ describe("opaque-crossing contract — rows 2-4: end-to-end through symbol.roset
     expect(String(id)).toBe("same-instance-note-different-each-call");
   });
 
-  it("row 4: an UNbranded instance still crosses as a borrowed AJSObject end-to-end (unaffected)", async () => {
-    await muted(async () => {
-      const [id] = await exec('(:id (make-plain-widget "plain-e2e"))', { capabilities: [cap] });
-      expect(String(id)).toBe("plain-e2e");
-    });
+  it("row 4: an UNbranded instance has no lens end-to-end — the rosetta return doors (NoLensError)", async () => {
+    await expect(exec('(:id (make-plain-widget "plain-e2e"))', { capabilities: [cap] })).rejects.toThrow(
+      /no lens for a PlainWidget instance/,
+    );
   });
 
   it("row 4 (negative control): a branded Widget has no `:id` — no structural access, doors", async () => {

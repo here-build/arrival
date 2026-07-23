@@ -27,9 +27,12 @@ export const CROSSINGS: readonly CrossingRow[] = [
   { type: "bigint", entryForm: "raw passthrough (opaque host value — not a scheme number)", exitForm: "raw (unchanged — same bigint identity)", roundTrip: true }, // §2.3: bigint is opaque, never boxed into an AExact (docs/design-history/arrival-one-number-rework.md)
   { type: "string", entryForm: "AString", exitForm: "string", roundTrip: true },
   { type: "null", entryForm: "ANil (nil)", exitForm: "[] (the empty list's array face)", roundTrip: false }, // asymmetric BY LAW: ingress permissive (null→nil), egress canonical (nil→[]) — V ruling 2026-07-13
-  { type: "undefined", entryForm: "AVoid", exitForm: "undefined", roundTrip: true },
+  { type: "undefined", entryForm: "AVoid (lens, no warn)", exitForm: "undefined", roundTrip: true },
   { type: "registered symbol (Symbol.for)", entryForm: "ASymbol", exitForm: "opaque symbol mapping (design pending, todo-ledgered)", roundTrip: false },
-  { type: "unique symbol", entryForm: "VOID (refused, warn)", exitForm: "n/a", roundTrip: false },
+  // V's ruling (2026-07-23): the warn-and-void middle tier is retired — a unique
+  // symbol has no lens (no portable identity), so it DOORS (NoLensError) instead of
+  // silently degrading to #void.
+  { type: "unique symbol", entryForm: "DOOR (no lens — NoLensError)", exitForm: "n/a", roundTrip: false },
   { type: "array", entryForm: "borrowed AJSArray (identity-cached)", exitForm: "raw source array", roundTrip: true },
   { type: "plain object", entryForm: "AJSObject (identity-cached, lazy)", exitForm: "raw source object", roundTrip: true },
   { type: "Uint8Array/ArrayBuffer/DataView", entryForm: "raw passthrough (named superset: FFI identity)", exitForm: "raw", roundTrip: true },
@@ -38,11 +41,16 @@ export const CROSSINGS: readonly CrossingRow[] = [
   // structure never reaches the router: the holding container settles it lazily on entry read
   // (pending-entry.ts; the inbound-registry law owns those rows).
   { type: "Promise", entryForm: "raw at fromJS (trampoline awaits); jsToScheme DOORS — structure entries settle lazily", exitForm: "n/a", roundTrip: false },
-  // Residual exotics (class instance / Map / Date / Error …): formerly a SILENT raw leak
-  // through jsToScheme's exotic passthrough — now a borrowed AJSObject, loudly (warn), with
-  // member reads through the interop policy and source-identity exit.
-  { type: "exotic object (class instance)", entryForm: "borrowed AJSObject (warn — leak closed)", exitForm: "raw source instance", roundTrip: true },
-  { type: "function (borrowed)", entryForm: "VOID (refused, warn)", exitForm: "region-scoped wrapper [INVERTS: reverse-membrane/P6]", roundTrip: false },
+  // Residual exotics (an unbranded class instance / Map / Date / RegExp / Set …): formerly a
+  // SILENT raw leak, then a warn-and-borrow AJSObject — V's ruling (2026-07-23) retires that
+  // tolerance tier too: no lens exists for an unbranded class instance, so it DOORS
+  // (NoLensError) — mark it `@arrival.private` to cross as an opaque handle, or hand plain
+  // data instead. (A host `Error` is its OWN declared lens, carved out — see
+  // error-object-exit.law.test.ts.)
+  { type: "exotic object (class instance)", entryForm: "DOOR (no lens — NoLensError; mark @arrival.private or hand plain data)", exitForm: "n/a", roundTrip: false },
+  // FUNCTION — deliberately UNCHANGED by the binary ruling (V has an open fork:
+  // lens-to-callable vs door — TODO(V-fork), rosetta.ts's FOREIGN_LENS_CLAIMS).
+  { type: "function (borrowed)", entryForm: "VOID (refused, warn) [TODO(V-fork)]", exitForm: "region-scoped wrapper [INVERTS: reverse-membrane/P6]", roundTrip: false },
   { type: "proper list (scheme→JS only)", entryForm: "n/a", exitForm: "lazy array proxy (R9, one-way, P9)", roundTrip: false },
   { type: "dotted pair (scheme→JS only)", entryForm: "n/a", exitForm: "lazy array proxy, tail folded (R9, one-way, P9)", roundTrip: false },
   { type: "native vector (scheme→JS only)", entryForm: "n/a", exitForm: "lazy array proxy (R9, one-way, P9)", roundTrip: false },

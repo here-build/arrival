@@ -20,7 +20,7 @@ import { EOF } from "../values/primitives/EOF.js";
 import { Values } from "../values/primitives/Values.js";
 import { AOpaqueHandle } from "../values/primitives/AOpaqueHandle.js";
 import { isMarkedInteropPrivate } from "./interop-access.js";
-import { R7RSError, UnrecognizedCrossingError, AsyncCrossingError } from "../errors.js";
+import { R7RSError, UnrecognizedCrossingError, AsyncCrossingError, NoLensError } from "../errors.js";
 import { is_promise } from "../eval/guards.js";
 import { _installCallableMarshal, type ACallable } from "../values/primitives/ACallable.js";
 import { type AUnwrap, type AWrap, type EgressMode, type SchemeValue } from "../values/types.js";
@@ -289,10 +289,50 @@ export interface InboundClaim {
 }
 
 /**
- * THE inbound claim registry — jsToScheme's whole value-kind algebra as one DECLARED,
- * ORDERED table (first claiming row wins; the order is semantic law, not import accident, and
- * the registry law test pins it). The row order and each row's rationale are docs/membrane.md
- * §INBOUND (the ordered claim registry); each row below carries its own one-line contract.
+ * THE INBOUND ALGEBRA — V's ruling (2026-07-23, verbatim): "the js > scheme membrane
+ * is pretty simple — it's always either having the proper lens or not, all the
+ * concepts are either familiar or explicitly incompatible." BINARY: every inbound
+ * value crosses through exactly one of three PHASES, run in order (the phases
+ * concatenate into the one flat, DECLARED fold `jsToSchemeImpl` walks — the phase
+ * split is a documented, law-pinned fact about {@link INBOUND_CLAIMS}'s structure,
+ * not a second dispatch mechanism):
+ *
+ *   PHASE 1 — {@link OWNED_ARTIFACT_CLAIMS} (OWNED-ARTIFACT RECOGNITION): a thing
+ *   already MARKED as ours — an `AValue` instance, a re-admitted egress proxy, a
+ *   scheme orphan (EOF/Values/R7RSError), or a branded opaque-handle source — is
+ *   recognized before ANY foreign-shape predicate runs. Running phase 1 to
+ *   completion before phase 2 begins is the OLD "R9-before-array" law, generalized:
+ *   an R9 proxy over a vector is `Array.isArray`-true and would otherwise be
+ *   mis-claimed by phase 2's array row — the phase boundary makes that structurally
+ *   impossible now, not just an ordering convention within one flat list.
+ *   MOSTLY, not fully, order-free within the phase: `isMarkedInteropPrivate`
+ *   (interop-access.ts) reads the SAME `INTEROP_BOUNDARY` stamp our own scheme
+ *   orphans carry (EOF/Values/R7RSError each declare `static [INTEROP_BOUNDARY] =
+ *   true` for the read-policy walk, unrelated to the whiteroom opt-in) — that
+ *   function's own doc names this explicitly. So the scheme-orphan row MUST be
+ *   checked before the branded-host-instance row (its declared order below), or an
+ *   EOF/Values/R7RSError would be mis-minted as an AOpaqueHandle instead of passing
+ *   by identity. The other three rows (AValue/R9/scheme-orphan) genuinely are
+ *   disjoint marks — this one pair is the exception, and the order below pins it.
+ *
+ *   PHASE 2 — {@link FOREIGN_LENS_CLAIMS} (THE FOREIGN LENS TABLE, typeof-disjoint):
+ *   reached only when phase 1 missed. Every row is keyed by a distinct `typeof` tag
+ *   (the array/plain-object containment ladder lives INSIDE the single "object" row
+ *   below, not as two order-dependent siblings), so — aside from that one internal
+ *   ladder — these rows are ALSO order-independent. Every hit here is a LENS, a
+ *   defined, familiar crossing: this is where the warn-and-degrade middle tier used
+ *   to live (`undefined` used to warn-then-void; it is now a plain lens, no warn,
+ *   same as every other row in this phase). ONE row survives verbatim, unresolved:
+ *   bare host function (`TODO(V-fork)` on its row) — V has an open fork
+ *   (lens-to-callable vs door) this restructure does not settle.
+ *
+ *   PHASE 3 — {@link INCOMPATIBILITY_DOOR_CLAIMS} (THE INCOMPATIBILITY DOOR):
+ *   reached only when phases 1-2 both missed. Every remaining shape is EXPLICITLY
+ *   INCOMPATIBLE — never a silent degrade to `#void` or an untethered borrow. Each
+ *   row names a DIFFERENT refusal (a bare Promise must settle first; a unique
+ *   symbol has no portable identity; an unbranded/exotic class instance has no
+ *   lens — mark it `@arrival.private` or hand plain data) so each teaches its own
+ *   cure (`NoLensError`/`AsyncCrossingError`, errors.ts).
  *
  * NOTE the registry-vs-switch history in boxing.ts: what that header rejects is
  * SELF-REGISTRATION (order by import accident). This is the opposite construction —
@@ -300,22 +340,7 @@ export interface InboundClaim {
  * in closures/protocol methods, so no class binding is read at module-eval time (the
  * benign AJSObject/AJSArray ↔ rosetta cycles stay TDZ-safe).
  */
-export const INBOUND_CLAIMS: readonly InboundClaim[] = [
-  {
-    // null → nil: the list-end bottom, provenance-stamped when supplied.
-    name: "null → nil",
-    claims: (v) => v === null,
-    box: (ctx, _v, p) => (p === EMPTY_PROVENANCE ? nil : new ANil(p)),
-  },
-  {
-    // undefined has no portable Scheme value (host-agnostic interpreter) → #void, loudly.
-    name: "undefined → #void (warn)",
-    claims: (v) => v === undefined,
-    box: () => {
-      warnMembrane("a JS `undefined`");
-      return theVoid;
-    },
-  },
+export const OWNED_ARTIFACT_CLAIMS: readonly InboundClaim[] = [
   {
     // Already-AValue: same/empty-provenance identity fast path; otherwise the class's
     // own re-stamp — deep on spine carriers (APair/AVector's arrival/withProvenanceDeep),
@@ -342,14 +367,15 @@ export const INBOUND_CLAIMS: readonly InboundClaim[] = [
     // same PROXY_ORIGIN map at mint) and is now crossing back IN is re-admitted as
     // its ORIGINAL box, not re-borrowed as a fresh AJSArray/AJSObject — so
     // `jsToScheme(schemeToJs(box)) === box` (mem/eq?) holds for containers exactly
-    // as it already does for scalars. Ordered BEFORE the array/plain-object rows on
-    // purpose: an R9 proxy over a VECTOR is `Array.isArray`-true and would
-    // otherwise be claimed by the array row first, losing identity permanently
-    // (a fresh borrowed AJSArray around the proxy, never eq? to the original
-    // vector). Re-dispatches through `jsToSchemeImpl` with the ORIGINAL box — that
-    // re-enters the "AValue → identity / provenance re-stamp" row just above,
-    // reusing its re-stamp logic verbatim rather than duplicating it here (risk:
-    // do NOT reimplement re-stamping in this row).
+    // as it already does for scalars. Phase 1 runs to completion before phase 2's
+    // array row ever sees the value (the ordering-is-load-bearing law, restated):
+    // an R9 proxy over a VECTOR is `Array.isArray`-true and would otherwise be
+    // claimed there first, losing identity permanently (a fresh borrowed AJSArray
+    // wrapping the proxy, never eq? to the original vector). Re-dispatches through
+    // `jsToSchemeImpl` with the ORIGINAL box — that re-enters the "AValue →
+    // identity / provenance re-stamp" row above, reusing its re-stamp logic
+    // verbatim rather than duplicating it here (risk: do NOT reimplement
+    // re-stamping in this row).
     name: "R9 egress proxy → original box (re-admission)",
     claims: (v) => typeof v === "object" && v !== null && originalBoxOf(v) !== undefined,
     box: (ctx, v, p, seen) => {
@@ -359,25 +385,91 @@ export const INBOUND_CLAIMS: readonly InboundClaim[] = [
     },
   },
   {
-    // JS array IS an R7RS vector (faithful Rosetta mapping) → borrowed AJSArray, source
-    // kept by reference, elements boxed lazily on access.
-    name: "array → borrowed AJSArray",
-    claims: (v) => Array.isArray(v),
-    box: (ctx, v, p) => {
-      invariant(Array.isArray(v), "inbound claim 'array': box called off its predicate");
-      return new AJSArray(v, p);
-    },
+    // Non-AValue scheme orphans: already scheme values (types.ts's SchemeValue union),
+    // no provenance slot → identity. ORDERED BEFORE the branded-host-instance row
+    // below on purpose (see this const's header note): EOF/Values/R7RSError each
+    // carry the SAME `INTEROP_BOUNDARY` stamp `isMarkedInteropPrivate` reads for the
+    // whiteroom brand — checked after this row, that predicate would otherwise be
+    // reached with an orphan still unclaimed and mis-mint it as an AOpaqueHandle.
+    name: "scheme orphan (EOF/Values/R7RSError) → identity",
+    claims: (v) => v instanceof EOF || v instanceof Values || v instanceof R7RSError,
+    box: (_ctx, v) => v,
   },
   {
-    // Plain-prototype object → borrowed AJSObject, entries boxed lazily via .get cache.
-    // BEFORE the promise row on purpose: a plain thenable stays a dict-shaped borrow.
-    name: "plain object → borrowed AJSObject",
+    // Branded HOST class instance (`@arrival.private`/`markInteropPrivate` — the
+    // whiteroom opaque-crossing contract, docs/plans/infer-whiteroom-design.md §"V'S
+    // API RULING", interop-access.ts's `markInteropPrivate` doc has the full statement):
+    // mint-or-reuse THIS RUN's canonical `AOpaqueHandle` via its own cache
+    // (`AOpaqueHandle.for` — run-scoped, see that class's header for why not global).
+    // This IS the lens for a class instance — the phase 3 door below fires only for
+    // an instance NEITHER this row nor any other owned-artifact row recognizes.
+    // Ordered AFTER the scheme-orphan row above (load-bearing — see this const's
+    // header note): `isMarkedInteropPrivate` also answers true for our OWN
+    // EOF/Values/R7RSError classes (they share the same `INTEROP_BOUNDARY` stamp for
+    // an unrelated reason — the read-policy walk, not the whiteroom opt-in), so the
+    // scheme-orphan row must claim those three classes first.
+    name: "branded host instance → opaque handle (mint/reuse, whiteroom contract)",
+    claims: (v) => typeof v === "object" && v !== null && isMarkedInteropPrivate(v),
+    box: (ctx, v, p) => {
+      invariant(typeof v === "object" && v !== null, "inbound claim 'branded host instance': box called off its predicate");
+      return AOpaqueHandle.for(ctx, v, p);
+    },
+  },
+] as const;
+
+export const FOREIGN_LENS_CLAIMS: readonly InboundClaim[] = [
+  {
+    // null → nil: the list-end bottom, provenance-stamped when supplied.
+    name: "null → nil",
+    claims: (v) => v === null,
+    box: (ctx, _v, p) => (p === EMPTY_PROVENANCE ? nil : new ANil(p)),
+  },
+  {
+    // undefined has no portable Scheme value (host-agnostic interpreter), but it IS a
+    // FAMILIAR concept (JS absence) — a plain LENS to #void, no warn. (The warn tier
+    // this row used to carry is the one V's ruling retires: undefined isn't
+    // "explicitly incompatible," it's just the other host bottom — see null → nil
+    // above, the two never collapse into one.)
+    name: "undefined → #void (lens)",
+    claims: (v) => v === undefined,
+    box: () => theVoid,
+  },
+  {
+    // The containment hierarchy for object-typed values that ARE plain data: JS array
+    // IS an R7RS vector (faithful Rosetta mapping) → borrowed AJSArray; a
+    // plain-prototype object → borrowed AJSObject. ONE row, ONE internal ladder
+    // (Array.isArray checked first) — not two order-dependent siblings — because the
+    // containment relationship (array ⊂ object, plain-proto ⊂ object) is a fact about
+    // the shapes, not an accident of declaration order. An object that is NEITHER
+    // (Date/Map/Set/RegExp/an unbranded class instance/…) is not claimed here at all;
+    // it falls through to phase 3's door.
+    name: "object → array/plain-object containment ladder",
     claims: (v) =>
       typeof v === "object" &&
       v !== null &&
-      (Object.getPrototypeOf(v) === Object.prototype || Object.getPrototypeOf(v) === null),
+      (Array.isArray(v) || Object.getPrototypeOf(v) === Object.prototype || Object.getPrototypeOf(v) === null),
     box: (ctx, v, p) => {
-      invariant(typeof v === "object" && v !== null, "inbound claim 'plain object': box called off its predicate");
+      invariant(typeof v === "object" && v !== null, "inbound claim 'object ladder': box called off its predicate");
+      return Array.isArray(v) ? new AJSArray(v, p) : new AJSObject(v, p);
+    },
+  },
+  {
+    // A HOST `Error` — a FAMILIAR concept (a JS exception/data-shaped error object
+    // returned as data, or caught and handed across a capability boundary), not an
+    // "explicitly incompatible" exotic. Declared LENS, no warn: borrowed as an
+    // AJSObject exactly like the plain-object row above, whose `stack` read
+    // collapses to absent through the interop read policy (error-object-exit.law.test.ts
+    // owns that law — a host Error's `stack` is a host-internals confession the
+    // sandbox has no use for; `message`/`name` stay readable). An `R7RSError` is
+    // NEVER reached here — it's claimed by phase 1's scheme-orphan row first, since
+    // every Error subclass this router would otherwise see is a genuine host Error.
+    // Kept a SEPARATE row from the object ladder above (not folded into its
+    // "plain-object" check) because `Error.prototype` is never `Object.prototype` —
+    // this is its own, deliberate carve-out, not a silent fallthrough.
+    name: "host Error → borrowed AJSObject (declared lens)",
+    claims: (v) => v instanceof Error,
+    box: (ctx, v, p) => {
+      invariant(v instanceof Error, "inbound claim 'host Error': box called off its predicate");
       return new AJSObject(v, p);
     },
   },
@@ -395,34 +487,18 @@ export const INBOUND_CLAIMS: readonly InboundClaim[] = [
     box: (ctx, v, p) => fromJs(ctx, v, p),
   },
   {
-    // Registered symbol (`Symbol.for('x')`) has a portable string key → keyword `:x`;
-    // a unique symbol has no portable identity → #void + warn (like a function).
-    name: "symbol → :keyword (registered) / #void (unique, warn)",
-    claims: (v) => typeof v === "symbol",
+    // Registered symbol (`Symbol.for('x')`) has a portable string key → keyword `:x`.
+    // A UNIQUE symbol has no portable identity — that is phase 3's door below, not
+    // this lens (a registered and a unique symbol share a `typeof` tag but are NOT
+    // the same concept: one has a stable cross-realm key, the other doesn't).
+    name: "symbol → :keyword (registered)",
+    claims: (v) => typeof v === "symbol" && Symbol.keyFor(v) !== undefined,
     box: (ctx, v, p) => {
-      invariant(typeof v === "symbol", "inbound claim 'symbol': box called off its predicate");
+      invariant(typeof v === "symbol", "inbound claim 'registered symbol': box called off its predicate");
       const key = Symbol.keyFor(v);
-      if (key !== undefined) return new ASymbol(`:${key}`, p);
-      warnMembrane("a unique JS symbol");
-      return theVoid;
+      invariant(key !== undefined, "inbound claim 'registered symbol': box called off its predicate (unregistered)");
+      return new ASymbol(`:${key}`, p);
     },
-  },
-  {
-    // Borrowed JS function is not a Scheme value — exposing it as callable would let
-    // the sandbox escape into uncontrolled JS — voids, loudly.
-    name: "function → #void (warn)",
-    claims: (v) => typeof v === "function",
-    box: () => {
-      warnMembrane("a JS function");
-      return theVoid;
-    },
-  },
-  {
-    // Non-AValue scheme orphans: already scheme values (types.ts's SchemeValue union),
-    // no provenance slot → identity.
-    name: "scheme orphan (EOF/Values/R7RSError) → identity",
-    claims: (v) => v instanceof EOF || v instanceof Values || v instanceof R7RSError,
-    box: (_ctx, v) => v,
   },
   {
     // Opaque HOST value — not a scheme number (docs/design-history/
@@ -447,9 +523,29 @@ export const INBOUND_CLAIMS: readonly InboundClaim[] = [
     box: (_ctx, v) => v,
   },
   {
+    // FUNCTION — deliberately UNCHANGED. TODO(V-fork): lens-to-callable vs door —
+    // pending ruling. A borrowed JS function is not (yet?) a Scheme value — exposing
+    // it as callable would let the sandbox escape into uncontrolled JS — voids,
+    // loudly. This is the ONE row the binary ruling does NOT resolve: V has an open
+    // fork on whether a bare host function should become a genuine callable lens or
+    // the phase 3 door, and this restructure leaves today's behavior verbatim rather
+    // than guessing which side of that fork V lands on.
+    name: "function → #void (warn) [TODO(V-fork): lens-to-callable vs door — pending ruling]",
+    claims: (v) => typeof v === "function",
+    box: () => {
+      warnMembrane("a JS function");
+      return theVoid;
+    },
+  },
+] as const;
+
+export const INCOMPATIBILITY_DOOR_CLAIMS: readonly InboundClaim[] = [
+  {
     // A bare Promise (or non-plain thenable) doors — see jsToSchemeAsyncDoor. Promise
     // VALUES inside structures never reach this row: the holding container settles
-    // them lazily on entry read (pending-entry.ts).
+    // them lazily on entry read (pending-entry.ts). Ordered FIRST in this phase: a
+    // Promise's `typeof` is "object", so it must be named before the generic
+    // unbranded/exotic-object door below claims it with the wrong message.
     name: "promise → door (settle first; container entries settle lazily)",
     claims: (v) => is_promise(v),
     box: () => {
@@ -457,40 +553,45 @@ export const INBOUND_CLAIMS: readonly InboundClaim[] = [
     },
   },
   {
-    // Branded HOST class instance (`@arrival.private`/`markInteropPrivate` — the
-    // whiteroom opaque-crossing contract, docs/plans/infer-whiteroom-design.md §"V'S
-    // API RULING", interop-access.ts's `markInteropPrivate` doc has the full statement):
-    // mint-or-reuse THIS RUN's canonical `AOpaqueHandle` via its own cache
-    // (`AOpaqueHandle.for` — run-scoped, see that class's header for why not global).
-    // Ordered here, immediately before the residual "exotic object" catch-all below,
-    // which this row NARROWS: an UNbranded class instance still falls through to that
-    // row unchanged (today's behavior, pinned). Ordered AFTER every row above that
-    // already claims a MORE SPECIFIC shape sharing the same marker mechanism — row 3
-    // ("AValue → identity") claims every AValue instance first (AValue itself carries
-    // the marker), and the "scheme orphan" row claims EOF/Values first (both carry it
-    // too) — so this row is reached only by objects NEITHER of those already took.
-    name: "branded host instance → opaque handle (mint/reuse, whiteroom contract)",
-    claims: (v) => typeof v === "object" && v !== null && isMarkedInteropPrivate(v),
-    box: (ctx, v, p) => {
-      invariant(typeof v === "object" && v !== null, "inbound claim 'branded host instance': box called off its predicate");
-      return AOpaqueHandle.for(ctx, v, p);
+    // A unique (unregistered) JS symbol: no stable cross-realm key, so no lens exists
+    // for it in the algebra — EXPLICITLY INCOMPATIBLE, not a warn-and-void degrade.
+    name: "unique symbol → door (no lens)",
+    claims: (v) => typeof v === "symbol",
+    box: () => {
+      throw new NoLensError("unique-symbol");
     },
   },
   {
-    // Residual exotics (class instances, Map, Date, Error, …): re-presented as a
-    // borrowed AJSObject, LOUDLY (never a silent raw pass-through). Member reads keep
-    // working through the interop policy; exit round-trips to source identity.
-    name: "exotic object → borrowed AJSObject (warn)",
+    // Residual exotics (Date/Map/Set/RegExp, an unbranded class instance, …) that
+    // carry NO owned-artifact mark (phase 1 missed) and match NEITHER declared phase
+    // 2 lens (not the array/plain-object ladder, not a host Error): no lens exists
+    // for them — EXPLICITLY INCOMPATIBLE. This is the flip from the old warn-and-
+    // borrow tier (an AJSObject wrap with a console warning) to a loud door naming
+    // the two cures: brand the class `@arrival.private`, or hand plain data instead.
+    name: "unbranded/exotic object → door (no lens)",
     claims: (v) => typeof v === "object" && v !== null,
-    box: (ctx, v, p) => {
-      invariant(typeof v === "object" && v !== null, "inbound claim 'exotic object': box called off its predicate");
-      warnMembrane(
-        `a JS ${v.constructor?.name ?? "<null-proto>"} instance`,
-        "was re-presented as a borrowed js-object wrapper — its members read through the interop policy, and it exits back to JS as the same instance",
-      );
-      return new AJSObject(v, p);
+    box: (_ctx, v) => {
+      invariant(typeof v === "object" && v !== null, "inbound claim 'unbranded/exotic object': box called off its predicate");
+      throw new NoLensError("unbranded-class", v.constructor?.name ?? "<anonymous object>");
     },
   },
+] as const;
+
+/**
+ * THE inbound claim registry — jsToScheme's whole value-kind algebra as one flat,
+ * DECLARED, ORDERED fold: {@link OWNED_ARTIFACT_CLAIMS} then {@link
+ * FOREIGN_LENS_CLAIMS} then {@link INCOMPATIBILITY_DOOR_CLAIMS} (first claiming row
+ * wins). The concatenation order across the three phases IS semantic (phase 1 must
+ * run to completion before phase 2, and phase 2 before phase 3's catch-all doors);
+ * within phase 1 and (mostly) within phase 2 the row order is NOT semantic — see the
+ * three phases' own doc above. The inbound-registry law test pins this flat list's
+ * names in order regardless, so an accidental reorder across phase boundaries is
+ * still a caught diff.
+ */
+export const INBOUND_CLAIMS: readonly InboundClaim[] = [
+  ...OWNED_ARTIFACT_CLAIMS,
+  ...FOREIGN_LENS_CLAIMS,
+  ...INCOMPATIBILITY_DOOR_CLAIMS,
 ] as const;
 
 /**
