@@ -56,3 +56,12 @@ export {
   type PreludeBindTarget,
   type RuntimeAssembler,
 } from "./common/kernel.js";
+
+// `bindValue` — binds a name into a live `AmbientRuntime` env, `fromJS`-boxing a raw JS value
+// unless it's already a SchemeValue (or one of the small documented carve-outs). Exported here
+// for the provenance analysis-stack relocation: `@inhuman.tools/arrival-provenance`'s
+// `analysis/uneval.ts` (`buildUneval`) arms `uneval`'s re-execution scope with it — binding the
+// run's output as `result` before evaluating a selector as one more tapped step. Not previously
+// exported anywhere (uneval.ts was an in-package relative import); this is its first cross-package
+// door.
+export { bindValue } from "./env/AmbientRuntime.js";

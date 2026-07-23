@@ -23,12 +23,17 @@
  * ADDITIVE + flag-gated exactly like the carrier: no `AutoBindings` sidecar
  * (`trace.withAutoBindings()`) → an empty graph with a warning, never a throw.
  */
-import { classify, fieldResolve } from "./lineage.js";
-import type { Bindings, Classifier, LineageNode } from "./lineage.js";
-import { slotsOf } from "./lineage-auto-bindings.js";
+import {
+  classify,
+  fieldResolve,
+  slotsOf,
+  type Bindings,
+  type Classifier,
+  type LineageNode,
+  type EvalTrace,
+} from "@inhuman.tools/arrival/provenance";
 
 import { classifierFromTrace, operandsOf, scopedBindings, subtreeIds } from "./carrier-fields.js";
-import type { EvalTrace } from "./trace.js";
 
 /** One consumer argument's op-sequence: the static skeleton + the runtime grounding of its slots. */
 export interface LineageWire {

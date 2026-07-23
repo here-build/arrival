@@ -26,12 +26,17 @@
  * symbol-bound `(:k (car x))` form works). (2) an `(@ x :k)` membrane read pins where the
  * keyword-only runtime `accessorField` (trace.ts) recognizes nothing — the carrier is the faithful side.
  */
-import { classify, fieldResolve } from "./lineage.js";
-import type { Bindings, Classifier, LineageNode } from "./lineage.js";
-import { slotsOf } from "./lineage-auto-bindings.js";
-import type { AutoBindings } from "./lineage-auto-bindings.js";
-
-import type { EvalTrace, Invocation } from "./trace.js";
+import {
+  classify,
+  fieldResolve,
+  slotsOf,
+  type Bindings,
+  type Classifier,
+  type LineageNode,
+  type AutoBindings,
+  type EvalTrace,
+  type Invocation,
+} from "@inhuman.tools/arrival/provenance";
 
 // The AST type `classify` actually accepts — derived from its own signature (via indexed
 // access) rather than named, so this file never needs to import the value union directly.

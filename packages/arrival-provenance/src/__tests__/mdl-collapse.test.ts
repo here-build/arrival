@@ -6,8 +6,8 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { collapseMDL } from "../mdl-collapse.js";
-import type { CandidateBox } from "../trace-to-forest.js";
+import { collapseMDL } from "../analysis/mdl-collapse.js";
+import type { CandidateBox } from "../analysis/trace-to-forest.js";
 
 const box = (over: Partial<CandidateBox> & Pick<CandidateBox, "id" | "type" | "n" | "localBits">): CandidateBox => ({
   children: [],

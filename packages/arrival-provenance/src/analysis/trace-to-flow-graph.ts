@@ -51,8 +51,7 @@ import { collapseMDL, type CollapseParams } from "./mdl-collapse.js";
 import { regionBoundariesFromEdges } from "./region-boundaries.js";
 import { traceToStatechart } from "./statechart.js";
 import { traceToForest, type CandidateBox, type ForestOptions } from "./trace-to-forest.js";
-import { scopeId } from "./scope-id.js";
-import type { EvalTrace, Invocation } from "./trace.js";
+import { scopeId, type EvalTrace, type Invocation } from "@inhuman.tools/arrival/provenance";
 
 export interface FlowGraphOptions extends ForestOptions, CollapseParams {
   /** v02-L2·C1 — an explicit `:fields` override, threaded straight to `traceToStatechart`

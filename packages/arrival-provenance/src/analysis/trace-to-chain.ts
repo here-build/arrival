@@ -20,9 +20,7 @@
  * the structure, not the scaled production path (that's the statechart's job, once
  * its O(n²) build is addressed).
  */
-import { userCallSite } from "./scope-id.js";
-import { snapshotTrace } from "./trace-snapshot.js";
-import type { EvalTrace } from "./trace.js";
+import { userCallSite, snapshotTrace, type EvalTrace } from "@inhuman.tools/arrival/provenance";
 
 export interface ChainNode {
   /** The invocation id (one node per actual call — not collapsed by scope). */

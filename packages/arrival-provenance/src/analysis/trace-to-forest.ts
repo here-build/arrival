@@ -34,9 +34,7 @@
  *   - Accessor macros (`field`/`@`) expand to a `cond` the classifier currently
  *     sees as a dnf box (minor noise; refine by skipping macro-internal forms).
  */
-import { headOf, scopeId } from "./scope-id.js";
-import { snapshotTrace, type PlainInv } from "./trace-snapshot.js";
-import type { EvalTrace } from "./trace.js";
+import { headOf, scopeId, snapshotTrace, type PlainInv, type EvalTrace } from "@inhuman.tools/arrival/provenance";
 
 // scopeId lives in a cycle-neutral leaf (scope-id.ts) — trace-snapshot needs it too, and
 // trace-to-forest imports trace-snapshot, so a reverse import would close a loop. Re-exported

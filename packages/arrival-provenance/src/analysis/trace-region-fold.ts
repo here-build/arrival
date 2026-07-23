@@ -16,14 +16,13 @@
  * value/provenance via `valueById` / `liveValueById`. Live reads into the snapshot
  * mirror deferred to Phase-2 (worker boundary); see `trace-snapshot.ts`.
  */
-import { schemeToJs } from "../membrane/rosetta.js";
-import type { APair } from "../values/primitives/APair.js";
-import type { SchemeValue } from "../values/types.js";
+import { schemeToJs } from "@inhuman.tools/arrival";
+import type { APair } from "@inhuman.tools/arrival/reflect-internals";
+import type { SchemeValue } from "@inhuman.tools/arrival";
 
 import { carrierFieldEdges, scopedBindings, subtreeIds } from "./carrier-fields.js";
-import type { PlainInv } from "./trace-snapshot.js";
+import { scopeId, type PlainInv, type EvalTrace, type Invocation } from "@inhuman.tools/arrival/provenance";
 import { staticLoopBodyScopes, staticRecursiveHeads, STRUCTURAL_FORMS } from "./trace-to-forest.js";
-import { scopeId } from "./scope-id.js";
 import {
   addPointToHasse,
   appendDecisionEdges,
@@ -44,7 +43,6 @@ import {
   type RegionGraph,
   type RegionWalkCtx,
 } from "./trace-to-regions.js";
-import type { EvalTrace, Invocation } from "./trace.js";
 
 // Reuses the from-scratch SHAPE helpers by EXTENDING sets incrementally: `staticLoopBodyScopes`
 // / `staticRecursiveHeads` (define-only) re-run lazily on a new define; `STRUCTURAL_FORMS`

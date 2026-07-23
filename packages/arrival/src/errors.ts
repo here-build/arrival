@@ -1243,8 +1243,11 @@ export class ExtensionSuffixConflictError extends ArrivalError {
 
 // -------------------------------------------------------------------------
 // :: Provenance/wire doors — joins the existing `ReplayScopeError`/
-// `WireLocalityError`/etc. family (all colocated with their mechanism; these two
-// are small enough, and general enough, to live in the shared home instead).
+// `WireLocalityError`/etc. family (all colocated with their mechanism; this one
+// is small enough, and general enough, to live in the shared home instead).
+// (`TraceArtifactVersionError` used to sit here too — moved to arrival-provenance's
+// `analysis/trace-artifact.ts`, its sole thrower, per the provenance analysis-stack
+// relocation; nothing in core ever caught it by identity.)
 // -------------------------------------------------------------------------
 
 /** A wire's declared `params` name has no matching key in the caller-supplied
@@ -1263,24 +1266,6 @@ export class IngressBindingError extends ArrivalError {
       `hermeticApply: wire "${span}" declares param "${param}" but no ingress binding was supplied for ` +
         "it — every name in wire.params must have a matching key in ingress, or " +
         "the applied lambda hits an unbound variable deep inside exec instead of this door.",
-    );
-  }
-}
-
-/** A `TraceArtifact` was produced by a newer protocol version than this
- *  visualizer supports (`provenance/trace-artifact.ts`'s `loadTraceArtifact`) —
- *  rejected loudly rather than rendered wrong; there is no older format to
- *  migrate from yet. */
-export class TraceArtifactVersionError extends ArrivalError {
-  public readonly name = "TraceArtifactVersionError";
-  readonly "arrival/error-category": ErrorClass = "other";
-
-  constructor(
-    public readonly version: number,
-    public readonly maxVersion: number,
-  ) {
-    super(
-      `Trace artifact version ${version} is newer than this visualizer supports (${maxVersion}). Update the visualizer.`,
     );
   }
 }

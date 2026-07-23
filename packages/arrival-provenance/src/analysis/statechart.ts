@@ -35,13 +35,12 @@
  * Distinguishing parallel-region-within-loop-region needs a mark hierarchy and
  * is a v1 follow-up; this v0 is the flat collapsed causal DAG.
  */
-import type { APair } from "../values/primitives/APair.js";
-import type { ASymbol } from "../values/primitives/ASymbol.js";
-import type { SchemeValue } from "../values/types.js";
+import type { APair } from "@inhuman.tools/arrival/reflect-internals";
+import type { ASymbol } from "@inhuman.tools/arrival/reflect-internals";
+import type { SchemeValue } from "@inhuman.tools/arrival";
 
 import { carrierFieldEdges } from "./carrier-fields.js";
-import { snapshotTrace, type PlainInv } from "./trace-snapshot.js";
-import type { EvalTrace } from "./trace.js";
+import { snapshotTrace, type PlainInv, type EvalTrace } from "@inhuman.tools/arrival/provenance";
 
 export type EdgeKind = "forward" | "loopback";
 

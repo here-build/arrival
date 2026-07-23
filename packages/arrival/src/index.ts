@@ -86,5 +86,10 @@ export type { SchemeValue } from "./values/types.js";
 export type { Invocation } from "./eval/dynamic-call-site.js";
 
 // The error root — `ArrivalError` is the base every arrival error extends; a capability
-// author's own error handling names it directly.
-export { ArrivalError } from "./errors.js";
+// author's own error handling names it directly. `ErrorClass` (the `"arrival/error-category"`
+// union every subclass must declare) is exported alongside it for the provenance
+// analysis-stack relocation: `TraceArtifactVersionError` moved to arrival-provenance's
+// `analysis/trace-artifact.ts` (its sole thrower) and, as an `ArrivalError` subclass
+// defined outside this package, needs `ErrorClass` as a real cross-package type import
+// instead of the in-package relative one every other subclass still uses.
+export { ArrivalError, type ErrorClass } from "./errors.js";

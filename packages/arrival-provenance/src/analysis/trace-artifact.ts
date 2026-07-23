@@ -22,12 +22,34 @@
  * version-gating here; downstream consumers take `{ graph }` and never branch on
  * the wire shape.
  */
-import { schemeToJs } from "../membrane/rosetta.js";
-import { TraceArtifactVersionError } from "../errors.js";
+import { ArrivalError, schemeToJs, type ErrorClass, type SchemeValue } from "@inhuman.tools/arrival";
 
 import { traceToRegions, type Region, type RegionGraph } from "./trace-to-regions.js";
-import type { EvalTrace } from "./trace.js";
-import type { SchemeValue } from "../values/types.js";
+import type { EvalTrace } from "@inhuman.tools/arrival/provenance";
+
+/**
+ * A `TraceArtifact` was produced by a newer protocol version than this
+ * visualizer supports (`loadTraceArtifact` below) — rejected loudly rather
+ * than rendered wrong; there is no older format to migrate from yet.
+ *
+ * Moved here from arrival core's `errors.ts` (provenance analysis-stack
+ * relocation): `trace-artifact.ts` is its sole thrower, and nothing in core
+ * ever caught it by identity — the door travels with its thrower. Message/
+ * shape preserved byte-identically.
+ */
+export class TraceArtifactVersionError extends ArrivalError {
+  public readonly name = "TraceArtifactVersionError";
+  readonly "arrival/error-category": ErrorClass = "other";
+
+  constructor(
+    public readonly version: number,
+    public readonly maxVersion: number,
+  ) {
+    super(
+      `Trace artifact version ${version} is newer than this visualizer supports (${maxVersion}). Update the visualizer.`,
+    );
+  }
+}
 
 /**
  * The wire-format version. Bump ONLY on a breaking change to the artifact shape

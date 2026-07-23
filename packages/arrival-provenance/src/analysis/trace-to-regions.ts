@@ -15,18 +15,21 @@
  * `TraceRegionFold` (`trace-region-fold.ts`) maintains incrementally O(Δ). Parity: strict
  * deep-equal test over EXPORTED pure helpers (`leafFor`, `conditionOf`, `regionsAt`, …).
  */
-import { APair } from "../values/primitives/APair.js";
-import { deepProvenance } from "./deep-provenance.js";
-import { schemeToJs } from "../membrane/rosetta.js";
+import { deepProvenance, schemeToJs, type SchemeValue } from "@inhuman.tools/arrival";
+import { APair } from "@inhuman.tools/arrival/reflect-internals";
 import { schemeToSugarcoat } from "@inhuman.tools/arrival-sugarcoat";
 
 import { carrierFieldEdges, scopedBindings, subtreeIds } from "./carrier-fields.js";
-import { userCallSite } from "./scope-id.js";
-import { snapshotTrace, type PlainInv, type PlainTrace } from "./trace-snapshot.js";
+import {
+  userCallSite,
+  snapshotTrace,
+  scopeId,
+  type PlainInv,
+  type PlainTrace,
+  type EvalTrace,
+  type Invocation,
+} from "@inhuman.tools/arrival/provenance";
 import { staticLoopBodyScopes, staticRecursiveHeads, STRUCTURAL_FORMS } from "./trace-to-forest.js";
-import { scopeId } from "./scope-id.js";
-import type { EvalTrace, Invocation } from "./trace.js";
-import type { SchemeValue } from "../values/types.js";
 
 /** A producer crossing a region's boundary — the region-model's first-class PORT.
  *  Keyed by producer's STRUCTURAL scope-id, NOT per-value: a N-times body emits

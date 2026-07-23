@@ -17,10 +17,8 @@
  * ancestor" heuristic.
  */
 import { traceToStatechart } from "./statechart.js";
-import { snapshotTrace, type PlainInv } from "./trace-snapshot.js";
+import { snapshotTrace, type PlainInv, scopeId, type EvalTrace } from "@inhuman.tools/arrival/provenance";
 import { traceToForest, type CandidateBox } from "./trace-to-forest.js";
-import { scopeId } from "./scope-id.js";
-import type { EvalTrace } from "./trace.js";
 
 export interface RegionBoundary {
   /** The region's structural scope id (`head@line:col`). */
