@@ -1,8 +1,15 @@
 // Membrane warning toggle — emitted when a host value with no portable Scheme
-// representation (a JS function / `undefined` / a unique symbol) crosses the membrane
-// and materializes to #void. A LEAF (no deps): the value layer (boxing.ts's `function`
-// boxer) and the membrane (rosetta.ts / membrane.ts) share the one flag without dragging
-// the evaluator into the value-primitive import graph.
+// representation crosses the membrane and materializes to #void. A LEAF (no deps).
+//
+// V's 2026-07-23/24 rulings retired every LIVE producer on the actual js→scheme
+// crossing path: `undefined` is a plain lens (no warn), a unique symbol doors
+// (NoLensError, no warn), and a bare host function is now a genuine reverse-membrane
+// callable (docs/membrane.md §CALLABLE-LENS, ACallable.ts's `hostFnToCallable` — no
+// warn either). The ONE remaining caller is `values/primitives/deep-restamp.ts`'s
+// re-stamp of a LEGACY bare-fn `AProcedure` already living in a scheme spine (a
+// pre-`ACallable` `SchemeValue` survivor arm, never a fresh JS→scheme crossing — the
+// callable lens has no purchase on something already inside the algebra). Stays a
+// leaf (no deps) so that one caller doesn't have to pull in a heavier module.
 
 let membraneWarningsEnabled = true;
 
@@ -27,16 +34,19 @@ export function setMembraneWarnings(enabled: boolean): void {
 const emitted = new Map<string, number>();
 const WARN_LIMIT = 3;
 
-/** `outcome` (optional) overrides the default "materialized to #void" clause: the
- *  inbound exotic claim (rosetta.ts) crosses a class instance to a borrowed wrapper
- *  rather than #void and says so. Callers that omit it get the default clause. */
+/** `outcome` (optional) overrides the default "materialized to #void" clause, for a
+ *  caller whose crossing lands somewhere else. No production caller supplies one
+ *  today (both live callers — deep-restamp.ts's `undefined`/legacy-bare-fn re-stamp
+ *  arms — genuinely materialize to `#void`); kept general rather than hardcoding the
+ *  one shape currently in use. Callers that omit it get the default clause. */
 export function warnMembrane(what: string, outcome?: string): void {
   if (!membraneWarningsEnabled) return;
 
   const text = `[arrival membrane] ${what} crossed into Scheme and ${
     outcome ??
-    "materialized to #void — it has no portable " +
-      "representation (the interpreter is host-agnostic; JS functions / undefined / unique symbols are not Scheme values)"
+    "materialized to #void — it has no portable representation (the interpreter is " +
+      "host-agnostic; a bare JS `undefined`, or a legacy bare-fn value already living " +
+      "in a scheme spine, has no portable re-stamp target)"
   }.`;
 
   const seen = emitted.get(text) ?? 0;

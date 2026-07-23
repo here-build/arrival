@@ -31,16 +31,53 @@ they defer to (proxies, region discipline, egress projection) are here.
 
 ---
 
-## THE VOID RULE — the most-restated fact, stated once
+## THE CALLABLE LENS — the reverse membrane completes the bifunctor
 
-**A borrowed JS function crosses into Scheme as `#void`, loudly — never as a callable
-wrapper.** A host function is a value-layer-only term (P1): exposing it as callable
-would hand Scheme a region the provenance interpreter cannot enter, and let the
-sandbox escape into uncontrolled host JS. So the boxing membrane materializes it to
-`#void` — which is not callable — and emits a bounded membrane warning (§DOORS). This
-is the ONE row the binary membrane ruling below (§INBOUND) leaves unresolved — V has
-an open fork (lens-to-callable vs door) — so it alone still warns; every other
-non-portable shape below now either has a lens or doors.
+**A borrowed JS function crosses into Scheme as a genuine callable (V's ruling,
+2026-07-24, verbatim): "host fn crosses into scheme as a callable; when scheme calls
+it, args cross scheme→js, result crosses js→scheme. SAME logic for functions RETURNED
+from symbol.rosetta impls."** This retired the void-and-warn tolerance the function
+row carried through the 2026-07-23 binary-membrane restructure (§INBOUND) — that
+ruling settled every OTHER shape but left the bare-function row a documented,
+unresolved fork (lens-to-callable vs door); this is the fork resolved. A host function
+reaching the generic membrane (`fromJS`, `jsToScheme`, `boxing.ts`'s `fromJs`) mints
+(or reuses, per-run) an `ARosettaProcedure` whose apply term IS the reverse membrane:
+scheme args cross scheme→js (default-options `schemeToJs`), the host fn runs, and its
+result — awaited first if it's a `Promise` — crosses js→scheme under the CALLING
+invocation's run (`ACallable.ts`'s `hostFnToCallable`). This is the *inbound* mirror of
+`hostProjectionOf` (§REGION), which already gives the *outbound* leg (a scheme callable
+→ a host-callable wrapper) — the callable bifunctor is now complete in both
+directions, not just one.
+
+**Identity, run-scoped.** The SAME host fn crossing in twice within one run answers
+the SAME callable (`eq?`) — a `(RunContext, fn)`-keyed mint-or-reuse cache, same
+run-locality reasoning as `AOpaqueHandle.for`'s own cache (provenance is minted from
+one run's own invocation numbering; a global cache would let a wrapper minted under
+run A accumulate ids from run B that mean nothing under run A's numbering).
+Provenance stamps ONLY the first mint: a procedure's identity is load-bearing (the
+same reason `ALambda`/`ANativeProcedure`'s `withProvenance` is a no-op), so a later
+crossing of the SAME fn with different provenance answers the cached value unchanged
+rather than forking identity — unlike `AOpaqueHandle` (a DATA value, which remints and
+merges on every crossing).
+
+**Reverse-then-forward re-admits by identity.** A callable's own `hostProjectionOf`
+wrapper crossing back IN does NOT mint a fresh `ARosettaProcedure` wrapping the
+wrapper — it re-admits as the ORIGINAL callable (`eq?`), the function-shaped sibling
+of R9's container re-admission (§INBOUND phase 1): `ACallable.ts` keeps a reverse
+`WRAPPER_ORIGIN` map (wrapper → original callable), registered at mint time, read by
+`originalCallableOf` as an OWNED_ARTIFACT_CLAIMS row checked before the generic
+function lens. The OTHER direction is honestly asymmetric, not a gap: a bare host fn
+crossing IN, then its minted callable crossing back OUT, does NOT return the identical
+raw fn object — a genuine marshal wrapper must exist to cross args/result at call
+time. `crossing.law.test.ts`'s "function (borrowed)" row states this precisely.
+
+**`symbol.rosetta` returns land for free.** A rosetta verb whose OUTPUT slot is
+`z.dynamic` (the declared no-transform escape hatch) skips `z.encode` entirely and
+hands the impl's raw return straight to `jsToScheme` — so an impl returning a bare
+function needed no new codec: it crosses through the SAME lens above, automatically.
+A TYPED output slot (a real codec, not `z.dynamic`) has no function codec and stays
+out of scope — a fn-returning verb declares `z.dynamic` output (or a future
+`z.callback` codec, not yet built).
 
 **`undefined` is a LENS, not a warn (V's ruling, 2026-07-23).** It has no faithful
 Scheme representation any more than `null` does, but it IS a familiar host concept —
@@ -53,23 +90,17 @@ so `jsToScheme`/`fromJS` refuse it loudly (`NoLensError`) instead of degrading t
 `#void`: register it (`Symbol.for(name)`) to cross as a `:keyword`, or pass a
 string/keyword directly.
 
-**The one exception is a DECLARED crossing.** The void rule governs the
-*undeclared* crossing — a function reaching the generic membrane (`fromJS`,
-`jsToScheme`, `boxing.ts`) with no contract naming it. When a symbol's contract
-*declares* a slot `z.procedure`, that slot's codec supplies both a faithful
-representation and the marshaling discipline a callable needs: a host function
-crossing it `encode`s into an `ANativeProcedure` — a genuine Scheme callable that
-marshals per-argument and re-enters under region discipline (§REGION). Declared
-callable in → wrapped; undeclared callable in → voided. The reverse ban is
-independent and absolute: a callable is never *returned* from a rosetta as a bare JS
-function (provenance untraceable) — see §DOORS and `environments.md §MEMBRANE-SEAM`.
-
-This asymmetry is the whole membrane in miniature: **a value crosses faithfully only
-where a contract or a class knows how to carry both its readings.** Everything below
-is the elaboration of "how."
+**A DECLARED `z.procedure` slot is a MORE SPECIFIC lens, not a separate rule.** When a
+symbol's contract declares a slot `z.procedure`, that slot's codec supplies its own
+faithful representation and per-argument marshaling discipline: a host function
+crossing it `encode`s into an `ANativeProcedure` under that codec's own types, re-
+entering under region discipline (§REGION) exactly like the generic lens above — the
+two differ in how MUCH the marshal knows about each argument's shape (typed
+per-parameter vs default-options), never in whether a function crosses at all.
 
 **Enforcement sites:** `membrane/boxing.ts`, `membrane/rosetta.ts` (`INBOUND_CLAIMS`
-function row), `membrane/membrane.ts`, `common/scheme-zod.ts` (`procedure`),
+function row), `membrane/membrane.ts`, `values/primitives/ACallable.ts`
+(`hostFnToCallable`, `originalCallableOf`), `common/scheme-zod.ts` (`procedure`),
 `common/symbols/rosetta.ts`.
 
 ---
@@ -128,16 +159,16 @@ registry in `rosetta.ts` (§INBOUND):
 
 **Two host bottoms map to two Scheme absences, never collapsing to one:** JS `null` →
 `nil` (the empty list — the list-end bottom), JS `undefined` → `#void` (the
-no-value bottom, silently — a lens, not a warn; see THE VOID RULE above). A membrane
+no-value bottom, silently — a lens, not a warn; see §CALLABLE-LENS above). A membrane
 that folded them together would make `(null? x)` and a void check indistinguishable
 at the boundary.
 
 The BOXED/RAW split is why `bigint` is the one `typeof` tag `boxing.ts` returns
 unboxed: it widens the boxer's return by exactly one member (`AValue | bigint`), and
-every caller already treats the result as a cast target. `undefined` and a bare
-function take THE VOID RULE's `#void` exit (the function row alone still warns — V's
-open fork, unresolved); a registered symbol (`Symbol.for("x")`) has a portable key and
-boxes to the keyword `:x`; a UNIQUE symbol has no lens at all and doors (§INBOUND).
+every caller already treats the result as a cast target. `undefined` takes the plain
+`#void` lens; a bare function takes the CALLABLE lens (§CALLABLE-LENS, mints/reuses
+an `ARosettaProcedure`); a registered symbol (`Symbol.for("x")`) has a portable key
+and boxes to the keyword `:x`; a UNIQUE symbol has no lens at all and doors (§INBOUND).
 
 **The freeze contract, stated once.** A borrowed source is frozen
 (`Object.freeze`) on the *first Scheme read* of its wrapper, so a `pure` rosetta — one
@@ -227,13 +258,17 @@ to completion before phase 2, phase 2 before phase 3's catch-all doors):
    re-stamps through ITS OWN protocol — deep on spine carriers via
    `arrival/withProvenanceDeep`, shallow elsewhere); a re-admitted R9 egress proxy
    (re-dispatches with the ORIGINAL box, not a fresh borrow — checked before phase 2's
-   array row, since a proxy over a vector is `Array.isArray`-true); a non-`AValue`
-   scheme orphan (`EOF`/`Values`/`R7RSError`, by identity); a branded
-   `@arrival.private` host instance (mints/reuses a run-scoped `AOpaqueHandle`, the
-   whiteroom opaque-crossing contract). The scheme-orphan row MUST precede the
-   branded-instance row: `isMarkedInteropPrivate` reads the same `INTEROP_BOUNDARY`
-   stamp our own orphan classes carry for an unrelated reason (the read-policy walk),
-   so checking brand-first would mis-mint an orphan as a handle.
+   array row, since a proxy over a vector is `Array.isArray`-true); a re-admitted
+   REVERSE-MEMBRANE WRAPPER — the function-shaped sibling of the R9 row, checked
+   before phase 2's function row since a wrapper is `typeof === "function"`-true —
+   re-dispatches to the ORIGINAL callable it projects (`ACallable.ts`'s
+   `originalCallableOf`, §CALLABLE-LENS); a non-`AValue` scheme orphan
+   (`EOF`/`Values`/`R7RSError`, by identity); a branded `@arrival.private` host
+   instance (mints/reuses a run-scoped `AOpaqueHandle`, the whiteroom opaque-crossing
+   contract). The scheme-orphan row MUST precede the branded-instance row:
+   `isMarkedInteropPrivate` reads the same `INTEROP_BOUNDARY` stamp our own orphan
+   classes carry for an unrelated reason (the read-policy walk), so checking
+   brand-first would mis-mint an orphan as a handle.
 2. **PHASE 2 — the foreign lens table.** Every remaining row is a declared LENS, keyed
    by a distinct `typeof` tag: `null → nil`; `undefined → #void` (a lens now, no warn —
    the other host bottom, never collapsed with `null`); the array/plain-object
@@ -243,8 +278,10 @@ to completion before phase 2, phase 2 before phase 3's catch-all doors):
    `boxing.ts` boxer table (`bigint` deliberately excluded — it would be minted into
    an `AExact`, the silent reinterpretation the raw lane forbids); a REGISTERED symbol
    to the keyword `:x`; the two DECLARED raw-identity lanes (binary FFI; `bigint`);
-   and — the one row this ruling leaves unresolved (V has an open fork: lens-to-
-   callable vs door) — a bare host function, unchanged, `#void` + warn.
+   and — the row the 2026-07-23 ruling left open, RESOLVED 2026-07-24 (§CALLABLE-LENS)
+   — a bare host function mints/reuses a genuine scheme-callable `ARosettaProcedure`
+   (the reverse-membrane lens), completing the callable bifunctor `hostProjectionOf`
+   already gave the other direction.
 3. **PHASE 3 — the incompatibility door.** Reached only when phases 1-2 both miss.
    Every remaining shape is EXPLICITLY INCOMPATIBLE, never a silent degrade: a bare
    `Promise` doors (settle first; a Promise INSIDE a structure never reaches here —
@@ -498,13 +535,20 @@ this arm is its crossing, shared by `schemeToJsImpl` and `membrane.toJS` so the 
 exits cannot drift. A *raised* error never reaches this arm; it takes the throw path.
 
 **Membrane-warn is bounded, per-crossing not per-value.** A non-portable host value
-crossing to `#void` (THE VOID RULE) emits a teaching warning — but only the first
-few times per *distinct shape*, then one suppression line, then silence. The fact
-belongs to the RUN, not to each value that crosses: a large payload whose values all
-trip the same warning would otherwise emit hundreds of thousands of identical lines and
-OOM the process, turning an O(1) diagnostic into an O(n) one on the hot path. Bounded by
-the handful of distinct warning shapes, never by the size of the data crossing — the
-same reasoning the note-sink exists for.
+materializing to `#void` emits a teaching warning — but only the first few times per
+*distinct shape*, then one suppression line, then silence. The fact belongs to the
+RUN, not to each value that crosses: a large payload whose values all trip the same
+warning would otherwise emit hundreds of thousands of identical lines and OOM the
+process, turning an O(1) diagnostic into an O(n) one on the hot path. Bounded by the
+handful of distinct warning shapes, never by the size of the data crossing — the
+same reasoning the note-sink exists for. The 2026-07-23/24 rulings retired every LIVE
+producer on the `fromJS`/`jsToScheme` inbound path itself (`undefined` is a plain
+lens, a unique symbol doors, a bare function is now §CALLABLE-LENS's callable — none
+warn); the mechanism survives for ONE remaining caller, unrelated to a fresh inbound
+crossing: `values/primitives/deep-restamp.ts`'s re-stamp of a LEGACY bare-fn
+`AProcedure` already living in a scheme spine (`SchemeValue`'s pre-`ACallable`
+survivor arm) — a shape this document's §CALLABLE-LENS does not cover, since it is
+never a JS→scheme crossing, only a re-stamp of something already inside the algebra.
 
 **Enforcement sites:** `errors.ts`, `membrane/membrane.ts`, `membrane/rosetta.ts`,
 `membrane/membrane-warn.ts`.

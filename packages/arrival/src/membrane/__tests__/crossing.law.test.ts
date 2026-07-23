@@ -32,7 +32,7 @@ import { theVoid } from "../../values/primitives/AVoid.js";
 import { APair } from "../../values/primitives/APair.js";
 import { AVector } from "../../values/primitives/AVector.js";
 import { ADict } from "../../values/primitives/ADict.js";
-import { ANativeProcedure } from "../../values/primitives/ACallable.js";
+import { ANativeProcedure, ARosettaProcedure } from "../../values/primitives/ACallable.js";
 import { closeRegionScope, openRegionScope, withRegionScope } from "../region-scope.js";
 import { RegionEscapeError } from "../../errors.js";
 import { AJSArray } from "../AJSArray.js";
@@ -508,10 +508,14 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
 
     case "function (borrowed)": {
       it(entryTitle, () => {
+        // V's ruling (2026-07-24): a bare host function is a genuine LENS now, no
+        // warn — it mints a scheme-callable ARosettaProcedure (the reverse-membrane
+        // lens, ACallable.ts's hostFnToCallable).
         const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
         try {
-          expect(fromJS(() => 42)).toBe(theVoid);
-          expect(spy).toHaveBeenCalledTimes(1);
+          const entered = fromJS(() => 42);
+          expect(entered).toBeInstanceOf(ARosettaProcedure);
+          expect(spy).not.toHaveBeenCalled();
         } finally {
           spy.mockRestore();
         }
@@ -519,13 +523,15 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
       it.todo(exitTitle); // [INVERTS: reverse-membrane/P6] — staged on the region-discipline
       // migration (region.law.test.ts owns its acceptance tests); today there is no
       // region-scoped wrapper to test, so filling this now would just re-pin the gap.
-      it(`${roundTripTitle} — a borrowed function voids on entry and stays void through exit`, () => {
-        expect(exitJS(fromJS(() => 42))).toBe(undefined);
+      it(`${roundTripTitle} — a host fn crosses in as a callable, out as a marshaling wrapper (not the SAME fn object, but SAME behavior)`, async () => {
+        const out = exitJS(fromJS(() => 42));
+        expect(typeof out).toBe("function");
+        await expect((out as (...a: unknown[]) => unknown)()).resolves.toBe(42);
       });
       it(provenanceTitle, () => {
         const stamped = jsToScheme(CONSTANT_CTX, () => 42, {}, PROV);
-        expect(stamped).toBe(theVoid);
-        expect(stamped.provenance.size).toBe(0);
+        expect(stamped).toBeInstanceOf(ARosettaProcedure);
+        expect([...stamped.provenance]).toEqual([...PROV]);
       });
       break;
     }

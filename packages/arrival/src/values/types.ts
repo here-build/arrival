@@ -38,6 +38,7 @@ import type { R7RSError } from "../errors.js";
 // type` keeps the mutual edge with AmbientRuntime.ts a pure compile-time cycle.
 import type { CallCtx } from "../run/CallCtx.js";
 import type { ACallable } from "./primitives/ACallable.js";
+import type { ARosettaProcedure } from "./primitives/ACallable.js";
 import { AValue } from "./primitives/AValue.js";
 
 /**
@@ -191,7 +192,7 @@ export type AWrap<T> = [unknown] extends [T]
                         : [T] extends [symbol]
                           ? ASymbol | AVoid // registered (Symbol.for) → ASymbol; unique → AVoid, jsToScheme's own split.
                           : [T] extends [Function]
-                            ? AVoid // a bare JS function has no portable Scheme value — warns + voids.
+                            ? ARosettaProcedure // reverse-membrane lens (V's 2026-07-24 ruling): mints/reuses a genuine scheme callable — see ACallable.ts's `hostFnToCallable`.
                             : [T] extends [object]
                               ? AJSObject // plain objects AND residual exotics — both borrow as AJSObject (exotics warn).
                               : SchemeValue;

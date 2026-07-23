@@ -6,10 +6,10 @@ import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
 import { ABool, schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { ANil } from "../values/primitives/ANil.js";
-import { AVoid, theVoid } from "../values/primitives/AVoid.js";
+import { AVoid } from "../values/primitives/AVoid.js";
 import { AJSArray } from "./AJSArray.js";
 import { AJSObject } from "./AJSObject.js";
-import { warnMembrane } from "./membrane-warn.js";
+import { hostFnToCallable, originalCallableOf } from "../values/primitives/ACallable.js";
 
 /**
  * The JS → Scheme boxing membrane: a single `typeof`-tag `switch` that constructs the
@@ -19,8 +19,11 @@ import { warnMembrane } from "./membrane-warn.js";
  * A single switch, not a registry: the subtypes already `extends AValue`, and the
  * object/function boxers are plain value-class construction (AJSArray/AJSObject are
  * value-primitive files) — nothing here needs indirection through a self-registering
- * boxer table. The one membrane-side arm (`function` → #void warn) uses the leaf
- * `membrane-warn`, so no evaluator is pulled into the value layer.
+ * boxer table. The `function` arm mints via `ACallable.ts`'s `hostFnToCallable` — the
+ * SAME reverse-membrane lens `membrane/rosetta.ts`'s INBOUND_CLAIMS function row uses
+ * (one mechanism, two entry points; that file's own doc is the law) — checking
+ * `originalCallableOf` first so a reverse-membrane wrapper crossing back in here
+ * re-admits as its original callable instead of being wrapped a second time.
  *
  * `bigint` is the one tag that does NOT box (docs/design-history/
  * arrival-one-number-rework.md §2.3): an opaque HOST value, not a scheme number — it
@@ -76,10 +79,16 @@ export function fromJs(
       // `typeof [] === "object"`: a JS array IS an R7RS vector → a borrowed AJSArray (the
       // faithful Rosetta mapping); a plain object wraps as a lazy AJSObject.
       return Array.isArray(v) ? new AJSArray(v, provenance) : new AJSObject(v, provenance);
-    case "function":
-      // docs/membrane.md §VOID-RULE — a borrowed function voids, loudly; never a callable wrapper.
-      warnMembrane("a JS function");
-      return theVoid;
+    case "function": {
+      // docs/membrane.md §CALLABLE-LENS — a bare host function crosses in as a genuine
+      // scheme callable (the reverse-membrane lens, ACallable.ts's `hostFnToCallable`):
+      // args marshal scheme→js, the host fn runs, its result marshals js→scheme.
+      // Re-admission FIRST: a function that is itself one of `hostProjectionOf`'s own
+      // reverse-membrane wrappers re-admits as its ORIGINAL callable (`eq?`) rather than
+      // being wrapped a second time (round-trip-to-identity, ACallable.ts's own doc).
+      const original = originalCallableOf(v as object);
+      return original ?? hostFnToCallable(ctx, v as (...args: unknown[]) => unknown, provenance);
+    }
     default:
       // "symbol" and any future tag: not boxable here (symbols cross via the membrane's
       // keyword/Symbol.for path, never fromJs). A programmer error, not a runtime one.

@@ -51,6 +51,7 @@ describe("inbound registry — the declared, ordered claim table IS the law", ()
       // PHASE 1 — owned-artifact recognition.
       "AValue → identity / provenance re-stamp (class term)",
       "R9 egress proxy → original box (re-admission)",
+      "reverse-membrane wrapper → original callable (re-admission)",
       "scheme orphan (EOF/Values/R7RSError) → identity",
       "branded host instance → opaque handle (mint/reuse, whiteroom contract)",
       // PHASE 2 — the foreign lens table.
@@ -62,7 +63,7 @@ describe("inbound registry — the declared, ordered claim table IS the law", ()
       "symbol → :keyword (registered)",
       "bigint → raw passthrough (opaque host value, not a scheme number)",
       "binary (Uint8Array/ArrayBuffer/DataView/Buffer) → raw passthrough (declared)",
-      "function → #void (warn) [TODO(V-fork): lens-to-callable vs door — pending ruling]",
+      "function → callable (reverse membrane: args scheme→js, result js→scheme)",
       // PHASE 3 — the incompatibility door.
       "promise → door (settle first; container entries settle lazily)",
       "unique symbol → door (no lens)",

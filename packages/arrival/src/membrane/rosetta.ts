@@ -22,15 +22,11 @@ import { AOpaqueHandle } from "../values/primitives/AOpaqueHandle.js";
 import { isMarkedInteropPrivate } from "./interop-access.js";
 import { R7RSError, UnrecognizedCrossingError, AsyncCrossingError, NoLensError } from "../errors.js";
 import { is_promise } from "../eval/guards.js";
-import { _installCallableMarshal, type ACallable } from "../values/primitives/ACallable.js";
+import { _installCallableMarshal, hostFnToCallable, originalCallableOf, type ACallable } from "../values/primitives/ACallable.js";
 import { type AUnwrap, type AWrap, type EgressMode, type SchemeValue } from "../values/types.js";
 import invariant from "tiny-invariant";
 import { closeRegionScope, currentRegionScope, DETACHED_SCOPE, openRegionScope, withRegionScope } from "./region-scope.js";
 import { originalBoxOf } from "./egress-proxy.js";
-
-// warnMembrane lives in leaf membrane-warn.ts, shared with boxing.ts `function` boxer — value layer needn't import evaluator-heavy module just to warn.
-// Non-portable JS value → #void, loudly: docs/membrane.md §VOID-RULE.
-import { warnMembrane } from "./membrane-warn.js";
 import { makeCallCtx, type CallCtx } from "../run/CallCtx.js";
 import { tf } from "../values/tagless-final.js";
 
@@ -299,12 +295,15 @@ export interface InboundClaim {
  *
  *   PHASE 1 — {@link OWNED_ARTIFACT_CLAIMS} (OWNED-ARTIFACT RECOGNITION): a thing
  *   already MARKED as ours — an `AValue` instance, a re-admitted egress proxy, a
- *   scheme orphan (EOF/Values/R7RSError), or a branded opaque-handle source — is
- *   recognized before ANY foreign-shape predicate runs. Running phase 1 to
- *   completion before phase 2 begins is the OLD "R9-before-array" law, generalized:
- *   an R9 proxy over a vector is `Array.isArray`-true and would otherwise be
- *   mis-claimed by phase 2's array row — the phase boundary makes that structurally
- *   impossible now, not just an ordering convention within one flat list.
+ *   re-admitted reverse-membrane wrapper (a callable's own host projection crossing
+ *   back in — the function-shaped sibling of the egress-proxy row, ACallable.ts's
+ *   `originalCallableOf`), a scheme orphan (EOF/Values/R7RSError), or a branded
+ *   opaque-handle source — is recognized before ANY foreign-shape predicate runs.
+ *   Running phase 1 to completion before phase 2 begins is the OLD "R9-before-array"
+ *   law, generalized: an R9 proxy over a vector is `Array.isArray`-true (and a
+ *   reverse-membrane wrapper is `typeof === "function"`-true) and would otherwise be
+ *   mis-claimed by phase 2's array/function rows — the phase boundary makes that
+ *   structurally impossible now, not just an ordering convention within one flat list.
  *   MOSTLY, not fully, order-free within the phase: `isMarkedInteropPrivate`
  *   (interop-access.ts) reads the SAME `INTEROP_BOUNDARY` stamp our own scheme
  *   orphans carry (EOF/Values/R7RSError each declare `static [INTEROP_BOUNDARY] =
@@ -312,8 +311,8 @@ export interface InboundClaim {
  *   function's own doc names this explicitly. So the scheme-orphan row MUST be
  *   checked before the branded-host-instance row (its declared order below), or an
  *   EOF/Values/R7RSError would be mis-minted as an AOpaqueHandle instead of passing
- *   by identity. The other three rows (AValue/R9/scheme-orphan) genuinely are
- *   disjoint marks — this one pair is the exception, and the order below pins it.
+ *   by identity. The other rows (AValue/R9/reverse-wrapper/scheme-orphan) genuinely
+ *   are disjoint marks — this one pair is the exception, and the order below pins it.
  *
  *   PHASE 2 — {@link FOREIGN_LENS_CLAIMS} (THE FOREIGN LENS TABLE, typeof-disjoint):
  *   reached only when phase 1 missed. Every row is keyed by a distinct `typeof` tag
@@ -322,9 +321,13 @@ export interface InboundClaim {
  *   ladder — these rows are ALSO order-independent. Every hit here is a LENS, a
  *   defined, familiar crossing: this is where the warn-and-degrade middle tier used
  *   to live (`undefined` used to warn-then-void; it is now a plain lens, no warn,
- *   same as every other row in this phase). ONE row survives verbatim, unresolved:
- *   bare host function (`TODO(V-fork)` on its row) — V has an open fork
- *   (lens-to-callable vs door) this restructure does not settle.
+ *   same as every other row in this phase). The bare-host-function row RESOLVED the
+ *   V-fork this restructure originally left open (2026-07-24 ruling, verbatim: "host
+ *   fn crosses into scheme as a callable; when scheme calls it, args cross
+ *   scheme→js, result crosses js→scheme") — lens-to-callable won: a bare function
+ *   mints a genuine `ARosettaProcedure` (`ACallable.ts`'s `hostFnToCallable`),
+ *   completing the callable bifunctor `hostProjectionOf` already gave the OTHER
+ *   direction.
  *
  *   PHASE 3 — {@link INCOMPATIBILITY_DOOR_CLAIMS} (THE INCOMPATIBILITY DOOR):
  *   reached only when phases 1-2 both missed. Every remaining shape is EXPLICITLY
@@ -382,6 +385,28 @@ export const OWNED_ARTIFACT_CLAIMS: readonly InboundClaim[] = [
       const original = originalBoxOf(v as object);
       invariant(original !== undefined, "inbound claim 'R9 egress proxy': box called off its predicate");
       return jsToSchemeImpl(ctx, original, p, seen);
+    },
+  },
+  {
+    // REVERSE-MEMBRANE WRAPPER RE-ADMISSION — the function-shaped sibling of the R9
+    // row above: a callable's own host projection (`ACallable.ts`'s `hostProjectionOf`
+    // — the mint every `arrival/toJS` on a callable answers) crossing back IN
+    // re-admits as the ORIGINAL callable, not re-wrapped a second time by phase 2's
+    // bare-host-function lens below. Same bifunctor law R9 gives containers
+    // (`jsToScheme(schemeToJs(callable)) === callable`, `eq?`), applied to the one
+    // shape a Proxy can't cover (a wrapper is a plain function, not a Proxy — so it
+    // needs its OWN reverse map, `ACallable.ts`'s `WRAPPER_ORIGIN`, rather than
+    // `originalBoxOf`). ORDERED BEFORE phase 2's bare-function row on purpose — same
+    // reason the R9 row precedes phase 2's array row: `typeof` alone can't
+    // distinguish "our own wrapper" from "an arbitrary host fn," so phase 1 must
+    // settle it first or every re-crossing wrapper would be minted into a FRESH
+    // `ARosettaProcedure` instead of recovering the value it actually came from.
+    name: "reverse-membrane wrapper → original callable (re-admission)",
+    claims: (v) => typeof v === "function" && originalCallableOf(v) !== undefined,
+    box: (_ctx, v) => {
+      const original = originalCallableOf(v as object);
+      invariant(original !== undefined, "inbound claim 'reverse-membrane wrapper': box called off its predicate");
+      return original;
     },
   },
   {
@@ -523,18 +548,22 @@ export const FOREIGN_LENS_CLAIMS: readonly InboundClaim[] = [
     box: (_ctx, v) => v,
   },
   {
-    // FUNCTION — deliberately UNCHANGED. TODO(V-fork): lens-to-callable vs door —
-    // pending ruling. A borrowed JS function is not (yet?) a Scheme value — exposing
-    // it as callable would let the sandbox escape into uncontrolled JS — voids,
-    // loudly. This is the ONE row the binary ruling does NOT resolve: V has an open
-    // fork on whether a bare host function should become a genuine callable lens or
-    // the phase 3 door, and this restructure leaves today's behavior verbatim rather
-    // than guessing which side of that fork V lands on.
-    name: "function → #void (warn) [TODO(V-fork): lens-to-callable vs door — pending ruling]",
+    // FUNCTION — V's ruling (2026-07-24, verbatim): "host fn crosses into scheme as
+    // a callable; when scheme calls it, args cross scheme→js, result crosses
+    // js→scheme. SAME logic for functions RETURNED from symbol.rosetta impls." A
+    // bare host function is now a genuine LENS: it mints (or reuses, per-run) a
+    // scheme-callable `ARosettaProcedure` (ACallable.ts's `hostFnToCallable`) whose
+    // apply term IS the reverse membrane — args marshal scheme→js under default
+    // options, the host fn runs, its result marshals js→scheme under the CALLING
+    // invocation's run. Reached only when phase 1's reverse-membrane-wrapper row
+    // (above) missed — a function that IS one of our own `hostProjectionOf` wrappers
+    // re-admits as its original callable instead of landing here fresh. Completes the
+    // callable bifunctor `hostProjectionOf` already gave the OTHER direction.
+    name: "function → callable (reverse membrane: args scheme→js, result js→scheme)",
     claims: (v) => typeof v === "function",
-    box: () => {
-      warnMembrane("a JS function");
-      return theVoid;
+    box: (ctx, v, p) => {
+      invariant(typeof v === "function", "inbound claim 'function': box called off its predicate");
+      return hostFnToCallable(ctx, v as (...args: unknown[]) => unknown, p);
     },
   },
 ] as const;

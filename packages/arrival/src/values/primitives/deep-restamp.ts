@@ -16,9 +16,13 @@
  *  - `seen` terminates cyclic spines: a re-encountered node returns AS-IS (the outer
  *    clone already carries the stamp), so shared/diamond substructure past the first
  *    occurrence keeps its original box;
- *  - a bare JS function in a value slot (the legacy AProcedure arm of SchemeValue) has no
- *    portable re-stampable value → #void, loudly — the same crossing rule the router
- *    applies to any inbound function;
+ *  - a bare JS function in a value slot (the legacy AProcedure arm of SchemeValue,
+ *    predating ACallable) has no portable re-stampable value → #void, loudly. UNLIKE
+ *    a fresh inbound crossing (docs/membrane.md §CALLABLE-LENS: a bare host function
+ *    reaching jsToScheme/fromJs now mints a genuine ARosettaProcedure callable), this
+ *    is a re-stamp of something ALREADY living inside a scheme spine, never a
+ *    js→scheme crossing — the callable lens has no purchase here, so the legacy void
+ *    behavior stands;
  *  - non-AValue scheme orphans (EOF / Values / R7RSError) carry no provenance → identity.
  *
  * Leaf-ish module: imports the AValue base, the #void singleton and the membrane warn
@@ -49,7 +53,10 @@ export function reStampChild(
     return theVoid;
   }
   if (child === null) return p === EMPTY_PROVENANCE ? nil : new ANil(p);
-  // Legacy bare-fn procedure arm — docs/membrane.md §VOID-RULE.
+  // Legacy bare-fn procedure arm (pre-ACallable SchemeValue survivor) — a re-stamp of a
+  // value ALREADY in the spine, not a js→scheme crossing, so docs/membrane.md
+  // §CALLABLE-LENS's inbound reverse-membrane lens does not apply here (see this
+  // file's header doc).
   if (typeof child === "function") {
     warnMembrane("a JS function");
     return theVoid;

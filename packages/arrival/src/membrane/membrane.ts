@@ -225,8 +225,9 @@ export function fromJS<T>(value: [T] extends [AValue] ? never : T): FromJSResult
   }
 
   // Leaves go through jsToScheme: primitives box, null→nil, undefined→#void (lens,
-  // no warn), function→#void+warn (V-fork TODO, unresolved), Symbol.for→:keyword, a
-  // unique symbol doors (NoLensError) — docs/membrane.md §VOID-RULE / §INBOUND.
+  // no warn), function→callable (the reverse-membrane lens, ACallable.ts's
+  // `hostFnToCallable` — V's 2026-07-24 ruling), Symbol.for→:keyword, a unique
+  // symbol doors (NoLensError) — docs/membrane.md §CALLABLE-LENS / §INBOUND.
   // Cast, not a narrowing gap: jsToScheme's honest `AWrap<T>` (values/types.ts) is exactly
   // this leaf case (the array/bytevector/Promise/object arms above already returned), but TS
   // can't thread that proof through the `[T] extends [AValue] ? never : T` conditional

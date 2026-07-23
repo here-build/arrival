@@ -10,7 +10,6 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import { setMembraneWarnings } from "../membrane-warn.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
@@ -29,6 +28,7 @@ import { ABool } from "../../values/primitives/ABool.js";
 import { AString } from "../../values/primitives/AString.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { APair } from "../../values/primitives/APair.js";
+import { ARosettaProcedure } from "../../values/primitives/ACallable.js";
 
 // ============================================================================
 // WRAPPER LAYER TESTS
@@ -153,26 +153,24 @@ describe("Wrapper Layer", () => {
       expect(fromJS(p)).toBe(p);
     });
 
-    // INVARIANT: a borrowed function materializes to #void (not callable, not portable)
-    it("materializes a borrowed function to #void (not callable — not a portable value)", () => {
-      expect(fromJS(() => 42)).toBe(theVoid);
+    // INVARIANT: a borrowed function crosses IN as a genuine scheme callable
+    it("materializes a borrowed function to a callable (ARosettaProcedure, reverse-membrane lens)", () => {
+      expect(fromJS(() => 42)).toBeInstanceOf(ARosettaProcedure);
     });
 
-    // INVARIANT: a non-portable-value materialization emits a console.warn; setMembraneWarnings(false)
-    // silences it (pins implementation, not behavior). V's ruling (2026-07-23) retired the
-    // warn tier for undefined (now a plain lens) and a unique symbol (now a door) — the
-    // ONLY row left that still warns is the bare host function (V's open fork, unresolved).
-    it("warns when a non-portable value materializes to #void; setMembraneWarnings(false) silences it", () => {
+    // INVARIANT: no membrane warning fires anymore — V's ruling (2026-07-23/24) retired
+    // the warn tier entirely off this path: `undefined` is a plain lens (no warn), a
+    // unique symbol doors (NoLensError, no warn), and a bare host function — the last row
+    // that still warned — is now the callable lens above (no warn either). Nothing left on
+    // `fromJS`/`jsToScheme` still emits a membrane warning; `setMembraneWarnings`'s
+    // toggle/dedupe behavior itself is pinned directly against `warnMembrane` in
+    // membrane-warn-bounded.law.test.ts, unrelated to any live producer here.
+    it("emits no console.warn materializing a borrowed function (the warn tier's last row is retired)", () => {
       const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
       try {
-        fromJS(() => 42); // a function — the one row the binary ruling leaves unresolved
-        expect(spy).toHaveBeenCalledTimes(1);
-        spy.mockClear();
-        setMembraneWarnings(false);
         fromJS(() => 42);
         expect(spy).not.toHaveBeenCalled();
       } finally {
-        setMembraneWarnings(true);
         spy.mockRestore();
       }
     });
@@ -295,8 +293,8 @@ describe("Wrapper Layer", () => {
       expect(source.a).toBe(1);
     });
 
-    // INVARIANT: a function-valued field materializes to #void on read; getters are invoked and their result boxed
-    it("materializes a function-valued field to #void (visible, not callable), allows getter reads", () => {
+    // INVARIANT: a function-valued field materializes to a genuine callable on read; getters are invoked and their result boxed
+    it("materializes a function-valued field to a callable (ARosettaProcedure), allows getter reads", () => {
       const source = {
         data: 7,
         get computed() {
@@ -309,7 +307,7 @@ describe("Wrapper Layer", () => {
       const obj = new AJSObject(source);
       expect((obj.get("data") as { valueOf(): unknown }).valueOf()).toBe(7); // data read (boxed)
       expect((obj.get("computed") as { valueOf(): unknown }).valueOf()).toBe(99); // getter invoked → value
-      expect(obj.get("method")).toBe(theVoid); // method → #void + warn (was invisible nil; now visible, still uncallable)
+      expect(obj.get("method")).toBeInstanceOf(ARosettaProcedure); // method → reverse-membrane lens, visible AND callable now
     });
 
     // INVARIANT: .has() reflects own-property existence only
@@ -352,9 +350,11 @@ describe("Wrapper Layer", () => {
       expect(unwrapped).toBe(original);
     });
 
-    // INVARIANT: a borrowed function does not round-trip — it materializes to #void
-    it("does NOT round-trip a borrowed function — it materializes to #void (retired interop)", () => {
-      expect(fromJS(() => 42)).toBe(theVoid);
+    // INVARIANT: a borrowed function crosses in as a callable, not the same fn object
+    // (a genuine marshal wrapper is required to cross args/result at call time) — see
+    // crossing.law.test.ts's "function (borrowed)" row for the full asymmetric-round-trip law.
+    it("a borrowed function crosses IN as a callable (ARosettaProcedure) — not a #void, not identity-preserving", () => {
+      expect(fromJS(() => 42)).toBeInstanceOf(ARosettaProcedure);
     });
 
     // INVARIANT: array identity is preserved through the borrow (.source + toJS roundtrip)

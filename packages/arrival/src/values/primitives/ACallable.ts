@@ -100,6 +100,104 @@ export function _installCallableMarshal(m: CallableMarshal): void {
   marshal = m;
 }
 
+// ── The inbound reverse-membrane lens (hostFnToCallable) — the bifunctor's OTHER leg ───────
+// hostProjectionOf above is the outbound projection (scheme callable → host fn); this is its
+// mirror, js→scheme (V's ruling, stage-c-corpse-deletion.md §"V rulings batch" 2026-07-24):
+// "host fn crosses into scheme as a callable; when scheme calls it, args cross scheme→js,
+// result crosses js→scheme. SAME logic for functions RETURNED from symbol.rosetta impls."
+// Lives here (not membrane/rosetta.ts) for the SAME reason hostProjectionOf does — the one
+// module that already owns the injected marshal seam mints both directions off it, so
+// neither direction needs a second seam or a fresh cycle into rosetta.ts.
+
+/** Reverse of `WRAPPER_KEY`'s cache: a reverse-membrane wrapper minted by `hostProjectionOf`
+ *  → the ORIGINAL `ACallable` it projects. Registered at mint time (below), read by
+ *  `originalCallableOf` — the inbound router's re-admission claim (rosetta.ts's
+ *  OWNED_ARTIFACT_CLAIMS) consults this BEFORE `hostFnToCallable`'s generic lens, so a
+ *  wrapper crossing back IN re-admits as its original callable (`eq?`) instead of being
+ *  wrapped a second time — the SAME round-trip-to-identity law egress-proxy.ts's R9
+ *  `PROXY_ORIGIN` gives containers, applied to the one shape (a plain function) proxies
+ *  can't cover. */
+const WRAPPER_ORIGIN = new WeakMap<object, ACallable>();
+
+/** The inverse of `hostProjectionOf`'s mint: `undefined` for anything that isn't one of
+ *  THIS module's own reverse-membrane wrappers (a plain host function, a foreign closure,
+ *  another callable's wrapper under a DIFFERENT scope never registers here — only ever the
+ *  scope it was actually minted under does). */
+export function originalCallableOf(fn: object): ACallable | undefined {
+  return WRAPPER_ORIGIN.get(fn);
+}
+
+/** Run-scoped mint-or-reuse cache for the FORWARD lens: `(RunContext, host fn) → the ONE
+ *  ARosettaProcedure that fn crosses in as, within that run.` Run-scoped for the SAME reason
+ *  `AOpaqueHandle.for`'s cache is (that class's own header): provenance is minted from ONE
+ *  run's own invocation numbering, so a global cache would let a wrapper minted under run A
+ *  accumulate ids from run B that mean nothing (or something else) under run A's numbering. */
+const HOST_FN_CACHE = new WeakMap<RunContext, WeakMap<(...args: unknown[]) => unknown, ARosettaProcedure>>();
+
+/**
+ * THE INBOUND REVERSE-MEMBRANE LENS: a bare host function crossing js→scheme becomes a
+ * genuine scheme-callable `ARosettaProcedure` — completing the callable bifunctor
+ * `hostProjectionOf` gives the OTHER direction. When scheme applies it: args cross
+ * scheme→js (`marshal.schemeToJs`, default options — the args are already IN hand, no
+ * region/scope concern the outbound wrapper has to guard), the host fn runs, and its
+ * result crosses js→scheme (`marshal.jsToScheme` under the CALLING invocation's
+ * `callCtx.runCtx` — the live run, correct meter/provenance) — promise-tolerant, since a
+ * host fn reached this way is often async.
+ *
+ * IDENTITY: mint-or-reuse per `(RunContext, fn)` — the SAME host fn crossing twice within
+ * one run answers the literal same callable (`eq?`), never a fresh wrapper each time.
+ * `provenance` stamps ONLY the first mint (constructor arg, see `ARosettaProcedure`'s own
+ * doc) — a procedure's identity is load-bearing (`callableEquals`'s note, this file's
+ * preamble), so unlike `AOpaqueHandle` (a DATA value, remints-and-merges on every crossing)
+ * a later crossing of the SAME fn with different provenance does not fork identity; it
+ * answers the cached value unchanged, exactly like ALambda/ANativeProcedure's own no-op
+ * `withProvenance`.
+ *
+ * Bounce concerns don't apply here (unlike `hostProjectionOf`): the host fn being wrapped
+ * cannot itself trampoline — it is opaque JS, not a scheme apply term.
+ */
+export function hostFnToCallable(
+  ctx: RunContext,
+  fn: (...args: unknown[]) => unknown,
+  provenance: ReadonlySet<number>,
+): ARosettaProcedure {
+  let byFn = HOST_FN_CACHE.get(ctx);
+  if (byFn === undefined) {
+    byFn = new WeakMap();
+    HOST_FN_CACHE.set(ctx, byFn);
+  }
+  const cached = byFn.get(fn);
+  if (cached !== undefined) return cached;
+  const proc = new ARosettaProcedure(
+    {
+      // Host functions are frequently anonymous (arrow callbacks) — `fn.name` answers ""
+      // for those, not undefined, so the `||` fallback is reachable, not dead.
+      name: fn.name || "host-function",
+      // Unknown arity by construction — an arbitrary host fn's arity is not introspectable
+      // (mirrors the `z.procedure`-minted ARosettaProcedure's own `{min:0, max:null}`,
+      // symbols/rosetta.ts).
+      arity: { min: 0, max: null },
+      contract: undefined,
+      strategy: undefined,
+      impl: (args, callCtx): CallResult => {
+        if (marshal === undefined) {
+          throw new Error(
+            "jsToScheme: a host-function callable applied before membrane init (membrane/rosetta.ts not loaded)",
+          );
+        }
+        const jsArgs = args.map((a) => marshal!.schemeToJs(a));
+        const result = fn(...jsArgs);
+        return result instanceof Promise
+          ? result.then((r) => marshal!.jsToScheme(callCtx.runCtx, r) as SchemeValue)
+          : (marshal!.jsToScheme(callCtx.runCtx, result) as SchemeValue);
+      },
+    },
+    provenance,
+  );
+  byFn.set(fn, proc);
+  return proc;
+}
+
 /** Opaque bounce-marker check for a reverse-membrane result reaching this host boundary — see
  *  types.ts's `SchemeBounceMarker` doc: a call boundary always narrows it out before any value
  *  use, so a host caller (this wrapper IS that boundary) must never see one. Named + an explicit
@@ -169,6 +267,11 @@ function hostProjectionOf(self: ACallable, exit?: MembraneExit): (...args: unkno
       return withRegionScope(scope, () => (exit !== undefined ? exit.element(raw) : marshal!.schemeToJs(raw)));
     });
   byKey.set(WRAPPER_KEY, wrapper);
+  // Register the reverse-admission mapping at mint time (before returning) — the SAME
+  // "register before any trap/read" discipline egress-proxy.ts's R9 proxies follow, so a
+  // caller that immediately hands this wrapper back across the membrane (jsToScheme) finds
+  // the entry already there. See `originalCallableOf`'s own doc.
+  WRAPPER_ORIGIN.set(wrapper, self);
   return wrapper;
 }
 
@@ -283,7 +386,12 @@ export class ANativeProcedure extends AValue {
  *  algebra into opaque host JS. `run` decodes args on entry, calls the host impl, encodes the
  *  result, and mints its provenance as `union(args.provenance)`. `strategy` holds the
  *  decode/encode/provenance options (was rosetta's options closure). The decode/encode bodies
- *  are stubs here and land when rosetta migrates in stage 3. */
+ *  are stubs here and land when rosetta migrates in stage 3.
+ *
+ *  ALSO the mint target for `hostFnToCallable` below (the INBOUND reverse-membrane lens): a
+ *  bare host function crossing js→scheme is exactly this shape — args decode (scheme→js),
+ *  an opaque host impl runs, the result encodes (js→scheme) — so a fresh instance of this
+ *  SAME class, not a new sibling, is the honest home (see that function's own doc). */
 export class ARosettaProcedure extends AValue {
   readonly kind = "procedure" as const;
   readonly name: string | symbol;
@@ -293,16 +401,26 @@ export class ARosettaProcedure extends AValue {
   readonly strategy: unknown;
   readonly #impl: CallableImpl;
 
-  constructor(opts: {
-    name: string | symbol;
-    arity: Arity;
-    contract: unknown;
-    strategy: unknown;
-    impl: CallableImpl;
-  }) {
+  constructor(
+    opts: {
+      name: string | symbol;
+      arity: Arity;
+      contract: unknown;
+      strategy: unknown;
+      impl: CallableImpl;
+    },
+    // Bake-time minters (scheme-zod.ts's `z.procedure`, symbols/rosetta.ts) never pass this —
+    // a baked symbol's identity is fixed at define time, EMPTY_PROVENANCE is correct. The one
+    // caller that DOES pass it is `hostFnToCallable`'s mint-or-reuse below: the value is born
+    // from a CROSSING, so its provenance is that crossing's origin, stamped ONCE at mint —
+    // `withProvenance` below stays a no-op afterward (a procedure's identity is load-bearing,
+    // same as every sibling in this file), so a later re-crossing of the SAME host fn with
+    // DIFFERENT provenance answers the cached instance unchanged rather than forking identity.
+    provenance?: ReadonlySet<number>,
+  ) {
     // Same reasoning as ALambda/ANativeProcedure's ctors above: bound once at
     // capability-assembly time (scheme-zod.ts's `z.procedure`), never per invocation.
-    super();
+    super(provenance);
     this.name = opts.name;
     this.arity = opts.arity;
     this.contract = opts.contract;

@@ -48,9 +48,16 @@ export const CROSSINGS: readonly CrossingRow[] = [
   // data instead. (A host `Error` is its OWN declared lens, carved out — see
   // error-object-exit.law.test.ts.)
   { type: "exotic object (class instance)", entryForm: "DOOR (no lens — NoLensError; mark @arrival.private or hand plain data)", exitForm: "n/a", roundTrip: false },
-  // FUNCTION — deliberately UNCHANGED by the binary ruling (V has an open fork:
-  // lens-to-callable vs door — TODO(V-fork), rosetta.ts's FOREIGN_LENS_CLAIMS).
-  { type: "function (borrowed)", entryForm: "VOID (refused, warn) [TODO(V-fork)]", exitForm: "region-scoped wrapper [INVERTS: reverse-membrane/P6]", roundTrip: false },
+  // FUNCTION — V's ruling (2026-07-24): host fn inbound = LENS (reverse membrane),
+  // completing the callable bifunctor `hostProjectionOf` already gave the OTHER
+  // direction (rosetta.ts's FOREIGN_LENS_CLAIMS function row). Asymmetric like "null"
+  // above: scheme→host wrapper→scheme DOES round-trip to the ORIGINAL callable
+  // (`eq?`, ACallable.ts's `WRAPPER_ORIGIN` re-admission), but host fn→scheme
+  // callable→host wrapper does NOT return the SAME fn object — a genuine marshal
+  // wrapper must exist to cross args/result at call time. The SAME host fn crossing
+  // in twice DOES answer the same callable (`eq?`, run-scoped mint-or-reuse), just
+  // not the identical raw fn on the way back out.
+  { type: "function (borrowed)", entryForm: "ARosettaProcedure (reverse-membrane lens: args scheme→js, result js→scheme; mint-or-reuse per run)", exitForm: "region-scoped wrapper (reverse-membrane, hostProjectionOf) [re-admits to ORIGINAL callable on re-entry]", roundTrip: false },
   { type: "proper list (scheme→JS only)", entryForm: "n/a", exitForm: "lazy array proxy (R9, one-way, P9)", roundTrip: false },
   { type: "dotted pair (scheme→JS only)", entryForm: "n/a", exitForm: "lazy array proxy, tail folded (R9, one-way, P9)", roundTrip: false },
   { type: "native vector (scheme→JS only)", entryForm: "n/a", exitForm: "lazy array proxy (R9, one-way, P9)", roundTrip: false },

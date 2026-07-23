@@ -12,9 +12,12 @@
  *
  * The membrane now MATERIALIZES faithfully: BOTH `jsToScheme` and `fromJS` box every
  * primitive (number/bigint→exact, boolean→ABool, string→AString) through the boxer
- * registry, map undefined / function / unique-symbol → #void (+ a console warning), and
- * Symbol.for('x') → the keyword `:x`. The sandbox never holds a raw JS value — the
- * deliberate, host-agnostic narrowing of JS interop. These tests pin that. Remaining notes:
+ * registry, map undefined → #void (a lens, no warn), a bare function → a genuine
+ * scheme-callable `ARosettaProcedure` (the reverse-membrane lens, V's 2026-07-24
+ * ruling — args cross scheme→js, result crosses js→scheme), a unique symbol doors
+ * (`NoLensError` — no portable identity), and Symbol.for('x') → the keyword `:x`.
+ * The sandbox never holds a raw JS value — the deliberate, host-agnostic narrowing
+ * of JS interop. These tests pin that. Remaining notes:
  *  - membrane `isSchemeValue` lists AValue subtypes by explicit
  *    `instanceof` checks. Any AValue subtype that isn't listed will mis-route.
  *    Nil is technically listed by `=== nil`, but clones miss (see
@@ -32,7 +35,7 @@ import { fromJS, isSchemeValue, toJS } from "../membrane.js";
 import { AJSObject } from "../AJSObject.js";
 import { AJSArray } from "../AJSArray.js";
 import { jsToScheme, schemeToJs } from "../rosetta.js";
-import { ALambda } from "../../values/primitives/ACallable.js";
+import { ALambda, ARosettaProcedure } from "../../values/primitives/ACallable.js";
 import { ABool, schemeFalse, schemeTrue } from "../../values/primitives/ABool.js";
 import { AString } from "../../values/primitives/AString.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
@@ -139,9 +142,11 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
     expect((result as AJSObject).source).toBe(obj);
   });
 
-  // INVARIANT: function → #void — the boxer registry never mints a callable wrapper
-  it("function → #void (the boxer registry never mints a callable wrapper)", () => {
-    expect(fromJs(CONSTANT_CTX, () => 42)).toBe(theVoid);
+  // INVARIANT: function → callable — V's ruling (2026-07-24) retired the void tier;
+  // the boxer registry now mints the SAME reverse-membrane lens jsToScheme's
+  // FOREIGN_LENS_CLAIMS function row does (ACallable.ts's `hostFnToCallable`).
+  it("function → ARosettaProcedure (the boxer registry mints the reverse-membrane lens)", () => {
+    expect(fromJs(CONSTANT_CTX, () => 42)).toBeInstanceOf(ARosettaProcedure);
   });
 
   // ── THE LAMBDA-BRAND DISTINCTION (the require return-marshal leak) ────────────
@@ -160,8 +165,8 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
   // membrane.ts `isSchemeValue`/rosetta.ts `jsToScheme`/print.ts `functionRepr` readers).
   // The identity-pass-through law still holds — it's now unconditional on `instanceof
   // AValue` (jsToScheme's very first case), not a brand check — pinned below against a real
-  // `ALambda`. The membrane's OTHER law is unchanged: an unbranded bare host function still
-  // voids (also pinned below).
+  // `ALambda`. The membrane's OTHER law CHANGED (2026-07-24 ruling): an unbranded bare host
+  // function is now a genuine reverse-membrane lens, not a void (also pinned below).
   // INVARIANT: a real scheme lambda (ALambda) passes through jsToScheme by identity (already a scheme value)
   // — historically pinned to the now-deleted LAMBDA brand; the law survives, the mechanism doesn't (pins implementation, not behavior)
   it("a real ALambda passes through jsToScheme by identity (it IS a scheme value)", () => {
@@ -169,9 +174,9 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
     expect(jsToScheme(CONSTANT_CTX, lam)).toBe(lam);
   });
 
-  // INVARIANT: an unbranded (borrowed host) function still voids through jsToScheme
-  it("a bare host function still voids through jsToScheme (borrowed host callback, by design)", () => {
-    expect(jsToScheme(CONSTANT_CTX, () => 42)).toBe(theVoid);
+  // INVARIANT: an unbranded (borrowed host) function crosses in as a callable now
+  it("a bare host function crosses jsToScheme as a callable (reverse-membrane lens)", () => {
+    expect(jsToScheme(CONSTANT_CTX, () => 42)).toBeInstanceOf(ARosettaProcedure);
   });
 
   // AValue input is returned as-is on the empty-provenance fast path.
@@ -403,9 +408,9 @@ describe("membrane fromJS / toJS — round-trip + wrapper-cache identity", () =>
     expect(toJS(wrapped)).toBe(obj);
   });
 
-  // INVARIANT: a borrowed function does not cross the membrane — materializes to #void
-  it("a borrowed function does NOT cross — it materializes to #void (not a portable value)", () => {
-    expect(fromJS(() => 42)).toBe(theVoid);
+  // INVARIANT: a borrowed function crosses the membrane as a callable (reverse-membrane lens)
+  it("a borrowed function crosses IN as a callable (ARosettaProcedure, reverse-membrane lens)", () => {
+    expect(fromJS(() => 42)).toBeInstanceOf(ARosettaProcedure);
   });
 
   // INVARIANT: the wrapper cache returns the same wrapper instance for the same JS object

@@ -121,10 +121,11 @@ export class AJSObject extends AValue {
     }
     if (raw === NOT_FOUND) return nil;
 
-    // A function-valued property (foreign method) boxes through jsToScheme to #void + a
-    // membrane warning — visible rather than silently vanishing to nil, and #void isn't
-    // callable so the sandbox still can't invoke foreign JS. Getter reads are unaffected
-    // (accessMember already invoked the getter to a value above).
+    // A function-valued property (foreign method) boxes through jsToScheme to a genuine
+    // scheme-callable ARosettaProcedure (the reverse-membrane lens, V's 2026-07-24 ruling)
+    // — visible AND callable now, marshaling scheme args→js on the way in, its result
+    // js→scheme on the way out. Getter reads are unaffected (accessMember already invoked
+    // the getter to a value above).
 
     // Box through jsToScheme so primitives become AValue subtypes stamped with this
     // wrapper's provenance; attestation inherits from container (values/attestation.ts
