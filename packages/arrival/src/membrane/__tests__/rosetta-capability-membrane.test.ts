@@ -52,6 +52,7 @@ import { jsToScheme, schemeToJs, schemeToJsUntyped } from "../rosetta.js";
 import { execOverFrame } from "../../eval/generator-exec.js";
 import { testCallCtx } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
+import { applyCapability } from "../../__tests__/_fresh-env.js";
 import { ARosettaProcedure } from "../../values/primitives/ACallable.js";
 import { withDynamicCallSite } from "../../eval/dynamic-call-site.js";
 import { tf } from "../../values/tagless-final.js";
@@ -84,16 +85,16 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
     // INVARIANT: a capability-bound rosetta verb extends the environment with a callable
     // usable from scheme source.
     it("should extend environment with Rosetta functions", async () => {
-      await EnvCapability.define("test/double-all", {
+      await applyCapability(inferenceEnv, [
+        EnvCapability.define("test/double-all", {
         symbols: (symbol, z) => ({
           "double-all": symbol.rosetta`double-all: doubles every element of a numeric list`(
             { input: [z.list(z.number)], output: [z.list(z.number)] },
             (numbers) => numbers.map((x) => x * 2),
           ),
         }),
-      })
-        .lower({})
-        .apply(inferenceEnv, undefined as never);
+      }),
+        ]);
 
       const result = await execOne(`
         (double-all (list 1 2 3 4 5))
@@ -107,7 +108,8 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
 
     // INVARIANT: multiple capability-bound rosetta verbs can be chained/composed from scheme source
     it("should handle multiple Rosetta functions", async () => {
-      await EnvCapability.define("test/multi-rosetta", {
+      await applyCapability(inferenceEnv, [
+        EnvCapability.define("test/multi-rosetta", {
         symbols: (symbol, z) => ({
           "sum-array": symbol.rosetta`sum-array: sums a numeric list`(
             { input: [z.list(z.number)], output: [z.number] },
@@ -118,9 +120,8 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
             (numbers) => numbers.filter((x) => x % 2 === 0),
           ),
         }),
-      })
-        .lower({})
-        .apply(inferenceEnv, undefined as never);
+      }),
+        ]);
 
       const result = await execOne(`
         (sum-array (filter-evens (list 1 2 3 4 5 6 7 8)))
@@ -143,7 +144,8 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
       // final `jsToScheme(..., resultProvenance)` call over an ALREADY-boxed value at
       // matching (empty) provenance is an identity no-op, so this changes nothing at
       // runtime vs. handing back the raw array the way the legacy fn did.
-      await EnvCapability.define("test/extract-values", {
+      await applyCapability(inferenceEnv, [
+        EnvCapability.define("test/extract-values", {
         symbols: (symbol, z) => ({
           "extract-values": symbol.rosetta`extract-values: plucks .value off every element`(
             { input: [z.value], output: [z.value] },
@@ -156,9 +158,8 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
             },
           ),
         }),
-      })
-        .lower({})
-        .apply(inferenceEnv, undefined as never);
+      }),
+        ]);
 
       // Create test data (this is tricky in LIPS, so we'll inject it)
       const testData = [
@@ -185,7 +186,8 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
     // style property and results round-trip correctly
     it("should handle the MCP CSS filtering pattern", async () => {
       // This simulates the exact pattern we need for MCP
-      await EnvCapability.define("test/filter-by-css-property", {
+      await applyCapability(inferenceEnv, [
+        EnvCapability.define("test/filter-by-css-property", {
         symbols: (symbol, z) => ({
           "filter-by-css-property":
             symbol.rosetta`filter-by-css-property: filters nodes whose style[property] === value`(
@@ -199,9 +201,8 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
               },
             ),
         }),
-      })
-        .lower({})
-        .apply(inferenceEnv, undefined as never);
+      }),
+        ]);
 
       // Create test node data
       const testNodes = [
@@ -230,7 +231,8 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
     // INVARIANT: a rosetta verb can aggregate scheme-converted JS objects into a stats object
     // that round-trips correctly
     it("should create CSS statistics like the MCP server needs", async () => {
-      await EnvCapability.define("test/css-property-stats", {
+      await applyCapability(inferenceEnv, [
+        EnvCapability.define("test/css-property-stats", {
         symbols: (symbol, z) => ({
           "css-property-stats": symbol.rosetta`css-property-stats: aggregates node style property:value counts`(
             { input: [z.value], output: [z.value] },
@@ -249,9 +251,8 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
             },
           ),
         }),
-      })
-        .lower({})
-        .apply(inferenceEnv, undefined as never);
+      }),
+        ]);
 
       const testNodes = [
         { style: { overflow: "hidden", display: "block" } },

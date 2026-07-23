@@ -1,7 +1,9 @@
 // vocabulary.ts — Stage B1 (docs/plans/stage-b-runcontext-absorbs-assembly.md): the VOCABULARY
 // artifact. `buildVocabulary` walks a capability-set + shared config bag ONCE, deps-first (C3),
-// minting every symbol EXACTLY like `EnvCapability.lower().apply()` does today (same helpers:
-// `contractOf`, `missingRequiresConfig`/`requiresConfigNeeds`/`requiresConfigReason`,
+// minting every symbol via the SAME per-kind bind dispatch `common/capability.ts`'s now-retired
+// `lower().apply()` used to run (Stage C Cut 4 moved that bind loop here, as `processCapability`
+// below — byte-equivalent dispatch, reusing capability.ts's exported helpers: `contractOf`,
+// `missingRequiresConfig`/`requiresConfigNeeds`/`requiresConfigReason`,
 // `collectRequiresConfigDegraded`/`mergeDegraded`, the alias/declarative/native/rosetta/door/
 // keyword/value per-kind dispatch, `associateCapability`, `bindCapabilityDefines`'s Pass-2 bake)
 // — but writes into a plain, freezable `Map` artifact instead of binding onto a live env frame.
@@ -38,8 +40,11 @@
 // the settled value, so concurrent callers of the same tuple await the SAME build.
 //
 // LEGACY `{ fn }` CAPABILITIES (McpEnvCapability's authoring shape) are OUT OF SCOPE for this
-// artifact — `lower()`/`assembleEnv` stay their home (see `VocabularyLegacyCapabilityError`);
-// callers decide whether a given capability set is vocabulary-eligible BEFORE calling this.
+// artifact — refused outright (see `VocabularyLegacyCapabilityError`, below); callers decide
+// whether a given capability set is vocabulary-eligible BEFORE calling this. (Stage C Cut 4:
+// there is no other home for a `{ fn }` capability anymore — `lower()`/`assembleEnv` are both
+// retired — so a legacy capability reaching here has nowhere production-sanctioned left to go
+// until the postponed MCP rework gives it one.)
 
 import { z } from "zod";
 import invariant from "tiny-invariant";
@@ -198,7 +203,8 @@ function bindDirect(mainMap: Map<string, AmbientValue>, bakeEnv: ResolvingAmbien
 
 /** Process ONE capability's `symbols` record into the shared maps — Pass 1 (every non-define
  *  kind) then Pass 2 (`bindCapabilityDefines`'s define/defineSyntax bake), byte-equivalent
- *  dispatch to `EnvCapability.lower().apply()`'s own per-kind loop, reusing its exported
+ *  dispatch to `common/capability.ts`'s retired `lower().apply()` per-kind loop (Stage C Cut 4
+ *  moved the bind loop here), reusing its exported
  *  helpers (see the module header). Returns this capability's own merged degraded entry, if
  *  any. */
 async function processCapability(

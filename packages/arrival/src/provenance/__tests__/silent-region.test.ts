@@ -49,6 +49,7 @@ import { PayloadStoreFake, ProvenanceStoreFake, setEmissionEnabled } from "../..
 import { hermeticApply } from "../../provenance/gamma.js";
 import type { EmittedWire } from "../../provenance/wireframe/types.js";
 import { EnvCapability } from "../../common/capability.js";
+import { applyCapability } from "../../__tests__/_fresh-env.js";
 
 const TRACK_COORD: TrackCoordinate = { templateHash: "th-silent-track", ordinalPath: [0], regionEpoch: "e0" };
 const RECORD_COORD: RecordCoordinate = { templateHash: "th-silent-mint", ordinalPath: [0], regionEpoch: "e0" };
@@ -74,13 +75,13 @@ function makeEcho(): ANativeProcedure {
  *  a plain `z.number` output (the impl returns an ordinary JS number, no pre-stamped
  *  escape hatch needed). */
 async function registerSource(env: ResolvingAmbient): Promise<void> {
-  await EnvCapability.define("test/fetch-item", {
-    symbols: (symbol, z) => ({
-      "fetch-item": symbol.rosetta`fetch-item: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 42),
+  await applyCapability(env, [
+    EnvCapability.define("test/fetch-item", {
+      symbols: (symbol, z) => ({
+        "fetch-item": symbol.rosetta`fetch-item: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 42),
+      }),
     }),
-  })
-    .lower({})
-    .apply(env, undefined as never);
+  ]);
 }
 
 describe("A. silent-region mode suppresses emission, never doors (§4 CHOSEN, round 2 A4)", () => {

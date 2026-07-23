@@ -28,14 +28,12 @@
 //      free reference, NO declared deps) throws `DefineLocalityError`, pinning that the
 //      bug this migration fixes was real and is now caught, not merely worked around.
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../AmbientRuntime.js";
 import { EnvCapability } from "../../../common/capability.js";
-import { execOverFrame, execStateOverFrame, execInFrame } from "../../../eval/generator-exec.js";
-import { freshEnv, nativeOnlyRoot } from "../../../__tests__/_fresh-env.js";
-import { assembleEnv } from "../../../common/kernel.js";
+import { exec, execOverFrame, execStateOverFrame, execInFrame } from "../../../eval/generator-exec.js";
+import { freshEnv } from "../../../__tests__/_fresh-env.js";
+import { buildVocabulary } from "../../vocabulary.js";
 import { DefineLocalityError } from "../../../errors.js";
 import srfi43 from "../srfi-43.js";
-import type { SchemeEnv } from "../../../common/scheme-env.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 
 // Mirrors `_fresh-env.ts`'s own injected evalScheme — `skipBootstrapWait` because
@@ -107,23 +105,17 @@ describe("scheme/srfi-43 — behavior equivalence (semantic-equivalence gate, §
   });
 });
 
+// STAGE C CUT 4 (docs/plans/stage-c-corpse-deletion.md): the "standalone .apply(), deps
+// unwalked" mechanism this block used to isolate the runtime-luck-vs-declared-edge distinction
+// is RETIRED along with `lower()`/`assembleEnv` — `buildVocabulary` (the sole surviving bake
+// path) ALWAYS walks a capability's OWN declared `deps`, so the distinction is moot (there is
+// no unwalked state to observe runtime luck against anymore). The PRODUCT law that survives —
+// srfi-43's declared deps (`equality`/`numeric`/`vectors`) genuinely resolve its ops — is
+// pinned via the sanctioned path, alongside the bake-time FV law (below), which is the row
+// that actually PROVES the edge is declared rather than runtime-lucky.
 describe("scheme/srfi-43 — the dep edge is real (§2.1's undeclared-dep bug class, now a declared edge)", () => {
-  it("standalone .apply() (bypassing assembleEnv's C3 dep-walk) leaves deps UNAPPLIED — but `vector-length`/`vector-ref`/`=`/`+`/`-`/`<`/`>`/`quotient`/`not` are ALL NATIVE_PACKS members, so `global_env` (post-`initBridge`) already carries them; the call SUCCEEDS anyway, the same two-phase-bootstrap luck srfi-235.ts's header names (unlike srfi-235's own `compose` — a BASE_PACKS-only name genuinely absent from `global_env` — this pack's free names never go missing at runtime standalone). This is exactly why the dep edge's realness is proven at BAKE TIME (the regression-pin test below), not by a runtime-unbound demonstration: a STATIC check that doesn't consult this runtime luck is the only thing that can catch it.", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-srfi43-standalone-runtime-luck");
-    await srfi43.lower({ evalScheme }).apply(env, undefined as never);
-    await expect(execStateOverFrame("(vector-count even? #(1 2 3))", { env })).resolves.not.toThrow();
-  });
-
-  it("bake itself succeeds even with deps unapplied — the FV law is a STATIC declared-`deps` check, not a runtime-binding probe", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-srfi43-standalone-bake-ok");
-    await expect(srfi43.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
-  });
-
-  it("assembleEnv (the real orchestration path — every production caller) DOES walk deps: every op works standalone", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-srfi43-assembleEnv-ok") as unknown as SchemeEnv;
-    await assembleEnv(env, [srfi43.lower({ evalScheme })]);
-    const typedEnv = env as unknown as ResolvingAmbient;
-    const [count] = await execOverFrame("(vector-count even? #(1 2 3 4))", { env: typedEnv });
+  it("srfi-43 ALONE (exec({capabilities})): every op resolves through its declared deps", async () => {
+    const [count] = await exec("(vector-count even? #(1 2 3 4))", { capabilities: [srfi43] });
     expect(count).toBe(2);
   });
 });
@@ -146,13 +138,11 @@ describe("scheme/srfi-43 — contract ENFORCEMENT fires at the call boundary", (
 });
 
 describe("scheme/srfi-43 — the §2.1 bake FV law passes for this pack AS MIGRATED", () => {
-  it("lowers cleanly with its declared deps — never DefineLocalityError", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-srfi43-fv-law-ok");
-    await expect(srfi43.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
+  it("bakes cleanly with its declared deps — never DefineLocalityError", async () => {
+    await expect(buildVocabulary([srfi43], undefined, evalScheme)).resolves.not.toThrow();
   });
 
   it("(regression pin) a LOCAL reproduction of the PRE-FIX shape — the same `vector-length`/`vector-ref` free references with NO declared deps — throws DefineLocalityError: the bug this migration fixes was real", async () => {
-    const env = await freshEnv();
     // Deliberately NO `deps` field — this is the exact shape srfi-43.ts had before this
     // migration (a bare `symbols` record with no dep declaration).
     const undeclaredCap = EnvCapability.define("test/srfi-43-pre-fix-repro", {
@@ -164,8 +154,6 @@ describe("scheme/srfi-43 — the §2.1 bake FV law passes for this pack AS MIGRA
           ),
       }),
     });
-    await expect(undeclaredCap.lower({ evalScheme }).apply(env, undefined as never)).rejects.toThrow(
-      DefineLocalityError,
-    );
+    await expect(buildVocabulary([undeclaredCap], undefined, evalScheme)).rejects.toThrow(DefineLocalityError);
   });
 });

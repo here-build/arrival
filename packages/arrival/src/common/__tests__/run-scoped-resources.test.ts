@@ -22,7 +22,7 @@ import { symbol } from "../symbol.js";
 import * as sz from "../scheme-zod.js";
 import { port, type Resource } from "../resources.js";
 import { execOverFrame } from "../../eval/generator-exec.js";
-import { freshEnv } from "../../__tests__/_fresh-env.js";
+import { applyCapability, freshEnv } from "../../__tests__/_fresh-env.js";
 import { RunContext } from "../../run/RunContext.js";
 import { disposeRunContext } from "../../run/run-lifecycle.js";
 import type { CallCtx } from "../../run/CallCtx.js";
@@ -62,7 +62,7 @@ describe("Stage 2 — per-RunContext capability resources", () => {
     it("(a) a resource with an observable [Symbol.asyncDispose] is disposed exactly once at run-end", async () => {
       const { capability, counts } = spyCapability();
       const env = await freshEnv();
-      await capability.lower({}).apply(env, undefined as never);
+      await applyCapability(env, [capability]);
       const runCtx = new RunContext({});
 
       const [out] = await execOverFrame("(spy/touch)", { env, runCtx });
@@ -80,7 +80,7 @@ describe("Stage 2 — per-RunContext capability resources", () => {
     it("(b) spawned once and REUSED across passes sharing one RunContext; FRESH across different RunContexts", async () => {
       const { capability, counts } = spyCapability();
       const env = await freshEnv();
-      await capability.lower({}).apply(env, undefined as never);
+      await applyCapability(env, [capability]);
 
       const sessionRunCtx = new RunContext({});
       await execOverFrame("(spy/touch)", { env, runCtx: sessionRunCtx }); // pass 1
@@ -111,7 +111,7 @@ describe("Stage 2 — per-RunContext capability resources", () => {
         },
       });
       const env = await freshEnv();
-      await capability.lower({}).apply(env, undefined as never);
+      await applyCapability(env, [capability]);
 
       const [out] = await execOverFrame("(plain/touch)", { env });
       expect(out).toBe("plain:0");
@@ -161,7 +161,7 @@ describe("Stage 2 — per-RunContext capability resources", () => {
     it("(a) the produced bag's [Symbol.asyncDispose] fires exactly once at RunContext end", async () => {
       const { capability, counts } = spyDefined();
       const env = await freshEnv();
-      await capability.lower({}).apply(env, undefined as never);
+      await applyCapability(env, [capability]);
       const runCtx = new RunContext({});
 
       const [out] = await execOverFrame('(cache/put "k" "v")', { env, runCtx });
@@ -178,7 +178,7 @@ describe("Stage 2 — per-RunContext capability resources", () => {
     it("(b) the cache PERSISTS across passes sharing a RunContext; a different RunContext starts EMPTY", async () => {
       const { capability, counts } = spyDefined();
       const env = await freshEnv();
-      await capability.lower({}).apply(env, undefined as never);
+      await applyCapability(env, [capability]);
 
       const sessionRunCtx = new RunContext({});
       await execOverFrame('(cache/put "k1" "v1")', { env, runCtx: sessionRunCtx }); // pass 1: write

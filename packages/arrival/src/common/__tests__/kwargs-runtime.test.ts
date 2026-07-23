@@ -23,7 +23,7 @@
 import { describe, expect, it, beforeAll } from "vitest";
 import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { execOverFrame as exec, execStateOverFrame as execState } from "../../eval/generator-exec.js";
-import { freshEnv } from "../../__tests__/_fresh-env.js";
+import { applyCapability, freshEnv } from "../../__tests__/_fresh-env.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
@@ -83,9 +83,9 @@ describe("z.kwargs runtime — INTEGRATION ((tool :k v …) through a real env +
     // binds an ARosettaProcedure, not a bare fn) rather than a raw `env.set(name, def.run)`
     // bare-fn bypass — the ledger's "bare-fn env.set harness wiring" row (replacedBy:
     // "EnvCapability-wired fixtures") retires with this fixture.
-    await EnvCapability.define("test/kwargs-runtime", { symbols: () => ({ "kw-greet": greet }) })
-      .lower({})
-      .apply(env, undefined as never);
+    await applyCapability(env, [
+      EnvCapability.define("test/kwargs-runtime", { symbols: () => ({ "kw-greet": greet }) }),
+    ]);
   });
 
   // INVARIANT: a real scheme `(tool :a v :b v2)` call invokes the impl with the constructed

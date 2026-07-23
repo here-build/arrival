@@ -118,15 +118,15 @@ export interface ExecOptions {
    */
   capabilities?: readonly EnvCapability[];
   /**
-   * THE SHARED CONFIG BAG for `capabilities` (inert without them). ONE object
-   * handed to every capability's `lower({ config })`: each validates its OWN slice
-   * against its `configuration` zod schemas (`z.object` strips undeclared keys),
-   * so unrelated capabilities ride one bag without knowing about each other.
-   * Deliberately reference-shared, never cloned/split: `EnvCapability.lower`
-   * threads the SAME raw object to its deps, so the kernel's closure dedup
-   * matches a capability's root + dep appearances by IDENTITY instead of
-   * tripping `AssembleConfigConflictError` (the `buildArrivalEnv` idiom —
-   * "each capability validates its own slice of the SHARED opts config").
+   * THE SHARED CONFIG BAG for `capabilities` (inert without them). ONE object handed to
+   * `buildVocabulary`, which threads it to every capability in the closure: each validates its
+   * OWN slice against its `configuration` zod schemas (`z.object` strips undeclared keys), so
+   * unrelated capabilities ride one bag without knowing about each other. Deliberately
+   * reference-shared, never cloned/split: the SAME raw object reaches a capability's root AND
+   * dep appearances, so the closure-walk's identity dedup (`common/dag-linearize.ts`) matches
+   * by IDENTITY instead of tripping `VocabularyCapabilityConflictError` (the retired
+   * `buildArrivalEnv`'s own idiom, restated: "each capability validates its own slice of the
+   * SHARED opts config").
    */
   config?: object;
   /**

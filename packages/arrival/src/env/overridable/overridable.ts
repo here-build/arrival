@@ -3,9 +3,9 @@
 // surface (CLI argv, API caller props, runProgram params, a notebook's form fields, an
 // agent's tool-call arguments) is the ENVIRONMENT'S job, never this capability's. It sees
 // none of those contexts — only the merged `params` bag (`configuration.params`, validated
-// structurally as z.record(z.string(), z.unknown()), supplied at `.lower({ config: { params
-// } })` time or through `exec(src, { capabilities, config })`'s shared config bag, of which
-// it validates only its own `params` slice).
+// structurally as z.record(z.string(), z.unknown()), supplied through
+// `exec(src, { capabilities, config })`'s shared config bag, of which it validates only its
+// own `params` slice).
 //
 // The one runtime verb is `overridable/resolve`, an ordinary rosetta; the macro is pure
 // ergonomics over it:

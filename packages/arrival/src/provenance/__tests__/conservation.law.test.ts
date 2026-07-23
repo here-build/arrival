@@ -44,6 +44,7 @@ import { provOf } from "../../provenance/lineage.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { schemeToJs, type InvocationLike } from "../../membrane/rosetta.js";
 import { EnvCapability, type SymbolFactory } from "../../common/capability.js";
+import { applyCapability } from "../../__tests__/_fresh-env.js";
 import { makeCallCtx } from "../../common/symbol.js";
 import type * as schemeZod from "../../common/scheme-zod.js";
 import { ResolvingAmbient, mintResolvingFrame } from "../../env/AmbientRuntime.js";
@@ -316,7 +317,7 @@ async function wireRosetta(
     },
   });
   const { env, verbs } = recordingEnv();
-  await cap.lower({}).apply(env, undefined as never);
+  await applyCapability(env, [cap]);
   expect(verbs.verb).toBeInstanceOf(ARosettaProcedure); // the binder-cut bind shape itself
   return verbs.verb;
 }

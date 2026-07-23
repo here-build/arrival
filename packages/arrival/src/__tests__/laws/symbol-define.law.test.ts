@@ -17,16 +17,9 @@
 import { describe, expect, it } from "vitest";
 import { symbol } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
-import { execOverFrame, execStateOverFrame, execInFrame } from "../../eval/generator-exec.js";
-import { freshEnv } from "../_fresh-env.js";
+import { execOverFrame, execStateOverFrame } from "../../eval/generator-exec.js";
+import { applyCapability, freshEnv } from "../_fresh-env.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../errors.js";
-import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
-
-// The injected evalScheme every direct `.apply()` call in this suite needs — mirrors
-// `_fresh-env.ts`'s own (skipBootstrapWait: these execs run AFTER the shared bootstrap
-// that produced `env`, so re-awaiting it would be a redundant, already-settled promise,
-// not a deadlock — unlike the base-pack assembly's OWN prelude evalScheme).
-const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
 
 describe("symbol.define — bake round-trip, two-phase order, sequential-RHS, contract enforcement", () => {
   it("declares → assembles → calls: a define referencing a SAME-CAPABILITY rosetta sibling", async () => {
@@ -44,7 +37,7 @@ describe("symbol.define — bake round-trip, two-phase order, sequential-RHS, co
         return { bump, "use-bump": useBump };
       },
     });
-    await cap.lower({ evalScheme }).apply(env, undefined as never);
+    await applyCapability(env, [cap]);
 
     const [result] = await execOverFrame(`(use-bump 41)`, { env });
     expect(result).toBe(42);
@@ -62,7 +55,7 @@ describe("symbol.define — bake round-trip, two-phase order, sequential-RHS, co
         return { "base-value": base, "derived-value": derived };
       },
     });
-    await cap.lower({ evalScheme }).apply(env, undefined as never);
+    await applyCapability(env, [cap]);
 
     const [result] = await execOverFrame(`derived-value`, { env });
     expect(result).toBe(10);
@@ -81,7 +74,7 @@ describe("symbol.define — bake round-trip, two-phase order, sequential-RHS, co
         ),
       }),
     });
-    await cap.lower({ evalScheme }).apply(env, undefined as never);
+    await applyCapability(env, [cap]);
 
     // A STRING where a number is contracted — the scheme-face z.decode must reject it
     // before the underlying lambda ever runs.
@@ -99,7 +92,7 @@ describe("symbol.define — bake round-trip, two-phase order, sequential-RHS, co
         ),
       }),
     });
-    await cap.lower({ evalScheme }).apply(env, undefined as never);
+    await applyCapability(env, [cap]);
     // Passing a STRING (not a number) does NOT throw at the contract boundary —
     // it flows straight through to the lambda, which just returns it unchanged.
     const [result] = await execOverFrame(`(unchecked-echo "hello")`, { env });
@@ -111,7 +104,7 @@ describe("symbol.define — bake round-trip, two-phase order, sequential-RHS, co
     const cap = EnvCapability.define("test/define-constant", {
       symbols: (symbol, z) => ({ "the-answer": symbol.define`the-answer: a constant`(z.number, `42`) }),
     });
-    await cap.lower({ evalScheme }).apply(env, undefined as never);
+    await applyCapability(env, [cap]);
     const [result] = await execOverFrame(`the-answer`, { env });
     expect(result).toBe(42);
   });
@@ -125,7 +118,7 @@ describe("symbol.define — the §2.1 bake FV locality law (the drift door)", ()
         "bad-ref": symbol.define`bad-ref: references an undeclared free name`(z.number, `undeclared-free-name`),
       }),
     });
-    await expect(cap.lower({ evalScheme }).apply(env, undefined as never)).rejects.toThrow(DefineLocalityError);
+    await expect(applyCapability(env, [cap])).rejects.toThrow(DefineLocalityError);
   });
 
   it("a body referencing a SAME-CAPABILITY sibling (any kind) passes the FV law", async () => {
@@ -140,7 +133,7 @@ describe("symbol.define — the §2.1 bake FV locality law (the drift door)", ()
         return { "fv-helper": helper, "fv-uses": uses };
       },
     });
-    await expect(cap.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
+    await expect(applyCapability(env, [cap])).resolves.not.toThrow();
   });
 
   it("SPECIAL_FORMS/KEYWORD_SYNTAX (if/lambda/let/…) are an unconditional baseline — never a drift-door false positive", async () => {
@@ -155,7 +148,7 @@ describe("symbol.define — the §2.1 bake FV locality law (the drift door)", ()
         ),
       }),
     });
-    await expect(cap.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
+    await expect(applyCapability(env, [cap])).resolves.not.toThrow();
   });
 
   // PRE-H2 machinery fix wave — gap (1): `car`/`cdr` (the whole `c[ad]+r` family) are
@@ -177,7 +170,7 @@ describe("symbol.define — the §2.1 bake FV locality law (the drift door)", ()
         ),
       }),
     });
-    await expect(cap.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
+    await expect(applyCapability(env, [cap])).resolves.not.toThrow();
   });
 
   it("a body referencing a longer cxr-family name (bare cadr) also bakes clean", async () => {
@@ -190,7 +183,7 @@ describe("symbol.define — the §2.1 bake FV locality law (the drift door)", ()
         ),
       }),
     });
-    await expect(cap.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
+    await expect(applyCapability(env, [cap])).resolves.not.toThrow();
   });
 
   it("a name that merely LOOKS cxr-shaped but isn't a real c[ad]+r spelling still drift-doors", async () => {
@@ -202,7 +195,7 @@ describe("symbol.define — the §2.1 bake FV locality law (the drift door)", ()
         "bad-cxr-lookalike": symbol.define`bad-cxr-lookalike: "cars" is not a real cxr name`(z.value, `cars`),
       }),
     });
-    await expect(cap.lower({ evalScheme }).apply(env, undefined as never)).rejects.toThrow(DefineLocalityError);
+    await expect(applyCapability(env, [cap])).rejects.toThrow(DefineLocalityError);
   });
 });
 
@@ -216,7 +209,7 @@ describe("symbol.define — §2.3's eager-forward-reference door", () => {
         return { "early-eager": early, "later-sibling": later };
       },
     });
-    await expect(cap.lower({ evalScheme }).apply(env, undefined as never)).rejects.toThrow(DefineForwardReferenceError);
+    await expect(applyCapability(env, [cap])).rejects.toThrow(DefineForwardReferenceError);
   });
 
   it("a LAMBDA body referencing a LATER sibling is legal — it late-binds at CALL time, not bake", async () => {
@@ -234,7 +227,7 @@ describe("symbol.define — §2.3's eager-forward-reference door", () => {
         return { "late-binder": early, "later-value": later };
       },
     });
-    await cap.lower({ evalScheme }).apply(env, undefined as never);
+    await applyCapability(env, [cap]);
     const [result] = await execOverFrame(`(late-binder)`, { env });
     expect(result).toBe(7);
   });
@@ -251,7 +244,7 @@ describe("symbol.define — §1.4 derived provenance role + its drift door", () 
         ),
       }),
     });
-    await cap.lower({ evalScheme }).apply(env, undefined as never);
+    await applyCapability(env, [cap]);
     const proc = env.get("pure-thing") as { provenanceRole?: string };
     expect(proc.provenanceRole).toBe("pipe");
   });
@@ -269,7 +262,7 @@ describe("symbol.define — §1.4 derived provenance role + its drift door", () 
         return { "mint-source": mint, "wraps-source": wraps };
       },
     });
-    await cap.lower({ evalScheme }).apply(env, undefined as never);
+    await applyCapability(env, [cap]);
     const proc = env.get("wraps-source") as { provenanceRole?: string };
     expect(proc.provenanceRole).toBe("opaque");
   });
@@ -286,7 +279,7 @@ describe("symbol.define — §1.4 derived provenance role + its drift door", () 
         return { "mint-source-2": mint, "liar-pipe": liar };
       },
     });
-    await expect(cap.lower({ evalScheme }).apply(env, undefined as never)).rejects.toThrow(ProvenanceRoleShapeError);
+    await expect(applyCapability(env, [cap])).rejects.toThrow(ProvenanceRoleShapeError);
   });
 
   it("a declared role MATCHING the derived classification is a legal no-op (no drift door)", async () => {
@@ -299,7 +292,7 @@ describe("symbol.define — §1.4 derived provenance role + its drift door", () 
         ),
       }),
     });
-    await expect(cap.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
+    await expect(applyCapability(env, [cap])).resolves.not.toThrow();
   });
 });
 
@@ -321,7 +314,7 @@ describe("symbol.defineSyntax — macro binds + expands (§1.5)", () => {
         return { "bump!": bump, "my-twice": myTwice };
       },
     });
-    await cap.lower({ evalScheme }).apply(env, undefined as never);
+    await applyCapability(env, [cap]);
 
     const [result] = await execOverFrame(`(my-twice (bump!))`, { env });
     expect(calls).toBe(2); // the macro expanded to TWO calls, not one

@@ -37,6 +37,7 @@ import type { Payload } from "../../provenance/store/interfaces.js";
 import type { MintRecord } from "../../provenance/store/records.js";
 import type { SchemeValue } from "../../values/types.js";
 import { isEagerProvenanceOracleEnabled, setEagerProvenanceOracleEnabled } from "../../values/op-helpers.js";
+import { applyCapability } from "../_fresh-env.js";
 
 // Same stamped-value constructors as w1-harness.ts (local copies, same rationale).
 const stampedStr = (s: string, p: number): SchemeValue => z.string.encode(s).withProvenance(new Set([p]));
@@ -105,7 +106,8 @@ export class RecordingRegistry {
    *  the boxed, already-stamped return crosses back out untouched via the output escape
    *  hatch. */
   async register(env: AmbientRuntime, op: string, shape: RecordingShape): Promise<void> {
-    await EnvCapability.define(`test/q16-source-${op}`, {
+    await applyCapability(env, [
+      EnvCapability.define(`test/q16-source-${op}`, {
       symbols: (symbol) => ({
         [op]: symbol.rosetta`${op}: Q16 harness recording source`(
           { input: [], inputRest: z.value, output: [z.value] },
@@ -172,9 +174,8 @@ export class RecordingRegistry {
           },
         ),
       }),
-    })
-      .lower({})
-      .apply(env, undefined as never);
+      }),
+    ]);
   }
 }
 
@@ -226,7 +227,7 @@ export async function recordRun(
   const payloads = new PayloadStoreFake();
   const registry = new RecordingRegistry(store, payloads, regionId);
   const env = mintFrame(baseEnv, `q16-record-${regionId}`);
-  for (const [op, shape] of Object.entries(sources)) registry.register(env, op, shape);
+  for (const [op, shape] of Object.entries(sources)) await registry.register(env, op, shape);
 
   // Q20b: production default is OFF — this run's `eagerCone` (the recorded-run's
   // ground truth the replay laws compare γ against) needs REAL accumulation, same as

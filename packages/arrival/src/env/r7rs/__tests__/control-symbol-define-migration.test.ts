@@ -47,8 +47,13 @@ import { PurityError } from "../../../errors.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
 import { DoorProcedure } from "../../../values/primitives/ACallable.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
+import { buildVocabulary } from "../../vocabulary.js";
+import { execInFrame } from "../../../eval/generator-exec.js";
+import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 import type { AEntity, DoorSymbolDef } from "../../../common/symbol.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
+
+const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
 
 const symbols = harvestContracts(controlPack.spec.symbols);
 
@@ -108,9 +113,9 @@ describe("ROW 1 — structural: no prelude, every symbol is a contract-free door
   });
 });
 
-describe("ROW 2 — bake / cause stamping: lower() succeeds, doors bind with a stamped owner", () => {
-  it("a bare lower({}) — zero deps, zero config — does not throw", () => {
-    expect(() => controlPack.lower({})).not.toThrow();
+describe("ROW 2 — bake / cause stamping: the vocabulary builds, doors bind with a stamped owner", () => {
+  it("a bare vocabulary build — zero deps, zero config — does not throw", async () => {
+    await expect(buildVocabulary([controlPack], undefined, evalScheme)).resolves.not.toThrow();
   });
 
   it("every bound value is a DoorProcedure carrying cause {owner: 'scheme/r7rs/control', needs: []}", async () => {
@@ -145,14 +150,14 @@ describe("ROW 3 — contract teaching: firing a door throws the name@owner Purit
 });
 
 describe("ROW 4 — FV law: N/A structurally (no symbol.define body exists to walk)", () => {
-  it("lower({}) never throws the §2.1 bake FV errors — nothing here is FV-checked", () => {
+  it("the vocabulary build never throws the §2.1 bake FV errors — nothing here is FV-checked", async () => {
     // define-bake.ts's FV/locality/forward-reference/role-shape checks only run
     // for `kind === "define"` entries; this pack has none, so these errors are
     // structurally unreachable — asserted as a negative, mirroring srfi-26's
     // ROW 3 and binding's ROW 2.
     let caught: unknown;
     try {
-      controlPack.lower({});
+      await buildVocabulary([controlPack], undefined, evalScheme);
     } catch (e) {
       caught = e;
     }

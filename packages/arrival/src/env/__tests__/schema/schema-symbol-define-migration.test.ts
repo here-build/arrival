@@ -30,11 +30,11 @@
 //   message instead of an opaque `car`-on-wrong-shape crash deep in the body (§4.2's "a
 //   wrong-arity call... now fails at the contract boundary, with a better message").
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../AmbientRuntime.js";
+
 
 import { exec } from "../../../index.js";
 import { execInFrame } from "../../../eval/generator-exec.js";
-import { nativeOnlyRoot } from "../../../__tests__/_fresh-env.js";
+import { buildVocabulary } from "../../vocabulary.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
 import { schemaCapability } from "../../schema/schema.js";
 import type { AEntity } from "../../../common/symbol.js";
@@ -98,15 +98,13 @@ describe("arrival/schema — structural: no prelude field, every symbol is kind:
 });
 
 describe("arrival/schema — the §2.1 bake FV law passes standalone (deps edge is load-bearing, not decorative)", () => {
-  it("lowers cleanly against a BARE root (global_env, no BASE_PACKS preludes) with only its own declared deps", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "schema-fv-law-standalone");
-    await expect(schemaCapability.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
+  it("bakes cleanly with only its own declared deps (no BASE_ROSTER folded in)", async () => {
+    await expect(buildVocabulary([schemaCapability], undefined, evalScheme)).resolves.not.toThrow();
   });
 
   it("(regression pin) never throws DefineLocalityError/DefineForwardReferenceError/ProvenanceRoleShapeError", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "schema-fv-law-pin");
     try {
-      await schemaCapability.lower({ evalScheme }).apply(env, undefined as never);
+      await buildVocabulary([schemaCapability], undefined, evalScheme);
     } catch (error) {
       expect(error).not.toBeInstanceOf(DefineLocalityError);
       expect(error).not.toBeInstanceOf(DefineForwardReferenceError);

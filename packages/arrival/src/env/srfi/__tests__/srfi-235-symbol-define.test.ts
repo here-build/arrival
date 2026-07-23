@@ -32,14 +32,12 @@
 //      declared deps) throws `DefineLocalityError` — pinning that the bug this
 //      migration fixes was real and is now caught, not merely worked around.
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../AmbientRuntime.js";
 import { EnvCapability } from "../../../common/capability.js";
-import { execOverFrame, execStateOverFrame, execInFrame } from "../../../eval/generator-exec.js";
-import { freshEnv, nativeOnlyRoot } from "../../../__tests__/_fresh-env.js";
-import { assembleEnv } from "../../../common/kernel.js";
+import { exec, execOverFrame, execStateOverFrame, execInFrame } from "../../../eval/generator-exec.js";
+import { freshEnv } from "../../../__tests__/_fresh-env.js";
+import { buildVocabulary } from "../../vocabulary.js";
 import { DefineLocalityError } from "../../../errors.js";
 import srfi235 from "../srfi-235.js";
-import type { SchemeEnv } from "../../../common/scheme-env.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 
 // Mirrors `_fresh-env.ts`'s own injected evalScheme — `skipBootstrapWait` because
@@ -92,26 +90,17 @@ describe("scheme/srfi-235 — combinator behavior equivalence (semantic-equivale
   });
 });
 
+// STAGE C CUT 4 (docs/plans/stage-c-corpse-deletion.md): the "standalone .apply(), deps
+// unwalked" mechanism this block used to prove these names are genuine runtime dependencies is
+// RETIRED along with `lower()`/`assembleEnv` — `buildVocabulary` (the sole surviving bake path)
+// ALWAYS walks a capability's OWN declared `deps`. The bake-time FV law (below) is what
+// actually proves the edges are declared, not runtime luck; here we pin the PRODUCT behavior —
+// complement/curry resolve through srfi-235's declared deps — via the sanctioned path.
 describe("scheme/srfi-235 — the dep edge is real (§2.1's undeclared-dep bug, now a declared edge)", () => {
-  it("standalone .apply() (bypassing assembleEnv's C3 dep-walk) leaves deps UNAPPLIED — complement's `compose`/`not` are genuinely unbound, and the call fails with the teaching door", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-srfi235-standalone-unbound");
-    await srfi235.lower({ evalScheme }).apply(env, undefined as never);
-    await expect(execStateOverFrame("(complement not)", { env })).rejects.toThrow();
-  });
-
-  it("bake itself succeeds even with deps unapplied — the FV law is a STATIC declared-`deps` check, not a runtime-binding probe", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-srfi235-standalone-bake-ok");
-    await expect(srfi235.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
-  });
-
-  it("assembleEnv (the real orchestration path — every production caller) DOES walk deps: complement/curry work standalone", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-srfi235-assembleEnv-ok") as unknown as SchemeEnv;
-    await assembleEnv(env, [srfi235.lower({ evalScheme })]);
-    const typedEnv = env as unknown as ResolvingAmbient;
-    const [complementResult] = await execOverFrame("((complement not) #t)", { env: typedEnv });
+  it("srfi-235 ALONE (exec({capabilities})): complement/curry resolve through its declared deps", async () => {
+    const [complementResult] = await exec("((complement not) #t)", { capabilities: [srfi235] });
     expect(complementResult).toBe(true);
-    await execOverFrame("(define (add1 a) (+ a 1))", { env: typedEnv });
-    const [curryResult] = await execOverFrame("((curry add1) 41)", { env: typedEnv });
+    const [, curryResult] = await exec("(define (add1 a) (+ a 1)) ((curry add1) 41)", { capabilities: [srfi235] });
     expect(curryResult).toBe(42);
   });
 });
@@ -129,13 +118,11 @@ describe("scheme/srfi-235 — contract ENFORCEMENT fires at the call boundary", 
 });
 
 describe("scheme/srfi-235 — the §2.1 bake FV law passes for this pack AS MIGRATED", () => {
-  it("lowers cleanly with its declared deps — never DefineLocalityError", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-srfi235-fv-law-ok");
-    await expect(srfi235.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
+  it("bakes cleanly with its declared deps — never DefineLocalityError", async () => {
+    await expect(buildVocabulary([srfi235], undefined, evalScheme)).resolves.not.toThrow();
   });
 
   it("(regression pin) a LOCAL reproduction of the PRE-FIX shape — the same `compose`/`not` bodies with NO declared deps — throws DefineLocalityError: the bug this migration fixes was real", async () => {
-    const env = await freshEnv();
     // Deliberately NO `deps` field — this is the exact shape srfi-235.ts had before
     // this migration (a bare `symbols` record with no dep declaration).
     const undeclaredCap = EnvCapability.define("test/srfi-235-pre-fix-repro", {
@@ -147,8 +134,6 @@ describe("scheme/srfi-235 — the §2.1 bake FV law passes for this pack AS MIGR
           ),
       }),
     });
-    await expect(undeclaredCap.lower({ evalScheme }).apply(env, undefined as never)).rejects.toThrow(
-      DefineLocalityError,
-    );
+    await expect(buildVocabulary([undeclaredCap], undefined, evalScheme)).rejects.toThrow(DefineLocalityError);
   });
 });

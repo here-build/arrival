@@ -1,21 +1,18 @@
 // kernel.ts — the IMPLEMENTATION of arrival's env-assembly machine. Env-agnostic core: closure +
-// 3-color cycle detection, identity dedup, C3 linearization (the merge), and the apply loop with
-// LIFO disposal + per-pack apply timeout. A pack is a named, dependency-carrying, async capability
-// contribution to an env.
+// 3-color cycle detection, identity dedup, and C3 linearization (the merge) — `linearize`, shared
+// with `env/vocabulary.ts`'s `buildVocabulary` via `dag-linearize.ts`'s domain-agnostic walk. The
+// live consumer of this file post Stage-C-Cut-4 is `createRuntimeAssembler` — the MID-RUN,
+// live-env pack applier backing `(require/extension :name)` (§LOADER): host-supplied `EnvPack`s
+// registered via `arrivalLoaderCapability`'s `extensionRegistry` config key, applied onto an
+// ALREADY-LIVE env after the vocabulary-path bootstrap has already run. The BOOTSTRAP assembler
+// (`assembleEnv`, folding an `EnvPack` DAG onto a fresh base — the pre-Stage-C bootstrap path)
+// is RETIRED (Stage C Cut 4, docs/plans/stage-c-corpse-deletion.md): bootstrap assembly is
+// `env/vocabulary.ts`'s `buildVocabulary` now, which mints a frozen `Vocabulary` map instead of
+// binding onto a live env — see that module's own header.
 //
-// The MODEL — what assembly is, why C3 (= Python MRO), the dep-edge-is-grant law, apply-once, and
-// the DAG-authoring-form → flat-runtime-form lowering — is docs/environments.md §ASSEMBLY, the single
-// authoritative statement; this file enforces it.
-
-// Door-set degradation's `DegradedCapability`/`DegradedNeed` types are TYPE-ONLY, from the
-// degradation-domain module (common/degradation.ts) — kernel stays env-agnostic (no runtime
-// dependency; the import erases at compile time), and the shape is defined once, not mirrored.
-import type { DegradedCapability } from "./degradation.js";
-// TYPE-ONLY, same posture: the per-env binding context a capability-lowered pack exposes
-// (`LoweredPack.activation`). capability.ts's own imports from this module are type-only too,
-// so the cycle is purely in type space — zero runtime edge; kernel stays env-agnostic (a pack
-// that carries no activation — every plain kernel pack — simply contributes nothing to the fold).
-import type { Activation } from "./capability.js";
+// The MODEL — what assembly is, why C3 (= Python MRO), the dep-edge-is-grant law, apply-once —
+// is docs/environments.md §ASSEMBLY; this file enforces the mid-run half of it (the bootstrap half
+// moved to `env/vocabulary.ts`).
 
 // Errors (teaching, errors-as-doors) live in errors.ts (the single error home). Imported here for
 // the throw sites below; the /env barrel surfaces them to consumers by importing errors.ts DIRECTLY
@@ -39,79 +36,41 @@ export interface EnvPack<E = unknown> {
   /** Host-injected arming for THIS pack (inferPack.config = the InferFn, mcpPack.config = the
    *  resolver). Two same-name packs with non-equal config in one assembly = AssembleConfigConflictError. */
   readonly config?: unknown;
-  /** Door-set degradation — a capability-aware `lower()` (common/capability.ts) MAY report
-   *  here, eagerly, that it lowered degraded (an absent optional-enabling config key, under
-   *  `degradation: "doors"`). Kernel-agnostic by construction: this field is an opaque, purely
-   *  structural bag `assembleEnv` folds into `AssembledEnv.degraded` without interpreting it —
-   *  a pack that never sets it (every pure-JS pack, every capability that didn't degrade)
-   *  simply contributes nothing. Absent, not an empty array, when nothing degraded. */
-  readonly degraded?: readonly DegradedCapability[];
-  /** The per-env binding context a capability-aware `lower()` armed (see
-   *  `LoweredPack.activation`, common/capability.ts) — OPTIONAL and structural: the kernel
-   *  never interprets it, only folds present ones into `AssembledEnv.activations` (the
-   *  phase-2 metadata read channel). Plain kernel packs never set it. */
-  readonly activation?: Activation<any, any>;
   /** Runs once, after all deps, in C3 order. May await import / defineRosetta / ctx.onDispose.
    *  MUST contribute symbols via the env's membrane-wrapping API, never a bare host closure. */
   apply(env: E, ctx: PackContext<E>): void | Promise<void>;
 }
 
 /** The narrow surface a `preludeOnly` symbol's BINDING lands on. Deliberately just `.set`:
- *  capability.ts's bindTarget only ever writes. In BOOTSTRAP assembly this is the kernel's own
- *  Map-backed shim (see `assembleEnv`); in MID-RUN application it is the caller's adapter over
- *  a real, discarded child frame (loader-capability.ts wraps the module-internal `bindValue` —
- *  `SchemeEnv` itself carries no write member; docs/environments.md §HERMETIC). */
+ *  capability.ts's bindTarget only ever writes. BOOTSTRAP assembly (`env/vocabulary.ts`'s
+ *  `buildVocabulary`) mirrors it straight into its own `preludeOnly` Map; MID-RUN application
+ *  (this module's `RuntimeAssembler`) hands the caller's adapter over a real, discarded child
+ *  frame (loader-capability.ts wraps the module-internal `bindValue` — `SchemeEnv` itself
+ *  carries no write member; docs/environments.md §HERMETIC). */
 export interface PreludeBindTarget {
   set(name: string, value: unknown): unknown;
 }
 
 export interface PackContext<E = unknown> {
-  /** Register a teardown thunk; run LIFO by AssembledEnv.dispose(). */
+  /** Register a teardown thunk; run LIFO by `RuntimeAssembler.dispose()`. */
   onDispose(fn: () => void | Promise<void>): void;
   /** The C3 linearization this pack sits in (highest precedence first) — debug/audit. */
   readonly order: readonly string[];
-  /** The scope a `preludeOnly` symbol routes its BINDING onto instead of the runtime env.
-   *
-   *  BOOTSTRAP (`assembleEnv`): ALWAYS present — the kernel's own bake-scoped overlay (see the
-   *  block comment above `assembleEnv`). Resolvable only while the assembly's C3 loop (the bake)
-   *  is open; DROPPED at seal — including for closures a prelude defined (a closure walks the
-   *  live chain at call time, and the overlay is gone post-assembly). That IS the `preludeOnly`
-   *  contract: assembly-time-only, not run-within-prelude-scope.
-   *
-   *  MID-RUN (`RuntimeAssembler.require`): caller-supplied — a discarded child `C'` of the live
-   *  env (@inhuman.tools/arrival/loader's `arrivalLoaderCapability`, `require/extension`'s
-   *  declaration). Undefined when that caller passes none. */
+  /** The scope a `preludeOnly` symbol routes its BINDING onto instead of the runtime env —
+   *  caller-supplied (`RuntimeAssembler.require`): a discarded child `C'` of the live env
+   *  (@inhuman.tools/arrival/loader's `arrivalLoaderCapability`, `require/extension`'s
+   *  declaration). Undefined when that caller passes none. Bootstrap assembly's OWN bake-scoped
+   *  overlay (the pre-Stage-C-Cut-4 `assembleEnv`) is retired — bootstrap's `preludeOnly` binding
+   *  now lands on `env/vocabulary.ts`'s `preludeOnly` Map directly, no kernel-level overlay. */
   readonly preludeScope?: PreludeBindTarget;
   /** The scope a capability's `prelude` TEXT is evaluated AGAINST — distinct from
-   *  `preludeScope` (the bind target):
-   *    - BOOTSTRAP: left undefined; capability.ts falls back to evaluating against `env` = R,
-   *      so prelude `define`s land in R while `preludeOnly` lookups are answered by the
-   *      kernel's phase-gated resolver on the base.
-   *    - MID-RUN: `preludeScope` = `preludeEvalScope` = a discarded CHILD `C'` of the live env.
-   *      Re-parenting a LIVE env is unsafe (concurrent lookups), so the prelude is evaluated IN
-   *      `C'` instead: lookups miss `C'` → hit `liveEnv` → base, and `C'` (with any prelude
-   *      `define`s) is simply dropped when `require()` returns — the deliberate mid-run
-   *      asymmetry (a mid-run pack's prelude cannot contribute runtime bindings). */
+   *  `preludeScope` (the bind target). MID-RUN (the only remaining kernel-assembled path):
+   *  `preludeScope` = `preludeEvalScope` = a discarded CHILD `C'` of the live env. Re-parenting a
+   *  LIVE env is unsafe (concurrent lookups), so the prelude is evaluated IN `C'` instead:
+   *  lookups miss `C'` → hit `liveEnv` → base, and `C'` (with any prelude `define`s) is simply
+   *  dropped when `require()` returns — the deliberate mid-run asymmetry (a mid-run pack's
+   *  prelude cannot contribute runtime bindings). */
   readonly preludeEvalScope?: E;
-}
-
-export interface AssembledEnv<E = unknown> {
-  readonly env: E;
-  /** The C3 linearization, highest precedence (roots) first. */
-  readonly order: readonly string[];
-  /** Every capability that lowered degraded — an enumerable degraded list, folded from each
-   *  applied pack's own `EnvPack.degraded`, in apply order. A host/discovery reader inspects
-   *  this instead of inferring degradation from a throw or probing symbols one by one; empty
-   *  when nothing degraded (including every assembly under the default `"forbid"` mode, where
-   *  no capability's `Activation.degradation.active` is ever true). */
-  readonly degraded: readonly DegradedCapability[];
-  /** Each applied pack's activation (validated config + resource cells + degradation),
-   *  keyed by pack name, apply order — folded from `EnvPack.activation`, uninterpreted
-   *  (the additive posture `degraded` set). THE describe-time read channel: dynamic
-   *  metadata fields resolve against exactly these objects. Packs that carry no activation
-   *  contribute nothing. */
-  readonly activations: ReadonlyMap<string, Activation<any, any>>;
-  dispose(): Promise<void>;
 }
 
 const packTimeoutMs = (): number => Number(process.env.ASSEMBLE_PACK_TIMEOUT_MS) || 30_000;
@@ -154,132 +113,6 @@ function linearize<E>(roots: readonly EnvPack<E>[]): { order: string[]; byName: 
       throw new AssembleLinearizationError(owner);
     },
   });
-}
-
-function makeCtx<E>(
-  order: string[],
-  preludeOpts: { preludeScope?: PreludeBindTarget; preludeEvalScope?: E } = {},
-): { ctx: PackContext<E>; runDisposers: () => Promise<void> } {
-  const disposers: Array<() => void | Promise<void>> = [];
-  const ctx: PackContext<E> = {
-    onDispose: (fn) => disposers.push(fn),
-    order,
-    preludeScope: preludeOpts.preludeScope,
-    preludeEvalScope: preludeOpts.preludeEvalScope,
-  };
-  const runDisposers = async () => {
-    for (let i = disposers.length - 1; i >= 0; i--) {
-      try {
-        await disposers[i]();
-      } catch {
-        /* best-effort teardown */
-      }
-    }
-  };
-  return { ctx, runDisposers };
-}
-
-// ── The kernel-internal, BAKE-SCOPED prelude overlay (bootstrap assembly) ────────────────────
-//
-// The `preludeOnly` assembly-time-only contract — bindings in a per-assembly `Map` behind
-// `ctx.preludeScope`, a base-env resolver live only for the C3 loop, the seal that drops it
-// (unregister where the host supports it for zero residue, a sealed-flag silencer where it does
-// not), and why post-seal the name is unbound everywhere including from prelude-defined closures
-// (so a bridge captures the VALUE, not the verb) — is docs/environments.md §PRELUDE. Two facts are
-// local to THIS implementation:
-//   • the base-env resolver is consulted at every chain layer
-//     (`AmbientRuntime._lookupWithResolvers`: own bindings → resolvers → parent), so a prelude
-//     evaluated against R — or any child chaining through the base — resolves the symbol exactly
-//     like a real binding;
-//   • everything is a per-assembly closure (concurrent assemblies share no state); only the id
-//     uniquifier below is module-level, so two overlapping assemblies over the SAME base register
-//     distinct resolver ids (`AmbientRuntime.registerResolver` dedups by id).
-
-/** The structural face of a resolver-capable base (mirrors scheme-env.ts's `SchemeEnv.
- *  registerResolver`/`ResolverSpec` WITHOUT importing them — the kernel stays env-agnostic;
- *  a non-scheme `E` simply never gets the resolver and Map-bound symbols stay unreachable).
- *  `unregisterResolver` is optional: present ⇒ the bake overlay is removed at seal (zero
- *  residue); absent ⇒ the sealed-flag fallback silences it instead. */
-interface ResolverHostLike {
-  registerResolver(resolver: { readonly id: string; resolve(name: string): unknown }): unknown;
-  unregisterResolver?(id: string): unknown;
-}
-const isResolverHost = (base: unknown): base is ResolverHostLike =>
-  typeof (base as { registerResolver?: unknown } | null | undefined)?.registerResolver === "function";
-
-let bakeOverlaySeq = 0;
-
-/**
- * Assemble `base` into a capability-scoped env by resolving the pack DAG — the BAKE phase.
- * Async by construction. Applies each pack once, least-precedence (deepest dependency) first —
- * last-write-wins, per docs/environments.md §ASSEMBLY. On any apply failure, runs disposers collected
- * so far (LIFO) and rejects — no half-built env escapes.
- *
- * `ctx.preludeScope` is ALWAYS provided — the kernel-internal, bake-scoped prelude overlay
- * (see the block comment above), dropped at seal. Mid-run application
- * (`RuntimeAssembler.require`) keeps its caller-supplied `preludeScope`/`preludeEvalScope`
- * override — that path applies onto a LIVE env, where the discarded-child topology is the
- * safe one.
- *
- * The kernel stays env-agnostic, so the SEALED ARTIFACT — the `CompiledResolutionChain`
- * (eval/CompiledResolutionChain.ts) — is compiled by the scheme-side assembly call sites
- * (generator-exec's `ensureBaseAssembled`/`assembleAmbient` call
- * `sealResolutionChain(base)` right after this resolves).
- */
-export async function assembleEnv<E>(base: E, roots: readonly EnvPack<E>[]): Promise<AssembledEnv<E>> {
-  const { order, byName } = linearize(roots);
-  // Per-assembly closure: the overlay Map + sealed flag live and die with THIS call.
-  let sealed = false;
-  const preludeMap = new Map<string, unknown>();
-  let overlayHost: ResolverHostLike | undefined;
-  let overlayId: string | undefined;
-  const preludeScope: PreludeBindTarget = {
-    set: (name, value) => {
-      // Register the overlay resolver lazily, on the FIRST preludeOnly binding — an assembly
-      // with none (the overwhelmingly common case) leaves the base env untouched.
-      if (overlayId === undefined && isResolverHost(base)) {
-        overlayHost = base;
-        overlayId = `kernel/bake-overlay#${bakeOverlaySeq++}`;
-        overlayHost.registerResolver({
-          id: overlayId,
-          resolve: (lookupName) => (sealed ? undefined : preludeMap.get(lookupName)),
-        });
-      }
-      preludeMap.set(name, value);
-      return value;
-    },
-  };
-  const { ctx, runDisposers } = makeCtx<E>(order, { preludeScope });
-  try {
-    for (const name of order.toReversed()) {
-      const pack = byName.get(name)!;
-      try {
-        await withTimeout(pack.apply(base, ctx), packTimeoutMs(), name);
-      } catch (error) {
-        await runDisposers();
-        if (error instanceof AssemblePackTimeoutError) throw error;
-        throw new AssemblePackError(name, error);
-      }
-    }
-  } finally {
-    // THE SEAL: after the C3 loop (success or failure) the bake-scoped overlay is dropped —
-    // preludeOnly symbols are unreachable, and where the base supports unregistration no
-    // resolver remains registered at all (zero residue).
-    sealed = true;
-    if (overlayId !== undefined) overlayHost?.unregisterResolver?.(overlayId);
-    preludeMap.clear();
-  }
-  // Fold each applied pack's own `.degraded` into the assembly-level list, apply order
-  // (highest precedence first, matching `order`) — purely structural, kernel never interprets it.
-  const degraded = order.flatMap((name) => byName.get(name)!.degraded ?? []);
-  // Fold each applied pack's activation (when present — capability-lowered packs only), same
-  // order, same uninterpreted posture. The phase-2 metadata read channel.
-  const activations = new Map<string, Activation<any, any>>();
-  for (const name of order) {
-    const activation = byName.get(name)!.activation;
-    if (activation !== undefined) activations.set(name, activation);
-  }
-  return { env: base, order, degraded, activations, dispose: runDisposers };
 }
 
 /** A live-env assembler for RUNTIME pack application — the `(require/extension :name)` path

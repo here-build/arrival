@@ -6,8 +6,9 @@
  * The `require` VERB ITSELF — the single-flight cache, cycle detection, and statement-
  * position eval loop that actually walks these primitives at call time — is declared directly
  * by `arrivalLoaderCapability` (loader-capability.ts) as a `symbol.native`, not built here: its
- * state is scoped to one capability `.lower()` (one live env), which is exactly what that
- * declarative builder already provides, so there is no separate factory to call through.
+ * state is scoped to one capability's own per-RunContext resources bag (`LoaderRunResources`),
+ * which is exactly what that declarative builder already provides, so there is no separate
+ * factory to call through.
  * `runResolverOf`/`runEnvOf` below are the shared back-channel readers require's
  * declaration (and `require/extension`'s) both need — genuine cross-verb plumbing, kept here.
  *

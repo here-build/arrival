@@ -16,14 +16,17 @@
 //
 // STAGE C CUT 3b (docs/plans/stage-c-corpse-deletion.md) retired the transitional COMPAT
 // bridge (`configuration.onRequireCache`/`configuration.onExtensionAssembler`) along with the
-// ambient path it bridged for (`buildArrivalEnv`'s discarded-`LoweredPack` consumers,
-// arrival-chain's `run-traced.ts`/`chain-env.ts`) — the resources bag below is now the single
-// source of truth with no receiver to notify.
+// ambient path it bridged for (the retired `buildArrivalEnv`'s discarded `.lower()`-produced
+// pack consumers, arrival-chain's `run-traced.ts`/`chain-env.ts`) — the resources bag below is
+// now the single source of truth with no receiver to notify. STAGE C CUT 4 retired `lower()`
+// itself (docs/plans/stage-c-corpse-deletion.md) — this capability's config is consumed
+// directly by `env/vocabulary.ts`'s `buildVocabulary` now, never bound through a lowered pack.
 //
-// The configuration slice mirrors `BuildArrivalEnvOpts`' loader-facing fields, so the ONE shared
-// config bag (`exec(src, { capabilities, config })` / `buildArrivalEnv(opts)`) feeds this capability
-// with no adapter — it validates its own slice (real structural zod checks, no `z.custom<T>()`
-// passthrough) and ignores the rest.
+// The configuration slice mirrors the loader-facing fields of arrival-run's successor session
+// builder (`buildArrivalSession`, run-program.ts), so the ONE shared config bag
+// (`exec(src, { capabilities, config })`) feeds this capability with no adapter — it validates
+// its own slice (real structural zod checks, no `z.custom<T>()` passthrough) and ignores the
+// rest.
 
 import type { EvalTap } from "../eval/evaluator.js";
 import { execExpr } from "../eval/generator-exec.js";
@@ -163,10 +166,11 @@ function loaderRegistryOf(runCtx: RunContext): ExtensionResolverRegistry {
 // Explicit `<any, any>`: TS's declaration-emit (this package builds `--build`/composite) can't
 // portably NAME the inferred config type without referencing arrival's internal
 // `AmbientRuntime` (RunEnv's root) across the package boundary. No consumer reads `.configuration`/
-// `.resources` off this export from outside `loader-capability.ts` itself (every external use is
-// `arrivalLoaderCapability.lower({...})`, generic-erased already) — so widening the export's own
-// generics costs nothing real; the `symbols` callback body is still checked against the REAL
-// inferred shapes at the `EnvCapability.define(...)` call site below, unaffected by this annotation.
+// `.resources` off this export from outside `loader-capability.ts` itself (every external use goes
+// through `exec(src, { capabilities: [arrivalLoaderCapability], config }})`, generic-erased already)
+// — so widening the export's own generics costs nothing real; the `symbols` callback body is still
+// checked against the REAL inferred shapes at the `EnvCapability.define(...)` call site below,
+// unaffected by this annotation.
 export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.define("arrival/loader", {
   configuration: {
     /** PRIMARY: the raw read-capable filesystem arming `(require …)`. The capability derives its own

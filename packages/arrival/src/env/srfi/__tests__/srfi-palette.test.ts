@@ -4,13 +4,14 @@ import { execOverFrame, execStateOverFrame } from "../../../eval/generator-exec.
 import { mintFrame } from "../../AmbientRuntime.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
-import { assembleEnv } from "../../../common/kernel.js";
-import { type SchemeEnv } from "../../../common/scheme-env.js";
+import { applyCapability } from "../../../__tests__/_fresh-env.js";
 import { describe, expect, it } from "vitest";
+import type { EnvCapability } from "../../../common/capability.js";
 import * as z from "../../../common/scheme-zod.js";
 import { ZodTuple, type ZodOptional, type ZodTypeAny } from "zod";
 import type { SequenceSymbolDef } from "../../../common/symbol.js";
 import type { ANativeProcedure } from "../../../values/primitives/ACallable.js";
+import core from "../../core/core.js";
 
 import {
   allSrfi,
@@ -26,12 +27,15 @@ import {
   srfi235,
 } from "../index.js";
 
-const evalScheme = (e: SchemeEnv, src: string) => execOverFrame(src, { env: e as never });
-
-/** Assemble one capability onto a fresh env; return a `(num src)` runner. */
-async function withCap(cap: { lower: (o: { evalScheme: typeof evalScheme }) => unknown }, name: string) {
+/** Assemble one capability onto a fresh env; return a `(num src)` runner. `scheme/core` is
+ *  folded in ALONGSIDE (never as the capability's OWN declared dep — see srfi-26.ts's header
+ *  for why `core` can't be a real `deps` edge without repositioning `BASE_PACKS`'s "precedence
+ *  floor"): `gensym` (used by srfi-26/srfi-2's `defineSyntax` transformers) is otherwise only
+ *  available through `BASE_PACKS`'s own positional guarantee, which this per-pack STANDALONE
+ *  fixture doesn't have. */
+async function withCap(cap: EnvCapability, name: string) {
   const env = mintFrame(sandboxedEnv, name);
-  await assembleEnv(env as unknown as SchemeEnv, [cap.lower({ evalScheme }) as never]);
+  await applyCapability(env, [cap, core]);
   return async (src: string) => Number((await execOverFrame(src, { env }))[0]);
 }
 
@@ -64,7 +68,7 @@ describe("@inhuman.tools/arrival/srfi", () => {
   });
   it("SRFI-8 receive is a multi-return purity door", async () => {
     const env = mintFrame(sandboxedEnv, "s8");
-    await assembleEnv(env as unknown as SchemeEnv, [srfi8.lower({ evalScheme }) as never]);
+    await applyCapability(env, [srfi8]);
     await expect(execOverFrame("(receive 1 2)", { env })).rejects.toThrow(
       /multiple-value returns are omitted|continuation arity|not available/,
     );
@@ -106,7 +110,7 @@ describe("@inhuman.tools/arrival/srfi", () => {
 describe("@inhuman.tools/arrival/srfi-1 — positional accessors", () => {
   async function accEnv() {
     const env = mintFrame(sandboxedEnv, `s1acc-${Math.random().toString(36).slice(2)}`);
-    await assembleEnv(env as unknown as SchemeEnv, [srfi1.lower({ evalScheme }) as never]);
+    await applyCapability(env, [srfi1]);
     const num = async (src: string) => Number((await execOverFrame(src, { env }))[0]);
     const raw = (src: string) => execOverFrame(src, { env });
     return { num, raw };
@@ -227,7 +231,7 @@ describe("SRFI-95 sort — contract element precision", () => {
 describe("SRFI-95 sort — end-to-end behavior (previously uncovered via the builtin dispatch)", () => {
   async function sortEnv() {
     const env = mintFrame(sandboxedEnv, `s95-${Math.random().toString(36).slice(2)}`);
-    await assembleEnv(env as unknown as SchemeEnv, [srfi95.lower({ evalScheme }) as never]);
+    await applyCapability(env, [srfi95]);
     // execState (COMPLEX tier): schemeToJs wants BOXED values — `exec` already unwraps.
     return async (src: string) => (await execStateOverFrame(src, { env })).values;
   }

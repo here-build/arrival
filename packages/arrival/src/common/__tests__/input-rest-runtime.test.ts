@@ -19,7 +19,7 @@
 import { describe, expect, it, beforeAll } from "vitest";
 import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
-import { freshEnv } from "../../__tests__/_fresh-env.js";
+import { applyCapability, freshEnv } from "../../__tests__/_fresh-env.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
@@ -79,9 +79,9 @@ describe("Contract.inputRest runtime — INTEGRATION ((tool head r1 r2 …) thro
     // binds an ARosettaProcedure, not a bare fn) rather than a raw `env.set(name, def.run)`
     // bare-fn bypass — the ledger's "bare-fn env.set harness wiring" row (replacedBy:
     // "EnvCapability-wired fixtures") retires with this fixture.
-    await EnvCapability.define("test/input-rest-runtime", { symbols: () => ({ headtail }) })
-      .lower({})
-      .apply(env, undefined as never);
+    await applyCapability(env, [
+      EnvCapability.define("test/input-rest-runtime", { symbols: () => ({ headtail }) }),
+    ]);
   });
 
   // INVARIANT: a real scheme call with a 0-length tail reaches the impl correctly through exec.

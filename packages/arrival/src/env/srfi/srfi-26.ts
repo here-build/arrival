@@ -42,12 +42,48 @@
 // their definitions — that is where the opaque firewall does its work.
 //
 // No other top-level defines exist in this pack — nothing to convert to
-// `symbol.define`, and no `deps:` edge is needed (neither body references a
-// name outside SPECIAL_FORMS ∪ KEYWORD_SYNTAX + the r7rs primitives every
-// capability gets through universal `core`/`r7rs` rooting).
+// `symbol.define`.
+//
+// CORRECTION (Stage C Cut 4, docs/plans/stage-c-corpse-deletion.md): the ORIGINAL claim here
+// ("no deps: edge is needed... the r7rs primitives every capability gets through universal
+// core/r7rs rooting") was WRONG — that "universal rooting" was the pre-Cut-2 two-phase
+// bootstrap's own ambient-parenting luck (NATIVE_PACKS bound onto `global_env` before ANY
+// BASE_PACKS prelude ran), not a real guarantee. Under the self-hosted `buildVocabulary`
+// (env/vocabulary.ts), a `symbol.defineSyntax` macro's transformer LAMBDA is baked into a
+// CLOSURE over that build's own null-rooted `bakeEnv` — permanently, since a scheme closure
+// resolves free names against exactly the scope it captured, lazily, at CALL time (macro
+// EXPANSION time here), never re-parented onto whatever "real" env the resulting Vocabulary is
+// later bound into. `cut`/`cute`'s bodies call `null?`/`pair?`/`symbol?`/`equal?` — NATIVE_PACKS
+// names (`car`/`cdr` alone would need no dep, per the resolver-synth cxr allowlist
+// `define-bake.ts` carries — but `equal?`/`symbol?`/`null?`/`pair?` are NOT cxr-shaped and carry
+// no such allowlist entry) — so a `buildVocabulary` closure that doesn't ALSO include
+// `equality` genuinely fails at macro-expansion time with an unbound-variable error, harmless
+// in every REAL run (production always folds `BASE_ROSTER`, which includes `equality`
+// transitively) but a real gap for any STANDALONE build of this one pack (found via
+// `srfi-palette.test.ts`'s per-pack `buildVocabulary([cap], ...)` fixture). `deps: [equality]`
+// converts the same "universal rooting" assumption every sibling SRFI pack in this file's own
+// migration wave (srfi-128/-189/-235, see their own headers) already had to convert into a
+// declared, checked edge. `deps: [lists]` too: both transformers also call `append`/`reverse`
+// (scheme/lists — `cons`/`car`/`cdr`'s own quasiquote-driven list construction resolves the
+// SAME way `symbol.define`'s cxr allowlist covers `car`/`cdr`, but `append`/`reverse`/`cons` as
+// ordinary procedure calls are NOT cxr-shaped and need the real dep).
+//
+// NOT `deps: [core]`, deliberately: both transformers also call `gensym` (`scheme/core`), but
+// `core` is base-packs.ts's OWN documented "precedence floor" (array position 0 — "everything
+// else expands against it") — a real, checked `deps` edge onto it (dependent-before-dependency)
+// would require repositioning `core` itself in `BASE_PACKS`, contradicting its floor role and
+// the array's whole existing order (verified empirically: adding it breaks the suite via
+// `AssembleLinearizationError`). `core`'s free availability is exactly the "universal
+// core/r7rs rooting" the file's original comment named — real, unlike the `equality`/`lists`
+// claim, precisely BECAUSE `core` is positionally guaranteed first in every real assembly,
+// never merely deps-reachable. A capability that needs `gensym` STANDALONE (bypassing
+// `BASE_PACKS`'s own positional guarantee, e.g. a unit test) must fold `core` in itself.
 import { EnvCapability } from "../../common/capability.js";
+import equality from "../r7rs/equality.js";
+import lists from "../r7rs/lists.js";
 
 export default EnvCapability.define("scheme/srfi-26", {
+  deps: [equality, lists],
   symbols: (symbol) => ({
     cut: symbol.defineSyntax`cut: specialize parameters without currying (SRFI-26). \`<>\` is a positional slot, \`<...>\` a (final) rest slot — \`(cut f a <>)\` builds (lambda (g) (f a g)); \`(cut f <...>)\` builds (lambda (. g) (apply f g)). Non-slot subexpressions stay in the body and re-evaluate on every call (contrast cute). Slot params are gensym'd so a non-slot expr referencing a same-named variable can't be captured.`(
       `(lambda items

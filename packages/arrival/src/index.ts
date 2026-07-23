@@ -192,13 +192,14 @@ export { LexicalScope, type SessionScope } from "./eval/LexicalScope.js";
 // guard collapses both onto a single module graph — avoids the dual-package hazard where
 // a subpath resolving to dist vs source makes `instanceof AString` reject cross-realm args.
 // The `/symbol` + `/scheme-zod` subpaths stay (additive) for granular, tree-shaken imports.
-//   • `EnvCapability` — the capability class (`exec({ capabilities })`, `assembleEnv` roots).
-//   • `assembleEnv`   — the C3 kernel assembler that spins packs/capabilities onto a base env.
+//   • `EnvCapability` — the capability class (`exec({ capabilities })` roots). STAGE C CUT 4
+//     retired `assembleEnv` (the bootstrap kernel assembler) — bootstrap assembly is
+//     `buildVocabulary`/`assembleRun` now (`/env` subpath); `createRuntimeAssembler` (also
+//     `/env`) survives for the MID-RUN `(require/extension :name)` path.
 //   • `symbol`        — the typed-symbol factory ({ native, rosetta, tagless, … }).
 //   • `z`             — the scheme-zod codec namespace, namespaced (not `export *`) so
 //                       `z.symbol` (codec) stays distinct from the top-level `symbol` (factory).
 export { EnvCapability } from "./common/capability.js";
-export { assembleEnv } from "./common/kernel.js";
 export { symbol } from "./common/symbol.js";
 export type { RosettaSymbolDef } from "./common/symbol.js";
 export type { SymbolDeclaration } from "./common/capability.js";

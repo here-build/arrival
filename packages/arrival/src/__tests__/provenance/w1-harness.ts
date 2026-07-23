@@ -47,6 +47,7 @@ import { reachableNodes } from "../../provenance/wireframe/loops.js";
 import type { WireframeGraph, WireframeProgram } from "../../provenance/wireframe/types.js";
 import { isEagerProvenanceOracleEnabled, setEagerProvenanceOracleEnabled } from "../../values/op-helpers.js";
 import type { SchemeValue } from "../../values/types.js";
+import { applyCapability } from "../_fresh-env.js";
 
 // ── stamped-value constructors (mirrors _lineage-test-helpers.ts's sStr/sNum — a
 // local copy so this harness has no test-file-to-test-file import; same shapes). ──
@@ -89,31 +90,31 @@ export class SourceRegistry {
    *  (golden-prov-infer.test.ts's `inferSources` rationale, restated). */
   async register(env: AmbientRuntime, op: string, shape: SourceShape): Promise<void> {
     const mint = this.mint.bind(this);
-    await EnvCapability.define(`test/w1-source-${op}`, {
-      symbols: (symbol) => ({
-        [op]: symbol.rosetta`${op}: W1 harness fake Rosetta-IN source`(
-          { input: [], inputRest: z.value, output: [z.value] },
-          (..._args: unknown[]): unknown => {
-            if (shape === "num") {
-              const id = mint(op);
-              return stampedNum(id, id);
-            }
-            if (shape === "str") {
-              const id = mint(op);
-              return stampedStr(`${op}#${id}`, id);
-            }
-            const out: Record<string, unknown> = {};
-            for (const field of shape.dict) {
-              const id = mint(op);
-              out[field] = stampedStr(`${op}.${field}#${id}`, id);
-            }
-            return out;
-          },
-        ),
+    await applyCapability(env, [
+      EnvCapability.define(`test/w1-source-${op}`, {
+        symbols: (symbol) => ({
+          [op]: symbol.rosetta`${op}: W1 harness fake Rosetta-IN source`(
+            { input: [], inputRest: z.value, output: [z.value] },
+            (..._args: unknown[]): unknown => {
+              if (shape === "num") {
+                const id = mint(op);
+                return stampedNum(id, id);
+              }
+              if (shape === "str") {
+                const id = mint(op);
+                return stampedStr(`${op}#${id}`, id);
+              }
+              const out: Record<string, unknown> = {};
+              for (const field of shape.dict) {
+                const id = mint(op);
+                out[field] = stampedStr(`${op}.${field}#${id}`, id);
+              }
+              return out;
+            },
+          ),
+        }),
       }),
-    })
-      .lower({})
-      .apply(env, undefined as never);
+    ]);
   }
 
   /** Project a set of numeric provenance ids back to the set of declared source op

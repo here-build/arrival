@@ -1,40 +1,43 @@
 // prelude-overlay.test.ts — end-to-end proof of the phase-gated `preludeOnly` mechanism
-// (design doc §1.3, reworked: the kernel owns the prelude scope — a per-assembly Map behind
-// `ctx.preludeScope`, answered by a phase-gated resolver on the base env), against a REAL
-// AmbientRuntime + assembleEnv + EnvCapability + exec. No caller-side wiring exists anymore:
-// plain `assembleEnv(base, packs)` is the WHOLE story. Facts proven:
-//   1. a preludeOnly verb is callable from a LATER capability's prelude during assembly,
-//      and a plain unbound-variable error at runtime.
-//   2. an ordinary prelude `define` lands in the runtime env (fact 1 of §1.3 — now trivially:
-//      the prelude evaluates against the runtime env itself, no overlay in the chain).
-//   3. the prelude scope ACCUMULATES across capabilities (C3 dep order).
-//   4. THE CONTRACT: preludeOnly means ASSEMBLY-TIME-ONLY — even a lambda DEFINED BY a prelude
-//      cannot reach the verb at runtime (closures walk the live chain at call time; the
-//      phase-gated resolver has gone silent). A prelude bridges a value to runtime by capturing
-//      the call's RESULT (`(define x (verb …))`), never the verb.
+// (design doc §1.3) against the self-hosted vocabulary path (`buildVocabulary` +
+// `env/assemble-run.ts`'s per-run prelude pass) — via `exec`/`execState({capabilities})`.
+//
+// STAGE C CUT 4 (docs/plans/stage-c-corpse-deletion.md) retired `lower()`/`assembleEnv`; this
+// file's OWN mechanism (a bespoke `assembleEnv(base, [cap.lower({evalScheme})])` fixture) went
+// with it. Re-authored against the sanctioned path: `exec`/`execState({capabilities})` builds
+// the `Vocabulary` and runs the tuple's per-run prelude pass (`env/assemble-run.ts`'s
+// `assembleRun`, step 3) as part of minting the RunContext, before any program form evaluates.
+//
+// A REAL BEHAVIORAL FINDING surfaced while re-authoring (not caused by Cut 4 — Stage B2's
+// `assemble-run.ts` already shipped this, this migration is what first exercised it end-to-end):
+// the per-run prelude pass runs preludes against a FRESH, DISCARDED-per-run scope
+// (`assemble-run.ts`'s own doc: "any `(define …)` a prelude form ran is gone with it — the
+// spec's confirmed discard ruling"). Under the retired BOOTSTRAP path, `ctx.preludeEvalScope`
+// was `undefined`, so `capability.ts`'s `lower().apply()` fell back to evaluating a prelude
+// directly against the REAL env — an ordinary `(define …)` in prelude TEXT genuinely persisted.
+// That is NO LONGER TRUE: every run (there is no other path now) discards the per-run prelude
+// scope. Facts proven here, against the CURRENT model:
+//   1. a preludeOnly verb is callable from a LATER capability's prelude during the per-run
+//      prelude pass, and a plain unbound-variable error from user program code.
+//   2. an ordinary prelude `(define …)` does NOT land in the runtime env anymore — discarded
+//      with the per-run prelude scope (the reversed finding above).
+//   3. the prelude scope ACCUMULATES across capabilities within ONE prelude pass (C3 dep order)
+//      — proven via side-effecting rosetta calls (recording, not defining), which still observe
+//      each other correctly within that one pass.
+//   4. NEITHER a lambda DEFINED BY a prelude NOR a value CAPTURED BY a prelude `(define …)`
+//      survives to runtime anymore — both are ordinary prelude-scope defines, discarded alike.
+//      The only way to expose a prelude-computed value as a stable runtime name now is a real
+//      `symbol.define`/`symbol.native` declaration (Pass 1/2 of `buildVocabulary`), never prelude
+//      TEXT.
 
 import { describe, expect, it } from "vitest";
-import { mintFrame, type ResolvingAmbient } from "../../env/AmbientRuntime.js";
-
-import { execOverFrame as exec } from "../../eval/generator-exec.js";
-// In-package test: internal-module access (the barrel export retired — privatization V5).
-import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";
-import { assembleEnv, type EnvPack } from "../kernel.js";
+import { exec, execState } from "../../eval/generator-exec.js";
 import { EnvCapability } from "../capability.js";
-import type { SchemeEnv } from "../scheme-env.js";
 
-const evalScheme = (e: SchemeEnv, src: string) => exec(src, { env: e as never });
-
-/** Plain assembly onto a fresh sandboxed child — the kernel supplies the prelude scope. */
-async function assemble(base: ResolvingAmbient, packs: readonly EnvPack<SchemeEnv>[]): Promise<ResolvingAmbient> {
-  await assembleEnv<SchemeEnv>(base as unknown as SchemeEnv, packs);
-  return base;
-}
-
-describe("preludeOnly — the kernel's phase-gated prelude scope (design §1.3)", () => {
+describe("preludeOnly — the phase-gated per-run prelude pass (design §1.3, over the vocabulary path)", () => {
   // INVARIANT: a preludeOnly verb is unbound at runtime, but a later capability's prelude can
-  // call it during assembly.
-  it("a preludeOnly verb is UNBOUND at runtime, but a LATER capability's prelude that calls it during assembly works", async () => {
+  // call it during the per-run prelude pass.
+  it("a preludeOnly verb is UNBOUND at runtime, but a LATER capability's prelude that calls it during the prelude pass works", async () => {
     // Capability A contributes a preludeOnly rosetta. Capability B (deps on A) calls it from
     // its OWN prelude, recording the call as an observable side effect via a runtime-bound sink.
     const calls: string[] = [];
@@ -58,36 +61,38 @@ describe("preludeOnly — the kernel's phase-gated prelude scope (design §1.3)"
         ),
       }),
       // B's prelude calls A's preludeOnly verb (visible because A applied first — C3 dep
-      // order — and the assembly's resolver answers from the shared Map) and forwards the
-      // result to a RUNTIME-bound sink.
+      // order — and the per-run prelude scope answers from BOTH the main map and the
+      // preludeOnly overlay) and forwards the result to a RUNTIME-bound sink.
       prelude: `(sink/record (overlay/greet "world"))`,
     });
 
-    const base = mintFrame(sandboxedEnv, "overlay-test-1");
-    const env = await assemble(base, [capB.lower({ evalScheme }) as never]);
-
-    // The prelude ran during assembly and observably called the preludeOnly verb.
+    // Minting a run for this tuple runs the prelude pass — before ANY program form evaluates.
+    const state = await execState(`1`, { capabilities: [capB] });
     expect(calls).toEqual(["hello world"]);
 
-    // The preludeOnly verb itself is a plain unbound-variable error at runtime — nothing to seal.
-    await expect(exec(`(overlay/greet "again")`, { env })).rejects.toThrow(/Unbound variable/);
+    // The preludeOnly verb itself is a plain unbound-variable error from user code — nothing to
+    // seal. Reuse the SAME runCtx (REPL continuity) so the prelude pass does not re-fire.
+    await expect(exec(`(overlay/greet "again")`, { capabilities: [capB], runCtx: state.runCtx })).rejects.toThrow(
+      /Unbound variable/,
+    );
   });
 
-  // INVARIANT: an ordinary prelude `define` lands in the runtime env, observable after assembly.
-  it("an ordinary prelude `define` still lands in the runtime env (fact 1 — now trivially, no overlay)", async () => {
+  // INVARIANT (Stage B2, reversed from the retired bootstrap path — see this file's header): an
+  // ordinary prelude `(define …)` is DISCARDED with the per-run prelude scope, never reaching
+  // user program code.
+  it("an ordinary prelude `define` does NOT land in the runtime env — discarded with the per-run prelude scope", async () => {
     const cap = EnvCapability.define("test/overlay-define", {
       prelude: `(define overlay-defined-value 42)`,
       symbols: () => ({}),
     });
-    const base = mintFrame(sandboxedEnv, "overlay-test-2");
-    const env = await assemble(base, [cap.lower({ evalScheme }) as never]);
-
-    const result = await exec(`overlay-defined-value`, { env });
-    expect(Number(result[0])).toBe(42);
+    const state = await execState(`1`, { capabilities: [cap] });
+    await expect(
+      exec(`overlay-defined-value`, { capabilities: [cap], runCtx: state.runCtx }),
+    ).rejects.toThrow(/Unbound variable/);
   });
 
-  // INVARIANT: the prelude scope accumulates across a chain of dependents in C3 order — a shared
-  // Map, not rebuilt per capability.
+  // INVARIANT: the prelude scope accumulates across a chain of dependents in C3 order, WITHIN
+  // one prelude pass — a shared Map for that pass, not rebuilt per capability.
   it("the prelude scope ACCUMULATES: A's preludeOnly verb is visible to a chain of TWO dependents via C3 order", async () => {
     const capA = EnvCapability.define("test/overlay-chain-a", {
       symbols: (symbol, z) => ({
@@ -113,7 +118,7 @@ describe("preludeOnly — the kernel's phase-gated prelude scope (design §1.3)"
       prelude: `(chain/note (chain/base-secret))`,
     });
     // C deps on B (transitively on A) — proves the prelude scope is the SAME shared Map across
-    // the whole assembly, not re-built per-capability.
+    // the whole prelude pass, not re-built per-capability.
     const cSeen: number[] = [];
     const capC = EnvCapability.define("test/overlay-chain-c", {
       deps: [capB],
@@ -129,16 +134,19 @@ describe("preludeOnly — the kernel's phase-gated prelude scope (design §1.3)"
       prelude: `(chain/note-c (chain/base-secret))`,
     });
 
-    const base = mintFrame(sandboxedEnv, "overlay-test-3");
-    await assemble(base, [capC.lower({ evalScheme }) as never]);
+    await execState(`1`, { capabilities: [capC] });
 
     expect(bSeen).toEqual([7]);
     expect(cSeen).toEqual([7]);
   });
 
-  // INVARIANT: a lambda defined by a prelude cannot reach a preludeOnly verb at runtime — only
-  // capturing the call's result bridges to runtime, never the verb itself.
-  it("THE CONTRACT: a lambda DEFINED BY a prelude cannot reach the preludeOnly verb at runtime — capture the RESULT, not the verb", async () => {
+  // INVARIANT (Stage B2, reversed from the retired bootstrap path — see this file's header):
+  // NEITHER a lambda DEFINED BY a prelude NOR a value CAPTURED BY a prelude `(define …)` reaches
+  // runtime anymore — both are ordinary prelude-scope defines, discarded alike. The retired
+  // bootstrap path's "capture the RESULT, not the verb" bridge no longer bridges anything at
+  // all; only a real `symbol.define`/`symbol.native` declaration (not prelude TEXT) exposes a
+  // stable runtime name now.
+  it("THE CONTRACT (reversed): neither a closure NOR a captured value defined by a prelude survives to runtime", async () => {
     const cap = EnvCapability.define("test/overlay-closure", {
       symbols: (symbol, z) => ({
         "closure/secret": symbol.rosetta`closure/secret: preludeOnly source`(
@@ -146,21 +154,22 @@ describe("preludeOnly — the kernel's phase-gated prelude scope (design §1.3)"
           () => 99,
         ),
       }),
-      // Two preludes-in-one: the WRONG bridge (a lambda naming the verb — resolves nothing at
-      // runtime) and the RIGHT bridge (capture the call's result at assembly time).
+      // Two prelude defines: what the retired bootstrap path called the WRONG bridge (a lambda
+      // naming the verb) and the RIGHT bridge (capture the call's result) — both discarded now.
       prelude: `
         (define (broken-bridge) (closure/secret))
         (define captured-secret (closure/secret))
       `,
     });
-    const base = mintFrame(sandboxedEnv, "overlay-test-4");
-    const env = await assemble(base, [cap.lower({ evalScheme }) as never]);
+    const state = await execState(`1`, { capabilities: [cap] });
 
-    // The captured VALUE is an ordinary runtime binding.
-    const result = await exec(`captured-secret`, { env });
-    expect(Number(result[0])).toBe(99);
-    // The closure walks the LIVE chain at call time — the phase-gated resolver is silent, so
-    // the free variable is a plain unbound error. Assembly-time-only is the contract, not a gap.
-    await expect(exec(`(broken-bridge)`, { env })).rejects.toThrow(/Unbound variable/);
+    // Neither prelude define reaches user program code — the per-run prelude scope that held
+    // both is gone.
+    await expect(exec(`captured-secret`, { capabilities: [cap], runCtx: state.runCtx })).rejects.toThrow(
+      /Unbound variable/,
+    );
+    await expect(exec(`(broken-bridge)`, { capabilities: [cap], runCtx: state.runCtx })).rejects.toThrow(
+      /Unbound variable/,
+    );
   });
 });

@@ -1,14 +1,14 @@
 // srfi-8-symbol-define.test.ts — SRFI-8 is doors-only under multi-return ban.
 // Single export `receive` is sugar over call-with-values; both are purity-doored.
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../AmbientRuntime.js";
 import type { AEntity } from "../../../common/symbol.js";
 import { exec, execInFrame } from "../../../eval/generator-exec.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError, PurityError } from "../../../errors.js";
 import srfi8 from "../srfi-8.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 import { DoorProcedure } from "../../../values/primitives/ACallable.js";
-import { freshEnv, nativeOnlyRoot } from "../../../__tests__/_fresh-env.js";
+import { freshEnv } from "../../../__tests__/_fresh-env.js";
+import { buildVocabulary } from "../../vocabulary.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
 const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
@@ -20,15 +20,13 @@ describe("scheme/srfi-8 — doors-only (all-or-nothing multi-return ban)", () =>
     expect(symbols.receive?.kind).toBe("door");
   });
 
-  it("lowers standalone without bake FV errors", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "srfi-8-standalone");
-    await expect(srfi8.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
+  it("bakes standalone without bake FV errors", async () => {
+    await expect(buildVocabulary([srfi8], undefined, evalScheme)).resolves.not.toThrow();
   });
 
-  it("never throws DefineLocalityError/DefineForwardReferenceError/ProvenanceRoleShapeError on lower", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "srfi-8-fv-pin");
+  it("never throws DefineLocalityError/DefineForwardReferenceError/ProvenanceRoleShapeError on bake", async () => {
     try {
-      await srfi8.lower({ evalScheme }).apply(env, undefined as never);
+      await buildVocabulary([srfi8], undefined, evalScheme);
     } catch (e) {
       expect(e).not.toBeInstanceOf(DefineLocalityError);
       expect(e).not.toBeInstanceOf(DefineForwardReferenceError);

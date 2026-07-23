@@ -6,8 +6,12 @@
 // Mirrors control-symbol-define-migration's doors-only posture.
 import { describe, expect, it } from "vitest";
 import bindingPack from "../binding.js";
-import { exec } from "../../../eval/generator-exec.js";
+import { exec, execInFrame } from "../../../eval/generator-exec.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
+import { buildVocabulary } from "../../vocabulary.js";
+import type { ResolvingAmbient } from "../../AmbientRuntime.js";
+
+const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
 import type { AEntity } from "../../../common/symbol.js";
 import { PurityError } from "../../../errors.js";
 import { DoorProcedure } from "../../../values/primitives/ACallable.js";
@@ -41,9 +45,9 @@ describe("ROW 1 — structural: doors-only, no prelude, multi-return surface tot
   });
 });
 
-describe("ROW 2 — bake / cause: lower succeeds; assembled env binds DoorProcedure", () => {
-  it("a bare lower() does not throw", () => {
-    expect(() => bindingPack.lower({})).not.toThrow();
+describe("ROW 2 — bake / cause: the vocabulary builds; assembled env binds DoorProcedure", () => {
+  it("a bare vocabulary build does not throw", async () => {
+    await expect(buildVocabulary([bindingPack], undefined, evalScheme)).resolves.not.toThrow();
   });
 
   it("every door name binds as DoorProcedure in the base env", async () => {

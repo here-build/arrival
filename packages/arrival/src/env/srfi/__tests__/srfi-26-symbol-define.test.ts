@@ -29,11 +29,11 @@
 //      `static-validation.law.test.ts` LAW 4 row, which pins the same fact for
 //      `(cut cons <> 1)` against the DEFAULT assembled base).
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../AmbientRuntime.js";
 import { type AEntity } from "../../../common/symbol.js";
 import { EnvCapability } from "../../../common/capability.js";
 import { exec, execOverFrame, execInFrame } from "../../../eval/generator-exec.js";
-import { freshEnv, nativeOnlyRoot } from "../../../__tests__/_fresh-env.js";
+import { applyCapability, freshEnv } from "../../../__tests__/_fresh-env.js";
+import { buildVocabulary } from "../../vocabulary.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
 import srfi26 from "../srfi-26.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
@@ -78,7 +78,7 @@ describe("scheme/srfi-26 — cut/cute expansion equivalence (semantic-equivalenc
         "bump!": symbol.rosetta`bump!: JS-side call counter`({ input: [], output: [z.number] }, () => ++calls),
       }),
     });
-    await cap.lower({ evalScheme }).apply(env, undefined as never);
+    await applyCapability(env, [cap]);
 
     // cut: (bump!) is NOT a slot — it stays in the lambda body, re-evaluating per call.
     calls = 0;
@@ -128,16 +128,14 @@ describe("scheme/srfi-26 — the contract-enforcement row: cut/cute are contract
   });
 });
 
-describe("scheme/srfi-26 — the §2.1 bake FV law passes (lowered standalone, zero declared deps)", () => {
-  it("lowers cleanly with NO deps declared — never DefineLocalityError/DefineForwardReferenceError/ProvenanceRoleShapeError", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-srfi-26-fv-law");
-    await expect(srfi26.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
+describe("scheme/srfi-26 — the §2.1 bake FV law passes (baked standalone, zero declared deps)", () => {
+  it("bakes cleanly with NO deps declared — never DefineLocalityError/DefineForwardReferenceError/ProvenanceRoleShapeError", async () => {
+    await expect(buildVocabulary([srfi26], undefined, evalScheme)).resolves.not.toThrow();
   });
 
   it("(regression pin) none of the FV/forward-ref/role drift doors fire for this pack's real bake", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-srfi-26-fv-law-2");
     try {
-      await srfi26.lower({ evalScheme }).apply(env, undefined as never);
+      await buildVocabulary([srfi26], undefined, evalScheme);
     } catch (error) {
       expect(error).not.toBeInstanceOf(DefineLocalityError);
       expect(error).not.toBeInstanceOf(DefineForwardReferenceError);

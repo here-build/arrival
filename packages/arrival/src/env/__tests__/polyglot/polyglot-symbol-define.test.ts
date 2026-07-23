@@ -25,11 +25,10 @@
 //   6. the `applicable` contract admits keyword accessors (`(compose :b :a)`) —
 //      the pack family's own documented idiom, which a bare `z.lambda` would reject.
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../AmbientRuntime.js";
 import { EnvCapability } from "../../../common/capability.js";
-import { exec, execState, execOverFrame, execStateOverFrame, execInFrame } from "../../../eval/generator-exec.js";
-import { freshEnv, nativeOnlyRoot } from "../../../__tests__/_fresh-env.js";
-import { assembleEnv } from "../../../common/kernel.js";
+import { exec, execOverFrame, execStateOverFrame, execInFrame } from "../../../eval/generator-exec.js";
+import { envFromCapabilities, freshEnv } from "../../../__tests__/_fresh-env.js";
+import { buildVocabulary } from "../../vocabulary.js";
 import { DefineLocalityError } from "../../../errors.js";
 import { StaticValidationError } from "../../../static-validation/validate-program.js";
 import { BASE_PACKS } from "../../base-packs.js";
@@ -37,7 +36,6 @@ import polyglot from "../../polyglot/polyglot.js";
 import polyglotClojure from "../../polyglot/polyglot-clojure.js";
 import polyglotLisp from "../../polyglot/polyglot-lisp.js";
 import polyglotRacket from "../../polyglot/polyglot-racket.js";
-import type { SchemeEnv } from "../../../common/scheme-env.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 
 // Mirrors `_fresh-env.ts`'s own injected evalScheme — `skipBootstrapWait` because
@@ -89,63 +87,38 @@ describe("scheme/polyglot-clojure & scheme/polyglot-racket — the FIRST product
   });
 });
 
-describe("scheme/polyglot-clojure — deps are real edges (§2.1 luck-into-structure)", () => {
-  // NEW CHARACTERISTIC vs the pre-split monolith (found empirically, first draft
-  // of this suite): `comp`'s RHS is the bare identifier `compose` — a CONSTANT
-  // define, evaluated EAGERLY at apply time (§2.3 sequential-RHS), not a lazy
-  // lambda body. In the old monolith `compose`/`comp` lived in the SAME
-  // capability, so `comp`'s eager lookup was always self-satisfied by
-  // declaration order, regardless of `deps`. Post-split, `compose` lives in a
-  // DIFFERENT capability (`scheme/polyglot`, core) — exactly the cross-
-  // capability edge the dialect table calls out ("comp aliases compose — deps
-  // on shared"). So standalone `.apply()` of JUST polyglot-clojure (bypassing
-  // assembleEnv's C3 dep-walk, which would apply core FIRST) now fails
-  // IMMEDIATELY on `comp`, before any lazy body (frequencies' `reduce`) is ever
-  // reached.
-  it("standalone .apply() of clojure ALONE fails immediately on comp's EAGER cross-capability alias, not on any lazy body", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-polyglot-clojure-standalone-unbound");
-    await expect(polyglotClojure.lower({ evalScheme }).apply(env, undefined as never)).rejects.toThrow(/compose/);
-  });
-
-  it("once compose is bound (core applied first), bake+apply succeed even with srfi-1 unapplied — the FV law is a STATIC declared-`deps` check, not a runtime-binding probe; the LAZY frequencies (needs srfi-1's reduce) only fails when CALLED", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-polyglot-clojure-standalone-bake-ok");
-    await polyglot.lower({ evalScheme }).apply(env, undefined as never); // core: binds compose
-    await expect(polyglotClojure.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
-    const typedEnv = env as unknown as ResolvingAmbient;
-    const [same] = await execOverFrame("(eq? comp compose)", { env: typedEnv }); // comp resolved — compose was bound
+// STAGE C CUT 4 (docs/plans/stage-c-corpse-deletion.md): the "standalone .apply(), bypassing
+// assembleEnv's C3 dep-walk" mechanism that used to prove these cross-capability edges are
+// REAL (not runtime luck) is RETIRED along with `lower()`/`assembleEnv` — `buildVocabulary`
+// (the sole surviving bake path) ALWAYS walks a capability's OWN declared `deps`, deep, so
+// there is no "standalone, deps unwalked" state left to construct at all. The PRODUCT law that
+// survives — a lone dialect pack's declared deps genuinely resolve its cross-capability
+// references — is pinned via `envFromCapabilities` (a STANDALONE `buildVocabulary([pack], ...)`,
+// bound onto a fresh frame — mirroring the retired `assembleEnv`'s own no-ambient-fold posture),
+// one row per pack, in place of the old three-tier (standalone-fails / manually-sequenced-luck /
+// assembleEnv-ok) contrast. NOT `exec`/`execState({capabilities:[pack]})`: every pack here is
+// ALSO a `BASE_PACKS` member, so `exec`'s own `{...capabilities, ...BASE_ROSTER}` fold asserts a
+// SECOND, conflicting root-list precedence for it (`AssembleLinearizationError` — the same
+// "co-rooting a BASE_ROSTER member" hazard `env/base-roster.ts`'s own header documents for
+// `NATIVE_PACKS`).
+describe("scheme/polyglot family — deps are real edges (§2.1 luck-into-structure), pinned via the sanctioned path", () => {
+  it("scheme/polyglot-clojure ALONE: comp resolves compose (core, cross-capability) and frequencies reaches srfi-1's reduce", async () => {
+    const env = await envFromCapabilities([polyglotClojure]);
+    const [same] = await execOverFrame("(eq? comp compose)", { env });
     expect(same).toBe(true);
-    // frequencies' own natives (@/dict/%dict-set) bound standalone from core;
-    // `repr`/`+`/`string?` are NATIVE_PACKS (global_env — the runtime-luck arm
-    // srfi-43's suite documents); `reduce` is srfi-1's, bound only through the
-    // dep walk — never applied here, so the LAZY body fails only when CALLED.
-    await expect(execStateOverFrame('(frequencies (list "a" "a"))', { env })).rejects.toThrow();
-  });
-
-  it("assembleEnv (the real orchestration path) walks deps: the srfi-1 reach works standalone", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-polyglot-clojure-assembleEnv-ok") as unknown as SchemeEnv;
-    await assembleEnv(env, [polyglotClojure.lower({ evalScheme })]);
-    const typedEnv = env as unknown as ResolvingAmbient;
-    const [freq] = await execOverFrame('(@ (frequencies (list "a" "b" "a")) "a")', { env: typedEnv }); // reduce (srfi-1)
+    const [freq] = await execOverFrame('(@ (frequencies (list "a" "b" "a")) "a")', { env }); // reduce (srfi-1)
     expect(Number(freq)).toBe(2);
   });
-});
 
-describe("scheme/polyglot-lisp — deps are real edges (§2.1 luck-into-structure)", () => {
-  it("assembleEnv walks deps: the srfi-1 `filter` reach works standalone (no core dep needed)", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-polyglot-lisp-assembleEnv-ok") as unknown as SchemeEnv;
-    await assembleEnv(env, [polyglotLisp.lower({ evalScheme })]);
-    const typedEnv = env as unknown as ResolvingAmbient;
-    const [removed] = await execOverFrame("(remove-if (lambda (x) (> x 2)) (list 1 2 3 4))", { env: typedEnv }); // filter (srfi-1)
-    expect(String(removed)).toContain("1");
+  it("scheme/polyglot-lisp ALONE: remove-if reaches srfi-1's filter", async () => {
+    const env = await envFromCapabilities([polyglotLisp]);
+    const [removed] = await execOverFrame("(remove-if (lambda (x) (> x 2)) (list 1 2 3 4))", { env });
+    expect(removed).toEqual([1, 2]);
   });
-});
 
-describe("scheme/polyglot-racket — deps are real edges (§2.1 luck-into-structure)", () => {
-  it("assembleEnv walks deps: the exceptions `error` reach (via %dict-guard) works standalone", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-polyglot-racket-assembleEnv-ok") as unknown as SchemeEnv;
-    await assembleEnv(env, [polyglotRacket.lower({ evalScheme })]);
-    const typedEnv = env as unknown as ResolvingAmbient;
-    await expect(execStateOverFrame('(dict-ref "not-a-dict" :a)', { env: typedEnv })).rejects.toThrow(
+  it("scheme/polyglot-racket ALONE: dict-ref's %dict-guard reaches the exceptions capability's error", async () => {
+    const env = await envFromCapabilities([polyglotRacket]);
+    await expect(execStateOverFrame('(dict-ref "not-a-dict" :a)', { env })).rejects.toThrow(
       /dict-ref: expected a dict/, // error (exceptions) — the door composes through the dep edge
     );
   });
@@ -198,13 +171,12 @@ describe("scheme/polyglot family — the §2.1 bake FV law passes AS MIGRATED, p
     ["scheme/polyglot (core)", polyglot],
     ["scheme/polyglot-lisp", polyglotLisp],
     ["scheme/polyglot-racket", polyglotRacket],
-  ] as const)("%s lowers cleanly with its declared deps — never DefineLocalityError", async (_label, pack) => {
-    const env = mintFrame(await nativeOnlyRoot(), `test-fv-law-ok-${pack.name.replace(/\//g, "-")}`);
-    await expect(pack.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
+    ["scheme/polyglot-clojure", polyglotClojure],
+  ] as const)("%s bakes cleanly with its declared deps — never DefineLocalityError", async (_label, pack) => {
+    await expect(buildVocabulary([pack], undefined, evalScheme)).resolves.not.toThrow();
   });
 
   it("(regression pin) a LOCAL reproduction of the PRE-FIX shape — a `reduce`/`filter`-reaching body with NO declared deps — throws DefineLocalityError", async () => {
-    const env = await freshEnv();
     const undeclaredCap = EnvCapability.define("test/polyglot-pre-fix-repro", {
       symbols: (symbol, z) => ({
         "bad-frequencies":
@@ -214,9 +186,7 @@ describe("scheme/polyglot family — the §2.1 bake FV law passes AS MIGRATED, p
           ),
       }),
     });
-    await expect(undeclaredCap.lower({ evalScheme }).apply(env, undefined as never)).rejects.toThrow(
-      DefineLocalityError,
-    );
+    await expect(buildVocabulary([undeclaredCap], undefined, evalScheme)).rejects.toThrow(DefineLocalityError);
   });
 });
 

@@ -237,8 +237,9 @@ describe("LAW 4 — macro firewall: binder formals and placeholder tokens never 
   });
 
   it('the ternary is LIVE: an `"expression"`-attributed defineSyntax macro\'s arguments DO walk', async () => {
-    // Capabilities lower through exec's OWN injected evalScheme (assembleCapabilityBase)
-    // — no fixture-side evalScheme needed, unlike suites that call `.apply()` directly.
+    // Capabilities bake through exec's OWN injected evalScheme (`buildVocabulary`, via
+    // `execState`'s private `capabilityEvalScheme`) — no fixture-side evalScheme needed, unlike
+    // suites that build a `Vocabulary`/apply a capability directly.
     const cap = EnvCapability.define("test/sv-ternary", {
       symbols: (symbol) => ({
         "first-of": symbol.defineSyntax`first-of: expands to its first argument form`("(lambda (a b) a)", {

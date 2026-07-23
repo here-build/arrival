@@ -37,14 +37,12 @@
 //      free reference, NO declared deps) throws `DefineLocalityError`, pinning
 //      that the bug this migration fixes was real and is now caught.
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../AmbientRuntime.js";
 import { EnvCapability } from "../../../common/capability.js";
-import { execOverFrame, execStateOverFrame, execInFrame } from "../../../eval/generator-exec.js";
-import { freshEnv, nativeOnlyRoot } from "../../../__tests__/_fresh-env.js";
-import { assembleEnv } from "../../../common/kernel.js";
+import { exec, execOverFrame, execStateOverFrame, execInFrame } from "../../../eval/generator-exec.js";
+import { freshEnv } from "../../../__tests__/_fresh-env.js";
+import { buildVocabulary } from "../../vocabulary.js";
 import { DefineLocalityError } from "../../../errors.js";
 import srfi128 from "../srfi-128.js";
-import type { SchemeEnv } from "../../../common/scheme-env.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 
 // Mirrors `_fresh-env.ts`'s own injected evalScheme — `skipBootstrapWait` because
@@ -118,33 +116,18 @@ describe("scheme/srfi-128 — comparator behavior equivalence (semantic-equivale
   });
 });
 
+// STAGE C CUT 4 (docs/plans/stage-c-corpse-deletion.md): the "standalone .apply(), deps
+// unwalked" mechanism this block used to contrast the two luck classes against is RETIRED
+// along with `lower()`/`assembleEnv` — `buildVocabulary` (the sole surviving bake path) ALWAYS
+// walks a capability's OWN declared `deps`, so BOTH luck classes collapse into "it just
+// resolves" now (there is no unwalked state to distinguish them by). The PRODUCT law that
+// survives — srfi-128's declared deps (`equality`/`numeric`/`chars`/`strings`/`lists`)
+// genuinely resolve BOTH `%type-rank` (native-sourced names) and `make-comparator` (the
+// BASE_PACKS-only `list`) — pinned via the sanctioned path.
 describe("scheme/srfi-128 — the dep edge is real, both luck classes in one pack (§2.1's undeclared-dep bug class, now declared edges)", () => {
-  it("standalone .apply() (deps unwalked): calls touching ONLY NATIVE_PACKS-sourced free names still resolve — the same two-phase-bootstrap luck srfi-43.ts's header names (equality/numeric/chars/strings are already on global_env post-initBridge)", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-srfi128-standalone-native-luck");
-    await srfi128.lower({ evalScheme }).apply(env, undefined as never);
-    // %type-rank's body reaches boolean?/number?/char?/string?/symbol?/null?/pair?
-    // (all NATIVE_PACKS-sourced, via scheme/equality + scheme/numeric + scheme/chars)
-    // and NOTHING from `list` — resolves via runtime chain lookup regardless of
-    // whether `deps` was walked, exactly srfi-43's own luck-class demonstration.
-    await expect(execStateOverFrame('(%type-rank "a")', { env })).resolves.not.toThrow();
-  });
-
-  it("standalone .apply() (deps unwalked): make-comparator genuinely fails — `list` is a BASE_PACKS-only name, absent from global_env, srfi-235's own luck class (NOT runtime luck)", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-srfi128-standalone-list-unbound");
-    await srfi128.lower({ evalScheme }).apply(env, undefined as never);
-    await expect(execStateOverFrame("(make-comparator number? = <)", { env })).rejects.toThrow();
-  });
-
-  it("bake itself succeeds even with deps unapplied — the FV law is a STATIC declared-`deps` check, not a runtime-binding probe", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-srfi128-standalone-bake-ok");
-    await expect(srfi128.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
-  });
-
-  it("assembleEnv (the real orchestration path — every production caller) DOES walk deps: make-comparator works standalone", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-srfi128-assembleEnv-ok") as unknown as SchemeEnv;
-    await assembleEnv(env, [srfi128.lower({ evalScheme })]);
-    const typedEnv = env as unknown as ResolvingAmbient;
-    const [ok] = await execOverFrame("(comparator? (make-comparator number? = <))", { env: typedEnv });
+  it("srfi-128 ALONE (exec({capabilities})): both %type-rank (native-sourced) and make-comparator (BASE_PACKS-only list) resolve through its declared deps", async () => {
+    await expect(exec('(%type-rank "a")', { capabilities: [srfi128] })).resolves.not.toThrow();
+    const [ok] = await exec("(comparator? (make-comparator number? = <))", { capabilities: [srfi128] });
     expect(ok).toBe(true);
   });
 });
@@ -173,13 +156,11 @@ describe("scheme/srfi-128 — contract ENFORCEMENT fires at the call boundary", 
 });
 
 describe("scheme/srfi-128 — the §2.1 bake FV law passes for this pack AS MIGRATED", () => {
-  it("lowers cleanly with its declared deps — never DefineLocalityError", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-srfi128-fv-law-ok");
-    await expect(srfi128.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
+  it("bakes cleanly with its declared deps — never DefineLocalityError", async () => {
+    await expect(buildVocabulary([srfi128], undefined, evalScheme)).resolves.not.toThrow();
   });
 
   it("(regression pin) a LOCAL reproduction of the PRE-FIX shape — the same `list` free reference with NO declared deps — throws DefineLocalityError: the bug this migration fixes was real", async () => {
-    const env = await freshEnv();
     // Deliberately NO `deps` field — this is the exact shape srfi-128.ts had before
     // this migration (a bare `prelude` text blob, no dep declaration possible at all).
     const undeclaredCap = EnvCapability.define("test/srfi-128-pre-fix-repro", {
@@ -191,8 +172,6 @@ describe("scheme/srfi-128 — the §2.1 bake FV law passes for this pack AS MIGR
           ),
       }),
     });
-    await expect(undeclaredCap.lower({ evalScheme }).apply(env, undefined as never)).rejects.toThrow(
-      DefineLocalityError,
-    );
+    await expect(buildVocabulary([undeclaredCap], undefined, evalScheme)).rejects.toThrow(DefineLocalityError);
   });
 });

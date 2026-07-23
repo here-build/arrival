@@ -50,6 +50,7 @@ import { AValue } from "../../values/primitives/AValue.js";
 import { provOf } from "../../provenance/lineage.js";
 import { sStr, runRaw, type EnvSetup } from "../../__tests__/_lineage-test-helpers.js";
 import { EnvCapability } from "../../common/capability.js";
+import { applyCapability } from "../../__tests__/_fresh-env.js";
 import { jsToScheme } from "../../membrane/rosetta.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 
@@ -106,7 +107,7 @@ const inferSources: EnvSetup = async (env) => {
       ),
     }),
   });
-  await cap.lower({}).apply(env, undefined as never);
+  await applyCapability(env, [cap]);
 };
 
 // provenance of the result (the infer sources are registered via the setup hook)

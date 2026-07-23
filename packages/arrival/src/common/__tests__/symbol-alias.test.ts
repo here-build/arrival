@@ -9,7 +9,7 @@
 import { describe, expect, it, beforeAll } from "vitest";
 import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
-import { freshEnv } from "../../__tests__/_fresh-env.js";
+import { applyCapability, freshEnv } from "../../__tests__/_fresh-env.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
 import { EnvCapability } from "../capability.js";
@@ -18,16 +18,16 @@ describe("symbol.alias — resolves to the SAME symbol under a new name", () => 
   let env: ResolvingAmbient;
   beforeAll(async () => {
     env = await freshEnv();
-    await EnvCapability.define("test/alias-basic", {
-      symbols: (symbol, z) => ({
-        shout: symbol.rosetta`shout: upcase a string`({ input: [z.string], output: [z.string] }, (s) =>
-          s.toUpperCase(),
-        ),
-        yell: symbol.alias`shout`,
+    await applyCapability(env, [
+      EnvCapability.define("test/alias-basic", {
+        symbols: (symbol, z) => ({
+          shout: symbol.rosetta`shout: upcase a string`({ input: [z.string], output: [z.string] }, (s) =>
+            s.toUpperCase(),
+          ),
+          yell: symbol.alias`shout`,
+        }),
       }),
-    })
-      .lower({})
-      .apply(env, undefined as never);
+    ]);
   });
 
   it("the alias's new name calls through to the target's real impl", async () => {
@@ -53,14 +53,14 @@ describe("symbol.alias — resolves to the SAME symbol under a new name", () => 
 describe("symbol.alias — numeric args flow through the target's own codecs", () => {
   it("an alias to a rosetta verb decodes/encodes exactly like the target", async () => {
     const env2 = await freshEnv();
-    await EnvCapability.define("test/alias-numeric", {
-      symbols: (symbol, z) => ({
-        inc: symbol.rosetta`inc: add one`({ input: [z.number], output: [z.number] }, (n) => n + 1),
-        "inc-alias": symbol.alias`inc`,
+    await applyCapability(env2, [
+      EnvCapability.define("test/alias-numeric", {
+        symbols: (symbol, z) => ({
+          inc: symbol.rosetta`inc: add one`({ input: [z.number], output: [z.number] }, (n) => n + 1),
+          "inc-alias": symbol.alias`inc`,
+        }),
       }),
-    })
-      .lower({})
-      .apply(env2, undefined as never);
+    ]);
     const [out] = (await execState(`(inc-alias 41)`, { env: env2 })).values;
     expect((out as AInexact).real).toBe(42);
   });
@@ -74,7 +74,7 @@ describe("symbol.alias — bake/assembly errors (errors-as-doors, teaching text)
     });
     let caught: unknown;
     try {
-      await cap.lower({}).apply(env3, undefined as never);
+      await applyCapability(env3, [cap]);
     } catch (e) {
       caught = e;
     }
@@ -92,6 +92,6 @@ describe("symbol.alias — bake/assembly errors (errors-as-doors, teaching text)
         second: symbol.alias`first`,
       }),
     });
-    await expect(cap.lower({}).apply(env4, undefined as never)).rejects.toThrow(/alias chains are not supported/);
+    await expect(applyCapability(env4, [cap])).rejects.toThrow(/alias chains are not supported/);
   });
 });

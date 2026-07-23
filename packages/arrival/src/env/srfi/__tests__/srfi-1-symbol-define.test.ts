@@ -28,15 +28,13 @@
 //      some aliases any?, bare any/every are SRFI value-returning; ! / pure-
 //      unshipped names are doors.
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../AmbientRuntime.js";
 import { EnvCapability } from "../../../common/capability.js";
-import { execOverFrame, execStateOverFrame, execInFrame } from "../../../eval/generator-exec.js";
-import { freshEnv, nativeOnlyRoot } from "../../../__tests__/_fresh-env.js";
-import { assembleEnv } from "../../../common/kernel.js";
+import { exec, execOverFrame, execStateOverFrame, execInFrame } from "../../../eval/generator-exec.js";
+import { envFromCapabilities, freshEnv } from "../../../__tests__/_fresh-env.js";
+import { buildVocabulary } from "../../vocabulary.js";
 import { DefineLocalityError } from "../../../errors.js";
 import { BASE_PACKS } from "../../base-packs.js";
 import srfi1 from "../srfi-1.js";
-import type { SchemeEnv } from "../../../common/scheme-env.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 import { printValue } from "../../../values/print.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
@@ -240,23 +238,24 @@ describe("scheme/srfi-1 — two-list products (single value; multi-return is doo
   });
 });
 
+// STAGE C CUT 4 (docs/plans/stage-c-corpse-deletion.md): the "standalone .apply(), bypassing
+// assembleEnv's C3 dep-walk" mechanism this block used to prove a BASE_PACKS-only name
+// genuinely fails unbound is RETIRED along with `lower()`/`assembleEnv` — `buildVocabulary`
+// (the sole surviving bake path) ALWAYS walks a capability's OWN declared `deps`, so there is
+// no unwalked state left to construct. The PRODUCT law that survives — srfi-1's declared deps
+// (`exceptions`/`lists`) genuinely resolve `partition`/`second` — is pinned via
+// `envFromCapabilities` (a STANDALONE `buildVocabulary([srfi1], ...)`, bound onto a fresh frame,
+// mirroring the retired `assembleEnv`'s own no-ambient-fold posture) rather than `exec`/
+// `execState`: srfi-1 is ALSO a `BASE_PACKS` member, so `exec`'s own `{...capabilities,
+// ...BASE_ROSTER}` fold would assert a SECOND, conflicting root-list precedence for it
+// (`AssembleLinearizationError` — the same "co-rooting a BASE_ROSTER member" hazard
+// `env/base-roster.ts`'s own header documents for `NATIVE_PACKS`).
 describe("scheme/srfi-1 — the dep edges are real (§2.1's undeclared-dep bug class, now declared)", () => {
-  it("standalone .apply() (bypassing assembleEnv's C3 dep-walk): a BASE_PACKS-only name genuinely fails unbound — the srfi-189 shape of the luck, not srfi-43's", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-srfi1-standalone-unbound");
-    await srfi1.lower({ evalScheme }).apply(env, undefined as never);
-    // Native clusters exist on a nativeOnlyRoot — BASE_PACKS-only (`cons`/`list` @ lists,
-    // `error` @ exceptions) do not without assembleEnv. partition uses `list`/`cons`.
-    await expect(execStateOverFrame("(partition odd? '(1 2))", { env: env as unknown as ResolvingAmbient })).rejects.toThrow(
-      /Unbound variable/,
-    );
-  });
-
-  it("assembleEnv (the real orchestration path — every production caller) walks deps: everything works standalone", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-srfi1-assembleEnv-ok") as unknown as SchemeEnv;
-    await assembleEnv(env, [srfi1.lower({ evalScheme })]);
-    const typedEnv = env as unknown as ResolvingAmbient;
-    expect(await printed(typedEnv, "(partition odd? '(1 2 3))")).toBe("((1 3) (2))");
-    const [second] = await execOverFrame("(second '(1 2 3))", { env: typedEnv });
+  it("srfi-1 ALONE (standalone buildVocabulary): partition/second resolve through its declared deps", async () => {
+    const env = await envFromCapabilities([srfi1]);
+    const [partitioned] = await execOverFrame("(partition odd? '(1 2 3))", { env });
+    expect(partitioned).toEqual([[1, 3], [2]]);
+    const [second] = await execOverFrame("(second '(1 2 3))", { env });
     expect(second).toBe(2);
   });
 });
@@ -284,13 +283,11 @@ describe("scheme/srfi-1 — contract ENFORCEMENT fires at the call boundary (col
 });
 
 describe("scheme/srfi-1 — the §2.1 bake FV law passes AS MIGRATED", () => {
-  it("lowers cleanly with its declared deps — never DefineLocalityError", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-srfi1-fv-law-ok");
-    await expect(srfi1.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
+  it("bakes cleanly with its declared deps — never DefineLocalityError", async () => {
+    await expect(buildVocabulary([srfi1], undefined, evalScheme)).resolves.not.toThrow();
   });
 
   it("(regression pin) a LOCAL repro of the PRE-FIX shape — a free `values` reference with NO declared deps — throws DefineLocalityError: the luck this migration converts into structure was real", async () => {
-    const env = await freshEnv();
     const undeclaredCap = EnvCapability.define("test/srfi-1-pre-fix-repro", {
       symbols: (symbol, z) => ({
         "bad-span":
@@ -300,9 +297,7 @@ describe("scheme/srfi-1 — the §2.1 bake FV law passes AS MIGRATED", () => {
           ),
       }),
     });
-    await expect(undeclaredCap.lower({ evalScheme }).apply(env, undefined as never)).rejects.toThrow(
-      DefineLocalityError,
-    );
+    await expect(buildVocabulary([undeclaredCap], undefined, evalScheme)).rejects.toThrow(DefineLocalityError);
   });
 });
 

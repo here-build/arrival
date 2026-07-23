@@ -1,106 +1,62 @@
-// capability-prelude-only-symbol.test.ts — EnvCapability.lower().apply() routes a
-// `preludeOnly` SymbolDef onto `ctx.preludeScope` instead of `env`, using the SAME bind
-// form (native → `env.set(verb, impl)`; rosetta → `env.set(verb, gatedRun)`), just a
-// different target scope. Design doc §1.3/§4 step 3.
+// capability-prelude-only-symbol.test.ts — a `preludeOnly` SymbolDef routes onto
+// `Vocabulary.preludeOnly` instead of `Vocabulary.map`, using the SAME bind form (native →
+// `bindTarget.set(verb, def)`; rosetta → `bindTarget.set(verb, def)`), just a different target
+// map. Design doc §1.3/§4 step 3.
 //
-// This is the CAPABILITY-LEVEL unit proof (isolated — no real AmbientRuntime/inherit chain,
-// no assembleEnv): a bare EnvCapability with one preludeOnly rosetta whose bind target we can
-// distinguish because `ctx.preludeScope` is a SEPARATE recording env from the runtime env.
-
+// STAGE C CUT 4 (docs/plans/stage-c-corpse-deletion.md) retired `lower()`/`EnvCapability.apply()`
+// — the bind loop this file used to unit-test (with a synthetic `ctx.preludeScope`) now lives in
+// `env/vocabulary.ts`'s `processCapability`/`makeBindTarget`, which ALWAYS provides BOTH target
+// maps (`mainMap`/`preludeOnlyMap`) unconditionally — there is no longer a "ctx.preludeScope
+// absent" state to construct at all (that was `capability.ts`'s OWN `PackContext.preludeScope?`
+// being optional; `buildVocabulary` has no such optionality). This is a STRONGER invariant than
+// the retired fallback-to-runtime-env law it replaces: a preludeOnly def can ONLY ever land in
+// `Vocabulary.preludeOnly`, never ambiguously in the main map. The retired "no overlay wired,
+// falls back to env" row is dropped — its premise (an apply reachable outside any assembly) no
+// longer exists.
 import { describe, expect, it } from "vitest";
 
 import { EnvCapability } from "../capability.js";
+import { buildVocabulary } from "../../env/vocabulary.js";
 import { ANativeProcedure, ARosettaProcedure } from "../../values/primitives/ACallable.js";
-import type { PackContext } from "../kernel.js";
 import { symbol } from "../symbol.js";
 import * as z from "../scheme-zod.js";
-import type { SchemeEnv } from "../scheme-env.js";
-import type { PreludeBindTarget } from "../kernel.js";
-import { ResolvingAmbient, mintResolvingFrame } from "../../env/AmbientRuntime.js";
-import { AString } from "../../values/primitives/AString.js";
-import { CallCtx } from "../symbols/_bake.js";
+import { execInFrame } from "../../eval/generator-exec.js";
+import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 
-type WithCtxFn<Args extends [...unknown[]] = [...unknown[]], Result extends unknown = unknown> = (
-  this: CallCtx,
-  ...args: Args
-) => Result;
+const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
 
-/** A REAL recording runtime env (hermetic-Environment ruling: capability apply narrows to
- *  the concrete `AmbientRuntime`; the JS-side write surface is retired). `verbs` is a read
- *  facade over the frame's own storage record, tagged so a test can tell WHICH scope a
- *  verb landed in (the runtime env vs. the prelude overlay). */
-function recordingEnv(tag: string): { env: ResolvingAmbient; verbs: Record<string, unknown>; tag: string } {
-  const env = mintResolvingFrame(`prelude-only-${tag}`, {}, null);
-  const verbs = new Proxy({} as Record<string, unknown>, { get: (_t, name) => env.__env__[name as string] });
-  return { env, verbs, tag };
-}
-
-/** The OVERLAY is deliberately still a synthetic `{ set }` recorder — `PreludeBindTarget`
- *  is the kernel's Map-shim shape (the `.set`-only bind face), NOT an env; the hermetic
- *  cut removed `set` from envs, not from the shim contract. */
-function recordingOverlay(): { overlay: PreludeBindTarget; verbs: Record<string, unknown> } {
-  const verbs: Record<string, unknown> = {};
-  return { overlay: { set: (name, value) => void (verbs[name] = value) }, verbs };
-}
-
-describe("EnvCapability.lower().apply() — routing preludeOnly symbols onto ctx.preludeScope", () => {
-  // INVARIANT: a preludeOnly rosetta binds onto ctx.preludeScope, not onto the runtime env.
-  it("a preludeOnly rosetta binds onto ctx.preludeScope, NOT onto the runtime env", async () => {
+describe("buildVocabulary — routing preludeOnly symbols onto Vocabulary.preludeOnly", () => {
+  // INVARIANT: a preludeOnly rosetta binds onto Vocabulary.preludeOnly, NOT onto Vocabulary.map.
+  it("a preludeOnly rosetta binds onto Vocabulary.preludeOnly, NOT onto Vocabulary.map", async () => {
     const def = symbol.rosetta`prelude-only/verb: only visible while a prelude evaluates`(
       { input: [z.string], output: [z.string], preludeOnly: true },
       (s) => s,
     );
     const cap = EnvCapability.define("test/prelude-only", { symbols: () => ({ "prelude-only/verb": def }) });
-    const { env: runtimeEnv, verbs: runtimeVerbs } = recordingEnv("runtime");
-    const { overlay, verbs: overlayVerbs } = recordingOverlay();
-    const ctx: PackContext<SchemeEnv> = { onDispose: () => undefined, order: [], preludeScope: overlay };
+    const vocabulary = await buildVocabulary([cap], undefined, evalScheme);
 
-    await cap.lower({}).apply(runtimeEnv, ctx);
-
-    expect(runtimeVerbs["prelude-only/verb"]).toBeUndefined(); // NOT on the runtime env
-    const bound = overlayVerbs["prelude-only/verb"];
-    expect(bound).toBeInstanceOf(ARosettaProcedure); // binder-cut bind shape (§9 option (c)); // IS on the overlay, same bind form (a real callable)
+    expect(vocabulary.map.has("prelude-only/verb")).toBe(false); // NOT on the runtime map
+    const bound = vocabulary.preludeOnly.get("prelude-only/verb");
+    expect(bound).toBeInstanceOf(ARosettaProcedure); // IS on the preludeOnly map, same bind form (a real callable)
   });
 
-  // INVARIANT: an ordinary (non-preludeOnly) rosetta binds onto the runtime env, unaffected by preludeOnly wiring.
-  it("an ORDINARY (non-preludeOnly) rosetta binds onto the runtime env as before — no regression", async () => {
+  // INVARIANT: an ordinary (non-preludeOnly) rosetta binds onto Vocabulary.map, unaffected by
+  // preludeOnly wiring.
+  it("an ORDINARY (non-preludeOnly) rosetta binds onto Vocabulary.map as before — no regression", async () => {
     const def = symbol.rosetta`ordinary/verb: a normal runtime verb`(
       { input: [z.string], output: [z.string] },
       (s) => s,
     );
     const cap = EnvCapability.define("test/ordinary", { symbols: () => ({ "ordinary/verb": def }) });
-    const { env: runtimeEnv, verbs: runtimeVerbs } = recordingEnv("runtime");
-    const { overlay, verbs: overlayVerbs } = recordingOverlay();
-    const ctx: PackContext<SchemeEnv> = { onDispose: () => undefined, order: [], preludeScope: overlay };
+    const vocabulary = await buildVocabulary([cap], undefined, evalScheme);
 
-    await cap.lower({}).apply(runtimeEnv, ctx);
-
-    expect(runtimeVerbs["ordinary/verb"]).toBeInstanceOf(ARosettaProcedure); // binder-cut bind shape
-    expect(overlayVerbs["ordinary/verb"]).toBeUndefined();
+    expect(vocabulary.map.get("ordinary/verb")).toBeInstanceOf(ARosettaProcedure);
+    expect(vocabulary.preludeOnly.has("ordinary/verb")).toBe(false);
   });
 
-  // INVARIANT: a preludeOnly symbol with no ctx.preludeScope present falls back to binding on env (no silent drop).
-  it("a preludeOnly symbol with NO ctx.preludeScope present falls back to binding on env (no silent drop)", async () => {
-    // If a capability declares preludeOnly but is applied OUTSIDE an assembly that wires an
-    // overlay (e.g. a bare direct apply in a test/tool), the symbol must still land somewhere
-    // observable rather than vanishing — bind onto env is the documented fallback.
-    const def = symbol.rosetta`prelude-only/no-overlay: fallback when no overlay is wired`(
-      { input: [z.string], output: [z.string], preludeOnly: true },
-      (s) => s,
-    );
-    const cap = EnvCapability.define("test/prelude-only-no-overlay", {
-      symbols: () => ({ "prelude-only/no-overlay": def }),
-    });
-    const { env: runtimeEnv, verbs: runtimeVerbs } = recordingEnv("runtime");
-
-    await cap.lower({}).apply(runtimeEnv, { onDispose: () => undefined, order: [] });
-
-    expect(runtimeVerbs["prelude-only/no-overlay"]).toBeInstanceOf(ARosettaProcedure); // binder-cut bind shape
-  });
-
-  // INVARIANT: a preludeOnly native symbol also routes onto ctx.preludeScope, kind-agnostic (native and
-  // rosetta share the routing rule).
-  it("a preludeOnly NATIVE symbol also routes onto ctx.preludeScope (kind-agnostic)", async () => {
+  // INVARIANT: a preludeOnly NATIVE symbol also routes onto Vocabulary.preludeOnly,
+  // kind-agnostic (native and rosetta share the routing rule).
+  it("a preludeOnly NATIVE symbol also routes onto Vocabulary.preludeOnly (kind-agnostic)", async () => {
     const def = symbol.native`prelude-only/native-verb: native prelude-only op`(
       { input: [z.string], output: [z.string], preludeOnly: true },
       (s) => s,
@@ -108,15 +64,11 @@ describe("EnvCapability.lower().apply() — routing preludeOnly symbols onto ctx
     const cap = EnvCapability.define("test/prelude-only-native", {
       symbols: () => ({ "prelude-only/native-verb": def }),
     });
-    const { env: runtimeEnv, verbs: runtimeVerbs } = recordingEnv("runtime");
-    const { overlay, verbs: overlayVerbs } = recordingOverlay();
-    const ctx: PackContext<SchemeEnv> = { onDispose: () => undefined, order: [], preludeScope: overlay };
+    const vocabulary = await buildVocabulary([cap], undefined, evalScheme);
 
-    await cap.lower({}).apply(runtimeEnv, ctx);
-
-    expect(runtimeVerbs["prelude-only/native-verb"]).toBeUndefined();
-    // A native binds as a first-class ANativeProcedure (callable-as-value) now, not a bare fn —
-    // still routed onto the overlay preludeScope, the invariant this test pins.
-    expect(overlayVerbs["prelude-only/native-verb"]).toBeInstanceOf(ANativeProcedure);
+    expect(vocabulary.map.has("prelude-only/native-verb")).toBe(false);
+    // A native binds as a first-class ANativeProcedure (callable-as-value) — still routed onto
+    // the preludeOnly map, the invariant this test pins.
+    expect(vocabulary.preludeOnly.get("prelude-only/native-verb")).toBeInstanceOf(ANativeProcedure);
   });
 });

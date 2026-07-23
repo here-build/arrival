@@ -53,6 +53,7 @@ import { UnboundVariableError } from "../../errors.js";
 import type { Payload } from "../../provenance/store/interfaces.js";
 import type { EmittedWire, WireframeGraph } from "../../provenance/wireframe/types.js";
 import { EnvCapability } from "../../common/capability.js";
+import { applyCapability } from "../../__tests__/_fresh-env.js";
 import { ARosettaProcedure } from "../../values/primitives/ACallable.js";
 import { prospectiveSourceCone } from "../../__tests__/provenance/w1-harness.js";
 import {
@@ -256,23 +257,23 @@ describe("replay-nondeterminism (§4 R1 + §7: frozen-payload replay stable unde
    *  per-op call counter closure the legacy loop built. */
   async function mutatedEnv(calls: Map<string, number>) {
     const env = mintFrame(inferenceEnv, "q16-mutated-world");
-    await EnvCapability.define("test/mutated-world", {
-      symbols: (symbol, z) => {
-        const symbols: Record<string, ARosettaProcedure> = {};
-        for (const op of Object.keys(SOURCES)) {
-          symbols[op] = symbol.rosetta`${op}: mutated-world source (offset +1000)`(
-            { input: [], output: [z.number] },
-            () => {
-              calls.set(op, (calls.get(op) ?? 0) + 1);
-              return 1000 + (calls.get(op) ?? 0);
-            },
-          );
-        }
-        return symbols;
-      },
-    })
-      .lower({})
-      .apply(env, undefined as never);
+    await applyCapability(env, [
+      EnvCapability.define("test/mutated-world", {
+        symbols: (symbol, z) => {
+          const symbols: Record<string, ARosettaProcedure> = {};
+          for (const op of Object.keys(SOURCES)) {
+            symbols[op] = symbol.rosetta`${op}: mutated-world source (offset +1000)`(
+              { input: [], output: [z.number] },
+              () => {
+                calls.set(op, (calls.get(op) ?? 0) + 1);
+                return 1000 + (calls.get(op) ?? 0);
+              },
+            );
+          }
+          return symbols;
+        },
+      }),
+    ]);
     return env;
   }
 
@@ -472,19 +473,19 @@ describe("effect-track replay-between-records (§4 CHOSEN, §7 sub-gate)", () =>
     // only so `liveCalls` staying 0 is a meaningful (not vacuously-typed-away)
     // assertion that the live op is never consulted, exactly the legacy fixture's own
     // shape.
-    await EnvCapability.define("test/mutated-effect", {
-      symbols: (symbol, z) => ({
-        "emit-step!": symbol.rosetta`emit-step!: mutated-world effect echo (×100)`(
-          { input: [z.number], output: [z.number] },
-          (x) => {
-            liveCalls++;
-            return x * 100;
-          },
-        ),
+    await applyCapability(mutated, [
+      EnvCapability.define("test/mutated-effect", {
+        symbols: (symbol, z) => ({
+          "emit-step!": symbol.rosetta`emit-step!: mutated-world effect echo (×100)`(
+            { input: [z.number], output: [z.number] },
+            (x) => {
+              liveCalls++;
+              return x * 100;
+            },
+          ),
+        }),
       }),
-    })
-      .lower({})
-      .apply(mutated, undefined as never);
+    ]);
     const replayAgain = await replayBetweenRecords({
       store: run.store,
       payloads: run.payloads,

@@ -6,8 +6,7 @@ import { execStateOverFrame, type ExecOptionsOverFrame } from "../../../eval/gen
 import { mintFrame } from "../../AmbientRuntime.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
-import { assembleEnv } from "../../../common/kernel.js";
-import { type SchemeEnv } from "../../../common/scheme-env.js";
+import { applyCapability } from "../../../__tests__/_fresh-env.js";
 import { describe, expect, it } from "vitest";
 
 import polyglotClojure from "../../polyglot/polyglot-clojure.js";
@@ -19,12 +18,11 @@ async function exec(code: string, options: ExecOptionsOverFrame) {
 describe("@inhuman.tools/arrival/polyglot-clojure", () => {
   it("installs the threading macros and comp; they run correctly assembled STANDALONE", async () => {
     const env = mintFrame(sandboxedEnv, "polyglot-clojure-test");
-    const evalScheme = (e: SchemeEnv, src: string) => exec(src, { env: e as never });
     // Assembling JUST polyglot-clojure pulls in scheme/polyglot (core), srfi-1,
     // and the R7RS natives transitively via its own declared `deps` (C3 dep walk)
     // — the same standalone-composition story polyglot.test.ts's pre-split
     // suite told for the whole monolith.
-    await assembleEnv(env as unknown as SchemeEnv, [polyglotClojure.lower({ evalScheme })]);
+    await applyCapability(env, [polyglotClojure]);
 
     const num = async (src: string) => Number((await exec(src, { env }))[0]);
     // -> threads FIRST: (+ 5 1)=6 ; (* 6 2)=12

@@ -10,8 +10,7 @@ import { execStateOverFrame, type ExecOptionsOverFrame } from "../../../eval/gen
 import { mintFrame } from "../../AmbientRuntime.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
-import { assembleEnv } from "../../../common/kernel.js";
-import { type SchemeEnv } from "../../../common/scheme-env.js";
+import { applyCapability } from "../../../__tests__/_fresh-env.js";
 import { describe, expect, it } from "vitest";
 
 import polyglot from "../../polyglot/polyglot.js";
@@ -32,8 +31,7 @@ describe("@inhuman.tools/arrival/polyglot (shared core)", () => {
   // per-dialect test files in the 2026-07-10 dialect split — no longer exercised here)
   it("installs @/@?/@keys/dict and compose/pipe run correctly standalone", async () => {
     const env = mintFrame(sandboxedEnv, "polyglot-core-test");
-    const evalScheme = (e: SchemeEnv, src: string) => exec(src, { env: e as never });
-    await assembleEnv(env as unknown as SchemeEnv, [polyglot.lower({ evalScheme })]);
+    await applyCapability(env, [polyglot]);
 
     const num = async (src: string) => Number((await exec(src, { env }))[0]);
     // compose is right-to-left: (*2 (+1 5)) = 12

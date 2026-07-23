@@ -86,7 +86,7 @@ function contractOf<T>(v: { contract: unknown }): T {
 }
 import { ProvenanceRoleShapeError, PreludeMembershipError } from "../../errors.js";
 import { classifyProgramPrelude, assertPreludeEligible } from "../../provenance/prelude.js";
-import { freshEnv } from "../../__tests__/_fresh-env.js";
+import { applyCapability, freshEnv } from "../../__tests__/_fresh-env.js";
 import { theVoid } from "../../values/primitives/AVoid.js";
 import srfi1 from "../../env/srfi/srfi-1.js";
 import srfi95 from "../../env/srfi/srfi-95.js";
@@ -606,16 +606,16 @@ describe("V2-Q4 — callback-role drift door + acc chain + stamp path (§2/§3; 
       expect(read("cons")).toBeUndefined();
       // The stamp seam is the REAL EnvCapability binder end-to-end for a fresh synthetic
       // def too (the kwargs-runtime fixture convention) — fan default rides the binding.
-      await EnvCapability.define("test/q4-stamp", {
-        symbols: (symbol, z) => ({
-          "q4-stamp": symbol.native`q4-stamp: synthetic fan`(
-            { input: [z.lambda, z.value], output: [z.value], provenance: "fan" },
-            (f, v) => v,
-          ),
+      await applyCapability(env, [
+        EnvCapability.define("test/q4-stamp", {
+          symbols: (symbol, z) => ({
+            "q4-stamp": symbol.native`q4-stamp: synthetic fan`(
+              { input: [z.lambda, z.value], output: [z.value], provenance: "fan" },
+              (f, v) => v,
+            ),
+          }),
         }),
-      })
-        .lower({})
-        .apply(env, undefined as never);
+      ]);
       expect(read("q4-stamp")).toEqual(["element-transformer"]);
     },
   );

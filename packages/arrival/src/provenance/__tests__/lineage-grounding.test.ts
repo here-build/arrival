@@ -42,6 +42,7 @@ import { sStr, runRaw, type EnvSetup } from "../../__tests__/_lineage-test-helpe
 import { ANil } from "../../values/primitives/ANil.js";
 import { APair } from "../../values/primitives/APair.js";
 import { EnvCapability } from "../../common/capability.js";
+import { applyCapability } from "../../__tests__/_fresh-env.js";
 
 // Fixed mint ids — stand-ins for "whatever the membrane minted at this crossing".
 const MINT_A = 500;
@@ -65,7 +66,7 @@ const sources: EnvSetup = async (env) => {
       ),
     }),
   });
-  await cap.lower({}).apply(env, undefined as never);
+  await applyCapability(env, [cap]);
 };
 
 /**

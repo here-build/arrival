@@ -14,9 +14,15 @@
 // `AEntity` members that bind directly. The assertions below pin BOTH halves of the split.
 //
 // COLLAPSE PIN (Stage-6, 2026-07-22): the bare-`Fn` and untagged `{ value }` arms are
-// RETIRED — a data constant authors as `symbol.value` (mints a boxed `AmbientValue` now) and
-// a bare fn as an explicit `{ fn }` record (the one surviving legacy arm, McpEnvCapability's
-// authoring shape). The negative assertions below keep the retirement from silently regressing.
+// RETIRED — a data constant authors as `symbol.value` (mints a boxed `AmbientValue` now). The
+// negative assertions below keep the retirement from silently regressing.
+//
+// STAGE C CUT 4 PIN (2026-07-23, docs/plans/stage-c-corpse-deletion.md): the legacy `{ fn }`
+// record arm is ALSO dropped from the union — `lower()`, its sole BINDER, is retired, and
+// `isSymbolSpec`/`VocabularyLegacyCapabilityError` (capability.ts / env/vocabulary.ts) now
+// exist purely as a RUNTIME refusal check for a capability that reaches the vocabulary path
+// with this shape (McpEnvCapability's downstream authoring surface, until the postponed MCP
+// rework), never as a type a TS-authored `symbols` record can still declare.
 import { describe, expectTypeOf, test } from "vitest";
 import type { SymbolDeclaration } from "../capability.js";
 import type { DefineSymbolDef, DefineSyntaxSymbolDef, MacroSymbolDef, NativeSymbolDef } from "../symbol.js";
@@ -62,9 +68,11 @@ describe("SymbolDeclaration — the raw authoring-time union, post Stage-A2 mint
     expectTypeOf<(...args: unknown[]) => unknown>().not.toExtend<SymbolDeclaration>();
   });
 
-  // INVARIANT: the surviving legacy `{ fn }` record stays assignable (the postponed MCP
-  // surface authors through it).
-  test("an explicit { fn } record is assignable to SymbolDeclaration (the surviving legacy arm)", () => {
-    expectTypeOf<{ fn: (...args: unknown[]) => unknown }>().toExtend<SymbolDeclaration>();
+  // INVARIANT (Stage C Cut 4 retirement pin): the legacy `{ fn }` record is NO LONGER
+  // assignable — `lower()` (its sole binder) is retired; a capability reaching the
+  // vocabulary path with this shape is refused at runtime (`isSymbolSpec`/
+  // `VocabularyLegacyCapabilityError`), not accepted at the type level.
+  test("an explicit { fn } record is NOT assignable to SymbolDeclaration (retired arm)", () => {
+    expectTypeOf<{ fn: (...args: unknown[]) => unknown }>().not.toExtend<SymbolDeclaration>();
   });
 });

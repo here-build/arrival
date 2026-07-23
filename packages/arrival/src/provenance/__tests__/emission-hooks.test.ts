@@ -26,6 +26,7 @@ import { schemeToJs } from "../../membrane/rosetta.js";
 import { withRecordCoordinateAsync, type EmissionSink, type RecordCoordinate } from "../../eval/provenance-hooks.js";
 import { PayloadStoreFake, ProvenanceStoreFake, setEmissionEnabled } from "../../provenance/store/index.js";
 import { EnvCapability } from "../../common/capability.js";
+import { applyCapability } from "../../__tests__/_fresh-env.js";
 
 const COORD: RecordCoordinate = { templateHash: "th-source", ordinalPath: [0], regionEpoch: "e0" };
 const REGION = "region-emission-hooks";
@@ -40,13 +41,13 @@ afterEach(() => {
  *  Test-local `EnvCapability`; a plain `z.number` output, same as
  *  `silent-region.test.ts`'s sibling. */
 async function registerSource(env: ResolvingAmbient): Promise<void> {
-  await EnvCapability.define("test/fetch-item", {
-    symbols: (symbol, z) => ({
-      "fetch-item": symbol.rosetta`fetch-item: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 42),
+  await applyCapability(env, [
+    EnvCapability.define("test/fetch-item", {
+      symbols: (symbol, z) => ({
+        "fetch-item": symbol.rosetta`fetch-item: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 42),
+      }),
     }),
-  })
-    .lower({})
-    .apply(env, undefined as never);
+  ]);
 }
 
 describe("the real port site: a rosetta crossing through evaluator.ts's generic apply", () => {

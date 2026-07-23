@@ -36,6 +36,7 @@ import { schemeToJs } from "../../membrane/rosetta.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { isEagerProvenanceOracleEnabled, setEagerProvenanceOracleEnabled } from "../../values/op-helpers.js";
 import { EnvCapability } from "../../common/capability.js";
+import { applyCapability } from "../../__tests__/_fresh-env.js";
 import {
   SourceRegistry,
   runEagerCone,
@@ -292,16 +293,16 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
         const env = mintFrame(inferenceEnv, "w1-begin-finding");
         // Test-local EnvCapability: identity passthrough, `z.value` on both sides (no
         // transform, matching the legacy `fn: (x) => x` shape exactly).
-        await EnvCapability.define("test/w1-begin-finding", {
-          symbols: (symbol, z) => ({
-            "emit!": symbol.rosetta`emit!: identity passthrough (sink echo)`(
-              { input: [z.value], output: [z.value] },
-              (x: unknown) => x,
-            ),
+        await applyCapability(env, [
+          EnvCapability.define("test/w1-begin-finding", {
+            symbols: (symbol, z) => ({
+              "emit!": symbol.rosetta`emit!: identity passthrough (sink echo)`(
+                { input: [z.value], output: [z.value] },
+                (x: unknown) => x,
+              ),
+            }),
           }),
-        })
-          .lower({})
-          .apply(env, undefined as never);
+        ]);
         const registry = new SourceRegistry();
         await registry.register(env, "src-a", num);
         await registry.register(env, "src-b", num);

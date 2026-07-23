@@ -16,11 +16,9 @@
 // no per-test isolation, no retry. A setup's failure doesn't abort the run; it's recorded
 // (`lastSetupFailure`) so a later step's OWN unexplained throw can be attributed to it
 // (`setup-failed`) instead of a bare, confusing "unbound variable" message.
-import { freshEnv } from "../../_fresh-env.js";
+import { applyCapability, freshEnv } from "../../_fresh-env.js";
 import type { ResolvingAmbient } from "../../../env/AmbientRuntime.js";
-import { assembleEnv } from "../../../common/kernel.js";
-import type { SchemeEnv } from "../../../common/scheme-env.js";
-import { execOverFrame, execInFrame } from "../../../eval/generator-exec.js";
+import { execOverFrame } from "../../../eval/generator-exec.js";
 import { ArrivalError } from "../../../errors.js";
 import { createChibiHarnessV2, type OutcomeSink, type StepOutcome } from "./harness-capability.js";
 import type { Manifest, Step, TestStep } from "./manifest.js";
@@ -66,8 +64,7 @@ export class CorpusRunner {
   static async create(manifest: Manifest): Promise<CorpusRunner> {
     const env = await freshEnv();
     const { capability, sink } = createChibiHarnessV2();
-    const evalScheme = (e: unknown, src: unknown): unknown => execInFrame(src as string, e as ResolvingAmbient);
-    await assembleEnv(env as unknown as SchemeEnv, [capability.lower({ evalScheme })]);
+    await applyCapability(env, [capability]);
     return new CorpusRunner(env, sink, manifest);
   }
 

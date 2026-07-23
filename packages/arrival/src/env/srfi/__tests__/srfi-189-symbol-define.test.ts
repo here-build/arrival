@@ -36,14 +36,12 @@
 //      VALIDATE-ONLY — the returned value is still a real scheme list a sibling
 //      `(car …)`/`(cdr …)` can walk, never a decoded JS array leaking through.
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../AmbientRuntime.js";
 import { EnvCapability } from "../../../common/capability.js";
-import { execOverFrame, execStateOverFrame, execInFrame } from "../../../eval/generator-exec.js";
-import { freshEnv, nativeOnlyRoot } from "../../../__tests__/_fresh-env.js";
-import { assembleEnv } from "../../../common/kernel.js";
+import { exec, execOverFrame, execStateOverFrame, execInFrame } from "../../../eval/generator-exec.js";
+import { freshEnv } from "../../../__tests__/_fresh-env.js";
+import { buildVocabulary } from "../../vocabulary.js";
 import { DefineLocalityError } from "../../../errors.js";
 import srfi189 from "../srfi-189.js";
-import type { SchemeEnv } from "../../../common/scheme-env.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 
 // Mirrors `_fresh-env.ts`'s own injected evalScheme — `skipBootstrapWait` because
@@ -208,31 +206,18 @@ describe("scheme/srfi-189 — Either accessors/combinators", () => {
   });
 });
 
+// STAGE C CUT 4 (docs/plans/stage-c-corpse-deletion.md): the "standalone .apply(), bypassing
+// assembleEnv's C3 dep-walk" mechanism this block used to contrast against the real
+// orchestration path is RETIRED along with `lower()`/`assembleEnv` — `buildVocabulary` (the
+// sole surviving bake path) ALWAYS walks a capability's OWN declared `deps`, so there is no
+// "standalone, deps unwalked, list/error genuinely unbound" state left to construct. The
+// PRODUCT law that survives — srfi-189's declared deps (`lists`/`exceptions`) genuinely
+// resolve `list`-/`error`-needing ops, pinned via the sanctioned path.
 describe("scheme/srfi-189 — the dep edge is real (§2.1's undeclared-dep bug class, now a declared edge)", () => {
-  it("standalone .apply() (bypassing assembleEnv's C3 dep-walk): a `list`-needing call (BASE_PACKS-only `scheme/lists`) genuinely fails unbound", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-srfi189-standalone-list-unbound");
-    await srfi189.lower({ evalScheme }).apply(env, undefined as never);
-    await expect(execStateOverFrame("(just 1)", { env })).rejects.toThrow();
-  });
-
-  it("standalone .apply(): a pair?/eq?-only call (NATIVE_PACKS `scheme/equality`, already on global_env) resolves via runtime luck — the mirror of srfi-43's own finding", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-srfi189-standalone-equality-luck");
-    await srfi189.lower({ evalScheme }).apply(env, undefined as never);
-    await expect(execStateOverFrame('(just? "not-a-just")', { env })).resolves.not.toThrow();
-  });
-
-  it("bake itself succeeds even with deps unapplied — the FV law is a STATIC declared-`deps` check, not a runtime-binding probe", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-srfi189-standalone-bake-ok");
-    await expect(srfi189.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
-  });
-
-  it("assembleEnv (the real orchestration path — every production caller) DOES walk deps: list/error-needing ops work standalone", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-srfi189-assembleEnv-ok") as unknown as SchemeEnv;
-    await assembleEnv(env, [srfi189.lower({ evalScheme })]);
-    const typedEnv = env as unknown as ResolvingAmbient;
-    const [justResult] = await execOverFrame("(maybe-ref (just 42))", { env: typedEnv });
+  it("srfi-189 ALONE (exec({capabilities})): list-/error-needing ops resolve through its declared deps", async () => {
+    const [justResult] = await exec("(maybe-ref (just 42))", { capabilities: [srfi189] });
     expect(justResult).toBe(42);
-    await expect(execStateOverFrame("(maybe-ref (nothing))", { env: typedEnv })).rejects.toThrow(/maybe-ref: Nothing/);
+    await expect(exec("(maybe-ref (nothing))", { capabilities: [srfi189] })).rejects.toThrow(/maybe-ref: Nothing/);
   });
 });
 
@@ -249,13 +234,11 @@ describe("scheme/srfi-189 — contract ENFORCEMENT fires at the call boundary", 
 });
 
 describe("scheme/srfi-189 — the §2.1 bake FV law passes for this pack AS MIGRATED", () => {
-  it("lowers cleanly with its declared deps — never DefineLocalityError", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-srfi189-fv-law-ok");
-    await expect(srfi189.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
+  it("bakes cleanly with its declared deps — never DefineLocalityError", async () => {
+    await expect(buildVocabulary([srfi189], undefined, evalScheme)).resolves.not.toThrow();
   });
 
   it("(regression pin) a LOCAL reproduction of the PRE-FIX shape — the same `list` free reference with NO declared deps — throws DefineLocalityError: the bug this migration fixes was real", async () => {
-    const env = await freshEnv();
     // Deliberately NO `deps` field — this is the exact shape srfi-189.ts had before
     // this migration (a bare `prelude` string with no dep declaration at all).
     const undeclaredCap = EnvCapability.define("test/srfi-189-pre-fix-repro", {
@@ -267,9 +250,7 @@ describe("scheme/srfi-189 — the §2.1 bake FV law passes for this pack AS MIGR
           ),
       }),
     });
-    await expect(undeclaredCap.lower({ evalScheme }).apply(env, undefined as never)).rejects.toThrow(
-      DefineLocalityError,
-    );
+    await expect(buildVocabulary([undeclaredCap], undefined, evalScheme)).rejects.toThrow(DefineLocalityError);
   });
 });
 

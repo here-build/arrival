@@ -19,6 +19,7 @@ import { is_callable_value } from "../../values/value-guards.js";
 import { PurityError } from "../../errors.js";
 import { EnvCapability } from "../../common/capability.js";
 import { ResolvingAmbient, mintResolvingFrame } from "../../env/AmbientRuntime.js";
+import { applyCapability } from "../_fresh-env.js";
 
 describe("DoorProcedure — the introspectable door binding (unit, no capability/env)", () => {
   it("exposes `.door` — the baked DoorSymbolDef — for static readers", () => {
@@ -96,7 +97,7 @@ describe("common/capability.ts's door bind arm — cause DERIVED from the owning
       }),
     });
     const { env, bound } = recordingEnv();
-    await cap.lower({}).apply(env, undefined as never);
+    await applyCapability(env, [cap]);
 
     const proc = bound.get("stub");
     expect(proc).toBeInstanceOf(DoorProcedure);
@@ -111,7 +112,7 @@ describe("common/capability.ts's door bind arm — cause DERIVED from the owning
       }),
     });
     const { env, bound } = recordingEnv();
-    await cap.lower({}).apply(env, undefined as never);
+    await applyCapability(env, [cap]);
 
     const proc = bound.get("stub") as DoorProcedure;
     let caught: unknown;
@@ -139,7 +140,7 @@ describe("common/capability.ts's door bind arm — cause DERIVED from the owning
       },
     });
     const { env, bound } = recordingEnv();
-    await cap.lower({}).apply(env, undefined as never);
+    await applyCapability(env, [cap]);
 
     const door = (bound.get("stub") as DoorProcedure).door;
     // NOT overwritten with "test/door-cap-3" — the capability trusts an already-stamped cause.

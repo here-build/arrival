@@ -17,10 +17,10 @@
 // record, no `deps`) and proves the bake FV law rejects it with `DefineLocalityError`
 // — the law that class of bug is caught by, kept independent of the deleted symbol.
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../AmbientRuntime.js";
 import { EnvCapability } from "../../../common/capability.js";
 import { execOverFrame, execStateOverFrame, execInFrame } from "../../../eval/generator-exec.js";
-import { freshEnv, nativeOnlyRoot } from "../../../__tests__/_fresh-env.js";
+import { freshEnv } from "../../../__tests__/_fresh-env.js";
+import { buildVocabulary } from "../../vocabulary.js";
 import { DefineLocalityError } from "../../../errors.js";
 import core from "../../core/core.js";
 
@@ -50,9 +50,8 @@ describe("scheme/core — behavior equivalence (semantic-equivalence gate, §4.2
 });
 
 describe("scheme/core — the §2.1 bake FV locality law", () => {
-  it("scheme/core lowers cleanly (dep-free since single's deletion) — never DefineLocalityError", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "test-core-fv-law-ok");
-    await expect(core.lower({ evalScheme }).apply(env, undefined as never)).resolves.not.toThrow();
+  it("scheme/core bakes cleanly (dep-free since single's deletion) — never DefineLocalityError", async () => {
+    await expect(buildVocabulary([core], undefined, evalScheme)).resolves.not.toThrow();
   });
 
   it("(regression pin) the live-catch shape — a scheme body calling pair?/not with NO declared deps — throws DefineLocalityError", async () => {
@@ -71,9 +70,7 @@ describe("scheme/core — the §2.1 bake FV locality law", () => {
           ),
       }),
     });
-    await expect(undeclaredCap.lower({ evalScheme }).apply(env, undefined as never)).rejects.toThrow(
-      DefineLocalityError,
-    );
+    await expect(buildVocabulary([undeclaredCap], undefined, evalScheme)).rejects.toThrow(DefineLocalityError);
   });
 });
 

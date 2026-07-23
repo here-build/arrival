@@ -17,15 +17,14 @@ import { mintFrame } from "../../AmbientRuntime.js";
 import { exec, execOverFrame } from "../../../eval/generator-exec.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
-import { assembleEnv } from "../../../common/kernel.js";
-import { type SchemeEnv } from "../../../common/scheme-env.js";
+import { applyCapability } from "../../../__tests__/_fresh-env.js";
 import { PurityError } from "../../../errors.js";
 import stubPack from "../srfi-stubs.js";
 
 /** Assemble the stub pack onto a fresh sandboxed env; return an exec bound to it. */
 async function withStubs(name: string): Promise<(src: string) => Promise<readonly unknown[]>> {
   const env = mintFrame(sandboxedEnv, name);
-  await assembleEnv(env as unknown as SchemeEnv, [stubPack.lower({}) as never]);
+  await applyCapability(env, [stubPack]);
   return (src: string) => execOverFrame(src, { env: env as never });
 }
 

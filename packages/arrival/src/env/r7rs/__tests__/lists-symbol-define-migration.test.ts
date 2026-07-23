@@ -57,9 +57,13 @@ import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeEr
 import { DoorProcedure } from "../../../values/primitives/ACallable.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
 import { BASE_PACKS } from "../../base-packs.js";
-import { execOverFrame as exec } from "../../../eval/generator-exec.js";
+import { execOverFrame as exec, execInFrame } from "../../../eval/generator-exec.js";
+import { buildVocabulary } from "../../vocabulary.js";
 import type { AEntity, DoorSymbolDef } from "../../../common/symbol.js";
+import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
+
+const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
 
 const symbols = harvestContracts(listsPack.spec.symbols);
 
@@ -149,9 +153,9 @@ describe("ROW 1 — structural: no prelude, the 23-symbol population is exactly 
   });
 });
 
-describe("ROW 2 — bake / cause stamping: lower() succeeds, doors bind with a stamped owner", () => {
-  it("a bare lower({}) — zero deps, zero config — does not throw", () => {
-    expect(() => listsPack.lower({})).not.toThrow();
+describe("ROW 2 — bake / cause stamping: the vocabulary builds, doors bind with a stamped owner", () => {
+  it("a bare vocabulary build — zero deps, zero config — does not throw", async () => {
+    await expect(buildVocabulary([listsPack], undefined, evalScheme)).resolves.not.toThrow();
   });
 
   it("every bound door value is a DoorProcedure carrying cause {owner: 'scheme/lists', needs: []}", async () => {
@@ -195,10 +199,10 @@ describe("ROW 3 — contract teaching: firing a door throws the name@owner Purit
 });
 
 describe("ROW 4 — FV law: N/A structurally (no symbol.define body exists to walk)", () => {
-  it("lower({}) never throws the §2.1 bake FV errors — nothing here is FV-checked", () => {
+  it("the vocabulary build never throws the §2.1 bake FV errors — nothing here is FV-checked", async () => {
     let caught: unknown;
     try {
-      listsPack.lower({});
+      await buildVocabulary([listsPack], undefined, evalScheme);
     } catch (e) {
       caught = e;
     }

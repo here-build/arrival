@@ -17,6 +17,7 @@ import { inferenceEnv } from "../env/inference-env.js";
 import { execOverFrame as exec } from "../eval/generator-exec.js";
 import { jsToScheme, schemeToJs } from "../membrane/rosetta.js";
 import { EnvCapability } from "../common/capability.js";
+import { applyCapability } from "./_fresh-env.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
 import { bindValue, mintFrame } from "../env/AmbientRuntime.js";
 
@@ -76,29 +77,29 @@ describe("Escaped Symbol Resolution", () => {
       // space or a leading digit is a perfectly ordinary JS object-property string, so
       // `capability.ts`'s binder (`env.set(verb, proc)`) doesn't care that the reader
       // only reaches it through `|escaped|` syntax.
-      await EnvCapability.define("test/get-24", {
-        symbols: (symbol, z) => ({
-          "get-24": symbol.rosetta`get-24: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 24),
+      await applyCapability(inferenceEnv, [
+        EnvCapability.define("test/get-24", {
+          symbols: (symbol, z) => ({
+            "get-24": symbol.rosetta`get-24: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 24),
+          }),
         }),
-      })
-        .lower({})
-        .apply(inferenceEnv, undefined as never);
+      ]);
 
       const result = await execOne(`(|get-24|)`);
       expect(schemeToJs(result, {})).toBe(24);
     });
 
     it("should define functions with space-containing names", async () => {
-      await EnvCapability.define("test/my-function", {
-        symbols: (symbol, z) => ({
-          "my function": symbol.rosetta`my function: doubles its argument`(
-            { input: [z.number], output: [z.number] },
-            (x) => x * 2,
-          ),
+      await applyCapability(inferenceEnv, [
+        EnvCapability.define("test/my-function", {
+          symbols: (symbol, z) => ({
+            "my function": symbol.rosetta`my function: doubles its argument`(
+              { input: [z.number], output: [z.number] },
+              (x) => x * 2,
+            ),
+          }),
         }),
-      })
-        .lower({})
-        .apply(inferenceEnv, undefined as never);
+      ]);
 
       const result = await execOne(`(|my function| 21)`);
       expect(schemeToJs(result, {})).toBe(42);

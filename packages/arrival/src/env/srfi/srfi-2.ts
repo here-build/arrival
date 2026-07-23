@@ -15,9 +15,21 @@
 // binds identically in the sandboxed env and the main env — the sandboxed
 // reader/matcher's inability to parse R7RS's own `(define-syntax …)` special
 // form doesn't apply here.
+//
+// `deps: [equality]` (Stage C Cut 4, docs/plans/stage-c-corpse-deletion.md): `and-let*`'s
+// transformer body calls `null?`/`pair?` — NATIVE_PACKS names with no bake-time allowlist entry
+// (unlike `car`/`cdr`/`cadr`, which the resolver-synth cxr allowlist covers for free) — so a
+// `buildVocabulary` closure that doesn't include `equality` bakes this macro into a closure that
+// fails at expansion time with an unbound-variable error. Harmless in every REAL run
+// (production always folds `BASE_ROSTER`, which includes `equality`), but a real gap for any
+// STANDALONE build of this one pack (found via `srfi-palette.test.ts`'s per-pack
+// `buildVocabulary([cap], ...)` fixture — see `srfi-26.ts`'s sibling correction for the full
+// mechanism explanation).
 import { EnvCapability } from "../../common/capability.js";
+import equality from "../r7rs/equality.js";
 
 export default EnvCapability.define("scheme/srfi-2", {
+  deps: [equality],
   symbols: (symbol) => ({
     "and-let*":
       symbol.defineSyntax`and-let*: sequential AND with binding (SRFI-2). Claw (var expr) binds+tests var; claw (expr) is a bare guard; a bare symbol tests itself. Any #f short-circuits the whole form to #f; otherwise the value is the body (or #t when there is no body).`(

@@ -22,7 +22,7 @@ import * as z from "../../common/scheme-zod.js";
 import { symbol, type CacheClass, type NativeSymbolDef, type RosettaSymbolDef, type SequenceSymbolDef } from "../../common/symbol.js";
 import { EnvCapability } from "../../common/capability.js";
 import { CacheClassShapeError, ProvenanceRoleShapeError } from "../../errors.js";
-import { freshEnv } from "../../__tests__/_fresh-env.js";
+import { applyCapability, freshEnv } from "../../__tests__/_fresh-env.js";
 import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 
 /** Test-only cast: pull a minted value's `.contract` (typed `unknown` on the class — see
@@ -182,15 +182,15 @@ describe("stamping — the resolved class rides the provenanceRole rails onto th
   let env: ResolvingAmbient;
   beforeAll(async () => {
     env = await freshEnv();
-    await EnvCapability.define("test/cache-class-stamp", {
-      symbols: (symbol, z) => ({
-        "cc/view": symbol.rosetta`cc/view: `({ input: [z.string], output: [z.string], cacheClass: "view" }, (s) => s),
-        "cc/pure": symbol.rosetta`cc/pure: `({ input: [z.string], output: [z.string], cacheClass: "pure" }, (s) => s),
-        "cc/plain": symbol.rosetta`cc/plain: `({ input: [z.string], output: [z.string] }, (s) => s),
+    await applyCapability(env, [
+      EnvCapability.define("test/cache-class-stamp", {
+        symbols: (symbol, z) => ({
+          "cc/view": symbol.rosetta`cc/view: `({ input: [z.string], output: [z.string], cacheClass: "view" }, (s) => s),
+          "cc/pure": symbol.rosetta`cc/pure: `({ input: [z.string], output: [z.string], cacheClass: "pure" }, (s) => s),
+          "cc/plain": symbol.rosetta`cc/plain: `({ input: [z.string], output: [z.string] }, (s) => s),
+        }),
       }),
-    })
-      .lower({})
-      .apply(env, undefined as never);
+    ]);
   });
 
   it("`cacheClass` is readable off the bound callable via env.get — data on the value, never a duck-read off the def", () => {

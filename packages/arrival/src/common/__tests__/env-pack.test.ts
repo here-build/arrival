@@ -1,9 +1,19 @@
-// env-pack.test.ts — P0: the pure assembly core (closure/cycle/dedup/C3/apply).
-// Design + test matrix: the env-pack capability-DAG design §11 (2026-06-13).
+// env-pack.test.ts — P0: the pure assembly core (closure/cycle/dedup/C3/apply), now exercised
+// exclusively through `createRuntimeAssembler` — the ONE assembler `common/kernel.ts` still
+// hosts. Design + test matrix: the env-pack capability-DAG design §11 (2026-06-13).
+//
+// STAGE C CUT 4 (docs/plans/stage-c-corpse-deletion.md) retired `assembleEnv` (the BOOTSTRAP
+// assembler, folding an `EnvPack` DAG onto a fresh base) — bootstrap assembly is
+// `env/vocabulary.ts`'s `buildVocabulary` now. `createRuntimeAssembler` SURVIVES (it applies
+// host-registered `EnvPack`s onto an ALREADY-LIVE env, backing `(require/extension :name)` — a
+// genuinely different, still-real operation). Every law below shares the SAME underlying core
+// (`linearize`/`dag-linearize.ts`'s C3 walk, `configEqual`, `withTimeout`) `assembleEnv` used to
+// call too — re-authored here as one-or-more `.require()` calls on a single assembler instance
+// instead of one `assembleEnv(base, roots)` call, with byte-identical assertions.
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { assembleEnv, createRuntimeAssembler, type EnvPack } from "../kernel.js";
+import { createRuntimeAssembler, type EnvPack } from "../kernel.js";
 import {
   AssembleCycleError,
   AssembleConfigConflictError,
@@ -36,38 +46,42 @@ afterEach(() => {
   delete process.env.ASSEMBLE_PACK_TIMEOUT_MS;
 });
 
-describe("env-pack assembly core (P0)", () => {
-  // INVARIANT: a linear dep chain a→b→c orders C3 highest-precedence-first, applies deps-first,
-  // each pack exactly once.
-  it("linear chain a→b→c: order highest-first; apply deps-first; each once", async () => {
+describe("env-pack assembly core (P0), over createRuntimeAssembler", () => {
+  // INVARIANT: a linear dep chain a→b→c applies deps-first, each pack exactly once.
+  it("linear chain a→b→c: applies deps-first; each once", async () => {
     const c = pack("c");
     const b = pack("b", [c]);
     const a = pack("a", [b]);
-    const r = await assembleEnv(stub(), [a]);
-    expect(r.order).toEqual(["a", "b", "c"]); // C3: highest precedence first
-    expect(r.env.appliedOrder).toEqual(["c", "b", "a"]); // applied least-precedence first
+    const env = stub();
+    await createRuntimeAssembler(env).require(a);
+    expect(env.appliedOrder).toEqual(["c", "b", "a"]); // applied least-precedence first
   });
 
   // INVARIANT: a diamond dep graph linearizes via classic C3 and applies the shared root exactly
   // once.
-  it("diamond d→{b,c}, b→a, c→a: C3 == [d,b,c,a]; a applied once", async () => {
+  it("diamond d→{b,c}, b→a, c→a: C3 apply order == [a,c,b,d]; a applied once", async () => {
     const a = pack("a");
     const b = pack("b", [a]);
     const c = pack("c", [a]);
     const d = pack("d", [b, c]);
-    const r = await assembleEnv(stub(), [d]);
-    expect(r.order).toEqual(["d", "b", "c", "a"]); // classic C3 diamond
-    expect(r.env.appliedOrder.filter((n) => n === "a")).toHaveLength(1);
-    expect(r.env.appliedOrder).toEqual(["a", "c", "b", "d"]);
+    const env = stub();
+    await createRuntimeAssembler(env).require(d);
+    expect(env.appliedOrder.filter((n) => n === "a")).toHaveLength(1);
+    expect(env.appliedOrder).toEqual(["a", "c", "b", "d"]);
   });
 
-  // INVARIANT: a pack reachable via 3 distinct paths is applied exactly once (dedup).
-  it("dedup via 3 paths to one pack: applied exactly once", async () => {
+  // INVARIANT: a pack reachable via 3 distinct require() calls is applied exactly once (dedup) —
+  // the assembler's single-flight `applied` map persists across calls on the SAME instance.
+  it("dedup via 3 require() calls to one pack: applied exactly once", async () => {
     const shared = pack("shared");
     const x = pack("x", [shared]);
     const y = pack("y", [shared]);
-    const r = await assembleEnv(stub(), [x, y, shared]); // shared reached 3 ways
-    expect(r.env.appliedOrder.filter((n) => n === "shared")).toHaveLength(1);
+    const env = stub();
+    const ra = createRuntimeAssembler(env);
+    await ra.require(x);
+    await ra.require(y);
+    await ra.require(shared); // reached a 3rd way — already applied, single-flight no-op
+    expect(env.appliedOrder.filter((n) => n === "shared")).toHaveLength(1);
   });
 
   // INVARIANT: a cycle in deps throws AssembleCycleError with the path.
@@ -75,7 +89,7 @@ describe("env-pack assembly core (P0)", () => {
     const a: EnvPack<Stub> = { name: "a", apply: () => {} };
     const b: EnvPack<Stub> = { name: "b", deps: [a], apply: () => {} };
     (a as { deps?: EnvPack<Stub>[] }).deps = [b]; // close the cycle
-    await expect(assembleEnv(stub(), [a])).rejects.toBeInstanceOf(AssembleCycleError);
+    await expect(createRuntimeAssembler(stub()).require(a)).rejects.toBeInstanceOf(AssembleCycleError);
   });
 
   // INVARIANT: two packs sharing a name with divergent config throw AssembleConfigConflictError.
@@ -85,7 +99,7 @@ describe("env-pack assembly core (P0)", () => {
     const mcp1 = pack("mcp", [], { config: fnA });
     const mcp2 = pack("mcp", [], { config: fnB });
     const root = pack("root", [mcp1, mcp2]);
-    await expect(assembleEnv(stub(), [root])).rejects.toBeInstanceOf(AssembleConfigConflictError);
+    await expect(createRuntimeAssembler(stub()).require(root)).rejects.toBeInstanceOf(AssembleConfigConflictError);
   });
 
   // INVARIANT: two packs sharing a name with equal config dedup silently (no conflict).
@@ -94,13 +108,14 @@ describe("env-pack assembly core (P0)", () => {
     const mcp1 = pack("mcp", [], { config: shared });
     const mcp2 = pack("mcp", [], { config: shared });
     const root = pack("root", [mcp1, mcp2]);
-    const r = await assembleEnv(stub(), [root]);
-    expect(r.env.appliedOrder.filter((n) => n === "mcp")).toHaveLength(1);
+    const env = stub();
+    await createRuntimeAssembler(env).require(root);
+    expect(env.appliedOrder.filter((n) => n === "mcp")).toHaveLength(1);
   });
 
-  // INVARIANT: an async pack apply resolves before assembleEnv returns, its bindings visible
+  // INVARIANT: an async pack apply resolves before require() returns, its bindings visible
   // after.
-  it("async apply (await import-shaped): env has the symbol after assemble resolves", async () => {
+  it("async apply (await import-shaped): env has the symbol after require() resolves", async () => {
     const slow: EnvPack<Stub> = {
       name: "slow",
       apply: async (env) => {
@@ -108,8 +123,9 @@ describe("env-pack assembly core (P0)", () => {
         env.syms.set("slow/fn", 42);
       },
     };
-    const r = await assembleEnv(stub(), [slow]);
-    expect(r.env.syms.get("slow/fn")).toBe(42);
+    const env = stub();
+    await createRuntimeAssembler(env).require(slow);
+    expect(env.syms.get("slow/fn")).toBe(42);
   });
 
   // INVARIANT: onDispose callbacks run in LIFO order (reverse of apply order).
@@ -127,15 +143,22 @@ describe("env-pack assembly core (P0)", () => {
     const c = mk("c");
     const b = mk("b", [c]);
     const a = mk("a", [b]);
-    const r = await assembleEnv(stub(), [a]);
-    await r.dispose();
+    const ra = createRuntimeAssembler(stub());
+    await ra.require(a);
+    await ra.dispose();
     // applied c,b,a → disposers pushed c,b,a → LIFO runs a,b,c
     expect(log).toEqual(["a", "b", "c"]);
   });
 
-  // INVARIANT: a throwing pack apply rolls back — prior packs' disposers run and the whole
-  // assembly rejects with AssemblePackError.
-  it("partial-assembly rollback: a throwing apply runs prior disposers and rejects", async () => {
+  // INVARIANT (createRuntimeAssembler-specific — see this file's own header): a throwing pack
+  // apply does NOT roll back prior successes — a live env can't cleanly "undo" a dep another
+  // caller may already be relying on. The whole require() still rejects with AssemblePackError;
+  // the prior pack's disposer runs only when `.dispose()` is explicitly called, same as any
+  // other successfully-applied pack. (The retired BOOTSTRAP `assembleEnv` DID roll back
+  // immediately on any apply failure — "no half-built env escapes" — but that law has no
+  // live-env equivalent; `buildVocabulary`, its successor, has no apply/dispose phase at all —
+  // it's a pure map-building walk with nothing to roll back.)
+  it("a throwing apply rejects with AssemblePackError; the prior pack's success is NOT rolled back", async () => {
     const disposed: string[] = [];
     const ok: EnvPack<Stub> = {
       name: "ok",
@@ -152,8 +175,12 @@ describe("env-pack assembly core (P0)", () => {
         throw new Error("kaboom");
       },
     };
-    await expect(assembleEnv(stub(), [boom])).rejects.toBeInstanceOf(AssemblePackError);
-    expect(disposed).toEqual(["ok"]); // ok applied before boom, so its disposer ran on rollback
+    const ra = createRuntimeAssembler(stub());
+    await expect(ra.require(boom)).rejects.toBeInstanceOf(AssemblePackError);
+    expect(disposed).toEqual([]); // not disposed automatically on failure
+    await ra.dispose();
+    expect(disposed).toEqual(["ok"]); // ok's apply already ran (registering onDispose) and is
+    // NOT undone by boom's failure — only torn down when the assembler itself disposes
   });
 
   // INVARIANT: an apply that never resolves trips AssemblePackTimeoutError under
@@ -161,7 +188,7 @@ describe("env-pack assembly core (P0)", () => {
   it("apply timeout: a never-resolving apply trips AssemblePackTimeoutError", async () => {
     process.env.ASSEMBLE_PACK_TIMEOUT_MS = "40";
     const wedged: EnvPack<Stub> = { name: "wedged", apply: () => new Promise(() => {}) };
-    await expect(assembleEnv(stub(), [wedged])).rejects.toBeInstanceOf(AssemblePackTimeoutError);
+    await expect(createRuntimeAssembler(stub()).require(wedged)).rejects.toBeInstanceOf(AssemblePackTimeoutError);
   });
 
   it("a pack listing the same dep twice dedups (no spurious AssembleLinearizationError)", async () => {
@@ -175,23 +202,14 @@ describe("env-pack assembly core (P0)", () => {
         env.appliedOrder.push("b");
       },
     };
-    const r = await assembleEnv(stub(), [dupDep]);
-    expect(r.order).toEqual(["b", "a"]);
-    expect(r.env.appliedOrder.filter((n) => n === "a")).toHaveLength(1);
+    const env = stub();
+    await createRuntimeAssembler(env).require(dupDep);
+    expect(env.appliedOrder).toEqual(["a", "b"]);
+    expect(env.appliedOrder.filter((n) => n === "a")).toHaveLength(1);
   });
 
-  // ── createRuntimeAssembler (P4: the `(require/extension)` live-apply path) ──
-  describe("createRuntimeAssembler", () => {
-    // INVARIANT: require() applies a pack onto a live env, deps-first.
-    it("applies a pack onto the live env, deps-first", async () => {
-      const env = stub();
-      const a = pack("a");
-      const b = pack("b", [a]);
-      const ra = createRuntimeAssembler(env);
-      await ra.require(b);
-      expect(env.appliedOrder).toEqual(["a", "b"]);
-    });
-
+  // ── createRuntimeAssembler-specific laws (P4: the `(require/extension)` live-apply path) ──
+  describe("createRuntimeAssembler — live-env-specific laws", () => {
     // INVARIANT: a second require() of the same pack is a no-op (applies once, idempotent).
     it("idempotent: a second require is a no-op (applies once)", async () => {
       const env = stub();
@@ -258,10 +276,11 @@ describe("env-pack assembly core (P0)", () => {
   // ── C3 SPEC-PARITY (G9): our linearization == Python's C3 on canonical cases ──
   describe("C3 spec-parity vs Python MRO", () => {
     // INVARIANT: the classic K1/K2/K3/Z diamond hierarchy linearizes identically to Python's
-    // documented C3 MRO.
+    // documented C3 MRO. Apply is least-precedence-first (deps first), the REVERSE of the C3
+    // order itself — so the expected apply sequence here is `order.toReversed()`.
     it("the classic K1/K2/K3/Z hierarchy matches Python's documented MRO", async () => {
       // From the C3 paper / Python docs. Python MRO of Z (dropping object):
-      //   Z, K1, K2, K3, D, A, B, C, E
+      //   Z, K1, K2, K3, D, A, B, C, E — reversed = apply order least-precedence-first.
       const A = pack("A"),
         B = pack("B"),
         C = pack("C"),
@@ -271,8 +290,9 @@ describe("env-pack assembly core (P0)", () => {
       const K2 = pack("K2", [D, B, E]);
       const K3 = pack("K3", [D, A]);
       const Z = pack("Z", [K1, K2, K3]);
-      const r = await assembleEnv(stub(), [Z]);
-      expect(r.order).toEqual(["Z", "K1", "K2", "K3", "D", "A", "B", "C", "E"]);
+      const env = stub();
+      await createRuntimeAssembler(env).require(Z);
+      expect(env.appliedOrder).toEqual(["E", "C", "B", "A", "D", "K3", "K2", "K1", "Z"]);
     });
 
     // INVARIANT: an inconsistent hierarchy Python's C3 rejects is also rejected here, via
@@ -284,7 +304,7 @@ describe("env-pack assembly core (P0)", () => {
       const a = pack("a", [x, y]);
       const b = pack("b", [y, x]);
       const c = pack("c", [a, b]);
-      await expect(assembleEnv(stub(), [c])).rejects.toBeInstanceOf(AssembleLinearizationError);
+      await expect(createRuntimeAssembler(stub()).require(c)).rejects.toBeInstanceOf(AssembleLinearizationError);
     });
   });
 });

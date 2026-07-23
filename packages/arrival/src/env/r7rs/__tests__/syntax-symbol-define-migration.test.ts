@@ -63,10 +63,14 @@
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../AmbientRuntime.js";
 import syntaxPack from "../syntax.js";
-import { execOverFrame as exec } from "../../../eval/generator-exec.js";
+import { execOverFrame as exec, execInFrame } from "../../../eval/generator-exec.js";
 import { StaticValidationError } from "../../../static-validation/validate-program.js";
 import { Macro } from "../../../eval/Macro.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
+import { buildVocabulary } from "../../vocabulary.js";
+import type { ResolvingAmbient } from "../../AmbientRuntime.js";
+
+const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
 import type { AEntity, DefineSyntaxSymbolDef } from "../../../common/symbol.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
@@ -121,9 +125,9 @@ describe("ROW 1 — structural: prelude is gone, all three macros bake as contra
   });
 });
 
-describe("ROW 2 — bake / FV law: lower() succeeds, all three macros bind as Macro values with the stamped attribute", () => {
-  it("a bare lower() (no deps — each form aliases a native special form, not another capability's export) does not throw", () => {
-    expect(() => syntaxPack.lower({})).not.toThrow();
+describe("ROW 2 — bake / FV law: the vocabulary builds, all three macros bind as Macro values with the stamped attribute", () => {
+  it("a bare vocabulary build (no deps — each form aliases a native special form, not another capability's export) does not throw", async () => {
+    await expect(buildVocabulary([syntaxPack], undefined, evalScheme)).resolves.not.toThrow();
   });
 
   it("bound values are Macro instances carrying macroAttribute: binder (the W3 read-back channel, §3.4)", async () => {

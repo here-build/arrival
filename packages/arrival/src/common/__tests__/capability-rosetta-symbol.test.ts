@@ -16,6 +16,7 @@ import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX, RunContext } from "../../run/RunContext.js";
 
 import { EnvCapability } from "../capability.js";
+import { applyCapability } from "../../__tests__/_fresh-env.js";
 import { symbol, makeCallCtx, type CallCtx } from "../symbol.js";
 import * as z from "../scheme-zod.js";
 import { ResolvingAmbient, mintResolvingFrame } from "../../env/AmbientRuntime.js";
@@ -64,7 +65,7 @@ async function wireRosetta(def: ARosettaProcedure): Promise<ARosettaProcedure> {
     symbols: (symbol) => ({ [name]: def, verb: symbol.alias`${name}` }),
   });
   const { env, verbs } = recordingEnv();
-  await cap.lower({}).apply(env, undefined as never);
+  await applyCapability(env, [cap]);
   expect(verbs.verb).toBeInstanceOf(ARosettaProcedure); // the binder-cut bind shape itself
   return verbs.verb;
 }
@@ -85,7 +86,7 @@ function invoke(
   );
 }
 
-describe("EnvCapability.lower() — the rosetta SymbolDef arm", () => {
+describe("the rosetta SymbolDef arm — bound via the vocabulary build", () => {
   // INVARIANT: lower().apply() decodes scheme args, runs impl, and encodes the result back to scheme
   // through the bound verb.
   it("decodes scheme→JS, runs impl, encodes JS→scheme through the bound verb", async () => {

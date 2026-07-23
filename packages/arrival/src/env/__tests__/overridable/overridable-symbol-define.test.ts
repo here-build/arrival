@@ -28,12 +28,11 @@
 //     firewall covers the formal, not the whole call — today's honest, whole-call-firewalled
 //     interim per §3.4's DEFERRED per-position walker note).
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../AmbientRuntime.js";
 
 import { exec, execState, LexicalScope, type ExecOptions } from "../../../index.js";
 import { execInFrame } from "../../../eval/generator-exec.js";
 import { AString } from "../../../values/primitives/AString.js";
-import { nativeOnlyRoot } from "../../../__tests__/_fresh-env.js";
+import { buildVocabulary } from "../../vocabulary.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
 import { overridableCapability } from "../../overridable/overridable.js";
 import type { AEntity, DefineSyntaxSymbolDef } from "../../../common/symbol.js";
@@ -79,17 +78,15 @@ describe("arrival/overridable — structural: no prelude field, define-syntax ki
 });
 
 describe("arrival/overridable — the §2.1 bake FV law is out of scope for defineSyntax (regression pin)", () => {
-  it("lowers standalone (existing deps unchanged), never throws a bake FV/role door", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "overridable-standalone");
+  it("bakes standalone (existing deps unchanged), never throws a bake FV/role door", async () => {
     await expect(
-      overridableCapability.lower({ evalScheme, config: { params: {} } }).apply(env, undefined as never),
+      buildVocabulary([overridableCapability], { params: {} }, evalScheme),
     ).resolves.not.toThrow();
   });
 
   it("never throws DefineLocalityError/DefineForwardReferenceError/ProvenanceRoleShapeError", async () => {
-    const env = mintFrame(await nativeOnlyRoot(), "overridable-fv-pin");
     try {
-      await overridableCapability.lower({ evalScheme, config: { params: {} } }).apply(env, undefined as never);
+      await buildVocabulary([overridableCapability], { params: {} }, evalScheme);
     } catch (error) {
       expect(error).not.toBeInstanceOf(DefineLocalityError);
       expect(error).not.toBeInstanceOf(DefineForwardReferenceError);

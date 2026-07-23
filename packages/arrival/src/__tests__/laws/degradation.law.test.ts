@@ -3,44 +3,47 @@
  * symbol-define-static-program-validation.md §3.7). The introspectable
  * `DoorProcedure` + `DoorCause` shape (§3.3) stamps `needs: []` everywhere;
  * this law suite pins the MECHANISM that actually mints non-empty `needs` — the
- * `degradation:` mode knob on `EnvCapability.lower()`, `Activation.degradation`
- * (common/degradation.ts), and `AssembledEnv.degraded` (common/kernel.ts).
+ * `Contract.requiresConfig` auto-door, `Activation.degradation` (common/degradation.ts),
+ * and `Vocabulary.degraded` (env/vocabulary.ts).
+ *
+ * STAGE C CUT 4 (docs/plans/stage-c-corpse-deletion.md) retired `lower()`/`assembleEnv`
+ * (and with them, the `degradation: "doors" | "forbid"` KNOB this suite used to pass
+ * per-call): `env/vocabulary.ts`'s `processCapability` hardcodes the mode-independent
+ * `"forbid"` posture unconditionally now. This is not a loss of coverage — D2 (the auto-door
+ * ruling this file already documented) says the `requiresConfig` auto-door mints REGARDLESS
+ * of mode; the "doors" rows below were always pinning "same outcome as forbid," so with no
+ * mode knob left to vary, those rows collapse into the single mode-independent assertion they
+ * were already proving. `DegradationInfo.mode`/`.active` stay informational fields (still
+ * "forbid"/inactive under the vocabulary path); nothing reads them to gate behavior.
  *
  * LAW 1 ("forbid" default preserved): a genuinely REQUIRED config key (no `.optional()`/
- *   `.default()`) absent from the supplied config throws at `lower()` REGARDLESS of
- *   `degradation` mode — §3.7's "required config stays fail-closed" row is unconditional,
- *   not mode-gated. Present-but-INVALID config throws the same way (LAW 4).
+ *   `.default()`) absent from the supplied config throws (now: rejects — `buildVocabulary` is
+ *   async) at vocabulary-build time — §3.7's "required config stays fail-closed" row.
  *
  *   Deviation from the ticket's literal fixture, recorded honestly: `arrival/infer`'s own
  *   `configuration: { infer: z.custom<InferFn>() }` was named as "the non-optional key"
  *   fixture, but verified against the installed zod (4.3.6): `z.custom()` with NO predicate
  *   answers `.isOptional()` `true` and `schema.parse({})` SUCCEEDS — infer's config is a
  *   known no-op validator (design doc §3.7's required-config note, explicitly out of this
- *   suite's scope), so it does not actually throw today, mode or no mode. Asserting a throw against
- *   it would pin a falsehood. This suite instead (a) proves a REAL required key throws, and
- *   (b) proves `missingOptionalKeys` correctly refuses to classify infer's shape as
- *   "optional" — the structural check (`instanceof ZodOptional | ZodDefault`) that keeps
- *   this module from silently degrading a key the author never marked `.optional()`.
+ *   suite's scope), so it does not actually throw today. This suite instead (a) proves a REAL
+ *   required key throws, and (b) proves `missingOptionalKeys` correctly refuses to classify
+ *   infer's shape as "optional" — the structural check (`instanceof ZodOptional | ZodDefault`)
+ *   that keeps this module from silently degrading a key the author never marked `.optional()`.
  *
  * LAW 2 (an absent optional enabling key lowers to a cause-carrying door): a verb declaring
  *   the key in its `Contract.requiresConfig` binds a `DoorProcedure` whose firing message
- *   teaches "provide X to enable it" — never a silent withhold. MODE-INDEPENDENT (D2): the
- *   auto-door mints under `"forbid"` too — the Stage-6 cleanup retired the builder-form
- *   `symbols` arm, and with it the mode-gated manual `degradation.door(...)` posture this
- *   law used to exercise (the fixture now declares `requiresConfig: ["fs"]` instead).
+ *   teaches "provide X to enable it" — never a silent withhold.
  *
- * LAW 3 (degraded list surfaced): `AssembledEnv.degraded` enumerates every capability that
- *   lowered degraded (capability name + the missing `needs`) — under EITHER mode, matching
- *   the auto-door's own mode-independence.
+ * LAW 3 (degraded list surfaced): `Vocabulary.degraded` enumerates every capability that
+ *   lowered degraded (capability name + the missing `needs`).
  *
- * LAW 4 (invalid config still throws in BOTH modes): present-but-wrong-shaped config is a
+ * LAW 4 (invalid config still throws/rejects): present-but-wrong-shaped config is a
  *   `schema.parse` throw unconditionally — degradation only ever narrows ABSENCE.
  *
  * LAW 5 (doors are typo-suggestible + carry the causal chain): a degradation-minted door is
  *   an ordinary bound value — present in `env.allBoundNames()` (the exact iterable
  *   `suggestFromVocabulary`'s callers feed it, per unbound-variable.ts's own doc), so it
- *   participates in typo suggestion for free (W0's own finding, now true of MINTED doors
- *   too, not just authored `notImplemented` ones). Firing it reconstructs the full causal
+ *   participates in typo suggestion for free. Firing it reconstructs the full causal
  *   chain: reference → door (`.door`) → owner (`.cause.owner`) → missing key (`.cause.needs`).
  */
 import { describe, expect, it } from "vitest";
@@ -52,14 +55,15 @@ import { z } from "zod";
 import * as sz from "../../common/scheme-zod.js";
 
 import { EnvCapability } from "../../common/capability.js";
-import { assembleEnv } from "../../common/kernel.js";
+import { buildVocabulary } from "../../env/vocabulary.js";
 import { missingOptionalKeys } from "../../common/degradation.js";
 import { DoorProcedure } from "../../values/primitives/ACallable.js";
 import { PurityError } from "../../errors.js";
 import { nil } from "../../index.js";
-// In-package test: internal-module access (the barrel export retired — privatization V5).
-import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";
-import { ResolvingAmbient, mintFrame, mintResolvingFrame } from "../../env/AmbientRuntime.js";
+import { bindValue, ResolvingAmbient, mintResolvingFrame } from "../../env/AmbientRuntime.js";
+import { execInFrame } from "../../eval/generator-exec.js";
+
+const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
 
 /** A REAL recording env — same shape as door-cause.test.ts's, local here so this law
  *  suite has no cross-file coupling to another test's fixture. (Hermetic-AmbientRuntime
@@ -74,23 +78,27 @@ function recordingEnv(): { env: ResolvingAmbient; bound: { get(name: string): un
   };
 }
 
+/** Bind `cap`'s own `Vocabulary` onto `env` — the replacement for the retired
+ *  `cap.lower({config}).apply(env, undefined as never)` idiom. */
+async function applyOnto(env: ResolvingAmbient, cap: EnvCapability, config?: object): Promise<void> {
+  const vocabulary = await buildVocabulary([cap], config, evalScheme);
+  for (const [name, value] of vocabulary.map) bindValue(env, name, value);
+}
+
 // ============================================================================
-// LAW 1 + LAW 4 — throw paths stay throw paths, unconditionally
+// LAW 1 + LAW 4 — throw paths stay throw (now reject) paths, unconditionally
 // ============================================================================
 
-describe("LAW 1 — required-and-absent config throws regardless of degradation mode", () => {
+describe("LAW 1 — required-and-absent config rejects at vocabulary build", () => {
   const requiredCap = () =>
     EnvCapability.define("test/degradation-required", {
       configuration: { must: z.string() },
       symbols: (symbol) => ({ stub: symbol.notImplemented`stub: unreachable — config validation throws first` }),
     });
 
-  it("throws under the default ('forbid') mode", () => {
-    expect(() => requiredCap().lower({ config: {} })).toThrow();
-  });
-
-  it("throws just the same under 'doors' — required config is NEVER mode-gated", () => {
-    expect(() => requiredCap().lower({ config: {}, degradation: "doors" })).toThrow();
+  it("rejects — a genuinely required key is never mode-gated", async () => {
+    const { env } = recordingEnv();
+    await expect(applyOnto(env, requiredCap(), {})).rejects.toThrow();
   });
 
   it("missingOptionalKeys correctly EXCLUDES a bare z.custom() key (arrival/infer's shape) — structural, not behavioral", () => {
@@ -105,23 +113,20 @@ describe("LAW 1 — required-and-absent config throws regardless of degradation 
   });
 });
 
-describe("LAW 4 — present-but-invalid config throws in BOTH modes (degradation only narrows ABSENCE)", () => {
+describe("LAW 4 — present-but-invalid config rejects (degradation only narrows ABSENCE)", () => {
   // Widened to `EnvCapability<any, any>` (the same declared-type idiom
   // arrival's src/loader/loader-capability.ts uses) so the WRONG-SHAPED config this
   // test deliberately supplies type-checks without a cast — the runtime `schema.parse`
-  // throw is the thing under test, not TS's own config-shape guard.
+  // rejection is the thing under test, not TS's own config-shape guard.
   const invalidCap = (): EnvCapability<any, any> =>
     EnvCapability.define("test/degradation-invalid", {
       configuration: { n: z.number() },
       symbols: (symbol) => ({ stub: symbol.notImplemented`stub: unreachable — config validation throws first` }),
     });
 
-  it("throws under 'forbid'", () => {
-    expect(() => invalidCap().lower({ config: { n: "not-a-number" } })).toThrow();
-  });
-
-  it("throws under 'doors' too", () => {
-    expect(() => invalidCap().lower({ config: { n: "not-a-number" }, degradation: "doors" })).toThrow();
+  it("rejects", async () => {
+    const { env } = recordingEnv();
+    await expect(applyOnto(env, invalidCap(), { n: "not-a-number" })).rejects.toThrow();
   });
 });
 
@@ -132,8 +137,7 @@ describe("LAW 4 — present-but-invalid config throws in BOTH modes (degradation
 /** A small fixture with ONE optional-enabling key, mirroring `arrival/loader`'s `fs` shape
  *  (a real predicate + `.optional()`) closely enough to exercise the mechanism without
  *  depending on the (downstream, cross-package) real loader capability. The verb declares
- *  `requiresConfig: ["fs"]` — the auto-door path, the ONE way an absent key gates a verb now
- *  that the builder-form arm (manual, mode-gated `degradation.door(...)`) is retired. */
+ *  `requiresConfig: ["fs"]` — the auto-door path, the ONE way an absent key gates a verb. */
 function fixtureCapability(name: string): EnvCapability<any, any> {
   return EnvCapability.define(name, {
     configuration: {
@@ -156,20 +160,16 @@ function fixtureCapability(name: string): EnvCapability<any, any> {
   });
 }
 
-describe("LAW 2 — an absent optional-enabling key lowers to a cause-carrying door (mode-independent D2)", () => {
-  it("under the default ('forbid') mode the auto-door binds all the same — requiresConfig is not mode-gated", async () => {
+describe("LAW 2 — an absent optional-enabling key lowers to a cause-carrying door", () => {
+  it("the auto-door binds all the same — requiresConfig is not mode-gated", async () => {
     const { env, bound } = recordingEnv();
-    await fixtureCapability("test/degradation-fixture-forbid")
-      .lower({ config: {} })
-      .apply(env, undefined as never);
+    await applyOnto(env, fixtureCapability("test/degradation-fixture-forbid"), {});
     expect(bound.get("fixture/verb")).toBeInstanceOf(DoorProcedure);
   });
 
-  it("under 'doors', the symbol BINDS as a door whose firing message teaches 'provide fs to enable it'", async () => {
+  it("the symbol BINDS as a door whose firing message teaches 'provide fs to enable it'", async () => {
     const { env, bound } = recordingEnv();
-    await fixtureCapability("test/degradation-fixture-doors")
-      .lower({ config: {}, degradation: "doors" })
-      .apply(env, undefined as never);
+    await applyOnto(env, fixtureCapability("test/degradation-fixture-doors"), {});
     const proc = bound.get("fixture/verb");
     expect(proc).toBeInstanceOf(DoorProcedure);
     let caught: unknown;
@@ -186,45 +186,28 @@ describe("LAW 2 — an absent optional-enabling key lowers to a cause-carrying d
     expect(err.owner).toBe("test/degradation-fixture-doors");
   });
 
-  it("a SATISFIED config binds the real verb, not a door, even under 'doors' mode", async () => {
+  it("a SATISFIED config binds the real verb, not a door", async () => {
     const { env, bound } = recordingEnv();
-    await fixtureCapability("test/degradation-fixture-satisfied")
-      .lower({ config: { fs: { readFile: async () => "" } }, degradation: "doors" })
-      .apply(env, undefined as never);
+    await applyOnto(env, fixtureCapability("test/degradation-fixture-satisfied"), {
+      fs: { readFile: async () => "" },
+    });
     expect(bound.get("fixture/verb")).not.toBeInstanceOf(DoorProcedure);
   });
 });
 
-describe("LAW 3 — AssembledEnv.degraded enumerates every degraded capability", () => {
-  it("enumerates under the default ('forbid') mode too — the auto-door's misses are mode-independent", async () => {
-    const base = mintFrame(sandboxedEnv, "degradation-law-forbid");
-    const assembled = await assembleEnv(base, [
-      fixtureCapability("test/degradation-assembled-forbid").lower({ config: {} }),
-    ]);
-    expect(assembled.degraded).toEqual([
+describe("LAW 3 — Vocabulary.degraded enumerates every degraded capability", () => {
+  it("enumerates the auto-door's misses", async () => {
+    const cap = fixtureCapability("test/degradation-assembled-forbid");
+    const vocabulary = await buildVocabulary([cap], {}, evalScheme);
+    expect(vocabulary.degraded).toEqual([
       { capability: "test/degradation-assembled-forbid", needs: [{ kind: "configuration", key: "fs" }] },
     ]);
   });
 
-  it("carries {capability, needs} for a capability that lowered degraded under 'doors'", async () => {
-    const base = mintFrame(sandboxedEnv, "degradation-law-doors");
-    const assembled = await assembleEnv(base, [
-      fixtureCapability("test/degradation-assembled-doors").lower({ config: {}, degradation: "doors" }),
-    ]);
-    expect(assembled.degraded).toEqual([
-      { capability: "test/degradation-assembled-doors", needs: [{ kind: "configuration", key: "fs" }] },
-    ]);
-  });
-
-  it("stays empty when the config is satisfied, even under 'doors' mode (nothing degraded)", async () => {
-    const base = mintFrame(sandboxedEnv, "degradation-law-satisfied");
-    const assembled = await assembleEnv(base, [
-      fixtureCapability("test/degradation-assembled-satisfied").lower({
-        config: { fs: { readFile: async () => "" } },
-        degradation: "doors",
-      }),
-    ]);
-    expect(assembled.degraded).toEqual([]);
+  it("stays empty when the config is satisfied (nothing degraded)", async () => {
+    const cap = fixtureCapability("test/degradation-assembled-satisfied");
+    const vocabulary = await buildVocabulary([cap], { fs: { readFile: async () => "" } }, evalScheme);
+    expect(vocabulary.degraded).toEqual([]);
   });
 });
 
@@ -235,18 +218,14 @@ describe("LAW 3 — AssembledEnv.degraded enumerates every degraded capability",
 describe("LAW 5 — a degradation-minted door is bound (typo-suggestible) and carries the full causal chain", () => {
   it("appears in allBoundNames() — the exact vocabulary suggestFromVocabulary's callers feed it (unbound-variable.ts)", async () => {
     const { env, bound } = recordingEnv();
-    await fixtureCapability("test/degradation-suggestible")
-      .lower({ config: {}, degradation: "doors" })
-      .apply(env, undefined as never);
+    await applyOnto(env, fixtureCapability("test/degradation-suggestible"), {});
     expect(env.allBoundNames()).toContain("fixture/verb");
     expect(bound.get("fixture/verb")).toBeInstanceOf(DoorProcedure);
   });
 
   it("reference → door → owner → missing key: the whole chain reads off the bound value", async () => {
     const { env, bound } = recordingEnv();
-    await fixtureCapability("test/degradation-causal-chain")
-      .lower({ config: {}, degradation: "doors" })
-      .apply(env, undefined as never);
+    await applyOnto(env, fixtureCapability("test/degradation-causal-chain"), {});
     // "reference": a lookup by name, exactly what a program's free-variable reference resolves to.
     const referenced = env.get("fixture/verb");
     expect(referenced).toBe(bound.get("fixture/verb"));

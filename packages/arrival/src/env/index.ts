@@ -3,8 +3,14 @@
 // on the env subpath alongside the assembly kernel: NOT the root barrel, NOT a new
 // `/advanced` subpath.
 //
-//   • the CAPABILITY-DAG ASSEMBLY KERNEL (common/kernel.ts) — `assembleEnv`, packs,
-//     the runtime assembler, the assembly errors. The subpath's original face.
+//   • the MID-RUN ASSEMBLY KERNEL (common/kernel.ts) — packs, the runtime assembler (backing
+//     `(require/extension :name)`), the assembly errors. STAGE C CUT 4 retired `assembleEnv`/
+//     `AssembledEnv` — the BOOTSTRAP half of the kernel (folding an `EnvPack` DAG onto a fresh
+//     base) — with zero arrival-internal consumers left: bootstrap assembly is
+//     `buildVocabulary`/`assembleRun` now (below), which mints a frozen `Vocabulary` map
+//     instead of binding onto a live env. `createRuntimeAssembler` SURVIVES — it applies
+//     host-registered `EnvPack`s onto an ALREADY-LIVE env, a genuinely different (mid-run)
+//     operation `buildVocabulary` doesn't do.
 //   • the EXEC PHASE PRODUCTS — `parseProgram` → `ParsedProgram` (phase 1) and
 //     `validateAgainstResolution` (the pure phase-2.5 pass over a sealed resolution
 //     chain). STAGE C CUT 3b retired the ambient-phase products
@@ -22,12 +28,10 @@
 // the degradation types from the degradation domain (common/degradation.ts). This is the
 // one place the surface is re-collected; the intermediate modules stay leaf.
 export {
-  assembleEnv,
   createRuntimeAssembler,
   type EnvPack,
   type PackContext,
   type PreludeBindTarget,
-  type AssembledEnv,
   type RuntimeAssembler,
 } from "../common/kernel.js";
 export {

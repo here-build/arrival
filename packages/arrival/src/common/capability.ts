@@ -1,23 +1,21 @@
 // capability — EnvCapability: the ONE shape every palette pack uses. The IMPLEMENTATION of the
 // capability contract:
 //
-//   `export default new EnvCapability(name, { configuration, resources, prelude, symbols, deps })`
+//   `export default EnvCapability.define(name, { configuration, resources, prelude, symbols, deps })`
 //
-// The model — the five-key CLOSED taxonomy, the MODULE-SINGLETON rule, the
-// module-singleton → `EnvPack` → assembled-env lowering chain, and "dependencies point down, only
-// down" — is docs/environments.md §CAPABILITY; this file is the enforcement site.
-//
-// Local to this file: the `symbols` record (and the legacy `this`-reading arms) carry
-// `ThisType<Activation<C,R>>`, so `this.configuration.<k>` is `z.infer`'d and `this.resources.<k>`
-// is the typed `Ref` with ZERO annotations — bound to the per-env activation at wire time, no
-// per-env closure churn. Lowering wires each symbol (membrane-wrapped) + evals the prelude;
-// resources become ref-counted `ResourceCell`s on the activation (`this.resources`).
+// The model — the five-key CLOSED taxonomy and the MODULE-SINGLETON rule — is
+// docs/environments.md §CAPABILITY; this file is the enforcement site. STAGE C CUT 4
+// (docs/plans/stage-c-corpse-deletion.md) retired `lower()`/`LoweredPack` — the
+// per-capability EnvPack-lowering chain — along with it: a capability's `spec` is now consumed
+// directly by `env/vocabulary.ts`'s `buildVocabulary` (the bootstrap bind loop lives there now,
+// byte-equivalent dispatch, reusing this file's exported per-kind helpers below). The raw
+// `new EnvCapability(name, spec)` constructor SURVIVES only as `EnvCapability.define`'s own
+// internal call (via `DefinedEnvCapability`, below) — `EnvCapability.define` is the one
+// sanctioned authoring path; every real pack in this package uses it.
 
 import { z } from "zod";
 
-import type { EnvPack, PackContext, PreludeBindTarget } from "./kernel.js";
-import { type Ref, type Resource, ResourceCell, spinUpAll, windDownAll } from "./resources.js";
-import type { EvalSchemeInto, RosettaSpec, SchemeEnv } from "./scheme-env.js";
+import { type Ref, type Resource, ResourceCell, windDownAll } from "./resources.js";
 import type {
   AEntity,
   BakeRuntimeOpts,
@@ -26,17 +24,10 @@ import type {
   DecodedReturn,
   DefineSymbolDef,
   DefineSyntaxSymbolDef,
-  DoorCause,
-  DoorSymbolDef,
   MacroSymbolDef,
   MaybePromise,
   MetadataRecord,
-  NativeSymbolDef,
   RestSpec,
-  RosettaSymbolDef,
-  SequenceSymbolDef,
-  TaglessGuardSymbolDef,
-  TaglessSymbolDef,
   VectorSpec,
 } from "./symbol.js";
 // The REAL `symbol` namespace + scheme-zod — `EnvCapability.define`'s injected `(symbol, z)`
@@ -46,46 +37,17 @@ import type {
 // callback — no cycle: `./symbols/index.js` and `./scheme-zod.js` sit BELOW this file in the
 // dependency direction already (capability.ts imports `./symbols/_bake.js`/`ACallable.js`,
 // which these modules also reach; neither imports back up to `capability.ts`).
-import invariant from "tiny-invariant";
 import * as symbolFactories from "./symbols/index.js";
 import * as schemeZod from "./scheme-zod.js";
-import { bindCapabilityDefines, computeCapabilityExports } from "./symbols/define-bake.js";
+import { computeCapabilityExports } from "./symbols/define-bake.js";
 import type { AliasSymbolDef } from "./symbols/alias.js";
 import { AKernelKeyword } from "../values/AKernelKeyword.js";
 import { ANativeProcedure, ARosettaProcedure, DoorProcedure } from "../values/primitives/ACallable.js";
-import type { RosettaFunction } from "../membrane/rosetta.js";
-// `bindRosetta`: the internal rosetta wiring (its retirement ledger lives in AmbientRuntime.ts).
-// Two producers only — this legacy `SymbolDeclaration` bind arm and `provenance/replay.ts`'s
-// playback frame; a third would be suspect.
-import { bindRosetta, bindValue, AmbientRuntime, type AmbientValue, isAmbientRuntime } from "../env/AmbientRuntime.js";
-import { associateCapability, CallCtx, type Face } from "./symbols/_bake.js";
+import type { AmbientValue } from "../env/AmbientRuntime.js";
+import { CallCtx, type Face } from "./symbols/_bake.js";
 import type { RunContext } from "../run/RunContext.js";
 import { onRunContextDispose } from "../run/run-lifecycle.js";
-import { AliasTargetError, AmbientShapeError, PreludeArmingError, SymbolKeyMismatchError } from "../errors.js";
-import {
-  buildDegradationInfo,
-  collectDegraded,
-  missingOptionalKeys,
-  type DegradationInfo,
-  type DegradationMode,
-  type DegradedCapability,
-  type DegradedNeed,
-} from "./degradation.js";
-
-/** An `EnvPack` that also carries its resource lifecycle (wind-down = pause; resume
- *  = re-spawn). The kernel uses the EnvPack face; a lifecycle owner calls these. */
-export type LoweredPack = EnvPack<SchemeEnv> & {
-  /** Release every resource (reverse-DAG), keep wiring. Next touch/resume re-spawns. */
-  windDown(): Promise<void>;
-  /** Eagerly re-acquire every resource. */
-  resume(signal?: AbortSignal): Promise<void>;
-  /** The per-env binding context this lower() armed (validated config + resource cells +
-   *  degradation) — EXPOSURE, not construction: the binder adapters already close over it.
-   *  The phase-2 read channel: `assembleEnv`
-   *  folds these into `AssembledEnv.activations`, and describe-time metadata resolution
-   *  (`resolveMetadata`) reads dynamic fields against exactly this object. */
-  readonly activation: Activation<any, any>;
-};
+import { type DegradationInfo, type DegradedCapability, type DegradedNeed } from "./degradation.js";
 
 type ZodMap = Record<string, z.ZodType>;
 type InferCfg<C extends ZodMap> = { [K in keyof C]: z.infer<C[K]> };
@@ -105,53 +67,62 @@ export interface Activation<C extends ZodMap, R extends Record<string, Resource<
 
 type Fn = (...args: any[]) => unknown;
 
-/** A symbol is one of TWO families (collapsing toward ONE — the minted A-VALUE):
+/** A symbol is one of ONE family now (Stage C Cut 4 retired the last authoring alternative):
  *
- *  • Stage A2 (2026-07-22): the symbol.* FACTORIES now mint the runtime A-value directly —
- *    `symbol.native`/`sequence`/`tagless`/`tagless-guard` → `ANativeProcedure`, `rosetta` →
- *    `ARosettaProcedure`, `door`/`notImplemented` → `DoorProcedure`, `keyword` →
- *    `AKernelKeyword`, `value` → the boxed `AmbientValue` itself. Every one of these is
- *    already `instanceof AValue` (or a raw `AmbientValue` leaf for `value`'s bigint/
- *    Promise/binary passthrough cases) — `AmbientValue` alone covers the whole family, so
- *    it's the ONE arm below (dispatched by `instanceof` in apply(), not by a `kind` tag —
- *    see the per-kind cases). `symbol.define`/`symbol.defineSyntax` are the two-phase
- *    carve-out (their scheme body doesn't evaluate until `apply()`'s Pass 2 runs) and
- *    `symbol.macro` hands over an already-built `Macro` — all THREE stay plain, `kind`-
- *    tagged declarative records, dispatched exactly as before.
- *  • the LEGACY rosetta-config form (`{ fn, withContext, type, options }`) — `fn` reads
- *    `this: Activation` (bound at wire time). Load-bearing OUTSIDE arrival:
- *    `McpEnvCapability`'s whole inline-annotation design (MCP `description`/`inputSchema`
- *    spliced onto the same object as `fn`) is built on it, and the here.build discovery
- *    servers author verbs this way. Deleting it needs McpEnvCapability's annotation-lifting
- *    to move to baked-symbol splicing first (the postponed MCP rework) — NOT dead code.
+ *  Stage A2 (2026-07-22): the symbol.* FACTORIES mint the runtime A-value directly —
+ *  `symbol.native`/`sequence`/`tagless`/`tagless-guard` → `ANativeProcedure`, `rosetta` →
+ *  `ARosettaProcedure`, `door`/`notImplemented` → `DoorProcedure`, `keyword` →
+ *  `AKernelKeyword`, `value` → the boxed `AmbientValue` itself. Every one of these is
+ *  already `instanceof AValue` (or a raw `AmbientValue` leaf for `value`'s bigint/
+ *  Promise/binary passthrough cases) — `AmbientValue` alone covers the whole family, so
+ *  it's the ONE arm below (dispatched by `instanceof` in apply(), not by a `kind` tag —
+ *  see the per-kind cases). `symbol.define`/`symbol.defineSyntax` are the two-phase
+ *  carve-out (their scheme body doesn't evaluate until Pass 2 runs) and `symbol.macro` hands
+ *  over an already-built `Macro` — all THREE stay plain, `kind`-tagged declarative records,
+ *  dispatched exactly as before.
+ *
+ *  STAGE C CUT 4 (docs/plans/stage-c-corpse-deletion.md): the LEGACY rosetta-config form
+ *  (`{ fn, withContext, type, options }`, `fn` reading `this: Activation`) is DROPPED from
+ *  this union — `lower()`, its sole BINDER, is retired. It is still load-bearing OUTSIDE
+ *  arrival (`McpEnvCapability`'s whole inline-annotation design is built on it, and the
+ *  here.build discovery servers author verbs this way) — but a TS-authored `symbols` record
+ *  inside THIS package can no longer declare it; `isSymbolSpec`/`VocabularyLegacyCapabilityError`
+ *  (env/vocabulary.ts) keep a RUNTIME refusal check for a capability that reaches the
+ *  vocabulary path with this shape anyway (a stale dist build, an untyped JS author), teaching
+ *  toward the postponed MCP rework rather than dead code.
  *
  *  Named `SymbolDeclaration`, not `SymbolDef`: the wider authoring shape a `symbols` record
  *  entry can literally BE, vs. `symbol.js`'s narrower `AEntity` (now a CONTRACT-data type only
  *  — it rides `.contract`/`.door` on a minted value, no longer a record traveling on its own).
  *
- *  `AliasSymbolDef` (`symbol.alias`) is a FIFTH arm: it never binds directly (see the
+ *  `AliasSymbolDef` (`symbol.alias`) is a FOURTH arm: it never binds directly (see the
  *  apply-loop resolution below) — it only ever stands in for a sibling entry's already-baked
  *  value.
  *
  *  RETIREMENT PIN: `Exclude<AmbientValue, Fn>`, not bare `AmbientValue` — `AmbientValue`'s
  *  own `AProcedure` member (values/types.ts) is STRUCTURALLY a bare callable
  *  (`(this, ...args) => Result | …`), the exact shape the Stage-6 bare-`Fn` authoring arm
- *  retired (a capability declaring `symbols: { foo: someFn }` directly, bypassing both the
- *  symbol.* factories and the surviving `{ fn }` wrapper). `symbol.value`'s factory itself
- *  never MINTS a bare function (see value.ts: `isSchemeValue` passthrough or `fromJS`,
- *  neither of which produces one) — this `Exclude` keeps that true at the TYPE level too,
- *  matching `capability.test-d.ts`'s retirement pin. The runtime fallback below doors
- *  loudly on the (should-be-unreachable) case a mis-authored capability hands one anyway. */
+ *  retired (a capability declaring `symbols: { foo: someFn }` directly, bypassing the
+ *  symbol.* factories). `symbol.value`'s factory itself never MINTS a bare function (see
+ *  value.ts: `isSchemeValue` passthrough or `fromJS`, neither of which produces one) — this
+ *  `Exclude` keeps that true at the TYPE level too, matching `capability.test-d.ts`'s
+ *  retirement pin. The runtime fallback below doors loudly on the (should-be-unreachable)
+ *  case a mis-authored capability hands one anyway. */
 export type SymbolDeclaration =
   | Exclude<AmbientValue, Fn>
   | MacroSymbolDef
   | DefineSymbolDef
   | DefineSyntaxSymbolDef
-  | (Omit<RosettaSpec, "fn"> & { fn: Fn })
   | AliasSymbolDef;
 
-// ── LEGACY-form guard — see `SymbolDeclaration`'s doc for why this one stays ─────────────
-export const isSymbolSpec = (m: SymbolDeclaration): m is Omit<RosettaSpec, "fn"> & { fn: Fn } =>
+// ── LEGACY-form RUNTIME refusal guard (Stage C Cut 4): `{ fn }` is no longer a
+// `SymbolDeclaration` union member (see the doc above) — `env/vocabulary.ts`'s
+// `buildVocabulary` still calls this against a runtime-cast `SymbolDeclaration` record to
+// refuse a legacy-shaped capability with `VocabularyLegacyCapabilityError` instead of
+// silently mis-binding it (a stale-dist or untyped-JS producer can still hand one in, past
+// the type system). Structural, not `SymbolDeclaration`-narrowing anymore — the predicate
+// type below is deliberately wider than the (now `{fn}`-free) parameter type. */
+export const isSymbolSpec = (m: SymbolDeclaration): m is SymbolDeclaration & { fn: Fn } =>
   typeof m === "object" && m !== null && "fn" in m;
 
 /** `symbol.alias`'s marker — see `alias.ts`'s header for the full dissolution-semantics
@@ -232,11 +203,12 @@ export const missingRequiresConfig = (
 export const requiresConfigNeeds = (missing: readonly (string | readonly string[])[]): readonly string[] =>
   missing.flatMap((entry) => (typeof entry === "string" ? [entry] : [...entry]));
 
-/** Auto-door misses surfaced for `AssembledEnv.degraded`: the bind loop below mints
+/** Auto-door misses surfaced for `Vocabulary.degraded`: `env/vocabulary.ts`'s bind loop mints
  *  `requiresConfig` doors as bound `DoorProcedure`s WITHOUT writing a `DoorSymbolDef` back
  *  into `symbolsRec`, so `collectDegraded`'s record scan (built for the builder-form
  *  `degradation.door(...)` path, which does write defs) can't see them — this sibling scan
- *  reads the same misses straight off the baked defs, and `lower()` merges the two views. */
+ *  reads the same misses straight off the baked defs, and that bind loop merges the two
+ *  views via {@link mergeDegraded}. */
 export const collectRequiresConfigDegraded = (
   capabilityName: string,
   symbolsRec: Record<string, SymbolDeclaration>,
@@ -292,39 +264,40 @@ export const requiresConfigReason = (missing: readonly (string | readonly string
 /** A `symbols` record. The BUILDER form (`(activation) => Record<…>`) is RETIRED (Stage-6
  *  cleanup): a config-bearing capability authors through `EnvCapability.define`, whose impls
  *  read `this.configuration`/`this.resources` at dispatch, and config-gates a verb via
- *  `Contract.requiresConfig` (the auto-door) instead of conditional enumeration. The
- *  `ThisType<Activation>` overlay remains for the legacy `{fn}`-record arm
- *  (`McpEnvCapability`'s downstream population — see `SymbolDeclaration`'s doc). */
+ *  `Contract.requiresConfig` (the auto-door) instead of conditional enumeration. STAGE C CUT 4:
+ *  the `ThisType<Activation>` overlay this type used to carry for the legacy `{fn}`-record arm
+ *  is gone too — that arm is no longer part of `SymbolDeclaration` (see its own doc), and no
+ *  surviving arm reads `this` off this record at all. */
 export type SymbolsSpec<C extends ZodMap, R extends Record<string, Resource<unknown>>> = Record<
   string,
   SymbolDeclaration
-> &
-  ThisType<Activation<C, R>>;
+>;
 
 export interface CapabilitySpec<C extends ZodMap, R extends Record<string, Resource<unknown>>> {
-  /** zod schemas for per-env config; values are supplied + validated at `lower()`. */
+  /** zod schemas for per-env config; values are supplied + validated when this capability's
+   *  spec is consumed (`env/vocabulary.ts`'s `buildVocabulary`). */
   configuration?: C;
   /** the ports this capability OWNS — static, or a provider that reads the parsed config.
-   *  Spawned by the activation middleware on first symbol touch (see lower()). */
+   *  Spawned per-RunContext, lazily, on first symbol touch (`["arrival/get-resources"]`,
+   *  below — the RunContext.capabilityResources store's producer callback). */
   resources?: { [K in keyof R]: R[K] | ((cfg: InferCfg<C>) => R[K]) };
   /** scheme bootstrap (`define-macro` + `define`s), eval'd into env on apply. */
   prelude?: string;
   /** DAG edges = capability grants. */
   deps?: readonly EnvCapability[];
-  /** the verbs this capability exposes — baked `symbol.native`/`symbol.rosetta`/… declarations
-   *  (the target form every pack in the arrival packages now uses), or (legacy shape,
-   *  still load-bearing for `McpEnvCapability`'s downstream population — see
-   *  `SymbolDeclaration`'s doc) a `Record<name, RosettaConfig>` whose `fn` reads `this`
-   *  (`this.configuration.*` / `this.resources.*.live`), with `this` typed as `Activation<C,R>`
-   *  (ThisType, inferred). A config-bearing BAKED capability authors through
-   *  `EnvCapability.define` (impls read `this.configuration` at dispatch; the retired
-   *  builder form `(activation) => ({...})` is no longer part of this type). */
+  /** the verbs this capability exposes — baked `symbol.native`/`symbol.rosetta`/… declarations,
+   *  the ONE authoring form every pack in the arrival packages uses (Stage C Cut 4 dropped the
+   *  legacy `{fn}`-record arm from `SymbolDeclaration` — see that type's own doc). A
+   *  config-bearing capability authors through `EnvCapability.define` (impls read
+   *  `this.configuration` at dispatch; the retired builder form `(activation) => ({...})` is
+   *  no longer part of this type). */
   symbols?: SymbolsSpec<C, R>;
 }
 
 /** Every `.spec.prelude` reachable from `caps`, DAG order (a dep's prelude precedes its
- *  dependent's — matching `lower()`'s own `apply()` evaluation order, so a dependent's prelude
- *  may reference names its dep's prelude defined), deduplicated by capability IDENTITY (a
+ *  dependent's — matching `env/vocabulary.ts`'s `buildVocabulary` deps-first bind order, so a
+ *  dependent's prelude may reference names its dep's prelude defined), deduplicated by
+ *  capability IDENTITY (a
  *  diamond-shaped dep graph must not double-emit a shared dep's prelude).
  *
  *  For an EDITOR/type-lens's ambient scheme vocabulary: walk the actually-assembled capability
@@ -347,22 +320,21 @@ export function collectPrelude(caps: readonly EnvCapability[], seen: Set<EnvCapa
 /** Serialize a capability DAG's scheme-bodied `symbol.define`s as `(define <verb> <body>)`
  *  source — the type-lens compile-path counterpart to {@link collectPrelude}'s `prelude:`
  *  strings. A `symbol.define`'s `body` is its RHS EXPRESSION (`(lambda () "string")` for
- *  `s/string`), bound at runtime under its own record key (see `apply()`'s Pass-2 loop).
+ *  `s/string`), bound at runtime under its own record key (see `env/vocabulary.ts`'s
+ *  `processCapability` Pass-2 loop, the successor of this file's retired `lower().apply()`).
  *  Emitting the SAME `(define verb body)` lets a type-lens infer each symbol's type FROM ITS
  *  OWN BODY, so the runtime binding and the editor type derive from one source — no
  *  hand-authored `.d.ts`, no editorial subset (the drift trap {@link collectPrelude} warns of,
  *  same reasoning). Deps FIRST (a dependent body may reference a base define — `s/field/string`
  *  calls `s/field`), deduped by the shared `seen` set exactly like `collectPrelude`.
  *
- *  Builder-function `symbols` (need a live `Activation` to enumerate) are skipped — a
- *  statically-enumerable record is the norm for define-bearing packs, and a type-lens needs no
- *  activation-specific symbols. Only `kind: "define"` entries emit; every other kind
- *  (rosetta/native/door/…) is either a JS impl with no scheme body or a keyword/macro the lens
- *  models elsewhere.
+ *  Only `kind: "define"` entries emit; every other kind (rosetta/native/door/…) is either a
+ *  JS impl with no scheme body or a keyword/macro the lens models elsewhere.
  *
- *  NOT for runtime prelude eval: `apply()` already binds these via `bindCapabilityDefines`;
- *  re-running them as a prelude would double-bind. This output feeds a type-lens `schemePrelude`
- *  (the editor's compiled scheme vocabulary), never the runtime env. */
+ *  NOT for runtime prelude eval: `env/vocabulary.ts`'s bind loop already binds these via
+ *  `bindCapabilityDefines`; re-running them as a prelude would double-bind. This output feeds
+ *  a type-lens `schemePrelude` (the editor's compiled scheme vocabulary), never the runtime
+ *  env. */
 export function collectSymbolDefines(caps: readonly EnvCapability[], seen: Set<EnvCapability> = new Set()): string {
   const parts: string[] = [];
   for (const cap of caps) {
@@ -385,9 +357,11 @@ export function collectSymbolDefines(caps: readonly EnvCapability[], seen: Set<E
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EnvCapability.define — Stage 1c (docs/execution.md §CALLCTX): the FLIPPED authoring API, THE
-// authoring path (the Stage-6 cleanup migrated every site; `new EnvCapability(name, spec)`
-// below remains only for the legacy `{fn}`-record arm — McpEnvCapability's downstream
-// population — and its subclass).
+// authoring path (the Stage-6 cleanup migrated every real pack; `new EnvCapability(name, spec)`
+// below remains for its own internal use by `DefinedEnvCapability`, a raw-ctor
+// per-key-`ResourceCell` authoring style some tests still exercise directly (see
+// `run-scoped-resources.test.ts`), and — outside arrival — McpEnvCapability's `{fn}`-record
+// downstream population, until the postponed MCP rework moves it onto baked-symbol splicing).
 //
 // The RETIRED `symbols` builder-form closed an `activation` BUILDER-ARG (`(activation) =>
 // ({...})`) over each verb's impl; the impl then read config/resources from THAT CLOSURE, never
@@ -405,14 +379,12 @@ export function collectSymbolDefines(caps: readonly EnvCapability[], seen: Set<E
 // Resources: `spec.resources` here is ONE factory over the validated config
 // (`(config) => Resources`), not the OLD per-key `Record<string, Resource<H>>` map
 // (`resources: { shout: shoutResource }`) `new EnvCapability(...)` still uses — a simpler,
-// NOT lifecycle-managed bag (no acquire/wind-down/resume), computed once per `lower()` call.
-// `lower()` ITSELF stays completely untouched (this migration's own bound) — its
-// `cells`/`ResourceCell` production, degradation, and def→value binding are exactly as they
-// are for `new EnvCapability(...)`. A `define()`-authored capability declares NO old-style
-// `spec.resources` (so `lower()` produces empty cells for it) and instead RE-STAMPS
-// `associateActivation` on its own already-bound procs right after `apply()` runs — reading
-// them back through the `SchemeEnv` accessor (`env.get`, the same read-face every OTHER
-// consumer uses), never poking `lower()`'s internals. See `DefinedEnvCapability` below.
+// NOT lifecycle-managed bag (no acquire/wind-down/resume). A `define()`-authored capability
+// declares NO old-style `spec.resources`; instead `DefinedEnvCapability` overrides
+// `["arrival/get-resources"]` (1d, RunContext-keyed) to produce its single arbitrary bag from
+// `resourcesFactory(config)` directly, and flips `producesRunResources`/
+// `nativeReadsRunResources` to `true` so its baked native/rosetta symbols read `this.resources`
+// from the run store. See `DefinedEnvCapability` below.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** The `this` every impl declared through {@link EnvCapability.define}'s injected `symbol`
@@ -571,10 +543,10 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
 
   /** The flipped authoring entry point — see the section immediately above this class for the
    *  full model. Builds the SAME `CapabilitySpec` shape the constructor above consumes (a
-   *  plain literal `symbols` record — `lower()` cannot tell the two paths apart, and never
-   *  changes), so `lower()` itself needs no edits. Returns a {@link DefinedEnvCapability} (a
-   *  thin, internal subclass) so its OWN `resources` factory can re-stamp
-   *  `associateActivation` after `apply()` — see that class's doc. */
+   *  plain literal `symbols` record — `env/vocabulary.ts`'s bind loop cannot tell the two
+   *  authoring paths apart, and never needs to). Returns a {@link DefinedEnvCapability} (a
+   *  thin, internal subclass) so its OWN `["arrival/get-resources"]` override can produce
+   *  this capability's per-run resource bag — see that class's doc. */
   static define<Shape extends ZodMap = Record<string, never>, Resources = Record<string, never>>(
     name: string,
     defSpec: DefineCapabilitySpec<Shape, Resources>,
@@ -593,433 +565,6 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
     );
   }
 
-  /** Lower to a kernel `EnvPack`. `evalScheme` runs the prelude (required iff a prelude
-   *  exists); `config` is validated against the `configuration` schemas.
-   *
-   *  `degradation`: `"forbid"` (the default — host/provisioning posture) or `"doors"`
-   *  (program-scoped callers opt in). Threaded to every dep's own `lower()` call, same as
-   *  `evalScheme`/`config`, so a degraded dep and a degraded root see the SAME mode. The mode
-   *  changes nothing by itself (docs/environments.md §DEGRADATION); see `./degradation.js`. */
-  lower(
-    opts: { evalScheme?: EvalSchemeInto; config?: Partial<InferCfg<C>>; degradation?: DegradationMode } = {},
-  ): LoweredPack {
-    const { spec, name } = this;
-    // The capability itself — captured here because `apply()` below is a METHOD (its `this` is the
-    // returned pack, not the capability). The bind loop's `associateCapability` keys each bound
-    // value to THIS object, which makeCallCtx later calls `["arrival/get-resources"]` on.
-    const ownerCapability = this;
-    // A SEPARATE alias for `apply()`'s door-bind arm: the per-symbol loop below rebinds
-    // `name` to each entry's OWN key (`for (const [name, def] of Object.entries(...))`),
-    // shadowing this capability-level `name` for the rest of that block — reading `name`
-    // from inside the "door" case would stamp the SYMBOL's name as the cause owner, not
-    // the capability's.
-    const capabilityName = name;
-
-    const schema = spec.configuration ? z.object(spec.configuration as ZodMap) : z.object({});
-    const configuration = schema.parse(opts.config ?? {}) as InferCfg<C>;
-
-    // Door-set degradation: computed from the RAW config bag (pre-`schema.parse`, which already ran
-    // above and would have thrown for a present-but-invalid or a genuinely-required-and-absent key —
-    // this scan only ever looks at declared-OPTIONAL keys, so it never masks either of those two
-    // throw paths). Under `"forbid"` (unset) `missingKeys` is purely informational (docs/environments.md
-    // §DEGRADATION).
-    const degradationMode: DegradationMode = opts.degradation ?? "forbid";
-    const missingKeys = missingOptionalKeys(
-      spec.configuration as Record<string, z.ZodTypeAny> | undefined,
-      opts.config as Record<string, unknown> | undefined,
-    );
-    const degradation = buildDegradationInfo(capabilityName, degradationMode, missingKeys);
-
-    // Resource DESCRIPTORS — stateless (config-derived, no acquired handle yet), computed
-    // ONCE regardless of how many RunContexts ever touch this lower()'d pack.
-    const resourceDescriptors = {} as Record<string, Resource<unknown>>;
-    for (const [key, def] of Object.entries(spec.resources ?? {})) {
-      resourceDescriptors[key] = (
-        typeof def === "function" ? (def as (c: InferCfg<C>) => Resource<unknown>)(configuration) : def
-      ) as Resource<unknown>;
-    }
-
-    // LEGACY per-ambient cells (Activation.resources — the `this`-bound bare-fn arm, a
-    // BUILDER-form `symbols`' own closure capture — e.g. `arrival/loader`'s `requireCache`/
-    // `assembler` — and dynamic-metadata resolution, `symbols/metadata.ts`'s `resolveMetadata`,
-    // which reads `Activation.resources` OUTSIDE any RunContext at all). These three consumers
-    // have no RunContext to key against (a `.bind(activation)`-fixed `this`, a closure captured
-    // once at `lower()` time, or a describe-time read with no run in flight), so they keep the
-    // PRE-STAGE-2 ambient-scoped lifetime unchanged — `LoweredPack.windDown()`/`.resume()`
-    // still pause/resume exactly this set. NOT part of Stage 2's per-RunContext migration; see
-    // the file header's "two resource paths" for what DID move.
-    const cells = {} as Record<string, ResourceCell<unknown>>;
-    for (const [key, resource] of Object.entries(resourceDescriptors)) {
-      cells[key] = new ResourceCell(resource);
-    }
-    const activation = { configuration, resources: cells, degradation } as unknown as Activation<C, R>;
-
-    // The builder-form `symbols` arm (`typeof spec.symbols === "function"`) is RETIRED —
-    // the record is the record (a define-form spec carries the eagerly-evaluated literal).
-    const symbolsRec = spec.symbols ?? {};
-    // Door-set degradation's OWN surfacing — degraded capabilities are ENUMERABLE: scan
-    // the computed record for doors this capability minted via `degradation.door(...)`,
-    // MERGED with the requiresConfig auto-door misses (bound as DoorProcedures below without
-    // a record entry — see `collectRequiresConfigDegraded`), folded into the returned pack's
-    // `degraded` field — `assembleEnv` (kernel.ts) aggregates it into `AssembledEnv.degraded`,
-    // uninterpreted.
-    const degraded = mergeDegraded(
-      collectDegraded(capabilityName, symbolsRec),
-      collectRequiresConfigDegraded(capabilityName, symbolsRec, configuration as Record<string, unknown>),
-    );
-
-    // First touch of ANY of this capability's symbols spawns ALL its resources
-    // (single-flight), BEFORE the method body runs — so methods read `this.resources
-    // .x.live` synchronously, never an `await .get()`. The capability dictates the
-    // entity set; the env accessor (this wrapper) makes presence a precondition.
-    // `cellList`/`ensureSpawned` remain the LEGACY (ambient-scoped) gate for the bare-fn arm
-    // below (`gated`) — untouched by Stage 2.
-    const cellList = Object.values(cells);
-    let spawned: Promise<void> | undefined;
-    const ensureSpawned = (): Promise<void> =>
-      (spawned ??= Promise.all(cellList.map((c) => c.get())).then(() => undefined));
-
-    // 1d — per-RunContext resources for the baked kinds (sequence/tagless/tagless-guard/rosetta,
-    // plus define-form native) no longer ride a bind-time `runScoped` gate wrapped into the impl.
-    // A real dispatch's `CallCtx` already carries `this.resources`, fetched at `makeCallCtx` from
-    // the run's own `capabilityResources` store (keyed by THIS capability, produced lazily by
-    // `["arrival/get-resources"]`, single-flighted + collapsed there) — see RunContext.ts. Stage
-    // A2: the impl adapter (`(args, callCtx) => rawRun.apply(callCtx, args)`) now lives INSIDE each
-    // factory (native.ts/rosetta.ts/sequence.ts/tagless.ts/taglessGuard.ts), minted once at bake —
-    // this file no longer builds it.
-    // Whether a NON-native baked verb of this capability reads its `this.resources` from the run
-    // store (its `associateCapability(..., readsResources)`): true iff the capability produces a
-    // per-run bag. `native` verbs are gated separately (`nativeReadsRunResources` — false in the
-    // base form, where a resource-reading native is closure-fed, never `this.resources`).
-    const bakedReadsResources = this.producesRunResources();
-    const nativeReadsResources = this.nativeReadsRunResources();
-
-    return {
-      name,
-      activation,
-      ...(opts.config === undefined ? {} : { config: opts.config }),
-      ...(degraded === undefined ? {} : { degraded: [degraded] }),
-      // Deps inherit the SAME raw `config` object (each validates its own slice via its schema; the
-      // stored `config` field stays reference-equal across a capability's root + dep appearances, so
-      // closure dedup matches by identity instead of tripping AssembleConfigConflictError).
-      ...(spec.deps
-        ? {
-            deps: spec.deps.map((d) =>
-              d.lower({ evalScheme: opts.evalScheme, config: opts.config, degradation: opts.degradation }),
-            ),
-          }
-        : {}),
-      // Lifecycle (pause/resume) over this capability's cells. Wiring is untouched.
-      windDown: async () => {
-        spawned = undefined;
-        await windDownAll(cellList);
-      },
-      resume: async (signal?: AbortSignal) => {
-        spawned = spinUpAll(cellList, signal);
-        await spawned;
-      },
-      async apply(env: SchemeEnv, ctx?: PackContext<SchemeEnv>) {
-        // HERMETIC NARROW (instanceof DOOR, never a cast; docs/environments.md §HERMETIC): with
-        // `SchemeEnv.set` hard-deleted, binding goes through the module-internal `bindValue`
-        // (AmbientRuntime.ts), which writes real AmbientRuntime storage. Packs are applied onto real
-        // envs everywhere in production (env-roots leaves, `LexicalScope.fresh()` roots, `inherit()`
-        // children thereof); a synthetic structural env cannot RECEIVE bindings — assemble onto a
-        // real frame instead.
-        if (!isAmbientRuntime(env)) {
-          throw new AmbientShapeError(
-            `capability "${name}"`,
-            `apply target is not an arrival AmbientRuntime — a capability's bindings ` +
-              `land in real environment storage (the JS-side write surface is retired; HERMETIC-ENVIRONMENT ` +
-              `ruling). Assemble onto \`LexicalScope.fresh().env\`, an env-roots base, or a child of one.`,
-          );
-        }
-        // The env-backed bind face, shaped like the kernel's PreludeBindTarget shim so
-        // `bindTarget` stays ONE type either way. The narrow from the shim's `unknown` is a
-        // boundary cast per this file's applyCallback convention: every value routed through
-        // it below is a constructed AmbientValue (ANativeProcedure/DoorProcedure/Macro/…).
-        const envTarget: PreludeBindTarget = { set: (n, v) => bindValue(env, n, v as AmbientValue) };
-        // preludeOnly routing: a baked native/rosetta def marked `preludeOnly: true` binds onto
-        // `ctx.preludeScope` instead of the runtime env — the assembly-time-only contract is
-        // docs/environments.md §PRELUDE. Same bind form either way (native → raw impl; rosetta → the
-        // gated run wrapper); only the TARGET scope differs. Absent `ctx.preludeScope` (a bare direct
-        // apply outside any assembly), fall back to `env` so the symbol is never silently dropped.
-        const bindTarget = (def: AEntity): PreludeBindTarget =>
-          "preludeOnly" in def && def.preludeOnly ? (ctx?.preludeScope ?? envTarget) : envTarget;
-        // Two-phase binding (docs/environments.md §PRELUDE): symbol.define/symbol.defineSyntax entries
-        // are collected here (in declaration order — JS object-key insertion order) and
-        // evaluated+bound in Pass 2, AFTER every other kind. `ownNames` is the letrec* NAME
-        // VISIBILITY set — see `BindCapabilityDefinesArgs.ownNames` (define-bake.ts) for the full
-        // contract.
-        const defineEntries: [string, DefineSymbolDef | DefineSyntaxSymbolDef][] = [];
-        const ownNames = new Set<string>();
-        for (const [name, rawDef] of Object.entries(symbolsRec)) {
-          // `symbolPrefix` retired (2026-07-22): it had exactly one author across the whole
-          // codebase — a mercury test fixture — never a production capability; the bound
-          // verb is simply the record key now.
-          const verb = name;
-          ownNames.add(verb);
-
-          // symbol.alias dissolution: substitute the TARGET's already-baked def in place of
-          // the marker, then fall through the SAME per-kind dispatch below — the alias binds
-          // byte-identically to its target under its own name (`verb`), never a wrapper.
-          // `symbolsRec` is already fully built (see alias.ts's header) so a sibling lookup
-          // here — regardless of iteration order — is sound; a target absent from THIS
-          // capability's own record, or itself an alias (no chains), is a declaration bug and
-          // doors loudly rather than silently binding nothing.
-          let def: SymbolDeclaration = rawDef;
-          // KEY-NAME MISMATCH gate (SymbolKeyMismatchError, below): deliberately SKIPPED for
-          // an alias-resolved entry — dissolution is a duplicate binding of a SIBLING's
-          // value under a DIFFERENT name BY DESIGN (`symbol.alias`'s whole point), so the
-          // resolved value's own mint-time name legitimately disagrees with `name` (the
-          // alias's OWN record key) here.
-          const viaAlias = isAliasDef(rawDef);
-          if (viaAlias) {
-            const targetDef = symbolsRec[(rawDef as AliasSymbolDef).target];
-            if (targetDef === undefined) {
-              throw new AliasTargetError(capabilityName, name, (rawDef as AliasSymbolDef).target, "missing-target");
-            }
-            if (isAliasDef(targetDef)) {
-              throw new AliasTargetError(capabilityName, name, (rawDef as AliasSymbolDef).target, "chained-alias");
-            }
-            def = targetDef;
-          }
-
-          if (isDeclarativeDef(def)) {
-            if (def.kind === "define" || def.kind === "define-syntax") {
-              defineEntries.push([verb, def]);
-              continue;
-            }
-            // "macro": a non-evaluating MACRO form: bind the raw transformer (Macro/Syntax)
-            // as-is. Not arg-evaluating (native/rosetta) nor evaluator-dispatched (keyword) —
-            // the generic is_macro/is_syntax eval hook expands it. Home of syntax-rules +
-            // preludeOnly assembly macros (`require/register-extension`). Routes through
-            // `bindTarget` so `preludeOnly: true` lands on the assembly overlay.
-            bindTarget(def).set(verb, def.macro);
-            continue;
-          }
-
-          // ── STAGE A2: symbol.* factories mint the A-VALUE directly — dispatch by
-          // `instanceof`, not a `kind` tag (see `SymbolDeclaration`'s doc above). Each
-          // branch's CONTRACT data rides `.contract` (native/rosetta/sequence/tagless/
-          // tagless-guard) or `.door` (door); a KEY-NAME mismatch between the record's own
-          // entry and the value's mint-time identity doors (SymbolKeyMismatchError) instead
-          // of silently drifting — every kind here carries enough self-identity to check it
-          // EXCEPT the final `value`-kind catch-all (a boxed leaf carries no declaration-
-          // site name).
-          //
-          //   ARITY — `arity: { min: 0, max: null }` (minted at bake, in the factory) is
-          //     introspection-only in this cut; the kinds self-check. Tighten from
-          //     `contract.in` when the MCP/type-lens surface consumes it.
-          //
-          //   PROVENANCE / CACHE-CLASS / CALLBACK-ROLES — stamped by the FACTORY at MINT
-          //   time now (native.ts/rosetta.ts/sequence.ts/tagless.ts/taglessGuard.ts), not
-          //   here; this loop only still reads `contract.requiresConfig`/`contract
-          //   .preludeOnly` (config/assembly-scope concerns that genuinely vary PER
-          //   `lower()` call) and performs OWNER ASSOCIATION.
-          //
-          //   OWNER ASSOCIATION is now called on a value that may be a SHARED SINGLETON
-          //   across every `lower()` call of this module-singleton capability (the factory
-          //   mints it ONCE, at `symbols` — record-literal evaluation time) — harmless:
-          //   `associateCapability` is idempotent for a repeat call under the SAME owning
-          //   capability (`run/CallCtx.ts`'s own doc), so re-associating the same value on
-          //   every apply() of the same capability is a no-op past the first.
-          if (def instanceof ANativeProcedure) {
-            // Unifies native/sequence/tagless/tagless-guard — all four mint this SAME
-            // class (D1: kind lives on the contract, not the runtime class);
-            // `contract.kind` tells them apart for the two things that still differ per
-            // assembly: the requiresConfig gate (native only — sequence/tagless/
-            // tagless-guard contracts carry no such field) and which readsResources
-            // answer applies.
-            const contract = def.contract as
-              | NativeSymbolDef
-              | SequenceSymbolDef
-              | TaglessSymbolDef
-              | TaglessGuardSymbolDef;
-            if (!viaAlias && contract.name !== name) throw new SymbolKeyMismatchError(capabilityName, name, contract.name);
-            if (contract.kind === "native") {
-              // STAGE 3 AUTO-DERIVED DOOR (`Contract.requiresConfig`, ./symbols/_bake.js) —
-              // read UNCONDITIONALLY, before the ordinary bind: an absent declared key mints
-              // a cause-carrying DoorProcedure for this verb instead, via the SAME
-              // `DegradationInfo.door` builder a manual builder-form `symbols` calls by hand
-              // (`activation.degradation`, always defined — see its own doc). No mode gate:
-              // fires under `"forbid"` too, closing the pre-Stage-3 gap where this reached
-              // for a bare-required config key and threw a ZodError at `schema.parse` instead.
-              const missingNative = missingRequiresConfig(
-                contract.requiresConfig,
-                activation.configuration as Record<string, unknown>,
-              );
-              if (missingNative !== undefined) {
-                bindTarget(contract).set(
-                  verb,
-                  new DoorProcedure(
-                    activation.degradation.door(
-                      verb,
-                      requiresConfigNeeds(missingNative),
-                      requiresConfigReason(missingNative, contract.doc),
-                    ),
-                  ),
-                );
-                continue;
-              }
-              // OWNER ASSOCIATION (1d, docs/execution.md §CALLCTX): key THIS bound value to its
-              // OWNING CAPABILITY (object identity), so a real dispatch (evaluator.ts, via
-              // makeCallCtx) enriches the `CallCtx` it builds — `configuration` resolves at
-              // dispatch off the RUN now (`runCtx.capabilityConfigurations`), never carried
-              // here. `readsResources` is FALSE for a base/constructor native (the legacy arm —
-              // see `nativeReadsRunResources`'s doc); triggering the run store here would
-              // double-spawn. `EnvCapability.define`'s form flips this via
-              // `nativeReadsRunResources()`.
-              associateCapability(def, ownerCapability, nativeReadsResources);
-              bindTarget(contract).set(verb, def);
-              continue;
-            }
-            // sequence / tagless / tagless-guard: no requiresConfig channel on these
-            // contracts. OWNER ASSOCIATION (1d) — see the `native` arm's comment. A
-            // non-native baked verb reads `this.resources` from the run store iff the
-            // capability produces a bag.
-            associateCapability(def, ownerCapability, bakedReadsResources);
-            bindTarget(contract).set(verb, def);
-            continue;
-          }
-          if (def instanceof ARosettaProcedure) {
-            const contract = def.contract as RosettaSymbolDef;
-            if (!viaAlias && contract.name !== name) throw new SymbolKeyMismatchError(capabilityName, name, contract.name);
-            // STAGE 3 AUTO-DERIVED DOOR — same gate as the `native` arm above; `contract.doc`
-            // is the rosetta verb's own doc string.
-            const missingRosetta = missingRequiresConfig(
-              contract.requiresConfig,
-              activation.configuration as Record<string, unknown>,
-            );
-            if (missingRosetta !== undefined) {
-              bindTarget(contract).set(
-                verb,
-                new DoorProcedure(
-                  activation.degradation.door(
-                    verb,
-                    requiresConfigNeeds(missingRosetta),
-                    requiresConfigReason(missingRosetta, contract.doc),
-                  ),
-                ),
-              );
-              continue;
-            }
-            // OWNER ASSOCIATION (1d) — see the `native` arm's comment. A rosetta reads
-            // `this.resources` from the run store iff the capability produces a bag.
-            associateCapability(def, ownerCapability, bakedReadsResources);
-            bindTarget(contract).set(verb, def);
-            continue;
-          }
-          if (def instanceof DoorProcedure) {
-            if (!viaAlias && def.door.name !== name) throw new SymbolKeyMismatchError(capabilityName, name, def.door.name);
-            // errors-as-doors: an OMITTED verb. `def.door.cause` is stamped HERE, IN PLACE,
-            // the first time this (shared, module-singleton) DoorProcedure is bound — the
-            // factory (`notImplemented.ts`) can't know its own owning capability at mint
-            // time. owner = this capability's OWN `name`, needs = [] (a permanent design
-            // omission, never caused by an absent config/dep — a non-empty `needs` is the
-            // door-set-degradation kind; see `DoorCause`'s doc in _bake.ts for the full
-            // needs-scope rule). Idempotent: a later `lower()` of the SAME capability sees
-            // `cause` already set and skips — a door bound instead via `requiresConfig`'s
-            // auto-door path above mints its OWN fresh DoorProcedure per assembly, so it
-            // never reaches here at all. Firing still throws the same teaching `PurityError`
-            // (DoorProcedure's own doc) — `PurityError.feature`/`.owner` — the
-            // routing/telemetry keys, mirroring core.ts's %purity-door → PurityError.
-            if (def.door.cause === undefined) {
-              (def.door as { cause?: DoorCause }).cause = { owner: capabilityName, needs: [] };
-            }
-            // Routes through `bindTarget`, same as every other kind (a `preludeOnly` door —
-            // none exist yet, but the field is real on `DoorSymbolDef` now — binds into the
-            // assembly's prelude scope, not the runtime env).
-            bindTarget(def.door).set(verb, def);
-            continue;
-          }
-          if (def instanceof AKernelKeyword) {
-            // kernel KEYWORD: bind the first-class marker the evaluator dispatches on.
-            // Resolving a call head to this VALUE → SPECIAL_FORMS[def.name] (the dual of
-            // cxr): the special form is aliasable + lexically shadowable, unlike the
-            // name-matched-before-lookup table it replaces.
-            if (!viaAlias && def.name !== name) throw new SymbolKeyMismatchError(capabilityName, name, def.name);
-            bindValue(env, verb, def);
-            continue;
-          }
-
-          // ── LEGACY {fn}-record arm — still McpEnvCapability's downstream authoring shape
-          // (the retired bare-`Fn` and untagged `{ value }` arms used to land here — see
-          // `SymbolDeclaration`'s doc).
-          if (isSymbolSpec(def)) {
-            const sym = def;
-            const bound = (sym.fn as Fn).bind(activation);
-            // Same activation-spawn middleware as `ensureSpawned` above — first touch gates on it.
-            const gated =
-              cellList.length === 0
-                ? bound
-                : async (...args: unknown[]) => {
-                    await ensureSpawned();
-                    return bound(...args);
-                  };
-            // `bindRosetta` (AmbientRuntime.ts): wrap via createRosettaWrapper, bind, stamp
-            // `rosettaTypesOf` when `.type` is declared and `env` is genuinely an
-            // `AmbientRuntime` (never a test mock).
-            bindRosetta(env, verb, { ...sym, fn: gated } as RosettaFunction);
-            continue;
-          }
-
-          // RETIREMENT DOOR: a bare function reaching here is the Stage-6-retired bare-`Fn`
-          // authoring arm (`symbols: { foo: someFn }`, bypassing both the symbol.* factories
-          // and the surviving `{ fn }` wrapper) — `SymbolDeclaration`'s own type excludes it
-          // (see that type's doc), so this is a type-erased/stale-dist violation, not a
-          // reachable path for a type-checked capability. Doors loudly rather than silently
-          // admitting it through `bindValue`'s function carve-out (which exists for OTHER
-          // internal producers — bindRosetta's wrapper, the evaluator's catch-frame Error
-          // bind — never a raw `symbols` record entry).
-          invariant(
-            typeof def !== "function",
-            `EnvCapability "${capabilityName}": symbol "${verb}" is a bare function — the bare-Fn authoring arm is retired; declare it as \`{ fn }\` (the surviving legacy arm) or a baked symbol.* def.`,
-          );
-
-          // ── `symbol.value` — the ONLY remaining minted shape: a raw DATA binding (never a
-          // scheme call target), already boxed at MINT time (value.ts's own `fromJS` tail —
-          // successor of the retired untagged `{ value }` arm). gap-a ruling (2026-07-22):
-          // the factory now stamps `{kind:"value",name,doc}` onto the box's own `.contract`
-          // too (own, non-enumerable, define-once — value.ts), so the SAME key-name check
-          // every other kind runs applies here as well via `contractOf` — absent only for
-          // the narrow bigint-leaf gap (a primitive can't carry a hidden property). No
-          // requiresConfig/preludeOnly channel — bound straight through `bindValue`, exactly
-          // as before (a bare JS leaf or a pre-boxed scheme value alike).
-          const valueEntity = contractOf(def);
-          if (!viaAlias && valueEntity !== undefined && valueEntity.name !== name) {
-            throw new SymbolKeyMismatchError(capabilityName, name, valueEntity.name);
-          }
-          bindValue(env, verb, def as AmbientValue);
-        }
-        if (spec.prelude !== undefined) {
-          if (opts.evalScheme === undefined) throw new PreludeArmingError(name);
-          // BOOTSTRAP: evaluate against `env` (= R, already re-parented onto the prelude
-          // overlay by the caller) so prelude `define`s land in R — `ctx.preludeEvalScope` is
-          // undefined here. MID-RUN: evaluate against the caller's discarded CHILD scope
-          // instead, so a prelude `define` is dropped with it rather than leaking to the live env.
-          await opts.evalScheme(ctx?.preludeEvalScope ?? env, spec.prelude);
-        }
-
-        // Pass 2: symbol.define / symbol.defineSyntax — evaluated + bound SEQUENTIALLY,
-        // in declaration order, against the SAME scope a prelude evaluates against
-        // (`ctx.preludeEvalScope ?? env`), now that every non-define kind (Pass 1) + the
-        // prelude have already landed.
-        if (defineEntries.length > 0) {
-          await bindCapabilityDefines({
-            capabilityName,
-            ownNames,
-            entries: defineEntries,
-            deps: spec.deps ?? [],
-            env,
-            scope: ctx?.preludeEvalScope ?? env,
-            bindTarget,
-            evalScheme: opts.evalScheme,
-          });
-        }
-      },
-    };
-  }
-
   private _exportsPromise?: Promise<ReadonlySet<string>>;
 
   /** `EnvCapability.exports` — DERIVED, memoized: every statically-enumerable name
@@ -1031,7 +576,7 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
    *  pack by pack). Consumed by `symbol.define`'s bake-time FV law
    *  (`define-bake.ts`'s `bindCapabilityDefines`) to resolve what a CROSS-capability
    *  reference needs. Async (not a real getter — parsing is inherently async) and
-   *  memoized per capability INSTANCE, not per `lower()` call: a module-singleton
+   *  memoized per capability INSTANCE, not per `buildVocabulary` build: a module-singleton
    *  capability's export set never changes across assemblies. */
   exports(): Promise<ReadonlySet<string>> {
     this._exportsPromise ??= computeCapabilityExports(this.spec);
@@ -1040,11 +585,11 @@ export class EnvCapability<C extends ZodMap = any, R extends Record<string, Reso
 }
 
 /** The runtime half of `EnvCapability.define` (Stage 1c) — see the section immediately above
- *  the class, and `define()`'s own doc, for the full model. A THIN subclass over the SAME
- *  `lower()` body (1d): `super.lower(opts)` binds every symbol AND `associateCapability`s each
- *  one to THIS instance, so the run's `capabilityResources` store reaches this capability's
- *  `["arrival/get-resources"]` override below — no `apply()`-time rebind loop, no per-proc
- *  rewrap. The only per-form specialization is the three virtual hooks:
+ *  the class, and `define()`'s own doc, for the full model. A THIN subclass: the base class's
+ *  bind loop (now `env/vocabulary.ts`'s `processCapability`, post Stage-C-Cut-4) `associateCapability`s
+ *  each symbol to THIS instance, so the run's `capabilityResources` store reaches this
+ *  capability's `["arrival/get-resources"]` override below — no per-proc rewrap. The only
+ *  per-form specialization is the three virtual hooks:
  *   - `["arrival/get-resources"]` produces this capability's single arbitrary `Resources` bag
  *     from `resourcesFactory(config)` (vs the base form's `spec.resources` `ResourceCell` record);
  *   - `producesRunResources`/`nativeReadsRunResources` flip to `true` so this capability's baked

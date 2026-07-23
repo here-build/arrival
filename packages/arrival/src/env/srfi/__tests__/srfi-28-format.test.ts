@@ -7,19 +7,18 @@
  * destination is a teaching door (no IO here). Directives: ~a ~s ~d ~% ~~.
  *
  * The pack is NOT registered globally (srfi/index.ts is single-writer / off-limits), so
- * every test ASSEMBLES the capability explicitly onto a fresh env — the EnvCapability /
- * assembleEnv idiom from env/__tests__/srfi.test.ts.
+ * every test ASSEMBLES the capability explicitly onto a fresh env via `applyCapability`
+ * (src/__tests__/_fresh-env.ts) — the EnvCapability idiom from env/__tests__/srfi.test.ts.
  *
  * Provenance discipline mirrors srfi-13-strings.test.ts: format is a COLLAPSING op, so
  * the fresh string carries the union of the fmt string's + every arg's lineage.
  */
 
 import { describe, it, expect } from "vitest";
-import { execOverFrame, execStateOverFrame, execInFrame } from "../../../eval/generator-exec.js";
+import { execOverFrame, execStateOverFrame } from "../../../eval/generator-exec.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
-import { assembleEnv } from "../../../common/kernel.js";
-import { type SchemeEnv } from "../../../common/scheme-env.js";
+import { applyCapability } from "../../../__tests__/_fresh-env.js";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { AString } from "../../../values/primitives/AString.js";
 import { AValue } from "../../../values/primitives/AValue.js";
@@ -32,8 +31,6 @@ import { bindValue, mintFrame } from "../../AmbientRuntime.js";
 // force the oracle ON for this file's lifetime.
 requireEagerOracle();
 
-const evalScheme = (e: SchemeEnv, src: string) => execOverFrame(src, { env: e as never });
-
 const stamped = (s: string, ...points: number[]) => new AString(s, new Set(points));
 const sorted = (set: Set<number>) => [...set].sort((a, b) => a - b);
 // A literal-only result comes back as a raw JS string; a provenanced input boxes it to
@@ -43,7 +40,7 @@ const js = (x: unknown) => (x instanceof AValue ? x["arrival/toJS"]() : x);
 let seq = 0;
 async function run(src: string, bindings: Record<string, AString> = {}): Promise<unknown> {
   const env = mintFrame(sandboxedEnv, `srfi-28-${seq++}`);
-  await assembleEnv(env as unknown as SchemeEnv, [srfi28.lower({ evalScheme }) as never]);
+  await applyCapability(env, [srfi28]);
   for (const [k, v] of Object.entries(bindings)) bindValue(env, k, v);
   const [r] = await execOverFrame(src, { env });
   return r;
@@ -53,7 +50,7 @@ async function run(src: string, bindings: Record<string, AString> = {}): Promise
 // directly (`toBeInstanceOf(AValue)`, `.provenance` — RULINGS.md R1).
 async function runBoxed(src: string, bindings: Record<string, AString> = {}): Promise<unknown> {
   const env = mintFrame(sandboxedEnv, `srfi-28-${seq++}`);
-  await assembleEnv(env as unknown as SchemeEnv, [srfi28.lower({ evalScheme }) as never]);
+  await applyCapability(env, [srfi28]);
   for (const [k, v] of Object.entries(bindings)) bindValue(env, k, v);
   const [r] = (await execStateOverFrame(src, { env })).values;
   return r;

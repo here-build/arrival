@@ -28,9 +28,8 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { ResolvingAmbient, mintPlainFrame, mintResolvingFrame, isAmbientRuntime } from "../../env/AmbientRuntime.js";
+import { mintPlainFrame, mintResolvingFrame, isAmbientRuntime } from "../../env/AmbientRuntime.js";
 import { compileResolutionChain, sealResolutionChain } from "../../eval/CompiledResolutionChain.js";
-import { assembleEnv, type EnvPack } from "../../common/kernel.js";
 import { execInFrame } from "../../eval/generator-exec.js";
 import { buildVocabulary } from "../../env/vocabulary.js";
 import { BASE_ROSTER } from "../../env/base-roster.js";
@@ -106,32 +105,16 @@ describe("CompiledResolutionChain — LAW 4: content address", () => {
 });
 
 describe("CompiledResolutionChain — LAW 5: the bake seal leaves zero resolver residue", () => {
-  it("the preludeOnly overlay is registered during the bake and DROPPED at seal", async () => {
-    const base = mintResolvingFrame("bake-seal-law", {}, null);
-    let duringBake: { resolvers: number; visible: unknown } | undefined;
-    const pack: EnvPack<ResolvingAmbient> = {
-      name: "law/bake-overlay",
-      apply(env, ctx) {
-        expect(ctx.preludeScope).toBeDefined(); // bootstrap assembly ALWAYS provides it
-        ctx.preludeScope!.set("bake-only", boxed(42)); // boxed: the overlay resolver serves this through the resolution walk, and resolution carries boxed values only (hermetic ruling)
-        duringBake = {
-          resolvers: env.resolverSpecs().length,
-          visible: env._lookupWithResolvers("bake-only"),
-        };
-      },
-    };
-    await assembleEnv(base, [pack]);
-
-    // During the bake: overlay registered, binding visible through the live walk.
-    expect(duringBake).toEqual({ resolvers: 1, visible: boxed(42) });
-    // At seal: unregistered — NO resolver remains on the env (zero residue), and the
-    // name is a plain miss everywhere.
-    expect(base.resolverSpecs()).toHaveLength(0);
-    expect(base._lookupWithResolvers("bake-only")).toBeUndefined();
-    // The compiled form of this base is therefore the degenerate flat map.
-    expect(compileResolutionChain(base).steps).toHaveLength(1);
-  });
-
+  // STAGE C CUT 4 (docs/plans/stage-c-corpse-deletion.md) retired `assembleEnv` — the kernel's
+  // OWN bake-scoped `preludeOnly` resolver overlay (`ctx.preludeScope` auto-registering a
+  // resolver on the base, dropped at seal) this row proved was THAT mechanism's own plumbing,
+  // and it died with `assembleEnv` itself. Bootstrap's `preludeOnly` routing lives in
+  // `env/vocabulary.ts` now (a plain, disjoint `Vocabulary.preludeOnly` Map — no resolver
+  // registration on any base at all; see `capability-prelude-only-symbol.test.ts`), and the
+  // per-run prelude pass (`env/assemble-run.ts`) mirrors both maps onto a discarded per-run
+  // frame, again with no resolver involved. The row this LAW is actually about —
+  // `compileResolutionChain` refusing a base with a live registered resolver — is
+  // mechanism-agnostic and survives below unchanged.
   it("compileResolutionChain refuses to compile a base with a LIVE registered resolver — the sealed chain has no representation for one anymore", () => {
     const base = mintResolvingFrame("still-registered", {}, null);
     base.registerResolver({ id: "leftover", resolve: () => undefined });
