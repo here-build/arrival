@@ -57,7 +57,10 @@ foundation package when LSP consumers land; the **name travels with it**.
 
 Also owns: front-end desugar/nodes, CoreForm, type glass (`emitTypes`),
 **runtime imports** (`RUNTIME_MANIFEST`: stage0 Scheme-texture + **ramda** cold
-stdlib), infer/mcp `RuntimeRef` surface, residual algebra + printer.
+stdlib), the `infer` family's `RuntimeRef` surface (stage0 stubs; still
+carries only `infer`/`infer/scalar`/`infer/chat/scalar` — the mcp/llm/chat
+rename hasn't reached this manifest yet, see `rules/phase1.ts`), residual
+algebra + printer.
 
 Cold stdlib: prefer `ramda` when arity/order match **loose** faces (e.g.
 `length`). Keep stage0 for Law T, n-ary, wrong ramda shape (`max-by`,

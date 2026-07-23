@@ -228,14 +228,16 @@ the shadow skips them as macro-heads.
 
 **This section owns only the pre-execution LENS FACE. `PROVENANCE.md` owns runtime
 lineage** — the eager stamp, the trace-tap, the region/track/wire graph, γ-replay. The
-classifier is a whole future interpreter, present in the tree and gated (P14): behind the
-`irLineage` flag its `fullCone` is asserted against the untapped eager stamp
-(`provenance/lineage-shadow.ts`), the graph-layer node kinds (`sink`, `transparent`,
-`binder`) are reachable by `classify` but wired to no live declaration yet. Cross-link, don't
+classifier is a whole future interpreter, present in the tree and gated (P14) by the G1–G7
+ledger: its `fullCone` is proven directly against the eager stamp (the old shadow-mode
+`irLineage` flag and `provenance/lineage-shadow.ts` are retired, Stage C Cut 3b — `provOf`
+now lives in `provenance/lineage.ts` itself and the golden-prov/checkpoint/conservation law
+suites read it straight), the graph-layer node kinds (`sink`, `transparent`, `binder`) are
+reachable by `classify` but wired to no live declaration yet. Cross-link, don't
 duplicate: the runtime provenance machinery is `PROVENANCE.md`'s.
 
 **Enforcement sites:** `provenance/lineage.ts`, `provenance/lineage-classifier-from-env.ts`,
-`provenance/lineage-shadow.ts`.
+`provenance/__tests__/lineage-checkpoint.test.ts`.
 
 ---
 
@@ -249,7 +251,7 @@ between two interpretations, not a point assertion.
 | Reader | Gate | What it proves |
 |---|---|---|
 | **oracle S/Σ** | O0 conformance corpus (`src/__tests__/oracle-contract.spec.ts`) | arrival's structural reader AGREES with the inlined canonical reference reader on every shared structural field, over every prefix of a scout-program corpus (valid / truncated / misnested / mid-token); `feasible()` matches; the resumable session and from-scratch `analyze` agree |
-| **lineage classifier** | shadow assertion (`provenance/__tests__/lineage-shadow.test.ts`, via `provenance/lineage-shadow.ts`) | `fullCone(skeleton, bindings)` equals the UNTAPPED eager `result.provenance` on the provable shadow class; a divergence outside the two skip categories (macro-head, keyword-projection) throws `ProvenanceShadowDivergence`. Cross-package: the arrival-chain field-pin shadow corpus asserts the static carrier reproduces the live runtime field pins |
+| **lineage classifier** | checkpoint law (`provenance/__tests__/lineage-checkpoint.test.ts`) | `fullCone(skeleton, bindings)` equals the eager interpreter's `provOf` stamp (both now read straight off `provenance/lineage.ts`); the golden-prov and conservation law suites read the same `provOf` reader independently. A new `LineageNode` kind without a walker arm is a COMPILE error (`assertNever` exhaustiveness in `walk()`), converting a silent under-cone into a build failure |
 | **static validator** | the static-validation law suite (`src/__tests__/laws/static-validation.law.test.ts`, `oracle-optout.law.test.ts`) | the six named laws — cascade fusion, suggestion soundness (no door suggested), all-at-once (no crash-on-first), the macro firewall (no false positives), SPECIAL_FORMS no-FP, internal-define letrec* scoping — plus the dead-branch reachability opt-out knob |
 | **type lens** | the drops-only law (`type-layer/__tests__/query.test.ts`) + the printer suites (`schema-to-ts.test.ts`) | across a list / string / number / top slot, NO valid-or-uncertain candidate is ever dropped; the `.d.ts` printer reproduces the contract codec (`§CONTRACT`'s four-reader agreement) |
 
@@ -261,6 +263,6 @@ lineage classifier's node union is guarded by `assertNever` exhaustiveness, so a
 kind without a walker arm is a COMPILE error before it can under-collect a cone silently.
 
 **Enforcement sites:** `src/__tests__/oracle-contract.spec.ts`,
-`provenance/__tests__/lineage-shadow.test.ts`, `src/__tests__/laws/static-validation.law.test.ts`,
+`provenance/__tests__/lineage-checkpoint.test.ts`, `src/__tests__/laws/static-validation.law.test.ts`,
 `src/__tests__/laws/oracle-optout.law.test.ts`, `type-layer/__tests__/query.test.ts`,
 `type-layer/__tests__/schema-to-ts.test.ts`.

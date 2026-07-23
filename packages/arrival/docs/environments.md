@@ -34,18 +34,22 @@ if the stdlib is expressible as capabilities, a consumer's tools are too.
 taxonomy* of five spec keys (`configuration`, `resources`, `prelude`, `symbols`, `deps`),
 configured by composition, never subclassed. A capability is a value, not a class hierarchy.
 
-**The lowering chain is: module singleton → `EnvPack` → assembled env.** `spec` is the
-authoring form. `EnvCapability.lower({ evalScheme, config, degradation })` validates the
-config against the `configuration` schemas, turns each resource declaration into a
-ref-counted `ResourceCell`, reads the (always literal — the builder arm is retired) `symbols` record,
-and returns a `LoweredPack` — an `EnvPack` whose `apply(env)` wires the symbols
-(membrane-wrapped) and evaluates the prelude. The kernel then C3-linearizes a set of packs
-and applies each once (§ASSEMBLY). The DAG is the authoring form; the assembled env is the
-flat runtime form.
+**The lowering chain is: module singleton → `Vocabulary` → `RunContext`.** `spec` is the
+authoring form. `env/vocabulary.ts`'s `buildVocabulary` walks a capability set deps-first
+(C3), validates each capability's config slice against its `configuration` schemas, turns
+each resource declaration into a ref-counted `ResourceCell`, reads the (always literal — the
+builder arm is retired) `symbols` record, and mints every symbol (membrane-wrapped) straight
+into a frozen `Vocabulary` map — never producing an `EnvPack` (`EnvCapability.lower()` /
+`LoweredPack` are retired, Stage C Cut 4). `env/assemble-run.ts`'s `assembleRun` then mints
+the per-run `RunContext` off that Vocabulary and runs the per-run prelude pass (§7a). The DAG
+is the authoring form; the Vocabulary is the flat, run-agnostic static form; the `RunContext`
+is the per-run instantiation. `EnvPack` itself survives only as the mid-run extension-pack
+shape `(require/extension …)` applies onto an already-live env (§ASSEMBLY, the mid-run path).
 
 **The one law under all of it: dependencies point down, only down.** Verbs depend on the
-capability machinery; the machinery lowers to the kernel's `EnvPack`; the kernel interprets
-nothing above itself. A capability never reaches sideways into another capability's
+capability machinery; the machinery lowers to a `Vocabulary` entry at bootstrap or an
+`EnvPack` mid-run; neither interprets anything above itself. A capability never reaches
+sideways into another capability's
 internals — it declares a `deps` edge and uses the granted names. A capability's *scheme*
 code obeys the same rule as its JS: a `symbol.define` body is free-variable-checked at bake,
 so a capability never works merely because something else happened to assemble first
@@ -66,7 +70,7 @@ The five keys are the entire surface:
 - `deps` — the DAG edges; a dep edge IS the grant.
 
 **Enforcement sites:** `common/capability.ts`, `common/kernel.ts`, `common/scheme-env.ts`,
-`env/index.ts`.
+`env/vocabulary.ts`.
 
 ---
 
@@ -98,35 +102,45 @@ Two same-name packs carrying *non-equal* config in one assembly is a genuine con
 throws (`AssembleConfigConflictError`); functions compare by reference only, plain data
 deep-equal.
 
-**Array position is precedence the moment a member declares `deps`.** `BASE_PACKS` and
-`NATIVE_PACKS` are ordered arrays; the kernel feeds each array's own order into the C3 merge
-as the roots list, so the array gives the total order. While every base pack's
+**Array position is precedence the moment a member declares `deps`.** `BASE_PACKS` is an
+ordered array; `buildVocabulary` (env/vocabulary.ts) feeds its own order into the C3 merge as
+part of the roots list, so the array gives the total order. While every base pack's
 cross-capability reference is late-bound at *call* time (so prelude evaluation order is
 behaviorally immaterial), the instant a member declares a `deps` edge the array must place
 that member *ahead* of its dependency — dependents lead, dependencies trail — or the merge
 has no valid "good head" and throws (`AssembleLinearizationError`). The `BASE_PACKS` tail
 block (racket → clojure → lisp → polyglot → srfi1 → binding → exceptions → lists) is exactly
-this constraint resolved by hand.
+this constraint resolved by hand. `env/base-roster.ts`'s `BASE_ROSTER` (`[...BASE_PACKS,
+bytevectors, errorObjects]`) is the array actually folded into a run's tuple — the two extras
+are the only former `NATIVE_PACKS` members with no `BASE_PACKS`-side `deps` reaching them
+already (see next).
 
-**Bootstrap is a two-root sequence, and one root cannot host both.** `NATIVE_PACKS` (the
-JS-implemented R7RS domains — numeric, strings, vectors, equality, …) assemble onto
-`global_env`; `BASE_PACKS` (the `.scm`-defined stdlib — core, macros, polyglot, r7rs, srfi
-preludes) assemble onto `user_env`, a child of `global_env`. A base prelude calling `+` or
-`string-length` resolves child→parent into the native root, so phase 1 must be live before
-phase 2 evaluates — a `.scm` prelude evaluating onto the same frame its dependencies are
-still being assembled into would race the phase order. This is the ontological reason for
-two roots, not an optimization.
+**Bootstrap is now a SINGLE self-hosting fold, not a two-root sequence — the legacy split is
+retired.** The pre-Stage-C bootstrap assembled `NATIVE_PACKS` (the JS-implemented R7RS
+domains — numeric, strings, vectors, equality, …) onto a `global_env` root and `BASE_PACKS`
+(the `.scm`-defined stdlib — core, macros, polyglot, r7rs, srfi preludes) onto a child
+`user_env`, because a base prelude calling `+`/`string-length` had to resolve child→parent
+into an already-live native root. `BASE_ROSTER` dissolves the split instead: every base
+symbol — `+`, `map`, `car`, the whole scheme surface — becomes an ordinary member of ONE
+tuple's own C3 closure (`buildVocabulary([...capabilities, ...BASE_ROSTER], config)`,
+`generator-exec.ts`'s `execStateViaVocabulary`), baked deps-first in the SAME loop as every
+user capability, never via a parent-chain fallback. `global_env`/`user_env` name no live
+binding anywhere in the package today — they survive only as the retired mechanism's own
+name, kept in comments for lineage.
 
-**Mid-run assembly is a distinct, single-flight path.** `assembleEnv` builds a *fresh* env
-once at construction. `RuntimeAssembler.require` applies registered packs onto an
+**Mid-run assembly is a distinct, single-flight path.** Bootstrap (`buildVocabulary`) builds a
+*fresh* Vocabulary once per capability-set tuple (memoized by identity — a repeat call
+sharing the same capability/config objects reuses it rather than re-assembling; the retired
+`assembleEnv` played this one-shot role pre Stage C Cut 4). `RuntimeAssembler.require` applies
+registered packs onto an
 *already-live* env mid-run — idempotently and single-flight: a second `require` of the same
 pack, or a concurrent one from a parallel HOF arm, awaits the one in-flight apply and never
 re-applies. Deps apply first in C3 order; a pack reached two ways applies once; a rejecting
 apply drops its single-flight entry so a later `require` may retry. This is the machine
 behind `(require/extension …)` (§LOADER).
 
-**Enforcement sites:** `common/kernel.ts`, `env/base-packs.ts`, `env/native-packs.ts`,
-`env/env-roots.ts`, `common/symbols/define-bake.ts`.
+**Enforcement sites:** `common/kernel.ts`, `env/base-packs.ts`, `env/base-roster.ts`,
+`env/vocabulary.ts`, `env/assemble-run.ts`, `common/symbols/define-bake.ts`.
 
 ---
 
@@ -140,7 +154,7 @@ The cut is acyclic — factories import from `_bake`, nothing imports back up th
 namespace — and one-file-per-kind lets the bundler tree-shake to only the accessed tags
 (ESM + `sideEffects:false`).
 
-**Eleven authoring kinds; what each binds to at runtime:**
+**Twelve authoring kinds; what each binds to at runtime:**
 
 | kind | authored as | runtime bound value | notes |
 |---|---|---|---|
@@ -154,14 +168,17 @@ namespace — and one-file-per-kind lets the bundler tree-shake to only the acce
 | `macro` | a raw JS `Macro`/`Syntax` transformer | the `Macro` itself, bound as-is | not arg-evaluating (native/rosetta) nor evaluator-dispatched (keyword); the generic `is_macro` hook expands it. |
 | `define` | a scheme-bodied value/procedure + a real contract | a validating `ANativeProcedure` (procedure) or the bare boxed value (constant) | decomposes a prelude blob into individually-declared, contract-bearing, FV-checked defines. |
 | `defineSyntax` | a scheme-bodied macro/expander | a `Macro` fexpr transformer | `define`'s sibling; contract-free, carries a `macroAttribute` walk hint. |
+| `value` | `name: doc`, a host-supplied constant | the boxed data value itself, never callable | a raw DATA binding made first-class — the discriminated successor of the retired untagged `{ value }` `SymbolDeclaration` arm. Host sentinels (`mcp/break`'s `MCP_BREAK`), pre-marshalled data roots. `require`/`require/extension` are NOT this kind — they bind `symbol.native` procedures (§LOADER). |
 | `alias` | a template head naming a sibling verb | *the target's own baked def*, re-bound | dissolution: the alias binds byte-identically under its own name, never a wrapper. A fourth arm, outside `AEntity`'s discriminant, resolved before per-kind dispatch. |
 
 **Every run-kind is a first-class callable, never a bare JS function** (P1: a bare function
 is a value the provenance interpreter cannot enter). `native`/`rosetta`/`tagless`/
 `tagless-guard`/`sequence` all bind `ANativeProcedure`/`ARosettaProcedure` subclasses invoked
 through the `arrival/tagless-final/apply` term; `door`/`keyword`/`macro` bind their own plain
-objects. The only sanctioned raw-value binding is the `{ value }` arm — a `require`-resolved
-value the loader calls directly in JS-land, never a scheme call target (§LOADER).
+objects. The one exception is `symbol.value` — a raw DATA binding (never callable), the
+discriminated successor of the retired untagged `{ value }` `SymbolDeclaration` arm. `require`/
+`require/extension` are NOT this kind — they bind `symbol.native` procedures whose call resolves
+the module payload (§LOADER).
 
 **`apply()` dispatches by `kind` and stamps three static facts onto the bound value:** the
 resolved `provenanceRole`, the optional `cacheClass`, and the resolved `callbackRoles`
@@ -170,7 +187,7 @@ these *off the bound value* via `env.get(op)`, never a duck-read of an ad-hoc pr
 the declaration is data in string-key space, not a sniffed shape).
 
 **Enforcement sites:** `common/symbols/index.ts`, `common/symbols/_bake.ts`,
-`common/symbols/{native,rosetta,tagless,taglessGuard,sequence,notImplemented,keyword,macro,define,alias}.ts`,
+`common/symbols/{native,rosetta,tagless,taglessGuard,sequence,notImplemented,keyword,macro,define,value,alias}.ts`,
 `common/capability.ts`.
 
 ---
@@ -214,12 +231,17 @@ behavior (`membrane/adopt-spine.ts`, which needs the value classes). The same sp
 layer down, as the governing law: **the chart is chosen by the contract; the contract is not
 the thing that performs the crossing.**
 
-**`z.value` is the declared no-transform escape hatch**, for slots genuinely untypeable at
-the boundary — a value that must keep its scheme identity, an opaque handle, arbitrary-shaped
-data no codec names. Every such slot is invisible to the type lens, unvalidated at the
-boundary, and barred from `cacheClass: "view"` (a raw crossing does not serialize — the bake
-gate refuses it). Declare the codec whenever one exists; `grep schemeToJsUntyped` is the
-audit list of every place the untyped crossing was reached for.
+**`z.value` is retired, split by structural brand into `z.schemeValue` (the contour top type)
+and `z.dynamic` (the crossing escape hatch).** Both are a bare `instanceof AValue` predicate,
+never a transform — but each is legal on only one side of the membrane, enforced at COMPILE
+TIME: a `symbol.rosetta` contract slot's bound (`CrossingSlot`) rejects `z.schemeValue`, and a
+native/sequence/tagless/define contract slot's bound (`ContourSlot`) symmetrically rejects
+`z.dynamic`. `z.dynamic` is the declared no-transform escape hatch for a rosetta slot
+genuinely untypeable at the boundary — a value that must keep its scheme identity, an opaque
+handle, arbitrary-shaped data no codec names. Every such slot is invisible to the type lens,
+unvalidated at the boundary, and barred from `cacheClass: "view"` (a raw crossing does not
+serialize — the bake gate refuses it). Declare the codec whenever one exists; `grep
+schemeToJsUntyped` is the audit list of every place the untyped crossing was reached for.
 
 **Enforcement sites:** `common/symbols/_bake.ts`, `common/scheme-zod.ts`,
 `common/spine-adoption.ts`, `membrane/adopt-spine.ts`, `common/schema-tag.ts`.
@@ -256,12 +278,13 @@ the boundary event is where the box layer's inputs are created.
 **A declared crossing wraps; an undeclared one voids or doors — reconciled explicitly.** A
 `z.procedure` slot is a *declared* callable crossing: its decode marshals the scheme callable
 into a host fn **synchronously, at decode time**, bound to the live region scope, so a reverse
-call re-enters under the run's real context. A callable arriving through a `z.value` slot is
-*undeclared*: `z.value` does no transform, so the raw scheme callable would be marshaled by
+call re-enters under the run's real context. A callable arriving through a `z.dynamic` slot is
+*undeclared*: `z.dynamic` does no transform, so the raw scheme callable would be marshaled by
 the impl itself — possibly *after* an `await`, by which point the synchronous region-scope
 window has closed and the reverse call would bind the detached scope. The machine forbids the
-unsafe shape rather than trying to marshal it safely: a callable crossing a `z.value` slot is a
-teaching throw steering the author to declare `z.procedure`. The *outbound* direction is barred
+unsafe shape rather than trying to marshal it safely: a callable crossing a `z.dynamic` slot is a
+teaching throw (`assertNotBareCallableInDynamicSlot`) steering the author to declare
+`z.procedure`. The *outbound* direction is barred
 too, but by two distinct rules, not one: a rosetta returning a bare JS function is banned
 outright ("a rosetta result is never a bare JS function — provenance untraceable"), and a bare
 JS function surfacing as loader *data* (a `kind: "value"` module result) is voided to `#void`
@@ -271,7 +294,7 @@ bound to the live scope; undeclared callable in → door; bare fn out → banned
 
 **The region-scope gate is one gate, stated once.** A rosetta `run` opens a region scope
 around a call **only** when the contract's input vector carries a slot that can hand the impl
-a live callable (`z.procedure` or `z.value` — `contractMayCarryCallable`). A lambda-free verb
+a live callable (`z.procedure` or `z.dynamic` — `contractMayCarryCallable`). A lambda-free verb
 (`+`, `string-append`, every plain data-in/data-out rosetta — the overwhelming majority) mints
 no scope, touches no wrapper cache, pays zero cost. The scope's `runCtx` is the invocation's
 live context, so a reverse-lambda minted under it re-enters via `scope.runCtx` — a lambda
@@ -341,8 +364,8 @@ result back, it is not a sink — it is a source with consequences and must say 
 *never* derived from the lineage role:
 
 - **`view`** — a persisted boundary snapshot, cacheable across runs; demands a serializable
-  contract (the bake gate `assertCacheClassShape` rejects `z.lambda`/`z.value` slots on either
-  vector — a cache entry must serialize).
+  contract (the bake gate `assertCacheClassShape` rejects `z.lambda`/`z.schemeValue`/`z.dynamic`
+  slots on either vector — a cache entry must serialize).
 - **`pure`** — regenerateable, deterministic from decoded args; recovery is re-call, nothing
   persisted; no shape gate.
 - **absent** — the safe default: regenerateable, re-runs on replay.
@@ -420,8 +443,9 @@ carries no resolver leg.
 ### 7a. PRELUDE — the VOCABULARY PATH contract (Stage B2)
 
 Everything above this subsection describes the LEGACY `lower()`/`assembleEnv` path (bootstrap's
-`ctx.preludeScope` overlay, mid-run `require`'s discarded child scope `C'`). The routed
-vocabulary path (`ExecOptions.vocabularyPath`, `env/vocabulary.ts` + `env/assemble-run.ts`)
+`ctx.preludeScope` overlay, mid-run `require`'s discarded child scope `C'`). The vocabulary path
+(`env/vocabulary.ts` + `env/assemble-run.ts`) — the internal `ExecOptions.vocabularyPath` routing
+flag that once selected it at Stage B1 is itself retired; it is the ONLY bootstrap path today —
 realizes the SAME contract — prelude is assembly-time-only, a closure survives by lexical
 capture not by a leaked binding — through a DIFFERENT mechanism, worth stating on its own terms
 rather than as a diff against the legacy prose.
@@ -451,15 +475,18 @@ the built-in regression DETECTOR for this law: manually re-running a capability'
 against an ALREADY-assembled run's `runCtx` must hit the door, because the run's registry
 already holds that entry.
 
-**The prelude scope composes exactly like the legacy bootstrap's own base.** A fresh
-`mintFrame(user_env, …)` child (never reused, never returned — discarded once the pass
-completes) seeded with the preludeOnly overlay (`Vocabulary.preludeOnly`) THEN the main map
-(`Vocabulary.map`) — the two are disjoint by construction (a name lands in exactly one), so this
-is completing the prelude's visibility, not an override. Basing on `user_env` (not a bare empty
-frame) is what lets a prelude call a base-pack primitive (`+`, `string-length`, …) — the SAME
-composition the vocabulary path's user-facing chain frame uses for program code, built
-separately, from `Vocabulary.map` alone (never `preludeOnly`, never a prelude `define` — see
-next).
+**The prelude scope is NULL-ROOTED, not the legacy bootstrap's live base.** A fresh
+`mintResolvingFrame("assemble-run-prelude")` — no parent at all (Stage C Cut 2's
+self-contained posture, matching `vocabulary.ts`'s own `bakeEnv`), never reused, never
+returned, discarded once the pass completes — is seeded with the main map (`Vocabulary.map`)
+THEN the preludeOnly overlay (`Vocabulary.preludeOnly`) — the two are disjoint by construction
+(a name lands in exactly one), so this is completing the prelude's visibility, not an override.
+A prelude can still call a base-pack primitive (`+`, `string-length`, …) because `BASE_ROSTER`
+is an ordinary member of THIS tuple's own `Vocabulary.map` (the caller folds it in —
+`generator-exec.ts`'s `execStateViaVocabulary`), bound directly into this scope — never via a
+parent-chain fallback onto a `user_env` realm, which this path never mints. The vocabulary
+path's user-facing chain frame program code resolves against is built separately, from
+`Vocabulary.map` alone (never `preludeOnly`, never a prelude `define` — see next).
 
 **Prelude `(define …)` is DISCARDED with the scope, uniformly — no bootstrap/mid-run asymmetry.**
 The legacy path's split (bootstrap's defines land in the runtime env; mid-run's are lost with
@@ -504,7 +531,8 @@ does not write.
 **Two module-internal doors are the ONLY writers, and they are not on the public surface.**
 Frame *birth* is `mintFrame`/`mintPlainFrame`/`mintResolvingFrame` (subtype-preserving: a
 `ResolvingAmbient` parent mints a resolver-capable child, so a capability base built on
-`user_env` stays resolver-capable with no ceremony). Binding is `bindValue`. Both are
+`inferenceEnv` — or `env/vocabulary.ts`'s own null-rooted `bakeEnv` — stays resolver-capable
+with no ceremony). Binding is `bindValue`. Both are
 module-internal, never barrel-exported; the legitimate writers are all inside the membrane — the
 evaluator's frame binds, capability assembly (`apply()` and the Pass-2 define binds), the retired
 `defineRosetta` wiring's two surviving producers, and the replay playback frame. A new call site
@@ -526,27 +554,35 @@ hardcoded roster. Absence is meaningful: a name the env did not bind is a door t
 chose not to open (a `preludeOnly` symbol at runtime; §LOADER's `require` itself stays BOUND
 and doors on missing config instead — §DEGRADATION-D2).
 
-**`global_env`/`user_env` are `ResolvingAmbient` roots, born through the minters.** Both are
-resolver-capable (the two producer classes of §PRELUDE register here); both seal, at the end of
-`ensureBaseAssembled`, into a frozen `CompiledResolutionChain` — the sealed artifact has no write
-surface, so the phase-1/phase-2 write windows are a structural fact, not a convention. Top-level
-user defines accumulate on a mutable session frame *above* the sealed chain (REPL semantics),
-never on the shared roots.
+**The retired `global_env`/`user_env` pair is now a SINGLE null-rooted frame per Vocabulary,
+sealed once.** `generator-exec.ts`'s `sealedVocabularyChain` mints one NULL-ROOTED
+`mintPlainFrame("exec-vocabulary")` per `Vocabulary` object (memoized in a `WeakMap`, so it is
+built once no matter how many runs share the tuple), binds every `Vocabulary.map` entry onto
+it, then seals it via `sealResolutionChain` into a frozen `CompiledResolutionChain` — the
+sealed artifact has no write surface, so the write window (mint the frame, bind it, seal it)
+is a structural fact, not a convention: nothing a run does afterward (a `define`, a `require`)
+ever writes into it. Top-level user defines accumulate on a mutable session frame *above* the
+sealed chain (REPL semantics, `Capabilities`/`LexicalScope`), never on the shared chain.
 
-**A caller reaches the machine through one of two glasses.** `exec({ env })` runs against an
-existing environment — the session's accumulated frame chain, shared state visible; `exec({
-capabilities })` assembles a FRESH child for that run — nothing leaks in, nothing leaks out but
-the return value. The split is the hermetic ruling's caller face: the only two ways in are "the
-environment you were handed" and "a new one born for you"; there is no third door that mutates
-someone else's.
+**The public caller face is now ONE glass, not two.** The retired `exec({ env })` option ran
+against an existing environment — the session's accumulated frame chain, shared state visible;
+today every barrel-exported entry point (`exec`/`execState`/`execExpr`, `ExecOptions`) only
+takes `{ capabilities }` — `buildVocabulary`/`assembleRun` mints a FRESH tuple for that run,
+nothing leaks in, nothing leaks out but the return value. The `{ env }` shape survives as
+`ExecOptionsOverFrame` — an internal, non-barrel-exported seam (`execStateOverFrame` et al.,
+`eval/generator-exec.ts`) for the one class of caller that still legitimately needs a live frame
+to bind bespoke rosettas/resolvers onto by hand (test harnesses only; production code never uses
+it). The hermetic ruling's caller face is therefore: "a new one born for you" is the only public
+door; there is no third door that mutates someone else's.
 
 **Security is by non-existence, not by fencing.** The inference plane inherits user→global and
 is total: no host-reaching verb EXISTS in the language to block, so there is no per-env
 blocklist to maintain or bypass. The polyglot membrane is the only language-crossing door.
 A fence guards a verb that exists; arrival removes the verb.
 
-**Enforcement sites:** `env/AmbientRuntime.ts`, `common/scheme-env.ts`, `env/env-roots.ts`,
-`env/native-packs.ts`, `env/inference-env.ts`.
+**Enforcement sites:** `env/AmbientRuntime.ts`, `common/scheme-env.ts`, `env/vocabulary.ts`,
+`eval/generator-exec.ts` (`sealedVocabularyChain`), `eval/CompiledResolutionChain.ts`,
+`env/inference-env.ts`.
 
 ---
 
@@ -574,10 +610,11 @@ capability dictates the entity set; the env accessor makes presence a preconditi
 activation exists yet, and eager reads at assembly are the connection storm the lazy model exists
 to prevent.
 
-**Wind-down is pause, resume is re-spawn, teardown is reverse.** `LoweredPack.windDown()` releases
-every resource (keeping the wiring); the next touch or `resume()` re-acquires. A set winds down in
-reverse order — dependents before dependencies, LIFO — matching the assembly's own disposal
-order.
+**Wind-down is pause, resume is re-spawn, teardown is reverse.** `common/resources.ts`'s
+`windDownAll` releases every resource (keeping the wiring) — wired to `RunContext` disposal via
+`capability.ts`'s `onRunContextDispose(runCtx, () => windDownAll(...))`, the retired
+`LoweredPack.windDown()`'s successor; the next touch re-acquires. A set winds down in reverse
+order — dependents before dependencies, LIFO — matching the assembly's own disposal order.
 
 **Enforcement sites:** `common/resources.ts`, `common/capability.ts`.
 
@@ -637,7 +674,8 @@ callbacks.
 `requiresConfig` door.** The primary surface is `configuration.fs` — a raw read-capable
 filesystem; the capability derives its own `Loader` internally (`makeFsLoader`). A pre-built
 `configuration.loader` is accepted and *wins* over `fs`, for the one thing `fs` cannot express: a
-caller injecting custom resolvers (the `.yaml`/`.toml` handlers arrival-chain threads).
+caller injecting custom resolvers (the `.yaml`/`.toml` handlers `arrival-ext-yaml`/
+`arrival-ext-toml` thread).
 **`require` is callable when a loader is derivable** (from `fs` or `loader`); with neither armed
 it binds a cause-carrying `DoorProcedure` via the auto-derived `requiresConfig: [["fs",
 "loader"]]` gate (§DEGRADATION-D2 — the any-of GROUP form: satisfied while at least one key is
@@ -645,7 +683,8 @@ present), so a loaderless program's `(require …)` is a STATIC "missing-configu
 teaching "provide `fs` or `loader`", not an unbound variable. (This supersedes the earlier
 withholding-by-absence posture: the verb's *presence* is now static — the `.define` symbol record
 is config-independent — and only its *callability* is config-derived. The door mints under either
-degradation mode; `AssembledEnv.degraded` enumerates the same misses.) "Bundled but inert without
+degradation mode; `Vocabulary.degraded` (mirrored onto `RunContext.degraded`) enumerates the
+same misses.) "Bundled but inert without
 `fs`" stays structural — the door IS the inertness, made legible.
 
 **Run state IS resources, not stashed callbacks.** The lifecycle-bearing per-run state is the
@@ -655,7 +694,7 @@ single-flight require session (module cache + cycle bookkeeping — a FRESH bag 
 `RuntimeAssembler` backing `(require/extension …)` — the bag's `[Symbol.asyncDispose]` is
 `assembler.dispose()`, so winding the run down tears every runtime-applied extension back out.
 
-**`require` and `require/extension` are RAW-BOUND `{ value }`-style natives, deliberately not
+**`require` and `require/extension` are RAW-BOUND `symbol.native` procedures, deliberately not
 rosetta-wrapped.** `require` returns a callable for `(define run-x (require "x.prompt"))` — the
 data is born when the proc is *invoked*, not when required, so a provenance mint here would
 surface `require` as a spurious chain node, and a return marshal would void an `eval` module's
@@ -692,9 +731,12 @@ catalog text, dashboard fields). A *dynamic* field resolves lazily at describe/c
 against the assembly's phase-2 activation — never at bake — through `resolveMetadata`
 (`common/symbols/metadata.ts`, the canonical home and its three rulings: lazily-at-read against
 the phase-2 activation; per-read, no memo; `undefined` resolution falls back to the static
-sibling and is *not* flagged session-generated). The activations feeding it are folded by
-`assembleEnv` into `AssembledEnv.activations` and exposed on the phase-2 read surface
-(`env/index.ts`, `eval/exec-phases.ts`).
+sibling and is *not* flagged session-generated). `resolveMetadata` takes a per-capability
+`Activation` (`common/capability.ts` — the same `this.configuration`/`this.resources` context
+§7's Pass-2 dispatch uses) directly; the retired `assembleEnv`'s own `AssembledEnv.activations`
+fold that used to collect and expose these across a whole assembled env is gone with it (Stage
+C Cut 4), and no production caller wires `resolveMetadata` yet (test-only today) — the phase-2
+read surface this channel targets is a design target, not shipped wiring.
 
 **How to *author* for this channel — the resource-deferral law, the object-spread hazard, the
 intent-not-impact rule for MCP exposure — lives in `writing-capabilities.md` and the
@@ -703,5 +745,5 @@ are describe-time host-side IO outside every wire — no provenance node, nothin
 stream, and scheme programs never see metadata (there is no `(symbol-metadata …)` verb, the same
 law as no `(configuration :key)`).
 
-**Enforcement sites:** `common/symbols/metadata.ts`, `env/index.ts`, `eval/exec-phases.ts`;
-authoring HOW-TO in `writing-capabilities.md`.
+**Enforcement sites:** `common/symbols/metadata.ts`, `common/capability.ts`,
+`eval/exec-phases.ts`; authoring HOW-TO in `writing-capabilities.md`.

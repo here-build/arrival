@@ -46,10 +46,11 @@ remain the two old ones: a value the second interpreter cannot execute (unboxed)
 trace that lies (stamps that disagree with the value plane). An empty trail is not a
 lying trail — it is the absence of evidence, and hosts that audit must arm.
 
-*Revealed by:* every provenance lie in the audit, seen at once — append's drop, vector-map's
-strip, the unstamped cdr spine. Each looked like a local style inconsistency; together they
-are one bug: treating the box as decoration on the real computation instead of the other
-computation.
+*Revealed by:* (historical) every provenance lie in the audit, seen at once — append's drop,
+vector-map's strip, the unstamped cdr spine. Each looked like a local style inconsistency;
+together they were one bug: treating the box as decoration on the real computation instead of
+the other computation. The conservation repair closed all three (see P8, P10) — kept here as
+the keystone's own origin story, the audit that revealed the principle in the first place.
 
 ---
 
@@ -62,10 +63,11 @@ BY a box). Callables included: an ACallable is executable on both layers — app
 layer, runCtx threading and mint/propagate classification on the box layer. A bare JS
 function is a value-layer-only term: the moment it enters value space, the program has a
 region the second interpreter cannot enter.
-*Revealed by:* the AProcedure arm, the LAMBDA brand passthrough, curry's bare-arrow leak,
-the legacy `SymbolDeclaration` arm's bare-fn form (capability.ts, wired through
-`AmbientRuntime.ts`'s internal `bindRosetta` — the retired public `env.defineRosetta` method's
-surviving wiring) — every one a JS artifact living in value space without lineage.
+*Revealed by:* the AProcedure arm, the LAMBDA brand passthrough, curry's bare-arrow leak —
+every one a JS artifact living in value space without lineage. (The legacy `SymbolDeclaration`
+bare-fn bind arm this used to also cite — capability.ts, wired through `AmbientRuntime.ts`'s
+internal `bindRosetta` — is retired: every capability now binds first-class ANativeProcedures
+instead, per capability.ts's own retirement note.)
 *Forbids:* new bare-fn producers; `typeof === "function"` as a value-space callability test;
 env bindings whose stored value has no class.
 
@@ -76,8 +78,10 @@ have changed under it: mutation desynchronizes the layers — the value layer mo
 the box layer holds a history that is now a forgery. The only mutations are named doors:
 cycle knot-tying (`__tieKnot` — construction-order-impossible structures), and phase-gated
 assembly-time env binding that dies at phase close. There is no third kind.
-*Revealed by:* the dead `forMutation`/`frozen` machinery — guards for a mutation path that
-could no longer exist, kept "just in case".
+*Revealed by:* (fixed) the `forMutation`/`frozen` guards on `asVector`/`asBytevector` — dead
+machinery for a mutation path already closed by `notImplemented` doors (`vector-set!`,
+`bytevector-u8-set!`, `string-set!`/`fill!`) — was removed outright rather than kept "just in
+case".
 *Forbids:* defensive freeze/guard machinery for impossible states; `set!`-shaped anything;
 un-named `Object.assign`/property writes on a constructed value.
 
@@ -86,9 +90,11 @@ The type lens is one of the static interpreters (P0) — a declaration that unde
 runtime is that interpreter executing a different program than the runtime pair, which makes
 every downstream reader either wrong or a caster. If the runtime stores `string | symbol`,
 the field says `string | symbol` and every reader narrows honestly.
-*Revealed by:* gensym's ES6 symbol smuggled through `__name__: string` via
-`as unknown as string` — the class body handled both arms for years; only the declaration
-lied, and two call sites grew apology-casts around it.
+*Revealed by:* (fixed) gensym's ES6 symbol once smuggled through a `__name__: string`
+declaration via `as unknown as string` — the class body handled both arms for years before
+the field was widened to its honest `string | symbol` (`ASymbol.ts`). The one surviving
+`as unknown as string` (`values-repr.ts`) is now a documented ctor-boundary cast onto that
+already-honest contract, not a declaration lying about the field it backs.
 *Forbids:* `as any`; casts not provable by an adjacent runtime guard; "it's fine, the code
 handles it" as a substitute for the type saying so.
 
@@ -108,7 +114,7 @@ plain-JS-OBSERVABLE: container egress may be a lazy ref-tracking proxy that mate
 demand — observationally plain, no AValue ever readable through it.
 *Revealed by:* strings crossing out boxed while booleans cross raw (two invariants pinning
 opposite exit contracts); representation-blind `equal?` and `boolean=?`'s deliberate
-`z.unknown()` — tolerance machinery that exists only because bare values leak inward.
+`z.schemeValue` input — tolerance machinery that exists only because bare values leak inward.
 *Forbids:* representation-blind comparisons (once the bare-value purge completes, blindness
 INVERTS to a strict-door throw); "accepts boxed or raw" contracts; any instanceof-chain
 converter competing with the protocol (P7).
@@ -148,8 +154,10 @@ equality (`equals`), and every other term live ON the value — splitting the au
 the choreography, and the two readings drift apart in whichever copy forgets one of them.
 Consumers — membrane, rosetta, zod codecs — dispatch the protocol; a codec is a guard + a
 contract refinement + a protocol call, never a competing description of the conversion.
-*Revealed by:* `schemeToJs`'s instanceof chain with a duck-typed hole where APair should be;
-codec encode/decode arms re-describing what classes already know.
+*Revealed by:* (fixed) `schemeToJs`'s instanceof chain once carried a duck-typed hole where
+APair should be — closed by the `arrival/toJS(exit)` collapse (every boxed shape dispatches
+through `egressAValue`, one protocol, no per-carrier special case); codec encode/decode arms
+re-describing what classes already know remain the live half of this citation.
 *Forbids:* external switch/instanceof conversion chains; a second place that knows how a
 vector serializes; codecs with hand-written transform bodies for representation (contract
 refinement — ranges, arity, element types — is the codec's real job and stays).
@@ -175,9 +183,10 @@ aesthetics — a term whose box discipline varies by carrier is a term whose pro
 is UNDEFINED: the second interpreter executes a different program depending on which
 container the data happens to sit in. Representation chooses storage and iteration, never
 meaning.
-*Revealed by:* vector-map stripping boxes while vector-filter preserves them and pair-map
-preserves them — three answers to one question on overlapping carriers, each pinned green by
-its own test.
+*Revealed by:* (fixed) vector-map once stripped boxes while vector-filter and pair-map
+preserved them — three answers to one question on overlapping carriers, each pinned green by
+its own test — until DR4 made vector-map box-preserving too (`conservation.law.test.ts`),
+closing the divergence this principle names.
 *Forbids:* per-carrier semantic divergence "for interop convenience"; blessing an accident as
 "deliberately softer"; goldens that freeze the divergence.
 
@@ -201,9 +210,12 @@ suite measures it propagating lineage fully — the exactness loss is the value 
 box layer keeps its history.) The shed list is egress, only. An op that "rebuilds and therefore
 drops" is a bug, full stop — rebuilding is an implementation detail of the value layer, and
 the value layer does not get to abort the box layer.
-*Revealed by:* `append` rebuilding the spine and dropping every element's provenance; `cdr`
-of a proper list returning an unstamped spine cell — both pinned GREEN as "documented
-asymmetries the eager path exhibits today".
+*Revealed by:* (fixed) `append` once rebuilt the spine dropping every element's provenance,
+and `cdr` of a proper list once returned an unstamped spine cell — both pinned GREEN as
+"documented asymmetries the eager path exhibits today" until the conservation repair
+(`conservation.law.test.ts`) flipped both from `it.fails` to plain `it`: the rebuilt spine and
+the projected sub-spine are now stamped with the deep-collapsed union of their elements,
+matching `cons`' union-onto-container convention.
 *Forbids:* green tests asserting provenance loss; "the container was fresh so the lineage is
 empty" reasoning; fixing a drop by blessing it.
 
@@ -261,7 +273,8 @@ And the strongest suites in this package are exactly interpretation-agreement la
 adding coverage, prefer a coherence law over a point assertion — it tests the choreography,
 not one dancer.
 *Revealed by:* exact-number JSON.stringify throwing pinned green while its inexact sibling
-was honestly `[fails]`; the provenance drops of P10.
+was honestly `[fails]`; P10's now-fixed provenance drops (append/cdr, once pinned green,
+exactly the lie this principle forbids — see P10's own citation).
 *Forbids:* "documents today's behavior" as a test category; rebaselining a golden to a bug.
 
 **P16. Pin behavior, not internals — and pin the harness on purpose.**

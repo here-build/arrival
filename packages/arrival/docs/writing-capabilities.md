@@ -4,8 +4,8 @@ An `EnvCapability` is the one shape every arrival environment is built from: a n
 composable contribution of **symbols** (verbs), **configuration** (per-env, validated),
 **resources** (external ports), **prelude** (scheme bootstrap), and **deps** (grants). The
 R7RS base, every SRFI, every dialect pack, and your domain tools are all this same shape;
-`assembleEnv` C3-linearizes the dependency DAG and applies each capability once. What the
-machine *is* — the lowering chain, C3 assembly, the seam a baked verb crosses — is the
+`buildVocabulary` C3-linearizes the dependency DAG and applies each capability once. What the
+machine *is* — the C3 assembly, the seam a baked verb crosses — is the
 ontology in `environments.md`. **This file is the author's how-to: the recipe you follow,
 with each law it rests on cited to its home in `environments.md`.**
 
@@ -17,8 +17,10 @@ error texts) live in the JSDoc of the entry points: `common/symbol.ts`, `common/
 The one law under everything below: **dependencies point down, only down** — a capability
 declares a `deps` edge and uses the granted names, never reaching sideways into another
 capability's internals (`environments.md` §CAPABILITY). A capability is a **module singleton**
-(one `new EnvCapability(name, spec)`, exported as a value): the five spec keys are a closed
-taxonomy, configured by composition, never subclassed.
+(one `EnvCapability.define(name, spec)`, exported as a value): the five spec keys are a closed
+taxonomy, configured by composition, never subclassed. The raw `new EnvCapability(name, spec)`
+constructor survives only as `.define`'s own internal call — every real pack authors through
+`.define`.
 
 ## Declare the honest codec
 
@@ -29,12 +31,15 @@ scheme-shaped leaks in. One contract has four readers that must agree — the fo
 `environments.md` §CONTRACT; the authoring rule is: **declare the codec that matches what the impl
 reads and returns.** "Take the raw value and sort it out inside" is a debt, not a shortcut.
 
-`z.value` is the declared no-transform escape hatch, for slots **genuinely untypeable at the
-boundary** (a value that must keep its scheme identity, an opaque handle, arbitrary-shaped data no
-codec names). Every such slot is invisible to the type lens, unvalidated at the boundary, and barred
-from `cacheClass: "view"` (a raw crossing doesn't serialize — the bake gate refuses it). Declare the
-codec whenever one exists; `grep schemeToJsUntyped` is the audit list of every place the untyped
-crossing was reached for.
+`z.dynamic` is the declared no-transform escape hatch for a **rosetta** (crossing) slot
+**genuinely untypeable at the boundary** — the impl receives/returns the raw scheme value and does
+its own `schemeToJs`/`jsToScheme` (`env/overridable/overridable.ts`'s `overridable/resolve` is the
+one production case). A **contour** slot (native/define/sequence/tagless) reaches instead for
+`z.schemeValue`, the honest top type for "any boxed scheme value" — the two are compile-time banned
+from each other's slot kind. Either way the slot is invisible to the type lens, unvalidated at the
+boundary, and barred from `cacheClass: "view"` (a raw crossing doesn't serialize — the bake gate
+refuses it). Declare the codec whenever one exists; `grep schemeToJsUntyped` is the audit list of
+every place the untyped crossing was reached for.
 
 ## Two axes: a provenance role, optionally a cache class
 
@@ -72,9 +77,10 @@ Describe-time personalization — a per-session catalog line, a live welcome scr
 has a declared channel (`dynamicDescription`). A verb whose *runtime behavior* silently depends on who
 is calling is not: an actor-dependent input is a **declared argument the actor passes**, visible in the
 program text, never ambient state smuggled through the environment. Configuration reaches a baked verb
-only through the builder form (`symbols: (activation) => ({…})`) precisely because inside a baked impl
-`this` is the per-call invocation context, not the activation — so config cannot ride `this`, and
-per-caller behavior cannot hide there either.
+through `this.configuration`/`this.resources` — `EnvCapability.define`'s injected `(symbol, z)` factory
+types `symbol.native`/`symbol.rosetta`'s impl `this` as the capability's own validated config and live
+resource `Ref`s, read per call. That channel carries config and resources, nothing else: per-caller
+behavior still cannot hide there — it stays a declared argument the actor passes.
 
 ## Author resources lazily
 
@@ -110,9 +116,9 @@ An omitted verb is a declaration, not an absence: `symbol.notImplemented` binds 
 a teaching error carrying the reason and the alternative bound in *this* environment. The same posture
 runs through the machinery — the sink shape gate, the view serialization gate, the free-variable law,
 the alias-target check all refuse at bake with the fix in the message. Never withhold a symbol by
-silently omitting it from the record; if a verb is absent because an optional config key wasn't
-supplied, lower with `degradation: "doors"` so the absence carries its cause and the assembly's
-`degraded` list enumerates it (the `forbid`/`doors` modes are `environments.md` §DEGRADATION).
+silently omitting it from the record; if a verb is gated on an optional config key, declare that key
+in the verb's `Contract.requiresConfig` — absence auto-mints a cause-carrying door, mode-independently,
+so the assembly's `degraded` list enumerates it (`environments.md` §DEGRADATION).
 
 ## Exposing a capability to agents (MCP)
 

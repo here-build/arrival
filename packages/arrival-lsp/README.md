@@ -1,124 +1,62 @@
 # @inhuman.tools/arrival-lsp
 
-Scheme language service for arrival: a **type lens** over TypeScript’s
+Scheme language service for arrival: a **type lens** over TypeScript's
 `LanguageService` (Volar-shaped — virtual TS, never run; diagnostics/completions/
 hover lifted back to Scheme spans). Ships **node + browser worker** runtimes so
-IDEs and tools (codemirror, mercury type-emit, MCP) share one substrate.
+IDEs and tools (codemirror, the inhuman studio editor) share one substrate.
 
-The shared `PRE` prelude and builtin `.d.ts` leaves declaration-merge so Scheme
+The `PRE` prelude and builtin `.d.ts` leaves declaration-merge so Scheme
 programs **bite** under `tsc` (`(car 5)` and `(+ "a" 1)` produce real diagnostics
-on `.scm` spans).
+on `.scm` spans) — that prelude, its builtin leaves, and the leaf-authoring
+contract now live in the sibling package
+`@inhuman.tools/arrival-internals-types-prelude` (`src/prelude/types.d.ts` +
+`src/prelude/builtins/*.d.ts`, proven by its own `src/__tests__/prelude.test.ts`);
+see that package to add or change a builtin leaf.
 
 ## Layout
 
 ```
 src/
-  prelude/
-    types.d.ts                 ← PRE: base types + Dict + accessors + sexpr + ArrShape merge contract
-    builtins/
-      _TEMPLATE.d.ts           ← copy-paste stub for a leaf
-      car.d.ts                 ← the reference leaf
-      <slug>.d.ts              ← one per builtin
-  __tests__/
-    prelude.test.ts            ← bite + merge proof (verdict)
+  index.ts               ← public barrel (language-service, span-map, typed-scanner, host-prelude, service-core)
+  language-service.ts    ← Node entry: disk prelude + `typescript` package libs
+  browser.ts             ← Browser/worker entry: bundled prelude + inlined TS libs (this package's vite build)
+  service-core.ts        ← environment-agnostic core: emitTypes → ts.LanguageService → Mapper
+  worker.ts              ← (Shared)Worker entry attaching ls-server to the worker's ports
+  ls-client.ts / ls-server.ts / ls-protocol.ts  ← worker wire protocol (light/heavy split)
+  host-prelude.ts        ← assemble a lens `host` option from a host's rosetta type registry
+  span-map.ts            ← bidirectional position lens over emitTypes's Mapping[]
+  typed-scanner.ts       ← the Σ∩T bridge: narrow a completion scanner by Layer T
+  balance.ts             ← balance an incomplete Scheme prefix for cursor queries
+  __tests__/             ← language-service, browser-service, host-prelude, ls-protocol, etc. (verdicts)
 ```
-
-## The leaf-authoring contract (read this before adding a builtin leaf)
-
-You own **exactly one** file: `src/prelude/builtins/<slug>.d.ts`. You never read
-another leaf. Everything you need is `PRE` (`../types.d.ts`) + your spec stub.
-
-### 1. File path & slug
-
-`src/prelude/builtins/<slug>.d.ts`. The slug is the scheme name; operator names get
-a readable slug (`+`→`plus`, `<`/`>`/`<=`/`>=`/`=`→`compares`). The **file name is
-cosmetic** — only the interface **member key** must be the exact scheme name.
-
-### 2. The `interface ArrShape { … }` merge pattern
-
-PRE declares an empty `interface ArrShape {}` and a `declare const __arr: ArrShape`.
-Each leaf re-declares the interface with its ONE member; TypeScript merges all
-`interface ArrShape` declarations across files into a single shape, and `__arr` is
-typed by the union of every leaf's member.
-
-```ts
-// builtins/cdr.d.ts
-interface ArrShape {
-  cdr<T>(xs: List<T>): T[];
-}
-```
-
-- **Operator / TS-illegal names → bracketed string keys**, legal inside an
-  interface body, so no identifier cleaning is ever needed:
-  ```ts
-  interface ArrShape {
-    "+"(...xs: number[]): number;
-    "string-append"(...xs: string[]): string;
-    "null?"(xs: List<unknown>): boolean;
-  }
-  ```
-- **Multi-name families** (chained compares, the math cluster) are ONE file with
-  several keys in the same interface block — they are cohesive (all-compares,
-  all-string-ops), so finer splitting buys no parallelism.
-
-> Why `interface` and not `declare const __arr: { … }`: object type literals on a
-> `const` do **not** merge across files (you get a duplicate-identifier error);
-> `interface` declarations **do** merge unconditionally. This is verified in
-> `__tests__/prelude.test.ts`. Always extend `ArrShape`.
-
-### 3. Plain TS scalars + PRE's structural types
-
-Write signatures in plain TS scalars plus PRE's structural vocabulary:
-
-| type | meaning |
-|---|---|
-| `string` / `number` / `boolean` | plain TS scalars — the membrane makes a boundary value *be* its plain JS type |
-| `void` | the unspecified value (Scheme's unit) |
-| `List<T>` | a Scheme proper list (readonly `T[]`) |
-| `Pair<H, T>` | a cons cell / dotted pair `[head, tail]` |
-| `Nil` | the empty list (`readonly []`) |
-| `Dict<Pairs>` | the homoiconic-dict → precise-object mapped type |
-| `Field<O, K>` | `(@ obj key)` / `(:key obj)` precise field read |
-| `sexpr<F>(f, …a)` | typed-apply fallback for indirect/HOF call heads |
-
-Scalars are plain TS — the LIPS↔JS membrane guarantees a boundary value *is* its
-plain JS type, so no dialect is needed. (The `SNum`/`SStr`/`SBool`/`Unit` aliases
-still exist in `types.d.ts` — each ≡ its primitive — but only as the compat bridge
-for rosetta `type:` strings and the `(require)` synthesizer; don't author leaves
-against them.)
-
-### 4. The required 1-positive / 1-negative assertion
-
-Each leaf adds a tiny verdict proving its signature bites. Mirror the cases in
-`__tests__/prelude.test.ts` (run PRE + your leaf through a bare
-`ts.LanguageService`):
-
-- **POSITIVE** — a well-typed call → `getSemanticDiagnostics` returns `[]`.
-  e.g. `__arr.cdr([1, 2, 3])` → no diagnostic.
-- **NEGATIVE** — a mis-typed call → exactly one diagnostic.
-  e.g. `__arr.cdr(5)` → one diagnostic (5 is not a list).
-
-Run `vitest run` green against PRE before considering a leaf done.
 
 ## `typecheck` / `test`
 
 ```bash
-pnpm typecheck   # tsc --noEmit over src (prelude + leaves compile & merge)
-pnpm test        # vitest: the bite + merge proof
+pnpm typecheck   # tsc --noEmit over src
+pnpm test        # vitest: language-service, browser-service, host-prelude, ls-protocol, typed-scanner, etc.
 ```
 
-## Emitter contract (planned)
+## Emitter contract
 
-The emitter (`types-emit.ts`) lowers Scheme forms to **virtual TS that is
-type-checked, never run**. The load-bearing consequence for binding forms:
+The emitter (`emitTypes`, `@inhuman.tools/arrival-mercury`'s
+`src/type-emit/emit.ts`, imported here via `service-core.ts`) lowers Scheme forms
+to **virtual TS that is type-checked, never run**. The load-bearing consequence
+for binding forms:
 
-- **`(let ((x v)) body)` / `(let* …)` → a pure TS block statement**, NOT an IIFE:
+- **`(let ((x v)) body)` / `(let* …)` at STATEMENT position → a pure TS block
+  statement**, NOT an IIFE:
   ```ts
   { const x = v; /* …body… */ }
   ```
   Because we only type-check (never execute), block-scoping is correct and
   ceremony-free — an IIFE would add a function boundary that distorts control-flow
   analysis and return-type inference for no benefit.
+- **At EXPRESSION position** (a value is needed and no statement block can be
+  placed, e.g. `(define r (let ((x 1)) (+ x 1)))`), the same binding form lowers
+  to an immediately-invoked arrow instead — `(() => { const x = …; return …; })()`
+  — the one place an arrow-call appears; the block-not-IIFE rule governs
+  statement/body position only.
 - **`set!`-ed variables lower to `let`** (the rest stay `const`), so reassignment
   type-checks without widening every binding.
 

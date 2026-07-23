@@ -51,7 +51,11 @@ Everything else comes on top of the language, in a variety of shapes:
   (indentation I-expressions, curly-infix, accessors).
 - `arrival-serializer` — the JS ↔ S-expression wire: s-expression output
   that is more compact than JSON for agent consumption.
-- `arrival-provenance` — the trace-capture substrate and provenance surface.
+- `arrival-provenance` — a thin re-export shim over core's `/provenance`
+  subpath (capture, analysis, verdict all live in `arrival` itself); the one
+  non-passthrough export is the mobx-reactive `ObservableEvalTrace`, kept
+  here so studio/UI consumers get reactive semantics without core taking on
+  a mobx dependency.
 - `arrival-mcp` — the framework for MCP servers that run sandboxed code with
   predefined capabilities: Model Context Protocol tools as values (discovery +
   action tiers); `arrival-mcp-do` — the Durable Object session shell;
@@ -64,8 +68,11 @@ Everything else comes on top of the language, in a variety of shapes:
   `tsc`, and diagnostics lift back to their `.scm` spans.
 - `arrival-mercury` — the Mercury compiler: arrival Scheme projected into
   human-grade TypeScript, designed around the reader's mental model rather
-  than mechanically lowered — plus its differential oracle: interpreter vs
-  compiled output, compared as black-box source-in/value-out outcomes.
+  than mechanically lowered.
+- `arrival-mercury-oracle` — the differential oracle: interpreter vs
+  compiled output, compared as black-box source-in/value-out outcomes;
+  split out from arrival-mercury to isolate the `tsx` runtime dependency
+  the compiler itself must not carry.
 - `arrival-codemirror` — CodeMirror 6 for arrival Scheme (classic +
   sugarcoat): structural editing, ghost text, param hints, and the full IDE
   surface (lint/hover/completion/goto).

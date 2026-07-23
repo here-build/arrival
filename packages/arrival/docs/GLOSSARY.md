@@ -67,11 +67,14 @@ lineage graph (`egress(Tᵢ)`, `cone(egress)`, "a sink is a port with no egress 
 value crossing out; the other is a graph node. *(owner: membrane.md §EGRESS and §NOT-A-CROSSING;
 provenance sense PROVENANCE.md §3)*
 
-**EnvPack** — the kernel-level lowered form of a capability: `EnvCapability.lower(...)` validates
-config, turns each resource into a ref-counted `ResourceCell`, computes the symbols record, and
-returns a `LoweredPack` — an `EnvPack` whose `apply(env)` wires the membrane-wrapped symbols and
-evaluates the prelude. The kernel C3-linearizes a set of packs and applies each once. *(owner:
-environments.md §CAPABILITY)*
+**EnvPack** — post Stage-C-Cut-4, a MID-RUN-ONLY shape: a host-registered extension pack
+(`(require/extension :name)`, wired through `arrivalLoaderCapability`'s `extensionRegistry`)
+applied onto an ALREADY-LIVE env by `createRuntimeAssembler`, C3-linearized and applied once.
+Bootstrap assembly mints no `EnvPack`s at all — `env/vocabulary.ts`'s `buildVocabulary` bakes a
+capability's `spec` directly into a frozen `Vocabulary` artifact (`map`/`preludeOnly`/`degraded`/
+`preludes`/`configsByCapability`), never binding onto a live env frame. `EnvCapability.lower()`/
+`LoweredPack` are retired. *(owner: environments.md §CAPABILITY; vocabulary path
+env/vocabulary.ts)*
 
 **γ-replay** — provenance replay: `γ = apply` of a wire lambda to recorded ingress in a hermetic
 env (base packs + prelude + ingress bindings) under region discipline, run in a SILENT region

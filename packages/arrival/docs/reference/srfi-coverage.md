@@ -35,8 +35,8 @@ Kinds abbreviated: `nat` native · `def` define · `stx` defineSyntax · `seq` s
 **Capability:** `scheme/srfi-1`  
 **Header claim:** honest **immutable subset** + implement-or-door.  
 **Explicit subset excuse:** **Yes** — live completion set; remaining official exports are purity / subset doors; peers in `scheme/lists`.  
-**Deps:** `equality`, `numeric`, `exceptions`, `lists` (no binding)  
-**Score:** **COMPLETE** under implement-or-door (pack keys cover official index; R5RS peers documented as live-elsewhere; residual: `find` miss → nil not `#f`, historical `unfold` protocol)
+**Deps:** `equality`, `numeric`, `exceptions`, `vectors`, `lists` (no binding)  
+**Score:** **COMPLETE** under implement-or-door (pack keys cover official index; R5RS peers documented as live-elsewhere; residual: historical `unfold` protocol)
 
 ### Pack symbols (all keys)
 
@@ -45,7 +45,7 @@ Kinds abbreviated: `nat` native · `def` define · `stx` defineSyntax · `seq` s
 | `filter` | seq | Live (also R5RS-adjacent; polymorphic tagless) |
 | `reduce` | tag | Live |
 | `fold` | door | **Doored** — redirects to `reduce` / `fold-right` |
-| `find` | nat | Live (returns `nil` on miss — SRFI returns `#f`; semantic delta) |
+| `find` | nat | Live (returns `#f` on miss, per SRFI) |
 | `take-while` | tag | Live |
 | `drop-while` | tag | Live |
 | `take` | seq | Live (representation-polymorphic; SRFI n=0-any-value tolerance dropped) |
@@ -74,10 +74,12 @@ Kinds abbreviated: `nat` native · `def` define · `stx` defineSyntax · `seq` s
 | `filter-map` | def | Live |
 | `count` | def | Live |
 | `append-map` | def | Live |
-| `%any-null?` / `%some` / `%every` | def/priv | Extra (private) |
-| `some` | def | Live under Ramda-familiar name of SRFI `any`; returns `#t`/`#f` not last-pred-value |
-| `any` | alias | **Alias of `some`** (spec name) |
-| `every` | def | Live; `#t`/`#f` not last-pred-value (documented deviation) |
+| `%any-null?` / `%some` / `%any` / `%every` / `%every-value` | def/priv | Extra (private) |
+| `any?` | def | Live — HONEST `#t`/`#f` boolean predicate (arrival's `?`-suffixed convention) |
+| `some` | alias | **Alias of `any?`** (Ramda-familiar name), stays boolean |
+| `any` | def | Live — SRFI-1's own value-returning quantifier: first truthy predicate RESULT, or `#f` |
+| `every?` | def | Live — HONEST `#t`/`#f` boolean predicate; vacuously `#t` on empty |
+| `every` | def | Live — SRFI-1's own value-returning quantifier: LAST predicate RESULT if every tuple truthy, `#t` on empty, `#f` on first falsy |
 | `zip` | def | Live |
 | `list-index` | def | Live |
 | `unfold` | def | Live but **non-SRFI shape** — `(fn init)` where `fn` → `(head . next)` or `#f`; official is `(p f g seed [tail-gen])` |
@@ -94,20 +96,18 @@ These are SRFI-1 exports that exist in the base env under other packs (so agents
 
 ### Missing (official SRFI-1, silent in pack)
 
-**None.** Former silent names are purity / subset doors (see `DOORS` in `srfi-1.ts`). Remaining work is optional **implement** promotions (take-right/drop-right/split-at/cons*/…) and semantic bugs (`find` → `#f`, SRFI-shaped `unfold`).
+**None.** Former silent names are purity / subset doors (see `DOORS` in `srfi-1.ts`). Remaining work is optional **implement** promotions (take-right/drop-right/split-at/cons*/…) and a semantic bug (SRFI-shaped `unfold`).
 
 Linear-update (`!`) family could honestly door with the same purity reason as `append!`/`set-car!` — today they are **silent**.
 
 ### Extra
 
-`first?`, `first-or`, `range`, private `%…` helpers; `some` as Ramda alias for `any`.
+`first?`, `first-or`, `range`, private `%…` helpers; `any?`/`every?` (honest boolean predicates); `some` as Ramda alias for `any?`.
 
 ### Semantic partials (not multi-return)
 
-1. **`find` miss → `nil`** (truthy ANil), not SRFI `#f`.  
-2. **`some`/`every` return `#t`/`#f`**, not SRFI last-pred-value (documented).  
-3. **`unfold` is not SRFI-1 `unfold`** — same name, different protocol.  
-5. **`fold` doored** but **`reduce` is not SRFI-1's `fold`** (different seed/`ridentity` contract) — door text explains rename; OK as door, still leaves n-ary `fold` missing.
+1. **`unfold` is not SRFI-1 `unfold`** — same name, different protocol.  
+2. **`fold` doored** but **`reduce` is not SRFI-1's `fold`** (different seed/`ridentity` contract) — door text explains rename; OK as door, still leaves n-ary `fold` missing.
 
 ---
 
@@ -416,7 +416,7 @@ syntax-like procedure forms, `boolean`, … (rest of SRFI-235).
 | 4 | **SRFI-43** | PARTIAL | Medium-High | Pure ops only; mutators undooored in pack |
 | 5 | **SRFI-235** | PARTIAL | Medium | `always`/`never` fixed; rest of combinators silent |
 | 6 | **SRFI-95** | PARTIAL | Medium | Only `sort`; mutators/siblings silent |
-| 7 | **SRFI-1** | COMPLETE | Low | Subset + doors; residual `find`/`unfold` semantics |
+| 7 | **SRFI-1** | COMPLETE | Low | Subset + doors; residual `unfold` semantics |
 | 8 | **SRFI-13** | COMPLETE | Low | Trim fixed; purity/subset doors; peers in strings |
 | 9 | **SRFI-8** | COMPLETE | Low | Doors-only `receive` |
 | 10 | **SRFI-28** | COMPLETE | Low | `format` live |

@@ -331,7 +331,7 @@ never eagerly copies (R9):
 - **BARE** — serialization (`arrival/toJS`, no options): a nested callable stringifies
   (that IS the serialization contract). Identity = **(box)**, forever — one
   module-level `WeakMap`.
-- **MEM (membrane)** — the crossing (`arrival/toJSMembrane`, every rosetta/`exec`
+- **MEM (membrane)** — the crossing (`arrival/toJS(exit)`, every rosetta/`exec`
   exit): options honored at every depth, nested callables become host functions.
   Identity = **(box, mode, exporting-SCOPE)** — the cache lives on the exporting
   `RegionScope` (§REGION).
@@ -486,15 +486,15 @@ typed decode (keyed `"typed"`). The pre-split single key let whichever family cr
 callable *first* serve its wrapper to the other — the same defect class the
 (box, mode, scope) container law fixes, one level down.
 
-**The `z.value`-after-await burst-bypass hazard, and the bake-side gate.** A callable
-arriving through a `z.value` slot is *undeclared*: `z.value` performs no transform, so
+**The `z.dynamic`-after-await burst-bypass hazard, and the bake-side gate.** A callable
+arriving through a `z.dynamic` slot is *undeclared*: `z.dynamic` performs no transform, so
 the raw callable is marshaled by the impl itself — possibly *after* the impl's first
 `await`, by which point `withRegionScope`'s synchronous save/restore has already
 reverted the ambient scope. A reverse call minted from that stale marshal binds
 `DETACHED_SCOPE`/`CONSTANT_CTX`, reopening exactly the burst-bypass hole region
-discipline exists to close. The fix is not to marshal a `z.value` callable safely — it
+discipline exists to close. The fix is not to marshal a `z.dynamic` callable safely — it
 is to never let one land there: a bake-time door
-(`assertNotBareCallableInValueSlot`) makes the unsafe shape UNAUTHORED, steering the
+(`assertNotBareCallableInDynamicSlot`) makes the unsafe shape UNAUTHORED, steering the
 author to declare `z.procedure` (whose decode marshals synchronously, at decode time,
 under the live scope). The gate is computed once at bake off the same normalized input
 vector every other bake gate reads; a lambda-free verb — the overwhelming majority —
@@ -520,7 +520,7 @@ doors, by crossing:
 | No lens (the binary membrane, §INBOUND phase 3) | a unique JS symbol, or an unbranded/exotic class instance, has no defined crossing into the algebra — names its cure (register the symbol; brand the class `@arrival.private`, or hand plain data) | `NoLensError` |
 | Region escape / incomplete | a reverse lambda outlives its invocation, or an invocation returns with calls in flight (§REGION) | `RegionEscapeError` / `RegionIncompleteError` |
 | Raw crossing | a raw JS scalar surfaces on an env read — a writer bypassed the storage membrane (`environments.md §HERMETIC`) | `RawCrossingError` |
-| `z.value` callable | a callable crosses a `z.value` slot (§REGION) | teaching throw |
+| `z.dynamic` callable | a callable crosses a `z.dynamic` slot (§REGION) | teaching throw |
 
 The `fromJS`/`toJS` strictness is also a *type-level* door: `fromJS`'s parameter
 resolves an `AValue`-typed argument to `never`, so the confusion is often caught in

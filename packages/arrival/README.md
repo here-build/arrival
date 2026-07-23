@@ -49,15 +49,15 @@ implementation. `exec` assembles the capabilities per call and returns plain JS 
 top-level form.
 
 ```typescript
-import { exec, EnvCapability, symbol, z } from '@inhuman.tools/arrival';
+import { exec, EnvCapability } from '@inhuman.tools/arrival';
 
-const weather = new EnvCapability("demo/weather", {
-  symbols: {
+const weather = EnvCapability.define("demo/weather", {
+  symbols: (symbol, z) => ({
     "forecast-for": symbol.rosetta`forecast-for: the current forecast for a city`(
       { input: [z.string], output: [z.string], provenance: "source" },
       async (city) => `cloudy in ${city}`,   // any real fetch goes here
     ),
-  },
+  }),
 });
 
 const [line] = await exec(`(string-append "today: " (forecast-for "berlin"))`,
@@ -74,10 +74,13 @@ is [`docs/writing-capabilities.md`](./docs/writing-capabilities.md).
 ## Data — a declared, typed program parameter
 
 Data enters as a **declared, typed parameter of the program**. `define/overridable` names it,
-gives it an `s/*` type and a default; the host supplies the value through `override`, validated
-against the declared type at the membrane.
+gives it an `s/*` type and a default; the host supplies the value through the `overridable`
+capability's shared config bag, validated against the declared type at the membrane.
 
 ```typescript
+import { exec } from '@inhuman.tools/arrival';
+import { overridableCapability } from '@inhuman.tools/arrival/overridable';
+
 const users = [{ id: "alice", priority: 15 }, { id: "bob", priority: 5 }];
 
 const [, highPriority] = await exec(
@@ -85,14 +88,14 @@ const [, highPriority] = await exec(
      (s/array (s/object (s/field/string "id") (s/field/number "priority")))
      '())
    (filter (lambda (u) (> (@ u :priority) 10)) users)`,
-  { override: { users } },
+  { capabilities: [overridableCapability], config: { params: { users } } },
 );
 // [{ id: "alice", priority: 15 }]
 ```
 
-Pass `override: {}` and the program runs on its declared defaults — it stays self-describing. A
-value that doesn't match the declared type is rejected with a door naming the binding, the
-expected shape, and who supplied it.
+Omit `config` (or pass `config: { params: {} }`) and the program runs on its declared defaults —
+it stays self-describing. A value that doesn't match the declared type is rejected with a door
+naming the binding, the expected shape, and who supplied it.
 
 ## Sessions — mint a scope, reuse it
 
@@ -108,8 +111,8 @@ const { values: [v] } = await execState(`(sq 7)`, { scope });  // turn 2 — see
 schemeToJs(v, {});                                             // 49
 ```
 
-Sequence diagrams, budgets observed live, and the assemble-once/run-N-times idiom are in
-[`docs/execution-sequences.md`](./docs/execution-sequences.md).
+The run model — hermetic per-run state, budgets observed live, and the session/scope surface — is
+in [`docs/execution.md`](./docs/execution.md).
 
 ## The language
 
@@ -232,9 +235,9 @@ under question. (The slice is per top-level form today; intra-form slicing is ne
 
 Built on the carried lineage: a **seal** walks every leaf of a result, checks that each traces to
 a real source, and *mathematically refuses to sign* one that doesn't — a fabricated leaf has no
-signature to give. With trace replay (`replayProgramWithPlayback`, the program re-run with every
-membrane crossing answered from the recorded payload stream, the live world never consulted) this
-composes into: an output either traces end-to-end (and a third party can re-derive it) or it has no
+signature to give. With trace replay (the program re-run with every membrane crossing answered
+from the recorded payload stream, the live world never consulted) this composes into: an output
+either traces end-to-end (and a third party can re-derive it) or it has no
 signature at all. What lives *here* is the boundary that makes this sound — the carrying above,
 plus the **attestation brand** (the `/attestation` subpath): provenance unions forward, attestation
 *drops on compute*, so an agent must re-assert what a derived value IS while reference-passing
@@ -303,45 +306,47 @@ consumers skip the pass for such programs (the runtime doors remain the backstop
 - `exec(code, options?) → Promise<unknown[]>` — parse + run, results unwrapped to plain JS.
 - `execState(code, options?) → Promise<ExecState>` — boxed, provenance-bearing `values` plus the
   session `scope` handle for REPL-style continuation, and the run's `runCtx`.
-- `ExecOptions`: `capabilities` (assembled per call), `config` (the shared bag capabilities read),
-  `override` (host values for `define/overridable` parameters), `scope` (a `LexicalScope`;
-  `.fresh()` mints an isolated session), `staticValidation: "on" | "off"`, `signal`, `budgetMs` /
+- `ExecOptions`: `capabilities` (assembled per call), `config` (the shared bag capabilities read —
+  also where `define/overridable` parameter values ride, alongside the `overridable` capability),
+  `scope` (a `LexicalScope`; `.fresh()` mints an isolated session), `runCtx` (reuse an existing
+  `RunContext` for REPL continuity), `staticValidation: "on" | "off"`, `signal`, `budgetMs` /
   `heapBudget` (opt-in wall-clock / allocation bounds; `signal` is the one that reaches into native
   calls), `strict` (turns off nil-tolerance, caller-scoped), `freezeRosettaReturns`, `tap` (trace
-  recording), `env` (the lower-level glass path).
-- `parse(code)`, `tokenize(source)` — the reader, standalone.
-- `initBridge()` — pre-warm the lazily assembled base.
+  recording).
+- `parse(code)` — the reader, standalone (`tokenize` lives on `/lsp-internals`).
 
 **Declaration**
 
-- `EnvCapability`, `assembleEnv`, the `symbol` factory namespace (`symbol.native`, `symbol.rosetta`,
+- `EnvCapability`, the `symbol` factory namespace (`symbol.native`, `symbol.rosetta`,
   `symbol.define`, `symbol.defineSyntax`, `symbol.tagless`, `symbol.notImplemented`, …), and the `z`
-  scheme-zod codec namespace (`z.string`, `z.number`, `z.value`, `z.box`, `z.procedure(in?, out?)`,
-  …). Every capability — the R7RS base, each SRFI, each dialect pack, your tools — is an
-  `EnvCapability`; `assembleEnv` C3-linearizes the dependency DAG (the same monotonic linearization
-  Python uses for MRO), dedups by identity, detects cycles, applies each pack once, disposes LIFO.
+  scheme-zod codec namespace (`z.string`, `z.number`, `z.dynamic`, `z.schemeValue`, `z.box`,
+  `z.procedure(in?, out?)`, …). Every capability — the R7RS base, each SRFI, each dialect pack,
+  your tools — is an `EnvCapability`; `exec`/`execState` C3-linearize the capability set's
+  dependency DAG (the same monotonic linearization Python uses for MRO) into a self-hosted,
+  memoized `Vocabulary`, dedup by identity, detect cycles; a capability's resources wind down LIFO
+  when the run disposes.
 
 **Static analysis & provenance**
 
-- `validateProgram` / `vocabularyFromChain` — the complete-diagnostic-list validation pass.
-- `classify`, `fullCone`, `fieldCone` — the static lineage carrier; `deepProvenance` — the deep
-  provenance read; `schemeToJs` — the boxed→plain exit read.
+- `validateProgram` / `vocabularyFromChain` (from `/lsp-internals`) — the complete-diagnostic-list
+  validation pass.
+- `forwardCone`, `backwardCone` (from `/provenance`) — the traced lineage cone; `deepProvenance` —
+  the deep provenance read; `schemeToJs` — the boxed→plain exit read.
 - `EvalTrace` / `buildUneval` (from `/provenance`) — the traced-run recorder and reverse slicer;
   `trace.toolNameFor(id)` / `trace.invocationById(id)` resolve a `deepProvenance` ordinal to the
-  verb / invocation that minted it; `replayProgramWithPlayback` — the recorded-payload replay
-  driver.
+  verb / invocation that minted it.
 
-**Subpath exports** — granular, tree-shaken entries: `/oracle`, `/type-layer`, `/symbol`,
-`/scheme-zod`, `/schema-tag`, `/provenance`, `/srfi`, `/capability`, `/env`, `/resources`,
-`/scheme-env`, `/attestation`, `/overridable`, `/schema`.
+**Subpath exports** — granular, tree-shaken entries: `/reflect-internals`, `/lsp-internals`,
+`/host-internals`, `/capability`, `/resources`, `/symbol`, `/emit`, `/schema-tag`, `/attestation`,
+`/provenance`, `/provenance/store`, `/type-layer`, `/loader`, `/overridable`, `/schema`.
 
-**Decomposed processing** — for cases the three declared doors (`capabilities` / `override` /
-`scope`) don't cover, the `/env` subpath carries the explicit phase products: `assembleAmbient`
-assembles a capability base once (an `AssembledAmbient`, caller-owned, `AsyncDisposable`) and
-`exec`/`execState(code, { ambient, scope })` reuses it across many runs. `LexicalScope.fresh()`
-mints the session's mutable frame; its `.env` satisfies the structural `SchemeEnv` write contract,
-so a session owner can register pack vocabulary against the frame it holds. Glass `{ env }` remains
-only for embedder-held frames.
+**Decomposed processing** — for cases the three declared doors (`capabilities` / `config` /
+`scope`) don't cover: the self-hosted `Vocabulary` a capability tuple builds into is memoized by
+(closure identity, config identity), so `exec`/`execState` already reuse an assembled capability
+base across every call sharing the same tuple, with no separate assembly step to opt into. `runCtx`
+reuse (above) extends that to reusing a single run's resources across REPL turns. `LexicalScope.fresh()`
+mints the session's mutable frame directly; an embedder-held frame that needs the structural env
+write contract types against `SchemeEnv` (`/host-internals`).
 
 ## The wider toolchain
 
@@ -358,7 +363,7 @@ Sibling packages build an editing and serving stack over the language; each has 
 | `@inhuman.tools/arrival-manifold` | N MCP servers → one `scheme-repl` tool (the measured benchmark below). |
 | `@inhuman.tools/arrival-serializer` | Budget-bounded rendering: under a budget, per-element caps shrink fairly across siblings and re-render — never a tail-cut. |
 
-The oracle (`@inhuman.tools/arrival/oracle`) exposes the interpreter's own knowledge — structural
+The oracle (`@inhuman.tools/arrival/lsp-internals`) exposes the interpreter's own knowledge — structural
 validity and the bound-symbol set (Σ) — as a truncation-safe scanner. Under it an unbalanced
 program is *ungeneratable*; with a grant env, an unbound symbol is *ungeneratable*; against the
 capability DAG, an ungranted tool is **unwritable at generation time** — containment moves from the

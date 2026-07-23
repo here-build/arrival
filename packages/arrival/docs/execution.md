@@ -1,8 +1,8 @@
 # The Run Model
 
 > The mental model, stated once, ahead of the code. One `exec()` is a **run**: a hermetic
-> unit of interpretation whose per-run state is minted once and carried on the values it
-> builds, never reached for ambiently. This document says what that state IS, where it
+> unit of interpretation whose per-run state is minted once and threaded explicitly through
+> the ops that need it, never reached for ambiently. This document says what that state IS, where it
 > lives (data-local, not global), and how the five optional per-run seams — cache, effects,
 > reads, notes, display — arm the interception facilities that turn a bare interpreter into
 > a cacheable, burstable, read-guarded one. §12 SESSIONS is the CONSUMER view (sessions,
@@ -28,8 +28,9 @@ the SECOND meaning of "replay" — γ over frozen ingress).
 cross between them.** A Cloudflare Durable Object shares one JS isolate across every request
 it serves. Two `exec()` calls interleaved on that isolate must not see each other's strict
 mode, allocation meter, cache, or effect log. The charter: **run-state is DATA-LOCAL** —
-minted once per `exec()` by `new RunContext(...)`, carried on `AValue.ctx` (every value built
-during the run holds the SAME `RunContext` reference), read off the threaded context at the
+minted once per `exec()` by `new RunContext(...)`, threaded explicitly as the `runCtx` parameter
+through every op that needs it (no value carries it — `AValue` dropped its per-value `.ctx`
+field; `run/RunContext.ts`'s own header names the removal), read off the threaded context at the
 one hermetic point, never off an ambient singleton.
 
 Three homes, by lifetime:
@@ -114,7 +115,7 @@ and no `(display …)` a model authored. The drop is correct, but it is currentl
 `require`d module is dropped, because `execExpr` binds no such sink.**
 
 *Enforcement sites: `run/RunContext.ts`, `eval/generator-exec.ts` (`ExecOptions`, `execState`,
-`execExpr`), `eval/exec-phases.ts` (`instantiate`).*
+`execExpr`), `env/assemble-run.ts` (`assembleRun`).*
 
 ## 4. CALLCTX — the fused dispatch `this`
 
@@ -146,10 +147,10 @@ time constants), never "under which assembly". At dispatch, `makeCallCtx` (`run/
 looks the owning capability up in TWO run-scoped tables:
 
 - `runCtx.capabilityConfigurations` — the validated per-assembly configuration, a plain
-  `ReadonlyMap<object, unknown>` filled ONCE, eagerly, when a RunContext is minted against an
-  ambient (`eval/exec-phases.ts`'s `instantiate`, walking `ambient.capabilities`/`.activations`
-  — deps included, deduped by capability identity). `this.configuration` is that lookup,
-  verbatim.
+  `ReadonlyMap<object, unknown>` filled ONCE, eagerly, when a RunContext is minted through
+  `env/assemble-run.ts`'s `assembleRun`, copied straight off the tuple's memoized
+  `Vocabulary.configsByCapability` (deps included, deduped by capability identity).
+  `this.configuration` is that lookup, verbatim.
 - `runCtx.capabilityResources` — unchanged in spirit (§1d's per-run resource store), except its
   configuration feed is now the SAME table lookup instead of a parameter carried on the
   association.
@@ -161,25 +162,22 @@ clobber the first's entry for the SAME shared value. Keying by the RUN instead �
 genuinely differs per assembly, one RunContext per `exec()` — cannot collide: two concurrent
 runs against the same shared value each carry their own table.
 
-**The consequence, deliberate.** A RunContext minted with no ambient to read — the bare-`env`
-GLASS exec path, `execExpr`, `CONSTANT_CTX` — carries no `capabilityConfigurations` table, so a
-dispatch there sees `this.configuration === undefined`, the SAME posture a capability with no
-configuration schema at all already has (and the SAME posture `capabilityResources` already
-documents for that path). A caller that bound capabilities directly onto a bare env
-(`capability.lower(...).apply(env, ...)`, bypassing `assembleAmbient`) and then dispatches
-through `exec(code, { env })` gets no configuration either — the sanctioned path threads
-`{ capabilities, config }` (or a pre-assembled `{ ambient }`) through `exec`, or builds the same
-table by hand and hands it to a caller-owned `RunContext({ capabilityConfigurations })` when
-testing the capability/`assembleEnv` layer directly (see `loader/__tests__/loader-capability
-.test.ts`'s `assembled()` helper for the pattern). A REUSED `runCtx` (`ExecOptions.runCtx`, REPL
-continuity) carries whatever table its OWN originating `instantiate` call built — a fresh
-`new RunContext(...)` a caller mints by hand outside `instantiate` carries none, so sharing a
-table-bearing `runCtx` across passes means minting it via `assembleAmbient` + `instantiate`
-directly (CALLER-owned, never disposed by `exec`), not capturing `ExecState.runCtx`/`.ambient`
-off a bare `{ capabilities }` call — `exec` disposes BOTH of those at that call's own end.
+**The consequence, deliberate.** Every public path now runs through `assembleRun` — directly, or
+via `execExpr`'s own standalone-default `assembleRun({ capabilities: BASE_ROSTER, ... })` — so
+`this.configuration` is populated on every sanctioned dispatch, `execExpr` included. Only a
+RunContext minted with NO vocabulary at all — `CONSTANT_CTX`, and the internal over-frame family
+(`execExprOverFrame`/`execOverFrame`, the `ExecOptionsOverFrame` test-harness seam that mints
+`new RunContext(...)` directly over a caller-held live frame instead of going through
+`assembleRun`) — carries no `capabilityConfigurations` table, so a dispatch there sees
+`this.configuration === undefined`, the SAME posture a capability with no configuration schema
+at all already has (and the SAME posture `capabilityResources` already documents for that path).
+A REUSED `runCtx` (`ExecOptions.runCtx`, REPL continuity) carries whatever table its OWN
+originating `assembleRun` call built — checked by vocabulary IDENTITY on reuse, never re-filled
+(a mismatch throws `RunContextVocabularyMismatchError`) — while a fresh `new RunContext(...)` a
+caller mints by hand outside `assembleRun` (the over-frame seam above) carries none.
 
 *Enforcement sites: `run/CallCtx.ts`, `run/RunContext.ts` (`capabilityConfigurations`),
-`eval/exec-phases.ts` (`instantiate`, `capabilityConfigurationTable`).*
+`env/assemble-run.ts` (`assembleRun`).*
 
 ## 5. BUDGETS — three bounds, first to fire wins
 

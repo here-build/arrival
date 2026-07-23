@@ -24,7 +24,7 @@ Three observations shape the design:
 
 1. **The arguments the model actually sent are ground truth at the door.** Upstream error
    prose does not need full parsing — its clue tokens (a quoted value, a quoted unexpected
-   key, a decode-path array) intersect against the sent-args tree the door already holds.
+   key, a zod-path array) intersect against the sent-args tree the door already holds.
 2. **"Unexpected key + here are the real keys" is a solved problem one level down.** The
    same tight-match machinery that resolves a misnamed tool name resolves a misnamed key.
 3. **Many near-identical retries is a repetition problem**, not a one-shot teaching
@@ -57,7 +57,7 @@ sent arguments are unavailable):
 |---|---|---|
 | own-decode | our own humanized rejection's `:<path> — <issue>` line head (§2.5) | the path is the answer — no search needed |
 | own-unknown-key | our own rejection naming one unrecognized top-level keyword | tight-matched by edit distance against the declared parameters |
-| decode-path | an SDK/validator issues-path array | the path is the answer — no search needed |
+| zod-path | an SDK/validator issues-path array | the path is the answer — no search needed |
 | value-mismatch | `'<value>' is not of type '<type>'` | walk the sent-args tree for the one leaf equal to `<value>`; zero or several matches ⇒ no localization |
 | unexpected-keys | `Additional properties are not allowed ('<k1>', '<k2>' were unexpected)` | walk the sent-args tree for the one object containing every quoted key as its own key |
 | required-key | `'<key>' is a required property` | walk the schema for the node whose `required` list contains `<key>`, preferring one whose parent path exists in the sent arguments |
@@ -135,12 +135,16 @@ validation-library dump:
 ```
 
 One line per problem, in the schema's own declaration order; `<issue>` reads as
-`missing (required)`, `expected <type>, got <type>: <value preview>`, or
-`unknown key(s) :<k1>, :<k2>` as appropriate. This decode is **strict** — an unrecognized
-keyword is rejected, never silently discarded (the rationale and the silent-strip hazards it
-closes live in `kwargs-rejection.ts`). Because this message already names its own
-parameter, it feeds the same localized door pipeline as an upstream rejection with no
-clue-walking needed — it is itself an `own-decode` clue.
+`missing (required)`, `expected <type>, got <type>: <value preview>`, or, one line per
+unrecognized key, `unknown key :<k>` (with a `(did you mean :<param>?)` suffix when the key
+edit-distance-matches a declared parameter) as appropriate. An unrecognized keyword near a
+declared parameter — typo-shaped — still hard-rejects this way; one that is far from every
+declared parameter is tolerated instead (dropped from the sent arguments, the call proceeds,
+and a note names what was ignored) unless it co-occurs with any other problem, in which case
+the hard door still fires with every problem listed (the rationale, the near/far split, and
+the silent-strip hazards this decode otherwise closes live in `kwargs-rejection.ts`). Because
+this message already names its own parameter, it feeds the same localized door pipeline as an
+upstream rejection with no clue-walking needed — it is itself an `own-decode` clue.
 
 ### 2.6 Retry-shape synthesis
 

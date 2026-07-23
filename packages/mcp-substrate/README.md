@@ -29,7 +29,7 @@ const runner = createDoorsRunner({
   // state survive host world-rebuilds; omitted, each runner uses a private instance.
 });
 
-const result = await runner.run({ expr, env, tools });
+const result = await runner.run({ expr, ambient, scope, tools });
 ```
 
-The runner is env-lifecycle-agnostic — it holds no reference to how the env was assembled.
+The runner is ambient/scope-lifecycle-agnostic — it holds no reference to how the ambient or scope was assembled.

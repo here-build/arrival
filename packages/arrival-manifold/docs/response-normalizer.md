@@ -26,9 +26,10 @@ MCP tool responses reach the scheme arm as raw `jsToScheme` values. Two failure 
    structure (`"[{…}]"`, CSV text) arrives as an opaque string the model must hand-parse.
 
 The normalizer is a membrane layer that (a) de-serializes recognized serializations, (b)
-applies universal container-hygiene rules, (c) stabilizes each tool's response shape into a
-monotonically-widening declared contract, (d) optionally persists that contract across
-sessions under a skeptical, self-healing invalidation rule.
+applies universal container-hygiene rules (§3's implementation-status note: proposed, not yet
+shipped), (c) stabilizes each tool's response shape into a monotonically-widening declared
+contract, (d) optionally persists that contract across sessions under a skeptical,
+self-healing invalidation rule (§8: also proposed, not yet built).
 
 ## 2. Scope boundary — generalized rule vs task-tuned hack
 
@@ -63,8 +64,10 @@ measurement, so the persistent store is **off for any comparison run** and repor
 separate delta if measured at all. Not a fairness confession — variable isolation.
 
 **Disclosed exhaustively, as spec.** The scheme arm carries a normalizer; native gets raw
-strings. Every transform is named plainly: deserialize, unwrap-container (C1), error-throw
-(C3), structural non-conformance door (§6.2), shape-stabilization (§6), and the optional
+strings. Every transform is named plainly: deserialize, container unwrap (C1) and in-band
+error-throw (C3) — proposed Stage-C design, not present in the shipped `unwrapToolResult`
+(§3 notes the gap), which hands Stage B's parsed value through unchanged — kind-widened
+non-conformance announcement (§6.2), shape-stabilization (§6), and the optional
 cross-session prior (§8). This is the adaptation surface stated as spec, not a list of
 concessions.
 
@@ -134,6 +137,13 @@ CallToolResult
 `⟂ LIMIT` = hand back untouched, never mangle. B1-else, B2-else, B3, C4 are the honest
 ignorance.
 
+**Implementation status.** Stage C's C1/C3 arms are proposed design, not shipped code —
+grep the package and neither exists. The shipped `unwrapToolResult` (`server.ts`) hands
+Stage B's parsed value through as-is; every response today takes C4's identity arm. No
+container-unwrap and no in-band-error-by-shape run; the only thrown error is the
+already-declared `isError:true` door (Stage A1). The rest of this section documents the
+proposed C1/C3 design and the ordering argument for when it lands.
+
 **Why C3 precedes C1.** C1's "exactly one key, value is the sole object" matches
 `{"error":{"code":429,…}}` — a C1-first order unwraps it and hands the model an **error as a
 success value**, then object-asserts the tool on error-shape keys. GraphQL `{"errors":[…]}` is
@@ -170,7 +180,8 @@ Supersedes always-on inference for everything below Stage A:
   `JSON.parse` (`server.ts`) — shipped behavior, object/array-yield only (scalar strings stay
   strings).
 - **Inferred zone — model-invoked, never automatic.** Every other recognizer (CSV/TSV, TOON,
-  Python-literal, NDJSON, prose-envelope, C1 unwrap) is exposed two ways:
+  Python-literal, NDJSON, prose-envelope) is exposed two ways — the proposed C1 unwrap
+  (§3's implementation-status note) has no prelude function today, only these six:
   1. **Parsers as first-class prelude functions** — `parse-json`, `parse-csv`, `parse-toon`,
      `parse-py-literal`, `detect-parse`, `detect-envelope` — pure, inline-usable:
      `(parse-csv (tool/read-file :path "x.csv"))`.
@@ -193,7 +204,8 @@ shape is always the pre-unwrap value.
 The per-recognizer guards are **owned by their modules**, each carrying the held-out failure
 that earned it. This doc keeps only the cross-cutting stances and the rejected alternatives.
 
-- **§4.1 Precision tier** (`json.ts`, `csv.ts`, plus C1/C3 in the Stage-C pipeline): every
+- **§4.1 Precision tier** (`json.ts`, `csv.ts`, plus the proposed C1/C3 Stage-C pipeline,
+  §3's implementation-status note): every
   guard is strict *because* the loose version mangled a held-out server — they are the safety
   property, not preferences. Cross-cutting orderings that span modules: **A before B**
   (`structuredContent` is authoritative; a B-first read extracts garbage), **C3 before C1**
@@ -233,7 +245,8 @@ is not a scheme-arm disadvantage:
 ### 4.4 Tool-intent overrides — deferred to the capability layer
 
 One residual overreach cannot be fixed structurally: a convert/transform tool (markdownify)
-whose payload *is literally* `{"error":"…"}` — C3 throws content the user asked to convert.
+whose payload *is literally* `{"error":"…"}` — proposed C3 would throw content the user asked
+to convert (today, with C3 unimplemented, that payload passes through untouched instead).
 Structural rules cannot know a tool's *intent*. This is **deferred to the capability layer**:
 tool-intent handling ("this tool is a converter — do not touch its payload") is a per-tool
 capability that arms the tool, not a hardcoded exemption in the universal normalizer. Keeping
@@ -246,7 +259,8 @@ established the recognizer set. Validation: 69 held-out servers (ranks 101-169),
 from real tool-handler source.
 
 **Scope of the result.** The validation was a **static desk-check of Stages A-C against single
-responses** — not a whole-system property:
+responses** — a paper classification against real tool-handler source, not a code run (Stage
+C is proposed design, §3's implementation-status note) — and not a whole-system property:
 
 - **Supported:** across 69 held-out servers, Stages A-C produced **no mis-extraction on a
   single response** — every unknown shape landed on a LIMIT (opaque/passthrough). The
@@ -292,50 +306,60 @@ session.
 
 Promotions, first-detections, and invalidations emit into the **service header** (same surface
 as the map/filter/reduce hints), as a distinct highlighted block so a promotion is re-read,
-not buried (the retroactive-window repair, §7). The vocabulary: `promotion` (shape widened,
-"from now every response is a vector — use map/filter/reduce"), `watching` (responses currently
-opaque; membrane will announce when a format stabilizes), `provisional` (a §8 prior loaded,
-verifying on first call), `invalidated` (prior shape didn't hold; relearning).
+not buried (the retroactive-window repair, §7). The ladder's own vocabulary (`ladder.ts`'s
+`Announcement.kind`): `promotion` (shape widened, "from now every response is a vector — use
+map/filter/reduce"), `first-shape` (a tool's first-ever observation), `kind-widened` (§6.2's
+information-only kind conflict), `watching` (responses currently opaque; membrane will
+announce when a format stabilizes — reserved in the vocabulary, emitted by the parser layer,
+not this module). `provisional` and `invalidated` are §8's separate, not-yet-built
+cross-session vocabulary (a §8 prior loaded and verifying on first call; a prior that didn't
+hold, relearning).
 
 ### 6.2 Non-conformance (kind-mismatch against the asserted rung)
 
 Because the ladder holds each tool's *asserted* kind, a response that violates it is surfaced
 **structurally** — never by reading prose. Once a tool is asserted (Singleton-object / Vector /
-Nested), a later response whose top-level KIND differs is non-conforming:
+Nested), a later response whose top-level KIND differs is non-conforming. **As implemented
+(`ladder.ts`), this is reversed from a door:**
 
 ```
 tool asserted structure, response is a SCALAR
-  → recoverable error, carrying the scalar VERBATIM as the condition's value/message.
-    NEVER an empty collection. NEVER a silent substitution.
+  → the value passes through UNCHANGED (never mangled, never substituted); the ladder
+    widens its kindsSeen union and emits a `kind-widened` announcement in the service
+    header. Information, not a thrown condition — "no door, no throw" (ladder.ts's own
+    comment, tracked as an explicit reversal of this section's original design).
 ```
 
 **One branch only. The empty-collection branch is rejected — it was a lie.** Mapping "asserted
-collection + scalar response" to an *empty collection* (absence) composes catastrophically:
+collection + scalar response" to an *empty collection* (absence) would compose
+catastrophically:
 
-- **It contradicts the §4.3 floor.** The floor promises prose errors without `isError` are
-  left uncaught and read exactly as native does. But a Vector-asserted tool returning
+- **It would contradict the §4.3 floor.** The floor promises prose errors without `isError`
+  are left uncaught and read exactly as native does. But a Vector-asserted tool returning
   `"Error: rate limit exceeded"` would become an **empty vector** — the model concludes *zero
   results* and answers wrong, where native sees the error and retries. **Strictly worse than
   native.** Both cannot hold; the empty branch loses.
-- **It makes "a miss is free" false.** §4.1's strict-or-opaque bargain rests on a rejected
+- **It would make "a miss is free" false.** §4.1's strict-or-opaque bargain rests on a rejected
   parse costing nothing. But after assertion, rejected parse → raw string → *empty vector*: a
   CSV with one unescaped newline (correctly rejected) would have its **entire payload silently
   discarded.** Every strict-guard miss becomes data loss — inverting the guards from safety
   feature to primary corruption vector.
 
-Routing non-conformance to a **recoverable error carrying the scalar** fixes both: the string
-stays visible (floor intact), a guard-miss costs nothing but a door, and an absence that *is*
-the answer still reads off the condition. This is why the system needs no English not-found
-sniff: `"No book found for olid: …"` becomes a *door carrying that exact string* — the
-kind-mismatch is the signal, the English is never parsed, nothing is invented. It cannot
-misfire on a tool that legitimately returns strings (a string *is* its asserted shape). It
-settles the mixed-tool question: **structure wins the assertion** — a tool seen returning
-structure even once is structure-asserted; subsequent scalars are non-conformance signals.
-Unseen / scalar-asserted tools have no assertion to violate, so bare `"success"`/`"ok"` stay
-opaque.
+Passing the value through **unchanged**, with only an announcement, fixes both: the string
+stays visible exactly as returned (floor intact), a guard-miss still costs nothing (no value is
+ever discarded on the ladder's say-so), and an absence that *is* the answer still reads
+verbatim off the response. This is why the system needs no English not-found sniff:
+`"No book found for olid: …"` reaches the model exactly as the server sent it — the
+kind-mismatch is only ever a header annotation, the English is never parsed, nothing is
+invented or withheld. It cannot misfire on a tool that legitimately returns strings (a same-
+kind response never announces). It settles the mixed-tool question: **the rung stays put** — a
+tool seen returning structure even once keeps its structure rung — while the KIND union simply
+widens to record that scalars occur too. Unseen / scalar-asserted tools have no assertion to
+widen against, so bare `"success"`/`"ok"` stay opaque.
 
-**Absence has exactly ONE representation.** A no-payload / not-found result is a recoverable
-door carrying the server's own words — never a fabricated empty collection, never a sentinel.
+**Absence has exactly ONE representation.** A no-payload / not-found result reaches the model
+as the server's own words, verbatim, exactly as native would show it — never a fabricated
+empty collection, never a sentinel, and never altered by the ladder.
 
 ### 6.3 Ladder state lifetime
 
@@ -357,8 +381,14 @@ rare.
 
 ## 8. Optional cross-session persistence (skeptical, self-healing)
 
-A pluggable store lets the ladder survive across sessions. Off by default (null store = pure
-in-session, zero new surface), and **mandatorily off for any comparison run** — cross-run
+**Not built.** No `ShapeStore` exists anywhere in the package (`ladder.ts`'s own comment: "the
+§8 cross-session store is a separate, out-of-scope layer this class knows nothing about") —
+this section is the design proposal for a pluggable store, not shipped behavior. `ShapeLadder`
+today is pure in-session, zero persistence, full stop; there is no "off by default" runtime
+switch to flip because there is nothing on the other side of it yet.
+
+A pluggable store would let the ladder survive across sessions. Off by default (null store =
+pure in-session, zero new surface), and **mandatorily off for any comparison run** — cross-run
 warm-start is an evaluation-advantage native cannot have (§2). This is a *product* feature,
 benchmarked off. Two-tier confidence:
 
@@ -425,10 +455,11 @@ stale assumption.
   capability side of the line.
 - **Reading English to decide absence.** Never regex `/no .* found/`. Absence is caught
   *structurally* (§6.2): a scalar arriving for a ladder-asserted structure is a kind-mismatch →
-  a recoverable door carrying that scalar verbatim, and only when the tool already proved a
-  structured shape. The same string from a never-structured tool stays opaque.
+  the value passes through verbatim, an announcement fires, and only when the tool already
+  proved a structured shape. The same string from a never-structured tool stays opaque.
 - **Fabricating empties.** Never substitute an empty collection for a response not understood.
-  A rejected parse costs a door, never a payload (§6.2).
+  A kind-mismatch costs an announcement, never a payload (§6.2); a rejected strict-recognizer
+  parse (§4.1) costs a thrown recoverable error, never a silent substitution either.
 - **Inner-field typing.** No optional/required inference on payload fields (§2.1.2).
 - **Trusting declared schema.** `outputSchema` informs only the descriptive catalog surface and
   a provisional prior; never a trusted transform input (§2.1.1).

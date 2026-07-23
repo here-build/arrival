@@ -76,6 +76,32 @@ iff **any** file has an error-tier diagnostic. One caveat for security-sensitive
 evaluated" is true for the Scheme — but `--with` / config-file capability modules are host JS that **is
 imported and executed** to arm the vocabulary (see below).
 
+## Machine output and run introspection
+
+`run --json` opts stdout's *values* into NDJSON (one JSON value per top-level form, for `| jq` and
+agent consumers) instead of the default s-expr text:
+
+```
+$ arrival run --json hello.scm
+"hello, world"
+```
+
+Three more `run` flags tap the same execution trace to answer "what actually happened" — all to
+**stderr**, never stdout, so they compose with piped values:
+
+- `--outline` — after the run, a source-ordered outline of every form that executed, each with its
+  state and its invocation `×count` (the dynamic multiplicity behind that form — `(fib 10)` reports
+  hundreds of invocations across a handful of forms).
+- `--form <scope>` — drill into one form by its `scopeId` (the `head@line:col` shown in
+  `--outline`): its invocation aggregate, callers, sampled values.
+- `--export` — emit the run introspection as one versioned JSON object on stdout (forms + counts +
+  states + total invocations — the machine/agent contract); this **replaces** the normal value
+  output rather than joining it.
+
+See `docs/interactive-run-design.md` for the design (source/execution/value as one structure
+across lenses); the module headers (`run-view.ts`, `run-outline.ts`, `form-detail.ts`,
+`run-export.ts`) carry the mechanics.
+
 ## Modules — `(require "file.scm")`
 
 `(require …)` loads a file **relative to the entry file's directory** (the require root is jailed there;
@@ -165,11 +191,21 @@ node's native type-stripping (node ≥ 23.6; older node gets a teaching error po
 
 ## Passing data in — an honest gap
 
-The language's designed door for host data is `define/overridable` + `override` (a typed, validated
-program parameter — see the core README). That door is reachable from the API (`exec(src, { override })`)
-but **not from this CLI yet**: there is no `--override` flag. Today a CLI-run program runs on its
-declared defaults; parameterized runs go through the API. A `run --override key=json` mapping onto the
-existing exec option is the intended shape.
+The language's designed door for host data is `define/overridable` (a typed, validated program
+parameter — see the core README). It isn't in the base roster (config-bearing, assembled fresh
+per run), so reaching it from the API means arming the capability explicitly alongside its config:
+
+```js
+import { exec } from "@inhuman.tools/arrival";
+import { overridableCapability } from "@inhuman.tools/arrival/overridable";
+
+exec(src, { capabilities: [overridableCapability], config: { params: { city: "Paris" } } });
+```
+
+That door is **not reachable from this CLI yet**: there is no `--override` flag, and no `--with`
+module ships `overridable` armed by default. Today a CLI-run program runs on its declared
+defaults; parameterized runs go through the API. A `run --override key=json` mapping onto the
+existing `config.params` shape is the intended shape.
 
 ## REPL
 
@@ -196,9 +232,11 @@ $ printf '(define x 21)\n(* x 2)\n' | arrival repl
 | 1 | `run`: validation or runtime error (doors on stderr) · `check`: at least one file has errors |
 | 2 | usage: missing/extra positionals, unknown command (usage text on stderr) |
 
-Diagnostics go to **stdout** for `check` (they are its product) and to **stderr** for `run` (stdout is
-reserved for your program's values — shell-capture `$(arrival run …)` gets values only). Output text is
-human-teaching prose, not a stable machine format; there is no `--json` yet. Gate CI on exit codes.
+Diagnostics go to **stdout** for `check` (they are its product, still human-teaching prose — not a
+stable machine format) and to **stderr** for `run` (stdout is reserved for your program's values —
+shell-capture `$(arrival run …)` gets values only). `run --json` opts the *values* into a machine
+format (see "Machine output and run introspection" above); `check`'s diagnostic text has no such
+switch yet. Gate CI on exit codes.
 
 ## Budgets
 

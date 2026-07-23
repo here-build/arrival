@@ -93,7 +93,7 @@ Whether these forms also improve AI *consumption* (not just density) is unvalida
 
 ## Scheme Integration
 
-Built-in support for `@here.build/arrival-scheme` runtime types:
+Built-in support for Arrival's Scheme runtime types (duck-typed by constructor name, exposed from `@inhuman.tools/arrival/reflect-internals`):
 
 - `AExact` (exact integers / rationals) → Numbers or `num/denom`
 - `AInexact` (floats / complex) → Numbers or `real+imagi`
@@ -107,9 +107,8 @@ Built-in support for `@here.build/arrival-scheme` runtime types:
 ## Part of Arrival
 
 - **@here.build/arrival-env** — type definitions and protocols
-- **@here.build/arrival-scheme** — Scheme interpreter integration
+- **@inhuman.tools/arrival** — the Scheme interpreter, exposing runtime types (e.g. via `/reflect-internals`)
 - **@inhuman.tools/arrival-serializer** — this package
-- **@here.build/arrival** — umbrella package exposing everything
 
 ## License
 

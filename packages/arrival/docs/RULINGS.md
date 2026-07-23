@@ -123,11 +123,14 @@ Cost: one proxy plus on-demand generation instead of a full copy.
 
 Proxy identity is per PROJECTION, not one global slot:
 
-- **bare** (serialization `arrival/toJS`) — keyed by (box), forever;
-- **membrane** (`arrival/toJSMembrane`, rosetta/exec crossings — options honored at
+- **bare** (serialization, `arrival/toJS()` — no `exit`) — keyed by (box), forever;
+- **membrane** (`arrival/toJS(exit)` — rosetta/exec crossings — options honored at
   every depth, nested callables become host fns) — keyed by (box, mode, exporting
   RegionScope);
 - **gated** (tier-state) — keyed by (gate, box).
+
+Formerly two methods (a bare `toJS` and a sibling `arrival/toJSMembrane`); collapsed
+into the one `arrival/toJS(exit?)` method, keyed on `exit` presence.
 
 The singleton/aliasing law holds WITHIN a slot; cross-slot identity is incoherent by
 construction once the projection depends on options and scope. Mechanism (the living

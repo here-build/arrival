@@ -38,7 +38,7 @@ r7rs-numbers/unicode/identity fold in as arrival-specific extension tables besid
 
 **F5 — Region discipline (P6).** Reverse-lambda scoping laws (call-after-return throws,
 pending-at-return throws, abort cancels, per-scope wrapper identity) in
-`membrane/region.law.test.ts`.
+`src/membrane/__tests__/region.law.test.ts`.
 
 **F6 — Doors (P5/errors-as-doors).** Registry-driven: `it.each(WELL_KNOWN_SYMBOLS)` asserts
 every stubbed/famous name doors with a message naming its alternative; every resource cap
@@ -46,10 +46,10 @@ every stubbed/famous name doors with a message naming its alternative; every res
 the test input — a door added without a registry row fails the completeness floor.
 
 **F7 — Static-interpretation agreement (P0's N-interpreter clause).** The existing strong
-suites, kept and named as a family: oracle-contract (Σ vs reference), lineage-shadow (static
-classifier vs eager stamps), type-lens (lower+tsc bite-guards), name-escape (bifunctor law).
-New suites join this family with the same shape: interpreter A vs interpreter B over a shared
-corpus, divergence = throw.
+suites, kept and named as a family: oracle-contract (Σ vs reference), lineage-spike (static
+classifier vs eager stamps), `.test-d.ts` type-level tests (tsc-as-interpreter bite-guards),
+name-escape (bifunctor law). New suites join this family with the same shape: interpreter A
+vs interpreter B over a shared corpus, divergence = throw.
 
 **F8 — The ledger (P15's taxonomy).** One suite that OWNS the truth table: every `it.fails`
 gap row cites its fix gate; every `it.todo` cites its staging gate; every `[INVERTS: gate]`
@@ -64,20 +64,23 @@ registry completeness — each with its rationale string IN the table row.
 ```
 src/__tests__/
   laws/            F1 term-carrier grids, equality, identity (nil-clone), accessor, env-resolution
-  membrane/        F3 crossing tables, strict doors, egress
-  provenance/      F2 conservation + minting + purity; goldens as oracle fixtures
-  conformance/     F4 chibi v2 + arrival extension tables (r7rs-*)
-  doors/           F6 registry-driven door suites
-  agreement/       F7 (oracle-contract, shadow, type-lens relocate here over time)
-  ledger/          F8 gap/staging/inversion index
-  _tables/         shared describe.each inputs: CARRIERS, TERMS, CROSSINGS, VIOLATIONS —
+    _tables/       shared describe.each inputs: CARRIERS, TERMS, CROSSINGS, VIOLATIONS —
                    typed, single-sourced; a law file imports its table, never redeclares it
+  provenance/      F2 conservation + minting + purity; goldens as oracle fixtures
+  scheme-compliance/conformance/   F4 chibi v2 + arrival extension tables (r7rs-*)
+  doors/           F6 registry-driven door suites
+  ledger/          F8 gap/staging/inversion index
+  oracle-contract.spec.ts   F7's oracle-contract (Σ vs reference); still loose at the top
+                   level, not yet relocated into a dedicated family directory
+
+src/membrane/__tests__/   F3 crossing tables, strict doors, egress; also F5 region
+                   discipline (region.law.test.ts)
 ```
 
 Conventions:
 - **Law files are named `<subject>.law.test.ts`** and contain ONE law (possibly many rows).
-- **Tables are data modules** (`_tables/*.ts`), typed, imported by law files AND usable by
-  future interpreters (the static lineage classifier can consume CARRIERS/TERMS too).
+- **Tables are data modules** (`laws/_tables/*.ts`), typed, imported by law files AND usable
+  by future interpreters (the static lineage classifier can consume CARRIERS/TERMS too).
 - **No helper tolerance**: comparison helpers assert ONE representation (the P4 exit
   convention). A helper that accepts boxed-or-raw is a P4 violation in test clothing.
 - **Every table row is individually addressable** in vitest output (`%s` naming from row
