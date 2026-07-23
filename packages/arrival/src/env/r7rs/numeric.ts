@@ -27,7 +27,7 @@ import { type Contract, type RestSpec, type VectorSpec } from "../../common/symb
 import { EnvCapability } from "../../common/capability.js";
 import type { EmitCtx, EmitRule } from "../../emit/emit-rule.js";
 import { Bin, Binding, Call, Lit, Method, Ref, Un, type BinOp, type R } from "../../emit/residual-lite.js";
-import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
+import type { RunContext } from "../../run/RunContext.js";
 import { CallCtx } from "../../common/symbols/_bake.js";
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "../../values/primitives/AValue.js";
 import type { ABool } from "../../values/primitives/ABool.js";
@@ -424,7 +424,6 @@ function schemeExpt(base: ANumeric, power: ANumeric): ANumeric {
     const n = power.num;
     if (n >= 0) {
       return mintExact(
-        CONSTANT_CTX,
         checkedPow(base.num, n, "expt"),
         checkedPow(base.denom, n, "expt"),
         undefined,
@@ -434,7 +433,6 @@ function schemeExpt(base: ANumeric, power: ANumeric): ANumeric {
     invariant(base.num !== 0, "expt: division by zero (0 raised to a negative power)");
     const m = -n;
     return mintExact(
-      CONSTANT_CTX,
       checkedPow(base.denom, m, "expt"),
       checkedPow(base.num, m, "expt"),
       undefined,
@@ -893,9 +891,9 @@ const exactFn = function (this: CallCtx, z: unknown): AExact {
   if (n instanceof AExact) return n;
   const real = n.real;
   TypeError.invariant(Number.isFinite(real), "Cannot convert infinity or NaN to exact");
-  if (Number.isInteger(real)) return mintExact(CONSTANT_CTX, real, 1, undefined, "inexact->exact");
+  if (Number.isInteger(real)) return mintExact(real, 1, undefined, "inexact->exact");
   const { num, denom } = floatToRational(real);
-  return mintExact(CONSTANT_CTX, num, denom, undefined, "inexact->exact");
+  return mintExact(num, denom, undefined, "inexact->exact");
 };
 
 // Boxed (RULINGS.md R1) — see NUMBER_TO_STRING_CONTRACT's doc for why a raw return

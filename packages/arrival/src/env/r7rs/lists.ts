@@ -1035,7 +1035,7 @@ export default EnvCapability.define("scheme/lists", {
           // (z.array(z.value)) genuinely allows a non-list LAST argument (R7RS §6.4's improper-
           // tail form), so `item` here can be a bare SchemeValue — the cast matches concatPair's
           // real runtime contract, not just its (over-narrow) declared one.
-          return concatPair(ctxOf(item), acc, item as AListAlike);
+          return concatPair(acc, item as AListAlike);
         }, nil);
       },
     ),

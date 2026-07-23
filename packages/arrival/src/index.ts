@@ -15,13 +15,11 @@
 export { box, patch_value, quote } from "./values/values-repr.js";
 export { eof } from "./values/primitives/EOF.js";
 // Interop sealing — `@arrival.private` (+ `markInteropBoundary`) marks a class opaque to
-// a Scheme member-read (`(@ x :internal)` → nil). `markSandboxPrivate`/`markAsSandboxBoundary`
-// are deprecated aliases kept for cross-package consumers (arrival-chain).
+// a Scheme member-read (`(@ x :internal)` → nil). `markAsSandboxBoundary` is a deprecated
+// alias kept for a cross-package consumer (arrival-chain) that could not be verified dead —
+// left in place (unlike its `markSandboxPrivate` sibling, confirmed zero-consumer and removed).
 export { arrival, markInteropPrivate, markInteropBoundary } from "./membrane/interop-access.js";
-export {
-  markInteropPrivate as markSandboxPrivate,
-  markInteropBoundary as markAsSandboxBoundary,
-} from "./membrane/interop-access.js";
+export { markInteropBoundary as markAsSandboxBoundary } from "./membrane/interop-access.js";
 export {
   schemeToJs,
   schemeToJsUntyped,
@@ -43,10 +41,7 @@ export {
   schemeTrue as ATrue,
   schemeTrue,
 } from "./values/primitives/ABool.js";
-export { AJSObject as AObject } from "./membrane/AJSObject.js";
-// `AChar` is the legacy alias kept for cross-package consumers; `ACharacter` is
-// the canonical class name. Both spellings resolve to the same class.
-export { ACharacter, ACharacter as AChar } from "./values/primitives/ACharacter.js";
+export { ACharacter } from "./values/primitives/ACharacter.js";
 
 // Canonical core-type re-exports, surfaced from their real home modules (not a
 // star-export) to keep the public API identical and every name barrel-visible.
@@ -74,8 +69,8 @@ export { is_callable_value } from "./values/value-guards.js";
 export { CONSTANT_CTX, RunContext, type HeapMeter } from "./run/RunContext.js";
 // STAGE 2 — the explicit RunContext teardown path (docs/execution.md §HERMETIC): a REPL host
 // that reused a RunContext across passes (`exec(code, { runCtx })`) calls this at session end
-// to tear down whatever capability resources (`common/resources.ts`'s `runScoped`) accrued
-// against it. `await using`ing a `new RunContext(...)`-minted RunContext calls the SAME function
+// to tear down whatever capability resources (`common/capability.ts`'s
+// `onRunContextDispose`-registered `windDownAll`/free-form dispose) accrued against it. `await using`ing a `new RunContext(...)`-minted RunContext calls the SAME function
 // via its `[Symbol.asyncDispose]`; a self-minted (non-reused) RunContext is disposed
 // automatically by `exec()`'s own `finally` — this export is for the REUSE case only.
 export { disposeRunContext } from "./run/run-lifecycle.js";
@@ -89,14 +84,13 @@ export {
   runCacheKey,
   type RunCache,
   type RunCacheEntry,
-  type RunCacheClass,
 } from "./run/run-cache.js";
 // The effect log (W1, arrival-plexus-effect-burst.md §2.3) + the read
 // guard (W2, §2.4): `exec(src, { effects, reads })` gathers sink penetrations instead of firing
 // them and (with `reads` armed) checks the read-your-deferred-write invariant. A host building a
 // confirm-manifest (arrival-mcp's confirm-manifest.ts, arrival-provenance-confirmation.md) reads
 // `EffectEntry`/`MemoryEffectLog` off this public surface rather than a deep relative import.
-export { MemoryEffectLog, burst, BurstDrainError, type EffectEntry, type EffectLog, type BurstFailure } from "./run/effect-log.js";
+export { MemoryEffectLog, burst, BurstDrainError, type EffectEntry, type EffectLog } from "./run/effect-log.js";
 export {
   MemoryReadTracker,
   checkReadWriteGuard,
@@ -158,26 +152,14 @@ export {
 } from "./errors.js";
 
 // Generator-based evaluator: flat trampoline for stack safety and performance.
-export {
-  evaluate as evaluateGenerator,
-  currentRunEnv,
-  type EvalContext,
-  type EvalGenerator,
-  type EvalTap,
-  type StackFrame,
-} from "./eval/evaluator.js";
+export { currentRunEnv, type EvalContext, type EvalTap, type StackFrame } from "./eval/evaluator.js";
 // `Invocation` lives in its own leaf (`eval/dynamic-call-site.ts`) so `rosetta.ts`
 // can install one without importing the evaluator; re-exported from here unchanged
 // for existing external importers of this package.
 export type { Invocation } from "./eval/dynamic-call-site.js";
 
 // Generator exec entry point (parser + generator evaluator) for string-to-value eval.
-export {
-  exec as execGeneratorFromString,
-  parse as parseGenerator,
-  execExpr as execGeneratorExpr,
-  type ExecOptions,
-} from "./eval/generator-exec.js";
+export { parse as parseGenerator, type ExecOptions } from "./eval/generator-exec.js";
 
 // The lexical-binding scope handle, public for `exec({ scope })` — a caller holds a
 // `LexicalScope.for(env)` across calls for REPL-style multi-step define accumulation.
@@ -215,8 +197,8 @@ export { tokenize } from "./reader/tokenize.js";
 // The public bare `exec`/`parse` resolve to the stack-safe, budget-bounded GENERATOR
 // path — an explicit named export wins over a star-exported name of the same name.
 // The generator `ExecOptions` is a strict superset of stdlib's exec options
-// ({env, dynamic_env, use_dynamic} shared, + signal/budgetMs/tap), so bare-`exec`
-// callers gain a killable, bounded evaluator.
+// ({env} shared, + signal/budgetMs/tap), so bare-`exec` callers gain a killable,
+// bounded evaluator.
 export { exec, parse, execState, type ExecState } from "./eval/generator-exec.js";
 
 // The STATIC VALIDATION PASS — the compiler's front door: parsed forms × a
@@ -225,12 +207,7 @@ export { exec, parse, execState, type ExecState } from "./eval/generator-exec.js
 // DiscoveryTool/MCP structured diagnostics and the codemirror LSP squiggles consume
 // the same surface; mercury's roster mode can construct its own vocabulary from
 // `EnvCapability.exports()`.
-export {
-  validateProgram,
-  StaticValidationError,
-  type Diagnostic,
-  type SiteRef,
-} from "./static-validation/validate-program.js";
+export { validateProgram, StaticValidationError, type Diagnostic } from "./static-validation/validate-program.js";
 export {
   vocabularyFromChain,
   type ProgramVocabulary,
@@ -249,15 +226,12 @@ export {
   countCone,
   fieldCone,
   fieldResolve,
-  stepKey,
-  sameStep,
   countOpaqueNodes,
   CLASSIFIED_SPECIAL_FORMS,
   type LineageNode,
   type PathStep,
   type Bindings,
   type Classifier,
-  type FieldResolution,
 } from "./provenance/lineage.js";
 export { classifierFromEnv } from "./provenance/lineage-classifier-from-env.js";
 // Per-value auto-binding leaf-stamp (flag-gated, additive). Captures, per consumer
@@ -271,4 +245,4 @@ export { AutoBindings, slotsOf } from "./provenance/lineage-auto-bindings.js";
 export { deepProvenance } from "./provenance/deep-provenance.js";
 
 // The per-run model-facing note channel — a renderer (mcp-substrate) mints one and drains it.
-export { createNoteSink, createDisplaySink, type NoteSink, type DisplaySink, type DisplayRecord } from "./run/note-sink.js";
+export { createNoteSink, createDisplaySink, type NoteSink, type DisplaySink } from "./run/note-sink.js";

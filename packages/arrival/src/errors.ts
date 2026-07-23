@@ -1080,18 +1080,6 @@ export class SymbolKeyMismatchError extends ArrivalError {
   }
 }
 
-/** A capability declares `symbols.prelude` (scheme source to evaluate at apply
- *  time) but `lower()` was never handed an `evalScheme` — nothing can run the
- *  prelude text. `common/capability.ts`. */
-export class PreludeArmingError extends ArrivalError {
-  public readonly name = "PreludeArmingError";
-  readonly "arrival/error-category": ErrorClass = "other";
-
-  constructor(public readonly capabilityName: string) {
-    super(`capability "${capabilityName}" has a prelude but no evalScheme was provided to lower()`);
-  }
-}
-
 /** A seam expected a concrete `AmbientRuntime` (or an `assembleAmbient()`
  *  product) and got a hand-rolled/structural stand-in instead — `eval/
  *  generator-exec.ts` (`exec`/`execExpr`/the prelude evalScheme),
@@ -1337,24 +1325,6 @@ export class TaglessProtocolError extends ArrivalError {
       `${op}: the ${receiver} primitive does not support \`${op}\` (it declares no ${termName}). A ` +
         `tagless op lives ON the arrival terms whose algebra implements it.`,
     );
-  }
-}
-
-// -------------------------------------------------------------------------
-// :: ProvenanceShadowDivergence — static fullCone vs the eager stamp disagree (a named bug).
-// -------------------------------------------------------------------------
-export class ProvenanceShadowDivergence extends Error {
-  constructor(
-    readonly form: string,
-    readonly staticCone: readonly number[],
-    readonly eagerCone: readonly number[],
-  ) {
-    super(
-      `PROVENANCE-SHADOW-DIVERGENCE on \`${form}\`: static fullCone ${JSON.stringify(
-        staticCone,
-      )} != untapped eager provenance ${JSON.stringify(eagerCone)}`,
-    );
-    this.name = "ProvenanceShadowDivergence";
   }
 }
 

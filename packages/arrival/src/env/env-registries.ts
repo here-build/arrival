@@ -10,25 +10,27 @@
 //     NOT leak in. A flat global would conflate every env built in the process.
 //   • WeakMap ⇒ a side-table entry GCs with its env — no lifetime coupling, no leak.
 //
-// The accessor gets-or-creates the per-env container, so a writer
-// (`defineRosetta` carrying a `type`) and a membership-only reader share one path; an
-// empty container created by a read is inert (membership = false) and GC-eligible.
+// The accessor gets-or-creates the per-env container, so a writer and a membership-only
+// reader share one path; an empty container created by a read is inert (membership =
+// false) and GC-eligible.
 //
-// This registry holds ONLY the TS-signature strings for the type-lens harvest — it
-// does not track purity. `pure: true` on a `defineRosetta` config is still load-bearing
-// at runtime even so: it gates `mintsPoint` inside `createRosettaWrapper` (rosetta.ts).
-// The static lineage classifier gets purity a different way — the bound value's
-// declared `.provenanceRole` (see `provenance/lineage-classifier-from-env.ts`), not a
-// side-table lookup here.
+// This registry holds ONLY the TS-signature strings for the type-lens harvest. TRAILS
+// CLEANUP (Tier 1, docs/plans/stage-c-corpse-deletion.md) shrank `bindRosetta`'s
+// `RosettaFunction` config down to its sole live producer's shape (`replay.ts`'s
+// playback-frame op, `{ fn }` only) — the `type`-carrying write path this registry was
+// populated FROM no longer exists, so every env's registry now reads back empty. Kept
+// alive (not deleted) because `rosettaTypesOf` itself is a separately-tracked survivor
+// (WO-1 territory, `rosetta-registry-dissolution.md` owns its eventual death, not this
+// wave) — this file's own contract is unaffected by who currently writes into it.
 
 import type { AmbientRuntime } from "./AmbientRuntime.js";
 
 // (No global docstring registry: each hermetic symbol carries its own doc, e.g. Macro's `__doc__`.)
 
 // -------------------------------------------------------------------------
-// :: Rosetta type signatures — the type-lens HARVEST surface. Populated on each
-// :: `defineRosetta` carrying a `type`, read per-env by arrival-lsp's
-// :: `assembleHostPrelude([...registry])`.
+// :: Rosetta type signatures — the type-lens HARVEST surface, read per-env by
+// :: arrival-lsp's `assembleHostPrelude([...registry])`. Currently never populated
+// :: (see this file's header) — every env's map reads back empty.
 // -------------------------------------------------------------------------
 const rosettaTypesByEnv = new WeakMap<AmbientRuntime, Map<string, string>>();
 

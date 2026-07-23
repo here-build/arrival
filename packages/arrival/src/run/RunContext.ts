@@ -55,12 +55,15 @@ export type CapabilityResourceStore = WeakMap<object, unknown>;
  *  configuration, scoped to THIS RunContext. Opaque `object` keys, same as
  *  {@link CapabilityResourceStore}, so this leaf file never imports the capability layer.
  *
- *  Unlike the resource store, this table is FILLED ONCE, EAGERLY, at mint (`eval/exec-phases.ts`'s
- *  `instantiate`, from the ambient's `capabilities` + `activations`) — never lazily grown at
- *  dispatch. A plain `ReadonlyMap` is enough (the full capability roster is known and finite the
- *  moment a RunContext is minted against an ambient); reused-`runCtx` REPL passes and a run minted
- *  with no ambient to read (the bare-`env` glass path, `execExpr`, CONSTANT_CTX) simply carry no
- *  table.
+ *  Unlike the resource store, this table is FILLED ONCE, EAGERLY, at mint (`env/assemble-run.ts`'s
+ *  `assembleRun`, from `Vocabulary.configsByCapability`) — never lazily grown at dispatch. A plain
+ *  `ReadonlyMap` is enough (the full capability roster is known and finite the moment a RunContext
+ *  is minted against a vocabulary tuple); reused-`runCtx` REPL passes carry the table their FIRST
+ *  mint built. Since Stage C Cut 3b, EVERY public exec path (`execState`/`execExpr`, including
+ *  their standalone bare-call default — the degenerate `BASE_ROSTER` tuple) is vocabulary-bearing
+ *  and gets this table; only `CONSTANT_CTX` and the internal, non-public live-frame family
+ *  (`execStateOverFrame`/`execOverFrame`/`execExprOverFrame`/`execInFrame`, generator-exec.ts —
+ *  a caller-held raw `AmbientRuntime`, not a vocabulary tuple) carry no table.
  *
  *  Read by `makeCallCtx` (CallCtx.ts) at every dispatch of a value with an
  *  `associateCapability`-registered owner: `runCtx.capabilityConfigurations?.get(capability)`
@@ -112,14 +115,17 @@ export class RunContext {
   readonly display: DisplaySink | undefined;
   /** 1d: this run's per-capability resource store (see {@link CapabilityResourceStore}). The
    *  `arrival/tagless-final/apply` dispatch wrapper (via makeCallCtx) reads a value's resources
-   *  from here, keyed by the value's owning capability. `undefined` on a RunContext minted with no
-   *  producer (the bare-`env` exec path, CONSTANT_CTX) — a resource-reading verb under
+   *  from here, keyed by the value's owning capability. Every ordinary mint gets a fresh (empty,
+   *  lazily-filled) store — `undefined` ONLY for the run-NEUTRAL `CONSTANT_CTX` singleton
+   *  (`_noResourceStore`, the constructor's internal-only flag) — a resource-reading verb under
    *  such a run sees `this.resources === undefined`, same as a resource-less capability. */
   readonly capabilityResources?: CapabilityResourceStore;
   /** This run's per-capability CONFIGURATION table (see {@link CapabilityConfigurationTable}).
    *  Filled ONCE at construction from `opts.capabilityConfigurations` — never grown later, unlike
-   *  `capabilityResources`. `undefined` when the caller supplies none, which is every mint site
-   *  with no ambient to read it from (the bare-`env` glass exec path, `execExpr`, CONSTANT_CTX) —
+   *  `capabilityResources`. Since Stage C Cut 3b, EVERY public exec path (`execState`/`execExpr`,
+   *  including their standalone bare-call default) mints via `assembleRun` and gets this table;
+   *  `undefined` only for `CONSTANT_CTX` and the internal, non-public live-frame family
+   *  (`execStateOverFrame`/`execOverFrame`/`execExprOverFrame`/`execInFrame`, generator-exec.ts) —
    *  `makeCallCtx` (CallCtx.ts) then leaves `this.configuration` `undefined` too, same posture as
    *  a capability with no configuration schema at all. */
   readonly capabilityConfigurations?: CapabilityConfigurationTable;
@@ -127,13 +133,14 @@ export class RunContext {
    *  Vocabulary.map | Vocabulary}'s flat name→value artifact this run resolves through, when
    *  minted via `env/assemble-run.ts`'s `assembleRun`. Kept OPAQUE here (`unknown`, not the real
    *  `AmbientValue`) so this LEAF file never imports the env layer — `env/vocabulary.ts` and its
-   *  consumers narrow the type at their own boundary. `undefined` for every OTHER mint site
-   *  (the ambient/glass paths, `execExpr`, CONSTANT_CTX) — a run built the old way carries no
-   *  vocabulary handle at all. */
+   *  consumers narrow the type at their own boundary. Since Stage C Cut 3b, EVERY public exec path
+   *  is vocabulary-bearing; `undefined` only for `CONSTANT_CTX` and the internal, non-public
+   *  live-frame family (see `capabilityConfigurations`'s doc above — same carve-out, same reason). */
   readonly vocabulary?: ReadonlyMap<string, unknown>;
-  /** Stage B1 — this run's tuple's degraded-capability list (the SAME shape `Vocabulary
-   *  .degraded`/`AssembledEnv.degraded` carry), opaque here for the identical reason
-   *  `vocabulary` is. `undefined` off the vocabulary path. */
+  /** Stage B1 — this run's tuple's degraded-capability list (the SAME shape `Vocabulary.degraded`
+   *  carries — the retired `AssembledEnv.degraded`, pre Cut 3b, carried the shape before it),
+   *  opaque here for the identical reason `vocabulary` is. `undefined` off the vocabulary path
+   *  (`CONSTANT_CTX` + the internal live-frame family). */
   readonly degraded?: readonly unknown[];
 
   constructor(
@@ -147,9 +154,10 @@ export class RunContext {
       reads?: ReadGuard;
       notes?: NoteSink;
       display?: DisplaySink;
-      /** The CONFIGURATION relocation's supply seam — `eval/exec-phases.ts`'s `instantiate` is
-       *  the one production caller, passing the table it built by walking the ambient's
-       *  capability DAG. Every other mint site (glass, `execExpr`, CONSTANT_CTX) omits it. */
+      /** The CONFIGURATION relocation's supply seam — `env/assemble-run.ts`'s `assembleRun` is
+       *  the one production caller, passing the table it built from `Vocabulary.configsByCapability`.
+       *  The internal, non-public live-frame family + `CONSTANT_CTX` omit it (see the field's own
+       *  doc above). */
       capabilityConfigurations?: CapabilityConfigurationTable;
       /** Stage B1 — see the field's own doc above. Supplied by `env/assemble-run.ts`'s
        *  `assembleRun` only. */

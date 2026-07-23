@@ -256,7 +256,8 @@ export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest exten
   readonly preludeOnly?: boolean;
   /** KIND-AGNOSTIC (native/rosetta). Config keys this verb needs to be CALLABLE — the
    *  auto-derive gap-closer (docs/environments.md §DEGRADATION-D2): `common/capability.ts`'s
-   *  bind loop reads this UNCONDITIONALLY (no builder-form, no `degradation:"doors"` gate) and,
+   *  bind loop reads this UNCONDITIONALLY (no builder-form, no mode gate — the retired
+   *  `"forbid"`/`"doors"` MODE distinction died in the Tier 1 trails cleanup) and,
    *  when any declared key is absent from the activation's validated `configuration`, binds a
    *  cause-carrying `DoorProcedure` for this verb INSTEAD of the real value — via
    *  `activation.degradation.door(verb, missingKeys, reason)` (`./degradation.js`), the SAME
@@ -271,7 +272,7 @@ export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest exten
    *  that `schema.parse` already let through absent. `degradation.ts`'s `missingOptionalKeys`
    *  structural check (`instanceof ZodOptional | ZodDefault`) is what keeps the two views
    *  agreeing: a `requiresConfig`-named key that is genuinely optional at the schema shows up
-   *  there too, so `AssembledEnv.degraded`'s informational surface and this verb-scoped gate
+   *  there too, so `Vocabulary.degraded`'s informational surface and this verb-scoped gate
    *  are reading the SAME "absent" fact from two angles, never a contradiction.
    *
    *  Absent ⇒ the verb binds unconditionally (byte-identical to today) — zero cost, the

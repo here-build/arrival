@@ -11,7 +11,6 @@ import { fromJS, isSchemeValue } from "../membrane/membrane.js";
 import { quote } from "../values/values-repr.js";
 import { APair } from "../values/primitives/APair.js";
 import type { RunContext } from "../run/RunContext.js";
-import { rosettaTypesOf } from "./env-registries.js";
 import { unboundVariableError } from "../unbound-variable.js";
 import { RawCrossingError } from "../errors.js";
 import { INTEROP_BOUNDARY } from "../membrane/interop-access.js";
@@ -256,10 +255,12 @@ export function assertResolvedBinding(value: unknown, name: string | symbol, res
  *   • the REPLAY playback frame (provenance/replay.ts, via bindRosetta).
  *
  * CARVE-OUTS, with their live consumers named:
- *   • `function` — {@link bindRosetta}'s wrapper storage (`createRosettaWrapper`'s
- *     output is a bare scheme-calling-convention fn) and the legacy SymbolDeclaration
- *     arm's activation-bound fns (capability.ts). Quarantined legacy: new callable
- *     kinds bind first-class ANativeProcedures instead.
+ *   • `function` — {@link bindRosetta}'s wrapper storage only (`createRosettaWrapper`'s
+ *     output is a bare scheme-calling-convention fn). The OTHER historical producer — the
+ *     legacy `SymbolDeclaration` `{ fn }` bind arm's activation-bound fns (capability.ts) —
+ *     died with `lower()` (Stage C Cut 4): every capability now binds first-class
+ *     ANativeProcedures instead, so `bindRosetta` (replay.ts's sole remaining producer) is
+ *     this carve-out's ONLY consumer.
  *   • `Error` — the evaluator's catch-frame bind of a raised condition object
  *     (evaluator.ts's catch-frame `bindValue(catchResolver.env, varName, errorValue)`): R7RSError extends
  *     the host `Error`, NOT AValue, so `isSchemeValue` misses it — reachable
@@ -426,30 +427,23 @@ export function mintFrame(
 
 /**
  * The retired `AmbientRuntime.prototype.defineRosetta` PUBLIC method's wiring, kept alive
- * ONLY for its two remaining producers: `capability.ts`'s legacy `SymbolDeclaration`
- * bind arm and `replay.ts`'s playback-frame op registration (both still author bare-fn
- * `{ fn, ... }` verbs, never `env.defineRosetta` itself — see the ledger's "defineRosetta
- * legacy arm authoring form" row for why that authoring SHAPE survives while this method
- * doesn't). Module-internal — not barrel-exported, not part of the `SchemeEnv` contract;
- * a new call site is a regression onto the retired public API
- * (env-capability-authoring skill's migration recipes are the way in).
+ * ONLY for its sole remaining producer: `replay.ts`'s playback-frame op registration
+ * (still authors a bare-fn `{ fn }` verb, never `env.defineRosetta` itself — see the
+ * ledger's "defineRosetta legacy arm authoring form" row for why that authoring SHAPE
+ * survives while this method doesn't). `capability.ts`'s legacy `SymbolDeclaration` bind
+ * arm — the OTHER historical producer — died with `lower()` (Stage C Cut 4). Module-internal
+ * — not barrel-exported, not part of the `SchemeEnv` contract; a new call site is a
+ * regression onto the retired public API (env-capability-authoring skill's migration
+ * recipes are the way in).
  *
  * `env` is a real `AmbientRuntime` now (the hermetic cut): with `SchemeEnv.set` gone,
- * capability.ts's apply narrows its structural env to the concrete class at the top
- * (an instanceof DOOR, never a cast) before any bind fires, and replay.ts's playback
- * frame always was one — so the old widest-common-shape `{ set }` parameter has no
- * remaining non-AmbientRuntime caller. The wrapper is stored through {@link bindValue}
- * (its `function` carve-out — this is the carve-out's named consumer).
+ * replay.ts's playback frame always was one — so the old widest-common-shape `{ set }`
+ * parameter has no remaining non-AmbientRuntime caller. The wrapper is stored through
+ * {@link bindValue} (its `function` carve-out — this is the carve-out's named consumer).
  */
 export function bindRosetta(env: AmbientRuntime, name: string, config: RosettaFunction): void {
   const wrapper = createRosettaWrapper(config);
   bindValue(env, name, wrapper);
-  // `config.pure` is consumed INSIDE createRosettaWrapper (the runtime mint gate,
-  // `mintsPoint = pure !== true`) — no static side-table records it; the
-  // static classifier reads the declared `.provenanceRole` off baked bound values
-  // instead (provenance/lineage-classifier-from-env.ts). Legacy-registered names
-  // carry no role and fall to the classifier's `undefined` default.
-  if (config.type !== undefined) rosettaTypesOf(env).set(name, config.type);
 }
 
 /**

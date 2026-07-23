@@ -141,8 +141,8 @@ export interface ExecOptions {
    * REUSE an existing RunContext (REPL continuity) instead of minting a fresh one for this
    * call: a REPL spawns ONE RunContext (capture it off a prior call's `ExecState.runCtx`) and
    * threads it through every later pass, so pass-scoped capability resources
-   * (`common/resources.ts`'s `runScoped` — a database handle, a require cache, …) survive
-   * between passes instead of respawning each call, exactly like `scope`'s accumulating
+   * (`common/capability.ts`'s per-run resource cells/factories — a database handle, a require
+   * cache, …) survive between passes instead of respawning each call, exactly like `scope`'s accumulating
    * defines already do.
    *
    * CALLER-owned: exec will NOT dispose it. Passing this OPTS OUT of the per-call disposal a
@@ -171,8 +171,6 @@ export interface ExecOptions {
    * evaluator's `currentRunResolver()` back-channel at the require apply boundary.
    */
   resolver?: Resolver;
-  dynamic_env?: AmbientRuntime;
-  use_dynamic?: boolean;
   /** Tap for tracing per-form evaluation enter/exit. See EvalTap. */
   tap?: EvalTap;
   /** Predicate to suppress tap firing for specific nodes (atoms always skipped).
@@ -402,8 +400,6 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     scope,
     runCtx: passedRunCtx,
     program: passedProgram,
-    dynamic_env,
-    use_dynamic,
     tap,
     nodeFilter,
     signal,
@@ -476,8 +472,6 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
         run(
           evaluate(expr, {
             resolver: runResolver,
-            dynamic_env,
-            use_dynamic,
             tap,
             nodeFilter,
             signal,
@@ -632,8 +626,6 @@ export async function execExpr(
   expr: SchemeValue,
   {
     resolver,
-    dynamic_env,
-    use_dynamic,
     tap,
     nodeFilter,
     signal,
@@ -682,8 +674,6 @@ export async function execExpr(
       await run(
         evaluate(expr, {
           resolver: runResolver,
-          dynamic_env,
-          use_dynamic,
           tap,
           nodeFilter,
           signal: runSignal,
@@ -747,8 +737,6 @@ export async function execStateOverFrame(code: string | SchemeValue, options: Ex
     scope,
     runCtx: passedRunCtx,
     program: passedProgram,
-    dynamic_env,
-    use_dynamic,
     tap,
     nodeFilter,
     signal,
@@ -784,8 +772,6 @@ export async function execStateOverFrame(code: string | SchemeValue, options: Ex
         run(
           evaluate(expr, {
             resolver: runResolver,
-            dynamic_env,
-            use_dynamic,
             tap,
             nodeFilter,
             signal,
@@ -823,7 +809,7 @@ export async function execOverFrame(code: string | SchemeValue, options: ExecOpt
  *  standalone-default machinery (a caller reaching this seam always holds a real frame). */
 export async function execExprOverFrame(
   expr: SchemeValue,
-  { env, dynamic_env, use_dynamic, tap, nodeFilter, signal, budgetMs, heapBudget, cache, effects, reads, runCtx: passedRunCtx }: ExecOptionsOverFrame,
+  { env, tap, nodeFilter, signal, budgetMs, heapBudget, cache, effects, reads, runCtx: passedRunCtx }: ExecOptionsOverFrame,
 ): Promise<SchemeValue> {
   if (!isAmbientRuntime(env)) throw new AmbientShapeError("execExprOverFrame", "expected a concrete AmbientRuntime");
   await ensureInferenceEnvPopulated();
@@ -834,7 +820,7 @@ export async function execExprOverFrame(
   try {
     return expectValue(
       await run(
-        evaluate(expr, { resolver: runResolver, dynamic_env, use_dynamic, tap, nodeFilter, signal: runSignal, runCtx }),
+        evaluate(expr, { resolver: runResolver, tap, nodeFilter, signal: runSignal, runCtx }),
         { signal: runSignal, budgetMs },
       ),
     );

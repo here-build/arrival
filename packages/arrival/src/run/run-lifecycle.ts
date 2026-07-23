@@ -5,7 +5,8 @@
  * A `RunContext` is minted once per `exec()` call by default, but a REPL-style caller may
  * hand the SAME `RunContext` to N successive `execState`/`exec` passes (`ExecOptions.runCtx`,
  * generator-exec.ts) — a session's "one run, many passes" continuity. Anything scoped to that
- * RunContext (Stage 2's capability resources, `common/resources.ts`'s `runScoped`) must survive
+ * RunContext (Stage 2's capability resources, `common/capability.ts`'s per-run resource
+ * cells/factories) must survive
  * across those passes and tear down exactly once, at the SESSION's end — never per pass, never
  * twice.
  *
@@ -65,10 +66,10 @@ function lifecycleOf(runCtx: RunContext): RunLifecycle {
 }
 
 /** Register `teardown` to run once, at `runCtx`'s disposal (explicit or backstop — whichever
- *  fires first). Called by `common/resources.ts`'s `runScoped` on a resource's FIRST touch
- *  under a given RunContext — never eagerly, never more than once per (resource, RunContext)
- *  pair (that pairing's own single-flight is `runScoped`'s job; this function only accumulates
- *  the eventual cleanup). A RunContext already disposed accepts no further teardowns silently
+ *  fires first). Called by `common/capability.ts` on a resource's FIRST touch under a given
+ *  RunContext — never eagerly, never more than once per (resource, RunContext) pair (that
+ *  pairing's own single-flight is the capability's own per-run cell/factory job; this function
+ *  only accumulates the eventual cleanup). A RunContext already disposed accepts no further teardowns silently
  *  running one late is worse than a resource that never got the chance to register — but this
  *  is not expected to happen in practice, since nothing should still be spawning resources
  *  against a RunContext whose session has already ended. */

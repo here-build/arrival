@@ -1,6 +1,6 @@
 import type { AmbientRuntime, AmbientValue } from "../env/AmbientRuntime.js";
 import type { RunContext } from "../run/RunContext.js";
-import { type CompiledResolutionChain, sealResolutionChain } from "./CompiledResolutionChain.js";
+import type { CompiledResolutionChain } from "./CompiledResolutionChain.js";
 import { INTEROP_BOUNDARY } from "../membrane/interop-access.js";
 
 /**
@@ -49,20 +49,6 @@ export class Capabilities {
     chain?: CompiledResolutionChain,
   ) {
     this.chain = chain;
-  }
-
-  /**
-   * The ASSEMBLED capability base — the baked `user_env → global_env` chain in its
-   * SEALED form. `base` is the run's base leaf (`user_env` from env-roots.ts), passed
-   * BY THE CALLER (generator-exec, which already imports the leaf safely) rather than
-   * imported here: a value import of env-roots into this module would cycle through
-   * the early-loaded eval chain (`Resolver → Capabilities → env-roots → new
-   * AmbientRuntime`, before `AmbientRuntime` is constructed). `sealResolutionChain` is
-   * memoized per base (one chain, one realm-shared memo), so the per-exec call here
-   * reuses the artifact the assembly call sites sealed at bake end.
-   */
-  static assembled(base: AmbientRuntime): Capabilities {
-    return new Capabilities(base, sealResolutionChain(base));
   }
 
   /** The raw base bindings lookup (`undefined` on a miss, no synth) — the capability

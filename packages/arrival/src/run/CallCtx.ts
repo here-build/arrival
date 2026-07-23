@@ -96,10 +96,13 @@ export function associateCapability(value: object, capability: object, readsReso
  * itself, keyed by the owning capability object:
  *
  *   - `configuration` — a plain lookup, `runCtx.capabilityConfigurations?.get(owner.capability)`.
- *     That table is filled ONCE, at RunContext mint (`eval/exec-phases.ts`'s `instantiate`), from
- *     the ambient this run was instantiated against — never lazily, never here. A run minted with
- *     no ambient to read (the bare-`env` glass path, `execExpr`, CONSTANT_CTX) carries no table,
- *     so `configuration` is `undefined` — the SAME posture a resource-less capability already has.
+ *     That table is filled ONCE, at RunContext mint (`env/assemble-run.ts`'s `assembleRun`, from
+ *     `Vocabulary.configsByCapability`) — never lazily, never here. Since Stage C Cut 3b every
+ *     public exec path (`execState`/`execExpr`, including their standalone default) mints this
+ *     way; only `CONSTANT_CTX` and the internal, non-public live-frame family
+ *     (`execStateOverFrame`/`execOverFrame`/`execExprOverFrame`/`execInFrame`, generator-exec.ts)
+ *     carry no table, so `configuration` is `undefined` there — the SAME posture a resource-less
+ *     capability already has.
  *   - `resources` — unchanged in spirit (still per-RunContext, still lazily produced), but its
  *     configuration feed is now sourced the SAME way: `resolveCapabilityResources` reads
  *     `runCtx.capabilityConfigurations` itself instead of taking a configuration parameter.

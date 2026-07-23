@@ -13,8 +13,10 @@
  * ruling this file already documented) says the `requiresConfig` auto-door mints REGARDLESS
  * of mode; the "doors" rows below were always pinning "same outcome as forbid," so with no
  * mode knob left to vary, those rows collapse into the single mode-independent assertion they
- * were already proving. `DegradationInfo.mode`/`.active` stay informational fields (still
- * "forbid"/inactive under the vocabulary path); nothing reads them to gate behavior.
+ * were already proving. TRAILS CLEANUP (Tier 1, docs/plans/stage-c-corpse-deletion.md) went
+ * one step further: `DegradationInfo.mode`/`.missingKeys`/`.active` had zero readers anywhere
+ * (internal or external) once mode-independent, so they were retired outright — `DegradationInfo`
+ * is now just its `.door(...)` minter, and `buildDegradationInfo` takes only `owner`.
  *
  * LAW 1 ("forbid" default preserved): a genuinely REQUIRED config key (no `.optional()`/
  *   `.default()`) absent from the supplied config throws (now: rejects — `buildVocabulary` is

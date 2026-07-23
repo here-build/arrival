@@ -62,12 +62,7 @@ import {
   mergeDegraded,
   type SymbolDeclaration,
 } from "../common/capability.js";
-import {
-  buildDegradationInfo,
-  collectDegraded,
-  missingOptionalKeys,
-  type DegradedCapability,
-} from "../common/degradation.js";
+import { buildDegradationInfo, collectDegraded, type DegradedCapability } from "../common/degradation.js";
 import { bindCapabilityDefines } from "../common/symbols/define-bake.js";
 import type {
   AEntity,
@@ -108,8 +103,8 @@ export interface Vocabulary {
    *  .ts`'s per-run prelude pass (B2), which overlays this map onto the prelude scope ALONGSIDE
    *  the main map — never onto the user-facing resolution chain. */
   readonly preludeOnly: ReadonlyMap<string, AmbientValue>;
-  /** Every capability that lowered degraded, C3 order (root-first) — same fold order as
-   *  `AssembledEnv.degraded` (kernel.ts). */
+  /** Every capability that lowered degraded, C3 order (root-first) — the same fold order the
+   *  retired `AssembledEnv.degraded` (kernel.ts, pre Stage-C-Cut-4) used to build. */
   readonly degraded: readonly DegradedCapability[];
   /** Every `.spec.prelude` in this tuple's closure, DEPS-FIRST (matches `collectPrelude`'s own
    *  order), deduped by capability IDENTITY (a diamond DAG contributes its prelude once) —
@@ -118,9 +113,9 @@ export interface Vocabulary {
    *  module's own doc. */
   readonly preludes: readonly { readonly capability: EnvCapability; readonly text: string }[];
   /** This tuple's validated per-capability configuration — capability OBJECT → its
-   *  `configuration` bag (the SAME shape `capabilityConfigurationTable`, eval/exec-phases.ts,
-   *  already builds from an `AssembledEnv`), feeding `RunContext.capabilityConfigurations`
-   *  directly. */
+   *  `configuration` bag, feeding `RunContext.capabilityConfigurations` directly
+   *  (`env/assemble-run.ts`'s `assembleRun` — the retired ambient-path table this replaced
+   *  used to build the same shape from an `AssembledEnv`, pre Stage-C Cut 3b). */
   readonly configsByCapability: ReadonlyMap<object, unknown>;
 }
 
@@ -226,13 +221,10 @@ async function processCapability(
 
   const schema = spec.configuration ? z.object(spec.configuration as Record<string, z.ZodTypeAny>) : z.object({});
   const configuration = schema.parse(config ?? {}) as Record<string, unknown>;
-  const missingKeys = missingOptionalKeys(
-    spec.configuration as Record<string, z.ZodTypeAny> | undefined,
-    config as Record<string, unknown> | undefined,
-  );
-  // "forbid" — same default posture as `lower()`'s own untouched default. The requiresConfig
-  // auto-door below fires mode-independently either way (D2, common/degradation.ts).
-  const degradation = buildDegradationInfo(capabilityName, "forbid", missingKeys);
+  // The requiresConfig auto-door below fires unconditionally (D2, common/degradation.ts) — no
+  // mode gate, no missing-keys tally to thread in (the retired "forbid"/"doors" MODE and its
+  // informational `missingKeys`/`active` fields died with the Tier 1 trails cleanup: zero readers).
+  const degradation = buildDegradationInfo(capabilityName);
 
   const bind = makeBindTarget(mainMap, preludeOnlyMap, bakeEnv);
   const defineEntries: [string, DefineSymbolDef | DefineSyntaxSymbolDef][] = [];
@@ -412,8 +404,9 @@ async function buildFresh(
     if (cap.spec.prelude !== undefined) preludes.push({ capability: cap, text: cap.spec.prelude });
   }
 
-  // Degraded fold order = C3 `order` itself (root-first) — matches `AssembledEnv.degraded`'s
-  // own fold in kernel.ts, NOT the deps-first apply walk above.
+  // Degraded fold order = C3 `order` itself (root-first) — matches the retired
+  // `AssembledEnv.degraded`'s own fold in kernel.ts (pre Stage-C Cut 3b), NOT the
+  // deps-first apply walk above.
   const degraded: DegradedCapability[] = [];
   for (const name of order) {
     const d = degradedByName.get(name);

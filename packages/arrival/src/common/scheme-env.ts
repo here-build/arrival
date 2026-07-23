@@ -1,24 +1,21 @@
 // scheme-env — the SCHEME-AWARE layer over the pure C3 kernel (kernel.ts).
 //
 // The kernel is env-agnostic: a pack's `apply(env)` may do anything, but the kernel
-// itself never touches `env` or knows what scheme is. This module adds the two
-// things a scheme env-build needs on top of that seam, WITHOUT modifying the kernel:
+// itself never touches `env` or knows what scheme is. This module adds the ENV TYPE
+// CONTRACT (`SchemeEnv`) a scheme env-build needs on top of that seam, WITHOUT
+// modifying the kernel — the surface a pack contributes to, defined here (not
+// imported from arrival-scheme) so the dependency only ever points arrival-scheme →
+// arrival-scheme-env, never back (no cycle).
 //
-//   1. the ENV TYPE CONTRACT (`SchemeEnv`) — the surface a pack contributes to,
-//      defined here (not imported from arrival-scheme) so the dependency only ever
-//      points arrival-scheme → arrival-scheme-env, never back (no cycle).
-//   2. BOOTSTRAP-SEQUENCE support — a pack may carry scheme `bootstrap` source
-//      (`define-macro` forms + `define`s) ALONGSIDE its JS `wire`, lowered to a
-//      plain `EnvPack` whose apply evaluates the bootstrap then runs the wiring.
-//      Because the kernel applies packs in C3 (dependency) order, a dependency's
-//      macros/defs are present before a dependent's bootstrap runs — the
-//      "bootstrap sequence" falls out of the DAG, not a hand-maintained order.
-//
-// The evaluator is INJECTED (`EvalSchemeInto`): arrival-scheme's `exec(src,{env})`
-// satisfies it. This module never imports the interpreter, so it stays the lower,
-// dependency-free layer the base sandbox can be re-expressed in terms of.
+// The evaluator is INJECTED (`EvalSchemeInto`/`EvalPreludeInto`): arrival-scheme's
+// `exec(src,{env})` satisfies it. This module never imports the interpreter, so it
+// stays the lower, dependency-free layer the base sandbox can be re-expressed in
+// terms of. (The `schemePacks`/`SchemePackSpec` bootstrap-sequence lowering that
+// used to live here — a pack carrying scheme `bootstrap` source alongside its JS
+// `wire`, lowered to a plain kernel `EnvPack` — died with `lower()`/`assembleEnv`
+// (Stage C Cut 4): the vocabulary path bakes a capability's `symbols`/`prelude`
+// directly, no separate bootstrap-lowering step is left to serve.)
 
-import type { EnvPack } from "./kernel.js";
 // Type-only edges (no runtime import — AmbientRuntime.ts imports THIS module's types, so a
 // value edge here would cycle; `import type` erases at emit, same posture as guards.ts's
 // false-leaf note): the storage union a resolver may answer with, and the run identity a
@@ -123,41 +120,3 @@ export type EvalSchemeInto<E = SchemeEnv> = (env: E, source: string) => unknown 
  *  `generator-exec.ts`'s `preludeEvalScheme`). */
 export type EvalPreludeInto<E = SchemeEnv> = (env: E, source: string, runCtx: RunContext) => unknown | Promise<unknown>;
 
-/** A scheme-aware capability: scheme `bootstrap` (macros + defs) and/or JS `wire`,
- *  composed as ONE pack. `deps`/`config`/`name` carry through to the kernel pack. */
-export interface SchemePackSpec<E = SchemeEnv> {
-  readonly name: string;
-  readonly deps?: readonly EnvPack<E>[];
-  /** Pack identity arming (e.g. the injected vfs/loader). Two same-name packs with
-   *  non-equal config in one assembly conflict — see the kernel's `configEqual`. */
-  readonly config?: unknown;
-  /** Scheme source: `(define-macro …)` forms + `(define …)`s, eval'd into env on apply. */
-  readonly bootstrap?: string;
-  /** JS wiring (resolver registration, resource arming — NOT direct value binds:
-   *  `SchemeEnv` carries no write member; bindings are contributed via `bootstrap`
-   *  source or a capability's declarative `symbols`), run AFTER bootstrap so it may
-   *  reference symbols the bootstrap introduced. */
-  readonly wire?: (env: E) => void | Promise<void>;
-}
-
-/**
- * Bind the injected evaluator once, get a `SchemePackSpec → EnvPack` lowering. The
- * produced packs are plain kernel `EnvPack`s (so they compose in the same DAG as
- * pure-JS packs); their `apply` evaluates `bootstrap` then runs `wire`. Async by
- * construction (eval is async) ⇒ assemble with `assembleEnv` (the kernel has no
- * synchronous assembler — there is no synchronous eval path anywhere in arrival).
- *
- *   const pack = schemePacks(exec)({ name: "scheme/srfi-1", bootstrap: SRFI1_SCM });
- *   await assembleEnv(env, [pack]);
- */
-export function schemePacks<E = SchemeEnv>(evalScheme: EvalSchemeInto<E>): (spec: SchemePackSpec<E>) => EnvPack<E> {
-  return (spec) => ({
-    name: spec.name,
-    deps: spec.deps,
-    config: spec.config,
-    apply: async (env) => {
-      if (spec.bootstrap !== undefined) await evalScheme(env, spec.bootstrap);
-      await spec.wire?.(env);
-    },
-  });
-}

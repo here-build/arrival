@@ -31,7 +31,7 @@ export default EnvCapability.define("scheme/macros", {
       macro: SchemeValue,
       // `resolver` is the evaluator's resolver at define-syntax time (threaded through
       // Macro.invoke), carrying the run's capability base.
-      { use_dynamic, error, resolver: defSiteResolver }: MacroInvokeContext,
+      { resolver: defSiteResolver }: MacroInvokeContext,
     ) {
       // TODO: find identifiers and freeze the def scope at definition time.
 

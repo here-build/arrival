@@ -225,11 +225,6 @@ export interface EvalContext {
    * evaluator's own frame sites always set it.
    */
   resolver?: Resolver;
-  dynamic_env?: AmbientRuntime;
-  use_dynamic?: boolean;
-  error?: (e: Error, code?: SchemeValue) => void;
-  /** Stack frames for error reporting */
-  _stack?: StackFrame[];
   /** Optional tap for tracing evaluation enter/exit per parsed Pair. */
   tap?: EvalTap;
   /**
@@ -1474,8 +1469,8 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       currentInvocation: dynamicInv,
       tail: true,
       // Run axis (call-time): swap the run and its flat EvalContext mirrors. Everything
-      // else on `ctx` (resolver already overridden, dynamic_env/tap/error/_stack) is the
-      // lexical/observability axis and stays def-time.
+      // else on `ctx` (resolver already overridden, tap) is the lexical/observability
+      // axis and stays def-time.
       runCtx: callCtx.runCtx,
       strict: callCtx.runCtx.strict,
       signal: callCtx.runCtx.signal,
@@ -2903,9 +2898,6 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
       // The use-site resolver — the def-time Resolver a `Syntax` captures is what hygiene
       // actually consults; this is the call-site one.
       resolver: useResolver,
-      dynamic_env: ctx.dynamic_env,
-      use_dynamic: ctx.use_dynamic,
-      error: ctx.error,
       // So the syntax-rules expander reads its `debug` option from ctx.
       runCtx: ctx.runCtx,
     };

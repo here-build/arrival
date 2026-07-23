@@ -1,7 +1,7 @@
 // mint-numeric.ts — the ONE choke point for minting a checked `AExact` under the
 // safe-operand invariant (docs/design-history/arrival-one-number-rework.md §0.2/§0.3,
 // §2.1: "RATIO with crash-on-overflow"). Every exact-producing op should route its final
-// num/denom (or a bare integral result) through `mintExact`/`mintNumeric` rather than
+// num/denom (or a bare integral result) through `mintExact` rather than
 // calling `new AExact(...)` directly, so the crash-on-overflow law and the DEBUG
 // bigint-cross-check live in one place instead of being re-derived per call site.
 //
@@ -16,16 +16,13 @@
 //
 // Benign runtime cycle with AExact.ts (same shape as the AExact↔AInexact/numbers.ts
 // cycles documented in those files' headers): this module constructs `new AExact` only
-// inside function BODIES (`mintExact`/`mintNumeric`), and AExact.ts calls this module's
+// inside function BODIES (`mintExact`), and AExact.ts calls this module's
 // helpers only inside its own method bodies — nothing touches the other at
 // module-eval/class-definition time, so the cycle never observes a not-yet-initialized
 // binding.
 import { ArrivalError, type ErrorClass, type SourceLocation } from "../errors.js";
 import { AExact } from "./primitives/AExact.js";
-import { AInexact } from "./primitives/AInexact.js";
 import { EMPTY_PROVENANCE } from "./primitives/AValue.js";
-import { type RunContext } from "../run/RunContext.js";
-import type { ANumeric } from "./numbers.js";
 
 // ============================================================================
 // The overflow door (§0.3 — crash-on-overflow, never silent coercion)
@@ -185,10 +182,6 @@ export function debugCrossCheckRational(
  * own "Division by zero" invariant (unrelated to overflow — not this function's door).
  */
 export function mintExact(
-  // TODO(ctx-elimination): kept so the many existing callers don't change (AValue no longer
-  // stores a per-value ctx — see AValue.ts's ctx-removal note) — no longer threaded into the
-  // mint below.
-  ctx: RunContext,
   num: number,
   denom: number,
   provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
@@ -198,36 +191,7 @@ export function mintExact(
    *  omits it (a computed value has no source span of its own). */
   location?: SourceLocation,
 ): AExact {
-  void ctx;
   if (!Number.isSafeInteger(num)) overflow(op, num);
   if (!Number.isSafeInteger(denom)) overflow(op, denom);
   return new AExact(num, denom, provenance, location);
-}
-
-/**
- * Mint an integral numeric result under `wantExact` (§2.1). The encode-edge law's OTHER
- * half (§2.2) lives here structurally: `wantExact` must be threaded in by the CALLER
- * from the coerced operands' own boxes (`nativeNumericOp`/`marshalCall`, sweep-owned) —
- * this function never re-derives exactness from `x`'s shape, it only mints what it's
- * told. `wantExact=true` with an out-of-safe-range `x` throws {@link ExactOverflowError}
- * (an integral exact result overflowing is exactly the §0.3 crash case, not a silent
- * float fallback); `wantExact=false` always succeeds (IEEE double covers every finite
- * `x` plus ±Infinity/NaN).
- */
-export function mintNumeric(
-  // TODO(ctx-elimination): kept so the many existing callers don't change — see mintExact's note.
-  ctx: RunContext,
-  x: number,
-  wantExact: boolean,
-  provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
-  op?: string,
-  /** Source span for a reader-minted literal — see `mintExact`'s twin param. */
-  location?: SourceLocation,
-): ANumeric {
-  void ctx;
-  if (wantExact) {
-    if (!Number.isSafeInteger(x)) overflow(op, x);
-    return new AExact(x, 1, provenance, location);
-  }
-  return new AInexact(x, provenance, location);
 }

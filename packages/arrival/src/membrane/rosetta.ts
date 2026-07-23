@@ -3,14 +3,14 @@
  * identity both directions (bifunctor framing: schemeToJs∘jsToScheme = id and
  * jsToScheme∘schemeToJs = id on the values each side owns).
  * `createRosettaWrapper` wraps a JS fn as a Scheme-callable rosetta — wired through
- * `AmbientRuntime.ts`'s internal `bindRosetta`, whose only two producers are
- * capability.ts's legacy arm and replay.ts's playback frame.
+ * `AmbientRuntime.ts`'s internal `bindRosetta`, whose sole producer is `provenance/
+ * replay.ts`'s playback-frame op registration (capability.ts's legacy `{ fn }` bind
+ * arm — the OTHER historical producer — died with `lower()`, Stage C Cut 4).
  */
 
 import { AValue, EMPTY_PROVENANCE, mergeProvenance, pointProvenance, unionProvenance } from "../values/primitives/AValue.js";
 import { fromJs } from "./boxing.js";
 import { type RunContext } from "../run/RunContext.js";
-import { deepProvenance } from "../provenance/deep-provenance.js";
 import { AJSArray } from "./AJSArray.js";
 import { AJSObject } from "./AJSObject.js";
 import { ANil, nil } from "../values/primitives/ANil.js";
@@ -74,17 +74,17 @@ void _modeKeyExhaustive;
 
 type Fn = (...args: any[]) => any;
 
+/**
+ * The sole producer left is `provenance/replay.ts`'s playback-frame op registration
+ * (`bindRosetta(env, op, { fn })`) — TRAILS CLEANUP (Tier 1) confirmed it passes ONLY `fn`,
+ * never `options`/`type`/`pure`, so `createRosettaWrapper` below is shrunk to that one live
+ * shape: no options bag (a replay op crosses with default `RosettaOptions`, never
+ * `returnEither`/`argProvenance`), no `.d.ts` type-lens fragment (playback ops aren't
+ * lens-harvested), no `pure` (a playback op always MINTS a fresh provenance point — it's
+ * answering from a recorded payload stream, not transforming its scheme args).
+ */
 export interface RosettaFunction {
   fn: Fn;
-  options?: RosettaOptions;
-  /**
-   * TS signature as ambient `.d.ts` fragment, e.g. `"(ip: SchemeIP): SBool"`. INERT at runtime — never read here; harvested by node-only type-lens to assemble `ArrShape` leaves, colocated with `fn` (not a parallel `.d.ts` that drifts). Author assertion over `any` impl, not mechanically derived. Base types from lens prelude; host types (`SchemeIP`, row shapes) from env type-preamble.
-   */
-  type?: string;
-  /**
-   * Provenance role. Default (`pure` unset): Rosetta-IN SOURCE — introduces external data, result MINTS fresh provenance leaf (conservative: never silently lose origin). `pure: true`: fn only TRANSFORMS args (e.g. `string-append`, `dedent`), result PROPAGATES inputs' provenance. Author assertion over `any` impl (JS purity undecidable), same trust model as `type`. LIVE — gates `mintsPoint = pure !== true` in createRosettaWrapper, drives static lineage classifier (`isRosettaIn === !pure`). Control/declaration forms (expose/approval/…) take `pure: true` for no-mint — richer taxonomy deferred.
-   */
-  pure?: boolean;
 }
 
 /**
@@ -546,7 +546,7 @@ export function jsToScheme<T>(
 /**
  * The ONE explicit, safe-range-checked door out of an opaque host `bigint` (the
  * INBOUND_CLAIMS "bigint → raw passthrough" row above) into a plain JS `number` a
- * caller can then hand to `fromJs`/`mintNumeric` to become a genuine scheme exact.
+ * caller can then hand to `fromJs`/`mintExact` to become a genuine scheme exact.
  * §2.3's opaque-host-value law: a bigint never SILENTLY becomes a scheme number
  * (`coerceNumeric` doors on it); this is the sanctioned, explicit alternative —
  * throws rather than losing precision on an out-of-range value, mirroring every
@@ -569,19 +569,12 @@ export function bigintToNumber(value: bigint): number {
   return Number(value);
 }
 
-export const createRosettaWrapper = ({ fn, options = {}, pure = false }: RosettaFunction) => {
-  // `pure: true` forwards inputs' provenance and mints nothing (the `pure?` field doc); a pure
-  // rosetta physically cannot mutate its borrowed inputs — the freeze contract, docs/membrane.md §BOXING.
-  const mintsPoint = pure !== true;
-
+export const createRosettaWrapper = ({ fn }: RosettaFunction) => {
   return async function rosettaWrapper(this: CallCtx, ...schemeArgs: SchemeValue[]) {
     // Collect provenance from AValue inputs before schemeToJs strips AValue identity (and provenance field) to JS primitives.
     // `Extract<SchemeValue, AValue>`, not abstract `AValue` base: SchemeValue's non-AValue members (EOF/Values/R7RSError/bare-fn AProcedure arm) fail reverse assignability TS `filter` predicate; `AValue` itself missing fields some concrete members (e.g. ARosettaProcedure arity/contract) require — Extract picks exactly union members `instanceof AValue` recognizes.
     const inputAValues = schemeArgs.filter((a): a is Extract<SchemeValue, AValue> => a instanceof AValue);
     const inputProvenance = unionProvenance(inputAValues);
-
-    // Per-arg deep provenance (opt-in), aligned to schemeArgs — lets consumer fn (e.g. `.prompt` building `inputsProvenance[field]`) attribute each input to producer, recovering per-field origins union can't distinguish.
-    const argProvenance = options.argProvenance === true ? schemeArgs.map(deepProvenance) : undefined;
 
     // `this` IS the CallCtx — the type parameter forces it at every call site (unbound
     // call = compile error); makeCallCtx/testCallCtx are the only constructors and
@@ -595,31 +588,29 @@ export const createRosettaWrapper = ({ fn, options = {}, pure = false }: Rosetta
       let rawResult: unknown;
       try {
         rawResult = await fn.apply(
-          makeCallCtx(runCtx, inv, argProvenance),
-          withRegionScope(scope, () => schemeArgs.map((arg) => schemeToJs(arg, options))),
+          makeCallCtx(runCtx, inv, undefined),
+          withRegionScope(scope, () => schemeArgs.map((arg) => schemeToJs(arg))),
         );
       } finally {
         closeRegionScope(scope);
       }
 
       // Decide output provenance before jsToScheme so deep-stamp reaches every constructed AValue in one pass — mint overrides inputs. No invocation in ctx (e.g. direct JS calls in tests): fall back to input provenance, silently. Node metadata bound separately via `ctx.currentInvocation.setMetadata(…)` — known up front, doesn't ride result.
+      // The shrunk `RosettaFunction` (Tier 1 cleanup — sole producer never passes `pure`)
+      // always MINTS a fresh provenance point, unconditionally — the `pure`-gated
+      // "propagate inputs' provenance instead" branch this used to have died with the field.
       let resultProvenance = inputProvenance;
-      if (mintsPoint && inv && typeof inv.id === "number") {
+      if (inv && typeof inv.id === "number") {
         // MobX observable — flip via own action for strict-mode safety. Plain POJO (direct-JS tests) has no method, set directly.
         if (typeof inv.markProvenancePoint === "function") inv.markProvenancePoint();
         else inv.isProvenancePoint = true;
         resultProvenance = pointProvenance(inv.id);
       }
 
-      const result = jsToScheme(runCtx, rawResult, options, resultProvenance);
-      return options.returnEither ? [result, nil] : result;
+      return jsToScheme(runCtx, rawResult, undefined, resultProvenance);
     } catch (error) {
       console.error("Rosetta function error:", error);
-      if (options.returnEither) {
-        return [nil, error];
-      } else {
-        throw error;
-      }
+      throw error;
     }
   };
 };

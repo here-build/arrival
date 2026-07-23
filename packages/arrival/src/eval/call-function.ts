@@ -35,11 +35,7 @@ type SchemeFunction = (...args: any[]) => any;
 // `map`/`member`/`assoc` callback ran with no abort signal, no heap meter, forced
 // non-strict, regardless of the run's actual configuration. Making it required turns that
 // silent drop into a compile error at every call site.
-export function call_function(
-  fn: SchemeFunction | ACallable,
-  args: SchemeValue[],
-  { use_dynamic, runCtx }: { use_dynamic?: boolean; runCtx: RunContext },
-) {
+export function call_function(fn: SchemeFunction | ACallable, args: SchemeValue[], { runCtx }: { runCtx: RunContext }) {
   // A callable VALUE (ANativeProcedure/ALambda/ARosettaProcedure) is invoked through the
   // seam — its apply term, a CallCtx threaded — not as a bare fn (`fn.apply` would throw
   // "apply called on an object, not a function"). Bare fns keep the LambdaContext path below.
@@ -49,9 +45,9 @@ export function call_function(
     return resolve_promises(applyCallback(fn, args, makeCallCtx(runCtx)) as SchemeValue);
   }
   // No call frame is built: a generator-lambda carries its own closure env, a
-  // native reads none, so no frame is needed here. Only `use_dynamic` rides the
-  // LambdaContext brand the membrane keys off.
-  const context = new LambdaContext({ use_dynamic });
+  // native reads none, so no frame is needed here — only the LambdaContext brand
+  // identity the membrane keys off.
+  const context = new LambdaContext();
   // `is_applyable` (unlike the retired `is_callable_value` guard) is structural, not a type
   // guard, so this else-arm no longer narrows away `ACallable` statically; the preceding
   // check already ruled it out at runtime — only a bare `SchemeFunction` reaches here.

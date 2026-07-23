@@ -4,7 +4,6 @@
 // (complexDoor/schemeCompare) are benign runtime cycles — method-body calls, nothing at module-eval.
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import { complexDoor, schemeCompare } from "../numbers.js";
 import { AExact } from "./AExact.js";
 import { mintExact } from "../mint-numeric.js";
@@ -66,9 +65,9 @@ export class AInexact extends AValue {
     return Number.isFinite(this.real);
   }
 
-  private static floatToRational(ctx: RunContext, x: number, tolerance: number = 1e-10): AExact {
+  private static floatToRational(x: number, tolerance: number = 1e-10): AExact {
     if (Number.isInteger(x)) {
-      return mintExact(ctx, x, 1, undefined, "inexact->exact");
+      return mintExact(x, 1, undefined, "inexact->exact");
     }
 
     // Simple approach: use decimal representation. `denom`/`num` route through
@@ -77,13 +76,13 @@ export class AInexact extends AValue {
     const str = x.toString();
     const dotIndex = str.indexOf(".");
     if (dotIndex === -1) {
-      return mintExact(ctx, x, 1, undefined, "inexact->exact");
+      return mintExact(x, 1, undefined, "inexact->exact");
     }
 
     const decimals = str.length - dotIndex - 1;
     const denom = 10 ** decimals;
     const num = Number(str.replace(".", ""));
-    return mintExact(ctx, num, denom, undefined, "inexact->exact");
+    return mintExact(num, denom, undefined, "inexact->exact");
   }
 
   // Conversion to JS
@@ -239,6 +238,6 @@ export class AInexact extends AValue {
     invariant(Number.isFinite(this.real), "Infinite number cannot be converted to exact");
     invariant(!Number.isNaN(this.real), "NaN cannot be converted to exact");
     // Convert float to rational
-    return AInexact.floatToRational(CONSTANT_CTX, this.real);
+    return AInexact.floatToRational(this.real);
   }
 }

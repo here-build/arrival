@@ -132,11 +132,13 @@ describe("V6 pin — defineRosetta hard-delete (docs/working-proposals/arrival-e
   // The PUBLIC method is gone from both producer surfaces: the concrete class (no instance
   // ever answers `.defineRosetta`) and the structural `SchemeEnv` contract every pack/consumer
   // types against (so a NEW `env.defineRosetta(...)` call site is a compile error everywhere,
-  // not just at this one class). The legacy AUTHORING SHAPE (`{ fn, type, pure, ... }`
-  // literals — `RosettaSpec`/`SymbolDeclaration`) survives unchanged; only the method that
-  // consumed it is deleted. `AmbientRuntime.ts`'s internal `bindRosetta` is the sole surviving
-  // wiring, reachable only from `common/capability.ts`'s legacy bind arm and
-  // `provenance/replay.ts`'s playback frame — never barrel-exported, never a `SchemeEnv` member.
+  // not just at this one class). The legacy AUTHORING SHAPE (`RosettaSpec`) survives unchanged;
+  // only the method that consumed it is deleted. `AmbientRuntime.ts`'s internal `bindRosetta` is
+  // the sole surviving wiring, reachable only from `provenance/replay.ts`'s playback frame
+  // (`common/capability.ts`'s legacy `{ fn }` bind arm — the OTHER historical producer — died
+  // with `lower()`, Stage C Cut 4, and with it `RosettaFunction`'s `options`/`type`/`pure` fields,
+  // TRAILS CLEANUP Tier 1 — the sole remaining producer never passed them) — never
+  // barrel-exported, never a `SchemeEnv` member.
   it("AmbientRuntime.prototype.defineRosetta no longer exists", () => {
     expect("defineRosetta" in AmbientRuntime.prototype).toBe(false);
   });

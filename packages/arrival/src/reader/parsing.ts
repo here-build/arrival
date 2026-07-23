@@ -2,7 +2,6 @@
 // prefixes), string literals, characters, and symbols. No I/O, no lexer state — given a token string,
 // returns the boxed value. Numeric-grammar helpers originate from the LIPS reader.
 import invariant from "tiny-invariant";
-import { CONSTANT_CTX } from "../run/RunContext.js";
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
@@ -156,7 +155,6 @@ export function parse_rational(arg: string, radix = 10, loc?: SourceLocation): A
   // must throw, not fall through to `parse_symbol` —
   // docs/design-history/arrival-one-number-rework.md §1's named hazard).
   return mintExact(
-    CONSTANT_CTX,
     toSafeExactComponent(numBig, arg),
     toSafeExactComponent(denomBig, arg),
     undefined,
@@ -172,7 +170,6 @@ export function parse_integer(arg: string, radix = 10, loc?: SourceLocation): AE
     return new AInexact(Number.parseInt(parse.number!, r), EMPTY_PROVENANCE, loc);
   }
   return mintExact(
-    CONSTANT_CTX,
     toSafeExactComponent(parseBigInt(parse.number!, r), arg),
     1,
     undefined,
@@ -207,7 +204,7 @@ export function parse_float(arg: string, loc?: SourceLocation): AExact | AInexac
   const simple_number = (parse.number!.match(/\.0$/) || !/\./.test(parse.number!)) && !/e/i.test(parse.number!);
   if (!parse.inexact) {
     if (parse.exact && simple_number) {
-      return mintExact(CONSTANT_CTX, assertSafeExactComponent(Math.round(value), arg), 1, undefined, "parse float", loc);
+      return mintExact(assertSafeExactComponent(Math.round(value), arg), 1, undefined, "parse float", loc);
     }
     // An EXPONENT numeral (e.g. "1e2") defaults to INEXACT regardless of magnitude
     // (R7RS §7.1.1: only a decimal-point-free, exponent-free numeral defaults exact) —
@@ -221,7 +218,7 @@ export function parse_float(arg: string, loc?: SourceLocation): AExact | AInexac
   if (parse.exact) {
     const floatVal = value;
     if (Number.isInteger(floatVal)) {
-      return mintExact(CONSTANT_CTX, assertSafeExactComponent(Math.round(floatVal), arg), 1, undefined, "parse float", loc);
+      return mintExact(assertSafeExactComponent(Math.round(floatVal), arg), 1, undefined, "parse float", loc);
     }
     const str = floatVal.toString();
     const decimalIndex = str.indexOf(".");
@@ -231,7 +228,6 @@ export function parse_float(arg: string, loc?: SourceLocation): AExact | AInexac
       const num = Number(str.replace(".", "").replace("-", ""));
       const sign = floatVal < 0 ? -1 : 1;
       return mintExact(
-        CONSTANT_CTX,
         assertSafeExactComponent(sign * num, arg),
         assertSafeExactComponent(denom, arg),
         undefined,
@@ -239,7 +235,7 @@ export function parse_float(arg: string, loc?: SourceLocation): AExact | AInexac
         loc,
       );
     }
-    return mintExact(CONSTANT_CTX, assertSafeExactComponent(Math.round(floatVal), arg), 1, undefined, "parse float", loc);
+    return mintExact(assertSafeExactComponent(Math.round(floatVal), arg), 1, undefined, "parse float", loc);
   }
   return new AInexact(value, EMPTY_PROVENANCE, loc);
 }

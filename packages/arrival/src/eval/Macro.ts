@@ -21,9 +21,6 @@ export interface Expansion {
 
 export interface MacroInvokeContext {
   env: unknown;
-  error?: (e: Error) => void;
-  use_dynamic?: boolean;
-  dynamic_env?: unknown;
   /** The per-run context, threaded to the macro engine's mint door (eval/syntax-rules.ts)
    *  so every value the expander mints during a live expansion carries the run's identity
    *  and charges its allocation meter. REQUIRED, never optional: `is_macro` dispatch (the

@@ -90,12 +90,9 @@ export class Syntax {
   // hygiene scope (`MacroExpansion`), never a value — hence `expand`, not a
   // boolean-switched `invoke`. `macro_expand` is pinned `true`; the transformer in
   // env/macros/macros.ts ignores it, kept only for fexpr-arg parity with `Macro.invoke`.
-  expand(code: unknown, { error, env, use_dynamic, runCtx, resolver }: MacroInvokeContext): MacroExpansion {
+  expand(code: unknown, { env, runCtx, resolver }: MacroInvokeContext): MacroExpansion {
     const args = {
-      error,
       env,
-      use_dynamic,
-      dynamic_env: this.__env__,
       macro_expand: true,
       runCtx,
       // Use-site resolver (from the dispatch) + the def-time one captured on this Syntax.

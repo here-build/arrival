@@ -942,7 +942,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // Semigroup — list append. `this ⋄ other` = this list's elements followed by other's. Pure:
   // builds a fresh spine, never mutates either operand.
   ["arrival/tagless-final/concat"]<T extends AListAlike>(other: T): AConcatPair<APair<Car, Cdr>, T> {
-    return concatPair<APair<Car, Cdr>, T>(CONSTANT_CTX, this, other);
+    return concatPair<APair<Car, Cdr>, T>(this, other);
   }
 }
 
@@ -990,14 +990,9 @@ type AConcatPair<Car extends SchemeValue, Cdr extends AListAlike> =
 // them onto `b` (shared by reference — purity: a's spine is fresh, b untouched). An improper
 // `a` still contributes its phantom `undefined` car before the non-Pair tail ends the walk.
 export function concatPair<Car extends SchemeValue, Cdr extends AListAlike>(
-  // TODO(ctx-elimination): kept so the existing caller (env/r7rs/lists.ts's `ctxOf(item)`)
-  // doesn't change — no longer threaded into the rebuilt spine below (AValue no longer stores
-  // a per-value ctx — see AValue.ts's ctx-removal note).
-  ctx: RunContext,
   a: Car,
   b: Cdr,
 ): AConcatPair<Car, Cdr> {
-  void ctx;
   const cars: SchemeValue[] = [];
   let node: unknown = a;
   while (node instanceof APair) {

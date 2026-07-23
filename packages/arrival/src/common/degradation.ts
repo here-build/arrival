@@ -1,11 +1,13 @@
 // degradation.ts — door-set degradation: the IMPLEMENTATION and domain types. Model (absent
 // OPTIONAL enabling config narrows a capability's affected symbols to a cause-carrying DOOR-SET
-// instead of silent withholding, only under `degradation: "doors"`; `forbid`, the default, changes
-// nothing — it only records what is missing) is docs/environments.md §DEGRADATION.
+// instead of silent withholding) is docs/environments.md §DEGRADATION. The `"forbid"` vs
+// `"doors"` MODE distinction this model once carried is retired — TRAILS CLEANUP (Tier 1)
+// found every build hardcoded `"forbid"` (D2 made the auto-door mint mode-independently) and
+// zero readers of the mode anywhere — the auto-door mechanism below is now unconditional.
 //
 // Two failure classes are DELIBERATELY untouched — present-but-invalid config (schema.parse's own
-// job, unconditional) and pack apply errors (a defect, never a door) STAY throw paths in BOTH
-// modes, unaffected by anything here.
+// job, unconditional) and pack apply errors (a defect, never a door) STAY throw paths,
+// unaffected by anything here.
 //
 // The degradable-set check is STRUCTURAL (`instanceof z.ZodOptional | z.ZodDefault`) — NOT zod's own
 // `.isOptional()`, which a schema built from `z.custom()` with no predicate answers `true` for
@@ -16,10 +18,11 @@
 // exactly as it is to today's `schema.parse` (a separate defect, not one this module should paper
 // over by misclassifying it as optional).
 //
-// Kernel-facing surface: `DegradedCapability`/`DegradedNeed` are the shape `common/kernel.ts`
-// folds (structurally, uninterpreted) into `AssembledEnv.degraded` — defined HERE (the
-// degradation-domain module), imported TYPE-ONLY by kernel.ts so the env-agnostic core
-// never gains a runtime dependency on this module.
+// Vocabulary-facing surface: `DegradedCapability`/`DegradedNeed` are the shape
+// `env/vocabulary.ts` folds (structurally, uninterpreted) into `Vocabulary.degraded` —
+// defined HERE (the degradation-domain module) so the env-agnostic layers importing it
+// stay decoupled from the vocabulary build itself. (Pre Stage-C Cut 3b, the kernel's now-
+// retired `assembleEnv` folded the same shape into `AssembledEnv.degraded` instead.)
 //
 // DEPARTURE D2 (named, not silent — Stage 3, `Contract.requiresConfig` in
 // `./symbols/_bake.js`): line 15's "required config always stays fail-closed" is about a key
@@ -27,8 +30,7 @@
 // unchanged. D2 is the ADDITIONAL, per-VERB case: a key a capability author wraps `.optional()`
 // (so `schema.parse` succeeds absent) but names in some verb's `requiresConfig` is no longer
 // "silently withheld, unless a builder hand-writes a `.door(...)` check" — `common/capability.ts`'s
-// bind loop reads `requiresConfig` UNCONDITIONALLY (independent of `degradation`'s `"forbid"` vs
-// `"doors"` mode — this door mints under EITHER) and auto-mints the SAME `DoorCause` shape via
+// bind loop reads `requiresConfig` UNCONDITIONALLY and auto-mints the SAME `DoorCause` shape via
 // `DegradationInfo.door` below. The two views agree by construction: a `requiresConfig`-named key
 // is, by D2's own authoring rule, always `.optional()`/`.default()`-wrapped, so it is exactly the
 // set `missingOptionalKeys` already reports — this module needed no new "is it optional" check,
@@ -37,18 +39,12 @@
 import { z } from "zod";
 import type { DoorCause, DoorSymbolDef } from "./symbols/_bake.js";
 
-/** `"forbid"` (the host/provisioning default) vs `"doors"` (program-scoped entry points —
- *  agent-exec, DiscoveryTool sessions, custdev harnesses — opt in). The mode changes nothing on
- *  its own (docs/environments.md §DEGRADATION); narrowing is caller-scoped, never retroactive over
- *  unmigrated callers. */
-export type DegradationMode = "forbid" | "doors";
-
 /** One missing input a degraded door needs to become callable — the `configuration` kind is
  *  the shipped case (`DoorCause["needs"]`'s element shape, from `_bake.ts`); `dependency`/
  *  `resource` kinds stay deferred pending an unrooted-capability policy. */
 export type DegradedNeed = DoorCause["needs"][number];
 
-/** A capability-level entry on `AssembledEnv.degraded` — an enumerable list a host/discovery
+/** A capability-level entry on `Vocabulary.degraded` — an enumerable list a host/discovery
  *  reader inspects instead of inferring degradation from a throw or by probing symbols one
  *  by one. */
 export interface DegradedCapability {
@@ -77,23 +73,17 @@ export function missingOptionalKeys(
   return missing;
 }
 
-/** The degradation view every `Activation` carries — computed once at `lower()` from
- *  `spec.configuration`'s declared-optional keys vs. the supplied config. Its ONE in-repo
- *  `.door(...)` caller is the `requiresConfig` auto-door in `common/capability.ts`'s bind
- *  loop (the builder-form `symbols` arm that used to hand-mint doors off this interface is
+/** The degradation view every `Activation` carries — a thin, owner-scoped `.door(...)`
+ *  minter. Its ONE in-repo caller is the `requiresConfig` auto-door in `common/capability.ts`'s
+ *  bind loop (the builder-form `symbols` arm that used to hand-mint doors off this interface is
  *  retired — a verb's config gate is declared as `Contract.requiresConfig`, loader's
  *  `require` being the worked example with its `[["fs", "loader"]]` any-of group). The
- *  `mode`/`missingKeys`/`active` fields remain as the informational surface hosts and
- *  describe-time readers inspect. */
+ *  interface used to also carry `mode`/`missingKeys`/`active` informational fields (from the
+ *  now-retired `"forbid"` vs `"doors"` distinction — every capability build hardcoded `"forbid"`
+ *  since D2 made the auto-door mint mode-independently); confirmed zero readers anywhere
+ *  (internal or external), so the TRAILS CLEANUP (Tier 1) collapsed the surface to what's
+ *  actually consulted. */
 export interface DegradationInfo {
-  readonly mode: DegradationMode;
-  /** Every declared-optional config key this capability's activation is missing —
-   *  informational (which subset gates which VERB is the verb's own `requiresConfig`
-   *  declaration, not this flat list). */
-  readonly missingKeys: readonly string[];
-  /** `true` iff `mode === "doors"` AND `missingKeys` is non-empty — informational now that
-   *  the auto-door mints mode-independently (D2). */
-  readonly active: boolean;
   /** Mint a `DoorSymbolDef` causally attributing `name` to THIS capability + `needs` (the
    *  causal chain end-to-end: reference → door → owner → missing key). Called by the
    *  `requiresConfig` auto-door; a pure value constructor, defined unconditionally. */
@@ -102,16 +92,8 @@ export interface DegradationInfo {
 
 /** Build the `DegradationInfo` a capability's `Activation` carries — `owner` is the
  *  capability's own name (the `DoorCause.owner` every minted door stamps). */
-export function buildDegradationInfo(
-  owner: string,
-  mode: DegradationMode,
-  missingKeys: readonly string[],
-): DegradationInfo {
-  const active = mode === "doors" && missingKeys.length > 0;
+export function buildDegradationInfo(owner: string): DegradationInfo {
   return {
-    mode,
-    missingKeys,
-    active,
     door: (name, needs, reason) => ({
       kind: "door",
       name,
@@ -127,8 +109,8 @@ export function buildDegradationInfo(
  *  DIFFERENT owner — a dep's door surfacing through re-export — is not THIS capability's
  *  degradation). Dedupes needs by `key` (a capability may mint several doors sharing the
  *  same missing key, e.g. `require`/`require/extension` both citing `fs`). Returns `undefined`
- *  when nothing degraded — `LoweredPack.degraded` stays absent rather than an empty array,
- *  so `AssembledEnv.degraded` never carries a needs-less, symbol-less entry. */
+ *  when nothing degraded rather than an empty array, so `Vocabulary.degraded` never carries a
+ *  needs-less, symbol-less entry. */
 export function collectDegraded(
   capabilityName: string,
   symbolsRec: Record<string, DoorSymbolDef | unknown>,

@@ -110,8 +110,11 @@ interface RequireSession {
    *   (a) `EvalContext` has no per-eval dir field, and `execExpr(form, { resolver, tap })` exposes
    *       no user passthrough to carry one — adding it is an arrival-CORE change (out of this
    *       package); OR
-   *   (b) a dynamic parameter (`ctx.dynamic_env`, which DOES propagate per-call) would work, but
-   *       creating/reading one needs arrival's parameter API, again core-side.
+   *   (b) a genuine dynamic-parameter mechanism (propagating per-call, unlike a lexical field)
+   *       would work, but creating/reading one needs arrival's parameter API, again core-side —
+   *       no such mechanism exists today (the `EvalContext.dynamic_env`/`use_dynamic` fields this
+   *       note used to point at were themselves dead plumbing, retired in the Stage-C trails
+   *       cleanup: never fed by any real caller, never read by any consumer).
    *  A dir-carrying CHILD scope is NOT viable: a `.scm`'s `define`s must spill into the SHARED run
    *  env, so the module's forms can't be evaluated in a private child. Until (a) or (b) lands in
    *  arrival core, the shared stack stays — correct for the common same-dir case, racy only for

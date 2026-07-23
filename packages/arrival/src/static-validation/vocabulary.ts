@@ -78,7 +78,7 @@ export interface AssembledVocabularyOptions {
    *  scope-bound macro/door classifies correctly; scope wins over the chain (lexical
    *  precedence). Absent ⇒ scope names classify as plain values. */
   readonly scopeLookup?: (name: string) => unknown;
-  /** `AssembledEnv.degraded`, when the caller assembled with `degradation: "doors"`. */
+  /** `Vocabulary.degraded` — a capability's requiresConfig-driven auto-doors, when any. */
   readonly degraded?: readonly DegradedCapability[];
 }
 
