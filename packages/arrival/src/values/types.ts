@@ -295,17 +295,20 @@ export const BARE_MODE: EgressMode = "bare";
 export type WrapperKey = EgressMode | "typed";
 
 /**
- * The membrane's element exit, handed to a container's `arrival/toJS(exit)` (only the
- * native containers ADict/APair/AVector read it — see AValue.ts). Built exclusively by
- * rosetta.ts's `egressAValue`; egress-proxy consumes it.
+ * The membrane's element exit, handed to any `arrival/toJS(exit?)` implementor — the native
+ * containers (ADict/APair/AVector, threading it for full recursive projection) AND ACallable
+ * (whose reverse-membrane wrapper reuses `exit.element` verbatim for its result leg — see
+ * ACallable.ts's `hostProjectionOf`). Built exclusively by rosetta.ts's `egressAValue`;
+ * egress-proxy consumes the container half.
  */
 export interface MembraneExit {
   /** Full recursive membrane crossing for one element, running under the PINNED
    *  exporting region scope — closes over `withRegionScope(pinned, () =>
-   *  schemeToJsImpl(el, options))`. Handles nested callables (schemeToJsImpl's own
-   *  is_callable_value fast path → callableToHostFn, minting under the pinned scope),
-   *  nested containers (the recursion re-enters `arrival/toJS(exit)` with the same options, so
-   *  the same modeKey falls out). */
+   *  schemeToJsImpl(el, options))`. Handles nested callables (schemeToJsImpl's `instanceof
+   *  AValue` dispatch re-enters `egressAValue`, which hands the SAME protocol to ACallable's
+   *  own `arrival/toJS(exit)`, minting under the pinned scope), nested containers (the
+   *  recursion re-enters `arrival/toJS(exit)` with the same options, so the same modeKey falls
+   *  out). */
   element(el: unknown): unknown;
   /** Branded cache-mode discriminator — derived from options CONTENT by rosetta's
    *  `modeKeyOf`; closure identity is irrelevant. Never `"bare"` in practice (bare

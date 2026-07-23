@@ -7,9 +7,13 @@
  * previous behavior (toJS answering the print string) made the protocol lie and forced
  * every crossing to special-case callables before dispatch.
  *
- * CURRENT LIMITS pinned here too: the wrapper runs under CONSTANT_CTX (no live run, no
- * region scope, provenance lost — next iterations); identity is stable per value (toJS
- * twice = the same host fn, mirroring the callable's own load-bearing reference identity).
+ * REGION-DISCIPLINED (toJS-protocol collapse, ACallable.ts's `hostProjectionOf`): the former
+ * CONSTANT_CTX-only, sync-when-possible bare path is GONE — every host projection, reached
+ * through this same protocol whether bare or under a real membrane exit, closes over
+ * `currentRegionScope() ?? DETACHED_SCOPE` and resolves through `withRegionCall`, so calling
+ * the returned host fn always answers a Promise (never a bare synchronous value or throw).
+ * Identity is stable per (callable, scope): toJS twice under the SAME scope answers the same
+ * host fn (mirroring the callable's own load-bearing reference identity) — never across scopes.
  */
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
@@ -75,7 +79,9 @@ describe("LAW — callable arrival/toJS is the reverse membrane", () => {
     expect(door).toBeInstanceOf(DoorProcedure);
     const fn = door["arrival/toJS"]() as (...args: unknown[]) => unknown;
     expect(typeof fn).toBe("function");
-    expect(() => fn()).toThrow(PurityError);
+    // Region-disciplined now: the host fn always resolves through withRegionCall, so the
+    // door's teaching throw surfaces as a rejection, not a synchronous throw.
+    await expect(fn()).rejects.toThrow(PurityError);
   });
 
   it("identity: toJS twice on the same callable answers the SAME host fn", async () => {

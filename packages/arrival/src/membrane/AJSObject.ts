@@ -18,7 +18,7 @@ import { CONSTANT_CTX } from "../run/RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
 import { nil } from "../values/primitives/ANil.js";
 import { accessHas, accessKeys, accessMember, NOT_FOUND } from "./interop-access.js";
-import { InteropAccessError } from "../errors.js";
+import { ForeignProxyFreezeError, InteropAccessError } from "../errors.js";
 import { attestDeep, freshIfSingleton, isAttested } from "../values/attestation.js";
 import { type SchemeValue } from "../values/types.js"; // Runtime import cycle (benign — see header): jsToScheme is a hoisted `export function`,
 // called only inside get() at runtime.
@@ -236,7 +236,11 @@ export class AJSObject extends AValue {
   // Re-source from an active run-context once one is restored.
   private freezeSource(): void {
     if (!Object.isFrozen(this.source)) {
-      Object.freeze(this.source);
+      try {
+        Object.freeze(this.source);
+      } catch (cause) {
+        throw new ForeignProxyFreezeError(cause);
+      }
     }
   }
 }

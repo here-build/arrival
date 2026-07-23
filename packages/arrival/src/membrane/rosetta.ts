@@ -22,20 +22,11 @@ import { AOpaqueHandle } from "../values/primitives/AOpaqueHandle.js";
 import { isMarkedInteropPrivate } from "./interop-access.js";
 import { R7RSError, UnrecognizedCrossingError, AsyncCrossingError } from "../errors.js";
 import { is_promise } from "../eval/guards.js";
-import { is_callable_value } from "../values/value-guards.js";
-import { applyCallback, _installCallableMarshal, type ACallable } from "../values/primitives/ACallable.js";
-import { type AUnwrap, type AWrap, type EgressMode, type SchemeBounceMarker, type SchemeValue } from "../values/types.js";
+import { _installCallableMarshal, type ACallable } from "../values/primitives/ACallable.js";
+import { type AUnwrap, type AWrap, type EgressMode, type SchemeValue } from "../values/types.js";
 import invariant from "tiny-invariant";
-import {
-  closeRegionScope,
-  currentRegionScope,
-  DETACHED_SCOPE,
-  openRegionScope,
-  withRegionCall,
-  withRegionScope,
-} from "./region-scope.js";
-// Leaf, ZERO own imports — see dynamic-call-site.ts header: ambient holder lives there, not eval/evaluator.ts (would close cycle: evaluator.ts → AmbientRuntime.ts → rosetta.ts).
-import { withDynamicCallSite } from "../eval/dynamic-call-site.js";
+import { closeRegionScope, currentRegionScope, DETACHED_SCOPE, openRegionScope, withRegionScope } from "./region-scope.js";
+import { originalBoxOf } from "./egress-proxy.js";
 
 // warnMembrane lives in leaf membrane-warn.ts, shared with boxing.ts `function` boxer — value layer needn't import evaluator-heavy module just to warn.
 // Non-portable JS value → #void, loudly: docs/membrane.md §VOID-RULE.
@@ -110,46 +101,22 @@ export interface InvocationLike {
  * docs/membrane.md §REGION — the wrapper closes over the ambient `RegionScope`
  * (`currentRegionScope()`), never re-reads it (so a late call sees the closed scope, tripping the
  * escape door), and identity is per (callable, scope, FAMILY) on the scope-owned cache.
+ *
+ * THIN DELEGATE (toJS-protocol collapse): the whole reverse-membrane body — region discipline,
+ * arg/result marshaling, the scope-owned cache — now lives on `ACallable` itself
+ * (`values/primitives/ACallable.ts`'s `hostProjectionOf`, installed via `_installCallableMarshal`
+ * below), reached through the SAME `arrival/toJS(exit?)` protocol every native container answers.
+ * `egressAValue` already builds exactly the `MembraneExit` a callable's protocol method wants
+ * (its `element` closure IS `schemeToJsImpl(el, options)` under the pinned scope) — so this
+ * function is nothing more than that dispatch, kept as a named export because callers across the
+ * codebase (and this file's own `schemeToJsImpl`) still spell the crossing as "get me this
+ * callable's host fn," not "egress this AValue." One cache either way (crossing.law's "two-caches
+ * split is dead" pin): `schemeToJs` of a dict holding a callable and a direct
+ * `callableToHostFn`/`toJS` call on that SAME callable, under the SAME scope, answer the
+ * identical wrapper.
  */
-/** `applyCallback`'s `CallResult` admits trampoline bounce token (`SchemeBounceMarker`) alongside `SchemeValue` — types.ts doc names invariant: bounce "never reaches a value slot," call boundary narrows it out first. `callableToHostFn` is that boundary for reverse-membrane re-entry result, asserts invariant explicitly vs widening `schemeToJs` input type to tolerate structurally impossible shape. */
-function isBounceMarker(x: unknown): x is SchemeBounceMarker {
-  return typeof x === "object" && x !== null && (x as Partial<SchemeBounceMarker>).__bounce === true;
-}
-
-/** Callable's JS projection IS the region wrapper (not print string). Called from schemeToJsImpl's
- * is_callable_value branch AND exported for membrane.toJS()'s matching special-case — kept out of
- * ACallable's `arrival/toJS` so the class need not import rosetta.ts (scheme-zod init cycle).
- * Keyed by `EgressMode` in the scope-owned two-level cache (its projection varies with the
- * `options` bag); scheme-zod's typed decode shares that cache under `"typed"` — docs/membrane.md
- * §REGION, and RegionScope.cache's doc. */
 export function callableToHostFn(value: ACallable, options: RosettaOptions): (...args: unknown[]) => unknown {
-  const scope = currentRegionScope() ?? DETACHED_SCOPE;
-  const key = modeKeyOf(options);
-  let byKey = scope.cache.get(value);
-  if (byKey === undefined) {
-    byKey = new Map();
-    scope.cache.set(value, byKey);
-  }
-  const cached = byKey.get(key);
-  if (cached) return cached;
-  const wrapper = (...jsArgs: unknown[]): Promise<unknown> =>
-    withRegionCall(scope, async () => {
-      // Args mint under ENCLOSING invocation's runCtx, never CONSTANT_CTX — `scope.runCtx` is exactly that (or CONSTANT_CTX for detached fallback).
-      // A promise-valued arg settles BEFORE boxing (the reverse membrane is already
-      // async); a bare Promise reaching jsToScheme doors (jsToSchemeAsyncDoor).
-      const schemeArgs = await Promise.all(jsArgs.map(async (a) => jsToScheme(scope.runCtx, await a, options)));
-      // Re-entry trace nests under the exporting invocation, threaded WHOLE through the apply
-      // term now (`scope.dynSite` is that same exporting invocation) rather than reconstructed
-      // downstream from ambient state; `withDynamicCallSite` stays too — nested lambda re-entry
-      // still reads it ambiently at ITS own dispatch (evaluator HOF-boundary wrappers).
-      const callCtx = makeCallCtx(scope.runCtx, scope.dynSite as InvocationLike | undefined);
-      const raw = await withDynamicCallSite(scope.dynSite, () => applyCallback(value, schemeArgs, callCtx));
-      invariant(!isBounceMarker(raw), "callableToHostFn: a reverse-membrane call resolved to a bounce token");
-      // Nested callable in result crosses under SAME scope — one discipline for whole re-entry, not just top-level return.
-      return withRegionScope(scope, () => schemeToJs(raw, options));
-    });
-  byKey.set(key, wrapper);
-  return wrapper;
+  return egressAValue(value, options) as (...args: unknown[]) => unknown;
 }
 
 /**
@@ -203,25 +170,21 @@ export function errorToHost(value: R7RSError, exitEl: (el: unknown) => unknown):
 
 /**
  * Recursive body behind `schemeToJs`. `unknown`-typed, not `any`: recursion crosses raw JS intermediates no single generic can describe (raw array element, plain object field) — see `schemeToJs` doc for narrowing at public boundary.
- * LAZY: every boxed shape delegates to own `arrival/toJS` (one protocol, class-owned — P7). Containers egress as lazy readonly proxies (egress-proxy.ts); borrowed AJSObject/AJSArray unwrap to `source` IDENTITY (the borrowed-identity law); callables become inverse-rosetta region wrappers. HERE: only rosetta-specific surface protocol doesn't know: elementwise crossing of RAW JS containers (elements may be boxed), sequence-op-term preserve, FFI allow-list, P5 door.
+ * LAZY: every boxed shape delegates to own `arrival/toJS` (one protocol, class-owned — P7). Containers egress as lazy readonly proxies (egress-proxy.ts); borrowed AJSObject/AJSArray unwrap to `source` IDENTITY (the borrowed-identity law); callables become inverse-rosetta region wrappers, through the SAME dispatch below (ACallable extends AValue — no separate special-case needed; see `egressAValue`'s doc). HERE: only rosetta-specific surface protocol doesn't know: elementwise crossing of RAW JS containers (elements may be boxed), sequence-op-term preserve, FFI allow-list, P5 door.
  */
 function schemeToJsImpl(value: unknown, options: RosettaOptions): unknown {
   // null/undefined echo back unchanged (matches AUnwrap non-SchemeValue arm).
   if (value == null) return value;
 
-  // Scheme callable crossing OUT → region-scoped JS wrapper (reverse-membrane). Checked BEFORE protocol dispatch (callable IS AValue) so rosetta face threads OPTIONS into wrapper re-entry marshalling; protocol `arrival/toJS` on ACallable (options-less, plain `toJS`/exec) builds same wrapper with defaults.
-  if (is_callable_value(value)) {
-    return callableToHostFn(value, options);
-  }
-
-  // Other boxed shapes: one dispatch through `egressAValue` (shared with membrane.toJS
-  // so the two exits can't drift) — it hands each AValue its `MembraneExit` via the single
-  // `arrival/toJS(exit)` protocol; containers thread it for full recursive projection
-  // (nested callables/containers all honor `options`), scalars ignore it and unwrap.
-  // Containers egress as lazy readonly proxies (egress-proxy.ts — identity per (box, mode,
-  // scope) for membrane, per box for bare), borrowed wrappers return source identity,
-  // ABytevector → raw Uint8Array. (Callables handled above; Macro/Syntax never a value,
-  // can't reach schemeToJs.)
+  // Every boxed shape — including a callable (ACallable extends AValue) — dispatches through
+  // `egressAValue` (shared with membrane.toJS so the two exits can't drift): it hands each
+  // AValue its `MembraneExit` via the single `arrival/toJS(exit)` protocol. Containers thread it
+  // for full recursive projection (nested callables/containers all honor `options`); a callable's
+  // own protocol method (ACallable.ts) reads the SAME exit to cross its result out and mints its
+  // region-scoped host wrapper; scalars ignore it and unwrap. Containers egress as lazy readonly
+  // proxies (egress-proxy.ts — identity per (box, mode, scope) for membrane, per box for bare),
+  // borrowed wrappers return source identity, ABytevector → raw Uint8Array. (Macro/Syntax never a
+  // value, can't reach schemeToJs.)
   if (value instanceof AValue) {
     return egressAValue(value, options);
   }
@@ -370,6 +333,29 @@ export const INBOUND_CLAIMS: readonly InboundClaim[] = [
       if (merged === v.provenance) return v;
       const deep = v["arrival/withProvenanceDeep"];
       return deep === undefined ? v.withProvenance(merged) : deep.call(v, ctx, p, seen);
+    },
+  },
+  {
+    // R9 RE-ADMISSION (docs/design-history/arrival-egress-membrane-exit.md — the
+    // bifunctor law): a value that crossed OUT as one of egress-proxy.ts's lazy
+    // ref-tracking proxies (bare/membrane/gated — ALL three laws register in the
+    // same PROXY_ORIGIN map at mint) and is now crossing back IN is re-admitted as
+    // its ORIGINAL box, not re-borrowed as a fresh AJSArray/AJSObject — so
+    // `jsToScheme(schemeToJs(box)) === box` (mem/eq?) holds for containers exactly
+    // as it already does for scalars. Ordered BEFORE the array/plain-object rows on
+    // purpose: an R9 proxy over a VECTOR is `Array.isArray`-true and would
+    // otherwise be claimed by the array row first, losing identity permanently
+    // (a fresh borrowed AJSArray around the proxy, never eq? to the original
+    // vector). Re-dispatches through `jsToSchemeImpl` with the ORIGINAL box — that
+    // re-enters the "AValue → identity / provenance re-stamp" row just above,
+    // reusing its re-stamp logic verbatim rather than duplicating it here (risk:
+    // do NOT reimplement re-stamping in this row).
+    name: "R9 egress proxy → original box (re-admission)",
+    claims: (v) => typeof v === "object" && v !== null && originalBoxOf(v) !== undefined,
+    box: (ctx, v, p, seen) => {
+      const original = originalBoxOf(v as object);
+      invariant(original !== undefined, "inbound claim 'R9 egress proxy': box called off its predicate");
+      return jsToSchemeImpl(ctx, original, p, seen);
     },
   },
   {

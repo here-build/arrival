@@ -55,6 +55,7 @@ describe("inbound registry — the declared, ordered claim table IS the law", ()
       "null → nil",
       "undefined → #void (warn)",
       "AValue → identity / provenance re-stamp (class term)",
+      "R9 egress proxy → original box (re-admission)",
       "array → borrowed AJSArray",
       "plain object → borrowed AJSObject",
       "scalar → boxer table (fromJs)",

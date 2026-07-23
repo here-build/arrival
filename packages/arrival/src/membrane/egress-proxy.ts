@@ -67,6 +67,24 @@ const bareProxies = new WeakMap<AValue, object>();
  *  re-egress hits; a fresh snapshot's fresh gate closure gets a fresh inner map. */
 const gatedProxies = new WeakMap<TierGate, WeakMap<AValue, object>>();
 
+/**
+ * R9 RE-ADMISSION: every egress proxy this module mints — under ANY of the three
+ * identity laws (bare/membrane/gated) — registers here at mint time, proxy → its
+ * original box. This is what makes the membrane a genuine bifunctor at the
+ * container boundary: `jsToScheme(schemeToJs(box)) === box` (rosetta.ts's
+ * INBOUND_CLAIMS reads this map to re-admit a proxy that round-trips back in,
+ * instead of re-borrowing it as a fresh AJSArray/AJSObject and losing identity —
+ * see that file's "R9 egress proxy → original box" claim). One WeakMap, keyed by
+ * the PROXY object (not the box) — a proxy is a fresh identity per (box, law-key),
+ * so this is the honest inverse of `bareProxies`/`membraneSlot`/`gatedSlot` above. */
+const PROXY_ORIGIN = new WeakMap<object, AValue>();
+
+/** The inverse of minting: `undefined` for anything that isn't one of THIS module's
+ *  own egress proxies (a plain JS object/array, a foreign Proxy, another AValue). */
+export function originalBoxOf(proxy: object): AValue | undefined {
+  return PROXY_ORIGIN.get(proxy);
+}
+
 /** Shallow read model a container hands to its proxy: `keys()` enumerates the own
  *  string keys (index strings for the array shape), `read(key)` returns the ELEMENT —
  *  usually a box, or a raw FFI-passthrough value (binary/Promise) that never boxed. */
@@ -248,5 +266,9 @@ export function egressContainerProxy(
   // reach-back during a later materialization finds this slot already occupied
   // (the register-before-materialize invariant, per slot).
   slot.set(proxy);
+  // R9 re-admission: every law registers the SAME proxy → box provenance, unconditionally
+  // (this file's PROXY_ORIGIN doc above) — a bare/gated proxy round-trips back in exactly
+  // like a membrane one.
+  PROXY_ORIGIN.set(proxy, box);
   return proxy;
 }

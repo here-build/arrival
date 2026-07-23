@@ -408,6 +408,29 @@ export class InteropAccessError extends Error {
   }
 }
 
+/**
+ * A borrowed source could not be frozen — `Object.freeze` itself threw instead of
+ * applying (or silently no-opping, its ordinary behavior on every plain object/array
+ * and well-behaved Proxy). This happens only for a genuinely foreign Proxy whose traps
+ * violate the invariants `Object.freeze`/`Object.isFrozen` require of it (e.g. an
+ * `ownKeys` trap that disagrees with its own `getOwnPropertyDescriptor` answers, or a
+ * `preventExtensions` trap that refuses). Named + exported (P5, docs/PRINCIPLES.md):
+ * the freeze-on-first-read contract (docs/membrane.md §BOXING) fails loudly at the
+ * crossing that tripped it, rather than leaving the source silently mutable — see
+ * AJSObject.ts / AJSArray.ts's `freezeSource`.
+ */
+export class ForeignProxyFreezeError extends Error {
+  constructor(cause: unknown) {
+    super(
+      "a foreign Proxy with a non-standard ownKeys trap reached the membrane and could not be " +
+        "frozen (docs/membrane.md §BOXING's freeze-on-first-read contract) — Object.freeze itself " +
+        `threw: ${cause instanceof Error ? cause.message : String(cause)}`,
+      { cause },
+    );
+    this.name = "ForeignProxyFreezeError";
+  }
+}
+
 // -------------------------------------------------------------------------
 // :: R7RS error types (Section 6.11).
 // -------------------------------------------------------------------------

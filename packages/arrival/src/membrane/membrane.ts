@@ -29,9 +29,8 @@ import { Macro } from "../eval/Macro.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
 import { APair } from "../values/primitives/APair.js";
-import { jsToScheme, callableToHostFn, egressAValue, errorToHost, schemeToJsUntyped } from "./rosetta.js";
+import { jsToScheme, egressAValue, errorToHost, schemeToJsUntyped } from "./rosetta.js";
 import { R7RSError, RedundantCrossingError } from "../errors.js";
-import { is_callable_value } from "../values/value-guards.js";
 import { Syntax } from "../eval/Syntax.js";
 import { type SchemeValue } from "../values/types.js";
 import { type ACallable } from "../values/primitives/ACallable.js";
@@ -245,19 +244,16 @@ export function toJS(value: SchemeValue) {
     return errorToHost(value, (el) => schemeToJsUntyped(el));
   }
   if (!isSchemeValue(value)) throw new RedundantCrossingError("toJS");
-  // A scheme callable exits as its reverse-membrane region wrapper (so exec()'s
-  // simple tier can return an ALambda/AProcedure as a callable host fn), NOT its
-  // print-string `arrival/toJS`. Special-cased here rather than in ACallable's
-  // own term because that class must not import rosetta.ts (scheme-zod init
-  // cycle — see ACallable's makeCallCtx note); membrane already carries the
-  // rosetta cycle safely (jsToScheme above). schemeToJs applies the same
-  // is_callable_value check before its own protocol dispatch.
-  if (is_callable_value(value)) return callableToHostFn(value, {});
-  // Containers cross via the membrane protocol under default options — egressAValue
-  // shares rosetta's default-mode slots, so `toJS(v) === schemeToJs(v)` holds and a
-  // NESTED callable gets the same host-fn face a bare top-level one gets right above.
-  // Non-container AValues fall through to their serialization protocol inside
-  // egressAValue; non-AValue scheme orphans keep the direct protocol call.
+  // Every AValue — including a scheme callable, which exits as its reverse-membrane region
+  // wrapper (so exec()'s simple tier can return an ALambda/AProcedure as a callable host fn), NOT
+  // its print-string `arrival/toJS` — crosses via the SAME membrane protocol under default
+  // options: ACallable extends AValue, so no special-case is needed here (the toJS-protocol
+  // collapse folded the callable projection into ACallable's own `arrival/toJS(exit?)`,
+  // reached generically through `egressAValue` below, same as every native container).
+  // egressAValue shares rosetta's default-mode slots, so `toJS(v) === schemeToJs(v)` holds and a
+  // NESTED callable gets the same host-fn face a bare top-level one gets. Non-container AValues
+  // fall through to their serialization protocol inside egressAValue; non-AValue scheme orphans
+  // keep the direct protocol call.
   if (value instanceof AValue) return egressAValue(value, {});
   return value["arrival/toJS"]();
 }

@@ -31,7 +31,7 @@ import { tf } from "../values/tagless-final.js";
 import { type ANil, nil } from "../values/primitives/ANil.js";
 import { AJSArrayList } from "../values/primitives/APair.js";
 import { accessHas, accessKeys, accessMember, NOT_FOUND } from "./interop-access.js";
-import { InteropAccessError, strictGate } from "../errors.js";
+import { ForeignProxyFreezeError, InteropAccessError, strictGate } from "../errors.js";
 import { foldMemberName } from "./AJSObject.js";
 
 /** Pending-cell cache for Promise-valued reads off the borrowed source (pending-entry.ts):
@@ -362,7 +362,11 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
   // Re-source from an active run-context once one is restored.
   private freezeSource(): void {
     if (!Object.isFrozen(this.source)) {
-      Object.freeze(this.source);
+      try {
+        Object.freeze(this.source);
+      } catch (cause) {
+        throw new ForeignProxyFreezeError(cause);
+      }
     }
   }
 

@@ -24,14 +24,19 @@
 // fast-path special-case or dispatched directly. The marshallers are INJECTED
 // (`_installCallableMarshal`, from membrane/rosetta.ts's module init) because importing
 // rosetta.ts here would close the scheme-zod init cycle (see the CallCtx note below).
-// CURRENT LIMITS (next iterations): the wrapper runs under CONSTANT_CTX — no region scope,
-// no live run, provenance lost; `callableToHostFn` (membrane/rosetta.ts) remains the
-// region-DISCIPLINED projection rosetta crossings use. The two share semantics, not state.
+// REGION-DISCIPLINED (toJS-protocol collapse): the wrapper closes over `currentRegionScope() ??
+// DETACHED_SCOPE`, minted/cached on THAT scope's own `cache` — the same (callable, scope,
+// WrapperKey) slot membrane/rosetta.ts's (now-thin) `callableToHostFn` reads, and the same
+// discipline scheme-zod.ts's typed `z.procedure` family shares one level over (keyed "typed"
+// there, "mem" here). The former process-global, options-less, CONSTANT_CTX-only cache is
+// GONE — there is exactly ONE cache a callable's host projection ever lives in, region-scope.ts's
+// `RegionScope.cache`, regardless of which door (a direct `value["arrival/toJS"]()`, a
+// container's nested-element materialization, or rosetta's `schemeToJs`) reached it.
 
 import { AValue } from "./AValue.js";
-import type { SchemeBounceMarker, SchemeValue } from "../types.js";
+import type { MembraneExit, SchemeBounceMarker, SchemeValue, WrapperKey } from "../types.js";
 import { tf } from "../tagless-final.js";
-import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
+import type { RunContext } from "../../run/RunContext.js";
 // CallCtx lives in this same directory (not common/symbols/_bake.ts) specifically so this file
 // never transitively imports common/scheme-zod.ts — that used to close a cycle (scheme-zod
 // imports ACallable for ALambda/etc.; _bake imports scheme-zod) that could leave a
@@ -43,6 +48,20 @@ import { PurityError } from "../../errors.js";
 // common/symbols/_bake.ts has its own runtime path back to this file (via scheme-zod.ts,
 // see the CallCtx note above) — a REAL (value) import here would close that cycle.
 import type { DoorSymbolDef } from "../../common/symbols/_bake.js";
+// TYPE-ONLY: `InvocationLike` is rosetta.ts's own duck-typed shape (see that file's doc) — the
+// SAME benign compile-time edge CallCtx.ts's own `invocation.currentInvocation` field already
+// carries (CallCtx.ts imports it the same way). Erased at compile: no runtime cycle.
+import type { InvocationLike } from "../../membrane/rosetta.js";
+// Region discipline (membrane/region-scope.ts) sits BELOW this file in the import order — its
+// own transitive imports (RunContext.ts, errors.ts, provenance/store/{ids,interfaces,records,
+// fold}.ts) are all type-only or equally leaf-ward, none reaching back to ACallable.ts or
+// scheme-zod.ts — so importing its ambient scope holder + reverse-call bookkeeping here closes
+// no cycle (a genuinely new, but safe, edge).
+import { currentRegionScope, DETACHED_SCOPE, withRegionCall, withRegionScope } from "../../membrane/region-scope.js";
+// Leaf, ZERO own imports (see that file's header) — lets a reverse-membrane re-entry nest its
+// trace under the exporting invocation instead of the lambda's definition-time lexical one.
+import { withDynamicCallSite } from "../../eval/dynamic-call-site.js";
+import invariant from "tiny-invariant";
 
 /** A callable's return: a settled value, a trampoline bounce (tail-position lambda), or a
  *  promise (JS-host entry). Non-value returns are narrowed out at the call boundary. */
@@ -81,33 +100,75 @@ export function _installCallableMarshal(m: CallableMarshal): void {
   marshal = m;
 }
 
-// Identity-stable projection: `toJS` twice on the same callable answers the SAME host fn
-// (mirrors the value's own load-bearing reference identity). Options-less single variant —
-// the region-disciplined, mode-keyed cache stays callableToHostFn's.
-const hostProjections = new WeakMap<object, (...args: unknown[]) => unknown>();
+/** Opaque bounce-marker check for a reverse-membrane result reaching this host boundary — see
+ *  types.ts's `SchemeBounceMarker` doc: a call boundary always narrows it out before any value
+ *  use, so a host caller (this wrapper IS that boundary) must never see one. Named + an explicit
+ *  assertion, not a widened input type admitting the structurally-impossible shape. */
+function isBounceMarker(x: unknown): x is SchemeBounceMarker {
+  return typeof x === "object" && x !== null && (x as Partial<SchemeBounceMarker>).__bounce === true;
+}
 
-/** Build (once per value) the host-callable reverse-membrane wrapper: JS args in →
- *  jsToScheme (under CONSTANT_CTX — no live run at a bare protocol crossing; run-axis
- *  fidelity is the next iteration) → apply term (`canBounce` false: a host caller cannot
- *  trampoline) → result out through schemeToJs (promise-tolerant: an async impl's settle
- *  crosses when it lands). */
-function hostProjectionOf(
-  self: object,
-  apply: (args: SchemeValue[], callCtx: CallCtx) => CallResult,
-): (...args: unknown[]) => unknown {
-  const cached = hostProjections.get(self);
+/** The wrapper cache's key for THIS crossing family — a literal, not a computed mode: a
+ *  callable's host projection never varies by RosettaOptions content (a nested callable element
+ *  produces the identical wrapper shape whether its container egressed bare or under a real
+ *  membrane exit — only a CONTAINER's own proxy identity distinguishes bare/mem, see
+ *  egress-proxy.ts), so `"mem"` is simply this family's fixed slot on the two-level cache,
+ *  alongside scheme-zod.ts's own `"typed"` slot (RegionScope.cache's own doc, region-scope.ts). */
+const WRAPPER_KEY: WrapperKey = "mem";
+
+/**
+ * Build (once per (callable, scope)) the host-callable reverse-membrane wrapper — see the file
+ * preamble ("toJS IS the membrane"). Region-disciplined (docs/membrane.md §REGION): closes over
+ * `currentRegionScope() ?? DETACHED_SCOPE` AT MINT TIME, never re-reads it, and mints/reuses on
+ * THAT scope's own `RegionScope.cache` — the SAME (callable, scope, WrapperKey) slot
+ * membrane/rosetta.ts's (now-thin) `callableToHostFn` reads, so a dict holding this callable and
+ * a bare top-level crossing of it resolve to the literal same wrapper under the same scope. A
+ * call long after the exporting invocation returned still targets the scope it was minted under,
+ * tripping `withRegionCall`'s escape door rather than silently reading whatever's ambient later.
+ *
+ * `exit`, when supplied, is the `MembraneExit` a container's own crossing hands its elements
+ * (rosetta.ts's `egressAValue` builds it; every native container's `arrival/toJS(exit?)` and this
+ * one thread it the same way) — reused VERBATIM for the result leg: `exit.element(raw)` already
+ * IS `schemeToJsImpl(raw, options)` run under the pinned exporting scope, so a NESTED callable's
+ * result gets the exact recursive crossing a top-level one does, with the SAME options bag, with
+ * zero knowledge of `RosettaOptions` needed in this file. No `exit` — a bare direct protocol call
+ * (`callable["arrival/toJS"]()`), or a container's BARE serialization egress materializing a
+ * nested callable element with no membrane exit at all — falls back to the injected marshal's
+ * default-options `schemeToJs`.
+ */
+function hostProjectionOf(self: ACallable, exit?: MembraneExit): (...args: unknown[]) => unknown {
+  const scope = currentRegionScope() ?? DETACHED_SCOPE;
+  let byKey = scope.cache.get(self);
+  if (byKey === undefined) {
+    byKey = new Map();
+    scope.cache.set(self, byKey);
+  }
+  const cached = byKey.get(WRAPPER_KEY);
   if (cached) return cached;
-  const wrapper = (...jsArgs: unknown[]): unknown => {
-    if (marshal === undefined) {
-      throw new Error("arrival/toJS: callable crossing before membrane init (membrane/rosetta.ts not loaded)");
-    }
-    const { jsToScheme, schemeToJs } = marshal;
-    const schemeArgs = jsArgs.map((a) => jsToScheme(CONSTANT_CTX, a)) as SchemeValue[];
-    const raw = apply(schemeArgs, makeCallCtx(CONSTANT_CTX));
-    if (raw instanceof Promise) return raw.then((settled) => schemeToJs(settled));
-    return schemeToJs(raw);
-  };
-  hostProjections.set(self, wrapper);
+  const wrapper = (...jsArgs: unknown[]): Promise<unknown> =>
+    withRegionCall(scope, async () => {
+      if (marshal === undefined) {
+        throw new Error("arrival/toJS: callable crossing before membrane init (membrane/rosetta.ts not loaded)");
+      }
+      // Args mint under the ENCLOSING invocation's runCtx, never CONSTANT_CTX — `scope.runCtx`
+      // is exactly that (or CONSTANT_CTX for the DETACHED fallback). A promise-valued arg
+      // settles BEFORE boxing (the reverse membrane is already async); a bare Promise reaching
+      // jsToScheme doors (jsToSchemeAsyncDoor, rosetta.ts).
+      const schemeArgs = (await Promise.all(
+        jsArgs.map(async (a) => marshal!.jsToScheme(scope.runCtx, await a)),
+      )) as SchemeValue[];
+      const callCtx = makeCallCtx(scope.runCtx, scope.dynSite as InvocationLike | undefined);
+      // Re-entry trace nests under the exporting invocation — `scope.dynSite` is that same
+      // invocation, threaded WHOLE through the apply term rather than reconstructed downstream
+      // from ambient state; nested lambda re-entry still reads it ambiently at its own dispatch
+      // (evaluator HOF-boundary wrappers).
+      const raw = await withDynamicCallSite(scope.dynSite, () => applyCallback(self, schemeArgs, callCtx));
+      invariant(!isBounceMarker(raw), "arrival/toJS: a reverse-membrane call resolved to a bounce token");
+      // Nested callable/container in the result crosses under the SAME scope: exit.element
+      // (a real membrane crossing — options already closed over) or the marshal's default (bare).
+      return withRegionScope(scope, () => (exit !== undefined ? exit.element(raw) : marshal!.schemeToJs(raw)));
+    });
+  byKey.set(WRAPPER_KEY, wrapper);
   return wrapper;
 }
 
@@ -152,9 +213,11 @@ export class ALambda extends AValue {
     this.#runner = opts.runner;
   }
 
-  ["arrival/toJS"](): unknown {
-    // see preamble, toJS IS the membrane
-    return hostProjectionOf(this, (args, callCtx) => this.#runner(args, callCtx, false));
+  ["arrival/toJS"](exit?: MembraneExit): unknown {
+    // see preamble, toJS IS the membrane. `applyCallback` (inside hostProjectionOf) dispatches
+    // this value's own `arrival/tagless-final/apply` term — identical to calling `#runner`
+    // directly with `canBounce: false` (a host caller can never trampoline).
+    return hostProjectionOf(this, exit);
   }
   ["arrival/print"](): string {
     return `#<procedure:${displayName(this.__name__ ?? this.name)}>`;
@@ -195,9 +258,9 @@ export class ANativeProcedure extends AValue {
     this.#impl = opts.impl;
   }
 
-  ["arrival/toJS"](): unknown {
+  ["arrival/toJS"](exit?: MembraneExit): unknown {
     // see preamble, toJS IS the membrane
-    return hostProjectionOf(this, (args, callCtx) => this.#impl(args, callCtx));
+    return hostProjectionOf(this, exit);
   }
   ["arrival/print"](): string {
     return `#<procedure:${displayName(this.name)}>`;
@@ -247,7 +310,7 @@ export class ARosettaProcedure extends AValue {
     this.#impl = opts.impl;
   }
 
-  ["arrival/toJS"](): unknown {
+  ["arrival/toJS"](exit?: MembraneExit): unknown {
     // see preamble, toJS IS the membrane. NOTE the double crossing this deliberately buys:
     // `#impl` is NOT the raw host fn — it is `def.run`, the full rosetta marshal
     // (z.decode scheme args → authored host impl → z.encode → jsToScheme box; the raw
@@ -256,7 +319,7 @@ export class ARosettaProcedure extends AValue {
     // and the wrapper crosses it OUT again — round-trip-to-identity on both legs (the
     // bifunctor law), which keeps the contract's validation/rejection grammar live for
     // host callers instead of bypassing it to the naked impl.
-    return hostProjectionOf(this, (args, callCtx) => this.#impl(args, callCtx));
+    return hostProjectionOf(this, exit);
   }
   ["arrival/print"](): string {
     return `#<procedure:${displayName(this.name)}>`;
@@ -304,10 +367,10 @@ export class DoorProcedure extends AValue {
     super();
   }
 
-  ["arrival/toJS"](): unknown {
+  ["arrival/toJS"](exit?: MembraneExit): unknown {
     // Faithful projection of a door: a host-callable that THROWS the same teaching
     // PurityError the apply term throws — crossing a door does not disarm it.
-    return hostProjectionOf(this, () => this["arrival/tagless-final/apply"]());
+    return hostProjectionOf(this, exit);
   }
   ["arrival/print"](): string {
     return `#<procedure:${this.door.name}>`;

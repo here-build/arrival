@@ -18,7 +18,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { CROSSINGS, VIOLATIONS } from "../../__tests__/laws/_tables/crossings.js";
 import { fromJS, toJS, isSchemeValue } from "../membrane.js";
-import { jsToScheme, schemeToJs, modeKeyOf } from "../rosetta.js";
+import { jsToScheme, schemeToJs, schemeToJsUntyped, modeKeyOf } from "../rosetta.js";
 import { exec } from "../../eval/generator-exec.js";
 import { setMembraneWarnings } from "../membrane-warn.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
@@ -763,6 +763,94 @@ describe("R9 lazy egress laws — containers exit as ref-tracking proxies (RULIN
   });
 });
 
+describe("R9 RE-ADMISSION — jsToScheme∘schemeToJs = id on containers (the bifunctor law closes the container leg, egress-proxy.ts's PROXY_ORIGIN)", () => {
+  const PROV = new Set<number>([777]);
+
+  it("list: round-trips to the SAME box (eq?/reference); car/cdr still work", () => {
+    const list = APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2)]) as APair<AExact, any>;
+    const out = schemeToJsUntyped(list);
+    const back = jsToScheme(CONSTANT_CTX, out);
+    expect(back).toBe(list);
+    expect((back as APair<AExact, any>).car).toBe(list.car);
+  });
+
+  it("vector: round-trips to the SAME box", () => {
+    const vec = new AVector([new AExact(1), new AExact(2)]);
+    const out = schemeToJsUntyped(vec);
+    const back = jsToScheme(CONSTANT_CTX, out);
+    expect(back).toBe(vec);
+  });
+
+  it("dict: round-trips to the SAME box", () => {
+    const dict = new ADict([[new ASymbol("a"), new AExact(1)]]);
+    const out = schemeToJsUntyped(dict);
+    const back = jsToScheme(CONSTANT_CTX, out);
+    expect(back).toBe(dict);
+  });
+
+  it("re-admission goes through the SAME 'AValue → identity / provenance re-stamp' row: a fresh provenance stamp on re-entry unions onto the original box's own lineage, never overwrites", () => {
+    const vec = new AVector([new AExact(1)]);
+    const out = schemeToJsUntyped(vec);
+    const stamped = jsToScheme(CONSTANT_CTX, out, {}, PROV) as AVector;
+    // A fresh stamp forces a re-stamp (not the identity fast path) — but it's still the
+    // registry's EXISTING "AValue → identity" row doing the work (re-dispatched with the
+    // ORIGINAL box), not a duplicated re-stamp implementation in the new R9 row.
+    expect(stamped).not.toBe(vec); // withProvenance mints a fresh wrapper on a lineage change…
+    expect([...stamped.provenance]).toEqual([...PROV]); // …but the union is the SAME merge law.
+    expect(vec.provenance.size).toBe(0); // the original is untouched.
+  });
+
+  it("a plain (non-egressed) array/object still borrows FRESH — R9 re-admission never fires on ordinary JS data", () => {
+    expect(jsToScheme(CONSTANT_CTX, [1, 2, 3]).constructor.name).toBe("AJSArray");
+    expect(jsToScheme(CONSTANT_CTX, { a: 1 }).constructor.name).toBe("AJSObject");
+  });
+
+  it("an array-shaped R9 proxy (a vector's egress) is re-admitted as the ORIGINAL vector, not re-borrowed as an AJSArray — the ordering-is-load-bearing row placement", () => {
+    const vec = new AVector([new AExact(9)]);
+    const out = schemeToJsUntyped(vec); // Array.isArray(out) is true — the proxy target is `[]`
+    expect(Array.isArray(out)).toBe(true);
+    const back = jsToScheme(CONSTANT_CTX, out);
+    expect(back).toBeInstanceOf(AVector);
+    expect(back).toBe(vec); // NOT a fresh AJSArray wrapping the proxy
+  });
+});
+
+describe("foreign Proxy at the membrane — freeze failure doors loudly (P5), never leaves the source silently mutable", () => {
+  it("a Proxy whose ownKeys trap violates the invariants Object.freeze requires throws ForeignProxyFreezeError, naming the cause", () => {
+    // A `ownKeys` trap that reports a key `getOwnPropertyDescriptor` refuses to back is a
+    // Proxy invariant violation — `Object.freeze`'s own internal `[[OwnPropertyKeys]]` walk
+    // throws a TypeError on it. This is the "genuinely foreign Proxy" case the new door exists
+    // for; an ordinary object/array always freezes cleanly (js-wrapper-freeze.test.ts).
+    const target: Record<string, unknown> = {};
+    const foreign = new Proxy(target, {
+      ownKeys() {
+        return ["ghost"];
+      },
+      getOwnPropertyDescriptor(t, key) {
+        if (key === "ghost") return undefined; // disagrees with ownKeys — the invariant break
+        return Reflect.getOwnPropertyDescriptor(t, key);
+      },
+    });
+    const wrapped = new AJSObject(foreign);
+    expect(() => wrapped.has("x")).toThrow(/foreign Proxy with a non-standard ownKeys trap/);
+  });
+
+  it("the same door fires for AJSArray over a foreign Proxy", () => {
+    const target: unknown[] = [];
+    const foreign = new Proxy(target, {
+      ownKeys() {
+        return ["0", "length"];
+      },
+      getOwnPropertyDescriptor(t, key) {
+        if (key === "0") return undefined; // disagrees with ownKeys
+        return Reflect.getOwnPropertyDescriptor(t, key);
+      },
+    }) as unknown[];
+    const wrapped = new AJSArray(foreign);
+    expect(() => wrapped.length).toThrow(/foreign Proxy with a non-standard ownKeys trap/);
+  });
+});
+
 describe.each(VIOLATIONS.map((v) => [v.name, v] as const))("forbidden crossing: %s", (_n, v) => {
   const title = `throws the teaching door: ${String(v.door)} (P5 — loud at the crossing, never later)`;
 
@@ -935,7 +1023,8 @@ describe("egress membrane exit — the two modes and their identity laws", () =>
     // `arrival/print`'s job; a callable's toJS is host-callable at every depth.
     const bare = outerDict["arrival/toJS"]() as { inner: { f: unknown } };
     expect(typeof bare.inner.f).toBe("function");
-    expect((bare.inner.f as () => unknown)()).toBe(7);
+    // Region-disciplined (ACallable.ts's hostProjectionOf): always resolves via withRegionCall.
+    await expect((bare.inner.f as () => Promise<unknown>)()).resolves.toBe(7);
   });
 
   // "nested forceBigInt: options reach container elements (the sibling defect, fixed)"
@@ -983,7 +1072,10 @@ describe("egress membrane exit — the two modes and their identity laws", () =>
     const d = dictOf([["f", native("ser")]]);
     const bare = d["arrival/toJS"]() as Record<string, unknown>;
     expect(typeof bare.f).toBe("function");
-    expect((bare.f as () => unknown)()).toBe(7);
+    // Region-disciplined now (the toJS-protocol collapse, ACallable.ts's hostProjectionOf):
+    // every host projection — bare or membrane — resolves through `withRegionCall`, so the
+    // wrapper always answers a Promise, never a bare synchronous value.
+    await expect((bare.f as () => Promise<unknown>)()).resolves.toBe(7);
     // The display face did not move — it lives on `arrival/print`, unchanged.
     expect(native("ser")["arrival/print"]()).toMatch(/^#<procedure:/);
   });
@@ -1006,6 +1098,18 @@ describe("egress membrane exit — the two modes and their identity laws", () =>
     const w0again = (withRegionScope(scope, () => schemeToJs(d)) as Record<string, unknown>).f;
     expect(typeof w0).toBe("function");
     expect(w0).toBe(w0again); // same (callable, scope, mem) — the wrapper closes over options
+    closeRegionScope(scope);
+  });
+
+  it("THE TWO-CACHES SPLIT IS DEAD: schemeToJs of a dict holding a callable answers the SAME wrapper as a direct protocol call on that callable, under the same scope (ACallable.ts's hostProjectionOf is the ONE cache)", async () => {
+    const f = native("unified");
+    const d = dictOf([["f", f]]);
+    const scope = openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined });
+    const viaDict = (withRegionScope(scope, () => schemeToJs(d)) as Record<string, unknown>).f;
+    const viaDirect = withRegionScope(scope, () => f["arrival/toJS"]());
+    expect(typeof viaDict).toBe("function");
+    expect(viaDict).toBe(viaDirect);
+    await expect((viaDirect as () => Promise<unknown>)()).resolves.toBe(7);
     closeRegionScope(scope);
   });
 });
