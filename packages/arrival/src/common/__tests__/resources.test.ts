@@ -20,8 +20,7 @@ function countingSocket(): { resource: Resource<Socket>; opens: () => number; cl
         s.closed = true;
         closed++;
       });
-    },
-  };
+    } };
   return { resource, opens: () => opened, closes: () => closed };
 }
 
@@ -108,8 +107,7 @@ describe("ResourceCell — the port factory", () => {
           s.closed = true;
           closedAfterAbort = true;
         });
-      },
-    };
+      } };
     const cell = new ResourceCell(resource);
     await cell.spinUp(ac.signal);
     await expect(cell.get()).rejects.toThrow();
@@ -126,8 +124,7 @@ describe("ResourceCell — the port factory", () => {
         n++;
         if (n === 1) throw new Error("flaky");
         return port({ id: n, closed: false }, () => {});
-      },
-    };
+      } };
     const cell = new ResourceCell(resource);
     await expect(cell.get()).rejects.toThrow("flaky");
     const h = await cell.get();

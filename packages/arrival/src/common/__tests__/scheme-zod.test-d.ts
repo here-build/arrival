@@ -18,7 +18,7 @@
 
 import { describe, expectTypeOf, test } from "vitest";
 
-import * as z from "../scheme-zod.js";
+import * as z from "../scheme-zod/index.js";
 import type { APair } from "../../values/primitives/APair.js";
 import type { ANil } from "../../values/primitives/ANil.js";
 import type { ACharacter } from "../../values/primitives/ACharacter.js";
@@ -102,8 +102,7 @@ describe("scheme-zod collection faces (interpreter vs JS)", () => {
     // A typical "list input, vector output" shape
     const listInVecOut = {
       input: [z.list(z.schemeValue)],
-      output: [z.vector(z.schemeValue)],
-    } as const;
+      output: [z.vector(z.schemeValue)] } as const;
 
     // Native impls receive the SCHEME face (raw containers); rosetta impls the JS face.
     type In = DecodedArgs<typeof listInVecOut.input, "scheme">;

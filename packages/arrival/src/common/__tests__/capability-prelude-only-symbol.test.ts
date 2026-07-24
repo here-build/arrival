@@ -17,9 +17,10 @@ import { describe, expect, it } from "vitest";
 
 import { EnvCapability } from "../capability.js";
 import { buildVocabulary } from "../../env/vocabulary.js";
-import { ANativeProcedure, ARosettaProcedure } from "../../values/primitives/ACallable.js";
-import { symbol } from "../symbol.js";
-import * as z from "../scheme-zod.js";
+import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
+import { ARosettaProcedure } from "../../values/primitives/ARosettaProcedure.js";
+import { symbol } from "../../symbol/index.js";
+import * as z from "../scheme-zod/index.js";
 import { execInFrame } from "../../eval/generator-exec.js";
 import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 
@@ -62,8 +63,7 @@ describe("buildVocabulary — routing preludeOnly symbols onto Vocabulary.prelud
       (s) => s,
     );
     const cap = EnvCapability.define("test/prelude-only-native", {
-      symbols: () => ({ "prelude-only/native-verb": def }),
-    });
+      symbols: () => ({ "prelude-only/native-verb": def }) });
     const vocabulary = await buildVocabulary([cap], undefined, evalScheme);
 
     expect(vocabulary.map.has("prelude-only/native-verb")).toBe(false);

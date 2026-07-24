@@ -28,21 +28,20 @@ import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
-import { symbol, testCallCtx } from "../symbol.js";
-import { type RosettaSymbolDef } from "../symbols/_bake.js";
-
-/** Test-only cast — see symbol.test.ts's own copy of this helper for the full rationale
- *  (Stage A2: `symbol.rosetta` mints the ARosettaProcedure directly; `.run` rides `.contract`). */
-function rosettaContract(v: { contract: unknown }): RosettaSymbolDef {
-  return v.contract as RosettaSymbolDef;
-}
-import * as z from "../scheme-zod.js";
+import { symbol, testCallCtx } from "../../symbol/index.js";
+import * as z from "../scheme-zod/index.js";
 import { EnvCapability } from "../capability.js";
 
 /** Build a keyword `ASymbol` exactly as evaluating `:key` now does (self-evaluating —
  *  keyword-tagless-apply.md), for the UNIT plane (no evaluator round trip). */
 function pluck(key: string): unknown {
   return new ASymbol(`:${key}`);
+}
+
+
+/** Invoke a baked rosetta procedure via its apply term (the sole membrane spine). */
+function fire(proc: { ["arrival/tagless-final/apply"](args: any[], callCtx: any): any }, callCtx: any, ...args: any[]) {
+  return proc["arrival/tagless-final/apply"](args, callCtx);
 }
 
 describe("z.kwargs runtime — UNIT (direct def.run, manually-built pluck pairs)", () => {
@@ -52,7 +51,7 @@ describe("z.kwargs runtime — UNIT (direct def.run, manually-built pluck pairs)
       { input: [], inputRest: { a: z.string, b: z.number.optional() }, output: [z.string] },
       (args) => `${args.a}:${args.b}`,
     );
-    const out = await rosettaContract(def).run.call(testCallCtx(), pluck("a"), new AString("Ada"), pluck("b"), new AExact(5));
+    const out = await fire(def, testCallCtx(), pluck("a"), new AString("Ada"), pluck("b"), new AExact(5));
     expect((out as AString)["arrival/toJS"]()).toBe("Ada:5");
   });
 
@@ -63,7 +62,7 @@ describe("z.kwargs runtime — UNIT (direct def.run, manually-built pluck pairs)
       { input: [], inputRest: { a: z.string, b: z.number.optional() }, output: [z.string] },
       (args) => `${args.a}:${args.b}`,
     );
-    const out = await rosettaContract(def).run.call(testCallCtx(), pluck("b"), new AExact(5), pluck("a"), new AString("Ada"));
+    const out = await fire(def, testCallCtx(), pluck("b"), new AExact(5), pluck("a"), new AString("Ada"));
     // NOTE: pairs must stay `:key value` (key first) — this call shows the TWO PAIRS in
     // swapped ORDER (the `:b` pair before the `:a` pair), not a swapped key/value.
     expect((out as AString)["arrival/toJS"]()).toBe("Ada:5");

@@ -46,9 +46,7 @@ describe("preludeOnly — the phase-gated per-run prelude pass (design §1.3, ov
         "overlay/greet": symbol.rosetta`overlay/greet: prelude-only greeting verb`(
           { input: [z.string], output: [z.string], preludeOnly: true },
           (name) => `hello ${name}`,
-        ),
-      }),
-    });
+        ) }) });
     const capB = EnvCapability.define("test/overlay-b", {
       deps: [capA],
       symbols: (symbol, z) => ({
@@ -58,13 +56,11 @@ describe("preludeOnly — the phase-gated per-run prelude pass (design §1.3, ov
             calls.push(s);
             return s;
           },
-        ),
-      }),
+        ) }),
       // B's prelude calls A's preludeOnly verb (visible because A applied first — C3 dep
       // order — and the per-run prelude scope answers from BOTH the main map and the
       // preludeOnly overlay) and forwards the result to a RUNTIME-bound sink.
-      prelude: `(sink/record (overlay/greet "world"))`,
-    });
+      prelude: `(sink/record (overlay/greet "world"))` });
 
     // Minting a run for this tuple runs the prelude pass — before ANY program form evaluates.
     const state = await execState(`1`, { capabilities: [capB] });
@@ -83,8 +79,7 @@ describe("preludeOnly — the phase-gated per-run prelude pass (design §1.3, ov
   it("an ordinary prelude `define` does NOT land in the runtime env — discarded with the per-run prelude scope", async () => {
     const cap = EnvCapability.define("test/overlay-define", {
       prelude: `(define overlay-defined-value 42)`,
-      symbols: () => ({}),
-    });
+      symbols: () => ({}) });
     const state = await execState(`1`, { capabilities: [cap] });
     await expect(
       exec(`overlay-defined-value`, { capabilities: [cap], runCtx: state.runCtx }),
@@ -99,9 +94,7 @@ describe("preludeOnly — the phase-gated per-run prelude pass (design §1.3, ov
         "chain/base-secret": symbol.rosetta`chain/base-secret: preludeOnly value contributed by A`(
           { input: [], output: [z.number], preludeOnly: true },
           () => 7,
-        ),
-      }),
-    });
+        ) }) });
     // B deps on A, records what it saw at prelude-eval time.
     const bSeen: number[] = [];
     const capB = EnvCapability.define("test/overlay-chain-b", {
@@ -113,10 +106,8 @@ describe("preludeOnly — the phase-gated per-run prelude pass (design §1.3, ov
             bSeen.push(n);
             return n;
           },
-        ),
-      }),
-      prelude: `(chain/note (chain/base-secret))`,
-    });
+        ) }),
+      prelude: `(chain/note (chain/base-secret))` });
     // C deps on B (transitively on A) — proves the prelude scope is the SAME shared Map across
     // the whole prelude pass, not re-built per-capability.
     const cSeen: number[] = [];
@@ -129,10 +120,8 @@ describe("preludeOnly — the phase-gated per-run prelude pass (design §1.3, ov
             cSeen.push(n);
             return n;
           },
-        ),
-      }),
-      prelude: `(chain/note-c (chain/base-secret))`,
-    });
+        ) }),
+      prelude: `(chain/note-c (chain/base-secret))` });
 
     await execState(`1`, { capabilities: [capC] });
 
@@ -152,15 +141,13 @@ describe("preludeOnly — the phase-gated per-run prelude pass (design §1.3, ov
         "closure/secret": symbol.rosetta`closure/secret: preludeOnly source`(
           { input: [], output: [z.number], preludeOnly: true },
           () => 99,
-        ),
-      }),
+        ) }),
       // Two prelude defines: what the retired bootstrap path called the WRONG bridge (a lambda
       // naming the verb) and the RIGHT bridge (capture the call's result) — both discarded now.
       prelude: `
         (define (broken-bridge) (closure/secret))
         (define captured-secret (closure/secret))
-      `,
-    });
+      ` });
     const state = await execState(`1`, { capabilities: [cap] });
 
     // Neither prelude define reaches user program code — the per-run prelude scope that held

@@ -1,7 +1,7 @@
 // callctx-activation-dispatch.test.ts — Stage 1b (docs/execution.md §CALLCTX): a baked
 // native/rosetta/tagless(-guard)/sequence verb's `this.configuration`/`this.resources` now
 // ALSO reach it through the `CallCtx` a REAL evaluator dispatch builds, not only through the
-// legacy outer-closure/builder-form channel (`common/capability.ts`'s `SymbolsSpec` builder
+// historical outer-closure/builder-form channel (`common/capability.ts`'s `SymbolsSpec` builder
 // arm) `capability.test.ts` already covers.
 //
 // This is a PARALLEL channel, additive: it proves `common/capability.ts`'s bind loop
@@ -26,8 +26,8 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
 import { EnvCapability } from "../capability.js";
-import { symbol } from "../symbol.js";
-import * as sz from "../scheme-zod.js";
+import { symbol } from "../../symbol/index.js";
+import * as sz from "../scheme-zod/index.js";
 import { port, type Resource } from "../resources.js";
 import { exec, execOverFrame, execInFrame } from "../../eval/generator-exec.js";
 import { assembleRun } from "../../env/assemble-run.js";
@@ -59,8 +59,7 @@ const shoutResource: Resource<Shout> = {
   acquire: async () => {
     shoutSpawns++;
     return port({ up: (s: string) => s.toUpperCase() }, () => undefined);
-  },
-};
+  } };
 
 // A BAKED rosetta verb (the target authoring form — no `ThisType`/builder closure anywhere):
 // its impl reads `this.configuration`/`this.resources` off the flat `CallCtx` itself. Before
@@ -81,16 +80,14 @@ const greeter = new EnvCapability("test/greeter-activation", {
         if (cfg === undefined || res === undefined) return `NO-ACTIVATION:${s}`;
         return `${cfg.tag}:${(await res.shout.get()).up(s)}`;
       },
-    ),
-  },
-});
+    ) } });
 
 describe("CallCtx activation dispatch (Stage 1b)", () => {
   // INVARIANT: a real evaluator dispatch (a scheme call, not a synthetic direct-apply)
   // enriches the CallCtx it builds with the resolved verb's own capability configuration
   // (sourced off the RUN'S `capabilityConfigurations` table, filled at `instantiate()` from
   // the ambient this exec assembled), so a baked impl reads `this.configuration.<key>` — the
-  // NEW this-channel, not the legacy outer-closure/builder form.
+  // NEW this-channel, not the historical outer-closure/builder form.
   it("threads a capability's `configuration` onto `this` at real evaluator dispatch", async () => {
     const [out] = await exec('(greet "yo")', { capabilities: [greeter], config: { tag: "hi" } });
     expect(out).toBe("hi:YO");
@@ -118,8 +115,7 @@ describe("CallCtx activation dispatch (Stage 1b)", () => {
       capabilities: [greeter, ...BASE_ROSTER],
       config,
       evalScheme: testEvalScheme,
-      evalPrelude: testEvalPrelude,
-    });
+      evalPrelude: testEvalPrelude });
     try {
       const [first] = await exec('(greet "a")', { capabilities: [greeter], config, runCtx });
       const [second] = await exec('(greet "b")', { capabilities: [greeter], config, runCtx });

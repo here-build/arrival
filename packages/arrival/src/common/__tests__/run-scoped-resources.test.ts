@@ -10,7 +10,7 @@
 //     verb reading `this.resources` as the WHOLE authored bag (synchronous — the factory is sync).
 //
 // `.live` (sync spawned handle) is NOT a baked-path read anymore: the eager pre-spawn gate that
-// backed it is retired, so baked impls acquire via async `.get()`. `.live` survives on the legacy
+// backed it is retired, so baked impls acquire via async `.get()`. `.live` survives on the historical
 // `{ fn }` / describe-time channel (`activation.resources` + `ensureSpawned`), covered elsewhere.
 //
 // `capability.test.ts` / `callctx-activation-dispatch.test.ts` / `capability-define-symbols
@@ -18,8 +18,8 @@
 import { describe, expect, it } from "vitest";
 
 import { EnvCapability } from "../capability.js";
-import { symbol } from "../symbol.js";
-import * as sz from "../scheme-zod.js";
+import { symbol } from "../../symbol/index.js";
+import * as sz from "../scheme-zod/index.js";
 import { port, type Resource } from "../resources.js";
 import { execOverFrame } from "../../eval/generator-exec.js";
 import { applyCapability, freshEnv } from "../../__tests__/_fresh-env.js";
@@ -38,8 +38,7 @@ describe("Stage 2 — per-RunContext capability resources", () => {
           return port({ tag: "live" }, () => {
             counts.disposed += 1;
           });
-        },
-      };
+        } };
       const capability = new EnvCapability("test/run-scoped-ctor", {
         resources: { port: resource },
         symbols: {
@@ -47,15 +46,13 @@ describe("Stage 2 — per-RunContext capability resources", () => {
             { input: [], output: [sz.string] },
             // 1d: baked verbs read run resources via async `.get()` (lazy per-cell spawn) — the
             // pre-spawn gate that made a sync `.live` read possible is gone. `.live` survives only
-            // on the legacy `{ fn }` / describe-time channel (`activation.resources`), not here.
+            // on the forbidden `{ fn }` / describe-time channel (`activation.resources`), not here.
             async function (this: CallCtx): Promise<string> {
               const res = this.resources as { port: { get(): Promise<{ tag: string }> } } | undefined;
               if (res === undefined) return "NO-RESOURCE";
               return (await res.port.get()).tag;
             },
-          ),
-        },
-      });
+          ) } });
       return { capability, counts };
     }
 
@@ -107,9 +104,7 @@ describe("Stage 2 — per-RunContext capability resources", () => {
               // it carries no keys — never a per-RunContext bag this capability never asked for.
               return `plain:${Object.keys(res ?? {}).length}`;
             },
-          ),
-        },
-      });
+          ) } });
       const env = await freshEnv();
       await applyCapability(env, [capability]);
 
@@ -136,8 +131,7 @@ describe("Stage 2 — per-RunContext capability resources", () => {
             set: (k, v) => void store.set(k, v),
             [Symbol.asyncDispose]: async () => {
               counts.disposed += 1;
-            },
-          };
+            } };
         },
         symbols: (symbol, sz) => ({
           "cache/put": symbol.rosetta`cache/put: write a key into this run's cache`(
@@ -152,9 +146,7 @@ describe("Stage 2 — per-RunContext capability resources", () => {
             function (key: string) {
               return this.resources.get(key) ?? "MISS";
             },
-          ),
-        }),
-      });
+          ) }) });
       return { capability, counts };
     }
 

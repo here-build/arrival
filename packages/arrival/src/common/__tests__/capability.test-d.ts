@@ -17,17 +17,20 @@
 // RETIRED — a data constant authors as `symbol.value` (mints a boxed `AmbientValue` now). The
 // negative assertions below keep the retirement from silently regressing.
 //
-// STAGE C CUT 4 PIN (2026-07-23, docs/plans/stage-c-corpse-deletion.md): the legacy `{ fn }`
+// STAGE C CUT 4 PIN (2026-07-23, docs/plans/stage-c-corpse-deletion.md): the forbidden `{ fn }`
 // record arm is ALSO dropped from the union — `lower()`, its sole BINDER, is retired. Phase B
-// (§"bans live at the TYPE level") went further: `isSymbolSpec`/`VocabularyLegacyCapabilityError`
+// (§"bans live at the TYPE level") went further: `isSymbolSpec` and the bare-fn refusal error (both deleted)
 // (the runtime refusal check that used to guard `env/vocabulary.ts`'s bind loop against this
 // shape) are DELETED — compat theater for a shape this very type-level pin already rejects.
 // An untyped author reaching for `{ fn }` now gets a TS error at the keyboard, never a runtime
 // door; this test is that error's proof.
 import { describe, expectTypeOf, test } from "vitest";
 import type { SymbolDeclaration } from "../capability.js";
-import type { DefineSymbolDef, DefineSyntaxSymbolDef, MacroSymbolDef, NativeSymbolDef } from "../symbols/_bake.js";
-import { ANativeProcedure, ARosettaProcedure, DoorProcedure } from "../../values/primitives/ACallable.js";
+import type { DefineSymbolDef, DefineSyntaxSymbolDef, MacroSymbolDef } from "../symbols/_bake.js";
+import type { NativeSymbolDef } from "../../values/primitives/ANativeProcedure.js";
+import { DoorProcedure } from "../../values/primitives/ACallable.js";
+import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
+import { ARosettaProcedure } from "../../values/primitives/ARosettaProcedure.js";
 import { AKernelKeyword } from "../../values/AKernelKeyword.js";
 
 describe("SymbolDeclaration — the raw authoring-time union, post Stage-A2 mint", () => {
@@ -64,14 +67,14 @@ describe("SymbolDeclaration — the raw authoring-time union, post Stage-A2 mint
   });
 
   // INVARIANT (retirement pin): a bare function is NOT assignable — callables author as
-  // baked symbol.* defs, or as the explicit legacy `{ fn }` record while MCP still rides it.
+  // baked symbol.* defs, or as the explicit forbidden `{ fn }` record while MCP still rides it.
   test("a bare function is NOT assignable to SymbolDeclaration (retired arm)", () => {
     expectTypeOf<(...args: unknown[]) => unknown>().not.toExtend<SymbolDeclaration>();
   });
 
-  // INVARIANT (Stage C Cut 4 retirement pin, Phase B RETROACTIVE): the legacy `{ fn }` record
+  // INVARIANT (Stage C Cut 4 retirement pin, Phase B RETROACTIVE): the forbidden `{ fn }` record
   // is NO LONGER assignable — `lower()` (its sole binder) is retired, and there is no runtime
-  // refusal check left either (`isSymbolSpec`/`VocabularyLegacyCapabilityError` are deleted,
+  // refusal check left either (`isSymbolSpec` and the bare-fn refusal error (both deleted) are deleted,
   // docs/plans/stage-c-corpse-deletion.md §"bans live at the TYPE level") — this compile-time
   // rejection IS the whole contract now.
   test("an explicit { fn } record is NOT assignable to SymbolDeclaration (retired arm)", () => {

@@ -11,7 +11,7 @@
 // `unrecognized_keys`) and must render byte-identically to before this change.
 
 import { describe, expect, it } from "vitest";
-import * as z from "../scheme-zod.js";
+import * as z from "../scheme-zod/index.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";

@@ -7,7 +7,7 @@
 //   1. the CODEC MEMBRANE — decode scheme→JS, run impl, encode JS→scheme (+ validation rejection);
 //   2. the PROVENANCE MINT (the former TODO, now resolved) — the bound `run` is `__withCtx`, so the
 //      evaluator appends ctx; given a ctx.currentInvocation the wrapper MARKS the point and stamps
-//      the output with `pointProvenance(inv.id)` — the SAME behavior `defineRosetta` gives today.
+//      the output with `pointProvenance(inv.id)` — the same source-mint behavior as `symbol.rosetta`.
 //
 // The mint is driven here by a SYNTHETIC ctx (a POJO invocation), exactly the direct-JS shape the
 // real createRosettaWrapper tests use — no full evaluator needed to prove the wiring.
@@ -17,15 +17,15 @@ import { CONSTANT_CTX, RunContext } from "../../run/RunContext.js";
 
 import { EnvCapability } from "../capability.js";
 import { applyCapability } from "../../__tests__/_fresh-env.js";
-import { symbol, makeCallCtx, type CallCtx } from "../symbol.js";
-import * as z from "../scheme-zod.js";
+import { symbol, makeCallCtx, type CallCtx } from "../../symbol/index.js";
+import * as z from "../scheme-zod/index.js";
 import { ResolvingAmbient, mintResolvingFrame } from "../../env/AmbientRuntime.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import type { InvocationLike } from "../../membrane/rosetta.js";
-import { ARosettaProcedure } from "../../values/primitives/ACallable.js";
+import { ARosettaProcedure } from "../../values/primitives/ARosettaProcedure.js";
 import { withDynamicCallSite } from "../../eval/dynamic-call-site.js";
 import { tf } from "../../values/tagless-final.js";
 import type { SchemeValue } from "../../values/types.js";
@@ -50,8 +50,7 @@ function invocationWithId(id: number): { invocation: InvocationLike; marked: () 
     markProvenancePoint() {
       didMark = true;
       this.isProvenancePoint = true;
-    },
-  };
+    } };
   return { invocation, marked: () => didMark };
 }
 
@@ -62,8 +61,7 @@ async function wireRosetta(def: ARosettaProcedure): Promise<ARosettaProcedure> {
   // from the gate by design: dissolution is a duplicate binding under a DIFFERENT name).
   const name = (def.contract as { name: string }).name;
   const cap = EnvCapability.define("test/rosetta", {
-    symbols: (symbol) => ({ [name]: def, verb: symbol.alias`${name}` }),
-  });
+    symbols: (symbol) => ({ [name]: def, verb: symbol.alias`${name}` }) });
   const { env, verbs } = recordingEnv();
   await applyCapability(env, [cap]);
   expect(verbs.verb).toBeInstanceOf(ARosettaProcedure); // the binder-cut bind shape itself

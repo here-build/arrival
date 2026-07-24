@@ -19,8 +19,7 @@ import {
   AssembleConfigConflictError,
   AssembleLinearizationError,
   AssemblePackError,
-  AssemblePackTimeoutError,
-} from "../../errors.js";
+  AssemblePackTimeoutError } from "../../errors.js";
 
 // A stub env: records the order packs applied + the symbols they set.
 interface Stub {
@@ -38,8 +37,7 @@ function pack(name: string, deps: EnvPack<Stub>[] = [], extra: Partial<EnvPack<S
       env.appliedOrder.push(name);
       env.syms.set(name, true);
     },
-    ...extra,
-  };
+    ...extra };
 }
 
 afterEach(() => {
@@ -121,8 +119,7 @@ describe("env-pack assembly core (P0), over createRuntimeAssembler", () => {
       apply: async (env) => {
         await Promise.resolve();
         env.syms.set("slow/fn", 42);
-      },
-    };
+      } };
     const env = stub();
     await createRuntimeAssembler(env).require(slow);
     expect(env.syms.get("slow/fn")).toBe(42);
@@ -138,8 +135,7 @@ describe("env-pack assembly core (P0), over createRuntimeAssembler", () => {
         ctx.onDispose(() => {
           log.push(name);
         });
-      },
-    });
+      } });
     const c = mk("c");
     const b = mk("b", [c]);
     const a = mk("a", [b]);
@@ -166,15 +162,13 @@ describe("env-pack assembly core (P0), over createRuntimeAssembler", () => {
         ctx.onDispose(() => {
           disposed.push("ok");
         });
-      },
-    };
+      } };
     const boom: EnvPack<Stub> = {
       name: "boom",
       deps: [ok],
       apply: () => {
         throw new Error("kaboom");
-      },
-    };
+      } };
     const ra = createRuntimeAssembler(stub());
     await expect(ra.require(boom)).rejects.toBeInstanceOf(AssemblePackError);
     expect(disposed).toEqual([]); // not disposed automatically on failure
@@ -200,8 +194,7 @@ describe("env-pack assembly core (P0), over createRuntimeAssembler", () => {
       deps: [a, a],
       apply: (env) => {
         env.appliedOrder.push("b");
-      },
-    };
+      } };
     const env = stub();
     await createRuntimeAssembler(env).require(dupDep);
     expect(env.appliedOrder).toEqual(["a", "b"]);
@@ -230,8 +223,7 @@ describe("env-pack assembly core (P0), over createRuntimeAssembler", () => {
           applies += 1;
           await Promise.resolve();
           e.appliedOrder.push("slow");
-        },
-      };
+        } };
       const ra = createRuntimeAssembler(env);
       await Promise.all([ra.require(slow), ra.require(slow)]); // race two arms
       expect(applies).toBe(1);
@@ -247,8 +239,7 @@ describe("env-pack assembly core (P0), over createRuntimeAssembler", () => {
           attempt += 1;
           if (attempt === 1) throw new Error("transient");
           e.appliedOrder.push("flaky");
-        },
-      };
+        } };
       const ra = createRuntimeAssembler(env);
       await expect(ra.require(flaky)).rejects.toBeInstanceOf(AssemblePackError);
       await ra.require(flaky); // retry succeeds
@@ -262,8 +253,7 @@ describe("env-pack assembly core (P0), over createRuntimeAssembler", () => {
       const mk = (name: string, deps: EnvPack<Stub>[] = []): EnvPack<Stub> => ({
         name,
         deps,
-        apply: (_e, ctx) => ctx.onDispose(() => void log.push(name)),
-      });
+        apply: (_e, ctx) => ctx.onDispose(() => void log.push(name)) });
       const a = mk("a");
       const b = mk("b", [a]);
       const ra = createRuntimeAssembler(env);

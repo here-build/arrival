@@ -3,7 +3,7 @@
 //
 // STAGE C CUT 4 (docs/plans/stage-c-corpse-deletion.md) retired `lower()`/`LoweredPack`
 // entirely, and with them this file's OWN pre-cut coverage:
-//   - the legacy `{ fn }`-record arm (capability.ts's `isSymbolSpec`/`bindRosetta` bind path) —
+//   - the forbidden `{ fn }`-record arm (capability.ts's `isSymbolSpec`/`bindRosetta` bind path) —
 //     DIED with the arm itself (dropped from `SymbolDeclaration`, see capability.ts's own doc);
 //     McpEnvCapability's downstream authoring shape is the postponed MCP rework's territory now,
 //     not arrival-internal test coverage.
@@ -40,8 +40,7 @@ describe("EnvCapability — config validation (the vocabulary-build path)", () =
   it("validates config through zod when the vocabulary builds — bad enum rejects", async () => {
     const cap = EnvCapability.define("test/config-validation", {
       configuration: { context: z.enum(["browser", "node", "bun"]), retries: z.number().default(3) },
-      symbols: () => ({}),
-    });
+      symbols: () => ({}) });
     await expect(buildVocabulary([cap], { context: "deno" }, evalScheme)).rejects.toThrow();
   });
 
@@ -50,8 +49,7 @@ describe("EnvCapability — config validation (the vocabulary-build path)", () =
   it("a satisfied config bakes cleanly; defaults are applied", async () => {
     const cap = EnvCapability.define("test/config-defaults", {
       configuration: { context: z.enum(["browser", "node", "bun"]), retries: z.number().default(3) },
-      symbols: () => ({}),
-    });
+      symbols: () => ({}) });
     const vocabulary = await buildVocabulary([cap], { context: "node" }, evalScheme);
     expect(vocabulary.configsByCapability.get(cap)).toEqual({ context: "node", retries: 3 });
   });

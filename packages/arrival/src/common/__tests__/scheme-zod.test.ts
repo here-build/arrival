@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
 import * as v8 from "node:v8";
 import * as vm from "node:vm";
 
-import * as z from "../scheme-zod.js";
+import * as z from "../scheme-zod/index.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { APair } from "../../values/primitives/APair.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
@@ -30,7 +30,8 @@ import { ABytevector } from "../../values/primitives/ABytevector.js";
 import { ADict } from "../../values/primitives/ADict.js";
 import { AJSObject } from "../../membrane/AJSObject.js";
 import { R7RSError } from "../../errors.js";
-import { ANativeProcedure, applyCallback } from "../../values/primitives/ACallable.js";
+import { applyCallback } from "../../values/primitives/ACallable.js";
+import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
 import { testCallCtx } from "../../run/CallCtx.js";
 
 function makeChar(c: string) {
@@ -348,8 +349,7 @@ describe("scheme-zod z.procedure — contract-aware marshaling", () => {
       name: "double",
       arity: { min: 1, max: 1 },
       contract: undefined,
-      impl: (args) => new AExact((args[0] as AExact).num * 2),
-    });
+      impl: (args) => new AExact((args[0] as AExact).num * 2) });
     const decoded = z.procedure(z.integer, z.integer).parse(doubleProc);
     await expect(decoded(21)).resolves.toBe(42);
   });
@@ -373,8 +373,7 @@ describe("scheme-zod z.procedure — contract-aware marshaling", () => {
       name: "identity",
       arity: { min: 1, max: 1 },
       contract: undefined,
-      impl: (args) => args[0],
-    });
+      impl: (args) => args[0] });
     const decoded = z.procedure().parse(identityNative);
     const rawArg = makeExact(5);
     // no `input` codec supplied → jsArgs pass straight through as scheme args, untransformed
@@ -397,7 +396,7 @@ describe("scheme-zod z.procedure — contract-aware marshaling", () => {
 // instance (distinct object identity), so `z.lookupName` resolves each to its OWN registered
 // name even though both share byte-identical runtime behavior (same predicate, same
 // identity-passthrough decode). A THIRD name, the deprecated `z.value` alias, existed as a
-// compatibility bridge (own registration, printed legacy `"value"`) until Phase B deleted it —
+// compatibility bridge (own registration, printed historical `"value"`) until Phase B deleted it —
 // see this file's git history for the retired trio-form pins (the "deprecated z.value alias
 // still functions" tripwire test and the third `trio` row) this describe block used to carry.
 describe("scheme-zod z.schemeValue / z.dynamic — exhaustive predicate, passthrough on both faces", () => {
@@ -447,7 +446,7 @@ describe("scheme-zod z.schemeValue / z.dynamic — exhaustive predicate, passthr
   });
 
   // PHASE-B-DELETES PIN, FLIPPED: `z.value` (the deprecated compatibility alias — same
-  // predicate, same identity passthrough, its own registration printing legacy "value") is
+  // predicate, same identity passthrough, its own registration printing historical "value") is
   // now GONE from the public surface entirely — asserted at the type level (no runtime
   // tripwire needed: a reference to `z.value` is a compile error, not a passing test).
   it("the deprecated z.value alias is GONE — not a property of the scheme-zod namespace", () => {
