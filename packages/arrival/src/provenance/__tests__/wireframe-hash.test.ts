@@ -19,8 +19,7 @@ const ROLES: Record<string, DeclaredRole> = {
   "src-b": "source",
   "fetch-item": "source",
   "emit!": "sink",
-  map: "fan",
-};
+  map: "fan" };
 const CLASSIFIER: Classifier = { roleOf: (op) => ROLES[op] };
 const BASE = new Set(["+", "-", "*", ">", "positive?", "car", "cdr", "cons", "list"]);
 const isBaseName = (n: string): boolean => BASE.has(n);

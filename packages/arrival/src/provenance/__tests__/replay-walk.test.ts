@@ -29,8 +29,7 @@ const ROLES: Record<string, DeclaredRole> = {
   "fetch-b": "source",
   "src-c": "source",
   "src-d": "source",
-  "src-e": "source",
-};
+  "src-e": "source" };
 const CLASSIFIER: Classifier = { roleOf: (op) => ROLES[op] };
 const BASE = new Set(["*", "positive?", "if"]);
 const isBaseName = (n: string): boolean => BASE.has(n);
@@ -100,8 +99,7 @@ describe("walkGraphReplay — genuine pull-driven laziness", () => {
       "fetch-b": "num",
       "src-c": "num",
       "src-d": "num",
-      "src-e": "num",
-    });
+      "src-e": "num" });
 
     const drivingFrozen = freezeMints(run.mints);
     const gen = walkGraphReplay({ program, frozen: drivingFrozen });

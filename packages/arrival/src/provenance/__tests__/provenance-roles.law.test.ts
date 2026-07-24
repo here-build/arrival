@@ -34,7 +34,7 @@
  * (deleted `af3014f1f6`, "rosettaPureOf dies write-only" — the per-env `pure` REGISTRY
  * that file exercised is confirmed dead, not merely superseded). Of that file's two
  * invariants:
- *   - DEAD: "env.defineRosetta's `pure: true` marker round-trips into the pure
+ *   - DEAD: "removed pure: true marker round-trips into the pure
  *     registry; default (no flag) is absent from it" — the registry itself is gone;
  *     `RosettaSpec.pure` survives only as `createRosettaWrapper`'s runtime mint gate
  *     (`config.pure`), a different, narrower mechanism than a queryable registry.
@@ -56,25 +56,19 @@ import {
   countCone,
   fieldCone,
   type Classifier,
-  type DeclaredRole,
-} from "../../provenance/lineage.js";
+  type DeclaredRole } from "../../provenance/lineage.js";
 import { classifierFromEnv } from "../../provenance/lineage-classifier-from-env.js";
 import { buildWireframe } from "../../provenance/wireframe/builder.js";
-import * as z from "../../common/scheme-zod.js";
-import { symbol, type AEntity, type ProvenanceRole } from "../../common/symbol.js";
+import * as z from "../../common/scheme-zod/index.js";
+import { symbol, type AEntity, type ProvenanceRole } from "../../symbol/index.js";
 import { EnvCapability } from "../../common/capability.js";
-import {
-  declaresAccChain,
-  withCallbackRoles,
-  type CallbackRoles,
-} from "../../common/symbols/_bake.js";
+import { declaresAccChain, withCallbackRoles, type CallbackRoles } from "../../common/symbols/_bake.js";
+import type { NativeSymbolDef } from "../../values/primitives/ANativeProcedure.js";
 import type {
-  NativeSymbolDef,
   RosettaSymbolDef,
   SequenceSymbolDef,
   TaglessGuardSymbolDef,
-  TaglessSymbolDef,
-} from "../../common/symbols/_bake.js";
+  TaglessSymbolDef } from "../../common/symbols/_bake.js";
 
 /** Test-only cast: pull a minted value's `.contract` (typed `unknown` on the class — see
  *  ACallable.ts) back to its known CONTRACT shape. Stage A2: the factories mint the
@@ -207,7 +201,7 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
     "the two ad-hoc booleans `fanout?`/`pure?` are GONE, not merely deprecated — " +
       'no declaration surface accepts them any more (§2 EXCLUDED: "degenerate two-word ' +
       'fragment of this vocabulary; each had exactly two readers")',
-    // RESIDUAL FINDING (do not flip without either (a) retiring the legacy surface
+    // RESIDUAL FINDING (do not flip without either (a) retiring the retired surface
     // below, or (b) narrowing this row's title to the `symbol.*` declaration surface
     // it actually verifies):
     //
@@ -225,7 +219,7 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
     // and every downstream capability (here.build's saas/server/{arrival,mcp}",
     // inhuman's saas/mcp, the sift-submission forensics catalog) still authors verbs
     // this way." `provenance/lineage-classifier-from-env.ts`'s own header independently
-    // confirms: "The legacy dynamic `AmbientRuntime.defineRosetta`/`RosettaFunction.pure`
+    // confirms: "The pure-flag
     // runtime API is a SEPARATE, not-yet-migrated registration path outside Q2/Q3's
     // declared-role vocabulary — ops registered that way carry no `.provenanceRole`."
     //
@@ -369,8 +363,7 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
               ? "sink"
               : op === "declared-transparent"
                 ? "transparent"
-                : undefined,
-      };
+                : undefined };
 
       const [loopAst] = await parse(`(declared-loop x)`);
       const loopNode = classify(loopAst, C);
@@ -416,8 +409,7 @@ describe("V2 — declaration-driven classifier (§2; PROVENANCE-PLAN.md Q3)", ()
       // classify() still consulted a name list (the retired heuristic) rather than
       // the declared role alone, one of these would misclassify.
       const C: Classifier = {
-        roleOf: (op) => (op === "totally-pure-sounding" ? "source" : op === "clearly-a-mint" ? "pipe" : undefined),
-      };
+        roleOf: (op) => (op === "totally-pure-sounding" ? "source" : op === "clearly-a-mint" ? "pipe" : undefined) };
       const [mintAst] = await parse(`(totally-pure-sounding p)`);
       expect(classify(mintAst, C).kind).toBe("source");
       const [pipeAst] = await parse(`(clearly-a-mint p)`);
@@ -610,9 +602,7 @@ describe("V2-Q4 — callback-role drift door + acc chain + stamp path (§2/§3; 
             "q4-stamp": symbol.native`q4-stamp: synthetic fan`(
               { input: [z.lambda, z.schemeValue], output: [z.schemeValue], provenance: "fan" },
               (f, v) => v,
-            ),
-          }),
-        }),
+            ) }) }),
       ]);
       expect(read("q4-stamp")).toEqual(["element-transformer"]);
     },

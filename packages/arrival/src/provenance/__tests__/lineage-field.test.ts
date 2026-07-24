@@ -31,8 +31,7 @@ import {
   countCone,
   fieldCone,
   type Classifier,
-  type LineageNode,
-} from "../../provenance/lineage.js";
+  type LineageNode } from "../../provenance/lineage.js";
 
 const C: Classifier = {
   // `dict` carries no declared role here — falls through to the pure-application
@@ -44,8 +43,7 @@ const C: Classifier = {
         ? "fan"
         : ["ext-call"].includes(op)
           ? "opaque"
-          : undefined,
-};
+          : undefined };
 
 async function skeleton(src: string): Promise<LineageNode> {
   const [ast] = await parse(src);
@@ -171,8 +169,7 @@ describe("lineage field — nested projection ABSORBS to base + INNERMOST step",
       kind: "field",
       op: "car",
       step: { car: true },
-      child: { kind: "leaf", slot: "x" },
-    });
+      child: { kind: "leaf", slot: "x" } });
   });
 
   it("triple nesting (:a (:b (:c x))) absorbs to the single innermost step :c", async () => {
@@ -208,8 +205,7 @@ describe("lineage field — nested projection ABSORBS to base + INNERMOST step",
       kind: "field",
       op: "vector-ref",
       step: { index: 0 }, // the transparent positional child, kept NESTED under the keyword
-      child: { kind: "leaf", slot: "x" },
-    });
+      child: { kind: "leaf", slot: "x" } });
   });
 
   it("INDEX over keyword (vector-ref (:b x) 0): the inner keyword wins, the outer index is absorbed", async () => {
@@ -344,8 +340,7 @@ describe("lineage field — fan × lens composes PARAMETRICALLY (the z-axis is p
       kind: "field",
       op: ":bar",
       step: { field: "bar" },
-      child: { kind: "leaf", slot: "it" },
-    });
+      child: { kind: "leaf", slot: "it" } });
   });
 
   it("the v0.2 dict shape (map (lambda (it) (dict :foo (:bar it))) xs) carries the inner field nested", async () => {
@@ -362,8 +357,7 @@ describe("lineage field — fan × lens composes PARAMETRICALLY (the z-axis is p
       kind: "field",
       op: ":bar",
       step: { field: "bar" },
-      child: { kind: "leaf", slot: "it" },
-    });
+      child: { kind: "leaf", slot: "it" } });
   });
 
   it("a BARE function symbol fan carries NO template — byte-identical to the pre-v0.2 fan", async () => {

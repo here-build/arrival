@@ -3,7 +3,7 @@
  * bound callable (`.provenanceRole` — `common/capability.ts`, resolved from
  * `Contract.provenance` at bake time, `common/symbols/_bake.ts`). Q3
  * (docs/PROVENANCE.md §2) retired the caller-supplied `sources: ReadonlySet<string>`
- * seam this test used to exercise via `env.defineRosetta` + an explicit source
+ * seam this test used to exercise via an explicit rosetta source
  * list — that heuristic no longer exists (docs/PROVENANCE.md §2 EXCLUDED). These
  * cases bind plain marker values directly (`.provenanceRole` stamped, no real
  * rosetta wrapper needed — `classify()` never calls the bound value, it only
@@ -14,6 +14,8 @@ import { parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { classify, fullCone, type DeclaredRole, type LineageNode } from "../../provenance/lineage.js";
 import { classifierFromEnv } from "../../provenance/lineage-classifier-from-env.js";
+import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
+import { theVoid } from "../../values/primitives/AVoid.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
 import { bindValue, mintFrame } from "../../env/AmbientRuntime.js";
 
@@ -21,8 +23,14 @@ let seq = 0;
 const env = () => mintFrame(inferenceEnv, `cfe-${seq++}`);
 
 /** A marker value carrying ONLY a declared role — classify() never invokes the bound
- *  value, so a bare stamped function is enough to exercise the declaration read. */
-const declared = (role: DeclaredRole): ((...args: unknown[]) => unknown) => Object.assign(() => undefined, { provenanceRole: role });
+ *  value, so a stamped ANativeProcedure is enough to exercise the declaration read. W8. */
+const declared = (role: DeclaredRole): ANativeProcedure =>
+  new ANativeProcedure({
+    name: "declared",
+    arity: { min: 0, max: null },
+    contract: undefined,
+    impl: () => theVoid,
+    provenanceRole: role });
 
 const node = async (src: string, e: ReturnType<typeof env>): Promise<LineageNode> =>
   classify((await parse(src))[0], classifierFromEnv(e));

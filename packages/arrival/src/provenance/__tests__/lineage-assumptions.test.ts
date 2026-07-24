@@ -28,7 +28,7 @@ import { bindValue, mintFrame } from "../../env/AmbientRuntime.js";
 requireEagerOracle();
 
 // `seq` numbers the BESPOKE per-`it` envs below (each builds its own env to install
-// a `defineRosetta` fixture); the shared run/runRaw own a separate counter.
+// a rosetta fixture); the shared run/runRaw own a separate counter.
 let seq = 0;
 
 describe("ASSUMPTION — provenance is minted only at Rosetta crossings (§5)", () => {
@@ -67,8 +67,7 @@ describe("ASSUMPTION — let is transparent (the graph is the object, not syntax
         "letform": [
           100,
           200,
-        ],
-      }
+        ] }
     `);
   });
 });
@@ -140,8 +139,7 @@ describe("NEXT-STEP assumptions (designed; unblock as the slices land)", () => {
   // carry the full proof). These pin the headline closure here in the ledger.
   it("A4-classifier: classify() handles `let`/`if` (special forms), not just applications", async () => {
     const C: Classifier = {
-      roleOf: (op) => (["map", "filter"].includes(op) ? "fan" : undefined),
-    };
+      roleOf: (op) => (["map", "filter"].includes(op) ? "fan" : undefined) };
     const cone = async (src: string, b: Record<string, readonly number[]>): Promise<number[]> => {
       const [ast] = await parse(src);
       return fullCone(classify(ast, C), b);
@@ -252,37 +250,30 @@ describe("v0.1 FINALIZATION GATES (G1–G7)", () => {
       mapLengthCoerce: await oneShot(`(length (map (lambda (e) e) xs))`),
       // vector->list converts the carrier; the collection-level box does not
       // ride onto the resulting Pair today.
-      vectorToList: await oneShot(`(vector->list xs)`),
-    };
+      vectorToList: await oneShot(`(vector->list xs)`) };
     expect(golden).toMatchInlineSnapshot(`
       {
         "mapLengthCoerce": {
           "ctor": "AExact",
           "prov": [
             7,
-          ],
-        },
+          ] },
         "vectorLength": {
           "ctor": "AExact",
-          "prov": [],
-        },
+          "prov": [] },
         "vectorMap": {
           "ctor": "AVector",
           "prov": [
             7,
-          ],
-        },
+          ] },
         "vectorMapTwice": {
           "ctor": "AVector",
           "prov": [
             7,
-          ],
-        },
+          ] },
         "vectorToList": {
           "ctor": "APair",
-          "prov": [],
-        },
-      }
+          "prov": [] } }
     `);
   });
 

@@ -44,8 +44,7 @@ import {
   emitMuxDecision,
   emitTrackClose,
   emitTrackOpen,
-  setEmissionEnabled,
-} from "../../provenance/store/emit.js";
+  setEmissionEnabled } from "../../provenance/store/emit.js";
 import { PayloadStoreFake, ProvenanceStoreFake, ProvenanceWriteFailure } from "../../provenance/store/fakes.js";
 import { foldRegionState, foldRegionStream } from "../../provenance/store/fold.js";
 import { ProvenanceRing } from "../../provenance/store/flush.js";
@@ -58,8 +57,7 @@ import {
   withRegionCall,
   withTrackCoordinate,
   type TrackCoordinate,
-  type TrackEmissionSink,
-} from "../../membrane/region-scope.js";
+  type TrackEmissionSink } from "../../membrane/region-scope.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 
 /** A manually-controlled promise — the "no real timers" idiom `store/fakes.ts` uses
@@ -387,8 +385,7 @@ describe("stream fold + monotonicity + fold-as-recovery (docs/PROVENANCE.md §5 
           runCtx: CONSTANT_CTX,
           dynSite: undefined,
           coordinate,
-          sink,
-        });
+          sink });
         await withRegionCall(resumedAgain, () => "recovered");
         await Promise.resolve();
         await Promise.resolve();

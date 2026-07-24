@@ -22,7 +22,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { schemeToJs } from "../../membrane/rosetta.js";
-import { ANativeProcedure } from "../../values/primitives/ACallable.js";
+import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
 import {
   closeRegionScope,
   openRegionScope,
@@ -30,8 +30,7 @@ import {
   withRegionScope,
   withTrackCoordinate,
   type TrackCoordinate,
-  type TrackEmissionSink,
-} from "../../membrane/region-scope.js";
+  type TrackEmissionSink } from "../../membrane/region-scope.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { ProvenanceStoreFake } from "../../provenance/store/fakes.js";
 import { setEmissionEnabled } from "../../provenance/store/emit.js";
@@ -58,8 +57,7 @@ function makeThrowingProc(): ANativeProcedure {
     contract: undefined,
     impl: () => {
       throw new Error("region-events probe: deliberate failure");
-    },
-  });
+    } });
 }
 
 describe("track-open/track-close: real B3 counters through withRegionCall", () => {

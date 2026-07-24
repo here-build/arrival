@@ -23,8 +23,8 @@ import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { EvalTrace } from "../../provenance/trace.js";
 import { APair } from "../../values/primitives/APair.js";
-import { symbol } from "../../common/symbol.js";
-import * as z from "../../common/scheme-zod.js";
+import { symbol } from "../../symbol/index.js";
+import * as z from "../../common/scheme-zod/index.js";
 import { parseDefineBody } from "../../common/symbols/define-bake.js";
 
 /** Walk a boxed scheme value; return every reachable APair lacking a location. */

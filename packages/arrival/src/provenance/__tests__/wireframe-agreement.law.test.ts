@@ -41,8 +41,7 @@ import {
   SourceRegistry,
   runEagerCone,
   prospectiveSourceCone,
-  type SourceShape,
-} from "../../__tests__/provenance/w1-harness.js";
+  type SourceShape } from "../../__tests__/provenance/w1-harness.js";
 import { W1_CORPUS, CORPUS_ROLES, CORPUS_BASE_NAMES, genLinearProgram } from "../../__tests__/provenance/w1-corpus.js";
 
 const num: SourceShape = "num";
@@ -292,16 +291,14 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
 
         const env = mintFrame(inferenceEnv, "w1-begin-finding");
         // Test-local EnvCapability: identity passthrough, `z.dynamic` on both sides (no
-        // transform, matching the legacy `fn: (x) => x` shape exactly).
+        // transform, matching the historical `fn: (x) => x` shape exactly).
         await applyCapability(env, [
           EnvCapability.define("test/w1-begin-finding", {
             symbols: (symbol, z) => ({
               "emit!": symbol.rosetta`emit!: identity passthrough (sink echo)`(
                 { input: [z.dynamic], output: [z.dynamic] },
                 (x: unknown) => x,
-              ),
-            }),
-          }),
+              ) }) }),
         ]);
         const registry = new SourceRegistry();
         await registry.register(env, "src-a", num);

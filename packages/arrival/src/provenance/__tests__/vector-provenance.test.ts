@@ -21,7 +21,7 @@ requireEagerOracle();
 // Source op fns FROM THE CAPABILITY's inlined `symbols` (the bare *_OPS map was
 // inlined into the constructor; the capability default export is the single
 // declaration site). DUAL-ACCEPT the symbol shape (mirrors EnvCapability.lower()'s
-// dispatch): a BAKED `symbol.native` def exposes the host fn as `.impl`; the legacy
+// dispatch): a BAKED `symbol.native` def exposes the host fn as `.impl`; the historical
 // `{ value: fn }` form exposes it as `.value`. Reading either keeps this raw-symbol
 // harness valid across the per-pack native migration regardless of order.
 const opFn = (v: { kind?: string; impl?: (...a: any[]) => any; value?: (...a: any[]) => any }) =>

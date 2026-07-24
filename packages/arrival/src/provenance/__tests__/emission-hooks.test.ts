@@ -3,7 +3,7 @@
  * (docs/PROVENANCE.md §7 W3 port completeness; `eval/provenance-hooks.ts`, `eval/evaluator.ts`'s
  * generic apply site). Where `provenance/store/__tests__/emit.test.ts` drives the
  * emission core directly, this file drives it through a REAL interpreted program —
- * a `defineRosetta`-registered source, run under a tap (`EvalTrace`, exactly the
+ * a rosetta-registered source, run under a tap (`EvalTrace`, exactly the
  * mechanism `membrane/region.law.test.ts` and `w1-harness.ts` already use), with a
  * `RecordCoordinate`/`EmissionSink` installed around the run.
  *
@@ -45,9 +45,7 @@ async function registerSource(env: ResolvingAmbient): Promise<void> {
   await applyCapability(env, [
     EnvCapability.define("test/fetch-item", {
       symbols: (symbol, z) => ({
-        "fetch-item": symbol.rosetta`fetch-item: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 42),
-      }),
-    }),
+        "fetch-item": symbol.rosetta`fetch-item: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 42) }) }),
   ]);
 }
 

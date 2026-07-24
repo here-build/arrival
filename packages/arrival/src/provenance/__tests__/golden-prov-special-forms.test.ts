@@ -39,8 +39,7 @@ import { sNum, run } from "../../__tests__/_lineage-test-helpers.js";
 /** STATIC classifier for the gate checks below — the control forms here use only
  *  arithmetic/comparison pures (no Rosetta-in, no fans). */
 const C: Classifier = {
-  roleOf: (op) => (["map", "filter"].includes(op) ? "fan" : undefined),
-};
+  roleOf: (op) => (["map", "filter"].includes(op) ? "fan" : undefined) };
 
 /** fullCone of the STATIC lineage tree for `src` under leaf bindings `b` (no eval). */
 async function staticCone(src: string, b: Record<string, readonly number[]>): Promise<number[]> {
@@ -125,8 +124,7 @@ describe("GOLDEN — `let` transparency (gate G2 oracle)", () => {
         "letform": [
           100,
           200,
-        ],
-      }
+        ] }
     `);
   });
 

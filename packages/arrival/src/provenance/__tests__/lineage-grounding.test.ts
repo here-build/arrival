@@ -2,7 +2,7 @@
  * Gsec — the per-value GROUNDING invariant (mechanism-1), in PURE arrival.
  *
  * THE CORE SECURITY GATE the provenance migration must not break. Hermetic: no
- * sift, no sift evidence env, no live model — a `defineRosetta` fake source mints
+ * sift, no sift evidence env, no live model — a rosetta fake source mints
  * deterministically. (sift's `leafGrounded`/`checkSignable` seal in
  * sift-submission/ is an APPLIED/downstream consumer being ejected; it is NOT a
  * core gate. But the SUBSTRATE the seal stands on IS a core invariant, and that
@@ -28,7 +28,7 @@
  * unions; this walk is the per-leaf analogue.)
  *
  * SOURCE-MINT MECHANISM (the hermetic stand-in for a Rosetta-IN crossing): a
- * `defineRosetta(name, { fn })` whose `fn` returns an already-STAMPED AValue. A
+ * `symbol.rosetta` with a host fn whose `fn` returns an already-STAMPED AValue. A
  * registered rosetta defaults to a Rosetta-IN SOURCE; returning a stamped value
  * makes "data is born at the membrane" observable deterministically without a live
  * model — the same fixture shape as golden-prov-infer.test.ts. The mint id values
@@ -36,7 +36,8 @@
  * SHAPE per leaf, not the id values.
  */
 import { describe, it, expect } from "vitest";
-import { is_pair, is_nil } from "../../values/value-guards.js";
+import { is_nil } from "../../values/value-guards.js";
+import { is_pair } from "../../values/value-guards.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { sStr, runRaw, type EnvSetup } from "../../__tests__/_lineage-test-helpers.js";
 import { ANil } from "../../values/primitives/ANil.js";
@@ -54,7 +55,7 @@ const MINT_B = 600;
 // being re-encoded, so the mint id it carries survives untouched). Each ignores its
 // arg and returns an already-stamped value (the mint), so grounding is reproducible
 // with no model. Provenance role left at its "source" default (mint-on-invocation),
-// same as legacy `defineRosetta` with no `pure`.
+// same as default source mint (no pure-pipe).
 const sources: EnvSetup = async (env) => {
   const cap = EnvCapability.define("test/grounding-sources", {
     symbols: (symbol, z) => ({
@@ -63,9 +64,7 @@ const sources: EnvSetup = async (env) => {
       ),
       "source-b": symbol.rosetta`source-b: fake Rosetta-IN source (B)`({ input: [z.string], output: [z.dynamic] }, () =>
         sStr("SRC-B", MINT_B),
-      ),
-    }),
-  });
+      ) }) });
   await applyCapability(env, [cap]);
 };
 

@@ -13,10 +13,10 @@
  * The unit under capture is the SOURCE end of the lineage: a Rosetta-IN crossing
  * (`infer`-shaped) is where provenance is BORN (the classifier's `source` node;
  * design §5 "minted only at Rosetta crossings"). A deterministic FAKE source is
- * registered via `defineRosetta` — its fn ignores its arg and returns an
+ * registered via `symbol.rosetta` — its fn ignores its arg and returns an
  * already-stamped value (a fixed mint id), so the capture is reproducible without
- * a live model. (This is the same `defineRosetta("infer-x", …)` pattern as
- * rosetta-pure-marker.test.ts / lineage-assumptions.test.ts `defineRosetta("boom", …)`,
+ * a live model. (This is the same rosetta-fixture pattern as
+ * rosetta-pure-marker.test.ts / lineage-assumptions.test.ts rosetta "boom" fixture,
  * with the fn returning a STAMPED value so the mint id is observable.)
  *
  * Why a stamped return value is the faithful stand-in: a registered rosetta defaults
@@ -42,7 +42,7 @@
  * Shared provenance helpers (provOf, sStr, runRaw) are imported — provOf from the
  * canonical production shadow module, sStr/runRaw from the test-helper module — so
  * there is ONE definition of each across the suite. The file-SPECIFIC part is the
- * `inferSources` setup (the deterministic `defineRosetta` fixtures), passed to the
+ * `inferSources` setup (the deterministic rosetta fixtures), passed to the
  * shared `runRaw` via its setup hook; the `prov`/`value` wrappers stay local.
  */
 import { describe, it, expect } from "vitest";
@@ -73,13 +73,13 @@ const OTHER_ID = 701; // infer-dict's `other` slot id (must be PRUNED by the pro
 // conversion") is load-bearing here, not cosmetic: it makes `run()` (common/symbols/
 // rosetta.ts) skip `z.encode` for this slot and hand the impl's return straight to
 // `jsToScheme(runCtx, result, {}, resultProvenance)` — the EXACT spine
-// `createRosettaWrapper` (rosetta.ts) used for legacy `defineRosetta`. With no live
+// `createRosettaWrapper` (rosetta.ts). With no live
 // `ctx.currentInvocation` (a direct `execState` run, same as `runRaw` here),
 // `resultProvenance` falls back to the (empty) input-provenance union, and
 // `jsToScheme`'s "AValue → identity / provenance re-stamp" inbound claim short-circuits
 // on `p === EMPTY_PROVENANCE`, returning the fixture's OWN stamp untouched — byte-
-// identical to what `defineRosetta`'s wrapper did. Provenance role left at its "source"
-// default (mint-on-invocation) — the same default legacy `defineRosetta` (no `pure`)
+// identical to host-fn membrane minting. Provenance role left at its "source"
+// default (mint-on-invocation) — the same default (no pure-pipe)
 // carried.
 const inferSources: EnvSetup = async (env) => {
   const cap = EnvCapability.define("test/infer-sources", {
@@ -104,9 +104,7 @@ const inferSources: EnvSetup = async (env) => {
       "infer-dict": symbol.rosetta`infer-dict: fake Rosetta-IN structured source`(
         { input: [z.string], output: [z.dynamic] },
         () => jsToScheme(CONSTANT_CTX, { field: sStr("FV", FIELD_ID), other: sStr("OV", OTHER_ID) }),
-      ),
-    }),
-  });
+      ) }) });
   await applyCapability(env, [cap]);
 };
 
@@ -133,14 +131,12 @@ describe("GOLDEN (G2 oracle) — a single Rosetta-IN crossing MINTS one leaf", (
     // the provenance is the mint alone. This is the classifier's `source` node.
     expect({
       value: await value(`(infer-x "ignored-prompt")`),
-      prov: await prov(`(infer-x "ignored-prompt")`),
-    }).toMatchInlineSnapshot(`
+      prov: await prov(`(infer-x "ignored-prompt")`) }).toMatchInlineSnapshot(`
       {
         "prov": [
           500,
         ],
-        "value": "RESULT-X",
-      }
+        "value": "RESULT-X" }
     `);
   });
 });
@@ -152,14 +148,12 @@ describe("GOLDEN (G2 oracle) — a pure pipe over the source PROPAGATES, never r
     // never to CARRY a new id (AValue.ts on-value provenance rationale).
     expect({
       value: await value(`(string-upcase (infer-x "p"))`),
-      prov: await prov(`(string-upcase (infer-x "p"))`),
-    }).toMatchInlineSnapshot(`
+      prov: await prov(`(string-upcase (infer-x "p"))`) }).toMatchInlineSnapshot(`
       {
         "prov": [
           500,
         ],
-        "value": "RESULT-X",
-      }
+        "value": "RESULT-X" }
     `);
   });
 
@@ -168,14 +162,12 @@ describe("GOLDEN (G2 oracle) — a pure pipe over the source PROPAGATES, never r
     // merge: the literal is not a source (lineage-spike.test.ts pure-predicate case).
     expect({
       value: await value(`(string-append "pre-" (infer-x "p"))`),
-      prov: await prov(`(string-append "pre-" (infer-x "p"))`),
-    }).toMatchInlineSnapshot(`
+      prov: await prov(`(string-append "pre-" (infer-x "p"))`) }).toMatchInlineSnapshot(`
       {
         "prov": [
           500,
         ],
-        "value": "pre-RESULT-X",
-      }
+        "value": "pre-RESULT-X" }
     `);
   });
 });
@@ -186,15 +178,13 @@ describe("GOLDEN (G2 oracle) — a MERGE of two infer sources fans both points i
     // depends on both crossings, so both minted ids are carried (set-union, sorted).
     expect({
       value: await value(`(string-append (infer-x "a") (infer-y "b"))`),
-      prov: await prov(`(string-append (infer-x "a") (infer-y "b"))`),
-    }).toMatchInlineSnapshot(`
+      prov: await prov(`(string-append (infer-x "a") (infer-y "b"))`) }).toMatchInlineSnapshot(`
       {
         "prov": [
           500,
           600,
         ],
-        "value": "RESULT-XRESULT-Y",
-      }
+        "value": "RESULT-XRESULT-Y" }
     `);
   });
 });
@@ -211,14 +201,12 @@ describe("GOLDEN (G2 oracle) — a FIELD PROJECTION refines a point (narrows the
     // spaced `(: field …)` reads `field` as a free variable (Unbound variable).
     expect({
       value: await value(`(:field (infer-dict "p"))`),
-      prov: await prov(`(:field (infer-dict "p"))`),
-    }).toMatchInlineSnapshot(`
+      prov: await prov(`(:field (infer-dict "p"))`) }).toMatchInlineSnapshot(`
       {
         "prov": [
           700,
         ],
-        "value": "FV",
-      }
+        "value": "FV" }
     `);
   });
 
@@ -228,14 +216,12 @@ describe("GOLDEN (G2 oracle) — a FIELD PROJECTION refines a point (narrows the
     // cone to the projected field's id. Pinned so a rewrite can't diverge the two.
     expect({
       value: await value(`(@ (infer-dict "p") "field")`),
-      prov: await prov(`(@ (infer-dict "p") "field")`),
-    }).toMatchInlineSnapshot(`
+      prov: await prov(`(@ (infer-dict "p") "field")`) }).toMatchInlineSnapshot(`
       {
         "prov": [
           700,
         ],
-        "value": "FV",
-      }
+        "value": "FV" }
     `);
   });
 });

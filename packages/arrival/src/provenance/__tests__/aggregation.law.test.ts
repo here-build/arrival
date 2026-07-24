@@ -21,8 +21,7 @@ import {
   foldRuns,
   NeverAggregatable,
   unfoldRun,
-  type AggregatableRecord,
-} from "../../provenance/store/aggregate.js";
+  type AggregatableRecord } from "../../provenance/store/aggregate.js";
 import { ProvenanceStoreFake, RunStoreFake } from "../../provenance/store/fakes.js";
 import { appendOrdinal, ROOT_ORDINAL_PATH, type RecordId } from "../../provenance/store/ids.js";
 import type { HostScheduleRecord, MintRecord, MuxDecisionRecord } from "../../provenance/store/records.js";

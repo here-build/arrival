@@ -45,8 +45,7 @@ import {
   recordHostScheduleVerdict,
   withTrackCoordinate,
   type TrackCoordinate,
-  type TrackEmissionSink,
-} from "../../membrane/region-scope.js";
+  type TrackEmissionSink } from "../../membrane/region-scope.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import type { EmittedWire, WireframeGraph } from "../../provenance/wireframe/types.js";
 import type { SchemeValue } from "../../values/types.js";
@@ -84,8 +83,7 @@ async function replayTrack(run: RecordedRun, template: WireframeGraph, i: number
     program,
     graph: template,
     frozen,
-    slots: { v: boxPayload({ value: i + 1, stampIds: [] }) },
-  });
+    slots: { v: boxPayload({ value: i + 1, stampIds: [] }) } });
 }
 
 async function fanTemplateOf(code: string): Promise<WireframeGraph> {
@@ -274,8 +272,7 @@ describe("track separation (§3 I3: no spontaneous inter-track edges)", () => {
     const t0Before = await replayTrack(run, template, 0);
     const mutatedRun: RecordedRun = {
       ...run,
-      mints: run.mints.map((m, k) => (k === 1 ? { ...m, payload: { ...m.payload, value: 999 } } : m)),
-    };
+      mints: run.mints.map((m, k) => (k === 1 ? { ...m, payload: { ...m.payload, value: 999 } } : m)) };
     const t0After = await replayTrack(mutatedRun, template, 0);
     const t1After = await replayTrack(mutatedRun, template, 1);
     expect(t0After.value).toBe(t0Before.value);
@@ -294,15 +291,13 @@ describe("track separation (§3 I3: no spontaneous inter-track edges)", () => {
         { kind: "slot", name: "acc" },
         { kind: "slot", name: "ev" },
       ],
-      span: "i3-acc-stretch",
-    };
+      span: "i3-acc-stretch" };
     const { steps, egress } = await replayBetweenRecords({
       store: foldRun.store,
       payloads: foldRun.payloads,
       regionId: foldRun.regionId,
       stretch: { wire: stretch, accParam: "acc", eventParam: "ev" },
-      initial: boxPayload({ value: 0, stampIds: [] }),
-    });
+      initial: boxPayload({ value: 0, stampIds: [] }) });
     expect(egress).toBe(foldRun.egress);
     // the chain: pure value k = pure value k-1 + event k — state flows ONLY through acc
     const pures = steps.flatMap((s) => (s.kind === "pure" ? [s.value as number] : []));

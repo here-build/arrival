@@ -25,8 +25,7 @@ const ROLES: Record<string, DeclaredRole> = {
   dedent: "transparent",
   map: "fan",
   filter: "fan",
-  "black-box": "opaque",
-};
+  "black-box": "opaque" };
 const C: Classifier = { roleOf: (op) => ROLES[op] };
 
 // The hermetic-base predicate — a synthetic subset of base-pack names the test
@@ -344,18 +343,15 @@ describe("Q8a′ builder core — loop-shaped binders get REAL backedge-wired in
           params: ["x"],
           paramRefs: [{ kind: "node", name: "x", node: 1 }],
           span: "w0",
-          consumer: { node: 0, slot: "arg0" },
-        },
+          consumer: { node: 0, slot: "arg0" } },
         {
           source: "(lambda (x) x)",
           params: ["x"],
           paramRefs: [{ kind: "node", name: "x", node: 0 }],
           span: "w1",
-          consumer: { node: 1, slot: "arg0" },
-        },
+          consumer: { node: 1, slot: "arg0" } },
       ],
-      egress: null,
-    };
+      egress: null };
     expect(reachableNodes(cyclic, 0)).toEqual(new Set([0, 1]));
   });
 });

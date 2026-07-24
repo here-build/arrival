@@ -84,11 +84,9 @@ describe("GOLDEN (G2 oracle) — pure-map length over a Pair source: the A13 lea
   it("(length (map id xs)): the count's cone is the MINIMAL grouping fact (empty), not every element id — the A13 leak is closed [GATE: G2]", async () => {
     expect({
       value: await value(`(length (map (lambda (e) e) xs))`, { xs: triple() }),
-      prov: await prov(`(length (map (lambda (e) e) xs))`, { xs: triple() }),
-    }).toEqual({
+      prov: await prov(`(length (map (lambda (e) e) xs))`, { xs: triple() }) }).toEqual({
       value: 3,
-      prov: [],
-    });
+      prov: [] });
   });
 
   it("(map id xs): the mapped LIST head's own provenance is EMPTY — element ids live on the elements", async () => {
@@ -109,15 +107,13 @@ describe("GOLDEN (G2 oracle) — filter RUNS the predicate; the count carries th
     // surviving elements (a=100, c=102) carry their provenance into the count.
     expect({
       value: await value(`(length (filter (lambda (e) (not (string=? e "b"))) xs))`, { xs: triple() }),
-      prov: await prov(`(length (filter (lambda (e) (not (string=? e "b"))) xs))`, { xs: triple() }),
-    }).toMatchInlineSnapshot(`
+      prov: await prov(`(length (filter (lambda (e) (not (string=? e "b"))) xs))`, { xs: triple() }) }).toMatchInlineSnapshot(`
       {
         "prov": [
           100,
           102,
         ],
-        "value": 2,
-      }
+        "value": 2 }
     `);
   });
 
@@ -138,16 +134,14 @@ describe("GOLDEN (G2 oracle) — filter RUNS the predicate; the count carries th
   it("(length (filter pred xs)) keeping ALL: pred always true; count is 3, all ids carried", async () => {
     expect({
       value: await value(`(length (filter (lambda (e) #t) xs))`, { xs: triple() }),
-      prov: await prov(`(length (filter (lambda (e) #t) xs))`, { xs: triple() }),
-    }).toMatchInlineSnapshot(`
+      prov: await prov(`(length (filter (lambda (e) #t) xs))`, { xs: triple() }) }).toMatchInlineSnapshot(`
       {
         "prov": [
           100,
           101,
           102,
         ],
-        "value": 3,
-      }
+        "value": 3 }
     `);
   });
 
@@ -156,12 +150,10 @@ describe("GOLDEN (G2 oracle) — filter RUNS the predicate; the count carries th
     // anchor for the filter cone: zero survivors ⇒ zero element ids.
     expect({
       value: await value(`(length (filter (lambda (e) #f) xs))`, { xs: triple() }),
-      prov: await prov(`(length (filter (lambda (e) #f) xs))`, { xs: triple() }),
-    }).toMatchInlineSnapshot(`
+      prov: await prov(`(length (filter (lambda (e) #f) xs))`, { xs: triple() }) }).toMatchInlineSnapshot(`
       {
         "prov": [],
-        "value": 0,
-      }
+        "value": 0 }
     `);
   });
 });
@@ -173,35 +165,29 @@ describe("GOLDEN (G2 oracle) — NESTED fan: (length (map g (filter p xs)))", ()
     // the outer map into the count.
     expect({
       value: await value(`(length (map (lambda (e) e) (filter (lambda (e) (not (string=? e "b"))) xs)))`, {
-        xs: triple(),
-      }),
+        xs: triple() }),
       prov: await prov(`(length (map (lambda (e) e) (filter (lambda (e) (not (string=? e "b"))) xs)))`, {
-        xs: triple(),
-      }),
-    }).toMatchInlineSnapshot(`
+        xs: triple() }) }).toMatchInlineSnapshot(`
       {
         "prov": [
           100,
           102,
         ],
-        "value": 2,
-      }
+        "value": 2 }
     `);
   });
 
   it("nested all-pass: filter keeps all, map identity; count is 3, all ids", async () => {
     expect({
       value: await value(`(length (map (lambda (e) e) (filter (lambda (e) #t) xs)))`, { xs: triple() }),
-      prov: await prov(`(length (map (lambda (e) e) (filter (lambda (e) #t) xs)))`, { xs: triple() }),
-    }).toMatchInlineSnapshot(`
+      prov: await prov(`(length (map (lambda (e) e) (filter (lambda (e) #t) xs)))`, { xs: triple() }) }).toMatchInlineSnapshot(`
       {
         "prov": [
           100,
           101,
           102,
         ],
-        "value": 3,
-      }
+        "value": 3 }
     `);
   });
 });
