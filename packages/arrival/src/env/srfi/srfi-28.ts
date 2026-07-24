@@ -36,7 +36,7 @@
 // the arrival printer, being display-only, differs from R7RS `write`). Non-string args
 // render identically under `~a` and `~s`.
 
-import { type CallCtx } from "../../common/symbol.js";
+import { type CallCtx } from "../../symbol/index.js";
 import { EnvCapability } from "../../common/capability.js";
 import { stringValue, isSchemeNumber } from "../../values/op-helpers.js";
 import { collapseProvenance, taintString } from "../../provenance/provenance-collapse.js";
@@ -234,6 +234,4 @@ export default EnvCapability.define("scheme/srfi-28", {
           // Collapsing op: re-stamp the DEEP union of the fmt string + every arg's lineage.
           return taintString(out, collapseProvenance(...provInputs));
         },
-      ),
-  }),
-});
+      ) }) });

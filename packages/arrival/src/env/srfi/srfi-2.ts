@@ -1,30 +1,14 @@
-// SRFI-2 — and-let*. Scheme-bootstrap capability.
+// SRFI-2 — and-let*. Sole definition site (base-packs via allSrfi).
 //
-// SINGLE SOURCE: `base-packs.ts` assembles this pack (via `allSrfi`) and evals it
-// (via initBridge's assembleEnv), so this module is the sole definition site.
+// Claws are FORMALS position, not expression space → `macroAttribute: "binder"`
+// (honest classification; firewalled like opaque until a binding-aware walker lands).
 //
-// `and-let*`'s claws are FORMALS position, not expression space — `(car claw)`
-// binds a variable, it does not reference one — so this pack declares
-// `macroAttribute: "binder"` explicitly rather than leaving it at the "opaque"
-// default. (Binder is firewalled identically to opaque until a binding-aware
-// macro walker lands — the declaration is the honest classification, not a
-// behavior change.)
+// `symbol.defineSyntax` binds a Macro directly (define-bake Pass 2) — works in
+// sandboxed and main env alike (no scheme define-syntax special-form parse needed).
 //
-// `symbol.defineSyntax` binds a `Macro` directly (bindCapabilityDefines's Pass 2,
-// define-bake.ts) rather than evaluating a scheme `define-syntax` form, so it
-// binds identically in the sandboxed env and the main env — the sandboxed
-// reader/matcher's inability to parse R7RS's own `(define-syntax …)` special
-// form doesn't apply here.
-//
-// `deps: [equality]` (Stage C Cut 4, docs/plans/stage-c-corpse-deletion.md): `and-let*`'s
-// transformer body calls `null?`/`pair?` — NATIVE_PACKS names with no bake-time allowlist entry
-// (unlike `car`/`cdr`/`cadr`, which the resolver-synth cxr allowlist covers for free) — so a
-// `buildVocabulary` closure that doesn't include `equality` bakes this macro into a closure that
-// fails at expansion time with an unbound-variable error. Harmless in every REAL run
-// (production always folds `BASE_ROSTER`, which includes `equality`), but a real gap for any
-// STANDALONE build of this one pack (found via `srfi-palette.test.ts`'s per-pack
-// `buildVocabulary([cap], ...)` fixture — see `srfi-26.ts`'s sibling correction for the full
-// mechanism explanation).
+// deps: [equality] — transformer body calls null?/pair? (not cxr-allowlisted). A
+// buildVocabulary([this]) closure without equality fails at expansion time unbound;
+// production BASE_ROSTER always includes equality. Standalone pack builds need the edge.
 import { EnvCapability } from "../../common/capability.js";
 import equality from "../r7rs/equality.js";
 
@@ -46,6 +30,4 @@ export default EnvCapability.define("scheme/srfi-2", {
                  (else
                   \`(if ,claw (and-let* ,rest ,@body) #f))))))`,
         { macroAttribute: "binder" },
-      ),
-  }),
-});
+      ) }) });

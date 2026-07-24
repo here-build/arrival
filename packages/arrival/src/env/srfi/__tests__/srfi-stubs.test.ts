@@ -9,7 +9,7 @@
 //
 // Assembly mirrors `env/__tests__/srfi.test.ts`: a capability is lowered onto a
 // fresh sandboxed env EXPLICITLY (the pack is not globally registered). Door-firing
-// is detected like `__tests__/purity-doors.test.ts`: the evaluator wraps the throw
+// is detected like `__tests__/doors/purity.law.test.ts`: the evaluator wraps the throw
 // in ArrivalError but preserves the message and chains the PurityError as `.cause`.
 
 import { describe, expect, it } from "vitest";

@@ -247,9 +247,7 @@ describe("scheme/srfi-189 — the §2.1 bake FV law passes for this pack AS MIGR
           symbol.define`bad-just: reproduces the pre-migration srfi-189 bug (no declared dep on scheme/lists' list)`(
             { input: [z.schemeValue], output: [z.schemeValue] },
             `(lambda (x) (list 'just x))`,
-          ),
-      }),
-    });
+          ) }) });
     await expect(buildVocabulary([undeclaredCap], undefined, evalScheme)).rejects.toThrow(DefineLocalityError);
   });
 });

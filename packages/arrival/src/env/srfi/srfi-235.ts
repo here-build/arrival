@@ -16,7 +16,7 @@
 //   • curry       — not SRFI-235; arity-aware partial application + procedure-min-arity.
 import { EnvCapability } from "../../common/capability.js";
 import dedent from "dedent";
-import { type CallCtx } from "../../common/symbol.js";
+import { type CallCtx } from "../../symbol/index.js";
 import { is_callable_value } from "../../values/value-guards.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import polyglot from "../polyglot/polyglot.js";
@@ -44,8 +44,7 @@ export default EnvCapability.define("scheme/srfi-235", {
           {
             <A extends unknown[], R>(fn: (...args: A) => R): (...args: A) => boolean;
           }
-        `,
-      },
+        ` },
       `(lambda (fn) (compose not fn))`,
     ),
 
@@ -59,8 +58,7 @@ export default EnvCapability.define("scheme/srfi-235", {
           {
             <T>(x: T): (...args: unknown[]) => T;
           }
-        `,
-      },
+        ` },
       `(lambda (x) (lambda args x))`,
     ),
 
@@ -72,8 +70,7 @@ export default EnvCapability.define("scheme/srfi-235", {
         output: [z.boolean],
         type: dedent`
           (...args: unknown[]) => boolean
-        `,
-      },
+        ` },
       `(lambda args #t)`,
     ),
     never: symbol.define`never: SRFI-235 — ignore args, return #f`(
@@ -83,8 +80,7 @@ export default EnvCapability.define("scheme/srfi-235", {
         output: [z.boolean],
         type: dedent`
           (...args: unknown[]) => boolean
-        `,
-      },
+        ` },
       `(lambda args #f)`,
     ),
 
@@ -111,19 +107,16 @@ export default EnvCapability.define("scheme/srfi-235", {
             <A, B, C, R>(fn: (a: A, b: B, c: C) => R): (a: A) => (b: B) => (c: C) => R;
             <R>(fn: (...args: unknown[]) => R, ...args: unknown[]): R | ((...more: unknown[]) => unknown);
           }
-        `,
-      },
+        ` },
       `(lambda (fn . args)
          (if (>= (length args) (procedure-min-arity fn))
              (apply fn args)
              (lambda more (apply curry fn (append args more)))))`,
     ),
 
-    // `procedure-min-arity` — curry's one remaining native: pure arity introspection off
-    // `ACallable.arity` (a callable value) or the JS `.length` fallback (a bare legacy fn,
-    // e.g. the quarantined `env.defineRosetta` authoring arm). No recursion, no invocation —
-    // just a read, so this needs no `this: CallCtx` / runCtx thread the way curry's old JS
-    // impl did to re-enter itself.
+    // `procedure-min-arity` — curry's remaining native: arity introspection off
+    // `ACallable.arity`, or JS `Function.length` when the value is a bare host function.
+    // No recursion, no invocation — no `this: CallCtx` / runCtx thread.
     "procedure-min-arity":
       symbol.native`procedure-min-arity: the minimum argument count fn accepts (arity introspection for scheme-authored combinators like curry)`(
         {
@@ -133,12 +126,9 @@ export default EnvCapability.define("scheme/srfi-235", {
           {
             (fn: (...args: unknown[]) => unknown): number;
           }
-        `,
-        },
+        ` },
         function (this: CallCtx, fn: unknown): AExact {
           const min = is_callable_value(fn) ? fn.arity.min : (fn as (...args: unknown[]) => unknown).length;
           return new AExact(min);
         },
-      ),
-  }),
-});
+      ) }) });

@@ -169,9 +169,7 @@ describe("scheme/srfi-128 — the §2.1 bake FV law passes for this pack AS MIGR
           symbol.define`bad-make-comparator: reproduces the pre-migration srfi-128 bug (no declared dep on list)`(
             { input: [z.lambda, z.lambda, z.lambda], output: [z.list([z.symbol, z.lambda, z.lambda, z.lambda])] },
             `(lambda (type-test equality ordering) (list 'comparator type-test equality ordering))`,
-          ),
-      }),
-    });
+          ) }) });
     await expect(buildVocabulary([undeclaredCap], undefined, evalScheme)).rejects.toThrow(DefineLocalityError);
   });
 });

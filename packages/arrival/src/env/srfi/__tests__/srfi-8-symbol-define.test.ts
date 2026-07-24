@@ -1,7 +1,7 @@
 // srfi-8-symbol-define.test.ts — SRFI-8 is doors-only under multi-return ban.
 // Single export `receive` is sugar over call-with-values; both are purity-doored.
 import { describe, expect, it } from "vitest";
-import type { AEntity } from "../../../common/symbol.js";
+import type { AEntity } from "../../../symbol/index.js";
 import { exec, execInFrame } from "../../../eval/generator-exec.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError, PurityError } from "../../../errors.js";
 import srfi8 from "../srfi-8.js";

@@ -28,6 +28,4 @@ import { EnvCapability } from "../../common/capability.js";
 
 export default EnvCapability.define("scheme/srfi-151", {
   symbols: (symbol) => ({
-    "bit-count": symbol.notImplemented`bit-count: doored under the one-number representation (safe-integer exacts, no bigints) — JS bitwise truncates to 32 bits, silent corruption above 2^31; here lieth the dragons. See this file's header and arrival-one-number-rework.md`,
-  }),
-});
+    "bit-count": symbol.notImplemented`bit-count: doored under the one-number representation (safe-integer exacts, no bigints) — JS bitwise truncates to 32 bits, silent corruption above 2^31; here lieth the dragons. See this file's header and arrival-one-number-rework.md` }) });

@@ -294,9 +294,7 @@ describe("scheme/srfi-1 — the §2.1 bake FV law passes AS MIGRATED", () => {
           symbol.define`bad-span: reproduces the pre-migration srfi-1 bug (free values reference, no declared dep on scheme/binding)`(
             { input: [z.lambda, z.union([z.pair, z.nil])], output: [z.values] },
             `(lambda (pred xs) (values xs xs))`,
-          ),
-      }),
-    });
+          ) }) });
     await expect(buildVocabulary([undeclaredCap], undefined, evalScheme)).rejects.toThrow(DefineLocalityError);
   });
 });

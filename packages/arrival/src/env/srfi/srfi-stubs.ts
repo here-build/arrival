@@ -127,6 +127,4 @@ export default EnvCapability.define("scheme/srfi-stubs", {
     "set-contains?": symbol.notImplemented`set-contains?: ${SET_REASON}`,
 
     // 8. String ports (mirrors host.ts's port omission)
-    "call-with-input-string": symbol.notImplemented`call-with-input-string: ${STRING_PORT_REASON}`,
-  }),
-});
+    "call-with-input-string": symbol.notImplemented`call-with-input-string: ${STRING_PORT_REASON}` }) });

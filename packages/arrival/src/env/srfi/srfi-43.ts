@@ -48,8 +48,7 @@ export default EnvCapability.define("scheme/srfi-43", {
           {
             <T, A>(kons: (acc: A, elt: T) => A, knil: A, vec: readonly T[]): A;
           }
-        `,
-      },
+        ` },
       `(lambda (kons knil vec)
          (let ((n (vector-length vec)))
            (let loop ((i 0) (acc knil))
@@ -66,8 +65,7 @@ export default EnvCapability.define("scheme/srfi-43", {
           {
             <T, A>(kons: (acc: A, elt: T) => A, knil: A, vec: readonly T[]): A;
           }
-        `,
-        },
+        ` },
         `(lambda (kons knil vec)
          (let loop ((i (- (vector-length vec) 1)) (acc knil))
            (if (< i 0) acc
@@ -82,8 +80,7 @@ export default EnvCapability.define("scheme/srfi-43", {
           {
             <T>(pred: (elt: T) => unknown, vec: readonly T[]): number;
           }
-        `,
-      },
+        ` },
       `(lambda (pred vec)
          (let ((n (vector-length vec)))
            (let loop ((i 0) (c 0))
@@ -99,8 +96,7 @@ export default EnvCapability.define("scheme/srfi-43", {
           {
             <T>(pred: (elt: T) => unknown, vec: readonly T[]): number | false;
           }
-        `,
-      },
+        ` },
       `(lambda (pred vec)
          (let ((n (vector-length vec)))
            (let loop ((i 0))
@@ -118,8 +114,7 @@ export default EnvCapability.define("scheme/srfi-43", {
           {
             <T>(vec: readonly T[], value: T, cmp: (elt: T, value: T) => number): number | false;
           }
-        `,
-        },
+        ` },
         `(lambda (vec value cmp)
            (let loop ((lo 0) (hi (- (vector-length vec) 1)))
              (if (> lo hi) #f
@@ -143,8 +138,7 @@ export default EnvCapability.define("scheme/srfi-43", {
           {
             <T, R>(pred: (elt: T) => R, vec: readonly T[]): R | false;
           }
-        `,
-      },
+        ` },
       `(lambda (pred vec)
          (let ((n (vector-length vec)))
            (let loop ((i 0))
@@ -161,8 +155,7 @@ export default EnvCapability.define("scheme/srfi-43", {
           {
             <T, R>(pred: (elt: T) => R, vec: readonly T[]): R | true | false;
           }
-        `,
-      },
+        ` },
       `(lambda (pred vec)
          (let ((n (vector-length vec)))
            (if (= n 0) #t
@@ -171,6 +164,4 @@ export default EnvCapability.define("scheme/srfi-43", {
                    (cond ((not r) #f)
                          ((= i (- n 1)) r)
                          (else (loop (+ i 1)))))))))`,
-    ),
-  }),
-});
+    ) }) });

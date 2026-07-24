@@ -7,10 +7,10 @@ import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
 import { applyCapability } from "../../../__tests__/_fresh-env.js";
 import { describe, expect, it } from "vitest";
 import type { EnvCapability } from "../../../common/capability.js";
-import * as z from "../../../common/scheme-zod.js";
+import * as z from "../../../common/scheme-zod/index.js";
 import { ZodTuple, type ZodOptional, type ZodTypeAny } from "zod";
 import type { SequenceSymbolDef } from "../../../common/symbols/_bake.js";
-import type { ANativeProcedure } from "../../../values/primitives/ACallable.js";
+import type { ANativeProcedure } from "../../../values/primitives/ANativeProcedure.js";
 import core from "../../core/core.js";
 
 import {
@@ -24,8 +24,7 @@ import {
   srfi189,
   srfi2,
   srfi8,
-  srfi235,
-} from "../index.js";
+  srfi235 } from "../index.js";
 
 /** Assemble one capability onto a fresh env; return a `(num src)` runner. `scheme/core` is
  *  folded in ALONGSIDE (never as the capability's OWN declared dep — see srfi-26.ts's header

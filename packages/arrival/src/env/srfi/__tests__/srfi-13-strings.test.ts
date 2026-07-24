@@ -86,13 +86,11 @@ describe("string-index — index of first match, or #f (char OR predicate)", () 
     {
       name: "predicate criterion — named predicate",
       input: '(string-index "hello world" char-whitespace?)',
-      value: 5,
-    },
+      value: 5 },
     {
       name: "predicate criterion — lambda",
       input: '(string-index "abc123" (lambda (c) (char-numeric? c)))',
-      value: 3,
-    },
+      value: 3 },
     { name: "empty string never matches", input: '(string-index "" #\\a)', value: false },
   ])("$name", async ({ input, value }) => {
     expect(js(await run(input))).toBe(value);
@@ -145,25 +143,21 @@ describe("string-trim family — SRFI-13 left/right/both; char/predicate criteri
     {
       name: "default: string-trim-left (alias of string-trim)",
       input: '(string-trim-left "  hi  ")',
-      value: "hi  ",
-    },
+      value: "hi  " },
     { name: "default: string-trim-right", input: '(string-trim-right "  hi  ")', value: "  hi" },
     { name: "char criterion: string-trim", input: '(string-trim "xxhixx" #\\x)', value: "hixx" },
     {
       name: "char criterion: string-trim-both",
       input: '(string-trim-both "xxhixx" #\\x)',
-      value: "hi",
-    },
+      value: "hi" },
     {
       name: "predicate criterion: string-trim",
       input: '(string-trim "12hi34" char-numeric?)',
-      value: "hi34",
-    },
+      value: "hi34" },
     {
       name: "predicate criterion: string-trim-both",
       input: '(string-trim-both "12hi34" char-numeric?)',
-      value: "hi",
-    },
+      value: "hi" },
     { name: "all-whitespace string-trim", input: '(string-trim "   ")', value: "" },
     { name: "all-whitespace string-trim-both", input: '(string-trim-both "   ")', value: "" },
     { name: "empty string-trim", input: '(string-trim "")', value: "" },
@@ -178,19 +172,16 @@ describe("string-pad / string-pad-right — to EXACTLY len (SRFI-13 truncation)"
     {
       name: "pads on the right with space by default",
       input: '(string-pad-right "7" 3)',
-      value: "7  ",
-    },
+      value: "7  " },
     { name: "custom pad char", input: '(string-pad "7" 3 #\\0)', value: "007" },
     {
       name: "string-pad TRUNCATES too-long input, keeps the tail",
       input: '(string-pad "hello" 3)',
-      value: "llo",
-    },
+      value: "llo" },
     {
       name: "string-pad-right TRUNCATES too-long input, keeps the head",
       input: '(string-pad-right "hello" 3)',
-      value: "hel",
-    },
+      value: "hel" },
     { name: "len equal to length is identity", input: '(string-pad "abc" 3)', value: "abc" },
   ])("$name", async ({ input, value }) => {
     expect(js(await run(input))).toBe(value);
@@ -212,13 +203,11 @@ describe("string-join — list of strings to one (default delimiter: single spac
     {
       name: "default delimiter (single space)",
       input: '(string-join (list "a" "b" "c"))',
-      value: "a b c",
-    },
+      value: "a b c" },
     {
       name: "explicit delimiter",
       input: '(string-join (list "a" "b" "c") ", ")',
-      value: "a, b, c",
-    },
+      value: "a, b, c" },
     { name: "empty list folds to the empty string", input: "(string-join '())", value: "" },
   ])("$name", async ({ input, value }) => {
     expect(js(await run(input))).toBe(value);
@@ -235,23 +224,19 @@ describe("string-tokenize — maximal runs of TOKEN chars (inverse of trim's cri
     {
       name: "default: non-whitespace runs, count",
       input: '(length (string-tokenize "  foo bar  baz "))',
-      value: 3,
-    },
+      value: 3 },
     {
       name: "default: non-whitespace runs, first token",
       input: '(car (string-tokenize "  foo bar"))',
-      value: "foo",
-    },
+      value: "foo" },
     {
       name: "criterion selects token chars, first token",
       input: '(car (string-tokenize "12ab34" char-numeric?))',
-      value: "12",
-    },
+      value: "12" },
     {
       name: "criterion selects token chars, count",
       input: '(length (string-tokenize "12ab34" char-numeric?))',
-      value: 2,
-    },
+      value: 2 },
     { name: "no tokens yields '()", input: '(null? (string-tokenize "   "))', value: true },
   ])("$name", async ({ input, value }) => {
     expect(js(await run(input))).toBe(value);
@@ -265,43 +250,35 @@ describe("string-split — SRFI-152 literal-delimiter split", () => {
     {
       name: "absent delimiter yields one field — count",
       input: '(length (string-split "abc" ","))',
-      value: 1,
-    },
+      value: 1 },
     {
       name: "absent delimiter yields one field — value",
       input: '(car (string-split "abc" ","))',
-      value: "abc",
-    },
+      value: "abc" },
     {
       name: "empty subject yields '() (SRFI-152 refinement over JS .split)",
       input: '(null? (string-split "" ","))',
-      value: true,
-    },
+      value: true },
     {
       name: "trailing delimiter keeps the empty trailing field (JS .split semantics)",
       input: '(length (string-split "a," ","))',
-      value: 2,
-    },
+      value: 2 },
     {
       name: "character delimiter — count, behaviorally identical to string form",
       input: '(length (string-split "a,b,c" #\\,))',
-      value: 3,
-    },
+      value: 3 },
     {
       name: "character delimiter — second field",
       input: '(cadr (string-split "a,b,c" #\\,))',
-      value: "b",
-    },
+      value: "b" },
     {
       name: "character delimiter — absent delimiter yields one field",
       input: '(car (string-split "abc" #\\,))',
-      value: "abc",
-    },
+      value: "abc" },
     {
       name: "character delimiter — empty subject yields '()",
       input: '(null? (string-split "" #\\,))',
-      value: true,
-    },
+      value: true },
   ])("$name", async ({ input, value }) => {
     expect(js(await run(input))).toBe(value);
   });

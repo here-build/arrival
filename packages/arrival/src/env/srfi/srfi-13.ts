@@ -1,44 +1,26 @@
-// SRFI-13 — string library completion. Scheme-bootstrap capability.
+// SRFI-13 — string library completion. Sole definition site (base-packs via allSrfi).
 //
-// SINGLE SOURCE: `base-packs.ts` assembles this pack (via allSrfi) and evals it
-// (via initBridge's assembleEnv), so this module is the sole definition site.
+// Completes the grain scheme/strings already starts (string-contains, case trio):
+// predicates, slices, trim/pad, index/count, join/tokenize, plus SRFI-152 string-split
+// (most-reached missing name). implement-or-door for the rest.
 //
-// WHY: the base env already binds the SRFI-13 verbs `string-contains` and the
-// R7RS case trio (`string-upcase` …) in `scheme/strings` — a model seeing those
-// correctly extrapolates to the REST of the standard string library, then crashes
-// on `Unbound variable 'string-split'`. This pack completes the platform's grain:
-// the SRFI-13 subset agents actually reach for (predicates, slices, trim/pad,
-// index/count, join/tokenize) plus SRFI-152's `string-split` (the #1 miss).
+// Scope vs full SRFI-13:
+//   • criteria = CHAR or 1-arg PREDICATE (no char-sets; SRFI-14 doored in srfi-stubs)
+//   • no optional start/end (slice with substring first)
+//   • remaining official exports doored here; R7RS mutators doored in scheme/strings
 //
-// SCOPE NARROWING (honest deltas from full SRFI-13) — implement-or-door:
-//   • criteria are a CHAR or a one-arg PREDICATE — SRFI-13 char-sets are not
-//     bound here (no charset type); char-set API doored in srfi-stubs (SRFI-14);
-//   • no optional start/end index arguments (use `substring` first);
-//   • `string-split` is SRFI-152, not SRFI-13 — bound here because it is the
-//     most-reached-for missing symbol; its docstring says so;
-//   • remaining official SRFI-13 exports not live here or in scheme/strings are
-//     `symbol.notImplemented` doors in this pack (purity for `!`, subset for pure);
-//   • R7RS string mutators (string-set!/fill!/copy!) live as doors in scheme/strings.
+// deferred: z.list(z.string) — join/tokenize/split carry author-asserted type: over
+// z.schemeValue until scheme-zod grows element-typed lists.
 //
-// FOLLOW-UP (contract-layer gap this pack exercises hardest): scheme-zod has no
-// element-typed list schema, so `string-join`/`string-tokenize`/`string-split`
-// carry author-asserted `type:` strings (`List<string>`) over `z.schemeValue` contracts.
-// When scheme-zod grows a `z.list(z.string)` codec, the three author assertions
-// here retire — the honest images become derivable.
-//
-// PROVENANCE discipline mirrors `scheme/strings`: booleans/indices/counts derived
-// from inputs stamp `withInputProvenance`; sliced/derived strings stamp the source
-// string's lineage; the COLLAPSING op (`string-join`) re-stamps the DEEP union via
-// `taintString(collapseProvenance(…))` (see string-append's comment); the SPLITTING
-// ops (`string-split` / `string-tokenize`) taint EACH piece with the source's
-// lineage so list elements stay grounded.
+// Provenance: derived counts stamp withInputProvenance; join deep-unions via
+// taintString(collapseProvenance); split/tokenize taint each piece from the source.
 
 import invariant from "tiny-invariant";
 import dedent from "dedent";
 import { type } from "../../utils/typecheck.js";
 import { type RunContext } from "../../run/RunContext.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
-import { type CallCtx, makeCallCtx } from "../../common/symbol.js";
+import { type CallCtx, makeCallCtx } from "../../symbol/index.js";
 import { EnvCapability } from "../../common/capability.js";
 import {
   assertAllocatable,
@@ -46,8 +28,7 @@ import {
   schemeBool,
   stringValue,
   toIndex,
-  withInputProvenance,
-} from "../../values/op-helpers.js";
+  withInputProvenance } from "../../values/op-helpers.js";
 import { type ABool } from "../../values/primitives/ABool.js";
 import { collapseProvenance, taintString } from "../../provenance/provenance-collapse.js";
 import { AString } from "../../values/primitives/AString.js";
@@ -55,10 +36,11 @@ import { AExact } from "../../values/primitives/AExact.js";
 import { APair } from "../../values/primitives/APair.js";
 import { nil } from "../../values/primitives/ANil.js";
 import { ACharacter } from "../../values/primitives/ACharacter.js";
-import { is_false, is_promise } from "../../eval/guards.js";
+import { is_false } from "../../values/value-guards.js";
+import { is_promise } from "../../eval/guards.js";
 import { promise_all } from "../../utils/promises.js";
 import { to_array } from "../pack-helpers.js";
-import type { AList, AListAlike, AProcedure, SchemeValue } from "../../values/types.js";
+import type { AList, AListAlike, SchemeValue } from "../../values/types.js";
 
 // ── implement-or-door inventory (official SRFI-13 names not live in this pack) ─
 // R7RS peers (scheme/strings) cover string?/make-string/string/length/ref/append/
@@ -148,8 +130,7 @@ const DOORS = {
   "string-filter":
     "build compositionally: (list->string (filter pred (string->list s))) using filter (SRFI-1), string->list and list->string (R7RS)",
   "string-delete":
-    "build compositionally: (list->string (remove pred (string->list s))) using remove (SRFI-1), string->list and list->string (R7RS)",
-} as const satisfies Record<string, string>;
+    "build compositionally: (list->string (remove pred (string->list s))) using remove (SRFI-1), string->list and list->string (R7RS)" } as const satisfies Record<string, string>;
 
 // ── criterion machinery ──────────────────────────────────────────────────────
 // SRFI-13 criteria: we honestly support a CHAR (equality) or a ONE-ARG PREDICATE
@@ -268,8 +249,7 @@ export default EnvCapability.define("scheme/srfi-13", {
           {
             (s: string, criterion: string | ((c: string) => unknown)): number | false;
           }
-        `,
-        },
+        ` },
         function (this: CallCtx, str: unknown, criterion: unknown): AExact | ABool | Promise<AExact | ABool> {
           const chars = [...stringValue(str)];
           const runCtx = this.runCtx;
@@ -289,8 +269,7 @@ export default EnvCapability.define("scheme/srfi-13", {
           {
             (s: string, criterion: string | ((c: string) => unknown)): number;
           }
-        `,
-        },
+        ` },
         function (this: CallCtx, str: unknown, criterion: unknown): AExact | Promise<AExact> {
           const chars = [...stringValue(str)];
           const runCtx = this.runCtx;
@@ -310,8 +289,7 @@ export default EnvCapability.define("scheme/srfi-13", {
           {
             (s: string, n: number): string;
           }
-        `,
-        },
+        ` },
         sliceImpl("string-take", (chars, k) => chars.slice(0, k)),
       ),
 
@@ -324,8 +302,7 @@ export default EnvCapability.define("scheme/srfi-13", {
           {
             (s: string, n: number): string;
           }
-        `,
-        },
+        ` },
         sliceImpl("string-drop", (chars, k) => chars.slice(k)),
       ),
 
@@ -338,8 +315,7 @@ export default EnvCapability.define("scheme/srfi-13", {
           {
             (s: string, n: number): string;
           }
-        `,
-        },
+        ` },
         sliceImpl("string-take-right", (chars, k) => chars.slice(chars.length - k)),
       ),
 
@@ -352,8 +328,7 @@ export default EnvCapability.define("scheme/srfi-13", {
           {
             (s: string, n: number): string;
           }
-        `,
-        },
+        ` },
         sliceImpl("string-drop-right", (chars, k) => chars.slice(0, chars.length - k)),
       ),
 
@@ -427,8 +402,7 @@ export default EnvCapability.define("scheme/srfi-13", {
           // and the output union images to the redundant `string | string`. Author-assert what the
           // impl proves by eye: it `to_array`s the input and typechecks each element is a string, and
           // folds to one string. `List<string>` (carriers.ts vocabulary) is the honest, informative image.
-          type: "(list: List<string>, delimiter?: string) => string",
-        },
+          type: "(list: List<string>, delimiter?: string) => string" },
         function (this: CallCtx, list, delimiter) {
           const parts = to_array("string-join")(list);
           const sep = delimiter === undefined ? " " : stringValue(delimiter);
@@ -449,8 +423,7 @@ export default EnvCapability.define("scheme/srfi-13", {
           // returns a proper list of token strings. Author-assert `List<string>`. criterion stays
           // `unknown` (a char OR a one-arg predicate — a char's `string` image would misread as "a
           // whole string"; the docstring teaches the domain), matching the sibling trim/index ops.
-          type: "(str: string, criterion?: unknown) => List<string>",
-        },
+          type: "(str: string, criterion?: unknown) => List<string>" },
         function (this: CallCtx, str: unknown, criterion?: unknown): AListAlike | Promise<AListAlike> {
           const chars = [...stringValue(str)];
           const runCtx = this.runCtx;
@@ -498,8 +471,7 @@ export default EnvCapability.define("scheme/srfi-13", {
           // list of strings (`List<string>`). The `string | char` delimiter images to the redundant
           // `string | string` (string and schemeChar both print `string`); the honest image is a
           // single `string` delimiter. Both recovered by the author assertion.
-          type: "(str: string, delimiter: string) => List<string>",
-        },
+          type: "(str: string, delimiter: string) => List<string>" },
         function (this: CallCtx, str, delimiter) {
           const s = stringValue(str);
           // SRFI-152 refinement over plain JS `.split`: an empty subject is NO fields.
@@ -525,6 +497,4 @@ export default EnvCapability.define("scheme/srfi-13", {
     // string-filter lives here so the pack owns the full index.
     ...Object.fromEntries(
       Object.entries(DOORS).map(([name, reason]) => [name, symbol.notImplemented`${name}: ${reason}`]),
-    ),
-  }),
-});
+    ) }) });

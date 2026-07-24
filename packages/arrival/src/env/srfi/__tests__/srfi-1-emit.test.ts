@@ -25,7 +25,7 @@
 // correctly wired even though nothing in the real pipeline populates that fact today).
 import { describe, expect, it } from "vitest";
 
-import type { AEntity } from "../../../common/symbol.js";
+import type { AEntity } from "../../../symbol/index.js";
 import type { EmitCtx } from "../../../emit/emit-rule.js";
 import { Arrow, Bin, Binding, Call, Lit, Method, Ref, type R } from "../../../emit/residual-lite.js";
 import srfi1Pack from "../srfi-1.js";
@@ -59,8 +59,7 @@ function testCtx(over: Partial<EmitCtx<R>> = {}): EmitCtx<R> {
     door: (reason) => {
       throw new Error(reason);
     },
-    ...over,
-  };
+    ...over };
 }
 
 const ref = (name: string): R => Ref(Binding(name));
