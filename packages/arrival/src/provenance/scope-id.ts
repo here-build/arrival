@@ -1,41 +1,30 @@
 /**
- * Structural scope identity off an arrival-scheme AST `Pair` — `headOf` (the head
- * symbol name) and `scopeId` (`head@line:col`). Pure, dependency-free leaf.
- *
- * Lives on its own so BOTH `trace-to-forest` (which consumes the live trace) and
- * `trace-snapshot` (which projects a clone-safe payload) can read scope identity
- * without an import cycle — `trace-to-forest` already imports `trace-snapshot`, so
- * `trace-snapshot` cannot import scope logic back through it. Keeping this a leaf
- * also lets the ELK worker (A2) import `scopeId` for the off-thread region build
- * without dragging in `trace-to-forest`'s machinery.
+ * Structural scope identity off an AST Pair: `headOf` + `scopeId` (`head@line:col`
+ * / `head@source:line:col`). Pure leaf so snapshot, forest, and workers share
+ * identity without import cycles.
  */
 
-/** Head symbol name of a form: the `__name__` of its `car`, or `"?"` if absent. */
+/** Head symbol `__name__`, or `"?"` if absent. */
 export function headOf(node: unknown): string {
   const car = (node as { car?: { __name__?: unknown } } | null)?.car;
   const name = (car as { __name__?: unknown } | undefined)?.__name__;
   return typeof name === "string" ? name : "?";
 }
 
-/** Stable structural scope id: `head@source:line:col` when the location carries a
- *  source file, `head@line:col` when sourceless, `head` if unlocated. The parser
- *  stamps a `__location__` symbol on located Pairs (with `source` when `parse` was
- *  given one — required `.scm` modules, `.prompt`-generated resolver lambdas).
- *  Exported so the unified flow-graph builder can bridge causal-chart nodes (keyed
- *  by Pair identity) back to forest boxes (keyed by this id) — both group by the
- *  same Pair, so the strings coincide.
+/**
+ * Stable scope id: `head@source:line:col` when located with a source file,
+ * `head@line:col` when sourceless, `head` if unlocated. Parser stamps
+ * `__location__` (symbol key) on located Pairs.
  *
- *  WHY source is part of the identity: line:col alone COLLIDES across files — two
- *  forms at the same position in different required modules (or two `.prompt`s'
- *  generated lambdas, which all parse the same text at the same 1:13) would fold
- *  onto one scope, merging distinct call sites in every scope-keyed consumer
- *  (chain labels, region folding, boundary ports). Identity is file+line+col;
- *  sourceless forms (the main program body) keep the old shape byte-for-byte.
+ * WHY source is part of identity: line:col alone collides across files —
+ * same position in different required modules or `.prompt`-generated lambdas
+ * would merge distinct call sites in every scope-keyed consumer. Identity is
+ * file+line+col; sourceless main-body forms keep the short shape.
  *
- *  Note the `__location__` is a SYMBOL-keyed property: it survives on the live
- *  Pair but `structuredClone` strips it. Anything crossing a worker boundary must
- *  pre-derive this string while the live Pair is in hand (see `trace-snapshot`'s
- *  `scope` field), not call `scopeId` on a cloned node. */
+ * `__location__` is symbol-keyed: survives on the live Pair, stripped by
+ * `structuredClone`. Cross-worker payloads must pre-derive `scope` while the
+ * live Pair is in hand (`trace-snapshot`), not call `scopeId` on a clone.
+ */
 export function scopeId(node: unknown): string {
   const head = headOf(node);
   if (node && typeof node === "object") {
@@ -52,28 +41,22 @@ export function scopeId(node: unknown): string {
   return head;
 }
 
-/** Marker substring stamped into a `.prompt`'s generated-lambda source (see the
- *  `ext/prompt/resolve` native handler in `llm-plane-arrival-env/src/prompt.ts`:
- *  `parse(…, \`dotprompt:${path}\`)`). A `scopeId`/`PlainInv.scope` string containing this
- *  marker was minted on the RESOLVER-GENERATED `(infer/run …)` form inside the
- *  resolved lambda, not on the user's own call site. */
+/** Marker in `.prompt` generated-lambda source (`parse(…, \`dotprompt:${path}\`)`).
+ *  A scope containing this was minted on the resolver's `(infer/run …)`, not the
+ *  author's call site. */
 export const DOTPROMPT_SOURCE_MARKER = "@dotprompt:";
 
-/** Shape shared by `PlainInv` (trace-snapshot.ts) and `ChainPoint`-like walkers:
- *  a pre-derived `scope` string plus a walkable `parent` chain. Kept minimal (not
- *  importing `PlainInv` itself) so this leaf stays dependency-free. */
+/** Minimal parent-chain shape for `userCallSite` (keeps this leaf import-free). */
 export interface ScopedParented {
   readonly scope: string;
   readonly parent: ScopedParented | null;
 }
 
-/** Project a `.prompt` provenance point (minted on the generated `(infer/run …)`
- *  form inside the resolved lambda) back to the user's real call site: walk
- *  `parent` upward to the nearest ancestor whose OWN scope does NOT carry the
- *  `@dotprompt:` marker — that is the `(run-x …)` application the author actually
- *  wrote. Returns the input itself when it isn't a dotprompt point, or when no
- *  non-dotprompt ancestor exists (degrades safely — shouldn't happen in practice,
- *  every `.prompt` call is itself a non-dotprompt-scoped application). */
+/**
+ * Project a `.prompt` provenance point back to the author's call site: walk
+ * parents to the nearest ancestor whose scope lacks `@dotprompt:`. Returns the
+ * input when it isn't a dotprompt point, or when no such ancestor exists.
+ */
 export function userCallSite<T extends ScopedParented>(inv: T): T {
   if (!inv.scope.includes(DOTPROMPT_SOURCE_MARKER)) return inv;
   for (let p = inv.parent; p; p = p.parent) {

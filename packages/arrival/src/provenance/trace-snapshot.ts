@@ -194,8 +194,7 @@ export function snapshotTrace(trace: EvalTrace): PlainTrace {
         // Rejection detail + cache flag — points only (the leaves the render draws), gated
         // exactly like `value`/`metadata`. Both are clone-safe primitives (string/boolean).
         error: isPoint && inv.state === "rejected" ? errText(inv.error) : undefined,
-        cached: isPoint ? inv.cached : undefined,
-      };
+        cached: isPoint ? inv.cached : undefined };
       byId.set(inv.id, plain);
       invocations.push(plain);
     }

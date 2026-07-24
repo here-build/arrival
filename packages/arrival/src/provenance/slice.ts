@@ -210,12 +210,10 @@ export function referencedSymbols(form: unknown): Set<string> {
   return out;
 }
 
-/** Resolve provenance ids to their EVIDENCE-READ ids — the canonical join space. Under FORWARD
- *  (the field-point mint is retired), a `(:field x)` projection forwards the producer's own point
- *  instead of minting a field-point id, so every provenance id IS already an evidence-read id and
- *  this is the identity. `buildSlice.points` is in the same space, so resolved leaf ids join to it
- *  by construction. The `(trace, ids)` signature is kept for the sift seal's call site (it passes a
- *  trace); the trace is no longer read. */
+/** Evidence-read id join space. Under FORWARD field projection, `(:field x)` forwards the
+ *  producer's point (no separate field-point id), so every provenance id is already an
+ *  evidence-read id — this is identity. `_trace` is accepted for sift-seal call-site symmetry
+ *  and is unused. */
 export function resolveReadIds(_trace: EvalTrace, ids: Iterable<number>): number[] {
   return [...ids];
 }

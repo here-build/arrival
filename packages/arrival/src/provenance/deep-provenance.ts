@@ -1,16 +1,12 @@
 /**
- * Deep provenance of a scheme value: the union of `.provenance` over every AValue
- * reachable from it — itself, a Pair's car/cdr spine (recursively), the elements of a
- * SchemeVector, and the elements of a plain JS array. List construction
- * (`new Pair(value, rest)`) leaves the spine's provenance EMPTY, so the origins live
- * only on the elements; a shallow top-level read would return ∅ for any packed list /
- * vector (the container is provenance-transparent). Cycle/visited-guarded.
+ * Union of `.provenance` over every AValue reachable from a scheme value —
+ * the value itself, Pair car/cdr spines, SchemeVector / plain-array elements.
+ * List construction leaves spine provenance empty; origins live on elements —
+ * a shallow top-level read returns ∅ for packed lists/vectors. Cycle-guarded.
  *
- * Single source shared by rosetta.ts's argProvenance builder and
- * lineage-auto-bindings.ts's per-invocation leaf-stamp — the SAME reachability the
- * eager stamp's union walks. Lives in the `values/` leaf layer (imports only value
- * classes + the pair guard), so both rosetta.ts and the carrier modules import it
- * without an import cycle.
+ * Shared by rosetta `argProvenance` and lineage-auto-bindings leaf-stamps —
+ * same reachability the eager stamp union walks. Values-layer leaf only
+ * (no import cycle into carrier modules).
  */
 import { AValue } from "../values/primitives/AValue.js";
 import { is_pair } from "../values/value-guards.js";
