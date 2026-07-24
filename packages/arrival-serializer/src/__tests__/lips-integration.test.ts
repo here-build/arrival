@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { toSExprString } from "../serializer";
 // Import what we can from lips
-import { exec, EnvCapability, schemeToJs, ANil, LexicalScope } from "@inhuman.tools/arrival";
+import { exec, execState, EnvCapability, schemeToJs, ANil, LexicalScope } from "@inhuman.tools/arrival";
 import { AExact, AString, ASymbol, APair } from "@inhuman.tools/arrival/reflect-internals";
 // Import custom matchers
 import "@inhuman.tools/arrival";
@@ -81,8 +81,10 @@ describe("LIPS Integration", () => {
     ];
 
     for (const { expr, expected } of tests) {
-      const result = await exec(expr);
-      const serialized = toSExprString(result);
+      // Raw scheme values (execState), not exec's toJS-collapsed ones — nil must stay ANil
+      // for the serializer's isNil check to render `nil` instead of a plain `(list)`.
+      const { values } = await execState(expr);
+      const serialized = toSExprString(values);
       console.log(`${expr} -> ${serialized}`);
       expect(serialized).toContain(expected);
     }
@@ -152,34 +154,40 @@ describe("LIPS Integration", () => {
 
 describe("exec with proper environment", () => {
   it("should execute single expressions and return unwrapped values", async () => {
-    const result = schemeToJs(await exec("(+ 1 2)"), { forceBigInt: true })[0];
-    expect(result).toBe(3n); // Native BigInt
+    // execState, not exec: a raw AExact reaches schemeToJs directly here (exec's toJS
+    // would collapse it before schemeToJs ever saw it). `forceBigInt` itself is retired —
+    // the one-number rework (docs/design-history/arrival-one-number-rework.md) makes every
+    // scheme number's JS face a plain `number`; exactness is a box-class distinction
+    // (AExact/AInexact), never a payload type — there is no bigint face left to force.
+    const { values } = await execState("(+ 1 2)");
+    const result = schemeToJs(values)[0];
+    expect(result).toBe(3);
   });
 
   it("should handle multiple expressions (returns first)", async () => {
-    const rawResults = await exec("(+ 1 2) (* 3 4) (quote hello)");
-    const results = schemeToJs(rawResults, { forceBigInt: true });
-    expect(results[0]).toBe(3n); // First result
-    expect(results[1]).toBe(12n); // Second result
+    const { values: rawResults } = await execState("(+ 1 2) (* 3 4) (quote hello)");
+    const results = schemeToJs(rawResults);
+    expect(results[0]).toBe(3); // First result
+    expect(results[1]).toBe(12); // Second result
     // Symbol needs special handling
     expect(rawResults[2]).toBeInstanceOf(ASymbol);
     expect(rawResults[2].__name__).toBe("hello");
   });
 
   it("should handle lists (returns LIPS Pair)", async () => {
-    const result = (await exec("(list 1 2 3)"))[0];
+    const result = (await execState("(list 1 2 3)")).values[0];
     expect(result).toBeInstanceOf(APair);
     expect(result.car).toBeInstanceOf(AExact);
   });
 
   it("should handle symbols (returns SchemeSymbol)", async () => {
-    const result = (await exec("'symbol-name"))[0];
+    const result = (await execState("'symbol-name")).values[0];
     expect(result).toBeInstanceOf(ASymbol);
     expect(result.__name__).toBe("symbol-name");
   });
 
   it("should handle strings (returns SchemeString)", async () => {
-    const result = (await exec('"hello world"'))[0];
+    const result = (await execState('"hello world"')).values[0];
     expect(result).toBeInstanceOf(AString);
     expect(result.__string__).toBe("hello world");
   });
@@ -190,33 +198,32 @@ describe("exec with proper environment", () => {
   });
 
   it("should handle complex expressions (returns LIPS structures)", async () => {
-    const result = (await exec("(map (lambda (x) (* x 2)) (list 1 2 3))"))[0];
+    const result = (await execState("(map (lambda (x) (* x 2)) (list 1 2 3))")).values[0];
     expect(result).toBeInstanceOf(APair);
     // Result is Pair with SchemeExact values
     expect(result.car).toBeInstanceOf(AExact);
-    expect(result.car.num).toBe(2n);
-    expect(result.cdr.car.num).toBe(4n);
+    expect(result.car.num).toBe(2);
+    expect(result.cdr.car.num).toBe(4);
   });
 
   it("should handle empty expressions (returns Nil)", async () => {
-    const result = (await exec("()"))[0];
+    const result = (await execState("()")).values[0];
     expect(result).toBeInstanceOf(ANil);
   });
 
   it("should have access to Ramda functions", async () => {
-    const result = (await exec("(map (lambda (x) (+ x 1)) (list 1 2 3))"))[0];
+    const result = (await execState("(map (lambda (x) (+ x 1)) (list 1 2 3))")).values[0];
     expect(result).toBeInstanceOf(APair);
 
     // Convert to JS values for easier testing
-    const values = schemeToJs(result, { forceBigInt: true });
-    expect(values).toEqual([2n, 3n, 4n]);
+    const values = schemeToJs(result);
+    expect(values).toEqual([2, 3, 4]);
   });
 
   it("should have access to functional composition", async () => {
-    const result = schemeToJs(await exec("((compose (lambda (x) (+ x 1)) (lambda (x) (+ x 1))) 5)"), {
-      forceBigInt: true,
-    })[0];
-    expect(result).toBe(7n);
+    const { values } = await execState("((compose (lambda (x) (+ x 1)) (lambda (x) (+ x 1))) 5)");
+    const result = schemeToJs(values)[0];
+    expect(result).toBe(7);
   });
 
   it("should support environment variables", async () => {
@@ -224,12 +231,11 @@ describe("exec with proper environment", () => {
     // `{ value }` arm is retired) — the hermetic-Environment ruling retired the JS-side
     // `env.set` write surface.
     const scope = LexicalScope.fresh("test");
-    await EnvCapability.define("serializer-test/env-vars", {
+    const envVars = EnvCapability.define("serializer-test/env-vars", {
       symbols: (symbol) => ({ x: symbol.value`x: test constant`(10), y: symbol.value`y: test constant`(20) }),
-    })
-      .lower({})
-      .apply(scope.env, undefined as never);
-    const result = schemeToJs(await exec("(+ x y)", { scope }), { forceBigInt: true })[0];
-    expect(result).toBe(30n);
+    });
+    const { values } = await execState("(+ x y)", { scope, capabilities: [envVars] });
+    const result = schemeToJs(values)[0];
+    expect(result).toBe(30);
   });
 });

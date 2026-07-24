@@ -28,11 +28,11 @@
  */
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
-import { initBridge } from "../index.js";
-import { execState, parse } from "../eval/generator-exec.js";
+import { ensureInferenceEnvPopulated, execStateOverFrame, parse } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../env/inference-env.js";
 import { mintFrame, type ResolvingAmbient } from "../env/AmbientRuntime.js";
 import { EnvCapability } from "../common/capability.js";
+import { applyCapability } from "../__tests__/_fresh-env.js";
 import { schemeToJs } from "../membrane/rosetta.js";
 import type { EvalTap } from "../eval/evaluator.js";
 import type { Classifier, DeclaredRole } from "../provenance/lineage.js";
@@ -40,7 +40,10 @@ import { buildWireframe } from "../provenance/wireframe/builder.js";
 import { hashGraph, rootOrdinalPath, siteHash, siteOf } from "../provenance/wireframe/hash.js";
 import { scopeId } from "../provenance/scope-id.js";
 import { withRecordCoordinateAsync, type EmissionSink, type RecordCoordinate } from "../eval/provenance-hooks.js";
-import { PayloadStoreFake, ProvenanceStoreFake, setEmissionEnabled } from "../provenance/store/index.js";
+// `store/index.js` is a curated studio read-slice (type-only) — fakes/emit runtime values
+// live at their own leaf modules (same shape as the sibling __benchmarks__ files).
+import { setEmissionEnabled } from "../provenance/store/emit.js";
+import { PayloadStoreFake, ProvenanceStoreFake } from "../provenance/store/fakes.js";
 import { APair } from "../values/primitives/APair.js";
 import type { AListAlike } from "../values/types.js";
 
@@ -58,13 +61,13 @@ const EPOCH = "spike-epoch-0";
 const PROGRAM = "(+ (* 2 3) (fetch-item))";
 
 async function registerSource(env: ResolvingAmbient): Promise<void> {
-  await EnvCapability.define("spike/fetch-item", {
-    symbols: (symbol, z) => ({
-      "fetch-item": symbol.rosetta`fetch-item: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 42),
+  await applyCapability(env, [
+    EnvCapability.define("spike/fetch-item", {
+      symbols: (symbol, z) => ({
+        "fetch-item": symbol.rosetta`fetch-item: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 42),
+      }),
     }),
-  })
-    .lower({})
-    .apply(env, undefined as never);
+  ]);
 }
 
 /** The THIN driver tap: mints O(1) invocation stubs (`{ id }` — the exact shape
@@ -83,7 +86,7 @@ function thinDriverTap(entersLog: string[]): EvalTap {
 }
 
 beforeAll(async () => {
-  await initBridge();
+  await ensureInferenceEnvPopulated();
 });
 
 afterEach(() => {
@@ -125,7 +128,7 @@ describe("walking-driver spike: skeleton from parse, meat from the live walk", (
 
     // ── 3. WALK — execute the SAME parsed form the skeleton was built from ────
     const result = await withRecordCoordinateAsync(coordinate, sink, () =>
-      execState(forms[0], { env, tap, nodeFilter }),
+      execStateOverFrame(forms[0], { env, tap, nodeFilter }),
     );
     expect(schemeToJs(result.values[0], {})).toBe(48); // (+ 6 42) — the run itself is undisturbed
 
@@ -179,7 +182,7 @@ describe("walking-driver spike: skeleton from parse, meat from the live walk", (
 
     const enters: string[] = [];
     const result = await withRecordCoordinateAsync(coordinate, sink, () =>
-      execState(forms[0], {
+      execStateOverFrame(forms[0], {
         env,
         tap: thinDriverTap(enters),
         nodeFilter: (node) => node instanceof APair && designatedSpans.has(scopeId(node)),

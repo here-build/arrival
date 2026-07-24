@@ -15,14 +15,17 @@
  */
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { initBridge } from "../index.js";
-import { parse } from "../eval/generator-exec.js";
+import { ensureInferenceEnvPopulated, parse } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../env/inference-env.js";
 import type { Classifier } from "../provenance/lineage.js";
 import { buildWireframe } from "../provenance/wireframe/builder.js";
 import { hashGraph } from "../provenance/wireframe/hash.js";
-import { PayloadStoreFake, PayloadTierMachine, setEmissionEnabled } from "../provenance/store/index.js";
+// `store/index.js` is a curated studio read-slice (type-only) — fakes/tiering/emit runtime
+// values live at their own leaf modules (same shape as `support/provenance-budget-workload.ts`).
+import { setEmissionEnabled } from "../provenance/store/emit.js";
+import { PayloadStoreFake } from "../provenance/store/fakes.js";
 import type { Payload } from "../provenance/store/interfaces.js";
+import { PayloadTierMachine } from "../provenance/store/tiering.js";
 import { replayGraphEgress, ReplayScopeError } from "../provenance/replay.js";
 import { answerQuery, ReplayMemo, type ReplayMemoKey } from "../provenance/replay-memo.js";
 import { SameProcessExecutor, type DrillInRequest, type OffloadIngress, type VerificationCandidate } from "../provenance/offload.js";
@@ -40,7 +43,7 @@ const corpusClassifier: Classifier = { roleOf: (op) => CORPUS_ROLES[op] };
 const corpusIsBaseName = (n: string): boolean => CORPUS_BASE_NAMES.has(n);
 
 beforeAll(async () => {
-  await initBridge();
+  await ensureInferenceEnvPopulated();
 });
 
 /** Reshape a recorded run's mints into `OffloadIngress.sources` — grouped by op,

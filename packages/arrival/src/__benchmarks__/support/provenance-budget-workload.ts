@@ -59,19 +59,15 @@
  * benchmark driver, not a re-implementation of the port-boundary trigger, which is
  * a separate concern this file does not take on).
  */
-import {
-  AggregatingProvenanceStore,
-  emitMuxDecision,
-  PayloadStoreFake,
-  PayloadTierMachine,
-  ProvenanceStoreFake,
-  RunStoreFake,
-  setEmissionEnabled,
-  type PayloadEvidenceEnvelope,
-  type PayloadHash,
-  type ProvenanceRecord,
-  type RegionId,
-} from "../../provenance/store/index.js";
+// `store/index.js` is now a CURATED studio read-slice (type-only — see that module's own
+// header); the fakes/aggregation/tiering runtime values live at their own leaf modules, same
+// import shape as the sibling `provenance-emit.bench.test.ts` / gate-suite `q16-harness.ts`.
+import { AggregatingProvenanceStore } from "../../provenance/store/aggregate.js";
+import { emitMuxDecision, setEmissionEnabled } from "../../provenance/store/emit.js";
+import { PayloadStoreFake, ProvenanceStoreFake, RunStoreFake } from "../../provenance/store/fakes.js";
+import type { PayloadHash, RegionId } from "../../provenance/store/ids.js";
+import type { ProvenanceRecord } from "../../provenance/store/records.js";
+import { PayloadTierMachine, type PayloadEvidenceEnvelope } from "../../provenance/store/tiering.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The reference workload's own SHAPE — every field cites its Appendix A row.

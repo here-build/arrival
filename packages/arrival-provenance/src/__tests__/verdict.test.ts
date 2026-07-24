@@ -19,12 +19,10 @@ import {
   deepProvenance,
   EnvCapability,
   execState,
-  initBridge,
   LexicalScope,
 } from "@inhuman.tools/arrival";
 import { APair, AString, attestDeep, nil } from "@inhuman.tools/arrival/reflect-internals";
-import { CONSTANT_CTX } from "@inhuman.tools/arrival/host-internals";
-import { beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { EvalTrace } from "../index.js";
 import { TRUTH_ORACLE_DISCLAIMER, groundingVerdict, verdictLeafValues } from "../verdict.js";
@@ -40,29 +38,23 @@ let seq = 0;
  *  Test-local `EnvCapability` (`EnvCapability.define`'s injected `symbol.rosetta` — the
  *  `env.defineRosetta` migration target): a plain typed `z.string → z.string` contract, no
  *  escape hatch needed. */
+const evidenceReadCapability = EnvCapability.define("test/evidence-read", {
+  symbols: (symbol, z) => ({
+    "evidence-read": symbol.rosetta`evidence-read: deterministic Rosetta-IN fixture source`(
+      { input: [z.string], output: [z.string] },
+      (q) => `SRC:${q}`,
+    ),
+  }),
+});
+
 async function run(source: string) {
-  await initBridge();
   const scope = LexicalScope.fresh(`verdict-test-${seq++}`);
-  await EnvCapability.define("test/evidence-read", {
-    symbols: (symbol, z) => ({
-      "evidence-read": symbol.rosetta`evidence-read: deterministic Rosetta-IN fixture source`(
-        { input: [z.string], output: [z.string] },
-        (q) => `SRC:${q}`,
-      ),
-    }),
-  })
-    .lower({})
-    .apply(scope.env, undefined as never);
   const trace = new EvalTrace();
-  const { values } = await execState(source, { scope, tap: trace });
+  const { values } = await execState(source, { scope, tap: trace, capabilities: [evidenceReadCapability] });
   const result = values.at(-1);
   if (result === undefined) throw new Error("fixture ran zero forms");
   return { result, trace, source };
 }
-
-beforeAll(async () => {
-  await initBridge();
-});
 
 describe("groundingVerdict — a grounded result signs", () => {
   it("every leaf read from the source ⇒ signable, all gates pass", async () => {
@@ -87,8 +79,8 @@ describe("groundingVerdict — fabrication refuses, per leaf, never by union", (
     // The tamper: cons a freshly-minted (never-evaluated, provenance-∅) string onto
     // the grounded result AFTER the run — the exact laundering a whole-result union
     // cannot see.
-    const fabricated = new AString(CONSTANT_CTX, "203.0.113.9");
-    const tampered = new APair(CONSTANT_CTX, fabricated, new APair(CONSTANT_CTX, bag.result, nil));
+    const fabricated = new AString("203.0.113.9");
+    const tampered = new APair(fabricated, new APair(bag.result, nil));
     const v = groundingVerdict({ ...bag, result: tampered });
     expect(v.verdict).toBe("unsigned");
     expect(v.checks.grounding).toBe("fail");
@@ -103,8 +95,8 @@ describe("groundingVerdict — fabrication refuses, per leaf, never by union", (
 
   it("discriminates where deepProvenance's union cannot: union non-empty, verdict unsigned", async () => {
     const bag = await run(`(evidence-read "beacon")`);
-    const fabricated = new AString(CONSTANT_CTX, "203.0.113.9");
-    const tampered = new APair(CONSTANT_CTX, fabricated, new APair(CONSTANT_CTX, bag.result, nil));
+    const fabricated = new AString("203.0.113.9");
+    const tampered = new APair(fabricated, new APair(bag.result, nil));
     // The union sees the grounded half and calls the WHOLE structure grounded…
     expect(deepProvenance(tampered).size).toBeGreaterThan(0);
     // …the per-leaf seal does not.
@@ -203,7 +195,7 @@ describe("groundingVerdict — the truth-oracle disclaimer is structural", () =>
     const outcomes = [
       groundingVerdict(grounded), // signable
       groundingVerdict({ ...grounded, focusLimit: 0 }), // scoped
-      groundingVerdict({ ...grounded, result: new AString(CONSTANT_CTX, "lie") }), // unsigned
+      groundingVerdict({ ...grounded, result: new AString("lie") }), // unsigned
     ];
     for (const v of outcomes) {
       expect(v.disclaimer).toBe(TRUTH_ORACLE_DISCLAIMER);
@@ -217,7 +209,7 @@ describe("verdictLeafValues — the walk's laundering-hole closures", () => {
     const bag = await run(`(evidence-read "a")`);
     // (grounded . "lie") — the sift reference's spine loop dropped the tail; here it
     // is a leaf and refuses.
-    const dotted = new APair(CONSTANT_CTX, bag.result, new AString(CONSTANT_CTX, "lie"));
+    const dotted = new APair(bag.result, new AString("lie"));
     expect(verdictLeafValues(dotted)).toHaveLength(2);
     expect(groundingVerdict({ ...bag, result: dotted }).verdict).toBe("unsigned");
   });
