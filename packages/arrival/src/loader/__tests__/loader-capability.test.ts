@@ -33,6 +33,8 @@ import { buildVocabulary } from "../../env/vocabulary.js";
 import invariant from "tiny-invariant";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
 import { bindValue, AmbientRuntime, type ResolvingAmbient } from "../../env/AmbientRuntime.js";
+import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
+import { AString } from "../../values/primitives/AString.js";
 
 import { arrivalLoaderCapability } from "../loader-capability.js";
 import { loaderFromResolver } from "../loader.js";
@@ -74,8 +76,7 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
   it("an armed loader resolves a data module (raw scheme args + no return marshal)", async () => {
     const results = await exec(`(define cfg (require "cfg.json")) (assoc "irrelevant" (list)) cfg`, {
       capabilities: [arrivalLoaderCapability],
-      config: { loader: files({ "cfg.json": `{"name":"world"}` }) },
-    });
+      config: { loader: files({ "cfg.json": `{"name":"world"}` }) } });
     const cfg = plain(results.at(-1)) as Record<string, unknown>;
     expect(cfg).toMatchObject({ name: "world" });
   });
@@ -83,8 +84,7 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
   it("a .scm require spills its defines into the RUN env (the ctx-read frame)", async () => {
     const results = await exec(`(require "lib.scm") (+ lib-answer 1)`, {
       capabilities: [arrivalLoaderCapability],
-      config: { loader: files({ "lib.scm": `(define lib-answer 41)` }) },
-    });
+      config: { loader: files({ "lib.scm": `(define lib-answer 41)` }) } });
     expect(Number(results.at(-1))).toBe(42);
   });
 
@@ -98,10 +98,8 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
         "test/upper-resolve": symbol.native`test/upper-resolve: uppercases module contents (ResolverResult value kind)`(
           { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
           (contents: unknown) => ({ kind: "value", value: String(contents).toUpperCase() }) as never,
-        ),
-      }),
-      prelude: `(require/register-extension ".upper" "test/upper-resolve")`,
-    });
+        ) }),
+      prelude: `(require/register-extension ".upper" "test/upper-resolve")` });
     // Tuple identity is config-object-IDENTITY-keyed (`buildVocabulary`'s memo) — reuse the SAME
     // config (and capabilities array) across both calls so the reused `runCtx` matches this
     // tuple, not a distinct one.
@@ -129,16 +127,23 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
             // The assembler applies registry packs onto the REAL live env; with the
             // JS-side write surface retired, the pack binds through the module-internal
             // door exactly as capability.ts's apply does (same instanceof narrow).
+            // W8: ANativeProcedure, not a bare host fn.
             invariant(env instanceof AmbientRuntime, "registry pack expects a real env");
-            bindValue(env, "greeting-of", () => "hi");
-          },
-        },
+            bindValue(
+              env,
+              "greeting-of",
+              new ANativeProcedure({
+                name: "greeting-of",
+                arity: { min: 0, max: 0 },
+                contract: undefined,
+                impl: () => new AString("hi") }),
+            );
+          } },
       ],
     ]);
     const results = await exec(`(require/extension :greeter) (require/extension :greeter) (greeting-of)`, {
       capabilities: [arrivalLoaderCapability],
-      config: { loader: files({}), extensionRegistry: registry },
-    });
+      config: { loader: files({}), extensionRegistry: registry } });
     expect(plain(results.at(-1))).toBe("hi");
     expect(applies).toBe(1);
   });
@@ -153,16 +158,14 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
             { kind: "configuration", key: "fs" },
             { kind: "configuration", key: "loader" },
             { kind: "configuration", key: "extensionRegistry" },
-          ],
-        },
+          ] },
       ]);
     });
 
     it("an armed loader is NOT degraded — `require` binds for real", async () => {
       const results = await exec(`(require "cfg.json")`, {
         capabilities: [arrivalLoaderCapability],
-        config: { loader: files({ "cfg.json": `{"name":"world"}` }) },
-      });
+        config: { loader: files({ "cfg.json": `{"name":"world"}` }) } });
       const cfg = plain(results.at(-1)) as Record<string, unknown>;
       expect(cfg).toMatchObject({ name: "world" });
     });
@@ -184,8 +187,7 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
     // code can't see base builtins (`string-append` unbound).
     it("a required .scm module sees base builtins (string-append) and spills its defines", async () => {
       const table: Record<string, string> = {
-        "lib.scm": `(define (greet name) (string-append "hello " name))`,
-      };
+        "lib.scm": `(define (greet name) (string-append "hello " name))` };
       const results = await exec(`(require "lib.scm") (greet "world")`, {
         capabilities: [arrivalLoaderCapability],
         config: {
@@ -194,11 +196,8 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
               const hit = table[p];
               if (hit === undefined) throw new Error(`no such file: ${p}`);
               return hit;
-            },
-          },
-          dirname: "",
-        },
-      });
+            } },
+          dirname: "" } });
       expect(results.at(-1)).toBe("hello world");
     });
 
@@ -208,9 +207,7 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
         capabilities: [arrivalLoaderCapability],
         config: {
           fs: { readFile: (p: string) => table[p] ?? "" },
-          dirname: "",
-        },
-      });
+          dirname: "" } });
       expect(plain(results.at(-1))).toMatchObject({ name: "world" });
     });
   });

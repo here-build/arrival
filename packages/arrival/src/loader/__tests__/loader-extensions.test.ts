@@ -1,7 +1,7 @@
 // The file-type resolver registry behind (require/register-extension): by-name mapping,
 // longest-suffix match, idempotent register / conflict-throw. STAGE C CUT 3b
 // (docs/plans/stage-c-corpse-deletion.md) retired the process-global convenience wrappers
-// (`registerExtension`/`lookupExtensionResolver`/`legacyExtensionRegistry`/
+// (`registerExtension`/`lookupExtensionResolver`/`process-global extension registry`/
 // `__resetExtensionRegistryForTest`) along with the ambient path they bridged for — every run's
 // registry is now its OWN per-`RunContext` `Map` (`LoaderRunResources.extensionResolvers`,
 // loader-capability.ts). This file re-pins the SAME primitives (`registerExtensionIn`/
@@ -49,6 +49,6 @@ describe("registerExtensionIn / lookupExtensionResolverIn", () => {
 
 // The `(require/register-extension)` verb itself (the baked `symbol.native` def, bound at both
 // its bootstrap and mid-run sites) is no longer unit-tested against a hand-rolled host here — it
-// has no imperative `defineRosetta`-shaped helper left to drive in isolation; both real bind
+// has no imperative host-fn bind helper left to drive in isolation; both real bind
 // sites live in `loader-capability.ts` and are exercised end-to-end by
 // the arrival-chain register-extension prelude-overlay test (private monorepo).

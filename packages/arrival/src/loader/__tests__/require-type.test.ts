@@ -10,8 +10,7 @@ import {
   resolveRequireType,
   valueToTsType,
   type ExtensionHandler,
-  type Loader,
-} from "../loader.js";
+  type Loader } from "../loader.js";
 
 describe("valueToTsType — JS value → lens TS type", () => {
   it("maps scalars to the branded base types", () => {
@@ -57,12 +56,10 @@ describe("resolveRequireType — route a file's source through the registry", ()
   it("a custom extension registered with a `type` provider is reachable", () => {
     const custom: ExtensionHandler = {
       resolve: (contents) => ({ kind: "value", value: String(contents) }),
-      type: () => `{ "csv": List<SStr> }`,
-    };
+      type: () => `{ "csv": List<SStr> }` };
     const customLoader: Loader = {
       ...loader,
-      resolvers: new Map(defaultResolvers()).set(".csv", custom),
-    };
+      resolvers: new Map(defaultResolvers()).set(".csv", custom) };
     expect(resolveRequireType(customLoader, "rows.csv", "a,b\n1,2")).toBe(`{ "csv": List<SStr> }`);
   });
 });

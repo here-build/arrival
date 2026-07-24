@@ -1,38 +1,23 @@
-// loader-extensions — the file-type resolver registry behind `(require/register-extension)`.
+// loader-extensions — file-type resolver registry behind `(require/register-extension)`.
 //
-// A file-type "extension" is not a verb-pack to assemble — it is a resolver, and the only
-// thing it needs is a function `(contents, filepath) → value`. So registering one is just
-// mutating a table, keyed by file-suffix → the NAME of the resolver verb that handles it.
+// A file-type "extension" is a resolver, not a verb-pack: `(contents, filepath) → value`.
+// Registration mutates a table: file-suffix → NAME of the resolver verb.
 //
-// Two deliberate design choices:
+// Design:
+//   • BY-NAME, late-bound per env. Table stores the verb NAME, not its value. `require`
+//     looks the name up in the CURRENT env and calls it — a resource-armed resolver
+//     (`.prompt` → `prompt/compile`) picks up the calling env's resource; an env that
+//     never rooted the owning capability has no binding and errors. Global vocabulary,
+//     per-scope capability.
+//   • PRELUDE-ONLY. `require/register-extension` is preludeOnly MACRO (loader-capability.ts)
+//     so the resolver name is UNEVALUATED. Never bound into the runtime env — a running
+//     program cannot teach the loader a new file type mid-run.
 //
-//   • BY-NAME, late-bound per env. The table stores the resolver verb's NAME, not its value.
-//     `require`, on hitting a `.X` file, looks the name up in the CURRENT env and calls it.
-//     So a resource-armed resolver (`.prompt` → `prompt/compile`, which closes over the
-//     infer resource) picks up the *calling* env's resource — no captured closure — and an env
-//     that never rooted the owning capability simply has no binding for the name, so requiring
-//     that extension errors. Global vocabulary, per-scope capability.
-//
-//   • PRELUDE-ONLY registration.
-//     `require/register-extension` is a `preludeOnly: true` MACRO (loader-capability.ts):
-//     MACRO so the resolver name is UNEVALUATED — write
-//       (require/register-extension ".prompt" ext/prompt/resolve)
-//     not a quoted string forced by "if I write the bare symbol it evaluates to the
-//     function, and String(fn) becomes the registry key". It is NEVER bound into the runtime
-//     env. A running program therefore CANNOT teach the loader a new file type mid-run.
-//
-// STAGE C CUT 3b (docs/plans/stage-c-corpse-deletion.md) — ONE registry, ONE set of
-// primitives: every run (the self-hosted vocabulary path, the exec default and now the ONLY
-// path) registers into THIS RUN'S OWN `LoaderRunResources.extensionResolvers` bag
-// (loader-capability.ts) — a fresh, empty `Map` per RunContext, populated only from a prelude
-// (§PRELUDE), never leaking across runs. The retired LEGACY AMBIENT path's process-global
-// `RESOLVERS` table (and its convenience wrappers `registerExtension`/`lookupExtensionResolver`/
-// `legacyExtensionRegistry`) died with the ambient path itself — `loaderRegistryOf`
-// (loader-capability.ts) no longer has a fallback arm to route to.
-//   `makeRegisterExtensionMacro`'s caller (loader-capability.ts) resolves `ctx.runCtx`'s OWN
-//   per-run bag — `registerExtensionIn`/`lookupExtensionResolverIn` are the shared primitives
-//   both the registration macro and `require`'s lookup run through, so the conflict door
-//   (`ExtensionSuffixConflictError`) and the longest-suffix match are unaffected by this cut.
+// ONE registry per run: THIS run's `LoaderRunResources.extensionResolvers` (fresh empty
+// Map per RunContext, populated only from a prelude). `makeRegisterExtensionMacro`'s
+// caller resolves which bag via `resolveRegistry(ctx.runCtx)`.
+// Shared primitives (`registerExtensionIn` / `lookupExtensionResolverIn`) keep the
+// conflict door and longest-suffix match in one place.
 
 import { ExtensionSuffixConflictError } from "../errors.js";
 import { Macro } from "../eval/Macro.js";
@@ -45,8 +30,7 @@ import type { SchemeValue } from "../values/types.js";
 import type { RunContext } from "../run/RunContext.js";
 import invariant from "tiny-invariant";
 
-/** ext-suffix (e.g. `".prompt"`) → the NAME of the resolver verb that handles it. The per-run
- *  (vocabulary-path) bag's shape (`LoaderRunResources.extensionResolvers`, loader-capability.ts). */
+/** ext-suffix (e.g. `".prompt"`) → NAME of the resolver verb. */
 export type ExtensionResolverRegistry = Map<string, string>;
 
 /** Coerce a name argument (string, AString, ASymbol, or (quote SYMBOL)) to the bound verb name. */
@@ -54,7 +38,7 @@ function resolverNameOf(raw: unknown): string {
   if (typeof raw === "string") return raw;
   if (raw instanceof AString) return String(raw.valueOf());
   if (raw instanceof ASymbol) return raw.literal();
-  // (quote name) — designed surface still accepts a quoted symbol.
+  // (quote name)
   if (raw instanceof APair) {
     const head = raw.car;
     if (head instanceof ASymbol && head.literal() === "quote" && raw.cdr instanceof APair) {
@@ -66,7 +50,7 @@ function resolverNameOf(raw: unknown): string {
   return String(raw);
 }
 
-/** Suffix form → leading-dot string (string literal or symbol `.prompt` / `prompt`). */
+/** Suffix form → leading-dot string. */
 function suffixOf(raw: unknown): string {
   if (typeof raw === "string") return raw;
   if (raw instanceof AString) return String(raw.valueOf());
@@ -74,18 +58,13 @@ function suffixOf(raw: unknown): string {
   return String(raw);
 }
 
-/** Normalize a suffix to a leading-dot form (`"hbs"` and `".hbs"` both → `".hbs"`). */
+/** Normalize to leading-dot form (`"hbs"` and `".hbs"` both → `".hbs"`). */
 function normalizeSuffix(ext: string): string {
   return ext.startsWith(".") ? ext : `.${ext}`;
 }
 
-/** Register a file-suffix → resolver-verb-name mapping INTO `registry` (either THIS run's
- *  `LoaderRunResources.extensionResolvers` bag or the legacy process-global table — the
- *  caller's choice, see this module's header). Idempotent for an identical mapping; a
- *  conflicting name for an already-registered suffix is a legible throw (never silent
- *  last-write-wins — two capabilities claiming `.hbs` differently is a real configuration
- *  bug) — the SAME door regardless of which registry this is, and the mechanism the
- *  diamond-DAG / re-registration law suites pin against. */
+/** Register suffix → resolver-verb-name into `registry`. Idempotent for identical mapping;
+ *  conflicting name for an already-registered suffix throws (never silent last-write-wins). */
 export function registerExtensionIn(registry: ExtensionResolverRegistry, ext: unknown, resolverName: unknown): void {
   const suffix = normalizeSuffix(suffixOf(ext));
   const name = resolverNameOf(resolverName);
@@ -94,9 +73,8 @@ export function registerExtensionIn(registry: ExtensionResolverRegistry, ext: un
   registry.set(suffix, name);
 }
 
-/** The resolver verb name for a path, by LONGEST matching suffix (so `.spec.json` can beat
- *  `.json`), read out of `registry`. Returns `undefined` when no registered extension matches —
- *  the caller decides whether that's an error or a fall-through to a builtin (`.scm`). */
+/** Resolver verb name for a path by LONGEST matching suffix (`.spec.json` beats `.json`).
+ *  `undefined` when no match — caller decides error vs fall-through to builtin. */
 export function lookupExtensionResolverIn(registry: ExtensionResolverRegistry, path: string): string | undefined {
   let best: string | undefined;
   let bestLen = -1;
@@ -110,17 +88,10 @@ export function lookupExtensionResolverIn(registry: ExtensionResolverRegistry, p
 }
 
 /**
- * The MACRO body of `require/register-extension` — shared by bootstrap (capability symbols)
- * and mid-run (`require/extension`'s discarded prelude child). Args are UNEVALUATED forms:
+ * MACRO body of `require/register-extension`. Args are UNEVALUATED forms:
  *   (require/register-extension ".prompt" ext/prompt/resolve)
- *   (require/register-extension ".prompt" "ext/prompt/resolve")  ; string still ok
- *   (require/register-extension ".prompt" 'ext/prompt/resolve)   ; quote still ok
- * Side-effects the registry `resolveRegistry(ctx.runCtx)` names; expands to nil (effect form).
- * `resolveRegistry` is the caller's (loader-capability.ts's) decision of WHICH registry this
- * particular invocation's `runCtx` implies — see this module's header for the full model.
- * `ctx.runCtx` rides `MacroInvokeContext` (the evaluator threads it at every macro-expand site,
- * `evaluator.ts`'s `evalArgs.runCtx`), so this macro reaches it WITHOUT ever going through
- * `makeCallCtx` (macros are `TF_EXPAND`-dispatched, never `this.resources`-bearing).
+ * Side-effects `resolveRegistry(ctx.runCtx)`; expands to nil.
+ * `ctx.runCtx` rides MacroInvokeContext (evaluator threads it) — never through makeCallCtx.
  */
 export function makeRegisterExtensionMacro(resolveRegistry: (runCtx: RunContext) => ExtensionResolverRegistry): Macro {
   return new Macro(

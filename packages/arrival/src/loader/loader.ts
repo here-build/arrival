@@ -1,18 +1,12 @@
 /**
- * Module RESOLUTION primitives for `(require …)`: the `Loader` interface (resolve + read +
- * the per-suffix `ExtensionHandler` table), the path jail, the builtin data-format parsers,
- * and the data-value ↔ scheme ↔ editor-TS-type projections every resolver shares.
+ * Module RESOLUTION primitives for `(require …)`: Loader interface (resolve + read +
+ * per-suffix ExtensionHandler table), path jail, builtin data-format parsers, and
+ * data ↔ scheme ↔ editor-TS-type projections.
  *
- * The `require` VERB ITSELF — the single-flight cache, cycle detection, and statement-
- * position eval loop that actually walks these primitives at call time — is declared directly
- * by `arrivalLoaderCapability` (loader-capability.ts) as a `symbol.native`, not built here: its
- * state is scoped to one capability's own per-RunContext resources bag (`LoaderRunResources`),
- * which is exactly what that declarative builder already provides, so there is no separate
- * factory to call through.
- * `runResolverOf`/`runEnvOf` below are the shared back-channel readers require's
- * declaration (and `require/extension`'s) both need — genuine cross-verb plumbing, kept here.
- *
- * See docs/package-specific/arrival-chain/require-import-loader.md.
+ * The require VERB (single-flight cache, cycle detection, eval loop) is declared by
+ * `arrivalLoaderCapability` as symbol.native — state lives on that capability's
+ * per-RunContext resources bag. `runResolverOf`/`runEnvOf` are the shared back-channel
+ * readers both require and require/extension need.
  */
 import { currentRunResolver } from "../eval/evaluator.js";
 import { execExpr, parse } from "../eval/generator-exec.js";
@@ -36,25 +30,15 @@ export type RunEnv = SchemeEnv;
  *  declaration (loader-capability.ts) can name it — a derived name, not a new type). */
 export type SchemeVal = Awaited<ReturnType<typeof execExpr>>;
 
-/** The run's COMPOSED resolver — scope + capability base — with a teaching error when absent.
- *  require IS a membrane penetration (each source read crosses the VFS boundary), so like the
- *  rosetta membrane it reads the evaluator's run-scoped back-channel: `currentRunResolver()`,
- *  published at every apply boundary (`ctxResolver(ctx)`, this call's own frame). That is how
- *  the verb reaches its resolution context as an ANativeProcedure, whose apply term threads
- *  ONLY `runCtx` (run-constant data — a resolver cannot ride it; see evaluator.ts's holder doc).
+/** The run's COMPOSED resolver (scope + capability base) — teaching error when absent.
+ *  require is a membrane penetration; reaches resolution context via evaluator back-channel
+ *  `currentRunResolver()` (apply term threads only runCtx — resolver cannot ride it).
  *
- *  WHY the resolver and not just its env: under `exec({ capabilities })` the run resolves
- *  through `Resolver(lexicalRoot, capabilityBase)` — the lexical frame is null-rooted and the
- *  stdlib lives on the capability base. A required module's forms evaluated against the ENV
- *  alone (reconstructing a resolver from a bare frame) would lose that base, so module code
- *  couldn't see `string-append`. Evaluating through THIS resolver (`execExpr({ resolver })`,
- *  loader-capability.ts) keeps a required module's resolution identical to the requiring
- *  program's: defines still spill into the same lexical frame (`resolver.env` — `define` binds
- *  there), and builtins resolve exactly as they do for the requiring program.
+ *  WHY resolver not just env: lexical frame is null-rooted; stdlib lives on capability base.
+ *  Evaluating forms against env alone loses builtins. Through THIS resolver, defines still
+ *  spill into `resolver.env` and builtins resolve as for the requiring program.
  *
- *  `ctx` is accepted (and ignored) for the verb declarations' `this: CallCtx` convention: the
- *  flat `CallCtx` (`{ runCtx, invocation }`) carries no resolver, so the back-channel is the
- *  one real source. */
+ *  `ctx` accepted (ignored) for `this: CallCtx` convention — CallCtx carries no resolver. */
 export function runResolverOf(ctx: unknown, verb: string): Resolver {
   void ctx;
   const resolver = currentRunResolver();
@@ -187,8 +171,7 @@ const DATA_PARSERS: Record<string, (text: string) => unknown> = {
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.length > 0)
-      .map((line) => JSON.parse(line)),
-};
+      .map((line) => JSON.parse(line)) };
 
 /** Project a parsed value onto its JSON shape (Dates → ISO strings, drops undefined) so a required
  *  data file enters the program as plain JSON-shaped data. NOT a deep clone — `structuredClone`
@@ -301,16 +284,14 @@ export function defaultResolvers(): Map<string, ExtensionHandler> {
     {
       resolve: (contents) => ({
         kind: "value",
-        value: normalizeToJson(DATA_PARSERS[ext]!(String(contents))),
-      }),
+        value: normalizeToJson(DATA_PARSERS[ext]!(String(contents))) }),
       type: (source) => {
         try {
           return valueToTsType(normalizeToJson(DATA_PARSERS[ext]!(source)));
         } catch {
           return null; // unparseable mid-edit — no shape, lens falls back to unknown
         }
-      },
-    },
+      } },
   ]);
   return new Map<string, ExtensionHandler>([
     // Pass the module path as `source` so a throw inside this file reads as
@@ -359,13 +340,12 @@ export function resolveRequireType(loader: Loader, path: string, source: string)
   }
 }
 
-/** Wrap a legacy `path → source` resolver (CLI `--file` mode) as a Loader. */
+/** Wrap a simple `path → source` resolver (CLI `--file` mode) as a Loader. */
 export function loaderFromResolver(resolver: RequireResolver): Loader {
   return {
     resolve: (specifier, fromDir) => joinPath(fromDir, specifier),
     read: (path) => resolver(path),
-    resolvers: defaultResolvers(),
-  };
+    resolvers: defaultResolvers() };
 }
 
 /** The minimal read surface {@link makeFsLoader} needs. node:fs's `fs.promises`
@@ -392,7 +372,6 @@ export function makeFsLoader(fs: FsReadLike): Loader {
   return {
     resolve: (specifier, fromDir) => joinPath(fromDir, specifier),
     read: (path) => fs.readFile(path),
-    resolvers: defaultResolvers(),
-  };
+    resolvers: defaultResolvers() };
 }
 

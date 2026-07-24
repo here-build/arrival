@@ -1,38 +1,28 @@
 // loader-capability — `arrivalLoaderCapability`: the module system as a plain
-// `EnvCapability`, the worked exemplar of docs/environments.md §LOADER. `(require …)` /
-// `(require/extension …)` / `(require/register-extension …)` are declared here; all their
-// per-run state lives on the capability's own axes (configuration + resources), nothing wired
-// imperatively, nothing pushed OUT through callbacks. §LOADER states the model in full: `fs`
-// IS configuration and `require` is ALWAYS ENUMERATED, gated by `requiresConfig` — without a
-// derivable loader it binds a cause-carrying DoorProcedure naming `fs`/`loader` (the Stage-3
-// auto-door: a program's `(require …)` under a loaderless env is a STATIC
-// "missing-configuration" diagnostic, not an unbound variable); run state IS resources
-// (the per-RunContext bag below: the single-flight require session — a fresh bag per
-// RunContext IS the "clear the cache between runs" reset — plus the per-live-env
-// `RuntimeAssembler` whose `[Symbol.asyncDispose]` tears extensions back out at run
-// teardown); `require/register-extension` is a `preludeOnly` macro that must apply BEFORE the
-// preludes calling it (last in the root set, lowest precedence ⇒ applied first, or the ext
-// capabilities dep on it).
+// EnvCapability, worked exemplar of docs/environments.md §LOADER.
+// `(require …)` / `(require/extension …)` / `(require/register-extension …)` live here;
+// per-run state on the capability's own axes (configuration + resources) — nothing
+// wired imperatively, nothing pushed out through callbacks.
 //
-// STAGE C CUT 3b (docs/plans/stage-c-corpse-deletion.md) retired the transitional COMPAT
-// bridge (`configuration.onRequireCache`/`configuration.onExtensionAssembler`) along with the
-// ambient path it bridged for (the retired `buildArrivalEnv`'s discarded `.lower()`-produced
-// pack consumers, arrival-chain's `run-traced.ts`/`chain-env.ts`) — the resources bag below is
-// now the single source of truth with no receiver to notify. STAGE C CUT 4 retired `lower()`
-// itself (docs/plans/stage-c-corpse-deletion.md) — this capability's config is consumed
-// directly by `env/vocabulary.ts`'s `buildVocabulary` now, never bound through a lowered pack.
+// Model (§LOADER):
+//   • `fs` IS configuration; `require` is ALWAYS ENUMERATED, gated by `requiresConfig` —
+//     without a derivable loader it binds a DoorProcedure naming `fs`/`loader` (static
+//     "missing-configuration", not unbound variable)
+//   • run state IS resources: single-flight require session (fresh bag per RunContext =
+//     cache reset between runs) + per-live-env RuntimeAssembler (asyncDispose tears
+//     extensions out at run teardown)
+//   • `require/register-extension` is preludeOnly (must apply before preludes that call
+//     it — last in root set / dep edge)
 //
-// The configuration slice mirrors the loader-facing fields of arrival-run's successor session
-// builder (`buildArrivalSession`, run-program.ts), so the ONE shared config bag
-// (`exec(src, { capabilities, config })`) feeds this capability with no adapter — it validates
-// its own slice (real structural zod checks, no `z.custom<T>()` passthrough) and ignores the
-// rest.
+// Config consumed by `buildVocabulary` directly. Slice mirrors loader-facing fields of
+// the session builder so the ONE shared config bag feeds this capability with no adapter
+// (real structural zod checks; ignores the rest of the bag).
 
 import type { EvalTap } from "../eval/evaluator.js";
 import { execExpr } from "../eval/generator-exec.js";
 import { EnvCapability } from "../common/capability.js";
 import { createRuntimeAssembler, type EnvPack, type RuntimeAssembler } from "../common/kernel.js";
-import * as z from "../common/scheme-zod.js";
+import * as z from "../common/scheme-zod/index.js";
 import { applyCallback } from "../values/primitives/ACallable.js";
 import { is_applyable } from "../values/value-guards.js";
 import { theVoid } from "../values/primitives/AVoid.js";
@@ -43,8 +33,7 @@ import { bindValue, AmbientRuntime, type AmbientValue, mintFrame, isAmbientRunti
 import {
   lookupExtensionResolverIn,
   makeRegisterExtensionMacro,
-  type ExtensionResolverRegistry,
-} from "./loader-extensions.js";
+  type ExtensionResolverRegistry } from "./loader-extensions.js";
 import type { RunContext } from "../run/RunContext.js";
 import { getCapabilityResources } from "../run/CallCtx.js";
 import {
@@ -58,8 +47,7 @@ import {
   type RunEnv,
   runEnvOf,
   runResolverOf,
-  type SchemeVal,
-} from "./loader.js";
+  type SchemeVal } from "./loader.js";
 
 /** Resolve a `(require/extension :name)` argument to the bare extension name. A keyword
  *  (`:sql`) is a self-evaluating symbol (arrival's keyword-tagless-apply.md) that stringifies
@@ -69,8 +57,6 @@ import {
 function extensionName(arg: unknown): string {
   return String(arg).replace(/^:/, "");
 }
-
-// ── configuration: real structural validators (not `z.custom<T>()` passthrough) ────────────────
 
 /** A read-capable fs is any object exposing `readFile(path)`. */
 const isFsReadLike = (v: unknown): v is FsReadLike =>
@@ -84,79 +70,49 @@ const isLoader = (v: unknown): v is Loader =>
   typeof (v as Loader).read === "function" &&
   (v as Loader).resolvers instanceof Map;
 
-// ── resources: the capability's per-RunContext state ────────────────────────────────────────────
-
-/** The single-flight module cache + the `.scm` cycle/loading bookkeeping, as ONE session. A
- *  FRESH session is minted per RunContext (the `.define` resources factory runs once per run) —
- *  dropping the bag at run teardown IS the reset, so "clear the cache between runs" needs no
- *  lifecycle verbs. */
+/** Single-flight module cache + `.scm` cycle/loading bookkeeping. Fresh per RunContext —
+ *  dropping the bag at teardown IS the cache reset. */
 interface RequireSession {
-  /** Each resolved path loads EXACTLY ONCE; every later require — sequential repeat OR concurrent
-   *  sibling — awaits that one promise. */
+  /** Each resolved path loads EXACTLY ONCE; sequential repeats and concurrent siblings
+   *  await that one promise. */
   readonly inflight: Map<string, Promise<{ value: SchemeVal }>>;
-  /** Paths whose MODULE FORMS are mid-evaluation (`.scm` `load` kind only): a re-entrant require of
-   *  one is a genuine R7RS cycle (awaiting its in-flight promise would deadlock). */
+  /** Paths whose module forms are mid-evaluation (`.scm` load only): re-entrant require is
+   *  a genuine R7RS cycle (awaiting would deadlock). */
   readonly evaluating: Set<string>;
-  /** The `.scm` require chain, for the cycle / requireChain message. */
+  /** `.scm` require chain, for cycle / requireChain message. */
   readonly loadingStack: string[];
-  /** Current module's dir, for relative resolves (seeded with the entry `dirname`). A SHARED stack
-   *  assumes the resolve dir is stable across concurrent requires — true for same-dir fan-out (the
-   *  common case: top-level `(map (require "x.prompt") …)`). Concurrent requires of modules in
-   *  DIFFERENT dirs doing relative NESTED requires can mis-resolve: two chains push/pop one stack, so
-   *  `dirStack.at(-1)` may read the sibling chain's dir.
+  /** Current module dir for relative resolves (seeded with entry `dirname`). SHARED stack
+   *  assumes resolve dir stable across concurrent requires — true for same-dir fan-out.
+   *  Concurrent cross-dir nested relative requires can mis-resolve (two chains share one stack).
    *
-   *  DEFERRED (blocked, not by choice). A correct fix threads the dir PER require-chain, but the only
-   *  channel that propagates through nested `(require …)` calls is the evaluator's `EvalContext`, and:
-   *   (a) `EvalContext` has no per-eval dir field, and `execExpr(form, { resolver, tap })` exposes
-   *       no user passthrough to carry one — adding it is an arrival-CORE change (out of this
-   *       package); OR
-   *   (b) a genuine dynamic-parameter mechanism (propagating per-call, unlike a lexical field)
-   *       would work, but creating/reading one needs arrival's parameter API, again core-side —
-   *       no such mechanism exists today (the `EvalContext.dynamic_env`/`use_dynamic` fields this
-   *       note used to point at were themselves dead plumbing, retired in the Stage-C trails
-   *       cleanup: never fed by any real caller, never read by any consumer).
-   *  A dir-carrying CHILD scope is NOT viable: a `.scm`'s `define`s must spill into the SHARED run
-   *  env, so the module's forms can't be evaluated in a private child. Until (a) or (b) lands in
-   *  arrival core, the shared stack stays — correct for the common same-dir case, racy only for
-   *  concurrent cross-dir nested requires. */
+   *  deferred: correct fix threads dir per require-chain via EvalContext, but EvalContext
+   *  has no per-eval dir field and execExpr exposes no passthrough; a dynamic-parameter
+   *  mechanism would also need core-side support. A dir-carrying child scope is NOT viable
+   *  (`.scm` defines must spill into the shared run env). Shared stack stays — correct for
+   *  common same-dir case, racy only for concurrent cross-dir nested requires. */
   readonly dirStack: string[];
 }
 
-/** The per-RunContext resources bag `this.resources` carries into every loader verb. Built once
- *  per run by the `.define` resources factory below; `[Symbol.asyncDispose]` (the assembler's
- *  `dispose()`, folding every runtime-applied extension back out) runs at RunContext teardown. */
+/** Per-RunContext resources bag for every loader verb. Built once per run;
+ *  `[Symbol.asyncDispose]` (assembler dispose) runs at RunContext teardown. */
 interface LoaderRunResources {
-  /** This run's require session — fresh per RunContext (see `RequireSession`). */
   readonly session: RequireSession;
-  /** The loader derived ONCE per run from config (`loader` wins over `fs`-derived);
-   *  `undefined` only when neither key is armed — unreachable from `require`'s impl, whose
-   *  `requiresConfig` door already gated that case at bind. */
+  /** Derived once per run (`loader` wins over `fs`-derived). `undefined` only when neither
+   *  armed — unreachable from require (requiresConfig door gates at bind). */
   readonly loader: Loader | undefined;
-  /** STAGE B4 — THIS run's file-suffix → resolver-verb-name registry (§LOADER's original
-   *  resource-registry design, restored): fresh, EMPTY per RunContext (this factory runs once
-   *  per run), populated ONLY from a prelude via `require/register-extension` (preludeOnly —
-   *  post-prelude registration is lexically impossible, by construction). Read by `require`'s
-   *  own impl (below) and written by the registration macro — see `loaderRegistryOf`, this
-   *  file, and loader-extensions.ts's header for the vocabulary-path-vs-legacy-ambient-path
-   *  split this field only ever answers the FORMER half of. */
+  /** File-suffix → resolver-verb-name. Fresh empty per run; populated ONLY from a prelude
+   *  via `require/register-extension` (preludeOnly — post-prelude registration impossible). */
   readonly extensionResolvers: ExtensionResolverRegistry;
-  /** The per-live-env `RuntimeAssembler` backing `(require/extension …)`. The assembler binds to
-   *  the LIVE env, which the resource meets only at call time (ctx channel), so it is created
-   *  lazily on first touch. Idempotent per env identity (one lowered capability normally applies
-   *  to exactly one env; a re-applied lower re-creates for the new env). */
+  /** Per-live-env RuntimeAssembler for `(require/extension …)`. Lazy on first touch;
+   *  idempotent per env identity. */
   getOrCreateAssembler(env: RunEnv): RuntimeAssembler<RunEnv>;
   [Symbol.asyncDispose](): Promise<void>;
 }
 
-/** The extension-resolver registry a given `runCtx` implies — the ONE decision point `require`'s
- *  lookup and `require/register-extension`'s write both defer to, so they can never disagree.
- *  STAGE C CUT 3b: every sanctioned run is now vocabulary-bearing (`generator-exec.ts`'s
- *  `execState`/`execExpr` both fold `BASE_ROSTER` and mint through `assembleRun` — see that
- *  module's own doc), so `runCtx.vocabulary === undefined` is an INVARIANT violation, not a
- *  legacy-path fallback case: a bare `RunContext` reaching `require` never went through a
- *  sanctioned exec entry. Read (or lazily spawn, on first touch) THIS run's own
- *  `LoaderRunResources.extensionResolvers` bag via `getCapabilityResources` — the SAME
- *  get-or-produce cache a real dispatch's `this.resources` would hit. */
+/** Extension-resolver registry for a runCtx — ONE decision point for require's lookup and
+ *  register-extension's write. vocabulary === undefined is an invariant violation (bare
+ *  RunContext never went through a sanctioned exec entry). Lazy-spawns via
+ *  getCapabilityResources — same cache a real dispatch's this.resources would hit. */
 function loaderRegistryOf(runCtx: RunContext): ExtensionResolverRegistry {
   invariant(
     runCtx.vocabulary !== undefined,
@@ -166,14 +122,10 @@ function loaderRegistryOf(runCtx: RunContext): ExtensionResolverRegistry {
   return resources.extensionResolvers;
 }
 
-// Explicit `<any, any>`: TS's declaration-emit (this package builds `--build`/composite) can't
-// portably NAME the inferred config type without referencing arrival's internal
-// `AmbientRuntime` (RunEnv's root) across the package boundary. No consumer reads `.configuration`/
-// `.resources` off this export from outside `loader-capability.ts` itself (every external use goes
-// through `exec(src, { capabilities: [arrivalLoaderCapability], config }})`, generic-erased already)
-// — so widening the export's own generics costs nothing real; the `symbols` callback body is still
-// checked against the REAL inferred shapes at the `EnvCapability.define(...)` call site below,
-// unaffected by this annotation.
+// Explicit `<any, any>`: declaration-emit can't portably name the inferred config type
+// without referencing internal AmbientRuntime across the package boundary. External use
+// goes through exec({ capabilities, config }), generic-erased; symbols body still checked
+// against real shapes at the define call site.
 export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.define("arrival/loader", {
   configuration: {
     /** PRIMARY: the raw read-capable filesystem arming `(require …)`. The capability derives its own
@@ -198,11 +150,9 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
      *  as `require`'s own fs/loader door). */
     extensionRegistry: z
       .custom<ReadonlyMap<string, EnvPack<RunEnv>>>((v) => v instanceof Map, "extensionRegistry must be a Map")
-      .optional(),
-  },
-  /** One bag per RunContext (docs/execution.md §HERMETIC): the require session, the config-derived
-   *  loader, and the lazily-created per-env assembler — whose `dispose()` IS the bag's
-   *  `[Symbol.asyncDispose]`, so winding the run down tears every runtime-applied extension out. */
+      .optional() },
+  /** One bag per RunContext (docs/execution.md §HERMETIC): session, config-derived loader,
+   *  lazy per-env assembler — dispose tears runtime-applied extensions out. */
   resources: (config): LoaderRunResources => {
     const { fs, loader } = config as { fs?: FsReadLike; loader?: Loader; dirname?: string };
     let assembler: RuntimeAssembler<RunEnv> | undefined;
@@ -212,8 +162,7 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
         inflight: new Map(),
         evaluating: new Set(),
         loadingStack: [],
-        dirStack: [(config as { dirname?: string }).dirname ?? ""],
-      },
+        dirStack: [(config as { dirname?: string }).dirname ?? ""] },
       loader: loader ?? (fs ? makeFsLoader(fs) : undefined),
       extensionResolvers: new Map(),
       getOrCreateAssembler(env: RunEnv): RuntimeAssembler<RunEnv> {
@@ -225,75 +174,49 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
       },
       async [Symbol.asyncDispose](): Promise<void> {
         await assembler?.dispose();
-      },
-    };
+      } };
   },
-  // FLIPPED form (`EnvCapability.define`): the symbol record is STATIC — every verb is always
-  // enumerated; config-gating rides each contract's `requiresConfig` (the Stage-3 auto-door)
-  // instead of conditional `defs["x"] = …` enumeration, and impls read
-  // `this.configuration`/`this.resources` at dispatch.
+  // Flipped form: symbol record STATIC — every verb always enumerated; config-gating via
+  // requiresConfig; impls read this.configuration/this.resources at dispatch.
   symbols: (symbol) => ({
-    // Assembly-time-only MACRO (§LOADER / §PRELUDE): callable from every later-applied
-    // capability's prelude, unbound everywhere at runtime. MACRO so the resolver name is
-    // unevaluated — see makeRegisterExtensionMacro. `loaderRegistryOf` is referenced here
-    // (module scope, this capability's OWN definition) before `arrivalLoaderCapability`'s
-    // `const` binding finishes initializing — safe: the reference resolves lazily, inside a
-    // closure `loaderRegistryOf` returns, not invoked until a REAL macro expansion long after
-    // module load completes (ordinary forward-closure-over-const, not a TDZ read).
+    // Assembly-time-only MACRO (§LOADER / §PRELUDE): unevaluated resolver name.
+    // loaderRegistryOf referenced before const finishes — safe (lazy, post-load expansion).
     "require/register-extension": {
       kind: "macro" as const,
       name: "require/register-extension",
       macro: makeRegisterExtensionMacro(loaderRegistryOf),
-      preludeOnly: true,
-    },
+      preludeOnly: true },
 
     require:
       symbol.native`require: loads a module by specifier and returns its value or spills its defines into the environment`(
         {
           input: [z.schemeValue],
           output: [z.schemeValue],
-          // ANY-OF door gate (the disjunctive `requiresConfig` form): `require` is callable
-          // while EITHER `fs` (the loader is derived) or a pre-built `loader` is armed; with
-          // both absent it binds a DoorProcedure naming the pair — the static gate's
-          // "missing-configuration" diagnostic replaces the old unbound-variable withholding.
-          requiresConfig: [["fs", "loader"]],
-        },
-        // RAW-BOUND `{ value }`-style native, never rosetta-wrapped — §LOADER (no provenance
-        // mint: `(define run-x (require "x.prompt"))` returns a CALLABLE, the data is born when
-        // the proc is INVOKED; no return marshal: an `eval` module's scheme lambda survives
-        // where a wrapper's `jsToScheme` would void it).
+          // ANY-OF: callable with either fs or loader; both absent ⇒ DoorProcedure naming the pair.
+          requiresConfig: [["fs", "loader"]] },
+        // RAW-BOUND native, never rosetta-wrapped (§LOADER): no provenance mint on the return
+        // (callable data born when the proc is INVOKED); no return marshal (eval-module scheme
+        // lambda survives where jsToScheme would void it).
         //
-        // STATEMENT-POSITION + eager-sequential within a `.scm`: that file's forms are
-        // `execExpr`'d in order, to completion, so a required file's `define-macro` is
-        // installed before the caller's next form expands (R5RS `load`). But requires are NOT
-        // globally sequential — `(map …)` evaluates its body in PARALLEL, so the same path can
-        // be `(require)`d concurrently by N iterations, hence the single-flight `inflight`
-        // cache (a flat in-flight Set would read siblings #2…N as a cycle, spuriously
-        // failing same-path fan-out). Cycles THROW (R7RS forbids module cycles; no exports
-        // object to return "partial" in a spill model) — only `.scm` (`load`) can `require`
-        // during its OWN evaluation, so the cycle guard is scoped to it; value/eval modules
-        // (`.json`, `.hbs`, capability-registered types like `.prompt`) are require-graph
-        // leaves and cannot cycle.
+        // Within a `.scm`, forms execExpr in order (R5RS load — define-macro before next expand).
+        // Requires are NOT globally sequential — `(map …)` parallelizes, so same path can be
+        // required concurrently; inflight cache shares one load (a flat Set would misread
+        // siblings as a cycle). Cycles THROW (R7RS; spill model has no partial exports) —
+        // only `.scm` load can require during its own eval; value/eval modules are leaves.
         async function (...args: unknown[]): Promise<SchemeVal> {
           const resources = this.resources as LoaderRunResources | undefined;
-          // The run-resources bag rides `RunContext.capabilityResources` (1d) — absent only on a
-          // bare-env dispatch that never went through `instantiate`'s mint site, which no loader
-          // consumer path does (require needs a real run).
           invariant(
             resources !== undefined,
             "require: no run resources — dispatched outside a resource-armed RunContext.",
           );
           const { session, loader } = resources;
-          // The `requiresConfig` door above already gated the both-absent case at bind — this
-          // narrow is for TS and for the (impossible by construction) bare-env dispatch.
+          // requiresConfig already gated both-absent at bind.
           invariant(
             loader !== undefined,
             "require: no loader derivable — the fs/loader door should have bound instead.",
           );
           const { tap } = this.configuration as { tap?: EvalTap };
-          // The COMPOSED resolver, not just its env (see runResolverOf, loader.ts): module
-          // forms evaluate through it, and the registered-resolver lookup walks it, so builtins
-          // and capability verbs resolve identically everywhere.
+          // Composed resolver (runResolverOf): module forms + registered-resolver lookup.
           const resolver = runResolverOf(this, "require");
           const { inflight, evaluating, loadingStack, dirStack } = session;
           const specifierArg = args[0];
@@ -301,41 +224,23 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
 
           const pending = inflight.get(path);
           if (pending) {
-            // In-flight as this chain's own ancestor → real cycle (awaiting would deadlock).
-            // Otherwise a settled cache hit or a concurrent sibling — share the load.
+            // Own ancestor → real cycle. Else settled hit or concurrent sibling — share.
             RequireCycleError.invariant(!evaluating.has(path), [...loadingStack, path]);
             return (await pending).value;
           }
 
           const load = (async (): Promise<{ value: SchemeVal }> => {
             const contents = await loader.read(path);
-            // Registry overlay: a capability-registered resolver for this suffix wins over the
-            // loader's built-in table. The registry stores the resolver verb's NAME — THIS run's
-            // own bag on the vocabulary path, the legacy process-global table otherwise
-            // (`loaderRegistryOf`, above) — resolved against THIS env (late-bind), so a
-            // resource-armed resolver (e.g. `.prompt` → `prompt/compile`) uses THIS env's
-            // resource. If the suffix is registered but the verb is NOT bound in this env (a
-            // scope that didn't root the owning capability), resolution FALLS THROUGH to the
-            // built-in table; once a suffix is removed from `defaultResolvers`, that fallthrough
-            // errors (no handler), which IS the scoping guarantee (you must root the capability).
+            // Capability-registered suffix wins over builtin table. Registry stores NAME —
+            // late-bound against THIS env (resource-armed resolver sees THIS env's resource).
+            // Registered but unbound verb ⇒ fall through to builtin; missing handler IS the
+            // scoping guarantee (must root the capability).
             const resolverName = lookupExtensionResolverIn(loaderRegistryOf(this.runCtx), path);
-            // The COMPOSED lookup (scope ?? capabilities), non-throwing: a capability-registered
-            // resolver verb lives on the capability base under the cut, where an env-chain-only
-            // read (`env.get`) would miss it.
             const registered = resolverName === undefined ? undefined : resolver.lookup(resolverName);
             let result: ResolverResult;
-            // A bound verb is a callable VALUE (ANativeProcedure), not `typeof === "function"` —
-            // dispatch through the ONE invocation seam (`applyCallback`), which handles both the
-            // value's apply term and a legacy bare fn.
-            if (typeof registered === "function" || is_applyable(registered)) {
-              // applyCallback's CallResult (SchemeValue | SchemeBounceMarker | Promise<SchemeValue>)
-              // doesn't structurally overlap ResolverResult — a registered resolver verb is never
-              // invoked in tail position, so a SchemeBounceMarker genuinely can't reach here; the
-              // registry's own contract IS that its resolver returns a ResolverResult shape (an
-              // authoring convention, not something the type system can see through applyCallback's
-              // generic seam) — bridge through `unknown` at this one boundary.
-              // `this` IS the whole CallCtx `require` was dispatched with — thread it, not
-              // just `this.runCtx`.
+            if (is_applyable(registered)) {
+              // Thread full CallCtx, not just runCtx. Bridge through unknown: registry contract
+              // is ResolverResult; applyCallback's CallResult can't express that.
               result = (await applyCallback(registered, [contents, { path }], this)) as unknown as ResolverResult;
             } else {
               const handler = pickHandler(path, loader.resolvers);
@@ -345,21 +250,11 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
 
             let value: SchemeVal = theVoid;
             if (result.kind === "value") {
-              // Shape data into scheme (`dataToScheme`): arrays become scheme LISTS at every
-              // depth (so `(append …)`/`(car …)`/`(length …)` work), plain objects become
-              // member-readable records (so `@`/`field` work). This is WHERE data gets
-              // parsed-into-scheme — which is why the program needs no `json/parse` verb.
-              // Pure value — `require` RETURNS it for an explicit `(define x (require …))`;
-              // nothing is spilled. `value` is for DATA only — a JS function here would be
-              // VOIDED to `#void` by the membrane (see THE CALLABLE RULE on `ResolverResult`,
-              // loader.ts). A callable file (`.hbs`, `.prompt`) resolves as `kind: "eval"`
-              // returning a scheme lambda instead.
+              // dataToScheme: arrays→lists, objects→member-readable. DATA only — JS function
+              // would void (CALLABLE RULE, loader.ts); callables use kind:"eval" + scheme lambda.
               value = dataToScheme(result.value);
             } else {
-              // load / eval: evaluate the module's forms in order into the run env, with the
-              // module's own dir on the stack for its relative requires. Only `load` (`.scm`)
-              // can require during this eval, so only it enters the cycle domain
-              // (`evaluating` / `loadingStack`).
+              // load/eval: forms into run env; only load enters cycle domain.
               const isLoad = result.kind === "load";
               dirStack.push(dirOf(path));
               if (isLoad) {
@@ -367,18 +262,8 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
                 loadingStack.push(path);
               }
               try {
-                // Evaluate through the requiring run's OWN composed resolver (ExecOptions.resolver,
-                // the module-eval passthrough): defines spill into the same lexical frame
-                // (`resolver.env`), builtins keep resolving through the same capability base.
-                // Reconstructing a resolver from a bare frame (the retired glass option) would
-                // lose the stdlib — the lexical root is null-rooted; only the composed resolver
-                // reaches the capability base.
-                //
-                // `runCtx: this.runCtx` (Stage C Cut 1): thread the requiring run's LIVE handle too,
-                // not just its resolver — else `execExpr` mints a fresh standalone RunContext and a
-                // NESTED `(require …)` inside THIS module resolves `loaderRegistryOf` against a
-                // DIFFERENT run's extension registry. Same run ⇒ same vocabulary, same meter, same
-                // extension registry, for every level of require nesting.
+                // Composed resolver keeps capability base (null-rooted lexical alone loses stdlib).
+                // Thread this.runCtx so nested require shares vocabulary/meter/extension registry.
                 for (const form of result.forms) value = await execExpr(form, { resolver, tap, runCtx: this.runCtx });
               } finally {
                 if (isLoad) {
@@ -387,8 +272,7 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
                 }
                 dirStack.pop();
               }
-              // `load` returns unspecified — the void SINGLETON, not a raw JS `undefined`
-              // (raw-bound verbs return scheme values; `undefined` is not one).
+              // load returns void singleton, not raw JS undefined.
               if (isLoad) value = theVoid;
             }
             return { value };
@@ -398,13 +282,8 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
           try {
             return (await load).value;
           } catch (error) {
-            // A failed load must not poison the cache — drop it so the path can be retried
-            // (a transient read error isn't permanent; a real cycle / parse error simply
-            // recurs). Then annotate the throw with the require chain (which `require` led
-            // here: a → b → c). The DEEPEST require wins — outer levels see it already set
-            // and leave it, so the chain reads entry→failing-module. Survives evaluator
-            // propagation: an already-SchemeError is re-thrown unchanged (evaluator.ts:615),
-            // and a plain assignment to an Error object sticks. Best-effort (frozen → skip).
+            // Don't poison cache — drop so path can retry. Annotate requireChain (deepest
+            // wins). Best-effort if frozen.
             inflight.delete(path);
             if (error !== null && typeof error === "object" && !("requireChain" in error)) {
               try {
@@ -423,23 +302,12 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
         {
           input: [z.schemeValue],
           output: [z.schemeValue],
-          // Same static-gate posture as `require`'s fs/loader door: absent registry ⇒ a
-          // cause-carrying door naming `extensionRegistry` instead of withholding the symbol.
-          requiresConfig: ["extensionRegistry"],
-        },
-        // RAW-BOUND, `__withCtx` — no rosetta wrapper, no marshal (same as `require`, §LOADER).
-        // Resolves the name, applies the registered pack (and its deps) to the live env through
-        // the per-env `RuntimeAssembler` (held by the run-resources bag — created lazily on
-        // first call; the bag's `asyncDispose` folds `dispose()` into run teardown), and returns
-        // unspecified: the capability's symbols are now live. Absent name ⇒ teaching error.
-        //
-        // The mid-run child scope `C'` is §LOADER / §PRELUDE (bootstrap's phase-gated prelude
-        // machinery cannot touch a LIVE env, so each call seeds a fresh, DISCARDED
-        // `C' = mintFrame(liveEnv, "prelude/<name>")` seeded with `register-extension` — passed
-        // as both the `preludeScope` bind target and the `preludeEvalScope` eval scope, a lookup
-        // miss on `C'` falling through to `liveEnv`; never linked in, dropped when the call
-        // resolves — so the applied pack's own prelude `define`s are lost with `C'`, only its
-        // DECLARED `symbols` reach the live env).
+          // Absent registry ⇒ door naming extensionRegistry (same posture as require's fs/loader).
+          requiresConfig: ["extensionRegistry"] },
+        // RAW-BOUND (§LOADER). Applies pack via per-env RuntimeAssembler; returns void.
+        // Mid-run discarded child scope C' (mintFrame off live env, seeded with
+        // register-extension): pack prelude defines die with C'; only declared symbols
+        // reach the live env (§PRELUDE).
         async function (...args: unknown[]): Promise<SchemeVal> {
           const resources = this.resources as LoaderRunResources | undefined;
           invariant(
@@ -449,7 +317,6 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
           const { extensionRegistry } = this.configuration as {
             extensionRegistry?: ReadonlyMap<string, EnvPack<RunEnv>>;
           };
-          // The `requiresConfig` door already gated the absent-registry case at bind.
           invariant(
             extensionRegistry !== undefined,
             "require/extension: no extensionRegistry — the config door should have bound instead.",
@@ -459,12 +326,7 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
           const pack = extensionRegistry.get(name);
           RequireResolverError.invariant(pack !== undefined, "no-extension", name, [...extensionRegistry.keys()]);
           const assembler = resources.getOrCreateAssembler(env);
-          // A discarded child scope, seeded with register-extension so the applied pack's prelude
-          // may still call it. Never linked into `env` — used only for THIS call. Bound by hand
-          // (no capability `apply()` pass runs here): the structural `SchemeEnv` face carries no
-          // write member, so narrow to the concrete frame class (a run env's frames are real
-          // AmbientRuntimes by construction) and mint through the module-internal `bindValue` /
-          // `mintFrame` — exactly as `apply()` binds a `kind: "native"` def.
+          // Discarded child, hand-bound (SchemeEnv has no write member) — mintFrame + bindValue.
           invariant(
             isAmbientRuntime(env),
             "require/extension: the run env is not an arrival AmbientRuntime — a mid-run prelude scope must be minted off a real frame to receive bindings.",
@@ -472,16 +334,9 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
           const preludeScope = mintFrame(env, `prelude/${name}`);
           bindValue(preludeScope, "require/register-extension", makeRegisterExtensionMacro(loaderRegistryOf));
           await assembler.require(pack, {
-            // The kernel's bind-target face over the same frame (PreludeBindTarget is the
-            // `.set`-only shim shape; the frame does not carry `set`).
             preludeScope: { set: (n, v) => bindValue(preludeScope, n, v as AmbientValue) },
-            // Same through-`unknown` widen as runEnvOf (loader.ts): assembler typed over structural
-            // RunEnv, the minted frame is the concrete class; `RunEnv & AmbientRuntime` restates the
-            // narrow above (`isAmbientRuntime(env)`) one frame down.
-            preludeEvalScope: preludeScope as RunEnv & AmbientRuntime,
-          });
-          return theVoid; // applied for effect; the pack's symbols are now bound on the env
+            // through-unknown widen: assembler typed over structural RunEnv; frame is concrete.
+            preludeEvalScope: preludeScope as RunEnv & AmbientRuntime });
+          return theVoid;
         },
-      ),
-  }),
-});
+      ) }) });

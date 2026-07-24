@@ -1,7 +1,7 @@
 // loader-extension-registry-vocabulary.test.ts — Stage B4 (docs archaeology:
 // stage-b-runcontext-absorbs-assembly.md): the file-suffix → resolver-verb-name registry as a
 // per-run LOADER RESOURCE on the vocabulary path (`exec`'s default for `{capabilities}` runs
-// since Stage B3). Companion to `loader-capability.test.ts` (the legacy-ambient-path proof —
+// since Stage B3). Companion to `loader-capability.test.ts` (the ambient-path proof —
 // `assembleEnv` directly, byte-unchanged by this stage) and `env/__tests__/assemble-run.test.ts`
 // (the GENERAL per-run-prelude laws) — this file is the REGISTRY-SPECIFIC proof:
 //   - registration via prelude resolves a real `(require "x.ext")` end-to-end;
@@ -58,10 +58,8 @@ function makeUpperExtCapability(name: string, suffix: string, resolverName: stri
       [resolverName]: symbol.native`${resolverName}: uppercases module contents (ResolverResult value kind)`(
         { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
         (contents: unknown) => ({ kind: "value", value: String(contents).toUpperCase() }) as never,
-      ),
-    }),
-    prelude: `(require/register-extension "${suffix}" "${resolverName}")`,
-  });
+      ) }),
+    prelude: `(require/register-extension "${suffix}" "${resolverName}")` });
 }
 
 describe("loader extension registry — vocabulary path (Stage B4)", () => {
@@ -69,8 +67,7 @@ describe("loader extension registry — vocabulary path (Stage B4)", () => {
     const ext = makeUpperExtCapability("test/ext-upper-vocab", ".upper", "test/upper-resolve-vocab");
     const results = await exec(`(require "shout.upper")`, {
       capabilities: [ext],
-      config: { loader: files({ "shout.upper": "hello" }) },
-    });
+      config: { loader: files({ "shout.upper": "hello" }) } });
     expect(plain(results.at(-1))).toBe("HELLO");
   });
 
@@ -101,8 +98,7 @@ describe("loader extension registry — vocabulary path (Stage B4)", () => {
     await expect(
       exec(`(require "unseen.isolated")`, {
         capabilities: [arrivalLoaderCapability],
-        config: { loader: files({ "unseen.isolated": "x" }) },
-      }),
+        config: { loader: files({ "unseen.isolated": "x" }) } }),
     ).rejects.toThrow(/no-resolver|no resolver/i);
   });
 
@@ -114,8 +110,7 @@ describe("loader extension registry — vocabulary path (Stage B4)", () => {
 
     const { values, runCtx } = await execState(`(require "x.diamond")`, {
       capabilities: [top],
-      config: { loader: files({ "x.diamond": "hi" }) },
-    });
+      config: { loader: files({ "x.diamond": "hi" }) } });
     expect(plain(values.at(-1))).toBe("HI");
 
     const registry = (
