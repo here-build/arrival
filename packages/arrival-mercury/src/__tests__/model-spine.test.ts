@@ -69,7 +69,7 @@ afterAll(async () => {
  *  with the phase-1 rules — L5 (anchor kind ⟺ declared provenance) is only
  *  meaningful against real contracts. */
 function modelFor(source: string): SchemeSemanticModel {
-  const registry = withRules(emitRegistryOf(session.ambient), phase1Rules);
+  const registry = withRules(emitRegistryOf(session.runCtx), phase1Rules);
   return new SchemeSemanticModel(source, registry);
 }
 
@@ -325,11 +325,16 @@ describe("dual-plane laws — the dynamic plane is the oracle for the static one
     // The live plane: run the program, read the eager Sets off the result value.
     const source = `(define response (infer "summarize" "hello"))
 (string-append "v:" (car response))`;
-    const { execState, LexicalScope, parseGenerator } = await import("@inhuman.tools/arrival");
+    const { execState, LexicalScope, parse } = await import("@inhuman.tools/arrival");
     const scope = LexicalScope.fresh("dual-plane-r6");
     let last: unknown;
-    for (const form of await parseGenerator(source)) {
-      const st = await execState(form, { ambient: session.ambient, scope });
+    for (const form of await parse(source)) {
+      const st = await execState(form, {
+        capabilities: session.capabilities,
+        config: session.config,
+        scope,
+        runCtx: session.runCtx,
+      });
       last = st.values.at(-1);
     }
     const liveAtoms = deepProvenance(last);

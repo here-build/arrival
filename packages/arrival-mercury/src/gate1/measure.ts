@@ -379,13 +379,14 @@ const sum = (xs: readonly number[]): number => xs.reduce((a, b) => a + b, 0);
  *  §4.1 per-session reuse contract). Throws if the sample-size guard fails —
  *  a report is never returned for a corpus too thin to mean anything. */
 export function runGate1Measurement(session: OracleSession): Gate1Report {
-  // The REAL compile-path registry (ambient harvest + srfi-1 static fallback +
-  // phase1Rules overlay) — never re-derive this inline. An earlier inline
-  // `withRules(emitRegistryOf(session.ambient), phase1Rules)` here skipped the
-  // srfi-1 merge `greenfieldRegistryFor` exists to apply, so this module scored
-  // `filter` (an srfi-1 symbol) 0% clean while the pipeline actually emits it
-  // clean — see `greenfieldRegistryFor`'s own doc (oracle/harness.ts) for the
-  // ambient-gap this closes.
+  // The REAL compile-path registry (`RunContext`-mode harvest + phase1Rules overlay)
+  // — never re-derive this inline. An earlier inline
+  // `withRules(emitRegistryOf(session.capabilities), phase1Rules)` here would skip
+  // everything BASE_ROSTER folds into a run's vocabulary (srfi-1 included — never
+  // present in `capabilities` itself), so this module would score `filter` (an
+  // srfi-1 symbol) 0% clean while the pipeline actually emits it clean — see
+  // `greenfieldRegistryFor`'s own doc (registry/greenfield-session.ts) for why the
+  // run-reader's `RunContext` harvest is the one view with everything already in it.
   const registry = greenfieldRegistryFor(session);
   const narrowsMembers = narrowsMembersOf(registry);
 

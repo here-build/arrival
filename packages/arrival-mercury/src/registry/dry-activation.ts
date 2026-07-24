@@ -67,14 +67,14 @@ export function dryActivation(capabilityName: string): AnyActivation {
     },
   });
   const resourcesProxy = new Proxy({}, { get: (_t, prop) => poisonResourceDeref(String(prop)) });
-  // Structurally the REAL `buildDegradationInfo(name, "forbid", [])` shape (degradation.ts):
-  // "forbid" mode, no missing keys, `.active` false — nothing a builder legitimately reads
-  // off `.degradation` branches. Hand-rolled here because arrival exposes the TYPE only
-  // through `Activation["degradation"]`, not the builder helper, on its public subpaths.
+  // Structurally the REAL `buildDegradationInfo(name)` shape (degradation.ts): the
+  // "forbid" vs "doors" mode distinction (and its `missingKeys`/`active` informational
+  // fields) is retired from `DegradationInfo` itself (TRAILS CLEANUP Tier 1 — confirmed
+  // zero readers anywhere) — the interface is just the `.door(...)` minter now. Hand-
+  // rolled here (rather than importing the builder helper) because arrival exposes the
+  // TYPE only through `Activation["degradation"]`, not the builder, on its public
+  // subpaths.
   const degradation: DegradationInfo = {
-    mode: "forbid",
-    missingKeys: [],
-    active: false,
     door: (name, needs, reason): DoorSymbolDef => ({
       kind: "door",
       name,

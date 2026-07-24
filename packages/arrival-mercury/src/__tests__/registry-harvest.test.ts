@@ -14,7 +14,7 @@ import { symbol, withContractFields } from "@inhuman.tools/arrival/symbol";
 import { openOracleSession, type OracleSession } from "../registry/greenfield-session.js";
 import { emitRegistryOf } from "../registry/index.js";
 
-describe("emitRegistryOf over the real oracle ambient", () => {
+describe("emitRegistryOf over the real oracle run", () => {
   let session: OracleSession;
 
   beforeAll(async () => {
@@ -26,45 +26,33 @@ describe("emitRegistryOf over the real oracle ambient", () => {
   }, 30_000);
 
   it("harvests rows for capability-declared symbols without arming anything", () => {
-    // The session's InferFn stub THROWS on any invocation — a clean harvest is the
-    // proof that neither resources nor impls were touched (test-plan row 2).
-    const registry = emitRegistryOf(session.ambient);
+    // No live invocation anywhere in this harvest — a clean harvest is the proof
+    // that neither resources nor impls were touched (test-plan row 2).
+    const registry = emitRegistryOf(session.runCtx);
     expect(registry.names.size).toBeGreaterThan(50);
-    for (const name of [
-      "infer",
-      "infer/chat",
-      "infer/chat/system",
-      "infer/chat/user",
-      "infer/chat/assistant",
-      "pair?",
-    ]) {
+    for (const name of ["chat/completion", "dotprompt/run", "llm/known", "pair?"]) {
       expect(registry.lookup(name), name).toBeDefined();
     }
-    const infer = registry.lookup("infer");
-    expect(infer).toMatchObject({
-      symbol: "infer",
-      capability: "arrival/infer",
+    const chatCompletion = registry.lookup("chat/completion");
+    expect(chatCompletion).toMatchObject({
+      symbol: "chat/completion",
+      capability: "arrival/llm-mcp",
       kind: "rosetta",
-      provenance: "source",
-      cacheClass: "pure",
       refPolicy: "shim", // no authored policy anywhere yet — the resolved default
     });
-    expect(infer?.type).toContain("prompt");
-    // R2 relocation (arrival-mercury constitution §9): `infer`'s Contract now carries
-    // its own `emit` rule (llm-plane-arrival-env/src/infer.ts's `inferEmitRule`,
-    // moved off this package's phase1 table) — this is the ambient PROOF that
-    // `arrival/infer` resolves through the real harvest at all (unlike scheme/srfi-1,
-    // never a held row here). `infer/chat/system` is `kind: "define"` (a
-    // `symbol.define` procedure, not `rosetta`) — its `emit` is carried by the
-    // declaration-site SPREAD idiom (`symbol.define`'s factory does not thread a
-    // Contract's `emit` through on its own; see infer.ts's own note), proven equally
-    // reachable here.
-    expect(infer?.emit).toBeDefined();
-    expect(registry.lookup("infer/chat/system")).toMatchObject({ kind: "define" });
-    expect(registry.lookup("infer/chat/system")?.emit).toBeDefined();
+    expect(chatCompletion?.type).toContain("LLMModel");
+    // The retired `arrival/infer` family (`infer`, `infer/chat/*`) carried its own
+    // Contract-level `emit` rule (R2 relocation, arrival-mercury constitution §9);
+    // the LLM/MCP layer's whiteroom rebuild that replaced it declares NO `emit`
+    // anywhere (verified: `grep -n "emit:" src/*.ts` over `llm-plane-arrival-env` is
+    // empty) — `chat/completion`/`dotprompt/run` fall to the walker's rung-3
+    // RuntimeRef shim instead (`runtime/runtime-manifest.ts`'s `chat/completion`
+    // row is the fix for that — see rework-zone guidelines §4 / job item 3).
+    expect(chatCompletion?.emit).toBeUndefined();
+    expect(registry.lookup("dotprompt/run")).toMatchObject({ kind: "rosetta", capability: "ext/prompt" });
   });
 
-  it("ambient harvest and bare-roster harvest BOTH succeed — no builder-form capability remains in the DAG", () => {
+  it("RunContext harvest and bare-roster harvest BOTH succeed — no builder-form capability remains in the DAG", () => {
     // The Stage-6 cleanup migrated every capability in the real oracle DAG off the
     // builder-form `symbols` (config now reaches impls via `this.configuration` at
     // dispatch), so a bare-roster harvest no longer trips the phantom activation's
@@ -72,15 +60,21 @@ describe("emitRegistryOf over the real oracle ambient", () => {
     // The poison-door mechanism itself stays covered by the synthetic fixtures in
     // the "dry-harvest of builder-form capabilities" describe below (it still
     // defends against type-erased/out-of-repo specs handing the harvest a builder).
-    expect(() => emitRegistryOf(session.ambient)).not.toThrow();
-    expect(() => emitRegistryOf(session.ambient.capabilities)).not.toThrow();
+    // The two modes are no longer "two views of the same assembly" (the retired
+    // `AssembledAmbient` shape's `.ambient`/`.ambient.capabilities` pair) — a bare
+    // `session.capabilities` walk necessarily sees FEWER names than the run's own
+    // vocabulary (BASE_ROSTER, srfi-1 included, is folded in at vocabulary-build
+    // time, never present in `capabilities` itself); this test only pins that
+    // NEITHER mode throws, not that they agree.
+    expect(() => emitRegistryOf(session.runCtx)).not.toThrow();
+    expect(() => emitRegistryOf(session.capabilities)).not.toThrow();
   });
 
   it("is deterministic across two harvests of the same roster", () => {
-    const a = emitRegistryOf(session.ambient);
-    const b = emitRegistryOf(session.ambient);
+    const a = emitRegistryOf(session.runCtx);
+    const b = emitRegistryOf(session.runCtx);
     expect([...a.names].sort()).toEqual([...b.names].sort());
-    expect(a.lookup("infer")).toEqual(b.lookup("infer"));
+    expect(a.lookup("chat/completion")).toEqual(b.lookup("chat/completion"));
   });
 
   it("Law N gate is wired and green over the real env (null?/pair? carry narrows, self-witnessed)", () => {
@@ -91,7 +85,7 @@ describe("emitRegistryOf over the real oracle ambient", () => {
     // today's only two narrows-flagged rows in the real env, each self-witnessed (its
     // own runtime behavior PROVES the narrowing). Every OTHER harvested symbol still
     // carries none — this loop stays a tight assertion, not a vacuous one.
-    const registry = emitRegistryOf(session.ambient);
+    const registry = emitRegistryOf(session.runCtx);
     const KNOWN_NARROWS: Readonly<Record<string, { readonly witness: string }>> = {
       "null?": { witness: "null?" },
       "pair?": { witness: "pair?" },

@@ -105,42 +105,50 @@
  *    foundations/arrival/arrival/src/env/srfi/srfi-1.ts carries `filterEmitRule`,
  *    byte-identical to the table's own (now-deleted) `filterRule` — but its TABLE ROW
  *    stayed for a full follow-up wave, evidence-forced: `scheme/srfi-1` was not part
- *    of the oracle's harvested ambient (`emitRegistryOf(session.ambient)` saw
- *    `scheme/lists`/`scheme/numeric`/`scheme/equality` — map/cons/apply/quotient/
- *    not/… all resolved from these Contracts — but ZERO rows for ANY srfi-1 symbol,
- *    probed directly). **Ambient gap now CLOSED** (`oracle/harness.ts`'s
- *    `greenfieldRegistryFor`): `scheme/srfi-1` can't simply join
- *    `session.ambient.capabilities` — its own `deps` order conflicts with
- *    `arrival/schema`'s (both always co-resident, both ordering `lists` vs
- *    `equality` oppositely; a real `AssembleLinearizationError`, confirmed directly,
- *    not a style question) — so harness.ts harvests it STATICALLY off the bare
- *    capability instead (`emitRegistryOf`'s bare-tree input mode, no C3 involved) and
- *    merges it under the real ambient's own harvest (ambient rows win on any name
- *    overlap). `withRules`' fallthrough to that merged harvest row is what resolves
+ *    of the oracle's harvested ambient (probed directly at the time — the retired
+ *    `AssembledAmbient`-shaped harvest saw `scheme/lists`/`scheme/numeric`/
+ *    `scheme/equality` — map/cons/apply/quotient/not/… all resolved from these
+ *    Contracts — but ZERO rows for ANY srfi-1 symbol). **Ambient gap now CLOSED, and
+ *    by a stronger mechanism than the original fix** (rework-zone guidelines §4 —
+ *    `registry/greenfield-session.ts`'s `greenfieldRegistryFor`): the ORIGINAL fix
+ *    harvested `scheme/srfi-1` STATICALLY off its bare capability (`scheme/srfi-1`'s
+ *    own `deps` order conflicts with `arrival/schema`'s — both always co-resident,
+ *    both ordering `lists` vs `equality` oppositely, a real
+ *    `AssembleLinearizationError` — so it could never simply join the session's live
+ *    `capabilities` as a co-root) and merged that static harvest UNDER the real
+ *    ambient's own. The run-reader door retired that merge entirely:
+ *    `emitRegistryOf`'s `RunContext` mode (registry/harvest.ts) walks a session's
+ *    `runCtx.vocabulary` directly — the run's OWN fully-linearized bound-value map,
+ *    with `scheme/srfi-1` (via BASE_ROSTER's self-hosting fold) already an ordinary
+ *    member, no separate harvest, no merge, no ordering conflict to route around.
+ *    `withRules`' fallthrough to that harvested Contract row is what resolves
  *    `filter` now — the same mechanism map/apply use, one layer earlier.
- *  - R2: the infer family's FIVE real Contract-backed symbols (`infer`, `infer/chat`,
- *    `infer/chat/system`, `infer/chat/user`, `infer/chat/assistant`) move onto their
- *    own Contracts in `@inhuman.tools/llm-plane-arrival-env`'s `src/infer.ts`
- *    (`arrivalInferCapability`) — the SAME `inferRule(verb)` factory this file used
- *    to hold, now named `inferEmitRule` there, byte-identical (`Call(ctx.runtime
- *    (verb), args)`). **Discovered, not assumed, and — unlike filter's (pre-fix)
- *    ambient gap — no gap to close at all:**
- *    `registry-harvest.test.ts`'s own pre-existing assertion (`capability:
- *    "arrival/infer"` on the harvested `infer` row) already proved `arrival/infer`
- *    IS part of the oracle's harvested ambient — `arrivalAgenticCapability` (rooted
- *    in `arrivalCapabilities()`, `@inhuman.tools/arrival-run/src/packs/index.ts`)
- *    deps on it, so `infer`/`infer/chat`/the three chat-message constructors resolve
- *    through the REAL harvest exactly like map/apply/cons do — no ambient gap, no
- *    held row. All five table rows are deleted (not just presence-only) —
- *    `withRules`' fallthrough to the harvested Contract row is what resolves them
- *    now.
- *  - `infer/scalar`/`infer/chat/scalar` STAY table-resident — but for a DIFFERENT
- *    reason than filter's ambient gap: they are not real capability vocabulary at
- *    all. They are the infer-scalar-fold peephole's synthetic dispatch heads (the
- *    distinguished call-head `(car (infer …))`/`(car (infer/chat …))` fuses onto —
- *    ../peepholes/infer.ts), so no `arrival/infer` symbol is named "infer/scalar";
- *    there is no Contract for either to move to, ever. Law C holds: the peepholes
- *    themselves (cross-node idioms) stay engine-side, unmoved by this relocation.
+ *  - R2 (HISTORICAL — the capability it named is now RETIRED, not just relocated):
+ *    this note used to say the infer family's five real Contract-backed symbols
+ *    (`infer`, `infer/chat`, `infer/chat/system`, `infer/chat/user`,
+ *    `infer/chat/assistant`) moved onto their own Contracts in
+ *    `@inhuman.tools/llm-plane-arrival-env`'s `src/infer.ts` (`arrivalInferCapability`).
+ *    That whole file/capability is GONE — the LLM/MCP layer's whiteroom rebuild
+ *    replaced the entire family with `chat/completion` (`./chat.ts`) and
+ *    `dotprompt/run`/`dotprompt/build-bundle` (`./prompt.ts`), neither of which is
+ *    named `infer`/`infer/chat/*` or shares their Contract shape (a model VALUE +
+ *    a fixed `{:text …}` product, not a bare model-name string + a one-element
+ *    list). No vocabulary binds `infer`/`infer/chat/*` anymore at all — a program
+ *    calling either name gets an ordinary unbound-variable error, never reaching
+ *    this table. `chat/completion` carries no Contract-level `emit` (verified:
+ *    `llm-plane-arrival-env` declares none), so it resolves through the harvested
+ *    Contract row same as any other emit-less symbol — no table row needed here;
+ *    only `runtime/runtime-manifest.ts`'s RuntimeRef shim row for it.
+ *  - `infer/scalar`/`infer/chat/scalar` STAY table-resident regardless — they were
+ *    never real capability vocabulary to begin with. They are the infer-scalar-fold
+ *    peephole's synthetic dispatch heads (the distinguished call-head
+ *    `(car (infer …))`/`(car (infer/chat …))` fuses onto — ../peepholes/infer.ts),
+ *    exercised directly by synthetic-registry unit tests (peepholes.test.ts,
+ *    rule-lint.test.ts) independent of any real vocabulary. The fold itself can
+ *    never fire against a real program anymore (its trigger — a bound `infer`/
+ *    `infer/chat` call — no longer exists), but the mechanism is otherwise inert,
+ *    not broken, and untouched by the family's retirement. Law C holds: the
+ *    peepholes themselves (cross-node idioms) stay engine-side.
  */
 import type { EmitCtx, EmitRule } from "@inhuman.tools/arrival/emit";
 

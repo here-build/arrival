@@ -229,6 +229,24 @@ export async function inferChatScalar(..._args: unknown[]): Promise<unknown> {
   );
 }
 
+/**
+ * `chat/completion` — the LLM/MCP layer's real verb (`@inhuman.tools/llm-plane-arrival-env`'s
+ * `chat.ts`), which replaced the whole `infer`/`infer/chat/*` family above (the retired
+ * `arrival/infer` capability's own file). It declares no Contract-level `emit` (the layer's
+ * whole package has none — verified directly, `grep -n "emit:" src/*.ts` over
+ * `llm-plane-arrival-env` is empty), so a `(chat/completion …)` call falls to the walker's
+ * rung-3 `RuntimeRef` shim exactly like the bare `infer` above did — and needs the SAME
+ * manifest-row treatment for that name to resolve at all, independent of which framework
+ * eventually answers the call. Same placeholder discipline: honestly async, throws rather
+ * than fabricating a response.
+ */
+export async function chatCompletion(..._args: unknown[]): Promise<unknown> {
+  throw new Error(
+    "chat/completion: stage-0 has no inference backend yet — the framework axis (vercel/langchain) " +
+      "is deferred past Phase 1 (constitution §4.3; phase1.ts's config.framework TODO).",
+  );
+}
+
 // car/cdr value-position (RuntimeRef / eta): LOOSE nil-tolerance — empty → [] (nil face),
 // not undefined and not R7RS throw. Call position uses the same algebra in phase1 carRule.
 /** Loose `car` — empty sequence → nil (`[]`); else first element. */

@@ -9,113 +9,71 @@
  * rules harvest are all browser-safe. The differential oracle
  * (`arrival-mercury-oracle`) imports these back DOWN from here.
  */
-import type { AssembledAmbient } from "@inhuman.tools/arrival/env";
-import { srfi1 } from "@inhuman.tools/arrival/srfi";
-import { buildArrivalSession, type InferFn } from "@inhuman.tools/arrival-run";
+import { buildArrivalSession, type ArrivalSession } from "@inhuman.tools/arrival-run";
 
 import { phase1Rules, withRules, type OverlayEmitRegistry } from "../rules/index.js";
 
-import { emitRegistryOf, type EmitRegistry } from "./index.js";
+import { emitRegistryOf } from "./index.js";
 
 /** The expensive, reusable half of a differential run — one capability-DAG
- *  assembly, held across many corpus/fuzz iterations (spec §4.1). */
-export interface OracleSession extends AsyncDisposable {
-  readonly ambient: AssembledAmbient;
-  dispose(): Promise<void>;
-}
+ *  assembly, held across many corpus/fuzz iterations (spec §4.1). Literally an
+ *  `ArrivalSession` — the `(runCtx, scope, capabilities, config)` tuple `execState`
+ *  itself mints and reuses; no separate wrapping shape needed. */
+export type OracleSession = ArrivalSession;
 
 /**
  * Build the one shared interpreter session. No `loader` is passed — every
  * corpus/fuzz program is a self-contained snippet, so `(require …)` stays an
- * unbound symbol by capability withholding. `infer` is the required non-thunk
- * `InferFn` callback (`BuildArrivalEnvOpts.infer`); the stub keeps `(infer …)`
- * a BOUND symbol that fails loudly, never an "unbound variable" red herring.
- *
- * srfi-1 is deliberately NOT added to `capabilities` here — see
- * `greenfieldRegistryFor`'s own note for the ambient-gap fix and why it lives at the
- * HARVEST layer instead of here (a real `AssembleLinearizationError`, not just a style
- * choice).
+ * unbound symbol by capability withholding. The retired `arrival/infer` capability
+ * (and its required `InferFn` stub) is gone — the LLM/MCP layer's `chat/completion`
+ * is what's bound now, and an unarmed `providers` bag makes any real dispatch throw
+ * the layer's own teaching door the moment a program actually calls one (the same
+ * "fails loudly, never an unbound-variable red herring" posture the retired stub
+ * existed to give `(infer …)`), so no host-side stub is needed here at all.
  */
-/** The required non-thunk `InferFn` (`BuildArrivalEnvOpts.infer`): a loud stub so
- *  `(infer …)` is a BOUND symbol that fails clearly, never an "unbound variable". */
-const inferStub: InferFn = () => {
-  throw new Error("oracle: (infer …) not supported outside the async-family cell");
-};
-
 export async function openOracleSession(): Promise<OracleSession> {
-  const session = await buildArrivalSession({ name: "arrival-mercury-oracle", infer: inferStub, params: {} });
-  const dispose = (): Promise<void> => session.dispose();
-  return { ambient: session.ambient, dispose, [Symbol.asyncDispose]: dispose };
+  return buildArrivalSession({ name: "arrival-mercury-oracle", params: {} });
 }
 
-/** One `withRules(merged, phase1Rules)` registry per ambient — the Law-N
- *  witness sweep, once per ambient (§4.1's reuse contract applied to the compiler
- *  side). Keyed by the AMBIENT (not the session wrapper) so two OracleSession
- *  handles over one assembly share the work. */
-const registryCache = new WeakMap<AssembledAmbient, OverlayEmitRegistry>();
+/** One `withRules(harvest, phase1Rules)` registry per session's `RunContext` — the
+ *  Law-N witness sweep, once per run (§4.1's reuse contract applied to the compiler
+ *  side). Keyed by `session.runCtx` (stable for the session's whole life), so two
+ *  `OracleSession` handles over one assembly share the work. */
+const registryCache = new WeakMap<object, OverlayEmitRegistry>();
 
 /**
- * THE AMBIENT-GAP FIX (rules/phase1.ts's own relocation note; R1's flagged
- * follow-up): `scheme/srfi-1` cannot simply be ADDED to `openOracleSession`'s live
- * `capabilities` — verified directly, not assumed. `srfi1`'s own `deps`
- * (foundations/arrival/arrival/src/env/srfi/srfi-1.ts: `[equality, numeric,
- * exceptions, vectors, lists]`, `lists` LAST) and `arrival/schema`'s own `deps`
- * (.../env/schema.ts: `[lists, equality, strings, numeric, exceptions]`, `lists`
- * FIRST) disagree about the relative order of `lists` vs `equality` — and
- * `arrival/schema` is unconditionally rooted in `arrivalCapabilities()`, hence always
- * present in `session.ambient.capabilities`. Assembling both roots in one
- * `assembleEnv` call throws `AssembleLinearizationError` (confirmed empirically:
- * `openOracleSession` with `capabilities: [srfi1]` fails at session build, every
- * time). Reordering srfi-1.ts's `deps` to match schema.ts's would only trade one
- * conflict for another — its own comment documents `vectors` must precede `lists`
- * to satisfy `polyglot-clojure.ts`'s independent precedence, a constraint that's
- * ACTUALLY exercised (BASE_PACKS assembles both today).
+ * Exported so tests can probe the REAL compiled-side registry directly instead of
+ * re-deriving it inline — a prior inline re-derivation (cross-pass-fixtures.test.ts)
+ * silently fell out of step the moment this function's own merge changed; see that
+ * test's own note. Current external callers: rule-lint.test.ts's EmitCtx-surface
+ * sweep over the fully-relocated Contract rules and cross-pass-fixtures.test.ts's
+ * per-row compile. `compileGreenfield` is the internal (oracle) caller — same
+ * registry, same cache, no divergence possible between what a test inspects and
+ * what the pipeline actually compiles against.
  *
- * So srfi-1 is harvested STATICALLY instead — off the bare `EnvCapability`, never
- * assembled live — via `emitRegistryOf`'s OTHER documented input mode (harvest.ts:
- * "or from a bare capability tree"), which walks the capability/deps GRAPH directly
- * (a plain deps-first DFS, harvest.ts's own `visit`) with no C3 linearization and
- * therefore no ordering conflict to trip over. Every capability in srfi-1's own dep
- * closure (equality/numeric/exceptions/vectors/lists) declares its `symbols` as a
- * plain object, never a builder function, so the phantom/dry activation this
- * bare-list path falls back to is BYTE-IDENTICAL to any "real" assembled
- * activation's answer for all of them. Computed once, module scope: `emitRegistryOf`
- * takes no session/ambient input here, so there is nothing to key a per-session
- * cache on.
- *
- * Behaviorally inert for everything this package already relied on: `scheme/lists`
- * &c. still resolve through the REAL ambient (below, ambient-first precedence), byte
- * -identical to before. This purely ADDS the names the ambient gap left dark —
- * filter/take/drop/iota/zip/every/any/… — which is exactly (and only) what closes
- * filter's ambient gap (rules/phase1.ts's now-deleted table row).
+ * RETIRED: this used to also merge in `scheme/srfi-1`'s STATIC harvest underneath
+ * the session's own (the "ambient-gap fix" — `arrival/schema` and `srfi1` disagreed
+ * on `deps` order, so both couldn't assemble live in one session; srfi-1's names
+ * were harvested off the bare capability instead and merged in as a fallback). The
+ * run-reader door (`symbolsOwnedBy`/the vocabulary-harvest discipline this file's
+ * `emitRegistryOf` now exclusively walks) reads a session's OWN `capabilities`
+ * roster directly, and that roster is `arrivalPlaneCapability`'s dep closure —
+ * which folds `scheme/srfi-1` in already, via `env/base-roster.ts`'s `BASE_ROSTER`
+ * self-hosting (the vocabulary a session assembles against was never missing
+ * srfi-1 to begin with; the gap this workaround closed was a harvest-input
+ * artifact of the retired `AssembledAmbient` shape, not a real vocabulary hole).
+ * No merge, no separate static harvest, no ordering conflict to route around. The
+ * harvest now walks `session.runCtx` directly (`emitRegistryOf`'s `RunContext` mode,
+ * registry/harvest.ts) rather than the session's bare `capabilities` list — BASE_ROSTER
+ * (srfi-1 included) is folded into a run's `vocabulary` at build time, never present in
+ * `capabilities` itself, so a capabilities-only walk would still miss it; the run's own
+ * resolved vocabulary is the one view that already has everything, correctly linearized.
  */
-const srfi1Registry = emitRegistryOf([srfi1]);
-
-/** Exported so tests can probe the REAL compiled-side registry directly instead of
- *  re-deriving the ambient+srfi-1 merge inline — a prior inline re-derivation
- *  (cross-pass-fixtures.test.ts) silently fell out of step the moment this function
- *  grew the srfi-1 merge below; see that test's own note. Current external callers:
- *  rule-lint.test.ts's EmitCtx-surface sweep over the fully-relocated Contract rules
- *  (filter included, now that its ambient gap is closed) and
- *  cross-pass-fixtures.test.ts's per-row compile. `compileGreenfield` is the
- *  internal (oracle) caller — same registry, same cache, no divergence possible
- *  between what a test inspects and what the pipeline actually compiles against. */
 export function greenfieldRegistryFor(session: OracleSession): OverlayEmitRegistry {
-  let hit = registryCache.get(session.ambient);
+  let hit = registryCache.get(session.runCtx);
   if (hit === undefined) {
-    const ambientRegistry = emitRegistryOf(session.ambient);
-    // Ambient rows win on any name they carry (the real, C3-consistent assembly);
-    // srfi-1's static harvest only fills in names the ambient never reaches. In
-    // practice these sets are disjoint on everything but srfi-1's OWN deps
-    // (lists/equality/numeric/exceptions/vectors), which the ambient already
-    // resolves via arrival/schema — so this fallback fires only for genuinely
-    // srfi-1-only symbols.
-    const withSrfi1: EmitRegistry = {
-      lookup: (name) => ambientRegistry.lookup(name) ?? srfi1Registry.lookup(name),
-      names: new Set([...ambientRegistry.names, ...srfi1Registry.names]),
-    };
-    hit = withRules(withSrfi1, phase1Rules);
-    registryCache.set(session.ambient, hit);
+    hit = withRules(emitRegistryOf(session.runCtx), phase1Rules);
+    registryCache.set(session.runCtx, hit);
   }
   return hit;
 }

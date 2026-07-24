@@ -1,17 +1,24 @@
 /**
- * The emit-rule registry harvest: collect `[name, Contract-facts]` rows from a
- * live `EnvCapability[]` tree (or an already-assembled ambient) WITHOUT running
- * the program and WITHOUT arming a single resource (constitution §4.1/§4.5;
- * registry-emit.md §"The harvest").
+ * The emit-rule registry harvest: collect `[name, Contract-facts]` rows WITHOUT
+ * running the program and WITHOUT arming a single resource (constitution §4.1/§4.5;
+ * registry-emit.md §"The harvest"). Two input modes:
  *
- * This is `exec-phases.ts`'s `rosterEntries` walk with exactly one change:
- * where that precedent returns early on a builder-form `symbols` (a documented
- * LIMIT), this harvest invokes the builder — against the ambient's REAL
- * activation when harvesting an assembly, against the phantom `dryActivation`
- * for a bare capability list (see `emitRegistryOf`'s doc for the split) — and
- * keeps walking. Everything else — deps-first visit order, identity dedup,
- * last-write-wins on a name clash — matches the roster walk (and therefore C3
- * apply precedence) deliberately.
+ *  - a live `EnvCapability[]` tree (a bare, ad hoc list — never assembled into a
+ *    run) — a dry, deps-first DAG walk against the phantom `dryActivation`
+ *    (`emitRegistryOf`'s own doc has the full contract).
+ *  - a `RunContext` — the run-reader door's own query surface
+ *    (`@inhuman.tools/arrival/host-internals`'s `ownerOf`): walk the run's OWN
+ *    resolved `vocabulary` (BASE_ROSTER already folded, every name already
+ *    linearized exactly once — no deps-graph walk needed, the run already did
+ *    it), reading each bound value's Contract via `contractOf` and its owning
+ *    capability via `ownerOf`.
+ *
+ * The bare-list mode is `exec-phases.ts`'s `rosterEntries` walk with exactly one
+ * change: where that precedent returns early on a builder-form `symbols` (a
+ * documented LIMIT), this harvest invokes the builder — against the phantom
+ * `dryActivation` — and keeps walking. Everything else — deps-first visit order,
+ * identity dedup, last-write-wins on a name clash — matches the roster walk (and
+ * therefore C3 apply precedence) deliberately.
  *
  * Placement note: the component spec drafted this module inside arrival core
  * (`src/emit/registry.ts`); the constitution's §4.5 layering ("the compiler
@@ -19,10 +26,12 @@
  * — arrival core keeps only the pure `EmitRule`/`EmitCtx`/`TypeFacts` types
  * and the Contract fields themselves.
  */
-import { contractOf, type Activation, type EnvCapability, type SymbolDeclaration } from "@inhuman.tools/arrival/capability";
+import type { EnvCapability, SymbolDeclaration } from "@inhuman.tools/arrival/capability";
 import type { EmitRule, RefPolicy } from "@inhuman.tools/arrival/emit";
-import type { AssembledAmbient } from "@inhuman.tools/arrival/env";
+import { ownerOf } from "@inhuman.tools/arrival/host-internals";
+import { contractOf } from "@inhuman.tools/arrival/lsp-internals";
 import type { AEntity, CacheClass, ProvenanceRole } from "@inhuman.tools/arrival/symbol";
+import type { RunContext } from "@inhuman.tools/arrival";
 
 import { dryActivation } from "./dry-activation.js";
 
@@ -84,36 +93,30 @@ function toRow(capability: string, symbolName: string, def: AEntity): EmitRegist
   };
 }
 
-/** The shared cache key for every PHANTOM (activation-less) harvest — one sentinel, so a
- *  builder is invoked at most once per instance across bare-list harvests. */
-const PHANTOM = Symbol("emit-registry phantom activation");
-
 /** Per-INSTANCE builder memoization (mirrors `EnvCapability.exports()`'s own
  *  `_exportsPromise`): a re-invoked builder mints fresh closure identities each call,
  *  so re-harvesting the same instance without this would silently duplicate work and
- *  break identity-keyed callers. Keyed additionally by the ACTIVATION the record was
- *  computed against (single slot, last-write-wins): the same capability instance may be
- *  harvested through one ambient's real activation and later through a bare list's
- *  phantom — those records legitimately differ (withholding-by-absence), so a key
- *  mismatch re-invokes. Module-level so the cache holds ACROSS `emitRegistryOf` calls
- *  within one compiler process. */
-const harvestCache = new WeakMap<EnvCapability, { key: unknown; rec: Record<string, SymbolDeclaration> }>();
+ *  break identity-keyed callers. Module-level so the cache holds ACROSS `emitRegistryOf`
+ *  calls within one compiler process.
+ *
+ *  Single-key now (no activation axis): the real-assembly harvest mode this cache used
+ *  to also key on is retired (see `emitRegistryOf`'s own doc) — every harvest is a dry
+ *  one, against the phantom activation, so one capability instance has exactly one
+ *  harvested record for its whole life. */
+const harvestCache = new WeakMap<EnvCapability, Record<string, SymbolDeclaration>>();
 
-function harvestSymbolsRec(cap: EnvCapability, activation: Activation<any, any> | undefined): Record<string, SymbolDeclaration> {
-  const key: unknown = activation ?? PHANTOM;
+function harvestSymbolsRec(cap: EnvCapability): Record<string, SymbolDeclaration> {
   const hit = harvestCache.get(cap);
-  if (hit !== undefined && hit.key === key) return hit.rec;
+  if (hit !== undefined) return hit;
   // The builder-form `symbols` arm is RETIRED from SymbolDeclaration's own type — this
   // typeof branch survives as pure DEFENSE against a type-erased/stale-dist spec handing
   // the harvest a builder (the phantom-activation poison discipline, constitution §4.5),
   // hence the cast at this one seam.
   const rec =
     typeof cap.spec.symbols === "function"
-      ? (cap.spec.symbols as unknown as (activation: unknown) => Record<string, SymbolDeclaration>)(
-          activation ?? dryActivation(cap.name),
-        )
+      ? (cap.spec.symbols as unknown as (activation: unknown) => Record<string, SymbolDeclaration>)(dryActivation(cap.name))
       : (cap.spec.symbols ?? {});
-  harvestCache.set(cap, { key, rec });
+  harvestCache.set(cap, rec);
   return rec;
 }
 
@@ -144,41 +147,50 @@ export function assertNarrowsWitnessed(rows: ReadonlyMap<string, EmitRegistryRow
   }
 }
 
-/** Harvest an emit-rule registry from an already-assembled ambient, or from a bare
- *  capability tree. Never arms a resource, never invokes an impl — a builder invocation
- *  only ever captures references (resources spawn on first symbol TOUCH, `capability.ts`'s
- *  documented lazy-spawn contract), so both paths are dry.
+/** Synthetic owner name for a `RunContext`-mode row whose value carries no `ownerOf`
+ *  attribution — should not happen in practice (every `runCtx.vocabulary` entry is
+ *  capability-bound; a root-scope `define` never lands in `vocabulary` at all, per the
+ *  Stage B1 split), kept only as a diagnostic fallback rather than a thrown assertion. */
+const UNOWNED = "«base»";
+
+/** Harvest an emit-rule registry from a `RunContext` — the run-reader door's own query
+ *  surface (`ownerOf`, `@inhuman.tools/arrival/host-internals`): walk the run's OWN
+ *  resolved `vocabulary` (`RunContext.vocabulary`, a flat, already-linearized name→value
+ *  map — BASE_ROSTER included, folded in at vocabulary-build time, so `scheme/srfi-1` and
+ *  the rest of the self-hosted base are ordinary rows here with no special-casing). No
+ *  deps-graph walk, no dry/phantom activation branch — every value is the run's REAL
+ *  bound value, so `contractOf` reads its true Contract directly. */
+function harvestFromRunContext(runCtx: RunContext): EmitRegistry {
+  const rows = new Map<string, EmitRegistryRow>();
+  if (runCtx.vocabulary !== undefined) {
+    for (const [name, value] of runCtx.vocabulary) {
+      const entity = contractOf(value as SymbolDeclaration);
+      if (entity === undefined) continue;
+      const owner = ownerOf(value) as EnvCapability | undefined;
+      rows.set(name, toRow(owner?.name ?? UNOWNED, name, entity));
+    }
+  }
+  assertNarrowsWitnessed(rows);
+  return { lookup: (name) => rows.get(name), names: new Set(rows.keys()) };
+}
+
+/** Harvest an emit-rule registry from a bare, ad hoc `EnvCapability[]` list — never
+ *  assembled into a run. Never arms a resource, never invokes an impl — a builder
+ *  invocation only ever captures references (resources spawn on first symbol TOUCH,
+ *  `capability.ts`'s documented lazy-spawn contract), so the walk is dry.
  *
- *  Builder-form `symbols` are invoked once per capability INSTANCE, against:
- *
- *  - the ambient's REAL activation when one is at hand (`ambient.activations`, the same
- *    per-env record `lower()` already invoked this builder with once at assembly) — this
- *    is what makes the designed activation-dependent idioms harvestable exactly when
- *    they are resolvable: `arrival/data`'s top-level `configuration.data ?? inert`
- *    value-capture, `arrival/loader`'s withholding-by-absence key set. The record is the
- *    TRUE one, not a phantom-branch guess.
- *
- *  - the phantom `dryActivation` for a bare capability list (no assembly to consult) —
- *    the loud "static by rule" door (constitution §4.5): a builder that WANTS activation
- *    state while none exists throws the teaching error instead of silently harvesting a
- *    wrong-branch record. (Component-spec deviation, deliberate: registry-emit.md
- *    phantoms UNCONDITIONALLY, but the real assembled population — data's value capture,
- *    loader's conditional `require` — proves that model unharvestable; the constitution's
- *    own law is "EMIT RULES are static", not "key sets are static", and rule STALENESS
- *    is what the phantom path still polices.) */
-export function emitRegistryOf(source: readonly EnvCapability[] | AssembledAmbient): EmitRegistry {
-  // `in`-narrowing, not `Array.isArray`: isArray's `any[]` guard can't subtract a
-  // READONLY array from the union's else branch; the ambient's own roster field can.
-  const isAmbient = "capabilities" in source;
-  const capabilities: readonly EnvCapability[] = isAmbient ? source.capabilities : source;
-  const activations = isAmbient ? source.activations : undefined;
+ *  Builder-form `symbols` are invoked once per capability INSTANCE, against the phantom
+ *  `dryActivation` — the loud "static by rule" door (constitution §4.5): a builder that
+ *  WANTS activation state throws the teaching error instead of silently harvesting a
+ *  wrong-branch record. */
+function harvestFromCapabilities(capabilities: readonly EnvCapability[]): EmitRegistry {
   const rows = new Map<string, EmitRegistryRow>();
   const seen = new Set<EnvCapability>();
   const visit = (cap: EnvCapability): void => {
     if (seen.has(cap)) return;
     seen.add(cap);
     for (const dep of cap.spec.deps ?? []) visit(dep); // deps-first — mirrors C3 apply precedence
-    const rec = harvestSymbolsRec(cap, activations?.get(cap.name));
+    const rec = harvestSymbolsRec(cap);
     for (const [name, rawDef] of Object.entries(rec)) {
       // Stage A2 (arrival core, 2026-07-22): the symbol.* factories mint the runtime
       // A-value directly now — `contractOf` (the shared read-side seam every describe/
@@ -193,4 +205,28 @@ export function emitRegistryOf(source: readonly EnvCapability[] | AssembledAmbie
   for (const cap of capabilities) visit(cap);
   assertNarrowsWitnessed(rows);
   return { lookup: (name) => rows.get(name), names: new Set(rows.keys()) };
+}
+
+/** Harvest an emit-rule registry — dispatches on input shape (see this file's header for
+ *  the two modes' full contract).
+ *
+ *  RETIRED: this used to also accept an already-assembled `AssembledAmbient` and harvest
+ *  builder-form `symbols` against its REAL per-capability `Activation` (config value
+ *  capture, resource Ref state) instead of the phantom — the shape the rework-zone
+ *  guidelines retired along with `AssembledAmbient` itself. The `RunContext` mode above
+ *  is its replacement, and reads TRUER than the retired mode ever did: it harvests the
+ *  run's actual bound values (post-linearization), not a re-invoked builder guessing at
+ *  activation state. */
+/** A named type-predicate guard, not an inline `Array.isArray`/`"vocabulary" in source`
+ *  check: TS's control-flow narrowing over `readonly EnvCapability[] | RunContext` only
+ *  narrows the branch the check's OWN shape matches (an inline `Array.isArray` narrows
+ *  the true arm but leaves the union in the false arm; an inline `"x" in source` narrows
+ *  the true arm but not the false arm when the field is optional) — a declared predicate
+ *  forces both arms. */
+function isCapabilityList(source: readonly EnvCapability[] | RunContext): source is readonly EnvCapability[] {
+  return Array.isArray(source);
+}
+
+export function emitRegistryOf(source: readonly EnvCapability[] | RunContext): EmitRegistry {
+  return isCapabilityList(source) ? harvestFromCapabilities(source) : harvestFromRunContext(source);
 }

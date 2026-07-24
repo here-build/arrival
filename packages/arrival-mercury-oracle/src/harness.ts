@@ -103,13 +103,18 @@ let scopeCounter = 0;
  *  interpreter's membrane JS face (`schemeToJs`, the same exit `runProgram` takes). */
 export async function evalInterpreter(session: OracleSession, source: string): Promise<Outcome> {
   try {
-    // Fresh scope over shared ambient — plane prelude (range/take/field/…) is already
-    // on the ambient from assembly; do not re-exec BUILTIN_PREAMBLE.
+    // Fresh scope over the shared session — plane prelude (range/take/field/…) is already
+    // on it from assembly; do not re-exec BUILTIN_PREAMBLE.
     const scope = LexicalScope.fresh(`oracle-${scopeCounter++}`);
     const forms = await parseGenerator(source);
     let last: unknown;
     for (const form of forms) {
-      const state = await execState(form, { ambient: session.ambient, scope });
+      const state = await execState(form, {
+        capabilities: session.capabilities,
+        config: session.config,
+        scope,
+        runCtx: session.runCtx,
+      });
       last = state.values.at(-1);
       if (isThenable(last)) last = await last; // the evaluator can hand back an unforced Promise
     }

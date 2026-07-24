@@ -37,7 +37,7 @@ let session: OracleSession;
 let registry: EmitRegistry;
 beforeAll(async () => {
   session = await openOracleSession();
-  registry = withRules(emitRegistryOf(session.ambient), phase1Rules);
+  registry = withRules(emitRegistryOf(session.runCtx), phase1Rules);
 }, 120_000);
 afterAll(async () => {
   await session.dispose();

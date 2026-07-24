@@ -8,22 +8,27 @@
  * influence… two questions, two planes") — this file never imports `../wire/`,
  * and nothing here assumes the static wire map exists yet.
  *
- * Built on the oracle session shape (`../oracle/harness.ts::openOracleSession`):
- * ONE reusable `buildArrivalSession` capability-DAG assembly (the expensive
- * part, §2.4's reuse contract), held across every baseline/probe re-run — a
- * FRESH `LexicalScope` per evaluated program, so one program's defines never
- * leak into the next, exactly as the oracle's `evalInterpreter` does.
+ * Built on the run-engine's session shape (`@inhuman.tools/arrival-run`'s
+ * `ArrivalSession` — the `(runCtx, scope, capabilities, config)` tuple
+ * `execState` mints and reuses): ONE reusable capability-DAG assembly (the
+ * expensive part, §2.4's reuse contract), held across every baseline/probe
+ * re-run — a FRESH `LexicalScope` per evaluated program, so one program's
+ * defines never leak into the next.
  *
  * THE SUBSTITUTION SEAM (this file's whole reason to exist — §2.2's "the
- * probe", §2.3): the oracle's `infer` stub always THROWS ("not supported
- * outside the async-family cell") — a probe session's `infer` instead
- * ANSWERS, from a hand-authored RECORDED TABLE (`ProbeTable`): a call →
- * recorded-result map standing in for the real effect-log
+ * probe", §2.3): the retired `arrival/infer` capability (and its `InferFn`
+ * host hook) is gone — the LLM/MCP layer's `chat/completion` replaced it, but
+ * that verb takes a model VALUE and returns a fixed `{:text …}` product, a
+ * much heavier shape than this harness needs. This module instead roots its
+ * OWN tiny, session-private capability (`probe/infer`, below) that binds the
+ * bare scheme name `infer` to a substitution-aware impl: a call → recorded-
+ * result table standing in for the real effect-log
  * (`@inhuman.tools/arrival-effects`'s `EffectLog`, keyed the same way —
- * `inferEffectKey`'s `[model, prompt, schema, cacheKey]` tuple). Phase B wires
- * the actual log in; because the table here is shaped identically (a call
- * resolves to a recorded value), that wiring swaps the TABLE SOURCE, not this
- * seam.
+ * `CallSignature`'s `[model, prompt, schema, cacheKey]` tuple, same shape the
+ * retired capability's own key used). Rooting it as a HOST capability
+ * (`buildArrivalSession`'s `opts.capabilities`, highest precedence) makes it
+ * exactly as first-class as any production verb — the corpus below spells
+ * `(infer "m" "p")` exactly as it always has.
  *
  * Exactly ONE call, addressed by a `CallRef`, may be served a WITNESS instead
  * of its recorded result (`probe`); every other call is served from the table
@@ -34,17 +39,16 @@
  * interpreter change, no carried metadata (P2) — the substitution happens
  * AT THE MEMBRANE, where effects already are.
  */
-import { execState, LexicalScope, parseGenerator, schemeToJsUntyped } from "@inhuman.tools/arrival";
-import type { AssembledAmbient } from "@inhuman.tools/arrival/env";
-import { buildArrivalSession, type InferFn } from "@inhuman.tools/arrival-run";
+import { EnvCapability, execState, jsToScheme, LexicalScope, parse, schemeToJsUntyped } from "@inhuman.tools/arrival";
+import { buildArrivalSession, type ArrivalSession } from "@inhuman.tools/arrival-run";
 
 /**
  * One crossing's content identity — the `(infer …)` call-site tuple the real
- * effect-log keys by. `tools`/`params` (the agentic-loop's extra identity
- * dimensions, see `inferIdentityKey` in `@inhuman.tools/arrival-run`) are out
- * of scope for Phase A: no probe test here drives a tool-enabled call, and
- * folding them in later is additive — the same way `inferIdentityKey` folds
- * them into a plain cacheKey without disturbing the untooled case.
+ * effect-log keys by. `schema`/`cacheKey` are carried for shape-compatibility
+ * with the retired capability's own key (and any future table row wanting
+ * them); this harness's own corpus never varies them — every `(infer …)`
+ * call this session's `probe/infer` capability binds is a bare 2-arg
+ * `(model, prompt)` call, so both always resolve to `null` here.
  */
 export interface CallSignature {
   readonly model: string;
@@ -54,8 +58,8 @@ export interface CallSignature {
 }
 
 /** One hand-authored table row: the call it answers, and the RAW value
- *  `infer` resolves to for it (pre-list-wrapping — `arrivalInferCapability`'s
- *  verb does that step; this is the value an `InferFn` itself returns). */
+ *  `infer` resolves to for it (pre-list-wrapping — `probe/infer`'s own impl,
+ *  below, does that step; this is the value a table lookup itself answers). */
 export interface ProbeTableEntry {
   readonly call: CallSignature;
   readonly result: unknown;
@@ -113,7 +117,7 @@ const isThenable = (v: unknown): v is PromiseLike<unknown> =>
   v != null && typeof (v as { then?: unknown }).then === "function";
 
 /**
- * Build the `InferFn` that IS the substitution seam (see file header). A
+ * Build the resolver that IS the substitution seam (see file header). A
  * fresh instance is built per run (`runWithTable`, below) so `consumed` starts
  * empty every time — each run (baseline or probe) derives its OWN row-index
  * sequence from its OWN execution order, independent of any other run over
@@ -123,10 +127,10 @@ function tableBackedInfer(
   table: ProbeTable,
   calls: RecordedCall[],
   target: { readonly index: number; readonly witness: unknown } | undefined,
-): InferFn {
+): (model: string, prompt: string) => Promise<unknown> {
   const consumed = new Set<number>();
-  return async (_ctx, model, prompt, schema, cacheKey) => {
-    const signature: CallSignature = { model, prompt, schema, cacheKey };
+  return async (model, prompt) => {
+    const signature: CallSignature = { model, prompt, schema: null, cacheKey: null };
     const rowIndex = table.findIndex((row, i) => !consumed.has(i) && sameSignature(row.call, signature));
     if (rowIndex === -1) throw new ProbeTableMissError(signature);
     consumed.add(rowIndex);
@@ -136,32 +140,23 @@ function tableBackedInfer(
   };
 }
 
-/** One reusable capability-DAG assembly (mirrors `OracleSession` — the
- *  expensive part, held across every baseline/probe re-run of small
- *  programs). `dispose()` tears down the shared ambient. */
-export interface ProbeSession extends AsyncDisposable {
-  readonly ambient: AssembledAmbient;
-  dispose(): Promise<void>;
-}
-
 /**
- * Per-session mutable indirection: `buildArrivalSession` bakes its `infer`
- * callable ONCE, at assembly, but `recordRun`/`probe` need DIFFERENT
- * table/target behavior on every call over that ONE assembly. The callable
- * handed to `buildArrivalSession` (`routedInfer`, below) is a STABLE
- * trampoline that reads `router.current` fresh on every invocation;
+ * Per-session mutable indirection: the session's `probe/infer` capability
+ * (below) is rooted ONCE, at assembly, but `recordRun`/`probe` need DIFFERENT
+ * table/target behavior on every call over that ONE assembly. The impl bound
+ * into the capability reads `router.current` FRESH on every invocation;
  * `recordRun`/`probe` swap what it points at for the duration of their own
  * run. This is what makes the expensive assembly reusable at all — nothing
- * about `assembleAmbient`'s own config-capture semantics needs to change for
- * a per-call-varying resolver, because the function reference it captures
- * never changes, only what that function reads.
+ * about the capability's own resolution needs to change for a per-call-
+ * varying resolver, because the function reference it captures never
+ * changes, only what that function reads.
  *
  * NOT safe for concurrent `recordRun`/`probe` calls against the SAME session:
  * the router is shared mutable state, last writer wins. Sequential use only —
  * open a second session for concurrent work.
  */
 interface InferRouter {
-  current?: InferFn;
+  current?: (model: string, prompt: string) => Promise<unknown>;
   /** Single-flight guard. The router is shared mutable state; a concurrent
    *  `recordRun`/`probe` would clobber `current` mid-run and silently corrupt a
    *  verdict. This is a SECURITY harness, so silent corruption is the worst
@@ -170,24 +165,54 @@ interface InferRouter {
   busy?: boolean;
 }
 
-const routerOf = new WeakMap<ProbeSession, InferRouter>();
-
-function routedInfer(router: InferRouter): InferFn {
-  return async (ctx, model, prompt, schema, cacheKey, tools, params) => {
-    if (router.current === undefined) {
-      throw new Error("probe session: infer called with no table bound — use recordRun/probe, not the session directly");
-    }
-    return router.current(ctx, model, prompt, schema, cacheKey, tools, params);
-  };
+/**
+ * The session-private capability rooting `infer` (see file header — THE
+ * SUBSTITUTION SEAM). A fresh instance per session (closed over that
+ * session's OWN `router`), passed as a host capability at HIGHEST precedence
+ * (`buildArrivalSession`'s `opts.capabilities`), so it binds `infer` exactly
+ * like a production verb would — the corpus never sees a difference.
+ *
+ * `infer` egresses as a 1-element list (mirrors the retired `arrival/infer`
+ * capability's own `inferList` wrapping) — every corpus program in this
+ * package's test suite unwraps it with `car`, exactly as before.
+ */
+function buildProbeInferCapability(router: InferRouter): EnvCapability {
+  return EnvCapability.define("probe/infer", {
+    symbols: (symbol, z) => ({
+      infer: symbol.rosetta`infer: probe harness substitution seam — answers from the session's bound table/witness (see this file's header)`(
+        { input: [z.string, z.string], output: [z.dynamic], type: "(model: string, prompt: string): unknown" },
+        async function (model: string, prompt: string) {
+          if (router.current === undefined) {
+            throw new Error(
+              "probe session: infer called with no table bound — use recordRun/probe, not the session directly",
+            );
+          }
+          const result = await router.current(model, prompt);
+          return jsToScheme(this.runCtx, [result]);
+        },
+      ),
+    }),
+  });
 }
+
+/** One reusable capability-DAG assembly (mirrors `OracleSession` — the
+ *  expensive part, held across every baseline/probe re-run of small
+ *  programs). `dispose()` tears down the shared run. Literally an
+ *  `ArrivalSession` — no separate wrapping shape needed now that the session
+ *  IS the `(runCtx, scope, capabilities, config)` tuple. */
+export type ProbeSession = ArrivalSession;
+
+const routerOf = new WeakMap<ProbeSession, InferRouter>();
 
 /** Open a fresh probe session — the one expensive capability-DAG assembly,
  *  reusable across many `recordRun`/`probe` calls (§2.4's reuse contract). */
 export async function openProbeSession(): Promise<ProbeSession> {
   const router: InferRouter = {};
-  const inner = await buildArrivalSession({ name: "arrival-mercury-probe", infer: routedInfer(router), params: {} });
-  const dispose = (): Promise<void> => inner.dispose();
-  const session: ProbeSession = { ambient: inner.ambient, dispose, [Symbol.asyncDispose]: dispose };
+  const session = await buildArrivalSession({
+    name: "arrival-mercury-probe",
+    capabilities: [buildProbeInferCapability(router)],
+    params: {},
+  });
   routerOf.set(session, router);
   return session;
 }
@@ -232,13 +257,19 @@ async function runWithTable(
   router.busy = true;
   router.current = tableBackedInfer(table, calls, target);
   try {
-    // Fresh scope over shared ambient — plane prelude already applied at assembly.
+    // Fresh scope over the shared session — plane prelude already applied at assembly.
     const scope = LexicalScope.fresh(`probe-${scopeCounter++}`);
     const budgetMs = DEFAULT_PROBE_BUDGET_MS;
-    const forms = await parseGenerator(source);
+    const forms = await parse(source);
     let last: unknown;
     for (const form of forms) {
-      const state = await execState(form, { ambient: session.ambient, scope, budgetMs });
+      const state = await execState(form, {
+        capabilities: session.capabilities,
+        config: session.config,
+        scope,
+        runCtx: session.runCtx,
+        budgetMs,
+      });
       last = state.values.at(-1);
       if (isThenable(last)) last = await last; // the evaluator can hand back an unforced Promise
     }

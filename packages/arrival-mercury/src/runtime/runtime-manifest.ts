@@ -47,7 +47,8 @@ const HBS_RUNTIME = "@inhuman.tools/arrival-env-capability-handlebars/runtime";
 
 /**
  * Corpus-driven + cold-stdlib map. Grow by adding a row (and a stage0 export
- * when `source === "stage0"`). Infer/mcp stay stage0 stubs (R7).
+ * when `source === "stage0"`). LLM/MCP verbs (`chat/completion` etc.) stay stage0
+ * stubs (R7) — the framework axis (vercel/langchain) is deferred past Phase 1.
  */
 export const RUNTIME_MANIFEST: Readonly<Record<string, RuntimeEntry>> = {
   // ── scheme texture / Law T / n-ary (stage0) ─────────────────────────────
@@ -77,9 +78,25 @@ export const RUNTIME_MANIFEST: Readonly<Record<string, RuntimeEntry>> = {
   some: e("some", "stage0"),
   "+": e("plus", "stage0"),
   map: e("map", "stage0"), // n-ary zip in value position; binary call often residual
+  // `infer`/`infer/chat/*` named the retired `arrival/infer` capability — no vocabulary
+  // binds those names anymore (the LLM/MCP layer's `chat/completion` replaced the whole
+  // family), so these three rows can never be consulted by a real compile: nothing can
+  // call a symbol these names bind. Left in place (inert, not dead-code risk) because
+  // `infer/scalar`/`infer/chat/scalar` are ALSO the infer-scalar-fold peephole's own
+  // synthetic dispatch heads (`../peepholes/infer.ts`, `rules/phase1.ts`'s `inferRule`),
+  // exercised directly by synthetic-registry unit tests (peepholes.test.ts,
+  // rule-lint.test.ts's pinned "four rows carry an emit" count) independent of any real
+  // capability — removing the rows here would not touch that peephole, only make its
+  // manifest-consuming full-pipeline path throw a fresh "unresolved RuntimeRef" door.
   infer: e("infer", "stage0"),
   "infer/scalar": e("inferScalar", "stage0"),
   "infer/chat/scalar": e("inferChatScalar", "stage0"),
+  // The REAL replacement (cross-package drift fix, rework-zone guidelines §4): the
+  // LLM/MCP layer's `chat/completion` (`@inhuman.tools/llm-plane-arrival-env`) declares
+  // no Contract-level `emit`, so it falls to this same rung-3 shim. `dotprompt/run`
+  // needs no row here — mercury's own `product/prompt-module.ts` already has dedicated
+  // codegen for `.prompt` units and never reaches the generic RuntimeRef fallback.
+  "chat/completion": e("chatCompletion", "stage0"),
 
   // max-by: ramda maxBy is binary key-comparator, not list-argmax
   "max-by": e("maxBy", "stage0"),
