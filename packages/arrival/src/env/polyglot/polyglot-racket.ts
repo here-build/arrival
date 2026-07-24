@@ -205,6 +205,4 @@ export default EnvCapability.define("scheme/polyglot-racket", {
         { input: [z.schemeValue, z.schemeValue], inputRest: z.schemeValue, output: [z.schemeValue] },
         `(lambda (d key . default)
          (apply dict-ref (cons d (cons key default))))`,
-      ),
-  }),
-});
+      ) }) });

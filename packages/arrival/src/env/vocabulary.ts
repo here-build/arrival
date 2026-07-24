@@ -1,53 +1,32 @@
-// vocabulary.ts — Stage B1 (docs/plans/stage-b-runcontext-absorbs-assembly.md): the VOCABULARY
-// artifact. `buildVocabulary` walks a capability-set + shared config bag ONCE, deps-first (C3),
-// minting every symbol via the SAME per-kind bind dispatch `common/capability.ts`'s now-retired
-// `lower().apply()` used to run (Stage C Cut 4 moved that bind loop here, as `processCapability`
-// below — byte-equivalent dispatch, reusing capability.ts's exported helpers: `contractOf`,
-// `missingRequiresConfig`/`requiresConfigNeeds`/`requiresConfigReason`,
-// `collectRequiresConfigDegraded`/`mergeDegraded`, the alias/declarative/native/rosetta/door/
-// keyword/value per-kind dispatch, `associateCapability`, `bindCapabilityDefines`'s Pass-2 bake)
-// — but writes into a plain, freezable `Map` artifact instead of binding onto a live env frame.
+// vocabulary.ts — the VOCABULARY artifact: one frozen name→value map per
+// (capability-set, config) tuple. `buildVocabulary` walks the set once, deps-first
+// (C3), minting every symbol via the same per-kind bind dispatch as capability
+// assembly (`contractOf`, requiresConfig doors, alias/declarative/native/rosetta/
+// door/keyword/value, `associateCapability`, `bindCapabilityDefines` Pass-2 bake)
+// — writing into freezable Maps, not a live env frame.
 //
-// WHY A LIVE SCRATCH FRAME STILL EXISTS (`bakeEnv`, below): `bindCapabilityDefines` (Pass 2)
-// evaluates REAL scheme source (`evalScheme(scope, "(define tmp <body>)")`) and reads the result
-// back via `scope.get(tempName)` — an actual interpreter round-trip, not a pure computation, and
-// the classifier it runs (`env.get(op, {throwError:false})`) reads whatever's ALREADY bound.
+// LIVE SCRATCH FRAME (`bakeEnv`): `bindCapabilityDefines` (Pass 2) evaluates real
+// scheme (`evalScheme(scope, "(define tmp <body>)")`) and reads back via
+// `scope.get` — an interpreter round-trip. Classifier reads already-bound names.
 //
-// STAGE C CUT 2 — SELF-CONTAINED, NOT `user_env`-parented: `bakeEnv` is a NULL-ROOTED scratch
-// frame (`mintResolvingFrame`, no parent) — it resolves against THIS BUILD's own static core, not
-// the legacy realm base. This is safe because the caller now folds `BASE_ROSTER` (env/base-
-// roster.ts) into `capabilities` BEFORE calling `buildVocabulary` (see `generator-exec.ts`'s
-// `execStateViaVocabulary`): the base stdlib is an ordinary member of THIS tuple's own C3 closure,
-// baked deps-first in the SAME loop below, so by the time a dependent capability's `symbol.define`
-// bakes, every name it may reference — its own declared `deps`, OR a base-roster name available
-// "for free" (define-bake.ts's `KEYWORD_SYNTAX_BASELINE` allowlist) — is ALREADY a direct
-// binding on `bakeEnv` (mirrored in by every earlier capability's own Pass 1 + Pass 2, below).
-// Nothing about a live parent-chain fallback is needed or wanted: the cornerstone (ambient ≠
-// lexical/global scope) forbids parenting this bake artifact on `user_env` at all — `bakeEnv`
-// mirrors every bind (Pass 1 AND Pass 2) into it AS WELL AS into the Vocabulary's own maps, so
-// scheme evaluation sees exactly what THIS tuple's own C3 walk has bound by this point — then
-// discards the scratch frame once the build finishes (nothing about it survives; the Vocabulary
-// maps are the only artifact).
+// NULL-ROOTED, SELF-CONTAINED (docs/environments.md §HERMETIC): `bakeEnv` is a
+// null-parent scratch (`mintResolvingFrame`). Caller folds `BASE_ROSTER` into
+// `capabilities` before calling (`generator-exec.ts` `execStateViaVocabulary`), so
+// the base stdlib is an ordinary C3 member of THIS tuple — baked deps-first in the
+// same loop. By the time a dependent's `symbol.define` bakes, its deps (and free
+// base names) are already direct bindings on `bakeEnv`. No parent-chain fallback
+// onto a realm singleton: ambient ≠ lexical/global scope. Scratch discarded after
+// build; only the Vocabulary maps survive.
 //
-// MEMO: keyed on the FULL transitive closure (deps included, not just the caller's root list) —
-// two calls whose closures land on the same capability OBJECTS (regardless of root-list order or
-// whether a dep was listed explicitly) hit the SAME cached build. Nested `WeakMap`s, one level per
-// capability in the closure's OWN-NAME-sorted order (a canonical, order-insensitive path — sorting
-// is safe because the closure walk itself already rejects two DIFFERENT objects sharing a name),
-// terminated by a `WeakMap` keyed on the shared config object's IDENTITY (a documented default —
-// see the design draft's "resolved questions" — a fresh-but-deep-equal config bag simply builds an
-// unshared second Vocabulary, never wrongly shares one). The memo stores the in-flight PROMISE, not
-// the settled value, so concurrent callers of the same tuple await the SAME build.
+// MEMO: keyed on the FULL transitive closure (deps included), not just the caller's
+// root list — same capability OBJECTS hit the same cache regardless of root order.
+// Nested WeakMaps, one level per capability in own-name-sorted order (total order;
+// closure walk rejects two different objects sharing a name), terminated by config
+// object IDENTITY. Fresh-but-deep-equal config builds an unshared second Vocabulary.
+// Memo stores the in-flight PROMISE so concurrent callers await one build.
 //
-// LEGACY `{ fn }` CAPABILITIES (McpEnvCapability's old authoring shape) are OUT OF SCOPE for this
-// artifact — but no runtime refusal check remains here (V ruling, docs/plans/
-// stage-c-corpse-deletion.md §"bans live at the TYPE level"): `{fn}` was retired from the
-// `SymbolDeclaration` union itself (Stage C Cut 4), so `SymbolDeclaration`'s own type already
-// rejects the shape at the author's keyboard — a runtime `isSymbolSpec`/
-// `VocabularyLegacyCapabilityError` door was compat theater for a shape that can no longer be
-// constructed under the type. There is no other home for a `{ fn }` capability anymore —
-// `lower()`/`assembleEnv` are both retired — so an untyped author now gets a TS error, which
-// IS the contract.
+// Bare `{ fn }` capabilities are rejected at the type level (`SymbolDeclaration`
+// union) — no runtime refusal door.
 
 import { z } from "zod";
 import invariant from "tiny-invariant";
@@ -61,83 +40,64 @@ import {
   requiresConfigNeeds,
   requiresConfigReason,
   collectRequiresConfigDegraded,
-  mergeDegraded,
-} from "../common/capability-internals.js";
+  mergeDegraded } from "../common/capability-internals.js";
 import { buildDegradationInfo, collectDegraded, type DegradedCapability } from "../common/degradation.js";
 import { bindCapabilityDefines } from "../common/symbols/define-bake.js";
-import type { AEntity } from "../common/symbol.js";
+import type { AEntity } from "../symbol/index.js";
 import type {
   DefineSymbolDef,
   DefineSyntaxSymbolDef,
-  NativeSymbolDef,
-  RosettaSymbolDef,
-  SequenceSymbolDef,
-  TaglessGuardSymbolDef,
-  TaglessSymbolDef,
-} from "../common/symbols/_bake.js";
+  RosettaSymbolDef } from "../common/symbols/_bake.js";
 import type { AliasSymbolDef } from "../common/symbols/alias.js";
 import type { PreludeBindTarget } from "../common/kernel.js";
 import { linearizeDag } from "../common/dag-linearize.js";
 import type { EvalSchemeInto } from "../common/scheme-env.js";
 import { associateCapability } from "../run/CallCtx.js";
 import { AKernelKeyword } from "../values/AKernelKeyword.js";
-import { ANativeProcedure, ARosettaProcedure, DoorProcedure } from "../values/primitives/ACallable.js";
+import { DoorProcedure } from "../values/primitives/ACallable.js";
+import { ANativeProcedure } from "../values/primitives/ANativeProcedure.js";
+import { ARosettaProcedure } from "../values/primitives/ARosettaProcedure.js";
 import {
   AliasTargetError,
   AssembleCycleError,
   AssembleLinearizationError,
   SymbolKeyMismatchError,
-  VocabularyCapabilityConflictError,
-} from "../errors.js";
+  VocabularyCapabilityConflictError } from "../errors.js";
 import { bindValue, mintResolvingFrame, type AmbientValue, type ResolvingAmbient } from "./AmbientRuntime.js";
 
-/** One symbol vocabulary, built ONCE per (capability-set, config) tuple — see the module
- *  header. Every content is either an immutable minted value or a baked closure over the
- *  frozen `map`/`preludeOnly` — the FV-law sharing proof (define-bake.ts) — so the WHOLE
- *  artifact is safe to share, by reference, across every `RunContext` built from this tuple. */
+/** One symbol vocabulary, built ONCE per (capability-set, config) tuple — see module
+ *  header. Contents are immutable minted values or baked closures over the frozen
+ *  maps (FV-law sharing, define-bake.ts) — safe to share by reference across every
+ *  `RunContext` of this tuple. */
 export interface Vocabulary {
-  /** The runtime vocabulary — every non-preludeOnly bound name, C3 last-write-wins. */
+  /** Runtime vocabulary — every non-preludeOnly name, C3 last-write-wins. */
   readonly map: ReadonlyMap<string, AmbientValue>;
-  /** Assembly-time-only names (docs/environments.md §PRELUDE) — resolvable from a capability's
-   *  OWN prelude text, never from the runtime map. Populated here (B1); read by `env/assemble-run
-   *  .ts`'s per-run prelude pass (B2), which overlays this map onto the prelude scope ALONGSIDE
-   *  the main map — never onto the user-facing resolution chain. */
+  /** Assembly-time-only names (docs/environments.md §PRELUDE) — resolvable from a
+   *  capability's OWN prelude text, never the runtime map. Overlaid onto the
+   *  per-run prelude scope by `assemble-run.ts`, never the user-facing chain. */
   readonly preludeOnly: ReadonlyMap<string, AmbientValue>;
-  /** Every capability that lowered degraded, C3 order (root-first) — the same fold order the
-   *  retired `AssembledEnv.degraded` (kernel.ts, pre Stage-C-Cut-4) used to build. */
+  /** Capabilities that lowered degraded, C3 root-first order. */
   readonly degraded: readonly DegradedCapability[];
-  /** Every `.spec.prelude` in this tuple's closure, DEPS-FIRST (matches `collectPrelude`'s own
-   *  order), deduped by capability IDENTITY (a diamond DAG contributes its prelude once) —
-   *  COLLECTED here (B1); EXECUTED per-run by `env/assemble-run.ts`'s `assembleRun` (B2), whose
-   *  single pass over this already-deduped array IS the single-execution-per-run law — see that
-   *  module's own doc. */
+  /** Every `.spec.prelude` in the closure, DEPS-FIRST, identity-deduped (diamond
+   *  DAG once). Collected here; executed once per run by `assembleRun` — that single
+   *  pass IS the single-execution law. */
   readonly preludes: readonly { readonly capability: EnvCapability; readonly text: string }[];
-  /** This tuple's validated per-capability configuration — capability OBJECT → its
-   *  `configuration` bag, feeding `RunContext.capabilityConfigurations` directly
-   *  (`env/assemble-run.ts`'s `assembleRun` — the retired ambient-path table this replaced
-   *  used to build the same shape from an `AssembledEnv`, pre Stage-C Cut 3b). */
+  /** Validated per-capability configuration → feeds `RunContext.capabilityConfigurations`. */
   readonly configsByCapability: ReadonlyMap<object, unknown>;
 }
 
-// ── The memo — nested WeakMap by (closure, sorted by name) → config identity ────────────────
-//
-// See the module header for the full rationale. `MemoNode` is a plain internal tree; nothing
-// here is exported — `buildVocabulary` is the only door.
+// ── memo: nested WeakMap by (closure sorted by name) → config identity ──────────
 interface MemoNode {
   readonly children: WeakMap<EnvCapability, MemoNode>;
   readonly byConfig: WeakMap<object, Promise<Vocabulary>>;
 }
 const freshNode = (): MemoNode => ({ children: new WeakMap(), byConfig: new WeakMap() });
 const rootMemo: MemoNode = freshNode();
-/** WeakMap keys must be objects — this stands in for `config === undefined` in the terminal
- *  `byConfig` map (a fixed, never-collected sentinel; a real config bag can never equal it by
- *  reference). */
+/** Stands in for `config === undefined` in the terminal WeakMap (object keys only). */
 const NO_CONFIG_SENTINEL: object = {};
 
-/** Locale-independent, code-unit-wise comparator — same rationale as
- *  `CompiledResolutionChain.ts`'s `byCodeUnit`: the memo path must be deterministic across
- *  realms/locales, and capability names are never equal here (the closure walk itself rejects
- *  two distinct objects sharing a name — see `onRevisit` below), so this is a total order. */
+/** Locale-independent code-unit comparator — same rationale as
+ *  `CompiledResolutionChain.ts` `byCodeUnit`. Names never equal here (`onRevisit`). */
 function byName(a: EnvCapability, b: EnvCapability): number {
   if (a.name < b.name) return -1;
   if (a.name > b.name) return 1;
@@ -167,8 +127,7 @@ function memoized(
   return promise;
 }
 
-// ── The map-backed `PreludeBindTarget` — mirrors EVERY bind into `bakeEnv` too (see the module
-// header's "why a live scratch frame still exists"). ──────────────────────────────────────────
+// Map-backed PreludeBindTarget — mirrors EVERY bind into bakeEnv too (header).
 function makeBindTarget(
   mainMap: Map<string, AmbientValue>,
   preludeOnlyMap: Map<string, AmbientValue>,
@@ -177,31 +136,23 @@ function makeBindTarget(
   return (def) => ({
     set: (name: string, value: unknown) => {
       bindValue(bakeEnv, name, value as AmbientValue);
-      // Read back the STORED (possibly `fromJS`-wrapped) value — the same raw `__env__` read
-      // `compileResolutionChain` itself does, not the read-time `.get()` (which quotes a stored
-      // APair for host consumption; the vocabulary map must hold what a chain lookup would).
+      // STORED (possibly fromJS-wrapped) value — raw `__env__` read, not `.get()`
+      // (which quotes APair for host; vocabulary must hold chain-lookup shape).
       const stored = bakeEnv.__env__[name];
       const target = "preludeOnly" in def && def.preludeOnly ? preludeOnlyMap : mainMap;
       target.set(name, stored);
       return stored;
-    },
-  });
+    } });
 }
 
-/** Bind directly into both the main map and `bakeEnv` — the two kinds capability.ts's own apply
- *  loop binds WITHOUT routing through `bindTarget` (kernel keywords, `symbol.value`'s tail
- *  case) — see that file's per-kind dispatch for why. */
+/** Bind into main map + bakeEnv — kinds that skip `bindTarget` (kernel keywords, value tail). */
 function bindDirect(mainMap: Map<string, AmbientValue>, bakeEnv: ResolvingAmbient, name: string, value: unknown): void {
   bindValue(bakeEnv, name, value as AmbientValue);
   mainMap.set(name, bakeEnv.__env__[name]);
 }
 
-/** Process ONE capability's `symbols` record into the shared maps — Pass 1 (every non-define
- *  kind) then Pass 2 (`bindCapabilityDefines`'s define/defineSyntax bake), byte-equivalent
- *  dispatch to `common/capability.ts`'s retired `lower().apply()` per-kind loop (Stage C Cut 4
- *  moved the bind loop here), reusing its exported
- *  helpers (see the module header). Returns this capability's own merged degraded entry, if
- *  any. */
+/** Process one capability's `symbols`: Pass 1 (non-define kinds) then Pass 2
+ *  (define/defineSyntax bake). Returns this capability's merged degraded entry, if any. */
 async function processCapability(
   cap: EnvCapability,
   config: object | undefined,
@@ -216,9 +167,7 @@ async function processCapability(
 
   const schema = spec.configuration ? z.object(spec.configuration as Record<string, z.ZodTypeAny>) : z.object({});
   const configuration = schema.parse(config ?? {}) as Record<string, unknown>;
-  // The requiresConfig auto-door below fires unconditionally (D2, common/degradation.ts) — no
-  // mode gate, no missing-keys tally to thread in (the retired "forbid"/"doors" MODE and its
-  // informational `missingKeys`/`active` fields died with the Tier 1 trails cleanup: zero readers).
+  // requiresConfig auto-door fires unconditionally (D2, common/degradation.ts).
   const degradation = buildDegradationInfo(capabilityName);
 
   const bind = makeBindTarget(mainMap, preludeOnlyMap, bakeEnv);
@@ -228,7 +177,7 @@ async function processCapability(
   for (const [name, rawDef] of Object.entries(symbolsRec)) {
     ownNames.add(name);
 
-    // symbol.alias dissolution — same substitute-then-fall-through as capability.ts's loop.
+    // symbol.alias — substitute then fall through.
     let def: SymbolDeclaration = rawDef;
     const viaAlias = isAliasDef(rawDef);
     if (viaAlias) {
@@ -247,13 +196,14 @@ async function processCapability(
         defineEntries.push([name, def]);
         continue;
       }
-      // "macro": bind the raw transformer as-is (routes through `bind` for preludeOnly).
+      // "macro": raw transformer (routes through bind for preludeOnly).
       bind(def).set(name, def.macro);
       continue;
     }
 
     if (def instanceof ANativeProcedure) {
-      const contract = def.contract as NativeSymbolDef | SequenceSymbolDef | TaglessSymbolDef | TaglessGuardSymbolDef;
+      const contract = def.contract;
+      if (contract === undefined) throw new Error(`${capabilityName}: ${name} bound ANativeProcedure has no contract`);
       if (!viaAlias && contract.name !== name) throw new SymbolKeyMismatchError(capabilityName, name, contract.name);
       if (contract.kind === "native") {
         const missingNative = missingRequiresConfig(contract.requiresConfig, configuration);
@@ -308,14 +258,13 @@ async function processCapability(
       continue;
     }
 
-    // Retirement door (bare-Fn arm) — see capability.ts's own identical guard; unreachable for
-    // a type-checked capability (legacy `{fn}` records already refused above).
+    // Bare-Fn arm rejected by SymbolDeclaration type; unreachable under checked capabilities.
     invariant(
       typeof def !== "function",
       `EnvCapability "${capabilityName}": symbol "${name}" is a bare function — the bare-Fn authoring arm is retired.`,
     );
 
-    // `symbol.value` — the one remaining minted shape, bound directly (never via `bind`).
+    // symbol.value — bound directly (never via bind).
     const valueEntity = contractOf(def);
     if (!viaAlias && valueEntity !== undefined && valueEntity.name !== name) {
       throw new SymbolKeyMismatchError(capabilityName, name, valueEntity.name);
@@ -332,8 +281,7 @@ async function processCapability(
       env: bakeEnv,
       scope: bakeEnv,
       bindTarget: bind,
-      evalScheme,
-    });
+      evalScheme });
   }
 
   const degraded = mergeDegraded(
@@ -344,11 +292,9 @@ async function processCapability(
   return { configuration, degraded };
 }
 
-/** Build (or reuse the memoized) {@link Vocabulary} for `capabilities` armed with `config`.
- *  See the module header for the full model: C3 walk deps-first (self overwrites dep), a
- *  scratch live frame mirrors every bind so `symbol.define`'s Pass-2 bake evaluates against
- *  the SAME visibility a live `lower().apply()` would see, and the result is frozen + memoized
- *  by (closure identity, config identity). */
+/** Build (or reuse memoized) {@link Vocabulary} for `capabilities` + `config`.
+ *  C3 deps-first (self overwrites dep); scratch frame mirrors binds so Pass-2 bake
+ *  sees the same visibility. Result frozen + memoized by (closure, config) identity. */
 export async function buildVocabulary(
   capabilities: readonly EnvCapability[],
   config: object | undefined,
@@ -363,8 +309,7 @@ export async function buildVocabulary(
     },
     onInconsistent: (owner) => {
       throw new AssembleLinearizationError(owner);
-    },
-  });
+    } });
 
   const sortedClosure = [...closureByName.values()].sort(byName);
   return memoized(sortedClosure, config, () => buildFresh(order, closureByName, config, evalScheme));
@@ -381,16 +326,10 @@ async function buildFresh(
   const configsByCapability = new Map<object, unknown>();
   const degradedByName = new Map<string, DegradedCapability | undefined>();
   const preludes: { capability: EnvCapability; text: string }[] = [];
-  // The scratch bake frame — see the module header. NULL-ROOTED (Stage C Cut 2): a capability's
-  // scheme bodies (`symbol.define`, preludes) resolve against THIS build's own static core (every
-  // earlier-processed capability in the SAME deps-first loop below, base roster included when the
-  // caller folds it in), never a parent-chain fallback onto `user_env`. Discarded once this build
-  // finishes; nothing about it survives.
+  // Null-rooted scratch — resolves against THIS build's static core only (header).
   const bakeEnv: ResolvingAmbient = mintResolvingFrame("vocabulary-bake");
 
-  // Deps-first (self overwrites dep) — mirrors `assembleEnv`'s own `order.toReversed()` apply
-  // walk; each capability is processed FULLY (Pass 1 + Pass 2) before the next, so a dependent's
-  // define bodies can reference a dep's already-baked defines.
+  // Deps-first (self overwrites dep); each capability fully (Pass 1 + 2) before next.
   for (const name of [...order].reverse()) {
     const cap = byNameMap.get(name)!;
     const { configuration, degraded } = await processCapability(cap, config, mainMap, preludeOnlyMap, bakeEnv, evalScheme);
@@ -399,9 +338,7 @@ async function buildFresh(
     if (cap.spec.prelude !== undefined) preludes.push({ capability: cap, text: cap.spec.prelude });
   }
 
-  // Degraded fold order = C3 `order` itself (root-first) — matches the retired
-  // `AssembledEnv.degraded`'s own fold in kernel.ts (pre Stage-C Cut 3b), NOT the
-  // deps-first apply walk above.
+  // Degraded fold = C3 `order` root-first — NOT the deps-first apply walk above.
   const degraded: DegradedCapability[] = [];
   for (const name of order) {
     const d = degradedByName.get(name);
@@ -413,6 +350,5 @@ async function buildFresh(
     preludeOnly: preludeOnlyMap,
     degraded,
     preludes,
-    configsByCapability,
-  });
+    configsByCapability });
 }

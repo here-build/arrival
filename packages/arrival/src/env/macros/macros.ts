@@ -33,12 +33,10 @@ export default EnvCapability.define("scheme/macros", {
       // Macro.invoke), carrying the run's capability base.
       { resolver: defSiteResolver }: MacroInvokeContext,
     ) {
-      // TODO: find identifiers and freeze the def scope at definition time.
-
-      // Def-time Resolver: scope = the define-syntax env (the hygiene identity root),
-      // capabilities = the evaluator's threaded base. NOT re-derived from `env` via chainRoot —
-      // `env` is null-rooted at expansion time, so chainRoot yields the lexical root, not the
-      // base, and globalRoot would be wrong.
+      // deferred: freeze def-scope identifiers at definition time.
+      // Def-time Resolver: define-syntax env is the hygiene identity root; capabilities
+      // from the evaluator's threaded base. Not chainRoot(this) — expansion env is
+      // null-rooted, so chainRoot would yield the lexical root, not the base.
       const defResolver = new Resolver(this, defSiteResolver?.capabilities);
 
       function get_identifiers(node: unknown) {
@@ -117,8 +115,7 @@ export default EnvCapability.define("scheme/macros", {
                 useResolver,
                 defResolver,
                 capabilities: defResolver.capabilities,
-                ctx: runCtx,
-              });
+                ctx: runCtx });
               if (bindings) {
                 const names = []; // transform_syntax appends the renamed template names
                 const new_expr = transform_syntax({
@@ -130,8 +127,7 @@ export default EnvCapability.define("scheme/macros", {
                   scope: defChild,
                   names,
                   ellipsis,
-                  ctx: runCtx,
-                });
+                  ctx: runCtx });
                 // TODO: throw when the template expands to nothing.
                 if (new_expr) {
                   expr = new_expr;
@@ -158,6 +154,4 @@ export default EnvCapability.define("scheme/macros", {
       );
       syntax.__code__ = macro;
       return syntax;
-    }),
-  }),
-});
+    }) }) });

@@ -1,51 +1,17 @@
-// @inhuman.tools/arrival/env/polyglot-stubs — the CROSS-DIALECT teaching-stub pack,
-// sibling in spirit to `env/srfi/srfi-stubs.ts` but a DIFFERENT population:
+// @inhuman.tools/arrival/env/polyglot-stubs — cross-dialect teaching stubs.
+// Sibling spirit to srfi-stubs, different population:
+//   srfi-stubs   — SRFI symbols the spec defines that arrival omits
+//   r7rs/host    — R7RS §6.13/§6.14 host-interface doors
+//   this file    — CL / Racket / Clojure names with no SRFI/R7RS lineage that
+//                  models trained on the Lisp family still reach for
 //
-//   srfi/srfi-stubs.ts     — SRFI symbols the SPEC defines that arrival omits.
-//   r7rs/host.ts           — the R7RS §6.13/§6.14 host-interface omission doors.
-//   polyglot-stubs.ts      — symbols from OTHER dialects (Common Lisp / Racket /
-//   (this file)              Clojure) with no SRFI/R7RS lineage at all, that a model
-//                            trained across the whole Lisp family predictably reaches
-//                            for anyway. A symbol belongs here iff no SRFI number /
-//                            R7RS section covers it.
+// Stubs make names typo-suggestible (unbound-variable.ts reads the live chain).
+// Implementation packs hold pure implementable symbols (mapcar, str, get-in, …);
+// this pack is only the remainder: IO, mutation, dialect-only macros, hash tables
+// (dicts are native+immutable — see HASH_LIBRARY_REASON). One EnvCapability
+// (no deps/FV weight to isolate by split); registered in BASE_PACKS, not allSrfi.
 //
-// Declaring a stub (rather than leaving the name silently absent) makes it
-// typo-suggestible for free: typo suggestions derive from the chain's ACTUAL
-// vocabulary (src/unbound-variable.ts), which includes these doors. The
-// polyglot IMPLEMENTATION packs (env/polyglot/polyglot.ts's shared core plus
-// env/polyglot-clojure.ts / -lisp.ts / -racket.ts) hold the actual pure
-// IMPLEMENTATIONS (str/mapcar/get-in/…); this pack holds the cross-dialect
-// omission doors.
-//
-// Every symbol here is genuinely NOT a pure-function candidate — IO, in-place
-// mutation, a macro too dialect-specific to generalize, or a hash-table type this
-// runtime deliberately doesn't have (dicts are native and immutable instead; see
-// srfi-stubs.ts family 1). The PURE, implementable cross-dialect symbols
-// (mapcar, str, get-in, frequencies, conj, …) are real bindings in the
-// implementation packs instead — a bare "Unbound variable" is a dead-end wall,
-// but a symbol that CAN just work shouldn't get a "sorry, not here" stub either.
-// This pack is only for the remainder: door the fact, the reason, and (where an
-// honest one exists) the exact bound alternative.
-//
-// DIALECT SECTIONS (grouped internally, not a physical file split): unlike the
-// implementation packs, doors carry no `deps`/FV-law weight a split would ever
-// need to isolate — every `symbol.notImplemented` body unconditionally throws,
-// so there is nothing here for the bake FV locality law to check, and splitting
-// would only fragment the REASON constants (HASH_LIBRARY_REASON's Racket/CL
-// spellings share one string; IO_REASON's Lisp/Clojure spellings share another)
-// across files for zero functional gain. This pack remains ONE `EnvCapability`
-// ("scheme/polyglot-stubs"), registered ONCE in base-packs.ts, matching the
-// dialect table:
-//   COMMON LISP  — type-of, gethash, getf, setf, defun, loop, nreverse,
-//                  with-open-file, print.
-//   CLOJURE      — println.
-//   RACKET       — make-hash, make-hasheq, hash-ref, for/list, for/fold.
-//   SHARED       — `<>` stays put: it's SRFI-26-adjacent (the cut/cute
-//                  placeholder token), not any one dialect's idiom.
-//
-// SCOPE: registered as its own BASE_PACKS entry in base-packs.ts (NOT folded into
-// allSrfi — it isn't a SRFI), so every env that inherits sandboxedEnv doors these
-// symbols, same as srfi-stubs.ts.
+// Sections: CL · Clojure · Racket · SHARED (`<>` — SRFI-26 placeholder, not a dialect).
 
 import { EnvCapability } from "../../common/capability.js";
 
@@ -100,6 +66,4 @@ export default EnvCapability.define("scheme/polyglot-stubs", {
     "make-hasheq": symbol.notImplemented`make-hasheq: ${HASH_LIBRARY_REASON}`,
     "hash-ref": symbol.notImplemented`hash-ref: ${HASH_LIBRARY_REASON}`,
     "for/list": symbol.notImplemented`for/list: for/list is not implemented — Racket's iteration-comprehension macro (binding clauses like ([x lst]) over a body) has no direct equivalent here; use (map (lambda (x) body) lst) instead`,
-    "for/fold": symbol.notImplemented`for/fold: for/fold is not implemented — Racket's accumulating-iteration macro has no direct equivalent here; use (reduce (lambda (x acc) body) initial lst) instead (see env/polyglot-clojure.ts's frequencies/group-by for worked examples)`,
-  }),
-});
+    "for/fold": symbol.notImplemented`for/fold: for/fold is not implemented — Racket's accumulating-iteration macro has no direct equivalent here; use (reduce (lambda (x acc) body) initial lst) instead (see env/polyglot-clojure.ts's frequencies/group-by for worked examples)` }) });

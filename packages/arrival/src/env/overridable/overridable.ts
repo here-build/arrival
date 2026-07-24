@@ -1,32 +1,16 @@
-// arrival/overridable — the `define/overridable` capability: plain `define` PLUS
-// VALIDATION whose value the execution environment MAY override. Exposing that override
-// surface (CLI argv, API caller props, runProgram params, a notebook's form fields, an
-// agent's tool-call arguments) is the ENVIRONMENT'S job, never this capability's. It sees
-// none of those contexts — only the merged `params` bag (`configuration.params`, validated
-// structurally as z.record(z.string(), z.unknown()), supplied through
-// `exec(src, { capabilities, config })`'s shared config bag, of which it validates only its
-// own `params` slice).
+// arrival/overridable — `define/overridable`: plain define PLUS validation whose value the
+// execution environment MAY override. Exposing that surface (CLI, API props, notebook
+// fields, tool-call args) is the ENVIRONMENT'S job — this capability sees only
+// `configuration.params` (its slice of the shared config bag).
 //
-// The one runtime verb is `overridable/resolve`, an ordinary rosetta; the macro is pure
-// ergonomics over it:
-//
+// Runtime verb `overridable/resolve` (rosetta); macro is ergonomics:
 //     (define/overridable city (s/string) "Berlin")
 //       ⇒ (define city (overridable/resolve 'city (s/string) "Berlin"))
+// Host override wins over in-form default; EITHER WAY type-lowers and parses — bad
+// DEFAULT throws as loud as bad OVERRIDE. Direct call is fine: only reads OWN params.
 //
-// `overridable/resolve` reads `configuration.params[name]` when the host supplied one (an
-// OVERRIDE), else the in-form default; EITHER WAY it lowers `type` to a zod schema and
-// `.parse()`s the value — so a bad DEFAULT throws exactly as loud as a bad OVERRIDE. It
-// validates whoever supplied the value, the in-program author included. Calling it directly
-// from user code is fine: it only ever reads the program's OWN params, nothing to leak.
-//
-// A `type` may be ANY s/* expression — `(s/enum "a" "b")`, a nested `(s/object …)`,
-// `(s/optional …)` — lowered through the same canonical `tagToJsonSchema` + `z.fromJSONSchema`
-// every schema consumer uses, so it cannot drift from the wire schema (see arrival/schema, the
-// declared `deps` that binds the s/* constructors here).
-//
-// NOT in BASE_PACKS: config-bearing (params differ per run) and lowered per-consumer, so an
-// overridable pack is assembled FRESH per run with that run's host-supplied parameter values —
-// unlike core/polyglot/srfi, assembled once into every env.
+// `type` is any s/* expression — same `tagToJsonSchema` + `z.fromJSONSchema` as wire schema
+// (deps on arrival/schema). NOT in BASE_PACKS: config-bearing, assembled fresh per run.
 
 import { z } from "zod";
 
@@ -86,19 +70,15 @@ export const overridableCapability = EnvCapability.define("arrival/overridable",
   symbols: (symbol, sz) => ({
     "overridable/resolve":
       symbol.rosetta`overridable/resolve: resolves a parameter, preferring a host override over the form default (validated against the declared type)`(
-        // `name` stays `sz.dynamic` (the raw ASymbol), NOT `sz.symbol`: sz.symbol decodes to an
-        // opaque host JS symbol whose toString prints the wrapper description, not the bare
-        // name. Errors name the binding, so read the ASymbol directly via `.literal()`. This is
-        // the ONE legitimate rosetta `dynamic` use in arrival core (Q1 split,
-        // docs/plans/stage-c-corpse-deletion.md §"z.value retirement campaign") — `name`/
-        // `type`/`default` genuinely cannot be typed (a scheme-DSL type tag is arbitrarily
-        // recursive, evaluated as raw scheme data, not a marshaled JS shape); no dedicated
-        // no-decode symbol-identity codec is invented this phase, per that campaign's own note.
+        // `name` stays `sz.dynamic` (raw ASymbol), NOT `sz.symbol`: sz.symbol decodes to an
+        // opaque host symbol whose toString is the wrapper description, not the bare name.
+        // Errors name the binding via `.literal()`. The ONE legitimate rosetta `dynamic` use
+        // in core — name/type/default cannot be typed (scheme-DSL type tags are arbitrarily
+        // recursive raw scheme data, not a marshaled JS shape).
         {
           input: [sz.dynamic, sz.dynamic, sz.dynamic],
           output: [sz.dynamic],
-          type: "(name: symbol, type: string|list, default: any): any",
-        },
+          type: "(name: symbol, type: string|list, default: any): any" },
         function (nameSym, typeTag, defaultVal) {
           const bindingName = (nameSym as ASymbol).literal();
           const jsTag = schemeToJs(typeTag);
@@ -126,6 +106,4 @@ export const overridableCapability = EnvCapability.define("arrival/overridable",
         `(lambda (name type default)
            \`(define ,name (overridable/resolve ',name ,type ,default)))`,
         { macroAttribute: "binder" },
-      ),
-  }),
-});
+      ) }) });

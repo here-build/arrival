@@ -1,72 +1,31 @@
-// @inhuman.tools/arrival/polyglot — the polyglot SHARED CORE.
+// @inhuman.tools/arrival/polyglot — shared core of the cross-dialect idiom family.
 //
-// The cross-dialect idiom family is four sibling packs:
-//   scheme/polyglot          (THIS file) — the shared core every dialect stands on.
-//   scheme/polyglot-clojure  (polyglot-clojure.ts) — Clojure's threading (->/->>),
-//                              its `comp` alias, and its stdlib completion (str,
-//                              get-in/assoc-in/update-in, zipmap, frequencies,
-//                              group-by, partial, juxt, mapv/filterv, conj, into,
-//                              rest, empty?).
-//   scheme/polyglot-lisp     (polyglot-lisp.ts) — Common Lisp's mapcar/remove-if/
-//                              remove-if-not.
-//   scheme/polyglot-racket   (polyglot-racket.ts) — Racket's threading (~>/~>>,
-//                              aliases expanding to ->/->>) and its dict-library
-//                              accessor family (dict-ref, dict-has-key?, …), plus
-//                              the Guile/Emacs Lisp `assoc-ref` riding with it.
+// Four sibling packs:
+//   scheme/polyglot          (this file) — shared core every dialect stands on
+//   scheme/polyglot-clojure  — threading (->/->>), comp, stdlib completion
+//   scheme/polyglot-lisp     — mapcar / remove-if / remove-if-not
+//   scheme/polyglot-racket   — threading (~>/~>>), dict-*, assoc-ref
 //
-// WHAT STAYS HERE, AND WHY: the member-access protocol (@/@?/@keys/dict) and the
-// universal composition family (compose/pipe/flow) are not any ONE dialect's
-// idiom — compose/pipe are Racket/CL/Clojure-adjacent alike (only their ALIASES —
-// `comp`, Clojure's spelling — are dialect-specific, and that alias lives in
-// polyglot-clojure.ts). `nil` (the LIPS-dialect empty-list alias) stays here too:
-// every dialect pack, and the racket dict family's "missing key" convention,
-// reads it. `%interleave` (the dict/zipmap/alist->dict argument-shape helper)
-// stays here because it is consumed CROSS-dialect (this pack's own `dict`,
-// polyglot-clojure's `zipmap`/`%dict-set`, polyglot-racket's `alist->dict`) —
-// the "private helpers travel with whichever pack keeps their sole consumers"
-// rule doesn't apply once there's more than one consumer family.
-// `%dict-guard` lives in polyglot-racket.ts instead, by that same rule: its sole
-// consumers are racket's dict-* family. Core placement would force racket to
-// declare a dep back on core for a helper it alone uses, for zero benefit (racket
-// already deps on core for `@`/`@?`/`@keys`/`dict`) — same principle
-// `%conj-list`/`%dict-set` follow in polyglot-clojure.ts.
+// HERE: member-access (@/@?/@keys/dict) + universal composition (compose/pipe/flow)
+// — not any one dialect's idiom (dialect aliases like `comp` live in their packs).
+// `nil` (empty-list alias) and `%interleave` (cross-dialect dict/zipmap/alist helper)
+// stay here (multi-consumer). `%dict-guard` lives in polyglot-racket (sole consumers).
 //
-// MEMBER ACCESS — the polyglot read protocol is part of this family. The model —
-// `@`/`@?`/`@keys` and the `(:key obj)` keyword accessor as TWO SYNTAXES over ONE
-// interop read (mirroring Graal's `InteropLibrary.readMember`), origin-agnostic
-// (dict / membrane-foreign / array read alike), threading with the sibling idioms
-// (`(->> p :versions last :state)`) — is `docs/grammar.md §MEMBER-ACCESS`; the read
-// MECHANISM is `docs/membrane.md §MEMBER-READ`. Both bottom out dispatching onto the
-// receiver's own `arrival/tagless-final/get|has|keys` terms (AValue.ts). The reads are
-// NOT declarations in the define set because they are native member-access primitives —
-// `@` is a base binding, a `:`-prefixed symbol is self-evaluating and carries its own
-// `apply` (`ASymbol.ts`). This pack is their conceptual home; the definition is lifted
-// onto the capability via `symbol.native` — a raw env.set bind (NOT rosetta-wrapped), so
-// the membrane primitive is not routed through the membrane it implements.
+// Member access model: docs/grammar.md §MEMBER-ACCESS; mechanism: docs/membrane.md
+// §MEMBER-READ. Two syntaxes over one interop read → receiver's tf(get|has|keys).
+// Bound via symbol.native (raw env.set — not rosetta — so the membrane primitive is
+// not routed through the membrane it implements).
 //
-// FV LOCALITY (docs/environments.md §PRELUDE, the FV locality law): every cross-
-// capability free name a define body reaches must be a declared `deps` edge, or
-// bake doors — `car`/`cdr` are the one exception, the kernel-level cxr resolver
-// family (see define-bake.ts's KEYWORD_SYNTAX_BASELINE/CXR_RE note). A pack's
-// `deps` array ORDER is itself a C3 merge input (§ASSEMBLY; base-packs.ts's header
-// carries the current tail order every dialect pack's `deps` must agree with).
+// FV locality (docs/environments.md §PRELUDE): every free name a define body reaches
+// needs a deps edge (cxr exception). deps ORDER is a C3 merge input. This pack:
+//   equality — null? · lists — reverse apply cons
+// (both BASE_PACKS leaves). Polyglot is a deps TARGET (srfi-235 needs compose) and
+// a dependent of every dialect pack — base-packs positions it after dialects, before lists.
 //
-// This shrunk core's own DEPS reduce to two cross-capability free names —
-//   equality — null?
-//   lists    — reverse apply cons
-// Both are BASE_PACKS leaves (no `deps`), so no C3 ordering holds between them.
-// `scheme/polyglot` is itself a deps TARGET (`scheme/srfi-235` needs `compose`)
-// and a dependent of every dialect pack, so base-packs.ts positions it after all
-// three dialect packs and before `lists`.
-//
-// Wiring-only (no resources) → pause-trivial. Scoped to the self-contained
-// idiom family — cut/cute (which need gensym + JS interop) ship as SRFI-26 instead.
-//
-// SINGLE SOURCE: `base-packs.ts` assembles this pack (via initBridge's assembleEnv),
-// so this module is the sole definition site.
+// Wiring-only → pause-trivial. cut/cute ship as SRFI-26. Sole definition site.
 
 import { EnvCapability } from "../../common/capability.js";
-import { type CallCtx } from "../../common/symbol.js";
+import { type CallCtx } from "../../symbol/index.js";
 import dedent from "dedent";
 import { schemeBool } from "../../values/op-helpers.js";
 import { AString } from "../../values/primitives/AString.js";
@@ -254,8 +213,7 @@ export default EnvCapability.define("scheme/polyglot", {
             <A extends unknown[], B, C, D, E, R>(f: (e: E) => R, g: (d: D) => E, h: (c: C) => D, i: (b: B) => C, j: (...args: A) => B): (...args: A) => R;
             <A extends unknown[], B, C, D, E, F, R>(f: (f: F) => R, g: (e: E) => F, h: (d: D) => E, i: (c: C) => D, j: (b: B) => C, k: (...args: A) => B): (...args: A) => R;
           }
-        `,
-        },
+        ` },
         `(lambda fns
          (lambda args
            (let ((rfns (reverse fns)))
@@ -280,8 +238,7 @@ export default EnvCapability.define("scheme/polyglot", {
             <A extends unknown[], B, C, D, E, R>(f: (...args: A) => B, g: (b: B) => C, h: (c: C) => D, i: (d: D) => E, j: (e: E) => R): (...args: A) => R;
             <A extends unknown[], B, C, D, E, F, R>(f: (...args: A) => B, g: (b: B) => C, h: (c: C) => D, i: (d: D) => E, j: (e: E) => F, k: (f: F) => R): (...args: A) => R;
           }
-        `,
-        },
+        ` },
         `(lambda fns
          (lambda args
            (if (null? fns)
@@ -310,7 +267,5 @@ export default EnvCapability.define("scheme/polyglot", {
          (if (or (null? ks) (null? vs))
              '()
              (cons (car ks) (cons (car vs) (%interleave (cdr ks) (cdr vs))))))`,
-        ),
-    };
-  },
-});
+        ) };
+  } });

@@ -142,8 +142,7 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
           {
             (obj: unknown, ks: List<unknown>, f: (cur: unknown) => unknown): unknown;
           }
-        `,
-          },
+        ` },
           `(lambda (obj ks f)
          (assoc-in obj ks (f (get-in obj ks))))`,
         ),
@@ -157,8 +156,7 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
             <V>(ks: List<string>, vs: List<V>): Record<string, V>;
             <V>(ks: List<unknown>, vs: List<V>): Record<string, V>;
           }
-        `,
-        },
+        ` },
         `(lambda (ks vs) (apply dict (%interleave ks vs)))`,
       ),
       // frequencies — reduce-dispatched coll (list|vector|nil). Keys via repr → string dict face.
@@ -172,8 +170,7 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
             <T>(coll: List<T>): Record<string, number>;
             <T>(coll: readonly T[]): Record<string, number>;
           }
-        `,
-          },
+        ` },
           `(lambda (coll)
          (reduce
            (lambda (x acc)
@@ -194,8 +191,7 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
             <T>(f: (x: T) => unknown, coll: List<T>): Record<string, List<T>>;
             <T>(f: (x: T) => unknown, coll: readonly T[]): Record<string, List<T>>;
           }
-        `,
-          },
+        ` },
           `(lambda (f coll)
          (reduce
            (lambda (x acc)
@@ -222,8 +218,7 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
             <A, B, C, R>(f: (a: A, b: B, c: C) => R, a: A, b: B, c: C): () => R;
             <R>(f: (...args: unknown[]) => R, ...fixed: unknown[]): (...more: unknown[]) => R;
           }
-        `,
-        },
+        ` },
         `(lambda (f . args)
          (lambda more (apply f (append args more))))`,
       ),
@@ -241,8 +236,7 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
             <A extends unknown[], R1, R2, R3>(f1: (...args: A) => R1, f2: (...args: A) => R2, f3: (...args: A) => R3): (...args: A) => List<R1 | R2 | R3>;
             (...fns: ((...args: unknown[]) => unknown)[]): (...args: unknown[]) => List<unknown>;
           }
-        `,
-        },
+        ` },
         `(lambda fns
          (lambda args
            (map (lambda (f) (apply f args)) fns)))`,
@@ -261,8 +255,7 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
             <A, B, R>(f: (a: A, b: B) => R, as: List<A>, bs: List<B>): readonly R[];
             <A, B, C, R>(f: (a: A, b: B, c: C) => R, as: List<A>, bs: List<B>, cs: List<C>): readonly R[];
           }
-        `,
-        },
+        ` },
         `(lambda (f . lists) (list->vector (apply map (cons f lists))))`,
       ),
       filterv: symbol.define`filterv: Clojure — filter with a vector result instead of a list`(
@@ -274,8 +267,7 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
             <T, S extends T>(p: (x: T) => x is S, xs: List<T>): readonly S[];
             <T>(p: (x: T) => unknown, xs: List<T>): readonly T[];
           }
-        `,
-        },
+        ` },
         `(lambda (pred lst) (list->vector (filter pred lst)))`,
       ),
       // %conj-list — conj's list arm (private helper). `z.schemeValue` both sides —
@@ -319,8 +311,7 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
             <T>(xs: List<T>): List<T>;
             (xs: unknown): List<unknown>;
           }
-        `,
-        },
+        ` },
         `(lambda (xs) (if (pair? xs) (cdr xs) '()))`,
       ),
       // empty? — list/string/vector/dict. OUTPUT z.boolean: every arm is ABool (`=` boxes via applyNumeric).
@@ -332,8 +323,7 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
           {
             (xs: List<unknown> | readonly unknown[] | string | Record<string, unknown>): boolean;
           }
-        `,
-        },
+        ` },
         `(lambda (xs)
          (cond
            ((null? xs) #t)
@@ -366,7 +356,5 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
          (let* ((ks (vector->list (@keys d)))
                 (vs (map (lambda (key) (@ d key)) ks)))
            (apply dict (append (%interleave ks vs) (list k v)))))`,
-        ),
-    };
-  },
-});
+        ) };
+  } });
