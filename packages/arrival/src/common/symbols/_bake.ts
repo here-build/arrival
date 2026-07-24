@@ -1,49 +1,48 @@
-// _bake: shared machinery behind the `symbol.*` factories — the contract/decoded-type layer,
-// the baked AEntity union + its members, and the helpers each per-tag factory file
-// (./native.ts, ./rosetta.ts, …) builds its AEntity from directly (no separate bake* ctor).
-// Factories live one-per-file, re-assembled into the `symbol` namespace by ./index.ts; stable
-// entry ../symbol.js re-exports these types alongside `export * as symbol from "./index.js"`.
-// Cut is acyclic: factories import from here; nothing imports back up through the namespace.
+// _bake: shared machinery behind the `symbol.*` factories — contract/decoded-type layer,
+// baked AEntity union, and helpers each per-tag factory (./native.ts, ./rosetta.ts, …)
+// builds from. Factories live one-per-file, re-assembled into `symbol` by ./index.ts;
+// package entry is `src/symbol/index.ts` (`@inhuman.tools/arrival`). Acyclic: factories
+// import from here; nothing imports back through the namespace.
 //
-// docs/environments.md §CONTRACT — the one zod contract with four readers (runtime validation,
-//   static impl types via z.infer, the harvested .d.ts, the JS↔Scheme membrane codec), the two
-//   faces, and the chart-vs-crossing split. This module builds the AUTHORED-extension layer:
-//   `const symbol = { native, rosetta, tagless, notImplemented, … }`.
-// docs/environments.md §SYMBOL-KINDS — the per-kind table (what each authored kind bakes to and the
-//   runtime value capability.ts binds through `arrival/tagless-final/apply`). The kind-def
-//   interfaces below carry the per-field contracts the table cannot.
+// docs/environments.md §CONTRACT — one zod contract, four readers (runtime validation,
+// static impl types via z.infer, harvested .d.ts, JS↔Scheme membrane codec), two faces,
+// contour-vs-crossing split. This module is the authored-extension layer.
+// docs/environments.md §SYMBOL-KINDS — per-kind table; interfaces below carry field
+// contracts the table cannot.
+//
+// CONTOUR vs CROSSING (brand bans — compile-time on the contract ARGUMENT, not the return):
+//   Rosetta (crossing/membrane): slots must NOT carry ContourOnly (`z.schemeValue`).
+//   Native/sequence/define (contour): slots must NOT carry CrossingOnly (`z.dynamic`,
+//   `z.instance(Ctor)`). Brands: scheme-zod ContourOnly / CrossingOnly.
+//   Pattern: NoContourBrand / NoCrossingBrand poison the bad *field* with
+//   ContractKindMismatch so the editor glows `input`/`output`/`inputRest`.
+//   Factories take CrossingContract / ContourContract — legal arm = type identity.
+//   Runtime: procedure ctor re-checks axes (assert*) as the instance chokepoint.
+//
+// Two faces of one schema: codec `z.input` = SCHEME face; `z.output` = JS face.
+// `symbol.native` (contour) projects scheme; `symbol.rosetta` (membrane) projects JS.
+// Non-codec schemas: faces coincide (`input ≡ output`).
 
-import * as z from "../scheme-zod.js";
-import { AValue } from "../../values/primitives/AValue.js";
-import { type ANativeProcedure } from "../../values/primitives/ACallable.js";
+import * as z from "../scheme-zod/index.js";
+import { type ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
+import type { NativeSymbolDef } from "../../values/primitives/ANativeProcedure.js";
 import { type RunContext } from "../../run/RunContext.js";
-import { type CallCtx, associateCapability, makeCallCtx, testCallCtx } from "../../run/CallCtx.js";
+import { type CallCtx } from "../../run/CallCtx.js";
 import { Macro } from "../../eval/Macro.js";
 import { ZodType, ZodUnion } from "zod";
 import { CacheClassShapeError, KeywordPairingError, ProvenanceRoleShapeError } from "../../errors.js";
-// TYPE-ONLY (erased — no runtime edge back up into capability.ts, which imports this
-// module's values): the per-env binding context a DYNAMIC metadata field resolves
-// against. Same erased-import posture kernel.ts takes for `DegradedCapability`.
+// TYPE-ONLY (erased — no runtime edge into capability.ts): Activation for dynamic metadata.
 import type { Activation } from "../capability.js";
-// TYPE-ONLY, one-directional (`common/symbols` → `emit`; emit-rule.ts imports nothing
-// back from this tree): the compiler-facing rule surface a Contract may carry.
-// Constitution §4.1/§4.5 (arrival-ts-transpiler-design.md) + registry-emit.md.
+// TYPE-ONLY, one-directional (`common/symbols` → `emit`): compiler rule surface a Contract may carry.
 import type { EmitRule, RefPolicy } from "../../emit/emit-rule.js";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 1. The args-vector spec + decoded-type inference
-// ─────────────────────────────────────────────────────────────────────────────
+// ── 1. Args-vector spec + decoded-type inference ─────────────────────────────
 
-/** An args/return vector: a bare tuple of schemas (positional sugar) OR an array-ish
- *  schema (`z.array` variadic / `z.tuple` / `z.union` overload). */
+/** Args/return vector: bare tuple of schemas (positional) OR array-ish schema
+ *  (`z.array` / `z.tuple` / `z.union`). */
 export type VectorSpec = readonly z.ZodTypeAny[] | z.ZodTypeAny;
 
-/** The TWO faces of one schema. A codec's `z.input` is its SCHEME face (AString, APair,
- *  ACallable) and its `z.output` the JS face (`string`, `array`, a callable) — one vocabulary,
- *  two processing rules: `symbol.native` (a CONTOUR, stays in value algebra) projects the scheme
- *  face; `symbol.rosetta` (the MEMBRANE, decode-in/encode-out) projects the JS face. A non-codec
- *  schema's faces coincide (`input ≡ output`), so pre-codec contracts type identically under
- *  either face — split is strictly additive. */
+/** Schema face: `"scheme"` → `z.input`; `"js"` → `z.output`. See preamble. */
 export type Face = "scheme" | "js";
 type ProjectFaceAtom<S extends z.ZodTypeAny, F extends Face> = F extends "scheme" ? z.input<S> : z.output<S>;
 type ProjectFaceArray<S extends z.ZodTypeAny[], F extends Face> = S extends [
@@ -55,27 +54,20 @@ type ProjectFaceArray<S extends z.ZodTypeAny[], F extends Face> = S extends [
 type ProjectFace<S extends z.ZodTypeAny, F extends Face> =
   S extends ZodUnion<infer T extends z.ZodTypeAny[]> ? ProjectFaceArray<T, F> : ProjectFaceAtom<S, F>;
 
-/** The ONE shared traversal: map a VectorSpec through the selected face (`z.output` for the
- *  membrane/JS face — the default — or `z.input` for the scheme face `symbol.native`
- *  projects). A tuple maps element-wise to a mutable tuple;
- *  a single schema infers bare (a variadic `z.array` schema's output is already an array,
- *  a scalar schema's output stays scalar).
- *  `DecodedArgs`/`DecodedReturn`/`DecodedArgsWithRest` are thin callers on top — they differ
- *  only in their OWN boundary handling (wrap a non-array single output in a 1-tuple; collapse
- *  a 1-tuple to its bare value), never in how a spec's shape decodes. */
+/** Map a VectorSpec through the selected face. Tuple → element-wise mutable tuple;
+ *  single schema → bare. `DecodedArgs`/`DecodedReturn`/`DecodedArgsWithRest` only differ
+ *  in boundary handling (1-tuple wrap/unwrap), not how a spec decodes. */
 export type SpecInfer<S extends VectorSpec, F extends Face = "js"> = S extends readonly z.ZodTypeAny[]
   ? { -readonly [K in keyof S]: ProjectFace<S[K] & z.ZodTypeAny, F> }
   : S extends z.ZodTypeAny
     ? ProjectFace<S, F>
     : never;
 
-/** Decoded arg TYPES for the impl (selected face; default = codec OUTPUT/JS side). A bare
- *  tuple maps each element; an array-ish schema yields its element-array (variadic). */
+/** Decoded arg types for the impl (default face = JS / codec output). */
 export type DecodedArgs<S extends VectorSpec, F extends Face = "js"> =
   SpecInfer<S, F> extends readonly unknown[] ? SpecInfer<S, F> : [SpecInfer<S, F>];
 
-/** Decoded RETURN type: single value when output is a 1-tuple, else the values-vector
- *  (multiple-values). */
+/** Decoded return: single value when output is a 1-tuple, else values-vector. */
 export type DecodedReturn<O extends VectorSpec, F extends Face = "js"> = O extends readonly [z.ZodTypeAny]
   ? SpecInfer<O, F>[0]
   : SpecInfer<O, F>;
@@ -83,52 +75,32 @@ export type DecodedReturn<O extends VectorSpec, F extends Face = "js"> = O exten
 /** async is implicit — bake awaits. */
 export type MaybePromise<T> = T | Promise<T>;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 1.5 Symbol metadata — the per-FIELD static-or-dynamic vocabulary. Every declaration
-//     kind carries an optional `metadata` extension bag; each FIELD is either static
-//     data or a lazily-resolved function of the assembly's activation. The describe-time
-//     read channel these dynamic fields resolve through is contracted in `./metadata.js`.
-// ─────────────────────────────────────────────────────────────────────────────
+// ── 1.5 Metadata — per-field static-or-dynamic (read channel: ./metadata.js) ─
 
-/** One metadata field: STATIC data, or a DYNAMIC `(this: Activation) => value`. The
- *  discriminant is `typeof === "function"`: a static field can therefore never BE a
- *  function — that is the rule, not a limitation (a function-valued "static" datum has no
- *  serialization/digest/rehydration story, i.e. it was never static). Per-FIELD union,
- *  deliberately NOT a whole-record builder (`metadata: (activation) => record` is
- *  rejected — it would re-open the builder-form arm the hermetic-symbols design retires);
- *  per-field keeps the static subset enumerable with zero assembly. A dynamic field
- *  resolves lazily at describe/catalog read time against the phase-2 activation — the
- *  describe-time read channel, contracted with its resolution semantics in
- *  `./metadata.js`'s `resolveMetadata`. */
+/** One field: STATIC data, or DYNAMIC `(this: Activation) => value`. Discriminant is
+ *  `typeof === "function"` — a static field can never BE a function (no serialization story).
+ *  Per-field union, not a whole-record builder: keeps the static subset enumerable pre-assembly.
+ *  Dynamic fields resolve lazily at describe/catalog read (`./metadata.js` `resolveMetadata`). */
 export type MetadataField<A = Activation<any, any>, V = unknown> =
-  | V // STATIC — data, enumerable pre-assembly
-  | ((this: A) => MaybePromise<V>); // DYNAMIC — resolved lazily at read, per read
+  | V // STATIC — enumerable pre-assembly
+  | ((this: A) => MaybePromise<V>); // DYNAMIC — resolved lazily, per read
 
-/** A symbol's metadata extension bag — the kind-agnostic `metadata?` slot every def
- *  carries. Def-level facts (`doc`, `type`, `provenance`, `preludeOnly`) stay def-level,
- *  contract-derived; this is the extension channel (MCP annotations, catalog text,
- *  dashboard fields). */
+/** Kind-agnostic `metadata?` extension bag (MCP annotations, catalog text). Def-level facts
+ *  (`doc`, `type`, `provenance`, `preludeOnly`) stay contract-derived, not here. */
 export type MetadataRecord<A = Activation<any, any>> = Record<string, MetadataField<A>>;
 
-/** The variadic TAIL after a fixed leading `input` tuple:
- *  - a `z.ZodTypeAny` — repeated single element type (0+ times), the variadic-tail case; OR
- *  - a plain kwargs SHAPE record `{k: schema}` — trailing kwargs OBJECT. VALUES are schemas but
- *    the CONTAINER is a plain object, NOT a ZodType — the sound `instanceof z.ZodType`
- *    discriminator between the two (no combinator can make a plain record satisfy it).
- *  `undefined` = no rest (default). */
+/** Variadic tail after a fixed leading `input` tuple:
+ *  - `z.ZodTypeAny` — repeated element (0+ times); OR
+ *  - plain kwargs shape `{k: schema}` — trailing kwargs OBJECT (VALUES are schemas; CONTAINER
+ *    is a plain object, NOT a ZodType — the `instanceof z.ZodType` discriminator).
+ *  `undefined` = no rest. */
 export type RestSpec = z.ZodTypeAny | Record<string, z.ZodTypeAny> | undefined;
 
-/** Decoded arg types WITH a rest tail: `input`'s fixed-tuple decoded types, followed by a
- *  spread of `inputRest`'s element type (0+ times). A rest tail composes only with a FIXED
- *  leading tuple `input` (never a bare single/kwargs schema — no well-defined prefix length
- *  to split at), so a non-tuple `I` + a real `Rest` types to `never` rather than silently
- *  doing something else. No rest (`Rest` defaults to `undefined`) reduces to plain
- *  `DecodedArgs<I>` — zero type/behavior difference for a declaration that doesn't set
- *  `inputRest`.
- *  `SpecInfer<I>` (not `DecodedArgs<I>`) supplies the fixed-tuple half — named as its OWN alias
- *  (not inlined) because TS's tuple-spread checker (error TS2574: A rest element type must be
- *  an array type) can't see a mapped type over a still-abstract `I` as array-shaped when
- *  written directly inside a `[...X, ...Y[]]` literal — a named alias resolves it. */
+/** Decoded args WITH rest: fixed-tuple types then spread of rest element type.
+ *  Rest composes only with a FIXED leading tuple `input` (non-tuple `I` + real `Rest` → `never`).
+ *  No rest reduces to `DecodedArgs<I>`.
+ *  Fixed half uses `SpecInfer<I>` (named alias) — TS2574 can't see a mapped abstract `I` as
+ *  array-shaped inside `[...X, ...Y[]]` when inlined. */
 export type DecodedArgsWithRest<
   I extends VectorSpec,
   Rest extends RestSpec = undefined,
@@ -140,211 +112,87 @@ export type DecodedArgsWithRest<
       : never
     : never
   : Rest extends Record<string, z.ZodTypeAny>
-    ? // kwargs: plain shape record `Rest` types the impl to ONE trailing arg — the decoded
-      // kwargs OBJECT (each field projected through the face), a single object param NOT a spread.
-      // Mirrors runtime `[z.decode(z.object(inputRest), fold(args))]`. `I` is `[]` at every
-      // kwargs site (the whole call IS the object), so there's no fixed prefix to splice ahead of it.
-      // Disjoint from the `z.ZodTypeAny` branch above: a plain record lacks ZodType's internals,
-      // so it never matches `extends z.ZodTypeAny`.
+    ? // kwargs: ONE trailing object param (face-projected fields), not a spread.
+      // Mirrors runtime `[z.decode(z.object(inputRest), fold(args))]`. `I` is `[]` at kwargs sites.
       [{ [K in keyof Rest]: ProjectFace<Rest[K] & z.ZodTypeAny, F> }]
     : DecodedArgs<I, F>;
 
-/** The declared-role vocabulary, data in string key space (P7 — the class/def stays the
- *  representation authority; this field is data, never a duck-read) — the ONE field every
- *  symbol declaration carries, replacing a bag of ad-hoc booleans. `pipe`/`fan`/`source` are
- *  LIVE today (declaration defaults, below); `sink`/`transparent`/`loop`/`opaque` are
- *  GRAPH-LAYER targets no declaration marks yet (`src/provenance/lineage.ts`'s node kinds exist
- *  for them; a future classifier consumes them) — the union names the full vocabulary now so
- *  `Contract.provenance`'s type stays stable as more roles go live, never narrowed to
- *  "whatever's reachable today". */
+/** Declared-role vocabulary (P7: data in string key space; class/def is representation authority).
+ *  `pipe`/`fan`/`source` are declaration defaults; `sink`/`transparent`/`loop`/`opaque` are
+ *  graph-layer targets (lineage node kinds exist; union stays full so `Contract.provenance`
+ *  stays stable as roles go live). */
 export type ProvenanceRole = "pipe" | "fan" | "source" | "sink" | "transparent" | "loop" | "opaque";
 
-/** The CACHE-CLASS vocabulary (Solidity's — Ruling A, arrival-mcp-rework-over-phases.md §2.3):
- *  an explicit declaration, never derived from the lineage role. See `Contract.cacheClass`. */
+/** Cache-class vocabulary — explicit declaration, never derived from lineage role. See `Contract.cacheClass`. */
 export type CacheClass = "view" | "pure";
 
-/** The CALLBACK-role vocabulary — the per-z.lambda-arm dual of `ProvenanceRole` (which names
- *  the HOST symbol's role). Extracted from contract SHAPE where shape decides, declared
- *  (`Contract.callbackRoles`) where it underdetermines — `extractCallbackRoles` below owns
- *  the exact split:
- *  - `element-transformer` — the callback's return BECOMES the element (map's fn). Parallel
- *    track composition.
- *  - `control` — boolean/ordering returns: the ONE merged selector+decision role (the
- *    selector/decision split stays merged until a product query needs it — one cone color).
- *    filter's pred, sort's less?, member/assoc's compare.
- *  - `effect` — void/unused returns under sink-ish hosts (the for-each family). Terminal
- *    track composition — no egress.
- *  - `accumulator` — the fold-shaped acc-position arm. DECLARES THE ACC CHAIN: chained
- *    track composition (`egress(Tᵢ) → ingress(Tᵢ₊₁)`, the ONLY sanctioned inter-track edge —
- *    the track-separation law's one exception). */
+/** Per-z.lambda-arm dual of `ProvenanceRole` (host role). Shape extracts where it decides;
+ *  `Contract.callbackRoles` declares where underdetermined (`extractCallbackRoles`):
+ *  - `element-transformer` — return BECOMES the element (map). Parallel track composition.
+ *  - `control` — boolean/ordering (filter pred, sort less?, member/assoc compare). One merged role.
+ *  - `effect` — void under sink-ish hosts (for-each). Terminal — no egress.
+ *  - `accumulator` — fold acc arm. DECLARES THE ACC CHAIN: `egress(Tᵢ) → ingress(Tᵢ₊₁)`, the
+ *    ONLY sanctioned inter-track edge (track-separation law's one exception). */
 export type CallbackRole = "element-transformer" | "control" | "effect" | "accumulator";
 
-/** Resolved per-arm callback roles, aligned with the contract's z.lambda arms IN LAMBDA
- *  ORDER (k-th entry = k-th lambda arm, NOT k-th input position — sort's less? sits at
- *  input position 1 but is lambda arm 0). An `undefined` entry = underdetermined-and-
- *  undeclared: shape decided nothing and the author declared nothing — HONEST data for the
- *  classifier, which consumes this positionally, never a guessed default. */
+/** Per-arm roles in LAMBDA order (k-th entry = k-th lambda arm, NOT k-th input position).
+ *  `undefined` = underdetermined-and-undeclared — honest hole, never a guessed default. */
 export type CallbackRoles = readonly (CallbackRole | undefined)[];
 
 /** A symbol's input/output contract. */
 export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest extends RestSpec = undefined> {
   input: I;
-  /** Variadic TAIL after `input`'s fixed leading positions (e.g. `apply`'s callable first arg
-   *  is `input`, its spread call-args are `inputRest`) — a fixed head with its OWN generic
-   *  type parameter separate from the tail's, so the two can differ. Only meaningful when
-   *  `input` is a fixed tuple — combining with a bare single-schema `input` is a contract-
-   *  authoring error: `normalizeInputVector` throws. Absent ⇒ the plain fixed-tuple contract,
-   *  no rest tail. */
+  /** Variadic tail after fixed leading `input` positions. Only with fixed-tuple `input` —
+   *  bare single-schema + rest is authoring error (`normalizeInputVector` throws). */
   inputRest?: Rest;
   output: O;
-  /** Ambient `.d.ts` member-body signature override — e.g. `"(ip: SchemeIP) => SchemeIP"` —
-   *  for the harvest (`schema-to-ts.ts`'s `signatureOf`), DECOUPLED from `input`/`output` zod
-   *  schemas. Zod schemas stay the MEMBRANE description (what actually crosses at runtime);
-   *  `type` is a separate author-asserted TYPE-LEVEL narrowing for what the harvest wants to
-   *  see that zod can't itself express (a host entity type like `SchemeIP`, not just the honest
-   *  `z.output` the membrane decodes to). Mirrors legacy `RosettaSpec.type`/`RosettaFunction.type`
-   *  — author assertion, not mechanically derived, checkable by eye. INERT everywhere except
-   *  the harvest: `native()`/`rosetta()`/`sequence()` carry it through; `signatureOf` prefers
-   *  it over computing from `in`/`out`. Absent ⇒ byte-identical to zod-derived signature. */
+  /** Harvest signature override (e.g. `"(ip: SchemeIP) => SchemeIP"`), decoupled from
+   *  zod membrane schemas. Author assertion, not derived; inert outside harvest —
+   *  `signatureOf` prefers it over computing from `in`/`out`. Absent ⇒ zod-derived. */
   readonly type?: string;
-  /** Declared PROVENANCE ROLE — ONE key-space string per symbol, not a bag of booleans.
-   *  `undefined` here means "this kind's default": `native()`/`sequence()`/`tagless()`/
-   *  `taglessGuard()` default to `"pipe"` (pure pass-through — propagate, never mint);
-   *  `rosetta()` defaults to `"source"` (mint a fresh point). The RESOLVED role lands on the
-   *  baked def (`NativeSymbolDef.provenance` etc.); capability.ts stamps it onto the bound
-   *  callable (`provenanceRole`) so the lineage classifier reads it off `env.get(op)` — never
-   *  a duck-read off an ad-hoc property. See `assertProvenanceRoleShape` below for the two
-   *  SHAPE-decidable contradictions this field is checked against at bake time. */
+  /** Declared provenance role. `undefined` ⇒ kind default: native/sequence/tagless/
+   *  taglessGuard → `"pipe"`; rosetta → `"source"`. Resolved role lands on the baked def;
+   *  capability.ts stamps `provenanceRole` on the bound callable for the lineage classifier
+   *  (`env.get(op)` — never a duck-read). Shape checks: `assertProvenanceRoleShape`. */
   readonly provenance?: ProvenanceRole;
-  /** EXPLICIT cache class (Solidity's vocabulary) — a declaration, never derived; the per-class
-   *  record/replay behavior is docs/execution.md §MODE-LAW:
-   *  - "view":  cacheable ACROSS runs. Demands a SERIALIZABLE contract (shape gate:
-   *             `assertCacheClassShape` — a cache entry must serialize).
-   *  - "pure":  regenerateable — deterministic from decoded args, recovery = re-call, NEVER
-   *             persisted cross-run. No shape gate (nothing of it is stored).
-   *  - absent:  regenerateable — the SAFE default.
-   *  Orthogonal to the lineage axis: view and pure both stay provenance `source` (§MODE-LAW —
-   *  the two axes are orthogonal; this field is the cache axis, `provenance` the lineage axis).
-   *  NAMING HAZARD: legacy defineRosetta's `pure: true` meant provenance PIPE
-   *  (`RosettaSpec.pure` / createRosettaWrapper's `mintsPoint = pure !== true` — mints nothing);
-   *  THIS `pure` is a cache class on a source. Different axes, same word; the legacy path is
-   *  dying and never carries this field. */
+  /** Explicit cache class — declaration, never derived from lineage. docs/execution.md §MODE-LAW:
+   *  - "view": cacheable across runs; demands serializable contract (`assertCacheClassShape`).
+   *  - "pure": regenerateable from decoded args; recovery = re-call; never persisted; no shape gate.
+   *  - absent: regenerateable (safe default).
+   *  Orthogonal to lineage: this is the cache axis; `provenance` is the lineage axis.
+   *  NAMING HAZARD: this `pure` is a cache class on a source — not a lineage "pipe" synonym. */
   readonly cacheClass?: CacheClass;
-  /** Declared CALLBACK roles, one per z.lambda arm IN LAMBDA ORDER — the override channel
-   *  for exactly the arms whose role the contract SHAPE underdetermines (`z.lambda` is a
-   *  bare callable schema carrying no return shape, so the callback's own return — control's
-   *  boolean/ordering, element-transformer's value — is invisible to shape; only the HOST's
-   *  output vector decides anything). Two shape rules, split by strength
-   *  (`extractCallbackRoles`):
-   *  - DECIDED — void-family host output ⇒ every lambda arm is `effect` (the callback's
-   *    product has no egress wire to ride); a declaration CONTRADICTING a decided arm
-   *    throws `ProvenanceRoleShapeError` at bake (the drift-door extension).
-   *  - DEFAULT — `fan`-role host with value egress ⇒ `element-transformer`; a declaration
-   *    OVERRIDES freely (filter is fan-shaped like map but its pred is `control` — the
-   *    shapes are identical, so the default must yield; under-trigger, never guess).
-   *  Underdetermined + undeclared arms resolve to `undefined` (honest holes). May be
-   *  SHORTER than the lambda-arm count (trailing arms fall to shape/undefined); LONGER
-   *  throws — a role for a phantom callback is a decidable contradiction. */
+  /** Per z.lambda arm in LAMBDA ORDER — override where shape underdetermines (`z.lambda`
+   *  carries no return shape). `extractCallbackRoles`: void-family host ⇒ every arm `effect`
+   *  (contradiction throws); fan + value egress ⇒ default `element-transformer` (overridable);
+   *  underdetermined+undeclared ⇒ `undefined`. Shorter than arm count OK; longer throws. */
   readonly callbackRoles?: readonly CallbackRole[];
-  /** KIND-AGNOSTIC (native/rosetta). `true` = ASSEMBLY-TIME-ONLY: binds into the assembly's
-   *  phase-gated prelude scope (kernel.ts `assembleEnv` — per-assembly Map answered by a resolver
-   *  on the base env during the C3 loop), never into the runtime env. Callable from any later-
-   *  applied capability's prelude during assembly; plain unbound-variable error at runtime —
-   *  INCLUDING from lambdas a prelude defined (closures walk the live chain at call time).
-   *  A prelude bridges a preludeOnly value to runtime by capturing the call's RESULT in an
-   *  ordinary define, never the verb itself. */
+  /** Assembly-time-only: binds into the phase-gated prelude scope (kernel `assembleEnv`), never
+   *  the runtime env. Unbound at runtime including from lambdas a prelude defined (closures
+   *  walk the live chain). Bridge to runtime: capture the call's RESULT in an ordinary define. */
   readonly preludeOnly?: boolean;
-  /** KIND-AGNOSTIC (native/rosetta). Config keys this verb needs to be CALLABLE — the
-   *  auto-derive gap-closer (docs/environments.md §DEGRADATION-D2): `common/capability.ts`'s
-   *  bind loop reads this UNCONDITIONALLY (no builder-form, no mode gate — the retired
-   *  `"forbid"`/`"doors"` MODE distinction died in the Tier 1 trails cleanup) and,
-   *  when any declared key is absent from the activation's validated `configuration`, binds a
-   *  cause-carrying `DoorProcedure` for this verb INSTEAD of the real value — via
-   *  `activation.degradation.door(verb, missingKeys, reason)` (`./degradation.js`), the SAME
-   *  `DoorCause` shape a builder-form `symbols` mints by hand, just minted for free from a
-   *  DECLARATION rather than an `if (x !== undefined)` branch.
-   *
-   *  DEPARTURE D2 (named, not silent — see `degradation.ts`'s file-header note on "required
-   *  config always stays fail-closed"): a key named here should be authored `.optional()` (or
-   *  `.default()`) at the capability's `configuration` schema, NOT left bare-required. A
-   *  bare-required key still throws at `schema.parse` before any door ever gets a chance to
-   *  mint — this field does not (and cannot) rescue that path; it only ever fires for a key
-   *  that `schema.parse` already let through absent. `degradation.ts`'s `missingOptionalKeys`
-   *  structural check (`instanceof ZodOptional | ZodDefault`) is what keeps the two views
-   *  agreeing: a `requiresConfig`-named key that is genuinely optional at the schema shows up
-   *  there too, so `Vocabulary.degraded`'s informational surface and this verb-scoped gate
-   *  are reading the SAME "absent" fact from two angles, never a contradiction.
-   *
-   *  Absent ⇒ the verb binds unconditionally (byte-identical to today) — zero cost, the
-   *  overwhelming majority. Additive: a capability using the manual builder-form `.door(...)`
-   *  path keeps working unchanged; this is an ADDITIONAL way to mint a door, not a
-   *  replacement.
-   *
-   *  DISJUNCTION: an entry may itself be a key GROUP (`readonly string[]`) meaning ANY-OF —
-   *  the entry is satisfied while at least one of its keys is present, and doors only when
-   *  EVERY key in the group is absent (loader's `require` needs `fs` OR `loader` — the case
-   *  a flat conjunctive list can't express). A minted door's `cause.needs` carries the
-   *  group's keys flattened (each one is a real enabling key); the teaching reason renders
-   *  the group as "`fs` or `loader`" so the either-of semantics stay legible. */
+  /** Config keys this verb needs to be CALLABLE (docs/environments.md §DEGRADATION-D2).
+   *  Bind loop: any declared key absent from validated `configuration` ⇒ cause-carrying
+   *  `DoorProcedure` via `activation.degradation.door` instead of the real value.
+   *  Keys named here must be `.optional()`/`.default()` on the capability schema — bare-required
+   *  still throws at `schema.parse` before any door mints. Absent ⇒ binds unconditionally.
+   *  An entry may be a key GROUP (`readonly string[]`) = ANY-OF (satisfied if ≥1 present;
+   *  doors only when every key absent). Door `cause.needs` flattens the group. */
   readonly requiresConfig?: readonly (string | readonly string[])[];
-  /** The idiomatic-residual rewrite for the compiler (the fifth reader of this record —
-   *  constitution §4.1). Absent ⇒ the fallback ladder's rung 3 (the RuntimeRef shim);
-   *  silence is impossible by construction (§4.2). STATIC data by law: a builder-form
-   *  capability whose rule depends on activation state is a harvest-time error (§4.5).
-   *  INERT everywhere except the compiler's harvest — the interpreter never reads it. */
+  /** Idiomatic-residual rewrite for the compiler (fifth reader). Absent ⇒ RuntimeRef shim.
+   *  STATIC data by law; inert outside the compiler harvest. */
   readonly emit?: EmitRule;
-  /** This symbol's leaf narrows (is-predicate / non-empty overload); `witness` names the
-   *  registered symbol whose runtime behavior PROVES it (Law N — enforcement is CI, not
-   *  culture: the harvest's witness-registry check red-builds a narrows row whose witness
-   *  is not itself a harvested symbol). Consumed SOLELY by the TYPE PASS's narrowing-form
-   *  grammar (§5.3) — entirely independent of whether this Contract also carries `emit`:
-   *  a shim-resolved symbol may be narrows-flagged purely to earn Law T's narrowing
-   *  exemption. */
+  /** Leaf narrows (is-predicate / non-empty overload); `witness` is the registered symbol whose
+   *  runtime PROVES it (Law N — CI witness-registry). Type-pass narrowing only; independent of `emit`. */
   readonly narrows?: { readonly witness: string };
-  /** Value-position behavior — see `RefPolicy` (emit/emit-rule.ts). DEFAULT `"shim"`,
-   *  resolved at the compiler's harvest (the row carries the resolved value; this field
-   *  stores only what the author declared). */
+  /** Value-position behavior — `RefPolicy` (emit/emit-rule.ts). Default `"shim"` at harvest. */
   readonly refPolicy?: RefPolicy;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 1.7 Contract-KIND capability check (V ruling, mid-Phase-A — supersedes an earlier
-//     bake-time teaching-door draft of this same ban; docs/plans/
-//     stage-c-corpse-deletion.md §"z.value retirement campaign"). A rosetta contract's
-//     slots may never be `z.schemeValue` (the honest top type has no encode/decode
-//     story across the membrane — a real codec, `z.procedure`, or `z.dynamic` is
-//     required instead); a native/sequence/tagless/define contract's slots may never be
-//     `z.dynamic` (those contours never cross the membrane, so the rosetta escape hatch
-//     is meaningless there — `z.schemeValue` or a real codec is always the honest
-//     choice). Enforced HERE, at the author's KEYBOARD (a compile error), not at bake —
-//     see scheme-zod.ts's own `ContourOnly`/`CrossingOnly` doc for the phantom-brand
-//     mechanism.
-//
-//     MECHANISM, precisely (and why it is shaped this way): the naive version — transform
-//     `contract.input`/`.output`'s OWN declared type via a mapped/conditional substitution
-//     — was tried and empirically breaks generic inference (confirmed against tsc: a
-//     tuple's per-position literal types collapse to a union once the parameter type stops
-//     being the bare inferred tuple), which would have silently widened `impl`'s arg types
-//     everywhere. So the check does NOT touch the `contract` parameter's type at all —
-//     `I`/`O`/`Rest` infer exactly as before, byte-identical to pre-ruling behavior. Instead
-//     `HasBrand` below inspects the ALREADY-RESOLVED `I`/`O`/`Rest` (used only in the
-//     FACTORY'S OWN RETURN TYPE, checked strictly AFTER inference completes) and collapses
-//     the return type to a nominally-foreign `ContractKindMismatch` shape when poisoned.
-//     Assigning that into a `symbols` record (typed `Record<string, SymbolDeclaration>`)
-//     then fails with an ordinary "missing property" mismatch, at the exact declaration —
-//     no custom diagnostic machinery, and (confirmed against tsc) zero effect on `impl`'s
-//     inferred argument types in the unpoisoned (overwhelming-majority) case, where the
-//     conditional collapses straight through to the real return type.
-// ─────────────────────────────────────────────────────────────────────────────
+// ── 1.7 Brand bans on contract ARGUMENT — see preamble CONTOUR vs CROSSING ───
 
-/** Does a VectorSpec/RestSpec carry a `Tag`-branded slot ANYWHERE at its TOP level (a
- *  tuple's own elements / a kwargs shape's own field schemas / a bare single schema
- *  itself)? Evaluated against an ALREADY-CONCRETE `T` (see the section header — never
- *  applied to drive inference, only to validate a resolved `I`/`O`/`Rest`). Order
- *  matters: a real schema is checked via `T extends z.ZodTypeAny` BEFORE the kwargs-record
- *  arm, mirroring the SAME `instanceof ZodType` discriminator `normalizeInputVector`/
- *  `rosetta()` use at runtime — a plain kwargs shape record never itself satisfies
- *  `z.ZodTypeAny`, so it can't be mistaken for one. */
+/** Top-level brand check on VectorSpec/RestSpec. Schema via `ZodTypeAny` before kwargs-record
+ *  (same `instanceof ZodType` discriminator as normalizeInputVector). */
 type HasBrand<T, Tag> = T extends readonly unknown[]
   ? true extends { readonly [K in keyof T]: T[K] extends Tag ? true : false }[number]
     ? true
@@ -359,56 +207,79 @@ type HasBrand<T, Tag> = T extends readonly unknown[]
         : false
       : false;
 
-/** A CONTRACT-KIND MISMATCH — the shape a factory's call resolves to instead of its real
- *  runtime type (`ARosettaProcedure`/`ANativeProcedure`) when `HasBrand` above catches a
- *  poisoned slot. Nominal (nothing else structurally matches it), so it never silently
- *  satisfies `SymbolDeclaration` by accident. */
+/** Teaching phantom — expected type of a poisoned `input`/`output`/`inputRest` field. */
 export interface ContractKindMismatch<Msg extends string> {
   readonly "arrival/contract-kind-mismatch": Msg;
 }
 
-/** A rosetta contract's result: `Real` (the genuine `ARosettaProcedure`) unless
- *  input/inputRest/output carries a `z.schemeValue` slot, in which case a
- *  `ContractKindMismatch` steering toward a real codec / `z.procedure` / `z.dynamic`. */
+/** T must not carry ContourOnly (`z.schemeValue`). Brand → `never`. */
+export type NoContourBrand<T> = HasBrand<T, z.ContourOnly<unknown>> extends true ? never : T;
+
+/** T must not carry CrossingOnly (`z.dynamic` / `z.instance`). Brand → `never`. */
+export type NoCrossingBrand<T> = HasBrand<T, z.CrossingOnly<unknown>> extends true ? never : T;
+
+type ContourMsgIn =
+  "z.schemeValue is not legal in a rosetta contract's input — rosetta crosses the membrane, so this slot needs a real codec, z.procedure (callables), or z.dynamic (genuinely-runtime-shaped data)";
+type ContourMsgRest =
+  "z.schemeValue is not legal in a rosetta contract's inputRest — same rule as input, see z.schemeValue's own doc";
+type ContourMsgOut =
+  "z.schemeValue is not legal in a rosetta contract's output — same rule as input, see z.schemeValue's own doc";
+type CrossingMsgIn =
+  "z.dynamic / z.instance is not legal in a native/sequence/define contract's input — this contour never crosses the membrane, so z.schemeValue (the honest top type) or a real codec is always the honest choice";
+type CrossingMsgRest =
+  "z.dynamic / z.instance is not legal in a native/sequence/define contract's inputRest — same rule as input";
+type CrossingMsgOut =
+  "z.dynamic / z.instance is not legal in a native/sequence/define contract's output — same rule as input";
+
+/** Rosetta `contract` param. Legal = identity; poisoned field glows via ContractKindMismatch. */
+export type CrossingContract<I extends VectorSpec, O extends VectorSpec, Rest extends RestSpec = undefined> = Contract<
+  I,
+  O,
+  Rest
+> &
+  (HasBrand<I, z.ContourOnly<unknown>> extends true ? { input: ContractKindMismatch<ContourMsgIn> } : unknown) &
+  (HasBrand<Rest, z.ContourOnly<unknown>> extends true
+    ? { inputRest: ContractKindMismatch<ContourMsgRest> }
+    : unknown) &
+  (HasBrand<O, z.ContourOnly<unknown>> extends true ? { output: ContractKindMismatch<ContourMsgOut> } : unknown);
+
+/** Native/sequence/define `contract` param. Bans CrossingOnly instead of ContourOnly. */
+export type ContourContract<I extends VectorSpec, O extends VectorSpec, Rest extends RestSpec = undefined> = Contract<
+  I,
+  O,
+  Rest
+> &
+  (HasBrand<I, z.CrossingOnly<unknown>> extends true ? { input: ContractKindMismatch<CrossingMsgIn> } : unknown) &
+  (HasBrand<Rest, z.CrossingOnly<unknown>> extends true
+    ? { inputRest: ContractKindMismatch<CrossingMsgRest> }
+    : unknown) &
+  (HasBrand<O, z.CrossingOnly<unknown>> extends true ? { output: ContractKindMismatch<CrossingMsgOut> } : unknown);
+
+/** @deprecated Prefer CrossingContract on the contract param; factories return the procedure. */
 export type CrossingResult<I extends VectorSpec, O extends VectorSpec, Rest extends RestSpec, Real> =
   HasBrand<I, z.ContourOnly<unknown>> extends true
-    ? ContractKindMismatch<"z.schemeValue is not legal in a rosetta contract's input — rosetta crosses the membrane, so this slot needs a real codec, z.procedure (callables), or z.dynamic (genuinely-runtime-shaped data)">
+    ? ContractKindMismatch<ContourMsgIn>
     : HasBrand<Rest, z.ContourOnly<unknown>> extends true
-      ? ContractKindMismatch<"z.schemeValue is not legal in a rosetta contract's inputRest — same rule as input, see z.schemeValue's own doc">
+      ? ContractKindMismatch<ContourMsgRest>
       : HasBrand<O, z.ContourOnly<unknown>> extends true
-        ? ContractKindMismatch<"z.schemeValue is not legal in a rosetta contract's output — same rule as input, see z.schemeValue's own doc">
+        ? ContractKindMismatch<ContourMsgOut>
         : Real;
 
-/** A native/sequence/tagless/define contract's result: `Real` unless input/inputRest/output
- *  carries a `z.dynamic` slot (the rosetta escape hatch has no meaning where nothing
- *  crosses the membrane), in which case a `ContractKindMismatch` steering toward
- *  `z.schemeValue` (the honest top type) or a real codec. */
+/** @deprecated Prefer ContourContract on the contract param; factories return the procedure. */
 export type ContourResult<I extends VectorSpec, O extends VectorSpec, Rest extends RestSpec, Real> =
   HasBrand<I, z.CrossingOnly<unknown>> extends true
-    ? ContractKindMismatch<"z.dynamic is not legal in a native/sequence/tagless/define contract's input — this contour never crosses the membrane, so z.schemeValue (the honest top type) or a real codec is always the honest choice">
+    ? ContractKindMismatch<CrossingMsgIn>
     : HasBrand<Rest, z.CrossingOnly<unknown>> extends true
-      ? ContractKindMismatch<"z.dynamic is not legal in a native/sequence/tagless/define contract's inputRest — same rule as input, see z.dynamic's own doc">
+      ? ContractKindMismatch<CrossingMsgRest>
       : HasBrand<O, z.CrossingOnly<unknown>> extends true
-        ? ContractKindMismatch<"z.dynamic is not legal in a native/sequence/tagless/define contract's output — same rule as input, see z.dynamic's own doc">
+        ? ContractKindMismatch<CrossingMsgOut>
         : Real;
 
-// `CallCtx`/`makeCallCtx` live in run/CallCtx.ts, not here: ACallable.ts needs `makeCallCtx`
-// as a real call value, and importing it from this file would close a cycle
-// (ACallable.ts → scheme-zod.ts → _bake.ts) that can leave a `z.instanceof(...)` codec's
-// captured class permanently undefined depending on which path enters first. Re-exported
-// here (not merely imported) so `_bake.js` importers resolve it from this module.
-// `associateCapability` (1d) rides the same re-export: `common/capability.ts` (the bind loop that
-// populates it) and `eval/evaluator.ts` (the dispatch sites that read it via `makeCallCtx`'s
-// `resolvedValue` param) both already funnel their `CallCtx` import through this module.
-export type { CallCtx };
-export { associateCapability, makeCallCtx, testCallCtx };
+// CallCtx / makeCallCtx: import from run/CallCtx.ts — importing here would cycle
+// (ACallable → scheme-zod → _bake) and can leave z.instanceof class captures undefined.
 
-/** The impl a contract demands: decoded args in, decoded return (or a promise) out.
- *  `DecodedArgsWithRest` strips `readonly` (`-readonly` mapped tuple) so a `const`-inferred
- *  contract tuple becomes a MUTABLE positional param list; splices in `inputRest`'s decoded
- *  element type as a spread tail when declared.
- *  `F` selects the face: `"js"` (default — rosetta, decoded membrane side) or `"scheme"`
- *  (native — value-algebra side; `symbol.native` passes it). */
+/** Impl a contract demands: decoded args in, decoded return (or promise) out.
+ *  `F`: `"js"` (default, rosetta) or `"scheme"` (native contour). */
 export type Impl<
   I extends VectorSpec,
   O extends VectorSpec,
@@ -416,60 +287,14 @@ export type Impl<
   F extends Face = "js",
 > = (this: CallCtx, ...args: DecodedArgsWithRest<I, Rest, F>) => MaybePromise<DecodedReturn<O, F>>;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 2. AEntity — the baked discriminated union. Interpreter primitive, TYPE-ONLY (no class/runtime
-//    footprint: the def itself is a plain object for every kind). RUNTIME BOUND VALUE capability.ts
-//    installs differs by kind — plain object for door/keyword/macro, but a first-class
-//    ANativeProcedure/ARosettaProcedure (ACallable subclass, invoked through `arrival/tagless-
-//    final/apply`) for native/rosetta/tagless/tagless-guard/sequence — never a bare callable fn.
-// ─────────────────────────────────────────────────────────────────────────────
+// ── 2. AEntity — baked discriminated union (TYPE-ONLY plain objects).
+// Runtime bound value: DoorProcedure/AKernelKeyword/Macro plain, or ANativeProcedure/
+// ARosettaProcedure (ACallable) for native/rosetta/tagless/tagless-guard/sequence —
+// never a bare callable fn.
 
 type AnyFn = (...args: any[]) => unknown;
 
-/** A native symbol: impl over SCHEME VALUES, no validation. Identity schemas for .d.ts harvest. */
-export interface NativeSymbolDef {
-  readonly kind: "native";
-  readonly name: string;
-  readonly doc?: string;
-  readonly in: z.ZodTypeAny;
-  readonly out: z.ZodTypeAny;
-  readonly impl: AnyFn;
-  /** See `Contract.type`. */
-  readonly type?: string;
-  /** See `Contract.preludeOnly`. */
-  readonly preludeOnly?: boolean;
-  /** See `Contract.requiresConfig` — carried through verbatim; `capability.ts`'s bind loop
-   *  reads it off THIS def to auto-mint a config-gated door. */
-  readonly requiresConfig?: readonly (string | readonly string[])[];
-  /** RESOLVED provenance role (`contract.provenance ?? "pipe"` — see `Contract.provenance`).
-   *  Non-optional: `native()` always resolves the default before baking. */
-  readonly provenance: ProvenanceRole;
-  /** RESOLVED cache class — the authored `Contract.cacheClass`, shape-gated at bake
-   *  (`assertCacheClassShape`). OPTIONAL by design: absent = regenerateable, the safe
-   *  default (never a resolved kind-default like `provenance`'s). capability.ts stamps
-   *  it onto the bound callable beside `provenanceRole`. */
-  readonly cacheClass?: CacheClass;
-  /** RESOLVED per-lambda-arm callback roles (`extractCallbackRoles` — shape + declared
-   *  override; see `Contract.callbackRoles`). `undefined` when the contract has no z.lambda
-   *  arm. capability.ts stamps this onto the bound callable beside `provenanceRole`. */
-  readonly callbackRoles?: CallbackRoles;
-  /** See `Contract.emit` — carried through verbatim (flattened top-level, like
-   *  `cacheClass`; never a `.contract` sub-object), read only by the compiler's harvest. */
-  readonly emit?: EmitRule;
-  /** See `Contract.narrows`. */
-  readonly narrows?: { readonly witness: string };
-  /** See `Contract.refPolicy` — the AUTHORED value; the harvest row resolves the
-   *  `"shim"` default. */
-  readonly refPolicy?: RefPolicy;
-  readonly metadata?: MetadataRecord;
-}
-
-/** A rosetta symbol: impl in JS-land. `in`/`out` are codec schemas; `run` is the
- *  decode→validate→impl→encode wrapper produced by bake.
- *
- *  `M` = optional metadata (e.g. MCP annotations). Stored under `.metadata` so higher layers
- *  (arrival-mcp) carry tool-specific data without polluting the core schema.
- */
+/** Rosetta symbol: JS-land impl. `in`/`out` are codecs. `M` = optional metadata bag. */
 export interface RosettaSymbolDef<
   I extends z.ZodTypeAny = z.ZodTypeAny,
   O extends z.ZodTypeAny = z.ZodTypeAny,
@@ -480,45 +305,30 @@ export interface RosettaSymbolDef<
   readonly doc?: string;
   readonly in: I;
   readonly out: O;
-  /** Raw JS-land impl (decoded args → result). Kept for harvest / inspection. */
+  /** Authored JS impl (decoded args → result). Harvest/inspection only — apply spine lives
+   *  on ARosettaProcedure's `arrival/tagless-final/apply`. */
   readonly impl: AnyFn;
-  /** The interpretive wrapper: (…schemeArgs[, ctx]) => Promise<schemeValuesList>. Decodes
-   *  (+ optionally validates) inputs, runs the (ctx-free) impl, awaits, encodes the output,
-   *  then MINTS provenance off the evaluator-appended ctx (same spine as createRosettaWrapper —
-   *  see `rosetta()` factory's `run` wrapper in rosetta.ts). */
-  readonly run: (this: CallCtx, ...schemeArgs: unknown[]) => Promise<unknown>;
-  /** RESOLVED provenance role (`contract.provenance ?? "source"` — see `Contract.provenance`).
-   *  `"pipe"` = transform (forwards input provenance); `"source"` (default) mints. Non-optional:
-   *  `rosetta()` always resolves the default before baking. */
+  /** Resolved role (`contract.provenance ?? "source"`). `"pipe"` forwards; `"source"` mints. */
   readonly provenance: ProvenanceRole;
-  /** RESOLVED cache class — see `NativeSymbolDef.cacheClass`. The run-cache interception gates
-   *  on this at the baked rosetta `run` wrapper (docs/execution.md §CHOKEPOINT). Absent =
-   *  regenerateable (never touches the serialized cache). */
+  /** Resolved cache class. Run-cache gates on this (docs/execution.md §CHOKEPOINT). Absent = regenerateable. */
   readonly cacheClass?: CacheClass;
-  /** RESOLVED per-lambda-arm callback roles — see `NativeSymbolDef.callbackRoles`. */
   readonly callbackRoles?: CallbackRoles;
   /** See `Contract.type`. */
   readonly type?: string;
   /** See `Contract.preludeOnly`. */
   readonly preludeOnly?: boolean;
-  /** See `Contract.requiresConfig` — carried through verbatim; see `NativeSymbolDef.requiresConfig`. */
+  /** See `Contract.requiresConfig`. */
   readonly requiresConfig?: readonly (string | readonly string[])[];
-  /** See `NativeSymbolDef.emit`. */
   readonly emit?: EmitRule;
   /** See `Contract.narrows`. */
   readonly narrows?: { readonly witness: string };
-  /** See `NativeSymbolDef.refPolicy`. */
   readonly refPolicy?: RefPolicy;
-  /** Extension bag, kept generic (`M`) so a higher layer can type its own bag
-   *  (`RosettaSymbolDef<M>`) — see `MetadataRecord`/`MetadataField` for the shared
-   *  static-or-dynamic contract. */
+  /** Extension bag — generic `M` so higher layers type their own bag. */
   readonly metadata?: M;
 }
 
-/** Tagless symbol: NO impl — bypass to operand's own `arrival/tagless-final/<name>`. `run` is
- *  ctx-aware dispatcher (receiver = last scheme arg, per scheme's `(op …args collection)`
- *  convention) that hands the method the run's RunContext as trailing arg, with detailed error
- *  when operand declares no such method. */
+/** Tagless: no impl — dispatch to operand's `arrival/tagless-final/<name>` (receiver = last
+ *  scheme arg). Throws when method absent. */
 export interface TaglessSymbolDef {
   readonly kind: "tagless";
   readonly name: string;
@@ -526,36 +336,21 @@ export interface TaglessSymbolDef {
   readonly in: z.ZodTypeAny;
   readonly out: z.ZodTypeAny;
   readonly run: (...schemeArgs: unknown[]) => Promise<unknown>;
-  /** Always `"pipe"` — `tagless()` takes no `Contract`, so there is no author override
-   *  channel yet (see `Contract.provenance`'s kind-default table). */
+  /** Always `"pipe"` — no Contract param, no author override channel. */
   readonly provenance: ProvenanceRole;
-  /**
-   * Author-asserted harvest signature — same role as `Contract.type` / TaglessGuardSymbolDef.type.
-   * Tagless ops are shapeless at the binder (`z.array(z.schemeValue)`); HOF generics (reduce,
-   * take-while, …) set this so the lens sees List/vector dual overloads, not unknown.
-   */
+  /** Harvest signature (shapeless binder; HOF generics set this for List/vector overloads). */
   readonly type?: string;
-  /** DECLARED per-callable-arg callback roles. A tagless def's contract is shapeless by
-   *  construction (`in: z.array(z.schemeValue)` — the real per-op types live on the receiver
-   *  terms), so shape can NEVER extract here; `withCallbackRoles` below is the declaration
-   *  channel (srfi-1's `reduce` declares its acc chain through it — the "fold declares acc
-   *  chain" case). */
+  /** Declared callback roles — shapeless `in`, so shape never extracts; `withCallbackRoles`
+   *  is the only channel (e.g. reduce's acc chain). */
   readonly callbackRoles?: CallbackRoles;
-  /** See `NativeSymbolDef.emit`. A tagless def has no Contract bag — like `type` above,
-   *  this lands by plain object spread at the declaration site
-   *  (`{ ...symbol.tagless…, emit: … }`); `tagless()` itself never sets it. */
+  /** Declaration-site only (`withContractFields`); factory never sets. */
   readonly emit?: EmitRule;
-  /** See `Contract.narrows` — declaration-site spread, same as `emit`. */
   readonly narrows?: { readonly witness: string };
-  /** See `NativeSymbolDef.refPolicy` — declaration-site spread, same as `emit`. */
   readonly refPolicy?: RefPolicy;
   readonly metadata?: MetadataRecord;
 }
 
-/** Tagless GUARD — like `symbol.tagless`, but a receiver with no such method yields `#f` (graceful
- *  predicate) rather than throwing. Dispatch form for type predicates: `(vector? x)` asks x's OWN
- *  `arrival/tagless-final/vector?`, defaulting to `#f` when x can't answer — no host-type
- *  `instanceof` reach-around in the builtin. */
+/** Tagless guard: like tagless, but missing method yields `#f` (type predicates). */
 export interface TaglessGuardSymbolDef {
   readonly kind: "tagless-guard";
   readonly name: string;
@@ -563,31 +358,20 @@ export interface TaglessGuardSymbolDef {
   readonly in: z.ZodTypeAny;
   readonly out: z.ZodTypeAny;
   readonly run: (...schemeArgs: unknown[]) => Promise<unknown>;
-  /** Always `"pipe"` — same rationale as `TaglessSymbolDef.provenance`. */
+  /** Always `"pipe"`. */
   readonly provenance: ProvenanceRole;
-  /**
-   * Author-asserted harvest signature — same role as `Contract.type` on native/rosetta.
-   * Tagless guards have no Contract bag; type predicates set this so the lens sees a TS
-   * type-guard (`(x: unknown) => x is T`) instead of the shapeless `(...args: unknown[]) => unknown`
-   * that `z.array(z.schemeValue)`/`z.schemeValue` would print.
-   */
+  /** Harvest signature — type predicates set a TS type-guard form. */
   readonly type?: string;
-  /** See `TaglessSymbolDef.callbackRoles` — same shapeless-contract rationale. */
   readonly callbackRoles?: CallbackRoles;
-  /** See `TaglessSymbolDef.emit` — declaration-site spread; the guard factory never sets it. */
   readonly emit?: EmitRule;
-  /** See `Contract.narrows` — declaration-site spread. The proven idiom for a
-   *  self-witnessing predicate (`pair?` whose own runtime behavior IS the proof). */
+  /** Self-witnessing predicate idiom (`pair?` proves itself). */
   readonly narrows?: { readonly witness: string };
-  /** See `NativeSymbolDef.refPolicy` — declaration-site spread. */
   readonly refPolicy?: RefPolicy;
   readonly metadata?: MetadataRecord;
 }
 
-/** Ctx-aware op: impl receives scheme args AND the run's RunContext (dual of `symbol.native`,
- *  which is ctx-FREE). For kernel-logic-bearing ops that aren't pure per-receiver dispatch
- *  (map/filter/reduce charge `runCtx.heapMeter`, then dispatch to the term's own algebra).
- *  `run` is the ctx-aware wrapper that strips evaluator ctx, extracts runCtx, calls impl. */
+/** Ctx-aware op: scheme args + RunContext (dual of ctx-free native). Kernel-logic ops
+ *  (map/filter charge heapMeter, then dispatch to term algebra). */
 export interface SequenceSymbolDef {
   readonly kind: "sequence";
   readonly name: string;
@@ -597,61 +381,31 @@ export interface SequenceSymbolDef {
   readonly run: (this: CallCtx, ...schemeArgs: unknown[]) => Promise<unknown>;
   /** See `Contract.type`. */
   readonly type?: string;
-  /** RESOLVED provenance role (`contract.provenance ?? "pipe"` — see `Contract.provenance`).
-   *  Non-optional: `sequence()` always resolves the default before baking. */
+  /** Resolved role (`contract.provenance ?? "pipe"`). */
   readonly provenance: ProvenanceRole;
-  /** RESOLVED cache class — see `NativeSymbolDef.cacheClass`. */
   readonly cacheClass?: CacheClass;
-  /** RESOLVED per-lambda-arm callback roles — see `NativeSymbolDef.callbackRoles`. */
   readonly callbackRoles?: CallbackRoles;
-  /** See `NativeSymbolDef.emit`. */
   readonly emit?: EmitRule;
-  /** See `Contract.narrows`. */
   readonly narrows?: { readonly witness: string };
-  /** See `NativeSymbolDef.refPolicy`. */
   readonly refPolicy?: RefPolicy;
   readonly metadata?: MetadataRecord;
 }
 
-/** Structured CAUSE for a door — the owning capability + WHAT missing input would satisfy
- *  it, so a static reader (a validator, discovery, the wireframe) can derive the causal
- *  chain from a bound door instead of reaching into an anonymous throwing closure.
+/** Structured door cause: owning capability + missing inputs so a static reader derives the
+ *  causal chain without opening a throwing closure.
  *
- *  ADDITIVE, stamped SEPARATELY from `notImplemented()` — the factory (`./notImplemented.js`)
- *  is called from inside a `symbols` record literal, before the `EnvCapability` wrapping it
- *  exists, so it cannot know its own owner. `common/capability.ts`'s door bind arm derives
- *  `owner` from the binding capability's OWN `name` at bake (`lower().apply()`), with
- *  `needs: []`: a `notImplemented` door is a PERMANENT design omission (set!, call/cc,
- *  mutators — R7RS features arrival omits by the purity invariant), never conditional on an
- *  absent config/dep, so it has nothing to list there. A NON-EMPTY `needs` is the door-SET-
- *  DEGRADATION kind — a capability lowered degraded because a declared config key was
- *  ABSENT.
- *
- *  `needs` SCOPE is deliberately CONFIGURATION-ONLY: a `dependency` need would name an
- *  UNROOTED capability (one absent from the assembled root set, so its own doors never bind
- *  at all — C3 pulls deps as object edges, not string ids), and that naming has no policy
- *  yet; inventing one here would be exactly the kind of undesigned decision this type
- *  shouldn't make. This type ships only what's actually derivable at bake with no open
- *  question: the owning capability's id + its own declared `configuration` schema keys.
- *  `dependency` (and any `resource` need — a capability's own resource, not subject to the
- *  SAME unrooted-naming hole, but equally unpopulated today) is a strictly additive
- *  extension once that policy is designed — never a retrofit that reshapes this scope. */
+ *  Stamped at bake by capability.ts (not by `notImplemented()` — factory runs inside a symbols
+ *  literal before EnvCapability exists). `notImplemented` doors get `needs: []` (permanent
+ *  purity omission). Non-empty `needs` = degradation door (declared config key absent).
+ *  `needs` is configuration-only: a dependency need would name an unrooted capability
+ *  (C3 pulls deps as object edges) — no policy yet; additive later. */
 export interface DoorCause {
   readonly owner: string;
   readonly needs: readonly { readonly kind: "configuration"; readonly key: string; readonly hint?: string }[];
 }
 
-/** An omitted verb (errors-as-doors). No contract/impl — just the teaching reason.
- *  `cause` is ADDITIVE (`DoorCause`, above) — `notImplemented()` never sets it;
- *  `common/capability.ts` stamps it at bake for every door it binds. Absent only for a
- *  `DoorSymbolDef` built and used OUTSIDE that bind path (a raw `symbol.notImplemented`
- *  template read directly, as `symbol.test.ts` pins).
- *
- *  `preludeOnly` — see `Contract.preludeOnly` (KIND-AGNOSTIC). No `notImplemented` door
- *  sets it today — every declared door binds into the runtime env — but `capability.ts`'s
- *  door bind arm routes through the SAME `bindTarget(def)` every other kind does, so a
- *  future door WOULD honor it — the field exists so that routing is actually meaningful,
- *  not just structurally present. */
+/** Omitted verb (errors-as-doors). `cause` stamped by capability.ts at bake; absent only
+ *  outside that path. `preludeOnly` routes via the same `bindTarget(def)` every kind uses. */
 export interface DoorSymbolDef {
   readonly kind: "door";
   readonly name: string;
@@ -661,9 +415,8 @@ export interface DoorSymbolDef {
   readonly metadata?: MetadataRecord;
 }
 
-/** A kernel KEYWORD: special form, made first-class. The bake loop binds `new AKernelKeyword(name)`; the
- *  evaluator resolves a call head through the env and dispatches `SPECIAL_FORMS[name]` when it
- *  resolves to that marker — aliasable + lexically shadowable (the dual of cxr). */
+/** Kernel keyword: special form made first-class. Bake binds `AKernelKeyword`; evaluator
+ *  dispatches `SPECIAL_FORMS[name]` — aliasable + lexically shadowable. */
 export interface KeywordSymbolDef {
   readonly kind: "keyword";
   readonly name: string;
@@ -671,141 +424,73 @@ export interface KeywordSymbolDef {
   readonly metadata?: MetadataRecord;
 }
 
-/** Non-evaluating MACRO form: impl is a raw JS transformer (a `Macro`/`Syntax`), bound as-is by
- *  assembly — NOT arg-evaluating (native/rosetta) nor evaluator-dispatched (keyword). Home for
- * syntax-rules + the macro family carrying a JS expander; generic `is_macro`/`is_syntax` eval
- * hook expands whatever it binds. */
+/** Non-evaluating macro: raw JS `Macro`/`Syntax` transformer, bound as-is. */
 export interface MacroSymbolDef {
   readonly kind: "macro";
   readonly name: string;
   readonly macro: Macro;
-  /**
-   * Assembly-time-only binding (same contract as `Contract.preludeOnly` on native/rosetta):
-   * binds onto the kernel's prelude overlay, never the runtime env. Used by
-   * `require/register-extension` — a macro so the resolver name is UNEVALUATED
-   * (a bare symbol, not a string forced by evaluation of a function binding).
-   */
+  /** Assembly-time-only (same as `Contract.preludeOnly`). Used by `require/register-extension`
+   *  so the resolver name is UNEVALUATED. */
   readonly preludeOnly?: boolean;
   readonly metadata?: MetadataRecord;
 }
 
-/** A SCHEME-BODIED value/procedure declaration. `symbol.define` decomposes a capability's
- *  prelude into individually-declared, contract-bearing defines — the missing link that
- *  makes capability-owned scheme code visible to static analysis (freeVars, the provenance
- *  classifier, a future validator).
- *
- *  `in`/`out` are ALWAYS normalized VectorSchemas — for a PROCEDURE (`callable: true`,
- *  contract authored as a `Contract<I,O,Rest>` record) they're the real arg/return vectors;
- *  for a CONSTANT (`callable: false`, contract authored as a single `ZodTypeAny`) they're
- *  `z.tuple([])` in / a 1-tuple wrapping the value schema out — the 0-ary-procedure
- *  convention every OTHER vector-shaped reader already uses, so harvest/arity code never
- *  special-cases constants structurally.
- *
- *  `callable` is NOT derivable from `in`/`out` shape alone (a genuine 0-ary THUNK —
- *  `(lambda () …)` — also normalizes to an empty `in` tuple) — it is the FACTORY's own
- *  discriminator (`contract instanceof ZodType` ⇒ constant), carried here so
- *  `capability.ts`'s bind arm never has to re-guess it. */
+/** Scheme-bodied value/procedure. Makes capability-owned scheme visible to freeVars /
+ *  classifier. `in`/`out` always normalized VectorSchemas: procedure = real vectors;
+ *  constant = empty-in / 1-tuple-out (0-ary convention so harvest never special-cases).
+ *  `callable` is factory-derived (`instanceof ZodType` ⇒ constant) — not recoverable from
+ *  shape alone (a 0-ary thunk also has empty `in`). */
 export interface DefineSymbolDef {
   readonly kind: "define";
   readonly name: string;
   readonly doc?: string;
   readonly in: z.ZodTypeAny;
   readonly out: z.ZodTypeAny;
-  /** Spine adoption (values/adopt-spine.ts) — precomputed at BAKE from the AUTHORED slot list,
-   *  because the normalized `in` schema above has already lost the per-slot identity the mark is
-   *  keyed on. `undefined` when no slot declares `z.listAlike`, which is the common case and
-   *  costs the call path nothing. Applied by define-bake.ts BEFORE the scheme body runs: the body
-   *  walks a real spine (car/cdr/null?), never a borrowed vector it cannot terminate on. */
+  /** Spine adoption from AUTHORED slots (normalized `in` lost per-slot identity).
+   *  Applied before body runs — body walks a real spine, not a borrowed vector. */
   readonly adoptArgs?: (args: readonly unknown[]) => unknown[];
-  /** See the class doc above. */
+  /** Factory discriminator — not re-derivable from normalized vectors. */
   readonly callable: boolean;
-  /** Is the call boundary's RETURN a single value (`isSingleOutput`'s reading of the
-   *  AUTHORED, pre-normalization `output`) rather than a multi-value/variadic vector?
-   *  Always `true` for a constant. Stored explicitly (not re-derived from the
-   *  NORMALIZED `out` schema at bind time) because `out` is already a `VectorSchema`
-   *  (a `z.tuple`/array-ish instance) by the time it reaches this def — `isSingleOutput`
-   *  itself only reads the raw pre-normalization `VectorSpec` shape (`Array.isArray`),
-   *  which the normalized schema no longer structurally is. */
+  /** Single-value return from authored (pre-normalization) output. Always true for constants.
+   *  Stored because normalized `out` is not a raw VectorSpec for `isSingleOutput`. */
   readonly singleOut: boolean;
-  /** The authored RHS EXPRESSION source (a `(lambda …)` for a procedure, a plain
-   *  expression for a constant) — NOT a whole `(define name …)` form, so the name lives in
-   *  exactly one place. Parsed + memoized at first bake. */
+  /** RHS expression source — not a whole `(define name …)` form. */
   readonly body: string;
-  /** FNV-1a over body + contract's stable text — minted EAGERLY at declaration construction
-   *  (cheap string hash), not deferred to bake. */
-  readonly bodyHash: string;
-  /** DERIVED provenance role — a fixpoint over the capability's whole `symbol.define` set
-   *  via `classifyProgramPrelude`'s algorithm, run at bake against the assembly's own
-   *  env-derived classifier. Port-free (fixpoint-closed) ⇒ `"pipe"`; port-reaching (direct
-   *  or transitive) ⇒ `"opaque"` (the conservative collapse — the full per-body LineageNode
-   *  tree is always re-derivable from `body`/`bodyHash` for a future finer-grained
-   *  consumer). An optional `provenance` on the AUTHORING contract stays legal as a drift
-   *  door (declared-vs-derived mismatch throws `ProvenanceRoleShapeError` at bake) — it is
-   *  never itself the resolved value here. */
+  /** Derived via fixpoint over the capability's define set: port-free ⇒ `"pipe"`;
+   *  port-reaching ⇒ `"opaque"`. Authored `provenance` is a drift door only (mismatch throws). */
   readonly provenance: ProvenanceRole;
-  /** The AUTHORED `Contract.provenance`, if the author declared one (procedure defines
-   *  only — a constant's bare `ZodTypeAny` contract has no slot for it). Carried so bake
-   *  can run the drift door (declared-vs-derived): a declared role that CONTRADICTS the
-   *  derived classification throws `ProvenanceRoleShapeError`. Never itself the resolved
-   *  `provenance` above — that field is always the DERIVED value (or the innocuous
-   *  `"pipe"` placeholder before bake runs). */
+  /** Authored role for drift check (procedure only). Never the resolved `provenance`. */
   readonly declaredProvenance?: ProvenanceRole;
   /** See `Contract.type`. */
   readonly type?: string;
   /** See `Contract.preludeOnly`. */
   readonly preludeOnly?: boolean;
-  /** Per-call zod validation gate (a cost valve) — mirrors rosetta's
-   *  `BakeRuntimeOpts.validate`, resolved to a concrete boolean at bake (default
-   *  `true`) since the wrapper is built once the evaluated closure is available. */
+  /** Per-call zod validation (default true) — same cost valve as rosetta. */
   readonly validate: boolean;
-  /** See `NativeSymbolDef.emit`. Meaningful for PROCEDURE defines only (`callable:
-   *  true`) — the Stage-2 hand-polish escape hatch (constitution §4.4): a self-hosted
-   *  define's body compiles ordinarily through CoreForm, so this override is optional
-   *  in practice. */
+  /** Procedure defines only — optional hand-polish for CoreForm-compiled bodies. */
   readonly emit?: EmitRule;
-  /** See `Contract.narrows`. */
   readonly narrows?: { readonly witness: string };
-  /** See `NativeSymbolDef.refPolicy`. */
   readonly refPolicy?: RefPolicy;
   readonly metadata?: MetadataRecord;
 }
 
-/** A SCHEME-BODIED macro/expander declaration — `symbol.define`'s sibling for macro forms.
- *  Contract-FREE (a macro has no call-boundary, no provenance role — its "free variables"
- *  would name the EXPANSION env, a categorically different static-analysis story) — carries
- *  the ternary `macroAttribute` static attribute instead (stored verbatim as authored; the
- *  walker that consumes it is a separate concern). The body is a scheme LAMBDA expression
- *  over the macro's OWN fexpr formals (e.g. `(lambda (formals expr . body) …)` for
- *  `receive`) — evaluated once per bake, then wound into a `Macro` fexpr transformer at
- *  bind time (capability.ts's apply arm). */
+/** Scheme-bodied macro/expander. Contract-free (no call boundary; FVs would name expansion env).
+ *  Body is a lambda over fexpr formals; baked into a Macro transformer at bind. */
 export interface DefineSyntaxSymbolDef {
   readonly kind: "define-syntax";
   readonly name: string;
   readonly doc?: string;
   readonly body: string;
-  readonly bodyHash: string;
-  /** `"opaque"` (DEFAULT, safe under-report) | `"expression"` | `"binder"`. Stores the
-   *  AUTHORED value verbatim; no validation or consumption happens here. */
+  /** `"opaque"` (default, safe under-report) | `"expression"` | `"binder"`. Authored verbatim. */
   readonly macroAttribute: "opaque" | "expression" | "binder";
-  /** See `Contract.preludeOnly` — kind-agnostic, same routing every other kind honors. */
   readonly preludeOnly?: boolean;
   readonly metadata?: MetadataRecord;
 }
 
-/** A raw VALUE binding, discriminated (`symbol.value` — the successor of the retired
- *  untagged `{ value }` SymbolDeclaration arm): a host constant bound by name, never a
- *  scheme call target.
- *
- *  Stage A2 (2026-07-22, gap-a ruling): the factory boxes the payload at DEFINE time and
- *  stamps THIS record onto the minted/boxed value's OWN `.contract` (own, non-enumerable,
- *  define-once — `value.ts`'s own doc has the full stamping contract) — the SAME slot
- *  every other kind rides, so `contractOf()` (common/capability.ts) picks it up uniformly
- *  and the harvest/registry regains PRESENCE for data constants (`kind: "value"`, no
- *  `emit`/`narrows`/`cacheClass`/`provenance` — those stay absent, exactly like a door/
- *  keyword/macro's own harvest row). `value` itself is NOT carried on this record — the
- *  box IS the value; a reader wanting the payload reads the value itself, not a nested
- *  field describing it (the "no interim representation" law). Optional only for a
- *  primitive leaf too narrow to carry a hidden property (a `bigint` box — see value.ts). */
+/** Host data constant, bound by name — never a scheme call target. Factory boxes at define time
+ *  and stamps this onto the value's own `.contract` (non-enumerable, define-once — see value.ts)
+ *  so `contractOf()` / harvest see presence. No nested `value` field: the box IS the value.
+ *  Optional `value` only for primitive leaves too narrow for a hidden property (`bigint`). */
 export interface ValueSymbolDef {
   readonly kind: "value";
   readonly name: string;
@@ -827,18 +512,11 @@ export type AEntity =
   | DefineSyntaxSymbolDef
   | ValueSymbolDef;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 3. Internals — name/doc parsing + vector normalization
-// ─────────────────────────────────────────────────────────────────────────────
+// ── 3. Name/doc parsing + vector normalization ───────────────────────────────
 
-/** Parse `"name: human description"` from a tagged-template. Substitutions interpolated first,
- *  then split on FIRST ": " (colon-SPACE) — the name/doc separator, per how every `symbol
- *  .notImplemented`/`symbol.native` template is actually authored ("name: doc"). Split on
- *  first bare colon is WRONG for a canonical name that itself CONTAINS a colon (SRFI-14's
- *  `char-set:whitespace: …`): bare-colon split truncates the name at "char-set". A colon inside
- *  the name is never followed by space (`char-set:whitespace`, `char-set:alphabetic`) — only
- *  the real name/doc separator is — so this handles both `name: doc` and `name:with:colons: doc`.
- *  No ": " ⇒ whole string is the name (doc undefined). */
+/** Parse `"name: human description"` from a tagged template. Split on FIRST `": "`
+ *  (colon-SPACE) — bare colon would truncate names that contain colons
+ *  (`char-set:whitespace: …` → `"char-set"`). No `": "` ⇒ whole string is the name. */
 export function parseNameDoc(tpl: TemplateStringsArray, sub: readonly unknown[]): { name: string; doc?: string } {
   let raw = "";
   for (let i = 0; i < tpl.length; i++) {
@@ -850,27 +528,16 @@ export function parseNameDoc(tpl: TemplateStringsArray, sub: readonly unknown[])
   return { name: raw.slice(0, sep).trim(), doc: raw.slice(sep + 1).trim() };
 }
 
-/** A zod schema describing a whole args/return VECTOR — its codec sides are array-shaped
- *  (a tuple `[a, b]` IS a `readonly unknown[]`; an array-ish schema's `T[]` is too). Typing
- *  the normalized schema this way lets `z.decode`/`z.encode` infer `readonly unknown[]` at
- *  the call site instead of `unknown` (a `ZodTypeAny`'s output) — so the wrapper reads the
- *  decoded args / encoded values-vector as an array WITHOUT an `as unknown[]` cast each time. */
+/** Whole args/return VECTOR schema — array-shaped so decode/encode infer `readonly unknown[]`. */
 type VectorSchema = z.ZodType<readonly unknown[], readonly unknown[]>;
 
-/** Read a kwargs KEY off a raw scheme call arg — a `:key` argument is a self-evaluating ASymbol
- *  (keyword-tagless-apply.md), read the same way `dict`'s native impl reads one (env/polyglot/polyglot.ts):
- *  stringify and strip a leading `:`. One protocol, shared here because a kwargs rosetta's input
- *  lowering folds the identical `:key value` pair sequence `dict` already folds. */
+/** Kwargs key from a scheme arg: self-evaluating `:key` ASymbol → strip leading `:`. */
 function kwargsKeyOf(arg: unknown): string {
   return String(arg).replace(/^:/, "");
 }
 
-/** Fold a `(tool :k v :k2 v2 …)` call's interleaved scheme args into the RAW kwargs object —
- *  a plain JS record keyed by kwargs shape's field names, valued by RAW (still-encoded) scheme
- *  values. The kwargs schema's OWN `z.decode` (run by caller, directly against the object
- *  schema — see `rosetta()` factory in rosetta.ts) then validates + decodes each field through
- *  its own per-property codec; this fold only does the array→object RESHAPE, not the per-field
- *  decode. A dangling keyword (odd arg count) doors with a teaching error. */
+/** Fold `(tool :k v …)` interleaved args into a raw kwargs object (reshape only — per-field
+ *  decode is the caller's). Odd arg count → KeywordPairingError. */
 export function collectKwargsObject(args: readonly unknown[]): Record<string, unknown> {
   if (args.length % 2 !== 0) {
     throw new KeywordPairingError("dangling-keyword", args.length);
@@ -882,90 +549,45 @@ export function collectKwargsObject(args: readonly unknown[]): Record<string, un
   return obj;
 }
 
-/** Normalize a VectorSpec to ONE `VectorSchema` describing the whole args/return vector:
- *  a bare tuple → `z.tuple`; an array-ish schema → itself. This is what `run` parses the
- *  decoded-args array against (and what the harvest prints from). (Kwargs no longer ride this
- *  fn: a kwargs contract is `input: []` + plain-record `inputRest`, folded to an object schema
- *  by `normalizeInputVector`, never a single object `input` reaching here.) */
+/** VectorSpec → one VectorSchema: bare tuple → `z.tuple`; array-ish schema → itself.
+ *  Kwargs never reach here (`input: []` + plain-record `inputRest` → `normalizeInputVector`). */
 export function normalizeVector(spec: VectorSpec): VectorSchema {
-  // `Array.isArray`'s type guard is `arg is any[]`, which does NOT narrow a `readonly` array
-  // OUT of the union on the false branch — so probe the tuple member with a guard that carries
-  // the `readonly` element type, leaving the single-schema member on the `else`.
+  // readonly-aware tuple probe — stock Array.isArray leaves readonly arrays in the union.
   if (isSchemaTuple(spec)) {
-    // z.tuple wants a non-empty tuple of items; an empty contract ([]) is the 0-arg case.
-    // The `[head, ...tail]` annotation is the only narrowing needed (a non-empty array can't be
-    // proven from `.length`); a tuple's `out Output` IS array-shaped, so it assigns to
-    // `VectorSchema` with no bridge.
     return spec.length === 0 ? z.tuple([]) : z.tuple(spec as [z.ZodTypeAny, ...z.ZodTypeAny[]]);
   }
-  // A single array-ish schema (z.array variadic / a tuple / a union of those) — its codec sides
-  // are array-shaped by the VectorSpec contract, but a bare `ZodTypeAny`'s static output is
-  // `unknown`, so assert the vector shape ONCE here (the inner twin of the harvest-surface
-  // contract) rather than on each decode/encode result.
   return spec as VectorSchema;
 }
 
-/** Is a VectorSpec the bare-tuple member (a positional list of schemas) rather than a single
- *  array-ish schema? A `readonly`-aware `Array.isArray` so the `else` branch narrows to the
- *  single-schema member (the stock guard's `arg is any[]` leaves `readonly` arrays in the union). */
+/** Bare-tuple member vs single array-ish schema (`readonly`-aware). */
 function isSchemaTuple(spec: VectorSpec): spec is readonly z.ZodTypeAny[] {
   return Array.isArray(spec);
 }
 
-/** Normalize a contract's INPUT side to ONE combined `VectorSchema`, folding `inputRest` (when
- *  present) into a `z.tuple(fixed, rest)` — the SAME shape `def.in` already prints/decodes for a
- *  hand-authored variadic tuple (map/filter's `input: z.tuple([z.unknown()], z.unknown())`);
- *  `inputRest` just gives that shape a name split across two contract fields instead of one
- *  schema authored inline, so a fixed head and its variadic tail can be typed independently
- *  (`DecodedArgsWithRest`'s two generic params). Absent `inputRest` ⇒ byte-identical to
- *  `normalizeVector(input)` — this is what `native()`/`rosetta()` call for `.in`/`inSchema`
- *  (OUTPUT side stays plain `normalizeVector(contract.output)`, no rest concept there). */
+/** Input side + optional rest → one VectorSchema. Rest as plain record = kwargs object schema;
+ *  rest as ZodType = `z.tuple(fixed, rest)`. Single-schema input + rest throws. */
 export function normalizeInputVector(input: VectorSpec, inputRest: RestSpec): VectorSchema {
   if (inputRest === undefined) return normalizeVector(input);
-  // kwargs: a plain shape record `inputRest` (values are ZodType, the CONTAINER is not) means the
-  // whole call is a trailing kwargs OBJECT, not a variadic element. `.in` becomes the bare
-  // `z.object(shape)` so the harvest prints the kwargs signature; `run` folds the raw `:k v` args
-  // into that object at decode time. instanceof is the sound discriminator — no combinator can
-  // make a plain record satisfy `instanceof z.ZodType`. (Cast: an object schema isn't array-shaped,
-  // but the kwargs decode path never parses the raw args array against it, the same benign cast
-  // the single-schema arm of `normalizeVector` already makes.)
+  // kwargs: container is not ZodType — instanceof is the discriminator.
   if (!(inputRest instanceof ZodType)) return z.object(inputRest) as unknown as VectorSchema;
-  // A real `z.ZodType` `inputRest` (variadic tail) needs a FIXED prefix length to split the call's
-  // raw args at — only a tuple `input` has one; a single-schema `input` covers the WHOLE call with
-  // no well-defined split point. Combining `inputRest` with a single schema is a contract-authoring
-  // bug: fail loudly here rather than silently ignoring the rest schema.
   if (!isSchemaTuple(input)) {
     throw new KeywordPairingError("input-rest-needs-tuple");
   }
-  // Mirrors the exact `z.tuple(fixed, rest)` call shape `map`/`filter` already author inline —
-  // the cast narrows the (possibly empty, per `readonly z.ZodTypeAny[]`) tuple to the non-empty
-  // form `z.tuple`'s rest-bearing overload demands; zod's own runtime doesn't care about the
-  // static arity either way.
   return z.tuple(input as [z.ZodTypeAny, ...z.ZodTypeAny[]], inputRest) as VectorSchema;
 }
 
-/** Author gave a 1-tuple output? Then impl returns a SINGLE value (we wrap as 1-element
- *  values-list); otherwise it returns the values-vector already. */
+/** 1-tuple output ⇒ impl returns a single value (wrapped as 1-element vector). */
 export function isSingleOutput(output: VectorSpec): boolean {
   return Array.isArray(output) && output.length === 1;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 3b. The DRIFT ALARM — declared `provenance` role vs contract SHAPE. Two contradictions
-//     are SHAPE-decidable; everything else needs the JS body, which shape can't see.
-// ─────────────────────────────────────────────────────────────────────────────
+// ── 3b. Drift alarm — declared provenance vs contract SHAPE ──────────────────
+// Shape catches CONTRADICTIONS, not LIES (a JS body that fans while declared pipe is
+// invisible). Two decidable cases only.
 
-/** Every schema at a NORMALIZED VectorSchema's top level (see `normalizeVector`/
- *  `normalizeInputVector`) — a `z.tuple`'s items, an array-ish schema's lone element
- *  (wrapped as a 1-list so both shapes iterate uniformly), or `undefined` for anything else
- *  (a kwargs `z.object`, a bare non-container schema) — the checks below fall back to their
- *  own conservative default rather than guess past this. Same zod-4.3.6 `_zod.def` shape
- *  `type-layer/schema-to-ts.ts`'s `signatureOf` already introspects (verified there); a local
- *  copy because that module wants a differently-shaped return (printer-facing `TupleDef`/
- *  `ArrayDef`) and importing it here would pull the harvest/printer world into the bake layer.
- *  EXPORTED (beyond this module's own gates below) for `rosetta.ts`'s z.dynamic-callable door —
- *  it reads the SAME shallow slot view
- *  `contractMayCarryCallable` reads, to find which top-level positions are bare `z.dynamic`. */
+/** Top-level slots of a normalized VectorSchema: tuple items, array element as 1-list, or
+ *  undefined (kwargs object / bare). Local `_zod.def` copy — importing schema-to-ts would
+ *  pull harvest into the bake layer. Exported for rosetta's z.dynamic-callable door. */
 export function topLevelSchemas(schema: z.ZodTypeAny): readonly z.ZodTypeAny[] | undefined {
   const def = (
     schema as {
@@ -977,23 +599,9 @@ export function topLevelSchemas(schema: z.ZodTypeAny): readonly z.ZodTypeAny[] |
   return undefined;
 }
 
-/** DRIFT ALARM (errors-as-doors): throws `ProvenanceRoleShapeError` when a declared
- *  `provenance` role CONTRADICTS its own contract's shape. Called at ASSEMBLY (bake time —
- *  `native()`/`rosetta()`/`sequence()`, on the schemas each already normalizes), never at
- *  call time — a wrong role is a declaration-authoring bug, not a runtime condition.
- *
- *  1. `sink`/`transparent` both claim NO real egress ("a sink is a port with no egress
- *     wire"; "a transparent crossing neither mints nor stamps" a value — lineage.ts) — a
- *     contract whose normalized OUTPUT vector carries a real return schema contradicts
- *     either.
- *  2. `fan` claims "apply this proc across elements" (map/filter/vector-map) — a contract
- *     whose normalized INPUT vector carries no `z.lambda` arm has no proc to apply.
- *
- *  LIMIT (do not extend this function past it): shape catches CONTRADICTIONS, not LIES. A
- *  JS body that fans while declared `pipe` is consistent-but-wrong and invisible to shape;
- *  contract shape cannot see JS bodies, and arrange-vs-membership is semantic, not
- *  structural. Mitigation for that class is an agreement gate plus the generator corpus,
- *  never a shape guess bolted on here. */
+/** Throws ProvenanceRoleShapeError when declared role contradicts shape. Bake-time only.
+ *  1. `sink`/`transparent` claim no egress — real return schema contradicts.
+ *  2. `fan` claims apply-across-elements — no `z.lambda` arm contradicts. */
 export function assertProvenanceRoleShape(
   name: string,
   role: ProvenanceRole,
@@ -1002,12 +610,7 @@ export function assertProvenanceRoleShape(
 ): void {
   if (role === "sink" || role === "transparent") {
     const items = topLevelSchemas(outSchema);
-    // VOID-FAMILY reading (the same no-egress reading `extractCallbackRoles`'s `voidEgress`
-    // takes): a zero-item output vector AND an all-`undefinedResult` vector both carry no real
-    // egress — `output: [z.undefinedResult]` is a void verb, not a return value. This is the
-    // bake-time sink-void proof the runtime tombstone-skip stands on (docs/execution.md
-    // §CHOKEPOINT, §MODE-LAW): a sink's replay-skip returns void, sound only because the
-    // contract PROVED void here.
+    // Void family: zero-item OR all-`undefinedResult` (docs/execution.md §CHOKEPOINT sink-void proof).
     const hasEgress = items === undefined ? true : items.some((item) => z.lookupName(item) !== "undefinedResult");
     if (hasEgress) {
       throw new ProvenanceRoleShapeError(
@@ -1033,12 +636,7 @@ export function assertProvenanceRoleShape(
   }
 }
 
-/** Every schema a cache-class gate must inspect: a normalized vector's top-level slots
- *  (`topLevelSchemas`), PLUS a kwargs `z.object`'s per-field codecs (a kwargs contract's
- *  `.in` is the bare object schema — its fields are the slots that cross), PLUS the bare
- *  schema itself when nothing introspects (so `z.lookupName` can still name it). Local to
- *  the cache gate: the provenance gates deliberately stay on `topLevelSchemas`' narrower
- *  read (their conservative fallbacks differ). */
+/** Cache-gate slots: topLevelSchemas + kwargs object fields + bare fallback. */
 function cacheGateSlots(schema: z.ZodTypeAny): readonly z.ZodTypeAny[] {
   const items = topLevelSchemas(schema);
   if (items !== undefined) return items;
@@ -1047,44 +645,15 @@ function cacheGateSlots(schema: z.ZodTypeAny): readonly z.ZodTypeAny[] {
   return [schema];
 }
 
-/** THE REGION-SCOPE GATE (openRegionScope-gap Ruling A, arrival-mcp-rework-over-phases.md's
- *  sibling ruling on capability/symbol.rosetta parity with legacy `createRosettaWrapper`):
- *  does this contract's (already-normalized) INPUT vector carry a slot that might hand the
- *  impl a LIVE callable? Two slot kinds can:
- *  - `z.procedure` — TYPED marshaling; decode ALWAYS wraps the incoming scheme callable into
- *    a host fn bound to whatever region scope is ambient (`currentRegionScope() ??
- *    DETACHED_SCOPE`, scheme-zod.ts). If nothing opened a real scope, the wrapper silently
- *    binds to the shared, never-closing `DETACHED_SCOPE` — a reverse call through it re-enters
- *    under `DETACHED_SCOPE.runCtx` (`CONSTANT_CTX`), NOT the live run's context, which is
- *    exactly the burst-bypass hole this gate exists to close (a lambda calling a sink verb
- *    would fire the sink inline instead of enqueueing under the live run's `effects`).
- *  - `z.dynamic` — the declared RAW escape hatch ("impl does its own conversion", scheme-zod.ts's
- *    own doc on `dynamic`): decode performs NO transform, so the impl receives the raw scheme
- *    value untouched and MAY itself call `schemeToJs`/`applyCallback` on it if it happens to be
- *    a callable — reading the SAME ambient scope `z.procedure`'s decode reads. (The deprecated
- *    `z.value` alias, which used to register under its OWN name — `"value"`, not `"dynamic"` —
- *    is GONE; Phase B deleted it, so every rosetta declaration is `z.dynamic` or a real codec now.)
- *
- *  Used by `rosetta()` (rosetta.ts) to decide, ONCE at bake, whether its baked `run` wrapper
- *  needs to open a region scope around a call at all — mirroring the legacy
- *  `createRosettaWrapper`, which scoped EVERY invocation unconditionally (it had no contract to
- *  gate on). A lambda-free verb (the overwhelming majority: `+`, `string-append`, every plain
- *  data-in/data-out rosetta) never mints a scope, never touches the WeakMap wrapper cache —
- *  zero cost, byte-identical to before this ruling landed.
- *
- *  `z.dynamic` is included per an explicit adjudication, not an oversight: contract SHAPE cannot
- *  see whether a raw value passing through a `z.dynamic` slot happens to be a callable the impl
- *  later hands to a reverse crossing — under-gating there would silently reopen the exact hole
- *  this function exists to close for a small, real family of verbs (the manifold/infer `dynamic`
- *  slots documented in scheme-zod.ts). The ruling errs toward scoping: correctness over the
- *  micro-cost of an unused scope on the rarer verb that declares `z.dynamic` for something
- *  genuinely non-callable.
- *
- *  Checked on the INPUT side only — `z.procedure`'s own doc bans the OTHER direction ("rosetta
- *  result is never a bare JS function — provenance untraceable"), and the region discipline this
- *  gate enables (the escape/pending doors) is specifically about a SCHEME callable crossing INTO
- *  JS; a JS callback crossing INTO scheme via `z.procedure`'s `encode` arm is a forward crossing
- *  with no region concern. */
+/** REGION-SCOPE GATE: does normalized INPUT carry a live-callable slot?
+ *  - `z.procedure` — decode wraps into a host fn on ambient scope; without a real scope the
+ *    wrapper binds DETACHED_SCOPE/CONSTANT_CTX — the burst-bypass hole (lambda → sink fires
+ *    inline instead of enqueueing under live `effects`).
+ *  - `z.dynamic` — raw escape hatch; impl may reverse-cross a callable on the same ambient scope.
+ *    Included deliberately: shape cannot see whether a dynamic value is callable — under-gating
+ *    reopens the hole. Err toward scoping.
+ *  INPUT only: scheme→JS reverse calls need the gate; JS→scheme encode has no region concern.
+ *  Rosetta uses this once at bake — lambda-free verbs pay zero. docs/membrane.md §REGION. */
 export function contractMayCarryCallable(inSchema: z.ZodTypeAny): boolean {
   return cacheGateSlots(inSchema).some((slot) => {
     const slotName = z.lookupName(slot);
@@ -1092,27 +661,16 @@ export function contractMayCarryCallable(inSchema: z.ZodTypeAny): boolean {
   });
 }
 
-/** THE `view` SHAPE GATE (errors-as-doors, beside `assertProvenanceRoleShape` — the same
- *  bake-time pattern): a `view` cache class demands a SERIALIZABLE contract — no `z.lambda`
- *  arms (a callable can't be a boundary snapshot), no raw-scheme-value slots (`z.schemeValue`/
- *  `z.dynamic` — neither carries a serialization story).
- *  This is the bake-time half of view serializability (docs/execution.md §CHOKEPOINT — a cache
- *  entry must serialize). A contradiction throws `CacheClassShapeError` at BAKE; the author's
- *  way out is declaring `pure` (or nothing). `pure` has NO shape gate: recovery is re-call,
- *  nothing of it is persisted. Called by `native()`/`rosetta()`/`sequence()` on the schemas
- *  each already normalizes.
- *
- *  Checked on BOTH vectors: an input raw-value/`z.lambda` slot breaks the cache KEY (decoded
- *  args must canonicalize to JSON — run-cache.ts's `canonicalJson`), an output one breaks
- *  the cache ENTRY (the decoded-face value must serialize). `z.lookupName` resolves
- *  through `.optional()` wrappers, so an optional lambda arm still gates. */
+/** View shape gate: `view` demands serializable contract — no `z.lambda`, no `z.schemeValue`/
+ *  `z.dynamic`. Both vectors (key + entry). Escape hatch: declare `pure` or nothing.
+ *  docs/execution.md §CHOKEPOINT. */
 export function assertCacheClassShape(
   name: string,
   cacheClass: CacheClass | undefined,
   inSchema: z.ZodTypeAny,
   outSchema: z.ZodTypeAny,
 ): void {
-  if (cacheClass !== "view") return; // pure / absent: regenerateable, nothing persists — no gate.
+  if (cacheClass !== "view") return; // pure / absent: regenerateable — no gate
   for (const [side, schema] of [
     ["input", inSchema],
     ["output", outSchema],
@@ -1140,34 +698,13 @@ export function assertCacheClassShape(
   }
 }
 
-/** CALLBACK-role extraction from the contract: per z.lambda arm, derive a `CallbackRole`
- *  from SHAPE (arm position + return schema) with the declared `Contract.callbackRoles`
- *  overriding exactly where shape underdetermines. Returns the resolved per-arm array
- *  (lambda order), or `undefined` when the contract carries no z.lambda arm at all.
- *
- *  What shape can actually see — and the strength split it forces:
- *  - `z.lambda` is a bare callable schema (scheme-zod.ts): it carries NO return shape, so
- *    the CALLBACK's own return is invisible. Only the HOST contract's vectors decide
- *    anything.
- *  - DECIDED: void-family host egress (every top-level output schema `undefinedResult`, or
- *    a zero-output vector) ⇒ every lambda arm is `effect` — whatever the callback returns
- *    has no egress wire to ride (for-each/string-for-each/vector-for-each). An override
- *    contradicting this THROWS (the drift-door extension; same `ProvenanceRoleShapeError`
- *    family, errors-as-doors).
- *  - DEFAULT: `fan`-role host with value egress ⇒ `element-transformer` (map/vector-map).
- *    Overridable WITHOUT the door: filter's contract is shape-identical to map's yet its
- *    pred is `control` — arrange-vs-membership is semantic, so the default must yield.
- *  - NOT extracted: `control` — a callback's boolean/ordering return is exactly what
- *    z.lambda can't express, and the host's own boolean egress is NOT a proxy (procedure?
- *    takes a z.lambda it never invokes and returns a boolean — a host-return rule would
- *    door an introspection subject as a decision callback). `accumulator` — fold-shaped
- *    acc-position is a semantic fact (and `reduce` is a shapeless tagless def anyway); both
- *    arrive by declaration only. The standing rule: the door must UNDER-trigger, never
- *    guess.
- *
- *  Decidable contradictions that DO door: a declared roles array LONGER than the lambda-arm
- *  count (a role for a phantom callback — including any declaration on a lambda-free
- *  contract), and a declaration against a DECIDED arm that disagrees with it. */
+/** Per z.lambda arm: derive CallbackRole from shape; declared roles override underdetermined arms.
+ *  - DECIDED: void-family host egress ⇒ every arm `effect` (contradiction throws).
+ *  - DEFAULT: fan + value egress ⇒ `element-transformer` (overridable — filter is fan-shaped
+ *    like map but pred is `control`; under-trigger, never guess).
+ *  - NOT extracted: `control`/`accumulator` — arrive by declaration only (z.lambda has no
+ *    return shape; host boolean egress is not a proxy).
+ *  Longer-than-arm-count declaration throws. No lambda arms ⇒ undefined. */
 export function extractCallbackRoles(
   name: string,
   hostRole: ProvenanceRole,
@@ -1176,10 +713,7 @@ export function extractCallbackRoles(
   declared: readonly CallbackRole[] | undefined,
 ): CallbackRoles | undefined {
   const inItems = topLevelSchemas(inSchema) ?? [];
-  // Lambda arms in input order. `lookupName` resolves through `.optional()` wrappers
-  // (scheme-zod.ts resolveCore walks `innerType`), so `z.lambda.optional()` (sort's less?,
-  // member/assoc's compare) counts as a lambda arm — as it must: the role describes the
-  // callback WHEN PRESENT.
+  // lookupName walks .optional() — z.lambda.optional() still counts.
   const lambdaCount = inItems.filter((item) => z.lookupName(item) === "lambda").length;
   if (declared !== undefined && declared.length > lambdaCount) {
     throw new ProvenanceRoleShapeError(
@@ -1191,10 +725,7 @@ export function extractCallbackRoles(
     );
   }
   if (lambdaCount === 0) return undefined;
-  // Void-family egress: every top-level output schema is `undefinedResult`, INCLUDING the
-  // vacuous zero-output vector (`output: []` — same no-egress reading the sink/transparent
-  // check above takes). A non-introspectable output (`topLevelSchemas` undefined) stays
-  // conservative: NOT void, nothing decided.
+  // Void family includes zero-output vector; non-introspectable output stays conservative.
   const outItems = topLevelSchemas(outSchema);
   const voidEgress = outItems !== undefined && outItems.every((item) => z.lookupName(item) === "undefinedResult");
   const roles: (CallbackRole | undefined)[] = [];
@@ -1214,35 +745,17 @@ export function extractCallbackRoles(
   return roles;
 }
 
-/** DECLARATION channel for the contract-LESS kinds (tagless/tagless-guard): their `in` is
- *  the shapeless `z.array(z.schemeValue)` (the real per-op algebra lives on the receiver terms),
- *  so `extractCallbackRoles` can never see their callbacks — declaration is the ONLY
- *  channel, and there is no shape for a declaration to contradict (no drift door here BY
- *  CONSTRUCTION, not by leniency). Roles align with the op's callable args in call order.
- *  The one live use is the acc-chain marker: srfi-1's `reduce` declares `["accumulator"]`
- *  — the "fold declares acc chain" case, the chained track-composition operator's source. */
+/** Declaration channel for contract-less kinds (tagless/tagless-guard). Shapeless `in` ⇒ no
+ *  shape extract, no drift door by construction. Stamps in place on the ANativeProcedure
+ *  (spreading the instance would drop `#impl`). Live use: reduce's `["accumulator"]`. */
 export function withCallbackRoles(value: ANativeProcedure, callbackRoles: readonly CallbackRole[]): ANativeProcedure {
-  // Stage A2: `tagless()`/`taglessGuard()` now mint the ANativeProcedure directly, so there
-  // is no plain def record left to spread-clone — stamp the SAME instance in place (the same
-  // "stamp a resolved axis onto the bound value" convention every OTHER kind's callbackRoles/
-  // cacheClass/provenanceRole already follows at mint time). Also mirrors the resolved def's
-  // OWN `.contract.callbackRoles` so a reader consulting the contract sees the same answer.
   (value as { callbackRoles?: CallbackRoles }).callbackRoles = callbackRoles;
   (value.contract as { callbackRoles?: CallbackRoles }).callbackRoles = callbackRoles;
   return value;
 }
 
-/** DECLARATION-SITE channel for the compiler-facing fields (`type`/`emit`/`narrows`/
- *  `refPolicy`) on a CONTRACT-LESS kind (tagless/tagless-guard): their factory takes no
- *  `Contract` param (see `TaglessSymbolDef`/`TaglessGuardSymbolDef`'s own docs), so these
- *  fields have always landed by declaration-site spread — `{ ...symbol.tagless\`x\`, type:
- *  … }`. Stage A2: the factory mints an `ANativeProcedure` directly now (no plain def left
- *  to spread-clone — spreading an ANativeProcedure instance would drop its private `#impl`
- *  and prototype methods), so this stamps the SAME fields onto `.contract` IN PLACE instead
- *  — the one seam every reader (`schema-to-ts.ts`'s `signatureOf`, the mercury harvest) was
- *  already consulting `.contract` for. Mirrors `withCallbackRoles`'s mutate-in-place shape;
- *  returns the SAME value for chaining (`withContractFields(withCallbackRoles(symbol.tagless\`x\`,
- *  […]), { type })` reads either order). */
+/** Declaration-site channel for `type`/`emit`/`narrows`/`refPolicy` on contract-less kinds.
+ *  Stamps onto `.contract` in place (same reason as withCallbackRoles). Chainable. */
 export function withContractFields(
   value: ANativeProcedure,
   fields: Partial<Pick<TaglessSymbolDef | TaglessGuardSymbolDef, "type" | "emit" | "narrows" | "refPolicy">>,
@@ -1251,74 +764,35 @@ export function withContractFields(
   return value;
 }
 
-/** The ACC-CHAIN marker, read as data: chained composition — `egress(Tᵢ) → ingress(Tᵢ₊₁)`
- *  is the ONLY sanctioned inter-track edge; the track-separation law's one exception. True
- *  iff the resolved roles carry an `accumulator` arm — the classifier's own read. */
+/** Acc-chain marker: true iff roles carry an `accumulator` arm.
+ *  `egress(Tᵢ) → ingress(Tᵢ₊₁)` is the only sanctioned inter-track edge. */
 export function declaresAccChain(callbackRoles: CallbackRoles | undefined): boolean {
   return callbackRoles !== undefined && callbackRoles.includes("accumulator");
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 4. Shared contract-impl types the per-tag factories build their return value from.
-//    NO separate "bake*" ctor — each factory (`native.ts`/`rosetta.ts`/`sequence.ts`/…)
-//    wires its own `AEntity` member directly from these types + helpers above.
-// ─────────────────────────────────────────────────────────────────────────────
+// ── 4. Shared types the per-tag factories build from (no separate bake* ctors) ─
 
-/** The impl a `symbol.sequence` contract demands: ONE args array (not spread — dual of native/
- *  rosetta's `Impl<I,O,Rest>`, which spreads positionally) typed via `DecodedArgs<I>`, the run's
- *  RunContext, decoded return (or promise) out via `DecodedReturn<O>`. Projects the SCHEME face
- *  (like `symbol.native` — a sequence op is a ctx-aware CONTOUR over scheme values, never a
- *  membrane crossing). No `Rest`: a sequence contract never carries `inputRest` (map/filter/sort's
- *  variadic tail is the tagless receiver's own term algebra, not a contract rest slot). */
+/** Sequence impl: one args array (not spread) + RunContext; scheme face; no Rest. */
 export type SequenceImpl<I extends VectorSpec, O extends VectorSpec> = (
   args: DecodedArgs<I, "scheme">,
   runCtx: RunContext,
 ) => MaybePromise<DecodedReturn<O, "scheme">>;
 
-/** Per-invocation knobs the wrapper honors. `validate` mirrors the design's `exec(src, { typecheck })`
- *  — see the decode note in `rosetta.ts` for the current fused-transform caveat. */
+/** Per-invocation knobs. */
 export interface BakeRuntimeOpts {
-  /** Run zod validation on decoded args + encoded output. Default true. */
+  /** Zod validation on decoded args + encoded output. Default true. */
   validate?: boolean;
-  /** Metadata to attach to the symbol (e.g. MCP tool annotations), stored in `.metadata`
-   *  on the resulting def; use generic `RosettaSymbolDef<M>` to type it. Fields obey the
-   *  `MetadataField` union (static data, or a dynamic field resolved through the
-   *  describe-time read channel — see `./metadata.js`). */
+  /** Extension bag — see `MetadataField` / `./metadata.js`. */
   metadata?: MetadataRecord;
 }
 
-// No separate, importable `bakeNative`/`bakeRosetta`/`bakeDoor` constructors here: the
-// baking logic is inlined directly into the returned closure of `native()`/`rosetta()`/
-// `notImplemented()` (one file each) — producing a NativeSymbolDef/RosettaSymbolDef/
-// DoorSymbolDef is ONLY possible by calling `symbol.native`/`symbol.rosetta`/
-// `symbol.notImplemented`. No raw ctor here to reach around them with.
-
-/** Human description of a receiver for the type-mismatch error: AValue reports its scheme `kind`
- *  ("number"/"pair"/"nil"/…), else the JS shape. */
-export function describeReceiver(v: unknown): string {
-  if (v === null || v === undefined) return String(v);
-  if (v instanceof AValue) return v.kind;
-  return Array.isArray(v) ? "array" : typeof v;
-}
-
-/** A receiver's tagless-final term method: scheme args (leading operands + the run's RunContext)
- *  in, op result out. Always called with the receiver as `this`. */
+/** Tagless-final term method: called with receiver as `this`. */
 type TermMethod = (this: unknown, ...args: unknown[]) => unknown;
 
-/** Resolve a named term method off a (possibly non-object) receiver, typed — the dispatch
- *  primitive both `tagless()` (tagless.ts, throws when absent) and `taglessGuard()` (taglessGuard.ts,
- *  #f when absent) stand on, plus `srfi-1`'s `filter` sequence. Reads the member only when the
- *  receiver is a real object, returns the callable iff it IS one, else `undefined` — call site
- *  decides missing-policy without a raw `receiver as Record` / `fn as callable` cast. */
+/** Resolve a named term method off a (possibly non-object) receiver. Call site decides
+ *  missing-policy (tagless throws; taglessGuard → #f). */
 export function resolveMethod(receiver: unknown, method: string): TermMethod | undefined {
   if (receiver == null || (typeof receiver !== "object" && typeof receiver !== "function")) return undefined;
   const fn = (receiver as Record<string, unknown>)[method];
   return typeof fn === "function" ? (fn as TermMethod) : undefined;
 }
-
-// Same convention for `tagless()`/`taglessGuard()`/`sequence()`: no separate `bake*` ctor,
-// each inlines its own baking logic directly.
-
-// Tagged-template factories (`native`/`rosetta`/`tagless`/…) live one-per-file under this
-// directory; each imports shared types + helpers from here (NOT a `bake*` ctor — gone) and is
-// re-assembled into `symbol` namespace by `./index.ts`. See `../symbol.js` for stable entry.
