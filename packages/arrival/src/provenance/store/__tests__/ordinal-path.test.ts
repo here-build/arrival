@@ -13,8 +13,7 @@ import {
   ordinalPathKey,
   parentOrdinalPath,
   ROOT_ORDINAL_PATH,
-  trailingOrdinal,
-} from "../ids.js";
+  trailingOrdinal } from "../ids.js";
 
 describe("appendOrdinal — the z-axis nesting primitive (§6 instance-ordinal space)", () => {
   it("appends one ordinal per nested fan/loop instance, deepest last", () => {

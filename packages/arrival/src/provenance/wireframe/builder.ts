@@ -1,88 +1,35 @@
 /**
- * THE WIREFRAME BUILDER CORE. `classify()` generalized whole-program: build the
- * PROSPECTIVE template graph over a program's top-level defines + main
- * expression.
+ * Whole-program prospective wireframe — `classify` generalized over top-level
+ * defines + main expression.
  *
- * THE CUT-AND-CLOSE ALGORITHM. Walk each surface expression; every DESIGNATED
- * subterm (a membrane-crossing port, a PORT-COUPLED mux, a fan instantiation
- * point, a binder, a call to a port-reaching define) becomes a NODE; the maximal
- * pure residue around the cuts is ONE WIRE — `unevalWire` closes it into a
- * lambda-lifted arrival lambda whose params are exactly its ingress (cut node
- * egresses + env-supplied slots), with wire-locality enforced at emission. This
- * is the collapse rule operationally: maximal pure connected subgraphs fold to
- * one wire. Ports break segments by definition, so a wire body structurally
- * contains no source, sink, or port-coupled mux — wire purity is by
- * construction.
+ * CUT-AND-CLOSE. Designated subterms (membrane ports, port-coupled muxes, fan
+ * instantiation, binders, port-reaching define calls) become NODES; maximal pure
+ * residue becomes ONE wire via `unevalWire` (params = ingress). Wire purity is by
+ * construction — ports break segments; a wire body has no source/sink/port-mux.
  *
- * SELECTOR-CONE REACHABILITY IS OWNED HERE: the declaration-driven classifier
- * supplies DECLARATIONS only; whether a mux stays a node is builder analysis. A
- * mux is port-coupled iff its selector's backward cone reaches a port. Computed
- * as `reachesPort(classify(selector, reachClassifier, subst))` where
- *   - `subst` is the builder's own let-walk substitution (the same map
- *     `classifyLet` builds internally, threaded in via classify's own param) —
- *     so `(let ((y (src))) (if y …))` couples through the binding;
- *   - `classify`'s `field` arm descends the FOCUSED child only (siblings pruned
- *     structurally) — `walk()`'s field-arm demand pattern, EXTENDED to selector
- *     reachability rather than rebuilt: a selector `(:flag (src))` couples,
- *     `(:flag cfg)` over a plain slot does not;
- *   - `reachClassifier` additionally lowers PORT-REACHING DEFINE names to `opaque`
- *     (reachesPort's conservative arm), closing the transitive gap the prelude
- *     partition's fixpoint closed one layer down: `(if (helper x) …)` couples when
- *     `helper` wraps a fetch.
- * A pure-selector mux collapses INTO its wire: its decision is a deterministic
- * function of frozen ingress, rederived by γ — the wire's params are its full FV
- * set, BOTH arms' ingress included (a deliberate precision trade; do not "fix" by
- * re-recording).
+ * SELECTOR-CONE (owned here; classifier supplies roles only). Mux is port-coupled
+ * iff `reachesPort(classify(selector, reachClassifier, subst))`:
+ *   - `subst` = builder let-walk (couples through bindings)
+ *   - field arm descends focused child only (`(:flag (src))` couples; plain slot does not)
+ *   - port-reaching defines lower to `opaque` (transitive coupling)
+ * Pure-selector mux collapses into its wire; both arms' FV still ingress
+ * (precision trade — do not "fix" by re-recording).
  *
- * I5 EXTERIOR COLLAPSE: a fan is a REGION HOST and presents as ONE node from the
- * enclosing graph; the callback body's own wireframe is the region's private
- * `template` interior (replayed on demand), never spliced into G. No region
- * field-ports exist (LIMIT: field-demand at a region boundary answers by REPLAY,
- * not by records).
+ * I5: fan is one region host in G; callback wireframe is private `template`
+ * (replayed on demand). Field-demand at region boundary → replay, not records.
  *
- * LOOP WIREFRAMING (`wireframe/loops.ts`):
- *   - binder{cycles} nodes (named-let / do) get a REAL private interior — the
- *     loop body's own `GraphBuilder` (the I5 pattern), never spliced into the
- *     enclosing graph. A call to the loop's own name (named-let) or the step
- *     expressions (`do`) are the BACKEDGE (a `recur` node) — they feed the
- *     NEXT iteration's `params`, never a value escaping the loop; the binder
- *     node's OWN ingress wires carry only the INITIAL values. A port inside a
- *     loop body wireframes through the interior exactly like any other cut.
- *     `buildNamedLetBinder`/`buildDoBinder`/`addRecur` below; `wireframe/
- *     loops.ts` supplies `do`'s pure binding-shape parser + a visited-set-
- *     guarded reachability walk (the termination discipline). A declared-
- *     `loop`-role op with no known recursive shape (dead code today) gets an
- *     empty interior — no recursive structure to invent.
- *   - A local closure (`letrec`-bound lambda) wrapping a port under-designates a
- *     mux whose selector calls it (classify never expands call sites into callee
- *     bodies): the port itself is still cut to a node, so replay stays sound (the
- *     abstract cone includes its ingress); designation precision re-audits
- *     against the agreement corpus.
- *   - A sink cut in non-tail `begin` position leaves the wire a sequencing
- *     reference to the sink node — tolerated, not modeled.
+ * LOOPS (`loops.ts`): binder{cycles} get private GraphBuilder interiors. named-let
+ * self-call / do steps are BACKEDGE `recur` (next-iteration params; binder ingress
+ * = initials only). Declared loop-role with no recursive shape → empty interior.
+ * letrec-bound closure under-designates call-site mux (classify never expands
+ * callees); port still cut so replay cone is sound.
  *
- * STRUCT-FACT WIRES: `factTagOf` below tags an `emitWire` output whose ENTIRE
- * closed body is a single structural-fact read — `(length p)` / `(vector-length
- * p)` / `(string-length p)`, unshadowed, never a wireframe-material call,
- * resolving to the hermetic BASE primitive — mirroring the values-layer TERM
- * name (ONE term, `arrival/tagless-final/length`, for all three surface
- * spellings) rather than a per-surface-verb vocabulary. Struct-fact wires are
- * value wires carrying a fact TAG, not a second edge species — NO new node
- * kind, NO new wire species; the tag lives on `Wire.fact` (types.ts) and is
- * additive (an untagged wire is byte-identical). The count-demand CONSUMER of
- * the tag — `reachableNodesForDemand`'s `"count"` grade, routing through fact
- * wires only and never an element wire — lives in `wireframe/loops.ts`.
+ * STRUCT-FACT: `factTagOf` tags whole-body `(length|vector-length|string-length p)`
+ * as one term `length` on `Wire.fact` — not a second edge species. Count-demand
+ * routes through fact wires only (`reachableNodesForDemand` in loops.ts).
  *
- * BARE DECLARED-ROLE REFERENCES: `walkForCuts` designates a node for a
- * declared-role name (source/sink/fan/loop) occurring as a bare VALUE, not just
- * at an application head — closing a HOF hole's SILENT half
- * (`(define (call-source f) (f)) (call-source fetch-item)`: `fetch-item`
- * cuts to a `source` node at the argument occurrence, so the prospective cone
- * sees it even though the call that actually fires it, `(f)`, is hidden behind
- * a parameter string-based dispatch can't follow). LIMIT, deliberately
- * unaddressed: chasing an ALIAS to its later call site (a let-bound name later
- * applied, `(let ((g fetch-item)) (g))`'s `(g)`) — only the direct occurrence
- * gets a node, never a tracked binding.
+ * BARE ROLE REFS: designated at value occurrence (HOF argument), not only
+ * application head. LIMIT: no alias chasing — `(let ((g fetch)) (g))` under-designates `(g)`.
  */
 import type { SchemeValue } from "../../values/types.js";
 import { APair } from "../../values/primitives/APair.js";
@@ -103,32 +50,23 @@ import type {
   WireFrameEntry,
   WireframeGraph,
   WireframeNode,
-  WireframeProgram,
-} from "./types.js";
+  WireframeProgram } from "./types.js";
 
-/** The DECLARED-TERM vocabulary of surface ops whose contract reads
- *  ONLY a container's structural fact, never its element union. Mirrors
- *  `values/__tests__/laws/_tables/terms.ts`'s `arrival/tagless-final/length` verbs
- *  EXACTLY (`length`/`vector-length`/`string-length` — ONE term) — every spelling
- *  here tags the SAME `verb: "length"` (`factTagOf` below), never a per-spelling tag. */
+/** Structural-fact surface ops → one term `length` (not per-spelling tags). */
 const FACT_VERBS: ReadonlySet<string> = new Set(["length", "vector-length", "string-length"]);
 
 export interface WireframeBuildOptions {
-  /** The declaration-driven classifier — the ONE role read (`.provenanceRole`). */
+  /** Declaration-driven role read (`.provenanceRole`). */
   readonly classifier: Classifier;
-  /** Is this name resolvable in the hermetic BASE env (natives, macros, base
-   *  packs)? Production derives it from the sealed base chain; tests use a set. */
+  /** Resolvable in hermetic base env? Production: sealed base chain; tests: a set. */
   readonly isBaseName: (name: string) => boolean;
-  /** Contract-extracted callback roles for a host verb, when available —
-   *  stamped onto fan nodes as data (never consulted for designation here). */
+  /** Host-verb callback roles — stamped on fan nodes, not used for designation. */
   readonly callbackRolesOf?: (op: string) => CallbackRoles | undefined;
 }
 
-/** Shared, immutable per-program context every GraphBuilder reads. */
 interface BuildCtx {
   readonly classifier: Classifier;
-  /** `classifier` widened for REACHABILITY: a port-reaching define name lowers to
-   *  `opaque` (reachesPort's conservative arm) — the transitive coupling read. */
+  /** Port-reaching defines → opaque for transitive selector coupling. */
   readonly reachClassifier: Classifier;
   readonly preludeNames: ReadonlySet<string>;
   readonly materialNames: ReadonlySet<string>;
@@ -136,22 +74,15 @@ interface BuildCtx {
   readonly callbackRolesOf?: (op: string) => CallbackRoles | undefined;
 }
 
-/** The walk's lexical context: `subst` feeds classify-based selector reachability
- *  (let transparency); `frames` are the let-family wrappers `unevalWire` re-wraps. */
+/** Lexical walk context: subst (let transparency) + frames for unevalWire rewrap. */
 interface WalkEnv {
   readonly subst: Subst;
   readonly frames: readonly WireFrame[];
-  /** The CURRENT (innermost) loop's recur name, when walking inside a binder's
-   *  `interior` graph; `undefined` outside any loop body (loop variables wire
-   *  from the body's recur-position egress). A call to this
-   *  name is the BACKEDGE — intercepted in `walkForCuts` before the normal
-   *  materialNames/role dispatch, never falling through as an ordinary
-   *  application. Does NOT cross an I5 region boundary (a fan's own `template`
-   *  interior starts a fresh env with no `recur` — see `buildFan`). */
+  /** Innermost loop's recur name; a call is BACKEDGE. Fresh env (no recur) inside fan templates. */
   readonly recur?: { readonly name: string };
 }
 
-// ── local surface helpers (../lineage.js keeps its own private copies; same shapes) ──
+// Local surface helpers (lineage keeps private copies of the same shapes).
 
 function opName(x: unknown): string {
   const v = (x as { valueOf?: () => unknown })?.valueOf?.();
@@ -168,8 +99,7 @@ function operands(app: APair<SchemeValue, SchemeValue>): unknown[] {
   return out;
 }
 
-/** Formal names of a lambda formals list (positional symbols; a variadic/dotted
- *  tail symbol is included — it binds too). */
+/** Lambda formals including dotted rest. */
 function lambdaParams(formals: unknown): string[] {
   const out: string[] = [];
   let n: unknown = formals;
@@ -183,8 +113,7 @@ function lambdaParams(formals: unknown): string[] {
 
 const LEAF = (slot: string): LineageNode => ({ kind: "leaf", slot });
 
-/** The empty wireframe graph — used for a declared-`loop`-role op with no known
- *  recursive shape (dead code today; see the `role === "loop"` arm below). */
+/** Empty interior for declared-loop role with no known recursive shape. */
 const EMPTY_GRAPH: WireframeGraph = { nodes: [], wires: [], egress: null };
 
 /** `(let ((a e)…) …)` binding entries as {name, rhs} pairs. */
@@ -212,15 +141,11 @@ function chainOf(n: unknown): unknown[] {
   return out;
 }
 
-/** One graph under construction (the main program, a define template, or a fan
- *  region's interior — each region interior is its OWN GraphBuilder: I5's collapse
- *  is structural, interior nodes cannot leak into the enclosing graph). */
+/** One graph under construction. Region interiors own a separate GraphBuilder (I5). */
 class GraphBuilder {
   private readonly nodes: WireframeNode[] = [];
   private readonly wires: Wire[] = [];
-  /** Designated surface subterm → node id, shared across this graph's emissions
-   *  (a cut made while walking a let RHS is visible to every wire wrapped in that
-   *  frame). */
+  /** Surface subterm → node id (shared across wires in this graph). */
   private readonly cuts = new Map<unknown, number>();
   private egress: number | null = null;
 
@@ -235,16 +160,12 @@ class GraphBuilder {
     return this.nodes.length - 1;
   }
 
-  /** Walk a top-level form whose VALUE is dropped — designated nodes (and their
-   *  ingress wires) still land; the pure residue emits no wire (dead by D6's
-   *  root-binder sequencing, which is prospective-only). */
+  /** Designated nodes land; pure residue emits no wire (value-dropped form). */
   walkDropped(expr: unknown, env: WalkEnv): void {
     this.walkForCuts(expr, env);
   }
 
-  /** Wireframe the graph's VALUE expression: an out-port node + the egress wire.
-   *  A form that IS entirely a sink keeps `egress` null (a sink is a port with
-   *  no egress wire — nothing flows onward). */
+  /** Value expression → out-port + egress wire. Pure sink leaves egress null. */
   emitEgress(expr: unknown, env: WalkEnv): void {
     this.walkForCuts(expr, env);
     const cutId = this.cuts.get(expr);
@@ -254,7 +175,6 @@ class GraphBuilder {
     this.emitWire(expr, { node: out, slot: "out" }, env);
   }
 
-  /** Close the maximal pure residue of `expr` into ONE wire feeding `consumer`. */
   private emitWire(expr: unknown, consumer: WireConsumer, env: WalkEnv): void {
     this.walkForCuts(expr, env);
     const emitted = unevalWire({
@@ -263,25 +183,16 @@ class GraphBuilder {
       cuts: this.cuts,
       preludeNames: this.bctx.preludeNames,
       materialNames: this.bctx.materialNames,
-      isBaseName: this.bctx.isBaseName,
-    });
+      isBaseName: this.bctx.isBaseName });
     const fact = this.factTagOf(expr, env);
     this.wires.push({ ...emitted, consumer, ...(fact !== undefined ? { fact } : {}) });
   }
 
-  /** Tag a wire whose ENTIRE closed body is a single structural-fact
-   *  read: `(length p)` / `(vector-length p)` / `(string-length p)`. Guards, in the
-   *  same teaching order `unevalWire`'s free-variable partition uses:
-   *   - `env.subst.has(op)` — a LOCAL binding shadows the name (a let/lambda param
-   *     literally called `length`); never tag a shadowed call.
-   *   - `materialNames.has(op)` — a port-reaching top-level define named `length`
-   *     is wireframe MATERIAL (cut to a template-ref node by `walkForCuts` before
-   *     `emitWire` ever sees this `expr` as call material) — never the base primitive.
-   *   - `!isBaseName(op)` — anything not resolving to the hermetic base env (a plain
-   *     unbound/user name shaped like a base op) is not the DECLARED term.
-   *  Deliberately narrow to the TOP-LEVEL application only — `(+ 1 (length xs))` is
-   *  NOT tagged (its wire computes more than the fact) — so the tag's promise stays
-   *  exact for `loops.ts`'s count-demand router. */
+  /**
+   * Tag whole-body structural-fact reads only. Guards (match unevalWire FV order):
+   * local shadow / material define / non-base name → never tag.
+   * Nested `(+ 1 (length xs))` not tagged — keeps count-demand routing exact.
+   */
   private factTagOf(expr: unknown, env: WalkEnv): WireFact | undefined {
     if (!(expr instanceof APair) || !(expr.car instanceof ASymbol)) return undefined;
     const op = opName(expr.car);
@@ -291,36 +202,18 @@ class GraphBuilder {
     return { kind: "fact", verb: "length" };
   }
 
-  /** Selector-cone reachability — see the file header. */
   private selectorReachesPort(selector: unknown, env: WalkEnv): boolean {
     return reachesPort(classify(selector as SchemeValue, this.bctx.reachClassifier, env.subst));
   }
 
-  // ── the designation walk ────────────────────────────────────────────────────
+  // ── designation walk ───────────────────────────────────────────────────────
 
-  /** Find and BUILD every designated subterm under `expr` (registering it in
-   *  `cuts`); descend nothing already cut. Pure residue is left in place for the
-   *  enclosing `emitWire` to close. */
+  /** Build every designated subterm under `expr`; pure residue left for emitWire. */
   private walkForCuts(expr: unknown, env: WalkEnv): void {
     if (this.cuts.has(expr)) return;
-    // A DECLARED-ROLE name (source/sink/fan/loop — a rosetta whose
-    // `.provenanceRole` is a PORT role, not pipe/undefined) occurring as a bare
-    // VALUE — not applied at THIS occurrence — is a rosetta-to-rosetta flow
-    // (e.g. `(call-source fetch-item)`, where `fetch-item` fires later, inside
-    // `call-source`'s own body, through a parameter string-based dispatch can't
-    // see through). DESIGNATE it: cut a node for the occurrence itself,
-    // mirroring the node an application of the same name would build
-    // (`buildArgNode`'s `role` arm below), but with no ingress operands — there
-    // is no call HERE, the callable is a value at this site. source/sink get
-    // their own faithful kind (source is what the cone-collector in
-    // w1-harness.ts's `graphSourceNames` actually reads); fan/loop fall back to
-    // `opaque` (no call site here to derive a template/interior shape from —
-    // even a conservative opaque/quarantine designation is enough).
-    // LIMIT, DELIBERATE — this fires on the occurrence, never chases a binding:
-    // a let-alias's OWN later call site (`(let ((g fetch-item)) (g))`'s `(g)`)
-    // stays under-designated; only the direct reference gets a node, wherever
-    // walkForCuts naturally reaches one (a let RHS, an if/cond arm, a call
-    // argument — no new machinery, no alias tracking).
+    // Bare port-role value (source/sink/fan/loop) → designate at occurrence
+    // (HOF args). source/sink keep kind; fan/loop → opaque (no call site for shape).
+    // LIMIT: no alias chasing.
     if (expr instanceof ASymbol) {
       const name = opName(expr);
       if (!env.subst.has(name) && !this.bctx.materialNames.has(name)) {
@@ -338,7 +231,7 @@ class GraphBuilder {
       }
       return;
     }
-    if (!(expr instanceof APair)) return; // literals are wire material
+    if (!(expr instanceof APair)) return;
 
     const head = expr.car;
     if (head instanceof ASymbol) {
@@ -346,7 +239,7 @@ class GraphBuilder {
       if (!env.subst.has(form)) {
         switch (form) {
           case "quote":
-            return; // datum space — no designation inside
+            return;
           case "quasiquote":
             this.walkQuasi(expr.cdr instanceof APair ? expr.cdr.car : undefined, 1, env);
             return;
@@ -360,8 +253,7 @@ class GraphBuilder {
               this.cuts.set(expr, this.buildMux(expr, rest, form, env));
               return;
             }
-            // Pure-selector mux — collapses INTO the wire; keep walking for
-            // designated subterms in selector/arms (they cut out of the wire).
+            // Pure-selector mux collapses into wire; still walk nested cuts.
             this.walkForCuts(test, env);
             for (const arm of chainOf(rest.cdr)) this.walkForCuts(arm, env);
             return;
@@ -391,8 +283,6 @@ class GraphBuilder {
             this.walkLet(expr, form as "let" | "let*" | "letrec" | "letrec*", env);
             return;
           case "do":
-            // Iterative loop — designated binder{cycles}: a real backedge-
-            // wired interior (the step expressions are the backedge).
             this.cuts.set(expr, this.buildDoBinder(expr, env));
             return;
           case "begin":
@@ -410,7 +300,6 @@ class GraphBuilder {
             return;
           }
           case "define": {
-            // Interior define (rare in wire space) — walk its value/body forms.
             const rest = expr.cdr;
             if (!(rest instanceof APair)) return;
             const extended = new Map(env.subst);
@@ -420,15 +309,13 @@ class GraphBuilder {
             return;
           }
           default:
-            break; // not a modeled special form — application path below
+            break;
         }
       }
     }
 
-    // ── application: (op . args) ──
     if (head instanceof APair) {
-      // Computed operator — walk it and the args; no designation for the call itself
-      // (classify's A21 HOF hole; conservative wire material).
+      // Computed operator — walk head+args; call itself is wire material (HOF hole).
       this.walkForCuts(head, env);
       for (const a of operands(expr)) this.walkForCuts(a, env);
       return;
@@ -440,15 +327,10 @@ class GraphBuilder {
 
     const op = opName(head);
     if (!env.subst.has(op)) {
-      // A call to the ENCLOSING loop's own recur name: the BACKEDGE, never
-      // a port-reaching define/role dispatch. Checked first (shadowing is already
-      // handled by the `env.subst.has(op)` guard above).
       if (env.recur !== undefined && op === env.recur.name) {
         this.cuts.set(expr, this.buildArgNode({ kind: "recur", span: scopeId(expr) }, expr, env));
         return;
       }
-      // A call to a port-reaching top-level define — its call sites reference its
-      // template subgraph.
       if (this.bctx.materialNames.has(op)) {
         this.cuts.set(expr, this.buildArgNode({ kind: "template-ref", name: op, span: scopeId(expr) }, expr, env));
         return;
@@ -465,13 +347,7 @@ class GraphBuilder {
           this.cuts.set(expr, this.buildFan(expr, op, env));
           return;
         case "loop": {
-          // A declared-`loop` op with no known recursive shape (dead code
-          // today — no live declaration uses this role, ../lineage.js's
-          // DeclaredRole doc): designate the node with an EMPTY interior;
-          // operands wire as ordinary ingress (buildArgNode's path) — inventing
-          // iteration semantics for a combinator with none observed is not this
-          // landing's job (named-let/do, which DO have known shapes, get real
-          // interiors via buildNamedLetBinder/buildDoBinder above).
+          // No known recursive shape → empty interior; named-let/do get real ones.
           const id = this.buildArgNode(
             { kind: "binder", op, span: scopeId(expr), cycles: true, params: [], interior: EMPTY_GRAPH },
             expr,
@@ -481,14 +357,13 @@ class GraphBuilder {
           return;
         }
         default:
-          break; // pipe / undefined — pure application, wire material
+          break;
       }
     }
     for (const a of operands(expr)) this.walkForCuts(a, env);
   }
 
-  /** Quasiquote space: only `unquote`/`unquote-splicing` bodies re-enter expression
-   *  space (depth-counted, mirroring free-vars.ts's walkQuasi). */
+  /** Quasiquote: only unquote bodies re-enter expression space (depth-counted). */
   private walkQuasi(n: unknown, depth: number, env: WalkEnv): void {
     if (!(n instanceof APair)) return;
     if (n.car instanceof ASymbol) {
@@ -511,15 +386,11 @@ class GraphBuilder {
     }
   }
 
-  /** let-family: TRANSPARENT to designation (mirrors `classifyLet`) — walk RHSs,
-   *  thread the substitution per kind, extend the frame stack for the body. A named
-   *  let is a recursive binder → designated, with a REAL backedge-wired interior
-   *  (`buildNamedLetBinder`). */
+  /** Let-family transparent to designation; named let → binder with interior. */
   private walkLet(expr: APair<SchemeValue, SchemeValue>, kind: "let" | "let*" | "letrec" | "letrec*", env: WalkEnv): void {
     const rest = expr.cdr;
     if (!(rest instanceof APair)) return;
     if (rest.car instanceof ASymbol) {
-      // named let — binder{cycles:true}: a real backedge-wired interior.
       this.cuts.set(expr, this.buildNamedLetBinder(expr, rest, env));
       return;
     }
@@ -528,9 +399,6 @@ class GraphBuilder {
     const extended = new Map(env.subst);
     const partial: WireFrameEntry[] = [];
     for (const entry of entries) {
-      // Walk the RHS for designated subterms. A sequential form's later RHS sits
-      // under the earlier entries (frame + subst); a parallel let's RHSs see the
-      // outer scope only.
       const rhsEnv: WalkEnv = sequential
         ? { subst: extended, frames: [...env.frames, { kind, entries: [...partial] }], recur: env.recur }
         : env;
@@ -547,16 +415,14 @@ class GraphBuilder {
     for (const bodyForm of chainOf(rest.cdr)) this.walkForCuts(bodyForm, bodyEnv);
   }
 
-  // ── node constructors ───────────────────────────────────────────────────────
+  // ── node constructors ──────────────────────────────────────────────────────
 
-  /** A port/opaque/template-ref node: every operand becomes an ingress wire. */
   private buildArgNode(node: WireframeNode, expr: APair<SchemeValue, SchemeValue>, env: WalkEnv): number {
     const id = this.addNode(node);
     operands(expr).forEach((a, i) => this.emitWire(a, { node: id, slot: `arg${i}` }, env));
     return id;
   }
 
-  /** A PORT-COUPLED mux (if/when/unless): selector wire + one wire per arm. */
   private buildMux(
     expr: APair<SchemeValue, SchemeValue>,
     rest: APair<SchemeValue, SchemeValue>,
@@ -564,8 +430,7 @@ class GraphBuilder {
     env: WalkEnv,
   ): number {
     const test = rest.car;
-    // if: arms = [then, else?]; when/unless: the body's VALUE is its last form
-    // (earlier forms walk value-dropped).
+    // if: [then, else?]; when/unless: last body form is value.
     const bodyForms = chainOf(rest.cdr);
     const arms = form === "if" ? bodyForms : bodyForms.length > 0 ? [bodyForms[bodyForms.length - 1]] : [];
     if (form !== "if") for (const dropped of bodyForms.slice(0, -1)) this.walkForCuts(dropped, env);
@@ -575,7 +440,6 @@ class GraphBuilder {
     return id;
   }
 
-  /** A PORT-COUPLED cond: one selector wire per non-else test, one wire per arm. */
   private buildCondMux(
     expr: APair<SchemeValue, SchemeValue>,
     clauses: readonly APair<SchemeValue, SchemeValue>[],
@@ -587,9 +451,7 @@ class GraphBuilder {
       const isElse = clause.car instanceof ASymbol && opName(clause.car) === "else";
       if (!isElse) this.emitWire(clause.car, { node: id, slot: `selector${sel++}` }, env);
       const body = chainOf(clause.cdr).filter((f) => !(f instanceof ASymbol && opName(f) === "=>"));
-      // Arm value: the last body form; a `(test)` clause's value is the test itself.
-      // (A `=>` clause's receiver is approximated as the arm — its applied-to-test
-      // threading is classifyCond's `combine("=>")`, deferred here.)
+      // Last body form is arm; bare `(test)` returns test. deferred: => threading.
       const arm = body.length > 0 ? body[body.length - 1] : clause.car;
       for (const dropped of body.slice(0, -1)) this.walkForCuts(dropped, env);
       this.emitWire(arm, { node: id, slot: `arm${k}` }, env);
@@ -597,12 +459,10 @@ class GraphBuilder {
     return id;
   }
 
-  /** A fan instantiation point = region host (I5: ONE node from G; the callback
-   *  body's wireframe is the region's PRIVATE template interior). */
+  /** Fan = I5 region host; lambda body → private template interior. */
   private buildFan(expr: APair<SchemeValue, SchemeValue>, op: string, env: WalkEnv): number {
     const args = operands(expr);
     const fn = args[0];
-    // Mirrors ../lineage.js's fan arm: map/vector-map preserve length; filter does not.
     const lengthPreserving = op === "map" || op === "vector-map";
     let template: WireframeGraph | undefined;
     let elementParams: string[] | undefined;
@@ -612,9 +472,7 @@ class GraphBuilder {
       const interior = new GraphBuilder(this.bctx);
       const intSubst = new Map(env.subst);
       for (const p of params) intSubst.set(p, LEAF(p));
-      // frames: [] — a template wire's slot params beyond `elementParams` are
-      // region CAPTURES by name (sealed at region open, I2); an enclosing let
-      // binding is a capture from the region's view, never an inlined frame.
+      // frames: [] — non-element slots are region captures (I2), not inlined frames.
       const intEnv: WalkEnv = { subst: intSubst, frames: [] };
       const bodyForms = chainOf(fn.cdr.cdr);
       for (const dropped of bodyForms.slice(0, -1)) interior.walkDropped(dropped, intEnv);
@@ -635,25 +493,16 @@ class GraphBuilder {
       ...(template !== undefined ? { template } : {}),
       ...(elementParams !== undefined ? { elementParams } : {}),
       ...(fnOp !== undefined ? { fnOp } : {}),
-      ...(roles !== undefined ? { callbackRoles: roles } : {}),
-    });
-    // The fanned container(s): (map f xs) → slot "source"; (map f xs ys) → +"source1".
+      ...(roles !== undefined ? { callbackRoles: roles } : {}) });
     args.slice(1).forEach((a, i) => this.emitWire(a, { node: id, slot: i === 0 ? "source" : `source${i}` }, env));
     return id;
   }
 
-  /** Named let → `binder{cycles}` with a REAL interior (loop variables wire
-   *  from the body's recur-position egress back to the binder's params).
-   *  `(let loop ((v init)…) body…)`: the body wireframes as the loop's own
-   *  PRIVATE graph (the I5 pattern — its own `GraphBuilder`, never spliced
-   *  into `this`), `v…` bound as per-iteration
-   *  LEAF slots (extending the OUTER subst, exactly like `buildFan`'s
-   *  `intSubst` — a captured outer binding must stay visible for selector-
-   *  cone reachability, e.g. a captured threshold that's itself a source);
-   *  a call to `loop` anywhere in the body is the BACKEDGE (a `recur` node,
-   *  intercepted in `walkForCuts`), never a value escaping the loop. The
-   *  INIT values are ORDINARY ingress wires from the OUTER scope — a named
-   *  let's bindings, like a plain let's, evaluate in the enclosing scope. */
+  /**
+   * Named let → binder{cycles} with private interior. Loop vars = LEAF slots
+   * extending outer subst (selector reachability sees captures). Self-call =
+   * recur backedge; init wires are outer-scope ingress.
+   */
   private buildNamedLetBinder(
     expr: APair<SchemeValue, SchemeValue>,
     rest: APair<SchemeValue, SchemeValue>,
@@ -678,43 +527,19 @@ class GraphBuilder {
       span: scopeId(expr),
       cycles: true,
       params,
-      interior: interior.finish(),
-    });
+      interior: interior.finish() });
     entries.forEach((e, i) => this.emitWire(e.rhs, { node: id, slot: `arg${i}` }, env));
     return id;
   }
 
-  /** `do` → `binder{cycles}` with a REAL interior. `(do ((var init
-   *  step?)…) (test result…) body…)`: `var…` bound as per-iteration LEAF
-   *  slots (extending the outer subst, same rationale as named-let above);
-   *  `body…` walks value-dropped (side effects only — its ports still land);
-   *  `test` likewise value-dropped: its ports still land regardless, though
-   *  no wire consumes a VALUE from it — `do` isn't shaped as an `if`, so no
-   *  mux models the continue/stop choice here. Accepted precision LIMIT, not
-   *  a correctness gap: the hard-gate concern is a template referent existing
-   *  before emission, not the continue/stop decision's runtime-recordability
-   *  (that precision re-audits against the agreement corpus).
-   *  The step expressions are the BACKEDGE (one `recur` node — R7RS: an
-   *  omitted step defaults to the var's own current binding, carried over
-   *  unchanged; `parseDoBindings` already encodes that default). `result…`
-   *  is the TERMINAL egress — the value(s) when the loop stops.
-   *
-   *  `result…`'s occurrences of a loop variable name the
-   *  SAME identifier the step clause rebinds every iteration — R7RS reads
-   *  `result…` in a scope where the vars are bound to their LATEST value,
-   *  i.e. whatever the backedge (the `recur` node below) fed them. Named-let
-   *  gets this for free because its tail position IS the literal recursive
-   *  call — the cut-and-close walk designates that call a `recur` NODE, and
-   *  ordinary reachability walks through it. `do` has no such syntactic call
-   *  in result position to intercept, so the equivalent wiring is synthesized
-   *  here: `result…` walks under an EXTRA synthetic `let` frame that rebinds
-   *  every loop variable to one shared cut sentinel pre-registered straight
-   *  to the `recur` node's id — mirroring `unevalWire`'s own let-frame
-   *  rewrap, so e.g. the egress wire reads `(let ((acc in0)) acc)` with
-   *  `in0` a NODE paramRef into `recur`, putting everything the step
-   *  expressions reach back in the result's cone. `body…`/`test` are
-   *  UNCHANGED (still plain per-iteration LEAF slots) — only the result
-   *  clause's variable scope changes. */
+  /**
+   * `do` → binder{cycles}. Body/test value-dropped (ports still land); no mux
+   * for continue/stop (precision LIMIT — agreement corpus). Steps = backedge
+   * recur (R7RS omitted step = identity; parseDoBindings encodes default).
+   * result… is terminal egress under synthetic let rebinding loop vars to the
+   * recur cut (R7RS latest-value scope; named-let gets this from syntactic
+   * self-call).
+   */
   private buildDoBinder(expr: APair<SchemeValue, SchemeValue>, env: WalkEnv): number {
     const rest = expr.cdr;
     const bindings = rest instanceof APair ? parseDoBindings(rest.car) : [];
@@ -739,8 +564,7 @@ class GraphBuilder {
       interior.cuts.set(recurSentinel, recurId);
       const resultFrame: WireFrame = {
         kind: "let",
-        entries: bindings.map((b): WireFrameEntry => ({ name: b.name, rhs: recurSentinel })),
-      };
+        entries: bindings.map((b): WireFrameEntry => ({ name: b.name, rhs: recurSentinel })) };
       const resultEnv: WalkEnv = { subst: intSubst, frames: [resultFrame] };
       for (const dropped of clause.resultForms.slice(0, -1)) interior.walkDropped(dropped, resultEnv);
       interior.emitEgress(clause.resultForms[clause.resultForms.length - 1], resultEnv);
@@ -752,18 +576,12 @@ class GraphBuilder {
       span: scopeId(expr),
       cycles: true,
       params,
-      interior: interior.finish(),
-    });
+      interior: interior.finish() });
     bindings.forEach((b, i) => this.emitWire(b.init, { node: id, slot: `arg${i}` }, env));
     return id;
   }
 
-  /** The loop's BACKEDGE: a `recur` node whose ingress wires
-   *  (`arg0..argN`, positional with the ENCLOSING binder's `params`) are the
-   *  next-iteration values — never `this.egress` (a recur never escapes the
-   *  loop). `do`'s recur has no syntactic call site (unlike named-let's
-   *  `(loop args…)`, intercepted in `walkForCuts`), so `buildDoBinder` calls
-   *  this directly with the step expressions. */
+  /** Backedge: next-iteration args; never escapes as graph egress. */
   private addRecur(span: string, args: readonly unknown[], env: WalkEnv): number {
     const id = this.addNode({ kind: "recur", span });
     args.forEach((a, i) => this.emitWire(a, { node: id, slot: `arg${i}` }, env));
@@ -771,12 +589,10 @@ class GraphBuilder {
   }
 }
 
-/** Extract a wireframe-material define's formals + body forms. Handles
- *  `(define (name . formals) body…)` and `(define name (lambda formals body…))`;
- *  a value define with a non-lambda RHS is a zero-param template over its RHS. */
+/** Formals + body of a wireframe-material define (function form or lambda RHS). */
 function defineShape(form: APair<SchemeValue, SchemeValue>): { params: string[]; bodyForms: unknown[] } {
   const rest = form.cdr;
-  if (!(rest instanceof APair)) return { params: [], bodyForms: [] }; // malformed — defineNameOf-guarded upstream
+  if (!(rest instanceof APair)) return { params: [], bodyForms: [] };
   const target = rest.car;
   if (target instanceof APair) return { params: lambdaParams(target.cdr), bodyForms: chainOf(rest.cdr) };
   const rhs = rest.cdr instanceof APair ? rest.cdr.car : undefined;
@@ -787,10 +603,8 @@ function defineShape(form: APair<SchemeValue, SchemeValue>): { params: string[];
 }
 
 /**
- * Build the whole-program prospective layer: partition top-level defines via
- * the prelude classifier, wireframe each PORT-REACHING define into a named
- * template, and wireframe the main (non-define) forms — the last one's value flows
- * to the out-port; earlier ones walk value-dropped (their ports still land).
+ * Whole-program prospective layer: prelude partition, port-reaching defines →
+ * named templates, main forms (last → egress; earlier value-dropped).
  */
 export function buildWireframe(forms: readonly SchemeValue[], opts: WireframeBuildOptions): WireframeProgram {
   const membership = classifyProgramPrelude(forms, opts.classifier);
@@ -798,13 +612,11 @@ export function buildWireframe(forms: readonly SchemeValue[], opts: WireframeBui
   const bctx: BuildCtx = {
     classifier: opts.classifier,
     reachClassifier: {
-      roleOf: (op) => (membership.wireframe.has(op) ? "opaque" : opts.classifier.roleOf(op)),
-    },
+      roleOf: (op) => (membership.wireframe.has(op) ? "opaque" : opts.classifier.roleOf(op)) },
     preludeNames: membership.pure,
     materialNames: membership.wireframe,
     isBaseName: opts.isBaseName,
-    ...(opts.callbackRolesOf !== undefined ? { callbackRolesOf: opts.callbackRolesOf } : {}),
-  };
+    ...(opts.callbackRolesOf !== undefined ? { callbackRolesOf: opts.callbackRolesOf } : {}) };
 
   const templates = new Map<string, DefineTemplate>();
   for (const form of forms) {
@@ -831,6 +643,5 @@ export function buildWireframe(forms: readonly SchemeValue[], opts: WireframeBui
     prelude: { names: membership.pure, source: preludeSource },
     membership,
     templates,
-    main: main.finish(),
-  };
+    main: main.finish() };
 }

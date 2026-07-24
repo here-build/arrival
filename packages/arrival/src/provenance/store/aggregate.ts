@@ -82,8 +82,7 @@ import type {
   IngressBindingRecord,
   ProvenanceRecord,
   TrackCloseRecord,
-  TrackOpenRecord,
-} from "./records.js";
+  TrackOpenRecord } from "./records.js";
 import {
   appendOrdinal,
   ordinalPathKey,
@@ -91,8 +90,7 @@ import {
   trailingOrdinal,
   type OrdinalPath,
   type RecordId,
-  type RegionId,
-} from "./ids.js";
+  type RegionId } from "./ids.js";
 import type { ProvenanceStore, RunStore } from "./interfaces.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -172,8 +170,7 @@ function runKeyOf(record: AggregatableRecord): RunKey {
     kind: record.kind,
     templateHash: record.id.templateHash,
     regionEpoch: record.id.regionEpoch,
-    parentOrdinalPath: parentOf(record.id.ordinalPath),
-  };
+    parentOrdinalPath: parentOf(record.id.ordinalPath) };
 }
 
 /** `foldRuns`'s result: the compacted runs it could form, PLUS whatever it could
@@ -213,8 +210,7 @@ function closeRun(open: OpenRun): AggregationRun {
     regionEpoch: open.regionEpoch,
     parentOrdinalPath: open.parentOrdinalPath,
     start: open.start,
-    count: open.count,
-  };
+    count: open.count };
 }
 
 /** Folds a SEQUENCE of aggregatable records (any emission order — runs are
@@ -275,8 +271,7 @@ export function foldRuns(records: readonly AggregatableRecord[]): FoldResult {
         regionEpoch: key.regionEpoch,
         parentOrdinalPath: key.parentOrdinalPath,
         start: ordinal,
-        count: 1,
-      };
+        count: 1 };
     }
   }
   flushOpen();
@@ -311,8 +306,7 @@ export function unfoldRun(run: AggregationRun): readonly UnfoldedFact[] {
     const id: RecordId = {
       templateHash: run.templateHash,
       regionEpoch: run.regionEpoch,
-      ordinalPath: appendOrdinal(run.parentOrdinalPath, ordinal),
-    };
+      ordinalPath: appendOrdinal(run.parentOrdinalPath, ordinal) };
     facts.push(run.kind === "track-close" ? { kind: run.kind, id, settled: true } : { kind: run.kind, id });
   }
   return facts;
@@ -403,8 +397,7 @@ export class AggregatingProvenanceStore implements ProvenanceStore {
       regionEpoch: key.regionEpoch,
       parentOrdinalPath: key.parentOrdinalPath,
       start: ordinal,
-      count: 1,
-    });
+      count: 1 });
   }
 
   /** Materialize every currently-open run for `regionId` — the port-flush

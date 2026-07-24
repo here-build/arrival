@@ -30,8 +30,7 @@ import {
   emitTrackOpen,
   ensureStreamHeader,
   isEmissionEnabled,
-  setEmissionEnabled,
-} from "../emit.js";
+  setEmissionEnabled } from "../emit.js";
 import { PayloadStoreFake, ProvenanceStoreFake, ProvenanceWriteFailure } from "../fakes.js";
 import { recordIdKey, type RecordId } from "../ids.js";
 
@@ -93,8 +92,7 @@ describe("emitMint — payload lands before the record, value+stampIds round-tri
       regionId: REGION,
       id: ID_A,
       value: { hello: "world" },
-      stampIds: [7, 8],
-    });
+      stampIds: [7, 8] });
     expect(record).toBeDefined();
     if (record === undefined) throw new Error("unreachable");
     expect(record.kind).toBe("mint");

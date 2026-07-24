@@ -24,8 +24,7 @@ describe("PayloadTierMachine — the ring leg (§5 A1 tier 1)", () => {
       storageTier: "ring",
       value: "hot value",
       stampIds: [1, 2],
-      retention: "standard",
-    });
+      retention: "standard" });
   });
 
   it("ringPut without an explicit retention defaults to 'standard'; an explicit tag flows through", async () => {
@@ -77,8 +76,7 @@ describe("PayloadTierMachine — the ring leg (§5 A1 tier 1)", () => {
       storageTier: "stub",
       value: undefined,
       stampIds: [9, 9], // §5 A1 tier 4: identity + stamps retained
-      retention: "standard",
-    });
+      retention: "standard" });
     await expect(store.get("h1")).rejects.toThrow(); // the store never saw this hash
     await expect(machine.flush("h1")).rejects.toBeInstanceOf(PayloadNotRingResident); // stubbed, not flushable
   });

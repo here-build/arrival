@@ -40,8 +40,7 @@ function trackedReader(values: readonly unknown[]): EgressReader & { readKeys: s
     read(key: string): unknown {
       readKeys.push(key);
       return values[Number(key)];
-    },
-  };
+    } };
 }
 
 describe("egressContainerProxy — Q14 gate, additive over the existing lazy-materialization seam", () => {

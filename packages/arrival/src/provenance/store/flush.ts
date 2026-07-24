@@ -1,36 +1,18 @@
 /**
- * store/flush.ts — the flush policy ("the in-memory ring flushes to DO
- * storage AT PORTS — every await is a port — durability boundaries coincide with
- * meaning boundaries... with a size/time backstop and a forced flush on the
- * pre-hibernation hook. Port completion BARRIERS on the durable write — this is
- * exactly what DO output gates provide natively; a failed write kills the request
- * and the idempotent record ids make the retry's re-emission safe").
+ * In-memory provenance ring: buffers `append`s and flushes to a `ProvenanceStore` at
+ * ports (every await), with size/time backstops and a forced `preHibernate` flush.
+ * Port completion barriers on the durable write — failed write leaves the buffer
+ * intact so retry re-emits under `ProvenanceStore.append`'s idempotent upsert.
  *
- * INTERFACE-LEVEL, fake-backed — "the DO surface is built interface-first...
- * a thin workerd suite validates the real adapter against the fakes' contract"
- * (that adapter is a later concern, never this file's). `ProvenanceRing`
- * wraps a `ProvenanceStore` and proves the CONTRACT this file's header quotes:
- *   - buffered `append`s are NOT durable until `flush` (or a backstop/pre-hibernation
- *     flush) runs;
- *   - `flush`/`atPort` AWAIT the underlying `store.append` calls — the barrier;
- *   - a failed underlying write leaves the buffer INTACT (never silently dropped) so
- *     a retried `flush` re-emits safely, relying on `ProvenanceStore.append`'s own
- *     idempotent-upsert contract for records that landed before the
- *     failure;
- *   - a size backstop (`maxRecords`) and a deterministic virtual-clock time backstop
- *     (`tick`/`flushAged`, the SAME no-real-timers idiom `PayloadStoreFake.step` uses)
- *     force a flush without waiting for an explicit port;
- *   - `preHibernate` force-flushes every region with buffered records — the DO's
- *     pre-hibernation hook, on the interface.
+ * Interface-level, fake-backed (workerd adapter is separate). Contract:
+ *   - buffered appends are not durable until flush / backstop / preHibernate
+ *   - flush/atPort await store.append (barrier)
+ *   - failed write keeps buffer intact
+ *   - maxRecords + virtual-clock maxAgeTicks force flush without an explicit port
+ *   - preHibernate flushes every region with buffered records
  *
- * Deliberately NOT wired into `store/emit.ts`'s `emit*` functions: those already
- * `await store.append` directly, one record per call — already durable-write-
- * barriered at the SINGLE-RECORD grain (the alignment holds trivially there).
- * This ring exists for BATCHING multiple records across one PURE STRETCH between
- * ports into one flush — real wiring into the wireframe-walking driver is a later
- * concern (the driver that decides where "a port" is at the evaluator level), never
- * this file's; this file lands the mechanism and proves its contract against the
- * fakes.
+ * Not wired into emit.ts (those await append per record). This ring batches across a
+ * pure stretch between ports. deferred: wireframe-driver port designation.
  */
 import type { ProvenanceStore } from "./interfaces.js";
 import type { RegionId } from "./ids.js";

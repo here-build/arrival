@@ -36,8 +36,7 @@ describe("foldRegionStream — the empty/base case", () => {
       unsettledCloses: 0,
       pending: 0,
       hostSchedules: [],
-      lastSeq: 0,
-    });
+      lastSeq: 0 });
   });
 });
 
