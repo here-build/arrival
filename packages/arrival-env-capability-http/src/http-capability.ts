@@ -21,11 +21,10 @@ export const arrivalHttpCapability = EnvCapability.define("arrival/http", {
   // time — config-independent — so the host `http` resolver can't be resolved out here. Each impl
   // re-reads it from `this.configuration.http` at REAL DISPATCH instead (the injected
   // `symbol.rosetta`'s typed `this` — `this.invocation` rides the same CallCtx channel it always
-  // did). VARIADIC identity input (`z.array(z.dynamic)`) keeps the legacy ARITY TOLERANCE (opts
-  // may be omitted). Each arg is `schemeToJs`'d explicitly inside the impl — byte-identical to the
-  // legacy generic membrane's automatic `schemeToJs` pass every `defineRosetta` arg went through.
-  // Each verb is a `symbol.rosetta` SOURCE (no `pure` ⇒ mints a fresh provenance point at the
-  // membrane crossing, exactly as the former `withContext` rosettas did).
+  // did). VARIADIC identity input (`z.array(z.dynamic)`) keeps open ARITY TOLERANCE (opts
+  // may be omitted). Each arg is `schemeToJs`'d explicitly inside the impl (crossing face).
+  // Each verb is a `symbol.rosetta` SOURCE (no pure-pipe ⇒ mints a fresh provenance point at the
+  // membrane crossing).
   symbols: (symbol) => {
     const httpVerb = (method: HttpMethod, name: "http/get" | "http/post") =>
       symbol.rosetta`${name}: performs an ${method} request via the http effect resolver`(

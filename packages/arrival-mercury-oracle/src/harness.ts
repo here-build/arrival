@@ -36,7 +36,7 @@
  * dissolved `legibility()` occupied (see that module's header for why: pure-
  * region CSE still needs the finished, already-named tree, and still must
  * run before asyncness materialization — Law W).
- * Gate subject is greenfield only (the legacy `@inhuman.tools/mercury` string
+ * Gate subject is greenfield only (the removed `@inhuman.tools/mercury` string
  * path was deleted — one pipeline). The artifact exports a program-face default
  * function; values are observed by calling it (no stdout/JSON round-trip, so
  * `NaN`/`-0` survive). Scratch `.mts` lives INSIDE this package tree (Node
@@ -533,7 +533,7 @@ function stageRuntimeModule(): void {
   stage0Staged = true;
 }
 
-/** Gate subject — greenfield only (legacy string path removed). */
+/** Gate subject — greenfield only (string emit path removed). */
 export type OracleSubject = "greenfield";
 
 export interface EvalCompiledOptions {

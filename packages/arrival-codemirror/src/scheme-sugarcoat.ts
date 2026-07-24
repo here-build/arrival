@@ -5,7 +5,7 @@ import { tags as t } from "@lezer/highlight";
  * StreamLanguage for classic Scheme + sugarcoat superset (readable lens).
  *
  * Covers s-exprs + curly-infix, `k:` / `:key`, `=>`, `== && ||`.
- * Radix/string/comment handling lifted from legacy scheme mode.
+ * Radix/string/comment handling lifted from the CodeMirror scheme mode.
  *
  * Emits ONLY tags (bring your own theme). Every custom token in tokenTable
  * or it renders as nothing — this is the contract with StreamLanguage.
@@ -35,7 +35,7 @@ export const CONTROL_KEYWORDS = set(`
   set! require import
 `);
 
-// ── number matchers (lifted from the legacy scheme mode) ──────────────────
+// ── number matchers (lifted from the CodeMirror scheme mode) ──────────────────
 const binaryMatcher =
   /^(?:[-+]i|[-+][01]+#*(?:\/[01]+#*)?i|[-+]?[01]+#*(?:\/[01]+#*)?@[-+]?[01]+#*(?:\/[01]+#*)?|[-+]?[01]+#*(?:\/[01]+#*)?[-+](?:[01]+#*(?:\/[01]+#*)?)?i|[-+]?[01]+#*(?:\/[01]+#*)?)(?=[()\s;"]|$)/i;
 const octalMatcher =
@@ -289,7 +289,7 @@ export const parser: StreamParser<SchemeSugarcoatState> = {
   },
 
   // CRITICAL: custom tokens (KEY/ARROW/...) must map here or they are invisible.
-  // Non-customs go through CM's legacy tag map.
+  // Non-customs go through CM's built-in tag map.
   tokenTable: {
     [KEY]: t.propertyName,
     [ARROW]: t.controlOperator,

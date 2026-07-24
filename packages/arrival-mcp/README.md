@@ -187,7 +187,7 @@ object you supply — restart and it's gone; inject an `AsyncSessionStore` for d
 | Export | What it is |
 |---|---|
 | `McpEnvCapability` | The shared env: `symbols` (verbs), `configuration` (typed args), `resources`, `annotations`, its own `description`/`dynamicDescription`. |
-| `DiscoveryTool` | `new DiscoveryTool(name, capability, { description?, budgetMs?, heapBudget?, statementCap?, attachmentQuota?, hostConfig?, exposableConfiguration? })` — the read REPL tier. `description` is a legacy override; omitted, the capability's own description wins. |
+| `DiscoveryTool` | `new DiscoveryTool(name, capability, { description?, budgetMs?, heapBudget?, statementCap?, attachmentQuota?, hostConfig?, exposableConfiguration? })` — the read REPL tier. `description` is an optional host override; omitted, the capability's own description wins. |
 | `ActionTool` | `new ActionTool(name, { description, context, clusters?/actions?, prepare?, wrapBatch?, … })` — the batch mutation tier. |
 | `tool` | Verb-authoring sugar over `symbol.rosetta`, tagged-template head (`` tool`name: doc` ``): bare `tool` (unclassified — always re-runs on replay), `tool.view` (cross-run cacheable boundary snapshot; demands a serializable output codec), `tool.pure` (deterministic from args — recovery is re-call, never persisted), `tool.effect` (mutation: `provenance: "sink"`, void result), `tool.risky` (`tool.effect` + `risky: true` metadata). |
 | budgets | `DEFAULT_BUDGET_MS` (5 s wall-clock), `defaultHeapBudget()` (`ARRIVAL_HEAP_MAX`, 100 M cells), `defaultStatementCap()` (`MCP_SESSION_STATEMENT_CAP`, 512/session), `defaultAttachmentQuota()` (`MCP_ATTACHMENT_QUOTA`, 3/call). |

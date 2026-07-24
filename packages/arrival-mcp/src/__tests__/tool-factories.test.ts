@@ -23,7 +23,7 @@
 // leading `ctx: RunContext` constructor param — construct with the value alone.
 
 import type { SymbolDeclaration } from "@inhuman.tools/arrival/capability";
-import { symbol, testCallCtx, type CacheClass } from "@inhuman.tools/arrival/symbol";
+import { symbol, testCallCtx, type CacheClass } from "@inhuman.tools/arrival";
 import { z, type RosettaSymbolDef } from "@inhuman.tools/arrival";
 import { AInexact, AString, ASymbol } from "@inhuman.tools/arrival/reflect-internals";
 import { describe, expect, it } from "vitest";
@@ -40,6 +40,12 @@ import { tool } from "../tool.js";
 function contractOf(def: SymbolDeclaration): RosettaSymbolDef {
   return (def as { contract: unknown }).contract as RosettaSymbolDef;
 }
+
+/** Invoke a baked rosetta procedure via its apply term (the sole membrane spine). */
+function fire(proc: { ["arrival/tagless-final/apply"](args: any[], callCtx: any): any }, callCtx: any, ...args: any[]) {
+  return proc["arrival/tagless-final/apply"](args, callCtx);
+}
+
 
 /** A keyword `ASymbol` exactly as evaluating `:key` produces (self-evaluating). */
 function pluck(key: string): unknown {
@@ -58,7 +64,7 @@ describe("tool.view — cacheClass stamping", () => {
     const def = tool.view`echo-view: echoes`({ shape: { text: z.string }, output: [z.string] }, (args: {
       text: string;
     }) => args.text);
-    const out = await contractOf(def).run.call(testCallCtx(), pluck("text"), new AString("hi"));
+    const out = await fire(def, testCallCtx(), pluck("text"), new AString("hi"));
     expect((out as AString)["arrival/toJS"]()).toBe("hi");
   });
 
@@ -81,7 +87,7 @@ describe("tool.pure — cacheClass stamping", () => {
     const def = tool.pure`double: doubles a number`({ shape: { n: z.number }, output: [z.number] }, (args: {
       n: number;
     }) => args.n * 2);
-    const out = await contractOf(def).run.call(testCallCtx(), pluck("n"), new AInexact(21));
+    const out = await fire(def, testCallCtx(), pluck("n"), new AInexact(21));
     expect((out as AInexact).real).toBe(42);
   });
 });
@@ -98,7 +104,7 @@ describe("tool.effect — sink provenance + void-shape enforcement", () => {
     const def = tool.effect`set-flag: flips a flag`({ shape: { value: z.string } }, (args: { value: string }) => {
       seen = args.value;
     });
-    const out = await contractOf(def).run.call(testCallCtx(), pluck("value"), new AString("on"));
+    const out = await fire(def, testCallCtx(), pluck("value"), new AString("on"));
     expect(seen).toBe("on");
     // `run` returns the ENCODED scheme-side value (the boxed AVoid), not the decoded JS
     // `undefined` — `sz.undefinedResult`'s own encode arm. void-family, never a real value.
@@ -161,7 +167,7 @@ describe("isTool: true — the static exposure flag, riding the SAME metadata ba
 
 describe("bare tool`` stays unclassified (regenerateable, the safe default) — untouched by the new arms", () => {
   it("carries no cacheClass and defaults to source provenance", () => {
-    const def = tool`legacy: unchanged`({ shape: {}, output: [], input: [] } as never, () => "x");
+    const def = tool`bare: unchanged`({ shape: {}, output: [], input: [] } as never, () => "x");
     expect(contractOf(def).cacheClass).toBeUndefined();
     expect(contractOf(def).provenance).toBe("source");
   });

@@ -88,7 +88,7 @@ const notAttestable = (reason: string): SealVerdict => ({ kind: "not-attestable"
  * header's `judgmentShaped` doc). `wire/policy.ts` keeps its OWN, independent
  * copy of this same shape for its (predecessor-plane) `verdictFor` — that is not
  * a DRY violation: wire/policy is the retiring plane (TESTING.md's
- * "losable-legacy"), and this copy is the one the LIVE conjunction owns.
+ * "losable-prior"), and this copy is the one the LIVE conjunction owns.
  */
 export type LeafRole = { readonly role: "data" } | { readonly role: "judgment"; readonly vocabulary: ReadonlySet<string> };
 

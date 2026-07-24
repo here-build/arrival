@@ -8,7 +8,7 @@
  *   • `undefined` resolution falls back to the static description, never flagged
  *     session-generated (the honest-failure contract).
  *   • a config schema requiring actor keys has no describe ambient — static catalog
- *     is the honest floor (and the legacy closure-form thunk still fires, receiver-free).
+ *     is the honest floor (and the closure-form thunk still fires, receiver-free).
  */
 import type { Activation } from "@inhuman.tools/arrival/capability";
 import { describe, expect, it } from "vitest";
@@ -98,7 +98,7 @@ describe("tool`` dynamicDescription — the closed drop, end to end", () => {
             shape: {},
             dynamicDescription() {
               counters.fired += 1;
-              return undefined; // receiver-free legacy behavior — must not throw
+              return undefined; // receiver-free behavior — must not throw
             },
           },
           () => "ok",

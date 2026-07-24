@@ -20,7 +20,7 @@ call *and watch the argument's type error appear* — the same buffer, the same 
 - **`schemeSugarcoat()`** — the language mode. One `StreamLanguage` covers classic Scheme *and*
   the full Sugarcoat superset: curly-infix, `k:` / `:key` keywords, `=>`, `== && ||`,
   at-expressions with their interpolation sub-mode, the whole R7RS numeric-literal zoo (radix/exactness/complex —
-  lifted faithfully from the legacy scheme mode). Emits highlight *tags* only — bring your own
+  lifted faithfully from the CodeMirror scheme mode). Emits highlight *tags* only — bring your own
   theme.
 
 - **`schemeStructural()`** — paredit for the classic lens: expand/contract selection ladder,

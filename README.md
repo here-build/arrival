@@ -51,11 +51,12 @@ Everything else comes on top of the language, in a variety of shapes:
   (indentation I-expressions, curly-infix, accessors).
 - `arrival-serializer` — the JS ↔ S-expression wire: s-expression output
   that is more compact than JSON for agent consumption.
-- `arrival-provenance` — a thin re-export shim over core's `/provenance`
-  subpath (capture, analysis, verdict all live in `arrival` itself); the one
-  non-passthrough export is the mobx-reactive `ObservableEvalTrace`, kept
-  here so studio/UI consumers get reactive semantics without core taking on
-  a mobx dependency.
+- `arrival-provenance` — analysis owner: forest, statechart, region tree,
+  flow graph, reverse-chain slicer (`buildUneval`), and the grounding seal
+  live natively here. Core (`arrival`'s `/provenance`) keeps only the capture
+  spine (`EvalTrace`, stamping); this package re-exports capture for
+  convenience and adds the mobx-reactive `ObservableEvalTrace` so studio/UI
+  consumers get reactive semantics without core taking on a mobx dependency.
 - `arrival-mcp` — the framework for MCP servers that run sandboxed code with
   predefined capabilities: Model Context Protocol tools as values (discovery +
   action tiers); `arrival-mcp-do` — the Durable Object session shell;

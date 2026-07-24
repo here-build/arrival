@@ -100,7 +100,7 @@ export class SchemeUserError extends Error {
   }
 }
 
-/** `error` — throws; never returns. Replaces the oracle harness's legacy-path
+/** `error` — throws; never returns. Replaces the oracle harness's dual-path
  *  `COMPILED_PREAMBLE` shim on the greenfield path. */
 export function error(message: unknown, ...irritants: unknown[]): never {
   throw new SchemeUserError(message, irritants);

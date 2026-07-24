@@ -1,6 +1,6 @@
 # @inhuman.tools/arrival-provenance
 
-A thin re-export shim over [Arrival](../arrival/README.md)'s `/provenance` subpath: the trace-capture substrate and the full analysis stack (forest, statechart, region tree, flow graph, reverse-chain slicer, grounding seal) live in core. It reads finished traces and **never drives the evaluator**. The only non-passthrough export is `EvalTrace`: this package's is the mobx-reactive `ObservableEvalTrace`, kept here so studio/UI consumers get byte-identical reactive semantics without core taking on a mobx dependency.
+Trace analysis for [Arrival](../arrival/README.md), owned natively here. The full analysis stack — forest, statechart, region tree, flow graph, reverse-chain slicer (`buildUneval`), grounding seal — lives in this package. Core (`@inhuman.tools/arrival`'s `/provenance`) keeps only the **capture spine** (`EvalTrace`, stamping at the membrane); this package re-exports capture for a single import surface and **never drives the evaluator**. The one non-passthrough export is `EvalTrace`: this package's is the mobx-reactive `ObservableEvalTrace`, kept here so studio/UI consumers get byte-identical reactive semantics without core taking on a mobx dependency.
 
 ## Install
 

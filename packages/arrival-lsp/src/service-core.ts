@@ -103,10 +103,8 @@ export interface SchemeLanguageServiceOptions {
   /**
    * Host-injected rosetta tools (sift's evidence tools), the seam that makes the type
    * mask narrow on injected symbols — not just the builtins. Two coupled parts, both
-   * derived from ONE source (the env's rosetta-type registry, `rosettaTypesOf` — sift's
-   * own env still registers into it via its own `defineRosetta`-shaped verb; arrival
-   * core's public `defineRosetta` method itself is retired, `bindRosetta` in
-   * `AmbientRuntime.ts` is the surviving internal wiring), via `assembleHostPrelude`:
+   * derived from ONE source (the env's rosetta-type registry, `rosettaTypesOf` —
+   * host tools register via `symbol.rosetta` / internal bind), via `assembleHostPrelude`:
    *   • `prelude` — ambient `.d.ts` text re-opening `interface ArrShape { "<name>": … }`
    *     (+ the host's entity types), merged into the same global scope as the builtin
    *     leaves. Makes `typeof __arr["<name>"]` resolve → the CANDIDATE side narrows.

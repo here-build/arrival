@@ -53,7 +53,7 @@ foundation package when LSP consumers land; the **name travels with it**.
 
 - **`buildProject`** — multi-file in-memory project compile (CLI `inhuman build` / `inhuman compile` are disk clients of this).
 - **`SchemeSemanticModel`** — organ 1; construct explicitly, then materialize from its views.
-- **Oracle** — differential agreement: interpreter ≡ compiled (greenfield path only; legacy string emit is not gate-authoritative).
+- **Oracle** — differential agreement: interpreter ≡ compiled (greenfield path only; string-emit path is not gate-authoritative).
 
 Also owns: front-end desugar/nodes, CoreForm, type glass (`emitTypes`),
 **runtime imports** (`RUNTIME_MANIFEST`: stage0 Scheme-texture + **ramda** cold

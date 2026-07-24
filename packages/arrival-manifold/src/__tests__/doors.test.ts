@@ -168,11 +168,11 @@ describe("bypass auto-exec — an UNAMBIGUOUS direct call is translated and EXEC
     );
   });
 
-  it("matches the LEGACY '_'-joined (wire) spelling too (still resolves via the normalized fallback — an old-habit guess isn't stranded)", async () => {
+  it("matches the underscore-joined wire spelling too (still resolves via the normalized fallback — an old-habit guess isn't stranded)", async () => {
     const client = await manifoldClient();
     const result = await client.callTool({ name: "filesystem_search_files", arguments: { path: "/data" } });
     expect(result.isError).toBeFalsy();
-    // Resolves to the REAL (`/`-joined) qualified name — the attempted legacy spelling is never
+    // Resolves to the REAL (`/`-joined) qualified name — the underscore spelling is never
     // echoed back; normalizeSymbolName collapses "/" and "_" identically, so the normalized-key
     // fallback still finds the one real tool.
     expect(textOf(result as { content: unknown })).toContain(
@@ -437,7 +437,7 @@ describe("normalizeSymbolName — the canonical-form primitive", () => {
     expect(normalizeSymbolName("memory/search_nodes")).toBe("memorysearchnodes");
   });
 
-  it("the legacy '_'-joined (wire) shape still normalizes identically (generality, not just today's convention)", () => {
+  it("the underscore-joined wire shape still normalizes identically (generality, not just today's convention)", () => {
     expect(normalizeSymbolName("memory_search_nodes")).toBe("memorysearchnodes");
   });
 });
@@ -552,7 +552,7 @@ describe("envelope/unbound-in-expr — the THREE-TIER tool-resolution door (unbo
       );
     });
 
-    it("legacy wire separator '_' with a garbled tool part → the server's tool menu (the base tier-2 case)", () => {
+    it("underscore wire separator with a garbled tool part → the server's tool menu (the base tier-2 case)", () => {
       const door = unboundInExprDoor("memory_serach_nodes", CATALOG, CATALOG_PARTS, TOOL_NAMING, CATALOG_SCHEMAS);
       expect(door?.fact).toBe(
         "server `memory` has no tool `serach_nodes` — its tools are: search_nodes, create_entities.",

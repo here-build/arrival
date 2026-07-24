@@ -1,5 +1,5 @@
 /**
- * W9 cut-over gates — lock the migration: no legacy mercury package, no dual
+ * W9 cut-over gates — lock the migration: no dual mercury package, no dual
  * oracle subject, type-emit stays free of type-lens (cycle-safe subpath).
  */
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
@@ -49,9 +49,11 @@ describe("W9 gates — migration lock", () => {
     // rides the 5s default at ~4s today; give it an honest budget.
   }, 30_000);
 
-  it("OracleSubject is greenfield-only (no legacy dual path)", () => {
+  it("OracleSubject is greenfield-only (no dual emit path)", () => {
     const harness = readFileSync(path.resolve(here, "../../../arrival-mercury-oracle/src/harness.ts"), "utf8");
+    // Dual-path subjects (historical names) must not reappear.
     expect(harness).not.toMatch(/subject\s*===\s*["']legacy["']/);
+    expect(harness).not.toMatch(/subject\s*===\s*["']prior["']/);
     expect(harness).not.toMatch(/projectToJsRaw/);
     expect(harness).toMatch(/export type OracleSubject = "greenfield"/);
   });

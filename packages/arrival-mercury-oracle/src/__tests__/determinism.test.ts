@@ -3,7 +3,7 @@
  * pipeline → same bytes. CI: compile twice, byte-compare.
  *
  * Gate-authoritative subject only: `compileGreenfield` (classify → model views
- * → walk → materialize → render). The legacy mercury string path is deleted.
+ * → walk → materialize → render). The string emit path is deleted.
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";

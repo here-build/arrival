@@ -329,7 +329,7 @@ export abstract class ArrivalMcpRunnerDO<Env extends ArrivalMcpRunnerEnv> extend
     const lifetime = new AbortController();
     const store: AsyncSessionStore = createDoSessionRunStore(this.ctx.storage);
     // The in-memory half of ToolCallCtx.session — the id + a scratch bag (the durable twin
-    // rides `store`; the bag only seeds legacy `__repl__` history, always empty here).
+    // rides `store`; the bag only seeds v1 `__repl__` history, always empty here).
     const sessionBag = { id: sessionId, state: {} as Record<string, unknown> };
 
     const built = this.buildTools(sessionId, sub, lifetime);

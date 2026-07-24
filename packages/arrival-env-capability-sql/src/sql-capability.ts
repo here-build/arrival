@@ -21,11 +21,10 @@ export const arrivalSqlCapability = EnvCapability.define("arrival/sql", {
   // time — config-independent — so the host `sql` resolver can't be resolved out here. The impl
   // re-reads it from `this.configuration.sql` at REAL DISPATCH instead (the injected
   // `symbol.rosetta`'s typed `this` — `this.invocation` rides the same CallCtx channel it always
-  // did). VARIADIC identity input (`z.array(z.dynamic)`) keeps the legacy ARITY TOLERANCE (params
-  // may be omitted). Each arg is `schemeToJs`'d explicitly inside the impl — byte-identical to the
-  // legacy generic membrane's automatic `schemeToJs` pass every `defineRosetta` arg went through.
-  // The verb is a `symbol.rosetta` SOURCE (no `pure` ⇒ mints a fresh provenance point at the
-  // membrane crossing, exactly as the former `withContext` rosettas did).
+  // did). VARIADIC identity input (`z.array(z.dynamic)`) keeps open ARITY TOLERANCE (params
+  // may be omitted). Each arg is `schemeToJs`'d explicitly inside the impl (crossing face).
+  // The verb is a `symbol.rosetta` SOURCE (no pure-pipe ⇒ mints a fresh provenance point at the
+  // membrane crossing).
   symbols: (symbol) => ({
     "sql/query": symbol.rosetta`sql/query: executes a sql query via the sql effect resolver`(
       { input: z.array(z.dynamic), output: [z.dynamic], type: "(label: string, query: string, params?: unknown): unknown" },

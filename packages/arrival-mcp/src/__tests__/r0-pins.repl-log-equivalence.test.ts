@@ -2,7 +2,7 @@
 //
 //   • The log holds ALL top-level statements — defines AND bare expressions — each define entry
 //     carrying its bound name. Bare expressions must appear in the log too: if only defines
-//     replayed, the sink tombstone-skip path would be unreachable. A legacy `__repl__` history
+//     replayed, the sink tombstone-skip path would be unreachable. A v1 `__repl__` history
 //     seeds the log's define entries on first touch (the log is a superset of that history, not
 //     a rename).
 //
@@ -62,11 +62,11 @@ describe("R3 pin — the v2 log holds ALL top-level statements, in program order
     ]);
   });
 
-  it("migration: a legacy __repl__ history SEEDS the define entries of the v2 log — and the bindings fold back", async () => {
+  it("migration: a v1 __repl__ history SEEDS the define entries of the v2 log — and the bindings fold back", async () => {
     const tool = demoTool();
-    // A legacy session bag: only the __repl__ define history, no v2 state.
+    // A v1 session bag: only the __repl__ define history, no v2 state.
     const session = {
-      id: "legacy",
+      id: "v1-seed",
       state: { __repl__: ["(define x 1)", "(define y (+ x 1))"] } as Record<string, unknown>,
     };
     const out = await tool.call({ expr: "(list x y)" }, { session });

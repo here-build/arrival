@@ -57,7 +57,7 @@ export type McpCapabilityDefineSpec<Shape extends ZodMap, Resources> = Omit<
    *  shape a `.define()`-authored verb impl sees: `configuration`/`resources`, never
    *  `Activation`'s old per-key `Ref<Handle>` shape) when a describe-time run is
    *  derivable (DiscoveryTool's describe run), the bare capability object otherwise
-   *  (the receiver-free legacy posture). Resolves `undefined` ⇒ honest fallback to the
+   *  (the receiver-free posture). Resolves `undefined` ⇒ honest fallback to the
    *  static `description`, NOT flagged session-generated. */
   readonly dynamicDescription?: (this: ImplThis<InferCfg<Shape>, Resources>) => MaybePromise<string | undefined>;
   /** The verbs this capability exposes — `EnvCapability.define`'s own `symbols`
@@ -107,7 +107,7 @@ export function hasCapabilityDynamicDescription(capability: object): boolean {
 /** Resolve a capability's OWN human-channel description — dynamic arm first (against
  *  `activation` when supplied), honest fallback to the static sibling on `undefined`
  *  resolution. `activation` omitted ⇒ the dynamic arm runs with `this` = the capability
- *  itself (the receiver-free legacy posture a function-form host config, or a config
+ *  itself (the receiver-free posture a function-form host config, or a config
  *  schema requiring actor-only keys, leaves DiscoveryTool with). `undefined` for a
  *  capability `defineMcpCapability` never minted (nothing to resolve). */
 export async function resolveCapabilityDescription(

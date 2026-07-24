@@ -11,7 +11,7 @@
  *   - the focus edge degrades to `scoped`, never past it;
  *   - the truth-oracle disclaimer is pinned VERBATIM and present on every report.
  *
- * Fixture shape mirrors core's lineage suites: a `defineRosetta` source is a
+ * Fixture shape mirrors core's lineage suites: a `symbol.rosetta` source is a
  * Rosetta-IN point, so under a trace tap its return mints real provenance — no live
  * tools, fully deterministic.
  */
@@ -35,9 +35,8 @@ let seq = 0;
  *  reverse-chain's output form derives from the trace itself (`lastTopLevelForm`),
  *  not a second, identity-mismatched parse of `source`.
  *
- *  Test-local `EnvCapability` (`EnvCapability.define`'s injected `symbol.rosetta` — the
- *  `env.defineRosetta` migration target): a plain typed `z.string → z.string` contract, no
- *  escape hatch needed. */
+ *  Test-local `EnvCapability` with injected `symbol.rosetta`: plain typed
+ *  `z.string → z.string` contract, no escape hatch needed. */
 const evidenceReadCapability = EnvCapability.define("test/evidence-read", {
   symbols: (symbol, z) => ({
     "evidence-read": symbol.rosetta`evidence-read: deterministic Rosetta-IN fixture source`(

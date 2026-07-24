@@ -25,13 +25,13 @@ const messageOf = (e: unknown): string => (e instanceof Error ? e.message : Stri
  *
  * 1. COMPILE-time: doors from either subject. Greenfield doors carry the
  *    door-throw contract — the message BEGINS with the door code
- *    ("<category>/<slug>: …") — so slugs classify by prefix; mercury's legacy
+ *    ("<category>/<slug>: …") — so slugs classify by prefix; mercury's prior
  *    doors are plain `Error`s with teaching messages ("`case` is not yet
  *    desugared — rewrite as `cond`", "run-view: async `filter` is
  *    unsupported").
  * 2. RUN-time: whatever the executed artifact throws in-process — native
  *    `ReferenceError`/`TypeError`, the stage-0 runtime's `error()`
- *    (`.name === "SchemeUserError"`, src/runtime/stage0.ts), or the legacy
+ *    (`.name === "SchemeUserError"`, src/runtime/stage0.ts), or the prior
  *    preamble's shim (`.name === "OracleUserError"`, `COMPILED_PREAMBLE`).
  */
 export function classifyCompiledError(e: unknown): ErrorClass {

@@ -323,7 +323,7 @@ function sourceTextFor(form: SchemeValue, index: number, forms: readonly SchemeV
 export interface ToolCallCtx {
   /** The MCP session: its id + state bag. With no injected `store`, the session's durable twin
    *  (`SessionRunState`) lives at `state.__run__` as ONE in-memory object (the stdio-mode,
-   *  zero-config default); a legacy `state.__repl__` history seeds the v2 log on first touch. */
+   *  zero-config default); a v1 `state.__repl__` history seeds the v2 log on first touch. */
   session?: { id: string; state: Record<string, unknown> };
   /** Injected session persistence ("map but async"). When present, `SessionRunState` is
    *  encoded/decoded through it (keyed by the session id) and every write is AWAITED before the
@@ -364,7 +364,7 @@ export interface DiscoveryToolOptions {
    *
    *  OPTIONAL: the capability itself is the self-contained home for description text
    *  (`McpEnvCapability`'s `description`/`dynamicDescription`) — "no side bag handed to the
-   *  runner." Set here ONLY as a LEGACY override: when present it WINS over the capability's own
+   *  runner." Set here ONLY as a host override: when present it WINS over the capability's own
    *  description (the same host-wins posture `config()`'s merge already takes); omitted ⇒
    *  `describe()` resolves the capability's own description instead. */
   description?: string;
@@ -555,7 +555,7 @@ export class DiscoveryTool {
     };
   }
 
-  /** Channel-1 (human) description — the LEGACY host override (`options.description`) wins when
+  /** Channel-1 (human) description — the host override (`options.description`) wins when
    *  supplied; otherwise the capability's OWN `description`/`dynamicDescription` is the
    *  self-contained home. The dynamic arm resolves against the SAME describe run the
    *  per-verb catalog channel already builds — built lazily ONLY when the capability actually
@@ -984,7 +984,7 @@ export class DiscoveryTool {
 
   /** Load the session's durable twin: the injected store's blob (decoded), or the in-memory
    *  object in the session bag, or — v2 absent — a fresh state whose log is SEEDED from the
-   *  legacy `__repl__` define history (the v2 log is a superset of it; no `__cache__` value
+   *  v1 `__repl__` define history (the v2 log is a superset of it; no `__cache__` value
    *  overlay is carried forward). */
   private async loadState(
     session: { id: string; state: Record<string, unknown> },

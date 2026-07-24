@@ -11,7 +11,7 @@
  *
  * Both rewrites are grounded against `arrivalInferCapability`
  * (inhuman/foundations/llm-plane-arrival-env/src/infer.ts) — the REAL contract
- * arrival-mercury compiles against — not against mercury's legacy
+ * arrival-mercury compiles against — not against mercury's prior
  * `lower.ts`/`rt-langchain.ts` behavior, which differs in one load-bearing way
  * (see cache-key-elide's doc below). Both verbs it declares share one shape:
  *
@@ -146,7 +146,7 @@ export function inferScalarFoldAt(
 // Mercury's actual cache-key behavior is an UNCONDITIONAL drop — `args[3+]` is
 // never even inspected, so a caller-supplied real cache key is silently
 // discarded exactly like an omitted one. That is mercury's `lower.ts`, a
-// throwaway legacy emitter (constitution §9 Phase 0: "knowingly
+// throwaway prior emitter (constitution §9 Phase 0: "knowingly
 // throwaway-by-Phase-3"), not a law to inherit uncritically.
 //
 // What this idiom actually implements — grounded against arrival's OWN

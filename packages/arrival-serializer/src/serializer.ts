@@ -928,11 +928,11 @@ export function formatSExpr(sexpr: SExpr, indent = 0): string {
     if (sexpr === "<function>") return sexpr;
     // BigInt notation (ends with n) - don't quote
     if (sexpr.endsWith("n") && /^\d+n$/.test(sexpr)) return sexpr;
-    // Template strings (wrapped in backticks) - don't quote. LEGACY passthrough: the
+    // Template strings (wrapped in backticks) - don't quote. Passthrough: the
     // AString branch above no longer emits this shape, but old already-rendered data
     // may still flow through formatSExpr, so this stays dead-but-harmless.
     if (sexpr.startsWith("`") && sexpr.endsWith("`")) return sexpr;
-    // Single-quoted strings - don't quote (already quoted). LEGACY passthrough, same
+    // Single-quoted strings - don't quote (already quoted). Passthrough, same
     // reason as above — the AString branch no longer produces this shape either.
     if (sexpr.startsWith("'") && sexpr.endsWith("'")) return sexpr;
     // Double-quoted strings - don't re-quote (already quoted). This IS the live shape:
