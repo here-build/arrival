@@ -4,9 +4,11 @@
 // consumers too) but silently drop every re-export for a nodenext consumer.
 //
 // Both tool tiers are value-shape, not a subclass stack: EnvCapability + per-verb
-// { description, inputSchema } is what the discovery tool reflects into its catalog +
-// input schema — so the transport offloads the whole verb definition here.
-export * from "./McpEnvCapability.js";
+// baked `metadata` (description, dynamicDescription, isTool, risky — see tool.ts) is
+// what the discovery tool reflects into its catalog + input schema off the RUN's own
+// vocabulary (the run-reader door) — so the transport offloads the whole verb
+// definition here. `defineMcpCapability` is the one authoring surface.
+export * from "./defineMcpCapability.js";
 // Value-shaped discovery tool: `new DiscoveryTool(name, capability, {description})` — the
 // subclass-free shell that derives schema + catalog + eval from the one aggregating capability.
 export * from "./DiscoveryTool.js";

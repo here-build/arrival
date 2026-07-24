@@ -13,7 +13,7 @@
  * approved row (ConfirmBurstTool, confirm-burst.ts) — it only builds the artifact.
  */
 
-import { canonicalJson, type EffectEntry } from "@inhuman.tools/arrival";
+import { canonicalJson, type EffectEntry } from "@inhuman.tools/arrival/host-internals";
 import { writeForm, type EvalTrace } from "@inhuman.tools/arrival/provenance";
 import { groundingVerdict } from "@inhuman.tools/arrival-provenance/verdict";
 

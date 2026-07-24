@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 
 import { ConfirmBurstTool } from "../confirm-burst.js";
 import { DiscoveryTool, type DiscoveryToolOptions } from "../DiscoveryTool.js";
-import { McpEnvCapability } from "../McpEnvCapability.js";
+import { defineMcpCapability } from "../defineMcpCapability.js";
 import { tool } from "../tool.js";
 
 interface Log {
@@ -17,9 +17,9 @@ interface Log {
   notes: string[];
 }
 
-function confirmCapability(log: Log): McpEnvCapability {
-  return new McpEnvCapability("confirm-caps", {
-    symbols: {
+function confirmCapability(log: Log) {
+  return defineMcpCapability("confirm-caps", {
+    tools: () => ({
       "create-widget": tool.risky`create-widget: creates a widget (irreversible)`(
         { shape: { name: z.string } },
         (args: { name: string }) => {
@@ -29,11 +29,10 @@ function confirmCapability(log: Log): McpEnvCapability {
       "log-note": tool.effect`log-note: appends a note (harmless)`({ shape: { text: z.string } }, (args: { text: string }) => {
         log.notes.push(args.text);
       }),
-      "list-created": { fn: () => log.created.join(",") },
-    },
-    annotations: {
-      "list-created": { description: "lists created widgets, comma-joined" },
-    },
+      "list-created": tool.pure`list-created: lists created widgets, comma-joined`({ shape: {} }, () =>
+        log.created.join(","),
+      ),
+    }),
   });
 }
 

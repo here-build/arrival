@@ -12,7 +12,7 @@
 // chunked log + one key per cache entry) — a deployment-layer concern this module has no
 // opinion on beyond producing the one logical record either layout can serve from.
 
-import { canonicalJson, type RunCache, type RunCacheEntry } from "@inhuman.tools/arrival";
+import { canonicalJson, type RunCache, type RunCacheEntry } from "@inhuman.tools/arrival/host-internals";
 
 import { isConfirmManifest, type ConfirmManifest } from "./confirm-manifest.js";
 

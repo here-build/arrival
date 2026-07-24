@@ -20,11 +20,12 @@ import { z as sz } from "@inhuman.tools/arrival";
 import { describe, expect, it } from "vitest";
 
 import { DiscoveryTool } from "../DiscoveryTool.js";
-import { McpEnvCapability } from "../McpEnvCapability.js";
+import { defineMcpCapability } from "../defineMcpCapability.js";
 import { type SessionRunState, isSessionRunState } from "../session-run-state.js";
+import { tool } from "../tool.js";
 
 function demoTool(): DiscoveryTool {
-  return new DiscoveryTool("demo", new McpEnvCapability("demo-caps", { symbols: {}, annotations: {} }), {
+  return new DiscoveryTool("demo", defineMcpCapability("demo-caps", { tools: () => ({}) }), {
     description: "demo tool",
   });
 }
@@ -117,18 +118,14 @@ describe("R3 semantic pin — fold(log, cache) reproduces the overlay-restore bi
     // rehydrations.
     let plainCalls = 0;
     let viewCalls = 0;
-    const cap = new McpEnvCapability("tick-caps", {
-      symbols: {
-        tick: { fn: () => ++plainCalls },
-        "tick-view": symbol.rosetta`tick-view: a boundary snapshot`(
+    const cap = defineMcpCapability("tick-caps", {
+      tools: () => ({
+        tick: tool`tick: unclassified impure counter`({ input: [], output: [], shape: {} }, () => ++plainCalls),
+        "tick-view": symbol.rosetta`tick-view: view-classed counter`(
           { input: [], output: [sz.number], cacheClass: "view" },
           () => ++viewCalls,
         ),
-      },
-      annotations: {
-        tick: { description: "unclassified impure counter" },
-        "tick-view": { description: "view-classed counter" },
-      },
+      }),
     });
     const session = { id: "s1", state: {} as Record<string, unknown> };
     const warmTool = new DiscoveryTool("tick", cap, { description: "tick tool" });

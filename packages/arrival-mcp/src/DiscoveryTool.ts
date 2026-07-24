@@ -1,9 +1,12 @@
-// DiscoveryTool — one discovery tool bound to one aggregating McpEnvCapability, constructed as
-// a value: `new DiscoveryTool(name, capability, { description })`.
+// DiscoveryTool — one discovery tool bound to one aggregating MCP capability (defineMcpCapability.ts),
+// constructed as a value: `new DiscoveryTool(name, capability, { description })`.
 //   • input schema = { expr, intent } ∪ the capability's `configuration` (the actor's typed args)
-//   • catalog      = `capability.allAnnotations()` (verbs, descriptions, dynamicDescription, aliases)
-//   • eval         = assembleAmbient({ capabilities: [capability], config }), then per-form
-//                    execState over `{ ambient, scope }`
+//   • catalog      = `mcpCatalogEntries(capability, runCtx?)` (defineMcpCapability.ts) — the
+//                    run-reader door over a live describe run when one exists, the static
+//                    `spec.symbols` walk otherwise (bake is eager, so both read the SAME values)
+//   • eval         = `execState("(begin)", { capabilities: [capability], config, scope })` mints
+//                    the `(runCtx, scope)` warm pair; every later form runs through the SAME ONE
+//                    exec path, `execState(expr, { capabilities, config, scope, runCtx })`
 //
 // The three host concerns enter at three membrane TIMES, never co-mingled:
 //   • eval-time     → the capability's `resources` (provider reads the per-call config; verbs read
@@ -12,23 +15,27 @@
 //                     the eval membrane — a run can't reach it, so session/other-call state stays out.
 //   • describe-time → infra closed over when the host built the capability (the welcome).
 
+type MaybePromise<T> = T | Promise<T>;
+
+import {
+  type EvalTap,
+  type SchemeValue,
+  LexicalScope,
+  RunContext,
+  disposeRunContext,
+  execState,
+  parse,
+} from "@inhuman.tools/arrival";
 import {
   type EffectEntry,
   type EffectLog,
-  type EvalTap,
   type RunCache,
-  type RunCacheEntry,
-  type SchemeValue,
-  APair,
-  LexicalScope,
   MemoryEffectLog,
-  execState,
   is_callable_value,
-  parse,
-} from "@inhuman.tools/arrival";
+} from "@inhuman.tools/arrival/host-internals";
+import { APair } from "@inhuman.tools/arrival/reflect-internals";
 import { EvalTrace } from "@inhuman.tools/arrival/provenance";
 import type { EnvCapability } from "@inhuman.tools/arrival/capability";
-import { type AssembledAmbient, assembleAmbient } from "@inhuman.tools/arrival/env";
 import {
   type ExtrasState,
   type SerializedExtra,
@@ -45,9 +52,15 @@ import * as z from "zod";
 
 import { type ConfirmManifest, buildConfirmManifest, buildInvocationSource, isConfirmManifest } from "./confirm-manifest.js";
 import { type RigAlteredCheck, noRigAlteredCheck } from "./confirm-burst.js";
+import {
+  hasCapabilityDynamicDescription,
+  mcpCatalogEntries,
+  resolveCapabilityDescription,
+  resolveMcpField,
+  verbMetadataByName,
+} from "./defineMcpCapability.js";
 import { lowerBinaryBlob } from "./dispatch.js";
 import { MCPError } from "./errors.js";
-import type { McpAnnotation, McpCapabilitySpec, McpEnvCapability } from "./McpEnvCapability.js";
 import {
   type LogStatement,
   type SessionRunIdentity,
@@ -72,11 +85,21 @@ const MCP_OUTPUT_BUDGET = 40_000;
 const perElementBudget = (count: number): number => Math.max(2_000, Math.floor(MCP_OUTPUT_BUDGET / Math.max(1, count)));
 
 interface ExecSerializedOptions {
-  /** The call's assembled ambient — CALLER-owned; exec never disposes it. Warm-reuse and
-   *  per-call disposal are both DiscoveryTool's responsibility. */
-  ambient: AssembledAmbient;
-  /** The session's lexical accumulation — top-level `define`s land HERE, never on the ambient's
-   *  env, so REPL continuity is the `execState({ scope })` idiom, not glass-env mutation. */
+  /** The call's capability set — always `[this.capability]`. Threaded explicitly on
+   *  EVERY call (including ones reusing `runCtx`): `execState` rebuilds/looks up the
+   *  memoized Vocabulary from `{capabilities, config}` every time, and a reused
+   *  `runCtx`'s tuple-identity invariant (`assemble-run.ts`) checks the result against
+   *  the run's ORIGINAL vocabulary — passing a mismatched tuple throws. */
+  capabilities: readonly EnvCapability[];
+  /** THE SAME config object used to mint `runCtx` — reference identity, not a fresh
+   *  per-call object (the vocabulary memo + the reused-runCtx tuple check are both
+   *  identity-keyed on it, per `ExecOptions.config`'s own contract). */
+  config: Record<string, unknown>;
+  /** The call's run — CALLER-owned; exec never disposes it. Warm-reuse and per-call
+   *  disposal are both DiscoveryTool's responsibility. */
+  runCtx: RunContext;
+  /** The session's lexical accumulation — top-level `define`s land HERE, never on a
+   *  throwaway env, so REPL continuity is the `execState({ scope, runCtx })` idiom. */
   scope: LexicalScope;
   budgetMs?: number;
   /** Per-run allocation bound — see {@link defaultHeapBudget}. Undefined ⇒ unbounded (the `exec`
@@ -112,17 +135,17 @@ interface ExecSerializedOptions {
 }
 
 /** The standard base's full symbol vocabulary (sorted), advertised in the tool schema in place
- *  of a hardcoded builtin constant — so the docs stay FAITHFUL to the base every eval ambient
- *  augments. Realm-memoized (the base is realm-scoped); read off a throwaway BARE ambient's
- *  sealed chain (`names()`). */
+ *  of a hardcoded builtin constant — so the docs stay FAITHFUL to the base every run resolves
+ *  through. Memoized for the process (the base roster is self-hosted, shared across every
+ *  bare-tuple run); read off a throwaway BARE run's own vocabulary. */
 let baseEnvSymbolsMemo: Promise<readonly string[]> | undefined;
 function baseEnvSymbols(): Promise<readonly string[]> {
   return (baseEnvSymbolsMemo ??= (async () => {
-    const ambient = await assembleAmbient({});
+    const state = await execState("(begin)", {});
     try {
-      return [...ambient.names()].filter((k): k is string => typeof k === "string").toSorted((a, b) => a.localeCompare(b));
+      return [...(state.runCtx.vocabulary?.keys() ?? [])].toSorted((a, b) => a.localeCompare(b));
     } finally {
-      await ambient.dispose();
+      await disposeRunContext(state.runCtx);
     }
   })());
 }
@@ -162,7 +185,7 @@ function isValuesTuple(value: unknown): value is { __values__: SchemeValue[] } {
 /**
  * Scheme→JS exit for SERIALIZATION — deliberately the bare `arrival/toJS` protocol, NOT
  * membrane.toJS's membrane crossing: the membrane exit gives a NESTED callable a live host fn
- * via `arrival/toJSMembrane`, which is exactly wrong for a wire serializer — the wire wants
+ * via `arrival/toJS(exit)`, which is exactly wrong for a wire serializer — the wire wants
  * strings, and a nested callable stringifying to `#<procedure …>` here IS the serialization
  * contract, pinned as law in arrival's crossing tests. Dispatches the PROTOCOL key directly
  * (the same cross-package convention arrival-serializer itself uses) since this module has no
@@ -194,7 +217,9 @@ async function execSerializedState(
   options: ExecSerializedOptions,
 ): Promise<ExecSerializedOutcome> {
   const state = await execState(expr, {
-    ambient: options.ambient,
+    capabilities: options.capabilities,
+    config: options.config,
+    runCtx: options.runCtx,
     scope: options.scope,
     budgetMs: options.budgetMs,
     heapBudget: options.heapBudget,
@@ -230,28 +255,10 @@ async function execSerializedState(
   };
 }
 
-/** One positional zod arg rendered as a Scheme-doc type token for the catalog. */
-function argTypeName(item: z.ZodType): string {
-  const opt = (() => {
-    try {
-      return item.safeParse(undefined).success ? "?" : "";
-    } catch {
-      return "";
-    }
-  })();
-  const desc = item.description ? ` (${item.description})` : "";
-  if (item instanceof z.ZodString) return `string${opt}${desc}`;
-  if (item instanceof z.ZodNumber) return `number${opt}${desc}`;
-  if (item instanceof z.ZodBoolean) return `boolean${opt}${desc}`;
-  if (item instanceof z.ZodArray) return `list${opt}${desc}`;
-  if (item instanceof z.ZodEnum) return item.options.map((v) => `"${v}"`).join("|");
-  return `value${opt}${desc}`;
-}
-
 // ── REPL sessions: statement log + first-class run cache ───────────────────────────────────────
-// A session's durable twin is `(log, cache)`. Live, the warm `(AssembledAmbient, LexicalScope)`
+// A session's durable twin is `(log, cache)`. Live, the warm `(RunContext, LexicalScope)`
 // pair is memoized on the call's config digest — same digest ⇒ reuse (zero fold cost); changed ⇒
-// dispose the old ambient, assemble fresh, drop the cache (configDigest is part of the
+// dispose the old run, mint fresh, drop the cache (configDigest is part of the
 // cache-validity identity), and FOLD: re-run the log over the cache in replay mode, where every
 // declared `view` penetration is answered from the cache instead of re-fired, every `sink`
 // tombstone skips, and `pure`/undeclared statements re-run under their stable-behavior promise.
@@ -481,17 +488,50 @@ export function defaultAttachmentQuota(): number {
 /** A discovery tool bound to one aggregating capability. Construct once per CONNECTION (the host
  *  builds `capability` with its infra armed into the resources); `call` runs once per request. */
 export class DiscoveryTool {
-  /** Warm pairs `(AssembledAmbient, LexicalScope)`, memoized on the call's config digest: same
-   *  digest ⇒ reuse the live ambient + the session's lexical accumulation (zero fold cost);
-   *  changed ⇒ dispose the old ambient, assemble fresh, fold. Keyed by session id — per-session
-   *  state lives with the session, never module-level. The ambient is CALLER-owned everywhere
+  /** Warm pairs `(RunContext, LexicalScope)`, memoized on the call's config digest: same
+   *  digest ⇒ reuse the live run + the session's lexical accumulation (zero fold cost);
+   *  changed ⇒ dispose the old run, mint fresh, fold. Keyed by session id — per-session
+   *  state lives with the session, never module-level. `config` rides alongside the pair
+   *  because every later `execState` call on this run must re-pass the SAME config object
+   *  (reference identity — `ExecOptions.config`'s own sharing contract, and the reused-runCtx
+   *  tuple-identity invariant `assemble-run.ts` checks). The run is CALLER-owned everywhere
    *  it's passed to exec: this map's owner disposes it — digest change, `closeSession`, or
-   *  `dispose()`. */
-  private readonly warm = new Map<string, { digest: string; ambient: AssembledAmbient; scope: LexicalScope }>();
+   *  `dispose()`.
+   *
+   *  `cache`/`effectLog` ALSO ride the pair — NOT re-passed per call. `RunContext.cache`/
+   *  `.effects` are set ONCE, at THIS run's own mint (`new RunContext(...)`, inside
+   *  `assembleRun`) and never rebound on reuse (`assembleRun`'s reused-`runCtx` branch returns
+   *  the run UNCHANGED, ignoring any `cache`/`effects` a later `execState` call passes) — the
+   *  hard constraint that shapes this whole design: a call CANNOT hand the reused run a fresh
+   *  per-call `EffectLog` the way the old `AssembledAmbient` path could (that path minted a
+   *  FRESH RunContext internally per `exec`, regardless of ambient reuse; resources lived on
+   *  the ambient's own lowering instead — Stage C Cut 2 relocated resource lifetime onto
+   *  `RunContext.capabilityResources`, so reusing a run is now the ONLY way to keep a
+   *  capability's resources warm across calls). The fix: ONE long-lived `MemoryEffectLog`,
+   *  gathering EVERY sink for the run's whole warm lifetime; a call reads only ITS OWN new
+   *  entries via `effectLog.entries.slice(lengthBeforeThisCall)` (mirrors the session log's own
+   *  `preLogLen` snapshot idiom). `cache`'s `entries` Map is likewise the ONE live map for the
+   *  run's lifetime — read via `cache.entries`, never reconstructed from `state.cache` while
+   *  warm (that snapshot is for FOLD/persistence only). KNOWN LIMIT: an injected
+   *  `AsyncSessionStore` combined with warm reuse across calls on the SAME digest is not
+   *  exercised by the current suite — a store decodes a fresh `entries`/`counters` object per
+   *  call, which this warm cache (still wrapping ITS OWN mint-time objects) would not observe;
+   *  revisit if that combination becomes a real host shape. */
+  private readonly warm = new Map<
+    string,
+    {
+      digest: string;
+      config: Record<string, unknown>;
+      runCtx: RunContext;
+      scope: LexicalScope;
+      cache: SessionRunCache;
+      effectLog: MemoryEffectLog;
+    }
+  >();
 
   constructor(
     readonly name: string,
-    private readonly capability: McpEnvCapability,
+    private readonly capability: EnvCapability,
     private readonly options: DiscoveryToolOptions,
   ) {}
 
@@ -507,7 +547,7 @@ export class DiscoveryTool {
 
   /** Channel-1 (human) description — the LEGACY host override (`options.description`) wins when
    *  supplied; otherwise the capability's OWN `description`/`dynamicDescription` is the
-   *  self-contained home. The dynamic arm resolves against the SAME describe ambient the
+   *  self-contained home. The dynamic arm resolves against the SAME describe run the
    *  per-verb catalog channel already builds — built lazily ONLY when the capability actually
    *  declares a dynamic arm, so a purely-static capability never pays the assembly cost.
    *  Resolving `undefined` (no capability description at all) falls back to the empty string,
@@ -515,8 +555,9 @@ export class DiscoveryTool {
    *  condition this method should crash over. */
   private async resolveToolDescription(): Promise<string> {
     if (this.options.description !== undefined) return this.options.description;
-    const ambient = this.capability.dynamicDescription === undefined ? undefined : await this.describeAmbient();
-    const live = await this.capability.resolveDescription(ambient?.activations.get(this.capability.name));
+    const describeRun = hasCapabilityDynamicDescription(this.capability) ? await this.describeRun() : undefined;
+    const activation = describeRun === undefined ? undefined : this.describeActivation(describeRun);
+    const live = await resolveCapabilityDescription(this.capability, activation);
     return live ?? "";
   }
 
@@ -541,16 +582,18 @@ export class DiscoveryTool {
     if (session !== undefined) assertSessionShape(this.name, session);
     const cfg = await this.config(args);
 
-    // ── sessionless: per-call ambient, disposed in `finally` — THIS call assembled it ⇒ THIS
-    // call disposes it, kernel disposers + the FULL lowered closure's resource wind-down — no
-    // log, no cache, nothing durable. The exec path carries no cache: the byte-identical fast
-    // path.
+    // ── sessionless: per-call run, disposed in `finally` — THIS call minted it ⇒ THIS
+    // call disposes it, the FULL closure's resource wind-down included — no log, no cache,
+    // nothing durable. The exec path carries no cache: the byte-identical fast path.
     if (session === undefined) {
-      const ambient = await this.assemble(cfg);
+      const scope = LexicalScope.fresh(`${this.name}:sessionless`);
+      const runCtx = await this.assemble(cfg, scope);
       try {
         const run = await this.runForms(args.expr, {
-          ambient,
-          scope: LexicalScope.fresh(`${this.name}:sessionless`),
+          capabilities: [this.capability],
+          config: cfg,
+          runCtx,
+          scope,
           budgetMs,
           heapBudget,
           signal,
@@ -559,7 +602,7 @@ export class DiscoveryTool {
         this.log(ctx, args, startTime, run.crashed ? { success: false, errorMessage: run.crashed } : { success: true });
         return run.out;
       } finally {
-        await ambient.dispose();
+        await disposeRunContext(runCtx);
       }
     }
 
@@ -580,10 +623,11 @@ export class DiscoveryTool {
     state.pendingManifest = undefined;
 
     const warm = this.warm.get(session.id);
-    const { ambient, scope, entries } =
+    const { config, runCtx, scope, cache, effectLog } =
       warm !== undefined && warm.digest === identity.configDigest
-        ? { ambient: warm.ambient, scope: warm.scope, entries: new Map(Object.entries(state.cache)) }
-        : await this.foldIntoFreshAmbient(session.id, state, identity, cfg, { budgetMs, heapBudget, signal });
+        ? warm
+        : await this.foldIntoFreshRun(session.id, state, identity, cfg, { budgetMs, heapBudget, signal });
+    const entries = cache.entries; // the ONE live map for this run's whole warm lifetime
 
     // Snapshot BEFORE running — the fill-or-kill revert point if this call ends up holding: a
     // held manifest's statements/cache mutations must never commit ("nothing rests on the
@@ -591,40 +635,46 @@ export class DiscoveryTool {
     const preLogLen = state.log.length;
     const preEntries = new Map(entries);
     const preCounters = { ...state.counters };
+    // THIS CALL's own slice of the run's long-lived effect log (see the `warm` field's own doc
+    // for why the log itself can't be fresh-per-call: `RunContext.effects` is fixed at mint).
+    const effectsBefore = effectLog.entries.length;
 
-    // THE EFFECT LOG + lineage tap (default-on): every sink this call's forms touch GATHERS
-    // here instead of firing — the gather-then-decide model the hold rule needs. `lineageOn`
-    // governs ONLY whether a trace is installed to annotate a held manifest's arguments; it
-    // never affects whether effects gather (that's structural).
-    const effectLog = new MemoryEffectLog();
+    // Lineage tap (default-on): governs ONLY whether a trace is installed to annotate a held
+    // manifest's arguments; it never affects whether effects gather (that's structural, always on).
     const lineageOn = this.options.lineage !== false;
     const trace = lineageOn ? new EvalTrace() : undefined;
 
     const run = await this.runForms(args.expr, {
-      ambient,
+      capabilities: [this.capability],
+      config,
+      runCtx,
       scope,
       budgetMs,
       heapBudget,
       signal,
-      cache: new SessionRunCache("record", entries, state.counters),
+      cache,
       state,
       onEvent: ctx.onEvent,
       effects: effectLog,
       tap: trace,
     });
+    const gathered = effectLog.entries.slice(effectsBefore);
 
     // THE HOLD RULE: any risky row present ⇒ the ENTIRE burst holds as a proposal — no
     // split-commit, atomicity is the product claim. Risky-free programs burst immediately right
     // here, before persisting — zero tax on the common case.
-    if (effectLog.entries.length > 0) {
-      const riskyEntries = effectLog.entries.filter((e) => this.isRisky(e.verbName));
+    if (gathered.length > 0) {
+      const riskyEntries = gathered.filter((e) => this.isRisky(runCtx, e.verbName));
       if (riskyEntries.length === 0) {
-        const burstError = await this.burstGatheredEffects(
-          effectLog.entries,
-          { ambient, scope, budgetMs, heapBudget, signal },
-          entries,
-          state.counters,
-        );
+        const burstError = await this.burstGatheredEffects(gathered, {
+          capabilities: [this.capability],
+          config,
+          scope,
+          cache,
+          budgetMs,
+          heapBudget,
+          signal,
+        });
         if (burstError !== undefined) {
           run.out.push(`(error ${JSON.stringify(burstError)})`);
           run.crashed = burstError;
@@ -633,7 +683,10 @@ export class DiscoveryTool {
       } else {
         // HOLD: revert to the pre-call snapshot (fill-or-kill — this call's statements and
         // cache mutations never commit) and return the manifest INSTEAD of `run.out` — the
-        // whole burst is a proposal now, not a completed response.
+        // whole burst is a proposal now, not a completed response. (The gathered entries
+        // THEMSELVES stay in the run's long-lived effect log forever — it has no removal API —
+        // but the NEXT call's own `effectsBefore` snapshot starts past them, so they are never
+        // double-counted or re-offered from the log itself.)
         state.log = state.log.slice(0, preLogLen);
         entries.clear();
         for (const [k, v] of preEntries) entries.set(k, v);
@@ -641,8 +694,8 @@ export class DiscoveryTool {
         const manifest = buildConfirmManifest({
           sessionId: session.id,
           statementIndex: preLogLen,
-          entries: effectLog.entries,
-          isRisky: (v) => this.isRisky(v),
+          entries: gathered,
+          isRisky: (v) => this.isRisky(runCtx, v),
           lineage: trace === undefined ? undefined : { trace, source: args.expr },
         });
         state.pendingManifest = manifest;
@@ -654,7 +707,7 @@ export class DiscoveryTool {
         await this.persist(session, ctx.store, state);
         this.log(ctx, args, startTime, { success: true });
         return [
-          `This run gathered ${riskyEntries.length} risky effect(s) among ${effectLog.entries.length} total — the ` +
+          `This run gathered ${riskyEntries.length} risky effect(s) among ${gathered.length} total — the ` +
             "WHOLE burst holds pending confirmation (fill-or-kill: nothing has been committed). Review the manifest " +
             "below, then call confirm-burst with { digest, approvedEffectIndexes: [...] } to fire the approved subset " +
             "in original order. Declining, or running a new program in this session, discards this manifest — its " +
@@ -678,54 +731,75 @@ export class DiscoveryTool {
     return run.out;
   }
 
-  /** Is `verbName` a `tool.risky` verb? The catalog's own annotation reflection
-   *  (`allAnnotations`, McpEnvCapability.ts) is the ONE lookup point — no second registry;
-   *  riskiness rides the same static factory-declared metadata channel `isTool`/`description`
-   *  already use. */
-  private isRisky(verbName: string): boolean {
-    return this.capability.allAnnotations()[verbName]?.risky === true;
+  /** Is `verbName` a `tool.risky` verb? The run-reader door's runtime query
+   *  (`verbMetadataByName`, defineMcpCapability.ts) is the ONE lookup point — no second
+   *  registry; riskiness rides the same static factory-declared `metadata` bag `isTool`/
+   *  `description` already use. */
+  private isRisky(runCtx: RunContext, verbName: string): boolean {
+    return verbMetadataByName(runCtx, verbName)?.risky === true;
   }
 
   /** Fire every gathered (non-risky) effect for real, in program order, right after gathering —
    *  the immediate-burst arm of the hold rule. Each entry's own minimal re-runnable invocation
    *  (`buildInvocationSource`, built from the RAW pre-decode args `EffectEntry.rawArgs` carries)
-   *  is evaluated through the SAME ambient/scope/cache this call already established, so the
-   *  sink fires through the ordinary `penetrateThroughCache` record-mode arm (tombstone written
-   *  normally — a later fold skips it exactly as if it had fired inline). Returns an error
-   *  message on the first entry that throws (stopping there, mirroring `runForms`'s own
-   *  stop-on-first-crash REPL posture); `undefined` on a clean drain. */
+   *  is evaluated through a FRESH, THROWAWAY run — deliberately NOT the warm run this call
+   *  dispatched through: the warm run's `effects` (the long-lived gather log) is PERMANENT
+   *  (`RunContext.effects` is fixed at construction, see the `warm` field's own doc) — reusing
+   *  it here would GATHER these effects a second time instead of firing them for real (the
+   *  `sink && effects !== undefined && cache?.mode !== "replay"` gather gate in
+   *  `penetrateThroughCache` doesn't distinguish "prime call" from "deliberate re-fire"). The
+   *  throwaway run carries the SAME `cache` (a plain value, shared freely across runs — its
+   *  `entries` map is what must stay consistent, not the RunContext holding it) in record mode
+   *  but NO `effects`, so each sink fires through the ordinary `penetrateThroughCache`
+   *  record-mode arm for real (tombstone written normally — a later fold skips it exactly as if
+   *  it had fired inline). Its own resources are never reused — disposed right after (a rare,
+   *  deliberate action, not the hot path; the cost of a fresh resource spawn for this one
+   *  dispatch is an accepted trade-off, not a warm-session leak). Returns an error message on
+   *  the first entry that throws (stopping there, mirroring `runForms`'s own stop-on-first-crash
+   *  REPL posture); `undefined` on a clean drain. */
   private async burstGatheredEffects(
     gathered: readonly EffectEntry[],
-    opts: { ambient: AssembledAmbient; scope: LexicalScope; budgetMs: number; heapBudget: number; signal?: AbortSignal },
-    entries: Map<string, RunCacheEntry>,
-    counters: SessionRunState["counters"],
+    opts: {
+      capabilities: readonly EnvCapability[];
+      config: Record<string, unknown>;
+      scope: LexicalScope;
+      cache: SessionRunCache;
+      budgetMs: number;
+      heapBudget: number;
+      signal?: AbortSignal;
+    },
   ): Promise<string | undefined> {
-    const cache = new SessionRunCache("record", entries, counters);
-    for (const entry of gathered) {
-      if (entry.rawArgs === undefined) {
-        return `confirm-burst: effect ${entry.index} (${entry.verbName}) was gathered with no raw-argument capture — cannot reconstruct its invocation to fire it.`;
+    const fireRunCtx = await this.assemble(opts.config, opts.scope, opts.cache);
+    try {
+      for (const entry of gathered) {
+        if (entry.rawArgs === undefined) {
+          return `confirm-burst: effect ${entry.index} (${entry.verbName}) was gathered with no raw-argument capture — cannot reconstruct its invocation to fire it.`;
+        }
+        const source = buildInvocationSource(entry.verbName, entry.rawArgs);
+        try {
+          await execState(source, {
+            capabilities: opts.capabilities,
+            config: opts.config,
+            runCtx: fireRunCtx,
+            scope: opts.scope,
+            budgetMs: opts.budgetMs,
+            heapBudget: opts.heapBudget,
+            signal: opts.signal,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          return `effect ${entry.index} (${entry.verbName}) threw while bursting: ${message}`;
+        }
       }
-      const source = buildInvocationSource(entry.verbName, entry.rawArgs);
-      try {
-        await execState(source, {
-          ambient: opts.ambient,
-          scope: opts.scope,
-          budgetMs: opts.budgetMs,
-          heapBudget: opts.heapBudget,
-          cache,
-          signal: opts.signal,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        return `effect ${entry.index} (${entry.verbName}) threw while bursting: ${message}`;
-      }
+    } finally {
+      await disposeRunContext(fireRunCtx);
     }
     return undefined;
   }
 
   /**
    * confirm-burst — see confirm-burst.ts's `ConfirmBurstTool`, a thin MCP-tool-shaped wrapper
-   * over THIS method, so confirmation reuses the same warm ambient / session state `call`
+   * over THIS method, so confirmation reuses the same warm run / session state `call`
    * itself holds, rather than a second implementation.
    *
    * Requires a session — a pending manifest lives in `SessionRunState`, so there is nothing to
@@ -785,7 +859,7 @@ export class DiscoveryTool {
     const orderedRows = manifest.rows.filter((r) => approved.has(r.effectIndex)).toSorted((a, b) => a.effectIndex - b.effectIndex);
     const rigCheck = this.options.rigAlteredCheck ?? noRigAlteredCheck;
 
-    // Rehydrate the SAME warm ambient `call` would (identity taken from the STATE itself —
+    // Rehydrate the SAME warm run `call` would (identity taken from the STATE itself —
     // confirm-burst carries no actor config to recompute one from; the session's own
     // recorded identity is exactly the world the manifest was built against).
     const identity: SessionRunIdentity = {
@@ -795,41 +869,59 @@ export class DiscoveryTool {
       configDigest: state.configDigest,
     };
     const warm = this.warm.get(session.id);
-    const { ambient, scope, entries } =
+    const { config, runCtx, scope, cache } =
       warm !== undefined && warm.digest === identity.configDigest
-        ? { ambient: warm.ambient, scope: warm.scope, entries: new Map(Object.entries(state.cache)) }
-        : await this.foldIntoFreshAmbient(session.id, state, identity, await this.config({ expr: "" }), {
+        ? warm
+        : await this.foldIntoFreshRun(session.id, state, identity, await this.config({ expr: "" }), {
             budgetMs,
             heapBudget,
             signal: ctx.signal,
           });
+    const entries = cache.entries;
 
-    const cache = new SessionRunCache("record", entries, state.counters);
+    // A FRESH, THROWAWAY run to fire the approved rows for real — NOT the warm `runCtx`: its
+    // `effects` is permanent (see `burstGatheredEffects`'s own doc for the full reasoning),
+    // so reusing it here would gather these rows again instead of firing them. Same `cache`
+    // (shared value, record mode) so tombstones land in the SAME entries map.
+    const fireRunCtx = await this.assemble(config, scope, cache);
+
     let fired = 0;
     const doors: string[] = [];
-    for (const row of orderedRows) {
-      const rig = await rigCheck(row);
-      if (rig.altered) {
-        doors.push(
-          `effect ${row.effectIndex} (${row.verb}): rig altered — the world moved under this specific effect` +
-            (rig.detail ? ` (${rig.detail})` : "") +
-            "; declined (fill-or-kill — re-issue the original program to re-offer it).",
-        );
-        continue;
+    try {
+      for (const row of orderedRows) {
+        const rig = await rigCheck(row);
+        if (rig.altered) {
+          doors.push(
+            `effect ${row.effectIndex} (${row.verb}): rig altered — the world moved under this specific effect` +
+              (rig.detail ? ` (${rig.detail})` : "") +
+              "; declined (fill-or-kill — re-issue the original program to re-offer it).",
+          );
+          continue;
+        }
+        if (row.invocationSource === undefined) {
+          doors.push(`effect ${row.effectIndex} (${row.verb}): no reconstructable invocation — declined.`);
+          continue;
+        }
+        try {
+          await execState(row.invocationSource, {
+            capabilities: [this.capability],
+            config,
+            runCtx: fireRunCtx,
+            scope,
+            budgetMs,
+            heapBudget,
+            signal: ctx.signal,
+          });
+          state.log.push({ src: row.invocationSource });
+          state.counters.statements += 1;
+          fired += 1;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          doors.push(`effect ${row.effectIndex} (${row.verb}) threw while bursting: ${message}`);
+        }
       }
-      if (row.invocationSource === undefined) {
-        doors.push(`effect ${row.effectIndex} (${row.verb}): no reconstructable invocation — declined.`);
-        continue;
-      }
-      try {
-        await execState(row.invocationSource, { ambient, scope, budgetMs, heapBudget, cache, signal: ctx.signal });
-        state.log.push({ src: row.invocationSource });
-        state.counters.statements += 1;
-        fired += 1;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        doors.push(`effect ${row.effectIndex} (${row.verb}) threw while bursting: ${message}`);
-      }
+    } finally {
+      await disposeRunContext(fireRunCtx);
     }
 
     const declinedCount = manifest.rows.length - fired;
@@ -855,27 +947,27 @@ export class DiscoveryTool {
     return doors.length === 0 ? [summary] : [summary, ...doors];
   }
 
-  /** Dispose one session's warm ambient (the host's session-close hook — `onsessionclosed`/
-   *  DELETE). The ambient's dispose is the full ownership-table teardown: kernel pack disposers
-   *  (LIFO) + EVERY lowered pack's resource wind-down across the whole dep closure — every port
-   *  the call ambient spawned is released, gateway included. Idempotent; a session with no warm
-   *  pair is a no-op. */
+  /** Dispose one session's warm run (the host's session-close hook — `onsessionclosed`/
+   *  DELETE). Disposal is the full per-run resource wind-down across the whole capability's
+   *  dep closure — every port the run spawned is released, gateway included. Idempotent; a
+   *  session with no warm pair is a no-op. */
   async closeSession(sessionId: string): Promise<void> {
     const warm = this.warm.get(sessionId);
     if (warm === undefined) return;
     this.warm.delete(sessionId);
-    await warm.ambient.dispose();
+    await disposeRunContext(warm.runCtx);
   }
 
-  /** Dispose every warm pair + the describe ambient (connection teardown). */
+  /** Dispose every warm pair + the describe run (connection teardown). */
   async dispose(): Promise<void> {
     const all = [...this.warm.values()];
     this.warm.clear();
-    for (const warm of all) await warm.ambient.dispose();
-    // The describe-time ambient (per-connection, memoized on this tool) dies with the tool.
+    for (const warm of all) await disposeRunContext(warm.runCtx);
+    // The describe-time run (per-connection, memoized on this tool) dies with the tool.
     const describeCtx = this.describeCtx;
     this.describeCtx = undefined;
-    await (await describeCtx)?.dispose();
+    const resolved = await describeCtx;
+    if (resolved !== undefined) await disposeRunContext(resolved.runCtx);
   }
 
   // ── the session machinery: load / fold / run / persist ──────────────────────────────────────
@@ -926,54 +1018,82 @@ export class DiscoveryTool {
     session.state.__run__ = state;
   }
 
-  /** The cold path: dispose the stale warm ambient (config-digest change), assemble fresh,
-   *  validate the cache identity (mismatch ⇒ drop the cache, KEEP the log, re-record —
-   *  self-heal), then FOLD: re-run the log over the cache, onto a FRESH session scope (the
-   *  lexical accumulation the replayed defines land in). Fold inherits the poison rule at
-   *  statement level — a statement whose re-run crashes is DROPPED from the log (with a counter
-   *  increment) rather than allowed to poison the session; cancellation propagates instead.
-   *  Returns the warm pair plus the live entry map the new input's record-mode cache shares.
-   *  The ambient's ownership transfers to the warm map only on success — a fold crash disposes
-   *  it in `finally`. */
-  private async foldIntoFreshAmbient(
+  /** The cold path: dispose the stale warm run (config-digest change), mint fresh, validate the
+   *  cache identity (mismatch ⇒ drop the cache, KEEP the log, re-record — self-heal), then
+   *  FOLD: re-run the log over the cache, onto a FRESH session scope (the lexical accumulation
+   *  the replayed defines land in). Fold inherits the poison rule at statement level — a
+   *  statement whose re-run crashes is DROPPED from the log (with a counter increment) rather
+   *  than allowed to poison the session; cancellation propagates instead.
+   *
+   *  TWO MINTS, not one — see the `warm` field's own doc for why: `RunContext.cache` is fixed
+   *  at construction, and fold needs "replay" mode (a stored `view` answers from cache, never
+   *  re-fires) while every LIVE call afterward needs "record" mode (always fires, write/
+   *  overwrite — §MODE-LAW). (1) a THROWAWAY run, `cache` in fold's own mode, over the SAME
+   *  `scope` — used only to replay the log's bindings into that scope, then disposed
+   *  immediately (its resources are never reused; the live mint below gets its own, fresh
+   *  resource store). (2) the LIVE run — "record" mode over the SAME `entries` map (now
+   *  folded), a fresh long-lived `MemoryEffectLog` — THIS is the pair the warm map keeps and
+   *  every subsequent call (including this one) actually dispatches through. */
+  private async foldIntoFreshRun(
     sessionId: string,
     state: SessionRunState,
     identity: SessionRunIdentity,
     cfg: Record<string, unknown>,
     opts: { budgetMs: number; heapBudget: number; signal?: AbortSignal },
-  ): Promise<{ ambient: AssembledAmbient; scope: LexicalScope; entries: Map<string, RunCacheEntry> }> {
+  ): Promise<{
+    config: Record<string, unknown>;
+    runCtx: RunContext;
+    scope: LexicalScope;
+    cache: SessionRunCache;
+    effectLog: MemoryEffectLog;
+  }> {
     const prior = this.warm.get(sessionId);
     if (prior !== undefined) {
       this.warm.delete(sessionId);
-      await prior.ambient.dispose();
+      await disposeRunContext(prior.runCtx);
     }
-    const ambient = await this.assemble(cfg);
     const scope = LexicalScope.fresh(`${this.name}:${sessionId}`);
-    let owned = false;
-    try {
-      const cacheValid = cacheValidFor(state, identity);
-      if (cacheValid === false) state.cache = {}; // drop the cache, keep the log — re-record (self-heal)
-      const entries = new Map(Object.entries(state.cache));
-      if (state.log.length > 0) state.counters.rehydrations += 1;
+    const cacheValid = cacheValidFor(state, identity);
+    if (cacheValid === false) state.cache = {}; // drop the cache, keep the log — re-record (self-heal)
+    const entries = new Map(Object.entries(state.cache));
+    if (state.log.length > 0) {
+      state.counters.rehydrations += 1;
+      // Phase 1 — the throwaway fold-replay run.
       const foldCache = new SessionRunCache(cacheValid ? "replay" : "record", entries, state.counters);
-      const kept: LogStatement[] = [];
-      for (const stmt of state.log) {
-        try {
-          const run = await execSerializedState(stmt.src, { ambient, scope, ...opts, cache: foldCache });
-          state.counters.heapUsedTotal += run.heapUsed; // fold re-runs burn heap too — cumulative honesty
-          kept.push(stmt);
-        } catch (error) {
-          if (opts.signal?.aborted) throw error; // cancellation, not a poisoned statement
-          state.counters.droppedOnReplay += 1; // the poison rule: drop, count, continue
+      const foldRunCtx = await this.assemble(cfg, scope, foldCache);
+      try {
+        const kept: LogStatement[] = [];
+        for (const stmt of state.log) {
+          try {
+            const run = await execSerializedState(stmt.src, {
+              capabilities: [this.capability],
+              config: cfg,
+              runCtx: foldRunCtx,
+              scope,
+              ...opts,
+              cache: foldCache,
+            });
+            state.counters.heapUsedTotal += run.heapUsed; // fold re-runs burn heap too — cumulative honesty
+            kept.push(stmt);
+          } catch (error) {
+            if (opts.signal?.aborted) throw error; // cancellation, not a poisoned statement
+            state.counters.droppedOnReplay += 1; // the poison rule: drop, count, continue
+          }
         }
+        state.log = kept;
+      } finally {
+        await disposeRunContext(foldRunCtx); // throwaway — its resources are never reused
       }
-      state.log = kept;
-      this.warm.set(sessionId, { digest: identity.configDigest, ambient, scope });
-      owned = true;
-      return { ambient, scope, entries };
-    } finally {
-      if (!owned) await ambient.dispose();
     }
+
+    // Phase 2 — the LIVE warm mint: record mode over the SAME (now-folded) entries, a fresh
+    // long-lived effect log. This is what the warm map keeps, and what this call's own
+    // `runForms` dispatches through.
+    const cache = new SessionRunCache("record", entries, state.counters);
+    const effectLog = new MemoryEffectLog();
+    const runCtx = await this.assemble(cfg, scope, cache, effectLog);
+    this.warm.set(sessionId, { digest: identity.configDigest, config: cfg, runCtx, scope, cache, effectLog });
+    return { config: cfg, runCtx, scope, cache, effectLog };
   }
 
   /** Parse + execute `expr` form-by-form (REPL semantics: earlier values stand, a crash stops
@@ -1000,7 +1120,9 @@ export class DiscoveryTool {
   private async runForms(
     expr: string,
     opts: {
-      ambient: AssembledAmbient;
+      capabilities: readonly EnvCapability[];
+      config: Record<string, unknown>;
+      runCtx: RunContext;
       scope: LexicalScope;
       budgetMs: number;
       heapBudget: number;
@@ -1012,7 +1134,7 @@ export class DiscoveryTool {
       tap?: EvalTap;
     },
   ): Promise<{ out: (string | Blob)[]; crashed?: string }> {
-    const { ambient, scope, budgetMs, heapBudget, signal, cache, state, onEvent, effects, tap } = opts;
+    const { capabilities, config, runCtx, scope, budgetMs, heapBudget, signal, cache, state, onEvent, effects, tap } = opts;
     const cap = this.options.statementCap ?? defaultStatementCap();
     const attachmentQuota = this.options.attachmentQuota ?? defaultAttachmentQuota();
     // ONE shared numbering/quota across every form of THIS call (the beginCall(quota) shape).
@@ -1092,7 +1214,9 @@ export class DiscoveryTool {
       const src = sources[index] as string;
       try {
         const run = await execSerializedState(form, {
-          ambient,
+          capabilities,
+          config,
+          runCtx,
           scope,
           budgetMs,
           heapBudget,
@@ -1189,24 +1313,42 @@ export class DiscoveryTool {
     return [...names].toSorted((a, b) => a.localeCompare(b));
   }
 
-  // ── ambient assembly: config from the actor args, resources armed by the capability ──
+  // ── run minting: config from the actor args, resources armed lazily by the capability ──
 
-  /** Assemble the phase-2 product for one config: the capability (and its whole dep closure)
-   *  lowered onto a fresh child of the standard base, sealed, returned as an owning
-   *  `AssembledAmbient` handle. Its `dispose()` IS the full ownership-table teardown — kernel
-   *  pack disposers (LIFO) + resource wind-down over the ENTIRE lowered closure (roots + deps);
-   *  a root-only teardown would never reach a dep capability's own resource cells. Vocabulary is
-   *  added ONLY by the capability's deps (the audited grant); the base chain is the same stdlib
-   *  every sandboxed ambient resolves through. */
-  private assemble(cfg: Record<string, unknown>): Promise<AssembledAmbient> {
-    return assembleAmbient({ capabilities: [this.capability], config: cfg });
+  /** Mint a fresh `RunContext` for one config, over `scope`: the capability (and its whole dep
+   *  closure) bound onto the self-hosted base via `execState`'s one exec path. Its disposal
+   *  (`disposeRunContext`) is the full per-run resource wind-down over the ENTIRE closure
+   *  (roots + deps); a root-only teardown would never reach a dep capability's own resource
+   *  cells. Vocabulary is added ONLY by the capability's deps (the audited grant); the base
+   *  roster is the same stdlib every sandboxed run resolves through.
+   *
+   *  `cache`/`effects`, when supplied, are set ON THIS MINT — as is `heapBudget` (always this
+   *  tool's own constant `this.options.heapBudget ?? defaultHeapBudget()`, read here so every
+   *  mint site doesn't have to). `RunContext.cache`/`.effects`/`.heapMeter` are ALL fixed at
+   *  construction (see the `warm` field's own doc for why this matters): pass them HERE, never
+   *  try to attach them via a later `execState` call reusing the returned run. */
+  private async assemble(
+    cfg: Record<string, unknown>,
+    scope: LexicalScope,
+    cache?: RunCache,
+    effects?: EffectLog,
+  ): Promise<RunContext> {
+    const heapBudget = this.options.heapBudget ?? defaultHeapBudget();
+    const state = await execState("(begin)", {
+      capabilities: [this.capability],
+      config: cfg,
+      scope,
+      heapBudget,
+      cache,
+      effects,
+    });
+    return state.runCtx;
   }
 
   /** The capability's `configuration` fields. Actor values come from call args for the
    *  exposable keys; host values (from `hostConfig` option) are merged in. */
   private async config(args: DiscoveryArgs): Promise<Record<string, unknown>> {
-    const spec = this.capability.spec as McpCapabilitySpec<Record<string, z.ZodType>, never>;
-    const configSchema = spec.configuration ?? {};
+    const configSchema = (this.capability.spec.configuration ?? {}) as Record<string, z.ZodType>;
     const allKeys = Object.keys(configSchema);
     const exposable = this.options.exposableConfiguration ?? allKeys;
 
@@ -1240,8 +1382,7 @@ export class DiscoveryTool {
     // ONE zod object is the source — the capability's `configuration` (transforms and all) merged
     // with expr/intent. Only *exposable* configuration keys are included in the schema presented
     // to the actor (host-only config such as functions is supplied via hostConfig and omitted here).
-    const configShape =
-      (this.capability.spec as McpCapabilitySpec<Record<string, z.ZodType>, never>).configuration ?? {};
+    const configShape = (this.capability.spec.configuration ?? {}) as Record<string, z.ZodType>;
     const allConfigKeys = Object.keys(configShape);
     const exposableKeys = this.options.exposableConfiguration ?? allConfigKeys;
     const exposedConfig = Object.fromEntries(
@@ -1302,57 +1443,70 @@ export class DiscoveryTool {
     return `${base}\n${liveNote}`;
   }
 
-  /** The DESCRIBE ambient: a HOST-CONFIG-ONLY `AssembledAmbient`, built lazily on the first
-   *  catalog read that needs one (some verb declares a `dynamicDescription`), memoized per tool
-   *  (per CONNECTION — the class doc), disposed with the tool. Its `activations` are the channel
-   *  a metadata-declared dynamic field resolves `this` against.
+  /** The DESCRIBE run: a HOST-CONFIG-ONLY `(runCtx, scope)` pair, built lazily on the first
+   *  catalog read that needs one (some verb — or the capability itself — declares a
+   *  `dynamicDescription`), memoized per tool (per CONNECTION — the class doc), disposed with
+   *  the tool.
    *
-   *  Describe happens BEFORE any actor args exist — a dynamic description reads HOST infra and
-   *  HOST config ONLY (exactly what the closure form could reach, now through the declared
-   *  channel). Honest fallbacks, never a faked actor-args call: a FUNCTION-form `hostConfig`
-   *  (needs the per-call args) or a config schema requiring actor keys ⇒ NO describe ambient —
-   *  dynamic thunks then run with their legacy receiver (a closure-form thunk ignores `this`; a
-   *  metadata-declared field reading `this.configuration` resolves `undefined` and the static
-   *  description stands, un-flagged). */
-  private describeCtx?: Promise<AssembledAmbient | undefined>;
-  private describeAmbient(): Promise<AssembledAmbient | undefined> {
+   *  Describe happens BEFORE any actor args exist — a dynamic description reads HOST config
+   *  ONLY (exactly what the closure form could reach). Honest fallback, never a faked
+   *  actor-args call: a FUNCTION-form `hostConfig` (needs the per-call args) or a config schema
+   *  requiring actor keys ⇒ NO describe run — a dynamic field then resolves receiver-free
+   *  (`this.configuration` reads `undefined`, and the static sibling stands, un-flagged).
+   *  Catalog LISTING itself never depends on this succeeding — see `mcpCatalogEntries`'s
+   *  static fallback (defineMcpCapability.ts): the ONE thing a missing describe run costs is
+   *  a `dynamicDescription` resolving live. */
+  private describeCtx?: Promise<{ runCtx: RunContext; scope: LexicalScope } | undefined>;
+  private describeRun(): Promise<{ runCtx: RunContext; scope: LexicalScope } | undefined> {
     return (this.describeCtx ??= (async () => {
       if (typeof this.options.hostConfig === "function") return undefined;
       try {
         const cfg = await this.config({ expr: "" });
-        return await this.assemble(cfg);
+        const scope = LexicalScope.fresh(`${this.name}:describe`);
+        const runCtx = await this.assemble(cfg, scope);
+        return { runCtx, scope };
       } catch {
         return undefined; // actor-key-requiring schema — static catalog, the honest floor
       }
     })());
   }
 
-  /** The verb catalog reflected off the capability's dep-closure annotations. A STATIC
-   *  `inputSchema` renders a sig; a getter (resource-resolving) is NOT invoked here (no live
-   *  activation). A `dynamicDescription` thunk resolves live (and flags the entry
-   *  session-generated) — per read, no memo, against the OWNING capability's describe-ambient
-   *  activation when one is derivable (the metadata channel); a closure-form legacy thunk
-   *  ignores the receiver. Resolving `undefined` falls back to the static description, NOT
-   *  flagged dynamic. */
+  /** The `this` a capability- or verb-level `dynamicDescription` resolves against at describe
+   *  time: this capability's OWN validated configuration, read off the describe run's
+   *  per-capability table (`RunContext.capabilityConfigurations`, a plain identity-keyed
+   *  lookup — no acquire, no hazard). `resources` stays `undefined` deliberately: resolving it
+   *  would spawn the capability's resource bag on this THROWAWAY describe run — a bag no later
+   *  call ever reuses, and `["arrival/get-resources"]`'s own per-run memoization is keyed on
+   *  THIS run, not a shared one — so a live `this.resources` read at describe time is out of
+   *  scope for this rework (see the report's deviations). */
+  private describeActivation(ctx: { runCtx: RunContext }): { configuration: unknown; resources: undefined } {
+    return { configuration: ctx.runCtx.capabilityConfigurations?.get(this.capability), resources: undefined };
+  }
+
+  /** The verb catalog reflected off the capability's own (and its dep closure's) baked
+   *  `metadata` bag (`mcpCatalogEntries`, defineMcpCapability.ts — the run-reader door over a
+   *  live describe run when one exists, the STATIC `spec.symbols` walk otherwise; the SAME
+   *  baked values either way, since bake is eager at `define()` time). A `dynamicDescription`
+   *  field resolves live (and flags the entry session-generated) — per read, no memo — against
+   *  the describe run's activation when one is derivable; receiver-free otherwise. Resolving
+   *  `undefined` falls back to the static description, NOT flagged dynamic. */
   private async catalog(): Promise<{ text: string; dynamic: boolean }[]> {
-    const entries = this.capability.allAnnotationEntries();
-    const describeCtx = entries.some(({ annotation }) => annotation.dynamicDescription !== undefined)
-      ? await this.describeAmbient()
-      : undefined;
+    const needsRun = mcpCatalogEntries(this.capability).some((e) => typeof e.metadata.dynamicDescription === "function");
+    const describeCtx = needsRun ? await this.describeRun() : undefined;
+    const entries = mcpCatalogEntries(this.capability, describeCtx?.runCtx);
+    const activation = describeCtx === undefined ? undefined : this.describeActivation(describeCtx);
     return Promise.all(
-      entries.map(async ({ owner, name, annotation: a }) => {
-        const d = Object.getOwnPropertyDescriptor(a, "inputSchema");
-        const sig = d && !d.get && Array.isArray(d.value) ? (d.value as z.ZodType[]).map(argTypeName).join(" ") : "";
-        const thunk = a.dynamicDescription;
-        // `this` = the owner's activation when the describe ambient exists; else the
-        // annotation object (the legacy method-call receiver — byte-compatible).
-        const live = thunk === undefined ? undefined : await thunk.call(describeCtx?.activations.get(owner) ?? a);
-        const sigPart = sig ? ` ${sig}` : "";
+      entries.map(async ({ name, metadata }) => {
+        const description = await resolveMcpField(metadata.description as string | undefined, activation);
+        const live = await resolveMcpField(
+          metadata.dynamicDescription as ((this: unknown) => MaybePromise<string | undefined>) | undefined,
+          activation,
+        );
         // An `isTool` verb is catalogued here AND (once a runner derives `tools/list` from it)
         // as its own top-level MCP tool — the REPL can compose it where a bare `tools/call`
         // can't, so it stays advertised in both places rather than one replacing the other.
-        const exposedNote = a.isTool ? " [also a top-level tool]" : "";
-        return { text: `(${name}${sigPart}) - ${live ?? a.description}${exposedNote}`, dynamic: live !== undefined };
+        const exposedNote = metadata.isTool === true ? " [also a top-level tool]" : "";
+        return { text: `(${name}) - ${live ?? description}${exposedNote}`, dynamic: live !== undefined };
       }),
     );
   }

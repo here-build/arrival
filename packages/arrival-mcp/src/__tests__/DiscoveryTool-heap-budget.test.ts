@@ -7,11 +7,11 @@
 
 import { describe, expect, it, afterEach } from "vitest";
 import { DiscoveryTool, defaultHeapBudget } from "../DiscoveryTool.js";
-import { McpEnvCapability } from "../McpEnvCapability.js";
+import { defineMcpCapability } from "../defineMcpCapability.js";
 
 /** No verbs, no configuration — every call runs on the base sandboxed env alone (which already
  *  provides `map`/`lambda`/list literals, per the standard base's SAFE_BUILTINS). */
-const emptyCapability = (): McpEnvCapability => new McpEnvCapability("empty-caps", {});
+const emptyCapability = () => defineMcpCapability("empty-caps", { tools: () => ({}) });
 
 const lit = (n: number) => `'(${Array.from({ length: n }, (_, i) => i).join(" ")})`;
 

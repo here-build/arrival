@@ -3,39 +3,62 @@
 // metadata key, riding the SAME bake-time metadata channel every `tool.*` arm already writes
 // `description` through.
 //
-// UNIT plane only (direct `def.run(...)`, manually-built `:key` pluck pairs) — mirrors
+// UNIT plane only (direct `def.contract.run(...)`, manually-built `:key` pluck pairs) — mirrors
 // arrival core's own `kwargs-runtime.test.ts` convention: by the time a call's args reach a
 // rosetta `run` wrapper, `(tool :a v)` has already evaluated to `[:a, v]` (self-evaluating
 // keyword ASymbols, keyword-tagless-apply.md), so a UNIT test constructs that shape by hand.
+//
+// RE-PINNED (2026-07-22, arrival core commit 2172eb4bc0 "symbol factories mint their A-values
+// — the lowering-free authoring endpoint"): a `tool.*` factory's return value is now the
+// baked runtime `ARosettaProcedure` itself, not the old bare `RosettaSymbolDef` record — its
+// OWN `.kind` is the AValue-family tag `"procedure"` (every callable's, regardless of
+// authoring arm), while the record this suite used to inspect directly (`cacheClass`/
+// `metadata`/`provenance`/`run`/the def's OWN `kind: "rosetta"`) now rides `.contract`
+// (`ARosettaProcedure.contract: unknown`, cast to `RosettaSymbolDef` here — the exact shape
+// `common/symbols/rosetta.ts`'s `new ARosettaProcedure({contract: def, ...})` stamps). Every
+// assertion below reads the SAME facts, at their new address — nothing is weakened.
+//
+// RE-PINNED (2026-07-22, arrival core commit a68d9fc79f "eliminate the per-value ctx field
+// from AValue"): `AString`/`ASymbol`/`AInexact` (and every AValue subclass) dropped their
+// leading `ctx: RunContext` constructor param — construct with the value alone.
 
-import { CONSTANT_CTX } from "@inhuman.tools/arrival";
+import type { SymbolDeclaration } from "@inhuman.tools/arrival/capability";
 import { symbol, testCallCtx, type CacheClass } from "@inhuman.tools/arrival/symbol";
-import { z } from "@inhuman.tools/arrival";
-import { AInexact } from "@inhuman.tools/arrival";
-import { AString } from "@inhuman.tools/arrival";
-import { ASymbol } from "@inhuman.tools/arrival";
+import { z, type RosettaSymbolDef } from "@inhuman.tools/arrival";
+import { AInexact, AString, ASymbol } from "@inhuman.tools/arrival/reflect-internals";
 import { describe, expect, it } from "vitest";
 
 import { tool } from "../tool.js";
 
+/** The baked `RosettaSymbolDef` record every `tool.*` factory's returned runtime value
+ *  carries on `.contract` — see this file's own header for why the read moved here.
+ *  `tool.*`'s own declared return type is the wide `SymbolDeclaration` (tool.ts's own
+ *  `.d.ts`-emission fix — see that file's comments), never the narrow runtime class name
+ *  (`ARosettaProcedure` isn't re-exported through the two-tier public surface at all); this
+ *  helper is the one place that narrows back down, since every value this suite hands it IS,
+ *  at runtime, the baked rosetta procedure `tool.*` always mints. */
+function contractOf(def: SymbolDeclaration): RosettaSymbolDef {
+  return (def as { contract: unknown }).contract as RosettaSymbolDef;
+}
+
 /** A keyword `ASymbol` exactly as evaluating `:key` produces (self-evaluating). */
 function pluck(key: string): unknown {
-  return new ASymbol(CONSTANT_CTX, `:${key}`);
+  return new ASymbol(`:${key}`);
 }
 
 describe("tool.view — cacheClass stamping", () => {
   it('bakes cacheClass: "view" onto the def, with a real (non-escape-hatch) output codec', () => {
     const def = tool.view`snapshot: a boundary snapshot`({ shape: {}, output: [z.string] }, () => "ok");
-    expect(def.kind).toBe("rosetta");
-    expect(def.cacheClass).toBe("view" satisfies CacheClass);
-    expect(def.metadata?.description).toBe("a boundary snapshot");
+    expect(contractOf(def).kind).toBe("rosetta");
+    expect(contractOf(def).cacheClass).toBe("view" satisfies CacheClass);
+    expect(contractOf(def).metadata?.description).toBe("a boundary snapshot");
   });
 
   it("runs end to end: decode kwargs → impl → encode the declared output", async () => {
     const def = tool.view`echo-view: echoes`({ shape: { text: z.string }, output: [z.string] }, (args: {
       text: string;
     }) => args.text);
-    const out = await def.run.call(testCallCtx(), pluck("text"), new AString(CONSTANT_CTX, "hi"));
+    const out = await contractOf(def).run.call(testCallCtx(), pluck("text"), new AString("hi"));
     expect((out as AString)["arrival/toJS"]()).toBe("hi");
   });
 
@@ -47,7 +70,7 @@ describe("tool.view — cacheClass stamping", () => {
 describe("tool.pure — cacheClass stamping", () => {
   it('bakes cacheClass: "pure" and defaults output to the [sz.dynamic] escape hatch when omitted', () => {
     const def = tool.pure`compute: a pure computation`({ shape: {} }, () => 42);
-    expect(def.cacheClass).toBe("pure" satisfies CacheClass);
+    expect(contractOf(def).cacheClass).toBe("pure" satisfies CacheClass);
   });
 
   it("a pure verb accepts a z.dynamic output with NO shape gate (nothing of it is persisted)", () => {
@@ -58,7 +81,7 @@ describe("tool.pure — cacheClass stamping", () => {
     const def = tool.pure`double: doubles a number`({ shape: { n: z.number }, output: [z.number] }, (args: {
       n: number;
     }) => args.n * 2);
-    const out = await def.run.call(testCallCtx(), pluck("n"), new AInexact(CONSTANT_CTX, 21));
+    const out = await contractOf(def).run.call(testCallCtx(), pluck("n"), new AInexact(21));
     expect((out as AInexact).real).toBe(42);
   });
 });
@@ -66,8 +89,8 @@ describe("tool.pure — cacheClass stamping", () => {
 describe("tool.effect — sink provenance + void-shape enforcement", () => {
   it('bakes provenance: "sink" with NO cacheClass (never persisted, never regenerated from a cache)', () => {
     const def = tool.effect`mutate: mutates something`({ shape: {} }, () => undefined);
-    expect(def.provenance).toBe("sink");
-    expect(def.cacheClass).toBeUndefined();
+    expect(contractOf(def).provenance).toBe("sink");
+    expect(contractOf(def).cacheClass).toBeUndefined();
   });
 
   it("runs end to end — the impl fires, the wrapper returns void", async () => {
@@ -75,7 +98,7 @@ describe("tool.effect — sink provenance + void-shape enforcement", () => {
     const def = tool.effect`set-flag: flips a flag`({ shape: { value: z.string } }, (args: { value: string }) => {
       seen = args.value;
     });
-    const out = await def.run.call(testCallCtx(), pluck("value"), new AString(CONSTANT_CTX, "on"));
+    const out = await contractOf(def).run.call(testCallCtx(), pluck("value"), new AString("on"));
     expect(seen).toBe("on");
     // `run` returns the ENCODED scheme-side value (the boxed AVoid), not the decoded JS
     // `undefined` — `sz.undefinedResult`'s own encode arm. void-family, never a real value.
@@ -96,10 +119,10 @@ describe("tool.effect — sink provenance + void-shape enforcement", () => {
 describe("tool.risky — tool.effect + a static `risky` metadata key", () => {
   it("bakes the same sink/void shape as tool.effect, PLUS risky: true on the metadata bag", () => {
     const def = tool.risky`delete-everything: irreversible`({ shape: {} }, () => undefined);
-    expect(def.provenance).toBe("sink");
-    expect(def.cacheClass).toBeUndefined();
-    expect(def.metadata?.risky).toBe(true);
-    expect(def.metadata?.description).toBe("irreversible");
+    expect(contractOf(def).provenance).toBe("sink");
+    expect(contractOf(def).cacheClass).toBeUndefined();
+    expect(contractOf(def).metadata?.risky).toBe(true);
+    expect(contractOf(def).metadata?.description).toBe("irreversible");
   });
 
   it("`risky` is STATIC data — factory-declared, never something a caller can flip per call", () => {
@@ -107,35 +130,39 @@ describe("tool.risky — tool.effect + a static `risky` metadata key", () => {
     // The metadata bag carries `risky` as a plain boolean DATA field, not a fn — there is no
     // per-call channel that could toggle it; it rides the same bake-time-only bag
     // `description` does (`BakeRuntimeOpts.metadata`, arrival core's `_bake.ts`).
-    expect(typeof def.metadata?.risky).toBe("boolean");
+    expect(typeof contractOf(def).metadata?.risky).toBe("boolean");
   });
 
   it("a caller can still layer extra static meta beside risky", () => {
     const def = tool.risky`purge: irreversible purge`({ shape: {} }, () => undefined, { group: "danger-zone" });
-    expect(def.metadata?.risky).toBe(true);
-    expect(def.metadata?.group).toBe("danger-zone");
+    expect(contractOf(def).metadata?.risky).toBe(true);
+    expect(contractOf(def).metadata?.group).toBe("danger-zone");
   });
 });
 
 describe("isTool: true — the static exposure flag, riding the SAME metadata bag", () => {
   it("tool.view/pure/effect/risky all accept it, unchanged shape", () => {
-    expect(tool.view`v: `({ shape: {}, output: [z.string] }, () => "x", { isTool: true }).metadata?.isTool).toBe(
+    expect(
+      contractOf(tool.view`v: `({ shape: {}, output: [z.string] }, () => "x", { isTool: true })).metadata?.isTool,
+    ).toBe(true);
+    expect(contractOf(tool.pure`p: `({ shape: {} }, () => 1, { isTool: true })).metadata?.isTool).toBe(true);
+    expect(contractOf(tool.effect`e: `({ shape: {} }, () => undefined, { isTool: true })).metadata?.isTool).toBe(
       true,
     );
-    expect(tool.pure`p: `({ shape: {} }, () => 1, { isTool: true }).metadata?.isTool).toBe(true);
-    expect(tool.effect`e: `({ shape: {} }, () => undefined, { isTool: true }).metadata?.isTool).toBe(true);
-    expect(tool.risky`r: `({ shape: {} }, () => undefined, { isTool: true }).metadata?.isTool).toBe(true);
+    expect(contractOf(tool.risky`r: `({ shape: {} }, () => undefined, { isTool: true })).metadata?.isTool).toBe(
+      true,
+    );
   });
 
   it("absent by default — a plain tool.* verb is a declared action, not (yet) its own top-level tool", () => {
-    expect(tool.pure`quiet: `({ shape: {} }, () => 1).metadata?.isTool).toBeUndefined();
+    expect(contractOf(tool.pure`quiet: `({ shape: {} }, () => 1)).metadata?.isTool).toBeUndefined();
   });
 });
 
 describe("bare tool`` stays unclassified (regenerateable, the safe default) — untouched by the new arms", () => {
   it("carries no cacheClass and defaults to source provenance", () => {
     const def = tool`legacy: unchanged`({ shape: {}, output: [], input: [] } as never, () => "x");
-    expect(def.cacheClass).toBeUndefined();
-    expect(def.provenance).toBe("source");
+    expect(contractOf(def).cacheClass).toBeUndefined();
+    expect(contractOf(def).provenance).toBe("source");
   });
 });

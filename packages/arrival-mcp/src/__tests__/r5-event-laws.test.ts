@@ -15,11 +15,11 @@ import type { ReplEvent, ReplStatementEvent, ReplTopologyEvent } from "@inhuman.
 import { describe, expect, it } from "vitest";
 
 import { DiscoveryTool } from "../DiscoveryTool.js";
-import { McpEnvCapability } from "../McpEnvCapability.js";
+import { defineMcpCapability } from "../defineMcpCapability.js";
 import { isSessionRunState } from "../session-run-state.js";
 
 function demoTool(options: { statementCap?: number } = {}): DiscoveryTool {
-  return new DiscoveryTool("demo", new McpEnvCapability("demo-caps", { symbols: {}, annotations: {} }), {
+  return new DiscoveryTool("demo", defineMcpCapability("demo-caps", { tools: () => ({}) }), {
     description: "demo tool",
     ...options,
   });

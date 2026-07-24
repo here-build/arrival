@@ -1,4 +1,3 @@
-import { port, type Resource } from "@inhuman.tools/arrival/resources";
 import type { ReplEvent } from "@inhuman.tools/mcp-substrate";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -9,29 +8,19 @@ import * as z from "zod";
 
 import { ActionTool } from "../ActionTool.js";
 import { DiscoveryTool } from "../DiscoveryTool.js";
-import { McpEnvCapability } from "../McpEnvCapability.js";
+import { defineMcpCapability } from "../defineMcpCapability.js";
 import { str } from "../refs.js";
 import { ARRIVAL_EVENT_METHOD, type McpTool, registerTools } from "../sdk-adapter.js";
 
-const greeter = (cfg: { who: string }): Resource<{ hello: () => string }> => ({
-  kind: "greeter",
-  async acquire() {
-    return port({ hello: () => `hi ${cfg.who}` }, () => {});
-  },
-});
-
 function demoTool(): DiscoveryTool {
-  const capability = new McpEnvCapability("demo-caps", {
+  const capability = defineMcpCapability("demo-caps", {
     configuration: { who: z.string() },
-    resources: { greeter: (cfg) => greeter(cfg as { who: string }) },
-    symbols: {
-      greet: {
-        fn(this: { resources: { greeter: { live: { hello: () => string } } } }) {
-          return this.resources.greeter.live.hello();
-        },
-      },
-    },
-    annotations: { greet: { description: "greets the configured person" } },
+    resources: (cfg) => ({ greeter: { hello: () => `hi ${cfg.who}` } }),
+    tools: (symbol, sz) => ({
+      greet: symbol.rosetta`greet: greets the configured person`({ input: [], output: [sz.dynamic] }, function (): any {
+        return this.resources.greeter.hello();
+      }),
+    }),
   });
   return new DiscoveryTool("demo", capability, { description: "demo tool" });
 }

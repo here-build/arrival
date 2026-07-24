@@ -1,4 +1,4 @@
-import { z as sz } from "@inhuman.tools/arrival";
+import { z as sz, type SymbolDeclaration } from "@inhuman.tools/arrival";
 import type { Activation } from "@inhuman.tools/arrival/capability";
 import { Contract, symbol, VectorSpec } from "@inhuman.tools/arrival/symbol";
 import * as z from "zod";
@@ -56,7 +56,7 @@ function toolFn<S extends z.ZodRawShape, const O extends VectorSpec, M extends R
       dynamicDescription?: (this: Activation<any, any>) => string | undefined | Promise<string | undefined>;
     },
     impl: (args: any) => any,
-  ) => {
+  ): SymbolDeclaration => {
     const shape: S = contract.shape;
     const hasArgs = Object.keys(shape).length > 0;
 
@@ -90,9 +90,18 @@ function toolView<S extends z.ZodRawShape, const O extends VectorSpec>(
   ...sub: (string | number)[]
 ) {
   const { name, doc } = parseHead(tpl, sub);
-  return (contract: { shape: S; output: O }, impl: (args: any) => any, meta: ToolMeta = {}) => {
+  return (contract: { shape: S; output: O }, impl: (args: any) => any, meta: ToolMeta = {}): SymbolDeclaration => {
     const shape: S = contract.shape;
     const hasArgs = Object.keys(shape).length > 0;
+    // `symbol.rosetta`'s own return type is `CrossingResult<I,O,Rest,ARosettaProcedure>` — a
+    // conditional, still generic in `O` HERE (not yet the caller's concrete instantiation),
+    // that resolves to `ARosettaProcedure` for a legal contract or a `ContractKindMismatch`
+    // error-type for a `z.schemeValue`-branded output. Neither `ARosettaProcedure` nor
+    // `ContractKindMismatch` is exported through the two-tier surface (deliberately — see
+    // rework-zone-guidelines.md §2's own "explicit annotations, not wider core exports"
+    // ruling), so this function's declared return type must be a NAMEABLE, non-conditional
+    // type (`SymbolDeclaration`) for `.d.ts` emission to succeed at all. The cast below is
+    // where that narrowing actually happens; see its own note for what it costs.
     return symbol.rosetta`${name}: ${doc}`(
       {
         input: [],
@@ -102,7 +111,20 @@ function toolView<S extends z.ZodRawShape, const O extends VectorSpec>(
       },
       (argsObj: any) => impl(argsObj),
       { metadata: { description: doc, ...meta } },
-    );
+      // The cast: `symbol.rosetta`'s ContractKindMismatch branch (its OWN compile-time ban on
+      // a `z.schemeValue`-branded rosetta slot) is a distinct type from `ARosettaProcedure`,
+      // and `O` is still an unresolved generic HERE — TS cannot prove which branch a not-yet-
+      // instantiated caller will land on, so a bare `SymbolDeclaration` return-type annotation
+      // doesn't type-check without help. KNOWN, ACCEPTED NARROWING: this cast (and the
+      // matching one in `toolPure`) makes `tool.view`/`tool.pure` ALWAYS report
+      // `SymbolDeclaration` to a caller, even one who (mis)supplies a `z.schemeValue`-branded
+      // `output` — that specific misuse loses ITS COMPILE-TIME catch through THESE TWO SUGAR
+      // ARMS ONLY. `symbol.rosetta` called directly keeps the full ban (this file's own
+      // `_bake.ts`-shared gate, unaffected). No current call site in this package uses
+      // `z.schemeValue` as a `tool.view`/`tool.pure` output; the RUNTIME shape gates
+      // (`assertCacheClassShape` for `view`, tombstone/void gates for `effect`) are
+      // completely separate and still fire unconditionally, regardless of this cast.
+    ) as SymbolDeclaration;
   };
 }
 
@@ -116,9 +138,15 @@ function toolPure<S extends z.ZodRawShape, const O extends VectorSpec>(
   ...sub: (string | number)[]
 ) {
   const { name, doc } = parseHead(tpl, sub);
-  return (contract: { shape: S; output?: O }, impl: (args: any) => any, meta: ToolMeta = {}) => {
+  return (contract: { shape: S; output?: O }, impl: (args: any) => any, meta: ToolMeta = {}): SymbolDeclaration => {
     const shape: S = contract.shape;
     const hasArgs = Object.keys(shape).length > 0;
+    // See `toolView`'s matching cast for the full reasoning: `O` is still generic here, so
+    // `symbol.rosetta`'s own `ContractKindMismatch`-vs-`ARosettaProcedure` conditional can't
+    // resolve without help. Same accepted narrowing — `tool.pure`'s compile-time
+    // `z.schemeValue`-in-output catch is lost through this sugar arm; `symbol.rosetta` direct
+    // keeps it, and `tool.pure` declares no runtime shape gate to begin with (nothing of a
+    // `pure` result is persisted, so there was never a shape gate here to weaken).
     return symbol.rosetta`${name}: ${doc}`(
       {
         input: [],
@@ -128,7 +156,7 @@ function toolPure<S extends z.ZodRawShape, const O extends VectorSpec>(
       },
       (argsObj: any) => impl(argsObj),
       { metadata: { description: doc, ...meta } },
-    );
+    ) as SymbolDeclaration;
   };
 }
 
@@ -140,7 +168,7 @@ function toolPure<S extends z.ZodRawShape, const O extends VectorSpec>(
  *  factory stamps unconditionally. */
 function toolEffect<S extends z.ZodRawShape>(tpl: TemplateStringsArray, ...sub: (string | number)[]) {
   const { name, doc } = parseHead(tpl, sub);
-  return (contract: { shape: S }, impl: (args: any) => any, meta: ToolMeta = {}) => {
+  return (contract: { shape: S }, impl: (args: any) => any, meta: ToolMeta = {}): SymbolDeclaration => {
     const shape: S = contract.shape;
     const hasArgs = Object.keys(shape).length > 0;
     return symbol.rosetta`${name}: ${doc}`(

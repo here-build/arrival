@@ -15,13 +15,13 @@ import { describe, expect, it } from "vitest";
 import * as z from "zod";
 
 import { DiscoveryTool } from "../DiscoveryTool.js";
-import { McpEnvCapability } from "../McpEnvCapability.js";
+import { defineMcpCapability, mcpCatalogEntries } from "../defineMcpCapability.js";
 import { tool } from "../tool.js";
 
-function liveCapability(counters: { fired: number }): McpEnvCapability {
-  return new McpEnvCapability("live-caps", {
+function liveCapability(counters: { fired: number }) {
+  return defineMcpCapability("live-caps", {
     configuration: { region: z.string().optional() },
-    symbols: {
+    tools: () => ({
       status: tool`status: dashboard`(
         {
           input: [],
@@ -35,19 +35,19 @@ function liveCapability(counters: { fired: number }): McpEnvCapability {
         },
         () => "ok",
       ),
-    },
+    }),
   });
 }
 
 describe("tool`` dynamicDescription — the closed drop, end to end", () => {
-  it("forwards into the baked def's metadata AND the lifted annotation", () => {
+  it("forwards into the baked def's metadata, read straight off the catalog", () => {
     const counters = { fired: 0 };
     const cap = liveCapability(counters);
-    const annotation = cap.allAnnotations().status;
-    expect(annotation).toBeDefined();
-    expect(typeof annotation!.dynamicDescription).toBe("function");
-    expect(annotation!.description).toBe("dashboard");
-    expect(counters.fired).toBe(0); // lift resolved nothing — read-time only
+    const entry = mcpCatalogEntries(cap).find((e) => e.name === "status");
+    expect(entry).toBeDefined();
+    expect(typeof entry!.metadata.dynamicDescription).toBe("function");
+    expect(entry!.metadata.description).toBe("dashboard");
+    expect(counters.fired).toBe(0); // nothing resolved yet — read-time only
   });
 
   it("describe(): resolves against the describe-ambient activation (host config), flags live", async () => {
@@ -88,9 +88,9 @@ describe("tool`` dynamicDescription — the closed drop, end to end", () => {
 
   it("actor-key-requiring config ⇒ no describe ambient — the static floor, no crash", async () => {
     const counters = { fired: 0 };
-    const cap = new McpEnvCapability("actor-caps", {
+    const cap = defineMcpCapability("actor-caps", {
       configuration: { who: z.string() }, // REQUIRED actor key — underivable at describe time
-      symbols: {
+      tools: () => ({
         status: tool`status: dashboard`(
           {
             input: [],
@@ -103,7 +103,7 @@ describe("tool`` dynamicDescription — the closed drop, end to end", () => {
           },
           () => "ok",
         ),
-      },
+      }),
     });
     const discovery = new DiscoveryTool("actor", cap, { description: "actor tool" });
     try {

@@ -16,15 +16,15 @@
 // miniature); the store variant rehydrates through the injected blob instead of the session bag.
 
 import { symbol } from "@inhuman.tools/arrival";
-import { port, type Resource } from "@inhuman.tools/arrival/resources";
 import { z as sz } from "@inhuman.tools/arrival";
 import { createInMemorySessionStore } from "@inhuman.tools/mcp-substrate";
 import { describe, expect, it, vi } from "vitest";
 import * as z from "zod";
 
 import { DiscoveryTool } from "../DiscoveryTool.js";
-import { McpEnvCapability } from "../McpEnvCapability.js";
+import { defineMcpCapability } from "../defineMcpCapability.js";
 import { type SessionRunState, decodeSessionRunState, isSessionRunState } from "../session-run-state.js";
+import { tool as toolFactory } from "../tool.js";
 
 function runState(session: { state: Record<string, unknown> }): SessionRunState {
   const state = session.state.__run__;
@@ -35,34 +35,30 @@ function runState(session: { state: Record<string, unknown> }): SessionRunState 
 /** One capability with a spied `view` verb + a spied `sink` verb + a spied unclassified verb. */
 function classedCapability() {
   const counts = { view: 0, sink: 0, plain: 0 };
-  const cap = new McpEnvCapability("classed-caps", {
-    symbols: {
-      peek: symbol.rosetta`peek: a boundary snapshot`(
+  const cap = defineMcpCapability("classed-caps", {
+    tools: () => ({
+      peek: symbol.rosetta`peek: view-classed snapshot`(
         { input: [sz.number], output: [sz.number], cacheClass: "view" },
         (n: number) => {
           counts.view++;
           return n * 2;
         },
       ),
-      "fire!": symbol.rosetta`fire!: an effect`(
+      "fire!": symbol.rosetta`fire!: sink effect`(
         { input: [sz.number], output: [sz.undefinedResult], provenance: "sink" },
         (_n: number) => {
           counts.sink++;
           return undefined;
         },
       ),
-      plain: { fn: () => ++counts.plain },
-    },
-    annotations: {
-      peek: { description: "view-classed snapshot" },
-      "fire!": { description: "sink effect" },
-      plain: { description: "unclassified counter" },
-    },
+      plain: toolFactory`plain: unclassified counter`({ input: [], output: [], shape: {} }, () => ++counts.plain),
+    }),
   });
   return { cap, counts };
 }
 
-const tool = (cap: McpEnvCapability) => new DiscoveryTool("classed", cap, { description: "classed tool" });
+const tool = (cap: ReturnType<typeof classedCapability>["cap"]) =>
+  new DiscoveryTool("classed", cap, { description: "classed tool" });
 
 describe("R3 law — penetration-count: a `view` penetration fires exactly once across N rehydrations", () => {
   it("N cold folds over the same session answer the view from the cache — one fire, ever", async () => {
@@ -125,9 +121,9 @@ describe("R3 law — fold-idempotence: fold ∘ persist ∘ fold = fold", () => 
 
 function configuredCapability() {
   const counts = { view: 0 };
-  const cap = new McpEnvCapability("cfg-caps", {
+  const cap = defineMcpCapability("cfg-caps", {
     configuration: { who: z.string() },
-    symbols: {
+    tools: () => ({
       peek: symbol.rosetta`peek: a boundary snapshot`(
         { input: [sz.number], output: [sz.number], cacheClass: "view" },
         (n: number) => {
@@ -135,8 +131,7 @@ function configuredCapability() {
           return n * 2;
         },
       ),
-    },
-    annotations: { peek: { description: "view-classed snapshot" } },
+    }),
   });
   return { cap, counts };
 }
@@ -162,23 +157,24 @@ describe("R3 law — config-change: a hit after a data-config change must miss (
   });
 });
 
+/** `EnvCapability.define`'s resources shape: ONE factory returning the whole (already-usable)
+ *  bag directly — disposal rides the bag's OWN `[Symbol.asyncDispose]` (see
+ *  `DefinedEnvCapability["arrival/get-resources"]`, common/capability.ts), registered on THIS
+ *  run's teardown the first time some verb actually touches `this.resources` (spawn stays
+ *  lazy — minting a run alone never spawns anything). */
 function spiedCapability(disposeSpy: () => void) {
-  const greeter: Resource<{ hello: () => string }> = {
-    kind: "greeter",
-    async acquire() {
-      return port({ hello: () => "hi" }, disposeSpy);
-    },
-  };
-  return new McpEnvCapability("spied-caps", {
-    resources: { greeter: () => greeter },
-    symbols: {
-      greet: {
-        fn(this: { resources: { greeter: { live: { hello: () => string } } } }) {
-          return this.resources.greeter.live.hello();
-        },
+  return defineMcpCapability("spied-caps", {
+    resources: () => ({
+      greeter: { hello: () => "hi" },
+      async [Symbol.asyncDispose]() {
+        disposeSpy();
       },
-    },
-    annotations: { greet: { description: "greets" } },
+    }),
+    tools: (symbol, sz) => ({
+      greet: symbol.rosetta`greet: greets`({ input: [], output: [sz.dynamic] }, function (): any {
+        return this.resources.greeter.hello();
+      }),
+    }),
   });
 }
 
@@ -192,25 +188,19 @@ describe("R3 law — INTERIM dispose-spy (§2.8, first tranche)", () => {
 
   it("a config-digest change disposes the stale warm pair; closeSession disposes the live one", async () => {
     const disposeSpy = vi.fn();
-    const cap = new McpEnvCapability("spied-cfg-caps", {
+    const cap = defineMcpCapability("spied-cfg-caps", {
       configuration: { who: z.string() },
-      resources: {
-        greeter: (cfg) =>
-          ({
-            kind: "greeter",
-            async acquire() {
-              return port({ hello: () => `hi ${(cfg as { who: string }).who}` }, disposeSpy);
-            },
-          }) satisfies Resource<{ hello: () => string }>,
-      },
-      symbols: {
-        greet: {
-          fn(this: { resources: { greeter: { live: { hello: () => string } } } }) {
-            return this.resources.greeter.live.hello();
-          },
+      resources: (cfg) => ({
+        greeter: { hello: () => `hi ${cfg.who}` },
+        async [Symbol.asyncDispose]() {
+          disposeSpy();
         },
-      },
-      annotations: { greet: { description: "greets the configured person" } },
+      }),
+      tools: (symbol, sz) => ({
+        greet: symbol.rosetta`greet: greets the configured person`({ input: [], output: [sz.dynamic] }, function (): any {
+          return this.resources.greeter.hello();
+        }),
+      }),
     });
     const t = new DiscoveryTool("spied-cfg", cap, { description: "spied tool" });
     const session = { id: "s1", state: {} as Record<string, unknown> };

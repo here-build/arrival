@@ -1,33 +1,26 @@
-import { port, type Resource } from "@inhuman.tools/arrival/resources";
 import { describe, expect, it, vi } from "vitest";
 import * as z from "zod";
 
 import { DiscoveryTool, type InteractionLog } from "../DiscoveryTool.js";
-import { McpEnvCapability } from "../McpEnvCapability.js";
+import { defineMcpCapability } from "../defineMcpCapability.js";
+import { tool } from "../tool.js";
 
-// A host-armed resource whose handle is derived from the per-call config — the "just use resources"
-// binding channel. `acquire` is where authorization would live (a resource that refuses to spawn).
-const greeter = (cfg: { who: string }): Resource<{ hello: () => string }> => ({
-  kind: "greeter",
-  async acquire() {
-    return port({ hello: () => `hi ${cfg.who}` }, () => {});
-  },
-});
-
-/** A capability the host builds per connection: one actor-arg (`who`) + one resource (`greeter`). */
-function demoCapability(): McpEnvCapability {
-  return new McpEnvCapability("demo-caps", {
+/** A capability the host builds per connection: one actor-arg (`who`) + one resource
+ *  (`greeter`) — `EnvCapability.define`'s own resources shape: ONE factory over the validated
+ *  config, producing the whole (already-usable, not lifecycle-managed) bag directly — no
+ *  per-key `Resource`/`.live` indirection (that ceremony belongs to the base, non-`.define()`
+ *  ctor form; see common/capability.ts's own doc on the two resources shapes). */
+function demoCapability() {
+  return defineMcpCapability("demo-caps", {
     configuration: { who: z.string() },
-    resources: { greeter: (cfg) => greeter(cfg as { who: string }) },
-    symbols: {
-      // verb reads BOTH channels: actor config + the eval-time resource.
-      greet: {
-        fn(this: { resources: { greeter: { live: { hello: () => string } } } }) {
-          return this.resources.greeter.live.hello();
-        },
-      },
-    },
-    annotations: { greet: { description: "greets the configured person" } },
+    resources: (cfg) => ({ greeter: { hello: () => `hi ${cfg.who}` } }),
+    tools: (symbol, sz) => ({
+      // verb reads BOTH channels: actor config (indirectly, via the resource factory) + the
+      // eval-time resource.
+      greet: symbol.rosetta`greet: greets the configured person`({ input: [], output: [sz.dynamic] }, function (): any {
+        return this.resources.greeter.hello();
+      }),
+    }),
   });
 }
 
@@ -79,18 +72,19 @@ describe("DiscoveryTool (value-shaped, capability-derived)", () => {
     // across calls rests on warm-pair memoization; across evictions it rests on the run cache,
     // gated by the `view`-class laws in r3-session-laws.test.ts.
     let calls = 0;
-    const cap = new McpEnvCapability("tick-caps", {
-      symbols: { tick: { fn: () => ++calls } },
-      annotations: { tick: { description: "increments + returns a counter" } },
+    const cap = defineMcpCapability("tick-caps", {
+      tools: () => ({
+        tick: tool`tick: increments + returns a counter`({ input: [], output: [], shape: {} }, () => ++calls),
+      }),
     });
-    const tool = new DiscoveryTool("tick", cap, { description: "tick tool" });
+    const discoveryTool = new DiscoveryTool("tick", cap, { description: "tick tool" });
     const session = { id: "s1", state: {} as Record<string, unknown> };
 
-    await tool.call({ expr: "(define a (tick))" }, { session }); // tick → 1
+    await discoveryTool.call({ expr: "(define a (tick))" }, { session }); // tick → 1
     expect(calls).toBe(1);
-    await tool.call({ expr: "(define b (tick))" }, { session }); // replay a from cache (no tick) + b → 2
+    await discoveryTool.call({ expr: "(define b (tick))" }, { session }); // replay a from cache (no tick) + b → 2
     expect(calls).toBe(2); // NOT 3 — a's (tick) was restored, not re-fired
-    expect(await tool.call({ expr: "a" }, { session })).toEqual(["1"]); // a restored to its original value
+    expect(await discoveryTool.call({ expr: "a" }, { session })).toEqual(["1"]); // a restored to its original value
     expect(calls).toBe(2); // reading a fires nothing
   });
 

@@ -16,17 +16,19 @@ import type { ReplEvent, ReplStatementEvent } from "@inhuman.tools/mcp-substrate
 import { describe, expect, it, vi } from "vitest";
 
 import { DiscoveryTool } from "../DiscoveryTool.js";
+import { defineMcpCapability } from "../defineMcpCapability.js";
 import { serializeResult } from "../dispatch.js";
-import { McpEnvCapability } from "../McpEnvCapability.js";
+import { tool } from "../tool.js";
 
 const PNG_BYTES = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4]);
 
 function shotTool(options: { attachmentQuota?: number } = {}, blobs?: Blob[]): DiscoveryTool {
-  const cap = new McpEnvCapability("shot-caps", {
-    symbols: {
-      shot: { fn: () => blobs?.shift() ?? new Blob([PNG_BYTES], { type: "image/png" }) },
-    },
-    annotations: { shot: { description: "returns one screenshot blob" } },
+  const cap = defineMcpCapability("shot-caps", {
+    tools: (symbol, sz) => ({
+      shot: symbol.rosetta`shot: returns one screenshot blob`({ input: [], output: [sz.box] }, (): any =>
+        blobs?.shift() ?? new Blob([PNG_BYTES], { type: "image/png" }),
+      ),
+    }),
   });
   return new DiscoveryTool("shot", cap, { description: "shot tool", ...options });
 }

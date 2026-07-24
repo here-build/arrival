@@ -2,8 +2,8 @@
  * confirm-burst — the second MCP tool of the provenance-offloaded confirmation design. Submits
  * the approved subset of a held `ConfirmManifest`; that submission IS the burst — the approved
  * effects fire, in original order, through `DiscoveryTool.confirmBurst` (which owns the
- * session/warm-ambient machinery this thin wrapper never duplicates: same session state, same
- * warm `(AssembledAmbient, LexicalScope)` pair the discovery tool itself reuses).
+ * session/warm-run machinery this thin wrapper never duplicates: same session state, same
+ * warm `(RunContext, LexicalScope)` pair the discovery tool itself reuses).
  *
  * A wrong digest refuses with a "which manifest?" teaching error naming the currently held
  * manifest, if any. Fill-or-kill: a declined effect leaves no durable trace — only re-issuing

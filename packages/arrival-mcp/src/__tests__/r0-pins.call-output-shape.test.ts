@@ -5,10 +5,10 @@
 import { describe, expect, it } from "vitest";
 
 import { DiscoveryTool } from "../DiscoveryTool.js";
-import { McpEnvCapability } from "../McpEnvCapability.js";
+import { defineMcpCapability } from "../defineMcpCapability.js";
 
 function demoTool(): DiscoveryTool {
-  return new DiscoveryTool("demo", new McpEnvCapability("demo-caps", { symbols: {}, annotations: {} }), {
+  return new DiscoveryTool("demo", defineMcpCapability("demo-caps", { tools: () => ({}) }), {
     description: "demo tool",
   });
 }
