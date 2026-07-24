@@ -9,14 +9,14 @@
 // predicate-or-Function) — an UNREGISTERED custom, which `printType` (schema-to-ts.ts,
 // `unrepresentable: "throw"`) throws on, dragging the WHOLE signature into
 // `signatureOf`'s total-harvest catch-all. `Contract.type` is the author's assertion of
-// the real shape the blind schema can't itself express (mirrors legacy RosettaSpec.type)
+// the real shape the blind schema can't itself express (mirrors author `type` override)
 // — it recovers the arity + the honest return the catch-all destroyed. INERT at runtime
 // (native ops never validate — see _bake.ts's bakeNative doc); this is a pure type-lens
 // surface proof, same posture as the sibling polyglot-contract-precision.test.ts.
 import { describe, expect, it } from "vitest";
 import core from "../../core/core.js";
 import { signatureOf } from "../../../type-layer/schema-to-ts.js";
-import type { AEntity } from "../../../common/symbol.js";
+import type { AEntity } from "../../../symbol/index.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
 // `scheme/core`'s `symbols` is a plain object (no config/resources builder), but realize

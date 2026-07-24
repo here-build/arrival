@@ -37,7 +37,7 @@ import { execInFrame } from "../../../eval/generator-exec.js";
 import { buildVocabulary } from "../../vocabulary.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
 import { schemaCapability } from "../../schema/schema.js";
-import type { AEntity } from "../../../common/symbol.js";
+import type { AEntity } from "../../../symbol/index.js";
 import type { SymbolDeclaration } from "../../../common/capability.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 
@@ -124,8 +124,7 @@ describe("arrival/schema — the §2.1 bake FV law passes standalone (deps edge 
 describe("arrival/schema — wire-format byte-equivalence (the load-bearing invariant)", () => {
   it("(s/object (s/field name string) (s/field occupation string)) — arrival-chain's own fixture, byte-for-byte", async () => {
     const [result] = await exec('(s/object (s/field "name" "string") (s/field "occupation" "string"))', {
-      capabilities,
-    });
+      capabilities });
     expect(JSON.stringify(result)).toBe('["object",["name","string"],["occupation","string"]]');
   });
 
@@ -141,8 +140,7 @@ describe("arrival/schema — wire-format byte-equivalence (the load-bearing inva
 
   it("nested (s/array (s/object ...)) — array-of-objects", async () => {
     const [result] = await exec('(s/array (s/object (s/field "name" "string") (s/field "bucket" (s/enum "A" "B"))))', {
-      capabilities,
-    });
+      capabilities });
     expect(JSON.stringify(result)).toBe('["array",["object",["name","string"],["bucket",["enum","A","B"]]]]');
   });
 
@@ -178,8 +176,7 @@ describe("arrival/schema — wire-format byte-equivalence (the load-bearing inva
 
   it("s/field/object composite with a description (the 3-arg _composite branch)", async () => {
     const [result] = await exec('(s/field/object "owner" "who owns it" (s/object (s/field "name" (s/string))))', {
-      capabilities,
-    });
+      capabilities });
     expect(JSON.stringify(result)).toBe('["owner",["object",["name","string"]],"who owns it"]');
   });
 

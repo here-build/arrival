@@ -183,9 +183,7 @@ describe("scheme/polyglot family — the §2.1 bake FV law passes AS MIGRATED, p
           symbol.define`bad-frequencies: reproduces the pre-migration polyglot luck (no declared dep on srfi-1's reduce)`(
             { input: [z.schemeValue], output: [z.schemeValue] },
             `(lambda (coll) (reduce (lambda (x acc) (+ acc 1)) 0 coll))`,
-          ),
-      }),
-    });
+          ) }) });
     await expect(buildVocabulary([undeclaredCap], undefined, evalScheme)).rejects.toThrow(DefineLocalityError);
   });
 });

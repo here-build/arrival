@@ -27,7 +27,7 @@
 import { describe, expect, it } from "vitest";
 import dedent from "dedent";
 import polyglot from "../../polyglot/polyglot.js";
-import type { AEntity } from "../../../common/symbol.js";
+import type { AEntity } from "../../../symbol/index.js";
 import { signatureOf } from "../../../type-layer/schema-to-ts.js";
 import { ADict } from "../../../values/primitives/ADict.js";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";

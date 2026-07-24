@@ -35,7 +35,7 @@ import { AString } from "../../../values/primitives/AString.js";
 import { buildVocabulary } from "../../vocabulary.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
 import { overridableCapability } from "../../overridable/overridable.js";
-import type { AEntity } from "../../../common/symbol.js";
+import type { AEntity } from "../../../symbol/index.js";
 import type { DefineSyntaxSymbolDef } from "../../../common/symbols/_bake.js";
 import type { SymbolDeclaration } from "../../../common/capability.js";
 import { contractOf } from "../../../common/capability-internals.js";
@@ -103,8 +103,7 @@ describe("arrival/overridable — end-to-end through the ONE consumer door, post
     const result = (
       await exec(`(define/overridable city (s/string) "Berlin") city`, {
         capabilities,
-        config: { params: { city: "Paris" } },
-      })
+        config: { params: { city: "Paris" } } })
     ).at(-1);
     expect(result).toBe("Paris");
   });
@@ -113,8 +112,7 @@ describe("arrival/overridable — end-to-end through the ONE consumer door, post
     const result = (
       await exec(`(define/overridable city (s/string) "Berlin") city`, {
         capabilities,
-        config: { params: {} },
-      })
+        config: { params: {} } })
     ).at(-1);
     expect(result).toBe("Berlin");
   });
@@ -122,8 +120,7 @@ describe("arrival/overridable — end-to-end through the ONE consumer door, post
   it("`overridable/resolve` remains callable directly — the macro is pure ergonomics over it", async () => {
     const [result] = await exec(`(overridable/resolve 'city (s/string) "Berlin")`, {
       capabilities,
-      config: { params: { city: "Paris" } },
-    });
+      config: { params: { city: "Paris" } } });
     expect(result).toBe("Paris");
   });
 });
@@ -133,8 +130,7 @@ describe("arrival/overridable — a teaching-door message survives the migration
     await expect(
       exec(`(define/overridable age (s/number) 30) age`, {
         capabilities,
-        config: { params: { age: "not-a-number" } },
-      }),
+        config: { params: { age: "not-a-number" } } }),
     ).rejects.toThrow(/define\/overridable age: expected number, got "not-a-number" \(from an environment override\)/);
   });
 });
@@ -178,8 +174,7 @@ describe("arrival/overridable — the §3.4 macro firewall: `name`'s formal posi
       exec(`(define/overridable city (s/string) "Berlin") (totally-unbound-name city)`, {
         capabilities,
         config: { params: {} },
-        staticValidation: "on",
-      }),
+        staticValidation: "on" }),
     ).rejects.toThrow(/unbound/i);
   });
 });
@@ -193,8 +188,7 @@ describe("arrival/overridable — boxed-state access still round-trips (R1 sanit
     }
     const result = await boxedExec(`(define/overridable city (s/string) "Berlin") city`, {
       capabilities,
-      config: { params: { city: "Paris" } },
-    });
+      config: { params: { city: "Paris" } } });
     expect((result.at(-1) as AString)["arrival/toJS"]()).toBe("Paris");
   });
 });
