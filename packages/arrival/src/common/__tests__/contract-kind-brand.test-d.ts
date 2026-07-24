@@ -49,8 +49,9 @@ describe("Q1 compile-time contract-kind ban — z.schemeValue banned from rosett
   test("z.schemeValue in a rosetta kwargs field must NOT compile", () => {
     EnvCapability.define("test/ban-schemeValue-rosetta-kwargs", {
       symbols: (symbol, z) => ({
-        // @ts-expect-error — same rule, a kwargs (inputRest shape-record) field.
         bad: symbol.rosetta`bad: schemeValue in rosetta kwargs`(
+          // @ts-expect-error — same rule, a kwargs (inputRest shape-record) field.
+          // Error lands on the contract object (poisoned `inputRest`), not the factory call.
           { input: [], inputRest: { v: z.schemeValue }, output: [z.string] },
           (args: { v: unknown }) => String(args.v),
         ) }) });

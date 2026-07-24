@@ -69,7 +69,7 @@ import { is_false } from "../../values/value-guards.js";
 import { ANil } from "../../values/primitives/ANil.js";
 import { schemeFalse } from "../../values/primitives/ABool.js";
 import { maybeThen } from "../../utils/promises.js";
-import { applyCallback } from "../../values/primitives/ACallable.js";
+import { applyCallback, type ACallable } from "../../values/primitives/ACallable.js";
 import { type RunContext } from "../../run/RunContext.js";
 import { AJSArray } from "../../membrane/AJSArray.js";
 import { tf } from "../../values/tagless-final.js";
@@ -161,19 +161,18 @@ const DOORS = {
 // `find-tail`) because it recurses over the predicate and unwraps an async generator-lambda
 // result. Procedure-only matcher (no host RegExp).
 //
-// Precision-typed to match its own Contract (below): `arg` is the callable-schema convention
-// (z.custom<(...args)=>T>(), matching filter/vector-map/vector-for-each). `list`'s car/cdr
-// decode `unknown` off `z.pair`'s default `APair<unknown, unknown>` generic (the SAME shared
-// identity primitive lists.ts's list ops use) — every recursive/return site that hands a car/cdr
-// back through this SchemeValue-returning fn casts it. findImpl carries no runtime pair-or-nil
-// check of its own (`symbol.native` contracts are TYPE-ONLY and never validated at
-// runtime — see string-split's comment in srfi-13.ts), so the cast restates the
-// TS-declared `AListAlike` shape, not a runtime-verified one.
+// Precision-typed to match its own Contract (below): `arg` is `z.lambda` → `ACallable`
+// (scheme-side callable VALUE; bare host fns refused — mint via hostFnToCallable).
+// `list`'s car/cdr decode `unknown` off `z.pair`'s default `APair<unknown, unknown>`
+// generic — every recursive/return site that hands a car/cdr back through this
+// SchemeValue-returning fn casts it. findImpl carries no runtime pair-or-nil check
+// of its own (`symbol.native` contracts are TYPE-ONLY and never validated at runtime),
+// so the cast restates the TS-declared `AListAlike` shape, not a runtime-verified one.
 // `runCtx` is a required parameter (not a defaulted CONSTANT_CTX) — a plain recursive
 // call (not a dispatch-bound `this: CallCtx`) can't recover the live ctx any other
 // way, so it's threaded explicitly through every recursive step. The `find` binding
 // below is the thin dispatch-bound wrapper that supplies it from `this.runCtx`.
-function findImpl(arg: (...args: unknown[]) => unknown, list: AListAlike, runCtx: RunContext): SchemeValue {
+function findImpl(arg: ACallable, list: AListAlike, runCtx: RunContext): SchemeValue {
   if (list instanceof ANil) {
     // SRFI-1: `find` returns #f on no-match — '() is R7RS-truthy, so it can't double
     // as the miss sentinel the way it would in a nil-as-false dialect.
@@ -344,8 +343,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           callbackRoles: ["control"] },
         // Thin dispatch-bound wrapper: supplies the recursive findImpl with the live
         // `this.runCtx` (findImpl itself recurses via a plain call, so it cannot recover
-        // ctx off `this`).
-        function (this: CallCtx, arg: (...args: unknown[]) => unknown, list: AListAlike) {
+        // ctx off `this`). `arg` is `z.lambda` → ACallable.
+        function (this: CallCtx, arg: ACallable, list: AListAlike) {
           return findImpl(arg, list, this.runCtx);
         },
       ),
