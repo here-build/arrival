@@ -31,28 +31,40 @@
       "import": "./dist/index.js"
     },
     "./reflect-internals": {
-      "types": "./dist/reflect-internals.d.ts",
-      "default": "./dist/reflect-internals.js"
+      "types": "./dist/reflect-internals/index.d.ts",
+      "default": "./dist/reflect-internals/index.js"
     },
     "./lsp-internals": {
-      "types": "./dist/lsp-internals.d.ts",
-      "default": "./dist/lsp-internals.js"
+      "types": "./dist/lsp-internals/index.d.ts",
+      "default": "./dist/lsp-internals/index.js"
     },
     "./host-internals": {
-      "types": "./dist/host-internals.d.ts",
-      "default": "./dist/host-internals.js"
+      "types": "./dist/host-internals/index.d.ts",
+      "default": "./dist/host-internals/index.js"
     },
     "./capability": {
       "types": "./dist/common/capability.d.ts",
       "default": "./dist/common/capability.js"
     },
-    "./resources": {
-      "types": "./dist/common/resources-surface.d.ts",
-      "default": "./dist/common/resources-surface.js"
+    "./capabilities": {
+      "types": "./dist/capabilities/index.d.ts",
+      "default": "./dist/capabilities/index.js"
     },
-    "./symbol": {
-      "types": "./dist/common/symbol.d.ts",
-      "default": "./dist/common/symbol.js"
+    "./capabilities/overridable": {
+      "types": "./dist/capabilities/overridable.d.ts",
+      "default": "./dist/capabilities/overridable.js"
+    },
+    "./capabilities/schema": {
+      "types": "./dist/capabilities/schema.d.ts",
+      "default": "./dist/capabilities/schema.js"
+    },
+    "./capabilities/loader": {
+      "types": "./dist/capabilities/loader.d.ts",
+      "default": "./dist/capabilities/loader.js"
+    },
+    "./resources": {
+      "types": "./dist/common/resources-surface/index.d.ts",
+      "default": "./dist/common/resources-surface/index.js"
     },
     "./emit": {
       "types": "./dist/emit/index.d.ts",
@@ -63,8 +75,8 @@
       "default": "./dist/common/schema-tag.js"
     },
     "./attestation": {
-      "types": "./dist/values/attestation-surface.d.ts",
-      "default": "./dist/values/attestation-surface.js"
+      "types": "./dist/values/attestation-surface/index.d.ts",
+      "default": "./dist/values/attestation-surface/index.js"
     },
     "./provenance": {
       "types": "./dist/provenance/index.d.ts",
@@ -77,18 +89,6 @@
     "./type-layer": {
       "types": "./dist/type-layer/index.d.ts",
       "default": "./dist/type-layer/index.js"
-    },
-    "./loader": {
-      "types": "./dist/loader/index.d.ts",
-      "default": "./dist/loader/index.js"
-    },
-    "./overridable": {
-      "types": "./dist/env/overridable/overridable.d.ts",
-      "default": "./dist/env/overridable/overridable.js"
-    },
-    "./schema": {
-      "types": "./dist/env/schema/schema.d.ts",
-      "default": "./dist/env/schema/schema.js"
     }
   },
   "main": "./dist/index.js",
