@@ -50,7 +50,7 @@ describe("JS-interop: strings & booleans (boxed scheme faces — the Face split)
   it("strings come back as AStrings (grafted String.prototype keeps interop natural)", async () => {
     const s = await one('(string-append "ab" "c")');
     // Boxed under the Face split (taintString always returns the AString scheme face —
-    // the raw-string no-provenance fast path was the LIPS-legacy leak). AString grafts
+    // the raw-string no-provenance fast path was the pre-box string-identity leak). AString grafts
     // String.prototype, so string-ish interop (concat, spread, JSON) still reads naturally.
     expect(String(s)).toBe("abc");
     expect(s + "!").toBe("abc!");

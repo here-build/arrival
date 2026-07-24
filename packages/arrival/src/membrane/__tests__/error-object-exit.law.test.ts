@@ -49,8 +49,7 @@ describe("error-object exit arm (value position)", () => {
 
   it("the two exits cannot drift: toJS and schemeToJs agree on the same boxed error", async () => {
     const {
-      values: [boxed],
-    } = await execState(`(make-error-object "drift" 42 "tag")`);
+      values: [boxed] } = await execState(`(make-error-object "drift" 42 "tag")`);
     const viaToJS = toJS(boxed) as R7RSError;
     const viaSchemeToJs = schemeToJs(boxed) as unknown as R7RSError;
     expect(viaToJS).toBeInstanceOf(R7RSError);
@@ -106,9 +105,7 @@ describe("host Error inbound — stack collapses to absent", () => {
           // The impl returns a raw host Error, which crosses BORROWED (AJSObject
           // wrapper) — the cast names the post-crossing truth the borrow performs.
           async () => new Error("host-boom") as unknown as SchemeValue,
-        ),
-      }),
-    });
+        ) }) });
     // nil is the empty list — assert in Scheme coordinates (`null?`), not by exit shape.
     const [stackIsNil] = await exec(`(null? (@ (host-error) "stack"))`, { capabilities: [errCap] });
     expect(stackIsNil).toBe(true);

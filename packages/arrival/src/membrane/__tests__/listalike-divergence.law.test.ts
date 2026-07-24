@@ -88,8 +88,7 @@ const runOne = async (code: string, bindings: Record<string, unknown>): Promise<
           inferenceEnv,
           "listalike-divergence",
           Object.fromEntries(Object.entries(bindings).map(([k, v]) => [k, jsToScheme(CONSTANT_CTX, v)])),
-        ),
-      }),
+        ) }),
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error("__DEADLINE__")), DEADLINE_MS)),
     ]);
     return `OK ${JSON.stringify(schemeToJs(values[0], {}))}`;
@@ -111,8 +110,7 @@ const asPairListLiteral = (xs: readonly unknown[]): string =>
  *  and only what an MCP tool returning a JSON array hands the model. That receiver is the point. */
 const bothCharts = async (code: string, fixture: readonly unknown[]) => ({
   viaToolArray: await runOne(code, { xs: fixture }),
-  viaPairList: await runOne(code.replace(/\bxs\b/g, asPairListLiteral(fixture)), {}),
-});
+  viaPairList: await runOne(code.replace(/\bxs\b/g, asPairListLiteral(fixture)), {}) });
 
 /** [verb, program over `xs`, fixture] — the fixture is chosen so the verb WALKS TO EXHAUSTION or
  *  MATCHES, never short-circuits on the head. (Short-circuiting fixtures are how both prior false

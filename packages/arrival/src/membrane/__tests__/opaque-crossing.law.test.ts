@@ -191,9 +191,7 @@ describe("opaque-crossing contract — rows 2-4: end-to-end through symbol.roset
         function (): string {
           return "unreachable";
         },
-      ),
-    }),
-  });
+      ) }) });
 
   it("row 1+3: make-widget then widget-id-typed round-trips the SAME instance through TWO rosetta calls", async () => {
     const [result] = await exec('(widget-id-typed (make-widget "abc"))', { capabilities: [cap] });
@@ -255,9 +253,7 @@ describe("opaque-crossing contract — eq? across two crossings sharing ONE cach
         function () {
           return shared as unknown as SchemeValue;
         },
-      ),
-    }),
-  });
+      ) }) });
 
   it("(eq? (get-shared-widget) (get-shared-widget)) is #t — two mints of the same instance are eq?", async () => {
     const [result] = await exec("(eq? (get-shared-widget) (get-shared-widget))", { capabilities: [cap] });

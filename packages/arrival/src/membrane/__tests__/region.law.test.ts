@@ -15,22 +15,22 @@
  * landing these other seven rows gate.
  *
  * openRegionScope-gap Ruling A (2026-07-11): the capability/`symbol.rosetta` bind path
- * used to carry a genuine gap from the legacy `env.defineRosetta` path — `createRosettaWrapper`
+ * once lacked region-scope on — `createRosettaWrapper`
  * (rosetta.ts) opened a region scope around every call; the baked `symbol.rosetta` `run`
  * wrapper (common/symbols/rosetta.ts) did not, so a `z.procedure` slot's decode fell back to
  * the shared, never-closing `DETACHED_SCOPE` (`DETACHED_SCOPE.runCtx = CONSTANT_CTX`) for
  * every capability verb. That gap is CLOSED: `run` now opens a region scope itself, gated on
  * `contractMayCarryCallable` (_bake.ts) — a bake-time check for a `z.procedure`/`z.dynamic`
  * input slot — with `runCtx: this.runCtx` (the invocation's LIVE context). The
- * "region-law-trace-nesting" row below is migrated off `env.defineRosetta` onto
+ * "region-law-trace-nesting" row below is uses
  * `EnvCapability` + `symbol.rosetta` accordingly; a new "burst-bypass" row pins the concrete
  * regression this gap caused (a lambda calling a sink verb used to fire it inline instead of
  * enqueueing under an armed `effects` log).
  */
 import { describe, expect, it } from "vitest";
-import * as z from "../../common/scheme-zod.js";
+import * as z from "../../common/scheme-zod/index.js";
 import { schemeToJs } from "../rosetta.js";
-import { ANativeProcedure } from "../../values/primitives/ACallable.js";
+import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
 import { closeRegionScope, openRegionScope, withRegionScope } from "../region-scope.js";
 import { CONSTANT_CTX, RunContext } from "../../run/RunContext.js";
 import type { SchemeValue } from "../../values/types.js";
@@ -46,8 +46,7 @@ function makeEcho(): ANativeProcedure {
     name: "echo",
     arity: { min: 1, max: 1 },
     contract: undefined,
-    impl: (args) => args[0],
-  });
+    impl: (args) => args[0] });
 }
 
 /** A callable whose impl never settles — lets the abort row prove the
@@ -57,8 +56,7 @@ function makeHangingProc(): ANativeProcedure {
     name: "hang",
     arity: { min: 0, max: 0 },
     contract: undefined,
-    impl: () => new Promise<never>(() => {}),
-  });
+    impl: () => new Promise<never>(() => {}) });
 }
 
 describe("a reverse lambda is region-bound to its invocation", () => {
@@ -140,16 +138,14 @@ describe("a reverse lambda is region-bound to its invocation", () => {
             result = await capturedWrapper(41);
             return undefined;
           },
-        ),
-      }),
-    });
+        ) }) });
 
     await execState("(region-law-capture (lambda (x) (+ x 1)))", { capabilities: [cap], tap: trace });
     expect(capturedInv).toBeDefined();
     expect(capturedWrapper).toBeDefined();
     // `z.procedure()` declared with no output type keeps "honest untransformed passthrough"
     // (scheme-zod.ts's own doc on the untyped HOF-callback case) — `result` is the raw scheme
-    // AExact, not a plain JS number (unlike the legacy generic-callable wrapper, which always
+    // AExact, not a plain JS number (unlike the retired bare-callable wrapper, which always
     // ran the result back through `schemeToJs`). `Number(...)` (valueOf) is the sanity check
     // that actually matters here: the re-entry ran the lambda body and produced 42.
     expect(Number(result)).toBe(42);
@@ -225,9 +221,7 @@ describe("a reverse lambda is region-bound to its invocation", () => {
             await lambdaWrapper();
             return undefined;
           },
-        ),
-      }),
-    });
+        ) }) });
 
     await exec("(call-with-lambda (lambda () (sink! 1)))", { capabilities: [cap], effects });
 

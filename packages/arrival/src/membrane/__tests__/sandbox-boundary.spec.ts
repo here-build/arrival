@@ -6,8 +6,7 @@ import {
   accessKeys,
   NOT_FOUND,
   markInteropBoundary,
-  isInteropBoundary,
-} from "../interop-access.js";
+  isInteropBoundary } from "../interop-access.js";
 import { InteropAccessError } from "../../errors.js";
 
 describe("Sandbox Boundary", () => {
@@ -397,8 +396,7 @@ describe("Sandbox Boundary", () => {
           fired = true;
           return Object; // tries to masquerade as the real Object
         },
-        configurable: true,
-      });
+        configurable: true });
       // The boundary read uses the own DESCRIPTOR's .value (undefined for an
       // accessor), so it neither fires the getter nor is fooled into a boundary.
       expect(isInteropBoundary(proto)).toBe(false);

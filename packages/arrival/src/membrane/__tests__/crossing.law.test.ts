@@ -32,7 +32,8 @@ import { theVoid } from "../../values/primitives/AVoid.js";
 import { APair } from "../../values/primitives/APair.js";
 import { AVector } from "../../values/primitives/AVector.js";
 import { ADict } from "../../values/primitives/ADict.js";
-import { ANativeProcedure, ARosettaProcedure } from "../../values/primitives/ACallable.js";
+import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
+import { ARosettaProcedure } from "../../values/primitives/ARosettaProcedure.js";
 import { closeRegionScope, openRegionScope, withRegionScope } from "../region-scope.js";
 import { RegionEscapeError } from "../../errors.js";
 import { AJSArray } from "../AJSArray.js";
@@ -148,41 +149,22 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
     }
 
     case "bigint": {
+      // Host bigint DOORS (NoLensError kind `"bigint"`) — same spirit as unique-symbol.
+      // Exact numbers are safe-int ratios; convert with Number/bigintToNumber in the
+      // safe range (or pass inexact/string) before re-crossing. Codecs that speak
+      // bigint on the host face (`z.bigint`) encode to AExact BEFORE the membrane.
       it(entryTitle, () => {
-        // Opaque HOST value (docs/design-history/arrival-one-number-rework.md §2.3)
-        // — NOT a scheme number: rides the same raw identity lane as
-        // Uint8Array/ArrayBuffer/DataView, never boxed into an AExact. `number?`/
-        // arithmetic coercion door on it explicitly (coerce-numeric.spec.ts,
-        // env/r7rs/numeric.ts own that law); the membrane's job is just to let it
-        // ride through unchanged, both in-range and out.
-        const entered = fromJS(10n);
-        expect(entered).toBe(10n);
-        expect(isSchemeValue(entered)).toBe(false); // stays raw, never boxed
+        expect(() => fromJS(10n)).toThrow(/no lens for a host bigint/);
       });
-      it(exitTitle, () => {
-        // Never boxed on entry (same shape as the binary-passthrough row above), so
-        // there is nothing to unbox on exit. toJS's strict door refuses a value that
-        // never crossed AS a scheme value — schemeToJs's generic scalar fallback
-        // returns it unchanged, matching the "raw" exit form honestly. True for both
-        // in-range and out-of-range magnitudes — there is no safe-range distinction
-        // left to make, since it was never reinterpreted as a number in the first place.
-        const huge = 12345678901234567890n;
-        expect(schemeToJs(fromJS(huge) as SchemeValue)).toBe(huge);
-      });
+      // exitForm: "n/a" — no exit cell (the crossing doors before any box exists).
       it(roundTripTitle, () => {
-        const inRange = schemeToJs(fromJS(10n) as SchemeValue);
-        expect(inRange).toBe(10n);
-        expect(typeof inRange).toBe("bigint");
-        const huge = 12345678901234567890n;
-        const outOfRange = schemeToJs(fromJS(huge) as SchemeValue);
-        expect(typeof outOfRange).toBe("bigint");
-        expect(outOfRange).toBe(huge);
+        expect(() => fromJS(10n)).toThrow(/no lens for a host bigint/);
+        expect(() => jsToScheme(CONSTANT_CTX, 12345678901234567890n)).toThrow(/no lens for a host bigint/);
       });
       it(provenanceTitle, () => {
-        // No carrier to stamp: an opaque host value has no box for a provenance set
-        // to attach to — jsToScheme's raw passthrough hands it back exactly as supplied.
-        const stamped = jsToScheme(CONSTANT_CTX, 10n, {}, PROV);
-        expect(stamped).toBe(10n);
+        // No carrier to stamp: the crossing doors BEFORE any box could carry a
+        // provenance set — loud at the crossing, never a stray degrade (P5).
+        expect(() => jsToScheme(CONSTANT_CTX, 10n, {}, PROV)).toThrow(/no lens for a host bigint/);
       });
       break;
     }
@@ -825,8 +807,7 @@ describe("foreign Proxy at the membrane — freeze failure doors loudly (P5), ne
       getOwnPropertyDescriptor(t, key) {
         if (key === "ghost") return undefined; // disagrees with ownKeys — the invariant break
         return Reflect.getOwnPropertyDescriptor(t, key);
-      },
-    });
+      } });
     const wrapped = new AJSObject(foreign);
     expect(() => wrapped.has("x")).toThrow(/foreign Proxy with a non-standard ownKeys trap/);
   });
@@ -840,8 +821,7 @@ describe("foreign Proxy at the membrane — freeze failure doors loudly (P5), ne
       getOwnPropertyDescriptor(t, key) {
         if (key === "0") return undefined; // disagrees with ownKeys
         return Reflect.getOwnPropertyDescriptor(t, key);
-      },
-    }) as unknown[];
+      } }) as unknown[];
     const wrapped = new AJSArray(foreign);
     expect(() => wrapped.length).toThrow(/foreign Proxy with a non-standard ownKeys trap/);
   });
@@ -988,8 +968,7 @@ describe("egress membrane exit — the two modes and their identity laws", () =>
       name: `test-${tag}`,
       arity: { min: 0, max: null },
       contract: undefined,
-      impl: (_args, runCtx) => new AExact(7),
-    });
+      impl: (_args, runCtx) => new AExact(7) });
   const dictOf = (entries: ReadonlyArray<readonly [string, SchemeValue | Promise<SchemeValue>]>): ADict =>
     new ADict(entries.map(([k, v]) => [new ASymbol(k), v] as const),
     );

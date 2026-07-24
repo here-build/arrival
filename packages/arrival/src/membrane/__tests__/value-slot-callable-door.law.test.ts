@@ -11,16 +11,18 @@
  * gate (see `region.law.test.ts`'s "BURST-BYPASS CLOSED" row) exists to close. `z.procedure`
  * is safe because its wrapper is minted SYNCHRONOUSLY at decode, under the live scope.
  *
- * The fix (common/symbols/rosetta.ts's `buildDynamicSlotCheck` / `assertNotBareCallableInDynamicSlot`):
- * make the unsafe shape UNAUTHORED — a callable landing in a bare top-level `z.dynamic` slot
- * throws a teaching door instead of silently marshaling under a scope that may already be gone.
+ * The fix (common/symbols/rosetta.ts's `buildDynamicSlotCheck`): make the unsafe shape
+ * UNAUTHORED — a callable landing in a bare top-level `z.dynamic` slot throws a teaching door
+ * instead of silently marshaling under a scope that may already be gone. Enforced as one
+ * `invariant(slots.every(...), () => msg)` per position family (kwargs keys / all-positional /
+ * selected indices), not a per-slot forEach throw.
  *
  * SCOPE, named (the Q1 retarget): this door is keyed on `"dynamic"` ONLY — neither the banned
  * `z.schemeValue` (structurally excluded from a rosetta contract at COMPILE time now, see
  * `_bake.ts`'s `CrossingResult`/`ContourResult` + `common/__tests__/scheme-zod.test-d.ts`) nor the
  * deprecated `z.value` alias, now DELETED (Phase B, this campaign) — a not-yet-migrated downstream
  * declaration was this door's own documented non-concern until the alias was retired — see
- * `rosetta.ts`'s own doc on `assertNotBareCallableInDynamicSlot`.
+ * `rosetta.ts`'s own z.dynamic-callable door doc.
  */
 import { describe, expect, it } from "vitest";
 import { EnvCapability } from "../../common/capability.js";
@@ -35,9 +37,7 @@ describe("the z.dynamic-callable door", () => {
           function (v) {
             return v;
           },
-        ),
-      }),
-    });
+        ) }) });
 
     await expect(exec("(echo-dynamic (lambda (x) x))", { capabilities: [cap] })).rejects.toThrow(
       /a callable argument crossed a z\.dynamic slot/,
@@ -53,9 +53,7 @@ describe("the z.dynamic-callable door", () => {
           function (v) {
             return v;
           },
-        ),
-      }),
-    });
+        ) }) });
 
     const [result] = await exec("(echo-dynamic 42)", { capabilities: [cap] });
     expect(Number(result)).toBe(42);
@@ -72,9 +70,7 @@ describe("the z.dynamic-callable door", () => {
             called = true;
             return undefined;
           },
-        ),
-      }),
-    });
+        ) }) });
 
     await exec("(call-it (lambda (x) (+ x 1)))", { capabilities: [cap] });
     expect(called).toBe(true);
@@ -88,9 +84,7 @@ describe("the z.dynamic-callable door", () => {
           function (args) {
             return args.v;
           },
-        ),
-      }),
-    });
+        ) }) });
 
     await expect(exec("(echo-kwargs :v (lambda (x) x))", { capabilities: [cap] })).rejects.toThrow(
       /a callable argument crossed a z\.dynamic slot \(keyword argument :v\)/,
@@ -105,9 +99,7 @@ describe("the z.dynamic-callable door", () => {
           function (args) {
             return args.v;
           },
-        ),
-      }),
-    });
+        ) }) });
 
     const [result] = await exec('(echo-kwargs :v "hello")', { capabilities: [cap] });
     expect(result).toBe("hello");
@@ -124,9 +116,7 @@ describe("the z.dynamic-callable door", () => {
           function (v) {
             return v;
           },
-        ),
-      }),
-    });
+        ) }) });
 
     const [result] = await exec('(echo-dynamic (list 1 2 "three"))', { capabilities: [cap] });
     expect(result).toBeTruthy();

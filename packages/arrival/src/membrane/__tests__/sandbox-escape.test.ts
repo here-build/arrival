@@ -26,8 +26,7 @@ import { inferenceEnv } from "../../env/inference-env.js";
 import {
   INTEROP_BOUNDARY,
   accessMember,
-  isInteropBoundary,
-} from "../interop-access.js";
+  isInteropBoundary } from "../interop-access.js";
 import { InteropAccessError } from "../../errors.js";
 import { AString } from "../../values/primitives/AString.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
@@ -306,7 +305,7 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
     // The budget lives on the GENERATOR-EXEC trampoline (`run()` in
     // evaluator.ts), which is the path the actual sandbox/MCP runtime uses
     // (arrival-chain's loader calls `execGeneratorExpr`). The file-level `exec`
-    // import is `lips.exec` (legacy REPL evaluator) — used by the other tests
+    // import is `lips.exec` (REPL evaluator) — used by the other tests
     // here — so we import the generator-exec `exec` locally for the budget API.
     // `budgetMs` throws a ArrivalError(/budget/) at the existing 1000-iter / 5ms
     // event-loop yield once the deadline passes; it composes with `signal`

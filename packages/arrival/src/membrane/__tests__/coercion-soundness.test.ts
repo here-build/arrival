@@ -41,7 +41,7 @@ import { AString } from "../../values/primitives/AString.js";
 import { AJSArray } from "../AJSArray.js";
 import listsCap from "../../env/r7rs/lists.js";
 import vectorsCap from "../../env/r7rs/vectors.js";
-import { vector, schemeValue } from "../../common/scheme-zod.js";
+import { vector, schemeValue } from "../../common/scheme-zod/index.js";
 import type { EnvCapability } from "../../common/capability.js";
 import { nil } from "../../values/primitives/ANil.js";
 import { provOf } from "../../provenance/lineage.js";

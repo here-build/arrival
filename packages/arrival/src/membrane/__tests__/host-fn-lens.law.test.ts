@@ -34,7 +34,8 @@ import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX, RunContext } from "../../run/RunContext.js";
 import { jsToScheme } from "../rosetta.js";
 import { fromJs } from "../boxing.js";
-import { ALambda, ARosettaProcedure, applyCallback } from "../../values/primitives/ACallable.js";
+import { ALambda, applyCallback } from "../../values/primitives/ACallable.js";
+import { ARosettaProcedure } from "../../values/primitives/ARosettaProcedure.js";
 import { testCallCtx } from "../../run/CallCtx.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AString } from "../../values/primitives/AString.js";
@@ -165,9 +166,7 @@ describe("LAW — host-function inbound reverse-membrane lens", () => {
           "make-adder": symbol.rosetta`make-adder: returns a bare host fn`({ input: [], output: [sz.dynamic] }, () => {
             const adder = (n: unknown) => (n as number) + 1;
             return adder;
-          }),
-        }),
-      });
+          }) }) });
       const result = await lastValue("((make-adder) 41)", { capabilities: [cap], config: {} });
       expect(result).toBeInstanceOf(AExact);
       expect((result as AExact).num).toBe(42);

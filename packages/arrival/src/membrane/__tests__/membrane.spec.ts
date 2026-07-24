@@ -18,8 +18,7 @@ import {
   fromJS,
   toJS,
   isSchemeValue,
-  isBytevectorLike,
-} from "../membrane.js";
+  isBytevectorLike } from "../membrane.js";
 import { AJSObject } from "../AJSObject.js";
 import { AJSArray } from "../AJSArray.js";
 import { nil } from "../../values/primitives/ANil.js";
@@ -28,7 +27,7 @@ import { ABool } from "../../values/primitives/ABool.js";
 import { AString } from "../../values/primitives/AString.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { APair } from "../../values/primitives/APair.js";
-import { ARosettaProcedure } from "../../values/primitives/ACallable.js";
+import { ARosettaProcedure } from "../../values/primitives/ARosettaProcedure.js";
 
 // ============================================================================
 // WRAPPER LAYER TESTS
@@ -96,9 +95,8 @@ describe("Wrapper Layer", () => {
     });
 
     // INVARIANT: JS primitives (bool/number/string) materialize into boxed AValue subtypes,
-    // never a raw leak; a registered symbol (Symbol.for) materializes to ASymbol. bigint is
-    // the one exception — see the dedicated test right below. A UNIQUE symbol has no lens
-    // (V's ruling, 2026-07-23) — it DOORS, it does not materialize to anything.
+    // never a raw leak; a registered symbol (Symbol.for) materializes to ASymbol. A UNIQUE
+    // symbol and host bigint have no lens — they DOOR (NoLensError), they do not materialize.
     it("MATERIALIZES primitives to boxed AValues (host-agnostic — never a raw leak)", () => {
       expect(fromJS(true)).toBeInstanceOf(ABool);
       expect(fromJS(42)).toBeInstanceOf(AExact);
@@ -108,13 +106,11 @@ describe("Wrapper Layer", () => {
       expect(fromJS(Symbol.for("test"))).toBeInstanceOf(ASymbol);
     });
 
-    // INVARIANT: bigint is an opaque host value (docs/design-history/
-    // arrival-one-number-rework.md §2.3) — NOT a scheme number — and rides the raw
-    // pass-through lane unboxed (never an AExact; arithmetic coercion doors instead,
-    // see coerce-numeric.spec.ts).
-    it("bigint stays raw — opaque host value, never boxed into an exact", () => {
-      expect(fromJS(42n)).toBe(42n);
-      expect(isSchemeValue(fromJS(42n))).toBe(false);
+    // INVARIANT: host bigint DOORS (NoLensError kind `"bigint"`) — same spirit as
+    // unique-symbol. Exact numbers are safe-int ratios; convert with Number/
+    // bigintToNumber in the safe range (or pass inexact/string) before re-crossing.
+    it("bigint DOORS — no lens for a host bigint (never boxed, never raw passthrough)", () => {
+      expect(() => fromJS(42n)).toThrow(/no lens for a host bigint/);
     });
 
     // INVARIANT: fromJS refuses an already-boxed scheme value, throwing "already-boxed" (pins implementation, not behavior)
@@ -302,8 +298,7 @@ describe("Wrapper Layer", () => {
         },
         method() {
           return "danger";
-        },
-      };
+        } };
       const obj = new AJSObject(source);
       expect((obj.get("data") as { valueOf(): unknown }).valueOf()).toBe(7); // data read (boxed)
       expect((obj.get("computed") as { valueOf(): unknown }).valueOf()).toBe(99); // getter invoked → value

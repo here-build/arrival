@@ -11,13 +11,13 @@
  * and the two APIs agree on the SHAPE of converted values.
  *
  * The membrane now MATERIALIZES faithfully: BOTH `jsToScheme` and `fromJS` box every
- * primitive (number/bigint→exact, boolean→ABool, string→AString) through the boxer
- * registry, map undefined → #void (a lens, no warn), a bare function → a genuine
- * scheme-callable `ARosettaProcedure` (the reverse-membrane lens, V's 2026-07-24
- * ruling — args cross scheme→js, result crosses js→scheme), a unique symbol doors
- * (`NoLensError` — no portable identity), and Symbol.for('x') → the keyword `:x`.
- * The sandbox never holds a raw JS value — the deliberate, host-agnostic narrowing
- * of JS interop. These tests pin that. Remaining notes:
+ * primitive (number→exact, boolean→ABool, string→AString) through the boxer registry,
+ * map undefined → #void (a lens, no warn), a bare function → a genuine scheme-callable
+ * `ARosettaProcedure` (the reverse-membrane lens, V's 2026-07-24 ruling — args cross
+ * scheme→js, result crosses js→scheme), a unique symbol and a host bigint door
+ * (`NoLensError`), and Symbol.for('x') → the keyword `:x`. The sandbox never holds a
+ * raw JS value — the deliberate, host-agnostic narrowing of JS interop. These tests
+ * pin that. Remaining notes:
  *  - membrane `isSchemeValue` lists AValue subtypes by explicit
  *    `instanceof` checks. Any AValue subtype that isn't listed will mis-route.
  *    Nil is technically listed by `=== nil`, but clones miss (see
@@ -30,12 +30,13 @@ import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { fromJs } from "../boxing.js";
-import { is_nil } from "../../eval/guards.js";
+import { is_nil } from "../../values/value-guards.js";
 import { fromJS, isSchemeValue, toJS } from "../membrane.js";
 import { AJSObject } from "../AJSObject.js";
 import { AJSArray } from "../AJSArray.js";
 import { jsToScheme, schemeToJs } from "../rosetta.js";
-import { ALambda, ARosettaProcedure } from "../../values/primitives/ACallable.js";
+import { ALambda } from "../../values/primitives/ACallable.js";
+import { ARosettaProcedure } from "../../values/primitives/ARosettaProcedure.js";
 import { ABool, schemeFalse, schemeTrue } from "../../values/primitives/ABool.js";
 import { AString } from "../../values/primitives/AString.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
@@ -77,13 +78,10 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
     expect((result as AInexact).real).toBe(3.14);
   });
 
-  // typeof 1n === "bigint" → opaque host value (docs/design-history/
-  // arrival-one-number-rework.md §2.3), never boxed — rides the raw pass-through lane.
-  // INVARIANT: bigint is not boxed — fromJs returns it unchanged (opaque host value, not a scheme number)
-  it("bigint → opaque host passthrough (never boxed; not a scheme number)", () => {
-    const result = fromJs(CONSTANT_CTX, 123n);
-    expect(result).toBe(123n);
-    expect(typeof result).toBe("bigint");
+  // typeof 1n === "bigint" → NoLensError door (same spirit as unique-symbol).
+  // INVARIANT: host bigint never boxes and never passthroughs — convert first.
+  it("bigint → door (NoLensError; never boxed; not a scheme number)", () => {
+    expect(() => fromJs(CONSTANT_CTX, 123n)).toThrow(/no lens for a host bigint/);
   });
 
   // SchemeBool.ts:32-34 — empty-provenance fast path REUSES the schemeTrue/schemeFalse
@@ -101,10 +99,7 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
     expect(result).toBeInstanceOf(ABool);
     expect(result).not.toBe(schemeTrue);
     expect((result as ABool).value).toBe(true);
-    // Cast: `fromJs`'s return type widened to `AValue | bigint` (§2.3's opaque-host-value
-    // law) — this call's runtime shape is always ABool (a boolean input never produces
-    // the bigint arm), same idiom as the `.value` cast just above.
-    expect([...(result as ABool).provenance]).toEqual([99]);
+    expect([...result.provenance]).toEqual([99]);
   });
 
   // The two JS bottoms map to the two distinct Scheme absences (Rosetta
@@ -193,9 +188,6 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
     const result = fromJs(CONSTANT_CTX, orig, prov);
     expect(result).not.toBe(orig);
     expect(result).toBeInstanceOf(AString);
-    // Cast: `fromJs`'s return type widened to `AValue | bigint` (§2.3's opaque-host-value
-    // law) — this call's runtime shape is always AString (an AValue input re-stamps
-    // through its own class, never the bigint arm).
     expect([...(result as AString).provenance]).toEqual([7]);
   });
 });
@@ -374,21 +366,11 @@ describe("membrane fromJS / toJS — round-trip + wrapper-cache identity", () =>
     expect(toJS(fromJS(42))).toBe(42);
   });
 
-  // INVARIANT: bigint is an opaque host value — the membrane routes it through unboxed,
-  // identical both directions (never a scheme number; see coerce-numeric.spec.ts for the
-  // arithmetic-coercion door and docs/design-history/arrival-one-number-rework.md §2.3).
-  it("bigint crosses as an opaque host value (never boxed into an exact)", () => {
-    // host-agnostic: 10n stays 10n — arrival never reinterprets a host bigint as a scheme
-    // number. fromJS rides the same raw identity lane Uint8Array/ArrayBuffer/DataView use.
-    const entered = fromJS(10n);
-    expect(entered).toBe(10n);
-    // Never boxed on entry, so schemeToJs's generic scalar fallback (not toJS's strict
-    // door, which refuses a value that never crossed AS a scheme value) returns it
-    // unchanged.
-    // @ts-expect-error `entered`'s static type is `FromJSResult` (bigint included, per
-    // the opaque-host-value law) — schemeToJs expects `SchemeValue`; the mismatch is in
-    // the declared union's width, not a real unsoundness.
-    expect(schemeToJs(entered)).toBe(10n);
+  // INVARIANT: host bigint DOORS both directions (NoLensError kind `"bigint"`) —
+  // never a scheme number; convert with Number/bigintToNumber before re-crossing.
+  it("bigint DOORS at the membrane (never boxed; never raw passthrough)", () => {
+    expect(() => fromJS(10n)).toThrow(/no lens for a host bigint/);
+    expect(() => schemeToJs(10n as never)).toThrow(/no lens for a host bigint/);
   });
 
   // LAW (nil-as-array, V 2026-07-13): null enters as nil; nil exits as [] — the

@@ -19,13 +19,14 @@
  *    (jsToSchemeAsyncDoor — crossing.law.test.ts owns that violation row).
  *
  * 3. THE BINARY MEMBRANE (V's ruling, 2026-07-23): the warn-and-degrade middle tier
- *    is RETIRED. `undefined` is now a plain lens (no warn). A unique JS symbol and
- *    an unbranded/exotic class instance (Date/Map/Set/RegExp/a plain class) now
- *    DOOR (`NoLensError`) instead of silently degrading to `#void` or borrowing as
- *    an untethered AJSObject with a console warning — crossing.law.test.ts owns the
- *    per-shape crossing rows; here we pin "nothing non-scheme escapes the router
- *    UNCLAIMED" over a sweep of exotic shapes (a host `Error` is its own declared
- *    lens, carved out of the sweep — error-object-exit.law.test.ts owns that law).
+ *    is RETIRED. `undefined` is now a plain lens (no warn). A unique JS symbol, a
+ *    host bigint, and an unbranded/exotic class instance (Date/Map/Set/RegExp/a
+ *    plain class) now DOOR (`NoLensError`) instead of silently degrading to `#void`,
+ *    raw-passthrough, or borrowing as an untethered AJSObject with a console
+ *    warning — crossing.law.test.ts owns the per-shape crossing rows; here we pin
+ *    "nothing non-scheme escapes the router UNCLAIMED" over a sweep of exotic shapes
+ *    (a host `Error` is its own declared lens, carved out of the sweep —
+ *    error-object-exit.law.test.ts owns that law).
  */
 import { describe, expect, it } from "vitest";
 import { INBOUND_CLAIMS, jsToScheme } from "../rosetta.js";
@@ -61,12 +62,12 @@ describe("inbound registry — the declared, ordered claim table IS the law", ()
       "host Error → borrowed AJSObject (declared lens)",
       "scalar → boxer table (fromJs)",
       "symbol → :keyword (registered)",
-      "bigint → raw passthrough (opaque host value, not a scheme number)",
       "binary (Uint8Array/ArrayBuffer/DataView/Buffer) → raw passthrough (declared)",
       "function → callable (reverse membrane: args scheme→js, result js→scheme)",
       // PHASE 3 — the incompatibility door.
       "promise → door (settle first; container entries settle lazily)",
       "unique symbol → door (no lens)",
+      "bigint → door (no lens)",
       "unbranded/exotic object → door (no lens)",
     ]);
   });
