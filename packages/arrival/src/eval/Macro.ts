@@ -7,12 +7,12 @@ import type { AmbientRuntime } from "../env/AmbientRuntime.js";
 import type { Resolver } from "./Resolver.js";
 
 /**
- * The uniform result of the `TF_EXPAND` term — a transcribed FORM plus, for a hygienic
- * transformer, the scope it must evaluate in. `Syntax.expand` always supplies `scope`
- * (its `MacroExpansion`); a `Macro` fexpr never does (its expansion evaluates in the
- * use-site resolver). `expr` may be a promise at runtime — a define-macro `__fn__` can
- * be async — which the evaluator awaits before evaluating (the term stays a thin sync
- * wrapper; the trampoline owns the await).
+ * Uniform result of the `TF_EXPAND` term — a transcribed FORM plus, for a
+ * hygienic transformer, the scope it must evaluate in. `Syntax.expand` always
+ * supplies `scope` (its MacroExpansion); a Macro fexpr never does (evaluates
+ * in the use-site resolver). `expr` may be a promise at runtime — a
+ * define-macro `__fn__` can be async — which the evaluator awaits before
+ * evaluating (thin sync wrapper; trampoline owns the await).
  */
 export interface Expansion {
   expr: SchemeValue;
@@ -21,45 +21,41 @@ export interface Expansion {
 
 export interface MacroInvokeContext {
   env: unknown;
-  /** The per-run context, threaded to the macro engine's mint door (eval/syntax-rules.ts)
-   *  so every value the expander mints during a live expansion carries the run's identity
-   *  and charges its allocation meter. REQUIRED, never optional: `is_macro` dispatch (the
-   *  only builder of this context) always holds a live `EvalContext.runCtx`, and an
-   *  optional field would re-open a `?? CONSTANT_CTX` fallback that silently unmeters. */
+  /** Per-run context, threaded to the macro engine's mint door
+   *  (eval/syntax-rules.ts) so expander-minted values charge the allocation
+   *  meter. REQUIRED: is_macro dispatch always holds a live EvalContext.runCtx;
+   *  optional would reopen a `?? CONSTANT_CTX` silent-unmeter fallback. */
   runCtx: RunContext;
-  /** The use-site resolver (synced to `env`). The expander uses the def-time Resolver a
-   *  `Syntax` captures instead. Optional — define-macro fexprs ignore it. */
+  /** Use-site resolver (synced to `env`). The expander uses the def-time
+   *  Resolver a Syntax captures instead. Optional — define-macro fexprs ignore it. */
   resolver?: Resolver;
   [key: string]: unknown;
 }
 
 /**
- * A define-macro fexpr: a function that receives UNEVALUATED code and returns a
- * replacement form. `Syntax` (syntax-rules) subclasses this. `__defmacro__` marks
- * instances that `macroexpand` is allowed to expand.
+ * A define-macro fexpr: receives UNEVALUATED code and returns a replacement
+ * form. `Syntax` (syntax-rules) is a sibling, not a subclass. `__defmacro__`
+ * marks instances that `macroexpand` may expand.
  *
- * Lineage: a fexpr — a first-class operative that receives UNEVALUATED operands
- * (Pitman, "Special Forms in Lisp", 1980; Shutt, "Fexprs as the basis of Lisp
- * function application", 2010).
+ * Lineage: fexpr — first-class operative with UNEVALUATED operands (Pitman
+ * 1980; Shutt 2010).
  */
 export class Macro {
-  // Interop boundary: Macro sits outside the AValue/ArrivalError families the
-  // FAMILY RULEs in interop-access.ts cover, so it carries its own explicit stamp
-  // (membrane.ts's `is_macro_value` dispatch means a Macro CAN reach the interop
-  // read path via a resolved env value).
+  // Outside the AValue/ArrivalError families that FAMILY RULEs cover — own stamp
+  // (membrane.ts is_macro_value dispatch can reach the interop read path).
   static [INTEROP_BOUNDARY] = true;
-  // The value-layer's downward-readable macro identity (AValue.ts's protocol slot) —
-  // read by `is_macro_value` (value-guards.ts) with no value→eval runtime edge.
+  // Value-layer downward-readable macro identity — is_macro_value (value-guards.ts)
+  // with no value→eval runtime edge.
   readonly ["arrival/is-macro"] = true;
 
   __name__: string;
   __fn__: Function;
   __doc__?: string;
   __defmacro__?: boolean;
-  /** The ternary static-walk attribute, stamped by `symbol.defineSyntax`'s bind arm
-   *  (common/symbols/define-bake.ts) from the declared `DefineSyntaxSymbolDef.macroAttribute`.
-   *  `undefined` (every prelude-era macro, every JS-authored transformer) reads as
-   *  `"opaque"` — the safe under-report default the validator's firewall assumes
+  /** Ternary static-walk attribute, stamped by `symbol.defineSyntax`'s bind arm
+   *  (common/symbols/define-bake.ts) from `DefineSyntaxSymbolDef.macroAttribute`.
+   *  `undefined` (prelude-era / JS-authored transformers) reads as `"opaque"` —
+   *  the safe under-report default the validator's firewall assumes
    *  (static-validation/vocabulary.ts). */
   macroAttribute?: "opaque" | "expression" | "binder";
 
@@ -76,18 +72,15 @@ export class Macro {
     this.__fn__ = fn;
   }
 
-  // A define-macro fexpr is Exp→Exp: it returns a replacement FORM (a `SchemeValue`),
-  // never an expansion record — that is `Syntax.expand`'s job. The fexpr body runs with
-  // `env` as `this`; `macro_expand` lets a macro recursively expand its own output.
+  // Exp→Exp: returns a replacement FORM (SchemeValue), never an expansion
+  // record — that is Syntax.expand's job. Body runs with `env` as `this`.
   invoke(code: unknown, { env, ...rest }: MacroInvokeContext, macro_expand: boolean = false): SchemeValue {
     return this.__fn__.call(env, code, { ...rest, macro_expand }, this.__name__) as SchemeValue;
   }
 
-  // RAW-ARG dispatch term (the head gate reads it via `is_expandable`). A fexpr consumes the
-  // keyword-STRIPPED operands (`code.cdr` — the `rest` the evaluator historically split off),
-  // and produces a scope-less `Expansion` (it evaluates in the use-site resolver). `Syntax`
-  // carries the sibling term returning `{ expr, scope }`. Kept a thin sync wrapper: the
-  // possibly-async `invoke` result rides `expr` and the trampoline awaits it.
+  // RAW-ARG dispatch term (head gate via is_expandable). Consumes keyword-stripped
+  // operands (`code.cdr`); produces a scope-less Expansion (use-site resolver).
+  // Thin sync wrapper: possibly-async invoke result rides `expr`; trampoline awaits.
   [TF_EXPAND](code: APair<SchemeValue, SchemeValue>, ctx: MacroInvokeContext): Expansion {
     return { expr: this.invoke(code.cdr, ctx, false) };
   }

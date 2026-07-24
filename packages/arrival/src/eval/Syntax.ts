@@ -9,9 +9,9 @@ import type { Resolver } from "./Resolver.js";
 type SyntaxLike = Syntax | Function;
 
 /**
- * The result of expanding a `Syntax`: the transcribed FORM plus the hygiene scope it must
- * evaluate in. A transformer is Exp→Exp — it returns a form, never a value. The shape is
- * fixed by the CLASS, not by any flag: `env/macros/macros.ts` returns it unconditionally.
+ * Result of expanding a Syntax: the transcribed FORM plus the hygiene scope
+ * it must evaluate in. A transformer is Exp→Exp — form, never a value. Shape
+ * is fixed by the class (env/macros/macros.ts returns it unconditionally).
  */
 interface MacroExpansion {
   expr: SchemeValue;
@@ -19,30 +19,26 @@ interface MacroExpansion {
 }
 
 /**
- * A `syntax-rules` transformer. NOT a `Macro`: a `Macro` is a runtime value (a bound,
- * callable fexpr), whereas a `Syntax` is an EXPAND-TIME rewriter — it captures its
- * definition env (`__env__`) for hygiene and returns an already-quoted expansion
- * (evaluatePair forwards Syntax results without re-evaluating — the `is_syntax` branch
- * there). The two share a duck shape (`__name__`/`__fn__`/`__defmacro__`/`invoke`) the
- * evaluator treats uniformly via `is_macro`, but neither is-a the other — hence no `extends`.
+ * A `syntax-rules` transformer. NOT a Macro: Macro is a runtime fexpr value;
+ * Syntax is an EXPAND-TIME rewriter that captures its definition env
+ * (`__env__`) for hygiene and returns an already-quoted expansion
+ * (evaluatePair forwards Syntax results without re-evaluating). They share a
+ * duck shape (`__name__`/`__fn__`/`__defmacro__`/`invoke`) treated uniformly
+ * via `is_macro`, but neither is-a the other — hence no `extends`.
  *
- * Lineage: a hygienic macro transformer (Kohlbecker et al. 1986; Clinger & Rees,
- * "Macros That Work", POPL 1991); the nested `Parameter` is SRFI-139 syntax parameters.
+ * Lineage: hygienic macro transformer (Kohlbecker et al. 1986; Clinger & Rees
+ * 1991); nested Parameter is SRFI-139 syntax parameters.
  */
 export class Syntax {
-  // Interop boundary: Syntax sits outside the AValue/ArrivalError families the FAMILY
-  // RULEs in interop-access.ts cover, so it carries its own explicit stamp (same
-  // reasoning as Macro.ts).
+  // Outside AValue/ArrivalError families — own interop stamp (same as Macro).
   static [INTEROP_BOUNDARY] = true;
-  // The value-layer's downward-readable macro identity (AValue.ts's protocol slot) —
-  // `is_macro_value` (value-guards.ts) treats a Syntax as a macro too.
+  // Value-layer macro identity — is_macro_value treats Syntax as a macro too.
   readonly ["arrival/is-macro"] = true;
   static __merge_env__ = Symbol.for("merge");
   // SRFI-139
   static Parameter = class SyntaxParameter {
     static [INTEROP_BOUNDARY] = true;
-    // MACRO_CLASS_BRANDS (the retired CLASS mechanism) counted "syntax-parameter" as
-    // macro-headed too — preserve that: `is_macro_value` must still answer true here.
+    // is_macro_value must answer true for syntax parameters.
     readonly ["arrival/is-macro"] = true;
 
     _syntax!: SyntaxLike; // Definite assignment - set via Object.defineProperty
@@ -50,13 +46,11 @@ export class Syntax {
       Object.defineProperty(this, "_syntax", {
         value: syntax,
         configurable: true,
-        enumerable: false,
-      });
+        enumerable: false });
       Object.defineProperty(syntax, "_param", {
         value: true,
         configurable: true,
-        enumerable: false,
-      });
+        enumerable: false });
     }
   };
 
@@ -65,16 +59,14 @@ export class Syntax {
   __defmacro__: boolean;
   __env__: unknown;
   /**
-   * The original macro FORM this transformer was built from (the `(syntax-rules …)`
-   * operands), stashed by the syntax-rules constructor in env/macros/macros.ts for
-   * inspection/printing. A Scheme form, not a value the transformer ever returns — held on
-   * the transformer object, outside the value channel.
+   * Original macro FORM this transformer was built from (`(syntax-rules …)`
+   * operands), stashed by the syntax-rules constructor for inspection/printing.
+   * Held on the transformer object, outside the value channel.
    */
   __code__?: SchemeValue;
   /**
-   * The def-time Resolver — wraps `__env__`, the hygiene identity root. Captured here and
-   * closed over by the transformer in env/macros/macros.ts; a glass over the same
-   * base-linked def env, so hygiene reaches base through it.
+   * Def-time Resolver wrapping `__env__` — the hygiene identity root. Captured
+   * here and closed over by the transformer in env/macros/macros.ts.
    */
   __resolver__: Resolver | undefined;
 
@@ -86,28 +78,22 @@ export class Syntax {
     this.__defmacro__ = true;
   }
 
-  // A `syntax-rules` transformer is Exp→Exp: it always returns the transcribed form +
-  // hygiene scope (`MacroExpansion`), never a value — hence `expand`, not a
-  // boolean-switched `invoke`. `macro_expand` is pinned `true`; the transformer in
-  // env/macros/macros.ts ignores it, kept only for fexpr-arg parity with `Macro.invoke`.
+  // Exp→Exp: always returns transcribed form + hygiene scope (MacroExpansion).
+  // macro_expand pinned true; transformer ignores it — kept for fexpr-arg parity.
   expand(code: unknown, { env, runCtx, resolver }: MacroInvokeContext): MacroExpansion {
     const args = {
       env,
       macro_expand: true,
       runCtx,
-      // Use-site resolver (from the dispatch) + the def-time one captured on this Syntax.
-      // The transformer closes over its own def Resolver for hygiene.
+      // Use-site resolver + the def-time one captured on this Syntax.
       resolver,
-      defResolver: this.__resolver__,
-    };
+      defResolver: this.__resolver__ };
     return this.__fn__.call(env, code, args, this.__name__ || "syntax") as MacroExpansion;
   }
 
-  // RAW-ARG dispatch term (the head gate reads it via `is_expandable`). A `syntax-rules`
-  // transformer matches against the FULL form (`code` — its keyword occupies the pattern's
-  // first slot), so unlike `Macro`'s term it forwards `code` intact, not `code.cdr`. Returns
-  // `{ expr, scope }`: the transcribed form plus the hygiene scope it evaluates in — the
-  // `scope` half `Macro`'s scope-less `Expansion` omits.
+  // RAW-ARG dispatch term. Matches against the FULL form (`code` — keyword
+  // occupies the pattern's first slot), so unlike Macro it forwards `code`
+  // intact, not `code.cdr`. Returns `{ expr, scope }`.
   [TF_EXPAND](code: APair<SchemeValue, SchemeValue>, ctx: MacroInvokeContext): Expansion {
     return this.expand(code, ctx);
   }

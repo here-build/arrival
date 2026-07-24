@@ -1,57 +1,42 @@
 // ----------------------------------------------------------------------
 // Function application chokepoint.
 //
-// `call_function` applies a Scheme function value (a native builtin OR a
-// generator-lambda) with a fresh call frame. Crucially it does NOT touch the
-// legacy evaluator: a generator-lambda, when applied here via `fn.apply`,
-// returns `run(evalBegin(body))` itself (evaluator.ts — the `_canBounce`
-// === false branch), so the generator drives the body. This is why the HOFs
-// (map/filter/fold) work through `call_function` today — env/r7rs/lists.ts
-// is the live consumer.
+// `call_function` applies a Scheme function value (native builtin or
+// generator-lambda) with a fresh call frame. A generator-lambda applied here
+// via `fn.apply` returns `run(evalBegin(body))` itself (evaluator.ts —
+// `canBounce === false`), so the generator drives the body. HOFs
+// (map/filter/fold) work through this path — env/r7rs/lists.ts is the live
+// consumer.
 //
-// `resolve_promises` collapses a tree of promises into a single promise (or
-// returns the argument untouched when there are none).
+// `resolve_promises` collapses a tree of promises into a single promise, or
+// returns the argument untouched when there are none.
 //
-// Both are self-contained (AmbientRuntime frame + LambdaContext + value kernel),
-// so a stdlib pack can import the applier without pulling in the evaluator.
+// Both are self-contained (AmbientRuntime frame + LambdaContext + value
+// kernel), so a stdlib pack can import the applier without the evaluator.
 // ----------------------------------------------------------------------
 import { is_promise } from "./guards.js";
-import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
+import { type RunContext } from "../run/RunContext.js";
 import { makeCallCtx } from "../run/CallCtx.js";
 import { is_applyable } from "../values/value-guards.js";
 import { applyCallback, type ACallable } from "../values/primitives/ACallable.js";
-import { LambdaContext } from "./LambdaContext.js";
 import { APair } from "../values/primitives/APair.js";
 import { DATA } from "../well-known-symbols.js";
 import type { SchemeValue } from "../values/types.js";
 import { promise_all } from "../utils/promises.js";
 
-type SchemeFunction = (...args: any[]) => any;
-
-// `runCtx` is REQUIRED (Wave 0 of the CONSTANT_CTX rework §2.1): the old
-// `{ runCtx }: {...; runCtx?:
-// RunContext } = {}` shape let a caller pass nothing at all — and real callers did
-// (env/r7rs/lists.ts's map/member/assoc, before this wave, invoked with `{}`), so every
-// `map`/`member`/`assoc` callback ran with no abort signal, no heap meter, forced
-// non-strict, regardless of the run's actual configuration. Making it required turns that
-// silent drop into a compile error at every call site.
-export function call_function(fn: SchemeFunction | ACallable, args: SchemeValue[], { runCtx }: { runCtx: RunContext }) {
-  // A callable VALUE (ANativeProcedure/ALambda/ARosettaProcedure) is invoked through the
-  // seam — its apply term, a CallCtx threaded — not as a bare fn (`fn.apply` would throw
-  // "apply called on an object, not a function"). Bare fns keep the LambdaContext path below.
-  // No live invocation reaches this chokepoint (only a bare `runCtx` parameter) — a real
-  // CallCtx with invocation undefined, degraded exactly as the pre-CallCtx-threading path.
-  if (is_applyable(fn)) {
-    return resolve_promises(applyCallback(fn, args, makeCallCtx(runCtx)) as SchemeValue);
+// `runCtx` is REQUIRED: an optional field let callers drop abort signal, heap
+// meter, and strict mode silently. Required turns that into a compile error.
+// Only ACallable (or any apply-term value) — bare host fns are doored.
+export function call_function(fn: ACallable, args: SchemeValue[], { runCtx }: { runCtx: RunContext }) {
+  if (!is_applyable(fn)) {
+    throw new TypeError(
+      typeof fn === "function"
+        ? "call_function: bare host function refused — mint an ANativeProcedure / ARosettaProcedure"
+        : "call_function: callee is not applyable",
+    );
   }
-  // No call frame is built: a generator-lambda carries its own closure env, a
-  // native reads none, so no frame is needed here — only the LambdaContext brand
-  // identity the membrane keys off.
-  const context = new LambdaContext();
-  // `is_applyable` (unlike the retired `is_callable_value` guard) is structural, not a type
-  // guard, so this else-arm no longer narrows away `ACallable` statically; the preceding
-  // check already ruled it out at runtime — only a bare `SchemeFunction` reaches here.
-  return resolve_promises((fn as SchemeFunction).apply(context, args));
+  // Invocation is undefined here — only a bare `runCtx` reaches this chokepoint.
+  return resolve_promises(applyCallback(fn, args, makeCallCtx(runCtx)) as SchemeValue);
 }
 
 // Collapse a tree that may contain Promises into a single Promise; if the tree

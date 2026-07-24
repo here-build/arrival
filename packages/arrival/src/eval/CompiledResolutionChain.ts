@@ -1,48 +1,29 @@
 /**
- * CompiledResolutionChain — the SEALED, ambient form of a baked capability base.
+ * CompiledResolutionChain — sealed ambient form of a baked capability base
+ * (the immutable bake product: frozen Map, lookup/toString only). Distinct from
+ * the mutable AmbientRuntime frame it seals from — Capabilities.globalRoot/refFrame
+ * return this as the hygiene sentinel.
  *
- * This class **is** "BakedBase" — the immutable, no-write-surface product of a bake.
- * No separate `BakedBase` wrapper type exists: this artifact has zero mutators
- * (a frozen `Map`, `lookup`/`toString` only), so the type-level
- * distinction from the mutable `AmbientRuntime` (lexical) frame it seals FROM is real —
- * `Capabilities.globalRoot`/`refFrame` (assembled mode) return THIS object as the
- * hygiene sentinel (see Capabilities.ts).
+ * Bake writes a live env chain (C3 bind, preludes, preludeOnly via kernel
+ * bake-overlay resolver middleware, torn down in finally — kernel.ts). Seal merges
+ * every layer's `__env__` child-wins into one flat Map. No capability-facing resolver
+ * contract survives seal; ResolvingAmbient resolvers exist only for the transient
+ * bake-overlay. `compileResolutionChain` asserts zero live resolvers rather than
+ * silently dropping them.
  *
- * Assembly (the BAKE) writes onto a live env chain: packs bind natives in C3 order,
- * preludes evaluate against the chain-so-far, `preludeOnly` bindings ride the kernel's
- * bake-scoped overlay (a `ResolvingAmbient.registerResolver` middleware, torn down via
- * `unregisterResolver` in a `finally` before `assembleEnv` resolves — kernel.ts). At the
- * SEAL, this module compiles the frame chain into a frozen artifact: every layer's
- * `__env__` record, merged child-wins into ONE flat `Map` — this IS the whole
- * compilation, because by the time a base reaches seal, the kernel's own overlay has
- * already unregistered and no capability declares a resolver of its own (the
- * capability-facing `EnvCapability.resolvers`/`ResolverSpec` contract was retired —
- * see docs/environments.md's revision history — leaving `ResolvingAmbient`'s resolver
- * primitive alive ONLY for the kernel's transient bake-overlay, which never survives to
- * this point). `compileResolutionChain` asserts that invariant rather than silently
- * dropping a live resolver it can no longer represent.
+ * No write surface post-seal. REPL writes go on the session frame above the chain
+ * (generator-exec defaultLexicalRoot). Glass `{ env }` keeps the live walk (no bake).
  *
- * WRITE-WINDOW: the artifact has no write surface — post-seal writes to the underlying
- * env are outside the contract. REPL accumulation rides the mutable session frame
- * ABOVE the chain (generator-exec's `defaultLexicalRoot`), never the ambient artifact.
- * GLASS callers (custom `{ env }`) keep the live env walk by definition — glass envs
- * don't bake; this module never sees them.
- *
- * CONTENT ADDRESS: `hash` is a deterministic composition of the merged vocabulary
- * (sorted names) — the coarse program+epoch identity the PROVENANCE track's
- * "baked-env hash" slot consumes. Binding-VALUE hashing (natives are JS-backed) is
- * DEFERRED — cross-deploy chain reuse needs a ruling first; two deploys with the same
- * vocabulary shape currently share a hash.
+ * `hash` = sorted vocabulary names (provenance baked-env slot). deferred: binding-value
+ * hashing for cross-deploy reuse (same shape currently shares a hash).
  */
 import invariant from "tiny-invariant";
 import { type AmbientRuntime, type AmbientValue, ResolvingAmbient } from "../env/AmbientRuntime.js";
 import type { RunContext } from "../run/RunContext.js";
 
 export class CompiledResolutionChain {
-  /** The one merged, frozen map every lookup reads — the degenerate (= only-occurring)
-   *  form the layered chain always compiles to now that no live resolver survives to
-   *  seal. Exposed as a single-element tuple (`steps`) for callers/tests that still
-   *  introspect the chain's step shape. */
+  /** Merged frozen map every lookup reads. Single-element `steps` for callers that
+   *  introspect chain shape. */
   readonly steps: readonly [ReadonlyMap<string | symbol, AmbientValue>];
   /** Content address (see the module header — vocabulary-shape identity, value hashing deferred). */
   readonly hash: string;
@@ -117,8 +98,7 @@ export function compileResolutionChain(base: AmbientRuntime): CompiledResolution
         layer.resolverSpecs().length === 0,
         `compileResolutionChain: layer "${String(layer.__name__)}" still has ${layer.resolverSpecs().length} ` +
           `live resolver(s) registered at seal time — the sealed chain has no resolver-interleaving ` +
-          `representation (retired with the capability-facing ResolverSpec contract); the kernel's own ` +
-          `bake-overlay must unregister before assembly resolves.`,
+          `representation; the kernel bake-overlay must unregister before assembly resolves.`,
       );
     }
     const record = layer.__env__;

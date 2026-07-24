@@ -1,39 +1,35 @@
 // ----------------------------------------------------------------------
 // The syntax-rules macro engine — pattern matching (extract_patterns), template
-// transcription (transform_syntax), and data-position un-renaming (restore_data_gensyms).
-// The three exports are consumed by the `syntax-rules` builtin (env/macros/macros.ts).
+// transcription (transform_syntax), and data-position un-renaming
+// (restore_data_gensyms). Consumed by the syntax-rules builtin (env/macros/macros.ts).
 //
-// EVALUATE-FREE: this rewrites code, it never runs it.
+// EVALUATE-FREE: rewrites code, never runs it.
 //
-// NO MODULE-LEVEL ENV: the engine references no global env. Hygiene identity flows in
-// through the injected HygieneScope (useResolver over the use site, the captured defResolver,
-// its capabilities whose `globalRoot` is the unshadowed-base identity) and the per-run ctx —
-// the syntax-rules caller threads them; lambda/define resolve from the runtime env.
+// NO MODULE-LEVEL ENV: hygiene identity flows in through the injected HygieneScope
+// (useResolver, captured defResolver, capabilities.globalRoot as unshadowed-base
+// identity) and the per-run ctx — the syntax-rules caller threads them.
 //
-// MINT DOOR: every cell the matcher/expander constructs during a live expansion goes through
-// consCell/listFromArray, which charge the allocation meter (chargeHeap) via the explicitly
-// threaded `ctx` PARAMETER — not a per-value stamp (AValue no longer carries one at all; see
-// AValue.ts's ctx-removal note — this subsystem's metering survives that removal unbroken
-// precisely because it was already ctx-as-op-parameter, not ctx-on-the-value). The charge
-// lives at the mint, not on a post-hoc walk of the output — a walk cannot tell fresh cells
-// from call-site fragments shared by reference.
-// Expansion is a native op materialized in synchronous walks with no trampoline TICK, and a
-// recursive macro's re-copied accumulation is exactly the O(K²) churn the meter contains. A
-// meter-less ctx makes chargeHeap a no-op — unmetered runs pay nothing.
+// MINT DOOR: every cell the matcher/expander constructs goes through
+// consCell/listFromArray, which charge the allocation meter (chargeHeap) via the
+// explicitly threaded `ctx` PARAMETER — not a per-value stamp. The charge lives
+// at the mint, not on a post-hoc walk of the output (a walk cannot tell fresh cells
+// from call-site fragments shared by reference). Expansion is a native op in
+// synchronous walks with no trampoline TICK; a recursive macro's re-copied
+// accumulation is exactly the O(K²) churn the meter contains. Meter-less ctx
+// makes chargeHeap a no-op.
 //
-// SPAN PROPAGATION: expansion-built pairs carry the TEMPLATE's span (same template node → same
-// span on every instantiation), so drill-in points at the form as WRITTEN in the macro;
-// pattern-variable substitutions are call-site pairs by reference and keep their own spans.
-// carrySpan/carrySpanSpine only stamp span-less pairs, never overwrite.
+// SPAN PROPAGATION: expansion-built pairs carry the TEMPLATE's span (same template
+// node → same span on every instantiation); pattern-variable substitutions are
+// call-site pairs by reference and keep their own spans. carrySpan/carrySpanSpine
+// only stamp span-less pairs, never overwrite.
 //
-// LAST-PAIR INVARIANT: last_pair() on a non-empty pair spine is always a pair (or undefined on
-// a cycle), never ANil. The repeated `invariant(... instanceof APair)` guards make that
+// LAST-PAIR INVARIANT: last_pair() on a non-empty pair spine is always a pair
+// (or undefined on a cycle), never ANil. The repeated invariant guards make that
 // runtime fact explicit instead of casting the union away.
 //
 // Attribution: derived from LIPS Scheme (Jakub T. Jankiewicz) — see LICENSE.
-// Lineage: hygienic macro expansion (Kohlbecker et al., "Hygienic Macro Expansion", 1986;
-// Clinger & Rees, "Macros That Work", POPL 1991); R7RS §4.3 syntax-rules; ellipsis
-// sub-patterns per SRFI-46.
+// Lineage: hygienic macro expansion (Kohlbecker et al. 1986; Clinger & Rees 1991);
+// R7RS §4.3 syntax-rules; ellipsis sub-patterns per SRFI-46.
 // ----------------------------------------------------------------------
 import invariant from "tiny-invariant";
 import { bindValue } from "../env/AmbientRuntime.js";
@@ -118,36 +114,27 @@ function listFromArray<T extends SchemeValue>(ctx: RunContext, array: readonly T
   return APair.fromArray(ctx, array, deep);
 }
 
-/** Stamp the template's span onto a single fresh, span-less Pair (see file preamble, SPAN
- *  PROPAGATION). Location is IMMUTABLE (AValue.ts) — there is no mutating `setLocation`
- *  anymore, so a stamp mints a genuine clone via `withLocation` rather than writing through
- *  the slot; every direct caller already treats this function's return as the value of
- *  record (it is always applied to a cell that was JUST minted inline, e.g. `carrySpan
- *  (consCell(ctx, ...), expr)`, so there is no OTHER reference to the pre-stamp instance to
- *  keep in sync). deferred: an expansion-chain slot recording the call site per expansion,
- *  for a consumer that needs both the template and call-site readings at once. */
+/** Stamp the template's span onto a single fresh, span-less Pair (preamble SPAN
+ *  PROPAGATION). Location is IMMUTABLE — a stamp mints a clone via withLocation.
+ *  Every direct caller treats the return as the value of record (applied to a
+ *  cell JUST minted inline). deferred: expansion-chain slot recording the call
+ *  site per expansion, for a consumer that needs both template and call-site. */
 function carrySpan<T extends SchemeValue>(fresh: T, template: SchemeValue): T {
   if (fresh instanceof APair && fresh.location === undefined && template instanceof APair) {
     const loc = template.location;
-    // `withLocation` on a narrowed-`T` intersection loses the precise APair<Car,Cdr>
-    // parametrization TS can't reconstruct through `instanceof` on a generic — the cast
-    // is honest: `withLocation` returns the same concrete class, only the location differs.
+    // withLocation on a narrowed-T intersection loses precise APair<Car,Cdr>
+    // parametrization — cast is honest: same concrete class, only location differs.
     if (loc !== undefined) return fresh.withLocation(loc) as T;
   }
   return fresh;
 }
 
-/** carrySpan for a freshly-built SPINE (fromArray/concat): stamps every unlocated cdr-chain
- *  cell, not just the head — repetition output is a list of cells all minted in one call. Car
- *  sub-structures already carry their own spans (template reconstructions or call-site fragments).
- *
- *  UNLIKE the single-cell `carrySpan` call sites, a spine's interior cells are already LINKED
- *  by reference (parent's cdr → child) before this walk starts — so when `carrySpan` mints a
- *  clone instead of mutating, the parent's cdr must be re-pointed at the clone, or the stamp is
- *  silently lost past the head. The spine is PRIVATE at this point (just minted by fromArray/
- *  concatPairLoose, not yet handed to any other holder), so patching through `__tieKnot` here is
- *  a sanctioned knot-tying use — the same license syntax-rules' ellipsis surgery already has
- *  (APair.ts's `__tieKnot` doc: "syntax-rules' ellipsis surgery on its private copies"). */
+/** carrySpan for a freshly-built SPINE (fromArray/concat): stamps every unlocated
+ *  cdr-chain cell, not just the head. Spine interior cells are already LINKED by
+ *  reference before this walk — when carrySpan mints a clone, the parent's cdr must
+ *  be re-pointed, or the stamp is silently lost past the head. The spine is PRIVATE
+ *  at this point (just minted, not yet handed out), so patching through __tieKnot
+ *  is a sanctioned knot-tying use (same license as ellipsis surgery on private copies). */
 function carrySpanSpine<T extends SchemeValue>(fresh: T, template: SchemeValue): T {
   let head: unknown = fresh;
   let prev: APair<SchemeValue, SchemeValue> | undefined;
@@ -214,10 +201,8 @@ export function extract_patterns(
   const bindings: MatchBindings = {
     "...": {
       symbols: {}, // symbols ellipsis (x ...)
-      lists: [],
-    },
-    symbols: {},
-  };
+      lists: [] },
+    symbols: {} };
   const { useResolver, defResolver, capabilities, ctx } = scope;
   // `pattern_names` distinguishes multiple matches of `((x ...) ...)` against `((1 2 3) (1 2 3))`:
   // each `x` added to the list marks it as this repetition's binding, not a duplicated ellipsis symbol.
@@ -598,8 +583,7 @@ export function transform_syntax({
   symbols,
   names,
   ellipsis: ellipsis_symbol,
-  ctx,
-}: TransformOptions) {
+  ctx }: TransformOptions) {
   // `scope` is the def-time syntax-child RESOLVER (`defResolver.child("syntax")`); the
   // engine consults its refFrame/lookupSettled/define instead of raw env .ref/.get/.set.
   const gensyms: Record<string | symbol, ASymbol> = {};
@@ -661,8 +645,7 @@ export function transform_syntax({
       // Record the rename so restore_data_gensyms can un-rename free output symbols post-eval.
       names.push({
         name,
-        gensym: gensym_name,
-      });
+        gensym: gensym_name });
       gensyms[name] = gensym_name;
       // `name` is checked for string because it can be a gensym symbol from nested syntax-rules.
       if (typeof name === "string" && /\./.test(name)) {
@@ -872,8 +855,7 @@ export function transform_syntax({
             return result;
           } else {
             const car = transform_ellipsis_expr(first, symbols, {
-              nested: true,
-            });
+              nested: true });
             if (car) {
               return carrySpan(consCell(ctx, car, nil), expr);
             }
