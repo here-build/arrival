@@ -10,22 +10,17 @@
 // The evaluator is INJECTED (`EvalSchemeInto`/`EvalPreludeInto`): arrival-scheme's
 // `exec(src,{env})` satisfies it. This module never imports the interpreter, so it
 // stays the lower, dependency-free layer the base sandbox can be re-expressed in
-// terms of. (The `schemePacks`/`SchemePackSpec` bootstrap-sequence lowering that
-// used to live here — a pack carrying scheme `bootstrap` source alongside its JS
-// `wire`, lowered to a plain kernel `EnvPack` — died with `lower()`/`assembleEnv`
-// (Stage C Cut 4): the vocabulary path bakes a capability's `symbols`/`prelude`
-// directly, no separate bootstrap-lowering step is left to serve.)
+// terms of. Capability `symbols`/`prelude` bake through the vocabulary path directly —
+// no separate bootstrap-lowering step.
 
 // Type-only edges (no runtime import — AmbientRuntime.ts imports THIS module's types, so a
-// value edge here would cycle; `import type` erases at emit, same posture as guards.ts's
-// false-leaf note): the storage union a resolver may answer with, and the run identity a
-// resolving read threads.
+// value edge here would cycle; `import type` erases at emit): the storage union a resolver may
+// answer with, and the run identity a resolving read threads.
 import type { AmbientValue } from "../env/AmbientRuntime.js";
 import type { RunContext } from "../run/RunContext.js";
 
 /** A rosetta (host-fn) contribution config. Defined here, not imported, so this package
- *  needn't depend on the runtime. The type the legacy `SymbolDeclaration` authoring arm
- *  (capability.ts) declares against; the wiring that consumes it is `bindRosetta`
+ *  needn't depend on the runtime. Wiring that consumes it is `bindRosetta`
  *  (AmbientRuntime.ts). */
 export interface RosettaSpec {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- variadic host fn, matches RosettaFunction
@@ -86,8 +81,7 @@ export interface ResolverSpec {
 export interface SchemeEnv {
   get(name: string, options?: { throwError?: boolean }): unknown;
   /** Register a catchall resolver (fires on a name the env did not bind). This is the
-   *  APPLY-TIME landing door for a capability's declared `resolvers` (CapabilitySpec.
-   *  resolvers → capability.ts's apply) and the kernel's bake overlay — assembly-time
+   *  APPLY-TIME landing door for a capability's declared `resolvers` and assembly-time
    *  producers only. There is deliberately NO `unregisterResolver` on this contract:
    *  resolver REMOVAL is not a pack-facing operation. The kernel's bake-SEAL hook
    *  reaches it structurally (`ResolverHostLike`, kernel.ts) on hosts that offer it —
@@ -110,8 +104,7 @@ export interface SchemeEnv {
 export type EvalSchemeInto<E = SchemeEnv> = (env: E, source: string) => unknown | Promise<unknown>;
 
 /** Evaluate PER-RUN PRELUDE `source` into `env`, THREADED WITH THIS RUN'S `runCtx`
- *  (docs/plans/stage-b-runcontext-absorbs-assembly.md, Stage B2's per-run prelude pass —
- *  `env/assemble-run.ts`'s `assembleRun`). Distinct from {@link EvalSchemeInto} — which stays
+ *  (`env/assemble-run.ts`'s `assembleRun`). Distinct from {@link EvalSchemeInto} — which stays
  *  runCtx-less because it also serves `symbol.define`'s Pass-2 bake, a BUILD-time (per-tuple,
  *  shared-across-runs) eval with no run to carry — this callback exists because a prelude's
  *  resource-touching verb (the loader's extension registry, a preludeOnly registration verb)
@@ -119,4 +112,3 @@ export type EvalSchemeInto<E = SchemeEnv> = (env: E, source: string) => unknown 
  *  `exec(source, { env, runCtx, skipBootstrapWait: true })` satisfies it (see
  *  `generator-exec.ts`'s `preludeEvalScheme`). */
 export type EvalPreludeInto<E = SchemeEnv> = (env: E, source: string, runCtx: RunContext) => unknown | Promise<unknown>;
-

@@ -1,41 +1,33 @@
-// capability-internals — the `-internals` naming signals what it is: a SIBLING CONTRACT
-// between `common/capability.ts` and `env/vocabulary.ts`, not part of the capability-authoring
-// public surface (`EnvCapability`/`SymbolDeclaration`/`ImplThis`, capability.ts's own "3 story").
-// Physically relocated OUT of capability.ts (export-restructure, docs/plans/
-// stage-c-corpse-deletion.md §"Export restructure") so that file reads as the clean authoring
-// contract it claims to be, and so the `/capability` subpath's external surface never leaked
-// these bind-loop helpers in the first place. NOT package.json-exported under any subpath —
-// reached only by relative import (`env/vocabulary.ts`, `type-layer/prelude.ts`) — no
-// stability contract, may change shape whenever the bind loop that consumes it does.
+// capability-internals — sibling contract between `common/capability.ts` and
+// `env/vocabulary.ts`, not part of the capability-authoring public surface
+// (`EnvCapability`/`SymbolDeclaration`/`ImplThis`). NOT package.json-exported under any
+// subpath — relative import only (`env/vocabulary.ts`, `type-layer/prelude.ts`); no
+// stability contract; may change with the bind loop that consumes it.
+//
+// Bind-loop helpers: alias/declarative dispatch, contract projection, `requiresConfig`
+// auto-door miss collection, prelude/`symbol.define` harvesting for type-lens.
 
 import type { AEntity, DefineSymbolDef, DefineSyntaxSymbolDef, MacroSymbolDef } from "./symbols/_bake.js";
 import type { AliasSymbolDef } from "./symbols/alias.js";
 import type { EnvCapability, SymbolDeclaration } from "./capability.js";
 import type { DegradedCapability, DegradedNeed } from "./degradation.js";
 import { AKernelKeyword } from "../values/AKernelKeyword.js";
-import { ANativeProcedure, ARosettaProcedure, DoorProcedure } from "../values/primitives/ACallable.js";
+import { DoorProcedure } from "../values/primitives/ACallable.js";
+import { ANativeProcedure } from "../values/primitives/ANativeProcedure.js";
+import { ARosettaProcedure } from "../values/primitives/ARosettaProcedure.js";
 
-// ── LEGACY-form RUNTIME refusal guard: RETIRED (V ruling, docs/plans/
-// stage-c-corpse-deletion.md §"bans live at the TYPE level" — the {fn} refusal was compat
-// theater for a shape SymbolDeclaration's type already rejects; see vocabulary.ts's own
-// header for the full argument). `isSymbolSpec`/`VocabularyLegacyCapabilityError` are gone —
-// `{ fn }` is no longer a `SymbolDeclaration` union member (see capability.ts's own doc), so
-// there is nothing left to structurally detect at runtime; an untyped author now gets a TS
-// error at the author's keyboard, which IS the contract.
-
-/** `symbol.alias`'s marker — see `alias.ts`'s header for the full dissolution-semantics
- *  contract. Checked BEFORE every other dispatch in the apply loop (its `kind` — `"alias"` —
- *  is deliberately outside both the minted-value family and the three surviving declarative
- *  kinds, so it would otherwise fall through to the legacy `{ fn }`-guessing arm instead). */
+/** `symbol.alias` marker — see `alias.ts` for dissolution semantics. Checked BEFORE every
+ *  other dispatch in the apply loop (`kind: "alias"` is outside the minted-value family and
+ *  the three declarative kinds). */
 export const isAliasDef = (m: SymbolDeclaration): m is AliasSymbolDef =>
   typeof m === "object" && m !== null && (m as { kind?: unknown }).kind === "alias";
 
-/** The three SURVIVING declarative record kinds — `symbol.define`/`symbol.defineSyntax` (the
- *  two-phase carve-out) and `symbol.macro` (already hands over a real `Macro`, but stays a
- *  `{kind, name, macro}` record so `preludeOnly` routing has somewhere to live). Every OTHER
- *  kind mints its A-value directly now (see `SymbolDeclaration`'s doc), so a plain object
- *  carrying one of these three `kind` tags is unambiguous — none of the minted classes'
- *  OWN `.kind` field (`"procedure"`/`"keyword"`/an ordinary scheme-value kind) collides with
+/** The three declarative record kinds — `symbol.define`/`symbol.defineSyntax` (two-phase
+ *  carve-out) and `symbol.macro` (already hands over a real `Macro`, stays a
+ *  `{kind, name, macro}` record so `preludeOnly` routing has somewhere to live). Every other
+ *  kind mints its A-value directly (see `SymbolDeclaration`); a plain object carrying one of
+ *  these three `kind` tags is unambiguous — none of the minted classes' own `.kind`
+ *  (`"procedure"`/`"keyword"`/ordinary scheme-value kinds) collides with
  *  `"define"`/`"define-syntax"`/`"macro"`. */
 export const isDeclarativeDef = (
   m: SymbolDeclaration,
@@ -47,22 +39,16 @@ export const isDeclarativeDef = (
     (m as { kind: unknown }).kind === "define" ||
     (m as { kind: unknown }).kind === "define-syntax");
 
-/** Stage A2 READ-SIDE seam: extract a `SymbolDeclaration` entry's `AEntity` CONTRACT view, for
- *  read-only introspection consumers (the describe/catalog roster in `eval/exec-phases.ts`, the
- *  type-lens harvest in `type-layer/prelude.ts`/`schema-to-ts.ts`, the mercury registry harvest)
- *  that used to walk a `symbols` record expecting each entry to BE its own `AEntity` record.
- *  Since the symbol.* factories now mint the runtime A-value directly (see `SymbolDeclaration`'s
- *  doc), those readers dispatch by `instanceof` here exactly like the bind loop above, pulling
- *  the SAME `.contract`/`.door` data the bind loop reads per-assembly — never invoking anything
- *  (a value is inert until applied; this is a pure, dry projection). `undefined` for an entry
- *  with no contract to show: `symbol.alias` (resolve the target first), the legacy `{ fn }` arm,
- *  and the narrow bigint-leaf gap `symbol.value`'s own factory documents (a JS primitive can't
- *  carry a hidden property to stamp).
+/** Extract a `SymbolDeclaration` entry's `AEntity` CONTRACT view for read-only introspection
+ *  (describe/catalog in `eval/exec-phases.ts`, type-lens harvest in
+ *  `type-layer/prelude.ts`/`schema-to-ts.ts`, mercury registry). Dispatches by `instanceof`
+ *  like the bind loop — pure dry projection, never invokes. `undefined` when no contract:
+ *  `symbol.alias` (resolve target first), and the bigint-leaf gap `symbol.value` documents
+ *  (a JS primitive cannot carry a hidden property to stamp).
  *
- *  gap-a ruling (2026-07-22): `symbol.value` stamps its OWN `{kind:"value",name,doc}` onto the
- *  minted/boxed value's `.contract` too (own, non-enumerable, define-once — see `value.ts`),
- *  the SAME slot every other kind rides — so the generic `"contract" in def` fallback below
- *  picks it up uniformly, with no per-kind special-casing here. */
+ *  `symbol.value` stamps its own `{kind:"value",name,doc}` onto the minted/boxed value's
+ *  `.contract` (own, non-enumerable, define-once — see `value.ts`), the same slot every other
+ *  kind rides — the generic `"contract" in def` fallback picks it up with no per-kind case. */
 export function contractOf(def: SymbolDeclaration): AEntity | undefined {
   if (def instanceof DoorProcedure) return def.door;
   if (def instanceof ANativeProcedure || def instanceof ARosettaProcedure) return def.contract as AEntity;
@@ -74,13 +60,11 @@ export function contractOf(def: SymbolDeclaration): AEntity | undefined {
   return undefined;
 }
 
-/** Stage 3 auto-derive gate (`Contract.requiresConfig`, `./symbols/_bake.js`): the declared
- *  keys ABSENT from this activation's validated `configuration` — `undefined` when the def
- *  declares no `requiresConfig` or every declared key is present (the zero-cost, overwhelming-
- *  majority path). Read UNCONDITIONALLY by the `native`/`rosetta` bind arms below — no
- *  builder-form, no `degradation:"doors"` gate; see the field's own doc for the D2 departure
- *  this closes (a bare-required config key used to fail-close at `schema.parse`, before any
- *  program graph existed to statically explain WHY). */
+/** `Contract.requiresConfig` auto-derive gate (`./symbols/_bake.js`): declared keys ABSENT
+ *  from this activation's validated `configuration` — `undefined` when no `requiresConfig` or
+ *  every declared key is present (zero-cost majority path). Read unconditionally by
+ *  `native`/`rosetta` bind arms — closes the D2 departure: a bare-required config key used to
+ *  fail-close at `schema.parse` before any program graph could statically explain WHY. */
 export const missingRequiresConfig = (
   requiresConfig: readonly (string | readonly string[])[] | undefined,
   configuration: Record<string, unknown>,
@@ -95,18 +79,16 @@ export const missingRequiresConfig = (
   return missing.length === 0 ? undefined : missing;
 };
 
-/** The keys a door's `cause.needs` carries for a missing set — group entries flattened
- *  (each key in an any-of group is a real enabling key; the either-of semantics live in the
- *  reason text, `cause.needs` stays the flat `configuration`-key list every reader expects). */
+/** Keys a door's `cause.needs` carries for a missing set — group entries flattened
+ *  (each key in an any-of group is a real enabling key; either-of semantics live in the
+ *  reason text; `cause.needs` stays the flat `configuration`-key list every reader expects). */
 export const requiresConfigNeeds = (missing: readonly (string | readonly string[])[]): readonly string[] =>
   missing.flatMap((entry) => (typeof entry === "string" ? [entry] : [...entry]));
 
-/** Auto-door misses surfaced for `Vocabulary.degraded`: `env/vocabulary.ts`'s bind loop mints
- *  `requiresConfig` doors as bound `DoorProcedure`s WITHOUT writing a `DoorSymbolDef` back
- *  into `symbolsRec`, so `collectDegraded`'s record scan (built for the builder-form
- *  `degradation.door(...)` path, which does write defs) can't see them — this sibling scan
- *  reads the same misses straight off the baked defs, and that bind loop merges the two
- *  views via {@link mergeDegraded}. */
+/** Auto-door misses for `Vocabulary.degraded`: bind loop mints `requiresConfig` doors as
+ *  bound `DoorProcedure`s WITHOUT writing a `DoorSymbolDef` back into `symbolsRec`, so
+ *  `collectDegraded`'s record scan cannot see them — this sibling scan reads misses off the
+ *  baked defs; bind loop merges both views via {@link mergeDegraded}. */
 export const collectRequiresConfigDegraded = (
   capabilityName: string,
   symbolsRec: Record<string, SymbolDeclaration>,
@@ -115,9 +97,8 @@ export const collectRequiresConfigDegraded = (
   const seen = new Set<string>();
   const needs: DegradedNeed[] = [];
   for (const rawDef of Object.values(symbolsRec)) {
-    // Stage A2: `requiresConfig` rides `.contract` on a minted native/rosetta value now
-    // (never a top-level field on the value itself) — `contractOf` is the shared read-side
-    // seam every describe/catalog/harvest reader already dispatches through.
+    // `requiresConfig` rides `.contract` on a minted native/rosetta — `contractOf` is the
+    // shared read-side seam every describe/catalog/harvest reader already dispatches through.
     const entity = contractOf(rawDef);
     if (entity === undefined || !("requiresConfig" in entity)) continue;
     const missing = missingRequiresConfig(entity.requiresConfig, configuration);
@@ -131,7 +112,7 @@ export const collectRequiresConfigDegraded = (
   return needs.length === 0 ? undefined : { capability: capabilityName, needs };
 };
 
-/** Merge the two degraded views (builder-door record scan + requiresConfig def scan),
+/** Merge the two degraded views (door record scan + requiresConfig def scan),
  *  deduped by need key; `undefined` when both are. */
 export const mergeDegraded = (
   a: DegradedCapability | undefined,
@@ -142,14 +123,13 @@ export const mergeDegraded = (
   const seen = new Set(a.needs.map((need) => `${need.kind}:${need.key}`));
   return {
     capability: a.capability,
-    needs: [...a.needs, ...b.needs.filter((need) => !seen.has(`${need.kind}:${need.key}`))],
-  };
+    needs: [...a.needs, ...b.needs.filter((need) => !seen.has(`${need.kind}:${need.key}`))] };
 };
 
-/** The auto-derived door's teaching reason — same "provide X to enable it" register
- *  `degradation.ts`'s hand-authored `.door(name, needs, reason)` callers write by hand, minted
- *  here mechanically from the declaring verb's OWN `doc` instead. An any-of group renders as
- *  "`fs` or `loader`" with a "one of them" pronoun, keeping the disjunction legible. */
+/** Auto-derived door's teaching reason — same "provide X to enable it" register
+ *  `degradation.ts`'s `.door(name, needs, reason)` callers write by hand, minted
+ *  mechanically from the declaring verb's OWN `doc`. An any-of group renders as
+ *  "`fs` or `loader`" with a "one of them" pronoun. */
 export const requiresConfigReason = (missing: readonly (string | readonly string[])[], doc: string | undefined): string => {
   const keysClause = missing
     .map((entry) => (typeof entry === "string" ? `\`${entry}\`` : entry.map((key) => `\`${key}\``).join(" or ")))
@@ -160,14 +140,13 @@ export const requiresConfigReason = (missing: readonly (string | readonly string
 };
 
 /** Every `.spec.prelude` reachable from `caps`, DAG order (a dep's prelude precedes its
- *  dependent's — matching `env/vocabulary.ts`'s `buildVocabulary` deps-first bind order, so a
- *  dependent's prelude may reference names its dep's prelude defined), deduplicated by
- *  capability IDENTITY (a
- *  diamond-shaped dep graph must not double-emit a shared dep's prelude).
+ *  dependent's — matching `env/vocabulary.ts`'s deps-first bind order, so a dependent's
+ *  prelude may reference names its dep's prelude defined), deduplicated by capability
+ *  IDENTITY (diamond-shaped dep graphs must not double-emit a shared dep's prelude).
  *
- *  For an EDITOR/type-lens's ambient scheme vocabulary: walk the actually-assembled capability
- *  set, never a hand-picked subset — a hand-picked list silently drifts the moment a
- *  capability's prelude changes or a new capability joins the root-set. */
+ *  For an editor/type-lens ambient scheme vocabulary: walk the actually-assembled capability
+ *  set, never a hand-picked subset — a hand-picked list silently drifts when a prelude changes
+ *  or a new capability joins the root-set. */
 export function collectPrelude(caps: readonly EnvCapability[], seen: Set<EnvCapability> = new Set()): string {
   const parts: string[] = [];
   for (const cap of caps) {
@@ -183,23 +162,19 @@ export function collectPrelude(caps: readonly EnvCapability[], seen: Set<EnvCapa
 }
 
 /** Serialize a capability DAG's scheme-bodied `symbol.define`s as `(define <verb> <body>)`
- *  source — the type-lens compile-path counterpart to {@link collectPrelude}'s `prelude:`
+ *  source — type-lens compile-path counterpart to {@link collectPrelude}'s `prelude:`
  *  strings. A `symbol.define`'s `body` is its RHS EXPRESSION (`(lambda () "string")` for
- *  `s/string`), bound at runtime under its own record key (see `env/vocabulary.ts`'s
- *  `processCapability` Pass-2 loop, the successor of capability.ts's retired `lower().apply()`).
- *  Emitting the SAME `(define verb body)` lets a type-lens infer each symbol's type FROM ITS
- *  OWN BODY, so the runtime binding and the editor type derive from one source — no
- *  hand-authored `.d.ts`, no editorial subset (the drift trap {@link collectPrelude} warns of,
- *  same reasoning). Deps FIRST (a dependent body may reference a base define — `s/field/string`
- *  calls `s/field`), deduped by the shared `seen` set exactly like `collectPrelude`.
+ *  `s/string`), bound at runtime under its own record key (`env/vocabulary.ts`
+ *  `processCapability` Pass-2). Emitting the same `(define verb body)` lets a type-lens
+ *  infer each symbol's type FROM ITS OWN BODY — runtime binding and editor type from one
+ *  source. Deps FIRST (a dependent body may reference a base define — `s/field/string`
+ *  calls `s/field`), deduped by the shared `seen` set like `collectPrelude`.
  *
- *  Only `kind: "define"` entries emit; every other kind (rosetta/native/door/…) is either a
- *  JS impl with no scheme body or a keyword/macro the lens models elsewhere.
+ *  Only `kind: "define"` entries emit; every other kind is a JS impl with no scheme body or
+ *  a keyword/macro the lens models elsewhere.
  *
- *  NOT for runtime prelude eval: `env/vocabulary.ts`'s bind loop already binds these via
- *  `bindCapabilityDefines`; re-running them as a prelude would double-bind. This output feeds
- *  a type-lens `schemePrelude` (the editor's compiled scheme vocabulary), never the runtime
- *  env. */
+ *  NOT for runtime prelude eval: bind loop already binds these via `bindCapabilityDefines`;
+ *  re-running as prelude would double-bind. Feeds a type-lens `schemePrelude` only. */
 export function collectSymbolDefines(caps: readonly EnvCapability[], seen: Set<EnvCapability> = new Set()): string {
   const parts: string[] = [];
   for (const cap of caps) {

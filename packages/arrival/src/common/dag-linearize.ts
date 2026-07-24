@@ -1,18 +1,18 @@
-// dag-linearize.ts — the pure C3 (Python MRO) linearization core, extracted (Stage B1) so
-// BOTH capability-shaped DAGs in this package share ONE algorithm instead of forking it:
+// dag-linearize.ts — pure C3 (Python MRO) linearization core. Both capability-shaped DAGs
+// in this package share ONE algorithm:
 //
-//   • `common/kernel.ts`'s `assembleEnv`/`createRuntimeAssembler` — the EnvPack DAG.
+//   • `common/kernel.ts`'s `createRuntimeAssembler` — the EnvPack DAG.
 //   • `env/vocabulary.ts`'s `buildVocabulary` — the EnvCapability DAG.
 //
-// Structural, not domain-specific: this module operates on the abstract `{name, deps}`
-// shape (`DagNode`) and never imports `EnvPack`/`EnvCapability`/any error class — a caller
-// supplies its OWN "what does a name collision mean" / "how do I report a cycle" behavior
-// via `DagLinearizeHooks`, so kernel.ts keeps throwing `AssembleConfigConflictError` /
+// Structural, not domain-specific: operates on the abstract `{name, deps}` shape (`DagNode`)
+// and never imports `EnvPack`/`EnvCapability`/any error class — a caller supplies its OWN
+// "what does a name collision mean" / "how do I report a cycle" behavior via
+// `DagLinearizeHooks`, so kernel.ts keeps throwing `AssembleConfigConflictError` /
 // `AssembleCycleError` / `AssembleLinearizationError` and vocabulary.ts throws its own
 // capability-domain errors, from the SAME walk.
 //
 // docs/environments.md §ASSEMBLY states the model (why C3, the dep-edge-is-grant law); this
-// file is the shared enforcement mechanism both call sites' errors.ts throws sit on top of.
+// file is the shared enforcement mechanism both call sites' errors sit on top of.
 
 /** The abstract DAG-node shape both `EnvPack` and `EnvCapability` satisfy structurally —
  *  nothing here imports either concrete type. */
@@ -23,11 +23,10 @@ export interface DagNode<N> {
 
 export interface DagLinearizeHooks<N> {
   /** Called EVERY time a name is seen again during the closure walk (regardless of the
-   *  node's current color — mirrors the original `closure()`'s own unconditional check) —
-   *  `existing` is the FIRST node registered under this name, `candidate` the one just
-   *  encountered. A caller checks whatever "same identity" means in its own domain
-   *  (EnvPack: config equality; EnvCapability: object identity) and throws its OWN domain
-   *  error when it disagrees. Omit to allow silent same-name dedup unconditionally. */
+   *  node's current color) — `existing` is the FIRST node registered under this name,
+   *  `candidate` the one just encountered. A caller checks whatever "same identity" means
+   *  in its own domain (EnvPack: config equality; EnvCapability: object identity) and throws
+   *  its OWN domain error when it disagrees. Omit to allow silent same-name dedup. */
   onRevisit?(existing: N, candidate: N): void;
   /** A cycle was detected in the dep graph — `path` is the cycle, from where it re-enters
    *  back to itself. Must throw (typed `never` so callers get the narrowing for free). */
@@ -139,9 +138,8 @@ export function c3Order<N extends DagNode<N>>(
 }
 
 /** Shared core: closure + cycle-detect + dedup + C3 linearization. Returns the apply order
- *  (highest precedence first) and the deduped nodes by name. Both `common/kernel.ts` (the
- *  EnvPack DAG) and `env/vocabulary.ts` (the EnvCapability DAG) call this — see the module
- *  header. */
+ *  (highest precedence first) and the deduped nodes by name. Both `common/kernel.ts` (EnvPack
+ *  DAG) and `env/vocabulary.ts` (EnvCapability DAG) call this — see the module header. */
 export function linearizeDag<N extends DagNode<N>>(
   roots: readonly N[],
   hooks: DagLinearizeHooks<N>,
