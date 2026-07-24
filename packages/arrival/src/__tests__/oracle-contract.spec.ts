@@ -21,6 +21,7 @@
 // reproduced here VERBATIM, attributed below. The corpus is the single-sourced bridge: if sift's
 // reference and this inlined copy ever drift, the fix is to re-sync this block from prefix-oracle.ts.
 
+import { ANativeProcedure } from "../values/primitives/ANativeProcedure.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -368,12 +369,18 @@ describe("oracle Layer-S — formKind / strict (arrival-only contract additions)
 /** A tiny discovery env with a callable builtin (`car`), a callable operator (`+`), and a
  *  non-callable value (`flows`). Σ sources boundSymbols()/isCallable() from this via makeOracleEnv. */
 function sigmaEnv(): AmbientRuntime {
-  const fn = (x: unknown): unknown => x;
+  // W8: oracle Σ filters operator heads via is_applyable — bare host fns are not callables.
+  const fn = new ANativeProcedure({
+    name: "id",
+    arity: { min: 0, max: null },
+    contract: undefined,
+    impl: (args) => args[0] as never,
+  });
   return mintPlainFrame(
     "sigma-test",
     {
-      car: fn as unknown as AmbientValue,
-      "+": fn as unknown as AmbientValue,
+      car: fn,
+      "+": fn,
       flows: 42 as unknown as AmbientValue },
     null,
   );

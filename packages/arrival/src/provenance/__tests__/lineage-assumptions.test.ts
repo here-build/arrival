@@ -67,7 +67,8 @@ describe("ASSUMPTION — let is transparent (the graph is the object, not syntax
         "letform": [
           100,
           200,
-        ] }
+        ],
+      }
     `);
   });
 });
@@ -257,23 +258,29 @@ describe("v0.1 FINALIZATION GATES (G1–G7)", () => {
           "ctor": "AExact",
           "prov": [
             7,
-          ] },
+          ],
+        },
         "vectorLength": {
           "ctor": "AExact",
-          "prov": [] },
+          "prov": [],
+        },
         "vectorMap": {
           "ctor": "AVector",
           "prov": [
             7,
-          ] },
+          ],
+        },
         "vectorMapTwice": {
           "ctor": "AVector",
           "prov": [
             7,
-          ] },
+          ],
+        },
         "vectorToList": {
           "ctor": "APair",
-          "prov": [] } }
+          "prov": [],
+        },
+      }
     `);
   });
 

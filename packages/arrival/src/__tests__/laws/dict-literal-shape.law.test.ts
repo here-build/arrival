@@ -56,7 +56,7 @@ describe("dict-literal true shape — the P-table probes (dict-literal-true-shap
     // verbatim — the static-entry (`keys()`) path could never express this key at
     // all, which is exactly why `literalForms` is the AUTHORITATIVE sequence
     // writeForm serializes from (P8).
-    const withUnquoteKey = await evalOne("'{:a 1, k v}");
+    const withUnquoteKey = await evalOne("'{:a 1,,k v}");
     expect(writeForm(withUnquoteKey)).toBe("{:a 1 (unquote k) v}");
   });
 
@@ -111,7 +111,7 @@ describe("dict-literal true shape — the P-table probes (dict-literal-true-shap
   });
 
   it("P8 — the two faces agree on scope: `literalForms` is authoritative, `keys()` is honestly only the STATIC subset", async () => {
-    const v = await evalOne("'{:a 1, k v}");
+    const v = await evalOne("'{:a 1,,k v}");
     expect(ADict.isDictLiteral(v)).toBe(true);
     if (!ADict.isDictLiteral(v)) throw new Error("unreachable — asserted above");
     // Four flat forms: :a, 1, (unquote k), v — the unquote-form key has no static

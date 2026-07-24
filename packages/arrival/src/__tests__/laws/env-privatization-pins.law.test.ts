@@ -70,13 +70,11 @@ describe("V0 pin — barrel surface", () => {
     expect(typeof (scope.env as { registerResolver?: unknown }).registerResolver).toBe("function");
   });
 
-  it("the root barrel is EXACTLY the 24-name minimal surface (export restructure pin — this enumeration IS the contract; update deliberately, on purpose, never by accident)", () => {
-    // Three concerns only (docs/plans/stage-c-corpse-deletion.md §"V's minimal-surface
-    // ruling" + §"Export restructure"): EVAL, CAPABILITY AUTHORING, PROVENANCE AS DATA — plus
-    // the error root and the two structural types a capability author's own signatures name.
-    // Type-only exports (ExecState, ExecOptions, SessionScope, SymbolDeclaration,
-    // RosettaSymbolDef, EvalTap, SchemeValue, Invocation) erase at emit and never appear in
-    // `Object.keys` — this list is the RUNTIME-VISIBLE subset of the 24.
+  it("the root barrel is EXACTLY the minimal runtime surface (export restructure pin — this enumeration IS the contract; update deliberately, on purpose, never by accident)", () => {
+    // Three concerns only: EVAL, CAPABILITY AUTHORING, PROVENANCE AS DATA — plus the
+    // error root and the structural types/helpers a capability author's signatures name.
+    // Type-only exports erase at emit and never appear in `Object.keys`.
+    // Symbol keep-set on root (post-./symbol retirement): CallCtx helpers + withContractFields.
     const names = Object.keys(arrival).sort();
     expect(names).toEqual(
       [
@@ -91,10 +89,13 @@ describe("V0 pin — barrel surface", () => {
         "exec",
         "execState",
         "jsToScheme",
+        "makeCallCtx",
         "parse",
         "schemeToJs",
         "schemeToJsUntyped",
         "symbol",
+        "testCallCtx",
+        "withContractFields",
         "z",
       ].sort(),
     );

@@ -30,6 +30,15 @@ import { ABool } from "../values/primitives/ABool.js";
 import { CONSTANT_CTX } from "../run/RunContext.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { harvestContracts } from "./_symbols-harvest.js";
+import { ANativeProcedure } from "../values/primitives/ANativeProcedure.js";
+
+/** W8: z.lambda only admits ACallable — bare host fns fail safeParse. */
+const fn = new ANativeProcedure({
+  name: "probe-fn",
+  arity: { min: 0, max: null },
+  contract: undefined,
+  impl: () => undefined as never,
+});
 
 /** A pack's `.spec.symbols` map, generically — mirrors numeric-contract-precision.test.ts's
  *  `harvestContracts(numericPack.spec.symbols)` access pattern. */
@@ -49,7 +58,6 @@ function contractDef(pack: { spec: { symbols?: unknown } }, name: string) {
   return def;
 }
 
-const fn = () => {};
 const properList = new APair(new AExact(1), nil);
 const realString = new AString("abc");
 

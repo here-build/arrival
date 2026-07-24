@@ -17,7 +17,7 @@ describe("curly-braces / {…} dict literals", () => {
     { name: "y_dict_string_key", input: "{\"a\" 1}", ast: "{\"a\" 1}" },
     { name: "y_dict_mixed_keys", input: "{:a 1 \"b\" 2}", ast: "{:a 1 \"b\" 2}" },
     { name: "y_dict_odd_boundary_comma_is_unquote", input: "{:a ,x}", ast: "{:a (unquote x)}" },
-    { name: "y_dict_unquote_key_after_separator", input: "{:a 1, k v}", ast: "{:a 1 (unquote k) v}" },
+    { name: "y_dict_unquote_key_after_separator", input: "{:a 1,,k v}", ast: "{:a 1 (unquote k) v}" },
     {
       name: "y_dict_canonical_mixed_comma_roles",
       input: "{:a ,quoted,,anotherQuoted ,quotedValue}",

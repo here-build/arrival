@@ -108,13 +108,14 @@ describe("GOLDEN (G2 oracle) — filter RUNS the predicate; the count carries th
     expect({
       value: await value(`(length (filter (lambda (e) (not (string=? e "b"))) xs))`, { xs: triple() }),
       prov: await prov(`(length (filter (lambda (e) (not (string=? e "b"))) xs))`, { xs: triple() }) }).toMatchInlineSnapshot(`
-      {
-        "prov": [
-          100,
-          102,
-        ],
-        "value": 2 }
-    `);
+        {
+          "prov": [
+            100,
+            102,
+          ],
+          "value": 2,
+        }
+      `);
   });
 
   it("(filter pred xs): the filtered LIST HEAD's own provenance now CARRIES the survivors' ids (C2/R2 fix)", async () => {
@@ -135,14 +136,15 @@ describe("GOLDEN (G2 oracle) — filter RUNS the predicate; the count carries th
     expect({
       value: await value(`(length (filter (lambda (e) #t) xs))`, { xs: triple() }),
       prov: await prov(`(length (filter (lambda (e) #t) xs))`, { xs: triple() }) }).toMatchInlineSnapshot(`
-      {
-        "prov": [
-          100,
-          101,
-          102,
-        ],
-        "value": 3 }
-    `);
+        {
+          "prov": [
+            100,
+            101,
+            102,
+          ],
+          "value": 3,
+        }
+      `);
   });
 
   it("(length (filter pred xs)) keeping NONE: pred always false; count is 0, empty provenance", async () => {
@@ -151,10 +153,11 @@ describe("GOLDEN (G2 oracle) — filter RUNS the predicate; the count carries th
     expect({
       value: await value(`(length (filter (lambda (e) #f) xs))`, { xs: triple() }),
       prov: await prov(`(length (filter (lambda (e) #f) xs))`, { xs: triple() }) }).toMatchInlineSnapshot(`
-      {
-        "prov": [],
-        "value": 0 }
-    `);
+        {
+          "prov": [],
+          "value": 0,
+        }
+      `);
   });
 });
 
@@ -168,27 +171,29 @@ describe("GOLDEN (G2 oracle) — NESTED fan: (length (map g (filter p xs)))", ()
         xs: triple() }),
       prov: await prov(`(length (map (lambda (e) e) (filter (lambda (e) (not (string=? e "b"))) xs)))`, {
         xs: triple() }) }).toMatchInlineSnapshot(`
-      {
-        "prov": [
-          100,
-          102,
-        ],
-        "value": 2 }
-    `);
+          {
+            "prov": [
+              100,
+              102,
+            ],
+            "value": 2,
+          }
+        `);
   });
 
   it("nested all-pass: filter keeps all, map identity; count is 3, all ids", async () => {
     expect({
       value: await value(`(length (map (lambda (e) e) (filter (lambda (e) #t) xs)))`, { xs: triple() }),
       prov: await prov(`(length (map (lambda (e) e) (filter (lambda (e) #t) xs)))`, { xs: triple() }) }).toMatchInlineSnapshot(`
-      {
-        "prov": [
-          100,
-          101,
-          102,
-        ],
-        "value": 3 }
-    `);
+        {
+          "prov": [
+            100,
+            101,
+            102,
+          ],
+          "value": 3,
+        }
+      `);
   });
 });
 

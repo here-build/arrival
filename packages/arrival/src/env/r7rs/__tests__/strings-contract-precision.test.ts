@@ -46,6 +46,14 @@ import { APair } from "../../../values/primitives/APair.js";
 import { nil } from "../../../values/primitives/ANil.js";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
+import { ANativeProcedure } from "../../../values/primitives/ANativeProcedure.js";
+
+const probeFn = new ANativeProcedure({
+  name: "probe-fn",
+  arity: { min: 0, max: null },
+  contract: undefined,
+  impl: () => undefined as never,
+});
 
 const symbols = harvestContracts(stringsPack.spec.symbols);
 
@@ -169,8 +177,8 @@ describe("scheme/strings Contract precision — 2026-07-05 audit: 8 fixes on the
   // regression pin
   it("regression pin: string-map/string-for-each's earlier inputRest fix is untouched by this round", () => {
     const mapDef = nativeDef("string-map");
-    expect(mapDef.in.safeParse([(): void => {}, str("abc")]).success).toBe(true);
-    expect(mapDef.in.safeParse([(): void => {}, "raw-js-string"]).success).toBe(false);
+    expect(mapDef.in.safeParse([probeFn, str("abc")]).success).toBe(true);
+    expect(mapDef.in.safeParse([probeFn, "raw-js-string"]).success).toBe(false);
   });
 });
 

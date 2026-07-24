@@ -124,7 +124,8 @@ describe("GOLDEN — `let` transparency (gate G2 oracle)", () => {
         "letform": [
           100,
           200,
-        ] }
+        ],
+      }
     `);
   });
 

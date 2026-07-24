@@ -26,6 +26,14 @@ import { AVector } from "../../../values/primitives/AVector.js";
 import { AExact } from "../../../values/primitives/AExact.js";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
+import { ANativeProcedure } from "../../../values/primitives/ANativeProcedure.js";
+
+const fn = new ANativeProcedure({
+  name: "probe-fn",
+  arity: { min: 0, max: null },
+  contract: undefined,
+  impl: () => undefined as never,
+});
 
 const symbols = harvestContracts(vectorsPack.spec.symbols);
 
@@ -36,7 +44,6 @@ function nativeDef(name: string) {
   return def;
 }
 
-const fn = () => {};
 const realVector = new AVector([]);
 const idx = new AExact(0);
 

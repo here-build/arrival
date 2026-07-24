@@ -132,12 +132,13 @@ describe("GOLDEN (G2 oracle) — a single Rosetta-IN crossing MINTS one leaf", (
     expect({
       value: await value(`(infer-x "ignored-prompt")`),
       prov: await prov(`(infer-x "ignored-prompt")`) }).toMatchInlineSnapshot(`
-      {
-        "prov": [
-          500,
-        ],
-        "value": "RESULT-X" }
-    `);
+        {
+          "prov": [
+            500,
+          ],
+          "value": "RESULT-X",
+        }
+      `);
   });
 });
 
@@ -149,12 +150,13 @@ describe("GOLDEN (G2 oracle) — a pure pipe over the source PROPAGATES, never r
     expect({
       value: await value(`(string-upcase (infer-x "p"))`),
       prov: await prov(`(string-upcase (infer-x "p"))`) }).toMatchInlineSnapshot(`
-      {
-        "prov": [
-          500,
-        ],
-        "value": "RESULT-X" }
-    `);
+        {
+          "prov": [
+            500,
+          ],
+          "value": "RESULT-X",
+        }
+      `);
   });
 
   it('(string-append "pre-" (infer-x …)): the literal prefix contributes no id — still the single mint', async () => {
@@ -163,12 +165,13 @@ describe("GOLDEN (G2 oracle) — a pure pipe over the source PROPAGATES, never r
     expect({
       value: await value(`(string-append "pre-" (infer-x "p"))`),
       prov: await prov(`(string-append "pre-" (infer-x "p"))`) }).toMatchInlineSnapshot(`
-      {
-        "prov": [
-          500,
-        ],
-        "value": "pre-RESULT-X" }
-    `);
+        {
+          "prov": [
+            500,
+          ],
+          "value": "pre-RESULT-X",
+        }
+      `);
   });
 });
 
@@ -179,13 +182,14 @@ describe("GOLDEN (G2 oracle) — a MERGE of two infer sources fans both points i
     expect({
       value: await value(`(string-append (infer-x "a") (infer-y "b"))`),
       prov: await prov(`(string-append (infer-x "a") (infer-y "b"))`) }).toMatchInlineSnapshot(`
-      {
-        "prov": [
-          500,
-          600,
-        ],
-        "value": "RESULT-XRESULT-Y" }
-    `);
+        {
+          "prov": [
+            500,
+            600,
+          ],
+          "value": "RESULT-XRESULT-Y",
+        }
+      `);
   });
 });
 
@@ -202,12 +206,13 @@ describe("GOLDEN (G2 oracle) — a FIELD PROJECTION refines a point (narrows the
     expect({
       value: await value(`(:field (infer-dict "p"))`),
       prov: await prov(`(:field (infer-dict "p"))`) }).toMatchInlineSnapshot(`
-      {
-        "prov": [
-          700,
-        ],
-        "value": "FV" }
-    `);
+        {
+          "prov": [
+            700,
+          ],
+          "value": "FV",
+        }
+      `);
   });
 
   it('(@ (infer-dict …) "field"): the @ member-read narrows identically to the keyword accessor', async () => {
@@ -217,12 +222,13 @@ describe("GOLDEN (G2 oracle) — a FIELD PROJECTION refines a point (narrows the
     expect({
       value: await value(`(@ (infer-dict "p") "field")`),
       prov: await prov(`(@ (infer-dict "p") "field")`) }).toMatchInlineSnapshot(`
-      {
-        "prov": [
-          700,
-        ],
-        "value": "FV" }
-    `);
+        {
+          "prov": [
+            700,
+          ],
+          "value": "FV",
+        }
+      `);
   });
 });
 

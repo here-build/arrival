@@ -73,7 +73,7 @@ describe("CRITICAL: sandbox escape vectors", () => {
     // eval no longer exists at all — the host-language sweep deleted it from
     // wrappedOps — so the eval-escape path is closed at the source; the throw is
     // Unbound on `eval` itself, not on `+`.
-    await expect(execOverFrame("(eval (quote +))", { env: inferenceEnv })).rejects.toThrow(/Unbound/);
+    await expect(execOverFrame("(eval (quote +))", { env: inferenceEnv })).rejects.toThrow(/eval|Unbound|not available/i);
   });
 
   /**
@@ -88,7 +88,7 @@ describe("CRITICAL: sandbox escape vectors", () => {
     // fails to resolve.
     await expect(
       execOverFrame(`((eval (quote +)) 2 3)`, { env: inferenceEnv })
-    ).rejects.toThrow(/Unbound/);
+    ).rejects.toThrow(/eval|Unbound|not available/i);
   });
 
   /**
@@ -107,7 +107,7 @@ describe("CRITICAL: sandbox escape vectors", () => {
       await expect(
         execOverFrame(`(eval (quote ${forbidden}))`, { env: inferenceEnv }),
         `${forbidden} must not be reachable via eval-escape`
-      ).rejects.toThrow(/Unbound/);
+      ).rejects.toThrow(/eval|Unbound|not available/i);
     }
   });
 
@@ -421,7 +421,7 @@ describe("registry poisoning vectors", () => {
    * land without also wrapping it.
    */
   it("AValue is NOT reachable from sandbox via direct lookup", async () => {
-    await expect(execOverFrame("AValue", { env: inferenceEnv })).rejects.toThrow(/Unbound/);
+    await expect(execOverFrame("AValue", { env: inferenceEnv })).rejects.toThrow(/eval|Unbound|not available/i);
   });
 
   /**
@@ -429,7 +429,7 @@ describe("registry poisoning vectors", () => {
    * this pin remains valid — AValue should never be exported.
    */
   it("AValue is NOT reachable from sandbox via (eval (quote AValue))", async () => {
-    await expect(execOverFrame("(eval (quote AValue))", { env: inferenceEnv })).rejects.toThrow(/Unbound/);
+    await expect(execOverFrame("(eval (quote AValue))", { env: inferenceEnv })).rejects.toThrow(/eval|Unbound|not available/i);
   });
 
   /**

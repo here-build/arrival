@@ -12,6 +12,8 @@ import { AString } from "../../values/primitives/AString.js";
 import { AVector } from "../../values/primitives/AVector.js";
 import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
 import { harvestContracts } from "../../__tests__/_symbols-harvest.js";
+import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
+import { testCallCtx } from "../../symbol/index.js";
 
 // Q20b: every assertion below calls a raw native op fn directly — still routes
 // through op-helpers.ts's withInputProvenance internally, so it needs the oracle
@@ -44,7 +46,14 @@ describe("vector/bytevector builtins propagate input provenance (goal b)", () =>
     expect(prov(ops["vector-copy"](provVec([1, 2, 3])))).toEqual([42]);
   });
   it("vector-map carries provenance", () => {
-    expect(prov(ops["vector-map"]((x: number) => x, provVec([1, 2])))).toEqual([42]);
+    // W8: proc is ACallable; raw ops are CallCtx-dispatch natives.
+    const id = new ANativeProcedure({
+      name: "id",
+      arity: { min: 1, max: 1 },
+      contract: undefined,
+      impl: (args) => args[0] as never,
+    });
+    expect(prov(ops["vector-map"].call(testCallCtx(), id, provVec([1, 2])))).toEqual([42]);
   });
   it("vector-append carries provenance", () => {
     expect(prov(ops["vector-append"](provVec([1]), provVec([2])))).toEqual([42]);
