@@ -1,32 +1,23 @@
 /**
- * attestation — the branded-value registry behind the manifold's `s/*` family
+ * attestation — branded-value registry behind the manifold's `s/*` family
  * (design: arrival-manifold/docs/attestation-design.md).
  *
  * PROVENANCE/TAINT-FLOW, NOT TYPING — and deliberately not the provenance set.
  * Provenance has union/forward algebra (survives computation via
  * `withInputProvenance`); attestation needs DROP-ON-COMPUTE algebra: a computed
- * value (`(+ (:a r) 1)`, `string-append`, any fresh box) must lose its inputs'
- * attestation so a model has to re-assert what the new value IS. An identity-keyed
- * WeakSet expresses "drop unless explicitly carried" natively: every builtin mints
- * fresh boxes (op-helpers.ts `withInputProvenance` — always a fresh construction
- * or a `withProvenance` clone), so computation drops attestation for free, while
- * reference-passing (`let`, lambda args, stored container elements, `if`/`cond`
- * selects) preserves it for free.
+ * value must lose its inputs' attestation so a model re-asserts what the new
+ * value IS. An identity-keyed WeakSet expresses that natively: every builtin
+ * mints fresh boxes, so computation drops attestation for free, while
+ * reference-passing preserves it for free.
  *
- * Three stamp sites, each mirroring an existing provenance touch:
- *   1. the `bakeRosetta` return walk (common/symbols/_bake.ts step 4) — a SOURCE
- *      rosetta's return is machine-made, so its spine + leaves are deep-attested
- *      in the same position as the provenance deep-stamp;
- *   2. pluck inheritance — `ADict.get`, `AJSObject.get`, and `AJSArray`'s element
- *      materialization attest the boxes they hand out iff the container itself is
- *      attested (ADict returns stored boxes by identity, so it stamps at pluck
- *      rather than at mint);
- *   3. the manifold's `s/*` validators — an explicit, model-authored assertion
- *      (arrival-manifold/src/bind.ts) whose identity-return rides site 1's walk.
+ * Three stamp sites:
+ *   1. `bakeRosetta` return walk — source rosetta returns deep-attested;
+ *   2. pluck inheritance — `ADict.get` / `AJSObject.get` / `AJSArray` elements
+ *      attest boxes iff the container is attested;
+ *   3. manifold `s/*` validators — explicit model-authored assertion.
  *
- * Enforcement lives wholly in arrival-manifold's tool boundary; core arrival only
- * carries the registry + the stamps. Attesting values no manifold ever inspects
- * (e.g. `infer` results outside a manifold env) is deliberate and harmless.
+ * Enforcement lives in arrival-manifold's tool boundary; core only carries the
+ * registry + stamps.
  */
 
 import { AValue } from "./primitives/AValue.js";
@@ -40,20 +31,15 @@ import type { SchemeValue } from "./types.js";
 
 const attested = new WeakSet<AValue>();
 
-/** Shared-box families that must NEVER enter the registry (design §F2):
- *  - `ANil` / `AVoid` — "absent"/"unspecified" are not values a tool should receive
- *    as attested (and `AJSObject.get` returns the SHARED `nil` for missing keys —
- *    stamping it would attest every missing field in the program);
- *  - `ASymbol` — keywords are call syntax (consumed by the kwargs fold), never a
- *    payload; the per-run intern table makes them shared within a run;
- *  - the `schemeTrue`/`schemeFalse` flyweights — program-wide singletons; attest a
- *    FRESH clone instead (`freshIfSingleton`). A fresh `new ABool` is attestable. */
+/** Shared-box families that must NEVER enter the registry:
+ *  - ANil / AVoid — absent/unspecified; stamping shared nil would attest every missing field;
+ *  - ASymbol — keywords are call syntax, never payload; per-run intern shares them;
+ *  - schemeTrue/schemeFalse flyweights — attest a FRESH clone instead (`freshIfSingleton`). */
 function refusesAttestation(v: AValue): boolean {
   return v instanceof ANil || v instanceof AVoid || v instanceof ASymbol || v === schemeTrue || v === schemeFalse;
 }
 
-/** Mark one value as attested. No-op (returns the value unattested) on non-AValues
- *  and on the refused shared-box families above. */
+/** Mark one value as attested. No-op on non-AValues and refused shared-box families. */
 export function attest<V>(v: V): V {
   if (v instanceof AValue && !refusesAttestation(v)) attested.add(v);
   return v;
@@ -64,14 +50,8 @@ export function isAttested(v: unknown): v is SchemeValue {
   return v instanceof AValue && attested.has(v);
 }
 
-/** The boolean escape hatch: a shared `schemeTrue`/`schemeFalse` flyweight is
- *  cloned (`withProvenance` always mints a fresh instance) so the CLONE can be
- *  attested without every `#t` in the program becoming attested. Everything else
- *  passes through unchanged (no sharing exists for the other primitives — F1).
- *  Used by the manifold's `s/boolean` AND by the machine stamp sites themselves:
- *  `fromJs` reuses the flyweights on the empty-provenance fast path, so a tool
- *  returning / a pluck minting a raw boolean would otherwise surface the
- *  unattestable singleton. */
+/** Boolean escape hatch: shared flyweights clone so the CLONE can be attested without
+ *  every `#t` in the program becoming attested. Everything else passes through. */
 export function freshIfSingleton(v: SchemeValue): SchemeValue;
 export function freshIfSingleton(v: unknown): unknown;
 export function freshIfSingleton(v: unknown): unknown {
@@ -92,16 +72,11 @@ function walk(v: unknown, seen: Set<unknown>): void {
   if (v instanceof AVector) {
     for (const el of v.__vector__) walk(el, seen);
   }
-  // AJSObject / AJSArray: attest the WRAPPER only — their entries box lazily and
-  // inherit at the pluck site (stamp site 2), so eager traversal here would defeat
-  // the membrane's laziness (and `AJSArray.vec()` covers its own materialization).
+  // AJSObject / AJSArray: attest WRAPPER only — entries box lazily and inherit at pluck.
 }
 
-/** Deep-attest a value: the container spine (`APair` chains, `AVector` elements)
- *  plus every leaf, in one pass — the attestation twin of the `jsToScheme`
- *  provenance deep-stamp, applied by `bakeRosetta`'s return walk so `car` /
- *  `vector-ref` on a tool result return already-attested STORED boxes. Lazy
- *  membrane wrappers are attested shallowly (see `walk`). Cycle-safe. */
+/** Deep-attest: container spine + every leaf. Lazy membrane wrappers attested shallowly.
+ *  Cycle-safe. Twin of jsToScheme's provenance deep-stamp. */
 export function attestDeep<V>(v: V): V {
   walk(v, new Set());
   return v;

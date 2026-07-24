@@ -1,13 +1,9 @@
-// The value → string PRINT protocol. Each AValue answers `["arrival/print"](): string` with its
-// own repr, recursing on children through `printValue` — so there is no central type-switch and no
-// drift.
+// Value → string print protocol. Each AValue answers `["arrival/print"](): string`
+// and recurses on children through `printValue` — no central type-switch, no drift.
 //
-// This module is a LEAF: it holds only the dispatch plus the NON-AValue residual — raw JS functions
-// (the quarantined `env.defineRosetta` legacy authoring arm's bare-fn output — a real scheme
-// lambda is an ALambda now, answering `arrival/print` directly, reverse-membrane-for-callables.md
-// §3 step 1), raw JS bottoms, and foreign objects — things that aren't boxed Scheme values and
-// therefore can't carry a print method. It imports nothing class-specific, so any value class can
-// import `printValue` for its child recursion without a cycle.
+// Leaf module: dispatch + the non-AValue residual (raw JS bottoms, foreign objects,
+// defensive bare-fn arm). Imports nothing class-specific, so value classes can import
+// `printValue` for child recursion without a cycle.
 
 interface Printable {
   "arrival/print"(): string;
@@ -17,18 +13,14 @@ function isPrintable(v: unknown): v is Printable {
   return v != null && typeof (v as Record<string, unknown>)["arrival/print"] === "function";
 }
 
-/**
- * Render any value to its Scheme repr. An AValue answers via its own `["arrival/print"]()`; a
- * non-AValue (raw function / bottom / foreign object) falls through to `printForeign`.
- */
+/** Render any value to its Scheme repr. AValue via `["arrival/print"]()`; else `printForeign`. */
 export function printValue(value: unknown): string {
   if (isPrintable(value)) return value["arrival/print"]();
   return printForeign(value);
 }
 
-// The non-AValue residual. Raw JS bottoms are largely moot post-membrane-materialization (booleans
-// box to ABool, etc.) but kept defensive; a raw JS function (a lambda/native) renders as a procedure;
-// a foreign object defers to its own toString, else a `#<ctor.name>` tag.
+// Non-AValue residual. Raw bottoms are largely moot post-boxing but kept defensive;
+// raw JS functions render as procedures; foreign objects use toString or `#<ctor.name>`.
 function printForeign(value: unknown): string {
   if (value === true) return "#t";
   if (value === false) return "#f";
@@ -45,10 +37,7 @@ function printForeign(value: unknown): string {
   return String(value);
 }
 
-// A raw JS procedure reaching here is the quarantined `env.defineRosetta` legacy authoring
-// arm's bare-fn output — every scheme-authored lambda is an ALambda now, answering
-// `arrival/print` directly (isPrintable catches it before this fn ever runs). Renders as
-// `#<procedure:name>` or `#<procedure>`.
+// Defensive residual — bare host fns are not scheme values. ACallable answers via isPrintable.
 function functionRepr(fn: object): string {
   const f = fn as { __name__?: string | symbol; name?: string };
   if (f.__name__ != null) {

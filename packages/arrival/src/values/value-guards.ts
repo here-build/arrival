@@ -1,15 +1,12 @@
 // Leaf value-kernel predicates.
 //
-// These type guards depend ONLY on the value kernel (Pair, Nil, the native
-// scalar wrappers) — never on AmbientRuntime / Macro / Syntax. Carved out of
-// guards.ts (a *false leaf* that imports AmbientRuntime, Macro, …) so Pair.ts can
-// import the predicates it needs without dragging the evaluator world into
-// the value kernel. guards.ts re-exports them for backward compatibility.
+// Depend ONLY on the value kernel (Pair, Nil, native scalar wrappers) — never on
+// AmbientRuntime / Macro / Syntax. Carved out of guards.ts so Pair.ts can import
+// without dragging the evaluator world into the value kernel. Import leaf predicates
+// from here, not via guards.ts.
 //
-// The residual Pair <-> value-guards 2-cycle is intentional and harmless: both
-// live inside the future @arrival/values package, so the cross-package
-// dependency graph stays acyclic — ESM resolves it because instanceof is
-// evaluated at call time, never at module-init.
+// The residual Pair ↔ value-guards 2-cycle is intentional and harmless: both live
+// inside the values package; ESM resolves it because instanceof is call-time only.
 import { AString } from "./primitives/AString.js";
 import { AExact } from "./primitives/AExact.js";
 import { AInexact } from "./primitives/AInexact.js";
@@ -17,12 +14,11 @@ import { ABool } from "./primitives/ABool.js";
 import { APair } from "./primitives/APair.js";
 import { ANil } from "./primitives/ANil.js";
 import { ACharacter } from "./primitives/ACharacter.js";
-import { ALambda, ANativeProcedure, ARosettaProcedure, DoorProcedure, type ACallable } from "./primitives/ACallable.js";
+import { ALambda, DoorProcedure, type ACallable } from "./primitives/ACallable.js";
+import { ANativeProcedure } from "./primitives/ANativeProcedure.js";
+import { ARosettaProcedure } from "./primitives/ARosettaProcedure.js";
 import { tf } from "./tagless-final.js";
-// Type-only — narrows the brand result to the evaluator's macro/syntax types so
-// `is_macro_value` stays signature-compatible with eval/guards' `is_macro`. An
-// `import type` erases at compile, so it adds NO value→eval runtime edge (it is
-// not importing the class, only the type name).
+// Type-only — erases at compile; no value→eval runtime edge.
 import type { Macro } from "../eval/Macro.js";
 import type { Syntax } from "../eval/Syntax.js";
 
@@ -31,16 +27,10 @@ export function is_plain_object(object: unknown): object is Record<string, unkno
 }
 
 /**
- * `nil` is the module-load singleton with empty provenance. Once `Nil` extends
- * AValue, `nil.withProvenance(p)` mints a FRESH Nil so the singleton's empty
- * provenance set is preserved (see ANil.ts — withProvenance mints a fresh
- * `ANil`). `restrictControlFlowProvenance` (evaluator.ts) does
- * exactly this when a control-flow arm resolves to nil while the predicate
- * carries non-empty provenance, so `=== nil` would silently report false on
- * those clones and cascade through `length` / `null?` / `car` / `cdr`
- * typechecks. Match by class instead — every Nil clone IS a Nil regardless of
- * which provenance set it's carrying. The doc comment over
- * `restrictControlFlowProvenance` explains the mechanism.
+ * `nil` is the module-load singleton with empty provenance. `nil.withProvenance(p)`
+ * mints a FRESH Nil so the singleton's empty set is preserved. Control-flow
+ * re-stamping does exactly this when a nil arm carries non-empty provenance, so
+ * `=== nil` would silently report false on those clones. Match by class instead.
  */
 export function is_nil(value: unknown): value is ANil {
   return value instanceof ANil;
@@ -51,14 +41,9 @@ export function is_pair(o: unknown): o is APair<any, any> {
 }
 
 /**
- * Scheme falsiness — the ONLY scheme-falsy value is `#f` (R7RS §6.3): a raw JS
- * `false`, a JS `null` (the membrane's #f sibling), or a boxed `ABool(false)`
- * (#f post-L1). Everything else — nil, 0, "", the empty list — is TRUTHY. This
- * is NOT JS falsiness; reading a scheme value with `!x` would wrongly treat 0/""
- * as false. Lives here (value-kernel leaf) rather than guards.ts so the value
- * primitives (APair/AVector filter, op-helpers' sort comparator) read truthiness
- * without dragging the evaluator world in; guards.ts re-exports it for the
- * evaluator/env call sites.
+ * Scheme falsiness — ONLY `#f` is falsy (R7RS §6.3): raw JS `false`, JS `null`
+ * (membrane's #f sibling), or boxed `ABool(false)`. Everything else — nil, 0, "",
+ * empty list — is TRUTHY. Not JS falsiness; `!x` would wrongly treat 0/"" as false.
  */
 export function is_false(o: unknown): o is false | null | ABool {
   return o === false || o === null || (o instanceof ABool && o.value === false);
@@ -68,40 +53,27 @@ export const is_native = (obj: unknown): obj is AString | ACharacter | AExact | 
   obj instanceof AString || obj instanceof ACharacter || obj instanceof AExact || obj instanceof AInexact;
 
 /**
- * `is_macro` WITHOUT an import edge into the evaluator. A Macro / Syntax /
- * Syntax.Parameter each carry an own `readonly ["arrival/is-macro"] = true` field
- * (eval/Macro.ts, eval/Syntax.ts) — the value layer's downward-readable protocol
- * slot (declared on AValue.ts for the protocol's typing home, though none of the
- * three macro classes extends AValue), read here structurally so the lineage
- * shadow-cone skip can test "is this a macro?" with no value→eval runtime edge.
- *
- * This is a duck/structural test, not `instanceof`: a forged `{ "arrival/is-macro":
- * true }` would pass. That is acceptable for the shadow-cone skip — the
- * input is a value resolved from the run env (`env.get(op)`), never attacker
- * data, and the only consequence of a false positive is recording a top-level
- * form as macro-headed (out-of-scope-for-shadow), never a soundness break in the
- * emitted program. The field mirrors eval/guards' `is_macro` arms 1:1 (Macro,
- * Syntax, and Syntax.Parameter all set it).
+ * Macro/Syntax detection without an import edge into the evaluator. Macro / Syntax /
+ * Syntax.Parameter each carry `readonly ["arrival/is-macro"] = true` (declared on
+ * AValue for the protocol's typing home; none of the three extends AValue). Duck test,
+ * not `instanceof`: a forged object would pass — acceptable for the shadow-cone skip
+ * (false positive only records a form as macro-headed; never a soundness break).
  */
 export function is_macro_value(o: unknown): o is Macro | Syntax {
   if (o === null || (typeof o !== "object" && typeof o !== "function")) return false;
   return (o as { ["arrival/is-macro"]?: unknown })["arrival/is-macro"] === true;
 }
 
-// Pure structural predicates (no value-kernel deps at all). They live here
-// rather than in guards.ts so leaf utilities (e.g. utils/typecheck.ts) can
-// import them without reaching guards.ts and, through it, AmbientRuntime/Macro.
+// Pure structural predicates — live here so leaf utilities avoid guards.ts → AmbientRuntime.
 export function is_function(o: unknown): o is Function {
   return typeof o === "function";
 }
 
-// Callable-as-value guards. `instanceof` is evaluated at call time, so importing
-// these value classes into this leaf adds no init-time cycle. The legacy
-// bare-fn `is_callable`/`is_macro` (eval/guards.js) coexist until the migration retires them.
+// Callable-as-value guards. instanceof is call-time; no init-time cycle.
 export function is_lambda(o: unknown): o is ALambda {
   return o instanceof ALambda;
 }
-/** Any callable value — a lambda, a host-JS primitive, or a door. */
+/** Any callable value — lambda, host-JS primitive, or door. */
 export function is_callable_value(o: unknown): o is ACallable {
   return (
     o instanceof ALambda ||
@@ -111,11 +83,9 @@ export function is_callable_value(o: unknown): o is ACallable {
   );
 }
 
-/** Structural, not nominal — unlike `is_callable_value`'s closed `ACallable` union, this
- *  admits ANY value answering `arrival/tagless-final/apply` (e.g. a self-applying keyword
- *  `ASymbol`). Used only at the evaluator's call-dispatch gates that must recognize such a
- *  value as invocable; `is_callable_value`'s other consumers (which rely on the narrowed
- *  `ACallable` type carrying `.arity`) are intentionally left alone. */
+/** Structural, not nominal — admits ANY value answering `arrival/tagless-final/apply`
+ *  (e.g. a self-applying keyword `ASymbol`). Used only at call-dispatch gates that must
+ *  recognize such values; consumers relying on `ACallable`'s `.arity` stay on `is_callable_value`. */
 export function is_applyable(o: unknown): boolean {
   return typeof (o as Record<PropertyKey, unknown> | null | undefined)?.[tf("apply")] === "function";
 }

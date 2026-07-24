@@ -127,18 +127,10 @@ export function structuralEqual(a: any, b: any, seen: SeenMap = new Map()): bool
 // eq? against the singleton, breaking `(eq? x '())`).
 // ----------------------------------------------------------------------
 export function eq(x: unknown, y: unknown): boolean {
-  // Identity first — also the only true-answer for the pointer-grade types below
-  // (Pair / vector / SchemeString / plain object). Then the SCALAR types route
-  // their value-comparison THROUGH their own Setoid (`arrival/tagless-final/equals`): the
-  // single comparison impl now lives on each term, not inlined here. Post-B2 each
-  // scalar's Setoid is exactly the compare this used to inline.
-  //
-  // SchemeBool is the one guarded exception: its Setoid is representation-BLIND
-  // (it also equals a RAW JS boolean, `this.value === other`), but `eq?`/`eqv?`
-  // are pointer/scalar-grade over BOXED scheme values — a bare `true` is NOT eq?
-  // to a boxed SchemeBool. The `y instanceof SchemeBool` guard keeps that boundary
-  // (raw-boolean `y` ⇒ #f) while still routing the boxed×boxed compare through the
-  // term (the Setoid's ternary reads `other.value` when `other` IS a SchemeBool).
+  // Identity first (pointer-grade Pair / vector / SchemeString / plain object).
+  // Scalars route through their Setoid (`arrival/tagless-final/equals`) on the term.
+  // ABool is representation-blind (equals a raw JS boolean) but `eq?`/`eqv?` stay
+  // pointer-grade over BOXED values — bare `true` is not eq? to a boxed ABool.
   if (x === y) return true;
   if (
     x instanceof ASymbol ||

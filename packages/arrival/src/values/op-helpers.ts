@@ -1,12 +1,9 @@
 /**
  * op-helpers — cross-cutting leaf shared by every primitive cluster.
  *
- * Type-coercion + provenance + allocation-guard helpers the value-domain capability
- * packs (numbers/strings/chars/lists/vectors/bytevectors/control/core) reach for. OWN
- * leaf module (imports only value-type classes, never env layer) so a cluster pack
- * (`env/r7rs/*`, which assembles its `wrappedOps` from these helpers) imports without a cycle.
- *
- * Dependency direction: clusters → op-helpers → value-type classes.
+ * Type-coercion + provenance + allocation-guard helpers. Own leaf module
+ * (imports only value-type classes, never env layer) so cluster packs import
+ * without a cycle. Dependency: clusters → op-helpers → value-type classes.
  */
 
 import invariant from "tiny-invariant";
@@ -22,7 +19,7 @@ import { ABytevector } from "./primitives/ABytevector.js";
 import { AString } from "./primitives/AString.js";
 import { AExact } from "./primitives/AExact.js";
 import { AInexact } from "./primitives/AInexact.js";
-import { is_false } from "./value-guards.js";
+import { is_false } from "../values/value-guards.js";
 import { is_promise } from "../eval/guards.js";
 import { type ANumeric } from "./numbers.js";
 import { type SchemeValue } from "./types.js";
@@ -30,108 +27,57 @@ import { ACharacter } from "./primitives/ACharacter.js";
 import { attachOffendingValue, ComparatorRequiredError } from "../errors.js";
 import { tf } from "./tagless-final.js";
 
-// Eager-stamp oracle flag: `withInputProvenance`/`mintVerdict` below accumulate
-// provenance stamps. This is a TEST-ONLY oracle — OFF by default, so production hot
-// paths skip the accumulation (the filter + union-set allocations) while the
-// boxed-value discipline stays intact. Turned ON on demand by the CI agreement oracle
-// (`wireframe-agreement.law.test.ts`, the replay laws' recorded-ground-truth side, and
-// tests that assume eager accumulation is live). Not an opt-out — a test-only oracle.
-// Flag is module-GLOBAL — right granularity for a whole process (the sampler's own
-// runner, or a test file's beforeAll/afterAll); the upgrade path if a single process
-// ever needs stamped AND unstamped envs simultaneously is a RunContext-carried flag,
-// not a second global.
+// Eager-stamp oracle flag: withInputProvenance/mintVerdict accumulate provenance.
+// TEST-ONLY oracle — OFF by default so production hot paths skip accumulation while
+// boxed-value discipline stays intact. Turned ON by CI agreement oracle and tests
+// that assume eager accumulation is live. Module-GLOBAL; upgrade path if a process
+// needs stamped AND unstamped envs simultaneously is a RunContext-carried flag.
 let eagerProvenanceOracleEnabled = false;
 
-/** Is the eager-stamp oracle (this file's `withInputProvenance`/`mintVerdict`
- *  accumulation) live? Default FALSE; `withInputProvenance` branches on it.
- *  Reports the raw AMBIENT flag only — NOT the effective in-γ state
- *  {@link withInputProvenance} also consults (see its own doc): a caller inside a
- *  silent region sees `false` here even though accumulation is in fact running for
- *  that call, because replay-correctness is a property of WHERE the call runs, not of
- *  this module-global switch. Existing readers (`wireframe-agreement.law.test.ts`)
- *  depend on this function mirroring exactly what `setEagerProvenanceOracleEnabled`
- *  last wrote — do not fold the OR in here. */
+/** Is the eager-stamp oracle live? Default FALSE. Reports the raw AMBIENT flag only —
+ *  NOT the effective in-γ state withInputProvenance also consults. */
 export function isEagerProvenanceOracleEnabled(): boolean {
   return eagerProvenanceOracleEnabled;
 }
 
-/** Opt out of (or back into) eager stamp accumulation process-wide. Values still
- *  box per the boxed-value discipline; OFF means they carry EMPTY provenance
- *  (outside a silent region — see {@link withInputProvenance}). Intended for
- *  provenance non-consumers (sampler runners) to opt OUT, and for the CI agreement
- *  oracle / older test suites to opt back IN for their own lifetime; tests restore
- *  the ambient default afterward. */
+/** Opt out of (or back into) eager stamp accumulation process-wide. Values still box;
+ *  OFF means EMPTY provenance outside a silent region. */
 export function setEagerProvenanceOracleEnabled(enabled: boolean): void {
   eagerProvenanceOracleEnabled = enabled;
 }
 
 /**
- * The EFFECTIVE accumulation switch {@link withInputProvenance}/`mintVerdict` actually
- * branch on: the ambient module flag OR "we are inside a silent region right now"
- * ({@link isSilentRegion}, `membrane/region-scope.ts`).
+ * EFFECTIVE accumulation switch: ambient flag OR "inside a silent region right now".
  *
- * WHY the OR is load-bearing, not a convenience: every γ/replay face
- * (`provenance/gamma.ts`'s `hermeticApply`/`applyWireInEnv`, and therefore all three of
- * `provenance/replay.ts`'s drivers) re-executes a wire's body through this SAME
- * interpreter, wrapped in `withSilentRegion` for its entire dynamic extent. A wire body
- * is ordinary pure-op composition (`(+ a b)`, `string-append`, …) over ingress values
- * that were boxed with their RECORDED stamp ids (`replay.ts`'s `boxPayload`) — the
- * only mechanism that unions those ids through the wire's arithmetic into the egress's
- * OWN `.provenance` is this file's accumulation. If the ambient production default is
- * OFF and γ did not force it back on for its own execution, replay would silently
- * reproduce an EGRESS VALUE with the right JS payload but EMPTY provenance —
- * correct-looking, wrong lineage — breaking the wire-γ adjunction and the replay laws
- * in PRODUCTION, not just in a test. Gating on `isSilentRegion()` here (rather than γ
- * explicitly flipping the module flag around its own call) means every replay path is
- * correct BY CONSTRUCTION — there is no second call site to remember to wrap, and
- * nothing outside a silent region is affected: a production hot path with the ambient
- * flag OFF and no silent region ambient sees zero accumulation.
+ * WHY the OR is load-bearing: every γ/replay face re-executes a wire's body through
+ * this SAME interpreter, wrapped in `withSilentRegion`. Ingress values carry recorded
+ * stamp ids; the only mechanism that unions those ids into the egress's own
+ * `.provenance` is this file's accumulation. If production default is OFF and γ did
+ * not force accumulation on, replay would silently produce correct-looking values with
+ * EMPTY provenance — breaking the wire-γ adjunction. Gating on `isSilentRegion()`
+ * means every replay path is correct BY CONSTRUCTION.
  *
- * EXPORTED (not file-private) because two hand-rolled `unionProvenance(...)` call
- * sites never went through `withInputProvenance` in the first place, and therefore
- * never respected the oracle flag: `env/r7rs/numeric.ts`'s `nativeNumericOp`/
- * `applyNumeric` (EVERY arithmetic op — `+`/`-`/`*`/`/`/comparisons/…) and its
- * `numberToStringFn`. Those two sites import this function instead of duplicating
- * the OR — see their own call-site comments. Arithmetic is the hot path, so this is
- * the load-bearing correctness gap for "production hot paths stop accumulating by
- * default"; other hand-rolled sites (`rosetta.ts`'s `argProvenance`,
- * `common/symbols/rosetta.ts`'s pipe-role mint) are lower-traffic and left alone.
+ * EXPORTED because hand-rolled `unionProvenance` sites (numeric arithmetic) import
+ * this instead of duplicating the OR.
  */
 export function isEagerAccumulationActive(): boolean {
   return eagerProvenanceOracleEnabled || isSilentRegion();
 }
 
 // Allocation cap — DoS defense for size-parameterized constructors
-
-// `make-string`/`make-vector`/`make-bytevector` take unbounded `k`. V8's ceiling
-// (~2^29 chars / ~2^32 slots) is the ENGINE limit, not our policy: `(make-string 1e8)`
-// allocates 200MB UTF-16 in ~1ms and succeeds, `(make-vector 1e8)` spins >10s on 100M
-// slots — one sandbox call drives host memory pressure. Length checked O(1) pre-alloc.
-//
 // Default 2^24: worst case (~32MB UTF-16 / one 16M-slot array) is recoverable.
 const allocationLimit = 1 << 24; // 16,777,216
 
-/**
- * Throw Scheme-surfaceable error (O(1), pre-allocation) when len exceeds cap or
- * is not a usable count. `len` read once by caller; validated here so both
- * constructors share one message shape and one policy.
- */
+/** Throw when len exceeds cap or is not a usable count. O(1), pre-allocation. */
 export function assertAllocatable(len: number, fnName: string): void {
   invariant(Number.isFinite(len) && len >= 0, `${fnName}: length must be a non-negative integer, got ${len}`);
   invariant(len <= allocationLimit, `${fnName}: requested length ${len} exceeds allocation limit ${allocationLimit}`);
 }
 
-// Value-type coercion
-
 /**
- * Unwrap an `ACharacter`. Refuses anything else — it does NOT silently mint a wrong value.
- *
- * A coercion helper in this tree may never answer with a value it had to invent: a blind
- * `(char as ACharacter).__char__` cast on a non-character (`AString`, a number, `nil`)
- * silently reads `undefined` off a value with no such field, and a caller doing
- * `chars.join("")` swallows that into `""` — `(list->string '(1 2))` would answer the
- * empty string, indistinguishable from a correct empty-list result. Same discipline
- * `stringValue` below enforces.
+ * Unwrap an `ACharacter`. Refuses anything else — never silently mints a wrong value.
+ * A blind cast on a non-character silently reads `undefined` and `chars.join("")`
+ * swallows that into `""` — `(list->string '(1 2))` would look like a correct empty result.
  */
 export function charValue(char: unknown): string {
   if (char instanceof ACharacter) return char.__char__;
@@ -141,14 +87,8 @@ export function charValue(char: unknown): string {
   );
 }
 
-// Container/nil kinds `stringValue` refuses to silently coerce: `String(nil)` → `"()"`
-// is a plausible-looking but WRONG string (e.g. `(string-length nil)` would answer 2).
-// None of the string-op call sites (strings.ts/srfi-13.ts/srfi-28.ts/bytevectors.ts/
-// vectors.ts/equality.ts) depend on coercing a container — each declares a
-// `z.string`-typed argument and expects a genuine AString. `symbol.native` contracts
-// are TYPE-ONLY, never runtime-validated (`_bake.ts`'s own doctrine), so a container
-// reaching here is an unchecked-native-tier hole, not a caller doing it on purpose.
-// Leaf/scalar kinds (character, symbol, number, boolean) KEEP the `String(x)` fallback.
+// Container/nil kinds stringValue refuses: `String(nil)` → `"()"` is plausible-looking but WRONG.
+// Leaf/scalar kinds KEEP the `String(x)` fallback.
 const STRING_COERCION_REFUSED_KINDS = new Set(["pair", "nil", "vector", "object", "dict"]);
 
 /** Best-effort short preview for a door message — never throws, truncated. */
@@ -162,8 +102,7 @@ function previewOf(v: unknown): string {
   return s.length > 40 ? `${s.slice(0, 40)}…` : s;
 }
 
-/** Unwrap AString.valueOf(); String(str) for leaf/scalar kinds; throws for container/nil
- *  kinds instead of minting a plausible-looking wrong string (B1). */
+/** Unwrap AString.valueOf(); String(str) for leaf/scalar; throws for container/nil kinds. */
 export function stringValue(str: unknown): string {
   if (str instanceof AString) return str.valueOf();
   if (str instanceof AValue && STRING_COERCION_REFUSED_KINDS.has(str.kind)) {
@@ -172,14 +111,12 @@ export function stringValue(str: unknown): string {
   return String(str);
 }
 
-/** Coerce to index number for vector/string ops */
+/** Coerce to index number for vector/string ops. */
 export function toIndex(v: unknown): number {
   return typeof v === "number" ? v : Number((v as AExact).valueOf());
 }
 
-/** Vector PROTOCOL guard: boxed AVector or borrowed AJSArray — both answer
- *  `arrival/tagless-final/vector?` and expose `__vector__`. Honest duck-narrowing —
- *  no `instanceof AVector` reach-around, no operand cast in `asVector`. */
+/** Vector PROTOCOL guard: boxed AVector or borrowed AJSArray — both answer vector? + __vector__. */
 interface VectorLike {
   "arrival/tagless-final/vector?"(): boolean;
   __vector__: SchemeValue[];
@@ -189,35 +126,29 @@ function isVectorLike(obj: unknown): obj is VectorLike {
 }
 
 /**
- * Resolve vector arg to raw element array (read view).
- *
- * PROTOCOL dispatch — anything answering `arrival/tagless-final/vector?` exposes
- * `__vector__`. No `instanceof AVector` reach-around. Raw JS array tolerated (transition;
- * S10 removes). Throws otherwise.
+ * Resolve vector arg to raw element array (read view). Protocol dispatch —
+ * anything answering `arrival/tagless-final/vector?` exposes `__vector__`.
+ * Raw JS array tolerated (transitional). Throws otherwise.
  */
 export function asVector(obj: unknown, fnName: string): SchemeValue[] {
   if (isVectorLike(obj)) {
     return obj.__vector__;
   }
-  if (Array.isArray(obj)) return obj; // transitional raw-array tolerance (S10 will remove this)
+  if (Array.isArray(obj)) return obj; // transitional raw-array tolerance
   throw attachOffendingValue(new TypeError(`${fnName}: expected vector`), obj);
 }
 
 /**
  * Coerce bytevector-like value to Uint8Array view.
  * Accepts Uint8Array / ArrayBuffer / DataView / Node Buffer.
- * Identity preserved for Uint8Array, view created for others.
  */
 export function asBytevector(obj: unknown, fnName: string): Uint8Array {
   switch (true) {
     case obj instanceof ABytevector:
-      // Unwrap by reference: env is immutable (vector-set!/bytevector-u8-set!/etc.
-      // are notImplemented stubs — no in-place writer to guard against).
+      // Unwrap by reference: env is immutable (bytevector-u8-set! is notImplemented stub).
       return obj.__bytevector__;
     case obj instanceof Uint8Array:
-      // FFI coercion: raw Uint8Array from a JS fn coerced in place. Stays permanently —
-      // it's the FFI adapter. (bytevector? tightens instanceof-only in S4; asBytevector
-      // keeps coercing raw forms.)
+      // FFI coercion: raw Uint8Array from a JS fn. Stays permanently — it's the FFI adapter.
       return obj;
     case obj instanceof ArrayBuffer:
       return new Uint8Array(obj);
@@ -230,25 +161,16 @@ export function asBytevector(obj: unknown, fnName: string): Uint8Array {
   }
 }
 
-// ============================================================================
-// Fantasy Land Ord — the type-agnostic ordered-comparison chain
-// ============================================================================
+// ── Fantasy Land Ord — type-agnostic ordered-comparison chain ──
+// All four relations derive from the single `lte`. Nil = universal-order BOTTOM
+// (SRFI-128 + Clojure). Shared by deriveSortCompare and fl-interop loose ops.
 
-// Ordered ENTITIES consult `arrival/tagless-final/lte` (like Setoid's equals for equal?).
-// All four relations derive from the single `lte`; a chain `(< a b c)` holds iff each
-// adjacent pair does. Per-type order in entity instance — string<?/char<? families are
-// type-agnostic chains. Adding new ordered type needs no new builtin. Numeric operands
-// take numeric path (`env/r7rs/numeric.ts`'s `wrapOrd`); FL check is one cheap property read.
 export interface AOrd {
   "arrival/tagless-final/lte"(other: unknown): boolean;
 }
 export const isOrd = (x: unknown): x is AOrd => x != null && typeof (x as Partial<AOrd>)[tf("lte")] === "function";
 const lte = (a: AOrd, b: unknown): boolean => Boolean(a[tf("lte")](b));
-// Nil = universal-order BOTTOM (V's F2: nil-as-bottom, matching SRFI-128 + Clojure).
-// Detected structurally (null/undefined/ANil — by constructor name, no value-class import/
-// no cycle). Returns 3-way verdict when EITHER side nil (both nil ⇒ 0/equal; one nil ⇒ lesser),
-// else undefined ("neither nil, compare normally"). Shared: `deriveSortCompare` here AND
-// fl-interop loose ops — `<` and `sort` agree on nil position.
+
 const isNilValue = (x: unknown): boolean =>
   x == null || (x as { constructor?: { name?: string } })?.constructor?.name === "ANil";
 export function nilOrderCompare(a: unknown, b: unknown): -1 | 0 | 1 | undefined {
@@ -262,8 +184,7 @@ export const ORD_REL: Record<"<" | ">" | "<=" | ">=", (a: AOrd, b: AOrd) => bool
   "<": (a, b) => !lte(b, a),
   ">": (a, b) => !lte(a, b),
   "<=": (a, b) => lte(a, b),
-  ">=": (a, b) => lte(b, a),
-};
+  ">=": (a, b) => lte(b, a) };
 /** n-ary ordered comparison from operands' `arrival/tagless-final/lte`. */
 export function deriveOrd(sym: "<" | ">" | "<=" | ">="): (...args: unknown[]) => ABool {
   const rel = ORD_REL[sym];
@@ -275,74 +196,33 @@ export function deriveOrd(sym: "<" | ">" | "<=" | ">="): (...args: unknown[]) =>
         break;
       }
     }
-    // R8 mint (`op-helpers.mintVerdict`) — withInputProvenance + schemeBool is the ORIGINAL
-    // of the law mintVerdict names for every site.
     return mintVerdict(args, verdict);
   };
 }
 
-/** Kind-name of un-orderable element — scheme `kind` (AValue "pair"/"vector"/…) else JS shape.
- *  Mirrors `common/symbols/_bake.ts`'s describeReceiver. */
 const describeOrdElement = (v: unknown): string =>
   v instanceof AValue ? v.kind : v === null || v === undefined ? String(v) : Array.isArray(v) ? "array" : typeof v;
 
-/** Derive JS `Array.prototype.sort` comparator ((a,b)=>number) for every primitive's
- *  `arrival/tagless-final/sort`. SHARED element-ordering both APair and AVector reach for.
- *
- *  • No comparator → operand's OWN total order via `arrival/tagless-final/lte`: a,b —
- *    `aLE = a≤b`, `bLE = b≤a` ⇒ aLE ? (bLE ? 0 : -1) : (bLE ? 1 : 0). Correct for EVERY
- *    Ord-bearing type. Element lacking `lte` (e.g. pair, no user cmp) → "cannot order"
- *    throw — never silent mis-order.
- *  • Comparator present → BOTH supported shapes (ASSUMED SYNC):
- *      – NUMBER comparator ((a,b)→number, <0 ⇒ a-before-b) — used DIRECTLY; boxed Scheme
- *        numeric unboxed.
- *      – else `less?` predicate (SRFI-95) — truthy iff a precedes b.
- *    Number branch REQUIRED: reading number verdict through `!is_false` mis-orders (every
- *    nonzero is scheme-truthy) — a number must be consulted as a number. */
+/** Derive JS Array.sort comparator for every primitive's `arrival/tagless-final/sort`.
+ *  • No comparator → operand's OWN total order via `lte`; element lacking lte throws.
+ *  • Comparator present → number comparator used DIRECTLY, else SRFI-95 `less?`.
+ *    Number branch REQUIRED: reading number through `!is_false` mis-orders. */
 export function deriveSortCompare(
   comparator: ((a: unknown, b: unknown) => unknown) | undefined,
   runCtx: RunContext,
 ): (a: unknown, b: unknown) => number {
   if (comparator !== undefined && comparator !== null) {
-    // Comparator is a callable VALUE (ANativeProcedure) — invoke through the seam, not bare fn.
-    // Sort sync; native cmp returns settled value (lambda cmp → promise, pre-existing limitation).
-    // `runCtx` threaded here because both callers (APair/AVector's own `sort` term)
-    // already hold a required, live `runCtx` one hop away. NOTE: this closes the
-    // ctx-honesty gap only — region-scope.ts's own header names a SEPARATE, still-open
-    // gap (no `RegionScope` opens around this comparator loop, so host-schedule/
-    // order-attribution provenance isn't recorded here); that needs `withRegionCall`
-    // wiring, a distinct design task this fix does not invent.
-    // No live invocation reaches this leaf (only a bare `runCtx` one hop away) — a real
-    // CallCtx with invocation undefined, degraded exactly as the pre-CallCtx-threading path.
+    // Comparator is a callable VALUE — invoke through the seam, not bare fn.
+    // runCtx threaded for ctx-honesty. Region-scope host-schedule wiring is separate
+    // (order-attribution); this only closes the metering gap.
     const call = (a: unknown, b: unknown): unknown => applyCallback(comparator, [a, b], makeCallCtx(runCtx));
-    // Host-schedule wiring: `sort`'s comparator is the canonical order-dependent
-    // selector host — its verdict SEQUENCE (not any single verdict) is the record
-    // ("the sequence IS the record"). `recordHostScheduleVerdict` already no-ops
-    // under emission-off/silent-region/no-coordinate (region-scope.ts's own gates) —
-    // the only thing THIS call site adds is reading the ambient scope and attributing
-    // a triple to it. No ambient RegionScope (today's entire production call graph
-    // outside a tracked crossing — see `currentRegionScope`'s own doc) ⇒ one
-    // `undefined` check, zero further cost.
-    //
-    // ELEMENT ORDINALS: `Array.prototype.sort`'s comparator signature carries no
-    // element INDEX, only the two VALUES — true per-element ordinal paths are not
-    // threadable through it without a deeper host-sort rewrite. Falls back to
-    // comparator CALL ORDER as the ordinal proxy: the n-th comparator invocation this
-    // sort performs is recorded as `([n], [n+1])` — a real, monotonic, per-sort-call
-    // attribution (never reused across two different `deriveSortCompare` calls, since
-    // `callOrdinal` is closed over fresh per call), just not a positional index into
-    // the original array. Only SOME attributable path is required, not the true
-    // element position.
+    // Host-schedule: sort's comparator verdict SEQUENCE is the record.
+    // Element ordinals fall back to comparator CALL ORDER (Array.sort carries no index).
     let callOrdinal = 0;
     return (a, b) => {
       const v = call(a, b);
-      // A LAMBDA comparator's settled value is a Promise (lambda bodies run through the
-      // trampolined async evaluator; a native/rosetta comparator never is). None of the
-      // three verdict branches below recognize a Promise, so the `is_false` fallthrough
-      // would mint a CONSTANT -1 for every pair — TimSort then emits a deterministic
-      // wrong order (= reverse(input)) with NO error. Interim honest door (full async
-      // threading is a future rework of `sort`'s own term algebra): throw instead of
-      // silently mis-sorting.
+      // Lambda comparator settles as a Promise — none of the verdict branches recognize it,
+      // so the is_false fallthrough would mint constant -1 (silent reverse-sort). Door instead.
       if (is_promise(v)) {
         throw attachOffendingValue(
           new TypeError(
@@ -356,7 +236,6 @@ export function deriveSortCompare(
       let verdict: number;
       if (typeof v === "number") verdict = v;
       else if (v instanceof AExact || v instanceof AInexact) verdict = Number(v.valueOf());
-      // `less?` predicate: truthy ≡ a precedes b.
       else verdict = is_false(v) ? (is_false(call(b, a)) ? 0 : 1) : -1;
 
       const scope = currentRegionScope();
@@ -369,7 +248,7 @@ export function deriveSortCompare(
   }
   return (a, b) => {
     const nilCmp = nilOrderCompare(a, b);
-    if (nilCmp !== undefined) return nilCmp; // nil = order's bottom (shared with comparison ops)
+    if (nilCmp !== undefined) return nilCmp;
     if (!isOrd(a)) throw new ComparatorRequiredError(describeOrdElement(a));
     if (!isOrd(b)) throw new ComparatorRequiredError(describeOrdElement(b));
     const aLE = lte(a, b);
@@ -378,31 +257,22 @@ export function deriveSortCompare(
   };
 }
 
-// Numeric coercion into SchemeExact/SchemeInexact tower
+// Numeric coercion into AExact/AInexact tower
 
 /**
- * The boxed-operand arm below correctly preserves the operand's OWN `.ctx`; the raw JS
- * bigint/number arms have no operand ctx to preserve and mint fresh under `ctx`. `ctx`
- * is OPTIONAL, defaulting to `CONSTANT_CTX` — every current caller (`env/r7rs/
- * numeric.ts`'s `applyNumeric`, `env/r7rs/strings.ts`, `env/r7rs/chars.ts`) does not yet
- * pass one. The honest completion — each of those call sites threading its own live
- * `runCtx`/`ctxOf(value)` — is that cluster's own job; this signature exists so it can
- * be wired without a second signature change.
+ * Coerce to scheme numeric. Safe ints exact; non-safe + floats inexact.
+ * Host bigint doors (NoLensError at membrane) — never mint an out-of-range exact.
+ * `ctx` defaults to CONSTANT_CTX; live call sites may thread their own runCtx.
  */
 export function coerceNumeric(value: unknown, ctx: RunContext = CONSTANT_CTX): ANumeric {
   switch (true) {
     case value instanceof AExact:
     case value instanceof AInexact:
       return value;
-    // §2.3's opaque-host-value law (docs/design-history/arrival-one-number-rework.md):
-    // a bigint is NOT a scheme number — never silently minted into a (possibly
-    // out-of-range) exact. Door here, the arithmetic-coercion entry point, naming the
-    // explicit escape hatch (`bigint->number`, the safe-range-checked conversion).
     case typeof value === "bigint":
       throw new TypeError(
-        "host bigint is not a scheme number — use bigint->number (safe-range checked) to convert explicitly",
+        "host bigint is not a scheme number — convert with Number/bigintToNumber in the safe range before crossing",
       );
-    // Safe ints exact (likely Scheme int literals); non-safe + floats inexact
     case typeof value === "number":
       return Number.isSafeInteger(value) ? new AExact(value) : new AInexact(value);
     case value && typeof value === "object" && "valueOf" in value && typeof value.valueOf === "function": {
@@ -410,7 +280,7 @@ export function coerceNumeric(value: unknown, ctx: RunContext = CONSTANT_CTX): A
       switch (true) {
         case typeof val === "bigint":
           throw new TypeError(
-            "host bigint is not a scheme number — use bigint->number (safe-range checked) to convert explicitly",
+            "host bigint is not a scheme number — convert with Number/bigintToNumber in the safe range before crossing",
           );
         case typeof val === "number":
           return Number.isSafeInteger(val) ? new AExact(val) : new AInexact(val);
@@ -424,26 +294,18 @@ export function coerceNumeric(value: unknown, ctx: RunContext = CONSTANT_CTX): A
   }
 }
 
-/** Convertible to SchemeNumeric without throwing. NOT a closed type guard: `valueOf` arm admits
- *  any object exposing number/bigint valueOf(), so true ≠ `ANumeric | number | bigint`. Callers
- *  needing boxed value go through `coerceNumeric` (takes unknown); no operand cast off this. */
+/** Convertible to SchemeNumeric without throwing. NOT a closed type guard:
+ *  valueOf arm admits any object exposing number valueOf(). Host bigint never a scheme number. */
 export function isSchemeNumber(value: unknown): boolean {
   switch (true) {
     case value instanceof AExact:
     case value instanceof AInexact:
       return true;
-    case typeof value === "bigint":
     case typeof value === "number":
       return true;
     case value && typeof value === "object" && "valueOf" in value && typeof value.valueOf === "function": {
       const val = value.valueOf();
-      switch (true) {
-        case typeof val === "bigint":
-        case typeof val === "number":
-          return true;
-        default:
-          return false;
-      }
+      return typeof val === "number";
     }
     default:
       return false;
@@ -453,40 +315,23 @@ export function isSchemeNumber(value: unknown): boolean {
 // Provenance stamping
 
 /**
- * Stamp `result` with union of `args`' provenances. Cluster-pack builtins
- * (`string-append`, `string-copy`, `list-copy`, `vector`, …) produce fresh results whose
- * provenance must inherit from inputs.
+ * Stamp `result` with union of `args`' provenances. Cluster-pack builtins produce
+ * fresh results whose provenance must inherit from inputs.
  *
- * Scalars boxed UNCONDITIONALLY (bare-value purge, RULINGS.md R1/P4): inside the
- * membrane only boxed AValues — a raw JS scalar handed back is unexecutable (P0/P4).
- * Empty-provenance flyweight exists (`fromJs` `EMPTY_PROVENANCE` branch reuses schemeTrue/
- * schemeFalse — allocation-free for booleans; strings/numbers correctly boxed; see
- * `mintVerdict`). Non-scalars stay raw — structural provenance, `AValue.fromJs` double-wraps.
+ * Scalars boxed UNCONDITIONALLY (bare-value purge): inside the membrane only boxed
+ * AValues. Non-scalars stay raw — structural provenance, fromJs double-wraps.
  *
- * RETURN-TYPE CAST — `fromJs(…) as T` is INHERENT: seam between layers modeling values
- * differently. Provenance layer boxes raw scalar; boolean/number → SchemeBool/AExact — but
- * symbol-contract layer (`output: [z.boolean]` ⇒ `DecodedReturn = boolean`) types by DECODED
- * shape, blind to box. Impl-side contract wants unboxed type (`string=?` is `: boolean`).
- * Surfacing box pushes widening into ~11 boxing-blind predicate/projection contracts —
- * value-model decision for provenance/contract design, not this leaf. AValue-branch `as T`
- * separately sound (`withProvenance` preserves subtype).
+ * RETURN-TYPE CAST — `fromJs(…) as T` is inherent: seam between layers modeling
+ * values differently (provenance boxes; contract layer types by decoded shape).
  */
 export function withInputProvenance<T>(args: readonly unknown[], result: T): T {
-  // Oracle inactive skips accumulation (filter + union allocations), NOT boxing — the
-  // boxed-value discipline is semantics; provenance is the payload being skipped. ctx
-  // still propagates from the first AValue operand (heap-metering channel, independent
-  // of provenance) via an allocation-free scan. "Inactive" is the EFFECTIVE switch
-  // (ambient flag OR silent-region γ, see `isEagerAccumulationActive`'s doc) — the
-  // production default is OFF, but a replay running inside a silent region still
-  // accumulates regardless of the ambient default.
+  // Oracle inactive skips accumulation, NOT boxing. "Inactive" is the EFFECTIVE
+  // switch (ambient flag OR silent-region γ — see isEagerAccumulationActive).
   if (!isEagerAccumulationActive()) {
     if (result instanceof AValue) return result;
     const t = typeof result;
-    if (t === "string" || t === "number" || t === "bigint" || t === "boolean") {
-      // TODO(ctx-elimination): this used to scan `args` for the first boxed operand and
-      // inherit ITS ctx (CONSTANT_CTX only when no boxed operand existed among `args`) — AValue
-      // no longer stores a per-value ctx at all (see AValue.ts's ctx-removal note), so there is
-      // nothing left to scan for; every mint here is CONSTANT_CTX now.
+    if (t === "string" || t === "number" || t === "boolean") {
+      // Host bigint is not boxable (NoLensError at fromJs).
       return fromJs(CONSTANT_CTX, result, EMPTY_PROVENANCE) as T;
     }
     return result;
@@ -498,26 +343,19 @@ export function withInputProvenance<T>(args: readonly unknown[], result: T): T {
     return (prov.size === 0 ? result : result.withProvenance(prov)) as T;
   }
   const t = typeof result;
-  if (t === "string" || t === "number" || t === "bigint" || t === "boolean") {
-    // TODO(ctx-elimination): same collapse as the inactive-oracle branch above — always
-    // CONSTANT_CTX now, never inherited from `inputs[0]`.
+  if (t === "string" || t === "number" || t === "boolean") {
     const prov = inputs.length > 0 ? unionProvenance(inputs) : EMPTY_PROVENANCE;
     return fromJs(CONSTANT_CTX, result, prov) as T;
   }
   return result;
 }
 
-/** Scheme face of predicate verdict — shared flyweights (eq?-stable, empty provenance).
- *  Every env pack's boolean-returning native boxes here under the Face split (`z.boolean`
- *  output demands ABool, never raw JS boolean). */
+/** Scheme face of predicate verdict — shared flyweights (eq?-stable, empty provenance). */
 export const schemeBool = (v: boolean): ABool => (v ? schemeTrue : schemeFalse);
 
 /**
- * THE ONE boolean-VERDICT boxing point (RULINGS.md R8):
- * provenance-free operands → eq?-stable flyweight (schemeTrue/schemeFalse — allocation-free
- * hot loops); stamped operands → fresh ABool carrying union. Verdict from lineage carries it;
- * from constants doesn't. Every boolean-verdict site — equal?/eqv?/eq?, numeric comparison
- * wrappers, predicate natives returning boolean through the wrap layer — routes through here.
+ * THE ONE boolean-verdict boxing point: provenance-free operands → eq?-stable flyweight;
+ * stamped operands → fresh ABool carrying union. Every boolean-verdict site routes here.
  */
 export function mintVerdict(operands: readonly unknown[], verdict: boolean): ABool {
   return withInputProvenance(operands, schemeBool(verdict));

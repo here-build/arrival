@@ -16,7 +16,8 @@ import { AInexact } from "./primitives/AInexact.js";
 import { DATA } from "../well-known-symbols.js";
 import { ACharacter } from "./primitives/ACharacter.js";
 import type { SchemeValue } from "./types.js";
-import { is_nil, is_pair } from "./value-guards.js";
+import { is_nil } from "../values/value-guards.js";
+import { is_pair } from "./value-guards.js";
 import { ABool } from "./primitives/ABool.js";
 import { ANil } from "./primitives/ANil.js";
 import { APair } from "./primitives/APair.js";
@@ -36,8 +37,7 @@ export function hidden_prop(obj: SchemeValue, name: string, value: unknown): voi
     get: () => value,
     set: () => {},
     configurable: false,
-    enumerable: false,
-  });
+    enumerable: false });
 }
 
 /** Gensym JS symbols are recognized by the `#:` name prefix — the marker
@@ -121,20 +121,10 @@ function isPendingDatum(value: SchemeValue | PromiseLike<SchemeValue>): value is
   return is_promise(value);
 }
 
-// ----------------------------------------------------------------------
-// Lifts a raw JS primitive to its Scheme value-type so member reads return
-// Scheme-typed values, not bare JS. Only strings/numbers need boxing; bigints
-// (an opaque HOST value per docs/design-history/arrival-one-number-rework.md
-// §2.3 — never a scheme number), objects, and arrays are handled by the membrane
-// at access time and pass through (the switch below has no `bigint` case, so it
-// falls straight to the identity return).
-// AmbientRuntime.get does not call this — a raw JS scalar found in env storage is an
-// invariant DOOR there, never a silent re-box. Remaining callers are the reader/
-// parse-time and pending-entry settle paths + the public barrel.
-// ----------------------------------------------------------------------
-// `ctx` is the caller's identity claim for the minted box (a live runCtx where one is
-// in hand); the CONSTANT_CTX default keeps existing callers (pending-entry settle, the
-// public barrel) byte-identical.
+// Lift raw JS string/number to Scheme. Bigint is host-only (no case → identity);
+// objects/arrays box at the membrane. AmbientRuntime.get doors on raw storage
+// scalars — does not call this. Callers: reader/parse, pending-entry, public barrel.
+// `ctx` = mint identity claim; CONSTANT_CTX when no live run.
 export function box(object: unknown, ctx: RunContext = CONSTANT_CTX): SchemeValue {
   switch (typeof object) {
     case "string":
