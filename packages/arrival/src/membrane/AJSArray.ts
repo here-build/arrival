@@ -1,18 +1,16 @@
 /**
- * AJSArray — the AValue term that re-presents a borrowed JS array as a vector inside the
- * Scheme value space. It carries the run ctx + provenance and its own tagless-final (vector)
- * algebra; the object sibling AJSObject is a separate term with its own algebra. See the
- * class doc below for the implements-not-extends-AVector cycle rationale.
+ * AJSArray — AValue term that re-presents a borrowed JS array as a vector inside
+ * Scheme value space. Carries provenance and its own tagless-final (vector) algebra;
+ * object sibling AJSObject is a separate term. See class doc for implements-not-
+ * extends-AVector cycle rationale.
  *
- * IMPORT CYCLE (benign): `jsToScheme` (rosetta.ts) is a hoisted `export function` declaration
- * whose module statically imports this class — so importing it here closes a runtime import
- * cycle, safe because the wrapper methods call it only at runtime and a hoisted function binding
- * is never in TDZ.
+ * IMPORT CYCLE (benign): jsToScheme (rosetta.ts) is a hoisted export function whose
+ * module statically imports this class — importing it here closes a runtime cycle,
+ * safe because wrapper methods call it only at runtime (never TDZ).
  *
- * INTEROP BOUNDARY: the member-access walk stops at this prototype (before it can reach
- * `source` or the delegated vector) via the nominal arrival-family rule in
- * interop-access.ts — `instanceof AValue` covers the whole value hierarchy in one
- * check; no per-class stamp needed.
+ * INTEROP BOUNDARY: member-access walk stops at this prototype (before source or the
+ * delegated vector) via interop-access's nominal arrival-family rule (`instanceof
+ * AValue`); no per-class stamp needed.
  */
 
 import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
@@ -22,8 +20,7 @@ import { withInputProvenance } from "../values/op-helpers.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { printValue } from "../values/print.js";
 import { type JSWorldArray, type SchemeValue } from "../values/types.js";
-// Runtime import cycle (benign — see header): a hoisted `export function` declaration,
-// called only inside wrapper methods at runtime.
+// Runtime import cycle (benign — see header): hoisted export function, runtime-only use.
 import { jsToScheme } from "./rosetta.js";
 import { is_promise } from "../eval/guards.js";
 import { settleEntry } from "../values/primitives/pending-entry.js";
@@ -34,55 +31,51 @@ import { accessHas, accessKeys, accessMember, NOT_FOUND } from "./interop-access
 import { ForeignProxyFreezeError, InteropAccessError, strictGate } from "../errors.js";
 import { foldMemberName } from "./AJSObject.js";
 
-/** Pending-cell cache for Promise-valued reads off the borrowed source (pending-entry.ts):
- *  number keys are element indices (`vector-ref`), string keys are member names (the
- *  tagless `get` trio) — two read protocols with historically different boxing, so their
- *  cells stay keyed apart even when they alias the same slot. WeakMap, not an instance
- *  field, for the same reasons as AJSObject's `entryCaches` (off the wrapper's own
- *  properties, no tslib `#`-private helper, GC-correct). Only pending reads land here —
- *  the sync read paths stay byte-identical (uncached, as before). */
-// `AJSArray<any>`: the store type parameter POLICES THE INBOUND CALL and is not part of the
+/**
+ * Pending-cell cache for Promise-valued reads off the borrowed source
+ * (pending-entry.ts): number keys are element indices (vector-ref), string keys are
+ * member names (tagless get trio) — two read protocols with different boxing, so cells
+ * stay keyed apart even when they alias the same slot. WeakMap, not instance field
+ * (same reasons as AJSObject entryCaches). Only pending reads land here — sync paths
+ * stay uncached.
+ */
+// AJSArray<any>: store type parameter POLICES THE INBOUND CALL and is not part of the
 // value's identity, so a cache keyed on the value accepts every instantiation.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const pendingCells = new WeakMap<AJSArray<any>, Map<number | string, SchemeValue | Promise<SchemeValue>>>();
 
 /**
- * A borrowed JS array, re-presented as a vector. It is an `AValue` (a sibling of
- * AJSObject) that *implements* the vector algebra — it does NOT inherit
- * `AVector`. Inheriting (`extends AVector`) would force the AVector class to be DEFINED
- * at this module's eval time, closing a module-init cycle
- * (AJSArray.ts → AVector → … → AJSArray.ts → `extends AVector(undefined)`). Implementing
- * by DELEGATION touches AVector only at RUNTIME (`new AVector` inside `vec()`), so the
- * binding need not exist yet when this module loads — the cycle stays benign, exactly
- * like every other function-body op-helpers↔AVector edge.
+ * A borrowed JS array, re-presented as a vector. It is an AValue (sibling of AJSObject)
+ * that *implements* the vector algebra — it does NOT inherit AVector. Extending
+ * AVector would force AVector defined at this module's eval time, closing a
+ * module-init cycle (AJSArray → AVector → … → AJSArray → extends AVector(undefined)).
+ * Implementing by DELEGATION touches AVector only at RUNTIME (`new AVector` inside
+ * vec()), so the binding need not exist when this module loads.
  *
- * The borrowed `source` boxes through the membrane ON DEMAND (`vec()` materializes once,
- * cached): reading `.length` or crossing back out to JS never copies the whole array. The
- * vector algebra (map / filter / reduce / sort) forwards to that materialized vector —
- * no duplicated logic.
+ * Borrowed source boxes through the membrane ON DEMAND (vec() materializes once,
+ * cached): reading .length or crossing back out to JS never copies the whole array.
+ * Vector algebra (map/filter/reduce/sort) forwards to that materialized vector.
  *
- * The Rosetta translation: a JS array IS an R7RS vector, so the membrane presents it as
- * one — `kind` is "vector". It used to answer car/cdr; a faithful vector has neither, so
- * `(car it)` now throws like `(car #(1 2 3))` — use `(vector->list it)`. `equals` stays
- * reference-identity, matching its opaque-view sibling AJSObject.
- * (`source` is kept as the borrowed reference so rosetta's `schemeToJs` crosses it back
- * out raw without materializing.)
+ * Rosetta translation: a JS array IS an R7RS vector, so kind is "vector". A faithful
+ * vector has neither car nor cdr — (car it) throws like (car #(1 2 3)); use
+ * (vector->list it). equals stays reference-identity, matching opaque-view sibling
+ * AJSObject. source is kept as the borrowed reference so schemeToJs crosses it back
+ * out raw without materializing.
  */
 export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends AValue {
   readonly kind = "vector" as const;
 
-  // The borrowed source materialized into an owned vector — lazy + cached (the delegation
-  // target). A plain field, NOT a #-private (the workspace's importHelpers emits a tslib
-  // helper for ES #-private slots; AJSObject's entry cache is a module-level WeakMap for
-  // the same reason).
+  // Borrowed source materialized into an owned vector — lazy + cached (delegation
+  // target). Plain field, NOT #-private (importHelpers emits tslib helper for ES
+  // #-private; AJSObject's entry cache is a module-level WeakMap for the same reason).
   private boxedVec?: AVector;
 
   /**
-   * `source` is typed `JSWorldArray<S>` — THE HYGIENE LAW at the type level (docs/membrane.md
-   * §HYGIENE; the why-it-corrupts is stated there). A caller statically holding scheme values
-   * (`SchemeValue[]`, `AValue[]`) collapses to `never` here and FAILS TO COMPILE — a type catches
-   * every violator at once, including the ones no test covers. The egress-proxy carve-out needs no
-   * exception clause: a Proxy over a plain target is not an `AValue`, so it passes on its own merits.
+   * source is typed JSWorldArray<S> — THE HYGIENE LAW at the type level
+   * (docs/membrane.md §HYGIENE). A caller statically holding scheme values
+   * (SchemeValue[], AValue[]) collapses to never and FAILS TO COMPILE. Egress-proxy
+   * carve-out needs no exception: a Proxy over a plain target is not an AValue, so it
+   * passes on its own merits.
    */
   constructor(
     readonly source: JSWorldArray<S>,
@@ -91,19 +84,18 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
     super(provenance);
   }
 
-  // Cheap read stays lazy — `.length` (and `(vector-length it)`) never boxes the array.
+  // Cheap read stays lazy — .length never boxes the array.
   get length(): number {
     this.freezeSource();
     return this.source.length;
   }
 
-  // Materialized element array — the vector surface the printer (and asVector) read.
+  // Materialized element array — vector surface the printer (and asVector) read.
   get __vector__(): readonly SchemeValue[] {
     return this.vec().__vector__;
   }
 
-  // Crosses back OUT to JS as the RAW borrowed source (not the boxed materialization) — the
-  // lazy unwrap rosetta's schemeToJs reads off `.source`.
+  // Crosses back OUT as the RAW borrowed source (not the boxed materialization).
   ["arrival/toJS"](): readonly unknown[] {
     return this.source;
   }
@@ -112,20 +104,17 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
     return this.source;
   }
 
-  // Returns the DEFAULT instantiation (`AJSArray<readonly unknown[]>`): the store type parameter
-  // exists to POLICE THE INBOUND CALL (it is what makes a scheme-valued store fail to compile), not
-  // to be tracked through the value's whole life. Re-stamping does not re-open the crossing — the
-  // store was already vetted at construction — so the widened source is honest here, not a laundered
-  // cast. Every consumer of a borrowed array types it bare (`AJSArray`), which is this default.
+  // Returns the DEFAULT instantiation (AJSArray<readonly unknown[]>): the store type
+  // parameter POLICES THE INBOUND CALL, not tracked through the value's whole life.
+  // Re-stamping does not re-open the crossing — store was vetted at construction.
   withProvenance(p: ReadonlySet<number>): AJSArray {
     return new AJSArray(this.source as readonly unknown[], p);
   }
 
-  // ── Vector algebra — DELEGATED to the materialized vector (no duplicated logic) ──
-  // Return types MIRROR AVector's concrete returns: honest + precise, never the abstract
-  // `AValue` (not assignable to the `SchemeValue` union the base declares). `map` is
-  // box-preserving ("one algebra, every carrier") — it returns a FRESH AVector,
-  // same as AVector's own map; a borrowed array's map is no longer a foreign-Functor cross-out.
+  // ── Vector algebra — DELEGATED to the materialized vector ──
+  // Return types MIRROR AVector's concrete returns (honest + precise, never abstract
+  // AValue). map is box-preserving ("one algebra, every carrier") — returns a FRESH
+  // AVector, same as AVector's own map.
   ["arrival/tagless-final/map"](
     fn: (x: SchemeValue) => SchemeValue | Promise<SchemeValue>,
     runCtx: RunContext,
@@ -177,21 +166,18 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
     return this.vec()[tf("drop-while")](pred, runCtx);
   }
 
-  // The SPINE READING of the borrowed array (see AJSArrayList's header for the chart law). Asking
-  // a vector for car/cdr IS asking for its spine — so we project one, straight off the borrowed
-  // `source`, O(1), no materialization.
-  //
-  // These used to delegate into `vec()`, which meant the most ordinary idiom in the medium —
-  // `(car (some-tool …))` — boxed the ENTIRE array just to read element 0, and `(cdr …)` handed
-  // back a vector slice that no `null?` could ever terminate on. The strict gate stays on the
-  // CONTAINER (a borrowed array is a vector, and strict mode still refuses car/cdr on it,
-  // faithfully); the projected view is a genuine pair and is never gated.
+  // SPINE READING of the borrowed array (AJSArrayList header: chart law). Asking a
+  // vector for car/cdr IS asking for its spine — project one straight off source, O(1),
+  // no materialization. Strict gate stays on the CONTAINER (borrowed array is a vector;
+  // strict mode still refuses car/cdr on it); the projected view is a genuine pair and
+  // is never gated. Rejected alternative: delegate into vec() — (car (some-tool …))
+  // would box the ENTIRE array just to read element 0, and (cdr …) would hand back a
+  // vector slice that no null? could terminate on.
   ["arrival/tagless-final/car"](runCtx?: RunContext): SchemeValue {
     strictGate(runCtx, {
       op: "car",
       rule: "R7RS `car` requires a pair; a vector is not a pair",
-      alternative: "use `(vector-ref v 0)` for the first element, or `(vector->list v)`",
-    });
+      alternative: "use `(vector-ref v 0)` for the first element, or `(vector->list v)`" });
     this.freezeSource();
     return this.source.length > 0 ? this.elementAt(0) : nil;
   }
@@ -200,59 +186,51 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
     strictGate(runCtx, {
       op: "cdr",
       rule: "R7RS `cdr` requires a pair; a vector is not a pair",
-      alternative: "use vector slicing or `(vector->list v)`",
-    });
+      alternative: "use vector slicing or `(vector->list v)`" });
     this.freezeSource();
     return AJSArrayList.at(this, 1);
   }
 
-  // Print protocol — the same #(...) vector repr as AVector; the __vector__ getter
-  // materializes the source once (cached), matching the printer's get_instances AJSArray
-  // entry at quote=false.
-  /** The BORROWED source's elements — raw, unboxed. Walking them costs no materialization: the
-   *  collapse walk only collects provenance off values that already ARE AValues. */
+  /** Borrowed source's elements — raw, unboxed. Collapse walk only collects provenance
+   *  off values that already ARE AValues; no materialization cost. */
   override ["arrival/provenanceChildren"](): Iterable<unknown> {
     return this.source;
   }
 
+  // Print protocol — same #(...) vector repr as AVector; __vector__ materializes once.
   ["arrival/print"](): string {
     return `#(${this.__vector__.map((el) => printValue(el)).join(" ")})`;
   }
 
-  // Setoid — reference identity (SAME borrowed source), matching the opaque-view sibling
-  // AJSObject. A borrowed foreign array is a read-only view; deep-comparing its source is
-  // the deep semantics the membrane exists to avoid.
+  // Setoid — reference identity (SAME borrowed source), matching AJSObject. Deep-
+  // comparing source is the deep semantics the membrane exists to avoid.
   ["arrival/tagless-final/equals"](other: unknown): boolean {
     return other instanceof AJSArray && other.source === this.source;
   }
 
-  // Element-count read straight off `source` (no materialize). Interim fix
-  // (RULINGS.md R2): reads the CONTAINER's own flat grouping/length-fact
-  // stamp (`withInputProvenance([this], count)`), never the elements' union — matches
-  // APair/AVector's `length` (one algebra every carrier). A borrowed array's own
-  // top-level provenance is empty by construction today (the grouping-fact mint for
-  // AJSArray/ADict is a separate, already-ticketed gap — term-carrier.law.test.ts's
-  // `equalsContainerHasNoGroupingFact`), so this reads as an empty-provenance boxed AExact
-  // until that lands (`withInputProvenance` always boxes — never a bare count).
+  // Element-count off source (no materialize). Reads the CONTAINER's own flat
+  // grouping/length-fact stamp (withInputProvenance([this], count)), never the
+  // elements' union — matches APair/AVector length (one algebra every carrier)
+  // (RULINGS.md R2). Borrowed array's top-level provenance is empty by construction
+  // today (grouping-fact mint for AJSArray/ADict is a separate gap —
+  // term-carrier.law equalsContainerHasNoGroupingFact), so this reads as empty-
+  // provenance boxed AExact until that lands.
   ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
     this.freezeSource();
     return withInputProvenance([this], this.source.length);
   }
 
-  // Vector type-predicate — a borrowed JS array answers `(vector? x)` #t (it IS a vector).
+  // Vector type-predicate — borrowed JS array answers (vector? x) #t.
   ["arrival/tagless-final/vector?"](): boolean {
     return true;
   }
 
-  // ── Member trio (`@`/`@?`/`@keys` + the `:key` accessor) — the borrowed-array arm of the
-  // protocol AJSObject/ADict carry. Reads go through the interop policy over the RAW source
-  // (own members only, boundary walk — a borrowed array's `length`/index reads are member
-  // reads, not vector algebra). Semantics inherited verbatim from the membrane face's
-  // former AJSArray branch: NOT_FOUND/blocked → nil; an array-valued member re-presents as
-  // a borrowed AJSArray (so car/cdr work on it); other members box via jsToScheme with
-  // EMPTY provenance (the face's historical choice — element reads via `vector-ref` carry
-  // this container's provenance instead; that asymmetry precedes this term and is pinned
-  // by the identity/lineage suites).
+  // Member trio (@/@?/@keys + :key) — borrowed-array arm of the protocol AJSObject/
+  // ADict carry. Reads through interop policy over the RAW source (own members only).
+  // NOT_FOUND/blocked → nil; array-valued member re-presents as borrowed AJSArray
+  // (so car/cdr work on it); other members box via jsToScheme with EMPTY provenance
+  // (historical face choice — element reads via vector-ref carry this container's
+  // provenance instead; asymmetry pinned by identity/lineage suites).
   ["arrival/tagless-final/get"](key: SchemeValue | string): SchemeValue | Promise<SchemeValue> {
     this.freezeSource();
     const name = foldMemberName(key);
@@ -265,8 +243,8 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
     }
     if (raw === NOT_FOUND) return nil;
     if (Array.isArray(raw)) return new AJSArray(raw);
-    // A Promise-valued member is a lazy pending cell — settled box carries the member
-    // path's historical EMPTY provenance, same as the sync read below.
+    // Promise-valued member is a lazy pending cell — settled box carries EMPTY
+    // provenance, same as the sync read below.
     if (is_promise(raw))
       return this.pendingCell(name, raw, (settled) => jsToScheme(CONSTANT_CTX, settled, {}, EMPTY_PROVENANCE));
     const boxed: SchemeValue = jsToScheme(CONSTANT_CTX, raw, {}, EMPTY_PROVENANCE);
@@ -283,35 +261,29 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
     return accessKeys(this.source);
   }
 
-  // Indexed access — boxes JUST element k (no full materialize), the same lazy crossing as
-  // `vec()` below and the AJSObject.get sibling: `jsToScheme` carrying THIS container's
-  // provenance, so `(vector-ref borrowed k)` stamps the element identically to
-  // `(vector->list borrowed)` (the Option-C discipline — a raw element inherits the
-  // container's lineage, an already-AValue element keeps its own). `jsToScheme` is typed
-  // `any` (rosetta legacy debt) but its contract is a boxed Scheme value → annotate to the
-  // honest union so the `SchemeValue` return type-checks without a cast. (`fromJS` would
-  // drop provenance instead, via CONSTANT_CTX/EMPTY_PROVENANCE.)
+  // Indexed access — boxes JUST element k (no full materialize). jsToScheme carries
+  // THIS container's provenance so (vector-ref borrowed k) stamps identically to
+  // (vector->list borrowed). fromJS would drop provenance (CONSTANT_CTX/EMPTY).
   ["arrival/tagless-final/vector-ref"](k: number): SchemeValue | Promise<SchemeValue> {
     this.freezeSource();
     const raw = this.source[k];
-    // A Promise-valued element is a lazy pending cell (pending-entry.ts): first read
-    // mints one settle chain, settlement caches the box — sync after settlement. The
-    // settled box takes the SAME boxing as the sync path below (container provenance +
-    // attestation inheritance).
+    // Promise-valued element is a lazy pending cell; settled box takes the SAME boxing
+    // as the sync path (container provenance + attestation inheritance).
     if (is_promise(raw)) return this.pendingCell(k, raw, (settled) => this.boxElement(settled));
     return this.boxElement(raw);
   }
 
-  /** The `vector-ref` boxing discipline (shared by the sync path and the pending cell's
-   *  settlement): jsToScheme carrying THIS container's provenance, attestation
-   *  inheritance (stamp site 2), `freshIfSingleton` so a raw boolean surfaces as an
-   *  attested clone, never the shared flyweight. */
   /**
-   * THE declared membrane penetration for this container's elements (docs/membrane.md §HYGIENE):
-   * the ONE place an element of a borrowed array crosses into the Scheme world, and the only
-   * element-crossing any consumer may use. `AJSArrayList` (the spine chart over this same store)
-   * calls THIS rather than owning a second boxing policy — one store, one crossing, owned by the
-   * class that owns the store (P7).
+   * THE declared membrane penetration for this container's elements
+   * (docs/membrane.md §HYGIENE): the ONE place an element of a borrowed array crosses
+   * into Scheme, and the only element-crossing any consumer may use. AJSArrayList
+   * (spine chart over this same store) calls THIS rather than owning a second boxing
+   * policy — one store, one crossing, owned by the class that owns the store (P7).
+   *
+   * Boxing discipline (shared by sync path and pending cell's settlement): jsToScheme
+   * carrying THIS container's provenance, attestation inheritance (stamp site 2),
+   * freshIfSingleton so a raw boolean surfaces as an attested clone, never the shared
+   * flyweight.
    */
   elementAt(i: number): SchemeValue {
     this.freezeSource();
@@ -319,11 +291,10 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
   }
 
   private boxElement(raw: unknown): SchemeValue {
-    // THE HYGIENE LAW, enforced at the penetration point (docs/membrane.md §HYGIENE). The check
-    // lives HERE, at the O(1) crossing, not in an O(n) constructor scan the lazy borrow exists to
-    // avoid — the crossing is the moment the flip happens. An AValue here is an unobserved flip that
-    // `jsToScheme` below would deep-re-stamp with this container's provenance, destroying its
-    // lineage; fail loudly instead.
+    // HYGIENE LAW at the O(1) penetration point (docs/membrane.md §HYGIENE) — not an
+    // O(n) constructor scan the lazy borrow exists to avoid. An AValue here is an
+    // unobserved flip that jsToScheme would deep-re-stamp with this container's
+    // provenance, destroying its lineage; fail loudly instead.
     Error.invariant(
       !(raw instanceof AValue),
       "AJSArray: `source` must hold JS-world values only — an AValue here means a scheme value was " +
@@ -334,9 +305,8 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
     return isAttested(this) ? attestDeep(freshIfSingleton(boxed)) : boxed;
   }
 
-  /** Mint-or-reuse the pending cell for a Promise-valued read (see `pendingCells`):
-   *  the chain itself is cached so concurrent readers share ONE settlement, and the
-   *  settled box overwrites it — sync-after-settled. */
+  /** Mint-or-reuse the pending cell for a Promise-valued read: chain cached so
+   *  concurrent readers share ONE settlement; settled box overwrites — sync-after. */
   private pendingCell(
     key: number | string,
     raw: unknown,
@@ -355,11 +325,9 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
     return cell;
   }
 
-  // The freeze contract — docs/membrane.md §BOXING. Idempotent (guarded by `Object.isFrozen`).
-  // TODO(ctx-elimination): this used to read `this.ctx.freezeRosettaReturns !== false` (default
-  // true, opt-out via a per-run ctx flag) — AValue no longer carries a per-value ctx (see
-  // AValue.ts's ctx-removal note), so the opt-out is unreachable and this always freezes now.
-  // Re-source from an active run-context once one is restored.
+  // Freeze contract — docs/membrane.md §BOXING. Idempotent (Object.isFrozen).
+  // deferred: freezes always; per-run freezeRosettaReturns opt-out died with AValue
+  // per-value ctx. Re-source from an active run-context once one is restored.
   private freezeSource(): void {
     if (!Object.isFrozen(this.source)) {
       try {
@@ -370,20 +338,16 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
     }
   }
 
-  // Box the borrowed source into an owned AVector through the membrane, once. The vector
-  // algebra above DELEGATES here — AJSArray implements the contract without inheriting it.
-  // `new AVector` runs only at call time, so AVector need not be defined when THIS module
-  // evaluates (the cycle-avoidance the "implements, not extends" shape buys).
+  // Box the borrowed source into an owned AVector through the membrane, once. Vector
+  // algebra DELEGATES here. new AVector runs only at call time (cycle-avoidance of
+  // implements-not-extends).
   private vec(): AVector {
     this.freezeSource();
-    // Box each element through jsToScheme carrying THIS borrowed container's provenance — so
-    // elements inherit the crossing's lineage (parallel to AJSObject.get, which threads
-    // this.provenance to its fields), and nested arrays/objects re-borrow faithfully.
+    // Each element through jsToScheme carrying THIS container's provenance — parallel
+    // to AJSObject.get. Nested arrays/objects re-borrow faithfully.
     if (this.boxedVec === undefined) {
-      // Attestation inheritance (stamp site 2, values/attestation.ts): the materialized
-      // elements are attested iff the borrowed container is — parallel to AJSObject.get.
-      // `freshIfSingleton` per element: a raw boolean boxes to the shared #t/#f flyweight
-      // on the empty-provenance path, and the singletons never attest — the clone does.
+      // Attestation inheritance (stamp site 2): elements attested iff container is.
+      // freshIfSingleton per element: raw boolean → shared flyweight; clone attests.
       const inherit = isAttested(this);
       this.boxedVec = new AVector(
         this.source.map((v) => {

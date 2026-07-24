@@ -1,140 +1,118 @@
 /**
  * R9 lazy egress proxies — the container exit of the membrane.
  *
- * Design: RULINGS.md R9 + docs/design-history/arrival-egress-membrane-exit.md. A
- * native container (AVector / APair / ADict) exits as a lazy, observationally-plain-JS
- * proxy instead of an eager deep copy: elements materialize on first read, and a
- * tracker guarantees a stable identity per projection — where "projection" is now an
- * explicit law, not one global slot:
+ * Design: RULINGS.md R9 + docs/membrane.md §EGRESS. A native container
+ * (AVector / APair / ADict) exits as a lazy, observationally-plain-JS proxy instead
+ * of an eager deep copy: elements materialize on first read; a tracker guarantees
+ * stable identity per projection — where "projection" is an explicit law:
  *
  *   • BARE (serialization — `arrival/toJS()`, no options): identity = (box), forever.
- *     One module-level WeakMap, exactly the original R9 behavior. Elements
- *     materialize through their own `arrival/toJS` (a nested callable stringifies —
- *     that IS the serialization contract).
+ *     One module-level WeakMap. Elements materialize through their own `arrival/toJS`
+ *     (a nested callable stringifies — that IS the serialization contract).
  *   • MEMBRANE (`arrival/toJS(exit)` — rosetta/exec crossings): identity =
- *     (box, mode, SCOPE). The cache lives on the exporting RegionScope
- *     (`RegionScope.egressProxies`), handed in via `MembraneExit.cache`, so a later
+ *     (box, mode, SCOPE). Cache lives on the exporting RegionScope
+ *     (`RegionScope.egressProxies`), handed via `MembraneExit.cache`, so a later
  *     invocation re-egressing the same box mints proxies bound to ITS scope instead
  *     of resurrecting wrappers pinned to a closed (or DETACHED) one. Elements
- *     materialize through `exit.element` — the full recursive membrane crossing.
+ *     materialize through `exit.element` — full recursive membrane crossing.
  *   • GATED (tier-state egress): identity = (gate, box). A gate is snapshot-scoped
- *     (`tierGateFromSnapshot` mints a fresh closure per snapshot), so its proxies are
- *     too — same-gate re-egress is a cache hit, a new snapshot's gate mints a fresh
- *     proxy honestly reflecting current tiers. Never combined with a membrane exit
- *     today (tiering is bare-mode by design — payload serialization WANTS print
- *     strings); if both are supplied, the membrane cache wins and the gate still
- *     governs materialization.
+ *     (`tierGateFromSnapshot` mints a fresh closure per snapshot). Never combined
+ *     with a membrane exit today (tiering is bare-mode by design); if both are
+ *     supplied, the membrane cache wins and the gate still governs materialization.
  *
  * BORROWED carriers (AJSArray/AJSObject) are a FOURTH egress class that never routes
  * here: they egress source identity (`return this.source`) — that IS their membrane
- * contract, and adding a proxy or a membrane walk would break it.
+ * contract; a proxy or membrane walk would break it.
  *
- * Mechanics (each locked in the design doc):
- * - The target is a REAL `[]` / `{}` doubling as the materialization cache: every trap
- *   answer is backed by an ordinary configurable+writable target property, so all Proxy
- *   invariants are trivially satisfiable, `Array.isArray(proxy)` is true for the array
- *   shape, and a second read is a plain property hit.
- * - The proxy registers in its cache slot BEFORE any trap can run (built, set,
- *   returned — traps only fire on reads after return), so a cyclic reach-back (a
- *   container that — via any depth — contains itself) resolves to the
- *   already-registered proxy structurally, with no recursion. (JSON.stringify on such
- *   a value then fails with the same TypeError a genuinely cyclic plain object
- *   produces — observationally plain JS, exactly.) The invariant holds PER SLOT.
- * - The write family (`set` / `deleteProperty` / `defineProperty` / `setPrototypeOf`)
- *   throws the same teaching door family as AJSObject's read-only membrane: the egressed
- *   value is a projection of an immutable Scheme value, not a mailbox back into it.
- * - Scalars are never routed here — they unwrap directly at their own `arrival/toJS`.
- * - Provenance reach-back (R9's "future bonus": deep non-primitive reads re-entering the
- *   boxed world with lineage intact) is deliberately NOT scaffolded in this iteration.
+ * Mechanics:
+ * - Target is a REAL `[]` / `{}` doubling as the materialization cache: every trap
+ *   answer is a configurable+writable target property, so Proxy invariants are
+ *   trivially satisfiable, `Array.isArray(proxy)` is true for the array shape, and
+ *   a second read is a plain property hit.
+ * - Proxy registers in its cache slot BEFORE any trap can run, so a cyclic
+ *   reach-back resolves to the already-registered proxy (no recursion). JSON.stringify
+ *   on such a value fails with the same TypeError a genuinely cyclic plain object
+ *   produces — observationally plain JS. Invariant holds PER SLOT.
+ * - Write family (set / deleteProperty / defineProperty / setPrototypeOf) throws the
+ *   same teaching door family as AJSObject's read-only membrane: egressed value is a
+ *   projection of an immutable Scheme value, not a mailbox back into it.
+ * - Scalars never route here — they unwrap at their own `arrival/toJS`.
  *
- * Leaf module: imports only the AValue base (for tracker key types and the bare
- * materialization dispatch) and the interop error — never membrane/env/bridge/rosetta.
- * The membrane recursion reaches this file exclusively as the `MembraneExit` VALUE
- * built by rosetta's `egressAValue` (type-only import below), which is exactly why a
- * nested callable can get its real reverse-membrane host-fn projection without this
- * module ever importing `callableToHostFn`.
+ * Leaf module: imports only AValue base and the interop error — never
+ * membrane/env/bridge/rosetta. Membrane recursion reaches this file exclusively as the
+ * MembraneExit VALUE built by rosetta's egressAValue (type-only import), so a nested
+ * callable gets its reverse-membrane host-fn projection without this module importing
+ * callableToHostFn.
  */
 import { AValue } from "../values/primitives/AValue.js";
 import type { EgressMode, MembraneExit } from "../values/types.js";
 import { InteropAccessError } from "../errors.js";
 
 /** BARE-law tracker: same box → same proxy, forever. Deterministic (no options, no
- *  scope), so box-forever identity is coherent — the original R9 law, now scoped to
- *  the serialization projection only. */
+ *  scope) — serialization projection only. */
 const bareProxies = new WeakMap<AValue, object>();
 
-/** GATED-law tracker: a gate is snapshot-scoped; its proxies are too. Same-gate
- *  re-egress hits; a fresh snapshot's fresh gate closure gets a fresh inner map. */
+/** GATED-law tracker: gate is snapshot-scoped; its proxies are too. */
 const gatedProxies = new WeakMap<TierGate, WeakMap<AValue, object>>();
 
 /**
  * R9 RE-ADMISSION: every egress proxy this module mints — under ANY of the three
- * identity laws (bare/membrane/gated) — registers here at mint time, proxy → its
- * original box. This is what makes the membrane a genuine bifunctor at the
- * container boundary: `jsToScheme(schemeToJs(box)) === box` (rosetta.ts's
- * INBOUND_CLAIMS reads this map to re-admit a proxy that round-trips back in,
- * instead of re-borrowing it as a fresh AJSArray/AJSObject and losing identity —
- * see that file's "R9 egress proxy → original box" claim). One WeakMap, keyed by
- * the PROXY object (not the box) — a proxy is a fresh identity per (box, law-key),
- * so this is the honest inverse of `bareProxies`/`membraneSlot`/`gatedSlot` above. */
+ * identity laws — registers here at mint time, proxy → original box. Makes the
+ * membrane a genuine bifunctor at the container boundary:
+ * `jsToScheme(schemeToJs(box)) === box` (rosetta INBOUND_CLAIMS re-admits via this
+ * map instead of re-borrowing as fresh AJSArray/AJSObject). One WeakMap, keyed by
+ * the PROXY (not the box) — honest inverse of bare/membrane/gated slots above.
+ */
 const PROXY_ORIGIN = new WeakMap<object, AValue>();
 
-/** The inverse of minting: `undefined` for anything that isn't one of THIS module's
- *  own egress proxies (a plain JS object/array, a foreign Proxy, another AValue). */
+/** Inverse of minting: undefined for anything that isn't one of THIS module's proxies. */
 export function originalBoxOf(proxy: object): AValue | undefined {
   return PROXY_ORIGIN.get(proxy);
 }
 
-/** Shallow read model a container hands to its proxy: `keys()` enumerates the own
- *  string keys (index strings for the array shape), `read(key)` returns the ELEMENT —
- *  usually a box, or a raw FFI-passthrough value (binary/Promise) that never boxed. */
+/** Shallow read model a container hands to its proxy: keys() enumerates own string
+ *  keys (index strings for array shape); read(key) returns the element (usually a
+ *  box, or a raw FFI-passthrough value that never boxed). */
 export interface EgressReader {
   keys(): readonly string[];
   read(key: string): unknown;
 }
 
-/** Element exit. Membrane egress routes through `exit.element` — the full recursive
- *  crossing (options + pinned scope + nested-callable wrapping live in rosetta's
- *  closure, never here). Bare egress dispatches the element's own serialization
- *  protocol; a raw FFI-passthrough element has no protocol and exits as itself. */
+/** Element exit. Membrane routes through exit.element (options + pinned scope +
+ *  nested-callable wrapping live in rosetta's closure). Bare dispatches the element's
+ *  own serialization protocol; raw FFI-passthrough has no protocol and exits as itself. */
 function materializeElement(element: unknown, membrane?: MembraneExit): unknown {
   if (membrane !== undefined) return membrane.element(element);
   return element instanceof AValue ? element["arrival/toJS"]() : element;
 }
 
 /**
- * The payload-tiering tier-state gate seam. This module stays a LEAF (file header
- * above) so this interface is deliberately ABSTRACT — no `PayloadTier`/
- * `EvidenceTier` import from `provenance/store`. The concrete implementation
- * (`provenance/store/tiering.ts`'s `tierGateFromSnapshot`) closes over its own tier
- * state and hands back a value shaped like this.
+ * Payload-tiering tier-state gate seam. This module stays a LEAF (preamble) so this
+ * interface is ABSTRACT — no PayloadTier/EvidenceTier import. Concrete implementation
+ * (provenance/store/tiering.ts tierGateFromSnapshot) closes over its own tier state.
  *
- * Proxy traps (`get`/`getOwnPropertyDescriptor` below) are SYNCHRONOUS by spec, so a
- * gate can only consult an ALREADY-RESOLVED view of tier state — never awaits.
+ * Proxy traps are SYNCHRONOUS by spec — a gate can only consult an ALREADY-RESOLVED
+ * view of tier state, never await.
  */
 export interface TierGate {
-  /** `true`: tier state allows the real read through to `reader.read(key)` — this is
-   *  the ONLY path taken when a gate is omitted entirely, or every backing payload is
-   *  still ring-resident (byte-stable pass-through, no behavior change from the
-   *  ungated shape). `false`: the key's payload has degraded (evicted to `stub`) —
-   *  `stubbedValue(key)` substitutes instead, and `reader.read(key)` is never called. */
+  /** true: tier allows the real read through to reader.read(key) — the ONLY path when
+   *  a gate is omitted, or every backing payload is still ring-resident (unset ⇒ inert
+   *  pass-through). false: key's payload degraded (evicted to stub) — stubbedValue
+   *  substitutes; reader.read is never called. */
   allows(key: string): boolean;
-  /** The degraded stand-in for a gated-off key. Never re-enters `reader.read` or
-   *  `materializeElement` — placed directly on the target, exactly like the existing
-   *  "raw FFI-passthrough" case (this file's header, mechanics bullet 4). */
+  /** Degraded stand-in for a gated-off key. Never re-enters reader.read or
+   *  materializeElement — placed directly on the target. */
   stubbedValue(key: string): unknown;
 }
 
-/** `egressContainerProxy`'s options — one object, so the membrane pair
- *  (materializer + mode + scope-owned cache) travels as a unit and cannot drift
- *  apart at a call site. */
+/** egressContainerProxy options — membrane pair (materializer + mode + scope-owned
+ *  cache) travels as a unit and cannot drift apart at a call site. */
 export interface EgressOpts {
-  /** Tier-state gate consulted BEFORE `reader.read(key)` on first materialization of
-   *  each key. Omitting it is byte-stable pass-through. */
+  /** Tier-state gate consulted BEFORE reader.read(key) on first materialization.
+   *  Omitting is inert pass-through. */
   gate?: TierGate;
-  /** The membrane exit — presence switches materialization from bare serialization
-   *  to `exit.element`, and the cache to the exit's scope-owned (box, mode) slots.
-   *  Bare egress omits it. */
+  /** Membrane exit — presence switches materialization from bare serialization to
+   *  exit.element, and the cache to the exit's scope-owned (box, mode) slots. */
   membrane?: MembraneExit;
 }
 
@@ -150,8 +128,7 @@ function writeDoor(kind: "assign" | "mutate", key: string | symbol | undefined):
   );
 }
 
-/** One cache slot under whichever identity law governs this egress — a get/set pair
- *  the build below stays agnostic to. */
+/** One cache slot under whichever identity law governs this egress. */
 interface ProxySlot {
   get(): object | undefined;
   set(proxy: object): void;
@@ -167,15 +144,13 @@ function membraneSlot(cache: WeakMap<AValue, Map<EgressMode, object>>, box: AVal
         cache.set(box, byMode);
       }
       byMode.set(mode, proxy);
-    },
-  };
+    } };
 }
 
 function boxSlot(cache: WeakMap<AValue, object>, box: AValue): ProxySlot {
   return {
     get: () => cache.get(box),
-    set: (proxy) => cache.set(box, proxy),
-  };
+    set: (proxy) => cache.set(box, proxy) };
 }
 
 function gatedSlot(gate: TierGate, box: AValue): ProxySlot {
@@ -189,12 +164,11 @@ function gatedSlot(gate: TierGate, box: AValue): ProxySlot {
 
 /**
  * Build (or return the already-built) lazy egress proxy for `box`, under the identity
- * law its options select (file header): membrane ⇒ (box, mode, scope) via
- * `opts.membrane.cache`; gated ⇒ (gate, box); bare ⇒ (box) forever.
+ * law its options select (preamble): membrane ⇒ (box, mode, scope); gated ⇒ (gate, box);
+ * bare ⇒ (box) forever.
  *
  * Identity is guaranteed HERE, at the single chokepoint every container's
- * `arrival/toJS(exit?)` calls — membrane.toJS needs no separate pre-check because
- * protocol dispatch lands in the right slot either way.
+ * `arrival/toJS(exit?)` calls — membrane.toJS needs no separate pre-check.
  */
 export function egressContainerProxy(
   box: AValue,
@@ -219,7 +193,7 @@ export function egressContainerProxy(
   const target: Record<PropertyKey, unknown> = shape === "array" ? [] : Object.create(Object.prototype);
   if (Array.isArray(target)) target.length = names.length; // length preset — reads never materialize the spine
 
-  /** Materialize one element onto the target (the cache) if it's ours and not yet there. */
+  /** Materialize one element onto the target if it's ours and not yet there. */
   const ensure = (key: PropertyKey): void => {
     if (typeof key !== "string" || !nameSet.has(key)) return;
     if (Object.prototype.hasOwnProperty.call(target, key)) return;
@@ -238,9 +212,9 @@ export function egressContainerProxy(
       return (typeof key === "string" && nameSet.has(key)) || Reflect.has(t, key);
     },
     ownKeys(t) {
-      // Canonical key list: every element key (materialized or not), then whatever else
-      // genuinely lives on the target ("length" for the array shape). Reporting a not-yet-
-      // materialized key is legal (the target is extensible); gOPD below backs it on demand.
+      // Every element key (materialized or not), then whatever else lives on the target
+      // ("length" for array shape). Reporting a not-yet-materialized key is legal
+      // (target is extensible); gOPD below backs it on demand.
       const extras = Reflect.ownKeys(t).filter((k) => typeof k !== "string" || !nameSet.has(k));
       return [...names, ...extras];
     },
@@ -259,16 +233,12 @@ export function egressContainerProxy(
     },
     setPrototypeOf() {
       writeDoor("mutate", undefined);
-    },
-  });
+    } });
 
   // Register BEFORE returning — traps only fire on reads after return, so a cyclic
-  // reach-back during a later materialization finds this slot already occupied
-  // (the register-before-materialize invariant, per slot).
+  // reach-back during later materialization finds this slot already occupied.
   slot.set(proxy);
-  // R9 re-admission: every law registers the SAME proxy → box provenance, unconditionally
-  // (this file's PROXY_ORIGIN doc above) — a bare/gated proxy round-trips back in exactly
-  // like a membrane one.
+  // R9 re-admission: every law registers the same proxy → box provenance.
   PROXY_ORIGIN.set(proxy, box);
   return proxy;
 }

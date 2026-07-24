@@ -1,94 +1,58 @@
 /**
  * Interop Member-Access Policy
  *
- * The read policy of the polyglot membrane (`membrane.readMember` wraps `accessMember`):
- * when Scheme reads a member of any value via `@` / `:key`, expose OWN DATA MEMBERS
- * only — never the implementation substrate's prototype machinery (`constructor`,
- * `__proto__`, built-in prototype methods, well-known symbols). This is arrival's
- * `InteropLibrary.readMember` contract, not a security fence around a guest: a foreign
- * object exposes its members, not its language's internals (Graal: JS can't reach
- * Java's `getClass()`). Arrival's own value-types opt in via `@arrival.private` so
- * `(@ a-string :__string__)` cannot reach their internals.
+ * Read policy of the polyglot membrane (`accessMember` is what borrowed-value
+ * get/has/keys wrap): when Scheme reads a member via `@` / `:key`, expose OWN DATA
+ * MEMBERS only — never the implementation substrate's prototype machinery
+ * (`constructor`, `__proto__`, built-in prototype methods, well-known symbols).
+ * Arrival's InteropLibrary.readMember contract, not a security fence around a guest:
+ * a foreign object exposes its members, not its language's internals (Graal: JS can't
+ * reach Java's `getClass()`). Arrival's own value-types opt in via `@arrival.private`
+ * so `(@ a-string :__string__)` cannot reach their internals.
  *
- * "Boundary" here is the membrane sense — the prototype where the member walk STOPS —
- * not a sandbox. See docs/sandbox-security-model.md for the original design rationale.
+ * "Boundary" = the prototype where the member walk STOPS — membrane sense, not sandbox.
  *
- * TWO CONCEPTS live here, deliberately co-located because the CHECKER reads both:
- * 1. THE READ POLICY — accessMember/accessHas/accessKeys + the boundary walk +
- *    blocklists. Its mouths are exactly TWO — the borrowed-value terms `AJSObject`
- *    and `AJSArray` (their own `get/has/keys` over `source`). The membrane has no
- *    `readMember` face: the value's own `arrival/tagless-final/get|has|keys` term
- *    dispatches the read, and there is no dotted-path side-door.
- *    ENDGAME (noted, not executed): with only two callers, both borrowed-value
- *    classes, the policy could inline INTO those classes entirely. Held: the
- *    blocklist + boundary-walk is genuinely shared logic, so a shared module is the
- *    honest home until a third caller forces the cut.
- * 2. THE PRIVACY BRAND — INTEROP_BOUNDARY + markInteropBoundary/@arrival.private:
- *    the opt-in for HOST classes (arrival-chain re-exports it). Arrival's own value
- *    family does not stamp per-class: the nominal family rule inside
- *    `isInteropBoundary` (`instanceof AValue`) covers every primitive in one check,
- *    and the sibling `instanceof ArrivalError` rule covers the structured-error
- *    hierarchy the same way. Classes outside both families (Macro, Syntax,
- *    AmbientRuntime, LexicalScope, Capabilities, EOF, Values, Unterminated,
- *    ParseError, EvalError) carry an explicit `static [INTEROP_BOUNDARY] = true`
- *    stamp (or, for the three errors.ts classes that predate ArrivalError, an
- *    explicit `instanceof` arm here — see the walk below).
+ * TWO CONCEPTS, co-located because the checker reads both:
+ * 1. READ POLICY — accessMember/accessHas/accessKeys + boundary walk + blocklists.
+ *    Mouths are exactly two: AJSObject and AJSArray (get/has/keys over `source`). The
+ *    membrane has no readMember face: the value's own tagless get|has|keys term
+ *    dispatches. Shared module is the honest home for shared blocklist + walk logic.
+ * 2. PRIVACY BRAND — INTEROP_BOUNDARY + markInteropBoundary / @arrival.private: opt-in
+ *    for HOST classes. Arrival's own value family uses the nominal family rule
+ *    (`instanceof AValue`); structured errors use `instanceof ArrivalError`. Classes
+ *    outside both families carry explicit `static [INTEROP_BOUNDARY] = true` (or, for
+ *    non-ArrivalError errors.ts roots, an explicit instanceof arm below).
  *
  * Lineage: GraalVM Truffle InteropLibrary (Würthinger et al. 2013/2017);
  * object-capability membrane (Miller, "Robust Composition", 2006).
  */
 
-// Installs the global `Error.invariant`/`TypeError.invariant` assertion helper
-// used throughout this module (side-effect import).
+// Installs global Error.invariant / TypeError.invariant (side-effect import).
 import "@here.build/error-invariant";
 
 import { InteropAccessError, ArrivalError, Unterminated, ParseError, EvalError, R7RSError } from "../errors.js";
-// The two nominal families the boundary walk recognizes in one shot apiece:
-// every AValue subclass (the value kernel) and every ArrivalError subclass (the
-// structured-error hierarchy). Importing AValue here is a benign two-file cycle —
-// AValue.ts already imports INTEROP_BOUNDARY from this module (its own defensive
-// stamp), and membrane already imports the value family elsewhere (AJSObject/
-// AJSArray extend AValue from within this same directory). Importing errors.ts is
-// not new at all — InteropAccessError already came from here.
+// Nominal families the boundary walk recognizes in one shot: every AValue subclass
+// and every ArrivalError subclass. Benign two-file cycle with AValue (it imports
+// INTEROP_BOUNDARY from here). InteropAccessError already came from errors.ts.
 import { AValue } from "../values/primitives/AValue.js";
 
-// ============================================================================
-// Interop Boundary Marker
-// ============================================================================
-
 /**
- * Symbol used to mark classes/prototypes as interop boundaries.
- * Any prototype with this symbol (set to true) will block inherited property access.
+ * Marks classes/prototypes as interop boundaries — inherited property access stops.
  *
- * Usage:
  * ```typescript
  * class SecureAPI {
  *   static [INTEROP_BOUNDARY] = true;
- *   // Methods here won't be accessible via prototype chain from Scheme
  * }
  * ```
+ *
+ * Module-local (NOT Symbol.for): a registry-global symbol is forgeable from the
+ * sandbox via Symbol.for, letting hostile code stamp or strip boundary markers.
  */
-// Module-local (NOT Symbol.for): a registry-global symbol is forgeable from
-// sandbox via `Symbol.for("scheme:interop-boundary")`, letting hostile code stamp
-// its own boundary markers or strip ours. A module-private Symbol is unreachable
-// from outside this module's closure.
 export const INTEROP_BOUNDARY = Symbol("scheme:interop-boundary");
 
-// ============================================================================
-// Interop Access Error
-// ============================================================================
-
-// InteropAccessError (the error these access primitives THROW) is imported from
-// errors.ts — the single error home — at every consumer directly, not laundered
-// through this module.
-
-// ============================================================================
-// Built-in Boundaries
-// ============================================================================
-
 /**
- * Built-in prototypes that are ALWAYS interop boundaries.
- * These are the standard JavaScript built-ins that Scheme code should never access.
+ * Built-in prototypes that are ALWAYS interop boundaries — standard JS built-ins
+ * Scheme code should never access through inheritance.
  */
 const BUILTIN_BOUNDARY_PROTOTYPES: Set<object | null> = new Set([
   Object.prototype,
@@ -121,36 +85,28 @@ const BUILTIN_BOUNDARY_PROTOTYPES: Set<object | null> = new Set([
   BigInt64Array.prototype,
   BigUint64Array.prototype,
   ArrayBuffer.prototype,
-  // SharedArrayBuffer exists only in crossOriginIsolated scopes (plain
-  // browser workers hide it entirely) — police it where it can exist.
+  // SharedArrayBuffer only in crossOriginIsolated scopes.
   ...(typeof SharedArrayBuffer === "undefined" ? [] : [SharedArrayBuffer.prototype]),
   DataView.prototype,
-  // Generator/AsyncGenerator function prototypes
   Object.getPrototypeOf(function* () {}).prototype, // GeneratorFunction.prototype
   Object.getPrototypeOf(async function* () {}).prototype, // AsyncGeneratorFunction.prototype
 ]);
 
-/**
- * Known dangerous property names that should always be blocked,
- * regardless of where they're defined.
- */
+/** Property names always blocked, regardless of definition site. */
 const BLOCKED_PROPERTY_NAMES: Set<string> = new Set([
-  // Prototype manipulation
   "__proto__",
   "__defineGetter__",
   "__defineSetter__",
   "__lookupGetter__",
   "__lookupSetter__",
-  // Constructor access (can create new objects outside the membrane)
   "constructor",
-  // Prototype access
   "prototype",
 ]);
 
 /**
- * Well-known Symbols that should be blocked from sandbox access.
- * These symbols trigger JS runtime behaviors (type coercion, iteration,
- * instance checks) that could execute arbitrary code or leak internal state.
+ * Well-known Symbols blocked from sandbox access — they trigger JS runtime
+ * behaviors (coercion, iteration, instance checks) that could execute arbitrary
+ * code or leak internal state.
  */
 const BLOCKED_WELL_KNOWN_SYMBOLS: Set<symbol> = new Set([
   Symbol.toPrimitive,
@@ -163,44 +119,28 @@ const BLOCKED_WELL_KNOWN_SYMBOLS: Set<symbol> = new Set([
   Symbol.isConcatSpreadable,
 ]);
 
-// ============================================================================
-// Boundary Cache
-// ============================================================================
-
-/**
- * Cache for prototype boundary status.
- * WeakMap ensures we don't prevent GC of prototypes.
- */
+/** Cache for prototype boundary status. WeakMap so prototypes stay GC-able. */
 const boundaryCache = new WeakMap<object, boolean>();
 
 /**
- * A prototype whose OWN `constructor` is a global (`globalThis[ctor.name] ===
- * ctor`) is a built-in's prototype, hence a boundary — generalizes the explicit
- * BUILTIN_BOUNDARY_PROTOTYPES list so every global (Date, RegExp, Map, the Error
- * subclasses, …) doesn't need enumerating. Identity-checked, not name-checked: a
- * hostile `constructor.name = "Object"` still fails, since `globalThis["Object"]`
- * is the real Object, not the impostor.
+ * A prototype whose OWN `constructor` is a global (`globalThis[ctor.name] === ctor`)
+ * is a built-in's prototype, hence a boundary — generalizes the explicit list so every
+ * global (Date, Error subclasses, …) need not be enumerated. Identity-checked, not
+ * name-checked: spoofed `constructor.name = "Object"` still fails.
  *
- * OWN-constructor is the discriminator: built-in and class prototypes have an
- * own `constructor` (`X.prototype.constructor === X`); an ad-hoc object used as
- * a prototype doesn't — it inherits `Object`, and without this guard would be
- * falsely flagged as a boundary, blocking its own data.
+ * OWN-constructor is the discriminator: built-in/class prototypes have own
+ * `constructor`; an ad-hoc object used as a prototype inherits Object and would
+ * otherwise be falsely flagged, blocking its own data.
  */
 function isGlobalConstructorPrototype(proto: object): boolean {
-  // Read via the OWN descriptor: enforces the own-requirement (an ad-hoc
-  // prototype inherits `Object` → no own descriptor → undefined) and hardens
-  // the read — a hostile own *accessor* `constructor` is never invoked.
+  // OWN descriptor: enforces own-requirement and hardens the read (hostile accessor never invoked).
   const ctor = Reflect.getOwnPropertyDescriptor(proto, "constructor")?.value;
   if (typeof ctor !== "function" || typeof ctor.name !== "string" || ctor.name.length === 0) return false;
-  // Identity, not name: a spoofed `constructor.name` still fails — `globalThis[name]`
-  // is the real global, not the impostor.
+  // Identity, not name.
   return (globalThis as Record<string, unknown>)[ctor.name] === ctor;
 }
 
-/**
- * Check if a prototype is a interop boundary.
- * Results are cached for performance.
- */
+/** Whether a prototype is an interop boundary. Results cached. */
 export function isInteropBoundary(proto: object | null): boolean {
   // null = end of chain, always a boundary.
   if (proto === null) return true;
@@ -213,36 +153,25 @@ export function isInteropBoundary(proto: object | null): boolean {
     return true;
   }
 
-  // A global constructor's prototype is a boundary — generalizes the explicit
-  // list above so any global built-in (incl. unenumerated ones, like the Error
-  // subclasses) stops the inheritance walk without being listed.
+  // Global constructor's prototype — generalizes the explicit list above.
   if (isGlobalConstructorPrototype(proto)) {
     boundaryCache.set(proto, true);
     return true;
   }
 
-  // ARRIVAL FAMILY RULE: the whole AValue hierarchy is a boundary in one check.
-  // Every value class's prototype sits in AValue's own prototype chain (a subclass
-  // IS an AValue-chain object), so `instanceof` covers ACharacter/AString/APair/…
-  // uniformly with no per-class stamp. The explicit `===` arm is required
-  // separately: `AValue.prototype instanceof AValue` is always false (`instanceof`
-  // walks the chain STARTING ABOVE the receiver, so a class's own prototype object
-  // never answers `instanceof` itself) — this is why AValue.ts additionally keeps
-  // its own `static [INTEROP_BOUNDARY] = true` stamp as a defensive belt, caught by
-  // the class-level marker check further below.
+  // ARRIVAL FAMILY: whole AValue hierarchy in one check. Explicit `===` arm required:
+  // `AValue.prototype instanceof AValue` is always false (instanceof walks STARTING
+  // ABOVE the receiver). AValue.ts keeps its own static stamp as a defensive belt,
+  // caught by the class-level marker check further below.
   if (proto === AValue.prototype || proto instanceof AValue) {
     boundaryCache.set(proto, true);
     return true;
   }
 
-  // Same nominal-family shape for the structured-error hierarchy: every branded
-  // error subclass (BudgetExceededError, UnboundVariableError, KwargsRejectionError,
-  // …) extends ArrivalError, so `instanceof ArrivalError` covers the whole set in
-  // one check. The errors.ts classes that predate ArrivalError (Unterminated,
-  // ParseError, EvalError, R7RSError — they extend Error directly) get their own
-  // explicit arm; R7RSError's own subclasses (R7RSReadError/R7RSFileError, never
-  // themselves branded) pick up the boundary too via `instanceof`, a strictly safe
-  // over-approximation (more privacy, not less — see the forgery-direction note above).
+  // Same shape for structured-error hierarchy. Pre-ArrivalError classes
+  // (Unterminated/ParseError/EvalError/R7RSError extend Error directly) get explicit
+  // arms; R7RSError subclasses pick up via instanceof (safe over-approximation —
+  // more privacy, not less).
   if (proto === ArrivalError.prototype || proto instanceof ArrivalError) {
     boundaryCache.set(proto, true);
     return true;
@@ -261,8 +190,8 @@ export function isInteropBoundary(proto: object | null): boolean {
     return true;
   }
 
-  // Explicit marker on the prototype itself. hasOwnProperty, not `in` — don't
-  // inherit boundary status from a parent prototype.
+  // Explicit marker on the prototype itself. hasOwnProperty, not `in` — don't inherit
+  // boundary status from a parent.
   if (
     Object.prototype.hasOwnProperty.call(proto, INTEROP_BOUNDARY) &&
     (proto as Record<symbol, unknown>)[INTEROP_BOUNDARY] === true
@@ -271,8 +200,7 @@ export function isInteropBoundary(proto: object | null): boolean {
     return true;
   }
 
-  // Class-level marker via `static [INTEROP_BOUNDARY] = true`. Read via the OWN
-  // descriptor so a hostile accessor `constructor` is never invoked.
+  // Class-level marker via static [INTEROP_BOUNDARY] = true. OWN descriptor only.
   const ctor = Reflect.getOwnPropertyDescriptor(proto, "constructor")?.value;
   if (ctor && typeof ctor === "function") {
     if (
@@ -288,13 +216,11 @@ export function isInteropBoundary(proto: object | null): boolean {
   return false;
 }
 
-/**
- * Mark a class or object as a interop boundary.
- * This prevents Scheme code from accessing inherited properties through it.
- */
+/** Mark a class or object as an interop boundary — Scheme cannot access inherited
+ *  properties through it. */
 export function markInteropBoundary(target: object | Function): void {
   (target as unknown as Record<symbol, unknown>)[INTEROP_BOUNDARY] = true;
-  // Invalidate cache — for classes, clear prototype; for plain objects, clear the object itself
+  // Invalidate cache — classes: clear prototype; plain objects: clear the object.
   if (typeof target === "function" && target.prototype) {
     boundaryCache.delete(target.prototype);
   } else {
@@ -305,43 +231,31 @@ export function markInteropBoundary(target: object | Function): void {
 /**
  * `@arrival.private` — declaratively seal a host class as an interop boundary, so
  * Scheme can't reach its prototype members (`(:field x)`/`(@ x :field)` → nil).
- * Wraps {@link markInteropBoundary}, which uses the MODULE-PRIVATE boundary symbol
- * — the only correct one. Never brand with `Symbol.for("scheme:interop-boundary")`:
- * that registry-global symbol is different from the one the boundary check reads,
- * and is forgeable from scheme code — it silently fails to seal anything.
+ * Wraps {@link markInteropBoundary}, which uses the MODULE-PRIVATE boundary symbol —
+ * the only correct one. Never brand with `Symbol.for("scheme:interop-boundary")`:
+ * that registry-global symbol differs from the one the check reads, and is forgeable.
  *
- * Usable as a TC39/legacy class decorator or a plain call:
+ * Usable as a TC39 class decorator (stage-3 form) or a plain call:
  *
- *   @arrival.private class Ip { #bytes; get bytes() { … } }   // decorator
- *   arrival.private(Ip)                                        // equivalent call
+ *   @arrival.private class Ip { #bytes; get bytes() { … } }
+ *   arrival.private(Ip)
  *
- * THE FULL CONTRACT (V's ruling, docs/plans/infer-whiteroom-design.md §"V'S API
- * RULING" — the opaque-crossing contract): marking a class this way does more than
- * seal prototype reads today. A `@arrival.private` instance crossing the membrane
- * gains FULL semi-opaque semantics, symmetric in both directions:
+ * OPAQUE-CROSSING CONTRACT (docs/membrane.md §INBOUND): marking a class this way
+ * grants full semi-opaque semantics, symmetric both directions:
  *
- *   - SCHEME-WARD (a rosetta impl returns an instance, or one rides inside a returned
- *     container): the instance crosses as an OPAQUE HANDLE (`AOpaqueHandle`, values/
- *     primitives/AOpaqueHandle.ts) — identity-preserving (same instance -> same
- *     handle, within one run; `eq?`/`equal?` hold via the handle's own Setoid),
- *     printable as its class face (`#<McpServer>`), and exposing NOTHING structurally:
- *     the handle declares no reader term at all, so `(:field handle)` doors with a
- *     TypeError (no silent nil — a value with no member protocol at all is a type
- *     error, not an absent field) on top of this seal's own prototype-read block.
- *     Minted by membrane/rosetta.ts's `jsToScheme` inbound-claims registry, which
- *     recognizes the brand via {@link isMarkedInteropPrivate} below.
- *   - HOST-WARD (the handle arrives as a rosetta impl ARG, directly or inside a
- *     container): UNWRAPS to the raw instance — the impl receives the real object,
- *     never the handle, uniformly across every slot kind (`z.dynamic`'s identity
- *     escape hatch, a typed `scheme-zod.ts` `instance(Ctor)` slot, or a container
- *     built from either). See common/symbols/rosetta.ts's `buildOpaqueHandleUnwrap`
- *     and scheme-zod.ts's `instance` codec for the two chokepoints.
- *   - ROUND-TRIP: out then in is the SAME instance (`===`) — `AOpaqueHandle` holds
- *     `.instance` by reference, never a copy.
+ *   - SCHEME-WARD (rosetta returns an instance, or one rides inside a container):
+ *     crosses as AOpaqueHandle — identity-preserving within one run (eq?/equal?),
+ *     printable as its class face (`#<McpServer>`), no reader term (member access is
+ *     TypeError, not silent nil). Minted by rosetta's inbound registry via
+ *     {@link isMarkedInteropPrivate}.
+ *   - HOST-WARD (handle as rosetta impl ARG): UNWRAPS to the raw instance — every slot
+ *     kind (z.dynamic, scheme-zod instance(Ctor), containers). See
+ *     common/symbols/rosetta.ts buildOpaqueHandleUnwrap and scheme-zod instance codec.
+ *   - ROUND-TRIP: out then in is the SAME instance (`===`) — handle holds .instance
+ *     by reference.
  *
- * An UNbranded class instance is completely unaffected — it keeps today's behavior
- * (borrows as an AJSObject, or the unrecognized-shape door). The brand is the sole
- * opt-in; nothing here is ambient.
+ * Unbranded class instances are unaffected (borrow as AJSObject, or no-lens door).
+ * Brand is the sole opt-in; nothing ambient.
  */
 export function markInteropPrivate<T extends Function>(target: T, _context?: unknown): T {
   markInteropBoundary(target);
@@ -352,28 +266,20 @@ export function markInteropPrivate<T extends Function>(target: T, _context?: unk
 export const arrival = { private: markInteropPrivate };
 
 /**
- * Does `value`'s own class (or an ancestor in its chain) carry the EXPLICIT
- * `@arrival.private`/`markInteropPrivate` stamp — the whiteroom opaque-crossing
- * contract's recognition test (membrane/rosetta.ts's inbound-claims registry).
+ * Does `value`'s own class (or an ancestor) carry the EXPLICIT
+ * `@arrival.private`/`markInteropPrivate` stamp — opaque-crossing recognition test
+ * (rosetta inbound registry).
  *
- * Deliberately NARROWER than {@link isInteropBoundary}: that function ALSO answers
- * true for every JS built-in prototype, `null` (chain end), and the nominal
- * `AValue`/`ArrivalError` FAMILY rules — it answers "does the READ POLICY stop here",
- * a much broader question than "did an author explicitly opt this HOST class into the
- * semi-opaque contract". This walks the SAME two explicit-marker arms
- * `isInteropBoundary` checks (the own-prototype stamp, and the own-static-field class
- * stamp) — never the built-in list, the global-constructor generalization, or either
- * nominal family — so a plain object, a built-in instance (Date/Map/…), or any OTHER
- * arrival-internal class outside the AValue/ArrivalError families never answers true
- * here unless IT SPECIFICALLY carries the marker.
+ * NARROWER than {@link isInteropBoundary}: that also answers true for every JS built-in
+ * prototype, null, and the AValue/ArrivalError FAMILY rules ("does the READ POLICY stop
+ * here"). This walks only the two explicit-marker arms (own-prototype stamp, own-static
+ * class stamp) — never the built-in list, global-constructor generalization, or either
+ * nominal family. Plain objects, Date/Map, and unstamped arrival-internal classes never
+ * answer true unless THEY carry the marker.
  *
- * The AValue/ArrivalError families DO also carry (or inherit) this marker — this
- * function does not attempt to exclude them structurally. That is harmless in
- * practice: every caller of this function (the inbound-claims registry) places its
- * check AFTER the rows that already claim AValue instances and the scheme-orphan
- * classes (EOF/Values/R7RSError) — order, not this predicate, is what keeps this
- * function's use scoped to genuinely-new host classes. See that registry's own doc
- * for the ordering argument.
+ * AValue/ArrivalError families may also carry/inherit this marker — callers place the
+ * check AFTER rows that claim AValue and scheme orphans (EOF/Values/R7RSError); order,
+ * not this predicate, scopes use to genuinely-new host classes.
  */
 export function isMarkedInteropPrivate(value: object): boolean {
   let proto: object | null = Reflect.getPrototypeOf(value);
@@ -398,47 +304,29 @@ export function isMarkedInteropPrivate(value: object): boolean {
   return false;
 }
 
-// ============================================================================
-// Sentinel Value
-// ============================================================================
-
 /**
- * Sentinel value indicating a property was not found.
- * This is distinct from `undefined` (which could be a valid property value).
+ * Sentinel: property not found. Distinct from `undefined` (a valid property value).
+ * Module-local (NOT Symbol.for): unforgeable — global registry would let sandbox code
+ * mint the same symbol and spoof NOT_FOUND.
  */
-// Module-local (NOT Symbol.for): the sentinel must be unforgeable. In the global
-// registry, sandbox code could mint the same symbol and inject it as a "real"
-// property value to spoof the NOT_FOUND signal.
 export const NOT_FOUND = Symbol("scheme:not-found");
 
 type AccessResult<T> = T | typeof NOT_FOUND;
 
-// ============================================================================
-// Core Access Functions
-// ============================================================================
-
-/**
- * Check if a property name is unconditionally blocked.
- */
+/** Unconditionally blocked property name? */
 function isBlockedPropertyName(key: string | symbol): boolean {
   if (typeof key === "symbol") return BLOCKED_WELL_KNOWN_SYMBOLS.has(key);
   return BLOCKED_PROPERTY_NAMES.has(key);
 }
 
 /**
- * Member access — the core interop-read primitive.
+ * Member access — core interop-read primitive.
  *
- * Access rules:
- * 1. Blocked property names (constructor, __proto__, etc.) always throw
- * 2. Own properties are always accessible
- * 3. Missing properties return NOT_FOUND
- * 4. Inherited properties are checked against interop boundaries
- *    - If found before hitting a boundary: accessible
- *    - If boundary is hit first: throws InteropAccessError
+ * 1. Blocked property names always throw
+ * 2. Own properties always accessible
+ * 3. Missing → NOT_FOUND
+ * 4. Inherited: accessible only if found before an interop boundary; else throw
  *
- * @param data - The object to access
- * @param key - The property key
- * @returns The property value, or NOT_FOUND if not present
  * @throws InteropAccessError if access would cross a boundary
  */
 export function accessMember(data: unknown, key: string | symbol): AccessResult<unknown> {
@@ -468,11 +356,10 @@ export function accessMember(data: unknown, key: string | symbol): AccessResult<
     return NOT_FOUND;
   }
 
-  // Property is inherited — trace the prototype chain to find it.
+  // Property is inherited — trace the prototype chain.
   let proto = Reflect.getPrototypeOf(obj);
 
   while (proto !== null) {
-    // Hit an interop boundary before finding the property?
     if (isInteropBoundary(proto)) {
       throw new InteropAccessError(
         `Cannot access inherited property '${String(keyStr)}' - ` +
@@ -489,17 +376,12 @@ export function accessMember(data: unknown, key: string | symbol): AccessResult<
     proto = Reflect.getPrototypeOf(proto);
   }
 
-  // Shouldn't reach here (we checked `in` above), but be safe.
   return NOT_FOUND;
 }
 
 /**
- * Interop member existence check.
- * Only returns true for:
- * - Own properties
- * - Inherited properties from non-boundary prototypes
- *
- * Returns false (not throws) for blocked properties.
+ * Interop member existence. True only for own properties and inherited properties
+ * from non-boundary prototypes. Returns false (not throws) for blocked properties.
  */
 export function accessHas(data: unknown, key: string | symbol): boolean {
   if (data === null || data === undefined) {
@@ -508,7 +390,6 @@ export function accessHas(data: unknown, key: string | symbol): boolean {
 
   const keyStr = typeof key === "symbol" ? key : String(key);
 
-  // Blocked properties don't "exist" from the interop perspective.
   if (isBlockedPropertyName(keyStr)) {
     return false;
   }
@@ -523,11 +404,9 @@ export function accessHas(data: unknown, key: string | symbol): boolean {
     return false;
   }
 
-  // Property is inherited — check if it's accessible.
   let proto = Reflect.getPrototypeOf(obj);
 
   while (proto !== null) {
-    // Hit boundary? Property doesn't "exist" from the interop perspective.
     if (isInteropBoundary(proto)) {
       return false;
     }
@@ -542,10 +421,7 @@ export function accessHas(data: unknown, key: string | symbol): boolean {
   return false;
 }
 
-/**
- * Interop member (own-key) enumeration.
- * Only returns own enumerable keys, never inherited ones.
- */
+/** Own enumerable keys only — never inherited. */
 export function accessKeys(data: unknown): string[] {
   if (data === null || data === undefined) {
     return [];
@@ -553,5 +429,3 @@ export function accessKeys(data: unknown): string[] {
 
   return Object.keys(Object(data));
 }
-
-

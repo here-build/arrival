@@ -1,5 +1,6 @@
 import invariant from "tiny-invariant";
 import type { RunContext } from "../run/RunContext.js";
+import { NoLensError } from "../errors.js";
 import { AValue, EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
 import { AString } from "../values/primitives/AString.js";
 import { AExact } from "../values/primitives/AExact.js";
@@ -12,86 +13,70 @@ import { AJSObject } from "./AJSObject.js";
 import { hostFnToCallable, originalCallableOf } from "../values/primitives/ACallable.js";
 
 /**
- * The JS → Scheme boxing membrane: a single `typeof`-tag `switch` that constructs the
- * right AValue subtype for a raw host value (already-AValue input short-circuits). The
- * tag set is JS's fixed `typeof` family + the two null-ish tags — closed, no plugins.
+ * JS → Scheme boxing: a single `typeof`-tag switch that constructs the right AValue
+ * subtype for a raw host value (already-AValue short-circuits). Tag set is JS's fixed
+ * typeof family + the two null-ish tags — closed, no plugins.
  *
- * A single switch, not a registry: the subtypes already `extends AValue`, and the
- * object/function boxers are plain value-class construction (AJSArray/AJSObject are
- * value-primitive files) — nothing here needs indirection through a self-registering
- * boxer table. The `function` arm mints via `ACallable.ts`'s `hostFnToCallable` — the
- * SAME reverse-membrane lens `membrane/rosetta.ts`'s INBOUND_CLAIMS function row uses
- * (one mechanism, two entry points; that file's own doc is the law) — checking
- * `originalCallableOf` first so a reverse-membrane wrapper crossing back in here
- * re-admits as its original callable instead of being wrapped a second time.
+ * A single switch, not a registry: subtypes already extend AValue; object/function
+ * boxers are plain construction. The function arm mints via hostFnToCallable — the
+ * SAME reverse-membrane lens rosetta's INBOUND_CLAIMS function row uses (one mechanism,
+ * two entry points; docs/membrane.md §CALLABLE-LENS is the law). Checks
+ * originalCallableOf first so a reverse-membrane wrapper crossing back in re-admits as
+ * its original callable.
  *
- * `bigint` is the one tag that does NOT box (docs/design-history/
- * arrival-one-number-rework.md §2.3): an opaque HOST value, not a scheme number — it
- * rides the same raw identity lane a bytevector does at the membrane's public face
- * (membrane.ts's `isBytevectorLike`), never reinterpreted as an `AExact`. That widens
- * this function's return type by exactly that one member; every caller already treats
- * the result as `unknown`/a cast target (rosetta.ts's INBOUND_CLAIMS row, op-helpers.ts's
- * `withInputProvenance`).
+ * Host bigint DOORS (NoLensError `"bigint"`) — same spirit as unique-symbol. Exact
+ * numbers are safe-int ratios; convert with Number/bigintToNumber in the safe range
+ * before re-crossing. Codecs that speak bigint (`z.bigint`) encode to AExact BEFORE
+ * the membrane and never reach here.
  */
 export function fromJs(
   ctx: RunContext,
   v: unknown,
   provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
-): AValue | bigint {
-  // Same-instance fast path: already a Scheme value. Re-stamp only when a distinct,
-  // non-empty provenance is supplied (then `withProvenance` mints a copy).
+): AValue {
+  // Same-instance fast path. Re-stamp only when a distinct non-empty provenance is supplied.
   if (v instanceof AValue) {
     if (provenance === EMPTY_PROVENANCE || provenance === v.provenance) return v;
-    // `withProvenance` is typed to the broad `SchemeValue` union (its abstract base
-    // declaration; concrete subclasses override to their own narrower type). A clone
-    // of an `AValue` is always an `AValue` subclass at runtime — narrow honestly with
-    // a guard rather than a cast, so `fromJs` keeps its `AValue` contract.
+    // withProvenance is typed to the broad SchemeValue union; a clone of an AValue is
+    // always an AValue subclass at runtime — narrow with a guard, not a cast.
     const restamped = v.withProvenance(provenance);
     invariant(restamped instanceof AValue, "fromJs: withProvenance must mint an AValue");
     return restamped;
   }
 
   if (v === null) {
-    // JS `null` → nil (empty list); JS `undefined` → void: the two host bottoms map to
-    // the two distinct Scheme absences rather than collapsing to one.
+    // null → nil (empty list); undefined → void: two host bottoms map to two Scheme absences.
     return new ANil(provenance);
   }
   switch (typeof v) {
     case "string":
       return new AString(v, provenance);
     case "number":
-      // Safe-integer JS numbers route to exact (both AExact components are plain
-      // `number`s, §2.1); anything beyond MAX_SAFE_INTEGER is inexact — never a silent
-      // out-of-range exact (values/mint-numeric.ts's crash-on-overflow law is for
-      // ARITHMETIC results; ingress from a bare host number stays this status-quo
-      // silent law per the plan's §0.3).
+      // Safe-integer → exact (both AExact components are plain numbers); beyond
+      // MAX_SAFE_INTEGER → inexact. Never a silent out-of-range exact
+      // (mint-numeric crash-on-overflow is for ARITHMETIC; bare host number ingress
+      // stays status-based).
       return Number.isSafeInteger(v) ? new AExact(v, 1, provenance) : new AInexact(v, provenance);
     case "bigint":
-      // Opaque host value — not a scheme number (see this function's header doc):
-      // never boxed, rides straight through by identity.
-      return v;
+      // No lens — exact numbers are safe-int ratios; raw bigint never enters scheme.
+      throw new NoLensError("bigint");
     case "boolean":
-      // Reuse singletons on the empty-provenance fast path; allocate only when stamped.
+      // Reuse singletons on the empty-provenance path; allocate only when stamped.
       return provenance === EMPTY_PROVENANCE ? (v ? schemeTrue : schemeFalse) : new ABool(v, provenance);
     case "undefined":
       return new AVoid(provenance);
     case "object":
-      // `typeof [] === "object"`: a JS array IS an R7RS vector → a borrowed AJSArray (the
-      // faithful Rosetta mapping); a plain object wraps as a lazy AJSObject.
+      // typeof [] === "object": JS array IS R7RS vector → AJSArray; plain object → AJSObject.
       return Array.isArray(v) ? new AJSArray(v, provenance) : new AJSObject(v, provenance);
     case "function": {
-      // docs/membrane.md §CALLABLE-LENS — a bare host function crosses in as a genuine
-      // scheme callable (the reverse-membrane lens, ACallable.ts's `hostFnToCallable`):
-      // args marshal scheme→js, the host fn runs, its result marshals js→scheme.
-      // Re-admission FIRST: a function that is itself one of `hostProjectionOf`'s own
-      // reverse-membrane wrappers re-admits as its ORIGINAL callable (`eq?`) rather than
-      // being wrapped a second time (round-trip-to-identity, ACallable.ts's own doc).
+      // docs/membrane.md §CALLABLE-LENS — bare host fn → reverse-membrane callable.
+      // Re-admission FIRST: hostProjectionOf wrapper re-admits as ORIGINAL callable (eq?).
       const original = originalCallableOf(v as object);
       return original ?? hostFnToCallable(ctx, v as (...args: unknown[]) => unknown, provenance);
     }
     default:
-      // "symbol" and any future tag: not boxable here (symbols cross via the membrane's
-      // keyword/Symbol.for path, never fromJs). A programmer error, not a runtime one.
+      // symbol and any future tag: not boxable here (symbols cross via membrane
+      // keyword/Symbol.for path). Programmer error, not a runtime one.
       invariant(false, `fromJs: no boxer for typeof tag "${typeof v}"`);
   }
 }
