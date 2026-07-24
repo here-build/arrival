@@ -33,7 +33,7 @@ import {
   MemoryEffectLog,
   is_callable_value,
 } from "@inhuman.tools/arrival/host-internals";
-import { APair } from "@inhuman.tools/arrival/reflect-internals";
+import { ANil, APair } from "@inhuman.tools/arrival/reflect-internals";
 import { EvalTrace } from "@inhuman.tools/arrival/provenance";
 import type { EnvCapability } from "@inhuman.tools/arrival/capability";
 import {
@@ -189,9 +189,18 @@ function isValuesTuple(value: unknown): value is { __values__: SchemeValue[] } {
  * strings, and a nested callable stringifying to `#<procedure …>` here IS the serialization
  * contract, pinned as law in arrival's crossing tests. Dispatches the PROTOCOL key directly
  * (the same cross-package convention arrival-serializer itself uses) since this module has no
- * core exports of its own to reuse. Three arms:
+ * core exports of its own to reuse. Four arms:
  *   • multiple values exit as a JS ARRAY of unwrapped elements;
  *   • a TOP-LEVEL callable exits as the named function face (serializer: `<function>`);
+ *   • ANil passes through UNPEELED — `arrival-serializer`'s own `toSExprString` intercepts a
+ *     real `ANil` instance at the top of its walk (`isNil()`, before any other dispatch) and
+ *     renders it as the bare symbol `nil`; `ANil["arrival/toJS"]()` deliberately projects to the
+ *     PLAIN empty array `[]` (nil's JS face — the differential oracle's own contract, never to
+ *     be changed), which is indistinguishable from an empty vector/AJSArray once collapsed. This
+ *     arm is the ONLY thing standing between a verb's `boxList`-minted nil (projectDiscovery.ts)
+ *     and it silently reading back as `(list)` on the wire — an empty NON-nil container (an
+ *     empty vector, an empty AJSArray) still peels through the generic arm below exactly as
+ *     before, so `(list)` still means "empty vector/array", never conflated with nil.
  *   • everything else dispatches its own `arrival/toJS` term (containers egress as
  *     bare-mode lazy proxies); a raw crosser with no protocol key passes through — it
  *     is already JS.
@@ -199,6 +208,7 @@ function isValuesTuple(value: unknown): value is { __values__: SchemeValue[] } {
 function hostFace(value: SchemeValue): unknown {
   if (isValuesTuple(value)) return value.__values__.map((element) => hostFace(element));
   if (is_callable_value(value)) return schemeCallableFace;
+  if (value instanceof ANil) return value;
   const exit = (value as { "arrival/toJS"?: () => unknown })["arrival/toJS"];
   return typeof exit === "function" ? exit.call(value) : value;
 }
