@@ -14,7 +14,7 @@
 import { CYCLES, DATA, REF } from "../../well-known-symbols.js";
 import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import { makeCallCtx } from "../../run/CallCtx.js";
-import { applyCallback } from "./ACallable.js";
+import { applyCallback, type ACallable } from "./ACallable.js";
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE, mergeProvenance } from "./AValue.js";
 import { deriveSortCompare, withInputProvenance } from "../op-helpers.js";
@@ -582,10 +582,10 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
 
   // Functor map — preserves every element's box. Concurrent fn; re-cons shallow.
   // LENGTH-PRESERVING — PROXY container stamp. Seam-routed (not bare fn(x)).
-  ["arrival/tagless-final/map"](
-    fn: (x: APairAsListValue<Car, Cdr>) => MaybePromise<SchemeValue>,
-    runCtx: RunContext,
-  ): MaybePromise<AListAlike> {
+  // Callback is ACallable only (W8) — bare host fns are not scheme-applicable;
+  // mint ANativeProcedure / hostFnToCallable. RegExp is a host-side filter sugar
+  // evaluated without applyCallback.
+  ["arrival/tagless-final/map"](fn: ACallable, runCtx: RunContext): MaybePromise<AListAlike> {
     chargeHeap(runCtx, countPairElements(this));
     const elements: unknown[] = [];
     let node: unknown = this;
@@ -605,12 +605,8 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
 
   // Filterable — preserves kept boxes. LENGTH-CHANGING — PROVENANCED fresh
   // (container stamp ∪ survivors). R7RS: only #f is false.
-  ["arrival/tagless-final/filter"](
-    arg: ((x: unknown) => unknown | Promise<unknown>) | RegExp,
-    runCtx: RunContext,
-  ): MaybePromise<AListAlike> {
+  ["arrival/tagless-final/filter"](arg: ACallable | RegExp, runCtx: RunContext): MaybePromise<AListAlike> {
     chargeHeap(runCtx, countPairElements(this));
-    const pred = arg instanceof RegExp ? (x: unknown) => String(x).match(arg) : arg;
     const elements: SchemeValue[] = [];
     let node: unknown = this;
     while (node instanceof APair) {
@@ -618,8 +614,14 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
       elements.push(node.car);
       node = node.cdr;
     }
-    const verdicts = elements.map((x) => applyCallback(pred, [x], makeCallCtx(runCtx)));
     const kept = (verdict: unknown): boolean => !is_false(verdict);
+    if (arg instanceof RegExp) {
+      // Host-side sugar — not a scheme callable; never route through applyCallback.
+      const re = arg;
+      const survivors = elements.filter((x) => kept(String(x).match(re)));
+      return withInputProvenance([this, ...survivors], APair.fromArray(CONSTANT_CTX, survivors, false));
+    }
+    const verdicts = elements.map((x) => applyCallback(arg, [x], makeCallCtx(runCtx)));
     if (verdicts.some(is_promise)) {
       return (promise_all(verdicts) as Promise<unknown[]>).then((results) => {
         const survivors = elements.filter((_, i) => kept(results[i]));
@@ -632,11 +634,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
 
   // Async-aware reduce, SRFI fold `fn(element, acc)`, left fold.
   // `(reduce - 100 '(1 2 3 4 5))` = -97, NOT the FL acc-first 85.
-  async ["arrival/tagless-final/reduce"]<Acc>(
-    fn: (element: unknown, acc: Acc) => Acc | Promise<Acc>,
-    initial: Acc,
-    runCtx: RunContext,
-  ): Promise<Acc> {
+  async ["arrival/tagless-final/reduce"]<Acc>(fn: ACallable, initial: Acc, runCtx: RunContext): Promise<Acc> {
     chargeHeap(runCtx, countPairElements(this));
     let acc = initial;
     let node: unknown = this;
@@ -650,10 +648,8 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   }
 
   // Structure-preserving sort — LENGTH-PRESERVING, PROXIED stamp (must agree with AVector).
-  ["arrival/tagless-final/sort"](
-    comparator: ((a: unknown, b: unknown) => unknown) | undefined,
-    runCtx: RunContext,
-  ): AListAlike {
+  // Comparator is ACallable (W8) when supplied — bare host less? mints via contourCallback in tests.
+  ["arrival/tagless-final/sort"](comparator: ACallable | undefined, runCtx: RunContext): AListAlike {
     chargeHeap(runCtx, countPairElements(this));
     const out: SchemeValue[] = [];
     let node: unknown = this;

@@ -165,27 +165,17 @@ export abstract class AValue {
   ["arrival/tagless-final/lower"]?(): SchemeValue | null;
   /** Element count — per-primitive divergence lives on the term. */
   ["arrival/tagless-final/length"]?(runCtx?: RunContext): AValue | number;
-  /** Functor — map over elements. `runCtx` REQUIRED (every real dispatcher threads it). */
-  ["arrival/tagless-final/map"]?(
-    fn: (x: unknown) => unknown | Promise<unknown>,
-    runCtx: RunContext,
-  ): SchemeValue | Promise<SchemeValue>;
-  /** Filterable — keep elements matching pred (or RegExp). `runCtx` required. */
+  /** Functor — map over elements. `runCtx` REQUIRED. Callback is ACallable (W8). */
+  ["arrival/tagless-final/map"]?(fn: unknown, runCtx: RunContext): SchemeValue | Promise<SchemeValue>;
+  /** Filterable — ACallable pred or host RegExp sugar. `runCtx` required. */
   ["arrival/tagless-final/filter"]?(
-    pred: ((x: unknown) => unknown | Promise<unknown>) | RegExp,
+    pred: unknown,
     runCtx: RunContext,
   ): SchemeValue | Promise<SchemeValue>;
-  /** Foldable left-fold — scheme convention `fn(element, acc)`. `runCtx` required. */
-  ["arrival/tagless-final/reduce"]?<Acc>(
-    fn: (element: unknown, acc: Acc) => Acc | Promise<Acc>,
-    initial: Acc,
-    runCtx: RunContext,
-  ): Acc | Promise<Acc>;
+  /** Foldable left-fold — scheme convention `fn(element, acc)`. Callback is ACallable. */
+  ["arrival/tagless-final/reduce"]?<Acc>(fn: unknown, initial: Acc, runCtx: RunContext): Acc | Promise<Acc>;
   /** Ordering — sorted sequence (container-preserving); default is elements' own `lte`. */
-  ["arrival/tagless-final/sort"]?(
-    comparator: ((a: unknown, b: unknown) => unknown) | undefined,
-    runCtx: RunContext,
-  ): SchemeValue;
+  ["arrival/tagless-final/sort"]?(comparator: unknown, runCtx: RunContext): SchemeValue;
   /** Prefix — first n elements, in the receiver's OWN representation. */
   ["arrival/tagless-final/take"]?(n: number, runCtx: RunContext): SchemeValue | Promise<SchemeValue>;
   /** Suffix — receiver after first n elements. */

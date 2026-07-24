@@ -2,6 +2,7 @@
 // type-STRING mapping is exact for: native identity primitives, the rosetta codec
 // family, compounds (object/array/tuple/union), and the full `signatureOf` over a
 // sampled native def, a rosetta def, and a multiple-values output.
+import { schemeTrue } from "../../values/primitives/ABool.js";
 import { describe, expect, it } from "vitest";
 import * as z from "../../common/scheme-zod/index.js";
 import { symbol, withContractFields } from "../../symbol/index.js";
@@ -194,7 +195,7 @@ describe("signatureOf — the args-vector → function-signature composer", () =
       "{ (x: unknown): x is string; <T>(x: T): x is Extract<T, string>; }";
     const def = symbol.native`string?: proof`(
       { input: [z.schemeValue], output: [z.boolean], type: dual },
-      () => true,
+      () => schemeTrue,
     );
     expect(sig(def)).toBe(dual);
   });

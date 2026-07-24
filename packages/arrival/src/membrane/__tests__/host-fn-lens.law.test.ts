@@ -165,7 +165,8 @@ describe("LAW — host-function inbound reverse-membrane lens", () => {
         symbols: (symbol, sz) => ({
           "make-adder": symbol.rosetta`make-adder: returns a bare host fn`({ input: [], output: [sz.dynamic] }, () => {
             const adder = (n: unknown) => (n as number) + 1;
-            return adder;
+            // reverse-membrane: host fn is a legal dynamic payload at runtime
+            return adder as unknown as import("../../values/types.js").SchemeValue;
           }) }) });
       const result = await lastValue("((make-adder) 41)", { capabilities: [cap], config: {} });
       expect(result).toBeInstanceOf(AExact);

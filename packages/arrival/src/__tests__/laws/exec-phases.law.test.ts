@@ -33,7 +33,7 @@ import { describe, expect, it } from "vitest";
 import { EnvCapability } from "../../common/capability.js";
 import type { Resource } from "../../common/resources.js";
 import * as z from "../../common/scheme-zod/index.js";
-import { symbol } from "../../symbol/index.js";
+import { symbol, type CallCtx } from "../../symbol/index.js";
 import { LexicalScope } from "../../eval/LexicalScope.js";
 import { parseProgram } from "../../eval/exec-phases.js";
 import { exec, execState, execInFrame } from "../../eval/generator-exec.js";
@@ -72,8 +72,9 @@ function spyCapability() {
       // acquire/dispose the ownership laws below assert.
       "spy/touch": symbol.rosetta`spy/touch: read the spy port's tag`(
         { input: [], output: [z.string] },
-        async function (this: { resources?: { port: { get(): Promise<{ tag: string }> } } }): Promise<string> {
-          await this.resources!.port.get();
+        async function (this: CallCtx): Promise<string> {
+          const resources = this.resources as { port: { get(): Promise<{ tag: string }> } };
+          await resources.port.get();
           return "touched";
         },
       ) } });

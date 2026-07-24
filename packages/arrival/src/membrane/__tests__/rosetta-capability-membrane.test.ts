@@ -179,7 +179,7 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
 
       console.log("CSS filtering result:", result);
 
-      const jsResult = schemeToJs(result as SchemeValue, {});
+      const jsResult = schemeToJs(result as SchemeValue, {}) as Array<{ name: string }>;
       expect(jsResult).toHaveLength(2);
       expect(jsResult[0].name).toBe("div1");
       expect(jsResult[1].name).toBe("div3");
@@ -222,7 +222,7 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
 
       console.log("CSS stats result:", result);
 
-      const jsResult = schemeToJs(result as SchemeValue, {});
+      const jsResult = schemeToJs(result as SchemeValue, {}) as Record<string, number>;
       expect(jsResult["overflow:hidden"]).toBe(2);
       expect(jsResult["overflow:visible"]).toBe(1);
       expect(jsResult["display:block"]).toBe(2);

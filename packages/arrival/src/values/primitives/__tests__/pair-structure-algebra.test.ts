@@ -19,6 +19,7 @@ import { functorLaws } from "./algebra-laws.js";
 import { AExact } from "../AExact.js";
 import { tf, type TaglessOp } from "../../tagless-final.js";
 import type { AList, AListAlike, SchemeValue } from "../../types.js";
+import { unaryContour, filterContour, reduceContour, idContour, keepAllContour } from "../../../__tests__/_contour-callback.js";
 
 
 type FL = Record<string, any>;
@@ -103,13 +104,13 @@ describe("Pair — Foldable (reduce)", () => {
   it("reduce sums elements left-to-right", async () => {
     const list = APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2), new AExact(3), new AExact(4)], false) as APair<any, any>;
     // arrival/tagless-final/reduce is element-FIRST: fn(element, acc).
-    const sum = await (list)[tf("reduce")]((x: unknown, acc: number) => acc + (x as AExact).valueOf(), 0);
+    const sum = await (list)[tf("reduce")](reduceContour((x, acc: number) => acc + (x as AExact).valueOf()), 0, CONSTANT_CTX);
     expect(sum).toBe(10);
   });
   it("reduce collects in order", async () => {
     const list = APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2), new AExact(3)], false) as APair<any, any>;
     // element-FIRST fn(element, acc): append the element onto the accumulator, in order.
-    const collected = await (list)[tf("reduce")]((x: unknown, acc: number[]) => [...acc, (x as AExact).valueOf()], [] as number[]);
+    const collected = await (list)[tf("reduce")](reduceContour((x, acc: number[]) => [...acc, (x as AExact).valueOf()]), [] as number[], CONSTANT_CTX);
     expect(collected).toEqual([1, 2, 3]);
   });
   // [impl-pinning] pins zero fn calls over the sentinel, not just the returned value.
@@ -117,10 +118,10 @@ describe("Pair — Foldable (reduce)", () => {
     let calls = 0;
     // element-FIRST fn(element, acc); the sentinel never calls fn, so the seed is returned.
     // @ts-expect-error empty-pair sentinel: car is undefined (not a SchemeValue) by design
-    const r = await (new APair(undefined, nil))[tf("reduce")]((_element: unknown, acc: string) => {
+    const r = await (new APair(undefined, nil))[tf("reduce")](reduceContour((_element, acc: string) => {
       calls++;
       return acc;
-    }, "SEED");
+    }), "SEED", CONSTANT_CTX);
     expect(calls).toBe(0);
     expect(r).toBe("SEED");
   });
@@ -132,22 +133,22 @@ describe("Pair — Foldable (reduce)", () => {
 describe("Pair — Filterable (filter)", () => {
   it("filter keeps evens", async () => {
     const list = APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2), new AExact(3), new AExact(4), new AExact(5), new AExact(6)], false) as APair<any, any>;
-    const evens = (await (list)[tf("filter")]((x: unknown) => (x as AExact).valueOf() % 2 === 0)) as APair<any, any>;
+    const evens = (await (list)[tf("filter")](filterContour((x) => (x as AExact).valueOf() % 2 === 0), CONSTANT_CTX)) as APair<any, any>;
     expect(evens.to_array().map((v) => (v as AExact).valueOf())).toEqual([2, 4, 6]);
   });
   it("filter all-false yields nil", async () => {
     const list = APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(3), new AExact(5)], false) as APair<any, any>;
-    const r = await list[tf("filter")](() => false);
+    const r = await list[tf("filter")](filterContour(() => false), CONSTANT_CTX);
     expect(r).toBe(nil);
   });
   // [impl-pinning] pins that the predicate is never invoked over the sentinel.
   it("filter on empty-pair sentinel does not call the predicate", async () => {
     let calls = 0;
     // @ts-expect-error empty-pair sentinel: car is undefined (not a SchemeValue) by design
-    await (new APair(undefined, nil))[tf("filter")](() => {
+    await (new APair(undefined, nil))[tf("filter")](filterContour(() => {
       calls++;
       return true;
-    });
+    }), CONSTANT_CTX);
     expect(calls).toBe(0);
   });
 });
@@ -219,12 +220,10 @@ describe("Pair — recursors terminate on Nil clones (provenance)", () => {
     // fn hands back the SAME AExact instance, so the result pair's car is that instance.
     const calls: unknown[] = [];
     const one = new AExact(1);
-    const r = (await new APair(one, cloneNil())[tf("map")]((x: unknown): SchemeValue => {
+    const r = (await new APair(one, cloneNil())[tf("map")](unaryContour((x) => {
       calls.push(x);
-      // @ts-expect-error returning `unknown` where `SchemeValue` is required; this test pins
-      // the runtime behavior (fn gets the boxed AExact, returns it unchanged) — not the type.
       return x;
-    })) as APair<any, any>;
+    }), CONSTANT_CTX)) as APair<any, any>;
     expect(calls).toEqual([one]);
     expect(r.car).toBe(one);
     expect(r.cdr).toBeInstanceOf(ANil);
@@ -233,8 +232,9 @@ describe("Pair — recursors terminate on Nil clones (provenance)", () => {
     // `x` is the boxed AExact — unwrap via valueOf() (a JS number) before folding, never mix
     // it directly with a bigint accumulator (AExact.valueOf() returns number, not bigint).
     const r = await new APair(new AExact(1), cloneNil())[tf("reduce")](
-      (x: unknown, acc: number) => acc + (x as AExact).valueOf(),
+      reduceContour((x, acc: number) => acc + (x as AExact).valueOf()),
       0,
+      CONSTANT_CTX,
     );
     expect(r).toBe(1);
   });

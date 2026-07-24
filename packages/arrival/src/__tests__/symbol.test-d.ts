@@ -20,19 +20,25 @@ import { type NativeSymbolDef } from "../values/primitives/ANativeProcedure.js";
 import { type DecodedArgs, type DecodedArgsWithRest, type DecodedReturn, type SpecInfer } from "../common/symbols/_bake.js";
 import type { APair } from "../values/primitives/APair.js";
 import type { AString } from "../values/primitives/AString.js";
+import type { ANil } from "../values/primitives/ANil.js";
+import type { ACallable } from "../values/primitives/ACallable.js";
 import type { AList, AListAlike, SchemeValue } from "../values/types.js";
+
+/** Scheme-face of `z.pair` after the codec rework — APair of scheme elements. */
+type PairScheme = APair<SchemeValue, SchemeValue>;
+/** `z.union([z.pair, z.nil])` scheme face. */
+type ListOrNilScheme = PairScheme | ANil;
 
 describe("SpecInfer — the shared VectorSpec → z.output traversal DecodedArgs/DecodedReturn build on", () => {
   test("tuple spec: element-wise z.output, as a mutable tuple", () => {
-    // z.pair is a real codec now (cons(value,value)) — its default (js) face is a
-    // [SchemeValue,SchemeValue] tuple, not APair. Use the "scheme" face to get APair.
-    expectTypeOf<SpecInfer<[typeof z.pair], "scheme">>().toEqualTypeOf<[AListAlike]>();
-    expectTypeOf<SpecInfer<[typeof z.pair, typeof z.string], "scheme">>().toEqualTypeOf<[AListAlike, AString]>();
+    // z.pair is a real codec (cons) — scheme face is APair, js face is a tuple.
+    expectTypeOf<SpecInfer<[typeof z.pair], "scheme">>().toEqualTypeOf<[PairScheme]>();
+    expectTypeOf<SpecInfer<[typeof z.pair, typeof z.string], "scheme">>().toEqualTypeOf<[PairScheme, AString]>();
   });
 
   test("single-schema spec: bare z.output, no tuple wrapping", () => {
     expectTypeOf<SpecInfer<typeof z.string>>().toEqualTypeOf<string>();
-    expectTypeOf<SpecInfer<typeof z.pair, "scheme">>().toEqualTypeOf<AListAlike>();
+    expectTypeOf<SpecInfer<typeof z.pair, "scheme">>().toEqualTypeOf<PairScheme>();
   });
 
   test("a 1-tuple spec stays a 1-tuple (unlike DecodedArgs, SpecInfer never wraps/collapses — that's each caller's own job)", () => {
@@ -46,9 +52,8 @@ describe("SpecInfer — the shared VectorSpec → z.output traversal DecodedArgs
 
 describe("symbol contract — decoded arg/return inference", () => {
   test("native: a scheme-face tuple infers the impl arg as the SCHEME TERM", () => {
-    // `z.pair` is a real codec (cons(value,value)); native reads the SCHEME face (z.input),
-    // which is still APair — symbol.native's own dispatch always selects "scheme" explicitly.
-    expectTypeOf<DecodedArgs<[typeof z.pair], "scheme">>().toEqualTypeOf<[AListAlike]>();
+    // `z.pair` is a real codec (cons); native reads the SCHEME face (z.input) → APair.
+    expectTypeOf<DecodedArgs<[typeof z.pair], "scheme">>().toEqualTypeOf<[PairScheme]>();
   });
 
   test("rosetta: a codec tuple infers the impl arg as the DECODED JS value", () => {
@@ -118,10 +123,9 @@ describe("symbol contract — inputRest: a fixed head + a separately-typed varia
   });
 
   test("native-identity flavored: a Pair head + a SchemeValue (z.schemeValue) rest", () => {
-    // "scheme" face — z.pair is a real codec now (cons(value,value)); its default (js) face
-    // decodes to a [SchemeValue,SchemeValue] tuple, not APair. The scheme face is still APair.
+    // "scheme" face — z.pair scheme face is APair; rest is SchemeValue.
     expectTypeOf<DecodedArgsWithRest<[typeof z.pair], typeof z.schemeValue, "scheme">>().toEqualTypeOf<
-      [AListAlike, ...SchemeValue[]]
+      [PairScheme, ...SchemeValue[]]
     >();
   });
 
@@ -129,7 +133,7 @@ describe("symbol contract — inputRest: a fixed head + a separately-typed varia
     expectTypeOf<DecodedArgsWithRest<[typeof z.pair], undefined, "scheme">>().toEqualTypeOf<
       DecodedArgs<[typeof z.pair], "scheme">
     >();
-    expectTypeOf<DecodedArgsWithRest<[typeof z.pair], undefined, "scheme">>().toEqualTypeOf<[AListAlike]>();
+    expectTypeOf<DecodedArgsWithRest<[typeof z.pair], undefined, "scheme">>().toEqualTypeOf<[PairScheme]>();
     expectTypeOf<DecodedArgsWithRest<[typeof z.string]>>().toEqualTypeOf<DecodedArgs<[typeof z.string]>>();
     expectTypeOf<DecodedArgsWithRest<[typeof z.string]>>().toEqualTypeOf<[string]>();
   });
@@ -188,8 +192,10 @@ describe("symbol contract — 2026-07-05 audit: for-each / string-map / string-f
     // Head return is `unknown`, not `SchemeValue` — forEachHead is z.lambda, whose declared
     // return type is (...args: unknown[]) => unknown (matches the sibling string-map/
     // string-for-each test below, same z.lambda). Pre-existing mismatch here, unrelated to nil.
+    // z.lambda → ACallable (W8: scheme callables only, not bare host fns).
+    // listRest JS face: pair→tuple, nil→null.
     expectTypeOf<DecodedArgsWithRest<[typeof forEachHead], typeof listRest>>().toEqualTypeOf<
-      [(...args: unknown[]) => unknown, ...([SchemeValue, SchemeValue] | null)[]]
+      [ACallable, ...([SchemeValue, SchemeValue] | null)[]]
     >();
   });
 
@@ -197,10 +203,12 @@ describe("symbol contract — 2026-07-05 audit: for-each / string-map / string-f
 
   // OLD string-map/string-for-each shape row DELETED (same sweep/rationale as the
   // for-each OLD row above).
-  test("NEW string-map/string-for-each shape: [callable, ...AString[]], not flat unknown[]", () => {
-    // Mirrors both ops' real migrated contract: { input: [z.custom<...>()], inputRest: z.schemeString, output: [...] }.
+  test("NEW string-map/string-for-each shape: [callable, ...string[]], not flat unknown[]", () => {
+    // Default (js) face of z.string is bare `string`; z.lambda → ACallable (W8).
+    // (Scheme-face rest would be AString[] — native contour; these HOFs use the js face
+    // when authored as rosetta-style synthetic mirrors in this proof.)
     expectTypeOf<DecodedArgsWithRest<[typeof stringHOFHead], typeof z.string>>().toEqualTypeOf<
-      [(...args: unknown[]) => unknown, ...AString[]]
+      [ACallable, ...string[]]
     >();
   });
 });
@@ -208,10 +216,10 @@ describe("symbol contract — 2026-07-05 audit: for-each / string-map / string-f
 describe("symbol contract — 2026-07-05 audit: filter's contract narrows to a fixed 2-tuple", () => {
   // OLD filter shape row DELETED (same sweep/rationale).
   test("NEW shape: a bare 2-element array literal decodes to a FIXED [pred, seq] tuple", () => {
-    // Mirrors filter's real migrated contract: { input: [predSchema, z.schemeValue], output: [z.unknown()], fanout: true }.
+    // Mirrors filter's real migrated contract: { input: [z.lambda, z.schemeValue], ... }.
     const predSchema = z.lambda;
     expectTypeOf<DecodedArgs<[typeof predSchema, typeof z.schemeValue]>>().toEqualTypeOf<
-      [(...args: unknown[]) => unknown, SchemeValue]
+      [ACallable, SchemeValue]
     >();
   });
 });
@@ -224,8 +232,9 @@ describe("symbol contract — 2026-07-05 audit: find's predicate + return precis
 
   // OLD predicate-slot shape row DELETED (same sweep/rationale).
   test("NEW shape: predicate slot is a callable schema — the established z.lambda convention (filter/vector-map/vector-for-each/curry/member's compare)", () => {
+    // Default (js) face of the union: pair→tuple, nil→null. z.lambda → ACallable.
     expectTypeOf<DecodedArgs<[typeof z.lambda, typeof listOrNil]>>().toEqualTypeOf<
-      [(...args: unknown[]) => unknown, [SchemeValue, SchemeValue] | null]
+      [ACallable, [SchemeValue, SchemeValue] | null]
     >();
   });
 
@@ -325,9 +334,9 @@ describe("symbol contract — 2026-07-05 audit: curry's contract narrows the lea
 
   // OLD curry shape row DELETED (same sweep/rationale).
   test("NEW curry shape: input=[head], inputRest=z.schemeValue — leading args decode as SchemeValue, not unknown", () => {
-    // Mirrors curry's real migrated contract: { input: [z.custom<...>()], inputRest: z.schemeValue, output: [z.custom<...>()] }.
+    // Mirrors curry's real migrated contract: { input: [z.lambda], inputRest: z.schemeValue, ... }.
     expectTypeOf<DecodedArgsWithRest<[typeof curryHead], typeof z.schemeValue>>().toEqualTypeOf<
-      [(...args: unknown[]) => unknown, ...SchemeValue[]]
+      [ACallable, ...SchemeValue[]]
     >();
   });
 
@@ -337,7 +346,7 @@ describe("symbol contract — 2026-07-05 audit: curry's contract narrows the lea
       symbol.native`curry2: proof`(
         { input: [curryHead], inputRest: z.schemeValue, output: [curryHead] },
         // @ts-expect-error — rest args decode via z.schemeValue (SchemeValue), annotating them string is wrong
-        (fn: (...args: unknown[]) => unknown, ...args: string[]) => fn,
+        (fn: ACallable, ...args: string[]) => fn,
       );
     }
     expectTypeOf<true>().toEqualTypeOf<true>();

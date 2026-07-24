@@ -208,7 +208,7 @@ const describeOrdElement = (v: unknown): string =>
  *  • Comparator present → number comparator used DIRECTLY, else SRFI-95 `less?`.
  *    Number branch REQUIRED: reading number through `!is_false` mis-orders. */
 export function deriveSortCompare(
-  comparator: ((a: unknown, b: unknown) => unknown) | undefined,
+  comparator: import("./primitives/ACallable.js").ACallable | undefined,
   runCtx: RunContext,
 ): (a: unknown, b: unknown) => number {
   if (comparator !== undefined && comparator !== null) {

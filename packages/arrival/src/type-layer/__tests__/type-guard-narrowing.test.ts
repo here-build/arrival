@@ -1,6 +1,7 @@
 // Dual type-guard harvest — control-flow narrowing pins.
 // type: fields are inline dedent`…` on the packs; this suite re-states the critical
 // dual shapes for checker inference (not importing shared constants).
+import { schemeTrue } from "../../values/primitives/ABool.js";
 import { describe, expect, it } from "vitest";
 import ts from "typescript";
 import dedent from "dedent";
@@ -147,7 +148,7 @@ describe("dual guard control-flow narrowing (lens-critical)", () => {
   it("signatureOf passes dual type: through unchanged", () => {
     const def = symbol.native`list?: pin`(
       { input: [z.schemeValue], output: [z.boolean], type: LIST_DUAL },
-      () => true,
+      () => schemeTrue,
     );
     expect(norm(signatureOf(contractOf(def)!))).toBe(norm(LIST_DUAL));
   });

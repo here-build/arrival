@@ -213,6 +213,7 @@ describe("a reverse lambda is region-bound to its invocation", () => {
           { input: [z.number], output: [z.undefinedResult], provenance: "sink" },
           async (_n: number) => {
             sinkFires++;
+            return undefined;
           },
         ),
         "call-with-lambda": symbol.rosetta`call-with-lambda: invoke the lambda arg once`(

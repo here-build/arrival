@@ -991,7 +991,7 @@ describe("egress membrane exit — the two modes and their identity laws", () =>
     const outerVec = new AVector([inner]);
     const viaDict = schemeToJs(outerDict) as { inner: { f: unknown } };
     expect(typeof viaDict.inner.f).toBe("function");
-    const viaVec = schemeToJs(outerVec) as ReadonlyArray<{ f: unknown }>;
+    const viaVec = schemeToJs(outerVec) as unknown as ReadonlyArray<{ f: unknown }>;
     expect(typeof viaVec[0].f).toBe("function");
     // Bare protocol answers the SAME faithful crossing (previously the print string —
     // the display/membrane conflation this law now pins the fix of). Display is

@@ -116,7 +116,7 @@ export class RecordingRegistry {
           // constraint (`T extends SchemeValue | null | undefined`) can't be satisfied by
           // an `unknown`-typed rest param without a cast; `any` here is the SAME erasure
           // `symbol.rosetta`'s own `rawImpl` boundary already performs one layer down.
-          async (...args: any[]): Promise<unknown> => {
+          async (...args: any[]): Promise<SchemeValue> => {
             args = args.map((a) => schemeToJs(a));
             this.calls.set(op, (this.calls.get(op) ?? 0) + 1);
             const callSeq = this.calls.get(op) ?? 1;
@@ -169,7 +169,7 @@ export class RecordingRegistry {
               record !== undefined,
               "q16 harness: emitMint no-oped — setEmissionEnabled(true) must wrap the record run",
             );
-            return boxed;
+            return boxed as SchemeValue;
           },
         ) }) }),
     ]);

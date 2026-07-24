@@ -13,6 +13,7 @@
 // element's AExact Setoid).
 // (Boxing track S5 — docs/plan-2026-06-10-boxing-track.md.)
 import fc from "fast-check";
+import { unaryContour } from "../../../__tests__/_contour-callback.js";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { describe, expect, it } from "vitest";
 import { AVector } from "../AVector.js";
@@ -98,7 +99,7 @@ describe("SchemeVector Setoid/Semigroup/Functor — boundaries", () => {
     // The transform returns a boxed element — `map`'s `fn` is honestly typed `SchemeValue →
     // SchemeValue` (a Scheme transform yields a Scheme value). `map` preserves that box
     // directly, rebuilding a fresh AVector (mirrors APair's box-preserving map, P8).
-    const mapped = (await a[tf("map")]((x: SchemeValue) => box(numOf(x) * 10))) as AVector;
+    const mapped = (await a[tf("map")](unaryContour((x) => box(numOf(x) * 10)), CONSTANT_CTX)) as AVector;
     expect(mapped).toBeInstanceOf(AVector);
     expect(mapped.__vector__.every((e) => e instanceof AExact)).toBe(true);
     expect(mapped.__vector__.map(numOf)).toEqual([10, 20, 30]);

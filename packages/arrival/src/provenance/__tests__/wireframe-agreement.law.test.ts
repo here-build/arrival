@@ -297,7 +297,7 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
             symbols: (symbol, z) => ({
               "emit!": symbol.rosetta`emit!: identity passthrough (sink echo)`(
                 { input: [z.dynamic], output: [z.dynamic] },
-                (x: unknown) => x,
+                (x: import("../../values/types.js").SchemeValue) => x,
               ) }) }),
         ]);
         const registry = new SourceRegistry();

@@ -39,8 +39,8 @@ import { bindValue } from "../../../env/AmbientRuntime.js";
  * defensive fallback, not a live path: `src` is an ANativeProcedure, so its arg
  * always arrives still-boxed — see `withLawEnv`'s doc for why that's load-bearing.
  */
-function stampFresh(raw: unknown, id: number): AValue {
-  if (raw instanceof AValue) return raw.withProvenance(new Set([id])) as AValue;
+function stampFresh(raw: unknown, id: number): SchemeValue {
+  if (raw instanceof AValue) return raw.withProvenance(new Set([id]));
   if (typeof raw === "number") return z.number.encode(raw).withProvenance(new Set([id]));
   if (typeof raw === "string") return z.string.encode(raw).withProvenance(new Set([id]));
   if (typeof raw === "boolean") return z.boolean.encode(raw).withProvenance(new Set([id]));

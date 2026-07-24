@@ -49,8 +49,23 @@ describe("Generator Evaluator with Real LIPS Types", () => {
     // (`0`→`0`, `BigInt(...)`→direct number use, the dead `typeof arg === "bigint"` arm
     // dropped since a raw host bigint is now an opaque pass-through the interpreter never
     // hands this test helper — §2.3).
+    // W8: ambient holds ACallable values only — bare host fns refused.
+    const contour = (
+      name: string,
+      arity: { min: number; max: number | null },
+      impl: (args: SchemeValue[]) => SchemeValue,
+    ) =>
+      new ANativeProcedure({
+        name,
+        arity,
+        contract: undefined,
+        impl: (args) => impl(args),
+      });
+    const numOf = (a: SchemeValue): number =>
+      a instanceof AExact ? a.num : a instanceof AInexact ? a.real : (a as unknown as number);
+    const bool = (b: boolean) => (b ? schemeTrue : schemeFalse);
     env = mintResolvingFrame("test-env", {
-      "+": (...args: unknown[]) => {
+      "+": contour("+", { min: 0, max: null }, (args) => {
         let result = 0;
         let hasInexact = false;
         for (const arg of args) {
@@ -65,60 +80,33 @@ describe("Generator Evaluator with Real LIPS Types", () => {
           }
         }
         return hasInexact ? new AInexact(result) : new AExact(result);
-      },
-      "-": (...args: unknown[]) => {
+      }),
+      "-": contour("-", { min: 0, max: null }, (args) => {
         if (args.length === 0) return new AExact(0);
-        let result = args[0] instanceof AExact ? args[0].num : (args[0] as number);
+        let result = numOf(args[0]!);
         if (args.length === 1) return new AExact(-result);
-        for (let i = 1; i < args.length; i++) {
-          const arg = args[i];
-          result -= arg instanceof AExact ? arg.num : (arg as number);
-        }
+        for (let i = 1; i < args.length; i++) result -= numOf(args[i]!);
         return new AExact(result);
-      },
-      "*": (...args: unknown[]) => {
+      }),
+      "*": contour("*", { min: 0, max: null }, (args) => {
         let result = 1;
-        for (const arg of args) {
-          result *= arg instanceof AExact ? arg.num : (arg as number);
-        }
+        for (const arg of args) result *= numOf(arg);
         return new AExact(result);
-      },
-      "/": (a: unknown, b: unknown) => {
-        const aVal = a instanceof AExact ? a.num : (a as number);
-        const bVal = b instanceof AExact ? b.num : (b as number);
-        return new AInexact(aVal / bVal);
-      },
-      "<": (a: unknown, b: unknown) => {
-        const aVal = a instanceof AExact ? a.num : (a as number);
-        const bVal = b instanceof AExact ? b.num : (b as number);
-        return aVal < bVal;
-      },
-      ">": (a: unknown, b: unknown) => {
-        const aVal = a instanceof AExact ? a.num : (a as number);
-        const bVal = b instanceof AExact ? b.num : (b as number);
-        return aVal > bVal;
-      },
-      "<=": (a: unknown, b: unknown) => {
-        const aVal = a instanceof AExact ? a.num : (a as number);
-        const bVal = b instanceof AExact ? b.num : (b as number);
-        return aVal <= bVal;
-      },
-      ">=": (a: unknown, b: unknown) => {
-        const aVal = a instanceof AExact ? a.num : (a as number);
-        const bVal = b instanceof AExact ? b.num : (b as number);
-        return aVal >= bVal;
-      },
-      "=": (a: unknown, b: unknown) => {
-        const aVal = a instanceof AExact ? a.num : (a as number);
-        const bVal = b instanceof AExact ? b.num : (b as number);
-        return aVal === bVal;
-      },
-      list: (...args: SchemeValue[]) => APair.fromArray(CONSTANT_CTX, args, false),
-      car: (pair: APair<any, any>) => pair.car,
-      cdr: (pair: APair<any, any>) => pair.cdr,
-      cons: (a: SchemeValue, b: SchemeValue) => new APair(a, b),
-      "null?": (x: unknown) => x === nil || (x !== null && typeof x === "object" && (x as ANil).toString?.() === "()"),
-      not: (x: unknown) => x === false || x === nil,
+      }),
+      "/": contour("/", { min: 2, max: 2 }, ([a, b]) => new AInexact(numOf(a!) / numOf(b!))),
+      "<": contour("<", { min: 2, max: 2 }, ([a, b]) => bool(numOf(a!) < numOf(b!))),
+      ">": contour(">", { min: 2, max: 2 }, ([a, b]) => bool(numOf(a!) > numOf(b!))),
+      "<=": contour("<=", { min: 2, max: 2 }, ([a, b]) => bool(numOf(a!) <= numOf(b!))),
+      ">=": contour(">=", { min: 2, max: 2 }, ([a, b]) => bool(numOf(a!) >= numOf(b!))),
+      "=": contour("=", { min: 2, max: 2 }, ([a, b]) => bool(numOf(a!) === numOf(b!))),
+      list: contour("list", { min: 0, max: null }, (args) => APair.fromArray(CONSTANT_CTX, args, false)),
+      car: contour("car", { min: 1, max: 1 }, ([pair]) => (pair as APair<any, any>).car),
+      cdr: contour("cdr", { min: 1, max: 1 }, ([pair]) => (pair as APair<any, any>).cdr),
+      cons: contour("cons", { min: 2, max: 2 }, ([a, b]) => new APair(a!, b!)),
+      "null?": contour("null?", { min: 1, max: 1 }, ([x]) =>
+        bool(x === nil || (x !== null && typeof x === "object" && (x as { toString?: () => string }).toString?.() === "()")),
+      ),
+      not: contour("not", { min: 1, max: 1 }, ([x]) => bool(x === schemeFalse || x === nil)),
       "#t": schemeTrue,
       "#f": schemeFalse });
   });

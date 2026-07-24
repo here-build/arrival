@@ -40,6 +40,7 @@ import { AVector } from "../../values/primitives/AVector.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
+import { idContour, keepAllContour, filterContour, contourCallback } from "../../__tests__/_contour-callback.js";
 import { provOf } from "../../provenance/lineage.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { schemeToJs, type InvocationLike } from "../../membrane/rosetta.js";
@@ -440,36 +441,39 @@ describe("conservation — every input id survives to the output or the trace", 
     const STAMP = new Set([7]);
     const mkStampedPair = () => new APair(sStr("a", 100), new APair(sStr("b", 101), nil)).withProvenance(STAMP);
     const mkStampedVector = () => new AVector([sStr("a", 100), sStr("b", 101)], STAMP);
-    const idFn = (x: SchemeValue): SchemeValue => x;
-    const keepAll = () => true;
-    const dropB = (x: unknown) => (x as AString).valueOf() !== "b";
+    const idFn = idContour;
+    const keepAll = keepAllContour;
+    const dropB = filterContour((x) => (x as AString).valueOf() !== "b");
 
     it("map PROXIES the container's own stamp through — Pair and Vector agree", async () => {
-      const pairOut = await Promise.resolve(mkStampedPair()[tf("map")](idFn));
-      const vecOut = await Promise.resolve(mkStampedVector()[tf("map")](idFn));
+      const pairOut = await Promise.resolve(mkStampedPair()[tf("map")](idFn, CONSTANT_CTX));
+      const vecOut = await Promise.resolve(mkStampedVector()[tf("map")](idFn, CONSTANT_CTX));
       expect(provOf(pairOut)).toEqual([7]);
       expect(provOf(vecOut)).toEqual([7]);
     });
 
     it("sort PROXIES the container's own stamp through — Pair and Vector agree (the old divergence is closed)", async () => {
-      const cmp = (a: unknown, b: unknown) =>
-        String((a as AString).valueOf()).localeCompare(String((b as AString).valueOf()));
-      const pairOut = mkStampedPair()[tf("sort")](cmp);
-      const vecOut = mkStampedVector()[tf("sort")](cmp);
+      const cmp = contourCallback((args) => {
+        const a = args[0] as AString;
+        const b = args[1] as AString;
+        return String(a.valueOf()).localeCompare(String(b.valueOf())) as unknown as import("../../values/types.js").SchemeValue;
+      }, "locale-cmp");
+      const pairOut = mkStampedPair()[tf("sort")](cmp, CONSTANT_CTX);
+      const vecOut = mkStampedVector()[tf("sort")](cmp, CONSTANT_CTX);
       expect(provOf(pairOut)).toEqual([7]);
       expect(provOf(vecOut)).toEqual([7]);
     });
 
     it("filter (keep-all) PROVENANCES union(container's own stamp, survivors) — Pair and Vector agree", async () => {
-      const pairOut = await Promise.resolve(mkStampedPair()[tf("filter")](keepAll));
-      const vecOut = await Promise.resolve(mkStampedVector()[tf("filter")](keepAll));
+      const pairOut = await Promise.resolve(mkStampedPair()[tf("filter")](keepAll, CONSTANT_CTX));
+      const vecOut = await Promise.resolve(mkStampedVector()[tf("filter")](keepAll, CONSTANT_CTX));
       expect(provOf(pairOut)).toEqual([7, 100, 101]);
       expect(provOf(vecOut)).toEqual([7, 100, 101]);
     });
 
     it("filter (drop one) PROVENANCES union(container's own stamp, SURVIVING elements only) — Pair and Vector agree", async () => {
-      const pairOut = await Promise.resolve(mkStampedPair()[tf("filter")](dropB));
-      const vecOut = await Promise.resolve(mkStampedVector()[tf("filter")](dropB));
+      const pairOut = await Promise.resolve(mkStampedPair()[tf("filter")](dropB, CONSTANT_CTX));
+      const vecOut = await Promise.resolve(mkStampedVector()[tf("filter")](dropB, CONSTANT_CTX));
       expect(provOf(pairOut)).toEqual([7, 100]); // 101 (the dropped "b") never flows
       expect(provOf(vecOut)).toEqual([7, 100]);
     });

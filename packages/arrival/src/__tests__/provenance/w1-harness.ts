@@ -94,21 +94,22 @@ export class SourceRegistry {
         symbols: (symbol) => ({
           [op]: symbol.rosetta`${op}: W1 harness fake Rosetta-IN source`(
             { input: [], inputRest: z.dynamic, output: [z.dynamic] },
-            (..._args: unknown[]): unknown => {
+            (..._args: unknown[]): SchemeValue => {
               if (shape === "num") {
                 const id = mint(op);
-                return stampedNum(id, id);
+                return stampedNum(id, id) as SchemeValue;
               }
               if (shape === "str") {
                 const id = mint(op);
-                return stampedStr(`${op}#${id}`, id);
+                return stampedStr(`${op}#${id}`, id) as SchemeValue;
               }
               const out: Record<string, unknown> = {};
               for (const field of shape.dict) {
                 const id = mint(op);
                 out[field] = stampedStr(`${op}.${field}#${id}`, id);
               }
-              return out;
+              // Host dict payload — dynamic out face re-boxes at the membrane.
+              return out as unknown as SchemeValue;
             },
           ) }) }),
     ]);

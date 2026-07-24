@@ -16,6 +16,7 @@ import { testCallCtx } from "../symbol/index.js";
 import * as z from "../common/scheme-zod/index.js";
 import { APair } from "../values/primitives/APair.js";
 import { AValue } from "../values/primitives/AValue.js";
+import type { SchemeValue } from "../values/types.js";
 import { AString } from "../values/primitives/AString.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
@@ -44,11 +45,9 @@ describe("symbol.native — scheme-identity, no validation", () => {
     const def = symbol.native`pair-id: identity on a pair`(
       { input: [z.pair], output: [z.pair] },
       (p) => {
-        // z.pair is cons(schemeValue, schemeValue) where schemeValue is z.schemeValue (AValue
-        // codec). The decoded
-        // param type is `APair<AValue, AValue>` — AValue satisfies SchemeValue and preserves
-        // the withProvenance method signature (unlike `any`/`unknown`).
-        expectTypeOf(p).toEqualTypeOf<APair<AValue, AValue>>();
+        // z.pair is cons(schemeValue, schemeValue); scheme face keeps the APair box.
+        // Element type is SchemeValue (not the abstract AValue base — not a union member).
+        expectTypeOf(p).toEqualTypeOf<APair<SchemeValue, SchemeValue>>();
         return p;
       },
     );

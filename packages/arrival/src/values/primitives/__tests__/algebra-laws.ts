@@ -12,6 +12,9 @@
 import fc from "fast-check";
 import { describe, it } from "vitest";
 import { tf } from "../../tagless-final.js";
+import { AString } from "../AString.js";
+import { CONSTANT_CTX } from "../../../run/RunContext.js";
+import { unaryContour } from "../../../__tests__/_contour-callback.js";
 
 type FL = Record<string, any>;
 const equals = (a: FL, b: FL): boolean => Boolean(a[tf("equals")](b));
@@ -132,7 +135,17 @@ export interface FunctorArbs<T, A> {
 export function functorLaws<T, A>(name: string, { arb, f, g, eq }: FunctorArbs<T, A>): void {
   // map may be async (APair/AVector await the user fn) or sync (AString char-map); await
   // covers both. eqF stays sync — it compares the already-materialized structures.
-  const map = async (x: FL, fn: (a: A) => A): Promise<FL> => await x[tf("map")](fn);
+  // W8: APair/AVector take ACallable + runCtx; AString's char-map stays bare host unary.
+  const map = async (x: FL, fn: (a: A) => A): Promise<FL> => {
+    const term = x[tf("map")] as ((...args: unknown[]) => unknown) | undefined;
+    if (term === undefined) throw new Error("functorLaws: no map term");
+    if (x instanceof AString) return (await term.call(x, fn)) as FL;
+    return (await term.call(
+      x,
+      unaryContour((el) => fn(el as A) as never),
+      CONSTANT_CTX,
+    )) as FL;
+  };
   const eqF = eq ?? ((a: T, b: T) => equals(a as FL, b as FL));
   describe(`${name} — Functor`, () => {
     it("identity: map(id) ≡ id", async () => {

@@ -12,7 +12,7 @@
  */
 import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import { makeCallCtx } from "../../run/CallCtx.js";
-import { applyCallback } from "./ACallable.js";
+import { applyCallback, type ACallable } from "./ACallable.js";
 import { chargeHeap } from "../../heap-budget.js";
 import { is_promise } from "../../eval/guards.js";
 import { is_false } from "../../values/value-guards.js";
@@ -174,10 +174,8 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
 
   // Functor map — PRESERVES every mapped element's box, rebuilds fresh AVector.
   // LENGTH-PRESERVING — PROXY container's own stamp through unchanged.
-  ["arrival/tagless-final/map"](
-    fn: (x: SchemeValue) => SchemeValue | Promise<SchemeValue>,
-    runCtx: RunContext,
-  ): AVector | Promise<AVector> {
+  // Callback is ACallable only (W8) — same discipline as APair.
+  ["arrival/tagless-final/map"](fn: ACallable, runCtx: RunContext): AVector | Promise<AVector> {
     strictGate(runCtx, {
       op: "map",
       rule: "R7RS `map` operates on lists; a vector is not a list",
@@ -194,30 +192,29 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
 
   // Filterable — keeps matching elements, PRESERVING boxes. LENGTH-CHANGING —
   // PROVENANCED fresh as union of container stamp + survivors' stamps.
-  async ["arrival/tagless-final/filter"](
-    arg: ((x: SchemeValue) => unknown | Promise<unknown>) | RegExp,
-    runCtx: RunContext,
-  ): Promise<AVector> {
+  async ["arrival/tagless-final/filter"](arg: ACallable | RegExp, runCtx: RunContext): Promise<AVector> {
     strictGate(runCtx, {
       op: "filter",
       rule: "`filter` (SRFI-1) operates on lists; a vector is not a list",
       alternative: "filter the list form: (list->vector (filter pred (vector->list v)))" });
     chargeHeap(runCtx, this.__vector__.length);
-    const pred = arg instanceof RegExp ? (x: SchemeValue) => String(x).match(arg) : arg;
     const out: SchemeValue[] = [];
+    if (arg instanceof RegExp) {
+      const re = arg;
+      for (const v of this.__vector__) {
+        if (!is_false(String(v).match(re))) out.push(v);
+      }
+      return withInputProvenance([this, ...out], new AVector(out));
+    }
     for (const v of this.__vector__) {
-      const verdict = await applyCallback(pred, [v], makeCallCtx(runCtx));
+      const verdict = await applyCallback(arg, [v], makeCallCtx(runCtx));
       if (!is_false(verdict)) out.push(v); // R7RS: only #f is false
     }
     return withInputProvenance([this, ...out], new AVector(out));
   }
 
   // Async-aware reduce, SRFI fold `fn(element, acc)`, left fold.
-  async ["arrival/tagless-final/reduce"]<Acc>(
-    fn: (element: SchemeValue, acc: Acc) => Acc | Promise<Acc>,
-    initial: Acc,
-    runCtx: RunContext,
-  ): Promise<Acc> {
+  async ["arrival/tagless-final/reduce"]<Acc>(fn: ACallable, initial: Acc, runCtx: RunContext): Promise<Acc> {
     strictGate(runCtx, {
       op: "reduce",
       rule: "`reduce` (SRFI-1) operates on lists; a vector is not a list",
@@ -229,13 +226,14 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   }
 
   // Structure-preserving sort — LENGTH-PRESERVING, PROXIED stamp (must agree with APair).
+  // Comparator is ACallable (W8) when supplied.
   ["arrival/tagless-final/sort"](
-    comparator: ((a: SchemeValue, b: SchemeValue) => unknown) | undefined,
+    comparator: ACallable | undefined,
     runCtx: RunContext,
   ): AVector {
     chargeHeap(runCtx, this.__vector__.length);
     const out = [...this.__vector__];
-    out.sort(deriveSortCompare(comparator as ((a: unknown, b: unknown) => unknown) | undefined, runCtx));
+    out.sort(deriveSortCompare(comparator, runCtx));
     return withInputProvenance([this], new AVector(out));
   }
 

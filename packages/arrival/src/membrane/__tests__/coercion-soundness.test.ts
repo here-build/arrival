@@ -32,6 +32,7 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { idContour, keepAllContour, reduceContour, contourCallback } from "../../__tests__/_contour-callback.js";
 import { CONSTANT_CTX, RunContext } from "../../run/RunContext.js";
 import { PortabilityError } from "../../errors.js";
 import { APair } from "../../values/primitives/APair.js";
@@ -97,9 +98,13 @@ const elemProvs = (r: unknown): number[][] => {
 /** Awaits the FL-interop result (live ops may return a Promise). */
 const force = async (r: unknown): Promise<unknown> => (r && typeof (r as any).then === "function" ? await r : r);
 
-const idSync = <T>(x: T): T => x;
-const keepAll = () => true;
-const cmp = (a: unknown, b: unknown) => String((a as AString).valueOf()).localeCompare(String((b as AString).valueOf()));
+// idContour / keepAllContour imported from _contour-callback (W8 ACallable callbacks).
+const cmp = contourCallback((args) => {
+  const a = args[0] as AString;
+  const b = args[1] as AString;
+  // Host number verdict — deriveSortCompare's number branch (CallResult cast).
+  return String(a.valueOf()).localeCompare(String(b.valueOf())) as unknown as import("../../values/types.js").SchemeValue;
+}, "locale-cmp");
 
 const mkPair = () => new APair(el("a", 100), new APair(el("b", 101), nil)).withProvenance(new Set([7]));
 const mkVec = () => new AVector([el("a", 100), el("b", 101)], new Set([7]));
@@ -122,19 +127,19 @@ const mkArr = () => new AJSArray(["a", "b"], new Set([ARR_ORIGIN]));
 // ════════════════════════════════════════════════════════════════════════════
 describe("G6 sound — element provenance survives map/filter/sort", () => {
   it("Pair · map preserves every element's box", async () => {
-    expect(elemProvs(await force(mkPair()[tf("map")](idSync)))).toEqual([[100], [101]]);
+    expect(elemProvs(await force(mkPair()[tf("map")](idContour, CONSTANT_CTX)))).toEqual([[100], [101]]);
   });
   it("Pair · filter preserves every kept element's box", async () => {
-    expect(elemProvs(await force(mkPair()[tf("filter")](keepAll)))).toEqual([[100], [101]]);
+    expect(elemProvs(await force(mkPair()[tf("filter")](keepAllContour, CONSTANT_CTX)))).toEqual([[100], [101]]);
   });
   it("Pair · sort preserves every element's box (only reorders)", async () => {
     // sort dissolved onto the term: call it directly (the fl-interop sort is now a
     // symbol.sequence dispatcher with no .impl). The term takes the optional comparator.
-    expect(elemProvs(await force(mkPair()[tf("sort")](cmp)))).toEqual([[100], [101]]);
+    expect(elemProvs(await force(mkPair()[tf("sort")](cmp, CONSTANT_CTX)))).toEqual([[100], [101]]);
   });
 
   it("SchemeVector · filter preserves every element's box", async () => {
-    expect(elemProvs(await force(mkVec()[tf("filter")](keepAll)))).toEqual([[100], [101]]);
+    expect(elemProvs(await force(mkVec()[tf("filter")](keepAllContour, CONSTANT_CTX)))).toEqual([[100], [101]]);
   });
 });
 
@@ -202,15 +207,15 @@ describe("G6 RULED (R2) — container-grouping is PROXIED (map/sort) / PROVENANC
     // threads `withInputProvenance([this], …)` (C2) — the container's own {7} stamp survives
     // the rebuild, agreeing with AVector's sort below (P8 — ONE answer, the old divergence
     // this row used to pin is gone).
-    expect(provOf(await force(mkPair()[tf("sort")](cmp)))).toEqual([7]);
+    expect(provOf(await force(mkPair()[tf("sort")](cmp, CONSTANT_CTX)))).toEqual([7]);
   });
 
   it("Pair · map is LENGTH-PRESERVING (PROXIES {7} through); filter is LENGTH-CHANGING (PROVENANCES a fresh union)", async () => {
     // map: the container's own {7} stamp threads through unchanged (PROXIED).
-    expect(provOf(await force(mkPair()[tf("map")](idSync)))).toEqual([7]);
+    expect(provOf(await force(mkPair()[tf("map")](idContour, CONSTANT_CTX)))).toEqual([7]);
     // filter (keepAll — nothing dropped): PROVENANCED mints union(container's own {7},
     // survivors' own {100,101}) — a fresh derived fact, not a bare passthrough of {7} alone.
-    expect(provOf(await force(mkPair()[tf("filter")](keepAll)))).toEqual([7, 100, 101]);
+    expect(provOf(await force(mkPair()[tf("filter")](keepAllContour, CONSTANT_CTX)))).toEqual([7, 100, 101]);
   });
 
   it("SchemeVector · map PRESERVES every element's box, rebuilding a fresh AVector [FIXED: DR4]", async () => {
@@ -221,7 +226,7 @@ describe("G6 RULED (R2) — container-grouping is PROXIED (map/sort) / PROVENANC
     // element boxes, so map's cross-out was the outlier. Now map mirrors APair's box-preserving
     // map: it returns a FRESH AVector holding the SAME element boxes (scheme-vector-algebra.
     // test.ts pins the Functor identity law over this box-preserving behavior).
-    const r = await force(mkVec()[tf("map")](idSync));
+    const r = await force(mkVec()[tf("map")](idContour, CONSTANT_CTX));
 
     // (a) a fresh AVector, not a cross-out impersonator.
     expect(r).toBeInstanceOf(AVector);
@@ -248,14 +253,14 @@ describe("G6 sound — sort over a SchemeVector (DR4 fix: container-preserving, 
   // (R2/C2) the container's own grouping-fact stamp PROXIES through too (the claim this
   // describe's title always made, now actually asserted, not just documented).
   it("sort(vector) returns a sorted VECTOR (boxes preserved, container preserved)", async () => {
-    const r = await force(mkVec()[tf("sort")](cmp));
+    const r = await force(mkVec()[tf("sort")](cmp, CONSTANT_CTX));
     expect(r).toBeInstanceOf(AVector);
     expect(elemProvs(r)).toEqual([[100], [101]]); // element boxes survive the reorder
     expect(provOf(r)).toEqual([7]); // R2/C2: container's own grouping-fact stamp PROXIES through
   });
   it("sort(vector) actually REORDERS (not a passthrough): reversed input comes back sorted", async () => {
     const reversed = new AVector([el("b", 101), el("a", 100)], new Set([7]));
-    const r = (await force(reversed[tf("sort")](cmp))) as AVector;
+    const r = (await force(reversed[tf("sort")](cmp, CONSTANT_CTX))) as AVector;
     expect(r.__vector__.map((e) => String((e as AString).valueOf()))).toEqual(["a", "b"]);
     expect(elemProvs(r)).toEqual([[100], [101]]); // boxes ride along through the reorder
     expect(provOf(r)).toEqual([7]); // container stamp proxies through the reorder too
@@ -269,7 +274,7 @@ describe("G6 sound — sort over a SchemeVector (DR4 fix: container-preserving, 
   // identical to `map` over a native vector above.
   it("map(AJSArray) delegates to the box-preserving Functor — a borrowed array answers map [RESOLVED]", async () => {
     expect(tf("map") in mkArr()).toBe(true);
-    const r = await force(mkArr()[tf("map")](idSync, CONSTANT_CTX));
+    const r = await force(mkArr()[tf("map")](idContour, CONSTANT_CTX));
     expect(r).toBeInstanceOf(AVector); // box-preserving, not the cross-out impersonator
     expect((r as AVector).length).toBe(2);
     expect((r as AVector).__vector__.every((e) => e instanceof AString)).toBe(true);
@@ -320,7 +325,7 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
   // RESOLVED (was CONTESTED): reduce delegates to the materialized vector, like map.
   it("reduce(AJSArray) folds the borrowed elements via a vector [RESOLVED]", async () => {
     expect(tf("reduce") in mkArr()).toBe(true);
-    const n = await force(mkArr()[tf("reduce")]((_e, acc: number) => acc + 1, 0, CONSTANT_CTX));
+    const n = await force(mkArr()[tf("reduce")](reduceContour((_e, acc: number) => acc + 1), 0, CONSTANT_CTX));
     expect(n).toBe(2);
   });
 });
@@ -407,14 +412,14 @@ describe("strict mode gates generic list-ops on a vector (loose tolerates, stric
   it("map(vector): loose works; strict throws PortabilityError pointing at vector-map", async () => {
     // loose tolerates: the box-preserving Functor returns a fresh AVector — getting a value
     // back at all is the "loose works" signal.
-    expect(await force(mkVec()[tf("map")](idSync, CONSTANT_CTX))).toBeInstanceOf(AVector);
+    expect(await force(mkVec()[tf("map")](idContour, CONSTANT_CTX))).toBeInstanceOf(AVector);
     // map is sync up to the gate → it throws synchronously, not a rejected promise
-    expect(() => mkVec()[tf("map")](idSync, strict)).toThrow(PortabilityError);
-    expect(() => mkVec()[tf("map")](idSync, strict)).toThrow(/vector-map/);
+    expect(() => mkVec()[tf("map")](idContour, strict)).toThrow(PortabilityError);
+    expect(() => mkVec()[tf("map")](idContour, strict)).toThrow(/vector-map/);
   });
   it("filter/reduce(vector): strict rejects them (SRFI-1 list-ops)", async () => {
-    await expect(mkVec()[tf("filter")](keepAll, strict)).rejects.toThrow(PortabilityError);
-    await expect(mkVec()[tf("reduce")]((_e: unknown, a: number) => a, 0, strict)).rejects.toThrow(
+    await expect(mkVec()[tf("filter")](keepAllContour, strict)).rejects.toThrow(PortabilityError);
+    await expect(mkVec()[tf("reduce")](reduceContour((_e, a: number) => a), 0, strict)).rejects.toThrow(
       PortabilityError,
     );
   });
@@ -422,6 +427,6 @@ describe("strict mode gates generic list-ops on a vector (loose tolerates, stric
     expect(mkVec()[tf("sort")](cmp, strict)).toBeInstanceOf(AVector);
   });
   it("a borrowed AJSArray inherits the gate via delegation (strict map throws)", () => {
-    expect(() => mkArr()[tf("map")](idSync, strict)).toThrow(PortabilityError);
+    expect(() => mkArr()[tf("map")](idContour, strict)).toThrow(PortabilityError);
   });
 });

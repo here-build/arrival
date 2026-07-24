@@ -115,22 +115,19 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
   // Return types MIRROR AVector's concrete returns (honest + precise, never abstract
   // AValue). map is box-preserving ("one algebra, every carrier") — returns a FRESH
   // AVector, same as AVector's own map.
-  ["arrival/tagless-final/map"](
-    fn: (x: SchemeValue) => SchemeValue | Promise<SchemeValue>,
-    runCtx: RunContext,
-  ): AVector | Promise<AVector> {
+  ["arrival/tagless-final/map"](fn: Parameters<AVector["arrival/tagless-final/map"]>[0], runCtx: RunContext): AVector | Promise<AVector> {
     return this.vec()[tf("map")](fn, runCtx);
   }
 
   ["arrival/tagless-final/filter"](
-    pred: ((x: unknown) => unknown | Promise<unknown>) | RegExp,
+    pred: Parameters<AVector["arrival/tagless-final/filter"]>[0],
     runCtx: RunContext,
   ): Promise<AVector> {
     return this.vec()[tf("filter")](pred, runCtx);
   }
 
   ["arrival/tagless-final/reduce"]<Acc>(
-    fn: (element: unknown, acc: Acc) => Acc | Promise<Acc>,
+    fn: Parameters<AVector["arrival/tagless-final/reduce"]>[0],
     initial: Acc,
     runCtx: RunContext,
   ): Acc | Promise<Acc> {
@@ -138,7 +135,7 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
   }
 
   ["arrival/tagless-final/sort"](
-    comparator: ((a: unknown, b: unknown) => unknown) | undefined,
+    comparator: Parameters<AVector["arrival/tagless-final/sort"]>[0],
     runCtx: RunContext,
   ): AVector {
     return this.vec()[tf("sort")](comparator, runCtx);

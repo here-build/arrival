@@ -37,6 +37,7 @@ import { APair } from "../../values/primitives/APair.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
 import { tf } from "../../values/tagless-final.js";
 import { AExact } from "../../values/primitives/AExact.js";
+import { unaryContour, filterContour, reduceContour, keepAllContour } from "../_contour-callback.js";
 import { harvestContracts } from "../_symbols-harvest.js";
 
 // A nil clone carrying non-empty provenance — exactly what
@@ -127,10 +128,13 @@ describe("APair.ts tagless-final map/filter/reduce/traverse — `=== nil` identi
   it("mapPair(f, Pair(1, nil-clone)) — produces (1) only, fn called once", async () => {
     const calls: unknown[] = [];
     const p = new APair(new AExact(1), cloneNil());
-    const result = await p[tf("map")]((x) => {
-      calls.push(x);
-      return x;
-    });
+    const result = await p[tf("map")](
+      unaryContour((x) => {
+        calls.push(x);
+        return x;
+      }),
+      CONSTANT_CTX,
+    );
     expect(calls.map((v) => (v as AExact).valueOf())).toEqual([1]);
     expect(result).toBeInstanceOf(APair);
     expect((result as APair<any, any>).cdr instanceof ANil).toBe(true);
@@ -139,10 +143,13 @@ describe("APair.ts tagless-final map/filter/reduce/traverse — `=== nil` identi
   it("filterPair(_, Pair(1, nil-clone)) — predicate called once", async () => {
     let predCalls = 0;
     const p = new APair(new AExact(1), cloneNil());
-    await p[tf("filter")](() => {
-      predCalls++;
-      return true;
-    });
+    await p[tf("filter")](
+      filterContour(() => {
+        predCalls++;
+        return true;
+      }),
+      CONSTANT_CTX,
+    );
     expect(predCalls).toBe(1);
   });
 
@@ -150,10 +157,14 @@ describe("APair.ts tagless-final map/filter/reduce/traverse — `=== nil` identi
     const collected: unknown[] = [];
     const p = new APair(new AExact(1), cloneNil());
     // arrival/tagless-final/reduce is element-FIRST: fn(element, acc).
-    await p[tf("reduce")]((v: unknown, acc: unknown[]) => {
-      collected.push(v);
-      return [...(acc as unknown[]), v];
-    }, [] as unknown[]);
+    await p[tf("reduce")](
+      reduceContour((v, acc: unknown[]) => {
+        collected.push(v);
+        return [...acc, v];
+      }),
+      [] as unknown[],
+      CONSTANT_CTX,
+    );
     expect(collected.map((v) => (v as AExact).valueOf())).toEqual([1]);
   });
 
