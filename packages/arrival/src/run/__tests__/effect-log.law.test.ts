@@ -16,17 +16,9 @@
  *   - no `effects` ⇒ byte-identical to landed (pre-W1) behavior
  */
 import { describe, it, expect } from "vitest";
-import * as z from "../../common/scheme-zod.js";
-import { symbol, testCallCtx } from "../../common/symbol.js";
+import * as z from "../../common/scheme-zod/index.js";
+import { symbol, testCallCtx } from "../../symbol/index.js";
 
-/** Test-only cast: pull a minted ARosettaProcedure\'s `.contract` (typed `unknown` on the
- *  class) back to its RosettaSymbolDef shape, for direct `.run` invocation — Stage A2\'s
- *  `symbol.rosetta` mints the ARosettaProcedure directly; the def it used to RETURN rides
- *  `.contract` on it. */
-import type { RosettaSymbolDef } from "../../common/symbols/_bake.js";
-function rosettaContract(v: { contract: unknown }): RosettaSymbolDef {
-  return v.contract as RosettaSymbolDef;
-}
 import { exec } from "../../eval/generator-exec.js";
 import { RunContext } from "../../run/RunContext.js";
 import { MemoryRunCache } from "../../run/run-cache.js";
@@ -53,11 +45,17 @@ function sinkDef(name: string) {
 const ctxWithEffects = (effects: MemoryEffectLog, cache?: MemoryRunCache) =>
   testCallCtx({ runCtx: new RunContext({ effects, cache }) });
 
+
+/** Invoke a baked rosetta procedure via its apply term (the sole membrane spine). */
+function fire(proc: { ["arrival/tagless-final/apply"](args: any[], callCtx: any): any }, callCtx: any, ...args: any[]) {
+  return proc["arrival/tagless-final/apply"](args, callCtx);
+}
+
 describe("EffectLog — the burst arm at the wrapper (W1)", () => {
   it("a sink enqueues and returns void during a prime run — the impl NEVER fires", async () => {
     const { def, fires } = sinkDef("effect-log-enqueue");
     const effects = new MemoryEffectLog();
-    const result = await rosettaContract(def).run.call(ctxWithEffects(effects), num(7));
+    const result = await fire(def, ctxWithEffects(effects), num(7));
     expect(result).toBeInstanceOf(AVoid); // boxed unspecified — the wrapper's own membrane, not raw JS
     expect(fires()).toBe(0); // deferred, not fired
     // toMatchObject (not toEqual): the entry also carries `rawArgs` (§5), an additive
@@ -69,9 +67,9 @@ describe("EffectLog — the burst arm at the wrapper (W1)", () => {
     const { def } = sinkDef("effect-log-order");
     const effects = new MemoryEffectLog();
     const ctx = ctxWithEffects(effects);
-    await rosettaContract(def).run.call(ctx, num(1));
-    await rosettaContract(def).run.call(ctx, num(1)); // identical penetration — still a SECOND entry
-    await rosettaContract(def).run.call(ctx, num(2));
+    await fire(def, ctx, num(1));
+    await fire(def, ctx, num(1)); // identical penetration — still a SECOND entry
+    await fire(def, ctx, num(2));
     expect(effects.entries.map((e) => e.decodedArgs)).toEqual([[1], [1], [2]]);
     expect(effects.entries.map((e) => e.index)).toEqual([0, 1, 2]);
   });
@@ -86,7 +84,7 @@ describe("EffectLog — the burst arm at the wrapper (W1)", () => {
       },
     );
     const effects = new MemoryEffectLog();
-    const result = await rosettaContract(viewDef).run.call(ctxWithEffects(effects), num(21));
+    const result = await fire(viewDef, ctxWithEffects(effects), num(21));
     expect(result).toBeDefined();
     expect(viewFires).toBe(1); // fired normally — burst arm is sink-only
     expect(effects.entries).toHaveLength(0);
@@ -96,14 +94,14 @@ describe("EffectLog — the burst arm at the wrapper (W1)", () => {
     const { def, fires } = sinkDef("effect-log-replay");
     // Record a tombstone the ordinary way (no effects log — today's landed path).
     const record = new MemoryRunCache("record");
-    await rosettaContract(def).run.call(testCallCtx({ runCtx: new RunContext({ cache: record }) }), num(3));
+    await fire(def, testCallCtx({ runCtx: new RunContext({ cache: record }) }), num(3));
     expect(fires()).toBe(1);
 
     // Replay with an effect log ALSO present: burst arm must be skipped because
     // cache.mode === "replay" — tombstone hit skips exactly as without an effects log.
     const replay = new MemoryRunCache("replay", record.entries);
     const effects = new MemoryEffectLog();
-    const result = await rosettaContract(def).run.call(ctxWithEffects(effects, replay), num(3));
+    const result = await fire(def, ctxWithEffects(effects, replay), num(3));
     expect(result).toBeInstanceOf(AVoid); // tombstone-skip void, not burst-enqueue void
     expect(fires()).toBe(1); // NOT re-fired
     expect(effects.entries).toHaveLength(0); // NOT enqueued — a fold never gathers
@@ -111,7 +109,7 @@ describe("EffectLog — the burst arm at the wrapper (W1)", () => {
 
   it("a run with no `effects` is byte-identical to landed (pre-W1) behavior", async () => {
     const { def, fires } = sinkDef("effect-log-absent");
-    const result = await rosettaContract(def).run.call(testCallCtx(), num(9));
+    const result = await fire(def, testCallCtx(), num(9));
     expect(result).toBeInstanceOf(AVoid); // boxed unspecified — the wrapper's own membrane, not raw JS
     expect(fires()).toBe(1); // fires immediately — no burst arm without an effects log
   });
@@ -127,9 +125,7 @@ describe("EffectLog — the burst arm at the wrapper (W1)", () => {
             fires++;
             return undefined;
           },
-        ),
-      }),
-    });
+        ) }) });
     const effects = new MemoryEffectLog();
     const [result] = await exec("(fire! 1)", { capabilities: [cap], effects });
     expect(result).toBeUndefined(); // exec() unwraps through toJS — void ↔ JS undefined

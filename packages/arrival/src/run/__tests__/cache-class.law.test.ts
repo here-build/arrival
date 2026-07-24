@@ -18,9 +18,10 @@
  * `provenance`, and vice versa.
  */
 import { describe, it, expect, beforeAll } from "vitest";
-import * as z from "../../common/scheme-zod.js";
-import { symbol, type CacheClass } from "../../common/symbol.js";
-import { type NativeSymbolDef, type RosettaSymbolDef, type SequenceSymbolDef } from "../../common/symbols/_bake.js";
+import * as z from "../../common/scheme-zod/index.js";
+import { symbol, type CacheClass } from "../../symbol/index.js";
+import { type NativeSymbolDef } from "../../values/primitives/ANativeProcedure.js";
+import { type RosettaSymbolDef, type SequenceSymbolDef } from "../../common/symbols/_bake.js";
 import { EnvCapability } from "../../common/capability.js";
 import { CacheClassShapeError, ProvenanceRoleShapeError } from "../../errors.js";
 import { applyCapability, freshEnv } from "../../__tests__/_fresh-env.js";
@@ -169,8 +170,8 @@ describe("lineage ⊥ cache — the infer coexistence law (Ruling B)", () => {
     expect(contractOf<RosettaSymbolDef>(def).cacheClass).toBe("view");
   });
 
-  it('the legacy-equivalent row: a `provenance: "pipe"` rosetta with NO cache class stays exactly that — the new field never rewrites the migrated legacy `pure: true` → pipe mapping', () => {
-    const def = symbol.rosetta`cc-legacy-pipe: `(
+  it('the pipe-without-cacheClass row: a `provenance: "pipe"` rosetta with NO cache class stays exactly that — the new field never rewrites the `pure: true` → pipe mapping (removed API)', () => {
+    const def = symbol.rosetta`cc-pipe-no-cache: `(
       { input: [z.string], output: [z.string], provenance: "pipe" },
       (s) => s,
     );
@@ -188,9 +189,7 @@ describe("stamping — the resolved class rides the provenanceRole rails onto th
         symbols: (symbol, z) => ({
           "cc/view": symbol.rosetta`cc/view: `({ input: [z.string], output: [z.string], cacheClass: "view" }, (s) => s),
           "cc/pure": symbol.rosetta`cc/pure: `({ input: [z.string], output: [z.string], cacheClass: "pure" }, (s) => s),
-          "cc/plain": symbol.rosetta`cc/plain: `({ input: [z.string], output: [z.string] }, (s) => s),
-        }),
-      }),
+          "cc/plain": symbol.rosetta`cc/plain: `({ input: [z.string], output: [z.string] }, (s) => s) }) }),
     ]);
   });
 

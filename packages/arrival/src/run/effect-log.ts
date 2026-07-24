@@ -1,13 +1,10 @@
 /**
- * effect-log — the gathered-effect manifest for one run, the ORDERED sibling of `RunCache`.
- * The model (why it never deduplicates — "two effects, always" — the poison rule, and where
- * entries are gathered) is docs/execution.md §BURST. This file owns the log entity and the
- * drain (`burst`); it does NOT own the read-clock guard (read-guard.ts) or the conflict
- * re-execution comparator (unbuilt).
+ * effect-log — gathered-effect manifest for one run, ORDERED sibling of RunCache.
+ * Model: docs/execution.md §BURST ("two effects, always"; poison rule; where entries gather).
+ * Owns the log entity and drain (`burst`); not the read-clock guard or conflict re-exec.
  *
- * Entries store the DECODED args (post-zod, the same face `RunCache` keys on), not re-encoded
- * scheme values, so later consumers (a confirmation manifest, per-effect arg invariants) read
- * plain JS. This file does not interpret them; it carries them through in program order.
+ * Entries store DECODED args (post-zod, same face RunCache keys on) — plain JS for later
+ * consumers. This file carries them in program order, does not interpret.
  */
 
 /** One gathered sink penetration. `index` is minted by `enqueue` — program order, never
@@ -67,8 +64,7 @@ export class MemoryEffectLog implements EffectLog {
       verbName: entry.verbName,
       decodedArgs: entry.decodedArgs,
       ...(entry.enqueuedAtReadClock === undefined ? {} : { enqueuedAtReadClock: entry.enqueuedAtReadClock }),
-      ...(entry.rawArgs === undefined ? {} : { rawArgs: entry.rawArgs }),
-    });
+      ...(entry.rawArgs === undefined ? {} : { rawArgs: entry.rawArgs }) });
   }
 }
 

@@ -1,13 +1,10 @@
 /**
- * note-sink — the two per-run model-facing side channels (`notes`/`display` on `RunContext`),
- * leaf sinks (zero imports) scoped to ONE run so nothing leaks across concurrent sessions, both
- * drained once at end of call. The model — the return-channel-never-lies law, what each channel
- * carries, and why arrival binds no `(display …)` verb of its own — is docs/execution.md §SINKS.
+ * note-sink — per-run model-facing side channels (`notes`/`display` on RunContext), leaf
+ * sinks scoped to ONE run, drained once at end of call. Model: docs/execution.md §SINKS
+ * (return-channel-never-lies; arrival binds no `(display …)` of its own).
  *
- * FOOTER FORMAT (this file's mechanism): `NoteSink` lines render into a
- * `#| ── environment notes ── |#` reader-comment footer that parses to zero forms, so the model
- * tells bookkeeping from answer at a glance. NOT for per-statement teaching (a door explaining a
- * mistake belongs on that statement's own error) or anything that is part of the answer.
+ * FOOTER: NoteSink lines render as `#| ── environment notes ── |#` reader-comment (zero
+ * forms) — bookkeeping vs answer at a glance. Not for per-statement teaching or answer content.
  */
 
 /** A per-run collector for model-facing bookkeeping. Push at the point the fact becomes true;
@@ -30,8 +27,7 @@ export function createNoteSink(): NoteSink {
       const out = lines.slice();
       lines.length = 0;
       return out;
-    },
-  };
+    } };
 }
 
 /** One `(display …)` occurrence: the ORIGINAL source of the call, and the value it saw. */
@@ -55,6 +51,5 @@ export function createDisplaySink(): DisplaySink {
       const out = records.slice();
       records.length = 0;
       return out;
-    },
-  };
+    } };
 }

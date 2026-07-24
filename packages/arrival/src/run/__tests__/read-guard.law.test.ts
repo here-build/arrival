@@ -31,8 +31,7 @@ import {
   MemoryReadTracker,
   checkReadWriteGuard,
   ReadYourDeferredWriteError,
-  type WriteSetResolver,
-} from "../../run/read-guard.js";
+  type WriteSetResolver } from "../../run/read-guard.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. checkReadWriteGuard — the pure function, direct
@@ -40,8 +39,7 @@ import {
 
 const entry = (over: Partial<EffectEntry> & { verbName: string; decodedArgs: readonly unknown[] }): EffectEntry => ({
   index: 0,
-  ...over,
-});
+  ...over });
 
 /** Effects named "write!" write the key at decodedArgs[0] — matches the `write!` verb
  *  the wired describe block below binds, so ONE resolver serves both sections. */
@@ -122,9 +120,7 @@ function makeCap(tracker: MemoryReadTracker) {
           writeFires++;
           return undefined;
         },
-      ),
-    }),
-  });
+      ) }) });
   return { cap, writeFires: () => writeFires };
 }
 

@@ -1,30 +1,19 @@
 /**
  * LAW W1 — an SRFI-13 criterion predicate observes the invocation's REAL RunContext,
- * not CONSTANT_CTX (the CONSTANT_CTX audit §2.4, srfi-13.ts:71 — the audit's own
- * "worst in cluster" finding: `criterionFlags`
- * passed CONSTANT_CTX as `applyCallback`'s runCtx argument ITSELF, so every
- * user-supplied SRFI-13 predicate (trim/index/count/tokenize) ran unmetered, off
- * cache/effects/abort, regardless of what the invoking run actually configured).
+ * not CONSTANT_CTX (the CONSTANT_CTX audit §2.4).
  *
- * `criterionFlags` now takes `runCtx` as a required parameter, threaded from every
- * caller's `this.runCtx` (trimImpl/sliceImpl converted from arrows to
- * `function(this: CallCtx, …)` so dispatch delivers it; string-index/string-count/
- * string-tokenize thread their own `this.runCtx`).
- *
- * Mirrors seq-op-runctx-threading.law.test.ts's method: construct a REAL
- * `new RunContext(...)` (distinguishable from CONSTANT_CTX by `heapMeter` — CONSTANT_CTX's
- * is always `undefined`), bind it via the sanctioned `testCallCtx` test door
- * (CallCtx.ts), and record the `this.runCtx` a plain-`function` probe (never an arrow
- * — the audit's §0 "arrow-fn trap") observes when SRFI-13's `applyCallback` seam
- * invokes it.
+ * W8 rewrite: bare host-fn applyCallback arm is gone — the probe is an ANativeProcedure
+ * that records `callCtx.runCtx`.
  */
 import { describe, expect, it } from "vitest";
 import srfi13 from "../../env/srfi/srfi-13.js";
-import { testCallCtx } from "../../common/symbol.js";
+import { testCallCtx } from "../../symbol/index.js";
 import { RunContext, CONSTANT_CTX } from "../../run/RunContext.js";
 import { AString } from "../../values/primitives/AString.js";
 import type { EnvCapability } from "../../common/capability.js";
 import { harvestContracts } from "../../__tests__/_symbols-harvest.js";
+import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
+import { schemeFalse } from "../../values/primitives/ABool.js";
 
 /** Same extraction idiom as identity.law.test.ts's `opsOf`: pull the raw impl fn off
  *  a `symbol.native`/`symbol.rosetta` entry in the capability's inlined `symbols` —
@@ -42,17 +31,19 @@ const SRFI13_OPS = opsOf(srfi13);
  *  `undefined`. Distinguishing the two is the whole law. */
 const liveCtx: RunContext = new RunContext({ heapBudget: 1_000_000 });
 
-/** Records the `this.runCtx` a raw-function criterion predicate observes. A `function`
- *  declaration — never an arrow — so `this` is actually reachable. */
-function makeProbe(): { fn: (this: { runCtx: RunContext }, ...args: unknown[]) => boolean; observed: RunContext[] } {
+/** Records the `callCtx.runCtx` an ANativeProcedure criterion observes. W8. */
+function makeProbe(): { fn: ANativeProcedure; observed: RunContext[] } {
   const observed: RunContext[] = [];
   return {
     observed,
-    fn: function (this: { runCtx: RunContext }, ...args: unknown[]): boolean {
-      observed.push(this.runCtx);
-      return false; // never matches — every char flows through the predicate once
-    },
-  };
+    fn: new ANativeProcedure({
+      name: "probe",
+      arity: { min: 0, max: null },
+      contract: undefined,
+      impl: (_args, callCtx) => {
+        observed.push(callCtx.runCtx);
+        return schemeFalse; // never matches — every char flows through the predicate once
+      } }) };
 }
 
 describe("W1 srfi-13 criterion ctx threading — a user predicate observes the invocation's real ctx, not CONSTANT_CTX", () => {

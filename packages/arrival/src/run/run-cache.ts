@@ -1,31 +1,23 @@
 /**
- * run-cache — the first-class run cache, the membrane's record/replay interception. Sibling of
- * RunContext: a run's durable twin is `(program, cache)`, and a cache can outlive its program to
- * answer a full re-run of a NEW program over the SAME cache (content-keyed). It intercepts at the
- * baked rosetta `run` wrapper — the ONE chokepoint where args are decoded and the impl has not
- * fired (docs/execution.md §CHOKEPOINT), gating on the def's EXPLICIT cache class plus the `sink`
- * lineage role for the tombstone skip.
+ * run-cache — membrane record/replay interception. A run's durable twin is
+ * `(program, cache)`; cache can outlive its program and answer a re-run of a NEW program
+ * over the SAME cache (content-keyed). Intercepts at the baked rosetta `run` wrapper —
+ * ONE chokepoint where args are decoded and the impl has not fired (docs/execution.md
+ * §CHOKEPOINT). Gates on explicit cache class + sink lineage for tombstone skip.
  *
- * The model in full — single-flight, the run-level / no-session-plumbing rule, the burst arm that
- * rides the same chokepoint, and the two meanings of "replay" — is docs/execution.md §MODE-LAW,
- * §BURST, §TWO-REPLAYS.
+ * Full model: docs/execution.md §MODE-LAW, §BURST, §TWO-REPLAYS.
  *
- * THE MODE LAW (record vs replay, per class) — mirrored in docs/execution.md §MODE-LAW; keep the
- * two tables in step:
+ * THE MODE LAW (keep in step with docs/execution.md §MODE-LAW):
  *
- *   class      | record mode                          | replay mode
+ *   class      | record                               | replay
  *   -----------|--------------------------------------|-------------------------------
- *   view       | fire, write/OVERWRITE `{value}`      | hit → serve, never re-fire;
- *              | (a settled entry never suppresses    | miss → fire + write (a NEW
- *              | a live fire — fresh truth)           | program's novel call is fresh)
- *   sink       | fire, write `{effect}` tombstone     | tombstone hit → skip (void);
- *              | (two identical live sinks = TWO      | miss → fire (new intent, not
- *              | effects, always)                     | a repeat)
- *   pure       | fire                                 | fire — determinism from args is
- *              |                                      | the CONTRACT; recovery = re-call,
+ *   view       | fire, write/OVERWRITE `{value}`      | hit → serve; miss → fire+write
+ *              | (settled entry never suppresses live)| (novel call is fresh)
+ *   sink       | fire, write `{effect}` tombstone     | tombstone → skip; miss → fire
+ *              | (two identical sinks = TWO effects)  | (new intent, not a repeat)
+ *   pure       | fire                                 | fire — determinism from args;
  *              |                                      | never stored
- *   undeclared | fire                                 | fire — regenerateable, the SAFE
- *              |                                      | default
+ *   undeclared | fire                                 | fire — regenerateable default
  */
 
 import type { EffectLog } from "./effect-log.js";
@@ -223,8 +215,7 @@ export async function penetrateThroughCache(
       verbName: symbolName,
       decodedArgs,
       ...(reads === undefined ? {} : { enqueuedAtReadClock: reads.log.length }),
-      ...(rawArgs === undefined ? {} : { rawArgs }),
-    });
+      ...(rawArgs === undefined ? {} : { rawArgs }) });
     return undefined;
   }
 

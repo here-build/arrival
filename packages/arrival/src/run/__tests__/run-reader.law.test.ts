@@ -29,17 +29,13 @@ describe("run-reader door — symbolsOwnedBy / ownerOf", () => {
         "run-reader-a-verb": symbol.rosetta`run-reader-a-verb: adds one`(
           { input: [z.number], output: [z.number] },
           (n: number) => n + 1,
-        ),
-      }),
-    });
+        ) }) });
     const capB = EnvCapability.define("test/run-reader-b", {
       symbols: (symbol, z) => ({
         "run-reader-b-verb": symbol.rosetta`run-reader-b-verb: doubles`(
           { input: [z.number], output: [z.number] },
           (n: number) => n * 2,
-        ),
-      }),
-    });
+        ) }) });
 
     const { runCtx } = await execState("(run-reader-a-verb 1)", { capabilities: [capA, capB] });
 
@@ -60,14 +56,10 @@ describe("run-reader door — symbolsOwnedBy / ownerOf", () => {
   it("a root-scope define is owner-less — never listed by any capability", async () => {
     const capA = EnvCapability.define("test/run-reader-rootscope-a", {
       symbols: (symbol, z) => ({
-        "rootscope-a-verb": symbol.rosetta`rootscope-a-verb: identity`({ input: [z.number], output: [z.number] }, (n: number) => n),
-      }),
-    });
+        "rootscope-a-verb": symbol.rosetta`rootscope-a-verb: identity`({ input: [z.number], output: [z.number] }, (n: number) => n) }) });
     const capB = EnvCapability.define("test/run-reader-rootscope-b", {
       symbols: (symbol, z) => ({
-        "rootscope-b-verb": symbol.rosetta`rootscope-b-verb: identity`({ input: [z.number], output: [z.number] }, (n: number) => n),
-      }),
-    });
+        "rootscope-b-verb": symbol.rosetta`rootscope-b-verb: identity`({ input: [z.number], output: [z.number] }, (n: number) => n) }) });
 
     const { runCtx, values } = await execState(
       "(define run-reader-root-witness (lambda (n) n)) run-reader-root-witness",
@@ -86,9 +78,7 @@ describe("run-reader door — symbolsOwnedBy / ownerOf", () => {
   it("reuse across REPL passes: the SAME runCtx answers symbolsOwnedBy consistently", async () => {
     const cap = EnvCapability.define("test/run-reader-repl", {
       symbols: (symbol, z) => ({
-        "repl-verb": symbol.rosetta`repl-verb: adds one`({ input: [z.number], output: [z.number] }, (n: number) => n + 1),
-      }),
-    });
+        "repl-verb": symbol.rosetta`repl-verb: adds one`({ input: [z.number], output: [z.number] }, (n: number) => n + 1) }) });
 
     const first = await execState("(define run-reader-repl-witness 1)", { capabilities: [cap] });
     const ownedFirst = symbolsOwnedBy(first.runCtx, cap);
@@ -100,8 +90,7 @@ describe("run-reader door — symbolsOwnedBy / ownerOf", () => {
     const second = await execState("(repl-verb run-reader-repl-witness)", {
       capabilities: [cap],
       scope: first.scope,
-      runCtx: first.runCtx,
-    });
+      runCtx: first.runCtx });
     expect(second.runCtx).toBe(first.runCtx);
 
     const ownedSecond = symbolsOwnedBy(second.runCtx, cap);

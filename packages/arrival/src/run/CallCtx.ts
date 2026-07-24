@@ -1,37 +1,27 @@
-// A leaf values/primitives file, deliberately NOT in common/symbols/_bake.ts: _bake.ts
-// imports scheme-zod.ts, which imports ACallable.ts back, and ACallable.ts needs makeCallCtx
-// as a real call. Housing makeCallCtx in _bake.ts closes that cycle, and entering it from the
-// wrong path leaves a z.instanceof(...) codec's captured class permanently undefined —
-// z.instanceof captures its argument BY VALUE at call time, not as a live binding, so once
-// broken it stays broken for that schema instance's lifetime. CallCtx/makeCallCtx need none of
-// _bake.ts's zod machinery, so they live here, breaking the cycle at its narrowest point.
-// _bake.ts re-exports both for existing importers.
+// CallCtx lives here (not in common/symbols/_bake.ts): _bake imports scheme-zod, which
+// imports ACallable back, and ACallable needs makeCallCtx as a real call. Housing
+// makeCallCtx in _bake would close that cycle badly — z.instanceof captures its class
+// argument BY VALUE at call time, so a TDZ undefined sticks for that schema instance's
+// lifetime. CallCtx needs none of _bake's zod machinery. Import from this file directly.
 
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { type InvocationLike } from "../membrane/rosetta.js";
 
 /**
- * The ONE `this` every callable body sees (docs/execution.md §CALLCTX) — the dispatch-level
- * receiver `runCtx` fused with the per-call-site provenance carrier `invocation` and the
- * opt-in per-arg DEEP provenance vector `argProvenance`. Flat, not nested lazy getters: every
- * field is a cheap carrier, nothing to defer.
+ * The ONE `this` every callable body sees (docs/execution.md §CALLCTX) — dispatch-level
+ * `runCtx` fused with call-site provenance `invocation` and optional deep `argProvenance`.
+ * Flat carriers; nothing deferred.
  *
- * `invocation` is genuinely call-varying (unlike `runCtx`, which is constant per run) — it
- * never lives on RunContext. `argProvenance` aligns to the call's scheme args and is absent
- * for every dispatch path that doesn't request it.
+ * `invocation` is call-varying (unlike run-constant `runCtx`) — never lives on RunContext.
+ * `argProvenance` aligns to scheme args; absent when the dispatch path doesn't request it.
  *
- * `configuration`/`resources` (Stage 1b, RUN-SIDE since the CONFIGURATION relocation,
- * docs/execution.md §CALLCTX): the SAME per-env `Activation` a builder-form `symbols` closes
- * over the outer closure (common/capability.ts) is reachable off `this` at a real dispatch too —
- * a PARALLEL channel, not a replacement: the existing closure-based read stays untouched. Both
- * fields resolve at `makeCallCtx` time off `runCtx` (`RunContext.capabilityConfigurations` /
- * `.capabilityResources`), keyed by the dispatched value's OWNING capability
- * ({@link associateCapability}), never carried on the association itself — a value that owns no
- * activation, or a run with no per-capability table to read (the bare-`env` glass path), simply
- * leaves both `undefined`. Absent for the vast majority of dispatch paths (a lexical lambda call,
- * a resource-less capability, any `makeCallCtx` call site that never threads a resolved value) —
- * optional, typed `unknown` here on purpose (narrowed by a capability's own `Activation<C,R>`
- * generics in stage 1c; this stage only wires the runtime carrier). */
+ * `configuration`/`resources` (docs/execution.md §CALLCTX): the same per-env Activation a
+ * builder-form `symbols` closes over is reachable off `this` at real dispatch — a PARALLEL
+ * channel, not a replacement. Resolved at `makeCallCtx` off `runCtx`
+ * (`capabilityConfigurations` / `capabilityResources`), keyed by the value's owning
+ * capability ({@link associateCapability}). No owner, or no per-capability table (bare-env
+ * glass) ⇒ both `undefined`. Typed `unknown` here; capability Activation generics narrow.
+ */
 export interface CallCtx {
   readonly runCtx: RunContext;
   readonly invocation: { currentInvocation: InvocationLike | undefined };
@@ -40,39 +30,24 @@ export interface CallCtx {
   readonly resources?: unknown;
 }
 
-/** The value → owning-capability association (1d, shrunk further at the CONFIGURATION relocation
- *  — see {@link makeCallCtx}'s own doc): `common/capability.ts`'s per-symbol bind loop calls
- *  {@link associateCapability} ONCE, at BIND time, keyed on the bound callable VALUE itself
- *  (ANativeProcedure/ARosettaProcedure/…) — never its name (a value can be re-exported/aliased
- *  under several names; the value's identity is what a real dispatch actually holds by the time it
- *  reaches {@link makeCallCtx}).
+/** Value → owning-capability association. Bind loop calls {@link associateCapability} once
+ *  at BIND time, keyed on the bound callable VALUE (never its name — aliases share identity).
  *
- *  Payload: the owning `capability` (opaque `object` — importing `EnvCapability` here would reopen
- *  the cycle this file's header note exists to avoid) plus `readsResources` — a define-time
- *  CONSTANT (which of the two per-run channels this value reads at all), never per-assembly data.
- *  Neither CONFIGURATION nor RESOURCES lives here anymore: both are per-RunContext, resolved at
- *  dispatch off the run itself (`runCtx.capabilityConfigurations`/`runCtx.capabilityResources`,
- *  see makeCallCtx) — the association only ever answers "who owns this value, and does it read
- *  resources at all", never "under which assembly". This is the fix the endgame context names:
- *  a symbol factory that mints ONE value at `define()` time for EVERY assembly of a capability
- *  cannot carry per-assembly config on a value-keyed WeakMap (a second assembly would silently
- *  overwrite the first's), whereas keying config off the RUN — the thing that genuinely differs
- *  per assembly — never collides. A `WeakMap` — not a field on the value — keeps the capability
- *  type out of this leaf file and lets an unbound value (a lambda, a resource-less survivor) cost
- *  a plain miss. */
+ *  Payload: owning `capability` (opaque `object` — importing EnvCapability reopens the cycle
+ *  this file's header avoids) + `readsResources` (define-time constant: does this value read
+ *  the per-run resource channel at all). Neither configuration nor resources live here —
+ *  both are per-RunContext, resolved at dispatch. A symbol factory mints ONE value at
+ *  `define()` for every assembly; per-assembly config on a value-keyed WeakMap would
+ *  silently overwrite. WeakMap keeps the capability type out of this leaf and costs a plain
+ *  miss for unbound values. */
 const capabilityByValue = new WeakMap<object, { readonly capability: object; readonly readsResources: boolean }>();
 
-/** Record `value`'s owning capability — called from `common/capability.ts`'s bind loop, once per
- *  bound native/rosetta/sequence/tagless(-guard) proc, right after construction. Re-attributing an
- *  ALREADY-bound value to a DIFFERENT capability is a declaration bug (a symbol belongs to exactly
- *  one owner) and throws; an idempotent re-bind under the SAME capability (same value re-run
- *  through the loop) is allowed.
+/** Record `value`'s owning capability — once per bound native/rosetta/sequence/tagless proc.
+ *  Re-attributing to a DIFFERENT capability throws; same capability re-bind is allowed.
  *
- *  `readsResources` gates whether this value's `this.resources` is fetched from the run's
- *  per-capability store (see makeCallCtx). `true` for the per-run-resource consumers (define-form
- *  symbols; constructor-form sequence/tagless/tagless-guard/rosetta). `false` for constructor-form
- *  `native` (its resources, when any, are read through the capability's own builder closure — e.g.
- *  arrival/loader — never `this.resources`; triggering the store here would DOUBLE-spawn them). */
+ *  `readsResources` gates `this.resources` fetch. `true` for per-run-resource consumers
+ *  (define-form; sequence/tagless/rosetta). `false` for constructor-form `native` (resources
+ *  via builder closure — e.g. arrival/loader; triggering the store here would double-spawn). */
 export function associateCapability(value: object, capability: object, readsResources: boolean): void {
   const existing = capabilityByValue.get(value);
   if (existing !== undefined && existing.capability !== capability) {
@@ -81,45 +56,21 @@ export function associateCapability(value: object, capability: object, readsReso
   capabilityByValue.set(value, { capability, readsResources });
 }
 
-/** Read `value`'s owning capability, if any — the run-reader door's DISCOVERY-side query (V's
- *  DI ruling, docs/plans/rework-zone-guidelines.md §"run-reader door": "discovery takes run
- *  context, extracts each symbol whose owning capability is an mcp capability, renders it in
- *  prelude"). A plain lookup mirroring {@link associateCapability}'s own write: `undefined` for
- *  anything never bound through the bind loop (a lambda, a root-scope `define`, a bare JS value)
- *  — a query, never an assertion, so it never throws. Exported via `/host-internals` for the
- *  packages composing catalogs/preludes over a run (arrival-mcp's DiscoveryTool and kin);
- *  {@link symbolsOwnedBy}, below, is the consumer-shaped composition most of them actually
- *  want. */
+/** Owning capability if any — discovery-side query (docs/execution.md §CALLCTX). Plain
+ *  lookup: `undefined` for anything never bound through the bind loop. Never throws.
+ *  Exported via `/host-internals`; {@link symbolsOwnedBy} is the usual consumer composition. */
 export function ownerOf(value: unknown): object | undefined {
   if (typeof value !== "object" || value === null) return undefined;
   return capabilityByValue.get(value)?.capability;
 }
 
-/** The consumer-shaped run-reader query (same DI ruling as {@link ownerOf}): every vocabulary
- *  NAME this run resolves whose bound value is owned by `capability`. Walks
- *  `runCtx.vocabulary` — the run's own frozen name→value artifact (`RunContext.vocabulary`,
- *  filled once at mint from `env/vocabulary.ts`'s `Vocabulary.map`, kept `unknown` here so this
- *  leaf file never imports the env layer) — keeping only the entries {@link ownerOf} attributes
- *  to `capability`. Plain data out (a fresh `ReadonlyMap`, not a live view over the vocabulary).
+/** Every vocabulary NAME this run resolves whose bound value is owned by `capability`.
+ *  Walks `runCtx.vocabulary` (opaque here so this leaf never imports the env layer).
+ *  No vocabulary (`CONSTANT_CTX`, live-frame family) ⇒ empty map.
  *
- *  A run with no vocabulary handle at all (`CONSTANT_CTX`, the internal live-frame family — see
- *  `RunContext.vocabulary`'s own doc) answers the empty map — the same "facility off" posture a
- *  resource-less/configuration-less capability already has elsewhere on such a run.
- *
- *  Two capabilities in the SAME run never collide: `associateCapability` throws at bind time on
- *  a re-attributed value, so a name's bound value has exactly one owner — the other capability's
- *  verbs, and the base roster's, are silently excluded here, never double-counted. A root-scope
- *  `(define ...)` lands in the run's LEXICAL `scope`, never in `vocabulary` (Stage B1's own
- *  split) — such a value is never even a candidate here, let alone falsely attributed to an
- *  owner.
- *
- *  Reused across REPL passes for free: the SAME `runCtx` (or any `runCtx` sharing the same
- *  memoized `Vocabulary` tuple, `env/vocabulary.ts`) always answers the identical map, since
- *  `vocabulary` never mutates after mint.
- *
- *  Contract/introspection data (a symbol's `.contract`) is a DIFFERENT door — `contractOf`
- *  (`/lsp-internals`) — deliberately not folded in here: this door answers "who owns this
- *  name", not "what does it mean". */
+ *  Two capabilities in one run never collide: associateCapability throws on re-attribution.
+ *  Root-scope `(define ...)` lands in lexical scope, never vocabulary — not a candidate.
+ *  Contract/introspection is a different door (`contractOf` on `/lsp-internals`). */
 export function symbolsOwnedBy(runCtx: RunContext, capability: object): ReadonlyMap<string, unknown> {
   const owned = new Map<string, unknown>();
   if (runCtx.vocabulary === undefined) return owned;
@@ -129,34 +80,17 @@ export function symbolsOwnedBy(runCtx: RunContext, capability: object): Readonly
   return owned;
 }
 
-/** Build the `this` every callable body (native/rosetta/tagless/tagless-guard/sequence impl,
- *  or any raw fn bound straight into env) is invoked with. The ONE construction site — every
- *  dispatch site calls this instead of hand-building the shape. `runCtx` has NO default (the
- *  latent-hazard rule, docs/execution.md §CALLCTX); `testCallCtx()` is the sanctioned door for
- *  CONSTANT_CTX under test.
+/** Build the `this` every callable body is invoked with. THE ONE construction site —
+ *  every dispatch calls this. `runCtx` has NO default (docs/execution.md §CALLCTX);
+ *  `testCallCtx()` is the sanctioned CONSTANT_CTX door under test.
  *
- * `resolvedValue` (1d, optional): the callable VALUE this dispatch is about to invoke — passed
- * ONLY by the real evaluator dispatch sites (evaluator.ts's `evaluatePair`/`applyArrowProc`),
- * which actually hold the resolved value at the point they build this `CallCtx`. When it carries
- * an {@link associateCapability}-registered owner, this enriches the returned `CallCtx` with THIS
- * RUN's data for that capability — CONFIGURATION relocation (docs/execution.md §CALLCTX): neither
- * `configuration` nor `resources` lives on the association anymore; both resolve off `runCtx`
- * itself, keyed by the owning capability object:
+ * `resolvedValue` (optional): the callable this dispatch will invoke — passed ONLY by
+ * real evaluator sites that hold the resolved value. When it carries an
+ * {@link associateCapability}-registered owner, enriches CallCtx from THIS run:
+ *   - `configuration` — `runCtx.capabilityConfigurations?.get(owner)` (filled once at mint)
+ *   - `resources` — lazy get-or-produce via `resolveCapabilityResources`
  *
- *   - `configuration` — a plain lookup, `runCtx.capabilityConfigurations?.get(owner.capability)`.
- *     That table is filled ONCE, at RunContext mint (`env/assemble-run.ts`'s `assembleRun`, from
- *     `Vocabulary.configsByCapability`) — never lazily, never here. Since Stage C Cut 3b every
- *     public exec path (`execState`/`execExpr`, including their standalone default) mints this
- *     way; only `CONSTANT_CTX` and the internal, non-public live-frame family
- *     (`execStateOverFrame`/`execOverFrame`/`execExprOverFrame`/`execInFrame`, generator-exec.ts)
- *     carry no table, so `configuration` is `undefined` there — the SAME posture a resource-less
- *     capability already has.
- *   - `resources` — unchanged in spirit (still per-RunContext, still lazily produced), but its
- *     configuration feed is now sourced the SAME way: `resolveCapabilityResources` reads
- *     `runCtx.capabilityConfigurations` itself instead of taking a configuration parameter.
- *
- * Every OTHER call site (APair.map's callback seam, srfi-1/13's HOF seams, op-helpers, the
- * membrane) omits `resolvedValue` and pays nothing beyond the `undefined` check. */
+ * Other call sites (HOF seams, membrane) omit `resolvedValue` and pay only the undefined check. */
 export function makeCallCtx(
   runCtx: RunContext,
   currentInvocation?: InvocationLike,
@@ -172,21 +106,15 @@ export function makeCallCtx(
     ...(owner !== undefined
       ? {
           configuration: runCtx.capabilityConfigurations?.get(owner.capability),
-          resources: owner.readsResources ? resolveCapabilityResources(runCtx, owner.capability) : undefined,
-        }
-      : {}),
-  };
+          resources: owner.readsResources ? resolveCapabilityResources(runCtx, owner.capability) : undefined }
+      : {}) };
 }
 
-/** Fetch (producing + caching on first touch) a capability's `Resources` bag for `runCtx`, keyed
- *  by the capability in the run's own `capabilityResources` store. A plain get-or-compute: on a
- *  miss, call the capability's `["arrival/get-resources"]` — fed the SAME run-sourced
- *  `configuration` `makeCallCtx` resolves for `this.configuration`
- *  (`runCtx.capabilityConfigurations?.get(capability)`, `undefined` when the run carries no
- *  table) — and store the result; a pending bag is replaced in-slot by its resolved value on
- *  settle. Called structurally (no capability-layer import) — the leaf boundary this file guards.
- *  The `has`-then-`set` is a sound semaphore under JS's single-dispatch model (see
- *  {@link CapabilityResourceStore}); a run with no store (CONSTANT_CTX) yields `undefined`. */
+/** Fetch (produce + cache on first touch) a capability's Resources bag for `runCtx`.
+ *  On miss: call `capability["arrival/get-resources"]` with run-sourced configuration;
+ *  pending Promise replaced in-slot on settle. Structural call (no capability-layer import).
+ *  `has`-then-`set` is sound under single-dispatch (see CapabilityResourceStore). No store
+ *  (CONSTANT_CTX) ⇒ undefined. */
 function resolveCapabilityResources(runCtx: RunContext, capability: object): unknown {
   const store = runCtx.capabilityResources;
   if (store === undefined) return undefined;
@@ -202,34 +130,23 @@ function resolveCapabilityResources(runCtx: RunContext, capability: object): unk
 }
 
 /**
- * The sanctioned door for a caller OUTSIDE a real verb dispatch that still needs to reach a
- * capability's per-run resource bag — currently arrival/loader's `require/register-extension`
- * preludeOnly MACRO (loader/loader-extensions.ts). A macro is `TF_EXPAND`-dispatched
- * (`Macro.invoke`), never through `makeCallCtx`, so it never gets a `this.resources` of its
- * own — but it receives `ctx.runCtx` (`MacroInvokeContext.runCtx`, threaded by the evaluator at
- * every macro-expand site), which is enough to reach the SAME bag a real dispatch of the owning
- * capability's OTHER verbs would read as `this.resources` moments later — one bag, one cache,
- * never a second divergent store. Delegates to the exact get-or-produce logic `makeCallCtx`
- * itself uses ({@link resolveCapabilityResources}) — a cache MISS lazily spawns the bag (calling
- * `capability["arrival/get-resources"]`) and a cache HIT returns the same reference a prior
- * `this.resources` read (or a prior call here) already produced.
+ * Sanctioned door for callers outside real verb dispatch that still need a capability's
+ * per-run resource bag — e.g. arrival/loader's `require/register-extension` preludeOnly
+ * MACRO (`Macro.invoke` / TF_EXPAND, never through makeCallCtx). Receives `ctx.runCtx` from
+ * MacroInvokeContext; same bag a real dispatch would read as `this.resources`. Delegates to
+ * the exact get-or-produce logic makeCallCtx uses.
  *
- * Callers on a run with no per-capability configuration table (`runCtx.capabilityConfigurations`
- * undefined — the bare-`env` glass path with no ambient behind it) MUST check for that first:
- * a capability whose `resources` factory destructures its config unconditionally will throw
- * when handed `undefined` here, same as any other resource-producing call under such a run.
+ * A run with no configuration table: check first — a resources factory that destructures
+ * config unconditionally will throw on `undefined`.
  */
 export function getCapabilityResources(runCtx: RunContext, capability: object): unknown {
   return resolveCapabilityResources(runCtx, capability);
 }
 
 /**
- * The sanctioned DIRECT-CALL door (docs/execution.md §CALLCTX): tests and host code invoking a
- * verb impl/wrapper outside a real dispatch (`run.call(testCallCtx(), …args)`) build a REAL
- * `CallCtx` over `CONSTANT_CTX` here rather than leaning on `this` optionality — `CONSTANT_CTX`
- * survives ONLY inside this explicit constructor, never as an implicit `this?.` fallback in a
- * verb body. `overrides` lets a call site supply a real `InvocationLike` (to exercise
- * provenance minting) or a non-default `RunContext` without hand-building the whole shape.
+ * Sanctioned direct-call door (docs/execution.md §CALLCTX): tests/host invoking a verb
+ * outside real dispatch build a real CallCtx over CONSTANT_CTX here — CONSTANT_CTX
+ * survives only inside this constructor, never as an implicit `this?.` fallback.
  */
 export function testCallCtx(overrides?: {
   runCtx?: RunContext;
@@ -239,6 +156,5 @@ export function testCallCtx(overrides?: {
   return makeCallCtx(overrides?.runCtx ?? CONSTANT_CTX, overrides?.currentInvocation, overrides?.argProvenance);
 }
 
-// The null-`this` case is uninhabited (docs/execution.md §CALLCTX): `this: CallCtx` on the
-// wrapper signatures makes an unbound call a COMPILE error at every typed call site, so no
-// runtime door guards a statically-excluded state.
+// Null-`this` is uninhabited: `this: CallCtx` on wrappers makes unbound call a compile
+// error at typed sites (docs/execution.md §CALLCTX).

@@ -5,34 +5,8 @@
  * confessions: APair.ts ×3 + AVector.ts ×3 carried an explicit `runCtx ?? CONSTANT_CTX`
  * literal pending this wave, §4 Wave 1).
  *
- * Before this wave, `runCtx` on all six terms was OPTIONAL — a caller-side omission
- * silently fell back to CONSTANT_CTX (`heapMeter: undefined`, `strict: false`, no abort
- * signal, invisible to cache/effects), even though every real production dispatcher
- * (`env/r7rs/lists.ts`'s single-list `map`, `env/srfi/srfi-1.ts`'s `filter`,
- * `common/symbols/tagless.ts`'s `reduce` dispatch, `env/srfi/srfi-95.ts`'s `sort`) already
- * threads a live, defined `this.runCtx` (required since Wave 0's `CallCtx`/`applyCallback`
- * fix — verified by reading each dispatcher's own wrapper, not assumed). `runCtx` is now a
- * REQUIRED param on all these terms (AValue.ts's protocol declaration, mirrored on
- * APair/AVector/AJSArray) — the `?? CONSTANT_CTX` fallback is deleted, not just unreached.
- *
- * ── Why this test constructs values directly instead of going through `exec()` ──
- * `map`/`filter` invoke their callback with exactly ONE argument (the element) — unlike
- * `for-each`/`member`/`assoc` (callback-runctx-threading.law.test.ts's subjects, which
- * always pass TWO), there is no natural single-argument, strict-mode-sensitive Scheme
- * builtin to use as an indirect probe (the one direct `this.runCtx.strict` reader,
- * `env/r7rs/numeric.ts`'s `looseCompare`, needs ≥2 operands to reach that check without an
- * unrelated arity/type throw). Testing through `exec()` would also route callback-minted
- * values' ctx through arithmetic's operand-derived stamping (`schemeMul` mints under the
- * FIRST OPERAND's `.ctx`, not `this.runCtx`) — confounding this fix with the (separate,
- * out-of-cluster) `env/r7rs/lists.ts` `cons`/`list` ctx-dropping bug.
- *
- * Instead: construct an APair/AVector directly under a REAL `new RunContext(...)` (distinguishable
- * from CONSTANT_CTX by `heapMeter` — CONSTANT_CTX's is always `undefined`), pass a plain JS
- * `function` (never an arrow — arrows structurally can't read `this`, the exact "arrow-fn
- * trap" the audit's §0 names) as the callback, and record the `this.runCtx` it observes
- * when `applyCallback`'s raw-function arm invokes it via `Reflect.apply(fn,
- * makeCallCtx(runCtx), args)`. This pins the EXACT call this wave changed, unconfounded by
- * any other cluster's ctx-honesty state.
+ * W8 rewrite: bare host-fn applyCallback arm is gone — the probe is an ANativeProcedure
+ * that records `callCtx.runCtx` (the CallCtx threaded through the apply term).
  */
 import { describe, expect, it } from "vitest";
 import { APair } from "../../values/primitives/APair.js";
@@ -40,22 +14,26 @@ import { AVector } from "../../values/primitives/AVector.js";
 import { nil } from "../../values/primitives/ANil.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { RunContext, CONSTANT_CTX } from "../../run/RunContext.js";
+import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
+import type { SchemeValue } from "../../values/types.js";
 
 /** A live, real run's ctx — `heapMeter` is DEFINED (`{ used, max }`), unlike CONSTANT_CTX's
  *  permanent `undefined`. Distinguishing the two is the whole law. */
 const liveCtx: RunContext = new RunContext({ heapBudget: 1_000_000 });
 
-/** Records the `this.runCtx` a raw-function callback observes. A `function` declaration —
- *  never an arrow — so `this` is actually reachable (the audit's §0 arrow-fn trap). */
-function makeProbe(): { fn: (this: { runCtx: RunContext }, ...args: unknown[]) => unknown; observed: RunContext[] } {
+/** Records the `callCtx.runCtx` an ANativeProcedure callback observes. W8. */
+function makeProbe(): { fn: ANativeProcedure; observed: RunContext[] } {
   const observed: RunContext[] = [];
   return {
     observed,
-    fn: function (this: { runCtx: RunContext }, ...args: unknown[]): unknown {
-      observed.push(this.runCtx);
-      return args[0];
-    },
-  };
+    fn: new ANativeProcedure({
+      name: "probe",
+      arity: { min: 0, max: null },
+      contract: undefined,
+      impl: (args, callCtx) => {
+        observed.push(callCtx.runCtx);
+        return args[0] as SchemeValue;
+      } }) };
 }
 
 const one = new AExact(1);

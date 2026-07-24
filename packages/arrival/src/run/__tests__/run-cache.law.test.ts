@@ -18,17 +18,9 @@
  *   before handing it to a run; deliberately no rows here.)
  */
 import { describe, it, expect } from "vitest";
-import * as z from "../../common/scheme-zod.js";
-import { symbol, testCallCtx } from "../../common/symbol.js";
+import * as z from "../../common/scheme-zod/index.js";
+import { symbol, testCallCtx } from "../../symbol/index.js";
 
-/** Test-only cast: pull a minted ARosettaProcedure\'s `.contract` (typed `unknown` on the
- *  class) back to its RosettaSymbolDef shape, for direct `.run` invocation — Stage A2\'s
- *  `symbol.rosetta` mints the ARosettaProcedure directly; the def it used to RETURN rides
- *  `.contract` on it. */
-import type { RosettaSymbolDef } from "../../common/symbols/_bake.js";
-function rosettaContract(v: { contract: unknown }): RosettaSymbolDef {
-  return v.contract as RosettaSymbolDef;
-}
 import { EnvCapability } from "../../common/capability.js";
 import { exec } from "../../eval/generator-exec.js";
 import { RunContext, CONSTANT_CTX } from "../../run/RunContext.js";
@@ -37,6 +29,12 @@ import { AExact } from "../../values/primitives/AExact.js";
 
 const num = (n: number) => new AExact(n);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+
+/** Invoke a baked rosetta procedure via its apply term (the sole membrane spine). */
+function fire(proc: { ["arrival/tagless-final/apply"](args: any[], callCtx: any): any }, callCtx: any, ...args: any[]) {
+  return proc["arrival/tagless-final/apply"](args, callCtx);
+}
 
 describe("canonicalJson — the normative algorithm (§2.2)", () => {
   it("object keys recursively sorted; arrays order-preserving; numbers as plain JSON", () => {
@@ -93,7 +91,7 @@ describe("single-flight (D1) + eviction — at the wrapper", () => {
     });
     const cache = new MemoryRunCache("record");
     const ctx = ctxWith(cache);
-    const [a, b] = await Promise.all([rosettaContract(def).run.call(ctx, num(21)), rosettaContract(def).run.call(ctx, num(21))]);
+    const [a, b] = await Promise.all([fire(def, ctx, num(21)), fire(def, ctx, num(21))]);
     expect(fires()).toBe(1); // ONE rosetta call, two consumers
     expect(a).toBeDefined();
     expect(b).toBeDefined();
@@ -112,7 +110,7 @@ describe("single-flight (D1) + eviction — at the wrapper", () => {
     );
     const cache = new MemoryRunCache("record");
     const ctx = ctxWith(cache);
-    await Promise.all([rosettaContract(def).run.call(ctx, num(1)), rosettaContract(def).run.call(ctx, num(1))]);
+    await Promise.all([fire(def, ctx, num(1)), fire(def, ctx, num(1))]);
     expect(fires).toBe(1);
     expect(cache.entries.size).toBe(0); // pure is NEVER persisted — recovery = re-call
   });
@@ -129,7 +127,7 @@ describe("single-flight (D1) + eviction — at the wrapper", () => {
     );
     const cache = new MemoryRunCache("record");
     const ctx = ctxWith(cache);
-    await Promise.all([rosettaContract(def).run.call(ctx, num(7)), rosettaContract(def).run.call(ctx, num(7))]);
+    await Promise.all([fire(def, ctx, num(7)), fire(def, ctx, num(7))]);
     expect(fires).toBe(2); // two effects, always — no single-flight for sinks
     expect(cache.entries.size).toBe(1); // one tombstone (single-slot LWW)
   });
@@ -142,9 +140,9 @@ describe("single-flight (D1) + eviction — at the wrapper", () => {
     });
     const cache = new MemoryRunCache("record");
     const ctx = ctxWith(cache);
-    await expect(rosettaContract(def).run.call(ctx, num(21))).rejects.toThrow("transient");
+    await expect(fire(def, ctx, num(21))).rejects.toThrow("transient");
     expect(cache.entries.size).toBe(0); // rejections are NEVER cached
-    await rosettaContract(def).run.call(ctx, num(21)); // the retry fires fresh
+    await fire(def, ctx, num(21)); // the retry fires fresh
     expect(fires()).toBe(2);
     expect(cache.entries.size).toBe(1); // only the SETTLED entry serialized
   });
@@ -154,8 +152,8 @@ describe("single-flight (D1) + eviction — at the wrapper", () => {
     const { def, fires } = viewDef("rc-view-overwrite", () => ++stamp);
     const cache = new MemoryRunCache("record");
     const ctx = ctxWith(cache);
-    await rosettaContract(def).run.call(ctx, num(21));
-    await rosettaContract(def).run.call(ctx, num(21)); // identical penetration, SEQUENTIAL — a settled entry never suppresses a live fire
+    await fire(def, ctx, num(21));
+    await fire(def, ctx, num(21)); // identical penetration, SEQUENTIAL — a settled entry never suppresses a live fire
     expect(fires()).toBe(2);
     const [entry] = [...cache.entries.values()];
     expect(entry).toEqual({ kind: "value", value: 2 }); // last write won the slot
@@ -193,9 +191,7 @@ function fixture() {
       plain: symbol.rosetta`plain: unclassified`({ input: [z.number], output: [z.number] }, (n: number) => {
         counts.plain++;
         return n - 1;
-      }),
-    }),
-  });
+      }) }) });
   return { cap, counts };
 }
 

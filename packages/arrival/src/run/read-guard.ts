@@ -1,16 +1,10 @@
 /**
- * read-guard — the read log + the read∩write deferral guard, sibling of `EffectLog` on the
- * `RunContext`. The rule it enforces (a burst must not read its own deferred write), the
- * injectable-seam design (the real tracker is a mobx context over plexus reads, host-armed),
- * and the predict-at-enqueue write-set model are docs/execution.md §READ-GUARD.
+ * read-guard — read log + read∩write deferral guard on RunContext. Rule: a burst must not
+ * read its own deferred write. Injectable seam + predict-at-enqueue write-set model:
+ * docs/execution.md §READ-GUARD.
  *
- * Import contract this file holds up: `ReadTracker`/`WriteSetResolver` are INJECTABLE interfaces
- * arrival core only calls through — this module adds NO mobx/plexus import (package.json is
- * `zod`/`tslib`/workspace siblings only). A run with no tracker pays nothing — no hook, no
- * region, no guard.
- *
- * The keys (`ReadEvent.key`, `WriteSetResolver`'s returns) are plain strings, host-
- * canonicalized — arrival core never interprets them, only compares by equality (`Set.has`).
+ * `ReadTracker`/`WriteSetResolver` are injectable — this module adds NO mobx/plexus import.
+ * No tracker ⇒ nothing paid. Keys are host-canonicalized strings; core compares by equality only.
  */
 
 import type { EffectEntry } from "./effect-log.js";
