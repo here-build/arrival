@@ -119,7 +119,9 @@ async function directPhase(): Promise<DirectPhaseResult> {
   const trace: EvalTrace = manifoldEnv.trace;
 
   await execState("(define r (t/fake))", {
-    ambient: manifoldEnv.ambient,
+    capabilities: manifoldEnv.capabilities,
+    config: manifoldEnv.config,
+    runCtx: manifoldEnv.runCtx,
     scope: manifoldEnv.scope,
     tap: trace,
   });

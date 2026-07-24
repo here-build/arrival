@@ -20,7 +20,7 @@
  */
 import readline from "node:readline";
 
-import { execState, schemeToJs } from "@inhuman.tools/arrival";
+import { disposeRunContext, execState, schemeToJs } from "@inhuman.tools/arrival";
 import { scan } from "@inhuman.tools/arrival/lsp-internals";
 import { EMPTY_REPL_MODEL, foldReplEvent, type ReplBlock, type ReplFoldModel } from "@inhuman.tools/mcp-substrate";
 
@@ -46,7 +46,8 @@ function closeable(src: string): boolean {
 
 /** The pre-painter loop, verbatim in behavior: one value per top-level form on
  *  stdout, errors as teaching-door text on stderr, the session survives every error. */
-async function replPlain(ambient: LoaderSession["ambient"], scope: LoaderSession["scope"]): Promise<number> {
+async function replPlain(session: LoaderSession): Promise<number> {
+  const { capabilities, config, runCtx, scope } = session;
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: false });
   let buffer = "";
   rl.on("SIGINT", () => {
@@ -66,13 +67,13 @@ async function replPlain(ambient: LoaderSession["ambient"], scope: LoaderSession
     const src = buffer;
     buffer = "";
     try {
-      const { values } = await execState(src, { ambient, scope, ...budgets() });
+      const { values } = await execState(src, { capabilities, config, runCtx, scope, ...budgets() });
       for (const v of values) printValue(schemeToJs(v, {}));
     } catch (e) {
       printError(e);
     }
   }
-  await ambient.dispose();
+  await disposeRunContext(runCtx);
   return 0;
 }
 
@@ -91,7 +92,8 @@ async function replay(history: readonly (readonly ReplBlock[])[], lens: Lens, ca
 
 /** The wave-1 TTY experience: greeting, then per-submission provenance-tint cascades,
  *  then a frozen scrollback record — `,lens` replays the whole record in the other lens. */
-async function replInteractive(ambient: LoaderSession["ambient"], scope: LoaderSession["scope"], armed?: ArmedCapabilities): Promise<number> {
+async function replInteractive(session: LoaderSession, armed?: ArmedCapabilities): Promise<number> {
+  const { capabilities, config, runCtx, scope } = session;
   let lens: Lens = "sugarcoat"; // D3: sugarcoat ON by default — it's the marketing surface
   const capabilityCount = armed?.capabilities.length ?? 0;
   const history: ReplBlock[][] = []; // settled turns, oldest → newest
@@ -140,7 +142,9 @@ async function replInteractive(ambient: LoaderSession["ambient"], scope: LoaderS
     // step repaints THIS turn's region in place — pending → running → done/error/
     // skipped, settling frame by frame as forms actually execute (§5's clip).
     await emitForms(src, {
-      ambient,
+      capabilities,
+      config,
+      runCtx,
       scope,
       ...budgets(),
       onEvent: (event) => {
@@ -153,17 +157,17 @@ async function replInteractive(ambient: LoaderSession["ambient"], scope: LoaderS
     prompt();
   }
   process.stdout.write("\n");
-  await ambient.dispose();
+  await disposeRunContext(runCtx);
   return 0;
 }
 
 /**
  * Render an interactive session a HOST already assembled — the reuse seam (inhuman's
  * `inhuman repl`, and the `arrival` bin below both go through here). The host owns the
- * capability VOCABULARY — its infer / loader / extras armed into `session.ambient`; this
+ * capability VOCABULARY — its infer / loader / extras armed into `session.runCtx`; this
  * owns only the TERMINAL — budget defaults, the bottom-anchored Ink TUI, syntax
  * highlighting, history recall. Non-TTY falls to the plain reader; `ARRIVAL_REPL=classic`
- * to the painter path. Disposes the session ambient on exit.
+ * to the painter path. Disposes the session's `runCtx` on exit.
  *
  * `opts.version` labels the vanishing status line (a host passes its OWN version; default
  * = arrival-cli's). `opts.capabilityCount` is the count shown beside it.
@@ -172,23 +176,22 @@ export async function replFromSession(
   session: LoaderSession,
   opts: { version?: string; capabilityCount?: number } = {},
 ): Promise<number> {
-  const { ambient, scope } = session;
   const interactive = process.stdin.isTTY === true;
-  if (!interactive) return replPlain(ambient, scope);
+  if (!interactive) return replPlain(session);
   // `ARRIVAL_REPL=classic` keeps the pre-Ink painter path — the escape hatch if the TUI
   // misbehaves on some terminal.
-  if (process.env.ARRIVAL_REPL === "classic") return replInteractive(ambient, scope);
+  if (process.env.ARRIVAL_REPL === "classic") return replInteractive(session);
   // Default TTY: the Ink bottom-anchored TUI (repl-ink.tsx).
   const version = opts.version ?? (await readOwnVersion());
   try {
     await replInk({
-      session: { ambient, scope },
+      session,
       ...budgets(),
       capabilityCount: opts.capabilityCount ?? 0,
       version,
     });
   } finally {
-    await ambient.dispose();
+    await disposeRunContext(session.runCtx);
   }
   return 0;
 }

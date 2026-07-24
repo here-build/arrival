@@ -27,7 +27,8 @@
 // because this closure has no access to that session's shared gate (it's a standalone
 // function handed to `RunInput.errorEnricher`, not a `Door` rendered through `DoorSession`).
 
-import { AString, AValue, EMPTY_PROVENANCE, offendingValueOf } from "@inhuman.tools/arrival";
+import { EMPTY_PROVENANCE } from "@inhuman.tools/arrival";
+import { AString, offendingValueOf } from "@inhuman.tools/arrival/reflect-internals";
 import type { EvalTrace } from "@inhuman.tools/arrival/provenance";
 
 import { detectParse } from "./detect.js";

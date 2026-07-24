@@ -9,7 +9,7 @@
 // `EvalTrace` per `ManifoldEnv`, shared across every call against that world — never re-minted
 // per call), and that ids stay resolvable across calls without colliding.
 
-import { AValue } from "@inhuman.tools/arrival";
+import { AValue } from "@inhuman.tools/arrival/reflect-internals";
 import { describe, expect, it } from "vitest";
 
 import { buildManifoldEnv } from "../bind.js";

@@ -14,14 +14,20 @@ import {
   type ToolIdentityParts,
 } from "../bind.js";
 
-// `buildManifoldEnv` returns a `ManifoldEnv` — `{ ambient, scope, ... }` — which satisfies
-// `createManifoldTool`'s narrower `{ ambient, scope }` pair structurally; `exec` accepts the
-// same pair directly (the CUT), so a bare `ManifoldEnv` is a valid `runExpr` target as-is.
-// `exec`'s per-form results are typed `unknown` at its seam; every value here came out of
-// the manifold's own bound-tool evaluation, so narrowing to SchemeValue for `schemeToJs`
-// is by-construction (the runtime assertions below are the real check).
-const runExpr = (world: Pick<ManifoldEnv, "ambient" | "scope">, expr: string) =>
-  exec(expr, { ambient: world.ambient, scope: world.scope }) as Promise<readonly SchemeValue[]>;
+// `buildManifoldEnv` returns a `ManifoldEnv` — `{ capabilities, config, runCtx, scope, ... }`
+// — which satisfies `createManifoldTool`'s narrower `{ capabilities, config, runCtx, scope }`
+// tuple structurally; `exec` accepts the same tuple directly (the CUT), so a bare
+// `ManifoldEnv` is a valid `runExpr` target as-is. `exec`'s per-form results are typed
+// `unknown` at its seam; every value here came out of the manifold's own bound-tool
+// evaluation, so narrowing to SchemeValue for `schemeToJs` is by-construction (the runtime
+// assertions below are the real check).
+const runExpr = (world: Pick<ManifoldEnv, "capabilities" | "config" | "runCtx" | "scope">, expr: string) =>
+  exec(expr, {
+    capabilities: world.capabilities,
+    config: world.config,
+    runCtx: world.runCtx,
+    scope: world.scope,
+  }) as Promise<readonly SchemeValue[]>;
 
 /** Test-only helper: builds the `toolParts` structural map `buildBypassResolution` now takes
  *  DIRECTLY from explicit (slug, tool) pairs — never by splitting a joined string (the exact

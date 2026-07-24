@@ -12,14 +12,15 @@
 import {
   execState,
   parse,
+  type EnvCapability,
   type EvalTap,
   type LexicalScope,
+  type RunContext,
   type SchemeValue,
 } from "@inhuman.tools/arrival";
 import { createDisplaySink, createNoteSink } from "@inhuman.tools/arrival/host-internals";
 import { tokenize } from "@inhuman.tools/arrival/lsp-internals";
 import { APair, AVoid } from "@inhuman.tools/arrival/reflect-internals";
-import type { AssembledAmbient } from "@inhuman.tools/arrival/env";
 import { toSExprString, toSExprStringWithElisions, type ElisionRecord } from "@inhuman.tools/arrival-serializer";
 
 import { ArgsFailureTracker, type ArgsFailureState } from "./args-failure-tracker.js";
@@ -188,9 +189,29 @@ function renderElisionNote(elisions: readonly ElisionRecord[]): string | undefin
 
 export interface RunInput {
   expr: string;
-  /** The assembled capability base (stdlib + every bound tool) this call resolves
-   *  builtins/tools through — caller-owned, never disposed here. */
-  ambient: AssembledAmbient;
+  /** The call's capability set (stdlib + every bound tool) this call resolves builtins/tools
+   *  through — caller-owned. Threaded explicitly on EVERY call (including ones reusing
+   *  `runCtx`): `execState` rebuilds/looks up the memoized Vocabulary from
+   *  `{capabilities, config}` every time, and a reused `runCtx`'s tuple-identity invariant
+   *  checks the result against the run's ORIGINAL vocabulary — a mismatched tuple throws. */
+  capabilities: readonly EnvCapability[];
+  /** THE SAME config object used to mint `runCtx` — reference identity, not a fresh per-call
+   *  object (the vocabulary memo + the reused-runCtx tuple check are both identity-keyed on it). */
+  config: Record<string, unknown>;
+  /** The call's run — CALLER-owned; this runner never disposes it. Warm-reuse and per-call
+   *  disposal are the caller's responsibility (mirrors DiscoveryTool's `warm` map). OPTIONAL:
+   *  omit it to let `execState` mint a FRESH `RunContext` for every call (still resolving the
+   *  SAME memoized Vocabulary off `{capabilities, config}`) — the right choice whenever a
+   *  caller's capabilities declare no per-run resources needing cross-call continuity AND a
+   *  per-call live signal must reach a native/rosetta impl's `this.runCtx.signal` (a REUSED
+   *  `runCtx`'s `.signal` is fixed at its ORIGINAL mint — see `RunContext`'s own doc — so a
+   *  later call's `signal` option never reaches an impl reading `this.runCtx.signal`, only
+   *  the trampoline's own per-call budget check). Pass a warm `runCtx` (a session owner mints
+   *  one via `execState("(begin)", {capabilities, config, scope})` and holds it) when a
+   *  capability's `resources`/cache/effects genuinely need to survive across calls (e.g. the
+   *  loader's require-cache) — session continuity for top-level `define`s comes from `scope`
+   *  alone either way. */
+  runCtx?: RunContext;
   /** The persistent lexical root this call's top-level `define`s land in. Pass the SAME
    *  scope object across calls for REPL-style multi-statement accumulation (a session
    *  owner mints one via `LexicalScope.fresh()` and holds it for the world's lifetime). */
@@ -464,7 +485,9 @@ export function createDoorsRunner(options: DoorsRunnerOptions): DoorsRunner {
           // answer). NESTED `(display X)` → identity + a recorded echo. A form with no display at
           // all is returned BY IDENTITY, so the common case costs nothing.
           const running = execState(stripTopLevelDisplay(form), {
-            ambient: input.ambient,
+            capabilities: input.capabilities,
+            config: input.config,
+            runCtx: input.runCtx,
             scope: input.scope,
             budgetMs: remaining,
             heapBudget: calibration.heapBudgetPerForm,

@@ -42,7 +42,7 @@
 // zip silently misattributes.
 
 import { type SchemeValue, z } from "@inhuman.tools/arrival";
-import { APair, ASymbol, AString } from "@inhuman.tools/arrival/reflect-internals";
+import { APair, ASymbol, AString, nil } from "@inhuman.tools/arrival/reflect-internals";
 import { symbol, type CallCtx } from "@inhuman.tools/arrival/symbol";
 import type { SymbolDeclaration } from "@inhuman.tools/arrival/capability";
 // `writeForm` is the SOURCE writer (provenance/slice.ts) — it renders a parsed form back to the
@@ -108,11 +108,10 @@ function annotateNestedDisplays(form: SchemeValue): SchemeValue {
       // model actually wrote.
       const src = writeForm(form);
       const inner = annotateNestedDisplays(arg);
-      return APair.fromArray(form.ctx, [
-        new ASymbol(form.ctx, DISPLAY_INTERNAL),
-        inner,
-        new AString(form.ctx, src),
-      ]) as SchemeValue;
+      return new APair(
+        new ASymbol(DISPLAY_INTERNAL),
+        new APair(inner, new APair(new AString(src), nil)),
+      ) as SchemeValue;
     }
     // A shape we do not understand: leave it exactly as written and let it fail honestly.
     return form;
@@ -121,7 +120,7 @@ function annotateNestedDisplays(form: SchemeValue): SchemeValue {
   const car = annotateNestedDisplays(form.car);
   const cdr = annotateNestedDisplays(form.cdr);
   if (car === form.car && cdr === form.cdr) return form; // nothing changed — share the subtree
-  return new APair(form.ctx, car, cdr) as SchemeValue;
+  return new APair(car, cdr) as SchemeValue;
 }
 
 

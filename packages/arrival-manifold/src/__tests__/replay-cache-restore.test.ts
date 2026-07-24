@@ -45,7 +45,7 @@
 //
 // ── ALTITUDE ─────────────────────────────────────────────────────────────────────────────────────
 // Every test drives the PUBLIC path only — `tool.call()` → `tool.sessionHistory()` →
-// `replaySessionHistory(history, fresh.ambient, fresh.scope)` — never hand-constructing entries. So they are agnostic
+// `replaySessionHistory(history, fresh.capabilities, fresh.config, fresh.runCtx, fresh.scope)` — never hand-constructing entries. So they are agnostic
 // to WHERE the fix parks the cache (an enriched `SessionHistoryEntry` field, or a side map threaded
 // through the resumability surface): they pin the observable end-to-end contract manifold-tool.ts:186
 // already promises ("feed [sessionHistory()] + a fresh env to replaySessionHistory to reconstruct"),
@@ -65,8 +65,13 @@ import { createManifoldTool } from "../manifold-tool.js";
 // for rationals, floats, and out-of-safe-range bigints. Assert the plain-JS value directly
 // when next touched.
 
-const runExpr = async (world: Pick<ManifoldEnv, "ambient" | "scope">, expr: string): Promise<unknown> => {
-  const [value] = await exec(expr, { ambient: world.ambient, scope: world.scope });
+const runExpr = async (world: Pick<ManifoldEnv, "capabilities" | "config" | "runCtx" | "scope">, expr: string): Promise<unknown> => {
+  const [value] = await exec(expr, {
+    capabilities: world.capabilities,
+    config: world.config,
+    runCtx: world.runCtx,
+    scope: world.scope,
+  });
   return value;
 };
 
@@ -114,7 +119,7 @@ describe("replay-cache RESTORE (RED) — a wire-safe tool-valued define survives
 
     const history = tool.sessionHistory();
     const fresh = await buildManifoldEnv(toolset); // fresh env, SAME toolset (same spy)
-    await replaySessionHistory(history, fresh.ambient, fresh.scope);
+    await replaySessionHistory(history, fresh.capabilities, fresh.config, fresh.runCtx, fresh.scope);
 
     // Safety guard first (passes today too — pins that no "fix" is allowed to re-fire the tool):
     expect(calls()).toBe(1);
@@ -137,7 +142,7 @@ describe("replay-cache RESTORE (RED) — a wire-safe tool-valued define survives
     await tool.call({ expr: '(define priced (shop/price :item "widget"))' });
 
     const fresh = await buildManifoldEnv(toolset);
-    const result = await replaySessionHistory(tool.sessionHistory(), fresh.ambient, fresh.scope);
+    const result = await replaySessionHistory(tool.sessionHistory(), fresh.capabilities, fresh.config, fresh.runCtx, fresh.scope);
     expect(result.skipped).not.toContain("priced");
   });
 
@@ -158,7 +163,7 @@ describe("replay-cache RESTORE (RED) — a wire-safe tool-valued define survives
     expect(tool.sessionHistory().map((e) => e.name)).toEqual(["priced", "doubled"]);
 
     const fresh = await buildManifoldEnv(toolset);
-    await replaySessionHistory(tool.sessionHistory(), fresh.ambient, fresh.scope);
+    await replaySessionHistory(tool.sessionHistory(), fresh.capabilities, fresh.config, fresh.runCtx, fresh.scope);
 
     expect(calls()).toBe(1); // still never re-fired
     expect(String(await runExpr(fresh, "doubled"))).toBe("84");
@@ -191,7 +196,7 @@ describe("replay-cache RESTORE (RED, design candidate C1) — a cached wire-safe
 
     const history = tool.sessionHistory();
     const freshWithoutTool = await buildManifoldEnv([]); // resumed env: the pricing tool is gone
-    await replaySessionHistory(history, freshWithoutTool.ambient, freshWithoutTool.scope);
+    await replaySessionHistory(history, freshWithoutTool.capabilities, freshWithoutTool.config, freshWithoutTool.runCtx, freshWithoutTool.scope);
 
     expect(boundNames(freshWithoutTool.scope)).toContain("priced");
     expect(String(await runExpr(freshWithoutTool, "priced"))).toBe("42");

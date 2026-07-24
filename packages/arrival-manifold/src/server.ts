@@ -53,8 +53,7 @@
 // line actually changed (a purely-declared tool's response parsing is latched but never
 // changes its already-declared `-> shape`, so it never triggers a notification).
 
-import type { LexicalScope } from "@inhuman.tools/arrival";
-import type { AssembledAmbient } from "@inhuman.tools/arrival/env";
+import { disposeRunContext, type EnvCapability, type LexicalScope, type RunContext } from "@inhuman.tools/arrival";
 import type { EvalTrace } from "@inhuman.tools/arrival/provenance";
 import {
   ambiguousBypassDoor,
@@ -434,14 +433,19 @@ export interface BuildManifoldServerOptions extends Omit<ManifoldToolOptions, "t
  *  tools/listChanged.
  *
  *  `scope`/`signatures`/`trace`/`serverSlugs` exist ONLY so `softRefresh` (below) can
- *  reconstruct a tool with the SAME ambient/scope/tools/trace — a hard rebuild already
- *  has these as locals inside `rebuild()`, but a soft refresh runs OUTSIDE that closure
- *  and needs its own copy of the world's current state to reuse verbatim. */
+ *  reconstruct a tool with the SAME capabilities/config/runCtx/scope/tools/trace — a hard
+ *  rebuild already has these as locals inside `rebuild()`, but a soft refresh runs OUTSIDE
+ *  that closure and needs its own copy of the world's current state to reuse verbatim. */
 interface ManifoldWorld {
   tool: ManifoldTool;
-  /** The world's assembled capability base — retained so a superseding rebuild can
-   *  dispose it (see the rebuild-disposal note in the module header). */
-  ambient: AssembledAmbient;
+  /** The world's capability set — retained (alongside `config`) so `execState` can
+   *  re-validate a reused `runCtx`'s tuple identity on every call. */
+  capabilities: readonly EnvCapability[];
+  /** THE SAME config object used to mint `runCtx` — reference identity. */
+  config: Record<string, unknown>;
+  /** The world's run — retained so a superseding rebuild can dispose it (see the
+   *  rebuild-disposal note in the module header). */
+  runCtx: RunContext;
   /** The persistent lexical root — same instance across a soft refresh, so `(define ...)`s
    *  survive it (unlike a hard rebuild, which deliberately mints a fresh one). */
   scope: LexicalScope;
@@ -578,7 +582,7 @@ export async function buildManifoldServer(
       tracker,
       argsTracker,
     });
-    const { ambient, scope, signatures, signatureByName, bypassResolution, trace } = manifoldEnv;
+    const { capabilities, config, runCtx, scope, signatures, signatureByName, bypassResolution, trace } = manifoldEnv;
     const tools = toBoundTools(manifoldEnv);
     const qualifiedNames = [...signatureByName.keys()];
     // The capability inventory is derived from the LIVE bindings — the slugs the model
@@ -597,8 +601,8 @@ export async function buildManifoldServer(
     return {
       // `trace` arms value provenance (response-normalizer §3.5): tool responses carry
       // their originating invocation, and the stringly-collection hint door teaches the
-      // parser prelude AT the failure. Per-world, same lifetime as ambient/scope.
-      tool: createManifoldTool({ ambient, scope }, catalog, {
+      // parser prelude AT the failure. Per-world, same lifetime as capabilities/config/runCtx/scope.
+      tool: createManifoldTool({ capabilities, config, runCtx, scope }, catalog, {
         ...toolBaseOptions,
         session,
         tracker,
@@ -609,7 +613,9 @@ export async function buildManifoldServer(
         typeHints: typeHintsForWorld(tools),
         trace,
       }),
-      ambient,
+      capabilities,
+      config,
+      runCtx,
       scope,
       qualifiedNames,
       bypassResolution,
@@ -621,13 +627,13 @@ export async function buildManifoldServer(
   };
 
   /** SOFT REFRESH (module header): rebuild ONLY the catalog string + the manifold tool's
-   *  description, reusing the CURRENT world's ambient/scope/tools/bypassResolution/trace
-   *  verbatim — never re-lists an upstream, never re-binds a capability, never mints a
-   *  fresh scope. Returns `undefined` when nothing actually changed (every tracker entry
-   *  latched since the last refresh belonged to an already-DECLARED tool, so no
-   *  signature line differs) — the caller's signal to skip the notification entirely.
-   *  Immutable-swap style, same as `rebuild`'s result: builds a brand-new `ManifoldWorld`
-   *  object, never mutates `current`. */
+   *  description, reusing the CURRENT world's capabilities/config/runCtx/scope/tools/
+   *  bypassResolution/trace verbatim — never re-lists an upstream, never re-binds a
+   *  capability, never mints a fresh scope. Returns `undefined` when nothing actually
+   *  changed (every tracker entry latched since the last refresh belonged to an
+   *  already-DECLARED tool, so no signature line differs) — the caller's signal to skip
+   *  the notification entirely. Immutable-swap style, same as `rebuild`'s result: builds a
+   *  brand-new `ManifoldWorld` object, never mutates `current`. */
   const softRefresh = (current: ManifoldWorld): ManifoldWorld | undefined => {
     const amendedSignatures = applyObservedAmendments(current.signatures, current.qualifiedNames);
     const changed = amendedSignatures.some((sig, i) => sig !== current.signatures[i]);
@@ -638,18 +644,24 @@ export async function buildManifoldServer(
       serverSlugs: current.serverSlugs,
     });
     return {
-      tool: createManifoldTool({ ambient: current.ambient, scope: current.scope }, catalog, {
-        ...toolBaseOptions,
-        session,
-        tracker,
-        argsTracker,
-        attachments,
-        tools: current.tools,
-        bypassResolution: current.bypassResolution,
-        typeHints: typeHintsForWorld(current.tools),
-        trace: current.trace,
-      }),
-      ambient: current.ambient,
+      tool: createManifoldTool(
+        { capabilities: current.capabilities, config: current.config, runCtx: current.runCtx, scope: current.scope },
+        catalog,
+        {
+          ...toolBaseOptions,
+          session,
+          tracker,
+          argsTracker,
+          attachments,
+          tools: current.tools,
+          bypassResolution: current.bypassResolution,
+          typeHints: typeHintsForWorld(current.tools),
+          trace: current.trace,
+        },
+      ),
+      capabilities: current.capabilities,
+      config: current.config,
+      runCtx: current.runCtx,
       scope: current.scope,
       qualifiedNames: current.qualifiedNames,
       bypassResolution: current.bypassResolution,
@@ -701,18 +713,18 @@ export async function buildManifoldServer(
         try {
           const { tools } = await connected.client.listTools();
           currentTools.set(connected, tools);
-          const previousAmbient = world.ambient;
+          const previousRunCtx = world.runCtx;
           world = await rebuild();
           // The swap above is the one atomic reference assignment the module header
-          // promises — an in-flight eval already closed over `previousAmbient` (its
-          // own `ExecInstance`/resolver, not this outer binding) and finishes against it
+          // promises — an in-flight eval already closed over `previousRunCtx` (its
+          // own resolver, not this outer binding) and finishes against it
           // undisturbed. Disposing it now (fire-and-forget; a disposal failure is
           // reported, never left to crash the refresh chain) frees the superseded
-          // world's capability-base resources instead of leaking one ambient per
+          // world's capability-base resources instead of leaking one run per
           // tools/listChanged refresh.
-          void previousAmbient.dispose().catch((error) => {
+          void disposeRunContext(previousRunCtx).catch((error) => {
             console.error(
-              `arrival-manifold: disposing the superseded world's ambient failed (non-fatal):`,
+              `arrival-manifold: disposing the superseded world's run failed (non-fatal):`,
               error instanceof Error ? error.message : error,
             );
           });

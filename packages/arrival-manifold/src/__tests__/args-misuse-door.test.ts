@@ -220,7 +220,12 @@ describe("args-misuse-door — L1/L2/L3 localized teach (docs/args-error-reporti
       const sent = "King Saud University";
       let caught: unknown;
       try {
-        await exec(`(${QUALIFIED} :query "${sent}")`, { ambient: manifoldEnv.ambient, scope: manifoldEnv.scope });
+        await exec(`(${QUALIFIED} :query "${sent}")`, {
+          capabilities: manifoldEnv.capabilities,
+          config: manifoldEnv.config,
+          runCtx: manifoldEnv.runCtx,
+          scope: manifoldEnv.scope,
+        });
       } catch (error) {
         caught = error;
       }

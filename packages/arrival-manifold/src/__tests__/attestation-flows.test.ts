@@ -5,14 +5,13 @@
 // from either are attested and pass; reference-passing (`let`, lambda args, `if` selects)
 // preserves the verdict; computation drops it — the model re-attests deliberately.
 
-import { exec, type LexicalScope } from "@inhuman.tools/arrival";
-import type { AssembledAmbient } from "@inhuman.tools/arrival/env";
+import { exec } from "@inhuman.tools/arrival";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { type AttestationMode, buildManifoldEnv } from "../bind.js";
+import { type AttestationMode, buildManifoldEnv, type ManifoldEnv } from "../bind.js";
 
-const run = (world: { ambient: AssembledAmbient; scope: LexicalScope }, expr: string) =>
-  exec(expr, { ambient: world.ambient, scope: world.scope });
+const run = (world: Pick<ManifoldEnv, "capabilities" | "config" | "runCtx" | "scope">, expr: string) =>
+  exec(expr, { capabilities: world.capabilities, config: world.config, runCtx: world.runCtx, scope: world.scope });
 // Every `invoke` mock below is asserted with a trailing `undefined` second arg — bind.ts's
 // rosettaDef forwards the calling eval's abort signal as `tool.invoke(args, this.abortSignal)`
 // (see bind.ts's `RemoteTool.invoke` doc); `run` here calls `exec()` with no `signal` option

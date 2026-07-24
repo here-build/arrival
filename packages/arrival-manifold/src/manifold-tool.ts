@@ -3,8 +3,7 @@
 // delegates every statement-eval / door / futility / session-history / type-hints
 // mechanism to a `DoorsRunner` (@inhuman.tools/mcp-substrate), constructed ONCE per tool.
 
-import type { LexicalScope } from "@inhuman.tools/arrival";
-import type { AssembledAmbient } from "@inhuman.tools/arrival/env";
+import type { EnvCapability, LexicalScope, RunContext } from "@inhuman.tools/arrival";
 import type { EvalTrace } from "@inhuman.tools/arrival/provenance";
 import {
   createDoorsRunner,
@@ -31,7 +30,7 @@ import {
   MAX_PASSTHROUGH_ATTACHMENTS,
   type AttachmentCollector,
 } from "./attachments.js";
-import { findArgsRejection, toolSchemasForAmbient, type BypassResolution } from "./bind.js";
+import { findArgsRejection, toolSchemasForRun, type BypassResolution } from "./bind.js";
 import {
   ARG_NAME,
   EVAL_TIMEOUT_ARG_NAME,
@@ -215,24 +214,27 @@ function toAttachmentSink(attachments: AttachmentCollector | undefined) {
   };
 }
 
-/** The pair a manifold world hands `createManifoldTool` — the assembled capability base
- *  (stdlib + every bound tool) plus the persistent lexical root a REPL session's
- *  top-level `define`s accumulate into. A `ManifoldEnv` (bind.ts) satisfies this
- *  structurally (it carries both fields, plus signatures/toolParts unused here), so
- *  callers may pass either the narrowed pair or the whole `ManifoldEnv`. */
+/** The tuple a manifold world hands `createManifoldTool` — the assembled capability set
+ *  (stdlib + every bound tool), the shared config bag, the world's run, and the
+ *  persistent lexical root a REPL session's top-level `define`s accumulate into. A
+ *  `ManifoldEnv` (bind.ts) satisfies this structurally (it carries all four fields, plus
+ *  signatures/toolParts unused here), so callers may pass either the narrowed tuple or
+ *  the whole `ManifoldEnv`. */
 export interface ManifoldWorldEnv {
-  ambient: AssembledAmbient;
+  capabilities: readonly EnvCapability[];
+  config: Record<string, unknown>;
+  runCtx: RunContext;
   scope: LexicalScope;
 }
 
-/** MVP fallback: recover the roster of bound-tool NAMES straight off `ambient` via
- *  `toolSchemasForAmbient`. Deliberately narrower than a full registry — `options.tools`
+/** MVP fallback: recover the roster of bound-tool NAMES straight off `runCtx`'s world via
+ *  `toolSchemasForRun`. Deliberately narrower than a full registry — `options.tools`
  *  (server.ts's `toBoundTools(manifoldEnv)`) powers the signature echo, which is an
  *  explicit OPT-IN (pinned by `signature-echo.test.ts`: a tool built WITHOUT a
  *  registry never echoes). Feeding this roster into `options.tools` too would silently
- *  flip that opt-in into an always-on the moment `ambient` has real bound tools. */
-function knownToolNamesFromAmbient(ambient: AssembledAmbient): readonly string[] {
-  return (toolSchemasForAmbient(ambient) ?? []).map(([name]) => name);
+ *  flip that opt-in into an always-on the moment the world has real bound tools. */
+function knownToolNamesFromRun(runCtx: RunContext): readonly string[] {
+  return (toolSchemasForRun(runCtx) ?? []).map(([name]) => name);
 }
 
 export function createManifoldTool(
@@ -240,7 +242,7 @@ export function createManifoldTool(
   catalog: string,
   options: ManifoldToolOptions = {},
 ): ManifoldTool {
-  const { ambient, scope } = worldEnv;
+  const { capabilities, config, runCtx, scope } = worldEnv;
   const { trace } = options;
   // Same opt-in gate as `trace` itself (SAME field: no trace ⇒ no enricher, byte-identical
   // default behavior) — constructed ONCE per tool so the stringly-collection door's
@@ -251,7 +253,7 @@ export function createManifoldTool(
   const tools: ReadonlyMap<string, BoundTool> = options.tools ?? new Map();
   // Only used when the caller didn't opt into a real registry (see above for why this
   // is narrower than `tools`).
-  const knownToolNames = options.tools ? undefined : knownToolNamesFromAmbient(ambient);
+  const knownToolNames = options.tools ? undefined : knownToolNamesFromRun(runCtx);
 
   const calibration: Partial<CalibrationOptions> = {
     ...options.calibration,
@@ -389,9 +391,20 @@ export function createManifoldTool(
         // later call including `(+ 1 2)` and every MCP tool (see EvalTrace.beginRun). The guard must
         // be able to end a program, never a session.
         trace?.beginRun();
+        // Deliberately OMITS `runCtx`: the world's `runCtx` (above) is a probe run, read only
+        // for its `.vocabulary` (knownToolNamesFromRun) — reusing it here would freeze every
+        // call's abort signal at THAT mint (`RunContext.signal` is fixed at construction; see
+        // `RunInput.runCtx`'s own doc), silently breaking bind.ts's `rosettaDef` forwarding
+        // (`tool.invoke(args, this.runCtx.signal)`) to the REAL upstream MCP request — the
+        // wire-level cancellation `server.test.ts`'s abort-signal suite proves. Manifold's
+        // "manifold" capability declares no per-run `resources` needing cross-call continuity,
+        // so a FRESH `RunContext` per call (still resolving the SAME memoized Vocabulary off
+        // `{capabilities, config}`) costs nothing and keeps the live signal correct; `scope`
+        // alone already gives REPL-style top-level `define` continuity.
         const result = await runner.run({
           expr,
-          ambient,
+          capabilities,
+          config,
           scope,
           tools,
           responseSizeMaxChars,

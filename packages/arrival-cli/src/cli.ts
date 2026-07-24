@@ -22,7 +22,8 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
 
-import { exec, execState, LexicalScope, StaticValidationError } from "@inhuman.tools/arrival";
+import { disposeRunContext, exec, execState, LexicalScope } from "@inhuman.tools/arrival";
+import { StaticValidationError } from "@inhuman.tools/arrival/lsp-internals";
 import { EvalTrace } from "@inhuman.tools/arrival/provenance";
 
 import { armCapabilities, type ArmedCapabilities } from "./capabilities.js";
@@ -131,11 +132,15 @@ async function runFile(file: string, mode: OutputMode, inspect: Inspect, armed?:
       // can't see require-spilled bindings (see session.ts header) — runtime doors
       // remain the backstop, stated out loud.
       process.stderr.write(`${REQUIRE_SKIP_NOTE}\n`);
-      const { ambient, scope } = await loaderSession(path.dirname(path.resolve(file)), `arrival-run:${path.basename(file)}`, armed);
+      const { capabilities, config, runCtx, scope } = await loaderSession(
+        path.dirname(path.resolve(file)),
+        `arrival-run:${path.basename(file)}`,
+        armed,
+      );
       try {
-        values = await exec(source, { ambient, scope, ...budgets(), tap: trace });
+        values = await exec(source, { capabilities, config, runCtx, scope, ...budgets(), tap: trace });
       } finally {
-        await ambient.dispose();
+        await disposeRunContext(runCtx);
       }
     } else {
       // THE CUT: default base, whole-program diagnostics before the first form fires.

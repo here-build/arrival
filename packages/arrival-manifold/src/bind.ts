@@ -12,10 +12,17 @@
 // a call's `:key value` pairs into an object and decodes every property through the
 // scheme-identity codec (`z.dynamic`). No per-type dispatch.
 
-import { jsToScheme, LexicalScope, schemeToJs, z, type SchemeValue } from "@inhuman.tools/arrival";
+import {
+  execState,
+  jsToScheme,
+  LexicalScope,
+  schemeToJs,
+  z,
+  type RunContext,
+  type SchemeValue,
+} from "@inhuman.tools/arrival";
 import { freshIfSingleton, isAttested } from "@inhuman.tools/arrival/attestation";
 import { EnvCapability, type SymbolDeclaration } from "@inhuman.tools/arrival/capability";
-import { assembleAmbient, type AssembledAmbient } from "@inhuman.tools/arrival/env";
 import { EvalTrace } from "@inhuman.tools/arrival/provenance";
 import { symbol, type CallCtx } from "@inhuman.tools/arrival/symbol";
 import {
@@ -57,8 +64,17 @@ export interface BoundServer {
 }
 
 export interface ManifoldEnv {
-  /** The composed capability base (stdlib + every bound tool), caller-disposed. */
-  ambient: AssembledAmbient;
+  /** The composed capability set (stdlib + every bound tool). Threaded on EVERY exec call
+   *  alongside `config`/`runCtx` — `execState` rebuilds/looks up the memoized Vocabulary
+   *  from `{capabilities, config}` every time, and a reused `runCtx`'s tuple-identity
+   *  invariant checks the result against the run's ORIGINAL vocabulary. */
+  capabilities: readonly EnvCapability[];
+  /** THE SAME config object used to mint `runCtx` — reference identity, not a fresh
+   *  per-call object (the vocabulary memo + the reused-runCtx tuple check are both
+   *  identity-keyed on it). */
+  config: Record<string, unknown>;
+  /** The world's run — caller-disposed (via `disposeRunContext`). */
+  runCtx: RunContext;
   /** The persistent lexical root a REPL session's top-level `define`s accumulate into —
    *  minted fresh per world build, shared across every call against this world. */
   scope: LexicalScope;
@@ -104,8 +120,8 @@ function bypassFormsOf(qualifiedName: string, toolParts: ReadonlyMap<string, Too
 }
 
 /** Build the env-side bypass-resolution map at world (re)build time — the ONE place
- *  that knows both the qualified tool roster and the ambient's full bound-symbol
- *  vocabulary (`AssembledAmbient.names()`), so the uniqueness verdict is computed
+ *  that knows both the qualified tool roster and the run's full bound-symbol
+ *  vocabulary (`RunContext.vocabulary.keys()`), so the uniqueness verdict is computed
  *  once. Remembers the env-side map (server.ts / python bridge via `_meta`).
  *
  *  Every registered form is indexed by both its raw spelling (an exact-lookup hit) and
@@ -169,16 +185,20 @@ export function resolveBypass(
   return resolution.get(attempted) ?? resolution.get(normalizeSymbolName(attempted));
 }
 
-/** Captured for `assembleManifoldPrelude` (json-schema-to-ts.ts) — `ambient` is the
- *  `z.dynamic`-erased source; schemas survive here on a module-level WeakMap keyed by
- *  the returned ambient. Never mutated externally; only `toolSchemasForAmbient` reads. */
+/** Captured for `assembleManifoldPrelude` (json-schema-to-ts.ts) — `z.dynamic`-erased
+ *  source; schemas survive here on a module-level WeakMap keyed by the run's
+ *  `Vocabulary.map` object (`RunContext.vocabulary`) — memoized per `{capabilities, config}`
+ *  tuple, stable identity across every run sharing that tuple (the same object a reused
+ *  `runCtx`'s tuple-identity invariant checks against). Never mutated externally; only
+ *  `toolSchemasForRun` reads. */
 type ToolSchemaEntry = readonly [name: string, input: ToolJsonSchema | undefined, output: ToolJsonSchema | undefined];
-const toolSchemasByAmbient = new WeakMap<AssembledAmbient, readonly ToolSchemaEntry[]>();
+const toolSchemasByVocabulary = new WeakMap<object, readonly ToolSchemaEntry[]>();
 
-/** Recover the raw JSON Schemas registered for `ambient`, or `undefined` if `ambient`
- *  was never built by `buildManifoldEnv`. */
-export function toolSchemasForAmbient(ambient: AssembledAmbient): readonly ToolSchemaEntry[] | undefined {
-  return toolSchemasByAmbient.get(ambient);
+/** Recover the raw JSON Schemas registered for `runCtx`'s world, or `undefined` if that
+ *  world was never built by `buildManifoldEnv` (or `runCtx` carries no vocabulary at all —
+ *  a legacy/bare mint outside the vocabulary path). */
+export function toolSchemasForRun(runCtx: RunContext): readonly ToolSchemaEntry[] | undefined {
+  return runCtx.vocabulary === undefined ? undefined : toolSchemasByVocabulary.get(runCtx.vocabulary);
 }
 
 /** Attestation mode — whether unattested top-level tool arguments are allowed,
@@ -549,14 +569,17 @@ export async function buildManifoldEnv(
   // module-level `@inhuman.tools/arrival/symbol` / `@inhuman.tools/arrival/scheme-zod`
   // imports directly (they're called from more than one place, not just this callback).
   const capability = EnvCapability.define("manifold", { symbols: () => symbols });
-  const ambient = await assembleAmbient({ capabilities: [capability] });
+  const capabilities: readonly EnvCapability[] = [capability];
+  const config: Record<string, unknown> = {};
   const scope = LexicalScope.fresh("manifold");
-  toolSchemasByAmbient.set(ambient, toolSchemas);
-  const globalBoundNames = [...ambient.names()].filter((name): name is string => typeof name === "string");
+  const state = await execState("(begin)", { capabilities, config, scope });
+  const runCtx = state.runCtx;
+  if (runCtx.vocabulary !== undefined) toolSchemasByVocabulary.set(runCtx.vocabulary, toolSchemas);
+  const globalBoundNames = [...(runCtx.vocabulary?.keys() ?? [])];
   const bypassResolution = buildBypassResolution(toolParts, globalBoundNames);
   // ONE trace per world build (see the field doc on `ManifoldEnv.trace`) — never per call.
   const trace = new EvalTrace();
-  return { ambient, scope, signatures, signatureByName, bypassResolution, toolParts, trace };
+  return { capabilities, config, runCtx, scope, signatures, signatureByName, bypassResolution, toolParts, trace };
 }
 
 /** Project a built `ManifoldEnv` into ONE `BoundTool` (mcp-substrate registry shape)
@@ -567,7 +590,7 @@ export async function buildManifoldEnv(
  *  server path (`server.ts`/`manifold-tool.ts`) — used in validation harnesses. */
 export function toBoundTools(manifoldEnv: ManifoldEnv): ReadonlyMap<string, BoundTool> {
   const schemaByName = new Map(
-    (toolSchemasForAmbient(manifoldEnv.ambient) ?? []).map(
+    (toolSchemasForRun(manifoldEnv.runCtx) ?? []).map(
       ([name, input, output]) => [name, { input, output }] as const,
     ),
   );

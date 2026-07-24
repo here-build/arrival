@@ -2,6 +2,7 @@
 // write keystrokes to the mock stdin, assert the rendered frames. `mode="none"` keeps
 // frames uncolored so assertions read the plain text. A real loader session backs it, so
 // `(+ 1 2)` genuinely evaluates through emitForms/foldReplEvent.
+import { disposeRunContext } from "@inhuman.tools/arrival";
 import { render } from "ink-testing-library";
 import React from "react";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -32,7 +33,7 @@ beforeAll(async () => {
   session = await loaderSession(process.cwd(), "test-repl-ink");
 });
 afterAll(async () => {
-  await session.ambient.dispose();
+  await disposeRunContext(session.runCtx);
 });
 
 function mount() {

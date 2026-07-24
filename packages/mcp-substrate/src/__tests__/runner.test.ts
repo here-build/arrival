@@ -16,8 +16,7 @@
 //      commented-out code for real. This test pins the forms-based behavior and guards against
 //      regressing back to text-based execution.
 
-import { LexicalScope } from "@inhuman.tools/arrival";
-import { assembleAmbient, type AssembledAmbient } from "@inhuman.tools/arrival/env";
+import { LexicalScope, RunContext, disposeRunContext, execState } from "@inhuman.tools/arrival";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { AttachmentSink } from "../attachment-sink.js";
@@ -42,19 +41,23 @@ function makeRunner(): ReturnType<typeof createDoorsRunner> {
   });
 }
 
-// ONE bare ambient (no capabilities, no tools) shared across every test in this file — it is
-// stateless and immutable, so sharing it costs nothing; only the SCOPE (where a test's own
-// `(define ...)`s would land) needs to be fresh per test, for isolation between cases.
-let ambient: AssembledAmbient;
+// ONE bare (runCtx, capabilities, config) triple (no capabilities, no tools) shared across every
+// test in this file — it is stateless and immutable, so sharing it costs nothing; only the
+// SCOPE (where a test's own `(define ...)`s would land) needs to be fresh per test, for
+// isolation between cases.
+const capabilities: readonly [] = [];
+const config: Record<string, unknown> = {};
+let runCtx: RunContext;
 beforeAll(async () => {
-  ambient = await assembleAmbient({});
+  const state = await execState("(begin)", { capabilities, config, scope: LexicalScope.fresh("runner-test-mint") });
+  runCtx = state.runCtx;
 });
 afterAll(async () => {
-  await ambient.dispose();
+  await disposeRunContext(runCtx);
 });
 
 /** A fresh, isolated lexical scope for one test — mints a null-rooted `LexicalScope` (its
- *  builtins still resolve through the shared `ambient` above). */
+ *  builtins still resolve through the shared `runCtx`/`capabilities` above). */
 function freshScope(name: string): LexicalScope {
   return LexicalScope.fresh(name);
 }
@@ -67,7 +70,9 @@ describe("createDoorsRunner(...).run(...) — end-to-end regression, real reader
     const scope = freshScope("runner-crash-regression");
     const result = await runner.run({
       expr: String.raw`(char=? #\" (car (string->list ",")))`,
-      ambient,
+      capabilities,
+      config,
+      runCtx,
       scope,
       tools: noTools,
     });
@@ -93,7 +98,9 @@ describe("createDoorsRunner(...).run(...) — end-to-end regression, real reader
       (else
        (loop (cdr chars) (cons (car chars) current) fields)))))
 (split-csv-row "a,\"b\",c")`,
-      ambient,
+      capabilities,
+      config,
+      runCtx,
       scope,
       tools: noTools,
     });
@@ -105,7 +112,9 @@ describe("createDoorsRunner(...).run(...) — end-to-end regression, real reader
     const scope = freshScope("runner-hash-semicolon");
     const result = await runner.run({
       expr: "(define x 1) #;(set! x 999) x",
-      ambient,
+      capabilities,
+      config,
+      runCtx,
       scope,
       tools: noTools,
     });
@@ -124,7 +133,9 @@ describe("createDoorsRunner(...).run(...) — end-to-end regression, real reader
     const scope = freshScope("runner-hash-semicolon-alignment");
     const result = await runner.run({
       expr: "(define a 10) #;(define bogus 999) (define c (+ a 5)) c",
-      ambient,
+      capabilities,
+      config,
+      runCtx,
       scope,
       tools: noTools,
     });
@@ -145,7 +156,9 @@ describe("createDoorsRunner(...).run(...) — the import-form door (doors.ts's i
     const scope = freshScope("runner-import-form-scheme-head");
     const result = await runner.run({
       expr: "(scheme base) (+ 1 2)",
-      ambient,
+      capabilities,
+      config,
+      runCtx,
       scope,
       tools: noTools,
     });
@@ -161,7 +174,9 @@ describe("createDoorsRunner(...).run(...) — the import-form door (doors.ts's i
     const scope = freshScope("runner-import-form-import-head");
     const result = await runner.run({
       expr: "(import (scheme base))",
-      ambient,
+      capabilities,
+      config,
+      runCtx,
       scope,
       tools: noTools,
     });
@@ -176,7 +191,9 @@ describe("createDoorsRunner(...).run(...) — the import-form door (doors.ts's i
     const scope = freshScope("runner-import-form-unrelated");
     const result = await runner.run({
       expr: "(frobnicate 1 2)",
-      ambient,
+      capabilities,
+      config,
+      runCtx,
       scope,
       tools: noTools,
     });
@@ -191,7 +208,7 @@ describe("createDoorsRunner(...).run(...) — the import-form door (doors.ts's i
     const scope = freshScope("runner-import-form-repeats");
     const renders: string[] = [];
     for (let i = 0; i < 11; i++) {
-      const result = await runner.run({ expr: "(scheme base)", ambient, scope, tools: noTools });
+      const result = await runner.run({ expr: "(scheme base)", capabilities, config, runCtx, scope, tools: noTools });
       renders.push(result.content.map((b) => (b.type === "text" ? b.text : "")).join("\n"));
     }
     expect(renders[0]).toContain("standard library is already fully bound");
@@ -212,7 +229,7 @@ describe("createDoorsRunner(...).run(...) — the import-form door (doors.ts's i
     it("a define-only program's environment notes announce the binding AND that nothing else executed (B3)", async () => {
       const runner = makeRunner();
       const scope = freshScope("runner-introduced-define-only");
-      const result = await runner.run({ expr: "(define x 41)", ambient, scope, tools: noTools });
+      const result = await runner.run({ expr: "(define x 41)", capabilities, config, runCtx, scope, tools: noTools });
       expect(result.isError).not.toBe(true);
       expect(result.content).toHaveLength(1);
       const text = (result.content[0] as { text: string }).text;
@@ -228,7 +245,9 @@ describe("createDoorsRunner(...).run(...) — the import-form door (doors.ts's i
       const scope = freshScope("runner-introduced-mixed");
       const result = await runner.run({
         expr: "(define a 10) (define b (+ a 5)) b",
-        ambient,
+        capabilities,
+      config,
+      runCtx,
         scope,
         tools: noTools,
       });
@@ -245,7 +264,7 @@ describe("createDoorsRunner(...).run(...) — the import-form door (doors.ts's i
     it("a program that binds NOTHING emits no environment-notes block (pure expressions are unaffected)", async () => {
       const runner = makeRunner();
       const scope = freshScope("runner-introduced-none");
-      const result = await runner.run({ expr: "(+ 1 2)", ambient, scope, tools: noTools });
+      const result = await runner.run({ expr: "(+ 1 2)", capabilities, config, runCtx, scope, tools: noTools });
       const texts = result.content.map((b) => (b.type === "text" ? b.text : ""));
       expect(texts.join("\n")).not.toContain("environment notes");
       expect(texts.join("\n")).toContain("3");
@@ -255,7 +274,7 @@ describe("createDoorsRunner(...).run(...) — the import-form door (doors.ts's i
       const { parse } = await import("@inhuman.tools/arrival");
       const runner = makeRunner();
       const scope = freshScope("runner-introduced-roundtrip");
-      const result = await runner.run({ expr: "(define x 41)", ambient, scope, tools: noTools });
+      const result = await runner.run({ expr: "(define x 41)", capabilities, config, runCtx, scope, tools: noTools });
       const notes = (result.content[0] as { text: string }).text;
       // A block comment parses to ZERO forms — pasting it back is a harmless no-op, never data.
       const forms = await parse(notes);

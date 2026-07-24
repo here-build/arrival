@@ -1,26 +1,28 @@
-import { LexicalScope } from "@inhuman.tools/arrival";
-import { assembleAmbient, type AssembledAmbient } from "@inhuman.tools/arrival/env";
+import { disposeRunContext, execState, LexicalScope, RunContext } from "@inhuman.tools/arrival";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { BypassResolution } from "../bind.js";
 import { DEFAULT_PASSTHROUGH_ATTACHMENTS, MAX_PASSTHROUGH_ATTACHMENTS } from "../attachments.js";
 import { createManifoldTool, RESPONSE_SIZE_MAX_CHARS, RESPONSE_SIZE_MIN_CHARS } from "../manifold-tool.js";
 
-// ONE bare ambient (no capabilities, no tools) shared across every test in this file — it is
-// stateless and immutable, so sharing it costs nothing; only the SCOPE needs to be fresh per
-// test, for isolation between cases.
-let ambient: AssembledAmbient;
+// ONE bare (runCtx, capabilities, config) triple (no capabilities, no tools) shared across
+// every test in this file — it is stateless and immutable, so sharing it costs nothing;
+// only the SCOPE needs to be fresh per test, for isolation between cases.
+const capabilities: readonly [] = [];
+const config: Record<string, unknown> = {};
+let runCtx: RunContext;
 beforeAll(async () => {
-  ambient = await assembleAmbient({});
+  const state = await execState("(begin)", { capabilities, config, scope: LexicalScope.fresh("manifold-tool-test-mint") });
+  runCtx = state.runCtx;
 });
 afterAll(async () => {
-  await ambient.dispose();
+  await disposeRunContext(runCtx);
 });
 
 describe("createManifoldTool", () => {
   it("describes itself as the single REPL tool with the given catalog as its description", async () => {
     const scope = LexicalScope.fresh("test");
-    const tool = createManifoldTool({ ambient, scope }, "CATALOG TEXT");
+    const tool = createManifoldTool({ capabilities, config, runCtx, scope }, "CATALOG TEXT");
     const described = tool.describe();
     expect(described.name).toBe("scheme-repl-with-all-mcp-tools");
     expect(described.description).toBe("CATALOG TEXT");
@@ -50,7 +52,7 @@ describe("createManifoldTool", () => {
 
   it("omits `_meta` entirely when no bypassResolution is supplied (never an empty object)", () => {
     const scope = LexicalScope.fresh("test");
-    const tool = createManifoldTool({ ambient, scope }, "CATALOG TEXT");
+    const tool = createManifoldTool({ capabilities, config, runCtx, scope }, "CATALOG TEXT");
     expect(tool.describe()._meta).toBeUndefined();
   });
 
@@ -60,7 +62,7 @@ describe("createManifoldTool", () => {
       ["filesystem_search_files", { kind: "unique", qualified: "filesystem/search_files" }],
       ["search", { kind: "ambiguous", candidates: ["github/search", "slack/search"] }],
     ]);
-    const tool = createManifoldTool({ ambient, scope }, "CATALOG TEXT", { bypassResolution });
+    const tool = createManifoldTool({ capabilities, config, runCtx, scope }, "CATALOG TEXT", { bypassResolution });
     expect(tool.describe()._meta).toEqual({
       bypassResolution: {
         filesystem_search_files: { kind: "unique", qualified: "filesystem/search_files" },
@@ -71,7 +73,7 @@ describe("createManifoldTool", () => {
 
   it("omits intent/successCriteria from the schema by default (opt-in, measured dead weight on strong models)", () => {
     const scope = LexicalScope.fresh("test");
-    const tool = createManifoldTool({ ambient, scope }, "CATALOG TEXT");
+    const tool = createManifoldTool({ capabilities, config, runCtx, scope }, "CATALOG TEXT");
     const properties = tool.describe().inputSchema.properties as Record<string, unknown>;
     expect(Object.keys(properties).sort()).toEqual([
       "eval-timeout-ms",
@@ -83,7 +85,7 @@ describe("createManifoldTool", () => {
 
   it("adds intent (only) to the schema when promptFields.intent is true", () => {
     const scope = LexicalScope.fresh("test");
-    const tool = createManifoldTool({ ambient, scope }, "CATALOG TEXT", { promptFields: { intent: true } });
+    const tool = createManifoldTool({ capabilities, config, runCtx, scope }, "CATALOG TEXT", { promptFields: { intent: true } });
     const described = tool.describe();
     const properties = described.inputSchema.properties as Record<string, unknown>;
     expect(properties.intent).toMatchObject({ type: "string" });
@@ -94,7 +96,7 @@ describe("createManifoldTool", () => {
 
   it("adds successCriteria (only) to the schema when promptFields.successCriteria is true", () => {
     const scope = LexicalScope.fresh("test");
-    const tool = createManifoldTool({ ambient, scope }, "CATALOG TEXT", { promptFields: { successCriteria: true } });
+    const tool = createManifoldTool({ capabilities, config, runCtx, scope }, "CATALOG TEXT", { promptFields: { successCriteria: true } });
     const properties = tool.describe().inputSchema.properties as Record<string, unknown>;
     expect(properties.successCriteria).toMatchObject({ type: "string" });
     expect(properties.intent).toBeUndefined();
@@ -102,7 +104,7 @@ describe("createManifoldTool", () => {
 
   it("adds both intent and successCriteria when both promptFields flags are true", () => {
     const scope = LexicalScope.fresh("test");
-    const tool = createManifoldTool({ ambient, scope }, "CATALOG TEXT", {
+    const tool = createManifoldTool({ capabilities, config, runCtx, scope }, "CATALOG TEXT", {
       promptFields: { intent: true, successCriteria: true },
     });
     const properties = tool.describe().inputSchema.properties as Record<string, unknown>;
@@ -118,7 +120,7 @@ describe("createManifoldTool", () => {
 
   it("evaluates expr against the env and returns one text content entry per top-level form", async () => {
     const scope = LexicalScope.fresh("test");
-    const tool = createManifoldTool({ ambient, scope }, "CATALOG TEXT");
+    const tool = createManifoldTool({ capabilities, config, runCtx, scope }, "CATALOG TEXT");
     const result = await tool.call({ expr: "(+ 1 2)\n(+ 3 4)" });
     expect(result.isError).toBeFalsy();
     expect(result.content).toEqual([
@@ -129,7 +131,7 @@ describe("createManifoldTool", () => {
 
   it("accepts an optional intent alongside expr and still executes expr normally", async () => {
     const scope = LexicalScope.fresh("test");
-    const tool = createManifoldTool({ ambient, scope }, "CATALOG TEXT");
+    const tool = createManifoldTool({ capabilities, config, runCtx, scope }, "CATALOG TEXT");
     const result = await tool.call({ intent: "add two numbers", expr: "(+ 1 2)" });
     expect(result.isError).toBeFalsy();
     expect(result.content).toEqual([{ type: "text", text: "3" }]);
@@ -137,7 +139,7 @@ describe("createManifoldTool", () => {
 
   it("still works with no intent field at all (existing callers unaffected)", async () => {
     const scope = LexicalScope.fresh("test");
-    const tool = createManifoldTool({ ambient, scope }, "CATALOG TEXT");
+    const tool = createManifoldTool({ capabilities, config, runCtx, scope }, "CATALOG TEXT");
     const result = await tool.call({ expr: "(+ 5 5)" });
     expect(result.isError).toBeFalsy();
     expect(result.content).toEqual([{ type: "text", text: "10" }]);
@@ -145,7 +147,7 @@ describe("createManifoldTool", () => {
 
   it("reports a runtime error as isError content instead of throwing", async () => {
     const scope = LexicalScope.fresh("test");
-    const tool = createManifoldTool({ ambient, scope }, "CATALOG TEXT");
+    const tool = createManifoldTool({ capabilities, config, runCtx, scope }, "CATALOG TEXT");
     const result = await tool.call({ expr: "(undefined-symbol)" });
     expect(result.isError).toBe(true);
     const [block] = result.content as Array<{ type: "text"; text: string }>;
@@ -154,7 +156,7 @@ describe("createManifoldTool", () => {
 
   it("threads the observation.maxTotalChars budget into result rendering (both rendering modes)", async () => {
     const scope = LexicalScope.fresh("test");
-    const braced = createManifoldTool({ ambient, scope }, "CATALOG TEXT", { observation: { maxTotalChars: 400 } });
+    const braced = createManifoldTool({ capabilities, config, runCtx, scope }, "CATALOG TEXT", { observation: { maxTotalChars: 400 } });
     const result = await braced.call({ expr: "(iota 1000)" });
     expect(result.isError).toBeFalsy();
     const [block] = result.content as Array<{ type: "text"; text: string }>;
@@ -165,7 +167,7 @@ describe("createManifoldTool", () => {
 
     // sexpr mode rides the same budget + observation seeds (observationCaps) — the caps
     // only bite past the budget, then the inline elision marker appears, in parens notation.
-    const sexpr = createManifoldTool({ ambient, scope }, "CATALOG TEXT", { rendering: "sexpr", observation: { maxTotalChars: 400 } });
+    const sexpr = createManifoldTool({ capabilities, config, runCtx, scope }, "CATALOG TEXT", { rendering: "sexpr", observation: { maxTotalChars: 400 } });
     const sexprResult = await sexpr.call({ expr: "(iota 1000)" });
     const [sexprBlock] = sexprResult.content as Array<{ type: "text"; text: string }>;
     expect(sexprBlock?.text.length).toBeLessThanOrEqual(400);
@@ -176,7 +178,7 @@ describe("createManifoldTool", () => {
   describe("response-size — model-controlled per-call compaction budget", () => {
     it("pins the schema's default/max + drift/cost teaching text verbatim", () => {
       const scope = LexicalScope.fresh("test");
-      const tool = createManifoldTool({ ambient, scope }, "CATALOG TEXT", { observation: { maxTotalChars: 8_000 } });
+      const tool = createManifoldTool({ capabilities, config, runCtx, scope }, "CATALOG TEXT", { observation: { maxTotalChars: 8_000 } });
       const properties = tool.describe().inputSchema.properties as Record<string, { type?: string; description: string }>;
       expect(properties["response-size"]).toMatchObject({ type: "integer" });
       // Default reflects THIS deployment's configured budget, not a hardcoded number.
@@ -193,7 +195,7 @@ describe("createManifoldTool", () => {
 
     it("falls back to the world default budget when response-size is absent", async () => {
       const scope = LexicalScope.fresh("test");
-      const tool = createManifoldTool({ ambient, scope }, "CATALOG TEXT", { observation: { maxTotalChars: 500 } });
+      const tool = createManifoldTool({ capabilities, config, runCtx, scope }, "CATALOG TEXT", { observation: { maxTotalChars: 500 } });
       const result = await tool.call({ expr: "(iota 3000)" });
       const [block] = result.content as Array<{ type: "text"; text: string }>;
       expect(block?.text.length).toBeLessThanOrEqual(500);
@@ -202,7 +204,7 @@ describe("createManifoldTool", () => {
 
     it("honors an explicit, larger response-size for this call only (no world config change)", async () => {
       const scope = LexicalScope.fresh("test");
-      const tool = createManifoldTool({ ambient, scope }, "CATALOG TEXT", { observation: { maxTotalChars: 500 } });
+      const tool = createManifoldTool({ capabilities, config, runCtx, scope }, "CATALOG TEXT", { observation: { maxTotalChars: 500 } });
       // A 3000-item array sits WELL over the manifold's default `topLevelArrayLimit` (100) —
       // that structural item-count cap is char-budget-independent BY DESIGN (serializer-elision
       // plan: this is exactly the fix for the grounding failure a large response-size used to
@@ -234,7 +236,7 @@ describe("createManifoldTool", () => {
 
     it(`clamps a response-size below ${RESPONSE_SIZE_MIN_CHARS} up to the floor`, async () => {
       const scope = LexicalScope.fresh("test");
-      const tool = createManifoldTool({ ambient, scope }, "CATALOG TEXT");
+      const tool = createManifoldTool({ capabilities, config, runCtx, scope }, "CATALOG TEXT");
       const result = await tool.call({ expr: "(iota 3000)", "response-size": 1 });
       const [block] = result.content as Array<{ type: "text"; text: string }>;
       expect(block?.text.length).toBeLessThanOrEqual(RESPONSE_SIZE_MIN_CHARS);
@@ -243,7 +245,7 @@ describe("createManifoldTool", () => {
 
     it(`clamps a response-size above ${RESPONSE_SIZE_MAX_CHARS} down to the ceiling`, async () => {
       const scope = LexicalScope.fresh("test");
-      const tool = createManifoldTool({ ambient, scope }, "CATALOG TEXT");
+      const tool = createManifoldTool({ capabilities, config, runCtx, scope }, "CATALOG TEXT");
       const result = await tool.call({
         expr: String.raw`(map (lambda (x) (make-string 3000 #\a)) (iota 100))`,
         "response-size": 999_999,
@@ -255,7 +257,7 @@ describe("createManifoldTool", () => {
 
     it("ignores a non-numeric response-size (falls back to the world default, no error)", async () => {
       const scope = LexicalScope.fresh("test");
-      const tool = createManifoldTool({ ambient, scope }, "CATALOG TEXT", { observation: { maxTotalChars: 500 } });
+      const tool = createManifoldTool({ capabilities, config, runCtx, scope }, "CATALOG TEXT", { observation: { maxTotalChars: 500 } });
       const result = await tool.call({ expr: "(iota 3000)", "response-size": "not-a-number" as unknown as number });
       expect(result.isError).toBeFalsy();
       const [block] = result.content as Array<{ type: "text"; text: string }>;
@@ -267,7 +269,7 @@ describe("createManifoldTool", () => {
   describe("response-attachments — schema pin (behavior lives in unwrap.test.ts, alongside AttachmentCollector)", () => {
     it("pins the schema's default/max + per-turn cost teaching text verbatim", () => {
       const scope = LexicalScope.fresh("test");
-      const tool = createManifoldTool({ ambient, scope }, "CATALOG TEXT");
+      const tool = createManifoldTool({ capabilities, config, runCtx, scope }, "CATALOG TEXT");
       const properties = tool.describe().inputSchema.properties as Record<string, { type?: string; description: string }>;
       expect(properties["response-attachments"]).toMatchObject({ type: "integer" });
       expect(properties["response-attachments"]?.description).toBe(

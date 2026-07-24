@@ -9,7 +9,7 @@
 // FIXTURE TABLE — see FIXTURES.md (sibling) for the human-readable acceptance contract,
 // including the per-row rationale for each expected TS diagnostic code.
 
-import { tokenize } from "@inhuman.tools/arrival";
+import { tokenize } from "@inhuman.tools/arrival/lsp-internals";
 import { createSpineLens, renderHint, selectHints, type BoundTool } from "@inhuman.tools/mcp-substrate";
 import { describe, expect, it } from "vitest";
 

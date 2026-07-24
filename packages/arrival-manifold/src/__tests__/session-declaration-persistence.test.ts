@@ -36,8 +36,8 @@ import { connectServer } from "../connect.js";
 import { createManifoldTool } from "../manifold-tool.js";
 import { buildManifoldServer } from "../server.js";
 
-const runExpr = (world: Pick<ManifoldEnv, "ambient" | "scope">, expr: string) =>
-  exec(expr, { ambient: world.ambient, scope: world.scope });
+const runExpr = (world: Pick<ManifoldEnv, "capabilities" | "config" | "runCtx" | "scope">, expr: string) =>
+  exec(expr, { capabilities: world.capabilities, config: world.config, runCtx: world.runCtx, scope: world.scope });
 
 const texts = (r: { content: unknown }): string[] =>
   (r.content as Array<{ type: string; text: string }>).map((b) => b.text);
@@ -203,7 +203,7 @@ describe("Step 2 — replaySessionHistory() reconstructs session state from defi
     // A brand-new env for the SAME (empty) toolset, standing in for "a resumed session" —
     // no live env carried over, only the history.
     const fresh = await buildManifoldEnv([]);
-    const result = await replaySessionHistory(history, fresh.ambient, fresh.scope);
+    const result = await replaySessionHistory(history, fresh.capabilities, fresh.config, fresh.runCtx, fresh.scope);
     expect(result).toEqual({ applied: ["a", "b"], skipped: [], failed: [] });
 
     const [aVal] = await runExpr(fresh, "a");
@@ -225,7 +225,7 @@ describe("Step 2 — replaySessionHistory() reconstructs session state from defi
       expect(history.map((e) => e.name)).toEqual(["b", "a"]); // a moved to newest on rebind
 
       const fresh = await buildManifoldEnv([]);
-      const result = await replaySessionHistory(history, fresh.ambient, fresh.scope);
+      const result = await replaySessionHistory(history, fresh.capabilities, fresh.config, fresh.runCtx, fresh.scope);
       // b replays FIRST (history order) and fails — `a` isn't bound yet in the fresh env at
       // that point; a's rebind then succeeds. Best-effort: one failure never aborts the rest.
       expect(result).toEqual({ applied: ["a"], skipped: [], failed: ["b"] });
@@ -262,7 +262,7 @@ describe("Step 2 — replaySessionHistory() reconstructs session state from defi
 
     const history = tool.sessionHistory();
     const fresh = await buildManifoldEnv(toolset);
-    const result = await replaySessionHistory(history, fresh.ambient, fresh.scope);
+    const result = await replaySessionHistory(history, fresh.capabilities, fresh.config, fresh.runCtx, fresh.scope);
 
     // The tool was NEVER re-invoked by replay.
     expect(invocations).toBe(1);
@@ -304,7 +304,7 @@ describe("Step 2 — replaySessionHistory() reconstructs session state from defi
 
       const history = tool.sessionHistory();
       const fresh = await buildManifoldEnv(toolset);
-      const result = await replaySessionHistory(history, fresh.ambient, fresh.scope);
+      const result = await replaySessionHistory(history, fresh.capabilities, fresh.config, fresh.runCtx, fresh.scope);
 
       // The tool was NEVER re-invoked by replay (before the fix this was 2).
       expect(invocations).toBe(1);

@@ -21,6 +21,8 @@
 // (--expose-gc is REQUIRED — the harness refuses to run without it: an unforced GC makes
 // every heapUsed sample noise, not a measurement.)
 
+import { disposeRunContext } from "@inhuman.tools/arrival";
+
 import { type BoundServer, buildManifoldEnv, type RemoteTool } from "../bind.js";
 import { createManifoldTool } from "../manifold-tool.js";
 
@@ -141,7 +143,7 @@ async function runCycle(variant: Variant): Promise<void> {
     await tool.call({ expr: `(define r${i} (t/fake))` });
   }
   if (variant.dispose) {
-    await manifoldEnv.ambient.dispose();
+    await disposeRunContext(manifoldEnv.runCtx);
   }
   // No `return manifoldEnv`/`tool`/`server` — they fall out of scope here.
 }

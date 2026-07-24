@@ -1,22 +1,21 @@
 // Fixture capability — the CONFIG-GATED arm: `greeting` is a declared-OPTIONAL
-// enabling key (the loader's `fs` pattern). Present ⇒ the verb binds; absent under
-// `degradation: "doors"` ⇒ a cause-carrying door, which the static pass reports as
-// the causal "provide `greeting`" diagnostic (bucket c, missing-configuration).
+// enabling key (the loader's `fs` pattern). Present ⇒ the verb binds; absent ⇒ the
+// contract's `requiresConfig` auto-mints a cause-carrying door (D2, unconditional —
+// degradation.ts's "doors" mode is the only mode now), which the static pass reports
+// as the causal "provide `greeting`" diagnostic (bucket c, missing-configuration).
 import { EnvCapability } from "@inhuman.tools/arrival/capability";
-import { custom } from "@inhuman.tools/arrival/scheme-zod";
+import * as z from "zod";
 
-export const configGreetCapability = new EnvCapability("fixture/config-greet", {
+export const configGreetCapability = EnvCapability.define("fixture/config-greet", {
   configuration: {
-    greeting: custom((v) => typeof v === "string").optional(),
+    greeting: z.string().optional(),
   },
-  symbols: ({ configuration, degradation }) => ({
-    "greet/configured":
-      configuration.greeting === undefined && degradation.active
-        ? degradation.door(
-            "greet/configured",
-            ["greeting"],
-            'greets with the host-provided greeting. Provide "greeting" to enable it.',
-          )
-        : () => `hello, ${configuration.greeting}`,
+  symbols: (symbol, sz) => ({
+    "greet/configured": symbol.rosetta`greet/configured: greets with the host-provided greeting`(
+      { input: [], output: [sz.string], requiresConfig: ["greeting"] },
+      function () {
+        return `hello, ${this.configuration.greeting}`;
+      },
+    ),
   }),
 });

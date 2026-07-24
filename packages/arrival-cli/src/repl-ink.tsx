@@ -16,7 +16,7 @@
 import React, { useCallback, useReducer, useRef, useState } from "react";
 import { Box, render, Static, Text, useApp, useInput, useStdout } from "ink";
 
-import { scan } from "@inhuman.tools/arrival/oracle";
+import { scan } from "@inhuman.tools/arrival/lsp-internals";
 import {
   EMPTY_REPL_MODEL,
   foldReplEvent,
@@ -212,7 +212,9 @@ function ReplApp({ session, budgetMs, heapBudget, version, capabilityCount, mode
       setRunning(model);
       const started = Date.now();
       await emitForms(src, {
-        ambient: session.ambient,
+        capabilities: session.capabilities,
+        config: session.config,
+        runCtx: session.runCtx,
         scope: session.scope,
         budgetMs,
         heapBudget,
@@ -473,7 +475,7 @@ function ReplApp({ session, budgetMs, heapBudget, version, capabilityCount, mode
 
 /** Mount the Ink repl over a persistent loader session. No banner, no header — the version /
  *  lens status rides the far right of the prompt line and vanishes on the first keystroke.
- *  Resolves when the user exits (Ctrl-D). Caller disposes the ambient.
+ *  Resolves when the user exits (Ctrl-D). Caller disposes the session's `runCtx`.
  *
  *  Autowrap is disabled for the session (Ink owns line-width layout; the terminal's own
  *  autowrap adds a phantom newline when a line fills to the edge) and restored on exit — via

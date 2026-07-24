@@ -1,8 +1,9 @@
 /**
  * The CLI's `ReplEvent` emitter — parse a buffer into top-level forms, run each in
- * sequence against the session's persistent `{ambient, scope}`, and call `onEvent` in
- * the exact order the event-order law requires (mcp-substrate's repl-event.ts header):
- * topology FIRST, then statement events strictly ordered by index, terminal-on-error.
+ * sequence against the session's persistent `(runCtx, scope)` warm pair, and call
+ * `onEvent` in the exact order the event-order law requires (mcp-substrate's
+ * repl-event.ts header): topology FIRST, then statement events strictly ordered by
+ * index, terminal-on-error.
  *
  * This mirrors arrival-mcp's `DiscoveryTool.runForms` at a deliberately smaller
  * altitude: no `RunCache`/session replay, no attachment extraction (D8: no inline
@@ -13,15 +14,16 @@
  * emitter core (arrival-awesome-repl.md §6's lift into mcp-substrate) exists.
  */
 import {
-  APair,
   execState,
   parse,
   schemeToJs,
-  StaticValidationError,
+  type EnvCapability,
   type LexicalScope,
+  type RunContext,
   type SchemeValue,
 } from "@inhuman.tools/arrival";
-import type { AssembledAmbient } from "@inhuman.tools/arrival/env";
+import { StaticValidationError } from "@inhuman.tools/arrival/lsp-internals";
+import { APair } from "@inhuman.tools/arrival/reflect-internals";
 import { toSExprString } from "@inhuman.tools/arrival-serializer";
 import type { ContentBlock, ReplEvent } from "@inhuman.tools/mcp-substrate";
 
@@ -32,7 +34,9 @@ import { formatDiagnostic } from "./session.js";
 const PRINT_OPTS = { maxItems: 64, maxStringChars: 1024, maxTotalChars: 16_384 };
 
 export interface FormEmitterOptions {
-  readonly ambient: AssembledAmbient;
+  readonly capabilities: readonly EnvCapability[];
+  readonly config: Record<string, unknown>;
+  readonly runCtx: RunContext;
   readonly scope: LexicalScope;
   readonly budgetMs: number;
   readonly heapBudget: number;
@@ -74,12 +78,12 @@ function doorText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-/** Runs `source` to completion (or its first crash) against the session's `ambient`/
- *  `scope`, calling `onEvent` in event-order-law order. Never throws — a parse crash
+/** Runs `source` to completion (or its first crash) against the session's `(runCtx, scope)`
+ *  warm pair, calling `onEvent` in event-order-law order. Never throws — a parse crash
  *  or a form's runtime error both resolve as a terminal statement event, matching the
  *  aggregate law (the block model IS the result). */
 export async function emitForms(source: string, opts: FormEmitterOptions): Promise<void> {
-  const { ambient, scope, budgetMs, heapBudget, onEvent } = opts;
+  const { capabilities, config, runCtx, scope, budgetMs, heapBudget, onEvent } = opts;
   const started = Date.now();
   const remaining = (): number => Math.max(0, budgetMs - (Date.now() - started));
 
@@ -108,7 +112,7 @@ export async function emitForms(source: string, opts: FormEmitterOptions): Promi
   for (const [index, form] of forms.entries()) {
     const formStarted = Date.now();
     try {
-      const state = await execState(form, { ambient, scope, budgetMs, heapBudget });
+      const state = await execState(form, { capabilities, config, runCtx, scope, budgetMs, heapBudget });
       const meter = state.runCtx.heapMeter;
       const texts: string[] = [];
       for (const boxed of state.values) {

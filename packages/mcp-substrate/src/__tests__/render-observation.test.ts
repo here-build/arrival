@@ -10,24 +10,27 @@
 // own reader — the earlier single-quote convention (`'Ada'`) did NOT re-parse
 // (`exec("'hi'")` threw `expecting datum after '''`). See the positive test below.
 
-import { exec, execState, LexicalScope } from "@inhuman.tools/arrival";
-import { assembleAmbient, type AssembledAmbient } from "@inhuman.tools/arrival/env";
+import { exec, execState, LexicalScope, RunContext, disposeRunContext } from "@inhuman.tools/arrival";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { DEFAULT_OBSERVATION_MAX_TOTAL_CHARS, renderObservation } from "../render-observation.js";
 
-// ONE bare ambient (no capabilities, no tools) shared across every test in this file — it is
-// stateless and immutable, so sharing it costs nothing; only the SCOPE (where a test's own
-// defines would land) needs to be fresh per test, for isolation between cases.
-let ambient: AssembledAmbient;
+// ONE bare (runCtx, capabilities, config) triple (no capabilities, no tools) shared across every
+// test in this file — it is stateless and immutable, so sharing it costs nothing; only the
+// SCOPE (where a test's own defines would land) needs to be fresh per test, for isolation
+// between cases.
+const capabilities: readonly [] = [];
+const config: Record<string, unknown> = {};
+let runCtx: RunContext;
 beforeAll(async () => {
-  ambient = await assembleAmbient({});
+  const state = await execState("(begin)", { capabilities, config, scope: LexicalScope.fresh("render-observation-mint") });
+  runCtx = state.runCtx;
 });
 afterAll(async () => {
-  await ambient.dispose();
+  await disposeRunContext(runCtx);
 });
 
-const run = (scope: LexicalScope, expr: string) => exec(expr, { ambient, scope });
+const run = (scope: LexicalScope, expr: string) => exec(expr, { capabilities, config, runCtx, scope });
 
 function freshEnv(): LexicalScope {
   return LexicalScope.fresh("render-observation-test");
@@ -83,7 +86,7 @@ describe("renderObservation — real arrival exec() results", () => {
     const env = freshEnv();
     // Multiple return values are only observable boxed: exec's plain-JS exit unwraps them to
     // a JS array by convention (the arrival membrane's Values arm), so this reads execState.
-    const state = await execState("(partition odd? '(1 2 3 4))", { ambient, scope: env });
+    const state = await execState("(partition odd? '(1 2 3 4))", { capabilities, config, runCtx, scope: env });
     expect(renderObservation(state.values[0])).toBe("(values\n  [1 3]\n  [2 4])");
   });
 });

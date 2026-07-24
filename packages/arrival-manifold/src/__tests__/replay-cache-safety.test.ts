@@ -43,8 +43,13 @@ import { describe, expect, it } from "vitest";
 import { buildManifoldEnv, type BoundServer, type ManifoldEnv } from "../bind.js";
 import { createManifoldTool } from "../manifold-tool.js";
 
-const runExpr = async (world: Pick<ManifoldEnv, "ambient" | "scope">, expr: string): Promise<unknown> => {
-  const [value] = await exec(expr, { ambient: world.ambient, scope: world.scope });
+const runExpr = async (world: Pick<ManifoldEnv, "capabilities" | "config" | "runCtx" | "scope">, expr: string): Promise<unknown> => {
+  const [value] = await exec(expr, {
+    capabilities: world.capabilities,
+    config: world.config,
+    runCtx: world.runCtx,
+    scope: world.scope,
+  });
   return value;
 };
 
@@ -75,7 +80,7 @@ describe("replay-cache safety — ① the tool is NEVER re-invoked by replay (to
 
     const history = tool.sessionHistory();
     const fresh = await buildManifoldEnv(toolset); // a fresh env, SAME toolset (same spy)
-    await replaySessionHistory(history, fresh.ambient, fresh.scope);
+    await replaySessionHistory(history, fresh.capabilities, fresh.config, fresh.runCtx, fresh.scope);
 
     // The empirical answer: the spy count is UNCHANGED — replay never called the tool again.
     expect(invocations).toBe(1);
@@ -113,7 +118,7 @@ describe("replay-cache safety — ② the ACTUAL current cost of the gap: the va
     ]);
 
     const fresh = await buildManifoldEnv(toolset);
-    const result = await replaySessionHistory(history, fresh.ambient, fresh.scope);
+    const result = await replaySessionHistory(history, fresh.capabilities, fresh.config, fresh.runCtx, fresh.scope);
     // THE GAP, PLAINLY: `priced` is neither restored to 42 nor to any placeholder — it is
     // reported as skipped, and the fresh env genuinely has no binding for it whatsoever. A
     // consumer whose per-call authorization model REQUIRES a fresh env every call (arrival-mcp's
@@ -162,7 +167,7 @@ describe("replay-cache safety — ③ probe: an INDIRECT tool call (through a he
     expect(history[0]!.toolValued).toBe(true);
 
     const fresh = await buildManifoldEnv(toolset);
-    const result = await replaySessionHistory(history, fresh.ambient, fresh.scope);
+    const result = await replaySessionHistory(history, fresh.capabilities, fresh.config, fresh.runCtx, fresh.scope);
     expect(result).toEqual({ applied: [], skipped: ["fetch-it"], failed: [] });
     // The tool was NOT re-invoked by replay (the helper's OWN body never ran — replay skipped its
     // define outright), and calling the (now-unbound) helper in the reconstructed env fails

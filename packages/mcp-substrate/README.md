@@ -29,7 +29,12 @@ const runner = createDoorsRunner({
   // state survive host world-rebuilds; omitted, each runner uses a private instance.
 });
 
-const result = await runner.run({ expr, ambient, scope, tools });
+const result = await runner.run({ expr, capabilities, config, runCtx, scope, tools });
 ```
 
-The runner is ambient/scope-lifecycle-agnostic — it holds no reference to how the ambient or scope was assembled.
+The runner is warm-pair-lifecycle-agnostic — it holds no reference to how `runCtx`/`scope` were
+assembled. `capabilities`/`config` are threaded on EVERY call (even ones reusing `runCtx`):
+`execState` rebuilds/looks up the memoized Vocabulary from `{capabilities, config}` every time,
+and a reused `runCtx`'s tuple-identity invariant checks the result against the run's ORIGINAL
+vocabulary — a mismatched tuple throws. `config` must be THE SAME object used to mint `runCtx`
+(reference identity, not a fresh per-call object).

@@ -1,35 +1,36 @@
 /**
  * The ONE run posture every CLI verb shares: the entry-point budgets (100M heap /
  * 300s wall, env-tunable — the same knobs `arrival-run` reads), the loader-armed
- * AMBIENT for require-using programs (the CUT, capability-refined: `arrivalLoaderCapability`
- * assembled once via {@link assembleAmbient}, jailed to a root dir, paired with a
- * {@link LexicalScope.fresh} session scope), and the two output surfaces — values through
- * arrival-serializer (budgeted), errors as their teaching-door TEXT (never a stack trace;
- * the doors ARE the UX).
+ * (runCtx, scope) WARM PAIR for require-using programs (the CUT, capability-refined:
+ * `arrivalLoaderCapability` minted once via {@link execState}, jailed to a root dir, paired
+ * with a {@link LexicalScope.fresh} session scope), and the two output surfaces — values
+ * through arrival-serializer (budgeted), errors as their teaching-door TEXT (never a stack
+ * trace; the doors ARE the UX).
  *
  * TWO PATHS, by the program's own shape: a require-FREE program runs the bare CUT
  * (default base, static validation available); a require-USING program runs the CUT
- * with the loader capability's ambient + a session scope (the path the loader's
+ * with the loader capability's warm pair + a session scope (the path the loader's
  * production consumers use) — a required module's forms evaluate through the
  * requiring run's COMPOSED resolver (`execExpr({ resolver })` — arrival's
  * src/loader/), so `(require …)` sees the stdlib too. The split stays because the
  * static pass cannot see require-spilled bindings (module-graph awareness is an LSP
  * problem, not v1's — see {@link usesRequire}), not because of any seal asymmetry —
- * and because the once-assembled ambient + scope keep defines + the require cache
+ * and because the once-minted runCtx + scope keep defines + the require cache
  * alive for the whole session.
  */
 import fs from "node:fs/promises";
 import path from "node:path";
 
 import {
+  disposeRunContext,
+  execState,
   LexicalScope,
+  RunContext,
   schemeToJsUntyped,
-  StaticValidationError,
-  tokenize,
-  type Diagnostic,
+  type EnvCapability,
   type SessionScope,
 } from "@inhuman.tools/arrival";
-import { assembleAmbient, type AssembledAmbient } from "@inhuman.tools/arrival/env";
+import { StaticValidationError, tokenize, type Diagnostic } from "@inhuman.tools/arrival/lsp-internals";
 import { arrivalLoaderCapability } from "@inhuman.tools/arrival/loader";
 import { toSExprString } from "@inhuman.tools/arrival-serializer";
 
@@ -58,11 +59,15 @@ export function budgets(): { budgetMs: number; heapBudget: number } {
   return { budgetMs: wallDefault(), heapBudget: heapDefault() };
 }
 
-/** The two session handles a loader-armed run continues on: a caller-owned
- *  {@link AssembledAmbient} (dispose it when the session ends) and the
- *  {@link SessionScope} its top-level `define`s land in. */
+/** The session handles a loader-armed run continues on: `capabilities`/`config` (the SAME
+ *  objects the warm `runCtx` was minted from — reference identity, the vocabulary memo + the
+ *  reused-runCtx tuple check are both identity-keyed on `config`), a caller-owned
+ *  {@link RunContext} (dispose it via {@link disposeRunContext} when the session ends), and
+ *  the {@link SessionScope} its top-level `define`s land in. */
 export interface LoaderSession {
-  readonly ambient: AssembledAmbient;
+  readonly capabilities: readonly EnvCapability[];
+  readonly config: Record<string, unknown>;
+  readonly runCtx: RunContext;
   readonly scope: SessionScope;
 }
 
@@ -72,32 +77,32 @@ export interface LoaderSession {
  * slice; `dirname: ""` makes `root` the jail root — the loader's own path
  * normalization refuses `..` escapes, and every resolved path is jail-relative,
  * re-anchored here via `path.resolve(root, p)`. The kernel wires the canonical
- * prelude `evalScheme` internally — no closure to supply here. Assembled ONCE
+ * prelude `evalScheme` internally — no closure to supply here. Minted ONCE
  * per session: `scope` accumulates defines across calls (`execState(src, {
- * ambient, scope })`, the REPL continuation idiom) and the require cache lives
- * for the ambient's lifetime — dispose it when the session (run/repl) ends.
+ * capabilities, config, runCtx, scope })`, the REPL continuation idiom) and the
+ * require cache lives for the run's lifetime — dispose it (via
+ * {@link disposeRunContext}) when the session (run/repl) ends.
  *
  * `armed` — the HOST-armed capability set (`--with` / config file, see
  * capabilities.ts): appended after the loader capability, its shared config bag
  * spread UNDER the loader's own keys (`fs`/`dirname` stay CLI-owned — a config
- * file must not re-root the require jail). `degradation: "doors"` is the
- * program-scoped posture (degradation.ts's caller split): an armed capability
- * missing an OPTIONAL enabling config key binds a cause-carrying door that
- * teaches "provide X" at the reference, instead of silently withholding into a
- * bare unbound throw. The loader itself is unaffected — `fs` is always supplied.
+ * file must not re-root the require jail). Degradation is unconditionally "doors"
+ * now (degradation.ts's mode distinction is retired — the auto-door mint is
+ * mode-independent): an armed capability missing an OPTIONAL enabling config key
+ * binds a cause-carrying door that teaches "provide X" at the reference, instead
+ * of silently withholding into a bare unbound throw. The loader itself is
+ * unaffected — `fs` is always supplied.
  */
 export async function loaderSession(root: string, name: string, armed?: ArmedCapabilities): Promise<LoaderSession> {
-  const ambient = await assembleAmbient({
-    capabilities: [arrivalLoaderCapability, ...(armed?.capabilities ?? [])],
-    config: {
-      ...armed?.config,
-      fs: { readFile: (p: string) => fs.readFile(path.resolve(root, p), "utf8") },
-      dirname: "",
-    },
-    degradation: "doors",
-  });
+  const capabilities: readonly EnvCapability[] = [arrivalLoaderCapability, ...(armed?.capabilities ?? [])];
+  const config: Record<string, unknown> = {
+    ...armed?.config,
+    fs: { readFile: (p: string) => fs.readFile(path.resolve(root, p), "utf8") },
+    dirname: "",
+  };
   const scope = LexicalScope.fresh(name);
-  return { ambient, scope };
+  const state = await execState("(begin)", { capabilities, config, scope });
+  return { capabilities, config, runCtx: state.runCtx, scope };
 }
 
 /**

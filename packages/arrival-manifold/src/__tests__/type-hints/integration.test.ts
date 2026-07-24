@@ -6,8 +6,7 @@
 // NOT the pure select/render/context-ring logic, which the sibling files in this
 // directory already pin in isolation.
 
-import { LexicalScope } from "@inhuman.tools/arrival";
-import { assembleAmbient, type AssembledAmbient } from "@inhuman.tools/arrival/env";
+import { disposeRunContext, execState, LexicalScope, RunContext } from "@inhuman.tools/arrival";
 import {
   DoorSession,
   HINT_RACE_BUDGET_MS,
@@ -29,16 +28,20 @@ import { connectServer } from "../../connect.js";
 import { createManifoldTool, type ManifoldToolOptions } from "../../manifold-tool.js";
 import { buildManifoldServer } from "../../server.js";
 
-// ONE bare ambient (no capabilities, no tools) shared across every bare `createManifoldTool`
-// call in this file — it is stateless and immutable, so sharing it costs nothing; only the
-// SCOPE needs to be fresh per call, for isolation between cases. Tests that bind real tools
-// (`buildManifoldEnv`) mint their own ambient instead and are unaffected by this one.
-let ambient: AssembledAmbient;
+// ONE bare (runCtx, capabilities, config) triple (no capabilities, no tools) shared across
+// every bare `createManifoldTool` call in this file — it is stateless and immutable, so
+// sharing it costs nothing; only the SCOPE needs to be fresh per call, for isolation
+// between cases. Tests that bind real tools (`buildManifoldEnv`) mint their own world
+// instead and are unaffected by this one.
+const capabilities: readonly [] = [];
+const config: Record<string, unknown> = {};
+let runCtx: RunContext;
 beforeAll(async () => {
-  ambient = await assembleAmbient({});
+  const state = await execState("(begin)", { capabilities, config, scope: LexicalScope.fresh("type-hints-test-mint") });
+  runCtx = state.runCtx;
 });
 afterAll(async () => {
-  await ambient.dispose();
+  await disposeRunContext(runCtx);
 });
 
 type Block = { type: string; text: string };
@@ -177,13 +180,13 @@ describe("RING-2 (integration) — manifold type-hints, through the REAL tool + 
       const { lens } = makeStubLens({ unit, diagnostics: [hitDiag] });
 
       const hintedTool = createManifoldTool(
-        { ambient, scope: LexicalScope.fresh("test") },
+        { capabilities, config, runCtx, scope: LexicalScope.fresh("test") },
         "CATALOG",
         withTypeHints({}, "on-error", lens),
       );
       const hinted = await hintedTool.call({ expr: source });
 
-      const baselineTool = createManifoldTool({ ambient, scope: LexicalScope.fresh("test") }, "CATALOG");
+      const baselineTool = createManifoldTool({ capabilities, config, runCtx, scope: LexicalScope.fresh("test") }, "CATALOG");
       const baseline = await baselineTool.call({ expr: source });
 
       // Partial success: stmt0 succeeded, stmt1 failed → isError is false (REPL-continue).
@@ -218,7 +221,7 @@ describe("RING-2 (integration) — manifold type-hints, through the REAL tool + 
       const lines: string[] = [];
       const session = new DoorSession((l) => lines.push(l));
       const tool = createManifoldTool(
-        { ambient, scope: LexicalScope.fresh("test") },
+        { capabilities, config, runCtx, scope: LexicalScope.fresh("test") },
         "CATALOG",
         withTypeHints({ session }, "off", lens),
       );
@@ -240,7 +243,7 @@ describe("RING-2 (integration) — manifold type-hints, through the REAL tool + 
       const lines: string[] = [];
       const session = new DoorSession((l) => lines.push(l));
       const tool = createManifoldTool(
-        { ambient, scope: LexicalScope.fresh("test") },
+        { capabilities, config, runCtx, scope: LexicalScope.fresh("test") },
         "CATALOG",
         withTypeHints({ session }, "telemetry", lens),
       );
@@ -266,7 +269,7 @@ describe("RING-2 (integration) — manifold type-hints, through the REAL tool + 
       const lines: string[] = [];
       const session = new DoorSession((l) => lines.push(l));
       const tool = createManifoldTool(
-        { ambient, scope: LexicalScope.fresh("test") },
+        { capabilities, config, runCtx, scope: LexicalScope.fresh("test") },
         "CATALOG",
         withTypeHints({ session }, "on-error", lens),
       );
@@ -292,7 +295,7 @@ describe("RING-2 (integration) — manifold type-hints, through the REAL tool + 
         diagnostics: [diag({ code: 2345, span: unit.statementSpans[1]! })],
         delayMs: 0,
       });
-      const tool = createManifoldTool({ ambient, scope: LexicalScope.fresh("test") }, "CATALOG", withTypeHints({}, "on-error", lens));
+      const tool = createManifoldTool({ capabilities, config, runCtx, scope: LexicalScope.fresh("test") }, "CATALOG", withTypeHints({}, "on-error", lens));
       const result = await tool.call({ expr: source });
       expect(blocksOf(result)).toHaveLength(3); // RED
     });
@@ -309,7 +312,7 @@ describe("RING-2 (integration) — manifold type-hints, through the REAL tool + 
       const lines: string[] = [];
       const session = new DoorSession((l) => lines.push(l));
       const tool = createManifoldTool(
-        { ambient, scope: LexicalScope.fresh("test") },
+        { capabilities, config, runCtx, scope: LexicalScope.fresh("test") },
         "CATALOG",
         withTypeHints({ session }, "on-error", lens),
       );
@@ -329,7 +332,7 @@ describe("RING-2 (integration) — manifold type-hints, through the REAL tool + 
 
   describe("§1/G6 — stale generation (a call-N lens result must never render for call N+1, nor leak into its telemetry)", () => {
     it("call N (slow lens) then call N+1 (fast lens) before N resolves → N+1 gets ITS OWN hint; N's stale result is discarded, never rendered, telemetry still logs it late", async () => {
-      const env = { ambient, scope: LexicalScope.fresh("test") };
+      const env = { capabilities, config, runCtx, scope: LexicalScope.fresh("test") };
       const lines: string[] = [];
       const session = new DoorSession((l) => lines.push(l));
 
@@ -390,7 +393,7 @@ describe("RING-2 (integration) — manifold type-hints, through the REAL tool + 
       const lines: string[] = [];
       const session = new DoorSession((l) => lines.push(l));
       const tool = createManifoldTool(
-        { ambient, scope: LexicalScope.fresh("test") },
+        { capabilities, config, runCtx, scope: LexicalScope.fresh("test") },
         "CATALOG",
         withTypeHints({ session }, "on-error", lens),
       );
@@ -416,7 +419,7 @@ describe("RING-2 (integration) — manifold type-hints, through the REAL tool + 
       const lines: string[] = [];
       const session = new DoorSession((l) => lines.push(l));
       const tool = createManifoldTool(
-        { ambient, scope: LexicalScope.fresh("test") },
+        { capabilities, config, runCtx, scope: LexicalScope.fresh("test") },
         "CATALOG",
         withTypeHints({ session }, "on-error", lens),
       );

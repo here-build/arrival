@@ -11,8 +11,7 @@
 // This module is a sibling to the type-hints context ring. They observe the same events
 // but project different data (original source here vs. degraded `declare const ...` there).
 
-import { execState, type LexicalScope } from "@inhuman.tools/arrival";
-import type { AssembledAmbient } from "@inhuman.tools/arrival/env";
+import { execState, type EnvCapability, type LexicalScope, type RunContext } from "@inhuman.tools/arrival";
 
 /** Detects a qualified tool name (`server/tool`) anywhere in a form.
  *
@@ -179,18 +178,23 @@ export function createLocalBindingTracker(): LocalBindingTracker {
   };
 }
 
-/** Reconstructs session state into `scope` (resolving builtins/tools through `ambient`) by
- *  replaying a history's non-tool-valued defines, in order. `ambient`/`scope` are typically a
- *  FRESH world's pair for the same toolset (e.g. a new `buildManifoldEnv` call) — replay only
- *  rebinds names into `scope`, it never builds tools or touches `ambient` otherwise. A
- *  tool-valued entry is skipped, never executed (it would re-invoke the tool) and its name is
- *  reported in `skipped` so a caller can warn that the reconstruction is not a complete replica
- *  of the original session. A statement that itself errors on replay (see `ReplayResult.failed`'s
- *  ordering caveat) is caught, never thrown — replay is best-effort and always finishes,
- *  reporting exactly what did/didn't land. */
+/** Reconstructs session state into `scope` (resolving builtins/tools through `capabilities`) by
+ *  replaying a history's non-tool-valued defines, in order. `capabilities`/`config`/`runCtx`/
+ *  `scope` are typically a FRESH world's warm pair for the same toolset (e.g. a new
+ *  `execState("(begin)", {capabilities, config, scope})` mint) — replay only rebinds names into
+ *  `scope`, it never builds tools or touches the capability base otherwise. `config` must be
+ *  THE SAME object used to mint `runCtx` (reference identity — the vocabulary memo + the
+ *  reused-runCtx tuple check are both identity-keyed on it). A tool-valued entry is skipped,
+ *  never executed (it would re-invoke the tool) and its name is reported in `skipped` so a
+ *  caller can warn that the reconstruction is not a complete replica of the original session. A
+ *  statement that itself errors on replay (see `ReplayResult.failed`'s ordering caveat) is
+ *  caught, never thrown — replay is best-effort and always finishes, reporting exactly what
+ *  did/didn't land. */
 export async function replaySessionHistory(
   entries: readonly SessionHistoryEntry[],
-  ambient: AssembledAmbient,
+  capabilities: readonly EnvCapability[],
+  config: Record<string, unknown>,
+  runCtx: RunContext,
   scope: LexicalScope,
 ): Promise<ReplayResult> {
   const applied: string[] = [];
@@ -205,7 +209,7 @@ export async function replaySessionHistory(
       // COMPLEX tier: replay only needs the scope mutation, never the values — the SIMPLE
       // tier's toJS unwrap is a pure hazard here (a strict-exit throw AFTER the define
       // already landed would misreport a successfully-applied entry as `failed`).
-      await execState(entry.source, { ambient, scope });
+      await execState(entry.source, { capabilities, config, runCtx, scope });
       applied.push(entry.name);
     } catch {
       failed.push(entry.name);

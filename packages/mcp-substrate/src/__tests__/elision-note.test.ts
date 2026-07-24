@@ -13,8 +13,7 @@
 // and permanently abandoned the REPL for python. FIX: delete the per-collection enumeration,
 // emit ONE line that says the value is INTACT.
 
-import { LexicalScope } from "@inhuman.tools/arrival";
-import { assembleAmbient, type AssembledAmbient } from "@inhuman.tools/arrival/env";
+import { LexicalScope, RunContext, disposeRunContext, execState } from "@inhuman.tools/arrival";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { AttachmentSink } from "../attachment-sink.js";
@@ -57,12 +56,15 @@ function makePlainRunner(): ReturnType<typeof createDoorsRunner> {
   });
 }
 
-let ambient: AssembledAmbient;
+const capabilities: readonly [] = [];
+const config: Record<string, unknown> = {};
+let runCtx: RunContext;
 beforeAll(async () => {
-  ambient = await assembleAmbient({});
+  const state = await execState("(begin)", { capabilities, config, scope: LexicalScope.fresh("mcp-substrate-test-mint") });
+  runCtx = state.runCtx;
 });
 afterAll(async () => {
-  await ambient.dispose();
+  await disposeRunContext(runCtx);
 });
 
 function freshScope(name: string): LexicalScope {
@@ -79,7 +81,7 @@ describe("runner.ts — elision contributes ONE line to the environment-notes bl
   it("a manifold-style 100-item array observation produces ONE environment-notes block, with a line saying the value is INTACT", async () => {
     const runner = makeElidingRunner();
     const scope = freshScope("elision-note-single");
-    const result = await runner.run({ expr: "(iota 100)", ambient, scope, tools: noTools });
+    const result = await runner.run({ expr: "(iota 100)", capabilities, config, runCtx, scope, tools: noTools });
 
     expect(result.isError).not.toBe(true);
     const noteBlocks = result.content.filter(isNotesBlock);
@@ -95,7 +97,9 @@ describe("runner.ts — elision contributes ONE line to the environment-notes bl
     const scope = freshScope("elision-note-two-forms");
     const result = await runner.run({
       expr: "(iota 100)\n(iota 200)",
-      ambient,
+      capabilities,
+      config,
+      runCtx,
       scope,
       tools: noTools,
     });
@@ -113,7 +117,7 @@ describe("runner.ts — elision contributes ONE line to the environment-notes bl
   it("no elision configured → no environment-notes block, ever", async () => {
     const runner = makePlainRunner();
     const scope = freshScope("elision-note-off");
-    const result = await runner.run({ expr: "(iota 100)", ambient, scope, tools: noTools });
+    const result = await runner.run({ expr: "(iota 100)", capabilities, config, runCtx, scope, tools: noTools });
 
     expect(result.isError).not.toBe(true);
     expect(result.content.filter(isNotesBlock)).toHaveLength(0);
@@ -122,7 +126,7 @@ describe("runner.ts — elision contributes ONE line to the environment-notes bl
   it("a small array that fits under the limits elides nothing → no environment-notes block", async () => {
     const runner = makeElidingRunner();
     const scope = freshScope("elision-note-small");
-    const result = await runner.run({ expr: "(iota 5)", ambient, scope, tools: noTools });
+    const result = await runner.run({ expr: "(iota 5)", capabilities, config, runCtx, scope, tools: noTools });
 
     expect(result.isError).not.toBe(true);
     expect(result.content.filter(isNotesBlock)).toHaveLength(0);

@@ -9,8 +9,7 @@
 // RED test per the design doc: one call producing a define + an elision + a futility note yields
 // EXACTLY ONE notes block, labelled, after the data.
 
-import { LexicalScope } from "@inhuman.tools/arrival";
-import { assembleAmbient, type AssembledAmbient } from "@inhuman.tools/arrival/env";
+import { LexicalScope, RunContext, disposeRunContext, execState } from "@inhuman.tools/arrival";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { AttachmentSink } from "../attachment-sink.js";
@@ -25,12 +24,15 @@ const noopSink: AttachmentSink = {
   drainNote: () => undefined,
 };
 
-let ambient: AssembledAmbient;
+const capabilities: readonly [] = [];
+const config: Record<string, unknown> = {};
+let runCtx: RunContext;
 beforeAll(async () => {
-  ambient = await assembleAmbient({});
+  const state = await execState("(begin)", { capabilities, config, scope: LexicalScope.fresh("mcp-substrate-test-mint") });
+  runCtx = state.runCtx;
 });
 afterAll(async () => {
-  await ambient.dispose();
+  await disposeRunContext(runCtx);
 });
 
 function freshScope(name: string): LexicalScope {
@@ -69,7 +71,7 @@ describe("runner.ts — consolidated environment-notes footer (E3)", () => {
       },
     });
     const scope = freshScope("environment-notes-consolidated");
-    const result = await runner.run({ expr: "(define x 1)\n(iota 100)", ambient, scope, tools: noTools });
+    const result = await runner.run({ expr: "(define x 1)\n(iota 100)", capabilities, config, runCtx, scope, tools: noTools });
 
     const noteBlocks = result.content.filter((b) => b.type === "text" && b.text.includes(NOTES_HEADER));
     expect(noteBlocks).toHaveLength(1);

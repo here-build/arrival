@@ -12,9 +12,8 @@
 // ("provenance-clone trap: x === y is NOT sufficient... use instance-aware checks") — the
 // runner was the one place that ignored its own rule.
 
-import { LexicalScope, type EvalTap } from "@inhuman.tools/arrival";
+import { LexicalScope, RunContext, disposeRunContext, execState, type EvalTap } from "@inhuman.tools/arrival";
 import { AValue } from "@inhuman.tools/arrival/reflect-internals";
-import { assembleAmbient, type AssembledAmbient } from "@inhuman.tools/arrival/env";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { AttachmentSink } from "../attachment-sink.js";
@@ -36,12 +35,15 @@ function makeRunner(): ReturnType<typeof createDoorsRunner> {
   });
 }
 
-let ambient: AssembledAmbient;
+const capabilities: readonly [] = [];
+const config: Record<string, unknown> = {};
+let runCtx: RunContext;
 beforeAll(async () => {
-  ambient = await assembleAmbient({});
+  const state = await execState("(begin)", { capabilities, config, scope: LexicalScope.fresh("mcp-substrate-test-mint") });
+  runCtx = state.runCtx;
 });
 afterAll(async () => {
-  await ambient.dispose();
+  await disposeRunContext(runCtx);
 });
 
 function freshScope(name: string): LexicalScope {
@@ -77,7 +79,9 @@ describe("runner.ts — void results re-stamped by a tap must never render as 'u
     const scope = freshScope("void-provenance-leak-plain");
     const result = await runner.run({
       expr: "(if #f #f)",
-      ambient,
+      capabilities,
+      config,
+      runCtx,
       scope,
       tools: noTools,
       tap: makeRestampingTap(),
@@ -93,7 +97,9 @@ describe("runner.ts — void results re-stamped by a tap must never render as 'u
     const scope = freshScope("void-provenance-leak-define");
     const result = await runner.run({
       expr: "(define x (if #f #f))",
-      ambient,
+      capabilities,
+      config,
+      runCtx,
       scope,
       tools: noTools,
       tap: makeRestampingTap(),

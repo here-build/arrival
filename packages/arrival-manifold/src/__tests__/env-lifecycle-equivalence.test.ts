@@ -74,7 +74,13 @@ async function runFreshEnvWithReplay(programsPerCall: readonly string[]): Promis
   const results: string[][] = [];
   for (const program of programsPerCall) {
     const manifoldEnv = await buildManifoldEnv([]); // a BRAND-NEW world every call — no identity carried over
-    await replaySessionHistory(runningHistory.entries(), manifoldEnv.ambient, manifoldEnv.scope);
+    await replaySessionHistory(
+      runningHistory.entries(),
+      manifoldEnv.capabilities,
+      manifoldEnv.config,
+      manifoldEnv.runCtx,
+      manifoldEnv.scope,
+    );
     const tool = createManifoldTool(manifoldEnv, "CATALOG"); // a BRAND-NEW tool instance too
     results.push(textsOf(await tool.call({ expr: program })));
     // Fold this call's OWN new defines into the running (session-scoped) history — same
