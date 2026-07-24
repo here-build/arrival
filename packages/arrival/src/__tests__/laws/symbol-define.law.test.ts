@@ -15,7 +15,7 @@
  * No pack migrates in this wave — every capability here is test-local.
  */
 import { describe, expect, it } from "vitest";
-import { symbol } from "../../common/symbol.js";
+import { symbol } from "../../symbol/index.js";
 import { EnvCapability } from "../../common/capability.js";
 import { execOverFrame, execStateOverFrame } from "../../eval/generator-exec.js";
 import { applyCapability, freshEnv } from "../_fresh-env.js";
@@ -35,8 +35,7 @@ describe("symbol.define — bake round-trip, two-phase order, sequential-RHS, co
           `(lambda (n) (bump n))`,
         );
         return { bump, "use-bump": useBump };
-      },
-    });
+      } });
     await applyCapability(env, [cap]);
 
     const [result] = await execOverFrame(`(use-bump 41)`, { env });
@@ -53,8 +52,7 @@ describe("symbol.define — bake round-trip, two-phase order, sequential-RHS, co
           `base-value`,
         );
         return { "base-value": base, "derived-value": derived };
-      },
-    });
+      } });
     await applyCapability(env, [cap]);
 
     const [result] = await execOverFrame(`derived-value`, { env });
@@ -71,9 +69,7 @@ describe("symbol.define — bake round-trip, two-phase order, sequential-RHS, co
         "strict-add1": symbol.define`strict-add1: contract-enforced identity`(
           { input: [z.number], output: [z.number] },
           `(lambda (n) n)`,
-        ),
-      }),
-    });
+        ) }) });
     await applyCapability(env, [cap]);
 
     // A STRING where a number is contracted — the scheme-face z.decode must reject it
@@ -89,9 +85,7 @@ describe("symbol.define — bake round-trip, two-phase order, sequential-RHS, co
           { input: [z.number], output: [z.number] },
           `(lambda (n) n)`,
           { validate: false },
-        ),
-      }),
-    });
+        ) }) });
     await applyCapability(env, [cap]);
     // Passing a STRING (not a number) does NOT throw at the contract boundary —
     // it flows straight through to the lambda, which just returns it unchanged.
@@ -102,8 +96,7 @@ describe("symbol.define — bake round-trip, two-phase order, sequential-RHS, co
   it("a CONSTANT define (bare ZodType contract) validates ONCE at bake and binds a plain value", async () => {
     const env = await freshEnv();
     const cap = EnvCapability.define("test/define-constant", {
-      symbols: (symbol, z) => ({ "the-answer": symbol.define`the-answer: a constant`(z.number, `42`) }),
-    });
+      symbols: (symbol, z) => ({ "the-answer": symbol.define`the-answer: a constant`(z.number, `42`) }) });
     await applyCapability(env, [cap]);
     const [result] = await execOverFrame(`the-answer`, { env });
     expect(result).toBe(42);
@@ -115,9 +108,7 @@ describe("symbol.define — the §2.1 bake FV locality law (the drift door)", ()
     const env = await freshEnv();
     const cap = EnvCapability.define("test/define-fv-drift", {
       symbols: (symbol, z) => ({
-        "bad-ref": symbol.define`bad-ref: references an undeclared free name`(z.number, `undeclared-free-name`),
-      }),
-    });
+        "bad-ref": symbol.define`bad-ref: references an undeclared free name`(z.number, `undeclared-free-name`) }) });
     await expect(applyCapability(env, [cap])).rejects.toThrow(DefineLocalityError);
   });
 
@@ -131,8 +122,7 @@ describe("symbol.define — the §2.1 bake FV locality law (the drift door)", ()
           `(lambda (n) (fv-helper n))`,
         );
         return { "fv-helper": helper, "fv-uses": uses };
-      },
-    });
+      } });
     await expect(applyCapability(env, [cap])).resolves.not.toThrow();
   });
 
@@ -145,9 +135,7 @@ describe("symbol.define — the §2.1 bake FV locality law (the drift door)", ()
         "control-flow": symbol.define`control-flow: uses if/let, no deps declared`(
           { input: [z.number], output: [z.number] },
           `(lambda (n) (if #t (let ((doubled n)) doubled) 0))`,
-        ),
-      }),
-    });
+        ) }) });
     await expect(applyCapability(env, [cap])).resolves.not.toThrow();
   });
 
@@ -167,9 +155,7 @@ describe("symbol.define — the §2.1 bake FV locality law (the drift door)", ()
         "first-of-pair": symbol.define`first-of-pair: bare car, no deps`(
           { input: [z.schemeValue], output: [z.schemeValue] },
           `(lambda (p) (car p))`,
-        ),
-      }),
-    });
+        ) }) });
     await expect(applyCapability(env, [cap])).resolves.not.toThrow();
   });
 
@@ -180,9 +166,7 @@ describe("symbol.define — the §2.1 bake FV locality law (the drift door)", ()
         "second-of-pair": symbol.define`second-of-pair: bare cadr, no deps`(
           { input: [z.schemeValue], output: [z.schemeValue] },
           `(lambda (p) (cadr p))`,
-        ),
-      }),
-    });
+        ) }) });
     await expect(applyCapability(env, [cap])).resolves.not.toThrow();
   });
 
@@ -192,9 +176,7 @@ describe("symbol.define — the §2.1 bake FV locality law (the drift door)", ()
     // over-forgiven by the new allowlist branch.
     const cap = EnvCapability.define("test/define-cxr-lookalike", {
       symbols: (symbol, z) => ({
-        "bad-cxr-lookalike": symbol.define`bad-cxr-lookalike: "cars" is not a real cxr name`(z.schemeValue, `cars`),
-      }),
-    });
+        "bad-cxr-lookalike": symbol.define`bad-cxr-lookalike: "cars" is not a real cxr name`(z.schemeValue, `cars`) }) });
     await expect(applyCapability(env, [cap])).rejects.toThrow(DefineLocalityError);
   });
 });
@@ -207,8 +189,7 @@ describe("symbol.define — §2.3's eager-forward-reference door", () => {
         const early = symbol.define`early-eager: eagerly references a LATER sibling`(z.number, `later-sibling`);
         const later = symbol.define`later-sibling: an eager constant`(z.number, `5`);
         return { "early-eager": early, "later-sibling": later };
-      },
-    });
+      } });
     await expect(applyCapability(env, [cap])).rejects.toThrow(DefineForwardReferenceError);
   });
 
@@ -225,8 +206,7 @@ describe("symbol.define — §2.3's eager-forward-reference door", () => {
           `(lambda () 7)`,
         );
         return { "late-binder": early, "later-value": later };
-      },
-    });
+      } });
     await applyCapability(env, [cap]);
     const [result] = await execOverFrame(`(late-binder)`, { env });
     expect(result).toBe(7);
@@ -241,9 +221,7 @@ describe("symbol.define — §1.4 derived provenance role + its drift door", () 
         "pure-thing": symbol.define`pure-thing: a pure lambda, no ports`(
           { input: [z.number], output: [z.number] },
           `(lambda (n) n)`,
-        ),
-      }),
-    });
+        ) }) });
     await applyCapability(env, [cap]);
     const proc = env.get("pure-thing") as { provenanceRole?: string };
     expect(proc.provenanceRole).toBe("pipe");
@@ -260,8 +238,7 @@ describe("symbol.define — §1.4 derived provenance role + its drift door", () 
           `(lambda () (mint-source))`,
         );
         return { "mint-source": mint, "wraps-source": wraps };
-      },
-    });
+      } });
     await applyCapability(env, [cap]);
     const proc = env.get("wraps-source") as { provenanceRole?: string };
     expect(proc.provenanceRole).toBe("opaque");
@@ -277,8 +254,7 @@ describe("symbol.define — §1.4 derived provenance role + its drift door", () 
           `(lambda () (mint-source-2))`,
         );
         return { "mint-source-2": mint, "liar-pipe": liar };
-      },
-    });
+      } });
     await expect(applyCapability(env, [cap])).rejects.toThrow(ProvenanceRoleShapeError);
   });
 
@@ -289,9 +265,7 @@ describe("symbol.define — §1.4 derived provenance role + its drift door", () 
         "honest-pipe": symbol.define`honest-pipe: declares "pipe" and IS pipe`(
           { input: [z.number], output: [z.number], provenance: "pipe" },
           `(lambda (n) n)`,
-        ),
-      }),
-    });
+        ) }) });
     await expect(applyCapability(env, [cap])).resolves.not.toThrow();
   });
 });
@@ -312,8 +286,7 @@ describe("symbol.defineSyntax — macro binds + expands (§1.5)", () => {
           "(lambda (expr) `(begin ,expr ,expr))",
         );
         return { "bump!": bump, "my-twice": myTwice };
-      },
-    });
+      } });
     await applyCapability(env, [cap]);
 
     const [result] = await execOverFrame(`(my-twice (bump!))`, { env });
@@ -325,8 +298,7 @@ describe("symbol.defineSyntax — macro binds + expands (§1.5)", () => {
     const def = symbol.defineSyntax`plain: default attribute`("(lambda (x) x)");
     expect(def.macroAttribute).toBe("opaque");
     const binder = symbol.defineSyntax`receive-like: a binder macro`("(lambda (formals expr) expr)", {
-      macroAttribute: "binder",
-    });
+      macroAttribute: "binder" });
     expect(binder.macroAttribute).toBe("binder");
   });
 });

@@ -21,7 +21,7 @@
  * are the container's OWN charge, not budget exhaustion from test setup).
  */
 import { describe, expect, it } from "vitest";
-import * as z from "../../common/scheme-zod.js";
+import * as z from "../../common/scheme-zod/index.js";
 import { CONSTANT_CTX, RunContext } from "../../run/RunContext.js";
 import { APair } from "../../values/primitives/APair.js";
 import { AExact } from "../../values/primitives/AExact.js";

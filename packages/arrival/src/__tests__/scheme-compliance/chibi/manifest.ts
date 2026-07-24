@@ -253,8 +253,7 @@ function blockMembers(
       name: normalizeText(text).slice(0, 200),
       symbols: datumSymbols(child),
       nested: true,
-      slot: members.length,
-    });
+      slot: members.length });
   }
   return members;
 }
@@ -529,8 +528,7 @@ export async function buildManifestFromForms(corpusPath: string, rawForms: reado
         sectionPath: [...sectionStack],
         text: raw.text,
         line: raw.line,
-        readerError: e instanceof Error ? e.message : String(e),
-      });
+        readerError: e instanceof Error ? e.message : String(e) });
       continue;
     }
     if (parsed.length !== 1) {
@@ -541,8 +539,7 @@ export async function buildManifestFromForms(corpusPath: string, rawForms: reado
         sectionPath: [...sectionStack],
         text: raw.text,
         line: raw.line,
-        readerError: `structural slice parsed to ${parsed.length} datums, expected exactly 1`,
-      });
+        readerError: `structural slice parsed to ${parsed.length} datums, expected exactly 1` });
       continue;
     }
     const form = parsed[0];
@@ -576,8 +573,7 @@ export async function buildManifestFromForms(corpusPath: string, rawForms: reado
         line: raw.line,
         name: normalizeText(raw.text).slice(0, 200),
         symbols: datumSymbols(form),
-        nested: false,
-      };
+        nested: false };
       steps.push(test);
       tests.push(test);
       continue;
@@ -598,8 +594,7 @@ export async function buildManifestFromForms(corpusPath: string, rawForms: reado
           sectionPath,
           text: raw.text,
           line: raw.line,
-          members,
-        });
+          members });
         tests.push(...members);
         continue;
       }

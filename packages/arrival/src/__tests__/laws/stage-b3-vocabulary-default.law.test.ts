@@ -1,11 +1,11 @@
 /**
  * LAW — Stage B3 (docs/plans/stage-b-runcontext-absorbs-assembly.md, §Sub-stages "B3 —
  * consumers migrate") introduced the self-hosted vocabulary path as `exec`'s DEFAULT, alongside
- * a `{ ambient }` KEEP-LEGACY escape hatch to the old `lower()`/`assembleEnv`/`instantiate`
+ * a `{ ambient }` retired ambient escape hatch to the old `lower()`/`assembleEnv`/`instantiate`
  * ambient. STAGE C CUT 3b (docs/plans/stage-c-corpse-deletion.md, "the massacre") retired that
  * escape hatch along with the ambient path itself — the vocabulary path is now the ONLY path,
  * so this file's original LAW 1 ("default-path equivalence: vocabulary vs ambient") and the
- * router pin's KEEP-LEGACY row have no surviving counterpart (there is nothing left to be
+ * router pin's retired ambient row have no surviving counterpart (there is nothing left to be
  * equivalent TO, and no second branch a router could route to) and are dropped. What survives,
  * unaffected by the router's collapse (neither pins ambient/glass at all):
  *
@@ -64,7 +64,7 @@ describe("LAW 2 — runCtx reuse: tuple-identity invariant", () => {
   });
 
   it("reusing a bare-minted RunContext (no .vocabulary at all) also mismatches", async () => {
-    const cap = EnvCapability.define("law/b3-runctx-legacy", { symbols: () => ({}) });
+    const cap = EnvCapability.define("law/b3-runctx-empty", { symbols: () => ({}) });
     // Bare `new RunContext(...)` — carries no vocabulary handle.
     const bareRunCtx = new RunContext({});
     await expect(
@@ -85,9 +85,7 @@ describe("LAW 2 — runCtx reuse: tuple-identity invariant", () => {
             bumps++;
             return "ok";
           },
-        ),
-      }),
-    });
+        ) }) });
     const capabilities = [cap];
     const config = {};
 
@@ -100,8 +98,7 @@ describe("LAW 2 — runCtx reuse: tuple-identity invariant", () => {
       capabilities: [...capabilities, ...BASE_ROSTER],
       config,
       evalScheme: realEvalScheme,
-      evalPrelude: realEvalPrelude,
-    });
+      evalPrelude: realEvalPrelude });
     expect(bumps).toBe(1); // the pre-mint's own prelude pass
 
     try {
@@ -131,9 +128,7 @@ describe("LAW 3 — static validation on the vocabulary path", () => {
         "gated/verb": symbol.native`gated/verb: requires fs`(
           { input: [], output: [sz.schemeValue], requiresConfig: ["fs"] },
           () => nil,
-        ),
-      }),
-    });
+        ) }) });
 
     let caught: unknown;
     try {
@@ -154,9 +149,7 @@ describe("LAW 3 — static validation on the vocabulary path", () => {
         "gated/verb": symbol.native`gated/verb: requires fs`(
           { input: [], output: [sz.schemeValue], requiresConfig: ["fs"] },
           () => nil,
-        ),
-      }),
-    });
+        ) }) });
     await expect(
       exec("(gated/verb)", { capabilities: [cap], config: { fs: { x: 1 } }, staticValidation: "on" }),
     ).resolves.toBeDefined();

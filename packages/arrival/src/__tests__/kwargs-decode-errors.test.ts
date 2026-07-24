@@ -12,27 +12,26 @@
 // line with no heuristics (the own-decode clue family, design doc §2.5).
 //
 // Harness: mirrors common/__tests__/kwargs-runtime.test.ts's UNIT plane — a `symbol.rosetta`
-// kwargs contract exercised directly via `rosettaContract(def).run.call(testCallCtx(), ...pluck pairs...)`,
+// kwargs contract exercised directly via `fire(def, testCallCtx(), ...pluck pairs...)`,
 // no evaluator round trip needed to reach the decode chokepoint.
 
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../run/RunContext.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
-import { symbol, testCallCtx } from "../common/symbol.js";
-import { type RosettaSymbolDef } from "../common/symbols/_bake.js";
-
-/** Test-only cast — see symbol.test.ts's own copy of this helper for the full rationale
- *  (Stage A2: `symbol.rosetta` mints the ARosettaProcedure directly; `.run` rides `.contract`). */
-function rosettaContract(v: { contract: unknown }): RosettaSymbolDef {
-  return v.contract as RosettaSymbolDef;
-}
-import * as z from "../common/scheme-zod.js";
+import { symbol, testCallCtx } from "../symbol/index.js";
+import * as z from "../common/scheme-zod/index.js";
 
 /** Build a keyword `ASymbol` exactly as evaluating `:key` now does (self-evaluating —
  *  keyword-tagless-apply.md) — the SAME helper kwargs-runtime.test.ts's UNIT plane uses. */
 function pluck(key: string): unknown {
   return new ASymbol(`:${key}`);
+}
+
+
+/** Invoke a baked rosetta procedure via its apply term (the sole membrane spine). */
+function fire(proc: { ["arrival/tagless-final/apply"](args: any[], callCtx: any): any }, callCtx: any, ...args: any[]) {
+  return proc["arrival/tagless-final/apply"](args, callCtx);
 }
 
 describe("kwargs decode rejection — humanized frozen shape (docs/args-error-reporting-v2.md §2.5)", () => {
@@ -50,7 +49,7 @@ describe("kwargs decode rejection — humanized frozen shape (docs/args-error-re
       );
       let caught: unknown;
       try {
-        await rosettaContract(def).run.call(testCallCtx(), pluck("query"), new AString("King Saud University"));
+        await fire(def, testCallCtx(), pluck("query"), new AString("King Saud University"));
       } catch (e) {
         caught = e;
       }
@@ -76,7 +75,7 @@ describe("kwargs decode rejection — humanized frozen shape (docs/args-error-re
         (args) => `${args.query}:${args.pageSize}`,
       );
       await expect(
-        rosettaContract(def).run.call(
+        fire(def, 
           testCallCtx(),
           pluck("query"),
           new AString("King Saud University"),
@@ -104,7 +103,7 @@ describe("kwargs decode rejection — humanized frozen shape (docs/args-error-re
       let caught: unknown;
       try {
         // Zero args — both required kwargs missing.
-        await rosettaContract(def).run.call(testCallCtx());
+        await fire(def, testCallCtx());
       } catch (e) {
         caught = e;
       }

@@ -66,9 +66,7 @@ function crossRunCapability() {
         function (this: CallCtx, thunk) {
           return applyCallback(thunk, [], this) as unknown as never;
         },
-      ),
-    }),
-  });
+      ) }) });
   return cap;
 }
 
@@ -79,15 +77,13 @@ describe("LAW — call-time runCtx: configuration follows the INVOKING run", () 
     // Run A: mint + stash a closure whose body dispatches `read-config`.
     const [captured] = await exec("(capture! (lambda () (read-config)))", {
       capabilities: [cap],
-      config: { greeting: "run-A" },
-    });
+      config: { greeting: "run-A" } });
     expect(captured).toBeDefined();
 
     // Run B: invoke it. The body's `read-config` must see B's config, not A's.
     const [viaB] = await exec("(invoke-held)", {
       capabilities: [cap],
-      config: { greeting: "run-B" },
-    });
+      config: { greeting: "run-B" } });
     expect(viaB).toBe("run-B");
   });
 
@@ -98,13 +94,11 @@ describe("LAW — call-time runCtx: configuration follows the INVOKING run", () 
     // (its def-time ctx is B's substituted bodyCtx) and applies it immediately via `apply-now`.
     await exec("(capture! (lambda () (apply-now (lambda () (read-config)))))", {
       capabilities: [cap],
-      config: { greeting: "run-A" },
-    });
+      config: { greeting: "run-A" } });
 
     const [viaB] = await exec("(invoke-held)", {
       capabilities: [cap],
-      config: { greeting: "run-B" },
-    });
+      config: { greeting: "run-B" } });
     expect(viaB).toBe("run-B");
   });
 });
@@ -117,8 +111,7 @@ describe("LAW — call-time runCtx: strict follows the INVOKING run", () => {
     await exec("(capture! (lambda () (car (quote ()))))", {
       capabilities: [cap],
       config: {},
-      strict: false,
-    });
+      strict: false });
 
     // Invoked under strict B: the body's car-of-nil must throw the R7RS pair typecheck.
     await expect(
@@ -131,8 +124,7 @@ describe("LAW — call-time runCtx: strict follows the INVOKING run", () => {
     await exec("(capture! (lambda () (car (quote ()))))", {
       capabilities: [cap],
       config: {},
-      strict: false,
-    });
+      strict: false });
     // Tolerant B: car-of-nil resolves to nil, no throw.
     await expect(
       exec("(invoke-held)", { capabilities: [cap], config: {}, strict: false }),
@@ -147,15 +139,13 @@ describe("LAW — call-time runCtx: allocation charges the INVOKING run's meter"
     // Run A carries no heapBudget → no meter; minting the closure charges nothing.
     await exec("(capture! (lambda () (map (lambda (x) x) (quote (0 1 2 3 4 5 6 7 8 9)))))", {
       capabilities: [cap],
-      config: {},
-    });
+      config: {} });
 
     // Run B: generous budget so the run completes; assert B's meter absorbed the body's charge.
     const stateB = await execState("(invoke-held)", {
       capabilities: [cap],
       config: {},
-      heapBudget: 1_000_000,
-    });
+      heapBudget: 1_000_000 });
     expect(stateB.runCtx.heapMeter?.used ?? 0).toBeGreaterThan(0);
   });
 
@@ -163,8 +153,7 @@ describe("LAW — call-time runCtx: allocation charges the INVOKING run's meter"
     const cap = crossRunCapability();
     await exec("(capture! (lambda () (map (lambda (x) x) (quote (0 1 2 3 4 5 6 7 8 9)))))", {
       capabilities: [cap],
-      config: {},
-    });
+      config: {} });
     await expect(
       exec("(invoke-held)", { capabilities: [cap], config: {}, heapBudget: 2 }),
     ).rejects.toThrow(/heap budget exceeded/);

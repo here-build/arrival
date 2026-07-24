@@ -47,8 +47,7 @@ const arbExpr = fc.letrec((tie) => ({
     fc.tuple(tie("expr"), tie("expr")).map(([a, b]) => `(- ${a} ${b})`),
     fc.tuple(tie("expr"), tie("expr")).map(([a, b]) => `(* ${a} ${b})`),
     fc.tuple(tie("expr"), tie("expr"), tie("expr")).map(([p, t, e]) => `(if ${p} ${t} ${e})`),
-  ),
-})).expr as fc.Arbitrary<string>;
+  ) })).expr as fc.Arbitrary<string>;
 
 /**
  * Whitelist of expected runtime errors — anything outside this list is a real

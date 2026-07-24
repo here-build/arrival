@@ -10,6 +10,10 @@
 import { describe, expect, it } from "vitest";
 import { freshEnv } from "./_fresh-env.js";
 import { execStateOverFrame as execState } from "../eval/generator-exec.js";
+import { ANativeProcedure } from "../values/primitives/ANativeProcedure.js";
+import { AExact } from "../values/primitives/AExact.js";
+import { theVoid } from "../values/primitives/AVoid.js";
+import type { SchemeValue } from "../values/types.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
 import { bindValue } from "../env/AmbientRuntime.js";
 
@@ -18,10 +22,26 @@ const env = await freshEnv();
 // e.g. list "(2 4 6)") — a boxed-state read, not the SIMPLE tier's plain-JS exit.
 const run = async (form: string) => String((await execState(form, { env })).values[0]);
 
-// An async proc: a JS function returning a resolved Promise. Mirrors a
-// membrane-crossing callback whose body awaits an async boundary.
-bindValue(env, "async-double", async (x: { valueOf(): number }) => Number(x.valueOf()) * 2);
-bindValue(env, "async-noop", async () => 0);
+// An async ANativeProcedure returning a Promise — mirrors a membrane-crossing callback.
+// W8: bare host fns are doored at bindValue.
+bindValue(
+  env,
+  "async-double",
+  new ANativeProcedure({
+    name: "async-double",
+    arity: { min: 1, max: 1 },
+    contract: undefined,
+    impl: async (args) => new AExact(Number((args[0] as { valueOf(): number }).valueOf()) * 2) }),
+);
+bindValue(
+  env,
+  "async-noop",
+  new ANativeProcedure({
+    name: "async-noop",
+    arity: { min: 0, max: null },
+    contract: undefined,
+    impl: async () => theVoid }),
+);
 
 describe("vector/string map+for-each await async procs (no raw Promise leak)", () => {
   it("vector-map with an async proc yields settled values, not [object Promise]", async () => {
@@ -34,7 +54,15 @@ describe("vector/string map+for-each await async procs (no raw Promise leak)", (
 
   it("string-map with an async proc yields settled chars, not [object Promise]", async () => {
     // identity-ish async proc over chars
-    bindValue(env, "async-char", async (c: unknown) => c);
+    bindValue(
+      env,
+      "async-char",
+      new ANativeProcedure({
+        name: "async-char",
+        arity: { min: 1, max: 1 },
+        contract: undefined,
+        impl: async (args) => args[0] as SchemeValue }),
+    );
     const out = await run(`(string-map async-char "abc")`);
     expect(out).not.toMatch(/\[object Promise\]/);
   });

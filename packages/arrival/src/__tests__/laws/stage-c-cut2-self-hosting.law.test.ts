@@ -8,7 +8,7 @@
  *   • folds `BASE_ROSTER` (env/base-roster.ts — NATIVE_PACKS + BASE_PACKS) into EVERY vocabulary
  *     tuple (`execStateViaVocabulary`'s `effectiveCapabilities`), so base stdlib symbols are
  *     ordinary members of the tuple's own C3 closure, never resolved by parenting on `user_env`;
- *   • reroutes a bare `exec(code)` (no capabilities, no env, no KEEP-LEGACY ask) onto this SAME
+ *   • reroutes a bare `exec(code)` (no capabilities, no env, no retired ambient opt-in) onto this SAME
  *     self-hosted path — the degenerate `BASE_ROSTER`-only tuple;
  *   • memoizes the sealed chain ONCE per `Vocabulary` object (`sealedVocabularyChain`,
  *     generator-exec.ts) instead of re-binding it every run;
@@ -90,16 +90,14 @@ describe("LAW 4 — self-hosted stdlib: one chain, no user_env parenting", () =>
   it("a { capabilities } run resolves BOTH its own capability's symbol and base stdlib through one chain", async () => {
     const cap = EnvCapability.define("law/cut2-self-hosting", {
       symbols: (symbol, z) => ({
-        "cut2/double": symbol.rosetta`cut2/double: doubles a number`({ input: [z.number], output: [z.number] }, (n: number) => n * 2),
-      }),
-    });
+        "cut2/double": symbol.rosetta`cut2/double: doubles a number`({ input: [z.number], output: [z.number] }, (n: number) => n * 2) }) });
     const [own, stdlib] = await exec("(cut2/double 21) (map (lambda (x) x) (list 1))", { capabilities: [cap] });
     expect(own).toBe(42);
     expect(stdlib).toEqual([1]);
   });
 
   // STAGE C CUT 3b: the "a value bound directly onto the real `user_env` is invisible" row is
-  // DROPPED — `user_env` (the realm singleton the cornerstone names as the legacy sin) is
+  // DROPPED — `user_env` (the realm singleton the cornerstone names as the hermetic violation) is
   // retired entirely, not merely unwalked. There is no longer a live frame to bind a leak
   // witness onto at all, so the invariant this row probed is now true by construction (no
   // parenting chain exists to leak through), not something a running program can still observe.

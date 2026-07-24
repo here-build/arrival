@@ -8,7 +8,7 @@
  * `buildVocabulary(BASE_ROSTER)` (`env/base-roster.ts`). THE CORNERSTONE (ledger): ambient and
  * global/lexical scope are separate SPECIES — a mutable realm frame playing double duty (defines
  * ACCUMULATING across unrelated bare-exec calls, purely because they happened to share one
- * process-wide singleton) was the legacy sin this cut retires, not a feature worth preserving.
+ * process-wide singleton) was the hermetic violation this cut retires, not a feature worth preserving.
  *
  * Two properties this file now pins instead:
  *   1. ISOLATION — two SEPARATE bare `exec` calls do NOT share top-level defines (each gets its

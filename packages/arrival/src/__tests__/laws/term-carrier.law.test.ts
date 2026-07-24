@@ -334,8 +334,7 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
           AJSArray: "append",
           AString: "string-append",
           ADict: "append",
-          ABytevector: "bytevector-append",
-        };
+          ABytevector: "bytevector-append" };
         const verb = concatVerb[carrier.carrier];
         const isString = carrier.carrier === "AString";
         // AJSArray LEFT this set on 2026-07-14 (the AJSArrayList rework). `append` now takes the

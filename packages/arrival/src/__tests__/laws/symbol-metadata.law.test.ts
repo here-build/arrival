@@ -19,10 +19,11 @@ import { describe, expect, it } from "vitest";
 
 import { z as hostZod } from "zod";
 
-import * as z from "../../common/scheme-zod.js";
-import { symbol } from "../../common/symbol.js";
+import * as z from "../../common/scheme-zod/index.js";
+import { symbol } from "../../symbol/index.js";
 import { resolveMetadata, staticMetadata } from "../../common/symbols/metadata.js";
-import type { NativeSymbolDef, RosettaSymbolDef } from "../../common/symbols/_bake.js";
+import type { NativeSymbolDef } from "../../values/primitives/ANativeProcedure.js";
+import type { RosettaSymbolDef } from "../../common/symbols/_bake.js";
 import type { Activation } from "../../common/capability.js";
 
 const zz = { string: z.string, number: z.number };
@@ -43,9 +44,7 @@ describe("factory stamping — the metadata bag reaches the def (the closed drop
         dynamicDescription: function () {
           fired += 1;
           return "live";
-        },
-      },
-    });
+        } } });
     expect(contractOf<RosettaSymbolDef>(def).metadata?.description).toBe("static text");
     expect(typeof contractOf<RosettaSymbolDef>(def).metadata?.dynamicDescription).toBe("function"); // the discriminant
     expect(fired).toBe(0); // bake resolved NOTHING
@@ -53,8 +52,7 @@ describe("factory stamping — the metadata bag reaches the def (the closed drop
 
   it("symbol.native carries the same optional bag", () => {
     const def = symbol.native`law/meta-native: doc`({ input: [zz.number], output: [zz.number] }, (n) => n, {
-      metadata: { docUrl: "https://example.test" },
-    });
+      metadata: { docUrl: "https://example.test" } });
     expect(contractOf<NativeSymbolDef>(def).metadata?.docUrl).toBe("https://example.test");
   });
 
@@ -77,8 +75,7 @@ describe("resolveMetadata — the unit surface (fake activation, no assembly)", 
         description: "static",
         endpoint: function (this: { configuration: { url: string } }) {
           return this.configuration.url;
-        },
-      },
+        } },
       activation,
     );
     expect(resolved).toEqual({ description: "static", endpoint: "https://cfg" });

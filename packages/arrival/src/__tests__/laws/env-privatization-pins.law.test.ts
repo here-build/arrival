@@ -158,23 +158,15 @@ describe("write-into-scope + override VALUE-INJECTION parity", () => {
   });
 });
 
-describe("V6 pin — defineRosetta hard-delete (docs/working-proposals/arrival-environment-privatization.md's own V3-V5 precedent, applied to the authoring METHOD)", () => {
-  // The PUBLIC method is gone from both producer surfaces: the concrete class (no instance
-  // ever answers `.defineRosetta`) and the structural `SchemeEnv` contract every pack/consumer
-  // types against (so a NEW `env.defineRosetta(...)` call site is a compile error everywhere,
-  // not just at this one class). The legacy AUTHORING SHAPE (`RosettaSpec`) survives unchanged;
-  // only the method that consumed it is deleted. `AmbientRuntime.ts`'s internal `bindRosetta` is
-  // the sole surviving wiring, reachable only from `provenance/replay.ts`'s playback frame
-  // (`common/capability.ts`'s legacy `{ fn }` bind arm — the OTHER historical producer — died
-  // with `lower()`, Stage C Cut 4, and with it `RosettaFunction`'s `options`/`type`/`pure` fields,
-  // TRAILS CLEANUP Tier 1 — the sole remaining producer never passed them) — never
-  // barrel-exported, never a `SchemeEnv` member.
+describe("V6 pin — no public host-fn registration method on AmbientRuntime / SchemeEnv", () => {
+  // Public defineRosetta is gone on the class and the SchemeEnv contract (compile error
+  // everywhere). Surviving wiring is module-internal bindRosetta only — never barrel-exported.
   it("AmbientRuntime.prototype.defineRosetta no longer exists", () => {
     expect("defineRosetta" in AmbientRuntime.prototype).toBe(false);
   });
 
   it("a live env instance answers to `get` but not `defineRosetta` (nor `set`/`inherit`/`merge` — the V7/V8 rows)", () => {
-    const env = mintFrame(sandboxedEnv, "pin-defineRosetta-gone");
+    const env = mintFrame(sandboxedEnv, "pin-host-fn-reg-gone");
     expect(typeof env.get).toBe("function");
     expect("defineRosetta" in env).toBe(false);
   });
@@ -219,8 +211,7 @@ describe("V7 pin — the MONADIC contract (hermetic-Environment ruling, 2026-07-
     const root = LexicalScope.fresh("pin-resolver-boxed");
     root.env.registerResolver({
       id: "boxed-answerer",
-      resolve: (n, ctx) => (n === "greeting" ? jsToScheme(ctx ?? CONSTANT_CTX, "hello", {}) : undefined),
-    });
+      resolve: (n, ctx) => (n === "greeting" ? jsToScheme(ctx ?? CONSTANT_CTX, "hello", {}) : undefined) });
     const [v] = await exec('(string-append greeting "!")', { scope: root });
     expect(v).toBe("hello!");
   });

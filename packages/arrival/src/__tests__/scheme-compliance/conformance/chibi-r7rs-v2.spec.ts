@@ -12,6 +12,9 @@
  *      symbol classification → an ordered `Manifest` of steps.
  *   2. `CorpusRunner.create` (top-level await) — one shared, capability-assembled env; the
  *      runner drives `exec()` per step on demand, cursor-guarded against out-of-order calls.
+ *      Dual-pass foundation (M5): pass `{ strict: true }` for Pass A (R7RS goldens). This
+ *      file still uses the default loose mode; SRFI-1 is the first corpus on Pass A
+ *      (`chibi-srfi1.spec.ts`). See conformance/README.md "Dual pass".
  *   3. Registration (this file, synchronous) — ONE describe/it/it.fails/it.skip/it.todo row
  *      per test form, in CORPUS ORDER (a plain loop dispatching per row — NOT `it.each`
  *      partitioning, which would reorder registration and therefore execution).

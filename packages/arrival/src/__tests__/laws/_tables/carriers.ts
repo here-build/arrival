@@ -24,8 +24,7 @@ export const CARRIERS: readonly CarrierRow[] = [
     // only available verb (`append`, verbs[0]) doesn't door for a non-pair operand — it
     // silently returns the SECOND operand unchanged, discarding the first (a P5 "fails
     // loudly" violation, not a clean unsupported cell). See the grid body's own note there.
-    unsupported: [],
-  },
+    unsupported: [] },
   {
     carrier: "AString",
     mint3: '(string (src #\\a) (src #\\b) (src #\\c))',
@@ -48,8 +47,7 @@ export const CARRIERS: readonly CarrierRow[] = [
       { term: "arrival/tagless-final/filter", reason: "no arrival/tagless-final/filter on AString; R7RS has no generic string filter — project through (list->string (filter pred (string->list s)))" },
       { term: "arrival/tagless-final/reduce", reason: "no arrival/tagless-final/reduce on AString; fold via (reduce fn seed (string->list s))" },
       { term: "arrival/tagless-final/sort", reason: "no arrival/tagless-final/sort on AString; sort via (list->string (sort (string->list s) less?))" },
-    ],
-  },
+    ] },
   {
     carrier: "ADict",
     mint3: "(dict :a (src 1) :b (src 2) :c (src 3))",
@@ -68,8 +66,7 @@ export const CARRIERS: readonly CarrierRow[] = [
       { term: "arrival/tagless-final/filter", reason: "no arrival/tagless-final/filter on ADict — keys aren't a sequence to filter; no generic dict-filter term" },
       { term: "arrival/tagless-final/reduce", reason: "no arrival/tagless-final/reduce on ADict — no generic dict-fold term" },
       { term: "arrival/tagless-final/length", reason: "no arrival/tagless-final/length on ADict — key-cardinality isn't wired through this generic term" },
-    ],
-  },
+    ] },
   {
     carrier: "ABytevector",
     mint3: "(bytevector (src 1) (src 2) (src 3))",
@@ -82,6 +79,5 @@ export const CARRIERS: readonly CarrierRow[] = [
       { term: "arrival/tagless-final/sort", reason: "no arrival/tagless-final/sort on ABytevector; R7RS has no bytevector-sort" },
       { term: "arrival/tagless-final/car", reason: "not a pair" },
       { term: "arrival/tagless-final/cdr", reason: "not a pair" },
-    ],
-  },
+    ] },
 ] as const;

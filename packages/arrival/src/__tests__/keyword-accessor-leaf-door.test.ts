@@ -53,8 +53,7 @@ describe("B2 — :key on a leaf receiver (no member protocol) throws, naming the
 describe("B2 — nil/missing-key tolerance is UNCHANGED (never regress absence)", () => {
   it("(:missing obj) on an object still reads as nil (dict-missing-key stays absence)", async () => {
     const env = mintFrame(inferenceEnv, "kw-missing-key", {
-      obj: jsToScheme(CONSTANT_CTX, { a: 1 }),
-    });
+      obj: jsToScheme(CONSTANT_CTX, { a: 1 }) });
     const result = await execOneBoxed("(:missing obj)", env);
     expect(result.constructor.name).toBe("ANil");
   });

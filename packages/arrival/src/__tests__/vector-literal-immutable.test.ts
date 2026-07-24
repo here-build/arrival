@@ -5,7 +5,7 @@
 // by design, so the old literal-vs-constructed mutability split DISSOLVES — there
 // is no mutable vector/bytevector to distinguish. All in-place mutators
 // (vector-set!/fill!, bytevector-u8-set!, …) are OMITTED and doored (the typed
-// throw lives in purity-doors.test.ts). Here we pin the UNIFICATION: literal AND
+// throw lives in doors/purity.law.test.ts). Here we pin the UNIFICATION: literal AND
 // constructed vectors/bytevectors are equally immutable, and reads still work.
 import { describe, expect, it } from "vitest";
 import { freshEnv } from "./_fresh-env.js";

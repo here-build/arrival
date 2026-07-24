@@ -20,8 +20,7 @@ describe("B1 — stringValue throws on container/nil kinds instead of silently c
   it.each([
     {
       name: "(string-length '()) throws (never silently returns 2, the `String(nil)` = \"()\" artifact)",
-      code: "(string-length '())",
-    },
+      code: "(string-length '())" },
     { name: "(string-upcase '()) throws", code: "(string-upcase '())" },
     { name: '(string-append "x" \'()) throws', code: '(string-append "x" \'())' },
     { name: '(string=? \'() "()") throws (never silently #t)', code: '(string=? \'() "()")' },

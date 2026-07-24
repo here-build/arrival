@@ -64,6 +64,7 @@ import { execState, execStateOverFrame } from "../../eval/generator-exec.js";
 import { freshEnv } from "../_fresh-env.js";
 import { nil } from "../../values/primitives/ANil.js";
 import type { ExecOptions, ExecOptionsOverFrame } from "../../eval/generator-exec.js";
+import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
 import { bindValue } from "../../env/AmbientRuntime.js";
 
@@ -266,10 +267,18 @@ describe("tail-call optimization (R7RS §3.5)", () => {
       // it just calls a bound function; the count lives in JS, not a mutated binding.
       let ticks = 0;
       const env = await freshEnv();
-      bindValue(env, "tick", () => {
-        ticks += 1;
-        return nil;
-      });
+      bindValue(
+        env,
+        "tick",
+        new ANativeProcedure({
+          name: "tick",
+          arity: { min: 0, max: 0 },
+          contract: undefined,
+          impl: () => {
+            ticks += 1;
+            return nil;
+          } }),
+      );
       await execSource(
         `(define (f n) (if (= n 0) 0 (begin (f (- n 1)) (tick))))
          (f 5000)`,
@@ -328,8 +337,7 @@ describe("tail-call optimization (R7RS §3.5)", () => {
         exit(_inv: unknown, result: { value: unknown } | { error: unknown }): void {
           exits++;
           if ("error" in result) errorExits++;
-        },
-      };
+        } };
       // A short tail loop so the tap fires a bounded, inspectable count. Each
       // iteration enters several Pairs ((loop …), (if …), (= …), (- …)); the
       // exact total is incidental — per-frame balance is the invariant.

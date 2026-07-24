@@ -54,7 +54,7 @@ import { z } from "zod";
 // vectors) is a DIFFERENT module than JS `zod` (config schemas use real `zod`) — aliased
 // so both are usable in the same file without shadowing, matching every other test that
 // declares both a capability's `configuration` (JS zod) and a native's contract (scheme-zod).
-import * as sz from "../../common/scheme-zod.js";
+import * as sz from "../../common/scheme-zod/index.js";
 
 import { EnvCapability } from "../../common/capability.js";
 import { buildVocabulary } from "../../env/vocabulary.js";
@@ -76,8 +76,7 @@ function recordingEnv(): { env: ResolvingAmbient; bound: { get(name: string): un
   const env = mintResolvingFrame("degradation-recording", {}, null);
   return {
     env,
-    bound: { get: (name) => env.__env__[name], has: (name) => Object.hasOwn(env.__env__, name) },
-  };
+    bound: { get: (name) => env.__env__[name], has: (name) => Object.hasOwn(env.__env__, name) } };
 }
 
 /** Bind `cap`'s own `Vocabulary` onto `env` — the replacement for the retired
@@ -95,8 +94,7 @@ describe("LAW 1 — required-and-absent config rejects at vocabulary build", () 
   const requiredCap = () =>
     EnvCapability.define("test/degradation-required", {
       configuration: { must: z.string() },
-      symbols: (symbol) => ({ stub: symbol.notImplemented`stub: unreachable — config validation throws first` }),
-    });
+      symbols: (symbol) => ({ stub: symbol.notImplemented`stub: unreachable — config validation throws first` }) });
 
   it("rejects — a genuinely required key is never mode-gated", async () => {
     const { env } = recordingEnv();
@@ -123,8 +121,7 @@ describe("LAW 4 — present-but-invalid config rejects (degradation only narrows
   const invalidCap = (): EnvCapability<any, any> =>
     EnvCapability.define("test/degradation-invalid", {
       configuration: { n: z.number() },
-      symbols: (symbol) => ({ stub: symbol.notImplemented`stub: unreachable — config validation throws first` }),
-    });
+      symbols: (symbol) => ({ stub: symbol.notImplemented`stub: unreachable — config validation throws first` }) });
 
   it("rejects", async () => {
     const { env } = recordingEnv();
@@ -151,15 +148,12 @@ function fixtureCapability(name: string): EnvCapability<any, any> {
             v !== null && typeof v === "object" && typeof (v as { readFile?: unknown }).readFile === "function",
           "fs must expose readFile(path)",
         )
-        .optional(),
-    },
+        .optional() },
     symbols: (symbol) => ({
       "fixture/verb": symbol.native`fixture/verb: reads via the fs`(
         { input: [], output: [sz.schemeValue], requiresConfig: ["fs"] },
         () => nil,
-      ),
-    }),
-  });
+      ) }) });
 }
 
 describe("LAW 2 — an absent optional-enabling key lowers to a cause-carrying door", () => {
@@ -191,8 +185,7 @@ describe("LAW 2 — an absent optional-enabling key lowers to a cause-carrying d
   it("a SATISFIED config binds the real verb, not a door", async () => {
     const { env, bound } = recordingEnv();
     await applyOnto(env, fixtureCapability("test/degradation-fixture-satisfied"), {
-      fs: { readFile: async () => "" },
-    });
+      fs: { readFile: async () => "" } });
     expect(bound.get("fixture/verb")).not.toBeInstanceOf(DoorProcedure);
   });
 });

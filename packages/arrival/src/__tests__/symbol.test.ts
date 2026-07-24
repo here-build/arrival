@@ -11,16 +11,17 @@
 
 import { describe, it, expect, expectTypeOf } from "vitest";
 import { CONSTANT_CTX } from "../run/RunContext.js";
-import * as arrival from "../common/symbol.js";
-import { testCallCtx } from "../common/symbol.js";
-import * as z from "../common/scheme-zod.js";
+import * as arrival from "../symbol/index.js";
+import { testCallCtx } from "../symbol/index.js";
+import * as z from "../common/scheme-zod/index.js";
 import { APair } from "../values/primitives/APair.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { AString } from "../values/primitives/AString.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
 import { nil } from "../values/primitives/ANil.js";
-import type { NativeSymbolDef, RosettaSymbolDef } from "../common/symbols/_bake.js";
+import type { NativeSymbolDef } from "../values/primitives/ANativeProcedure.js";
+import type { RosettaSymbolDef } from "../common/symbols/_bake.js";
 
 const { symbol } = arrival;
 
@@ -31,6 +32,12 @@ const { symbol } = arrival;
 function contractOf<T>(v: { contract: unknown }): T {
   return v.contract as T;
 }
+
+/** Invoke a baked rosetta procedure via its apply term (the sole membrane spine). */
+function fire(proc: { ["arrival/tagless-final/apply"](args: any[], callCtx: any): any }, callCtx: any, ...args: any[]) {
+  return proc["arrival/tagless-final/apply"](args, callCtx);
+}
+
 
 describe("symbol.native — scheme-identity, no validation", () => {
   it("infers the impl arg+return as SCHEME VALUES from identity schemas", () => {
@@ -92,7 +99,7 @@ describe("symbol.rosetta — JS-land, codec decode/encode", () => {
       { input: [z.string], output: [z.number] },
       (s) => s.length,
     );
-    const out = await contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), new AString("hello"));
+    const out = await fire(def, testCallCtx(), new AString("hello"));
     // output codec is z.number → encode(number) = SchemeInexact (the chosen float type).
     expect(out).toBeInstanceOf(AInexact);
     expect((out as AInexact).real).toBe(5);
@@ -104,7 +111,7 @@ describe("symbol.rosetta — JS-land, codec decode/encode", () => {
       (s) => s.length,
     );
     // A SchemeExact is not a SchemeString → the z.string codec's instanceof guard doors.
-    await expect(contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), new AExact(3))).rejects.toThrow();
+    await expect(fire(def, testCallCtx(), new AExact(3))).rejects.toThrow();
   });
 
   it("can SKIP validation (trusted call site) but still runs the codec transform", async () => {
@@ -113,7 +120,7 @@ describe("symbol.rosetta — JS-land, codec decode/encode", () => {
       (s) => s,
       { validate: false },
     );
-    const out = await contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), new AString("x"));
+    const out = await fire(def, testCallCtx(), new AString("x"));
     expect(out).toBeInstanceOf(AString);
     expect((out as AString)["arrival/toJS"]()).toBe("x");
   });
@@ -126,32 +133,29 @@ describe("symbol.rosetta — JS-land, codec decode/encode", () => {
         return s.toUpperCase();
       },
     );
-    const out = await contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), new AString("hi"));
+    const out = await fire(def, testCallCtx(), new AString("hi"));
     expect((out as AString)["arrival/toJS"]()).toBe("HI");
   });
 });
 
-describe("`this: CallCtx` is mandatory (R-CTX-3) — misuse THROWS, never silently CONSTANT_CTX", () => {
-  // The R-CTX-3 migration door retired 2026-07-10 (V's strictness sweep): `this: CallCtx`
-  // is enforced STATICALLY (an unbound call is a compile error at every typed call site),
-  // and makeCallCtx/testCallCtx never yield nullable fields. What these rows now pin is
-  // the surviving INVARIANT — JS-level misuse (Reflect.apply past the types) still throws
-  // LOUDLY instead of silently degrading to CONSTANT_CTX (the silent fallback hid the
-  // B2-rosetta mint regression until conservation.law caught it).
-  it("a bare `def.run(...)` call (no receiver) throws instead of silently defaulting", async () => {
+describe("CallCtx is mandatory on the apply term — misuse THROWS, never silently CONSTANT_CTX", () => {
+  // The apply spine reads callCtx.runCtx / callCtx.invocation. A missing or hollow CallCtx
+  // must throw loudly, never degrade to CONSTANT_CTX (the silent fallback hid the B2-rosetta
+  // mint regression until conservation.law caught it).
+  it("apply with undefined callCtx throws instead of silently defaulting", async () => {
     const def = symbol.rosetta`strlen: length of a string`(
       { input: [z.string], output: [z.number] },
       (s) => s.length,
     );
-    await expect(Reflect.apply(contractOf<RosettaSymbolDef>(def).run, undefined, [new AString("hello")])).rejects.toThrow();
+    await expect(fire(def, undefined as any, new AString("hello"))).rejects.toThrow();
   });
 
-  it("an ad hoc `{}` receiver (missing runCtx/invocation) throws the same way", async () => {
+  it("apply with an ad hoc `{}` callCtx (missing runCtx/invocation) throws the same way", async () => {
     const def = symbol.rosetta`strlen: length of a string`(
       { input: [z.string], output: [z.number] },
       (s) => s.length,
     );
-    await expect(Reflect.apply(contractOf<RosettaSymbolDef>(def).run, {}, [new AString("hello")])).rejects.toThrow();
+    await expect(fire(def, {} as any, new AString("hello"))).rejects.toThrow();
   });
 
   it("testCallCtx() is a real CallCtx — the sanctioned idiom never doors", async () => {
@@ -159,7 +163,7 @@ describe("`this: CallCtx` is mandatory (R-CTX-3) — misuse THROWS, never silent
       { input: [z.string], output: [z.number] },
       (s) => s.length,
     );
-    const out = await contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), new AString("hello"));
+    const out = await fire(def, testCallCtx(), new AString("hello"));
     expect((out as AInexact).real).toBe(5);
   });
 });
@@ -168,9 +172,9 @@ describe("the number codec FAMILY — exactness + range + JS-type declared by th
   describe("z.number ↔ JS number (encode → inexact)", () => {
     it("decodes a safe-integer exact and a float inexact to JS number", async () => {
       const def = symbol.rosetta`dbl: double`({ input: [z.number], output: [z.number] }, (n) => n * 2);
-      const fromExact = await contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), new AExact(21));
+      const fromExact = await fire(def, testCallCtx(), new AExact(21));
       expect((fromExact as AInexact).real).toBe(42);
-      const fromInexact = await contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), new AInexact(1.5));
+      const fromInexact = await fire(def, testCallCtx(), new AInexact(1.5));
       expect((fromInexact as AInexact).real).toBe(3);
     });
 
@@ -185,14 +189,14 @@ describe("the number codec FAMILY — exactness + range + JS-type declared by th
 
     it("DOORS a non-integer exact rational", async () => {
       const def = symbol.rosetta`idn2: identity number`({ input: [z.number], output: [z.number] }, (n) => n);
-      await expect(contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), new AExact(1, 3))).rejects.toThrow(/faithful JS number|rational/i);
+      await expect(fire(def, testCallCtx(), new AExact(1, 3))).rejects.toThrow(/faithful JS number|rational/i);
     });
   });
 
   describe("z.integer ↔ JS number constrained to safe ints (encode → exact)", () => {
     it("decodes a safe int and encodes the return as EXACT", async () => {
       const def = symbol.rosetta`inc: increment`({ input: [z.integer], output: [z.integer] }, (n) => n + 1);
-      const out = await contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), new AExact(41));
+      const out = await fire(def, testCallCtx(), new AExact(41));
       expect(out).toBeInstanceOf(AExact);
       expect((out as AExact).num).toBe(42);
       expect((out as AExact).denom).toBe(1);
@@ -200,7 +204,7 @@ describe("the number codec FAMILY — exactness + range + JS-type declared by th
 
     it("DOORS a non-safe-integer inexact input", async () => {
       const def = symbol.rosetta`idi: identity int`({ input: [z.integer], output: [z.integer] }, (n) => n);
-      await expect(contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), new AInexact(1.5))).rejects.toThrow(/safe integer/i);
+      await expect(fire(def, testCallCtx(), new AInexact(1.5))).rejects.toThrow(/safe integer/i);
     });
   });
 
@@ -222,7 +226,7 @@ describe("the number codec FAMILY — exactness + range + JS-type declared by th
       // codec's encode arm is where this now doors, not construction of the input.
       const def = symbol.rosetta`bigid: identity bigint`({ input: [z.bigint], output: [z.bigint] }, (n) => n + 1n);
       const maxSafe = new AExact(Number.MAX_SAFE_INTEGER);
-      await expect(contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), maxSafe)).rejects.toThrow(/safe-integer/i);
+      await expect(fire(def, testCallCtx(), maxSafe)).rejects.toThrow(/safe-integer/i);
     });
 
     it("infers the impl arg as bigint", () => {
@@ -234,7 +238,7 @@ describe("the number codec FAMILY — exactness + range + JS-type declared by th
 
     it("round-trips a SMALL bigint → scheme → bigint (safe-int only)", async () => {
       const def = symbol.rosetta`bid: bigint identity`({ input: [z.bigint], output: [z.bigint] }, (n) => n);
-      const out = (await contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), new AExact(7))) as AExact;
+      const out = (await fire(def, testCallCtx(), new AExact(7))) as AExact;
       // re-decode the encoded scheme value through the same codec
       const back = z.decode(z.bigint, out);
       expect(back).toBe(7n);
@@ -248,7 +252,7 @@ describe("variadic + multiple values", () => {
       { input: z.array(z.number), output: [z.number] },
       (...ns: number[]) => ns.reduce((a, b) => a + b, 0),
     );
-    const out = await contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), new AExact(1), new AExact(2), new AExact(3));
+    const out = await fire(def, testCallCtx(), new AExact(1), new AExact(2), new AExact(3));
     expect((out as AInexact).real).toBe(6);
   });
 
@@ -257,7 +261,7 @@ describe("variadic + multiple values", () => {
       { input: [z.string], output: z.array(z.string) },
       (s) => [s, s],
     );
-    const out = await contractOf<RosettaSymbolDef>(def).run.call(testCallCtx(), new AString("a"));
+    const out = await fire(def, testCallCtx(), new AString("a"));
     // encode of z.array(z.string) → a JS array of SchemeStrings (the values-vector).
     expect(Array.isArray(out)).toBe(true);
     const vec = out as AString[];

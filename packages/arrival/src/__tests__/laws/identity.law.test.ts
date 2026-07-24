@@ -28,7 +28,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
-import { testCallCtx } from "../../common/symbol.js";
+import { testCallCtx } from "../../symbol/index.js";
 import { isSchemeValue, toJS } from "../../membrane/membrane.js";
 import { schemeToJs } from "../../membrane/rosetta.js";
 import listsCap from "../../env/r7rs/lists.js";
@@ -46,7 +46,7 @@ import { harvestContracts } from "../_symbols-harvest.js";
 const cloneNil = (origin = 42) => nil.withProvenance(new Set<number>([origin]));
 
 // Source op fns from the capability's inlined `symbols` — migrated packs expose
-// `symbol.native` defs (`{ kind: "native", impl }`); the legacy `{ value }` form is the
+// `symbol.native` defs (`{ kind: "native", impl }`); the untagged `{ value }` form is the
 // fallback for any entry not yet on the symbol.* API.
 const opsOf = (cap: EnvCapability): Record<string, (...a: any[]) => any> =>
   Object.fromEntries(

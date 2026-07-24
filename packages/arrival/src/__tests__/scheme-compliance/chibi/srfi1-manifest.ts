@@ -19,8 +19,7 @@ import {
   headSymbolName,
   splitTopLevelForms,
   type Manifest,
-  type RawForm,
-} from "./manifest.js";
+  type RawForm } from "./manifest.js";
 
 export const SRFI1_TEST_PATH = path.resolve(import.meta.dirname, "../../../../vendor/chibi-scheme/lib/srfi/1/test.sld");
 

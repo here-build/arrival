@@ -17,11 +17,11 @@
  * not key behavior on it). An optional `setup` hook runs against the fresh env
  * BEFORE the bindings are set, which is the one degree of freedom golden-prov-infer /
  * lineage-grounding need to wire their deterministic fake-source `EnvCapability`
- * (`symbol.rosetta` verbs — the `env.defineRosetta` migration target, 2026-07-11).
+ * (`symbol.rosetta` verbs — `symbol.rosetta`, 2026-07-11).
  * `EnvSetup` is `void | Promise<void>` for exactly this: a capability's `.lower({})
- * .apply(env, …)` is async, unlike the legacy `defineRosetta` call it replaced.
+ * .apply(env, …)` is async, unlike the older sync registration call.
  */
-import * as z from "../common/scheme-zod.js";
+import * as z from "../common/scheme-zod/index.js";
 import { CONSTANT_CTX } from "../run/RunContext.js";
 import { execStateOverFrame } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../env/inference-env.js";
@@ -45,8 +45,8 @@ export const sNum = (n: number, p: number): AValue => z.number.encode(n).withPro
 
 /** A per-env setup applied before the bindings are written — e.g. wiring a test-local
  *  `EnvCapability` (`symbol.rosetta` verbs) via `cap.lower({}).apply(env, undefined as
- *  never)`, which is async, hence the `Promise<void>` arm (widened from the legacy
- *  `defineRosetta`-only, synchronous-only shape). */
+ *  never)`, which is async, hence the `Promise<void>` arm (widened from the historical
+ *  older sync-only registration shape). */
 export type EnvSetup = (env: AmbientRuntime) => void | Promise<void>;
 
 let seq = 0;
@@ -56,7 +56,7 @@ let seq = 0;
  * value. Each call gets a uniquely-named child env; `binds` are boxed through
  * `jsToScheme` (the same membrane `env.set` applies internally; already-boxed AValue
  * inputs short-circuit to identity) and written with `env.set`. `setup` (if given) runs
- * against the env first — used to register `defineRosetta` sources.
+ * against the env first — used to register rosetta sources.
  *
  * COMPLEX tier (`execState`, not `exec`) — this whole file exists to read
  * provenance/box discipline off the result (`provOf`, `deepIds`, `collapseProvenance`),

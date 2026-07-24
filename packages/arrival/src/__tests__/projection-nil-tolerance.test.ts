@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mintFrame } from "../env/AmbientRuntime.js";
 import { exec, execState, execOverFrame, execStateOverFrame } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../env/inference-env.js";
-import { is_nil, is_false } from "../eval/guards.js";
+import { is_nil, is_false } from "../values/value-guards.js";
 import { ANil } from "../values/primitives/ANil.js";
 
 /**

@@ -39,8 +39,7 @@ import {
   isEagerProvenanceOracleEnabled,
   setEagerProvenanceOracleEnabled,
   withInputProvenance,
-  mintVerdict,
-} from "../../values/op-helpers.js";
+  mintVerdict } from "../../values/op-helpers.js";
 import { schemeTrue, schemeFalse } from "../../values/primitives/ABool.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { fromJs } from "../../membrane/boxing.js";

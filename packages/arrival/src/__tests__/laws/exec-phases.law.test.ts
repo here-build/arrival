@@ -22,8 +22,8 @@
  *
  * DROPPED (no vocabulary-path equivalent — see docs/plans/stage-c-corpse-deletion.md's Cut 3b
  * status entry): the realm-default `ExecState.ambient` row (`ExecState` carries no `ambient`
- * field at all anymore — ownership of "the shared default" was the legacy realm singleton's own
- * concept, and the cornerstone rules that legacy sin out); the glass "`ExecState.ambient` is
+ * field at all anymore — ownership of "the shared default" was the retired realm singleton's own
+ * concept, and the cornerstone rules that hermetic violation out); the glass "`ExecState.ambient` is
  * absent" row (glass itself is gone — `ExecOptions` has no `env`); `assembleAmbient({ heapBudget
  * })`'s AMBIENT-LEVEL default heapBudget policy (only the per-call `ExecOptions.heapBudget`
  * survives — there is no ambient object left to carry a policy default on).
@@ -32,8 +32,8 @@ import { describe, expect, it } from "vitest";
 
 import { EnvCapability } from "../../common/capability.js";
 import type { Resource } from "../../common/resources.js";
-import * as z from "../../common/scheme-zod.js";
-import { symbol } from "../../common/symbol.js";
+import * as z from "../../common/scheme-zod/index.js";
+import { symbol } from "../../symbol/index.js";
 import { LexicalScope } from "../../eval/LexicalScope.js";
 import { parseProgram } from "../../eval/exec-phases.js";
 import { exec, execState, execInFrame } from "../../eval/generator-exec.js";
@@ -57,11 +57,8 @@ function spyResource(): { resource: Resource<{ tag: string }>; counts: { acquire
           tag: "live",
           [Symbol.asyncDispose]: async () => {
             counts.disposed += 1;
-          },
-        };
-      },
-    },
-  };
+          } };
+      } } };
 }
 
 /** A capability owning ONE spy port + a verb that touches it (spawning it). */
@@ -79,9 +76,7 @@ function spyCapability() {
           await this.resources!.port.get();
           return "touched";
         },
-      ),
-    },
-  });
+      ) } });
   return { capability, counts };
 }
 
@@ -124,8 +119,7 @@ describe("ownership table — phase 5 disposes exactly what the call minted", ()
     const runCtx = await assembleRun({
       capabilities: [capability, ...BASE_ROSTER],
       evalScheme: testEvalScheme,
-      evalPrelude: testEvalPrelude,
-    });
+      evalPrelude: testEvalPrelude });
     const [a] = await exec(`(spy/touch)`, { capabilities: [capability], runCtx });
     const [b] = await exec(`(spy/touch)`, { capabilities: [capability], runCtx });
     expect([a, b]).toEqual(["touched", "touched"]);
@@ -181,8 +175,7 @@ describe("validation without execution (§3.5) — the complete diagnostic list,
     try {
       await execState(`(spy/touch) (definitely-not-bound-anywhere 1)`, {
         capabilities: [capability],
-        staticValidation: "on",
-      });
+        staticValidation: "on" });
     } catch (e) {
       caught = e;
     }

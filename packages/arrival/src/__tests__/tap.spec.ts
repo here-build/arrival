@@ -17,6 +17,8 @@ import { exec, execStateOverFrame } from "../eval/generator-exec.js";
 import { freshEnv } from "./_fresh-env.js";
 import type { ResolvingAmbient } from "../env/AmbientRuntime.js";
 import type { APair } from "../values/primitives/APair.js";
+import { ANativeProcedure } from "../values/primitives/ANativeProcedure.js";
+import { AExact } from "../values/primitives/AExact.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
 import { bindValue, mintFrame } from "../env/AmbientRuntime.js";
 
@@ -50,8 +52,7 @@ function recorder() {
     },
     exit(inv: TestInv, result: ExitResult): void {
       events.push({ kind: "exit", inv, result });
-    },
-  };
+    } };
   return { events, tap };
 }
 
@@ -140,14 +141,19 @@ describe("evaluation tap", () => {
       resolveAsync = r;
     });
     const env = mintFrame(userEnv, "tap-async-test");
-    bindValue(env, "await-this", () => pending);
+    // W8: ANativeProcedure (returns a Promise of a scheme value) — bare fns are doored.
+    bindValue(
+      env,
+      "await-this",
+      new ANativeProcedure({
+        name: "await-this",
+        arity: { min: 0, max: 0 },
+        contract: undefined,
+        impl: () => pending.then((v) => new AExact(v as number)) as never }),
+    );
 
     const { events, tap } = recorder();
-    // execState (COMPLEX tier): the bare `env.set`-bound native returns a raw
-    // (unboxed) resolved value BY DESIGN (env.set is the no-codec escape hatch —
-    // see chibi-harness.ts's doc) — `exec`'s plain-JS `toJS` unwrap would refuse
-    // it (RULINGS.md R1's strict door). This test only cares about tap
-    // enter/exit accounting, not the returned value's shape.
+    // execState (COMPLEX tier): this test only cares about tap enter/exit accounting.
     const finished = execStateOverFrame("(await-this)", { env, tap });
 
     // Wait for the evaluator to reach the pending promise.
@@ -208,8 +214,7 @@ describe("evaluation tap", () => {
       },
       exit(inv: TestInv, result: ExitResult): void {
         events.push({ kind: "exit", inv, result });
-      },
-    };
+      } };
     await exec("(+ (* 2 3) (* 4 5))", { tap, nodeFilter: () => false });
     expect(events).toHaveLength(0);
   });

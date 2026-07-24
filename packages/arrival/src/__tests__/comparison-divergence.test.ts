@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mintFrame } from "../env/AmbientRuntime.js";
 import { execOverFrame as exec } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../env/inference-env.js";
-import { is_false } from "../eval/guards.js";
+import { is_false } from "../values/value-guards.js";
 
 /**
  * Comparison divergence ledger — the explicit, visible record of where the comparison ops'

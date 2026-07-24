@@ -13,7 +13,7 @@
 // `cause.owner` = its pack) is pinned in the sibling `declared-doors.law.test.ts`.
 
 import { describe, expect, it } from "vitest";
-import { symbol } from "../../common/symbol.js";
+import { symbol } from "../../symbol/index.js";
 import { DoorProcedure } from "../../values/primitives/ACallable.js";
 import { is_callable_value } from "../../values/value-guards.js";
 import { PurityError } from "../../errors.js";
@@ -93,9 +93,7 @@ describe("common/capability.ts's door bind arm — cause DERIVED from the owning
   it("stamps cause = { owner: <capability name>, needs: [] } for a notImplemented door with no cause of its own", async () => {
     const cap = EnvCapability.define("test/door-cap", {
       symbols: (symbol) => ({
-        stub: symbol.notImplemented`stub: a teaching stub`,
-      }),
-    });
+        stub: symbol.notImplemented`stub: a teaching stub` }) });
     const { env, bound } = recordingEnv();
     await applyCapability(env, [cap]);
 
@@ -108,9 +106,7 @@ describe("common/capability.ts's door bind arm — cause DERIVED from the owning
   it("firing the bound door throws PurityError naming `name @ capability`", async () => {
     const cap = EnvCapability.define("test/door-cap-2", {
       symbols: (symbol) => ({
-        stub: symbol.notImplemented`stub: a teaching stub`,
-      }),
-    });
+        stub: symbol.notImplemented`stub: a teaching stub` }) });
     const { env, bound } = recordingEnv();
     await applyCapability(env, [cap]);
 
@@ -134,11 +130,9 @@ describe("common/capability.ts's door bind arm — cause DERIVED from the owning
         // arrives at the bind loop already carrying a cause).
         const preCaused = new DoorProcedure({
           ...symbol.notImplemented`stub: a teaching stub`.door,
-          cause: { owner: "elsewhere/pack", needs: [] },
-        });
+          cause: { owner: "elsewhere/pack", needs: [] } });
         return { stub: preCaused };
-      },
-    });
+      } });
     const { env, bound } = recordingEnv();
     await applyCapability(env, [cap]);
 

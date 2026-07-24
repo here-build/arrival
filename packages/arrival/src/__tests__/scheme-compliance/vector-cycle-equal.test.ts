@@ -33,7 +33,7 @@ const run = async (form: string) => (await execState(form, { env })).values[0];
 
 // Verdicts print as the boxed scheme booleans (`#t`/`#f` — equal? returns the
 // schemeTrue/schemeFalse flyweights under the Face split; the raw JS "true"/"false"
-// string forms were the LIPS-legacy leak).
+// string forms were the pre-box string-identity leak).
 describe("equal? on cyclic vectors terminates (cycle-safety regression)", () => {
   it("two distinct reader-built self-cyclic vectors compare without a stack blow", async () => {
     // Each vector's element[1] points back at itself; distinct but structurally

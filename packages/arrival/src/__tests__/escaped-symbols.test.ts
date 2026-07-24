@@ -62,9 +62,7 @@ describe("Escaped Symbol Resolution", () => {
           "test-obj": jsToScheme(CONSTANT_CTX, {
             "24": "value-24",
             "42": "value-42",
-            normal: "normal-value",
-          }),
-        }),
+            normal: "normal-value" }) }),
       );
       expect(schemeToJs(result, {})).toBe("value-24");
     });
@@ -72,17 +70,13 @@ describe("Escaped Symbol Resolution", () => {
 
   describe("Escaped symbols in function names", () => {
     it("should define and call functions with escaped names", async () => {
-      // A test-local EnvCapability (`symbol.rosetta` — the `env.defineRosetta`
-      // migration target). The bound verb's KEY is the exact scheme-facing name — a
-      // space or a leading digit is a perfectly ordinary JS object-property string, so
-      // `capability.ts`'s binder (`env.set(verb, proc)`) doesn't care that the reader
-      // only reaches it through `|escaped|` syntax.
+      // Test-local EnvCapability with `symbol.rosetta`. The bound verb's KEY is the
+      // exact scheme-facing name — a space or leading digit is an ordinary JS property
+      // string; the binder doesn't care that the reader only reaches it via `|escaped|`.
       await applyCapability(inferenceEnv, [
         EnvCapability.define("test/get-24", {
           symbols: (symbol, z) => ({
-            "get-24": symbol.rosetta`get-24: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 24),
-          }),
-        }),
+            "get-24": symbol.rosetta`get-24: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 24) }) }),
       ]);
 
       const result = await execOne(`(|get-24|)`);
@@ -96,9 +90,7 @@ describe("Escaped Symbol Resolution", () => {
             "my function": symbol.rosetta`my function: doubles its argument`(
               { input: [z.number], output: [z.number] },
               (x) => x * 2,
-            ),
-          }),
-        }),
+            ) }) }),
       ]);
 
       const result = await execOne(`(|my function| 21)`);
@@ -110,8 +102,7 @@ describe("Escaped Symbol Resolution", () => {
     it("should handle keywords with special characters", async () => {
       const testObj = {
         "foo-bar": "hyphenated",
-        foo_bar: "underscored",
-      };
+        foo_bar: "underscored" };
 
       bindValue(inferenceEnv, "test-obj", jsToScheme(CONSTANT_CTX, testObj));
 
@@ -130,9 +121,7 @@ describe("Escaped Symbol Resolution", () => {
       const component = {
         "794f1e9c-5726-4a0c-a8b6-c0ae5f31f4e4": {
           name: "Button",
-          type: "component",
-        },
-      };
+          type: "component" } };
 
       bindValue(inferenceEnv, "components", jsToScheme(CONSTANT_CTX, component));
 
@@ -150,10 +139,8 @@ describe("Escaped Symbol Resolution", () => {
           {
             id: "794f1e9c-5726-4a0c-a8b6-c0ae5f31f4e4",
             name: "My Project",
-            "24": "numeric property value",
-          },
-        ],
-      };
+            "24": "numeric property value" },
+        ] };
 
       bindValue(inferenceEnv, "data", jsToScheme(CONSTANT_CTX, data));
 

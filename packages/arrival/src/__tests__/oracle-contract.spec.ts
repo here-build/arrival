@@ -132,8 +132,7 @@ function refAnalyze(src: string): RefState {
     position,
     closeable: depth === 0 && !inText,
     closeSuffix: depth > 0 ? ")".repeat(depth) : "",
-    overClosed: min < 0,
-  };
+    overClosed: min < 0 };
 }
 // --- end canonical reference ---------------------------------------------------------------------
 
@@ -375,8 +374,7 @@ function sigmaEnv(): AmbientRuntime {
     {
       car: fn as unknown as AmbientValue,
       "+": fn as unknown as AmbientValue,
-      flows: 42 as unknown as AmbientValue,
-    },
+      flows: 42 as unknown as AmbientValue },
     null,
   );
 }

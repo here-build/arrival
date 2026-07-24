@@ -3,11 +3,10 @@
  * HARNESS shared by `wireframe-agreement.law.test.ts`'s W1 describe block and its
  * corpus (`w1-corpus.ts`). Two independent halves:
  *
- *  1. THE EAGER ORACLE SIDE — register synthetic Rosetta-IN sources via the legacy
- *     `AmbientRuntime.defineRosetta` fixture path (the SAME mechanism golden-prov-infer.
- *     test.ts uses: a deterministic fake that returns an ALREADY-STAMPED value,
- *     since a direct `execState` run has no live `currentInvocation` to auto-mint
- *     against — see rosetta.ts's `mintsPoint && inv` guard). Each call mints a FRESH
+ *  1. THE EAGER ORACLE SIDE — register synthetic Rosetta-IN sources via test-local
+ *     `symbol.rosetta` fixtures (deterministic fakes that return ALREADY-STAMPED
+ *     values — a direct `execState` run has no live `currentInvocation` to auto-mint
+ *     against; see rosetta.ts's `mintsPoint && inv` guard). Each call mints a FRESH
  *     id via a shared counter and records id→op in a registry, so the eager run's
  *     deep-collapsed provenance (numeric ids) can be projected back to the SET OF
  *     SOURCE OP NAMES that actually fired — the only vocabulary the two layers
@@ -41,7 +40,7 @@ import { execStateOverFrame } from "../../eval/generator-exec.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AValue } from "../../values/primitives/AValue.js";
-import * as z from "../../common/scheme-zod.js";
+import * as z from "../../common/scheme-zod/index.js";
 import { EnvCapability } from "../../common/capability.js";
 import { reachableNodes } from "../../provenance/wireframe/loops.js";
 import type { WireframeGraph, WireframeProgram } from "../../provenance/wireframe/types.js";
@@ -80,10 +79,10 @@ export class SourceRegistry {
    *  crossing, and the real membrane mints once per crossing regardless of how many
    *  times a fan/loop calls it (golden-prov-infer.test.ts's rationale, restated).
    *
-   *  Migrated off the retired `env.defineRosetta` onto a test-local `EnvCapability`
+   *  Uses a test-local `EnvCapability`
    *  (`symbol.rosetta` verb — the migration target). `inputRest: z.dynamic` + `output:
    *  [z.dynamic]` is the untyped-source shape (research-env.ts's `buildResearchScope`
-   *  idiom): args are ignored anyway (the legacy `void args`), and the return is an
+   *  idiom): args are ignored anyway (the historical `void args`), and the return is an
    *  ALREADY-STAMPED `AValue` (`stampedNum`/`stampedStr`) whose mint id must survive
    *  untouched — `z.dynamic` on the output side is the declared no-transform escape
    *  hatch that skips `z.encode` and hands the impl's return straight to `jsToScheme`
@@ -111,9 +110,7 @@ export class SourceRegistry {
               }
               return out;
             },
-          ),
-        }),
-      }),
+          ) }) }),
     ]);
   }
 

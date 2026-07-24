@@ -36,8 +36,7 @@ describe("keyword-as-getter: (:key obj) reads obj[key]", () => {
     const result = await execOne(
       "(:pasword obj)",
       mintFrame(inferenceEnv, "keyword-accessor-getter", {
-        obj: jsToScheme(CONSTANT_CTX, { pasword: "swordfish" }),
-      }),
+        obj: jsToScheme(CONSTANT_CTX, { pasword: "swordfish" }) }),
     );
     expect(result.toString()).toBe("swordfish");
   });
@@ -45,8 +44,7 @@ describe("keyword-as-getter: (:key obj) reads obj[key]", () => {
   it("a missing key reads as nil, not undefined or a thrown error", async () => {
     const obj = { name: "test" };
     const env = mintFrame(inferenceEnv, "keyword-accessor-missing", {
-      obj: jsToScheme(CONSTANT_CTX, obj),
-    });
+      obj: jsToScheme(CONSTANT_CTX, obj) });
     const result = await execOneBoxed(`(:missing obj)`, env);
     expect(result.constructor.name).toBe("ANil");
   });
@@ -60,8 +58,7 @@ describe("keyword-as-getter composes: it's ordinary callable data, so HOFs take 
       { id: "3", name: "Charlie" },
     ];
     const env = mintFrame(inferenceEnv, "keyword-accessor-map", {
-      users: jsToScheme(CONSTANT_CTX, users),
-    });
+      users: jsToScheme(CONSTANT_CTX, users) });
     expect(schemeToJs(await execOne(`(map :name users)`, env))).toEqual(["Alice", "Bob", "Charlie"]);
   });
 
@@ -72,8 +69,7 @@ describe("keyword-as-getter composes: it's ordinary callable data, so HOFs take 
       { active: true, name: "Item 3" },
     ];
     const env = mintFrame(inferenceEnv, "keyword-accessor-filter", {
-      items: jsToScheme(CONSTANT_CTX, items),
-    });
+      items: jsToScheme(CONSTANT_CTX, items) });
     const filtered = schemeToJs(await execOne(`(filter :active items)`, env));
     expect(filtered).toHaveLength(2);
     expect(filtered[0].name).toBe("Item 1");
@@ -91,8 +87,7 @@ describe("adjacent reader case: a pipe-quoted symbol resolves as an ordinary var
     const result = await execOneBoxed(
       `(list |24|)`,
       mintFrame(inferenceEnv, "pipe-symbol-variable", {
-        "24": jsToScheme(CONSTANT_CTX, "unqouted"),
-      }),
+        "24": jsToScheme(CONSTANT_CTX, "unqouted") }),
     );
     expect(result.car.toString()).toEqual("unqouted");
   });

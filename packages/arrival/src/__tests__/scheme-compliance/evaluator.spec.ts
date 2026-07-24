@@ -24,7 +24,9 @@ import { schemeTrue, schemeFalse } from "../../values/primitives/ABool.js";
 import { AString } from "../../values/primitives/AString.js";
 import { APair } from "../../values/primitives/APair.js";
 import { nil } from "../../values/primitives/ANil.js";
-import { ALambda } from "../../values/primitives/ACallable.js";
+import { ALambda, hostFnToCallable } from "../../values/primitives/ACallable.js";
+import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
+import { EMPTY_PROVENANCE } from "../../values/primitives/AValue.js";
 import { type SchemeValue } from "../../values/types.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
 import { bindValue } from "../../env/AmbientRuntime.js";
@@ -118,8 +120,7 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       "null?": (x: unknown) => x === nil || (x !== null && typeof x === "object" && (x as ANil).toString?.() === "()"),
       not: (x: unknown) => x === false || x === nil,
       "#t": schemeTrue,
-      "#f": schemeFalse,
-    });
+      "#f": schemeFalse });
   });
 
   describe("run() trampoline", () => {
@@ -188,35 +189,25 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       expect(result).toEqual(new AExact(26)); // 6 + 20
     });
 
-    // INVARIANT: a JS function bound in env that returns a promise is awaited and its
-    // resolved value passed through unboxed.
-    // [RETAGGED 2026-07-09, B4 — was INVERTS: reverse-membrane/P1] `env.set("async-add", ...)`
-    // binds a bare JS fn directly (bypassing EnvCapability), and `expect(result).toBe(30)`
-    // asserts raw unboxed pass-through via the evaluator call-head's `Reflect.apply` fallback
-    // (ACallable.ts / evaluator.ts:3125-3135, kept deliberately per
-    // the reverse-membrane-for-callables design §5 item 5 — "keep, demoted to
-    // the legacy-defineRosetta compatibility path; delete with step 6"). Does NOT die with the
-    // B1-B3 reverse-membrane landing (cxr pilot + capability.ts binder cut + region discipline
-    // — all landed 2026-07-09): none of those steps touch bare `env.set`. Real gate: step 6
-    // (`AProcedure` arm removal from `SchemeValue`), itself gated on the legacy
-    // `env.defineRosetta` arm's retirement — see ledger row "defineRosetta legacy arm
-    // authoring form" (gate: McpEnvCapability annotation-lifting, undone — McpEnvCapability
-    // still authors every verb as a bare fn / RosettaSpec-shaped object; downstream consumers
-    // confirmed live: inhuman/sift-submission/mcp/src/packs/*.ts, here.build/saas/server/{mcp,
-    // arrival}, inhuman/saas/mcp).
+    // INVARIANT: a host-fn-as-callable (hostFnToCallable → ARosettaProcedure) that returns a
+    // promise is awaited and its result boxes through the reverse membrane.
+    // W8: bare env-resident host fns are doored; mint via hostFnToCallable.
     it("should handle JS functions that return promises", async () => {
-      // With membrane, JS functions receive JS values (not SchemeExact)
-      bindValue(env, "async-add", async (a: number, b: number) => {
-        await new Promise((r) => setTimeout(r, 1));
-        return a + b;
-      });
+      bindValue(
+        env,
+        "async-add",
+        hostFnToCallable(
+          CONSTANT_CTX,
+          async (a: unknown, b: unknown) => {
+            await new Promise((r) => setTimeout(r, 1));
+            return (a as number) + (b as number);
+          },
+          EMPTY_PROVENANCE,
+        ),
+      );
 
       const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("async-add"), new AExact(10), new AExact(20)], false);
       const result = await execExprOverFrame(code, { env });
-      // The bare-fn boxing seam (evaluator main apply arm) boxes the raw return — the
-      // pre-seam raw-30 passthrough was the R1 leak, not the contract. This spec's
-      // `execExpr` is the COMPLEX-tier form-at-a-time wrapper (no toJS exit), so the
-      // assertion reads the BOX honestly.
       expect((result as AExact)["arrival/toJS"]()).toBe(30);
     });
   });
@@ -323,10 +314,18 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       // INVARIANT: begin executes every expression for its side effects, in sequence
       it("should execute side effects", async () => {
         let sideEffect = 0;
-        bindValue(env, "inc!", () => {
-          sideEffect++;
-          return new AExact(sideEffect);
-        });
+        bindValue(
+          env,
+          "inc!",
+          new ANativeProcedure({
+            name: "inc!",
+            arity: { min: 0, max: 0 },
+            contract: undefined,
+            impl: () => {
+              sideEffect++;
+              return new AExact(sideEffect);
+            } }),
+        );
 
         // (begin (inc!) (inc!) (inc!))
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("begin"), APair.fromArray(CONSTANT_CTX, [new ASymbol("inc!")], false), APair.fromArray(CONSTANT_CTX, [new ASymbol("inc!")], false), APair.fromArray(CONSTANT_CTX, [new ASymbol("inc!")], false)], false);
@@ -432,10 +431,18 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       // INVARIANT: and short-circuits on the first #f without evaluating the rest
       it("should short-circuit on false", async () => {
         let called = false;
-        bindValue(env, "side-effect", () => {
-          called = true;
-          return true;
-        });
+        bindValue(
+          env,
+          "side-effect",
+          new ANativeProcedure({
+            name: "side-effect",
+            arity: { min: 0, max: 0 },
+            contract: undefined,
+            impl: () => {
+              called = true;
+              return schemeTrue;
+            } }),
+        );
         // (and #f (side-effect))
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("and"), schemeFalse, APair.fromArray(CONSTANT_CTX, [new ASymbol("side-effect")], false)], false);
         expect(await execExprOverFrame(code, { env })).toBe(schemeFalse);
@@ -461,10 +468,18 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       // INVARIANT: or short-circuits on the first truthy value without evaluating the rest
       it("should short-circuit on true", async () => {
         let called = false;
-        bindValue(env, "side-effect", () => {
-          called = true;
-          return false;
-        });
+        bindValue(
+          env,
+          "side-effect",
+          new ANativeProcedure({
+            name: "side-effect",
+            arity: { min: 0, max: 0 },
+            contract: undefined,
+            impl: () => {
+              called = true;
+              return schemeFalse;
+            } }),
+        );
         // (or 1 (side-effect))
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("or"), new AExact(1), APair.fromArray(CONSTANT_CTX, [new ASymbol("side-effect")], false)], false);
         expect(await execExprOverFrame(code, { env })).toEqual(new AExact(1));
@@ -506,18 +521,15 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       });
 
       // INVARIANT: (test => proc) applies proc to the test's value when the test is truthy.
-      // [RETAGGED 2026-07-09, B4 — was INVERTS: reverse-membrane/P1] `env.set("double", ...)`
-      // bare-fn producer, same still-valid Reflect.apply-fallback pattern/gate as the "JS
-      // functions that return promises" test above (see that comment for the full gate chain:
-      // step 6 / AProcedure removal, gated on the undone McpEnvCapability annotation-lifting
-      // migration, NOT on B1-B3 which already landed).
+      // W8: hostFnToCallable mints ARosettaProcedure (scheme args → JS, result boxes back).
       it("should handle => syntax", async () => {
-        // (cond ((+ 1 2) => (lambda (x) (* x 2))))
-        // With membrane, JS functions receive JS values (not SchemeExact)
-        bindValue(env, "double", (x: number) => x * 2);
+        // (cond ((+ 1 2) => double))
+        bindValue(
+          env,
+          "double",
+          hostFnToCallable(CONSTANT_CTX, (x: unknown) => (x as number) * 2, EMPTY_PROVENANCE),
+        );
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("cond"), APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new AExact(1), new AExact(2)], false), new ASymbol("=>"), new ASymbol("double")], false)], false);
-        // The bare-fn boxing seam boxes the => builtin's raw return; this spec's
-        // `execExpr` surfaces the box — unwrap to assert the value.
         expect(((await execExprOverFrame(code, { env })) as AExact)["arrival/toJS"]()).toBe(6);
       });
     });
@@ -591,10 +603,18 @@ describe("Generator Evaluator with Real LIPS Types", () => {
       // INVARIANT: do executes the command body once per iteration for its side effects
       it("should execute body on each iteration", async () => {
         let count = 0;
-        bindValue(env, "inc!", () => {
-          count++;
-          return undefined;
-        });
+        bindValue(
+          env,
+          "inc!",
+          new ANativeProcedure({
+            name: "inc!",
+            arity: { min: 0, max: 0 },
+            contract: undefined,
+            impl: () => {
+              count++;
+              return theVoid;
+            } }),
+        );
         // (do ((i 0 (+ i 1))) ((>= i 3)) (inc!))
         const code = APair.fromArray(CONSTANT_CTX, [
           new ASymbol("do"),
@@ -644,14 +664,14 @@ describe("Generator Evaluator with Real LIPS Types", () => {
     // value's identity to force-time, severing construction-rooted provenance).
     // Removed from the special-form table; doored in core.ts. The full door
     // surface (delay/force/make-promise/delay-force) is pinned in
-    // purity-doors.test.ts; here we just confirm the special form is gone.
+    // doors/purity.law.test.ts; here we just confirm the special form is gone.
     describe("delay/force — omitted by the purity invariant", () => {
       // INVARIANT: delay is no longer a working special form — evaluating (delay …)
       // throws rather than deferring
       it("(delay …) is no longer a working special form", async () => {
         // This raw env has no bootstrap loaded, so `delay` is unbound here (the
         // teaching door — "omitted from arrival by design" — is a bootstrap macro,
-        // verified at the full-env layer in purity-doors.test.ts). The point at
+        // verified at the full-env layer in doors/purity.law.test.ts). The point at
         // THIS layer: delay no longer evaluates lazily; it is gone from the
         // special-form table.
         await expect(execExprOverFrame(APair.fromArray(CONSTANT_CTX, [new ASymbol("delay"), APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new AExact(1), new AExact(2)], false)], false), { env })).rejects.toThrow();

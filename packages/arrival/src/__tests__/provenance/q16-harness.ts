@@ -27,7 +27,7 @@ import { AmbientRuntime, mintFrame } from "../../env/AmbientRuntime.js";
 import { execStateOverFrame } from "../../eval/generator-exec.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { schemeToJs } from "../../membrane/rosetta.js";
-import * as z from "../../common/scheme-zod.js";
+import * as z from "../../common/scheme-zod/index.js";
 import { EnvCapability } from "../../common/capability.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { emitMint, setEmissionEnabled } from "../../provenance/store/emit.js";
@@ -97,7 +97,7 @@ export class RecordingRegistry {
    *  (eager-oracle side) and awaits a real `emitMint` under a distinct RecordId
    *  (retrospective side) — see the module header's design call.
    *
-   *  Migrated off the retired `env.defineRosetta` onto a test-local `EnvCapability`
+   *  Uses a test-local `EnvCapability`
    *  (`symbol.rosetta` verb — the migration target), same `inputRest: z.dynamic` /
    *  `output: [z.dynamic]` untyped-source shape w1-harness.ts's `SourceRegistry.register`
    *  uses: args decode to the raw scheme value (no automatic JS conversion), so this
@@ -164,17 +164,14 @@ export class RecordingRegistry {
               regionId: this.regionId,
               id: { templateHash: `q16:${op}`, ordinalPath: [this.ordinal++], regionEpoch: this.regionEpoch },
               value: peeled,
-              stampIds,
-            });
+              stampIds });
             invariant(
               record !== undefined,
               "q16 harness: emitMint no-oped — setEmissionEnabled(true) must wrap the record run",
             );
             return boxed;
           },
-        ),
-      }),
-      }),
+        ) }) }),
     ]);
   }
 }
@@ -263,8 +260,7 @@ export async function recordRun(
     store,
     payloads,
     registry,
-    regionId,
-  };
+    regionId };
 }
 
 /** The replayed cone's ids, off a boxed γ egress — I1/I3's comparison surface. */

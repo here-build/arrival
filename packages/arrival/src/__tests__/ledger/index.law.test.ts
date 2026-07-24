@@ -17,7 +17,7 @@
  *   it.fails("(append (list a) (list b)) keeps element ids", () => { ... });
  *
  * This is how the walker meta-test cross-references a red row back to its gate
- * without guessing by test name. The legacy (SUNSET) suite's `it.fails` calls
+ * without guessing by test name. The sunset suite's `it.fails` calls
  * are NOT governed by this convention — the walker only scans the sunrise dirs.
  */
 import { describe, it, expect } from "vitest";
@@ -107,7 +107,7 @@ const GAPS: readonly LedgerRow[] = [
   // cutover triage's own instruction to name every genuine gap). "list->array" was never a
   // bound scheme symbol in any pack (repo-wide grep confirms; R7RS itself has no such builtin)
   // — it's purely an internal error-message label for the pack-local listToArray helper. The
-  // test predates the LIPS-legacy dissolution sweep and needs retiring/redirecting, not a
+  // test predates the identity-box dissolution sweep and needs retiring/redirecting, not a
   // reintroduced symbol.
   { id: "list->array phantom symbol", gate: "sunset-suite cleanup pass", replacedBy: "n/a — test retirement, not a feature to land" },
   // ── Q9 W1 agreement corpus findings (docs/PROVENANCE.md §7 W1 agreement; provenance/
@@ -121,18 +121,15 @@ const GAPS: readonly LedgerRow[] = [
   {
     id: "letrec local-closure mux under-designation",
     gate: "Q8c/Q9-follow-up builder fix (Q8a documented LIMIT, builder.ts header: \"A local closure (letrec-bound lambda) wrapping a port under-designates a mux whose selector calls it\")",
-    replacedBy: "provenance/wireframe-agreement.law.test.ts's letrec-closure-mux row, once selectorReachesPort can see through a letrec-bound closure",
-  },
+    replacedBy: "provenance/wireframe-agreement.law.test.ts's letrec-closure-mux row, once selectorReachesPort can see through a letrec-bound closure" },
   {
     id: "non-tail begin sink sequencing over-includes source",
     gate: "Q8c/Q9-follow-up builder fix (Q8a documented LIMIT, builder.ts header: \"A sink cut in non-tail begin position leaves the wire a sequencing reference to the sink node (D6 territory) — tolerated, not modeled\")",
-    replacedBy: "provenance/wireframe-agreement.law.test.ts's non-tail-begin row, once reachableNodes (or the builder) stops treating a dropped sink's ingress as reachable from the tail value",
-  },
+    replacedBy: "provenance/wireframe-agreement.law.test.ts's non-tail-begin row, once reachableNodes (or the builder) stops treating a dropped sink's ingress as reachable from the tail value" },
   {
     id: "cond => receiver approximation loses test-value dependency",
     gate: "Q8c/Q9-follow-up builder fix (Q8a documented LIMIT, builder.ts's buildCondMux: \"A `=>` clause's receiver is approximated as the arm — its applied-to-test threading is classifyCond's combine(\\\"=>\\\"), deferred here\")",
-    replacedBy: "provenance/wireframe-agreement.law.test.ts's cond=> row, once the arm wire models applying the receiver to the test's value instead of the raw closure",
-  },
+    replacedBy: "provenance/wireframe-agreement.law.test.ts's cond=> row, once the arm wire models applying the receiver to the test's value instead of the raw closure" },
   // "do-loop result clause unreachable from recur node" RETIRED (Q9 follow-up builder
   // fix, builder.ts's `buildDoBinder`): the result clause now walks under a synthetic
   // `let` frame rebinding every loop variable to a cut sentinel pointed at the `recur`
@@ -154,8 +151,7 @@ const GAPS: readonly LedgerRow[] = [
   {
     id: "field-shaped pure ops not projection-aware (car/cons sibling leak)",
     gate: "V ruling pending (Q21 audit 2026-07-10: survived the whole Q-track — Q8c built fact wires and Q17 flipped demand-monotonicity WITHOUT a `field` WireframeNode; whether one is added, and where it cuts, is a design ruling. Q9 finding — no `field` WireframeNode is built yet for car/cdr/:field/@ accessors, so a projection's sibling side is NOT pruned from the prospective cone the way the real accessor prunes it from the eager value; distinct from R2 demand-monotonicity, Q8c/Q17's SEPARATE deferred field-DEMAND-lattice concern — this is the ordinary full/flat cone over-including a sibling the runtime provably never touches)",
-    replacedBy: "provenance/wireframe-agreement.law.test.ts's car/cons row, once a `field` node routes the projection the way §1/§2 describe",
-  },
+    replacedBy: "provenance/wireframe-agreement.law.test.ts's car/cons row, once a `field` node routes the projection the way §1/§2 describe" },
 ] as const;
 
 const INVERSIONS: readonly LedgerRow[] = [
@@ -179,15 +175,11 @@ const INVERSIONS: readonly LedgerRow[] = [
   // (membrane.ts isSchemeValue, rosetta.ts jsToScheme, print.ts functionRepr). See
   // membrane-symmetry.test.ts's retagged "a real ALambda passes through jsToScheme by
   // identity" row, now a plain `it()`.
-  { id: "defineRosetta legacy arm authoring form", gate: "McpEnvCapability annotation-lifting", replacedBy: "capability baked-symbol suites" },
-  // "bare-fn env.set harness wiring" — PARTIALLY retired (B4 audit, 2026-07-09):
-  // input-rest-runtime.test.ts / kwargs-runtime.test.ts converted to real
-  // EnvCapability-wired fixtures. The pattern still has live instances elsewhere
-  // (vector-map-promise-leak.test.ts, generator-exec.spec.ts, laws/_tables/fixtures.ts,
-  // evaluator.spec.ts's two deliberately-kept Reflect.apply-fallback probes) — row stays
-  // until those convert too (or are confirmed permanent test-harness shortcuts, same as
-  // evaluator.spec.ts's pair).
-  { id: "bare-fn env.set harness wiring", gate: "reverse-membrane", replacedBy: "EnvCapability-wired fixtures" },
+  { id: "forbidden bare-fn authoring form", gate: "McpEnvCapability annotation-lifting", replacedBy: "capability baked-symbol suites" },
+  // "bare-fn env.set harness wiring" — RETIRED (W8, 2026-07-24): bindValue doors bare
+  // host functions; createRosettaWrapper/bindRosetta mint ARosettaProcedure; tests use
+  // ANativeProcedure / hostFnToCallable. Reflect.apply bare-fn apply arms deleted.
+  { id: "bare-fn env.set harness wiring", gate: "W8 ACallable-only env", replacedBy: "ANativeProcedure / hostFnToCallable harnesses" },
   // "z.procedure region-free callbacks" RETIRED (B4 audit, 2026-07-09 — region-discipline/B3
   // landed 2026-07-09): membrane/region.law.test.ts's "z.procedure decode adopts the same
   // scope token" row is now a plain green `it()`; no `it.fails()` referenced this id.
@@ -213,8 +205,7 @@ const STAGED: readonly LedgerRow[] = [
   {
     id: "loop-unroll",
     gate: "first loop-cone consumer wave — the wireframe-walking driver / P11 drill-in (the row SURVIVED the Q-track completion audit (2026-07-10), never silently dropped. docs/PROVENANCE.md §7: \"widened vs exact-via-count cones\" (finding #19). Both sides' machinery exists since Q16 — widened loop cones refuse per-wire γ with ReplayScopeError and reconstruct via aggregation count + playback — so the law is BODY-able; nobody has staged its body because no consumer demands the widened-vs-exact comparison yet)",
-    replacedBy: "a future `provenance/track-cone.law.test.ts` it.todo row, once its consumer wave stages the body",
-  },
+    replacedBy: "a future `provenance/track-cone.law.test.ts` it.todo row, once its consumer wave stages the body" },
   // "memory retention" RETIRED at Q21 (audit 2026-07-10): its gate — Q19, the R3 hard
   // gate — LANDED (e8c5a37ea6). The staged substance ("sealed-value growth measured
   // against Appendix A budget — a benchmark assertion, not a law-test row") now EXISTS

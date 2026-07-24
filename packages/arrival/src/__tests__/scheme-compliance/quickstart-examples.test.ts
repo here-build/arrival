@@ -29,18 +29,16 @@ describe("Quick Start Examples", () => {
 
   it("Register custom functions with Rosetta", async () => {
     // Register a domain function via a test-local EnvCapability (`symbol.rosetta` —
-    // the `env.defineRosetta` migration target). `z.list(z.number)` on both sides:
+    // `symbol.rosetta`. `z.list(z.number)` on both sides:
     // scheme proper-list ↔ JS `number[]`, decoded/encoded through the contract codecs
-    // — JS arrays become Scheme lists automatically, same as the legacy fixture.
+    // — JS arrays become Scheme lists automatically, same as the historical fixture.
     await applyCapability(sandboxedEnv, [
       EnvCapability.define("test/double-all", {
         symbols: (symbol, z) => ({
           "double-all": symbol.rosetta`double-all: doubles every element of a numeric list`(
             { input: [z.list(z.number)], output: [z.list(z.number)] },
             (numbers) => numbers.map((x) => x * 2),
-          ),
-        }),
-      }),
+          ) }) }),
     ]);
 
     // execState (COMPLEX tier): schemeToJs wants BOXED values — `exec` already unwraps.
@@ -59,7 +57,7 @@ describe("Quick Start Examples", () => {
     // `{id, priority}` records), so both slots stay `z.dynamic` (the rosetta escape
     // hatch: "impl receives/returns raw scheme value, does its own schemeToJs/
     // jsToScheme" — scheme-zod.ts's own doc) and the impl does the conversion inline,
-    // exactly what the legacy `defineRosetta` wrapper did automatically for every call.
+    // exactly the automatic host-arg crossing.
     await applyCapability(sandboxedEnv, [
       EnvCapability.define("test/high-priority-users", {
         symbols: (symbol, z) => ({
@@ -72,9 +70,7 @@ describe("Quick Start Examples", () => {
                 users.filter((u) => u.priority > 10),
               );
             },
-          ),
-        }),
-      }),
+          ) }) }),
     ]);
 
     // Pass JS data to Scheme

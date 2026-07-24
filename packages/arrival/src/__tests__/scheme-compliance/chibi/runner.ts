@@ -16,6 +16,17 @@
 // no per-test isolation, no retry. A setup's failure doesn't abort the run; it's recorded
 // (`lastSetupFailure`) so a later step's OWN unexplained throw can be attributed to it
 // (`setup-failed`) instead of a bare, confusing "unbound variable" message.
+//
+// Dual pass (M5 / CLEANUP-WORKBOARD §4.0):
+//   Pass A — `create(manifest, { strict: true })`  → ride chibi/R7RS goldens (test-error etc.)
+//   Pass B — loose golden pins outside the corpus runner (see golden-loose-car-cdr-empty.test.ts)
+// The runner stamps ONE mode for the whole shared env; do not mix modes mid-corpus (cursor is
+// sequential and setup forms would inherit the wrong strict bit). Load-bearing pair with
+// harness-capability.ts: `js-run-test` threads `this.runCtx` into thunk applyCallback calls —
+// bare `testCallCtx()` is CONSTANT_CTX and would silently ignore this flag. Grow mode-split
+// coverage by (1) promoting a form into Pass A under strict, (2) adding a golden-loose pin
+// under Pass B, (3) recording the pair in the misalignment inventory — never by permanent
+// EXPECTED_FAILURE under the wrong mode.
 import { applyCapability, freshEnv } from "../../_fresh-env.js";
 import type { ResolvingAmbient } from "../../../env/AmbientRuntime.js";
 import { execOverFrame } from "../../../eval/generator-exec.js";
@@ -26,6 +37,16 @@ import type { Manifest, Step, TestStep } from "./manifest.js";
 /** Wall-clock budget per top-level `exec` call (one form, or one block form) — see design §1
  *  "Per-step budget". A wedge becomes a red `budget` row instead of a hung run. */
 export const STEP_BUDGET_MS = 5000;
+
+/** Options for one CorpusRunner pass. `strict` is stamped on every `execOverFrame` call. */
+export interface CorpusRunnerOptions {
+  /**
+   * Interpreter nil-/portability-strictness (`ExecOptions.strict` / `RunContext.strict`).
+   * - `true`  — Pass A: R7RS-faithful (e.g. `(car '())` throws; vector list-ops PortabilityError)
+   * - `false` / omitted — historical default (loose / zimmerframe product mode)
+   */
+  strict?: boolean;
+}
 
 type BlockStep = Extract<Step, { kind: "block" }>;
 type SetupStep = Extract<Step, { kind: "setup" }>;
@@ -50,6 +71,8 @@ export class CorpusRunner {
     private readonly env: ResolvingAmbient,
     private readonly sink: OutcomeSink,
     private readonly manifest: Manifest,
+    /** Pass-A vs loose: fixed for the runner's lifetime (see module header dual-pass note). */
+    private readonly strict: boolean,
   ) {
     this.steps = manifest.steps;
     this.steps.forEach((step, pos) => {
@@ -61,11 +84,16 @@ export class CorpusRunner {
     });
   }
 
-  static async create(manifest: Manifest): Promise<CorpusRunner> {
+  /** Whether this runner is Pass A (R7RS-strict) or the historical loose default. */
+  get isStrict(): boolean {
+    return this.strict;
+  }
+
+  static async create(manifest: Manifest, options: CorpusRunnerOptions = {}): Promise<CorpusRunner> {
     const env = await freshEnv();
     const { capability, sink } = createChibiHarnessV2();
     await applyCapability(env, [capability]);
-    return new CorpusRunner(env, sink, manifest);
+    return new CorpusRunner(env, sink, manifest, options.strict ?? false);
   }
 
   /** Advance the cursor as needed and return `step`'s outcome (cached after the first call). */
@@ -144,9 +172,14 @@ export class CorpusRunner {
     }
   }
 
+  /** One step's exec options — budget + this pass's strict bit (Pass A vs loose). */
+  private frameOpts() {
+    return { env: this.env, budgetMs: STEP_BUDGET_MS, strict: this.strict };
+  }
+
   private async execSetup(step: SetupStep): Promise<void> {
     try {
-      await execOverFrame(step.text, { env: this.env, budgetMs: STEP_BUDGET_MS });
+      await execOverFrame(step.text, this.frameOpts());
       this.lastSetupFailure = undefined;
     } catch (e) {
       this.lastSetupFailure = { line: step.line, message: describeError(e) };
@@ -157,7 +190,7 @@ export class CorpusRunner {
 
   private async execStandaloneTest(step: TestStep): Promise<void> {
     try {
-      await execOverFrame(step.text, { env: this.env, budgetMs: STEP_BUDGET_MS });
+      await execOverFrame(step.text, this.frameOpts());
     } catch (e) {
       this.settled.set(step.index, this.classifyFormLevelThrow(e));
       return;
@@ -166,15 +199,14 @@ export class CorpusRunner {
     const outcome: StepOutcome = drained[0] ?? {
       kind: "error",
       phase: "actual-eval",
-      message: "js-run-test never fired for this step (the form did not dispatch through the harness hook)",
-    };
+      message: "js-run-test never fired for this step (the form did not dispatch through the harness hook)" };
     this.settled.set(step.index, outcome);
   }
 
   private async execBlock(step: BlockStep): Promise<void> {
     let abortedMessage: string | undefined;
     try {
-      await execOverFrame(step.text, { env: this.env, budgetMs: STEP_BUDGET_MS });
+      await execOverFrame(step.text, this.frameOpts());
     } catch (e) {
       abortedMessage = describeError(e);
     }
@@ -186,8 +218,7 @@ export class CorpusRunner {
           phase: "block-aborted",
           message:
             abortedMessage ??
-            `block produced only ${drained.length} outcome(s) for ${step.members.length} member(s) — a member past this point never ran`,
-        },
+            `block produced only ${drained.length} outcome(s) for ${step.members.length} member(s) — a member past this point never ran` },
     );
     this.blockOutcomes.set(step.index, outcomes);
     step.members.forEach((member, i) => this.settled.set(member.index, outcomes[i]));

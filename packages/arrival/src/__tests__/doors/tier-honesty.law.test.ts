@@ -85,8 +85,7 @@ describe("tier honesty (§7: every drill-in answer carries an honest evidence ti
         memo,
         key: freshKey,
         replay: () => replayGraphEgress({ program, frozen: run.frozen }),
-        fallback: unreachable,
-      });
+        fallback: unreachable });
       expect(EVIDENCE_TIERS).toContain(fresh.tier);
       expect(fresh.tier).toBe("replayed");
 
@@ -94,8 +93,7 @@ describe("tier honesty (§7: every drill-in answer carries an honest evidence ti
         memo,
         key: freshKey,
         replay: () => replayGraphEgress({ program, frozen: run.frozen }),
-        fallback: unreachable,
-      });
+        fallback: unreachable });
       expect(EVIDENCE_TIERS).toContain(cachedAnswer.tier);
       expect(cachedAnswer.tier).toBe("replayed-cached");
 
@@ -106,8 +104,7 @@ describe("tier honesty (§7: every drill-in answer carries an honest evidence ti
         memo,
         key: { templateHash: "th-tier-1-recorded", ordinalPath: [0], demand: "value" },
         replay: outOfScope,
-        fallback: () => machine.read("tier-1-payload"),
-      });
+        fallback: () => machine.read("tier-1-payload") });
       expect(EVIDENCE_TIERS).toContain(recordedAnswer.tier);
       expect(recordedAnswer.tier).toBe("recorded");
 
@@ -116,8 +113,7 @@ describe("tier honesty (§7: every drill-in answer carries an honest evidence ti
         memo,
         key: { templateHash: "th-tier-1-stub", ordinalPath: [0], demand: "value" },
         replay: outOfScope,
-        fallback: () => machine.read("tier-1-payload"),
-      });
+        fallback: () => machine.read("tier-1-payload") });
       expect(EVIDENCE_TIERS).toContain(stubAnswer.tier);
       expect(stubAnswer.tier).toBe("stub");
     },
@@ -171,8 +167,7 @@ describe("tier honesty (§7: every drill-in answer carries an honest evidence ti
         replay: () => replayGraphEgress({ program, frozen: run.frozen }),
         fallback: () => {
           throw new Error("unreachable");
-        },
-      });
+        } });
       expect(cold.tier).toBe("replayed");
 
       // Separately: the SAME logical payload's backing store degrades to stub (a
@@ -195,8 +190,7 @@ describe("tier honesty (§7: every drill-in answer carries an honest evidence ti
         replay: () => replayGraphEgress({ program, frozen: run.frozen }),
         fallback: () => {
           throw new Error("unreachable — the memo must hit before fallback is ever considered");
-        },
-      });
+        } });
       expect(warm.tier).toBe("replayed-cached");
       expect(warm.tier).not.toBe(cold.tier); // never conflated with the live replay that produced it
       expect(warm.value).toBe(cold.value); // same egress value (purity) ...
@@ -221,8 +215,7 @@ describe("tier honesty (§7: every drill-in answer carries an honest evidence ti
         replay: () => replayGraphEgress({ program, frozen: run.frozen }),
         fallback: () => {
           throw new Error("unreachable");
-        },
-      });
+        } });
       // Repeated hits: ALWAYS `replayed-cached` — never regresses to `recorded`/
       // `stub`, and never re-claims a fresh `replayed` (γ never silently re-runs on
       // a memo hit — `answerQuery`'s hit branch short-circuits before `replay` is
@@ -236,8 +229,7 @@ describe("tier honesty (§7: every drill-in answer carries an honest evidence ti
           },
           fallback: () => {
             throw new Error("unreachable");
-          },
-        });
+          } });
         expect(hit.tier).toBe("replayed-cached");
       }
 

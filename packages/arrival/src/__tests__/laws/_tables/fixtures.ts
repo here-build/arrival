@@ -3,14 +3,9 @@
  *
  * Every law cell needs a 3-element carrier whose elements are individually
  * provenance-stamped, so the term's box discipline is observable. This module is
- * the ONE place that mints, mirroring the mechanism golden-prov-infer.test.ts /
- * lineage-assumptions.test.ts already established (`env.defineRosetta` registering
- * a deterministic Rosetta-IN source whose fn returns an ALREADY-STAMPED value —
- * `jsToScheme`'s "same-provenance fast path" then passes it through unchanged,
- * see rosetta.ts's `createRosettaWrapper`: with no tap installed, `resultProvenance`
- * falls back to `inputProvenance`, which is EMPTY for a literal arg, so
- * `jsToScheme` sees `provenance === EMPTY_PROVENANCE` and returns our stamped
- * value AS-IS instead of re-stamping it empty).
+ * the ONE place that mints. W8: `src` / `borrow-array` are ANativeProcedures
+ * (scheme-arg callables) — they receive already-boxed scheme args and return
+ * stamped scheme values without a membrane unwrap.
  *
  * Unlike golden-prov-infer's FIXED mint ids (a deterministic golden capture), `src`
  * here mints a FRESH id per call (P11 — mint at the edge, one point per crossing),
@@ -28,10 +23,11 @@ import { ADict } from "../../../values/primitives/ADict.js";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { collapseProvenance } from "../../../provenance/provenance-collapse.js";
 import { schemeToJs } from "../../../membrane/rosetta.js";
-import * as z from "../../../common/scheme-zod.js";
+import * as z from "../../../common/scheme-zod/index.js";
 import type { ResolvingAmbient } from "../../../env/AmbientRuntime.js";
 import type { SchemeValue } from "../../../values/types.js";
 import type { CarrierRow } from "./carriers.js";
+import { ANativeProcedure } from "../../../values/primitives/ANativeProcedure.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
 import { bindValue } from "../../../env/AmbientRuntime.js";
 
@@ -40,8 +36,8 @@ import { bindValue } from "../../../env/AmbientRuntime.js";
  * already-boxed AValue — with a FRESH single-id provenance set. One point minted
  * per `src` call (P11), regardless of the carrier's element type (numbers for the
  * numeric carriers, characters for AString). The number/string/boolean arms are a
- * defensive fallback, not a live path: `src` is bound bare (not a rosetta), so its
- * arg always arrives still-boxed — see `withLawEnv`'s doc for why that's load-bearing.
+ * defensive fallback, not a live path: `src` is an ANativeProcedure, so its arg
+ * always arrives still-boxed — see `withLawEnv`'s doc for why that's load-bearing.
  */
 function stampFresh(raw: unknown, id: number): AValue {
   if (raw instanceof AValue) return raw.withProvenance(new Set([id])) as AValue;
@@ -60,38 +56,34 @@ export interface LawEnv {
 
 /**
  * A fresh capability env armed with the two harness-only bindings every carrier's
- * `mint3` snippet needs — `src` and `borrow-array` — NEITHER a rosetta, both bound
- * bare via `env.set`, for the SAME reason: a rosetta's `schemeToJs` would strip
- * each arg's box before `fn` ever saw it (see rosetta.ts), which is fine for a
- * function that genuinely wants JS-side values but wrong for one that needs to
- * re-stamp the ORIGINAL boxed value's exact type/identity. A bare JS function is
- * dispatched by the evaluator's plain-function call path (`Reflect.apply(fn,
- * callCtx, wrappedArgs)`, eval/evaluator.ts) with the already-evaluated,
- * ALREADY-BOXED scheme args — untouched by any membrane unwrap.
+ * `mint3` snippet needs — `src` and `borrow-array` — both ANativeProcedures (W8),
+ * not rosettas, for the SAME reason: a rosetta's `schemeToJs` would strip each
+ * arg's box before the body ever saw it, which is wrong for a verb that needs to
+ * re-stamp the ORIGINAL boxed value's exact type/identity. An ANativeProcedure
+ * receives already-evaluated, ALREADY-BOXED scheme args — untouched by any membrane unwrap.
  *
- *  - `src`: a Rosetta-IN SOURCE minting one fresh provenance point per call (P11),
- *    independent of argument type. `schemeToJs`'s honest per-type unwrapping
- *    (rosetta.ts — e.g. ACharacter → a bare JS string) is a ONE-WAY projection
- *    (P9): re-boxing a bare string can't recover whether it started life as an
- *    AString or an ACharacter, so a rosetta-wrapped `src` couldn't round-trip a
- *    character carrier's elements. Binding bare sidesteps the unwrap entirely —
- *    `stampFresh`'s `raw instanceof AValue` arm always fires, preserving the
- *    original element's exact class.
+ *  - `src`: mints one fresh provenance point per call (P11), independent of argument type.
  *  - `borrow-array`: CROSSES each already-boxed arg out to the JS world (`schemeToJs`) before
  *    borrowing the resulting JS array, and unions the consumed args' provenance onto the
- *    CONTAINER. A borrowed store holds JS-world values only (V's hygiene law) — see the binding
- *    below for why the old "fromJS on a JS array of boxed elements" idiom was minting a value
- *    production cannot construct.
+ *    CONTAINER. A borrowed store holds JS-world values only (V's hygiene law).
  */
 export async function withLawEnv(): Promise<LawEnv> {
   const env = await freshEnv();
   const mintedIds: number[] = [];
   let seq = 0;
-  bindValue(env, "src", (raw: unknown) => {
-    const id = ++seq;
-    mintedIds.push(id);
-    return stampFresh(raw, id);
-  });
+  bindValue(
+    env,
+    "src",
+    new ANativeProcedure({
+      name: "src",
+      arity: { min: 1, max: 1 },
+      contract: undefined,
+      impl: (args) => {
+        const id = ++seq;
+        mintedIds.push(id);
+        return stampFresh(args[0], id);
+      } }),
+  );
   // `borrow-array` CROSSES its arguments into the JS world, then borrows the result.
   //
   // It used to hand the raw JS array of ALREADY-BOXED args straight to `fromJS`, producing an
@@ -99,11 +91,6 @@ export async function withLawEnv(): Promise<LawEnv> {
   // a borrowed store holds JS-WORLD VALUES ONLY — primitives, plain objects/arrays, and
   // reverse-membraned egress proxies. `AJSArray`'s store type (`JSWorldArray`, values/types.ts)
   // now refuses it at compile time, and its element crossing refuses it at runtime.
-  //
-  // It was not a harmless fiction. `jsToScheme` DEEP-RE-STAMPS an AValue with the provenance it is
-  // handed, so a boxed element buried in a borrowed store gets its own lineage overwritten with the
-  // container's the moment anything reads it. The fixture was minting a value production cannot
-  // make, and pinning per-element ids that a borrowed array is incapable of carrying.
   //
   // The honest shape is exactly AString's, one row above in CARRIERS: three `src`-stamped boxes are
   // CONSUMED by the constructor, their provenance UNIONS onto the container, and the elements
@@ -113,10 +100,15 @@ export async function withLawEnv(): Promise<LawEnv> {
   bindValue(
     env,
     "borrow-array",
-    (...args: SchemeValue[]) =>
-      new AJSArray(args.map((a) => schemeToJs(a, {})),
-        collapseProvenance(...args),
-      ),
+    new ANativeProcedure({
+      name: "borrow-array",
+      arity: { min: 0, max: null },
+      contract: undefined,
+      impl: (args) =>
+        new AJSArray(
+          args.map((a) => schemeToJs(a, {})),
+          collapseProvenance(...args),
+        ) }),
   );
   return { env, mintedIds };
 }

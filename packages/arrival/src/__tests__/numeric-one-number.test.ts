@@ -64,22 +64,19 @@ describe("overflow-throws — exact results whose components leave safe-integer 
       // RED until the atom lands: today AExact is bigint-backed (no magnitude ceiling),
       // so this computes silently to a correct-but-unbounded exact bigint — no throw.
       name: "(+ 9007199254740991 1) rejects — exact addition overflowing 2^53 THROWS, never silently widens",
-      input: "(+ 9007199254740991 1)",
-    },
+      input: "(+ 9007199254740991 1)" },
     {
       // RED until the atom lands (same reason: unbounded bigint today). 94906266 is
       // safe on its own (~9.5e7); its square (9007199326062756) exceeds
       // Number.MAX_SAFE_INTEGER (9007199254740991) — confirmed by direct computation.
       name: "(* 94906266 94906266) rejects — exact multiplication overflowing 2^53 THROWS",
-      input: "(* 94906266 94906266)",
-    },
+      input: "(* 94906266 94906266)" },
     {
       // RED until the atom lands. The doc's own example (§3): a 3-arg `*` fold must
       // catch the overflow at whichever step first leaves safe range, not just at the
       // final accumulated result.
       name: "(* 94906266 94906266 94906266) rejects — per-step overflow check in a variadic fold",
-      input: "(* 94906266 94906266 94906266)",
-    },
+      input: "(* 94906266 94906266 94906266)" },
   ])("$name", async ({ input }) => {
     await expect(run(input)).rejects.toThrow(/exact overflow/i);
   });
@@ -123,8 +120,7 @@ describe("box identity — exact and inexact are different boxes at equal numeri
       // that normalization is ever forgotten during the port.
       name: 'exact -0 is unconstructible — (* -1 0) prints bare "0", never "-0"',
       input: "(* -1 0)",
-      expected: "0",
-    },
+      expected: "0" },
   ])("$name", async ({ input, expected }) => {
     expect(await run(input)).toBe(expected);
   });
@@ -135,8 +131,7 @@ describe("division — exact zero divisor errors; integer-only ops require denom
     {
       name: "(/ 1 0) rejects — exact division by exact zero errors (R7RS), not ∞",
       input: "(/ 1 0)",
-      matcher: /division by zero/i,
-    },
+      matcher: /division by zero/i },
     {
       // RED until the atom lands: today's message is "quotient: argument 0 type
       // mismatch" (z.bigint's CodecFidelityError swallowed into a generic mismatch by
@@ -145,8 +140,7 @@ describe("division — exact zero divisor errors; integer-only ops require denom
       // whose door message IS "quotient: not an integer".
       name: "(quotient (/ 3 2) 1) rejects — quotient doors on a non-integer (denom ≠ 1) operand",
       input: "(quotient (/ 3 2) 1)",
-      matcher: /integer/i,
-    },
+      matcher: /integer/i },
   ])("$name", async ({ input, matcher }) => {
     await expect(run(input)).rejects.toThrow(matcher);
   });
@@ -165,8 +159,7 @@ describe("parsing — string->number / reader agree on exactness", () => {
       // printed bare "100", not "100.0".
       name: '(string->number "1e2") is inexact 100.0 — exponent notation never mints exact',
       input: '(string->number "1e2")',
-      expected: "100.0",
-    },
+      expected: "100.0" },
     { name: '(string->number "10/2") reduces to exact 5', input: '(string->number "10/2")', expected: "5" },
     { name: '(string->number "1/3") parses as the exact rational 1/3', input: '(string->number "1/3")', expected: "1/3" },
   ])("$name", async ({ input, expected }) => {

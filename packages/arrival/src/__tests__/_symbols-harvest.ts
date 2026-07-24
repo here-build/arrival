@@ -14,12 +14,12 @@
 // `common/capability.ts`'s bind loop and `eval/exec-phases.ts`'s describe/catalog roster
 // already dispatch through, applied once over a whole `symbols` record.
 //
-// An entry with NO contract to show (`symbol.alias`'s unresolved marker, the legacy
+// An entry with NO contract to show (`symbol.alias`'s unresolved marker, the historical
 // `{ fn }` arm, `symbol.value`'s raw boxed data) is silently OMITTED from the returned
 // record — exactly like `eval/exec-phases.ts`'s `rosterEntries` already treats those.
 import type { SymbolDeclaration } from "../common/capability.js";
 import { contractOf } from "../common/capability-internals.js";
-import type { AEntity } from "../common/symbol.js";
+import type { AEntity } from "../symbol/index.js";
 
 export function harvestContracts(symbols: Record<string, SymbolDeclaration> | unknown): Record<string, AEntity> {
   const out: Record<string, AEntity> = {};

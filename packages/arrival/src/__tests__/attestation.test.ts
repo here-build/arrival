@@ -7,8 +7,8 @@
 
 import { describe, expect, it } from "vitest";
 
-import * as z from "../common/scheme-zod.js";
-import { symbol } from "../common/symbol.js";
+import * as z from "../common/scheme-zod/index.js";
+import { symbol } from "../symbol/index.js";
 import { attest, attestDeep, freshIfSingleton, isAttested } from "../values/attestation.js";
 import { exec, execState } from "../eval/generator-exec.js";
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
@@ -23,19 +23,10 @@ import { tf } from "../values/tagless-final.js";
 import { AListAlike } from "../values/types.js";
 import { jsToScheme } from "../membrane/rosetta.js";
 import { CONSTANT_CTX } from "../run/RunContext.js";
-import { testCallCtx } from "../common/symbol.js";
-import { type RosettaSymbolDef } from "../common/symbols/_bake.js";
+import { testCallCtx } from "../symbol/index.js";
 
-/** Test-only cast: pull a minted ARosettaProcedure's `.contract` (typed `unknown` on the
- *  class) back to its RosettaSymbolDef shape, for direct `.run` invocation — Stage A2's
- *  `symbol.rosetta` mints the ARosettaProcedure directly; the def it used to RETURN rides
- *  `.contract` on it. */
-function rosettaContract(v: { contract: unknown }): RosettaSymbolDef {
-  return v.contract as RosettaSymbolDef;
-}
-
-/** A SOURCE rosetta (default — not pure) returning a fixed JS value; its `run`
- *  called direct-JS (no evaluator ctx) exercises exactly the _bake step-4 walk.
+/** A SOURCE rosetta (default — not pure) returning a fixed JS value; its apply term
+ *  called direct-JS (no evaluator ctx) exercises exactly the bake step-4 walk.
  *  REBASELINE (v1→v2 scheme-zod swap, 4ebe73abbe, 2026-07-08): `z.value` used to be a UNION
  *  of auto-boxing codecs (v1's `value = z.union([number, string, boolean, …])`), so a raw JS
  *  return auto-boxed via whichever union member matched. v2's `value` (Q1 split: `z.dynamic`,
@@ -51,6 +42,12 @@ const source = (impl: () => unknown) =>
 /** A SOURCE rosetta echoing its scheme argument — the identity fast path through
  *  jsToScheme returns the very same box, which the return walk then deep-attests. */
 const echo = symbol.rosetta`echo: identity`({ input: [z.dynamic], output: [z.dynamic] }, (v) => v);
+
+
+/** Invoke a baked rosetta procedure via its apply term (the sole membrane spine). */
+function fire(proc: { ["arrival/tagless-final/apply"](args: any[], callCtx: any): any }, callCtx: any, ...args: any[]) {
+  return proc["arrival/tagless-final/apply"](args, callCtx);
+}
 
 describe("attestation registry (attest / isAttested / freshIfSingleton)", () => {
   /** Exempt singletons (nil, void, interned symbols, #t/#f) are never marked attested;
@@ -84,9 +81,9 @@ describe("attestation registry (attest / isAttested / freshIfSingleton)", () => 
 
 describe("bakeRosetta return walk (stamp site 1)", () => {
   it("attests a scalar return; a boolean return is a fresh attested clone, never the flyweight", async () => {
-    expect(isAttested(await rosettaContract(source(() => 42)).run.call(testCallCtx()))).toBe(true);
-    expect(isAttested(await rosettaContract(source(() => "hi")).run.call(testCallCtx()))).toBe(true);
-    const bool = await rosettaContract(source(() => true)).run.call(testCallCtx());
+    expect(isAttested(await fire(source(() => 42), testCallCtx()))).toBe(true);
+    expect(isAttested(await fire(source(() => "hi"), testCallCtx()))).toBe(true);
+    const bool = await fire(source(() => true), testCallCtx());
     expect(isAttested(bool)).toBe(true);
     expect(bool).not.toBe(schemeTrue);
     expect(isAttested(schemeTrue)).toBe(false); // no program-wide leak
@@ -97,12 +94,12 @@ describe("bakeRosetta return walk (stamp site 1)", () => {
       { input: [], output: [z.number], provenance: "pipe" },
       () => 42,
     );
-    expect(isAttested(await rosettaContract(pureDef).run.call(testCallCtx()))).toBe(false);
+    expect(isAttested(await fire(pureDef, testCallCtx()))).toBe(false);
   });
 
   it("attests a dict return's wrapper; entries inherit through get, cache-stable", async () => {
     const def = source(() => ({ a: 1, nested: { x: 2 }, tags: [7, 8] }));
-    const out = (await rosettaContract(def).run.call(testCallCtx())) as AJSObject;
+    const out = (await fire(def, testCallCtx())) as AJSObject;
     expect(out).toBeInstanceOf(AJSObject);
     expect(isAttested(out)).toBe(true);
 
@@ -125,7 +122,7 @@ describe("bakeRosetta return walk (stamp site 1)", () => {
 
   it("a missing key plucks the SHARED nil — never attested", async () => {
     const def = source(() => ({ a: 1 }));
-    const out = (await rosettaContract(def).run.call(testCallCtx())) as AJSObject;
+    const out = (await fire(def, testCallCtx())) as AJSObject;
     const missing = out.get("missing");
     expect(missing).toBeInstanceOf(ANil);
     expect(isAttested(missing)).toBe(false);
@@ -133,7 +130,7 @@ describe("bakeRosetta return walk (stamp site 1)", () => {
 
   it("AJSArray materialization inherits: every materialized element box is attested", async () => {
     const def = source(() => [1, 2, 3]);
-    const out = (await rosettaContract(def).run.call(testCallCtx())) as AJSArray;
+    const out = (await fire(def, testCallCtx())) as AJSArray;
     expect(out).toBeInstanceOf(AJSArray);
     expect(isAttested(out)).toBe(true);
     for (const el of out.__vector__) expect(isAttested(el)).toBe(true);
@@ -143,7 +140,7 @@ describe("bakeRosetta return walk (stamp site 1)", () => {
     // execState (COMPLEX tier): `echo.run` is a rosetta expecting a real boxed
     // AValue input (RULINGS.md R1) — `exec`'s plain-JS exit would fail its decode.
     const [pair] = (await execState("'(1 2 3)")).values;
-    const out = (await rosettaContract(echo).run.call(testCallCtx(), pair)) as APair<any, any>;
+    const out = (await fire(echo, testCallCtx(), pair)) as APair<any, any>;
     expect(out).toBeInstanceOf(APair);
     expect(isAttested(out)).toBe(true);
     expect(isAttested(out.car)).toBe(true);
@@ -153,7 +150,7 @@ describe("bakeRosetta return walk (stamp site 1)", () => {
 
   it("attests a vector's stored elements", async () => {
     const [vec] = (await execState("#(1 2)")).values;
-    const out = (await rosettaContract(echo).run.call(testCallCtx(), vec)) as AVector;
+    const out = (await fire(echo, testCallCtx(), vec)) as AVector;
     expect(out).toBeInstanceOf(AVector);
     expect(isAttested(out)).toBe(true);
     for (const el of out.__vector__) expect(isAttested(el)).toBe(true);

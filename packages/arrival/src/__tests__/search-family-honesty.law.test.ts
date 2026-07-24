@@ -45,8 +45,7 @@ const run = async (code: string, bindings: Record<string, unknown> = {}): Promis
         inferenceEnv,
         "search-honesty",
         Object.fromEntries(Object.entries(bindings).map(([k, v]) => [k, jsToScheme(CONSTANT_CTX, v)])),
-      ),
-    });
+      ) });
     return `OK ${JSON.stringify(schemeToJs(values[0], {}))}`;
   } catch (e) {
     return `DOOR ${e instanceof Error ? e.message : String(e)}`;

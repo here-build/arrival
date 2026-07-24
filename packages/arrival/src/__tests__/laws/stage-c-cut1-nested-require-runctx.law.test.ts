@@ -11,12 +11,12 @@
  * `this.runCtx` was always the real run handle). THIS file is the ONE-LEVEL-DEEPER proof: the
  * require that dispatches from INSIDE an already-`require`d `.scm` module's own forms — the
  * exact path `loaderRegistryOf` (loader-capability.ts) used to silently fall through to the
- * process-global legacy table (`loader-extensions.ts`'s `legacyExtensionRegistry`) for, even
+ * process-global extension table (`loader-extensions.ts`'s `process-global extension registry`) for, even
  * under a vocabulary-path top-level run with its own per-run extension registry.
  *
- * LAW 1 (nested require resolves per-run, not legacy): a vocabulary-path run requires a `.scm`
+ * LAW 1 (nested require resolves per-run, not historical): a vocabulary-path run requires a `.scm`
  *   module which itself `(require …)`s an extension-resolved file, registered only via THIS
- *   run's own prelude — the nested require must resolve it, and the process-global legacy
+ *   run's own prelude — the nested require must resolve it, and the process-global historical
  *   table must stay untouched (size 0) throughout.
  *
  * LAW 2 (cross-run isolation at the nested level): a SEPARATE run (a fresh `exec()` call, a
@@ -57,14 +57,12 @@ function makeUpperExtCapability(name: string, suffix: string, resolverName: stri
       [resolverName]: symbol.native`${resolverName}: uppercases module contents (ResolverResult value kind)`(
         { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
         (contents: unknown) => ({ kind: "value", value: String(contents).toUpperCase() }) as never,
-      ),
-    }),
-    prelude: `(require/register-extension "${suffix}" "${resolverName}")`,
-  });
+      ) }),
+    prelude: `(require/register-extension "${suffix}" "${resolverName}")` });
 }
 
 describe("LAW 1 — nested require (inside a required .scm module) resolves via the RUN's own per-run registry", () => {
-  it("does not fall to a process-global legacy table (Stage C Cut 3b: there is no longer one to fall to)", async () => {
+  it("does not fall to a process-global extension table (Stage C Cut 3b: there is no longer one to fall to)", async () => {
     const ext = makeUpperExtCapability("test/ext-upper-nested", ".nestedupper", "test/upper-resolve-nested");
 
     const results = await exec(`(require "outer-nested.scm")`, {
@@ -72,16 +70,13 @@ describe("LAW 1 — nested require (inside a required .scm module) resolves via 
       config: {
         loader: files({
           "outer-nested.scm": `(require "inner-nested.nestedupper")`,
-          "inner-nested.nestedupper": "hello from inside",
-        }),
-      },
-    });
+          "inner-nested.nestedupper": "hello from inside" }) } });
 
     // The `.scm` module's own last form is the nested require — its value is what `load`
     // discards (require's own `load` branch always returns unspecified), so the observable
     // proof is simply that resolution SUCCEEDED (pre-fix: `loaderRegistryOf` reads
     // `this.runCtx.vocabulary` off execExpr's freshly-minted, vocabulary-less RunContext for
-    // the nested call ⇒ always the (empty) legacy table ⇒ "no-resolver" throws here instead).
+    // the nested call ⇒ always the empty process-global table ⇒ "no-resolver" throws here instead).
     expect(results.length).toBeGreaterThan(0);
   });
 });
@@ -95,14 +90,11 @@ describe("LAW 2 — cross-run isolation holds one require-frame deeper", () => {
       config: {
         loader: files({
           "outer-iso-a.scm": `(require "inner-iso-a.nestediso")`,
-          "inner-iso-a.nestediso": "seen by run A",
-        }),
-      },
-    });
+          "inner-iso-a.nestediso": "seen by run A" }) } });
 
     // Run B: a SEPARATE exec() call, a capability set that never registered `.nestediso` (only
     // the bare loader) — its nested require of the SAME suffix must fail, proving run A's
-    // per-run registration never leaked (into the legacy table, or anywhere run B's own bag
+    // per-run registration never leaked (into the historical table, or anywhere run B's own bag
     // would read).
     await expect(
       exec(`(require "outer-iso-b.scm")`, {
@@ -110,10 +102,7 @@ describe("LAW 2 — cross-run isolation holds one require-frame deeper", () => {
         config: {
           loader: files({
             "outer-iso-b.scm": `(require "unseen-iso-b.nestediso")`,
-            "unseen-iso-b.nestediso": "unreachable",
-          }),
-        },
-      }),
+            "unseen-iso-b.nestediso": "unreachable" }) } }),
     ).rejects.toThrow(/no-resolver|no resolver/i);
   });
 });
@@ -130,10 +119,7 @@ describe("LAW 3 — a nested require's allocations charge the OUTER run's heap m
       heapBudget: 1000,
       config: {
         loader: files({
-          "outer-meter.scm": `(map (lambda (x) x) (list 1 2 3 4 5 6 7 8 9 10))`,
-        }),
-      },
-    });
+          "outer-meter.scm": `(map (lambda (x) x) (list 1 2 3 4 5 6 7 8 9 10))` }) } });
 
     expect(runCtx.heapMeter?.used).toBeGreaterThan(0);
   });

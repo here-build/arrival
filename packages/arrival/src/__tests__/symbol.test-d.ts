@@ -14,15 +14,10 @@
 // mode honors `@ts-expect-error`, so each marked line reds if it ever starts compiling.
 
 import { describe, expectTypeOf, test } from "vitest";
-import * as z from "../common/scheme-zod.js";
-import { type AEntity, symbol } from "../common/symbol.js";
-import {
-  type DecodedArgs,
-  type DecodedArgsWithRest,
-  type DecodedReturn,
-  type NativeSymbolDef,
-  type SpecInfer,
-} from "../common/symbols/_bake.js";
+import * as z from "../common/scheme-zod/index.js";
+import { type AEntity, symbol } from "../symbol/index.js";
+import { type NativeSymbolDef } from "../values/primitives/ANativeProcedure.js";
+import { type DecodedArgs, type DecodedArgsWithRest, type DecodedReturn, type SpecInfer } from "../common/symbols/_bake.js";
 import type { APair } from "../values/primitives/APair.js";
 import type { AString } from "../values/primitives/AString.js";
 import type { AList, AListAlike, SchemeValue } from "../values/types.js";

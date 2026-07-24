@@ -27,7 +27,8 @@
 // derives section nesting structurally at collection time, so these forms become
 // `section-begin`/`section-end` steps the runner never executes — no runtime group-stack is
 // needed (unlike v1's `js-test-begin`/`js-test-end`).
-import { testCallCtx } from "../../../common/symbol.js";
+import { testCallCtx } from "../../../symbol/index.js";
+import type { CallCtx } from "../../../run/CallCtx.js";
 import { EnvCapability } from "../../../common/capability.js";
 import { applyCallback } from "../../../values/primitives/ACallable.js";
 import { ABool } from "../../../values/primitives/ABool.js";
@@ -78,20 +79,29 @@ export function createChibiHarnessV2(): { capability: EnvCapability; sink: Outco
       // EITHER is attributed to the right phase), then compare the two BOXED results entirely
       // in scheme. Only the boolean verdict crosses back (§5); reprs are computed here (failure
       // only) via the class-owned print protocol, never `String(...)`.
+      //
+      // Dual pass (M5): plain-function `this: CallCtx` (never an arrow — W0 / arrow-fn trap).
+      // Thunks and the comparator MUST see the enclosing run's RunContext (strict / meter /
+      // channels). Bare `testCallCtx()` is CONSTANT_CTX (`strict: false`) — that silently
+      // collapsed Pass A to loose for every test-error/test form, which is why car/cdr-empty
+      // lived as permanent EXPECTED_FAILURES under "harness never passes strict". Thread
+      // `this.runCtx` so CorpusRunner.create(manifest, { strict: true }) is load-bearing.
       "js-run-test":
         symbol.native`js-run-test: run expected/actual thunks, compare via the scheme comparator, sink the outcome`(
           { input: [z.schemeValue, z.lambda, z.lambda], output: [z.undefinedResult] },
-          async (_name, expectedThunk, actualThunk): Promise<AVoid> => {
+          async function (this: CallCtx, _name, expectedThunk, actualThunk): Promise<AVoid> {
+            // One CallCtx per js-run-test fire — same run as the outer form (Pass A or loose).
+            const thunkCtx = testCallCtx({ runCtx: this.runCtx });
             let expected: SchemeValue;
             try {
-              expected = (await applyCallback(expectedThunk, [], testCallCtx())) as SchemeValue;
+              expected = (await applyCallback(expectedThunk, [], thunkCtx)) as SchemeValue;
             } catch (e) {
               queue.push({ kind: "error", phase: "expected-eval", message: describeError(e) });
               return theVoid;
             }
             let actual: SchemeValue;
             try {
-              actual = (await applyCallback(actualThunk, [], testCallCtx())) as SchemeValue;
+              actual = (await applyCallback(actualThunk, [], thunkCtx)) as SchemeValue;
             } catch (e) {
               queue.push({ kind: "error", phase: "actual-eval", message: describeError(e) });
               return theVoid;
@@ -102,7 +112,7 @@ export function createChibiHarnessV2(): { capability: EnvCapability; sink: Outco
                   "chibi harness v2: comparator not registered (prelude did not run js-register-comparator)",
                 );
               }
-              const verdict = await applyCallback(comparator, [expected, actual], testCallCtx());
+              const verdict = await applyCallback(comparator, [expected, actual], thunkCtx);
               const pass = verdict instanceof ABool ? verdict.value : Boolean(verdict);
               if (pass) queue.push({ kind: "pass" });
               else queue.push({ kind: "fail", expectedRepr: printValue(expected), actualRepr: printValue(actual) });
@@ -111,8 +121,7 @@ export function createChibiHarnessV2(): { capability: EnvCapability; sink: Outco
             }
             return theVoid;
           },
-        ),
-    }),
+        ) }),
 
     prelude: `
     ;; The comparator — chibi's approximate float equality, structurally recursive over
@@ -183,8 +192,7 @@ export function createChibiHarnessV2(): { capability: EnvCapability; sink: Outco
       (syntax-rules ()
         ((test-numeric-syntax str expect strs ...)
          (test str expect (string->number str)))))
-  `,
-  });
+  ` });
 
   return {
     capability,
@@ -193,9 +201,7 @@ export function createChibiHarnessV2(): { capability: EnvCapability; sink: Outco
         const out = queue.slice();
         queue.length = 0;
         return out;
-      },
-    },
-  };
+      } } };
 }
 
 function describeError(e: unknown): string {

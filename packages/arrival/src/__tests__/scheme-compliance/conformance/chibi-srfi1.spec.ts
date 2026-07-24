@@ -14,9 +14,15 @@
  *   - the registry: `registries-srfi1.ts`'s own `EXCLUDED`/`EXPECTED_FAILURES` tables
  *     (driven by src/env/srfi/srfi-1.ts's DOORS inventory), not the main corpus's.
  *
+ * Dual pass (M5): this file is **Pass A** — `CorpusRunner.create(manifest, { strict: true })`
+ * so chibi goldens that require R7RS throws (notably `(test-error (car '()))` /
+ * `(test-error (cdr '()))`) are real green rows, not permanent EXPECTED_FAILURES under a
+ * loose harness. **Pass B** (golden-loose current product pins for those mode-splits) lives
+ * in `golden-loose-car-cdr-empty.test.ts`. Misalignment inventory seed:
+ * `registries-srfi1.ts` `MODE_SPLIT_INVENTORY`.
+ *
  * `CorpusRunner`/the harness capability (test/test-error/test-values macros, the scheme-side
- * comparator) are shared verbatim with the main corpus — a fresh env per spec file, built
- * the same way (`CorpusRunner.create`).
+ * comparator) are shared verbatim with the main corpus — a fresh env per spec file.
  */
 import fs from "fs";
 import { describe, expect, it } from "vitest";
@@ -31,10 +37,15 @@ if (!fs.existsSync(SRFI1_TEST_PATH)) {
   });
 } else {
   const manifest: Manifest = await buildSrfi1Manifest();
-  const runner = await CorpusRunner.create(manifest);
+  // Pass A: R7RS-strict so car/cdr-of-empty test-error forms ride chibi goldens.
+  const runner = await CorpusRunner.create(manifest, { strict: true });
 
-  describe("Chibi SRFI-1", () => {
+  describe("Chibi SRFI-1 (Pass A — strict / chibi goldens)", () => {
     let registeredCount = 0;
+
+    it("runner is Pass A (strict: true)", () => {
+      expect(runner.isStrict).toBe(true);
+    });
 
     const rowLabel = (step: TestStep): string =>
       `${normalizeText(step.text).slice(0, 160)}  ${SRFI1_TEST_PATH}:${step.line}`.slice(0, 300);

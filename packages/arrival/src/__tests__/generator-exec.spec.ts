@@ -16,6 +16,7 @@ import { AString } from "../values/primitives/AString.js";
 import { nil } from "../values/primitives/ANil.js";
 import { freshEnv } from "./_fresh-env.js";
 import type { SchemeValue } from "../values/types.js";
+import { ANativeProcedure } from "../values/primitives/ANativeProcedure.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
 import { bindValue } from "../env/AmbientRuntime.js";
 
@@ -312,10 +313,18 @@ describe("generator-exec", () => {
     it("should run finally clause after success", async () => {
       const log: string[] = [];
       const env = await freshEnv();
-      bindValue(env, "log", (tag: AString) => {
-        log.push(String(tag.valueOf()));
-        return nil;
-      });
+      bindValue(
+        env,
+        "log",
+        new ANativeProcedure({
+          name: "log",
+          arity: { min: 1, max: 1 },
+          contract: undefined,
+          impl: (args) => {
+            log.push(String((args[0] as AString).valueOf()));
+            return nil;
+          } }),
+      );
       await execStateOverFrame(
         `(try
            (log "body")
@@ -331,10 +340,18 @@ describe("generator-exec", () => {
     it("should run finally clause after catch", async () => {
       const log: string[] = [];
       const env = await freshEnv();
-      bindValue(env, "log", (tag: AString) => {
-        log.push(String(tag.valueOf()));
-        return nil;
-      });
+      bindValue(
+        env,
+        "log",
+        new ANativeProcedure({
+          name: "log",
+          arity: { min: 1, max: 1 },
+          contract: undefined,
+          impl: (args) => {
+            log.push(String((args[0] as AString).valueOf()));
+            return nil;
+          } }),
+      );
       await execStateOverFrame(
         `(try
            (begin (log "body") (raise "error"))
