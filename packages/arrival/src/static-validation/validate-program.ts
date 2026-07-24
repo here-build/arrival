@@ -1,31 +1,30 @@
-// validate-program — the STATIC VALIDATION PASS: the compiler's front door, not a
+// validate-program — STATIC VALIDATION PASS: the compiler's front door, not a
 // provenance artifact (provenance/ modules CONSUME forms; this one JUDGES them).
-// Composes the machinery — the reference walk (collect-references.ts), the
-// graph (reference-graph.ts), the assembled vocabulary (vocabulary.ts), the
-// introspectable doors, the degradation-minted causes, and `suggestFromVocabulary` —
-// into ONE eslint-style pass: the COMPLETE `Diagnostic[]`, never crash-on-first. Only
-// the CALLER decides to throw (`exec` aggregates error-tier diagnostics into one
-// `StaticValidationError` at parse phase, before the first form evaluates).
+// Composes the reference walk (collect-references.ts), the graph (reference-graph.ts),
+// assembled vocabulary (vocabulary.ts), introspectable doors, degradation-minted causes,
+// and `suggestFromVocabulary` into ONE eslint-style pass: the COMPLETE `Diagnostic[]`,
+// never crash-on-first. Only the CALLER decides to throw (`exec` aggregates error-tier
+// diagnostics into one `StaticValidationError` at parse phase, before the first form
+// evaluates).
 //
-// THE SOUNDNESS CONTRACT (binding) — the static-validator voice of the one conservative-
-// narrowing law (DEGRADE TO WARNING, NEVER A FALSE POSITIVE: docs/static-plane.md
-// §CONSERVATIVE NARROWING): the `error` tier advertises no spurious
-// `unbound-symbol` errors MODULO the EXCLUDED reachability strictness — a dead-branch
-// reference (`(if #f (missing) 42)`) reports BY DESIGN (dead references are drift) and
-// is not a false positive; it is the one deliberate divergence from runtime semantics,
-// opt-out documented on the exec knob. Four leak sources are closed by construction:
-// (1) SPECIAL_FORMS/keyword heads — the unconditional KEYWORD_SYNTAX baseline
-// (vocabulary.ts); (2) binder-macro formals — the ternary firewall ("binder" is
-// opaque-equivalent until a binding-aware walker exists); (3) program-level
-// `define-macro`/`define-syntax` names — the macro-aware first sweep below; (4)
-// internal-define sequences — the walker's body-sequence letrec* pre-pass. Anything the
-// pass cannot prove degrades to `warning` (the impure-resolver switch) or is not
-// emitted (the macro firewall). Suggestions are the one explicitly-heuristic channel,
-// labeled ("did you mean") and bound by the suggestion-soundness law below.
+// SOUNDNESS CONTRACT — static-validator voice of the one conservative-narrowing law
+// (DEGRADE TO WARNING, NEVER A FALSE POSITIVE: docs/static-plane.md §CONSERVATIVE
+// NARROWING): the `error` tier advertises no spurious `unbound-symbol` errors MODULO
+// the EXCLUDED reachability strictness — a dead-branch reference (`(if #f (missing) 42)`)
+// reports BY DESIGN (dead references are drift) and is not a false positive; it is the
+// one deliberate divergence from runtime semantics, opt-out documented on the exec knob.
+// Four leak sources closed by construction:
+// (1) SPECIAL_FORMS/keyword heads — unconditional KEYWORD_SYNTAX baseline (vocabulary.ts);
+// (2) binder-macro formals — ternary firewall ("binder" is opaque-equivalent until a
+//     binding-aware walker exists);
+// (3) program-level `define-macro`/`define-syntax` names — macro-aware first sweep below;
+// (4) internal-define sequences — walker's body-sequence letrec* pre-pass.
+// Anything unproven degrades to `warning` (impure-resolver switch) or is not emitted
+// (macro firewall). Suggestions are the one explicitly-heuristic channel, labeled
+// ("did you mean") and bound by the suggestion-soundness law below.
 //
-// DISPLAY DISCIPLINE (same posture as Unison): a content hash NEVER appears in
-// diagnostic text; every identity resolves to `name @ capability`. Enforced by these
-// assemblers — no Diagnostic field carries a hash.
+// DISPLAY DISCIPLINE: a content hash NEVER appears in diagnostic text; every identity
+// resolves to `name @ capability`. No Diagnostic field carries a hash.
 
 import type { SourceLocation } from "../errors.js";
 import type { SchemeValue } from "../values/types.js";
@@ -189,9 +188,7 @@ export function validateProgram(
         sites,
         message,
         publicMessage,
-        ...(suggestions.length > 0 ? { suggestions } : {}),
-      },
-    });
+        ...(suggestions.length > 0 ? { suggestions } : {}) } });
   }
 
   // Bucket c — `missing-configuration`: group ReferenceNodes by the MissingConfigNode
@@ -204,8 +201,7 @@ export function validateProgram(
     for (const d of referencedDoors) doorsExplainedByConfig.add(d);
     diagnostics.push({
       firstOrder: Math.min(...referencedDoors.map((d) => d.references[0].order)),
-      diagnostic: missingConfigDiagnostic(cfg, referencedDoors),
-    });
+      diagnostic: missingConfigDiagnostic(cfg, referencedDoors) });
   }
 
   // Bucket b — `bound-to-door`: a referenced door WITHOUT a config cure (authored
@@ -228,9 +224,7 @@ export function validateProgram(
         sites,
         message,
         publicMessage,
-        ...(door.door.cause !== undefined ? { cause: door.door.cause } : {}),
-      },
-    });
+        ...(door.door.cause !== undefined ? { cause: door.door.cause } : {}) } });
   }
 
   return diagnostics.toSorted((a, b) => a.firstOrder - b.firstOrder).map((d) => d.diagnostic);
@@ -271,6 +265,5 @@ function missingConfigDiagnostic(cfg: MissingConfigNode, referencedDoors: readon
     sites,
     message,
     publicMessage,
-    ...(cause !== undefined ? { cause } : {}),
-  };
+    ...(cause !== undefined ? { cause } : {}) };
 }

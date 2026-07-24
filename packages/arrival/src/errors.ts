@@ -1,32 +1,16 @@
 // -------------------------------------------------------------------------
-// :: errors.ts — the single home for every arrival Error subclass.
+// :: errors.ts — single home for every arrival Error subclass.
 //
-// Kept a runtime LEAF: this module has NO runtime imports at all (the retired
-// `static [CLASS]` brand was the one well-known-symbol runtime dependency; the
-// interop-boundary mechanism now lives entirely on the READER side, in
-// interop-access.ts's `instanceof ArrivalError`/`instanceof R7RSError`/…
-// checks, so this file needs nothing back from it).
-// value-guards.js is NOT safe to depend on here — it imports the whole primitive
-// class barrel as VALUES, so an `errors.ts → value-guards` edge would eagerly
-// initialize AString/AExact/AInexact/ACharacter/APair/… at module-load, before
-// those classes exist (they reach errors.ts on their own init path), leaving
-// AValue `undefined` when a subclass `extends` it. A located value's span is read
-// via `.location` — a plain property read through the TYPE-only `SchemeValue` import
-// (every member is an AValue, which declares `location` — see AValue.ts), so this
-// stays a zero-runtime-class-import read, same as the old symbol-brand check.
-// StackFrame / SchemeValue are TYPE-only (erased), so a value term can throw any of
-// these without dragging the evaluator world in.
+// Runtime LEAF: NO runtime imports. Interop-boundary is on the READER side
+// (interop-access.ts's instanceof checks). value-guards is NOT safe to depend
+// on here — it imports the primitive barrel as VALUES and would leave AValue
+// undefined when a subclass extends it. StackFrame / SchemeValue are TYPE-only.
 // -------------------------------------------------------------------------
 import type { StackFrame } from "./eval/evaluator.js";
 import type { SchemeValue } from "./values/types.js";
 
-// -------------------------------------------------------------------------
-// :: SPEC-TAXONOMY CODES — a `code` field on an error is a stable id
-// (E-UNTERMINATED, E-DICT-DUP-KEY, E-LET-BRACKET-*, …). The polyglot grammar
-// specs (src/reader/__tests__/polyglot/, see its README error-taxonomy table)
-// match error CLASSES on `code`, not on prose — messages stay free to teach
-// while the contract stays machine-checkable.
-// -------------------------------------------------------------------------
+// SPEC-TAXONOMY CODES — stable ids (E-UNTERMINATED, E-DICT-DUP-KEY, …).
+// Polyglot grammar specs match on `code`, not prose.
 
 // -------------------------------------------------------------------------
 // :: Source Location Tracking
@@ -51,14 +35,10 @@ export function formatLocation(loc: SourceLocation): string {
 
 /** Thrown for unterminated expressions (unclosed strings, parentheses, etc). */
 export class Unterminated extends Error {
-  /** Interop boundary: covered by the `instanceof Unterminated` arm in
-   *  interop-access.ts's `isInteropBoundary` (Unterminated/ParseError/EvalError/
-   *  R7RSError predate ArrivalError, so each gets its own explicit arm there). */
+  // Interop: instanceof Unterminated arm in interop-access.ts (non-ArrivalError roots get an arm).
 
-  /** The `ConstructorParameters`-typed static invariant (the errors-as-doors idiom):
-   *  `X.invariant(cond, ...factsMatchingX'sCtor)` throws the RECEIVER, never a bare
-   *  `Error`. Repeated per-class (not inherited from one root) because `Unterminated`/
-   *  `ParseError` do not extend `ArrivalError`. */
+  /** errors-as-doors: X.invariant(cond, ...facts) throws the RECEIVER, never bare Error.
+   *  Repeated per-class — Unterminated/ParseError do not extend ArrivalError. */
   static invariant<T extends new (...args: any) => any>(
     this: T,
     condition: boolean,
@@ -79,10 +59,9 @@ export class Unterminated extends Error {
 }
 
 export class ParseError extends Error {
-  /** Interop boundary: covered by the `instanceof ParseError` arm in
-   *  interop-access.ts's `isInteropBoundary` (see the note on Unterminated above). */
+  // Interop: instanceof ParseError arm in interop-access.ts.
 
-  /** See `Unterminated.invariant` above — same idiom, repeated per non-`ArrivalError` root. */
+  /** Same invariant idiom as Unterminated — repeated per non-ArrivalError root. */
   static invariant<T extends new (...args: any) => any>(
     this: T,
     condition: boolean,
@@ -105,17 +84,12 @@ export class ParseError extends Error {
 }
 
 export class EvalError extends Error {
-  /** Interop boundary: covered by the `instanceof EvalError` arm in
-   *  interop-access.ts's `isInteropBoundary` (see the note on Unterminated above). */
+  // Interop: instanceof EvalError arm in interop-access.ts.
 
   location?: SourceLocation;
   code?: unknown;
-  /** The corrected-form the door teaches (errors-as-doors): the concrete shape the
-   *  malformed input should have had. A single string when the fix is unambiguous;
-   *  an array when there are ≥2 clear readings the caller must choose between (e.g.
-   *  an odd whole-list binding vector — fill the missing value, OR reparenthesize).
-   *  Structural sibling of `code`: `code` routes, `hint` teaches. The message renders
-   *  both for humans; consumers (tests, agent surfaces) read the field. */
+  /** Corrected-form the door teaches. String when unambiguous; array when ≥2 clear
+   *  readings. `code` routes, `hint` teaches. */
   hint?: string | string[];
 
   constructor(
@@ -132,23 +106,9 @@ export class EvalError extends Error {
 }
 
 // -------------------------------------------------------------------------
-// :: ErrorClass — the closed error taxonomy both worlds classify into
-// (oracle-harness.md §2/§4.2's "same error class, message may drift" half of the
-// agreement law, `@inhuman.tools/arrival-mercury-oracle`). `runOracle` compares the
-// CLASS, never the message.
-//
-// Interpreter side: every `ArrivalError` subclass below declares its own literal
-// `"arrival/error-category"` (the abstract field on the base) — classification is a
-// compile-time-checked fact ON the type, not a name/message pattern-match maintained
-// in a separate classifier function. A generic wrap (`BudgetExceededError` below,
-// evaluator.ts's `ForeignThrowError`) computes/forwards its category at construction
-// instead of hand-picking one per throw site.
-//
-// Compiled side has no such hierarchy to hang a field on — a compiled artifact throws
-// whatever V8/tsx surfaces (`ReferenceError`, `TypeError`, the harness's own `error()`
-// shim), so the oracle package's own `classifyCompiledError` still duck-types by name/
-// message shape. The two shapes are structurally unrelated by design; this union is
-// the one shared vocabulary between them.
+// :: ErrorClass — closed taxonomy both worlds classify into. Oracle compares
+// CLASS, never message. Every ArrivalError subclass declares its own literal
+// `"arrival/error-category"` — compile-time-checked fact ON the type.
 // -------------------------------------------------------------------------
 export type ErrorClass =
   | "empty-list-access"
@@ -157,52 +117,31 @@ export type ErrorClass =
   | "division-by-zero"
   | "arity-mismatch"
   | "unsupported-form"
-  | "exact-overflow" // the RATIO ruling's crash-on-overflow guarantee — see ExactOverflowError
-  | "prohibited-dynamics" // arrival's immutability/no-dynamics-by-design law — see PurityError
-  | "user-error" // an R7RS (error …) raise
+  | "exact-overflow" // crash-on-overflow guarantee — see ExactOverflowError
+  | "prohibited-dynamics" // immutability/no-dynamics-by-design — see PurityError
+  | "user-error" // R7RS (error …) raise
   | "other";
 
 // -------------------------------------------------------------------------
-// :: ArrivalError — the single concrete arrival / Scheme-level error (the base).
-//
-// StackFrame is a TYPE-only import, so value terms throw/extend it without pulling
-// in the evaluator — stays cycle-free.
+// :: ArrivalError — base for every arrival / Scheme-level error.
+// StackFrame is TYPE-only — value terms throw without pulling the evaluator.
 // -------------------------------------------------------------------------
 
-/** A SchemeValue's source location off its `.location` accessor, if any (leaf-local — the
- *  evaluator's richer `formatCode` renderer isn't reachable from a leaf, so a stack
- *  frame's code prints via its own `String()` repr). Most, but NOT all, SchemeValue members
- *  are AValue subclasses that declare `location` (see AValue.ts) — the four that aren't
- *  (EOF, Values, R7RSError, the bare-function AProcedure) never appear as `code` in
- *  practice, but the union is honest, so `"location" in code` narrows to the AValue-typed
- *  constituents (the ones actually declaring the property) exactly the way `LOCATION in
- *  code` used to narrow to APair alone, before every value kind carried a location. */
+/** SchemeValue's source location off `.location`, if any. */
 function readLocation(code: SchemeValue): SourceLocation | undefined {
   return "location" in code ? code.location : undefined;
 }
 
 export abstract class ArrivalError extends Error {
-  // Interop boundary: covered by the nominal `instanceof ArrivalError` family rule
-  // in interop-access.ts (every concrete subclass's prototype answers `instanceof
-  // ArrivalError`, so the whole hierarchy is a boundary in one check — no per-class
-  // stamp needed).
+  // Interop: nominal instanceof ArrivalError family rule in interop-access.ts.
   public readonly name: string = "ArrivalError";
 
-  /** Every concrete `ArrivalError` subclass names its own {@link ErrorClass} — a
-   *  compile-time-checked fact on the type (never a name/message pattern-match
-   *  maintained separately). A generic wrap (`BudgetExceededError` below,
-   *  evaluator.ts's `ForeignThrowError`) computes/forwards one at construction
-   *  instead of hand-picking per throw site. */
+  /** Every concrete subclass names its own {@link ErrorClass}. */
   abstract readonly "arrival/error-category": ErrorClass;
 
-  /** The `ConstructorParameters`-typed static invariant (errors-as-doors idiom):
-   *  `MyError.invariant(cond, ...factsMatchingMyError'sCtor)` throws the RECEIVER
-   *  (`new this(...)`), never a bare `Error` — inherited by EVERY `ArrivalError`
-   *  subclass through the ctor prototype chain, structured ctors included, so no
-   *  subclass needs its own copy. Deliberately NOT the global message-first
-   *  `@here.build/error-invariant` install: that package strips the message under
-   *  `NODE_ENV=production`, and arrival doors are never stripped (prod here is MCP
-   *  or transpile-to-js, never a live runner — message richness is free). */
+  /** errors-as-doors: MyError.invariant(cond, ...facts) throws the RECEIVER.
+   *  NOT the global @here.build/error-invariant install (that strips messages under
+   *  NODE_ENV=production; arrival doors never strip — message richness is free). */
   static invariant<T extends new (...args: any) => any>(
     this: T,
     condition: boolean,
@@ -217,8 +156,7 @@ export abstract class ArrivalError extends Error {
     public readonly cause?: Error,
   ) {
     super(message);
-    // Capture on THIS wrapper only — capturing on the cause would overwrite its
-    // original stack with the wrap site, destroying where it actually happened.
+    // Capture on THIS wrapper only — capturing on the cause overwrites its original stack.
     Error.captureStackTrace?.(this);
   }
 
@@ -242,19 +180,12 @@ export abstract class ArrivalError extends Error {
   }
 }
 
-// A RAW HOST-runtime error — a V8/engine throw from a native impl body that skipped its
-// contract (`Cannot read properties of undefined`, `x is not a function`, a non-iterable
-// spread), NOT an arrival-authored type error. Both are `TypeError`s with no distinguishing
-// class or `.cause` brand, so the message is the only honest discriminant — these phrasings
-// are engine-authored, arrival never writes them. A host bug is an INTERNAL arrival defect
-// (an impl that bypassed its zod/typecheck contract), so it must keep its scheme stack
-// rather than surface bare. Matching is intentionally conservative — a miss just falls
-// back to the default (treat as an ordinary arrival error) behavior.
+// RAW HOST-runtime error — V8/engine throw from a native impl that skipped its contract.
+// Message is the only discriminant (engine-authored phrases; arrival never writes them).
+// Host bug is an INTERNAL defect — keeps scheme stack. Matching is conservative.
 const HOST_RUNTIME_BUG_RE =
   /Cannot read propert|reading '|is not a function|is not iterable|is not a constructor|Spread syntax requires|Maximum call stack|is not defined/;
-// Returns `boolean`, not an `e is Error` predicate — a predicate would make a `? :`'s
-// else-branch subtract `Error` from an already-`Error` operand → `never` (evaluator.ts
-// failAndWrap).
+// Returns boolean, not `e is Error` — a predicate would make else-branch `never`.
 export function isHostRuntimeBug(e: unknown): boolean {
   return (
     (e instanceof TypeError || e instanceof RangeError || e instanceof ReferenceError) &&
@@ -263,15 +194,8 @@ export function isHostRuntimeBug(e: unknown): boolean {
 }
 
 // -------------------------------------------------------------------------
-// :: BudgetExceededError — a run's own containment policy tripped (wall-clock or
-// heap), never a genuine fault. Shared by the flat trampoline's execution-budget
-// check (eval/evaluator.ts's `run()`) and the heap-budget meter (heap-budget.ts,
-// charged from env/pack-helpers.ts and common/scheme-zod.ts's list-materializing
-// chokepoints) — one class, since both are "this run was contained," not two
-// distinct concerns. Every call site already builds its own full message
-// (`heapBudgetMessage`, or an inline `execution budget exceeded (${budgetMs}ms)`
-// template), so this class needs no fields of its own beyond what ArrivalError
-// already carries — no constructor override.
+// :: BudgetExceededError — run containment (wall-clock or heap), never a fault.
+// One class for both; call sites build their own full message.
 // -------------------------------------------------------------------------
 export class BudgetExceededError extends ArrivalError {
   public readonly name = "BudgetExceededError";
@@ -279,12 +203,8 @@ export class BudgetExceededError extends ArrivalError {
 }
 
 // -------------------------------------------------------------------------
-// :: PurityError — the typed error a deliberately-omitted feature carries.
-//
-// arrival is PURE DATAFLOW: mutation (set-car!/vector-set!/…) and dynamics
-// (call/cc/dynamic-wind/parameterize/delay/force) are omitted by design — they'd
-// falsify the lineage every value carries. Each omission is a `symbol.notImplemented`
-// door in the pack owning that part of the spec, which throws this when reached.
+// :: PurityError — deliberately-omitted feature (PURE DATAFLOW: mutation and
+// dynamics omitted by design — they'd falsify lineage). symbol.notImplemented doors throw this.
 // -------------------------------------------------------------------------
 export class PurityError extends ArrivalError {
   public readonly owner: string;
@@ -293,11 +213,9 @@ export class PurityError extends ArrivalError {
 
   constructor(
     message: string,
-    /** The omitted feature, e.g. "set-cdr!" — internal routing/telemetry key. */
+    /** Omitted feature, e.g. "set-cdr!" — routing/telemetry key. */
     public readonly feature: string,
-    /** The door's owning capability (`DoorCause.owner`) when the throwing `DoorProcedure`
-     *  carries a stamped cause. Absent ⇒ falls back to the fixed wall
-     *  ("owned-by/purity-invariant") for a cause-less door. */
+    /** Door's owning capability when stamped; else "owned-by/purity-invariant". */
     owner?: string,
   ) {
     super(message);
@@ -306,30 +224,23 @@ export class PurityError extends ArrivalError {
 }
 
 // -------------------------------------------------------------------------
-// :: PortabilityError + strictGate — the loose/strict (R7RS-portability) divergence.
-//
-// LOOSE mode (default) tolerates modern conveniences stock R7RS does not (e.g. `(map f #(…))`
-// over a vector). STRICT mode (`RunContext.strict`) rejects them with an educational error so a
-// user can test portability. `strictGate` is the single home for the per-method gate.
+// :: PortabilityError + strictGate — loose/strict (R7RS-portability) divergence.
+// LOOSE (default) tolerates modern conveniences; STRICT rejects with educational error.
 // -------------------------------------------------------------------------
 export class PortabilityError extends ArrivalError {
   public readonly name = "PortabilityError";
   readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
-    /** The diverging op, e.g. "map" — the routing/telemetry key. */
     public readonly op: string,
-    /** The spec rule strict mode enforces, e.g. "R7RS `map` operates on lists; a vector is not a list". */
     public readonly rule: string,
-    /** The portable alternative, e.g. "use `vector-map` for vectors". */
     public readonly alternative?: string,
   ) {
     super(`${op}: not portable in strict mode — ${rule}${alternative ? ` (${alternative})` : ""}`);
   }
 }
 
-/** Loose/strict divergence gate: throws PortabilityError in strict mode, no-op in loose
- *  (default). Reads `strict` structurally so it needs no RunContext import. */
+/** Throws PortabilityError in strict mode; no-op in loose. Reads `strict` structurally. */
 export function strictGate(
   runCtx: { readonly strict: boolean } | undefined,
   divergence: { op: string; rule: string; alternative?: string },
@@ -515,9 +426,8 @@ export class AssemblePackTimeoutError extends Error {
 }
 
 // -------------------------------------------------------------------------
-// :: Vocabulary-artifact errors (Stage B1, env/vocabulary.ts's `buildVocabulary`) — the
-// capability-DAG counterpart to the two env-pack errors above (same C3 core, a different
-// domain's identity check).
+// :: Vocabulary-artifact errors (env/vocabulary.ts buildVocabulary) — capability-DAG
+// counterpart to the env-pack errors above (same C3 core, different domain).
 // -------------------------------------------------------------------------
 export class VocabularyCapabilityConflictError extends Error {
   constructor(public readonly capabilityName: string) {
@@ -662,20 +572,13 @@ export class DefineForwardReferenceError extends ArrivalError {
   }
 }
 
-// ===========================================================================
-// Each class below is a named door: it carries its facts as typed readonly
-// fields, and the message is built HERE, ONCE, from those facts — every call
-// site is a one-line `throw new X(facts…)` (or `X.invariant(cond, facts…)`).
-// Where a test or classifier matches on message text, that text is preserved
-// byte-for-byte across refactors (only wording no site depends on may change,
-// e.g. dropping tiny-invariant's "Invariant failed: " prefix).
-// ===========================================================================
+// Named doors below: facts as typed fields; message built once from those facts.
+// Call sites are `throw new X(facts…)` or `X.invariant(cond, facts…)`.
+// Message text that tests/classifiers match is stable.
 
 // -------------------------------------------------------------------------
-// :: Membrane doors — a value crossing the JS↔Scheme boundary in a shape the
-// membrane refuses. Each names a DIFFERENT cure (fix the writer / add a branch /
-// await it / use the value directly / re-enter / detach), so each gets its own
-// class rather than one shared "membrane error."
+// :: Membrane doors — JS↔Scheme refuse. Each names a different cure (fix writer /
+// add branch / await / use directly / re-enter / detach) so each is its own class.
 // -------------------------------------------------------------------------
 
 /** AmbientRuntime storage (or a fallback resolver's answer) held/returned a raw JS
@@ -750,22 +653,15 @@ export class AsyncCrossingError extends ArrivalError {
   }
 }
 
-/** jsToScheme's INCOMPATIBILITY DOOR (V's ruling, 2026-07-23, verbatim: "the js >
- *  scheme membrane is pretty simple — it's always either having the proper lens or
- *  not, all the concepts are either familiar or explicitly incompatible" —
- *  rosetta.ts's `INCOMPATIBILITY_DOOR_CLAIMS`, the third phase of `INBOUND_CLAIMS`).
- *  Every inbound value crosses through an OWNED-ARTIFACT mark, a FOREIGN LENS (a
- *  defined shape → AValue crossing), or here: no lens exists for it. The
- *  warn-and-degrade middle tier this ruling retires (undefined→#void+warn,
- *  unique-symbol→#void+warn, unbranded-class→borrowed-AJSObject+warn) either became
- *  a plain lens (undefined) or a door (the two kinds below) — never a silent
- *  degrade. Each kind names its own cure. */
+/** jsToScheme's INCOMPATIBILITY DOOR (rosetta.ts INCOMPATIBILITY_DOOR_CLAIMS):
+ *  every inbound value crosses via OWNED-ARTIFACT mark, FOREIGN LENS, or here —
+ *  no lens exists. Never a silent degrade. Each kind names its own cure. */
 export class NoLensError extends ArrivalError {
   public readonly name = "NoLensError";
   readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
-    public readonly kind: "unique-symbol" | "unbranded-class",
+    public readonly kind: "unique-symbol" | "unbranded-class" | "bigint",
     /** unbranded-class only: `value.constructor?.name` (or the anonymous-object fallback). */
     public readonly className?: string,
   ) {
@@ -774,10 +670,14 @@ export class NoLensError extends ArrivalError {
         ? "jsToScheme: no lens for a unique JS symbol — it has no portable Scheme representation " +
           "and no identity a Scheme program could reconstruct across a crossing. Register it " +
           "(`Symbol.for(name)`) to cross as a `:keyword`, or pass a string/keyword directly instead."
-        : `jsToScheme: no lens for a ${className} instance — arrival's foreign-lens table recognizes ` +
-          "plain data (arrays / plain objects / primitives) and explicitly-branded handles only. Mark " +
-          "the class `@arrival.private` (interop-access.ts's markInteropPrivate) to cross it as an " +
-          "opaque handle, or hand plain data (a plain object/array built from its fields) instead.",
+        : kind === "bigint"
+          ? "jsToScheme: no lens for a host bigint — arrival's exact numbers are safe-integer ratios, " +
+            "not unbounded integers. Convert with Number/bigintToNumber in the safe range (or pass an " +
+            "inexact/string), then re-cross; raw bigint never enters scheme."
+          : `jsToScheme: no lens for a ${className} instance — arrival's foreign-lens table recognizes ` +
+            "plain data (arrays / plain objects / primitives) and explicitly-branded handles only. Mark " +
+            "the class `@arrival.private` (interop-access.ts's markInteropPrivate) to cross it as an " +
+            "opaque handle, or hand plain data (a plain object/array built from its fields) instead.",
     );
   }
 }
@@ -1242,12 +1142,8 @@ export class ExtensionSuffixConflictError extends ArrivalError {
 }
 
 // -------------------------------------------------------------------------
-// :: Provenance/wire doors — joins the existing `ReplayScopeError`/
-// `WireLocalityError`/etc. family (all colocated with their mechanism; this one
-// is small enough, and general enough, to live in the shared home instead).
-// (`TraceArtifactVersionError` used to sit here too — moved to arrival-provenance's
-// `analysis/trace-artifact.ts`, its sole thrower, per the provenance analysis-stack
-// relocation; nothing in core ever caught it by identity.)
+// :: Provenance/wire doors — joins ReplayScopeError/WireLocalityError family
+// (those colocated with their mechanism; this one lives in the shared home).
 // -------------------------------------------------------------------------
 
 /** A wire's declared `params` name has no matching key in the caller-supplied
@@ -1342,7 +1238,7 @@ export class TaglessProtocolError extends ArrivalError {
 
   constructor(
     public readonly op: string,
-    /** The scheme-visible receiver description (`describeReceiver`). */
+    /** The scheme-visible receiver description (tagless.ts's local describeReceiver). */
     public readonly receiver: string,
     /** The `arrival/tagless-final/<op>` term name the receiver is missing. */
     public readonly termName: string,
@@ -1383,7 +1279,7 @@ export class TypeTagError extends ArrivalError {
       kind === "unrecognized-tag"
         ? `define/overridable ${bindingName}: unrecognized type tag ${expectedOrReason} — expected an s/* ` +
           `expression: (s/string)/(s/number)/(s/integer)/(s/boolean), (s/enum value...), ` +
-          `(s/object (s/field ...)...) or (s/array tag) (see @inhuman.tools/arrival/schema), optionally ` +
+          `(s/object (s/field ...)...) or (s/array tag) (see @inhuman.tools/arrival/capabilities/schema), optionally ` +
           `wrapped in (s/optional ...)`
         : `define/overridable ${bindingName}: expected ${expectedOrReason}, got ${got} (from ${source}) — ` +
           `${
@@ -1427,40 +1323,22 @@ export class CarrierMismatchError extends ArrivalError {
 }
 
 // -------------------------------------------------------------------------
-// :: OFFENDING_VALUE — symbol-keyed metadata on a collection-type-error: the value a
-// collection op (take/drop/filter/map/sort/length/car/cdr/vector-ref/…) refused because
-// it wasn't a collection at all (classically: a STRING that is actually a serialized
-// payload a model forgot to parse). Same discipline as arrival-manifold/bind.ts's
-// ARGS_REJECTION — SYMBOL-KEYED metadata rides the error OBJECT, `error.message` is
-// NEVER touched (a downstream door reads the value's `.provenance` — an AValue names the
-// invocation that produced it — and teaches the right parser; the message stays the
-// stable, already-tested string it always was).
-//
-// Consumers read it ONLY through {@link offendingValueOf}: arrival's evaluator
-// (`eval/evaluator.ts`'s `failAndWrap`) wraps every propagating native throw in a fresh
-// `ArrivalError` whose OWN symbol-keyed properties are necessarily empty (`message` is
-// copied, the original error rides `.cause`) — a top-level-only symbol read comes back
-// `undefined` through every real `exec()`/`execState()` path.
+// :: OFFENDING_VALUE — symbol-keyed metadata on a collection-type-error: the
+// value a collection op refused. SYMBOL-KEYED metadata rides the error OBJECT;
+// `error.message` is NEVER touched. Consumers read ONLY through offendingValueOf
+// (failAndWrap rewraps throws — top-level-only symbol read is always undefined
+// through real exec paths; walk .cause).
 // -------------------------------------------------------------------------
 
-/** Symbol-keyed metadata key for {@link attachOffendingValue}/{@link offendingValueOf}. */
+/** Symbol-keyed metadata key for attachOffendingValue / offendingValueOf. */
 export const OFFENDING_VALUE = Symbol("arrival/offending-value");
 
-/** Wrapper layers between a door-layer consumer and the throw site: at most one today
- *  (`failAndWrap`'s `ArrivalError`, riding `.cause`) — bounded the same as
- *  ARGS_REJECTION's walk so a pathological/cyclic `cause` chain can never spin. */
+/** Max cause-chain depth (failAndWrap adds at most one ArrivalError layer). */
 const OFFENDING_VALUE_MAX_CAUSE_DEPTH = 4;
 
-/** Attach the offending VALUE to a collection-type-error, mirroring
- *  `arrival-manifold/bind.ts`'s `attachArgsRejection`: metadata rides the error OBJECT via
- *  a plain symbol-keyed assignment (own, enumerable, configurable — the same shape
- *  `attachArgsRejection` uses; NOT a hidden `Object.defineProperty`, so
- *  `Object.getOwnPropertySymbols`/`Reflect.ownKeys` see it same as any other own prop),
- *  never `error.message`. Wrapped in try/catch — a frozen/sealed error object must never
- *  make the ATTACHER throw and mask the real error the caller is already raising; on
- *  failure the error still propagates, just without the metadata. Returns the same error
- *  (by reference) so a call site can wrap inline: `throw attachOffendingValue(new
- *  TypeError(msg), receiver)`. */
+/** Attach offending VALUE to a collection-type-error. Metadata rides the error
+ *  OBJECT (plain symbol assignment, never message). try/catch so a frozen error
+ *  never masks the real throw. Returns same error by reference for inline throw. */
 export function attachOffendingValue<E>(error: E, value: unknown): E {
   try {
     (error as unknown as Record<symbol, unknown>)[OFFENDING_VALUE] = value;
@@ -1470,10 +1348,7 @@ export function attachOffendingValue<E>(error: E, value: unknown): E {
   return error;
 }
 
-/** THE one supported read path for {@link OFFENDING_VALUE} — walk `error` and its
- *  `Error.cause` chain (bounded) for the metadata, exactly like ARGS_REJECTION's
- *  `findArgsRejection`. `undefined` when the error never carried one (e.g. an unbound-
- *  variable error, or any error a throw site never annotated). */
+/** Walk error + Error.cause chain (bounded) for OFFENDING_VALUE. */
 export function offendingValueOf(error: unknown): unknown | undefined {
   let node: unknown = error;
   for (
@@ -1488,6 +1363,4 @@ export function offendingValueOf(error: unknown): unknown | undefined {
   return undefined;
 }
 
-// NOTE: KwargsRejectionError is NOT here — it's colocated in
-// `common/kwargs-rejection.ts` beside the frozen rejection-string grammar it
-// throws (mechanism-local colocation), not duplicated in this leaf.
+// KwargsRejectionError lives in common/kwargs-rejection.ts (mechanism-local).

@@ -6,8 +6,8 @@
 
 import { describe, expect, it } from "vitest";
 
-import * as z from "../../common/scheme-zod.js";
-import { symbol } from "../../common/symbol.js";
+import * as z from "../../common/scheme-zod/index.js";
+import { symbol } from "../../symbol/index.js";
 import { assembleHarvestedPrelude } from "../prelude.js";
 import { createQueryLens } from "../query.js";
 
@@ -109,14 +109,12 @@ describe("getTypeValidCandidates — kebab/operator-named callees narrow", () =>
       name: "a kebab callee's LIST slot narrows: drops the void-returner, keeps the list-returner + local",
       marked: "(get-route |)",
       cands: ["make-route", "set-timer", "my_local"],
-      expected: ["make-route", "my_local"],
-    },
+      expected: ["make-route", "my_local"] },
     {
       name: "a kebab callee's STRING slot still narrows: drops the list-returner, keeps the local",
       marked: "(get-route 1 |)",
       cands: ["make-route", "my_local"],
-      expected: ["my_local"],
-    },
+      expected: ["my_local"] },
   ])("$name", ({ marked, cands, expected }) => {
     expect(kvalid(marked, cands)).toEqual(expected);
   });
@@ -165,14 +163,12 @@ describe("getTypeValidCandidates — the Σ∩T mask is DROPS-ONLY", () => {
       // returns a number (PROVABLY ill-typed — dropped), my_local is undeclared (uncertain — kept).
       marked: "(get_route |)",
       cands: ["make_route", "sum_readings", "my_local"],
-      expected: ["make_route", "my_local"],
-    },
+      expected: ["make_route", "my_local"] },
     {
       name: "LIST slot: the generic carrier `list` is KEPT (its return is a list)",
       marked: "(get_route |)",
       cands: ["list", "sum_readings"],
-      expected: ["list"],
-    },
+      expected: ["list"] },
     {
       name: "STRING slot: keeps the string-returner + the unresolved local; drops the rest",
       // get_route arg 1 is `string`. get_route itself returns a string (kept); set_timer
@@ -180,40 +176,34 @@ describe("getTypeValidCandidates — the Σ∩T mask is DROPS-ONLY", () => {
       // my_local kept.
       marked: "(get_route 1 |)",
       cands: ["get_route", "set_timer", "make_route", "my_local"],
-      expected: ["get_route", "my_local"],
-    },
+      expected: ["get_route", "my_local"] },
     {
       name: "NUMBER slot: keeps the number-returner + the unresolved local; drops the string-returner",
       // set_timer arg 0 is `number`. sum_readings returns a number (kept); get_route returns a
       // string (dropped); my_local kept.
       marked: "(set_timer |)",
       cands: ["sum_readings", "get_route", "my_local"],
-      expected: ["sum_readings", "my_local"],
-    },
+      expected: ["sum_readings", "my_local"] },
     {
       name: "TOP / no enclosing call: every candidate is kept (T never narrows an operator/top slot)",
       marked: "|",
       cands: ["sum_readings", "set_timer", "anything"],
-      expected: ["sum_readings", "set_timer", "anything"],
-    },
+      expected: ["sum_readings", "set_timer", "anything"] },
     {
       name: "OPERATOR slot (cursor at the head): every candidate is kept",
       marked: "(|)",
       cands: ["sum_readings", "set_timer", "make_route"],
-      expected: ["sum_readings", "set_timer", "make_route"],
-    },
+      expected: ["sum_readings", "set_timer", "make_route"] },
     {
       name: "unknown callee → unresolved slot → every candidate kept (conservative)",
       marked: "(no_such_tool |)",
       cands: ["sum_readings", "set_timer"],
-      expected: ["sum_readings", "set_timer"],
-    },
+      expected: ["sum_readings", "set_timer"] },
     {
       name: "empty candidate list returns empty (no compile)",
       marked: "(get_route |)",
       cands: [],
-      expected: [],
-    },
+      expected: [] },
   ])("$name", ({ marked, cands, expected }) => {
     expect(valid(marked, cands)).toEqual(expected);
   });
@@ -245,8 +235,7 @@ describe("getSlotArrayKind — the 3-way value verdict", () => {
     {
       name: "a string param → \"scalar\" (string folds into scalar for the array verdict)",
       marked: "(get_route 1 |)",
-      expected: "scalar",
-    },
+      expected: "scalar" },
     { name: "an unresolved slot (unknown callee) → null", marked: "(no_such_tool |)", expected: null },
     { name: "a top / no-call cursor → null", marked: "|", expected: null },
   ])("$name", ({ marked, expected }) => {
@@ -262,40 +251,33 @@ describe("getSlotElementType — the ENUM / closed-domain narrow (the highest-va
       // for a scalar) → a PROVED closed string set → its two members.
       name: "a DIRECT enum param → its members as enum (isStringy null)",
       marked: "(plan_route |)",
-      expected: { isStringy: null, enum: ["fast", "scenic"] },
-    },
+      expected: { isStringy: null, enum: ["fast", "scenic"] } },
     {
       // plan_route arg 1 is `("fast" | "scenic")[]`. ElemOf recovers the enum element → same members.
       name: "an ARRAY-of-enum param → the ELEMENT's members as enum",
       marked: "(plan_route 'x |)",
-      expected: { isStringy: null, enum: ["fast", "scenic"] },
-    },
+      expected: { isStringy: null, enum: ["fast", "scenic"] } },
     {
       // plan_route arg 2 is `string` (ElemOf never → domain is the slot → free-form string).
       name: "a free-form string param → isStringy true, enum null (plan_route trailing string arg)",
       marked: "(plan_route 'x (list) |)",
-      expected: { isStringy: true, enum: null },
-    },
+      expected: { isStringy: true, enum: null } },
     {
       name: "a free-form string param → isStringy true, enum null (get_route string arg)",
       marked: "(get_route 1 |)",
-      expected: { isStringy: true, enum: null },
-    },
+      expected: { isStringy: true, enum: null } },
     {
       name: "a number param → both null (a non-string domain narrows nothing)",
       marked: "(set_timer |)",
-      expected: { isStringy: null, enum: null },
-    },
+      expected: { isStringy: null, enum: null } },
     {
       name: "a List<unknown> param → both null (the element isn't a string set)",
       marked: "(get_route |)", // element is `unknown`
-      expected: { isStringy: null, enum: null },
-    },
+      expected: { isStringy: null, enum: null } },
     {
       name: "a vector<number> param → both null (the element isn't a string set)",
       marked: "(sum_readings |)", // element is `number`
-      expected: { isStringy: null, enum: null },
-    },
+      expected: { isStringy: null, enum: null } },
     // ★SUPERSET-SAFE: an unresolved slot and a no-call cursor BOTH return both-null, so a
     // consumer never narrows a domain we could not resolve.
     { name: "an unresolved slot (unknown callee) → both null", marked: "(no_such_tool |)", expected: { isStringy: null, enum: null } },
@@ -313,13 +295,11 @@ describe("getSlotAcceptsBareWord — a bare word is admissible as a string", () 
     {
       name: "a free-form string slot → true (plan_route trailing string arg)",
       marked: "(plan_route 'x (list) |)",
-      expected: true,
-    },
+      expected: true },
     {
       name: "a closed enum slot → false (a bare word is NOT any string here)",
       marked: "(plan_route |)",
-      expected: false,
-    },
+      expected: false },
     { name: "a list slot → false (List<unknown>, not a string slot)", marked: "(get_route |)", expected: false },
     { name: "a vector slot → false (number[], not a string slot)", marked: "(sum_readings |)", expected: false },
     { name: "a number slot → false (number, not a string slot)", marked: "(set_timer |)", expected: false },

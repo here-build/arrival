@@ -3,8 +3,8 @@
 import * as ts from "typescript";
 import { describe, expect, it } from "vitest";
 
-import * as z from "../../common/scheme-zod.js";
-import { symbol } from "../../common/symbol.js";
+import * as z from "../../common/scheme-zod/index.js";
+import { symbol } from "../../symbol/index.js";
 import { lower } from "../lower.js";
 import { assembleHarvestedPrelude } from "../prelude.js";
 
@@ -16,8 +16,7 @@ function compileErrors(source: string): string[] {
     target: ts.ScriptTarget.ES2022,
     lib: ["lib.es2022.d.ts"],
     noEmit: true,
-    skipLibCheck: true,
-  };
+    skipLibCheck: true };
   const host = ts.createCompilerHost(options);
   const getSourceFile = host.getSourceFile.bind(host);
   host.getSourceFile = (name, lang, onError, shouldCreate) =>

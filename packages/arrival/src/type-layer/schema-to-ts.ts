@@ -3,64 +3,42 @@
 // prelude (prelude.ts, one arrow per grant tool); `printType`/`sTagToTsType` are the
 // standalone schema and schema-DSL-tag printers.
 //
-// ─────────────────────────────────────────────────────────────────────────────
-// HOW IT WORKS — three layers, each ~a handful of lines:
+// Three layers:
 //
-//   1. printType(schema)        — one zod schema → its TS type-string. Wraps
-//                                 zod-to-ts (`zodToTs` + `printNode`) with
-//                                 io:"output" (so a CODEC prints its DECODED JS
-//                                 side: z.string → "string", z.number → "number",
-//                                 z.exact → "number" — exact is a safe-integer ratio
-//                                 of `number`s, never bigint) plus the instanceof
-//                                 override below. Output is flattened to a single line.
+//   1. printType(schema) — one zod schema → its TS type-string. Wraps zod-to-ts
+//      (`zodToTs` + `printNode`) with io:"output" (a CODEC prints its DECODED JS side:
+//      z.string → "string", z.exact → "number" — exact is a safe-integer ratio of
+//      `number`s, never bigint) plus the instanceof override. Output is one line.
 //
-//   2. the instanceof OVERRIDE  — the scheme-identity primitives (z.pair / z.schemeString /
-//                                 z.schemeExact / z.lambda / …) are "custom" to zod and
-//                                 UNREPRESENTABLE by default. `scheme-zod.ts`'s own
-//                                 `lookupName(schema)` resolves one of them to its canonical
-//                                 NAME (by identity — scheme-zod.ts is the one place that
-//                                 actually knows every vocabulary item, having declared them),
-//                                 and IMAGE_BY_NAME below maps that name to the TS image to
-//                                 emit. This file keeps no class-name-string
-//                                 or schema-identity recognition tables — a new scheme-zod
-//                                 primitive only needs ONE new entry, in scheme-zod.ts's own
-//                                 NAMES map, plus (if it should print as something other than
-//                                 the robust `unknown` default) one IMAGE_BY_NAME entry here.
+//   2. instanceof OVERRIDE — scheme-identity primitives (z.pair / z.schemeString /
+//      z.lambda / …) are "custom" to zod and UNREPRESENTABLE by default.
+//      `scheme-zod.ts`'s `lookupName(schema)` resolves by identity to a canonical NAME;
+//      IMAGE_BY_NAME maps that name to the TS image. This file keeps no class-name or
+//      schema-identity recognition tables — a new scheme-zod primitive needs ONE entry in
+//      scheme-zod.ts's NAMES map, plus (if not the robust `unknown` default) one
+//      IMAGE_BY_NAME entry here.
 //
-//   3. signatureOf(def)         — the args-vector → function-signature composer.
-//                                 arrival's contract normalizes to ONE schema per side
-//                                 (a z.tuple for a positional list, an array-ish schema
-//                                 for a variadic / multiple-values vector — see
-//                                 symbol.ts normalizeVector). We read that normalized
-//                                 `in`/`out` and compose:
-//                                   • input  z.tuple([A,B])  → "(a: A, b: B)"
-//                                            z.tuple([])      → "()"
-//                                            z.array(T)       → "(...args: T[])"  (variadic)
-//                                   • output z.tuple([R])     → "R"        (1-tuple = single value)
-//                                            z.tuple([A,B])   → "[A, B]"   (multiple-values)
-//                                            z.array(T)       → "T[]"      (variadic values)
-//                                   • rosetta is implicitly ASYNC (bake awaits) → the
-//                                     return is wrapped Promise<…>; native is sync.
-//                                 yielding the full ".d.ts member" arrow signature.
-// ─────────────────────────────────────────────────────────────────────────────
+//   3. signatureOf(def) — args-vector → function-signature composer. Contract normalizes
+//      to ONE schema per side (z.tuple for positional, array-ish for variadic /
+//      multiple-values — symbol.ts normalizeVector):
+//        input  z.tuple([A,B]) → "(a: A, b: B)"; z.array(T) → "(...args: T[])"
+//        output z.tuple([R]) → "R"; z.tuple([A,B]) → "[A, B]"; z.array(T) → "T[]"
+//        rosetta is implicitly ASYNC (bake awaits) → Promise<…>; native is sync.
 
 import { zodToTs, printNode, createAuxiliaryTypeStore } from "zod-to-ts";
 import type { OptionalTypeOverrideFunction } from "zod-to-ts";
-import * as z from "../common/scheme-zod.js";
+import * as z from "../common/scheme-zod/index.js";
 import { tagToJsonSchema } from "../common/schema-tag.js";
-import type { AEntity } from "../common/symbol.js";
+import type { AEntity } from "../symbol/index.js";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Scheme primitive → its PLAIN-TS IMAGE  (Scheme is a TS subset; see carriers.ts).
+// Scheme primitive → its PLAIN-TS IMAGE (Scheme is a TS subset; see carriers.ts).
 //
-// The harvest re-presents each scheme primitive as the TS type the lens narrows against:
-// the membrane makes a boundary value its plain JS type, and list/pair/vector project to
-// the carrier vocabulary. Keyed by SCHEMA IDENTITY. `z.pair` is `cons(schemeValue, schemeValue)` (see
-// scheme-zod.ts's own doc comment on `pair`) — it carries the name "cons", not "pair", so
-// it prints via the named-generic pre-check below as `Pair<SchemeValue, SchemeValue>`, not through
-// this table. An unmapped custom/instanceof scheme primitive degrades to `unknown`
-// (robust default — never throw; the total-harvest contract, e.g. a future zod primitive).
-// ─────────────────────────────────────────────────────────────────────────────
+// Harvest re-presents each scheme primitive as the TS type the lens narrows against:
+// membrane makes a boundary value its plain JS type; list/pair/vector project to the
+// carrier vocabulary. Keyed by SCHEMA IDENTITY. `z.pair` is `cons(schemeValue, schemeValue)`
+// (scheme-zod.ts on `pair`) — named "cons", not "pair" — so it prints via the named-
+// generic pre-check as `Pair<SchemeValue, SchemeValue>`, not this table. Unmapped
+// custom/instanceof primitives degrade to `unknown` (total-harvest; never throw).
 type Ts = typeof import("typescript");
 type NodeBuilder = (ts: Ts) => import("typescript").TypeNode;
 
@@ -89,77 +67,61 @@ const lambdaNode: NodeBuilder = (ts) => {
   return ts.factory.createFunctionTypeNode(undefined, [restParam], unknownNode(ts));
 };
 
-// Keyed by the canonical NAME `scheme-zod.ts`'s `lookupName()` returns for a vocabulary
-// schema — NOT class-name-string, NOT schema-object-identity. Keying on either would
-// need a second recognition table here, hand-synced on every new scheme-zod primitive
-// — the drift that lets a primitive (as `z.lambda` once did) ship with no printer entry
-// at all. scheme-zod.ts is the one place that knows every vocabulary item's identity;
-// this file only needs to know how to PRINT
-// a given name, not how to RECOGNIZE one.
+// Keyed by the canonical NAME `lookupName()` returns — NOT class-name-string, NOT
+// schema-object-identity. Keying on either would need a second recognition table here,
+// hand-synced on every new scheme-zod primitive. scheme-zod.ts owns identity; this file
+// only knows how to PRINT a given name.
 const IMAGE_BY_NAME: ReadonlyMap<string, NodeBuilder> = new Map<string, NodeBuilder>([
-  // NOTE: no "pair" entry — `z.pair` is `cons(schemeValue, schemeValue)`, named "cons", and prints via
-  // the named-generic pre-check as `Pair<SchemeValue, SchemeValue>` before this table is ever consulted.
+  // no "pair" — `z.pair` is named "cons"; prints via named-generic pre-check as Pair<…>
   ["string", stringNode],
   ["exact", numberNode],
   ["inexact", numberNode],
-  // number/exact/bigint are UNIONS of two same-output codecs in v2; without an image
-  // they'd print the duplicated `number | number`. The image is their carrier, printed
-  // once. `bigint`'s face is `number` too — per
-  // docs/design-history/arrival-one-number-rework.md §2.3, exact is a safe-integer
-  // ratio of `number`s and z.bigint is retired; it never decodes to a real JS bigint.
+  // number/exact/bigint are UNIONS of two same-output codecs; without an image they'd
+  // print `number | number`. Image is the carrier, once. `bigint`'s face is `number` too
+  // (docs/design-history/arrival-one-number-rework.md §2.3: exact is a safe-integer ratio
+  // of `number`s; z.bigint is retired and never decodes to a real JS bigint).
   ["number", numberNode],
   ["bigint", numberNode],
-  // looseNumber / looseAnyNumber are CODECs whose OUT side is a bare z.custom (so
-  // NaN/±Inf stay legal). Without an image the OUT custom leaf prints as unknown —
-  // floor/abs/etc. harvest as (a: unknown) => unknown even though the decoded type is known.
-  // Teach the names; do NOT rewrite OUT to z.number() (rejects non-finites).
+  // looseNumber / looseAnyNumber CODECs: OUT is bare z.custom so NaN/±Inf stay legal.
+  // Without an image the OUT custom leaf prints as unknown. Teach the names; do NOT
+  // rewrite OUT to z.number() (rejects non-finites).
   ["looseNumber", numberNode],
   ["looseAnyNumber", numberNode],
   ["symbol", stringNode],
-  // bytevector is a CODEC in v2 (out = z.instanceof(Uint8Array), a custom leaf that would print
-  // `unknown`); the name-keyed image restores its Uint8Array carrier (as v1's instanceof did).
+  // bytevector CODEC out = z.instanceof(Uint8Array) (custom leaf → `unknown`); image
+  // restores Uint8Array carrier.
   ["bytevector", uint8ArrayNode],
   ["nil", nullNode],
   ["boolean", booleanNode],
   ["char", stringNode],
-  // The Q1 split (docs/plans/stage-c-corpse-deletion.md §"z.value retirement campaign"):
-  // "schemeValue" (the honest top type, native/contour contracts) prints the real
-  // `SchemeValue` alias; "dynamic" (the rosetta escape hatch) prints the bare `unknown`
-  // keyword — same runtime shape, but deliberately NOT the named alias (a rosetta
-  // `z.dynamic` slot's shape is genuinely unknowable, not "any scheme value" in the
-  // native/contour sense). The deprecated legacy "value" alias's own print arm is GONE —
-  // Phase B deleted the alias itself, so no schema ever registers under that name again.
+  // "schemeValue" (honest top, native/contour) → named `SchemeValue` alias; "dynamic"
+  // (rosetta escape hatch) → bare `unknown` — same runtime shape, deliberately NOT the
+  // named alias (a rosetta `z.dynamic` slot is genuinely unknowable, not "any scheme value").
   ["schemeValue", schemeValueNode],
   ["dynamic", unknownNode],
   ["lambda", lambdaNode],
-  ["undefinedResult", voidNode], // R7RS's "unspecified" return — the honest TS analog is void
-  // "error" has NO entry here on purpose: an unmapped NAME still falls through to the
-  // `unknownNode` default below (never throw) — R7RSError has no ambient carrier type to
-  // reference, so "unknown" is the honest print, not a gap.
+  ["undefinedResult", voidNode], // R7RS "unspecified" → void
+  // "error" omitted on purpose: unmapped NAME → unknownNode default (never throw).
+  // R7RSError has no ambient carrier type; "unknown" is the honest print.
 ]);
 
-/** The zod-to-ts override: a scheme-zod vocabulary schema → its plain-TS image, resolved by
- *  `lookupName` (identity-based, owned by scheme-zod.ts itself); an UNMAPPED name (a vocabulary
- *  item this file hasn't been taught to print yet — should not happen for anything registered
- *  in scheme-zod.ts's own NAMES map, but kept as a robust default) → `unknown`, never throw
- *  (total-harvest). Non-vocabulary schemas (object/array/union/literal/… and the codecs, which
- *  print via zod-to-ts's native `io:"output"` handling) defer to zod-to-ts (return undefined).
+/** The zod-to-ts override: scheme-zod vocabulary schema → plain-TS image via `lookupName`
+ *  (identity-based, owned by scheme-zod.ts); UNMAPPED name → `unknown`, never throw
+ *  (total-harvest). Non-vocabulary schemas (object/array/union/literal/… and codecs via
+ *  `io:"output"`) defer to zod-to-ts (return undefined).
  *
- *  A registered vocabulary name WITH an image prints that image directly (fires for CODECS too —
- *  v2 made most primitives codecs/pipes, not leaf customs). A registered name WITHOUT an image
- *  (`schemeNumber`/`vector`/`dict`/`list`/`cons`, and the number/exact/bigint UNIONs whose members
- *  carry their own image) returns undefined so zod-to-ts composes it per-member — so `z.schemeNumber`
- *  prints "number | number" (exact/inexact fire per-member, both `number`; z.bigint is
- *  retired), undeduped — the same known gap as `z.vector` below — never short-circuited. An
- *  UNregistered leaf custom degrades to `unknown` (never throw); an unregistered compound defers. */
+ *  Registered name WITH image prints that image (including CODECS — most primitives are
+ *  pipes, not leaf customs). Registered name WITHOUT image (`schemeNumber`/`vector`/`dict`/
+ *  `list`/`cons`, and unions whose members carry their own image) returns undefined so
+ *  zod-to-ts composes per-member — `z.schemeNumber` prints "number | number" undeduped
+ *  (same known gap as `z.vector`). Unregistered leaf custom → `unknown`; compound defers. */
 const instanceofOverride: OptionalTypeOverrideFunction = (schema, typescript) => {
-  // Named-generic pre-check — MUST fire before the leaf guard below: `list`/`cons` are CODECS
+  // Named-generic pre-check — MUST fire before the leaf guard: `list`/`cons` are CODECS
   // (`_zod.def.type === "pipe"`), so that guard would early-return them to zod-to-ts, which
   // decomposes structurally (`list` → `Cons<T> | null`, `cons` → `[A, B]`) and loses the name.
-  // Scoped to EXACTLY the two registered collection names via COLLECTION_ELEMENT — a homogeneous
-  // `list`/`cons` registers an element, nothing else does, so this fires for nothing but these
-  // two (a `schemeNumber`-style union of custom leaves has no element registration → skips this,
-  // reaching the per-member composition path below untouched).
+  // Scoped to the two registered collection names via COLLECTION_ELEMENT — only homogeneous
+  // `list`/`cons` register an element; a `schemeNumber`-style union has no element
+  // registration → skips this, reaching per-member composition below.
   const element = z.lookupCollectionElement(schema);
   if (element !== undefined) {
     const name = z.lookupName(schema);
@@ -171,17 +133,17 @@ const instanceofOverride: OptionalTypeOverrideFunction = (schema, typescript) =>
       return typescript.factory.createTypeReferenceNode("Pair", [harvestNode(carE), harvestNode(cdrE)]);
     }
   }
-  // Registered vocabulary name → its image. MUST run before the leaf guard: v2 primitives are
-  // CODECS (pipe), so the guard would defer them to zod-to-ts and print the raw OUT schema
-  // (undefinedResult→undefined, bytevector→unknown, number→number|number) instead of the carrier
-  // image (void / Uint8Array / number). A registered name with NO image → undefined → composed
-  // per-member by zod-to-ts (schemeNumber → number | number; vector/dict/list/cons → structural).
+  // Registered vocabulary name → its image. MUST run before the leaf guard: primitives are
+  // CODECS (pipe), so the guard would defer to zod-to-ts and print the raw OUT schema
+  // (undefinedResult→undefined, bytevector→unknown, number→number|number) instead of the
+  // carrier image (void / Uint8Array / number). Name with NO image → undefined → composed
+  // per-member (schemeNumber → number | number; vector/dict/list/cons → structural).
   const name = z.lookupName(schema);
   if (name !== undefined) {
     const builder = IMAGE_BY_NAME.get(name);
     return builder ? builder(typescript) : undefined;
   }
-  // Unregistered: a leaf custom degrades to unknown (never throw); a compound defers to zod-to-ts.
+  // Unregistered: leaf custom → unknown (never throw); compound → zod-to-ts.
   const s = schema as { _zod?: { def?: { type?: string } } };
   if (s?._zod?.def?.type !== "custom") return undefined;
   return unknownNode(typescript);
@@ -212,21 +174,19 @@ function flatten(printed: string): string {
  * Print one scheme-zod schema as a single-line TypeScript type-string.
  *
  * Codecs print their DECODED (output) side (io:"output"): z.string → "string",
- * z.number → "number", z.exact → "number" (a safe-integer ratio of `number`s —
- * z.bigint is retired, never a real bigint). instanceof primitives print their
- * class name via the override (z.pair → "Pair"). Compounds compose
+ * z.exact → "number" (safe-integer ratio of `number`s — never a real bigint).
+ * instanceof primitives print via the override (z.pair → "Pair"). Compounds compose
  * (z.object → "{ k: T; … }", z.array → "T[]", z.tuple → "[A, B]", z.union → "A | B").
  */
-// The raw zod-to-ts TypeNode for one schema (before flatten/print). Split out so the
-// named-generic pre-check can nest an element's node as a type argument (`List<…>`) — a string
-// can't be a TypeReferenceNode's type arg, so `printType(element)` won't do; we need the node.
+// Raw zod-to-ts TypeNode (before flatten/print). Split so the named-generic pre-check
+// can nest an element's node as a type argument (`List<…>`) — a string can't be a
+// TypeReferenceNode's type arg.
 function harvestNode(schema: z.ZodTypeAny): import("typescript").TypeNode {
   const { node } = zodToTs(schema as never, {
     auxiliaryTypeStore: createAuxiliaryTypeStore(),
     overrideFunction: instanceofOverride,
     io: "output",
-    unrepresentable: "throw",
-  });
+    unrepresentable: "throw" });
   return node as import("typescript").TypeNode;
 }
 
@@ -252,13 +212,9 @@ export function sTagToTsType(tag: unknown): string {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// signatureOf — the vector → function-signature composer.
-//
-// Reads the AEntity's NORMALIZED in/out (already one schema per side, per
-// symbol.ts normalizeVector): a z.tuple for a positional list, an array-ish schema
-// for a variadic / multiple-values vector. We branch on the schema's _zod.def.
-// ─────────────────────────────────────────────────────────────────────────────
+// signatureOf — vector → function-signature composer.
+// Reads AEntity's NORMALIZED in/out (one schema per side, symbol.ts normalizeVector):
+// z.tuple for positional, array-ish for variadic / multiple-values.
 
 interface TupleDef {
   type: "tuple";

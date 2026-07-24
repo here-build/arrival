@@ -1,18 +1,18 @@
 // contract.ts — arrival's local, type-identical copy of the constraint-kernel oracle boundary.
 //
-// DRIFT ALARM. Canonical source: `sift/src/sampler/oracle-contract.ts`. These interfaces are
-// re-declared here, NOT imported: arrival-scheme is a FOUNDATION package sift depends on, so
-// importing sift types (even type-only) would invert the dependency arrow. The two copies MUST stay
-// type-identical; the O0 conformance corpus is the executable proof they do (runs sift's reference S
-// reader and this impl over one shared corpus, asserts agreement).
+// DRIFT ALARM. Canonical source: `sift/src/sampler/oracle-contract.ts`. Interfaces are
+// re-declared here, NOT imported: arrival-scheme is a FOUNDATION package sift depends on,
+// so importing sift types (even type-only) would invert the dependency arrow. The two
+// copies MUST stay type-identical; the agreement corpus is the executable proof
+// (runs sift's reference S reader and this impl over one shared corpus, asserts agreement).
 //
-// Track A (this package) IMPLEMENTS these: Layer S (scanner.ts) supplies the structural half; Σ/T
-// degrade gracefully (validSymbols/expectedType → null, produces → true) until later nodes land.
-// Track B (sift) CONSUMES them, compiling per-cursor verdicts into a token mask / validator / repair
-// pass without knowing how the verdict is computed.
+// This package IMPLEMENTS these: Layer S (scanner.ts) supplies the structural half; Σ/T
+// degrade gracefully (validSymbols/expectedType → null, produces → true) until those
+// layers land. sift CONSUMES them, compiling per-cursor verdicts into a token mask /
+// validator / repair pass without knowing how the verdict is computed.
 //
-// DESIGN INVARIANT: every method is a pure function of the ACCEPTED PREFIX — no lookahead, no
-// backtracking — so the constraint aligns with autoregressive generation.
+// DESIGN INVARIANT: every method is a pure function of the ACCEPTED PREFIX — no lookahead,
+// no backtracking — so the constraint aligns with autoregressive generation.
 
 /** A type tag from arrival's entity algebra plus the structural kinds. `null` = unknown/any. */
 export type TypeTag = string;
@@ -84,7 +84,7 @@ export interface OracleScanner {
   session?(prefix?: string): OracleSession;
 }
 
-/** What Track A injects so the oracle can answer Σ/T. The structural stub needs neither. */
+/** What the implementor injects so the oracle can answer Σ/T. The structural stub needs neither. */
 export interface OracleEnv {
   /** Enumerate identifiers bound in the current lexical scope chain (Σ source). */
   boundSymbols(): ReadonlySet<string>;

@@ -1,39 +1,35 @@
-// collect-references — the validator's SITE-COLLECTING, scope-correct reference walk.
-// Produces one `ReferenceOccurrence` per lexically-FREE symbol occurrence, in program
-// order, each carrying the span of its innermost enclosing located Pair — the raw
-// material a `ReferenceNode` reference graph is built from.
+// collect-references — validator's SITE-COLLECTING, scope-correct reference walk.
+// One `ReferenceOccurrence` per lexically-FREE symbol occurrence, in program order, each
+// carrying the span of its innermost enclosing located Pair — raw material for a
+// `ReferenceNode` graph.
 //
 // WHY NOT `provenance/wireframe/free-vars.ts` directly: that walker answers the
-// wire-locality LAW — a *set* of names, no spans, and deliberately conservative in the
+// wire-locality LAW — a *set* of names, no spans, deliberately conservative in the
 // OVER-approximating direction (an unmodeled head walks as a plain application, so a
-// missed binder yields an extra "free" name — harmless for a locality check, poison for
-// an error-tier diagnostic). This walker shares free-vars' binder arms 1:1 (the same
-// local-copy convention prelude.ts/slice.ts/free-vars.ts each document) and extends them
-// with exactly what an error-tier soundness contract demands and a set-shaped FV cannot
-// carry:
+// missed binder yields an extra "free" name — harmless for locality, poison for an
+// error-tier diagnostic). This walker shares free-vars' binder arms 1:1 (same local-copy
+// convention prelude.ts/slice.ts/free-vars.ts each document) and extends them with what
+// an error-tier soundness contract demands and a set-shaped FV cannot carry:
 //
 //   • SITES — every occurrence is (name × span), not a deduplicated name;
-//   • the MACRO FIREWALL — a call head resolving to a macro walks its interior by the
-//     ternary `macroAttribute`: "expression" ⇒ arguments are ordinary expression space;
-//     "opaque"/"binder" ⇒ the interior contributes NOTHING — under-report, never lie. A
-//     binder macro's formals are NOT expression space; walking them as such would be a
-//     false positive;
+//   • MACRO FIREWALL — a call head resolving to a macro walks its interior by ternary
+//     `macroAttribute`: "expression" ⇒ ordinary expression space; "opaque"/"binder" ⇒
+//     interior contributes NOTHING — under-report, never lie. Binder-macro formals are
+//     NOT expression space; walking them as such would be a false positive;
 //   • `try` scope-correctness — `(try body (catch (var) handler…) (finally …))` binds
-//     the catch variable for its handlers; the clause markers `catch`/`finally` are
-//     structural literals, never references;
-//   • `define-macro`/`define-syntax` interiors are SKIPPED entirely — a macro body's
-//     "free variables" name the EXPANSION env, categorically outside this pass;
+//     the catch variable for its handlers; `catch`/`finally` are structural literals;
+//   • `define-macro`/`define-syntax` interiors SKIPPED — a macro body's free variables
+//     name the EXPANSION env, outside this pass;
 //   • INTERNAL-DEFINE letrec* scoping — every body SEQUENCE pre-collects its
-//     define/define-macro/define-syntax names before walking any of its forms, so
-//     `(define (a) (b)) (define (b) 1)` sibling references are bound in both directions.
-//     The pre-pass collects defines ANYWHERE in the sequence (not only R7RS §5.3.2's
-//     leading run) — over-binding relative to the spec's letter, which UNDER-reports:
-//     the safe direction for the error tier.
+//     define/define-macro/define-syntax names before walking any form, so
+//     `(define (a) (b)) (define (b) 1)` sibling references bind both ways. Pre-pass
+//     collects defines ANYWHERE in the sequence (not only R7RS §5.3.2's leading run) —
+//     over-binding relative to the spec, which UNDER-reports: safe for the error tier.
 //
-// Non-variables, excluded by construction (mirrors free-vars): keyword symbols (`:foo`),
-// gensyms (raw-`symbol` names), quoted/vector datum contents. LIMIT (shared with
-// free-vars): reader collection literals (`[…]`/`{…}`) evaluate their elements in code
-// position but walk as datum here — an under-report, never a false positive.
+// Non-variables excluded (mirrors free-vars): keyword symbols (`:foo`), gensyms,
+// quoted/vector datum. LIMIT (shared with free-vars): reader collection literals
+// (`[…]`/`{…}`) evaluate elements in code position but walk as datum here — under-
+// report, never a false positive.
 
 import { APair } from "../values/primitives/APair.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";

@@ -1,35 +1,33 @@
-// scanner.ts — Track O, Layer S: the structural validity oracle.
+// scanner.ts — Layer S: the structural validity oracle.
 // The oracle S reader in the static plane: docs/static-plane.md §THE FOUR READERS 4.2.
 //
-// arrival's implementation of the constraint-kernel oracle's STATIC/STRUCTURAL half
+// Implementation of the constraint-kernel oracle's STATIC/STRUCTURAL half
 // (sift/src/sampler/oracle-contract.ts). Reports the parse state at the end of an ACCEPTED
 // PREFIX — paren depth, string/comment, operator-vs-argument position, form kind, whether the
 // program is COMPLETE-ABLE here — and the structural next-token classes. Every method is a PURE
 // FUNCTION OF THE PREFIX: no lookahead, no backtracking, aligning the constraint with
 // autoregressive generation (the model emits token t from 1..t-1 and never revises).
 //
-// === Why this is a single-pass scanner, not the Lexer FSM ===
-//
+// Why a single-pass scanner, not the Lexer FSM:
 // The oracle is DEFINED ON TRUNCATED INPUT — EOF is its normal case — but the real Lexer
-// (src/Lexer.ts) THROWS `Unterminated` on exactly the truncated prefixes the oracle must report
-// gracefully:
+// (src/reader/Lexer.ts) THROWS `Unterminated` on exactly the truncated prefixes the oracle must
+// report gracefully:
 //
 //   "(foo \"abc"   → Lexer throws; oracle must report { inString: true }
 //   "#| open"      → Lexer throws; oracle must report { inComment: true }
 //
 // A bare paren inside an unterminated string is data, not structure — the oracle must KNOW that,
 // and the Lexer can't tell us because it crashes before yielding the state. So Layer S ports the
-// proven single-pass semantics of sift's `prefix-oracle.ts` (the S-only reference) directly. The
-// genuinely-shared, non-crashing machinery from arrival is `specials.names()` — the reader-macro
-// set ('  ` ,@ , #( …) — which the scanner consults to classify quote/quasiquote prefixes.
+// single-pass semantics of sift's `prefix-oracle.ts` (the S-only reference) directly. Shared,
+// non-crashing machinery from arrival is `specials.names()` — the reader-macro set
+// ('  ` ,@ , #( …) — which the scanner consults to classify quote/quasiquote prefixes.
 //
-// This scanner AGREES with `prefix-oracle.ts` on every shared structural field for every prefix,
-// proven by the O0 conformance corpus (docs/static-plane.md §AGREEMENT GATES; the mirror-contract
-// drift alarm is oracle/contract.ts). The contract adds `formKind`/`strict` (the strict-vs-lazy
-// axis the dynamic half needs) and the Σ/T hooks (`validSymbols`/`expectedType`/`produces`) — for
-// Layer S those degrade gracefully per the contract: Σ/T return null/true, and formKind/strict are
-// derived structurally from the enclosing form's head where cheaply knowable, defaulting to
-// application/top.
+// This scanner AGREES with `prefix-oracle.ts` on every shared structural field for every prefix
+// (docs/static-plane.md §AGREEMENT GATES; mirror-contract drift alarm is oracle/contract.ts).
+// The contract adds `formKind`/`strict` (strict-vs-lazy axis) and the Σ/T hooks
+// (`validSymbols`/`expectedType`/`produces`) — for Layer S those degrade gracefully: Σ/T return
+// null/true; formKind/strict derive structurally from the enclosing form's head where cheaply
+// knowable, defaulting to application/top.
 
 import * as specials from "../reader/specials.js";
 import type {
@@ -39,8 +37,7 @@ import type {
   OracleSession,
   OracleState,
   TokenClass,
-  TypeTag,
-} from "./contract.js";
+  TypeTag } from "./contract.js";
 import { computeValidSymbols, type OracleEnvΣ } from "./sigma.js";
 
 const OPEN = new Set(["(", "[", "{"]);
@@ -75,10 +72,8 @@ interface Frame {
   quoted: boolean;
 }
 
-/** The raw structural scan result — every field a pure function of the prefix. Exported (was
- *  file-local while `scan` itself already returned it — a malformed public surface fixed as
- *  part of the export restructure, docs/plans/stage-c-corpse-deletion.md §"the /oracle kill":
- *  it now travels properly on `/lsp-internals` alongside `scan`. */
+/** The raw structural scan result — every field a pure function of the prefix. Exported
+ *  alongside `scan` (consumed via `/lsp-internals`). */
 export interface ScanResult {
   depth: number;
   inString: boolean;
@@ -193,7 +188,7 @@ export function scan(src: string): ScanResult {
       continue;
     }
 
-    // any other char (including the reader-macro prefixes '  `  ,  ,@) is atom content — exactly
+    // any other char (including the reader-macro prefixes '  `  , @) is atom content — exactly
     // as the reference reader treats it. We classify a lone quote prefix at the next `(` instead.
     midToken = true;
     cur += c;
@@ -220,8 +215,7 @@ export function scan(src: string): ScanResult {
     strict,
     closeable: depth === 0 && !inText,
     closeSuffix: depth > 0 ? ")".repeat(depth) : "",
-    overClosed: min < 0,
-  };
+    overClosed: min < 0 };
 }
 
 /** Derive the enclosing form's kind + strictness from the open-form stack. `curToken` is the
@@ -275,8 +269,8 @@ export function validNextClasses(s: ScanResult): Set<TokenClass> {
  *
  * Layer Σ (bound-symbol masking) is LIVE iff an `env` is injected: `validSymbols()` then returns
  * `boundSymbols() ∪ scope-locals`, position-filtered (operator ⇒ callables, argument ⇒ any). With no
- * env it degrades to null — the Layer-S contract ("Σ not modelled, do not constrain symbols"). T
- * (expectedType/produces) stays null/true until O3.
+ * env it degrades to null — the Layer-S contract ("Σ not modelled, do not constrain symbols").
+ * T (expectedType/produces) stays null/true (graceful; type layer not modelled here).
  *
  * `prefix` is the accepted source the scan came from — Σ re-derives its lexical scope from it (a pure
  * function of the prefix, like every other field).
@@ -297,22 +291,21 @@ function makeState(s: ScanResult, prefix: string, env: OracleEnvΣ | null): Orac
     // Σ — live when an env is injected, null (graceful) otherwise.
     validSymbols: (): ReadonlySet<string> | null =>
       computeValidSymbols(prefix, s.position, s.formKind, env),
-    // T — not modelled until O3 (graceful per the contract).
+    // T — not modelled (graceful per the contract).
     expectedType: (): TypeTag | null => null,
     produces: (_id: string, _type: TypeTag): boolean => true,
-    validClasses: (): Set<TokenClass> => new Set(classes),
-  };
+    validClasses: (): Set<TokenClass> => new Set(classes) };
 }
 
 /**
  * A resumable Layer-S session over a growing prefix. `advance` appends accepted text; `state` is
  * the verdict at the current cursor; `clone` branches for per-candidate masking with NO shared
  * mutable state. Layer S is structural-only: `lastClosed` is always null and `failed` always false
- * (no eager evaluation — that is Track A's incremental evaluator, not Layer S).
+ * (no eager evaluation — that is the incremental evaluator, not Layer S).
  *
  * The session re-scans the accumulated prefix from scratch on each `advance`. That keeps the
- * resumable path always agreeing with `analyze` over the same prefix (asserted by the O0 corpus)
- * and correct by construction; the scan is O(n) and the prefixes are scout-program sized.
+ * resumable path always agreeing with `analyze` over the same prefix (asserted by the agreement
+ * corpus) and correct by construction; the scan is O(n) and the prefixes are scout-program sized.
  */
 class StructuralSession implements OracleSession {
   private prefix: string;
@@ -364,12 +357,11 @@ export const structuralScanner: OracleScanner = {
   },
   session(prefix?: string): OracleSession {
     return new StructuralSession(prefix ?? "");
-  },
-};
+  } };
 
 /**
  * Build a Σ-LIVE scanner backed by a discovery `env`. Identical to {@link structuralScanner} for
- * every structural field (S is unchanged), but `validSymbols()` now returns the position-filtered
+ * every structural field (S is unchanged), but `validSymbols()` returns the position-filtered
  * bound set instead of null. Sessions opened from it carry the env into clones, so the per-candidate
  * masking path stays Σ-live. `feasible` is unchanged — structural feasibility is env-independent.
  */
@@ -383,6 +375,5 @@ export function makeSigmaScanner(env: OracleEnvΣ): OracleScanner {
     },
     session(prefix?: string): OracleSession {
       return new StructuralSession(prefix ?? "", env);
-    },
-  };
+    } };
 }

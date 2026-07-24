@@ -17,12 +17,11 @@ describe("curly-braces / {…} dict literals", () => {
     { name: "y_dict_string_key", input: "{\"a\" 1}", ast: "{\"a\" 1}" },
     { name: "y_dict_mixed_keys", input: "{:a 1 \"b\" 2}", ast: "{:a 1 \"b\" 2}" },
     { name: "y_dict_odd_boundary_comma_is_unquote", input: "{:a ,x}", ast: "{:a (unquote x)}" },
-    { name: "y_dict_unquote_key_after_separator", input: "{:a 1, ,k v}", ast: "{:a 1 (unquote k) v}" },
+    { name: "y_dict_unquote_key_after_separator", input: "{:a 1, k v}", ast: "{:a 1 (unquote k) v}" },
     {
       name: "y_dict_canonical_mixed_comma_roles",
       input: "{:a ,quoted,,anotherQuoted ,quotedValue}",
-      ast: "{:a (unquote quoted) (unquote anotherQuoted) (unquote quotedValue)}",
-    },
+      ast: "{:a (unquote quoted) (unquote anotherQuoted) (unquote quotedValue)}" },
     { name: "y_quote_dict_stays_data", input: "'{:a (f x)}", ast: "(quote {:a (f x)})" },
     { name: "y_dict_value_vector_nested", input: "{:a [1 2]}", ast: "{:a [1 2]}" },
     { name: "y_dict_suffix_key_flip", input: "{flight_number: \"X\"}", ast: "{:flight_number \"X\"}" },
@@ -30,8 +29,7 @@ describe("curly-braces / {…} dict literals", () => {
     {
       name: "y_dict_suffix_nested_in_vector_airline",
       input: "[{flight_number: \"HAT136\", date: \"2024-05-20\"}]",
-      ast: "[{:flight_number \"HAT136\" :date \"2024-05-20\"}]",
-    },
+      ast: "[{:flight_number \"HAT136\" :date \"2024-05-20\"}]" },
     { name: "y_quote_dict_suffix_key_flips_too", input: "'{a: 1}", ast: "(quote {:a 1})" },
     { name: "y_dict_string_key_json_colon", input: "{\"a\": 1}", ast: "{\"a\" 1}" },
     { name: "i_dict_glued_string_colon_reads_keyword_value", input: "{\"a\":1}", ast: "{\"a\" :1}" },
@@ -49,18 +47,16 @@ describe("curly-braces / {…} dict literals", () => {
     { name: "y_empty_dict_missing_key_nil", input: "(:missing {})", value: null },
     { name: "y_dict_whole_value", input: "{:a 1 :b (+ 1 1)}", value: { a: 1, b: 2 } },
     { name: "y_quasiquote_dict_template_unquote_value", input: "(:a `{:a ,(+ 1 2)})", value: 3 },
-    { name: "y_quasiquote_dict_template_unquote_key", input: "(:k `{:a 1, ,\"k\" 2})", value: 2 },
+    { name: "y_quasiquote_dict_template_unquote_key", input: "(:k `{:a 1, \"k\" 2})", value: 2 },
     {
       name: "y_dict_suffix_key_evals",
       input: "(:flight_number {flight_number: \"HAT136\"})",
-      value: "HAT136",
-    },
+      value: "HAT136" },
     { name: "y_dict_suffix_mixed_evals", input: "(:b {:a 1 b: (+ 1 1)})", value: 2 },
     {
       name: "y_dict_suffix_airline_shape_evals",
       input: "(:date (vector-ref [{flight_number: \"HAT136\", date: \"2024-05-20\"}] 0))",
-      value: "2024-05-20",
-    },
+      value: "2024-05-20" },
     { name: "y_dict_string_key_json_colon_evals", input: "(:a {\"a\": 1})", value: 1 },
   ])("eval · $input", async ({ input, value }) => {
     expect(await evalJson(input)).toEqual(value);
@@ -107,9 +103,8 @@ describe("curly-braces / {…} dict literals", () => {
     { name: "n_dict_dup_key_prefix_and_suffix", input: "{:a 1 a: 2}", mode: "read" },
     {
       name: "n_quasiquote_dup_key_post_substitution",
-      input: "`{:a 1, ,\"a\" 2}",
-      mode: "eval",
-    },
+      input: "`{:a 1, \"a\" 2}",
+      mode: "eval" },
   ])("door E-DICT-DUP-KEY · $name", async ({ input, mode }) => {
     let err: unknown;
     try {
@@ -174,7 +169,7 @@ describe("curly-braces / {…} dict literals", () => {
   });
 
   it.each([
-    { name: "i_unquote_key_outside_quasiquote_errors", input: "{:a 1, ,k 2}", mode: "eval" },
+    { name: "i_unquote_key_outside_quasiquote_errors", input: "{:a 1, k 2}", mode: "eval" },
   ])("door any-error · $name", async ({ input, mode }) => {
     let err: unknown;
     try {

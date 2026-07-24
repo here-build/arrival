@@ -3,20 +3,16 @@
  * analysis tools, and MCP all read through here).
  *
  * LOCATION CHANNEL: every node this parser mints gets its `SourceLocation` threaded at
- * CONSTRUCTION time (the `location` constructor param every value class now carries — see
- * AValue.ts) — never via a downstream mutation. The old two-channel design (a parse-origin
- * RunContext MIRRORING a mutating `setLocation()`/`[LOCATION]` write) is gone on both
- * halves: `AValue` no longer carries a per-value ctx (see AValue.ts's ctx-removal note),
- * and `setLocation` no longer exists — a location is either passed to the constructor of a
- * freshly-minted node, or (the one re-stamp case: an already-built cell needing a
- * DIFFERENT span) obtained via `.withLocation(loc)`, which mints a new instance rather than
- * writing through the slot. Body sites tagged `// mirror` are the surviving re-stamp calls
- * from that history; every leaf/container literal (string/number/char/vector/bytevector/
- * dict) is now located too — not just APair spines, which is all the old channel covered.
+ * CONSTRUCTION time (`location` constructor param on every value class — AValue.ts) —
+ * never via a downstream mutation. A location is either passed to the constructor of a
+ * freshly-minted node, or (re-stamp case: an already-built cell needing a DIFFERENT span)
+ * obtained via `.withLocation(loc)`, which mints a new instance rather than writing
+ * through the slot. Body sites tagged `// mirror` are re-stamp calls; every leaf/container
+ * literal (string/number/char/vector/bytevector/dict) is located — not just APair spines.
  * SYMBOLS stay deliberately excluded (interning identity is load-bearing — see
  * parsing.ts's `parse_symbol`).
  *
- * LITERAL GRAMMAR: the `[…]` vector / `{…}` dict inline literals (§LITERALS), their
+ * LITERAL GRAMMAR: `[…]` vector / `{…}` dict inline literals (§LITERALS), their
  * position-scoped comma/colon separators (§COMMA), the suffix-keyword flip (§SUFFIX-FLIP),
  * the curly-infix ban (§INFIX), and the E-DICT-* / E-BRACKET-* / E-LITERAL-* door taxonomy
  * (§ERRORS) are the model of `docs/grammar.md`. Bodies here point there rather than restate
@@ -31,17 +27,9 @@
 import { DatumReference } from "./DatumReference.js";
 import { foldcase_string } from "./foldcase.js";
 import * as specials from "./specials.js";
-import { is_nil } from "../eval/guards.js";
+import { is_nil } from "../values/value-guards.js";
 import { is_pair } from "../values/value-guards.js";
-import {
-  is_builtin,
-  is_bytevector_literal,
-  is_directive,
-  is_literal,
-  is_special,
-  is_symbol_extension,
-  is_vector_literal,
-} from "./token-guards.js";
+import { is_builtin, is_bytevector_literal, is_directive, is_literal, is_special, is_symbol_extension, is_vector_literal } from "./token-guards.js";
 import type { EOF } from "../values/primitives/EOF.js";
 import { eof } from "../values/primitives/EOF.js";
 import { ParseError, type SourceLocation, Unterminated } from "../errors.js";
@@ -627,10 +615,9 @@ export class Parser {
       // `object` may still be a DatumReference placeholder here — the reader-internal
       // channel `_resolve_pair` patches before the form leaves the reader.
       if (is_literal(token)) {
-        // The INNER cell (`(object . ())`, the quoted argument's own spine) now carries
-        // `loc` too — the quote-family prefix's location, threaded at construction on
-        // BOTH cells, closing the "inner cell left span-less" gap the old ctx-mirror
-        // channel never covered (see AValue.ts's location channel note).
+        // INNER cell (`(object . ())`, the quoted argument's own spine) carries `loc`
+        // too — quote-family prefix location threaded at construction on BOTH cells
+        // (see AValue.ts location channel).
         const inner = new APair(object as SchemeValue, nil, EMPTY_PROVENANCE, loc);
         expr = new APair(special.symbol, inner, EMPTY_PROVENANCE, loc);
       } else {

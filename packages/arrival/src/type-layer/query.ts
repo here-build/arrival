@@ -1,37 +1,30 @@
 // query — T, the type half of the Σ∩T NARROW (docs/static-plane.md §THE Σ∩T NARROW,
-// §THE FOUR READERS 4.1): the core query lens over a harvested prelude.
+// §THE FOUR READERS 4.1): core query lens over a harvested prelude.
 //
-// "Scheme is a TS subset except lists and pairs." The lens lowers a scheme prefix to TS
-// (lower.ts), compiles it against the harvested prelude (prelude.ts), and reads the TYPE
-// at the cursor's argument slot back off the checker. It answers five questions:
+// "Scheme is a TS subset except lists and pairs." Lowers a scheme prefix to TS (lower.ts),
+// compiles against the harvested prelude (prelude.ts), reads the TYPE at the cursor's
+// argument slot off the checker. Five questions:
 //
-//   • getTypeValidCandidates  — the subset of the sampler's Σ candidates that are TYPE-VALID
-//     as the next token of the slot under the cursor (the Σ∩T mask).
-//   • getSlotArrayKind        — the slot's 3-way value verdict: list / vector / scalar (null
-//     when unresolved).
-//   • getSlotElementType      — the slot's element-DOMAIN: a PROVABLY CLOSED string-literal
-//     `enum` (the highest-value narrow — an enum/closed-domain arg → its member set), or a
-//     free-form-`string` `isStringy` flag (both null on uncertainty).
-//   • getSlotAcceptsBareWord  — is a bare value-word admissible here as a string (null when
-//     unresolved).
-//   • getSlotIsStringTyped    — is the slot a string subtype, not an array (null when unresolved).
+//   • getTypeValidCandidates  — Σ candidates that are TYPE-VALID as the next slot token (Σ∩T)
+//   • getSlotArrayKind        — list / vector / scalar (null when unresolved)
+//   • getSlotElementType      — element-DOMAIN: PROVABLY CLOSED string-literal `enum`, or
+//     free-form-`string` `isStringy` (both null on uncertainty)
+//   • getSlotAcceptsBareWord  — bare value-word admissible as a string? (null when unresolved)
+//   • getSlotIsStringTyped    — string subtype, not an array? (null when unresolved)
 //
-// ★THE GOVERNING INVARIANT — CONSERVATIVE, DROPS-ONLY (the type-lens voice of the one
-// conservative-narrowing law: docs/static-plane.md §CONSERVATIVE NARROWING). An axis narrows
-// ONLY when it can PROVE the constraint (a candidate PROVABLY ill-typed at the slot, a slot NOT
-// `any`/`unknown`/`never`/out-of-range). On ANY uncertainty it returns the unresolved value
-// (candidate list unchanged, or null) — a wrongly-dropped valid candidate is a DEFECT, never a
+// GOVERNING INVARIANT — CONSERVATIVE, DROPS-ONLY (type-lens voice of the one conservative-
+// narrowing law: docs/static-plane.md §CONSERVATIVE NARROWING). An axis narrows ONLY when
+// it can PROVE the constraint. On ANY uncertainty it returns the unresolved value
+// (candidates unchanged, or null) — a wrongly-dropped valid candidate is a DEFECT, never a
 // tradeoff. Every keep/null path below is annotated with the uncertainty it absorbs.
 //
-// Mechanism (ONE compile per query — the slot type is extracted once, then candidates are
-// filtered against it; never a compile-per-candidate):
-//   1. insert a unique SENTINEL atom at the cursor; balance the (mid-edit) prefix; lower().
-//   2. PARSE the lowered TS (no checker — a cheap createSourceFile) and walk to the SENTINEL's
-//      enclosing ts.CallExpression → the callee text + the argument index `i`.
-//   3. the slot's expected type is `Parameters<typeof <callee>>[i]`; compile the prelude + that
-//      alias + one `declare const` per candidate; read the types off ONE TypeChecker.
-//   4. keep a candidate iff its own value-type — or, as a sub-call head, its (awaited) RETURN
-//      type — is assignable to the slot; keep on every uncertainty.
+// Mechanism (ONE compile per query — slot type extracted once; never compile-per-candidate):
+//   1. insert unique SENTINEL at cursor; balance mid-edit prefix; lower().
+//   2. PARSE lowered TS (no checker); walk to SENTINEL's enclosing CallExpression → callee + i.
+//   3. slot type = `Parameters<typeof <callee>>[i]`; compile prelude + alias + one
+//      `declare const` per candidate; read types off ONE TypeChecker.
+//   4. keep iff value-type — or, as sub-call head, awaited RETURN type — assignable to slot;
+//      keep on every uncertainty.
 
 import * as ts from "typescript";
 
@@ -223,8 +216,7 @@ export function createQueryLens(harvested: HarvestedPrelude): QueryLens {
       const compiled = probeSlot(scheme, cursorOffset, [`declare const __str: IsStringTyped<__E>;`]);
       if (compiled === null) return null; // no slot / unresolved → null (superset-safe)
       return readBoolLiteral(compiled.checker, typeAt(compiled.checker, compiled.sourceFile, "__str"));
-    },
-  };
+    } };
 }
 
 /** The both-null element verdict — returned on every uncertainty path (frozen so callers can't
@@ -361,9 +353,8 @@ function slotTypeExpr(role: { calleeText: string; argIndex: number; propertyKey?
 }
 
 // ── the virtual program ──────────────────────────────────────────────────────
-// The single-compile host lives in compile-host.ts (shared with diagnose.ts). The query
-// lens rides on top of intentionally-erroring probes (an undeclared candidate, an
-// arity-loose call) and reads TYPES off the checker regardless of diagnostics.
+// Compile host: compile-host.ts (shared with diagnose.ts). Query rides intentionally-
+// erroring probes and reads TYPES off the checker regardless of diagnostics.
 
 /** Read the type of `declare const <name>: …` off the checker — locate the declaration's name
  *  identifier, then `getTypeAtLocation`. `null` when the declaration is absent (a corrupt probe). */

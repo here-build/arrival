@@ -2,10 +2,10 @@
  * Incremental, table-driven FSM tokenizer. The Parser drives it through `peek()`/`skip()` (one token
  * of lookahead, never the whole string), so a streaming or partial parse never re-lexes from the top.
  *
- * The non-obvious part is rule ORDERING: rules concatenate `_rules` → `_brackets` → specials →
- * `_symbol_rules`, symbols last. That layering is the disambiguation strategy — a delimiter like
- * `(`/`{` is claimed as a bracket before the symbol rules could absorb it, which is why adding the
- * SRFI-105 `{}` delimiter was a one-line widening of the bracket char-class.
+ * Rule ORDERING is the disambiguation strategy: rules concatenate `_rules` → `_brackets` →
+ * specials → `_symbol_rules`, symbols last — a delimiter like `(`/`{` is claimed as a bracket
+ * before the symbol rules could absorb it (adding a new bracket delimiter is a one-line
+ * widening of the bracket char-class).
  */
 import invariant from "tiny-invariant";
 import { eof } from "../values/primitives/EOF.js";
@@ -97,8 +97,7 @@ export class Lexer {
     Object.defineProperty(this, "__input__", {
       value: input.replaceAll("\r", ""),
       configurable: true,
-      enumerable: true,
-    });
+      enumerable: true });
     const internals: LexerInternals = {
       _i: 0,
       _whitespace: whitespace,
@@ -108,8 +107,7 @@ export class Lexer {
       _state: null,
       _next: null,
       _token: null,
-      _prev_char: "",
-    };
+      _prev_char: "" };
     // hide internals from introspection
     for (const name of Object.keys(internals) as (keyof LexerInternals)[]) {
       Object.defineProperty(this, name, {
@@ -120,8 +118,7 @@ export class Lexer {
         },
         set(value: LexerInternals[typeof name]) {
           (internals[name] as LexerInternals[typeof name]) = value;
-        },
-      });
+        } });
     }
   }
 
@@ -261,8 +258,7 @@ export class Lexer {
         token: this._token,
         col: this._col,
         offset: this._i,
-        line,
-      };
+        line };
     }
     return this._token;
   }
@@ -275,8 +271,7 @@ export class Lexer {
       Object.defineProperty(this, "__token__", {
         value: this.token(true),
         configurable: true,
-        enumerable: true,
-      });
+        enumerable: true });
       return this.token(meta);
     }
     const found = this.next_token();
@@ -289,8 +284,7 @@ export class Lexer {
       Object.defineProperty(this, "__token__", {
         value: this.token(true),
         configurable: true,
-        enumerable: true,
-      });
+        enumerable: true });
       return this.token(meta);
     }
     return eof;

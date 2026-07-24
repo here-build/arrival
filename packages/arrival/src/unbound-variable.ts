@@ -3,29 +3,27 @@
 // `eval/evaluator.ts#resolvedBindingOrThrow`), plus the TYPO-SUGGESTION mechanism that
 // enriches it.
 //
-// The suggestion machinery below stays zero-imports: the throw sites sit at/below the
-// eval layer, so this module must be importable from anywhere in the graph with no
-// cycle risk. The one exception is `UnboundVariableError` itself, which lives in
-// `errors.ts` and has zero imports of its own beyond `ArrivalError`, so importing it
-// here carries no cycle risk either.
+// The suggestion machinery stays zero-imports: throw sites sit at/below the eval layer,
+// so this module must be importable from anywhere in the graph with no cycle risk. The
+// one exception is `UnboundVariableError` itself (`errors.ts`, zero imports beyond
+// `ArrivalError`) — importing it here carries no cycle risk either.
 //
-// There is deliberately NO static curated table of "well-known" names here. Such a table
-// is declaration data smuggled into the error path: every row duplicates either a REAL
-// binding (env/polyglot/polyglot.ts, the SRFI/R7RS packs) or a DECLARED
-// `symbol.notImplemented` door (env/polyglot/polyglot-stubs.ts, env/srfi/srfi-stubs.ts,
-// env/r7rs/host.ts) — and a genuinely-absent well-known name (e.g. SRFI-1's bare `fold`)
-// belongs as a declared door in its own pack (env/srfi/srfi-1.ts), not a table row.
-// Teaching about well-known-but-absent names is CAPABILITY DATA resolving through the
-// ordinary chain, not a special error path.
+// Deliberately NO static curated table of "well-known" names. Such a table is declaration
+// data smuggled into the error path: every row duplicates either a REAL binding
+// (env/polyglot/polyglot.ts, the SRFI/R7RS packs) or a DECLARED `symbol.notImplemented`
+// door (env/polyglot/polyglot-stubs.ts, env/srfi/srfi-stubs.ts, env/r7rs/host.ts) — and a
+// genuinely-absent well-known name (e.g. SRFI-1's bare `fold`) belongs as a declared door
+// in its own pack (env/srfi/srfi-1.ts), not a table row. Teaching about well-known-but-
+// absent names is CAPABILITY DATA resolving through the ordinary chain, not a special
+// error path.
 //
-// What remains here is exactly the half that CANNOT be declared: a MISTYPED name has no
-// declaration site. Suggestions derive from the resolution chain's ACTUAL vocabulary
-// (every name bound in the env the miss happened against — passed in by the throw site):
+// What remains is the half that CANNOT be declared: a MISTYPED name has no declaration
+// site. Suggestions derive from the resolution chain's ACTUAL vocabulary (every name
+// bound in the env the miss happened against — passed in by the throw site):
 //   • a typo of a REAL bound symbol suggests that symbol — including prelude-defined
 //     names and per-env tool verbs;
-//   • the declared notImplemented doors ARE bindings, so declaring a stub makes it
-//     typo-suggestible for free through the same mechanism (suggest the door, and
-//     calling the door teaches the reason);
+//   • declared notImplemented doors ARE bindings, so declaring a stub makes it
+//     typo-suggestible for free (suggest the door; calling the door teaches the reason);
 //   • a typo of a LEXICALLY bound program name (a user `define`) suggests it too — the
 //     Resolver passes its composed scope+capabilities vocabulary.
 //
@@ -131,29 +129,31 @@ export function suggestFromVocabulary(unboundName: string, vocabulary: Iterable<
   return nearHits.toSorted(byCodeUnit).slice(0, MAX_SUGGESTIONS);
 }
 
-// ─── Idiom routing (B8 + Tier C, docs/benchmark-defect-register.md) ───────────────
+// ─── Idiom routing ────────────────────────────────────────────────────────────
 //
-// A DISJOINT, NAME-EXACT gate from the fuzzy vocabulary matcher above: these are names
-// with no declaration site AND no near-vocabulary match — a model reaching for another
-// dialect's syntax (Racket's `#:kwargs`), or a capability that sounds standard but was
-// never bound here (`require`, `with-input-from-file`, `read-all` — there is no file/port
-// IO in this sandbox; a tool's result IS the data, already in hand). Fuzzy suggestion
-// would never fire on these (edit distance from "require" to any bound name is nowhere
-// near 1), so this table is additive, not a competing heuristic — same family as the
-// `SYNTH_NAMES` seed above (car/cdr), just keyed by exact name/prefix instead of being
-// structurally synthesized. Doctrine: `env/polyglot/polyglot-racket.ts`'s header — models reach
-// for the dialect they know; give them the name, guard the shape loudly.
+// A DISJOINT, NAME-EXACT gate from the fuzzy vocabulary matcher above: names with
+// no declaration site AND no near-vocabulary match — a model reaching for another
+// dialect's syntax (Racket's `#:kwargs`), or a capability that sounds standard but
+// was never bound here (`require`, `read-all`). Names that ARE declared doors (e.g.
+// `with-input-from-file` in env/r7rs/host.ts) must NOT appear here — dual-path is a
+// lie (unbound-variable routing never runs once the name resolves as a live door).
+// Fuzzy suggestion would never fire on these (edit distance from "require" to any
+// bound name is nowhere near 1), so this table is additive, not a competing heuristic
+// — same family as the `SYNTH_NAMES` seed above (car/cdr), just keyed by exact
+// name/prefix instead of being structurally synthesized. Doctrine: models reach for
+// the dialect they know; give them the name, guard the shape loudly.
 
-/** No-file-IO explanation, shared by every dead-end file/port primitive: the sandbox has
- *  no filesystem or port layer by design (`catalog.ts`'s own "pure except the bound
- *  tools" contract) — a tool's own result already IS the data; parse it in-program. */
+/** No-file-IO explanation for unbound file/port idioms that have no host door: the
+ *  sandbox has no filesystem or port layer by design — a tool's own result already IS
+ *  the data; parse it in-program. Live host doors (with-input-from-file, open-input-file,
+ *  …) teach via their own `symbol.notImplemented` reason instead. */
 const NO_FILE_IO_HINT =
   "there is no file/port IO in this sandbox; the tool's own result is already the data — parse it with (detect-parse s).";
 
-/** Exact-name idiom routes: a name with no declaration site, routed to its native form. */
+/** Exact-name idiom routes: a name with no declaration site, routed to its native form.
+ *  ONLY truly-unbound names — if a name is a BASE_PACKS door, drop it from here. */
 const IDIOM_ROUTES: ReadonlyMap<string, string> = new Map([
   ["require", "the parsers are already bound here — try (parse-json s) or (detect-parse s), not require."],
-  ["with-input-from-file", NO_FILE_IO_HINT],
   ["read-all", NO_FILE_IO_HINT],
 ]);
 
@@ -170,22 +170,20 @@ function idiomRoutingHint(name: string): string | undefined {
 }
 
 /**
- * `unboundVariableError` — builds the thrown Error. `vocabulary` is the throw site's
- * enumeration of every name its resolution walk could have found (`AmbientRuntime
- * .allBoundNames()`, `Resolver.allBoundNames()`, the sealed chain's `names`);
- * omitted/empty ⇒ the plain wall, no hint machinery at all (the evaluator's
- * defensive unreachable-branch throw).
+ * Builds the thrown Error. `vocabulary` is the throw site's enumeration of every name
+ * its resolution walk could have found (`AmbientRuntime.allBoundNames()`,
+ * `Resolver.allBoundNames()`, the sealed chain's `names`); omitted/empty ⇒ the plain
+ * wall, no hint machinery at all (the evaluator's defensive unreachable-branch throw).
  *
  * The hint (when a near name exists, OR the name matches a known dead-end idiom — see
- * `idiomRoutingHint` above, checked FIRST since it's name-exact and cheaper) rides both
- * `.message` (the thrown Error, e.g. surfaced in a stack trace) and `.publicMessage` (the
- * model/agent-facing string an MCP tool surface reads); with no hint both fall back to the
- * plain wording — a pure addition, never a regression.
+ * `idiomRoutingHint`, checked FIRST since it's name-exact and cheaper) rides both
+ * `.message` (the thrown Error) and `.publicMessage` (the model/agent-facing string);
+ * with no hint both fall back to the plain wording — a pure addition, never a regression.
  *
  * `enriched` is a THIRD, STRUCTURED signal alongside the two wording fields:
- * unambiguously true iff a did-you-mean suffix OR an idiom routing hint was appended. It
- * exists so a consumer that needs "did arrival already enrich this?" asks a typed boolean
- * instead of sniffing the SHAPE of `.message`.
+ * unambiguously true iff a did-you-mean suffix OR an idiom routing hint was appended.
+ * A consumer that needs "did arrival already enrich this?" asks a typed boolean instead
+ * of sniffing the SHAPE of `.message`.
  */
 export function unboundVariableError(name: string, vocabulary: Iterable<string | symbol> = []): UnboundVariableError {
   const routingHint = idiomRoutingHint(name);

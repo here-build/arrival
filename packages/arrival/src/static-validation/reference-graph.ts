@@ -1,21 +1,18 @@
-// reference-graph — the core data model: an explicit graph where MISSING things are
-// FIRST-CLASS NODES, built in one pass; every diagnostic is then a graph QUERY, never
-// traversal-order reporting. Same posture as Dagger's rewrite off encounter-order error
-// emission (which produced nonsensical dependency traces) onto explicit graphs where a
-// missing binding is itself a node.
+// reference-graph — explicit graph where MISSING things are FIRST-CLASS NODES, built in
+// one pass; every diagnostic is a graph QUERY, never traversal-order reporting.
+// Encounter-order error emission produces nonsensical dependency traces; missing
+// bindings as nodes keep the causal chain a PATH (`Reference → Door → owner /
+// → MissingConfig`), not prose.
 //
-// Cascade fusion falls out STRUCTURALLY instead of by bookkeeping: one
-// `MissingConfigNode` aggregates every door it disables, each door aggregates every
-// reference it explains — "group ReferenceNodes by the Missing* node their resolution
-// path terminates in" is just reading the node. The causal chain is a PATH in the
-// graph (`Reference → Door → owner / → MissingConfig`), not prose.
+// Cascade fusion is STRUCTURAL: one `MissingConfigNode` aggregates every door it
+// disables; each door aggregates every reference it explains — "group ReferenceNodes
+// by the Missing* node their resolution path terminates in" is just reading the node.
 //
 // Node kinds: Reference, Binding, Door, MissingSymbol, MissingConfig.
-// `MissingDepNode`/`MissingResourceNode` remain producer-less design shapes —
-// `DoorCause.needs` carries only the `configuration` kind until the unrooted-capability
-// policy is ruled; the graph grows additively then, exactly like `cause` grew onto
-// `DoorSymbolDef`. CapabilityNode is carried as the door's `owner` display identity
-// (`name @ capability` — the display discipline).
+// deferred: `MissingDepNode`/`MissingResourceNode` remain producer-less —
+// `DoorCause.needs` carries only the `configuration` kind until unrooted-capability
+// policy lands; the graph grows additively then. CapabilityNode is the door's `owner`
+// display identity (`name @ capability`).
 
 import type { SourceLocation } from "../errors.js";
 import type { DoorSymbolDef } from "../common/symbols/_bake.js";
@@ -31,8 +28,8 @@ export interface ReferenceNode {
 }
 
 /** A vocabulary entry that resolves (value | keyword | macro | the program's own
- *  definitions) — referenced sites attach for future consumers (LSP nodes-at-span,
- *  mercury's FV∩exports closure); no diagnostic reads them this wave. */
+ *  definitions) — referenced sites attach for consumers (LSP nodes-at-span, mercury's
+ *  FV∩exports closure); no diagnostic reads them today. */
 export interface BindingNode {
   readonly name: string;
   readonly entry: VocabularyEntry | { readonly kind: "program" };
@@ -119,8 +116,7 @@ export function buildReferenceGraph(
           door: entry.door,
           owner: entry.door.cause?.owner,
           needs: [],
-          references: [],
-        };
+          references: [] };
         doors.set(occ.name, node);
         for (const need of entry.door.cause?.needs ?? []) {
           // `configuration` is the only need kind with a producer.

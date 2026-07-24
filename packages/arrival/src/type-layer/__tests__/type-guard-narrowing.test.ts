@@ -7,10 +7,10 @@ import dedent from "dedent";
 import { signatureOf } from "../schema-to-ts.js";
 import equality from "../../env/r7rs/equality.js";
 import vectors from "../../env/r7rs/vectors.js";
-import { symbol } from "../../common/symbol.js";
+import { symbol } from "../../symbol/index.js";
 import { contractOf } from "../../common/capability-internals.js";
 import { harvestContracts } from "../../__tests__/_symbols-harvest.js";
-import * as z from "../../common/scheme-zod.js";
+import * as z from "../../common/scheme-zod/index.js";
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim();
 
@@ -113,8 +113,7 @@ describe("dual guard control-flow narrowing (lens-critical)", () => {
   it("list?: string | List<number> keeps List<number>", () => {
     const t = narrowedType({
       guardSig: LIST_DUAL,
-      inputType: "string | List<number>",
-    });
+      inputType: "string | List<number>" });
     expect(t).toMatch(/number/);
     expect(t).not.toMatch(/string/);
     expect(t).not.toBe("List<unknown>");
@@ -123,8 +122,7 @@ describe("dual guard control-flow narrowing (lens-critical)", () => {
   it("list?: List<string> | number keeps List<string>", () => {
     const t = narrowedType({
       guardSig: LIST_DUAL,
-      inputType: "List<string> | number",
-    });
+      inputType: "List<string> | number" });
     expect(t).toMatch(/string/);
     expect(t).not.toMatch(/number/);
   });
@@ -132,8 +130,7 @@ describe("dual guard control-flow narrowing (lens-critical)", () => {
   it("vector?: string | readonly number[] keeps number[]", () => {
     const t = narrowedType({
       guardSig: VECTOR_DUAL,
-      inputType: "string | readonly number[]",
-    });
+      inputType: "string | readonly number[]" });
     expect(t).toMatch(/number/);
     expect(t).not.toMatch(/string/);
   });
@@ -141,8 +138,7 @@ describe("dual guard control-flow narrowing (lens-critical)", () => {
   it("pair?: string | Pair<number, boolean> keeps Pair", () => {
     const t = narrowedType({
       guardSig: PAIR_DUAL,
-      inputType: "string | Pair<number, boolean>",
-    });
+      inputType: "string | Pair<number, boolean>" });
     expect(t).toMatch(/number/);
     expect(t).toMatch(/boolean/);
     expect(t).not.toMatch(/string/);

@@ -8,7 +8,7 @@
 //
 // Harvests from the AEntity defs directly (schema-to-ts.signatureOf) rather than through
 // `OracleEnv.signatureOf`: that method is a contract shared with sift (type-identical,
-// O0-conformance-proven), so re-typing it to a TS string would invert the cross-package
+// agreement-corpus-proven), so re-typing it to a TS string would invert the cross-package
 // arrow. The harvest stays one-directional (defs → prelude text), entirely in this package.
 
 import { escapeName, isTsIdentifier } from "./name-escape.js";
@@ -58,20 +58,19 @@ export function assemblePreludeFromSignatures(
     operatorDecls.length > 0 ? `declare const _: {\n${operatorDecls.join("\n")}\n};\n` : "";
   return {
     prelude: [carrierVocabulary(), "", ...identDecls, "", operatorNamespace].join("\n"),
-    members,
-  };
+    members };
 }
 
 /**
  * Assemble the ambient prelude for a set of `[name, SymbolDeclaration]` grant tools. Thin
  * wrapper over `assemblePreludeFromSignatures`: pulls each entry's `AEntity` CONTRACT via
- * `contractOf` (Stage A2 — the symbol.* factories mint the runtime A-value directly now;
- * `common/capability.ts`'s `contractOf` is the shared read-side seam every describe/catalog/
- * harvest reader dispatches through), harvests its arrow signature via `signatureOf`, then
- * delegates assembly. A door/macro/keyword harvests as `never` (not callable) — `signatureOf`'s
- * own contract. An entry with NO contract to show (`symbol.alias`'s unresolved marker, the
- * legacy `{ fn }` arm, `symbol.value`'s raw boxed data) is silently skipped — nothing to
- * declare a signature for.
+ * `contractOf` (`symbol.*` factories mint the runtime A-value; `common/capability.ts`'s
+ * `contractOf` is the shared read-side seam every describe/catalog/harvest reader
+ * dispatches through), harvests its arrow signature via `signatureOf`, then delegates
+ * assembly. A door/macro/keyword harvests as `never` (not callable) — `signatureOf`'s own
+ * contract. An entry with NO contract to show (`symbol.alias`'s unresolved marker,
+ * `symbol.value`'s raw boxed data, or a non-`AEntity` authoring shape) is silently skipped —
+ * nothing to declare a signature for.
  */
 export function assembleHarvestedPrelude(
   entries: Iterable<readonly [name: string, def: SymbolDeclaration]>,

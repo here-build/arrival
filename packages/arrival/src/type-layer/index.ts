@@ -1,12 +1,11 @@
-// type-layer — the public seam for the Σ∩T NARROW (the harvested-prelude query lens).
+// type-layer — public seam for the Σ∩T NARROW (harvested-prelude query lens).
 // Plane framing: docs/static-plane.md §THE Σ∩T NARROW, §THE FOUR READERS 4.1.
 //
-// `@inhuman.tools/arrival/type-layer` surfaces the pieces a consumer assembles to narrow a
-// constrained decode by the host tools' TYPES (Scheme is a TS subset except lists and pairs).
-// `printType`/`lower` are exposed so a hand-rolled `declare const` (e.g. value-symbol
-// constants) prints with the SAME flatten the harvest uses — never diverges from a harvested
-// signature. Internals (carriers.ts ambient text, the role finder, the virtual program host)
-// stay unexported; see each export's own doc for its contract.
+// `@inhuman.tools/arrival/type-layer` surfaces the pieces a consumer assembles to narrow
+// constrained decode by host tools' TYPES (Scheme is a TS subset except lists and pairs).
+// `printType`/`lower` are exposed so a hand-rolled `declare const` prints with the SAME
+// flatten the harvest uses. Internals (carriers ambient text, role finder, virtual program
+// host) stay unexported; see each export's own doc for its contract.
 
 export { assembleHarvestedPrelude, assemblePreludeFromSignatures, type HarvestedPrelude } from "./prelude.js";
 export { createQueryLens, type QueryLens, type SlotArrayKind } from "./query.js";

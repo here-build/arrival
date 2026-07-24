@@ -18,8 +18,7 @@ import {
   int_re,
   parsable_contants,
   pre_num_parse_re,
-  rational_re,
-} from "./lexical-grammar.js";
+  rational_re } from "./lexical-grammar.js";
 import { ACharacter } from "../values/primitives/ACharacter.js";
 import type { SchemeValue } from "../values/types.js";
 
@@ -44,11 +43,11 @@ function parseBigInt(str: string, radix: number = 10): bigint {
 // §0.3/§2.5): a source literal whose exact magnitude would leave `Number.isSafeInteger`
 // range THROWS a teaching ParseError rather than silently truncating or minting an
 // impossible AExact component — the RATIO design has no bignum escape hatch.
-// This is the reader's own twin of `values/numbers.ts`'s private `parseSafeIntLiteral`:
+// DRIFT ALARM: reader's twin of `values/numbers.ts`'s private `parseSafeIntLiteral` —
 // same law, duplicated rather than imported, because that helper belongs to
-// `parseNumber` — a deliberately separate, non-dual-use host utility (see that file's
-// header) — while parse_rational/parse_integer/parse_float here are the reader's LIVE
-// path (also called by `string->number`, env/r7rs/strings.ts).
+// `parseNumber` (a deliberately separate, non-dual-use host utility) while
+// parse_rational/parse_integer/parse_float here are the reader's LIVE path (also called
+// by `string->number`, env/r7rs/strings.ts).
 const PARSE_SAFE_MAX = BigInt(Number.MAX_SAFE_INTEGER);
 const PARSE_SAFE_MIN = BigInt(Number.MIN_SAFE_INTEGER);
 
@@ -295,8 +294,7 @@ const BAR_SYMBOL_MNEMONICS: Record<string, string> = {
   b: "\b",
   t: "\t",
   n: "\n",
-  r: "\r",
-};
+  r: "\r" };
 
 const BAR_SYMBOL_ESCAPE_RE = /\\(?:x([0-9a-fA-F]+);|([|\\abtnr])|[ \t]*\r?\n[ \t]*)/g;
 
@@ -368,9 +366,9 @@ function parse_symbol(arg: string): ASymbol {
 
 // ── Self-evaluating literal constants ──
 // Hoisted to module scope so every `+inf.0` / `-inf.0` / `+nan.0` in source shares ONE instance.
-// These MUST stay boxed SchemeInexact, not raw JS numbers: a bare primitive leaks an un-AValue past
-// the parser and breaks every downstream consumer that assumes numerics are SchemeExact/SchemeInexact
-// (`is_inexact`, the numeric operator wrapping in env/r7rs/numeric.ts, the L2+ provenance algebra).
+// MUST stay boxed SchemeInexact, not raw JS numbers: a bare primitive leaks an un-AValue past
+// the parser and breaks every downstream consumer that assumes numerics are SchemeExact/
+// SchemeInexact (`is_inexact`, numeric operators in env/r7rs/numeric.ts, provenance algebra).
 const nan = new AInexact(Number.NaN);
 const posInf = new AInexact(Number.POSITIVE_INFINITY);
 const negInf = new AInexact(Number.NEGATIVE_INFINITY);
@@ -384,8 +382,7 @@ const constants: Record<string, SchemeValue> = {
   "-inf.0": negInf,
   "+nan.0": nan,
   "-nan.0": nan,
-  ...parsable_contants,
-};
+  ...parsable_contants };
 
 // ── Token → value dispatch ──
 // Constants first, then string, then the `#`-prefixed family (char), then the numeric tower;
@@ -430,12 +427,11 @@ export function parse_argument(arg: string, strict = false, loc?: SourceLocation
     }
   }
   if (/^#[iexobd]/.test(arg)) throw new ParseError(`Invalid numeric constant: ${arg}`, undefined, "E-NUMERIC-CONSTANT");
-  // SYMBOLS deliberately stay LOCATION-LESS (byte-identical interning off CONSTANT_CTX's
-  // flyweight table): a per-occurrence span would mint per-occurrence instances — and raw
-  // reference identity on interned symbols is load-bearing: memq/assq compare with `===`
-  // (env/r7rs/lists.ts), and the specials quote-family table shares instances with parsed
-  // source through that same table. Deferred: per-occurrence symbol spans are blocked on
-  // those `===` sites delegating to `eq()` (structural-equal.ts, the codebase's own
-  // name-comparing eq?).
+  // SYMBOLS deliberately stay LOCATION-LESS (interning off CONSTANT_CTX's flyweight table):
+  // a per-occurrence span would mint per-occurrence instances — and raw reference identity
+  // on interned symbols is load-bearing: memq/assq compare with `===` (env/r7rs/lists.ts),
+  // and the specials quote-family table shares instances with parsed source through that
+  // same table. deferred: per-occurrence symbol spans blocked until those `===` sites
+  // delegate to `eq()` (structural-equal.ts).
   return parse_symbol(arg);
 }

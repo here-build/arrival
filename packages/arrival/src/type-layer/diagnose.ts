@@ -1,23 +1,21 @@
-// diagnose — the type-hint DIAGNOSE primitive: whole-program semantic diagnostics over a
+// diagnose — type-hint DIAGNOSE primitive: whole-program semantic diagnostics over a
 // harvested prelude, mapped back to scheme coordinates.
 //
-// Sibling to query.ts (the Σ∩T narrow). Where `createQueryLens` reads TYPES off the checker
-// and IGNORES diagnostics (it rides on intentionally-erroring probes), `createDiagnoseLens`
-// reads `getSemanticDiagnostics` off the SAME single-compile host, filters them to the
-// current-program region, maps each TS offset back through lower.ts's per-statement span-map,
-// and extracts a structured payload (expected/actual/propertyName/candidates/signature).
+// Sibling to query.ts (Σ∩T narrow). `createQueryLens` reads TYPES off the checker and
+// IGNORES diagnostics (intentionally-erroring probes); `createDiagnoseLens` reads
+// `getSemanticDiagnostics` off the SAME single-compile host, filters to the current-
+// program region, maps each TS offset through lower.ts's per-statement span-map, and
+// extracts a structured payload (expected/actual/propertyName/candidates/signature).
 //
-// It is a SEPARATE export (not a QueryLens method) so the decode gate's five methods stay
-// byte-identical — a diagnose is a whole-program probe, a different function shape.
+// SEPARATE export (not a QueryLens method) so the decode gate's five methods stay a
+// pure type-narrow surface — diagnose is a whole-program probe, a different shape.
 //
-// ADVISORY, NOT BLOCKING: these diagnostics are WARNINGS. The type-hint surface is
-// telemetry-first and never gates execution — `diagnose` only OBSERVES a throwaway
-// program; it never rejects, throws-on-diagnostic, or changes what runs. The consumer
-// (manifold's select/render/deliver) treats every result as "here's a possible problem".
+// ADVISORY, NOT BLOCKING: WARNINGS only. Telemetry-first; never gates execution —
+// `diagnose` OBSERVES a throwaway program; never rejects or changes what runs.
 //
-// The context region is a RECIPE: `contextDefines` are the prior iterations'
-// `(define …)` SOURCE, re-lowered each call (homoiconicity → deterministic types). Diagnostics
-// inside the context region fall outside the current-program span-map and drop as unmappable.
+// Context region is a RECIPE: `contextDefines` are prior iterations' `(define …)` SOURCE,
+// re-lowered each call (homoiconicity → deterministic types). Diagnostics inside the
+// context region fall outside the current-program span-map and drop as unmappable.
 
 import * as ts from "typescript";
 
@@ -25,21 +23,20 @@ import { compile } from "./compile-host.js";
 import { lower, type LoweredStatement } from "./lower.js";
 import type { HarvestedPrelude } from "./prelude.js";
 
-/** One diagnostic, span-mapped to the lowered-unit's scheme coordinates. Arrival-native
- *  (tuple spans); the manifold spine adapter maps this near-identically to `MappedDiagnostic`
- *  (pre-rendering `signatureText`, leaving `expected`/`actual` as TS strings for render.ts's
- *  bifunctor back-translation). */
+/** One diagnostic, span-mapped to lowered-unit scheme coordinates. Arrival-native
+ *  (tuple spans); manifold spine adapter maps to `MappedDiagnostic` (pre-renders
+ *  `signatureText`; leaves `expected`/`actual` as TS strings for render back-translation). */
 export interface RawMappedDiagnostic {
   readonly code: number;
   /** Span in lowered-unit scheme coordinates (`forms[i].span` shifted by `programStartOffset`). */
   readonly span: readonly [start: number, end: number];
-  /** The raw TS message — INTERNAL ONLY, never rendered (TS never leaks to the surface). */
+  /** Raw TS message — INTERNAL ONLY, never rendered (TS never leaks to the surface). */
   readonly tsMessage: string;
-  readonly expected?: string; // TS type string of the expected type, when applicable
-  readonly actual?: string; //  TS type string of the actual type, when applicable
-  readonly propertyName?: string; // for 2353/2561/2551/2339
-  readonly candidateProperties?: readonly string[]; // closed key set, for did-you-mean
-  readonly signatureText?: string; // for arity (2554/2555), pre-rendered to scheme by the adapter
+  readonly expected?: string; // TS type string when applicable
+  readonly actual?: string;
+  readonly propertyName?: string; // 2353/2561/2551/2339
+  readonly candidateProperties?: readonly string[]; // closed key set (did-you-mean)
+  readonly signatureText?: string; // arity 2554/2555; adapter pre-renders to scheme
 }
 
 interface DiagnoseUnit {
@@ -121,8 +118,7 @@ export function createDiagnoseLens(harvested: HarvestedPrelude): DiagnoseLens {
         diagnostics.push({ code: d.code, span, tsMessage, ...extractPayload(checker, sourceFile, d) });
       }
       return { unit, diagnostics };
-    },
-  };
+    } };
 }
 
 /** Structured payload per code. Every extraction is defensive: an un-locatable node

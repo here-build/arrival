@@ -61,7 +61,7 @@ export function type(obj: unknown): string {
   // retirement (boxing that raw value at its membrane crossing) shows up here. ──
   if (obj === null) return "null";
   if (typeof obj === "number") return Number.isNaN(obj) ? "NaN" : "number"; // leak: unboxed scalar return
-  if (typeof obj === "bigint") return "number"; // leak: unboxed scalar return
+  if (typeof obj === "bigint") return "number"; // residual leak inventory: membrane now DOORS bigint (NoLensError); this face only if one smuggled past
   if (obj === undefined) return "void";
   if (typeof obj !== "object") return typeof obj; // leak: bare fns in env space, raw string/boolean/symbol
 
@@ -96,8 +96,7 @@ export function typeErrorMessage(fn: unknown, got: string, expected: unknown, po
     } else {
       expected = new Intl.ListFormat("en", {
         style: "long",
-        type: "disjunction",
-      }).format(expected);
+        type: "disjunction" }).format(expected);
     }
   }
   return `Expecting ${expected} got ${got}${postfix}`;

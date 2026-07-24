@@ -1,4 +1,4 @@
-// sigma.ts — Track O, Layer Σ: bound-symbol masking.
+// sigma.ts — Layer Σ: bound-symbol masking.
 //
 // Layer S (scanner.ts) reports the STRUCTURAL parse state at the end of an accepted prefix. Σ
 // refines the `atom` class into the SET OF BOUND IDENTIFIERS legal at the cursor — the contract's
@@ -10,12 +10,12 @@
 //   - top / quote ⇒ no constraint (null) — a top-level datum or quoted data may be any symbol.
 //
 // Two symbol sources, unioned:
-//   1. boundSymbols() — the live discovery env, an OracleEnv over the real AmbientRuntime (enumerates
-//      __env__ up the parent chain). This is the grant boundary: Σ enforces the sandbox's binding
-//      set for free (spec §A2).
-//   2. scope-locals — the LEXICAL binders the prefix itself introduces: let/let*/letrec/letrec*
-//      bindings, lambda parameters, define'd names. A pure function of the accepted prefix (a scope
-//      stack threaded alongside the reader's own depth/position tracking); a binder is in scope for
+//   1. boundSymbols() — the live discovery env, an OracleEnv over the real AmbientRuntime
+//      (enumerates __env__ up the parent chain). Grant boundary: Σ enforces the sandbox's
+//      binding set for free.
+//   2. scope-locals — LEXICAL binders the prefix itself introduces: let/let*/letrec/letrec*
+//      bindings, lambda parameters, define'd names. Pure function of the accepted prefix
+//      (scope stack threaded alongside depth/position tracking); a binder is in scope for
 //      its body region and absent outside it.
 //
 // GRACEFUL DEGRADATION: no env ⇒ boundSymbols() is empty and callable-vs-not is undecidable, so Σ
@@ -30,7 +30,7 @@ import type { CursorPosition, FormKind, OracleEnv } from "./contract.js";
 
 /** The internal env surface Σ consumes: {@link OracleEnv} plus a callable predicate (operator-position
  *  filtering needs to know which bound names are applicable). A callable need not have a known
- *  signature (that's T/O3) — `isCallable` is the cheap structural "could this be a form head" check. */
+ *  signature (that's T) — `isCallable` is the cheap structural "could this be a form head" check. */
 export interface OracleEnvΣ extends OracleEnv {
   /** True iff the bound value of `id` is applicable (a function / macro / syntax). Drives the
    *  operator-position filter. Unknown names (not bound) ⇒ false. */

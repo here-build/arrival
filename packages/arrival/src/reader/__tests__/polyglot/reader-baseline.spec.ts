@@ -8,8 +8,7 @@ describe("reader-baseline / specials outside […] {…} literals", () => {
     {
       name: "y_unquote_outside_literal_untouched",
       input: "`(a ,b)",
-      ast: "(quasiquote (a (unquote b)))",
-    },
+      ast: "(quasiquote (a (unquote b)))" },
     { name: "y_dotted_pair_outside_literals_unaffected", input: "(a . b)", ast: "(a . b)" },
     { name: "i_comma_is_delimiter_outside_literals", input: "(f 1, 2)", ast: "(f 1 (unquote 2))" },
   ])("read · $name", async ({ input, ast }) => {

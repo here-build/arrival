@@ -1,13 +1,11 @@
-// emit/emit-rule — EmitRule/EmitCtx/EmitConfig: the compiler-facing rule surface a
-// Contract may carry (`Contract.emit`). Pure-data types; the layering rule that keeps them
-// `typescript`-free lives in ./index.ts.
+// emit/emit-rule — EmitRule/EmitCtx/EmitConfig: pure-data rule surface a Contract may
+// carry (`Contract.emit`). Layering rule (typescript-free) lives in ./index.ts.
 //
-// GENERIC OVER THE RESIDUAL. Both interfaces are generic over the residual type `R` with an
-// `unknown` default: `EmitRule` bare (as `Contract.emit` stores it) is the fully-opaque
-// instantiation; rule-authoring sites instantiate `EmitRule<R>` against the real residual.
-// Method (not property) signatures are deliberate — TS checks method parameters
-// bivariantly, so a rule authored against the real `R` stays assignable to the opaque
-// `EmitRule` a Contract stores.
+// GENERIC OVER THE RESIDUAL. Both interfaces default `R = unknown`: bare `EmitRule` (as
+// `Contract.emit` stores it) is fully opaque; rule-authoring sites instantiate
+// `EmitRule<R>` against the real residual. Method (not property) signatures are
+// deliberate — TS checks method parameters bivariantly, so a rule authored against real
+// `R` stays assignable to the opaque `EmitRule` a Contract stores.
 
 import type { TypeFacts } from "./type-facts.js";
 
@@ -52,7 +50,7 @@ export interface EmitCtx<R = unknown> {
   config: EmitConfig;
   /** Opaque origin handle for the CoreForm node this residual is produced FOR — zero
    *  type contract on this side (CoreForm's NodeId is compiler-package-local; typing it
-   *  here would invert the layering rule's dependency direction). Currently inert by design: origin
+   *  here would invert the layering rule's dependency direction). Inert by design: origin
    *  spans thread via copy-forward in the pass that builds residuals; this handle exists
    *  for the one case copy-forward can't cover (a rule minting a node with no 1:1
    *  CoreForm origin). Consumers must treat it as optional. */

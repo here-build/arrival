@@ -1,35 +1,29 @@
-// emit/residual-lite — a minimal, pure-data residual BUILDER surface that lets a
-// Contract-carried `emit` rule construct residual shapes without arrival core ever
-// importing the compiler.
+// emit/residual-lite — pure-data residual BUILDER surface so a Contract-carried `emit`
+// rule can construct residual shapes without arrival core importing the compiler.
 //
-// WHY IT EXISTS. Arrival core must not import the compiler's residual constructors
-// (arrival-mercury's residual/types.ts): the dependency runs compiler → arrival-core
-// only, never the reverse (the layering rule; canonical statement in ./index.ts). But an
-// emit rule still has to BUILD `Bin`/`Lit`/`Method`/`Ref`/`Un`/`Call`/`Member`/
-// `ArrayLit`/`Spread`/`Arrow`/`Index` to hand back as its residual. This module declares
-// exactly those shapes locally.
+// WHY. Arrival core must not import the compiler's residual constructors
+// (arrival-mercury's residual/types.ts): dependency runs compiler → arrival-core only
+// (layering rule; canonical in ./index.ts). An emit rule still has to BUILD
+// `Bin`/`Lit`/`Method`/`Ref`/`Un`/`Call`/`Member`/`ArrayLit`/`Spread`/`Arrow`/`Index`.
+// This module declares those shapes locally.
 //
-// STRUCTURAL, NOT NOMINAL — the load-bearing invariant. Nothing here is imported BY the
-// compiler, and this module never imports the compiler's `R`. The two `R` types are
-// independently declared, field-for-field identical; TypeScript's structural typing plus
-// `EmitRule`'s bivariant method-parameter check (./emit-rule.ts) let a rule built from
-// THESE constructors satisfy the compiler's real `EmitRule<R>`, and let the compiler's
-// renderer accept the returned object with zero adaptation. A shape that drifts out of
-// step with the compiler's `R` is a compile error at the CONSUMING (compiler) site —
-// never a silent shape drift here. `EmitCtx<R>.runtime(sym): R` is generic over THIS
-// file's `R`, so a rule that MINTS a runtime reference gets a value already typed `R` by
-// the signature alone — no constructor here is needed for that value to flow into e.g.
-// `Call.callee: R` (identity assignment, not a shape check).
+// STRUCTURAL, NOT NOMINAL. Nothing here is imported BY the compiler; this module never
+// imports the compiler's `R`. The two `R` types are independently declared, field-for-
+// field identical; structural typing plus `EmitRule`'s bivariant method-parameter check
+// (./emit-rule.ts) let a rule built from THESE constructors satisfy the compiler's real
+// `EmitRule<R>`, and let the compiler's renderer accept the returned object with zero
+// adaptation. Shape drift surfaces as a compile error at the CONSUMING (compiler) site —
+// never a silent drift here. `EmitCtx<R>.runtime(sym): R` is generic over THIS file's
+// `R`, so a mint of a runtime reference is already typed `R` by the signature alone.
 //
-// MIRROR RULE. Every type below is field-for-field identical to residual/types.ts's alias
-// of the same name, and every union is the FULL union (all operators, all literal kinds),
-// not the subset current rules use — so a rule landing here later needs no widening. Three
-// deliberate departures, each marked at its declaration: `Param` is NARROWED to a Binding
-// pattern; `RuntimeRef` and `ChunkExpr` are TYPE ARMS with no constructor (inspected or
-// returned, never minted here).
+// MIRROR RULE. Every type below is field-for-field identical to residual/types.ts's
+// alias of the same name; every union is the FULL union (all operators, all literal
+// kinds), not the subset current rules use. Three deliberate departures, marked at
+// declaration: `Param` is NARROWED to a Binding pattern; `RuntimeRef` and `ChunkExpr`
+// are TYPE ARMS with no constructor (inspected or returned, never minted here).
 //
-// GROWTH DISCIPLINE. Seed only shapes a rule actually constructs; add a constructor in the
-// change whose rule needs it, never speculatively.
+// GROWTH DISCIPLINE. Seed only shapes a rule actually constructs; add a constructor in
+// the change whose rule needs it, never speculatively.
 
 /** Opaque node-id carrier (mirror rule). Never constructed or inspected here; kept for
  *  origin-field shape parity. */
@@ -77,9 +71,8 @@ export interface Param {
   readonly pattern: Binding;
 }
 
-/** The residual shapes an emit rule constructs — `Ref`, `Lit`, `Bin`, `Method`, `Un`,
- *  `Call`, `Member`, `ArrayLit`, `Spread`, `Arrow`, `Index` — plus two type-only arms
- *  (`RuntimeRef`, `ChunkExpr`) it may inspect or return but never mints (see below). */
+/** Residual shapes an emit rule constructs — plus two type-only arms (`RuntimeRef`,
+ *  `ChunkExpr`) it may inspect or return but never mints. */
 export type R =
   | (Base & { readonly t: "Ref"; readonly binding: Binding })
   | (Base & { readonly t: "Lit"; readonly value: LitValue })

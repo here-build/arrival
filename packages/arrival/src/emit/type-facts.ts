@@ -1,7 +1,6 @@
-// emit/type-facts — the TypeFacts vocabulary: the membrane between tsc and emit rules.
-// Types only; the layering rule keeping this `typescript`-free lives in ./index.ts — the
-// compiler package extracts facts FROM ts.Type, rules in arrival core consume only this
-// vocabulary.
+// emit/type-facts — TypeFacts: the membrane between tsc and emit rules. Types only;
+// layering rule (typescript-free) lives in ./index.ts — the compiler extracts facts FROM
+// ts.Type; rules in arrival core consume only this vocabulary.
 
 /** Per-node type facts the compiler's type pass proves and an emit rule consumes.
  *

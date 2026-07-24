@@ -4,7 +4,7 @@
 // scheme-zod vocabulary and prints the ambient carrier reference by name instead of decomposing
 // the codec structurally.
 import { describe, expect, it } from "vitest";
-import * as z from "../../common/scheme-zod.js";
+import * as z from "../../common/scheme-zod/index.js";
 import { printType } from "../schema-to-ts.js";
 
 describe("printType — named-generic collections (List<T> / Pair<Car, Cdr>)", () => {

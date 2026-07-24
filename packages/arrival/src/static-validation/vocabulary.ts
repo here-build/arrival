@@ -1,12 +1,12 @@
 // vocabulary — `ProgramVocabulary`, the roster surface `validateProgram` judges
-// references against. The ASSEMBLED-mode constructor here is built from a SEALED
+// references against. ASSEMBLED-mode constructor is built from a SEALED
 // `CompiledResolutionChain` (+ the run's session scope). Roster mode (mercury front-end,
 // codemirror LSP, doc-gen — pre-assembly, over `EnvCapability.exports()`) is a separate
 // consumer of the same interface.
 //
-// What immutability buys: against a sealed chain, `names` is complete for enumerable
-// bindings and frozen for the assembly's lifetime — "unbound" judged at parse phase
-// cannot be invalidated by evaluation. The three deliberate augmentations:
+// Against a sealed chain, `names` is complete for enumerable bindings and frozen for the
+// assembly's lifetime — "unbound" judged at parse phase cannot be invalidated by
+// evaluation. Three deliberate augmentations:
 //
 //   • KEYWORD_SYNTAX baseline — core's keyword-bound special-form names are an
 //     UNCONDITIONAL baseline, never roster-optional: assembled realms root core
@@ -16,13 +16,11 @@
 //   • RESOLVER-SYNTH family — `c[ad]+r` names are synthesized structurally by the
 //     Resolver ABOVE the chain (eval/Resolver.ts cxrUnfold), absent from every
 //     enumerable vocabulary by construction; recognized by the same regex.
-//   • `hasImpureResolver` is always `false` in this cut: the sealed chain no longer
-//     carries a resolver-interleaving representation (the capability-facing
-//     `ResolverSpec`/`EnvCapability.resolvers` contract was retired — it had zero live
-//     users; `CompiledResolutionChain` is now unconditionally the flat-map form). The
-//     field stays on `ProgramVocabulary` for the diagnostic-severity contract
-//     (`validate-program.ts`'s error→warning downgrade) in case a future resolver-shaped
-//     producer of this interface (e.g. a glass/roster constructor) needs it.
+//   • `hasImpureResolver` is always `false` here: the sealed chain is unconditionally
+//     the flat-map form (no resolver-interleaving representation). The field stays on
+//     `ProgramVocabulary` for the diagnostic-severity contract
+//     (`validate-program.ts`'s error→warning downgrade) so a future resolver-shaped
+//     producer of this interface can use it.
 
 import type { CompiledResolutionChain } from "../eval/CompiledResolutionChain.js";
 import { DoorProcedure } from "../values/primitives/ACallable.js";
@@ -96,8 +94,7 @@ export function vocabularyFromChain(
   for (const n of scopeNames) names.add(n);
   for (const k of KEYWORD_SYNTAX_BASELINE) names.add(k);
 
-  // See the module header: the sealed chain carries no resolver-interleaving
-  // representation anymore, so this is unconditionally sound (never a false "pure").
+  // Sealed chain is flat-map form — unconditionally pure (see preamble).
   const hasImpureResolver = false;
 
   const memo = new Map<string, VocabularyEntry | undefined>();

@@ -1,22 +1,21 @@
 // carriers — the type-layer's carrier vocabulary.
 //
 // "Scheme is a TS subset except lists and pairs." These are the *only* hand-written
-// generic types — the closed tagless algebra zod cannot express. The harvested tool
+// generic types — the closed tagless algebra zod cannot express. Harvested tool
 // signatures and the lowered program reference this vocabulary; the lens prepends an
 // ambient projection of it to its virtual compile. nil = null; vector = readonly T[]
 // (native TS array); scalars/dict project to plain TS directly.
 //
 // Authored as an `export declare` module (types-only — the lens never RUNS these; the
-// emitted TS is inference-only) so the bite-guards under __tests__/ import the same
+// emitted TS is inference-only) so bite-guards under __tests__/ import the same
 // vocabulary the harvest emits against — one source of truth, no drift.
 
-/** The honest top type for `z.schemeValue` (common/scheme-zod.ts's Q1 split,
- *  docs/plans/stage-c-corpse-deletion.md §"z.value retirement campaign") — "any boxed
- *  scheme value", the R7RS-polymorphic domain of car/eq?/filter/vector elements. `unknown`
- *  IS the honest bound (a native/contour slot genuinely admits anything), but printing the
- *  bare keyword would erase the intent that this slot is DELIBERATELY unconstrained (vs. an
- *  unmapped/unregistered schema falling through to `unknown` by DEFAULT) — a distinct named
- *  alias keeps that distinction visible in a harvested signature. */
+/** Honest top type for `z.schemeValue` — "any boxed scheme value", the R7RS-polymorphic
+ *  domain of car/eq?/filter/vector elements. `unknown` IS the honest bound (a native/
+ *  contour slot genuinely admits anything), but printing the bare keyword would erase
+ *  the intent that this slot is DELIBERATELY unconstrained (vs. an unmapped schema
+ *  falling through to `unknown` by DEFAULT) — a distinct named alias keeps that
+ *  distinction visible in a harvested signature. */
 export type SchemeValue = unknown;
 
 declare const LIST_BRAND: unique symbol;
@@ -121,9 +120,9 @@ export declare const s: {
 // At a List slot after `(`, admit a head iff its return COULD be a list — mask only
 // PROVABLY non-list. The `[unknown] extends [R]` arm is the nuke-guard: a generic / `if`
 // / union return resolves to `unknown` and ADMITS, so we never block `(if …)`/`car`/etc.
-// Operates on a RESOLVED return type — head-level admissibility before args (the
-// overload-aware, call-site-contextual resolution of an in-progress `(head …)`) is the
-// gate's Phase-4 job, typing the actual call in context rather than this abstraction.
+// Operates on a RESOLVED return type — head-level admissibility before args (overload-
+// aware, call-site-contextual resolution of an in-progress `(head …)`) is deferred:
+// typing the actual call in context rather than this abstraction.
 export type CouldBeList<R> =
   [unknown] extends [R] ? true
   : [Extract<R, Cons<unknown> | null>] extends [never] ? false

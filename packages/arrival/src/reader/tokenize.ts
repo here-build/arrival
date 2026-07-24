@@ -1,8 +1,7 @@
-// The tokenizer: Lexer-driven string -> token lifting + datum-comment (#;) stripping.
-// Lifted out of the original LIPS monolith into a reader leaf. It depends only on the
-// Lexer + eof + AString, so it stays cycle-neutral (Lexer imports neither this module nor
-// the eval layer). `tokenize` is the one public entry; `tokens`/`strip_s_comments` are its
-// private helpers.
+// The tokenizer: Lexer-driven string → token lifting + datum-comment (#;) stripping.
+// Depends only on Lexer + eof + AString — cycle-neutral (Lexer imports neither this module
+// nor the eval layer). `tokenize` is the one public entry; `tokens`/`strip_s_comments` are
+// its private helpers.
 import { Lexer } from "./Lexer.js";
 import { eof } from "../values/primitives/EOF.js";
 import { AString } from "../values/primitives/AString.js";

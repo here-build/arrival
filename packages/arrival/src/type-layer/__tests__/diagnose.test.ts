@@ -22,8 +22,7 @@ const TYPED: HarvestedPrelude = {
     "declare const fx_search: (a: { query: string; max_results?: number }) => void;",
     "declare const config: { count: number };",
   ].join("\n"),
-  members: ["add2", "fx_search", "list", "config"],
-};
+  members: ["add2", "fx_search", "list", "config"] };
 
 const lens = createDiagnoseLens(TYPED);
 

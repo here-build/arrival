@@ -1,15 +1,12 @@
-// oracle/index.ts — Track O assembly point (the local module export).
+// oracle — local assembly point for the constraint-kernel oracle.
 //
-// Face of the constraint-kernel oracle (Track A of sift/docs/CONSTRAINT-KERNEL-SPEC.md; its
-// place in the static plane: docs/static-plane.md §THE FOUR READERS 4.2). Assembles the Layer-S
-// structural reader (scanner.ts) behind the contract interfaces (contract.ts). The `/oracle`
-// package subpath itself is RETIRED (export restructure, docs/plans/stage-c-corpse-deletion.md
-// §"the /oracle kill") — the doors any sibling package needs (`scan`/`ScanResult`/`makeOracle`
-// + the contract types) are re-exported from `/lsp-internals` now (`src/lsp-internals.ts`,
-// which imports from THIS file and from scanner.ts); this file stays the module-local
-// assembly point either way, just no longer a package.json entry of its own.
+// Face of the constraint-kernel oracle (static plane: docs/static-plane.md §THE FOUR
+// READERS 4.2). Assembles the Layer-S structural reader (scanner.ts) behind the contract
+// interfaces (contract.ts). Package consumers take `scan`/`ScanResult`/`makeOracle` +
+// contract types from `/lsp-internals` (`src/lsp-internals/index.ts`); this file remains
+// the module-local assembly.
 //
-// Σ (O2) and T (O3) layers attach to this assembly later; today the scanner degrades them
+// Σ and T attach behind the same surface; without an env the scanner degrades them
 // gracefully per the contract (validSymbols/expectedType → null, produces → true).
 
 export type {
@@ -21,8 +18,7 @@ export type {
   OracleSession,
   OracleState,
   TokenClass,
-  TypeTag,
-} from "./contract.js";
+  TypeTag } from "./contract.js";
 
 export { scan, structuralScanner, makeSigmaScanner, validNextClasses } from "./scanner.js";
 export { computeValidSymbols, scanScope } from "./sigma.js";
@@ -36,10 +32,10 @@ import type { OracleEnvΣ } from "./sigma.js";
 import type { AmbientRuntime } from "../env/AmbientRuntime.js";
 
 /**
- * The assembled oracle. Given an `env` (a live {@link AmbientRuntime} or pre-built {@link OracleEnvΣ})
- * it is Σ-LIVE: `validSymbols()` returns the position-filtered bound set. Given nothing, it's the
- * Layer-S structural scanner — Σ/T degrade to null/true per the contract. T will land behind the
- * same surface as `makeOracle()` with no argument.
+ * The assembled oracle. Given an `env` (a live {@link AmbientRuntime} or pre-built
+ * {@link OracleEnvΣ}) it is Σ-LIVE: `validSymbols()` returns the position-filtered bound
+ * set. Given nothing, it's the Layer-S structural scanner — Σ/T degrade to null/true per
+ * the contract. T lands behind the same surface as `makeOracle()` with no argument.
  */
 export function makeOracle(env?: AmbientRuntime | OracleEnvΣ): OracleScanner {
   if (!env) return structuralScanner;

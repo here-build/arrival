@@ -7,7 +7,7 @@
 // index. So each non-identifier name is ESCAPED into a valid TS identifier and exposed as a
 // DOTTED member (`_.nil$question$`): `typeof _.nil$question$` is legal, and `_.<TAB>` autocompletes.
 //
-// THE LENS (a predicate-safe, stable iso):
+// THE LENS (predicate-safe, stable iso):
 //   • escapeName : scheme-name → TS-identifier      (forward)
 //   • unescapeName: TS-identifier → scheme-name      (backward)
 //   • LAW (round-trip): unescapeName(escapeName(x)) === x  for every scheme name x.
@@ -48,7 +48,7 @@ const RESERVED_WORDS: ReadonlySet<string> = new Set([
   "else", "enum", "export", "extends", "false", "finally", "for", "function", "if", "import",
   "in", "instanceof", "new", "null", "return", "super", "switch", "this", "throw", "true", "try",
   "typeof", "var", "void", "while", "with", "yield",
-  // strict-mode reserved (every emitted TS file is a module, hence strict):
+  // strict-mode reserved (every emitted TS file is a module ⇒ strict):
   "let", "static", "implements", "interface", "package", "private", "protected", "public", "await",
 ]);
 

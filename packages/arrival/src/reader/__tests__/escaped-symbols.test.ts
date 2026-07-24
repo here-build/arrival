@@ -40,8 +40,7 @@ describe("Escaped Symbol Resolution", () => {
   describe("Keywords vs escaped symbols", () => {
     it("should distinguish :24 from |24|", async () => {
       const testObj = {
-        "24": "numeric key value",
-      };
+        "24": "numeric key value" };
 
       bindValue(inferenceEnv, "test-obj", jsToScheme(CONSTANT_CTX, testObj));
 

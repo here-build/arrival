@@ -70,7 +70,6 @@ export const parsable_contants = {
   // VALUES exist under any mode. Model — the Rosetta translation, why they gate on
   // portability, what strict mode does — is `docs/grammar.md §LOOSE-STRICT`.
   "#null": nil,
-  "#void": theVoid,
-};
+  "#void": theVoid };
 export const directives = ["#!fold-case", "#!no-fold-case"];
 export const hash_literals = ["#t", "#f"];

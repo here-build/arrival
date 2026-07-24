@@ -58,38 +58,32 @@ describe("bracket bindings — R2b per-element (Racket) consumption", () => {
       name: "let*: per-element bracket bindings consume, equal to the paren image",
       bracketSrc: "(let* ([a 1] [b 2]) (+ a b))",
       parenSrc: "(let* ((a 1) (b 2)) (+ a b))",
-      expected: 3,
-    },
+      expected: 3 },
     {
       name: "let: per-element bracket binding consumes",
       bracketSrc: "(let ([a 1]) a)",
       parenSrc: "(let ((a 1)) a)",
-      expected: 1,
-    },
+      expected: 1 },
     {
       name: "letrec: per-element bracket binding consumes (mutual recursion)",
       bracketSrc: "(letrec ([f (lambda () 1)]) (f))",
       parenSrc: "(letrec ((f (lambda () 1))) (f))",
-      expected: 1,
-    },
+      expected: 1 },
     {
       name: "letrec*: per-element bracket binding consumes (same impl as letrec)",
       bracketSrc: "(letrec* ([a 1] [b (+ a 1)]) b)",
       parenSrc: "(letrec* ((a 1) (b (+ a 1))) b)",
-      expected: 2,
-    },
+      expected: 2 },
     {
       name: "do: per-element bracket bindings (with step) consume",
       bracketSrc: "(do ([i 0 (+ i 1)]) (= i 3) i)",
       parenSrc: "(do ((i 0 (+ i 1))) (= i 3) i)",
-      expected: 3,
-    },
+      expected: 3 },
     {
       name: "named let (Racket per-element): consumes instead of silently binding zero params",
       bracketSrc: "(let loop ([i 0]) i)",
       parenSrc: "(let loop ((i 0)) i)",
-      expected: 0,
-    },
+      expected: 0 },
   ])("$name", async ({ bracketSrc, parenSrc, expected }) => {
     const value = await assertEquivalent(bracketSrc, parenSrc);
     expect(value).toBe(expected);
@@ -110,32 +104,27 @@ describe("bracket bindings — R2a whole-list (Clojure) consumption", () => {
       name: "let: whole-list bracket bindings consume, equal to the paren image",
       bracketSrc: "(let [a 1 b 2] (+ a b))",
       parenSrc: "(let ((a 1) (b 2)) (+ a b))",
-      expected: 3,
-    },
+      expected: 3 },
     {
       name: "named let (Clojure whole-list): consumes",
       bracketSrc: "(let loop [i 0] i)",
       parenSrc: "(let loop ((i 0)) i)",
-      expected: 0,
-    },
+      expected: 0 },
     {
       name: "named let (Clojure whole-list): recurses correctly",
       bracketSrc: "(let loop [i 0] (if (= i 3) i (loop (+ i 1))))",
       parenSrc: "(let loop ((i 0)) (if (= i 3) i (loop (+ i 1))))",
-      expected: 3,
-    },
+      expected: 3 },
     {
       name: "let*: whole-list bracket bindings consume",
       bracketSrc: "(let* [a 1 b 2] (+ a b))",
       parenSrc: "(let* ((a 1) (b 2)) (+ a b))",
-      expected: 3,
-    },
+      expected: 3 },
     {
       name: "letrec: whole-list bracket bindings consume",
       bracketSrc: "(letrec [f 1] f)",
       parenSrc: "(letrec ((f 1)) f)",
-      expected: 1,
-    },
+      expected: 1 },
   ])("$name", async ({ bracketSrc, parenSrc, expected }) => {
     const value = await assertEquivalent(bracketSrc, parenSrc);
     expect(value).toBe(expected);
@@ -192,14 +181,12 @@ describe("bracket bindings — R2a whole-list grouped by POSITION, never by valu
       name: "let*: a whole-list value computed from a PRIOR binding (compound at an odd position)",
       bracketSrc: "(let* [x 1 y (+ x 1)] y)",
       parenSrc: "(let* ((x 1) (y (+ x 1))) y)",
-      expected: 2,
-    },
+      expected: 2 },
     {
       name: "let: a LAMBDA value at an odd whole-list position is a value, not a grouping boundary",
       bracketSrc: "(let [f (lambda (n) (* n n)) x 5] (f x))",
       parenSrc: "(let ((f (lambda (n) (* n n))) (x 5)) (f x))",
-      expected: 25,
-    },
+      expected: 25 },
   ])("$name", async ({ bracketSrc, parenSrc, expected }) => {
     const value = await assertEquivalent(bracketSrc, parenSrc);
     expect(value).toBe(expected);
@@ -208,18 +195,15 @@ describe("bracket bindings — R2a whole-list grouped by POSITION, never by valu
   it.each([
     {
       name: "let: EVERY whole-list value compound, equal? to the literal result",
-      src: "(equal? (let [a (+ 1 2) b (* 3 4)] (list a b)) (list 3 12))",
-    },
+      src: "(equal? (let [a (+ 1 2) b (* 3 4)] (list a b)) (list 3 12))" },
     {
       name: "let*: interleaved atomic/compound values — the exact allFlat-unsound shape",
-      src: "(equal? (let* [a 1 b (+ a 1) c 3 d (* c 2)] (list a b c d)) (list 1 2 3 6))",
-    },
+      src: "(equal? (let* [a 1 b (+ a 1) c 3 d (* c 2)] (list a b c d)) (list 1 2 3 6))" },
     {
       // If position-grouping ever drifted into let* semantics, `b` would read the
       // sibling a=1 (=> 1); a parallel let reads the outer a=10.
       name: "let: whole-list keeps PARALLEL semantics — a value sees the OUTER binding, not its sibling",
-      src: "(equal? (let [a 10] (let [a 1 b a] (list a b))) (list 1 10))",
-    },
+      src: "(equal? (let [a 10] (let [a 1 b a] (list a b))) (list 1 10))" },
   ])("$name", async ({ src }) => {
     const [result] = await exec(src);
     expect(result?.valueOf()).toBe(true);
@@ -241,26 +225,22 @@ describe("bracket bindings — a binding NAME may be a scope keyword (slots are 
       name: "per-element binding named `let` binds and reads back",
       bracketSrc: "(let ([let 5]) let)",
       parenSrc: "(let ((let 5)) let)",
-      expected: 5,
-    },
+      expected: 5 },
     {
       name: "whole-list binding named `let`",
       bracketSrc: "(let [let 5] let)",
       parenSrc: "(let ((let 5)) let)",
-      expected: 5,
-    },
+      expected: 5 },
     {
       name: "whole-list with TWO keyword-named bindings, both read as plain names",
       bracketSrc: "(let [let 5 let* 6] (+ let let*))",
       parenSrc: "(let ((let 5) (let* 6)) (+ let let*))",
-      expected: 11,
-    },
+      expected: 11 },
     {
       name: "let*: a keyword-named binding is usable in a later compound value",
       bracketSrc: "(let* [let 5 x (+ let 1)] x)",
       parenSrc: "(let* ((let 5) (x (+ let 1))) x)",
-      expected: 6,
-    },
+      expected: 6 },
   ])("$name", async ({ bracketSrc, parenSrc, expected }) => {
     const value = await assertEquivalent(bracketSrc, parenSrc);
     expect(value).toBe(expected);
@@ -272,13 +252,11 @@ describe("bracket bindings — R4 doors: whole-list malformations (E-LET-BRACKET
     {
       name: "odd element count in a whole-list vector doors",
       src: "(let [a 1 b] a)",
-      patterns: [/odd number of elements/, /\[a 1 b\]/],
-    },
+      patterns: [/odd number of elements/, /\[a 1 b\]/] },
     {
       name: "odd element count doors the same way for let*",
       src: "(let* [a 1 b 2 c] a)",
-      patterns: [] as RegExp[],
-    },
+      patterns: [] as RegExp[] },
     {
       name: "do does not accept the whole-list form (R2a exclusion) — doors, points at per-element",
       src: "(do [i 0 (+ i 1)] (= i 3) i)",
@@ -286,8 +264,7 @@ describe("bracket bindings — R4 doors: whole-list malformations (E-LET-BRACKET
       // at a time) — for the odd 3-element `[i 0 (+ i 1)]` shape, the door's
       // corrected-form echo pairs the first two and leaves the third dangling: this
       // is exactly what teaches the model to use the per-element form instead.
-      patterns: [/^do bindings must be a parenthesized list of pairs/, /\(\(i 0\) \(\+ i 1\)\)/],
-    },
+      patterns: [/^do bindings must be a parenthesized list of pairs/, /\(\(i 0\) \(\+ i 1\)\)/] },
   ])("$name", async ({ src, patterns }) => {
     if (patterns.length > 0) {
       const message = await doorMessage(src);
@@ -302,32 +279,27 @@ describe("bracket bindings — R4 doors: per-element malformations (E-LET-BRACKE
     {
       name: "wrong per-element vector length (3 where 2 expected) doors",
       src: "(let ([a 1 2]) a)",
-      patterns: [/has 3 elements/, /\[name value\]/],
-    },
+      patterns: [/has 3 elements/, /\[name value\]/] },
     {
       name: "wrong per-element vector length for do (4 where 2-3 expected) doors",
       src: "(do ([i 0 1 2]) (= i 3) i)",
-      patterns: [/has 4 elements/, /2–3/],
-    },
+      patterns: [/has 4 elements/, /2–3/] },
     {
       name: "a destructuring name slot (vector where a symbol is expected) doors with the pinned text",
       src: "(let ([[a b] 1]) a)",
       patterns: [
         /destructuring is not supported — bind the whole value to one name, then read parts with accessors/,
-      ],
-    },
+      ] },
     {
       name: "a destructuring name slot in whole-list form also doors with the pinned text",
       src: "(let [[a b] 1] a)",
       patterns: [
         /destructuring is not supported — bind the whole value to one name, then read parts with accessors/,
-      ],
-    },
+      ] },
     {
       name: "a non-symbol, non-vector name slot doors generically",
       src: "(let ([1 2]) 1)",
-      patterns: [/binding name must be a symbol/],
-    },
+      patterns: [/binding name must be a symbol/] },
   ])("$name", async ({ src, patterns }) => {
     const message = await doorMessage(src);
     for (const pattern of patterns) expect(message).toMatch(pattern);
@@ -339,12 +311,10 @@ describe("bracket bindings — R5 negatives (never consumed outside the six form
   it.each([
     {
       name: "a bracketed binding INIT value is legal data, not a binding",
-      src: "(let ((a [1 2 3])) (vector-length a))",
-    },
+      src: "(let ((a [1 2 3])) (vector-length a))" },
     {
       name: "a #(...) constant binding init is legal data too",
-      src: "(let ((a #(1 2 3))) (vector-length a))",
-    },
+      src: "(let ((a #(1 2 3))) (vector-length a))" },
   ])("$name", async ({ src }) => {
     const [result] = await exec(src);
     expect(result?.valueOf()).toBe(3);
@@ -376,16 +346,14 @@ describe("bracket bindings — passthrough (unrelated malformed bindings, unchan
     {
       name: "a bare symbol binding still hits the generic invariant, not a bracket door",
       src: "(let ((a 1) b) a)",
-      pattern: /let: invalid binding/,
-    },
+      pattern: /let: invalid binding/ },
     {
       // `(define x 1)` misused as `do`'s bindings clause (Racket-`begin` habit) is an
       // APair whose first element is the bare symbol `define` — not an AVector, so it
       // falls straight through to the unchanged `is_pair(binding)` invariant.
       name: "do-as-begin misuse still hits the generic invariant, not a bracket door",
       src: "(do (define x 1) (test-ok) x)",
-      pattern: /do: invalid binding/,
-    },
+      pattern: /do: invalid binding/ },
   ])("$name", async ({ src, pattern }) => {
     const message = await doorMessage(src);
     expect(message).toMatch(pattern);

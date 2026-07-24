@@ -3,8 +3,8 @@
 // family, compounds (object/array/tuple/union), and the full `signatureOf` over a
 // sampled native def, a rosetta def, and a multiple-values output.
 import { describe, expect, it } from "vitest";
-import * as z from "../../common/scheme-zod.js";
-import { symbol, withContractFields } from "../../common/symbol.js";
+import * as z from "../../common/scheme-zod/index.js";
+import { symbol, withContractFields } from "../../symbol/index.js";
 import { contractOf } from "../../common/capability-internals.js";
 import { printType, signatureOf, sTagToTsType } from "../schema-to-ts.js";
 
@@ -29,8 +29,7 @@ describe("printType — native identity primitives (scheme primitive → plain-T
     {
       name: "z.pair → Pair<SchemeValue, SchemeValue> (cons(schemeValue, schemeValue), not a standalone name)",
       schema: z.pair,
-      expected: "Pair<SchemeValue, SchemeValue>",
-    },
+      expected: "Pair<SchemeValue, SchemeValue>" },
     { name: "z.string → string", schema: z.string, expected: "string" },
     { name: "z.bigint (exact) → number", schema: z.bigint, expected: "number" },
     { name: "z.inexact → number", schema: z.inexact, expected: "number" },
@@ -50,18 +49,15 @@ describe("printType — native identity primitives (scheme primitive → plain-T
     {
       name: "z.lambda → a callable signature, not degraded to unknown",
       schema: z.lambda,
-      expected: "(...args: unknown[]) => unknown",
-    },
+      expected: "(...args: unknown[]) => unknown" },
     {
       name: "a union of primitives (z.schemeNumber) → 'number | number' (override fires per-member, undeduped)",
       schema: z.schemeNumber,
-      expected: "number | number",
-    },
+      expected: "number | number" },
     {
       name: "the list union z.pair | z.nil → Pair<SchemeValue, SchemeValue> | null",
       schema: z.union([z.pair, z.nil]),
-      expected: "Pair<SchemeValue, SchemeValue> | null",
-    },
+      expected: "Pair<SchemeValue, SchemeValue> | null" },
   ])("prints $name", ({ schema, expected }) => {
     expect(printType(schema)).toBe(expected);
   });
@@ -86,13 +82,11 @@ describe("printType — unregistered custom leaf hardens to unknown, never throw
     {
       name: "a bare unregistered custom leaf degrades to 'unknown'",
       schema: unregisteredLeaf,
-      expected: "unknown",
-    },
+      expected: "unknown" },
     {
       name: "only the unregistered member inside a union degrades to unknown, sibling members unaffected",
       schema: z.union([z.string, unregisteredLeaf]),
-      expected: "string | unknown",
-    },
+      expected: "string | unknown" },
   ])("$name", ({ schema, expected }) => {
     expect(printType(schema)).toBe(expected);
   });
@@ -125,24 +119,20 @@ describe("printType — compounds", () => {
     {
       name: "z.object as a single-line member list (no dangling semicolon)",
       schema: z.object({ k: z.string, n: z.number }),
-      expected: "{ k: string; n: number }",
-    },
+      expected: "{ k: string; n: number }" },
     {
       name: "z.array as variadic 'T[]' (codec element decoded)",
       schema: z.array(z.number),
-      expected: "number[]",
-    },
+      expected: "number[]" },
     {
       name: "z.array of an identity primitive as 'T[]'",
       schema: z.array(z.pair),
-      expected: "Pair<SchemeValue, SchemeValue>[]",
-    },
+      expected: "Pair<SchemeValue, SchemeValue>[]" },
     { name: "a tuple as '[A, B]'", schema: z.tuple([z.string, z.number]), expected: "[string, number]" },
     {
       name: "a tuple mixing codec + identity members",
       schema: z.tuple([z.pair, z.string]),
-      expected: "[Pair<SchemeValue, SchemeValue>, string]",
-    },
+      expected: "[Pair<SchemeValue, SchemeValue>, string]" },
     { name: "a union as 'A | B'", schema: z.union([z.string, z.number]), expected: "string | number" },
   ])("prints $name", ({ schema, expected }) => {
     expect(printType(schema)).toBe(expected);
@@ -158,28 +148,23 @@ describe("sTagToTsType — the s/* schema-DSL tag → TS type-string bridge", ()
     {
       name: "an object tag's scalar fields",
       tag: ["object", ["title", "string"], ["count", "number"]] as const,
-      expected: "{ title: string; count: number; [x: string]: never }",
-    },
+      expected: "{ title: string; count: number; [x: string]: never }" },
     {
       name: "a field description prints as a JSDoc comment (zod-to-ts's own convention)",
       tag: ["object", ["summary", "string", "a one-line summary"]] as const,
-      expected: "{ /** a one-line summary */ summary: string; [x: string]: never }",
-    },
+      expected: "{ /** a one-line summary */ summary: string; [x: string]: never }" },
     {
       name: "a nested array field",
       tag: ["object", ["tags", ["array", "string"]]] as const,
-      expected: "{ tags: string[]; [x: string]: never }",
-    },
+      expected: "{ tags: string[]; [x: string]: never }" },
     {
       name: "a nested object field (itself carrying the never-index signature)",
       tag: ["object", ["author", ["object", ["name", "string"]]]] as const,
-      expected: "{ author: { name: string; [x: string]: never }; [x: string]: never }",
-    },
+      expected: "{ author: { name: string; [x: string]: never }; [x: string]: never }" },
     {
       name: "an optional field's /optional suffix drops it from `required` — TS marks it `?` (zod's own `?: T | undefined`)",
       tag: ["object", ["title", "string"], ["nickname", "string/optional"]] as const,
-      expected: "{ title: string; nickname?: string | undefined; [x: string]: never }",
-    },
+      expected: "{ title: string; nickname?: string | undefined; [x: string]: never }" },
   ])("prints $name", ({ tag, expected }) => {
     expect(sTagToTsType(tag)).toBe(expected);
   });
@@ -195,7 +180,7 @@ describe("signatureOf — the args-vector → function-signature composer", () =
   // INVARIANT: an author-asserted `type` override on the contract takes precedence over the
   // zod-schema-derived signature (decoupled from the runtime membrane) (pins implementation,
   // not behavior).
-  it("honors an author-asserted `type` override on the contract — the zod schema stays the MEMBRANE description (runtime decode/validate), `type` is a separate, decoupled TYPE-LEVEL narrowing for the harvest (mirrors legacy RosettaSpec.type/RosettaFunction.type)", () => {
+  it("honors an author-asserted `type` override on the contract — the zod schema stays the MEMBRANE description (runtime decode/validate), `type` is a separate, decoupled TYPE-LEVEL narrowing for the harvest (mirrors author `type` override/RosettaFunction.type)", () => {
     const def = symbol.native`typed-override: proof`(
       { input: [z.schemeValue], output: [z.schemeValue], type: "(ip: SchemeIP) => SchemeIP" },
       (a) => a,

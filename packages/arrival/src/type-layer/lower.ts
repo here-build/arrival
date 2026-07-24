@@ -1,33 +1,27 @@
-// lower — the scheme → TypeScript LOWERING for the type-layer.
+// lower — scheme → TypeScript LOWERING for the type-layer.
 //
-// "Scheme is a TS subset except lists and pairs." This walks the s-expr forest
-// (`parseSexprs` from @inhuman.tools/arrival-sugarcoat) and emits a TS *string* that the
-// lens compiles against the harvested prelude (carriers.ts + a `declare const` per
-// tool). The emitted TS NEVER RUNS — it exists only so the type-checker can narrow a
-// lowered call against its tool signature (the Σ∩T narrow). So fidelity is about
-// TYPES, not runtime: string-escape exactness, numeric precision, etc. are immaterial
-// as long as the emitted form carries the right type.
+// "Scheme is a TS subset except lists and pairs." Walks the s-expr forest (`parseSexprs`
+// from @inhuman.tools/arrival-sugarcoat) and emits a TS *string* the lens compiles against
+// the harvested prelude (carriers.ts + a `declare const` per tool). Emitted TS NEVER RUNS —
+// exists only so the type-checker can narrow a lowered call against its tool signature
+// (Σ∩T). Fidelity is about TYPES, not runtime: string-escape exactness, numeric precision
+// are immaterial as long as the emitted form carries the right type.
 //
-// The cut between "plain TS" and "carrier vocabulary":
-//   • application `(head a b)`     → `head(a, b)` (scheme arg order; head is a global /
-//                                    declared const) — or `_.op$escaped(a, b)` for a
-//                                    non-identifier head (`+`, `string-append`, …), which
-//                                    lives in the prelude's `_` namespace under its escaped,
-//                                    dotted name (name-escape.ts — so `typeof _.op` is legal).
-//   • lists/pairs (the ONLY non-TS-subset values) → the carrier globals
-//                                    `list`/`cons`/`car`/`cdr` (functional, never `.car`).
-//   • vector `#(…)`                → a native TS array `[…]`.
-//   • dict / keyword-access        → object literal / index read.
-//   • lambda                       → an arrow.
-//   • scalars                      → their plain-TS image (string/number/boolean).
+// Cut between "plain TS" and "carrier vocabulary":
+//   • application `(head a b)` → `head(a, b)` (scheme arg order) — or `_.op$escaped(a, b)`
+//     for a non-identifier head (`+`, `string-append`, …) in the prelude's `_` namespace
+//     under its escaped dotted name (name-escape.ts — so `typeof _.op` is legal).
+//   • lists/pairs (ONLY non-TS-subset values) → carrier globals `list`/`cons`/`car`/`cdr`
+//     (functional, never `.car`).
+//   • vector `#(…)` → native TS array `[…]`.
+//   • dict / keyword-access → object literal / index read.
+//   • lambda → arrow; scalars → plain-TS image.
 //
-// SPAN-MAP (per-top-level-statement): alongside the joined `ts`, `lower` returns one
-// `{ tsRange, schemeSpan }` per top-level statement — the TS byte-range each statement
-// occupies in the joined output, and the scheme byte-range it came from (`forms[i].span`,
-// stamped unconditionally by parseSexprs). Per-STATEMENT granularity only: the sole
-// consumer (diagnose.ts) maps a diagnostic's TS offset back to the errored statement's
-// scheme span (statement-coincidence); nothing reads sub-expression offsets. `{ ts }` is
-// preserved verbatim — every current caller destructures `.ts` only.
+// SPAN-MAP (per top-level statement): alongside joined `ts`, returns one
+// `{ tsRange, schemeSpan }` per statement — TS byte-range in joined output, scheme
+// byte-range from `forms[i].span` (parseSexprs). Per-STATEMENT only: diagnose.ts maps a
+// diagnostic's TS offset to the errored statement's scheme span; nothing reads
+// sub-expression offsets. `{ ts }` is stable — callers that destructure `.ts` only keep working.
 
 import { parseSexprs, type Node } from "@inhuman.tools/arrival-sugarcoat";
 
@@ -126,11 +120,9 @@ function emitTopLevel(nodes: Node[]): { ts: string; schemeSpan: readonly [number
  *  b: any) => body` (a multi-form body folds to a comma sequence, mirroring emitLambda;
  *  `: any` params are advisory polarity, avoiding TS7006 under noImplicitAny).
  *
- *  KNOWN ACCEPTED RISK: a same-program REDEFINE of the same top-level name fires TS2451
- *  ("Cannot redeclare block-scoped variable") — 0 occurrences observed across the
- *  2,200-program calibration corpus. Not engineered around (`var` would silently shadow
- *  scoping semantics elsewhere; `let` would invite a different mutation-shaped false
- *  positive) — flagged here rather than hidden.
+ *  ACCEPTED RISK: same-program REDEFINE of a top-level name fires TS2451 ("Cannot
+ *  redeclare block-scoped variable"). Not engineered around (`var` silently shadows
+ *  scoping elsewhere; `let` invites a different mutation-shaped false positive).
  *
  *  Returns undefined for a malformed `(define)`/`(define ())` (no target) — the caller
  *  falls back to the ordinary application-call lowering. */
