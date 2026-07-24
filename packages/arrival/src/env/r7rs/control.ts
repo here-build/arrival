@@ -1,31 +1,14 @@
-// @inhuman.tools/arrival/r7rs/control — the control-feature / dynamics OMISSIONS.
+// @inhuman.tools/arrival/r7rs/control — doors-only for control/dynamics omissions.
+// R7RS-small §6.10 (call/cc, dynamic-wind), §4.2.6 (parameters), §4.2.5 (delay/force).
 //
-// Lineage: R7RS-small (Shinn, Cowan & Gleckler, eds., 2013) — §6.10 Control
-// features (call/cc, call-with-current-continuation, dynamic-wind), §4.2.6 Dynamic
-// bindings (make-parameter, parameterize), §4.2.5 Delayed evaluation (delay, force,
-// make-promise, delay-force).
+// Pure dataflow: every value carries construction-site lineage. Continuations,
+// dynamic binding, and delayed evaluation tie identity to re-entry or force-time —
+// no construction site to root lineage. Omitted by design; each door names the
+// why and the supported alternative.
 //
-// This is a DOORS-ONLY capability — it implements nothing; it argues what arrival
-// omits and why. arrival is PURE DATAFLOW: every value carries the lineage of WHERE
-// it was constructed, and the MCP/trace engine reads it. First-class continuations,
-// dynamic binding, and delayed evaluation all tie a value's IDENTITY to WHEN/WHERE
-// control re-enters or to force-time — never to a construction site — so lineage
-// cannot be rooted. They are omitted BY DESIGN. Each door (errors-as-doors) names
-// the omission, argues the why, and routes to the supported alternative.
-//
-// No value-TYPE pack owns §6.10/§4.2.5/§4.2.6 (unlike the string/vector/list
-// mutators, which co-locate with their type's pack) — they share one rationale
-// (identity tied to control-extent, not construction-site), so they get one
-// dedicated section pack here, the parallel of "vectors own the vector mutators".
-//
-// SINGLE SOURCE: `r7rs/index.ts` adds this to `allR7rs`, so `base-packs.ts`
-// assembles it into the base env — the doors are live in every assembled env.
-// This pack's entire symbol population is `symbol.notImplemented` doors — zero
-// `symbol.define`, zero `symbol.defineSyntax` — and a door is contract-free by
-// construction, so there is no bake/FV machinery here to interact with.
-//
-// §6.10: map/for-each live in lists; multi-return doored on binding. This pack:
-// call/cc + parameters + delay. promise? doored with its constructors (nothing to test).
+// Shared rationale (control-extent identity) → one section pack, not co-located with
+// type packs. map/for-each live in lists; multi-return in binding. Sole definition
+// site via r7rs/index → base-packs (all notImplemented; no bake/FV surface).
 
 import { EnvCapability } from "../../common/capability.js";
 
@@ -46,5 +29,6 @@ export default EnvCapability.define("scheme/r7rs/control", {
     "make-promise": symbol.notImplemented`make-promise: delayed evaluation is omitted from arrival by design — it defers a value's identity to force-time and the dynamic extent alive then, not to where it was constructed; compute the value where you need it`,
     "delay-force": symbol.notImplemented`delay-force: delayed evaluation is omitted from arrival by design — it defers a value's identity to force-time and the dynamic extent alive then, not to where it was constructed; compute the value where you need it`,
     "promise?": symbol.notImplemented`promise?: delayed evaluation is omitted from arrival by design — with delay/force/make-promise/delay-force all doored (§4.2.5), no promise value can exist to test; there is nothing for this predicate to recognize`,
-  }),
-});
+
+    // §4.2.9 case-lambda — multi-arity clause dispatch not yet built; same surface as lambda.
+    "case-lambda": symbol.notImplemented`case-lambda: multi-arity lambda clauses are not yet implemented — express arity dispatch with lambda + guards (cond/case on argument shape, or one procedure per arity) instead` }) });

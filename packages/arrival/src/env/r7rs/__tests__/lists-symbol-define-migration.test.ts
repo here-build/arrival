@@ -59,7 +59,7 @@ import { freshEnv } from "../../../__tests__/_fresh-env.js";
 import { BASE_PACKS } from "../../base-packs.js";
 import { execOverFrame as exec, execInFrame } from "../../../eval/generator-exec.js";
 import { buildVocabulary } from "../../vocabulary.js";
-import type { AEntity, DoorSymbolDef } from "../../../common/symbol.js";
+import type { AEntity, DoorSymbolDef } from "../../../symbol/index.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
@@ -142,7 +142,6 @@ describe("ROW 1 — structural: no prelude, the 23-symbol population is exactly 
       expect("in" in def).toBe(false);
       expect("out" in def).toBe(false);
       expect("body" in def).toBe(false);
-      expect("bodyHash" in def).toBe(false);
     }
   });
 

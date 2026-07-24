@@ -11,7 +11,7 @@
 // (contract authoring) both have NOTHING to run over. What DOES apply, one row
 // each, mirroring the wave's per-pack template narrowed to what's actually here:
 //
-//   ROW 1 — structural: no prelude field; all 10 symbols are kind "door"; a door
+//   ROW 1 — structural: no prelude field; all 11 symbols are kind "door"; a door
 //     carries no contract surface (§1.1/§1.2 apply only to `symbol.define`).
 //   ROW 2 — bake / cause stamping: `.lower({})` succeeds with zero deps (this
 //     pack references nothing outside itself); every bound value is a
@@ -27,13 +27,13 @@
 //     `kind === "define"` bodies, and this pack has none — `lower({})` cannot
 //     throw `DefineLocalityError`/`DefineForwardReferenceError`/
 //     `ProvenanceRoleShapeError` because nothing here is FV-walked at all.
-//     `exports()` (§2.2) still derives the correct 10-name surface purely from
+//     `exports()` (§2.2) still derives the correct 11-name surface purely from
 //     `spec.symbols` keys (the `macroAwareDefineNames(spec.prelude)` half of the
 //     union is vacuous — no prelude to parse).
 //   ROW 5 — the §6.10 boundary check: `map`/`for-each` live as natives in
 //     r7rs/lists.ts; multi-return (`values`/`call-with-values`/…) is doored on
 //     r7rs/binding (same purity family as call/cc). This pack owns first-class
-//     continuations + dynamic binding + delayed evaluation only — ten names.
+//     continuations + dynamic binding + delayed evaluation + case-lambda — eleven names.
 //   ROW 6 — chibi conformance cross-check: every door this pack declares is
 //     covered by a `registries.ts` Exclusion `anyOf` rule (two of which cite
 //     "r7rs/control.ts's notImplemented doors" by name in their `feature` text) —
@@ -50,7 +50,7 @@ import { freshEnv } from "../../../__tests__/_fresh-env.js";
 import { buildVocabulary } from "../../vocabulary.js";
 import { execInFrame } from "../../../eval/generator-exec.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
-import type { AEntity, DoorSymbolDef } from "../../../common/symbol.js";
+import type { AEntity, DoorSymbolDef } from "../../../symbol/index.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
 const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
@@ -70,6 +70,7 @@ const DOOR_NAMES = [
   "make-promise",
   "delay-force",
   "promise?",
+  "case-lambda",
 ] as const;
 
 function doorDef(name: string): DoorSymbolDef {
@@ -84,7 +85,7 @@ describe("ROW 1 — structural: no prelude, every symbol is a contract-free door
     expect(controlPack.spec.prelude).toBeUndefined();
   });
 
-  it("the capability's symbol population is EXACTLY the ten documented omissions", () => {
+  it("the capability's symbol population is EXACTLY the eleven documented omissions", () => {
     expect(Object.keys(symbols).sort()).toEqual([...DOOR_NAMES].sort());
   });
 
@@ -102,7 +103,6 @@ describe("ROW 1 — structural: no prelude, every symbol is a contract-free door
       expect("callable" in def).toBe(false);
       expect("validate" in def).toBe(false);
       expect("body" in def).toBe(false);
-      expect("bodyHash" in def).toBe(false);
     }
   });
 
@@ -202,8 +202,22 @@ describe("ROW 6 — chibi conformance cross-check: every door is covered by a re
     return EXCLUDED.some((rule) => rule.match.kind === "symbols" && rule.match.anyOf.includes(name));
   }
 
-  it.each(DOOR_NAMES)("%s is named in at least one EXCLUDED symbols rule", (name) => {
-    expect(coveredBySomeRule(name)).toBe(true);
+  it.each(DOOR_NAMES.filter((n) => n !== "case-lambda"))(
+    "%s is named in at least one EXCLUDED symbols rule",
+    (name) => {
+      expect(coveredBySomeRule(name)).toBe(true);
+    },
+  );
+
+  // case-lambda itself is not a chibi test-step head; the corpus exercises it via
+  // cascading unbound names (any-arity / rest-arity / dead-clause). Those remain
+  // EXCLUDED; this pins the door is live without inventing a dead symbols rule.
+  it("case-lambda is doored (not unbound) and chibi cascading names stay EXCLUDED", async () => {
+    const env = await freshEnv();
+    expect(env.get("case-lambda")).toBeInstanceOf(DoorProcedure);
+    expect(coveredBySomeRule("any-arity")).toBe(true);
+    expect(coveredBySomeRule("rest-arity")).toBe(true);
+    expect(coveredBySomeRule("dead-clause")).toBe(true);
   });
 
   it("the two feature texts that cite this file by name still do (anti-drift pin on the cross-reference itself)", () => {

@@ -29,7 +29,7 @@
 
 import { describe, expect, it } from "vitest";
 import numericPack from "../numeric.js";
-import type { AEntity } from "../../../common/symbol.js";
+import type { AEntity } from "../../../symbol/index.js";
 import { AExact } from "../../../values/primitives/AExact.js";
 import { AInexact } from "../../../values/primitives/AInexact.js";
 import { APair } from "../../../values/primitives/APair.js";

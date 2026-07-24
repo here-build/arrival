@@ -14,6 +14,4 @@ export default EnvCapability.define("scheme/r7rs/binding", {
     "call-with-values": symbol.notImplemented`call-with-values: ${MULTI_RETURN}`,
     "let-values": symbol.notImplemented`let-values: ${MULTI_RETURN}`,
     "let*-values": symbol.notImplemented`let*-values: ${MULTI_RETURN}`,
-    "define-values": symbol.notImplemented`define-values: ${MULTI_RETURN}`,
-  }),
-});
+    "define-values": symbol.notImplemented`define-values: ${MULTI_RETURN}` }) });

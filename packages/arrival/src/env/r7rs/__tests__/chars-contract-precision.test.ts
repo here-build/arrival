@@ -20,7 +20,7 @@
 
 import { describe, expect, it } from "vitest";
 import charsPack from "../chars.js";
-import type { AEntity } from "../../../common/symbol.js";
+import type { AEntity } from "../../../symbol/index.js";
 import { ACharacter } from "../../../values/primitives/ACharacter.js";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";

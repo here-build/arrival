@@ -13,7 +13,7 @@ import dedent from "dedent";
 import unicodeProperties from "unicode-properties";
 import invariant from "tiny-invariant";
 
-import { withContractFields, type CallCtx } from "../../common/symbol.js";
+import { withContractFields, type CallCtx } from "../../symbol/index.js";
 import { charValue, coerceNumeric, deriveOrd, schemeBool as bool } from "../../values/op-helpers.js";
 import { schemeFalse, schemeTrue } from "../../values/primitives/ABool.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
@@ -30,8 +30,7 @@ export default EnvCapability.define("scheme/chars", {
             (x: unknown): x is string;
             <T>(x: T): x is Extract<T, string>;
           }
-        `,
-    }),
+        ` }),
 
     "char=?": symbol.native`char=?: typed equivalence over characters`(
       { input: [], inputRest: z.char, output: [z.boolean] },
@@ -255,6 +254,4 @@ export default EnvCapability.define("scheme/chars", {
         );
         return new ACharacter(String.fromCodePoint(code));
       },
-    ),
-  }),
-});
+    ) }) });

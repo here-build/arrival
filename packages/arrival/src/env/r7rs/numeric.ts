@@ -17,18 +17,18 @@
  * speculative evaluation branch exists for them.
  */
 
-import * as z from "../../common/scheme-zod.js";
+import * as z from "../../common/scheme-zod/index.js";
 import dedent from "dedent";
 import invariant from "tiny-invariant";
 // `TypeError.invariant` is a global augmentation — import explicitly so correctness
 // doesn't depend on load order.
 import "@here.build/error-invariant";
-import { type Contract, type RestSpec, type VectorSpec } from "../../common/symbol.js";
+import { type Contract, type RestSpec, type VectorSpec } from "../../symbol/index.js";
 import { EnvCapability } from "../../common/capability.js";
 import type { EmitCtx, EmitRule } from "../../emit/emit-rule.js";
 import { Bin, Binding, Call, Lit, Method, Ref, Un, type BinOp, type R } from "../../emit/residual-lite.js";
 import type { RunContext } from "../../run/RunContext.js";
-import { CallCtx } from "../../common/symbols/_bake.js";
+import { CallCtx } from "../../run/CallCtx.js";
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "../../values/primitives/AValue.js";
 import type { ABool } from "../../values/primitives/ABool.js";
 import { AExact } from "../../values/primitives/AExact.js";
@@ -45,8 +45,7 @@ import {
   nilOrderCompare,
   mintVerdict,
   isEagerAccumulationActive,
-  type AOrd,
-} from "../../values/op-helpers.js";
+  type AOrd } from "../../values/op-helpers.js";
 import { checkedMul, mintExact } from "../../values/mint-numeric.js";
 import { type } from "../../utils/typecheck.js";
 import { tf } from "../../values/tagless-final.js";
@@ -778,14 +777,12 @@ const LOOSE_NUM_PAIR = {
   "<": (a, b) => flLteNum(a, b) && !flLteNum(b, a),
   ">": (a, b) => flLteNum(b, a) && !flLteNum(a, b),
   "<=": (a, b) => flLteNum(a, b),
-  ">=": (a, b) => flLteNum(b, a),
-};
+  ">=": (a, b) => flLteNum(b, a) };
 const ORD_FROM_LE = {
   "<": (ab, ba) => ab && !ba,
   ">": (ab, ba) => ba && !ab,
   "<=": (ab) => ab,
-  ">=": (_ab, ba) => ba,
-};
+  ">=": (_ab, ba) => ba };
 const describeLoose = (v) => (v instanceof AValue ? v.kind : v == null ? String(v) : typeof v);
 function loosePairOrder(sym, a, b) {
   const nilCmp = nilOrderCompare(a, b);
@@ -956,16 +953,14 @@ const addSpec: NumSpec = {
   inRest: z.schemeNumber,
   out: z.schemeNumber,
   fn: addFn,
-  zeroArgIdentity: (ctx) => new AExact(0),
-};
+  zeroArgIdentity: (ctx) => new AExact(0) };
 const subSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: subFn };
 const mulSpec: NumSpec = {
   in: [],
   inRest: z.schemeNumber,
   out: z.schemeNumber,
   fn: mulFn,
-  zeroArgIdentity: (ctx) => new AExact(1),
-};
+  zeroArgIdentity: (ctx) => new AExact(1) };
 const divSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: divFn };
 // `quotient` uses `z.schemeNumber` in/out, NOT `z.bigint`: it shares the same
 // box-native `toIntegerPair` door every other integer-division op uses (bypasses the
@@ -978,26 +973,22 @@ const floorRemainderSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out:
 const truncateQuotientSpec: NumSpec = {
   in: [z.schemeNumber, z.schemeNumber],
   out: z.schemeNumber,
-  fn: truncateQuotientFn,
-};
+  fn: truncateQuotientFn };
 const truncateRemainderSpec: NumSpec = {
   in: [z.schemeNumber, z.schemeNumber],
   out: z.schemeNumber,
-  fn: truncateRemainderFn,
-};
+  fn: truncateRemainderFn };
 const numeratorSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: numeratorFn };
 const denominatorSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: denominatorFn };
 const squareSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: squareFn };
 const makeRectangularSpec: NumSpec = {
   in: [z.looseNumber, z.looseNumber],
   out: z.schemeNumber,
-  fn: (): ANumeric => complexDoor(),
-};
+  fn: (): ANumeric => complexDoor() };
 const makePolarSpec: NumSpec = {
   in: [z.looseNumber, z.looseNumber],
   out: z.schemeNumber,
-  fn: (): ANumeric => complexDoor(),
-};
+  fn: (): ANumeric => complexDoor() };
 const realPartSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() };
 const imagPartSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() };
 const magnitudeSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() };
@@ -1015,8 +1006,7 @@ const gcdSpec: NumSpec = {
   inRest: z.schemeNumber,
   out: z.schemeNumber,
   fn: gcdFn,
-  zeroArgIdentity: (ctx) => new AExact(0),
-};
+  zeroArgIdentity: (ctx) => new AExact(0) };
 const maxSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: maxFn };
 const minSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: minFn };
 const zeroSpec: NumSpec = { in: [z.schemeNumber], out: z.boolean, fn: isZeroFn };
@@ -1053,8 +1043,7 @@ const lcmSpec: NumSpec = {
   inRest: z.schemeNumber,
   out: z.schemeNumber,
   fn: lcmFn,
-  zeroArgIdentity: (ctx) => new AExact(1),
-};
+  zeroArgIdentity: (ctx) => new AExact(1) };
 
 // ── Bespoke contracts — ops whose impl does NOT come from `nativeNumericOp`/`NumSpec`
 // (own coercion + bespoke `marshalCall` wrapper, or no NumSpec), so their Contract is
@@ -1074,8 +1063,7 @@ const NUMBER_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
             (x: unknown): x is number;
             <T>(x: T): x is Extract<T, number>;
           }
-        `,
-};
+        ` };
 const EXACT_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeValue],
   output: [z.boolean],
@@ -1084,8 +1072,7 @@ const EXACT_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
             (x: unknown): x is number;
             <T>(x: T): x is Extract<T, number>;
           }
-        `,
-};
+        ` };
 const INEXACT_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeValue],
   output: [z.boolean],
@@ -1094,26 +1081,22 @@ const INEXACT_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
             (x: unknown): x is number;
             <T>(x: T): x is Extract<T, number>;
           }
-        `,
-};
+        ` };
 
 /** floor/ truncate/ → (q . r); input schemeNumber. */
 const QUOTIENT_REMAINDER_PRODUCT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber, z.schemeNumber],
-  output: [z.pair],
-};
+  output: [z.pair] };
 
 /** exact-integer-sqrt → (s . r); one non-neg exact integer input. */
 const EXACT_ISQRT_PRODUCT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber],
-  output: [z.pair],
-};
+  output: [z.pair] };
 
 /** `1+`/`1-` — `(n: unknown) => ANumeric`. Input `z.schemeNumber`. */
 const ONE_ARG_NUM_OUTPUT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber],
-  output: [z.schemeNumber],
-};
+  output: [z.schemeNumber] };
 
 /** `>>`/`<<` — `(a: unknown, b: unknown) => ANumeric`. `shiftRightFn`/`shiftLeftFn`
  *  `coerceNumeric` both operands before `marshalCall(arithmeticShiftSpec, …)` (which
@@ -1121,24 +1104,21 @@ const ONE_ARG_NUM_OUTPUT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = 
  *  declared domain; integer narrowing is `arithmeticShiftSpec`'s own runtime check. */
 const TWO_ARG_NUM_OUTPUT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber, z.schemeNumber],
-  output: [z.schemeNumber],
-};
+  output: [z.schemeNumber] };
 
 /** `inexact`/`exact->inexact` — `(z: unknown) => AInexact` (narrower than the generic
  *  scheme-number union, matching `inexactFn`'s declared return). Input `z.schemeNumber`
  *  (`inexactFn` `coerceNumeric`s first). */
 const INEXACT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber],
-  output: [z.inexact],
-};
+  output: [z.inexact] };
 
 /** `exact`/`inexact->exact` — `(z: unknown) => AExact` (narrower than the generic
  *  scheme-number union, matching `exactFn`'s declared return). Input `z.schemeNumber`
  *  (`exactFn` `coerceNumeric`s first). */
 const EXACT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber],
-  output: [z.exact],
-};
+  output: [z.exact] };
 
 /** `number->string` — `(z: unknown, radix?: unknown) => AString` (boxed, carrying the
  *  union of its operands' provenance — RULINGS.md R1: `exec`'s SIMPLE tier calls `toJS`
@@ -1148,54 +1128,32 @@ const EXACT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
  *  `z`/`radix` are `z.schemeNumber` — `numberToStringFn` `coerceNumeric`s each. */
 const NUMBER_TO_STRING_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber, z.schemeNumber.optional()],
-  output: [z.string],
-};
+  output: [z.string] };
 
 // ════════════════════════════════════════════════════════════════════════════
-// Contract.emit — THE PHASE-2 RELOCATION DRILL (constitution §9): + / - / * / / /
-// quotient / modulo / = move here from the compiler-side phase1 table
-// (`arrival/packages/arrival-mercury/src/rules/phase1.ts`) onto their OWN
-// Contract's `emit` field — the pattern every remaining table row's relocation
-// follows. Residual shapes are BYTE-FOR-BYTE identical to the table rules they
-// replace (verified by diffing against phase1.ts's pre-relocation `plusRule`/
-// `minusRule`/`timesRule`/`divideRule`/`quotientRule`/`moduloRule`/`numEqRule` — see
-// that file's git history), built via `@inhuman.tools/arrival/emit`'s residual-lite
-// constructors (§4.5's seed of "residual types belong in arrival core eventually";
-// arrival core cannot import the compiler's OWN residual constructors — the
-// dependency runs the other way).
+// Contract.emit — + / - / * / / quotient / modulo / = / comparisons / zero?
+// Residual-lite constructors from emit/. Law W (sync-shaped, never mint Await).
 //
-// Law W (rules are sync-shaped, never mint Await) and Law A (residual selection keys
-// on ARGUMENT facts, never result types) both hold trivially: none of these seven
-// branch on `ctx.argFacts` at all — §7's one-number law and Appendix B's
-// operator-identity ruling fix the algorithm per symbol; there is no type-directed
-// choice to make.
+// + - * / quotient modulo = are unconditional (no argFacts branch): §7 one-number
+// law fixes the algorithm per symbol. Comparisons and zero? are fact-gated (Law A).
 // ════════════════════════════════════════════════════════════════════════════
 
-/** Fixed-arity refusal — verbatim relocation of phase1.ts's own `exactly` helper: a
- *  fixed-arity builtin called wrong is a static defect, caught here (a compile
- *  diagnostic via `ctx.door`) rather than left to crash the walker on an `undefined`
- *  operand. Generic over the residual so it composes with residual-lite's `R`. */
+/** Fixed-arity refusal: wrong arity → `ctx.door`, not a walker crash on undefined. */
 function exactly<T>(ctx: EmitCtx<R>, sym: string, args: readonly T[], n: number): readonly T[] {
   if (args.length !== n) ctx.door(`\`${sym}\` wants exactly ${n} argument${n === 1 ? "" : "s"}, got ${args.length}`);
   return args;
 }
 
-// ── §7 one-number: + - * / — plain left folds, zero ctx reads ───────────────────────
-// Verbatim relocation of phase1.ts's own `foldBin`/`plusRule`/`timesRule`/`minusRule`/
-// `divideRule`. The platform's arithmetic IS the semantics (§7: one JS `number`
-// payload, no exactness dispatch for any branch to key on) — left folds print flat
-// (`a + b + c`) because same-precedence left-nesting needs no parens (the renderer's
-// parenthesizer is structural).
+// ── §7 one-number: + - * / — left folds, zero ctx reads ─────────────────────────────
+// One JS number payload; left folds print flat (`a + b + c`).
 const foldBin = (op: BinOp, args: readonly R[]): R => args.reduce((acc, a) => Bin(op, acc, a));
 
 const plusEmitRule: EmitRule<R> = {
   // (+) → 0 (the additive identity); (+ x) → x itself — no operator node emitted.
-  call: (args) => (args.length === 0 ? Lit(0) : foldBin("+", args)),
-};
+  call: (args) => (args.length === 0 ? Lit(0) : foldBin("+", args)) };
 
 const timesEmitRule: EmitRule<R> = {
-  call: (args) => (args.length === 0 ? Lit(1) : foldBin("*", args)),
-};
+  call: (args) => (args.length === 0 ? Lit(1) : foldBin("*", args)) };
 
 const minusEmitRule: EmitRule<R> = {
   // R7RS `-` wants ≥ 1 argument; unary is negation.
@@ -1204,8 +1162,7 @@ const minusEmitRule: EmitRule<R> = {
       ? ctx.door("`-` wants at least 1 argument")
       : args.length === 1
         ? Un("-", args[0]!)
-        : foldBin("-", args),
-};
+        : foldBin("-", args) };
 
 const divideEmitRule: EmitRule<R> = {
   // `/` is plain JS division (§7 — the interpreter's exact-rational richness is
@@ -1215,19 +1172,15 @@ const divideEmitRule: EmitRule<R> = {
       ? ctx.door("`/` wants at least 1 argument")
       : args.length === 1
         ? Bin("/", Lit(1), args[0]!)
-        : foldBin("/", args),
-};
+        : foldBin("/", args) };
 
 const quotientEmitRule: EmitRule<R> = {
   call: (args, ctx) => {
     const [a, b] = exactly(ctx, "quotient", args, 2);
-    // Global `Math` via a minted binding (relocated verbatim — precedent: the
-    // walker's door-throw references the global `Error` the same way). The walker's
-    // module JS frame pre-seeds "Error"/"Math"/"Promise" (the FRAME wave), so a user
-    // binding named `Math` disambiguates instead of shadowing the global.
+    // Global Math via minted Binding — walker's frame pre-seeds Math/Error/Promise
+    // so a user binding named Math disambiguates instead of shadowing.
     return Method(Ref(Binding("Math")), "trunc", [Bin("/", a!, b!)]);
-  },
-};
+  } };
 
 const moduloEmitRule: EmitRule<R> = {
   call: (args, ctx) => {
@@ -1235,8 +1188,7 @@ const moduloEmitRule: EmitRule<R> = {
     // JS `%` is a REMAINDER (sign-of-dividend); `((a % n) + n) % n` is the one
     // correct sign-of-divisor modulo algorithm over it (Appendix B).
     return Bin("%", Bin("+", Bin("%", a!, n!), n!), n!);
-  },
-};
+  } };
 
 const numEqEmitRule: EmitRule<R> = {
   call: (args) => {
@@ -1251,44 +1203,28 @@ const numEqEmitRule: EmitRule<R> = {
     let chain: R = Bin("===", args[0]!, args[1]!);
     for (let i = 2; i < args.length; i++) chain = Bin("&&", chain, Bin("===", args[i - 1]!, args[i]!));
     return chain;
-  },
-};
+  } };
 
-// ── §7 fact-gated relocation: < <= > >= — Law A, argFacts-gated (unlike =/+/-/*//) ──
-// `=`/+/-/*// above are unconditional: `=`'s runtime is `looseCompare("=", numEqOp)` —
-// no FL-Ord fallback, so its only non-numeric behavior is nil-tolerance, and nil
-// compiles to a `===`-comparable value (§7), making `===` sound for EVERY input. `<`/
-// `<=`/`>`/`>=` are different: their runtime is `looseCompare(sym, wrapOrd(op, sym))` —
-// `wrapOrd` ALSO dispatches non-numeric Ord entities (FL `arrival/tagless-final/lte` —
-// strings, chars, DateTime; op-helpers.ts's `isOrd`/`ORD_REL`) through a comparison
-// JS's raw `<`/`<=`/`>`/`>=` does not replicate, and `looseCompare`'s nil-tolerance
-// here runs `nilOrderCompare`'s nil-as-bottom rule (op-helpers.ts), not a bare `===`.
-// So an UNPROVEN operand could be nil or a non-numeric Ord type, either of which a
-// bare JS relational operator gets wrong. Only when EVERY operand proves `numeric`
-// (TypeFacts — §3.3's ∀-over-union-constituents derivation, which by construction
-// excludes any nil-including union: `null`/`undefined` share no TypeFlags with
-// NumberLike) can the value at this site never be nil or non-numeric-Ord — the raw JS
-// operator IS then the scheme numeric comparison (§7's one-number law). Any operand
-// missing the fact (Law F) → the full `looseCompare(wrapOrd(...))` runtime, unchanged.
+// ── §7 fact-gated: < <= > >= — Law A, argFacts-gated (unlike =/+/-/*//) ──────────────
+// `=` is unconditional: looseCompare("=", numEqOp) has no FL-Ord fallback; nil is
+// ===-comparable under §7. Relationals use wrapOrd — also dispatches non-numeric Ord
+// (strings/chars/DateTime via tf(lte)) and nilOrderCompare (nil-as-bottom), neither
+// of which JS's raw < <= > >= replicate. UNPROVEN operand may be nil or non-numeric
+// Ord → bare JS operator wrong. ONLY when EVERY operand proves numeric (∀-over-union,
+// nil-excluding) is the raw JS op the scheme numeric comparison. Else full runtime.
 function compareEmitRule(sym: "<" | ">" | "<=" | ">="): EmitRule<R> {
   return {
     call: (args, ctx) => {
-      // R7RS: a 0/1-ary comparison is vacuously true — mirrors numEqEmitRule exactly.
+      // R7RS: 0/1-ary comparison is vacuously true.
       if (args.length < 2) return Lit(true);
-      // ALL-OR-NOTHING over the whole call, not per-adjacent-pair: a middle operand
-      // appears in two comparisons, so proving only SOME operands numeric can't
-      // license splitting the chain into native/shim halves — one decision, matching
-      // numEqEmitRule's own single-shaped chain.
+      // ALL-OR-NOTHING over the whole call (middle ops appear twice — no split chain).
       const allNumeric = args.every((_, i) => ctx.argFacts[i]?.numeric === true);
       if (!allNumeric) return Call(ctx.runtime(sym), args);
       if (args.length === 2) return Bin(sym, args[0]!, args[1]!);
-      // n-ary: a<b && b<c — middle operands appear twice; same double-evaluation
-      // §2.2 already licenses for numEqEmitRule's own n-ary chain.
       let chain: R = Bin(sym, args[0]!, args[1]!);
       for (let i = 2; i < args.length; i++) chain = Bin("&&", chain, Bin(sym, args[i - 1]!, args[i]!));
       return chain;
-    },
-  };
+    } };
 }
 
 const ltEmitRule = compareEmitRule("<");
@@ -1296,20 +1232,14 @@ const gtEmitRule = compareEmitRule(">");
 const lteEmitRule = compareEmitRule("<=");
 const gteEmitRule = compareEmitRule(">=");
 
-// ── §7 fact-gated relocation: zero? ──────────────────────────────────────────────────
-// Same gate as the comparisons above: `zero?`'s runtime (`nativeNumericOp("zero?", …)`)
-// throws on a non-number (`coerceNumeric`), so an UNPROVEN operand can't silently be
-// nil — but it CAN be any non-numeric scheme value the type pass hasn't excluded, and
-// `x === 0` on e.g. a string or pair is simply the wrong question (not unsafe, just
-// not what `zero?` means for that domain — the shim's coercion+door is the honest
-// total behavior). Proven `numeric` (nil-excluding, see the comparisons' own note
-// above) → the value is always a bare JS number, so `x === 0` is exactly `isZeroFn`.
+// ── §7 fact-gated: zero? ────────────────────────────────────────────────────────────
+// Same gate: unproven may be non-numeric (x === 0 is the wrong question) → shim's
+// coerceNumeric+door. Proven numeric → `x === 0`.
 const zeroEmitRule: EmitRule<R> = {
   call: (args, ctx) => {
     const [n] = exactly(ctx, "zero?", args, 1);
     return ctx.argFacts[0]?.numeric === true ? Bin("===", n!, Lit(0)) : Call(ctx.runtime("zero?"), [n!]);
-  },
-};
+  } };
 
 export default EnvCapability.define("scheme/numeric", {
   // `z` stays a module import here: this pack builds its `NumSpec` contract table and
@@ -1594,6 +1524,4 @@ export default EnvCapability.define("scheme/numeric", {
     "number->string": symbol.native`number->string: format a number in a radix`(
       NUMBER_TO_STRING_CONTRACT,
       numberToStringFn as (...args: unknown[]) => unknown,
-    ),
-  }),
-});
+    ) }) });

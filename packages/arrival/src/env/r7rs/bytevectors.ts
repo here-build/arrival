@@ -5,7 +5,8 @@
  * coercion accept boxed `SchemeBytevector` as well as raw binary (`Uint8Array`/
  * `ArrayBuffer`/`DataView`/Node `Buffer`) that legitimately flows unboxed through
  * the membrane from FFI. The mutating ops (`bytevector-u8-set!` /
- * `bytevector-copy!`) are omitted under the purity invariant and doored below.
+ * `bytevector-copy!` / `bytevector-fill!`) are omitted under the purity
+ * invariant and doored below.
  *
  * Each op declares a SCHEME-IDENTITY zod contract (no codec, no runtime
  * validation — "zod for TYPES purely") and an impl bound raw. The bytevector
@@ -16,7 +17,7 @@
  */
 
 import dedent from "dedent";
-import { type CallCtx } from "../../common/symbol.js";
+import { type CallCtx } from "../../symbol/index.js";
 import { ABytevector } from "../../values/primitives/ABytevector.js";
 import { AString } from "../../values/primitives/AString.js";
 import { asBytevector, schemeBool, stringValue, toIndex, withInputProvenance } from "../../values/op-helpers.js";
@@ -34,8 +35,7 @@ export default EnvCapability.define("scheme/bytevectors", {
             (x: unknown): x is Uint8Array;
             <T>(x: T): x is Extract<T, Uint8Array>;
           }
-        `,
-      },
+        ` },
       function (this: CallCtx, obj) {
         // Polymorphic by design: scheme producers mint SchemeBytevector, but raw
         // binary legitimately flows from FFI through the membrane unboxed (it
@@ -96,6 +96,7 @@ export default EnvCapability.define("scheme/bytevectors", {
     // below stays.
     "bytevector-u8-set!": symbol.notImplemented`bytevector-u8-set!: every value is frozen by design — mutating it after construction would falsify the provenance lineage it carries; construct a new value instead (bytevector-copy / a fresh bytevector)`,
     "bytevector-copy!": symbol.notImplemented`bytevector-copy!: every value is frozen by design — mutating its destination would falsify the provenance lineage it carries; construct a new value instead (bytevector-copy returns a fresh bytevector)`,
+    "bytevector-fill!": symbol.notImplemented`bytevector-fill!: every value is frozen by design — mutating it after construction would falsify the provenance lineage it carries; construct a new value instead (make-bytevector with the fill / bytevector-copy)`,
 
     "bytevector-copy": symbol.native`bytevector-copy: a fresh copy of the bytevector (or slice)`(
       { input: [z.bytevector, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.bytevector] },
@@ -159,6 +160,4 @@ export default EnvCapability.define("scheme/bytevectors", {
           ),
         );
       },
-    ),
-  }),
-});
+    ) }) });

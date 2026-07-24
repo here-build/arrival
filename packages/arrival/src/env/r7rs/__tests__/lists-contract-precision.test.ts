@@ -28,7 +28,7 @@ import listsPack from "../lists.js";
 import dedent from "dedent";
 const norm = (s: string) => s.replace(/\s+/g, " ").trim();
 import { signatureOf } from "../../../type-layer/schema-to-ts.js";
-import type { AEntity } from "../../../common/symbol.js";
+import type { AEntity } from "../../../symbol/index.js";
 import { APair } from "../../../values/primitives/APair.js";
 import { ANil, nil } from "../../../values/primitives/ANil.js";
 import { AExact } from "../../../values/primitives/AExact.js";
@@ -37,6 +37,8 @@ import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { schemeFalse } from "../../../values/primitives/ABool.js";
 import type { SchemeValue } from "../../../values/types.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
+import { ANativeProcedure } from "../../../values/primitives/ANativeProcedure.js";
+import { theVoid } from "../../../values/primitives/AVoid.js";
 
 const symbols = harvestContracts(listsPack.spec.symbols);
 
@@ -62,7 +64,12 @@ const str = (s: string): AString => new AString(s);
 // constraint targets genuine callers; construction itself never dereferences element
 // shape, only the zod schemas under test do — the cast documents that mismatch.
 const properList = (...items: unknown[]) => APair.fromArray(CONSTANT_CTX, items as SchemeValue[]);
-const fn = (..._args: unknown[]): boolean => false;
+// W8: z.lambda admits ACallable only — bare host fns are refused.
+const fn = new ANativeProcedure({
+  name: "fn",
+  arity: { min: 0, max: null },
+  contract: undefined,
+  impl: () => theVoid });
 
 describe("scheme/lists Contract precision — genuinely REFINED schemas reject wrongly-shaped values (were z.unknown(), now zod-validated)", () => {
   // INVARIANT: make-list's output must be a proper list (pair or nil); fill stays
@@ -104,11 +111,11 @@ describe("scheme/lists Contract precision — genuinely REFINED schemas reject w
 
   // @ledger: list->array phantom symbol — test targets a never-bound scheme name
   // GAP (src/__tests__/ledger/index.law.test.ts GAPS table, id above): repo-wide grep confirms
-  // no pack (r7rs, srfi, or the legacy env/lists.ts) has ever bound a scheme symbol literally
+  // no pack (r7rs, srfi, or the historical env/lists.ts) has ever bound a scheme symbol literally
   // named "list->array" — R7RS itself has no such builtin (only vector->list/list->vector).
   // `list->array` is purely an internal error-message LABEL (`to_array("list->array")`, this
   // file's lists.ts / strings.ts) for the pack-local `listToArray` helper, never an exported
-  // native def. This row predates the LIPS-legacy dissolution sweep (the sibling
+  // native def. This row predates the identity-box dissolution sweep (the sibling
   // "append/reverse: untouched" test in this file documents array->list's own dissolution) —
   // it.fails, not it.todo: there's no live plan to ADD a bound "list->array" symbol; this row
   // just needs retiring/redirecting once someone owns the sunset-suite cleanup pass.
@@ -156,10 +163,8 @@ describe("scheme/lists Contract precision — STATIC-only fixes (documented, not
     const def = sequenceDef("map");
     expect(def.in.safeParse([fn, properList(1, 2, 3)]).success).toBe(true);
     expect(def.in.safeParse([fn]).success).toBe(true); // 0 further lists — still legal (map over one term)
-    // z.lambda's predicate is `typeof v === "function"` — a MISSING head position decodes to
-    // `undefined`, which fails that check, so an empty array is now genuinely rejected (unlike
-    // a bare z.custom/z.unknown head, which would have accepted it — the quirk this test
-    // originally calibrated against no longer applies to map's head specifically).
+    // z.lambda's predicate is ACallable-only (W8) — a MISSING head position decodes to
+    // `undefined`, which fails that check, so an empty array is genuinely rejected.
     expect(def.in.safeParse([]).success).toBe(false);
   });
 
@@ -237,17 +242,8 @@ describe("scheme/lists Contract precision — STATIC-only fixes (documented, not
     expect(def.out.safeParse(["anything"]).success).toBe(false);
   });
 
-  // NOT a bare-value-purge (P4/A4) row, on inspection — retagged (was mis-filed under the
-  // same marker as the row above). The compare callback's `is_false`-guarded tolerance
-  // (lists.ts) exists for a BARE JS FUNCTION supplied as `compare` (`call_function`'s
-  // non-callable-value branch, `fn.apply(...)`) — a Track-B (reverse-membrane/P1) concern:
-  // a bare fn's return is a value-layer-only term the box interpreter can't read (P1), not a
-  // scalar escaping a boxed producer inside the membrane (P4, this purge's scope). It
-  // retires when B4 (legacy bare-fn arm retirement) lands, not here — A4 and B4 are
-  // independent tracks of the 2026-07-09 principle-first rework. This test itself never observed the raw
-  // arm at runtime (both assertions use boxed `exact(1)` operands) — static-only, as titled.
   // INVARIANT: member/assoc accept any scheme value for obj; compare's declared return
-  // type is unknown, not boolean
+  // type is unknown, not boolean. W8: compare is ACallable (z.lambda).
   it("member/assoc: obj accepts any scheme value (was z.unknown(), now z.schemeValue — static-only); compare predicate's return type is now `unknown` not `boolean` (matches the file's is_false-guarded actual usage, and srfi-1.ts filter's established convention)", () => {
     for (const name of ["member", "assoc"]) {
       const def = nativeDef(name);

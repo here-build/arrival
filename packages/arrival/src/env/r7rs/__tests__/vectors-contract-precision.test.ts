@@ -21,7 +21,7 @@ import vectorsPack from "../vectors.js";
 import dedent from "dedent";
 const norm = (s: string) => s.replace(/\s+/g, " ").trim();
 import { signatureOf } from "../../../type-layer/schema-to-ts.js";
-import type { AEntity } from "../../../common/symbol.js";
+import type { AEntity } from "../../../symbol/index.js";
 import { AVector } from "../../../values/primitives/AVector.js";
 import { AExact } from "../../../values/primitives/AExact.js";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";

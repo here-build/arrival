@@ -30,8 +30,8 @@
 // elements and `vector-ref`/`vector->list`'s returns are STATIC-ONLY precision gains — provable
 // only here, at the type level.
 import { describe, expectTypeOf, test } from "vitest";
-import * as z from "../../../common/scheme-zod.js";
-import { symbol } from "../../../common/symbol.js";
+import * as z from "../../../common/scheme-zod/index.js";
+import { symbol } from "../../../symbol/index.js";
 import { type DecodedArgs, type DecodedArgsWithRest, type DecodedReturn } from "../../../common/symbols/_bake.js";
 import type { AVector } from "../../../values/primitives/AVector.js";
 import type { AExact } from "../../../values/primitives/AExact.js";

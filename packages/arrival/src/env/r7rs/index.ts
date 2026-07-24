@@ -17,7 +17,8 @@
 // of the spec). Where each lives: the value-mutators with their type packs
 // (r7rs/strings, r7rs/vectors, r7rs/lists, r7rs/bytevectors); the §6.10/§4.2.5/
 // §4.2.6 control + dynamics + laziness omissions in `control.ts`; the §6.13/§6.14
-// host-interface omissions in `host.ts`.
+// host-interface omissions in `host.ts`; §6.12 eval/environment reification in
+// `eval.ts`; library/inclusion/feature-expand doors co-located on `syntax.ts`.
 
 import syntax from "./syntax.js";
 import binding from "./binding.js";
@@ -25,6 +26,7 @@ import exceptions from "./exceptions.js";
 import lists from "./lists.js";
 import control from "./control.js";
 import host from "./host.js";
+import r7rsEval from "./eval.js";
 
 export { default as syntax } from "./syntax.js";
 export { default as binding } from "./binding.js";
@@ -32,6 +34,7 @@ export { default as exceptions } from "./exceptions.js";
 export { default as lists } from "./lists.js";
 export { default as control } from "./control.js";
 export { default as host } from "./host.js";
+export { default as r7rsEval } from "./eval.js";
 
 /** The whole R7RS derived-syntax set — assemble all, or `.filter()` a subset. */
-export const allR7rs = [syntax, binding, exceptions, lists, control, host] as const;
+export const allR7rs = [syntax, binding, exceptions, lists, control, host, r7rsEval] as const;

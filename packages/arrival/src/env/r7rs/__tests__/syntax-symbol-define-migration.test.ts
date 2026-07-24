@@ -71,7 +71,7 @@ import { buildVocabulary } from "../../vocabulary.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 
 const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
-import type { AEntity } from "../../../common/symbol.js";
+import type { AEntity } from "../../../symbol/index.js";
 import type { DefineSyntaxSymbolDef } from "../../../common/symbols/_bake.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
@@ -201,8 +201,7 @@ describe("ROW 4 — the validator's macro-firewall row still holds (binder posit
     try {
       await exec("(let-syntax ((m (syntax-rules () ((_ x) (totally-unbound-name-xyz x))))) (m 5))", {
         env,
-        staticValidation: "on",
-      });
+        staticValidation: "on" });
     } catch (e) {
       caught = e;
     }

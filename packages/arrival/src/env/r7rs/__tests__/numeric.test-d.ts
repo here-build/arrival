@@ -22,12 +22,12 @@
 // there is no surviving "AnyNum, plain number|bigint" shape in the live pack; the inline
 // `z.union([z.number, z.bigint])` pairing this file used to mirror is gone along with the
 // ops that used it. `z.bigint` itself still exists in scheme-zod.ts, but only as a KEPT
-// (deliberately not deleted) legacy compat export for consumers outside this sweep's scope
+// (deliberately not deleted) historical compat export for consumers outside this sweep's scope
 // (chars.ts/strings.ts/srfi-13.ts) — the numeric pack's own contracts no longer reference
 // it at all, so it has no remaining "face" to prove here.
 
 import { describe, expectTypeOf, test } from "vitest";
-import * as z from "../../../common/scheme-zod.js";
+import * as z from "../../../common/scheme-zod/index.js";
 import type { DecodedArgs, DecodedArgsWithRest, DecodedReturn } from "../../../common/symbols/_bake.js";
 import type { ANumeric } from "../../../values/numbers.js";
 

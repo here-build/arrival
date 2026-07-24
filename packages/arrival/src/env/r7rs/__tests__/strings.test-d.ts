@@ -17,8 +17,8 @@
 // in the runtime file, which probes actual value acceptance via zod's own safeParse.
 
 import { describe, expectTypeOf, test } from "vitest";
-import * as z from "../../../common/scheme-zod.js";
-import { symbol } from "../../../common/symbol.js";
+import * as z from "../../../common/scheme-zod/index.js";
+import { symbol } from "../../../symbol/index.js";
 import { type DecodedArgs, type DecodedReturn } from "../../../common/symbols/_bake.js";
 import type { AList, AListAlike, SchemeValue } from "../../../values/types.js";
 import type { APair } from "../../../values/primitives/APair.js";

@@ -20,8 +20,8 @@
 // via `.safeParse`, since native ops run no validation during evaluation).
 
 import { describe, expectTypeOf, test } from "vitest";
-import * as z from "../../../common/scheme-zod.js";
-import { symbol } from "../../../common/symbol.js";
+import * as z from "../../../common/scheme-zod/index.js";
+import { symbol } from "../../../symbol/index.js";
 import { type DecodedArgs } from "../../../common/symbols/_bake.js";
 import type { ANumeric } from "../../../values/numbers.js";
 import type { ABytevector } from "../../../values/primitives/ABytevector.js";

@@ -17,7 +17,7 @@ import { describe, expect, it } from "vitest";
 import { execStateOverFrame, type ExecOptionsOverFrame } from "../../../eval/generator-exec.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
 import type { SchemeValue } from "../../../values/types.js";
-import type { AEntity } from "../../../common/symbol.js";
+import type { AEntity } from "../../../symbol/index.js";
 import exceptionsPack from "../exceptions.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 

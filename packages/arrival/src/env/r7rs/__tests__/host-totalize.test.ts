@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import hostPack, { HOST_DOOR_NAMES } from "../host.js";
 import { exec } from "../../../eval/generator-exec.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
-import type { AEntity } from "../../../common/symbol.js";
+import type { AEntity } from "../../../symbol/index.js";
 import { PurityError } from "../../../errors.js";
 import { DoorProcedure } from "../../../values/primitives/ACallable.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
@@ -36,6 +36,7 @@ describe("scheme/r7rs/host — totalized doors", () => {
     ["port?", "(port? 1)"],
     ["get-output-string", "(get-output-string 1)"],
     ["file-exists?", '(file-exists? "x")'],
+    ["load", "(load)"],
     ["features", "(features)"],
   ] as const)("%s → PurityError", async (_n, src) => {
     const { purity, message } = await door(src);

@@ -43,7 +43,7 @@
 import { describe, expect, it } from "vitest";
 import { execStateOverFrame as execState } from "../../../eval/generator-exec.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
-import type { AEntity } from "../../../common/symbol.js";
+import type { AEntity } from "../../../symbol/index.js";
 import stringsPack from "../strings.js";
 import srfi13Pack from "../../srfi/srfi-13.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";

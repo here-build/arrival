@@ -13,7 +13,7 @@
 // (`.success` is `true`, not `false`) until the fix narrows the element schema.
 import { describe, expect, it } from "vitest";
 import bytevectorsPack from "../bytevectors.js";
-import type { AEntity } from "../../../common/symbol.js";
+import type { AEntity } from "../../../symbol/index.js";
 import { ABytevector } from "../../../values/primitives/ABytevector.js";
 import { AExact } from "../../../values/primitives/AExact.js";
 import { AString } from "../../../values/primitives/AString.js";
@@ -104,9 +104,10 @@ describe("scheme/bytevectors Contract precision — the real exported ops reject
     expect(toUtf8.in.safeParse(["raw-js-string"]).success).toBe(false);
   });
 
-  // INVARIANT: the bytevectors pack exports exactly 11 symbols (deliberate drift alarm —
-  // forces a reviewer to touch this test when a symbol is added/removed)
-  it("sanity: the pack exports exactly 11 symbols (the scope this fix must cover)", () => {
-    expect(Object.keys(symbols)).toHaveLength(11);
+  // INVARIANT: the bytevectors pack exports exactly 12 symbols (deliberate drift alarm —
+  // forces a reviewer to touch this test when a symbol is added/removed). 9 natives +
+  // 3 purity doors (bytevector-u8-set! / bytevector-copy! / bytevector-fill!).
+  it("sanity: the pack exports exactly 12 symbols (the scope this fix must cover)", () => {
+    expect(Object.keys(symbols)).toHaveLength(12);
   });
 });

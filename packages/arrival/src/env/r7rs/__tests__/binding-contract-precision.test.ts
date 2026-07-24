@@ -3,7 +3,7 @@
 // No harvest signature proofs: doors carry no Contract.type / in/out surface.
 import { describe, expect, it } from "vitest";
 import bindingPack from "../binding.js";
-import type { AEntity } from "../../../common/symbol.js";
+import type { AEntity } from "../../../symbol/index.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
 const symbols = harvestContracts(bindingPack.spec.symbols);

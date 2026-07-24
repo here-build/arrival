@@ -23,74 +23,55 @@
 
 import { AJSArray } from "../../membrane/AJSArray.js";
 import dedent from "dedent";
-import { withContractFields, type CallCtx } from "../../common/symbol.js";
+import { withContractFields, type CallCtx } from "../../symbol/index.js";
 import { ABool, schemeFalse, schemeTrue } from "../../values/primitives/ABool.js";
 import { AJSObject } from "../../membrane/AJSObject.js";
 import { ADict, isDictShaped } from "../../values/primitives/ADict.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { eq, eqv, structuralEqual } from "../../values/structural-equal.js";
 import { EnvCapability } from "../../common/capability.js";
-import { is_callable, is_false, is_macro } from "../../eval/guards.js";
+import { is_false } from "../../values/value-guards.js";
+import { is_callable, is_macro } from "../../eval/guards.js";
 import { ANil } from "../../values/primitives/ANil.js";
 import { AString } from "../../values/primitives/AString.js";
 import { APair, isCircularList } from "../../values/primitives/APair.js";
 import { schemeBool as bool, mintVerdict, stringValue, withInputProvenance } from "../../values/op-helpers.js";
 import { printValue } from "../../values/print.js";
 import { SchemeValue } from "../../values/types.js";
-// TYPE-ONLY, one-directional (`common/symbols` → `emit`; emit-rule.ts imports nothing
-// back from this tree): the compiler-facing rule surface a Contract may carry.
-// Constitution §4.1/§4.5 (arrival-ts-transpiler-design.md) + registry-emit.md.
+// TYPE-ONLY import of the compiler-facing Contract.emit surface.
 import type { EmitCtx, EmitRule } from "../../emit/emit-rule.js";
 import { Bin, Call, Lit, Member, Un, type R } from "../../emit/residual-lite.js";
 
 // ════════════════════════════════════════════════════════════════════════════
-// Contract.emit — THE PHASE-2 RELOCATION DRILL (constitution §9): not / null? /
-// pair? move here from the compiler-side phase1 table (`inhuman/foundations/
-// arrival-mercury/src/rules/phase1.ts`) onto their OWN Contract's `emit` field — the
-// same pattern numeric.ts's quotient/modulo/=/+/-/*// relocation and lists.ts's cons
-// relocation established. Residual shapes are BYTE-FOR-BYTE identical to the table
-// rules they replace (verified by diffing against phase1.ts's pre-relocation
-// `notRule`/`nullQRule`/`pairQRule`), built via `@inhuman.tools/arrival/emit`'s
-// residual-lite constructors (§4.5's seed of "residual types belong in arrival core
-// eventually").
+// Contract.emit — not / null? / pair? / equal?
+// Residual selection keys on ARGUMENT facts (Law A), never result types or syntax.
 //
-// `null?`/`pair?` carry the FULL package deal (constitution §5.3/Law N): the
-// `narrows`/`refPolicy` fields move WITH the rule, not just the residual shape — the
-// harvest now carries them (`registry/harvest.ts`'s `toRow` reads any baked def's
-// `emit`/`narrows`/`refPolicy` uniformly, capability-agnostic), so
-// `narrowsMembersOf(registry)` still returns `{null?, pair?}` once the phase1 table
-// row is deleted (verified: `withRules`' fallthrough to the harvested base row).
-// `pair?` is a `tagless-guard` def (no `Contract` param to thread these through) —
-// its fields land via the SAME declaration-site object-spread `type` already uses.
+// null?/pair? carry the FULL Law-N package: `emit` + `narrows` + `refPolicy` travel
+// together on the harvested row (narrowsMembersOf reads them capability-agnostic).
+// pair? is tagless-guard — those fields land via declaration-site object-spread.
 // ════════════════════════════════════════════════════════════════════════════
 
-/** Fixed-arity refusal — verbatim relocation of phase1.ts's own `exactly` helper (see
- *  numeric.ts's own copy of this same helper for the full rationale). */
+/** Fixed-arity refusal: wrong arity → `ctx.door`, not a walker crash on undefined. */
 function exactly<T>(ctx: EmitCtx<R>, sym: string, args: readonly T[], n: number): readonly T[] {
   if (args.length !== n) ctx.door(`\`${sym}\` wants exactly ${n} argument${n === 1 ? "" : "s"}, got ${args.length}`);
   return args;
 }
 
-// ─── Law T: not ────────────────────────────────────────────────────────────────────────
-// Constitution §5.2: `!c` when the operand is provably boolean, `c === false` otherwise
-// (exact Scheme truthiness — only `#f` is false; `0`/`""` are truthy).
+// ─── Law T: not ────────────────────────────────────────────────────────────────────
+// `!c` when operand is provably boolean (or read-register); else `c === false`
+// (Scheme truthiness — only #f is false; 0/"" are truthy).
 const notEmitRule: EmitRule<R> = {
   call: (args, ctx) => {
     const [c] = exactly(ctx, "not", args, 1);
     return ctx.config.register === "read" || ctx.argFacts[0]?.boolean === true
       ? Un("!", c!)
       : Bin("===", c!, Lit(false));
-  },
-};
+  } };
 
-// ─── null? / pair? — FACT-GATED .length reads, Law-N self-witnessed ──────────────────
-// Both are TOTAL predicates over ANY value — which is exactly why the bare `.length`
-// read was wrong-code, not a deferred hazard: a JS string carries `.length` too, so
-// `(null? "")` compiled to `true` where the interpreter says `#f`. The fuzzer found
-// it on its first run (narrows-{null,pair}-string-collision corpus rows). Law F
-// applied properly: the clean `.length` form emits only when argFacts PROVE the
-// array representation; anything unproven rides the stage-0 shim, whose
-// Array.isArray test is the honest total semantics.
+// ─── null? / pair? — fact-gated .length, Law-N self-witnessed ──────────────────────
+// TOTAL over ANY value — bare `.length` is wrong-code: `(null? "")` would be true
+// (strings carry .length). Clean form only when argFacts PROVE array representation;
+// unproven → runtime shim (Array.isArray).
 const provesArray = (f: { list?: true; pair?: true; nonEmptyList?: true } | undefined): boolean =>
   f?.list === true || f?.pair === true || f?.nonEmptyList === true;
 
@@ -98,37 +79,24 @@ const nullQEmitRule: EmitRule<R> = {
   call: (args, ctx) => {
     const [xs] = exactly(ctx, "null?", args, 1);
     return provesArray(ctx.argFacts[0]) ? Bin("===", Member(xs!, "length"), Lit(0)) : Call(ctx.runtime("null?"), [xs!]);
-  },
-};
+  } };
 
 const pairQEmitRule: EmitRule<R> = {
   call: (args, ctx) => {
     const [xs] = exactly(ctx, "pair?", args, 1);
     return provesArray(ctx.argFacts[0]) ? Bin(">", Member(xs!, "length"), Lit(0)) : Call(ctx.runtime("pair?"), [xs!]);
-  },
-};
+  } };
 
-// ── equal? — the PRIMITIVE-proven gate, Law-A soundness line ────────────────────────
-// `equal?` is DEEP structural equality (structuralEqual), not `===` — for a COMPOUND
-// value (list/pair/vector), `===` is reference identity and would wrongly say `#f` for
-// two structurally-equal-but-distinct cells (`(equal? '(1) '(1))` is `#t`; the two
-// compiled arrays are NOT the same reference). So `===` may NEVER be the residual when
-// BOTH sides could be compound.
+// ── equal? — primitive-proven gate (Law A) ─────────────────────────────────────────
+// Deep structural equality, not ===. For compounds, === is reference identity and
+// wrongly says #f for `(equal? '(1) '(1))`. So === is NEVER residual when BOTH sides
+// could be compound.
 //
-// But when EITHER side provably decodes to a bare JS primitive (`numeric`/`stringy`/
-// `boolean` — §3.3's ∀-over-union derivation, same nil-excluding guarantee the
-// comparisons in numeric.ts lean on), `===` agrees with `equal?` for ANY value on the
-// other side, proven or not: a primitive can only `equal?`-match a value of the SAME
-// primitive JS type and value, which is exactly what `===` tests, and it can never
-// `equal?`-match a compound value — `===` between a primitive and an object is always
-// `false`, and `structuralEqual` between a scalar and a compound is always `false` too
-// (a type mismatch, never a coincidental deep-equal). So ONE side proving primitive is
-// sufficient, not both — the check below is deliberately asymmetric (`||`, not `&&`).
-//
-// UNPROVEN on both sides (the common case for two arbitrary list operands) → the
-// runtime shim (`structuralEqual`'s real deep walk) — collapsing that to `===` would
-// silently flip every reference-distinct-but-equal compound pair to `#f` (the exact bug
-// this gate exists to prevent; see equality-emit.test.ts's discriminating pair).
+// When EITHER side proves bare JS primitive (numeric/stringy/boolean), === agrees with
+// equal? for any other side: a primitive only equal?-matches same type+value, and
+// never a compound. Check is deliberately asymmetric (`||`, not `&&`).
+// Both unproven → structuralEqual shim (collapsing to === flips distinct-but-equal
+// compounds to #f).
 const provesPrimitive = (f: { numeric?: true; stringy?: true; boolean?: true } | undefined): boolean =>
   f?.numeric === true || f?.stringy === true || f?.boolean === true;
 
@@ -138,31 +106,18 @@ const equalQEmitRule: EmitRule<R> = {
     return provesPrimitive(ctx.argFacts[0]) || provesPrimitive(ctx.argFacts[1])
       ? Bin("===", a!, b!)
       : Call(ctx.runtime("equal?"), [a!, b!]);
-  },
-};
+  } };
 
 export default EnvCapability.define("scheme/equality", {
   symbols: (symbol, z) => ({
     // R7RS 6.3 Booleans
     "boolean=?": symbol.native`boolean=?: typed equivalence over booleans`(
-      // Input stays z.schemeValue (representation-blind), NOT z.boolean — the impl's own unwrap()
-      // below branches on raw JS boolean vs boxed ABool, so blindness is load-bearing here
-      // (unlike symbol=?, a bare instanceof check with no such branch). `z.boolean`'s codec
-      // `safeParse`s ONLY its scheme face (ABool instances) regardless of native/rosetta Face
-      // projection — using it here would silently reject the raw-JS-boolean half the impl
-      // genuinely accepts. Output stays z.boolean: the RETURN is always a real ABool (the
-      // schemeBool flyweight), never representation-blind.
+      // z.schemeValue BY DESIGN: unwrap accepts raw JS boolean OR boxed ABool.
+      // z.boolean would reject the raw half. Output is always ABool flyweight.
       { input: [], inputRest: z.schemeValue, output: [z.boolean] },
       function (this: CallCtx, ...bools) {
         if (bools.length < 2) return schemeTrue;
-        // L1 boxes `#t` / `#f` as SchemeBool — unwrap before comparing, otherwise
-        // `(boolean=? #t #t)` would compare two distinct singletons and pass, but
-        // the type-guard one line up would already have rejected the schemeTrue
-        // singleton as `typeof !== "boolean"`. Mirror `boolean?`'s post-L1 fix.
-        // Both representations are load-bearing here (the contract's own `z.schemeValue`
-        // input + this file's header doc both still document "booleans cross the
-        // rosetta membrane unboxed"), so a raw JS boolean must unwrap too, not just
-        // a boxed ABool.
+        // Representation-blind: raw JS boolean OR boxed ABool (rosetta membrane).
         const unwrap = (b: SchemeValue): boolean | undefined => {
           if (typeof b === "boolean") return b;
           if (b instanceof ABool) return b.value;
@@ -174,13 +129,7 @@ export default EnvCapability.define("scheme/equality", {
       },
     ),
 
-    // R7RS 6.5 Symbols. Unlike `boolean=?` above, this is NOT representation-blind: the
-    // impl only ever checks `instanceof ASymbol` (no raw-JS-symbol unwrap branch), and
-    // symbols have no plain-JS counterpart in this language (no codec for them in
-    // scheme-zod.ts, unlike string/boolean/char/number — see laws/equality.law.test.ts's
-    // own "always boxed in practice" note for characters & symbols). So `z.symbol` (the SAME
-    // identity primitive `symbol->string`/`string->symbol` below already use) is the honest
-    // domain, not `z.schemeValue` — this is a precision fix, not a blindness removal.
+    // R7RS 6.5 — NOT representation-blind: only ASymbol (no plain-JS symbol codec).
     "symbol=?": symbol.native`symbol=?: typed equivalence over symbols`(
       { input: [z.symbol, z.symbol], inputRest: z.symbol, output: [z.boolean] },
       function (this: CallCtx, ...syms) {
@@ -206,19 +155,14 @@ export default EnvCapability.define("scheme/equality", {
     "string->symbol": symbol.native`string->symbol: a symbol whose name is the string's characters`(
       { input: [z.string], output: [z.symbol] },
       function (s) {
-        // TODO(ctx-elimination): this used to mint with the INPUT's ctx (value-carries-ctx),
-        // interning in that run's own per-run table (heap-charged, GC'd at run end) rather than
-        // the permanent global one — closing the `(string->symbol unique)` DoS. AValue no
-        // longer stores a per-value ctx (see AValue.ts's ctx-removal note), so ASymbol's
-        // constructor always interns into the one permanent CONSTANT_CTX table now — a
-        // `(string->symbol unique)` mint-loop grows it unbounded until an ambient run-context
-        // restores per-run scoping.
+        // deferred: ASymbol interns into the permanent global table (no per-run ctx on
+        // AValue) — `(string->symbol unique)` mint-loops grow unbounded until ambient
+        // run-context restores per-run scoping.
         return withInputProvenance([s], new ASymbol(stringValue(s)));
       },
     ),
 
     "procedure?": symbol.native`procedure?: callable, excluding macros`(
-      // Total type predicate: any value in, #f on non-callables. Dual type-guard harvest.
       {
         input: [z.schemeValue],
         output: [z.boolean],
@@ -227,21 +171,14 @@ export default EnvCapability.define("scheme/equality", {
             (x: unknown): x is (...args: unknown[]) => unknown;
             <T>(x: T): x is Extract<T, (...args: unknown[]) => unknown>;
           }
-        `,
-      },
-      // A procedure is any callable EXCEPT a macro — this includes a membrane SchemeJSFunction
-      // (typeof "object"), which the old `typeof obj === "function"` test wrongly excluded.
+        ` },
+      // Callable excluding macros — includes membrane SchemeJSFunction (typeof "object").
       function (this: CallCtx, obj) {
         return new ABool(is_callable(obj) && !is_macro(obj));
       },
     ),
 
-    // `repr` — the scheme surface of the value→string PRINT protocol (values/print.ts:
-    // `printValue` dispatches each AValue's own `["arrival/print"]()`, the leaf handles the
-    // non-AValue residual). Representation-blind and value-domain-agnostic — it renders ANY
-    // value to its R7RS external representation — so it belongs here, not in any one type
-    // cluster. (DEFERRED: the 2-arg `(repr x write?)` write-mode form is not honored —
-    // `printValue` has no write-mode flag. Matches the current 1-arg behavior.)
+    // value→string print protocol (values/print.ts). deferred: 2-arg write-mode form.
     repr: symbol.native`repr: render a value to its external representation string`(
       { input: [z.schemeValue], output: [z.string] },
       function (this: CallCtx, obj) {
@@ -249,22 +186,16 @@ export default EnvCapability.define("scheme/equality", {
       },
     ),
 
-    // R8 mint (RULINGS.md R8): a verdict derived from lineage carries it — stamped
-    // operands union into the result, provenance-free operands still get `bool`'s
-    // shared flyweight (mintVerdict's allocation-free path).
+    // R8 mint (RULINGS.md R8): lineage-derived verdict carries stamped operands' union;
+    // provenance-free path uses bool's shared flyweight.
     "equal?": symbol.native`equal?: representation-blind structural equality`(
-      // Compiler-facing (constitution §4.1) — the primitive-proven gate (see
-      // `equalQEmitRule`'s own doc comment above for the full soundness argument).
       { input: [z.schemeValue, z.schemeValue], output: [z.boolean], emit: equalQEmitRule },
       function (this: CallCtx, a, b) {
         return mintVerdict([a, b], structuralEqual(a, b));
       },
     ),
 
-    // R7RS 6.1 equivalence — the pointer/scalar-grade identity predicates. `eqv?`
-    // reduces to `eq?` today (`eqv` = `eq` + explicit number/char equality, both
-    // already routed through each scalar's Setoid inside `eq`); both delegate to
-    // the single comparison home in `structural-equal.ts`.
+    // R7RS 6.1 — pointer/scalar identity; both delegate to structural-equal.ts.
     "eq?": symbol.native`eq?: pointer/scalar-grade identity`(
       { input: [z.schemeValue, z.schemeValue], output: [z.boolean] },
       function (this: CallCtx, x, y) {
@@ -279,15 +210,9 @@ export default EnvCapability.define("scheme/equality", {
       },
     ),
 
-    // R7RS 6.3 — logical negation. This native pack binds onto global_env BEFORE
-    // the scheme/core prelude that calls `not` at macro-define time, so the
-    // binding order is load-order-safe.
+    // R7RS 6.3 — only #f is falsy; is_false (not `!value` — ABool is truthy in JS).
     not: symbol.native`not: #t iff value is #f (the only scheme-falsy)`(
-      // Compiler-facing (constitution §4.1) — the Phase-2 relocation drill.
       { input: [z.schemeValue], output: [z.boolean], emit: notEmitRule },
-      // R7RS: only #f is falsy. Post-L1 `#f` parses to `SchemeBool(false)`
-      // (a truthy object in JS), so `!value` would wrongly return false here.
-      // `is_false` is the canonical scheme-falsy predicate (`guards.ts`).
       function (this: CallCtx, value) {
         return bool(is_false(value));
       },
@@ -306,15 +231,14 @@ export default EnvCapability.define("scheme/equality", {
             (x: unknown): x is string;
             <T>(x: T): x is Extract<T, string>;
           }
-        `,
-      },
+        ` },
       function (this: CallCtx, obj) {
         return bool(obj instanceof AString);
       },
     ),
 
-    // `(pair? x)` asks the receiver's own `arrival/tagless-final/pair?` (APair answers #t); the
-    // guard's graceful default (#f) covers everything else — no `instanceof APair` reach-around.
+    // tagless: receiver's own tf(pair?); default #f — no instanceof APair reach-around.
+    // Law-N witness: runtime proves the narrowing. Fields via object-spread (tagless-guard).
     "pair?": withContractFields(symbol.taglessGuard`pair?: #t iff obj is a pair (cons cell)`, {
       type: dedent`
           {
@@ -322,14 +246,9 @@ export default EnvCapability.define("scheme/equality", {
             <T>(x: T): x is Extract<T, Pair<any, any>>;
           }
         `,
-      // Compiler-facing (constitution §4.1) — the Phase-2 relocation drill. Stamped onto
-      // `.contract` in place now (a tagless-guard def has no `Contract` param to thread
-      // these through — see `TaglessGuardSymbolDef.emit`/`.narrows` in _bake.ts). `pair?`
-      // is its own Law-N witness — its runtime behavior PROVES the narrowing.
       emit: pairQEmitRule,
       narrows: { witness: "pair?" },
-      refPolicy: "eta",
-    }),
+      refPolicy: "eta" }),
 
     "null?": symbol.native`null?: empty-list test`(
       {
@@ -341,38 +260,20 @@ export default EnvCapability.define("scheme/equality", {
             <T>(x: T): x is Extract<T, null>;
           }
         `,
-        // Compiler-facing (constitution §4.1) — the Phase-2 relocation drill. `null?`
-        // is its own Law-N witness — its runtime behavior PROVES the narrowing.
+        // Law-N witness: runtime proves the narrowing.
         emit: nullQEmitRule,
         narrows: { witness: "null?" },
-        refPolicy: "eta",
-      },
-      // The empty list is the ANil singleton (and its provenance clones). Raw JS
-      // null/undefined never reach here — the membrane boxes JS null→nil and
-      // undefined→theVoid before any value enters the language.
+        refPolicy: "eta" },
+      // ANil (and provenance clones). Raw JS null/undefined never arrive (membrane
+      // boxes null→nil, undefined→theVoid).
       //
-      // ── PLUS one TOLERANCE, scoped to the BORROWED array ──────────────────────────────────
-      //
-      // An EMPTY tool-returned JSON array also answers #t.
-      //
-      // Why this is not a hole in R7RS disjointness: `(null? #())` on a genuine scheme vector stays
-      // #f — that constraint is load-bearing and untouched. The tolerance applies ONLY to an
-      // `AJSArray`, the borrowed value whose chart has not been chosen. Every CONTRACTED list verb
-      // already sees `nil` for an empty array (adoption normalizes it at mint — adopt-spine.ts), so
-      // this closes the one remaining path: a BARE `null?` on a raw tool result, where no contract
-      // has spoken.
-      //
-      // Why tolerate rather than stay faithful: at the EMPTY value the two charts CONVERGE. An
-      // empty list and an empty vector both mean "no elements", and a JSON `[]` is honestly both
-      // until a contract picks one. Answering #f there is the membrane insisting on a reading the
-      // caller never asked for — and it is the exact shape of lie this whole rework exists to kill:
-      // a model writing `(if (null? results) "none" (car results))` over an empty tool result took
-      // the ELSE branch, called `(car [])`, got a tolerant nil, and reported confident garbage. A
-      // "nothing here" that will not admit it is nothing.
-      //
-      // Known deliberate ruling, not a mechanical fix: it buys seamlessness at the cost of one
-      // value answering #t to both `null?` and `vector?`. Reverting it is a one-line change (drop
-      // the second disjunct) plus the `null? on empty` row in listalike-divergence.law.test.ts.
+      // TOLERANCE: empty AJSArray (borrowed tool JSON []) also answers #t. Genuine
+      // scheme vector `(null? #())` stays #f — R7RS disjointness holds. Only AJSArray
+      // (chart not yet chosen): contracted list verbs already see nil via adoption;
+      // bare null? on a raw tool result is the remaining path. At the empty value the
+      // two charts converge ("no elements"); answering #f forces a chart the caller
+      // never asked for and makes `(if (null? results) … (car results))` take the else
+      // branch on empty tool data. Cost: one value answers #t to both null? and vector?.
       function (this: CallCtx, obj) {
         return bool(obj instanceof ANil || (obj instanceof AJSArray && obj.source.length === 0));
       },
@@ -387,10 +288,8 @@ export default EnvCapability.define("scheme/equality", {
             (x: unknown): x is boolean;
             <T>(x: T): x is Extract<T, boolean>;
           }
-        `,
-      },
-      // L1 boxes parser literals as SchemeBool — JS `typeof` no longer catches them.
-      // Mirrors the `number?` / `string?` pattern of accepting both raw and boxed forms.
+        ` },
+      // Raw JS boolean OR boxed ABool (same dual form as number?/string?).
       function (this: CallCtx, obj) {
         return bool(obj instanceof ABool);
       },
@@ -403,8 +302,7 @@ export default EnvCapability.define("scheme/equality", {
             (x: unknown): x is string;
             <T>(x: T): x is Extract<T, string>;
           }
-        `,
-    }),
+        ` }),
 
     // `dict?` — Racket's dict predicate, the missing counterpart to our native `{…}` /
     // `(dict …)` open-key map (polyglot.ts). We ship the type but had no predicate for
@@ -425,8 +323,7 @@ export default EnvCapability.define("scheme/equality", {
             (x: unknown): x is Record<string, unknown>;
             <T>(x: T): x is Extract<T, Record<string, unknown>>;
           }
-        `,
-        },
+        ` },
         function (this: CallCtx, obj): ABool {
           return new ABool(obj instanceof AJSObject || obj instanceof ADict);
         },
@@ -441,8 +338,7 @@ export default EnvCapability.define("scheme/equality", {
             (x: unknown): x is List<unknown>;
             <T>(x: T): x is Extract<T, List<any>>;
           }
-        `,
-      },
+        ` },
       // A circular list is NOT a proper list (R7RS); detect runtime cycles too
       // (have_cycles below only catches reader #0= cycles).
       function (this: CallCtx, obj) {
@@ -463,6 +359,4 @@ export default EnvCapability.define("scheme/equality", {
           node = node.cdr;
         }
       },
-    ),
-  }),
-});
+    ) }) });

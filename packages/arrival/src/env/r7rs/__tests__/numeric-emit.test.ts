@@ -16,7 +16,7 @@
 // builds the expected tree in isolation from the compiler.
 import { describe, expect, it } from "vitest";
 
-import type { AEntity } from "../../../common/symbol.js";
+import type { AEntity } from "../../../symbol/index.js";
 import type { EmitCtx } from "../../../emit/emit-rule.js";
 import { Bin, Binding, Call, Lit, Method, Ref, Un, type R } from "../../../emit/residual-lite.js";
 import numericPack from "../numeric.js";
@@ -52,8 +52,7 @@ function testCtx(over: Partial<EmitCtx<R>> = {}): EmitCtx<R> {
     door: (reason) => {
       throw new Error(reason);
     },
-    ...over,
-  };
+    ...over };
 }
 
 const ref = (name: string): R => Ref(Binding(name));

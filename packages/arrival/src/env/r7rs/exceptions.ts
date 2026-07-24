@@ -2,43 +2,21 @@
 // *current-exception-handlers*, raise, raise-continuable, with-exception-handler,
 // error, and the guard derived syntax.
 //
-// The OPPOSITE face of the purity doors (r7rs/control for dynamics, the type
-// packs for mutators): those doors name what arrival omits for provenance
-// soundness; this pack supplies the exception forms it keeps. Built on the host
-// try/catch/finally special forms + the `%raise`/`%current-handlers`/
-// `%set-handlers!`/`make-error-object` machinery below, all owned here —
-// `scheme/exceptions` (error-objects.ts) is just the R7RS predicate surface
-// (error-object?/error-object-message/etc).
+// Opposite face of the purity doors (control for dynamics, type packs for mutators):
+// those name omissions; this pack supplies the exception forms kept. Owns the
+// %raise / %current-handlers / %set-handlers! / make-error-object machinery;
+// error-objects.ts is the R7RS predicate surface only. Sole definition site.
 //
-// SINGLE SOURCE: this module is the sole definition site for both the machinery
-// and the derived forms — no cross-capability ordering dependency remains.
+// HANDLER-STACK LAW: stack is WeakMap<RunContext, stack> — never a scheme binding
+// or module mutable. RunContext is minted once per top-level exec() and threaded
+// by reference through every nested frame (define-bake forwards the caller's real
+// runCtx across define→define boundaries). Fresh per exec(), shared within that
+// run, isolated across concurrent exec() on the same isolate.
 //
-// HANDLER-STACK LAW: the stack lives in a `WeakMap<RunContext, stack>` (declared
-// below), never in a scheme binding or a module-level mutable slot. A
-// `RunContext` is minted once per top-level `exec()` call and threaded BY
-// REFERENCE through every nested scope/lambda/let within that call — including
-// across a `symbol.define` → `symbol.define` call boundary (`define-bake.ts`'s
-// `buildDefineProcedure` forwards the caller's real `runCtx` into
-// `call_function`, so both sides of the boundary observe the SAME `RunContext`
-// identity). That's what makes the WeakMap keying sound: the handler stack is
-// fresh per top-level `exec()`, shared across every nested frame inside it, and
-// isolated from any other concurrent `exec()` sharing the same isolate — each
-// run's stack is keyed to its own `RunContext` identity, with no shared-isolate
-// caveat needed.
-//
-// Every `symbol.define` body below still avoids bare `car`/`cdr`/`cons` and
-// scheme-level `try`/`catch`/`finally`, routing instead through this
-// capability's own machinery natives (`%handler-car`, `%handler-cdr`,
-// `%with-restore`, etc.) — not because those forms are unsafe inside a
-// `symbol.define` body (both are bakeable: `define-bake.ts`'s FV allowlist
-// recognizes the `car`/`cdr` family as resolver-synthesized rather than
-// capability exports, and `free-vars.ts` models `try`/`catch`/`finally` as a
-// special form with `catch`'s bound var properly scoped to its handler body) —
-// but because folding these bodies back onto the plain forms is a deferred
-// cleanup, not done here; the dedicated machinery natives are correct and
-// tested as they stand.
+// Bodies route through machinery natives (%handler-car/cdr, %with-restore, …)
+// rather than bare car/cdr/try. deferred: fold onto plain forms (both bakeable).
 import { EnvCapability } from "../../common/capability.js";
-import { type CallCtx } from "../../common/symbol.js";
+import { type CallCtx } from "../../symbol/index.js";
 import { R7RSError } from "../../errors.js";
 import { AString } from "../../values/primitives/AString.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
@@ -50,56 +28,35 @@ import { schemeBool as bool } from "../../values/op-helpers.js";
 import { to_array } from "../pack-helpers.js";
 import invariant from "tiny-invariant";
 
-// Per-run isolation, keyed by RunContext identity — see the file header's
-// HANDLER-STACK LAW: fresh per top-level `exec()`, shared across every nested
-// frame within it, isolated from any other concurrent `exec()` on the same
-// isolate.
+// HANDLER-STACK LAW — see preamble.
 const handlersByRun = new WeakMap<RunContext, SchemeValue>();
 
-// R7RS raise/raise-continuable/error carry ARBITRARY data (§6.11: "obj may be any
-// object") — critically INCLUDING the R7RSError condition objects `error`/
-// `make-error-object` construct. `z.schemeValue`'s `isSchemeValue` predicate is
-// `instanceof AValue` (membrane.ts) — an `R7RSError` is a raw host `Error`
-// subclass, deliberately NOT an `AValue` box (`z.error`'s own codec exists
-// precisely because it isn't one), so `z.schemeValue` alone REJECTS a condition object.
-// A bare `native` contract never enforced this (native contracts are types-only)
-// — but `symbol.define`'s contract IS enforced at the call boundary, so this
-// pack's own condition objects must be an explicit member of every slot that can
-// carry a raised/returned value: `(guard (exn (else exn)) (error "BOOM!" 1 2 3))`
-// round-trips a real R7RSError through exactly `raise`'s `obj` slot.
+// raise/error carry arbitrary data (§6.11), including R7RSError. z.schemeValue is
+// instanceof AValue — R7RSError is a raw host Error (z.error exists because it is
+// not AValue), so schemeValue alone rejects condition objects. define contracts
+// enforce at the call boundary: every raised/returned slot must admit R7RSError
+// explicitly (guard else-exn round-trips through raise's obj).
 export default EnvCapability.define("scheme/r7rs/exceptions", {
   symbols: (symbol, z) => ({
-    // Throw the object directly (not wrapped in an Error with toString) — preserves
-    // the original object type for R7RS exception handling.
+    // Throw obj directly (preserve type for R7RS exception handling).
     "%raise": symbol.native`%raise: throw obj directly (machinery — the R7RS forms build on this)`(
-      // `obj` is genuinely ANY scheme value (raise accepts arbitrary data, R7RS §6.11) —
-      // `z.schemeValue`, the honest top type, is the representation-blind fit for this
-      // kind of slot (scheme-zod.ts's own documented convention). Output is `z.never()`:
-      // the impl's own declared return type is `never` — it always throws.
+      // Arbitrary data (§6.11). Output undefinedResult — always throws.
       { input: [z.schemeValue], output: [z.undefinedResult] },
       function (this: CallCtx, obj) {
         throw obj;
       },
     ),
-    // Read/replace the handler stack (machinery; the R7RS forms push/pop through these
-    // instead of mutating a scheme binding with `set!`). From scheme's perspective these
-    // are ordinary zero/one-arg calls.
+    // Machinery push/pop — not set! of a scheme binding.
     "%current-handlers": symbol.native`%current-handlers: read the exception-handler stack (machinery)`(
-      // The stack is a proper scheme list (nil, or a pair of a handler procedure + the rest
-      // of the stack) — scheme-zod has no dedicated "list of procedures" vocabulary item, so
-      // `z.schemeValue` (representation-blind scheme-value identity) is the honest ceiling here.
+      // Stack is a proper list; no typed "list of procedures" schema → z.schemeValue.
       { input: [], output: [z.schemeValue] },
-      // Non-arrow: `this.runCtx` is the CallCtx receiver `symbol.native` dispatches
-      // with (the same convention `%push-handler` below already uses) — the WeakMap
-      // key. Absent entry ⇒ this run has never pushed a handler yet ⇒ empty stack.
+      // this.runCtx is the WeakMap key. Absent ⇒ empty stack.
       function (): SchemeValue {
         return (handlersByRun.get(this.runCtx) ?? nil) as SchemeValue;
       },
     ),
     "%set-handlers!": symbol.native`%set-handlers!: replace the exception-handler stack (machinery)`(
-      // Input is the same list shape `%current-handlers` reads (see above). Output is
-      // ALWAYS `nil` (the impl's own `return nil`) — `z.nil` is the exact honest type here,
-      // not merely a wide one.
+      // Same list shape as %current-handlers; output always nil.
       { input: [z.schemeValue], output: [z.nil] },
       function (handlers) {
         handlersByRun.set(this.runCtx, handlers as SchemeValue);
@@ -115,8 +72,7 @@ export default EnvCapability.define("scheme/r7rs/exceptions", {
       {
         input: [z.string],
         inputRest: z.schemeValue,
-        output: [z.error],
-      },
+        output: [z.error] },
       function (this: CallCtx, message, ...irritants) {
         const msg = message instanceof AString ? message.valueOf() : String(message);
         return new R7RSError(msg, ...irritants);
@@ -282,6 +238,4 @@ export default EnvCapability.define("scheme/r7rs/exceptions", {
                   ,@clauses
                   (else (raise ,var)))))))`,
         { macroAttribute: "binder" },
-      ),
-  }),
-});
+      ) }) });

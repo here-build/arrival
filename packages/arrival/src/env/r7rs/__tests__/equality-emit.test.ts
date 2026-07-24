@@ -21,7 +21,7 @@
 // exercise these through the REAL harvest + walker + render pipeline, unchanged.
 import { describe, expect, it } from "vitest";
 
-import type { AEntity } from "../../../common/symbol.js";
+import type { AEntity } from "../../../symbol/index.js";
 import type { EmitCtx } from "../../../emit/emit-rule.js";
 import { Binding, Bin, Call, Lit, Member, Ref, Un, type R } from "../../../emit/residual-lite.js";
 import equalityPack from "../equality.js";
@@ -62,8 +62,7 @@ function testCtx(over: Partial<EmitCtx<R>> = {}): EmitCtx<R> {
     door: (reason) => {
       throw new Error(reason);
     },
-    ...over,
-  };
+    ...over };
 }
 
 const ref = (name: string): R => Ref(Binding(name));
