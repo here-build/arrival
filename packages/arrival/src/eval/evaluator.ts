@@ -100,30 +100,23 @@ import {
   R7RSError,
   ResolvedNonValueError,
   SpecialFormShapeError,
-  type SourceLocation,
-} from "../errors.js";
-import { is_callable, is_expandable, is_false, is_function, is_macro, is_promise } from "./guards.js";
+  type SourceLocation } from "../errors.js";
+import { is_false } from "../values/value-guards.js";
+import { is_callable, is_expandable, is_macro, is_promise } from "./guards.js";
 import { is_applyable, is_lambda } from "../values/value-guards.js";
-import { applyCallback, ALambda, type CallResult } from "../values/primitives/ACallable.js";
-import { makeCallCtx, type CallCtx } from "../common/symbols/_bake.js";
+import { ALambda, type CallResult } from "../values/primitives/ACallable.js";
+import { makeCallCtx, type CallCtx } from "../run/CallCtx.js";
 import type { InvocationLike } from "../membrane/rosetta.js";
-// Runtime edge for the bare-fn boxing seam below — cycle-benign: rosetta.ts never
-// imports the evaluator (its evaluator-adjacent needs ride leaf modules).
-import { jsToScheme } from "../membrane/rosetta.js";
-import { maybeThen } from "../utils/promises.js";
 import {
   currentDynamicCallSite,
   setDynamicCallSite,
   withDynamicCallSite,
-  type Invocation,
-} from "./dynamic-call-site.js";
-// The retrospective-stream emission hook. Flag-gated
-// OFF by default; see provenance-hooks.ts's header for the full port-site rationale.
+  type Invocation } from "./dynamic-call-site.js";
+// Retrospective-stream emission hook (flag-gated OFF by default) —
+// see provenance-hooks.ts for the port-site rationale.
 import { notePotentialRosettaExit } from "./provenance-hooks.js";
-// The shared scheme-visible type-namer — the same helper syntax-rules.ts already
-// uses for its "expected pair got X" doors (`got ${type(node)}`). Reused here so
-// the not-callable doors below name the ACTUAL type (vector/string/number/dict/…)
-// instead of a raw `typeof`, which collapses every boxed value to "object".
+// Shared scheme-visible type-namer (same helper syntax-rules uses for doors) —
+// not-callable doors name the ACTUAL type instead of typeof → "object".
 import { type } from "../utils/typecheck.js";
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
@@ -137,18 +130,14 @@ import { AListAlike, type SchemeBounceMarker, type SchemeValue } from "../values
 import { ANil, nil } from "../values/primitives/ANil.js";
 import { AKernelKeyword } from "../values/AKernelKeyword.js";
 import { AString } from "../values/primitives/AString.js";
-// AJSObject here is ONLY the genuinely-foreign borrowed-JS wrapper face (notCallableError's
-// dict-shaped-borrow check below). The `{…}` dict-literal NODE face — its detection
-// (isDictLiteral) and the DictLiteralNode type — is ADict's own algebra.
+// AJSObject here is ONLY the foreign borrowed-JS wrapper face (notCallableError's
+// dict-shaped-borrow check). The `{…}` dict-literal NODE face is ADict's own algebra.
 import { AJSObject } from "../membrane/AJSObject.js";
 import { ADict, foldKeyName, isDictShaped, type DictKey } from "../values/primitives/ADict.js";
-// The reader's dict grammar — quasiquote re-instantiates READER literals, so the
-// evaluator legitimately reaches into the reader layer for the re-mint.
+// Quasiquote re-instantiates READER literals — evaluator reaches into the reader for re-mint.
 import { tf, TF_EXPAND } from "../values/tagless-final.js";
 
-// ============================================================================
-// Error Handling with Stack Traces
-// ============================================================================
+// ── Error Handling with Stack Traces ────────────────────────────────────────
 
 export interface StackFrame {
   code: SchemeValue;
@@ -158,56 +147,36 @@ export interface StackFrame {
   location?: SourceLocation;
 }
 
-// ============================================================================
-// Types
-// ============================================================================
-
-// `Invocation` — opaque tag for one dynamic evaluation of an AST node (the tap
-// implementation defines its shape; the evaluator only threads it through as the
-// parent of nested invocations), imported type-only from `./dynamic-call-site.js`.
+// ── Types ───────────────────────────────────────────────────────────────────
 
 /**
- * Tap callback surface for tracing evaluation. The evaluator fires `enter`
- * before evaluating a parsed Pair (one carrying a __location__ marker), and
- * `exit` when that Pair's evaluation completes — synchronously or after
- * arbitrary async work, with either a value or an error.
+ * Tap callback surface for tracing evaluation. Fires `enter` before evaluating
+ * a parsed Pair (one carrying a __location__ marker), and `exit` when that
+ * Pair's evaluation completes — sync or async, value or error.
  */
 export interface EvalTap {
   /**
-   * `tailPosition` surfaces the evaluator's ground-truth: this Pair is being
-   * evaluated in tail position (R7RS §3.5), so a call here is a tail call. The
-   * trace uses it to identify tail-recursive loops precisely — don't infer TCO
-   * from the flattened parent structure, read the flag the evaluator already
-   * computes for the trampoline. Optional for backward-compat with taps that
-   * don't care.
+   * `tailPosition` is the evaluator's ground-truth: this Pair is in tail
+   * position (R7RS §3.5). Read this flag — don't infer TCO from flattened
+   * parent structure. Optional for taps that don't care.
    */
   enter(node: AListAlike, parent: Invocation | null, tailPosition?: boolean): Invocation;
   /**
-   * Returning a value-shaped result substitutes the evaluator's outgoing value
-   * for the invocation. Used by provenance plumbing: the tap stamps the result
-   * with computed provenance and the substitution flows that stamp into the
-   * binding the evaluator is about to create.
-   *
-   * Why this matters: provenance is computed at exit time (it depends on
-   * children's provenance + symbolContributions accumulated during the call,
-   * neither of which exists at enter time). The tap stamps a NEW AValue
-   * carrying that provenance via `withProvenance`. Without substitution the
-   * evaluator continues with the original, un-stamped result, and the
-   * provenance never reaches the next env binding — so downstream
-   * `onSymbolResolved` reads empty provenance and lineage breaks at the
-   * (define greeting (car (infer …))) boundary. Tap-as-transformer is what
-   * lets a primitive-shaped binding inherit its producer's provenance.
+   * Returning a value-shaped result substitutes the outgoing value. Provenance
+   * is computed at exit time (depends on children's provenance +
+   * symbolContributions, neither of which exists at enter). Without substitution
+   * the evaluator continues with the un-stamped result and lineage breaks at
+   * the next env binding. Tap-as-transformer lets a primitive-shaped binding
+   * inherit its producer's provenance.
    */
   exit(
     invocation: Invocation,
     result: { value: SchemeValue } | { error: unknown },
   ): { value: SchemeValue } | { error: unknown } | void;
   /**
-   * Fired when a SchemeSymbol is resolved during evaluation, attributed to
-   * the currently-entered Pair invocation (or null if at top level). Useful
-   * for tracers that need symbol values in the lineage — symbol eval is the
-   * one path that doesn't fire enter/exit, so without this method the
-   * resolved value never reaches the tap.
+   * Fired when a SchemeSymbol is resolved, attributed to the currently-entered
+   * Pair invocation (or null at top level). Symbol eval is the one path that
+   * doesn't fire enter/exit — without this the resolved value never reaches the tap.
    */
   onSymbolResolved?(invocation: Invocation | null, symbol: ASymbol, value: SchemeValue): void;
 }
@@ -215,71 +184,50 @@ export interface EvalTap {
 /** Evaluation context passed through the evaluator */
 export interface EvalContext {
   /**
-   * The name-resolution + scope-construction facade — the SINGLE binding/resolution
-   * channel: the lexical {@link LexicalScope} chain plus the {@link Capabilities} base
-   * it falls through to, with `resolver.env` the underlying lexical frame
-   * ({@link AmbientRuntime} storage). Both exec entries and every frame the evaluator
-   * builds set it; the macro seam stages it through {@link MacroInvokeContext}. There
-   * is no coexisting `env` field — the frame env is reached ONLY as `resolver.env`.
-   * Optional because an external caller could still hand a bare `EvalContext`; the
-   * evaluator's own frame sites always set it.
+   * Name-resolution + scope-construction facade — the SINGLE binding/resolution
+   * channel: lexical {@link LexicalScope} chain plus {@link Capabilities} base,
+   * with `resolver.env` the underlying lexical frame. No coexisting `env` field —
+   * the frame env is reached ONLY as `resolver.env`. Optional because an external
+   * caller could hand a bare EvalContext; the evaluator's own frame sites always set it.
    */
   resolver?: Resolver;
   /** Optional tap for tracing evaluation enter/exit per parsed Pair. */
   tap?: EvalTap;
   /**
-   * Optional filter — when present, returning false skips tap firing for a node
-   * (atoms and macro-expansion-constructed Pairs are always skipped regardless).
+   * Optional filter — returning false skips tap firing (atoms and
+   * macro-expansion-constructed Pairs are always skipped regardless).
    */
   nodeFilter?: (node: AListAlike) => boolean;
   /** Current dynamic-stack invocation; sub-evaluations receive this as parent. */
   currentInvocation?: Invocation;
   /**
-   * Optional execution-budget signal. When `signal.aborted` becomes true the
-   * trampoline throws `signal.reason ?? DOMException("aborted", "AbortError")`
-   * at the next iteration boundary (the 1000-iter / 5ms TICK cadence in `run()`).
-   * Composes with Web APIs at
-   * the rosetta boundary: `fetch(url, { signal: ctx.signal })` becomes
-   * natural, so a single AbortController can cancel both Scheme execution
-   * and any in-flight host requests it spawned.
-   *
-   * Without this, `(define (loop) (loop))` runs forever — the 5ms yield
-   * gives the event loop room to breathe but does not bound CPU; sandbox
-   * code and agent-generated programs need an actual bound.
+   * Execution-budget signal. When aborted the trampoline throws
+   * `signal.reason ?? DOMException("aborted", "AbortError")` at the next
+   * iteration boundary (1000-iter / 5ms TICK cadence). Composes with Web APIs
+   * at the rosetta boundary: `fetch(url, { signal: ctx.signal })`. Without this,
+   * `(define (loop) (loop))` runs forever — the 5ms yield breathes the event
+   * loop but does not bound CPU.
    */
   signal?: AbortSignal;
   /**
-   * Tail-position flag (R7RS §3.5). True when this expression's value is the enclosing
-   * lambda/let body's value — a procedure call here is a tail call and must not grow the
-   * host stack. Structural propagation rule: preamble TAIL PROPAGATION. Read at
-   * evaluatePair to choose `{ call }` (push) vs `{ tailCall }` (replace slot) for a
-   * Scheme lambda.
+   * Tail-position flag (R7RS §3.5). True when this expression's value is the
+   * enclosing lambda/let body's value. Structural rule: preamble TAIL
+   * PROPAGATION. Read at evaluatePair to choose `{ call }` vs `{ tailCall }`.
    */
   tail?: boolean;
   /**
-   * Interpreter-level NIL-TOLERANCE mode (carried from `ExecOptions.strict`).
-   * When `true`, projection ops (`car`/`cdr` and friends) applied to `null`/nil
-   * THROW instead of resolving tolerantly to `nil`. Absent/`false` ⇒ TOLERANT,
-   * today's behavior. Propagated structurally like `tail` (the
-   * `{ ...ctx }` spreads carry it into every child context).
-   *
-   * Carried on `ctx.runCtx.strict`; numeric's loose comparators read it off the
-   * flat `this.runCtx`. Optional so the few `EvalContext` literals that omit the
-   * run-level options stay valid; the sole origin is `exec()` in generator-exec.ts.
+   * NIL-TOLERANCE mode (from ExecOptions.strict). When true, projection ops
+   * applied to null/nil THROW; absent/false ⇒ TOLERANT. Propagated structurally
+   * like `tail`. Carried on ctx.runCtx.strict. Optional so bare EvalContext
+   * literals stay valid; sole origin is exec() in generator-exec.ts.
    */
   strict?: boolean;
   /**
-   * The per-run context (minted by `exec()`; see `run/RunContext`). Carries
-   * hermetic run-state — strict mode, the heap meter — as DATA threaded through
-   * evaluation; the sole live channel for that state. Propagated structurally like
-   * `strict` (the `{ ...ctx }` spreads).
-   *
-   * REQUIRED: both mint sites (generator-exec.ts's `exec`/`execExpr`, via
-   * `new RunContext(...)`) always set it, and every derived `EvalContext` is a
-   * `{ ...ctx }` spread — so an absent `runCtx` could only mean a hand-built literal
-   * skipping the real run, never a legitimate state. Required rather than
-   * `ctx.runCtx ?? CONSTANT_CTX`-defaulted because that default silently drops the
-   * live run-state (strict/meter) on any path that forgets to thread ctx.
+   * Per-run context (minted by exec(); see run/RunContext). Hermetic run-state
+   * — strict mode, heap meter — as DATA. REQUIRED: both mint sites always set
+   * it, and every derived EvalContext is a `{ ...ctx }` spread. Required rather
+   * than `ctx.runCtx ?? CONSTANT_CTX` because that default silently drops live
+   * run-state on any path that forgets to thread ctx.
    */
   runCtx: RunContext;
 }
@@ -287,98 +235,69 @@ export interface EvalContext {
 /** Options for the trampoline runner (`run`). */
 interface RunOptions {
   /**
-   * Execution-budget signal; see `EvalContext.signal` for the cancellation rationale.
-   * Threaded as a runner option (not via the generator) because the
-   * trampoline lives outside any single `EvalContext` — generators created
-   * by sub-evaluations carry their own ctx, but the budget is per-run.
+   * Execution-budget signal; see EvalContext.signal. Threaded as a runner
+   * option because the trampoline lives outside any single EvalContext — budget
+   * is per-run.
    */
   signal?: AbortSignal;
   /**
-   * Wall-clock execution budget in milliseconds. When set, the trampoline
-   * starts a deadline at `performance.now() + budgetMs` and throws a
-   * `ArrivalError(/budget/)` once the deadline passes — checked at the SAME
-   * iteration boundary as the abort signal (the 1000-iter / 5ms TICK
-   * cadence), so it costs nothing on the hot path and bounds
-   * `(let loop () (loop))` to within one cadence unit.
-   *
-   * This is the "L0" host bound: an `AbortSignal` lets an EXTERNAL controller
-   * cancel (UI cancel button, parent `fetch` abort), but sandbox / agent code
-   * needs an INTERNAL bound that fires even when nobody is holding a
-   * controller. `budgetMs` is that bound — independent of, and composable
-   * with, `signal` (whichever fires first wins).
+   * Wall-clock execution budget (ms). Deadline at `performance.now() + budgetMs`;
+   * throws ArrivalError(/budget/) at the SAME TICK cadence as the abort signal.
+   * The "L0" host bound: AbortSignal lets an EXTERNAL controller cancel, but
+   * sandbox/agent code needs an INTERNAL bound that fires even when nobody holds
+   * a controller. Independent of, and composable with, signal.
    */
   budgetMs?: number;
 }
 
-// The dynamic call-site holder lives in `./dynamic-call-site.js` (imported above).
-// evaluatePair sets it just before invoking a callable; evalLambda / named-let read
-// it when building the body ctx, so a lambda body runs with the DYNAMIC parent
-// invocation (the call site), not the LEXICAL one captured at lambda-creation.
-// Without it, a native JS HOF (map/filter/reduce) iterating a user lambda would
-// give the body the lexical parent (the enclosing define), severing the parent
-// chain at the HOF boundary — DNF path reconstruction needs the call-site parent
-// to surface HOF iteration via parent-walking.
+// Dynamic call-site holder: evaluatePair sets it just before invoking a callable;
+// evalLambda / named-let read it when building the body ctx, so a lambda body runs
+// with the DYNAMIC parent (the call site), not the LEXICAL one captured at creation.
+// Without it, a native JS HOF iterating a user lambda severs the parent chain at the
+// HOF boundary — DNF path reconstruction needs the call-site parent.
 
 /**
  * Run-scoped CURRENT RESOLVER, set to `ctxResolver(ctx)` at the apply boundary
- * alongside `_dynamicCallSite` (saved + restored in the surrounding finally). Two
- * readers: (1) the rosetta MEMBRANE's env back-channel (`currentRunEnv()` =
- * `.env`, the resolver's lexical frame) — a rosetta impl running under a ctx-less
- * `apply` (llm-plane-arrival-env/prompt.ts) reads it to evaluate an `s/…` schema
- * DSL and reach the infer capability; (2) `(require …)`'s module-eval seam
- * (`currentRunResolver()`), which needs the WHOLE composed resolver — under the
- * cut, builtins live on the capability base, not the lexical frame's `__parent__`
- * chain. `runCtx` cannot supply either — it carries run-CONSTANT data, not an
- * env/resolver. TODO(ctx-elimination): the heap-meter used to ride the operand's ctx
- * (`operand.ctx.heapMeter`) — AValue no longer carries one at all (see AValue.ts's
- * ctx-removal note); this holder is not that either.
+ * alongside the dynamic call site (saved + restored in the surrounding finally).
+ * Two readers: (1) the rosetta MEMBRANE's env back-channel (`currentRunEnv()` =
+ * `.env`); (2) `(require …)`'s module-eval seam (`currentRunResolver()`), which
+ * needs the WHOLE composed resolver — under the cut, builtins live on the
+ * capability base, not the lexical frame's `__parent__` chain. runCtx cannot
+ * supply either — it carries run-CONSTANT data, not an env/resolver.
  *
- * Why module-level: readers are variadic / HOF builtins (`filter`/`join`/`reverse`/
- * `apply`, and `to_array` reached through them) whose arity a trailing `ctx` would
- * corrupt. Single-threaded JS makes the holder safe; nesting is handled by the
- * save/restore. The meter is found by walking `__parent__` from this env, so a
- * child-frame env still resolves the run's installed meter.
+ * Module-level because readers are variadic / HOF builtins whose arity a trailing
+ * `ctx` would corrupt. Single-threaded JS makes the holder safe; nesting is
+ * save/restore. The meter is found by walking `__parent__` from this env.
  */
 declare global {
   // eslint-disable-next-line no-var
   var __arrivalRunResolver: Resolver | undefined;
 }
-// PROCESS-GLOBAL, not module-local: a bundler can load evaluator.ts twice (Vite dev
-// serves it raw via /@fs AND prebundles a second copy inside
-// `.vite/deps/@here__build_arrival-chain.js`; esbuild/wrangler can dup across
-// subpaths), giving each copy its own holder — then `exec` (one copy) publishes the
-// resolver into ITS holder while the `(require …)` verb (the other copy, via
-// loader.ts's `currentRunResolver`) reads an empty one and doors with "no run
-// resolver reachable". Pinning it on `globalThis` shares one holder across copies;
-// single-threaded JS keeps the save/restore nesting safe.
+// PROCESS-GLOBAL, not module-local: a bundler can load evaluator.ts twice (Vite
+// serves raw via /@fs AND prebundles a second copy; esbuild/wrangler can dup across
+// subpaths). exec publishes into one copy while require's currentRunResolver reads
+// the other → "no run resolver reachable". globalThis shares one holder.
+// Single-threaded JS keeps save/restore nesting safe.
 
-/** The run's current env at apply time — the published resolver's lexical frame.
- *  Read by `to_array`'s heap-meter lookup (env/pack-helpers.ts) in place of the
- *  erased env-as-`this`. */
+/** Run's current env at apply time — the published resolver's lexical frame.
+ *  Read by to_array's heap-meter lookup (env/pack-helpers.ts). */
 export const currentRunEnv = (): AmbientRuntime | undefined => globalThis.__arrivalRunResolver?.env;
 
 /**
- * The run's current COMPOSED resolver at apply time — the same save/restore holder
- * as {@link currentRunEnv}, publishing the whole `Resolver` instead of only its
- * lexical frame. Needed by `(require …)` (src/loader/): a required module's forms
- * must evaluate through the SAME scope+capability composition as the requiring
- * program. Under the cut the lexical frame is null-rooted and builtins live on the
- * resolver's capability base — an env-only back-channel loses that half, so a
- * module rebuilt from `currentRunEnv()` alone could not see the stdlib
- * (`string-append` unbound). Glass callers see a resolver whose scope and
- * capabilities wrap the same base-linked env — byte-identical resolution.
+ * Run's current COMPOSED resolver at apply time — same save/restore holder as
+ * {@link currentRunEnv}, publishing the whole Resolver. Needed by `(require …)`:
+ * a required module's forms must evaluate through the SAME scope+capability
+ * composition. Under the cut the lexical frame is null-rooted and builtins live
+ * on the capability base — an env-only back-channel loses that half.
  */
 export const currentRunResolver = (): Resolver | undefined => globalThis.__arrivalRunResolver;
 
 /**
- * Re-install `_dynamicCallSite` on every invocation of a lambda VALUE passed as
- * an arg. Native HOFs like reduce/fold/find recurse via promise chains
- * (`maybeThen(fn(acc, x)).then(recurse)` in env/srfi/srfi-1.ts's HOFs), so iteration
- * N+1 fires from a microtask AFTER the outer evaluatePair's finally has
- * restored the holder. Without per-call re-install, the lambda body for
- * iteration ≥1 would inherit the WRONG dynamic parent.
- *
- * Every lambda-shaped argument reaching here is a real `ALambda` value.
+ * Re-install the dynamic call site on every invocation of a lambda VALUE passed
+ * as an arg. Native HOFs (reduce/fold/find) recurse via promise chains, so
+ * iteration N+1 fires from a microtask AFTER the outer evaluatePair's finally
+ * restored the holder. Without per-call re-install, iteration ≥1 inherits the
+ * WRONG dynamic parent.
  */
 function wrapLambdaArgs(args: SchemeValue[], dynSite: Invocation | undefined): SchemeValue[] {
   let out: SchemeValue[] | null = null;
@@ -392,82 +311,54 @@ function wrapLambdaArgs(args: SchemeValue[], dynSite: Invocation | undefined): S
   return out ?? args;
 }
 
-/** Re-install `_dynamicCallSite` on each invocation of a lambda VALUE passed as a HOF arg.
- *  Delegates to the original's apply term (its runner is private) inside
- *  {@link withDynamicCallSite}; the holder is read in the runner's synchronous prologue, so
- *  the finally-restore never races the bounced body. */
+/** Re-install dynamic call site on each HOF-arg lambda invocation. Delegates to
+ *  the original's apply term inside {@link withDynamicCallSite}; the holder is
+ *  read in the runner's synchronous prologue, so the finally-restore never races
+ *  the bounced body. */
 function wrapLambdaValue(lambda: ALambda, dynSite: Invocation | undefined): ALambda {
   const wrapped = new ALambda({
     name: lambda.name,
     arity: lambda.arity,
     scope: lambda.scope,
     runner: (values, callCtx, canBounce) =>
-      withDynamicCallSite(dynSite, () => lambda[tf("apply")](values, callCtx, canBounce)),
-  });
+      withDynamicCallSite(dynSite, () => lambda[tf("apply")](values, callCtx, canBounce)) });
   wrapped.__name__ = lambda.__name__;
   wrapped.__params__ = lambda.__params__;
   return wrapped;
 }
 
-/**
- * A bare JS function value reaching the evaluator's define-naming step. Its one
- * producer is the legacy `env.defineRosetta` authoring arm (capability.ts), which
- * binds a bare host function into value space; `(define name <expr>)` evaluating to
- * one still wants its `__name__`/`__params__` stamped for debugging. Every
- * scheme-authored lambda is a real `ALambda`, not this shape.
- */
-interface NameableFunction {
-  __name__?: string;
-  /**
-   * Positional parameter names captured at lambda creation. Empty for
-   * variadic-only lambdas. Used by tracers to correlate a symbol use inside
-   * the body with the lambda parameter it binds — see arrival-chain
-   * lineage's iteration-element classification.
-   */
-  __params__?: readonly string[];
-
-  (...args: SchemeValue[]): SchemeValue | Bounce | Promise<SchemeValue>;
-}
-
-/** Interface for macro expansion result */
 interface DataMarked {
   [DATA]?: boolean;
 }
 
-/** Type guard for DataMarked objects */
 function is_data_marked(o: unknown): o is DataMarked {
   if (o === null || typeof o !== "object") return false;
-  // The data mark is the `__data__` SYMBOL (Symbol.for("__data__")), set by quote() —
-  // check it by symbol, not a `"__data__" in o` string key. A normal `(quote x)` hits
-  // evalQuote and skips this macro path, but a hygiene-gensym'd `#:quote` resolves to the
-  // quote Macro and DOES take it; a string-key miss would re-evaluate quoted data inside
-  // syntax-rules expansions.
+  // Data mark is the `__data__` SYMBOL (Symbol.for("__data__")), set by quote() —
+  // check by symbol, not a string key. A hygiene-gensym'd `#:quote` resolves to the
+  // quote Macro and takes this path; a string-key miss would re-evaluate quoted
+  // data inside syntax-rules expansions.
   return (o as Record<symbol, unknown>)[DATA] === true;
 }
 
-/** A nameable callable — a legacy bare fn (the quarantined `env.defineRosetta` arm) OR an
- *  ALambda value. Both carry a mutable `__name__` the define-naming step stamps. */
-function is_lambda_function(o: unknown): o is NameableFunction | ALambda {
-  return typeof o === "function" || o instanceof ALambda;
+/** Nameable callable — ALambda whose mutable `__name__` the define-naming step stamps. */
+function is_lambda_function(o: unknown): o is ALambda {
+  return o instanceof ALambda;
 }
 
 /** The evaluator generator type - third param is what yield returns */
 export type EvalGenerator = Generator<unknown, SchemeValue, SchemeValue>;
 
 /**
- * `evaluate`'s return widens `EvalGenerator`'s to also admit a `Macro`/`Syntax`:
- * evaluating a bare symbol can resolve a transformer object — the `define-syntax`
- * mechanism expands to `(define name (let ((g <transformer>)) (typecheck …) g))`,
- * so the `let`-body evaluates the gensym `g`, resolves a `Syntax`, and returns it
- * to be bound. Only the terminal return widens; the yield-send type stays
- * `SchemeValue`, so the trampoline `{ call }` consumers (the inner `let`/`define`
- * eval) receive it as `SchemeValue` and the expander never escapes the value
- * union through them. A direct `run(evaluate(...))` sees the wider value and
- * seals it back with `expectValue` (a run/top-level result is never a bare
- * expander — that would be a structural error).
+ * `evaluate`'s return widens EvalGenerator to also admit Macro/Syntax:
+ * evaluating a bare symbol can resolve a transformer — define-syntax expands to
+ * `(define name (let ((g <transformer>)) (typecheck …) g))`, so the let-body
+ * resolves a Syntax and returns it to be bound. Only the terminal return widens;
+ * yield-send stays SchemeValue so trampoline consumers never see an expander
+ * escape through them. A direct `run(evaluate(...))` seals with expectValue
+ * (a run/top-level result is never a bare expander).
  */
 
-/** Symbol to mark a yield as "need to check time" vs "await this promise" */
+/** Yield marker: "need to check time" vs "await this promise" */
 const TICK = Symbol("tick");
 
 /** Marker for sub-generator calls (flat trampoline) */
@@ -476,39 +367,29 @@ interface Call {
   /** Optional stack frame for error reporting */
   frame?: StackFrame;
   /**
-   * Fired by the trampoline when the sub-generator returns normally.
-   * Returning a value substitutes the outgoing result (the trampoline uses
-   * the returned value as `valueToSend` to the parent generator). Returning
-   * `undefined` is the "no substitution" signal — taps cannot substitute
-   * with undefined, which is fine since undefined isn't a meaningful Scheme
-   * value to thread through a binding. See `EvalTap.exit` for the war
-   * story on why tap-as-transformer is load-bearing for provenance.
+   * Fired when the sub-generator returns normally. Returning a value
+   * substitutes the outgoing result as valueToSend; `undefined` means no
+   * substitution. See EvalTap.exit for why tap-as-transformer is load-bearing
+   * for provenance.
    */
   onResolve?: (value: unknown) => unknown | undefined;
   /**
-   * Fired by the trampoline when the sub-generator (or its descendants)
-   * throws. The return type mirrors `onResolve` for shape symmetry, but the
-   * rejection path doesn't currently use the substitution; v0 only needs
-   * the resolved-value transformer to close the lineage gap.
+   * Fired when the sub-generator (or its descendants) throws. Shape-symmetric
+   * with onResolve; the rejection path does not use substitution — only the
+   * resolved-value transformer closes the lineage gap.
    */
   onReject?: (error: unknown) => unknown | undefined;
   /**
    * Tail-position marker (R7RS §3.5). True when the YIELDING generator does
-   * nothing but return this sub-call's result (a local pass-through —
-   * `return yield { call }`, modulo `onResolve`). The trampoline COLLAPSES
-   * the chain when a tail call bubbles up: it pops all consecutive
-   * `tail: true` slots down to the first slot that does real work after its
-   * child returns (an argument collector, a predicate eval, a binding RHS —
-   * none of those are marked tail). The popped slots' `onResolve`/`onReject`
-   * hooks compose onto the replacement slot so taps stay enter/exit balanced
-   * and provenance transforms still fire when the tail chain returns.
+   * nothing but return this sub-call's result (pass-through). The trampoline
+   * COLLAPSES the chain: pops all consecutive `tail: true` slots down to the
+   * first slot that does real work (argument collector, predicate, binding
+   * RHS). Popped slots' onResolve/onReject compose onto the replacement so
+   * taps stay balanced and provenance transforms still fire.
    *
-   * Required for O(1) space: a lambda body that tail-calls itself sits under
-   * a fixed-depth tower of pass-through slots (begin → if → evaluate →
-   * evaluatePair). Without collapse, each recursion stacks a fresh tower and
-   * `stack[]` grows O(depth) — replacing only the innermost slot per
-   * recursion OOMs at shallow depth. Collapsing the whole tower per
-   * iteration keeps `stack[]` bounded.
+   * Required for O(1) space: a self-tail-calling lambda body sits under a
+   * fixed-depth tower of pass-through slots. Without collapse, stack[] grows
+   * O(depth) and OOMs at shallow depth.
    */
   tail?: boolean;
 }
@@ -518,24 +399,19 @@ function is_call(o: unknown): o is Call {
 }
 
 /**
- * Marker for tail calls — yielded by evaluatePair when a Scheme-to-Scheme
- * call lands in tail position (R7RS §3.5). The trampoline REPLACES the
- * current slot with the callee generator instead of stacking it: a tail
- * call returns IN PLACE OF the caller, not through it — this is what keeps
- * the stack budget flat across recursion.
+ * Marker for tail calls — yielded by evaluatePair when a Scheme-to-Scheme call
+ * lands in tail position (R7RS §3.5). The trampoline REPLACES the current slot
+ * with the callee generator: a tail call returns IN PLACE OF the caller — this
+ * keeps the stack budget flat across recursion.
  *
- * Data flow: the popped slot's `onResolve`/`onReject` move to the new slot,
- * so when the tail body eventually returns/throws, the ORIGINAL consumer
- * (the caller's caller) still sees the value/error via the same hook a
- * normal sub-call would have fired. Without this transfer the tap-
- * substitution chain breaks every tail-recursive step and provenance
- * stamping disappears for values flowing through a tight loop.
+ * Data flow: the popped slot's onResolve/onReject move to the new slot so the
+ * ORIGINAL consumer still sees the value/error. Without this transfer, the
+ * tap-substitution chain breaks every tail-recursive step and provenance
+ * stamping disappears for values in a tight loop.
  *
- * Frame stack: the popped slot's frame goes away (it's done, by definition,
- * once it tail-calls); the new frame represents the calling Pair (e.g.
- * `(loop n)`) so the stack trace still names who initiated the dispatch.
- * `EvalTap.exit` fires on the popped frame BEFORE the new one is pushed —
- * lineage stays intact via the popped slot's invocation stamp.
+ * Frame stack: the popped slot's frame goes away; the new frame represents the
+ * calling Pair so the stack trace still names who initiated the dispatch.
+ * EvalTap.exit fires on the popped frame BEFORE the new one is pushed.
  */
 interface TailCall {
   tailCall: {
@@ -550,13 +426,12 @@ function is_tailCall(o: unknown): o is TailCall {
 }
 
 /**
- * Sentinel returned by a Scheme lambda's runner when the `canBounce` apply-term
- * argument was true at invocation time — i.e. when the calling evaluatePair speaks
- * the bounce protocol and is willing to route the body generator back into
- * the active trampoline. Bypasses the `run(evalBegin(body, ctx))` path that
- * would otherwise mint a fresh Promise and grow the host stack one await
- * per recursive call. HOF callbacks invoke through `applyCallback`, which always
- * passes `canBounce=false`, so they never see this token.
+ * Sentinel returned by a Scheme lambda's runner when `canBounce` was true —
+ * the calling evaluatePair speaks the bounce protocol and routes the body
+ * generator back into the active trampoline. Bypasses `run(evalBegin(body))`
+ * which would mint a fresh Promise and grow the host stack one await per
+ * recursive call. HOF callbacks use applyCallback with canBounce=false, so
+ * they never see this token.
  */
 interface Bounce extends SchemeBounceMarker {
   generator: Generator<unknown, unknown, unknown>;
@@ -566,54 +441,29 @@ function is_bounce(o: unknown): o is Bounce {
   return o !== null && typeof o === "object" && (o as { __bounce?: unknown }).__bounce === true;
 }
 
-/**
- * Brand-only bounce check, narrowing to `SchemeBounceMarker` (no `generator`).
- * Used where a value-typed callable's return surfaces the union's bounce arm
- * (`SchemeBounceMarker`) rather than the local `Bounce`: negating `is_bounce`
- * (a `Bounce` guard) can't remove the structurally-wider marker, so a value
- * boundary that must rule the bounce out narrows on the brand instead.
- */
-function is_bounce_marker(o: unknown): o is SchemeBounceMarker {
-  return o !== null && typeof o === "object" && (o as { __bounce?: unknown }).__bounce === true;
-}
-
-/**
- * Wrap a lambda body generator as a Bounce token. Used by evalLambda's and
- * named-let's ALambda runners when the `canBounce` apply-term argument is
- * true — see Bounce's doc comment for the invariants this preserves.
- */
+/** Wrap a lambda body generator as a Bounce token (evalLambda / named-let runners). */
 function makeBounce(generator: Generator<unknown, unknown, unknown>): Bounce {
   return { __bounce: true, generator };
 }
 
 /**
- * Narrow a resolved environment binding to what the evaluator can carry: a value,
- * or a `Macro`/`Syntax` expander.
+ * Narrow a resolved environment binding to what the evaluator can carry: a
+ * value, or a Macro/Syntax expander.
  *
- * `Resolver.resolve`/`lookup` return an `AmbientValue | undefined`. Three of
- * those members can never be carried by the evaluator and are thrown with a clear
- * message: an unbound name (`undefined`), an `AmbientRuntime` (a scope is neither a
- * value nor an operator), and a `RegExp` (internal-only — number-parsing and
- * syntax-rules patterns — never resolved as a binding). What remains is a value
- * (`SchemeValue`, which includes a `AProcedure` procedure) OR a `Macro`/`Syntax`.
+ * Resolver.resolve/lookup return AmbientValue | undefined. Three members can
+ * never be carried and throw: unbound (`undefined`), AmbientRuntime (a scope is
+ * neither value nor operator), and RegExp (internal-only — never a binding).
+ * What remains is SchemeValue OR Macro/Syntax.
  *
- * A `Macro`/`Syntax` is admitted on BOTH the operator and the value path: at a
- * call head it is the operator (`(my-macro …)`, split downstream by `is_macro`);
- * in value position it is the expander object itself — `define-syntax` expands to
- * `(define name (let ((g <transformer>)) (typecheck …) g))`, so evaluating the
- * gensym `g` resolves a `Syntax` and returns it to be bound. So this is not the
- * decision's "macro referenced as a value is an error" case — it is the mechanism
- * by which a macro binding is installed. Callers split value vs expander with
- * `is_macro` where they care (the value-channel tap skips an expander).
+ * Macro/Syntax is admitted on BOTH the operator path (call head, split by
+ * is_macro) and the value path (define-syntax installs by returning a resolved
+ * Syntax from a let-body). Callers split value vs expander with is_macro where
+ * they care.
  */
 function resolvedBindingOrThrow(binding: AmbientValue | undefined, sym: ASymbol): SchemeValue | Macro | Syntax {
   if (binding === undefined) {
-    // Structurally unreachable via the ordinary `Resolver.resolve` call path (it
-    // throws `unboundVariableError` itself before ever returning `undefined` —
-    // see `eval/Resolver.ts#resolveSynth`), but kept as a defensive throw for any
-    // other caller of this narrowing fn. No vocabulary passed — this branch has no
-    // resolver in reach, so it stays the plain wall (suggestions live at the real
-    // throw sites, which enumerate the chain they actually missed against).
+    // Unreachable via ordinary Resolver.resolve (throws unboundVariableError
+    // itself) — defensive throw for any other caller of this narrowing fn.
     throw unboundVariableError(symbol_name(sym));
   }
   if (isAmbientRuntime(binding)) {
@@ -626,13 +476,11 @@ function resolvedBindingOrThrow(binding: AmbientValue | undefined, sym: ASymbol)
 }
 
 /**
- * Seal an `evaluate` result back to a `SchemeValue` at a boundary where a
- * `Macro`/`Syntax` cannot legitimately appear. `evaluate`'s return admits a bare
- * expander only as the internal `define-syntax` mechanism (its `let`-body returns
- * a resolved transformer); that flow is always consumed through the trampoline
- * yield channel and immediately bound. A top-level / `run(evaluate(...))` result
- * is never a bare expander, so an expander here is a structural error — throw
- * rather than leak a non-value into the value surface.
+ * Seal an evaluate result back to SchemeValue at a boundary where Macro/Syntax
+ * cannot legitimately appear. evaluate admits a bare expander only as the
+ * internal define-syntax mechanism (consumed through the trampoline yield and
+ * immediately bound). A top-level / run(evaluate(...)) result is never a bare
+ * expander — throw rather than leak a non-value.
  */
 export function expectValue(result: SchemeValue | Macro | Syntax): SchemeValue {
   if (is_macro(result)) {
@@ -641,31 +489,22 @@ export function expectValue(result: SchemeValue | Macro | Syntax): SchemeValue {
   return result;
 }
 
-// ============================================================================
-// Symbol name extraction
-// ============================================================================
+// ── Symbol name extraction ──────────────────────────────────────────────────
 
 function symbol_name(sym: ASymbol): string {
   const name = sym.__name__;
   return typeof name === "symbol" ? name.description || "" : name;
 }
 
-// ============================================================================
-// AmbientRuntime lookup without lips runtime dependency
-// ============================================================================
-//
-// Name-resolution is the Resolver's job (eval/Resolver.ts owns the throwing,
-// synth-aware `env_get` lookup + its `c[ad]+r` unfold). Every evaluator lookup
-// goes through `ctxResolver(ctx).resolve`/`.lookup`, which bottoms out in
-// `env_get` over the wrapped, base-linked env.
+// Name-resolution is the Resolver's job (Resolver.ts owns the throwing,
+// synth-aware env_get + c[ad]+r unfold). Every evaluator lookup goes through
+// ctxResolver(ctx).resolve/.lookup.
 
 /**
- * The ctx's resolver — the evaluator's sole name-resolution + frame-construction
- * channel (there is no coexisting `EvalContext.env`; the resolver IS the env,
- * reached as `resolver.env`). Both exec entries and every frame the evaluator
- * builds set it, so it is present at every evaluation boundary; the invariant
- * catches a malformed bare `EvalContext` from an external caller LOUD rather
- * than NPEing on a later `.scope`/`.env` read.
+ * The ctx's resolver — sole name-resolution + frame-construction channel
+ * (no coexisting EvalContext.env; the resolver IS the env, as resolver.env).
+ * Present at every evaluation boundary; the invariant catches a malformed bare
+ * EvalContext LOUD rather than NPEing later.
  */
 function ctxResolver(ctx: EvalContext): Resolver {
   invariant(ctx.resolver, "EvalContext.resolver is required (set by exec / every frame site)");
@@ -673,35 +512,22 @@ function ctxResolver(ctx: EvalContext): Resolver {
 }
 
 /**
- * Race a host promise (a JS-interop / rosetta tool-call return the trampoline
- * awaits at its `is_promise(value)` branch) against an AbortSignal, so a PARKED
- * await becomes abort-aware.
+ * Race a host promise (JS-interop / rosetta return the trampoline awaits) against
+ * an AbortSignal, so a PARKED await becomes abort-aware.
  *
- * WHY this is needed on top of the TICK-boundary abort check (run's TICK branch,
- * below): that check only fires while the trampoline is actively STEPPING. While
- * parked on a raw `await value` — a rosetta tool call to a stuck upstream that
- * never resolves — nothing ticks, so `signal.aborted` is never read and the run
- * hangs until the host promise settles on its own. The outer wall-clock race a
- * caller may layer on top (arrival-manifold's manifold-tool.ts) can `abort()`
- * the signal on time, but that only unsticks THIS await if the await itself
- * observes the signal. This makes it observe it, at the ONE choke point every
- * host promise funnels through, regardless of whether the specific host
- * operation honors the signal.
+ * WHY on top of the TICK-boundary abort check: that check only fires while the
+ * trampoline is STEPPING. While parked on a raw await — a stuck upstream — nothing
+ * ticks, so signal.aborted is never read. This observes the signal at the ONE
+ * choke point every host promise funnels through.
  *
- * This does NOT cancel the underlying host operation — it only returns control to the
- * trampoline, which throws the abort reason and unwinds. Cancelling the upstream must be
- * wired at the operation itself (`fetch(url, { signal })`, or the MCP SDK's
- * `client.callTool(params, schema, { signal })`); arrival-manifold forwards this exact
- * signal there (bind.ts's `rosettaDef` → `RemoteTool.invoke`; server.ts's `toBoundServer`
- * → `client.callTool`), so an aborted eval tells a real upstream MCP server to stop. An
- * operation that accepts no signal (or a ctx-less direct-JS caller) is merely abandoned —
- * its eventual settlement is swallowed (the inline `.then` keeps a rejection handler) so it
- * never surfaces as an unhandled rejection.
+ * Does NOT cancel the underlying host operation — only returns control to the
+ * trampoline. Cancelling the upstream must be wired at the operation itself
+ * (`fetch(url, { signal })`, MCP SDK callTool with signal). An operation that
+ * accepts no signal is merely abandoned — its eventual settlement is swallowed
+ * so it never surfaces as an unhandled rejection.
  */
 export function raceAbort<T>(value: PromiseLike<T>, signal: AbortSignal): Promise<T> {
-  // Already aborted: an `addEventListener("abort", …)` would never fire (the event
-  // already dispatched), so reject now — and still attach a swallow handler so the
-  // abandoned host promise's later settlement is never an unhandled rejection.
+  // Already aborted: addEventListener would never fire — reject now, swallow later settlement.
   if (signal.aborted) {
     void Promise.resolve(value).catch(() => {});
     return Promise.reject(signal.reason ?? new DOMException("aborted", "AbortError"));
@@ -709,11 +535,8 @@ export function raceAbort<T>(value: PromiseLike<T>, signal: AbortSignal): Promis
   return new Promise<T>((resolve, reject) => {
     const onAbort = (): void => reject(signal.reason ?? new DOMException("aborted", "AbortError"));
     signal.addEventListener("abort", onAbort, { once: true });
-    // The two-handler `.then` both settles the race on the happy path AND keeps a
-    // rejection handler attached to `value` for the abort-loser path, so an
-    // abandoned host promise that later rejects is swallowed here (never
-    // unhandled). removeEventListener is idempotent — `once: true` already removed
-    // the listener if abort won; it actively removes it if `value` won.
+    // Two-handler .then settles the race AND keeps a rejection handler for the
+    // abort-loser path, so an abandoned host promise that later rejects is swallowed.
     Promise.resolve(value).then(
       (v) => {
         signal.removeEventListener("abort", onAbort);
@@ -727,25 +550,19 @@ export function raceAbort<T>(value: PromiseLike<T>, signal: AbortSignal): Promis
   });
 }
 
-// A non-Error scheme value thrown (raw `raise`/`%raise`, R7RS §6.11 — ANY object is a
-// valid raised value) gets stringified into an `ArrivalError` by `failAndWrap` below
-// (`ArrivalError.cause` is typed `Error` — errors.ts — so a SchemeValue can't ride there).
-// This module-level side channel preserves the ORIGINAL raised value, keyed by the wrapper
-// instance, so `evalTry`'s catch/guard binding can recover the real object instead of a
-// printed re-presentation of it. Module-level (not per-`run()`-call) because `evalTry` reads
-// it from a DIFFERENT function than the one that populates it; a WeakMap so a never-caught
-// wrapper's raised value doesn't outlive it.
+// Non-Error scheme value thrown (raw raise/%raise, R7RS §6.11 — ANY object is
+// valid) gets stringified into ArrivalError by failAndWrap (cause is typed Error).
+// This side channel preserves the ORIGINAL raised value, keyed by the wrapper,
+// so evalTry's catch/guard can recover the real object. WeakMap so a never-caught
+// wrapper's value doesn't outlive it.
 const rawRaisedValues = new WeakMap<ArrivalError, SchemeValue>();
 
-/** The generic wrap `failAndWrap` mints for any throw that wasn't already an
- *  `ArrivalError` — a raw non-Error raised value (R7RS `raise` accepts ANY object),
- *  a foreign host Error, or a tiny-invariant throw. `"arrival/error-category"`
- *  forwards from `cause` when it's already self-classifying (an R7RS `(error …)`
- *  raise: `cause instanceof R7RSError` ⇒ `"user-error"`), else `"other"` — the
- *  same cause-forwarding shape as `ArrivalError`'s own `get stack()` above. */
+/** Generic wrap failAndWrap mints for any throw that wasn't already an
+ *  ArrivalError — raw non-Error raised value, foreign host Error, or
+ *  tiny-invariant throw. error-category forwards from cause when self-classifying
+ *  (R7RSError ⇒ "user-error"), else "other". */
 class ForeignThrowError extends ArrivalError {
-  // Interop boundary: covered by the nominal `instanceof ArrivalError` family rule
-  // in interop-access.ts — no per-class stamp needed.
+  // Covered by the nominal instanceof ArrivalError family rule — no per-class stamp.
   public readonly name = "ForeignThrowError";
   readonly "arrival/error-category": ErrorClass;
 
@@ -755,48 +572,41 @@ class ForeignThrowError extends ArrivalError {
   }
 }
 
-// ============================================================================
-// Flat Trampoline Runner
-// ============================================================================
+// ── Flat Trampoline Runner ──────────────────────────────────────────────────
 
 /**
- * Drive a generator-based evaluator to completion on the FLAT TRAMPOLINE (preamble):
- * an explicit generator stack (no host-stack growth), awaiting yielded promises,
- * yielding to the event loop every ~5ms, tracking frames for error reporting, and
- * honoring the optional AbortSignal / budget at TICK boundaries.
+ * Drive a generator-based evaluator to completion on the FLAT TRAMPOLINE
+ * (preamble): explicit generator stack (no host-stack growth), await yielded
+ * promises, yield to the event loop every ~5ms, track frames, honor AbortSignal
+ * / budget at TICK boundaries.
  */
 async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOptions = {}): Promise<T> {
   const { signal, budgetMs } = options;
 
-  // Fast-fail: if the caller passed an already-aborted signal, refuse
-  // before allocating the trampoline state. Mirrors fetch() semantics.
+  // Fast-fail already-aborted signal before allocating trampoline state.
   if (signal?.aborted) {
     throw signal.reason ?? new DOMException("aborted", "AbortError");
   }
 
-  // Wall-clock deadline. `undefined` when no budget was requested, so the
-  // per-TICK comparison short-circuits to a single `!== undefined` check.
-  // A non-positive budget means "already expired" — refuse on entry, the
-  // budget analogue of the pre-aborted-signal fast path above.
+  // Wall-clock deadline. undefined when no budget; non-positive ⇒ already expired.
   const deadline = budgetMs === undefined ? undefined : performance.now() + budgetMs;
   if (deadline !== undefined && budgetMs! <= 0) {
     throw new BudgetExceededError(`execution budget exceeded (${budgetMs}ms)`, []);
   }
 
-  // Stack of generators - this is the key to flat trampolining
+  // Explicit generator stack — the key to flat trampolining
   const stack: Generator<unknown, unknown, unknown>[] = [generator];
-  // Stack frames for error reporting (parallel to generator stack)
+  // Parallel stack frames for error reporting
   const frameStack: (StackFrame | undefined)[] = [undefined];
-  // Calls that pushed each generator (root has none). Carries onResolve/onReject hooks.
+  // Calls that pushed each generator (root has none). Carries onResolve/onReject.
   const callStack: (Call | undefined)[] = [undefined];
   let lastYield = performance.now();
   let iterations = 0;
   let valueToSend: unknown = undefined;
 
-  // Fire onReject up the call stack so any tap subscribers see the error,
-  // then build the wrapped ArrivalError to throw out of run().
+  // Fire onReject up the call stack, then wrap into ArrivalError.
   const failAndWrap = (error: unknown): never => {
-    // Snapshot stack frames BEFORE popping so ArrivalError carries the trace.
+    // Snapshot frames BEFORE popping so ArrivalError carries the trace.
     const frames = frameStack.filter((f): f is StackFrame => f !== undefined);
     while (callStack.length > 0) {
       const c = callStack.pop();
@@ -805,25 +615,20 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
       try {
         c?.onReject?.(error);
       } catch {
-        // Swallow tap exceptions — they must not mask the real error.
+        // Swallow tap exceptions — must not mask the real error.
       }
     }
     if (error instanceof ArrivalError) throw error;
     if (!(error instanceof Error)) {
-      // R7RS `raise` accepts ANY scheme object (§6.11) — a native throw of a raw, non-Error
-      // value (e.g. `%raise` throwing a boxed APair) arrives here. `ArrivalError.cause` is
-      // typed `Error` (errors.ts), so the original SchemeValue can't ride there directly —
-      // stash it in the side channel below, keyed by the wrapper instance, so a `guard`/
-      // `catch` upstream (evalTry) can recover the ORIGINAL raised value instead of this
-      // stringified re-presentation (see rawRaisedValues' own doc comment).
+      // R7RS raise accepts ANY scheme object (§6.11). ArrivalError.cause is
+      // typed Error — stash the original in the side channel so guard/catch
+      // (evalTry) recovers the real raised value, not a stringified re-presentation.
       const wrapped = new ForeignThrowError(String(error), frames, undefined);
       rawRaisedValues.set(wrapped, error as SchemeValue);
       throw wrapped;
     }
-    // A raw host-runtime throw is an INTERNAL defect (a native impl that skipped its
-    // contract), not a user error. Name the innermost scheme frame's procedure and flag it
-    // internal so it reads as an arrival bug to fix — never as a user mistake to explain. The
-    // full frame chain still rides as `schemeStack`. Authored errors pass through verbatim.
+    // Raw host-runtime throw is an INTERNAL defect, not a user error. Name the
+    // innermost scheme frame's procedure so it reads as an arrival bug to fix.
     const message = isHostRuntimeBug(error)
       ? `internal error in \`${frames.at(-1)?.procedure ?? "?"}\`: ${error.message}`
       : error.message;
@@ -845,12 +650,8 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
       valueToSend = undefined; // Reset after use
 
       if (result.done) {
-        // Generator finished - fire onResolve, pop, pass result to parent.
-        // If onResolve returns a value, substitute it: the tap may have
-        // stamped a freshly-cloned AValue with provenance computed only at
-        // exit time, and that stamp has to ride into the parent's binding
-        // (otherwise the original un-stamped result wins). `undefined`
-        // means "no substitution" — see Call.onResolve docstring.
+        // Generator finished — fire onResolve (may substitute a provenance-
+        // stamped clone), pop, pass result to parent. undefined = no substitution.
         const finishedCall = callStack.at(-1);
         let finalValue = result.value;
         if (finishedCall?.onResolve) {
@@ -870,7 +671,7 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
 
       const value = result.value;
 
-      // Check for sub-generator call (flat trampoline)
+      // Sub-generator call (flat trampoline)
       if (is_call(value)) {
         stack.push(value.call);
         frameStack.push(value.frame);
@@ -878,34 +679,18 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
         continue;
       }
 
-      // Tail-call dispatch (R7RS §3.5). A Scheme lambda was invoked in tail
-      // position; the callee's eventual return value IS the result of the
-      // whole tail-position chain, so rather than stack the callee and return
-      // through every intermediate frame, we COLLAPSE the chain.
-      //
-      // Must unwind the ENTIRE tail tower, not just the yielding slot: every
-      // pass-through `{ call }` is tagged `tail: true` (the yielding code does
-      // nothing but `return yield { call }`, e.g. begin/if/evaluate wrappers
-      // around a recursive call). Replacing only the innermost slot leaves the
-      // tower standing and `stack[]` grows O(depth) per recursion. So we pop
-      // the current slot plus all consecutive `tail: true` slots beneath it,
-      // stopping at the first NON-tail slot (argument collector, predicate
-      // eval, binding RHS, or the root) that genuinely consumes the value —
-      // the callee is pushed ON TOP of that consumer.
-      //
-      // Hooks: each popped slot may carry an `onResolve` (tap.exit /
-      // provenance stamp) and `onReject`. We COMPOSE them (innermost first)
-      // onto the replacement slot so they fire when the tail chain finally
-      // returns — keeping tap enter/exit balanced and provenance transforms
-      // intact. In the common no-tap case every popped slot's hooks are
-      // undefined, so composition is empty and this stays O(1) per iteration
-      // (no per-level closure retention).
+      // Tail-call dispatch (R7RS §3.5) — COLLAPSE the entire tail tower, not
+      // just the yielding slot. Pass-through `{ call }`s are tagged tail:true
+      // (begin/if/evaluate wrappers). Replacing only the innermost leaves the
+      // tower standing → stack[] grows O(depth). Pop current + consecutive
+      // tail:true slots; stop at the first NON-tail consumer; push callee on top.
+      // Compose popped onResolve/onReject (innermost first) onto the replacement
+      // so taps stay balanced and provenance transforms still fire. No-tap case:
+      // every hook undefined → composition empty → O(1) per iteration.
       if (is_tailCall(value)) {
-        // Collect pass-through hooks while unwinding the tail tower.
         const resolvers: Array<(value: unknown) => unknown | undefined> = [];
         const rejecters: Array<(error: unknown) => unknown | undefined> = [];
-        // Pop the slot that yielded the tailCall first (it is pass-through by
-        // construction — evaluatePair does `return yield { tailCall }`).
+        // Pop the yielding slot first (pass-through by construction).
         {
           const c = callStack.pop();
           stack.pop();
@@ -913,8 +698,7 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
           if (c?.onResolve) resolvers.push(c.onResolve);
           if (c?.onReject) rejecters.push(c.onReject);
         }
-        // Then pop consecutive pass-through (tail) slots until the first
-        // slot that consumes the value (non-tail) or the root.
+        // Then consecutive pass-through (tail) slots until a consumer or the root.
         while (callStack.length > 0 && callStack.at(-1)?.tail === true) {
           const c = callStack.pop();
           stack.pop();
@@ -922,9 +706,6 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
           if (c?.onResolve) resolvers.push(c.onResolve);
           if (c?.onReject) rejecters.push(c.onReject);
         }
-        // Compose hooks (innermost first → outermost last) so the value
-        // threads through them in the same order it would have on a normal
-        // return walk back up the popped tower.
         const composedResolve =
           resolvers.length === 0
             ? undefined
@@ -948,26 +729,18 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
           frame: value.tailCall.frame,
           onResolve: composedResolve,
           onReject: composedReject,
-          // The replacement is itself pass-through w.r.t. whatever consumer
-          // now sits beneath it — so a tail call from INSIDE the new body
-          // continues to collapse correctly.
-          tail: true,
-        };
+          // Replacement is itself pass-through — a tail call from INSIDE the
+          // new body continues to collapse correctly.
+          tail: true };
         stack.push(replacement.call);
         frameStack.push(replacement.frame);
         callStack.push(replacement);
         continue;
       }
 
-      // If yielded value is a promise (from JS interop), await it. When a signal
-      // is present, race the await against it (raceAbort): a host promise parked
-      // HERE — a rosetta tool call to a stuck upstream — cannot reach the TICK
-      // abort check below, because nothing ticks while parked. Without the race an
-      // abort would not unstick the run until the host promise settled on its own,
-      // however long that took. With no signal there is no wrapper
-      // promise and no listener — a plain await. A raced abort rejects with the
-      // abort reason and flows through the SAME failAndWrap path as a host-promise
-      // rejection, so the run unwinds identically to the TICK-boundary abort.
+      // JS-interop promise: await it. With a signal, race via raceAbort — a
+      // parked host promise cannot reach the TICK abort check (nothing ticks
+      // while parked). Raced abort flows through the same failAndWrap path.
       if (is_promise(value)) {
         try {
           valueToSend = signal === undefined ? await value : await raceAbort(value, signal);
@@ -975,26 +748,24 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
           failAndWrap(error);
           return undefined as never; // unreachable
         }
-        lastYield = performance.now(); // Reset timer after async
+        lastYield = performance.now();
         iterations = 0;
         continue;
       }
 
       if (value === TICK) {
         iterations++;
-        // Yield every 1000 iterations or 5ms, whichever comes first. Check the
-        // abort/budget signals at THIS cadence (not per-step): TICK fires at every
-        // loop-step / tail-call boundary, exactly the granularity an infinite-loop
-        // body hits, so checking per-`current.next()` call would burn ~1-2% CPU on
-        // reads that are false 99.999% of the time — at TICK boundaries it costs
-        // nothing and still bounds `(let loop () (loop))` within one budget unit.
+        // Yield every 1000 iters or 5ms. Check abort/budget at THIS cadence
+        // (not per-step): TICK fires at every loop/tail boundary — the
+        // granularity an infinite-loop body hits. Per-next() checks would burn
+        // ~1-2% CPU on false reads; at TICK they cost nothing and still bound
+        // `(let loop () (loop))` within one budget unit.
         if (iterations > 1000 || performance.now() - lastYield > 5) {
           if (signal?.aborted) {
             throw signal.reason ?? new DOMException("aborted", "AbortError");
           }
-          // ArrivalError (not DOMException): a budget overrun is OUR policy, not a
-          // Web-standard cancellation; its `/budget/` message is what
-          // `exec(code, { budgetMs })` callers (and the sandbox-escape suite) match on.
+          // ArrivalError (not DOMException): budget overrun is OUR policy; the
+          // /budget/ message is what exec(code, { budgetMs }) callers match on.
           const now = performance.now();
           if (deadline !== undefined && now > deadline) {
             throw new BudgetExceededError(
@@ -1002,8 +773,8 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
               frameStack.filter((f): f is StackFrame => f !== undefined),
             );
           }
-          // setTimeout (macrotask), not a microtask: only a macrotask yields the event
-          // loop far enough for host interceptors / I/O to run between steps.
+          // setTimeout (macrotask): only a macrotask yields the event loop far
+          // enough for host interceptors / I/O between steps.
           await new Promise((resolve) => {
             setTimeout(resolve, 0);
           });
@@ -1030,68 +801,47 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
 
 export default run;
 
-// No sync runner (rejected alternative): the env carries promise-returning callables
-// (rosettas, `infer`, host fetch), so a sync trampoline could honor only pure scheme —
-// the first yielded promise would throw "Unexpected promise," a foot-gun that works for
-// trivial expressions and fails on anything real. The abort budget compounds it: it
-// rides the event-loop yield cadence inside `run()`, so a sync path couldn't cancel at
-// the same granularity. One async path, paying the microtask cost everywhere, beats a
-// half-working escape hatch that drifts from the async semantics it mirrors.
+// No sync runner (rejected alternative): the env carries promise-returning
+// callables (rosettas, infer, host fetch), so a sync trampoline could honor
+// only pure scheme — the first yielded promise would throw. The abort budget
+// rides the event-loop yield cadence, so a sync path couldn't cancel at the
+// same granularity. One async path beats a half-working escape hatch.
 
-// ============================================================================
-// Special Form Handlers
-// ============================================================================
+// ── Special Form Handlers ───────────────────────────────────────────────────
 
 /**
  * Stamp the chosen arm's AValue result with `union(predicate, armResult)`.
  *
- * Per spec §5.3 (control-flow restriction): branching forms must not pollute
- * the result's lineage with provenance from arms that never ran. Without this,
- * binding `(if (= count 3) low high)` to a name would pin BOTH `low` and
- * `high` as ancestors of the bound value — including the path the predicate
- * proved unreachable. The Heisenberg-style "every possible past contributed"
- * reading breaks variant-lineage debugging downstream (arrival-chain DNF path
- * reconstruction would surface phantom contributors).
+ * Per control-flow restriction (preamble §CONTROL-FLOW PROVENANCE): branching
+ * forms must not pollute the result's lineage with unchosen arms. Without this,
+ * binding `(if (= count 3) low high)` would pin BOTH low and high as ancestors —
+ * including the path the predicate proved unreachable. DNF path reconstruction
+ * would surface phantom contributors.
  *
- * The tap-level provenance computation already gets this right "for free":
- * only entered children fire enter/exit, so `computeProvenance` reading from
- * `inv.children` naturally excludes unchosen arms. THIS function exists for
- * the SECOND channel — the value flowing back into env bindings. When the
- * result binds to a symbol via `define`/`let`, `onSymbolResolved` reads
- * `value.provenance` directly (not the if-invocation's provenance), so the
- * value itself must carry the union(pred, arm) stamp before the binding fires.
- *
- * The two channels are complementary: tap for invocation provenance, value
- * stamping for symbol-binding provenance. Both must restrict to (pred, arm).
+ * Tap-level provenance already excludes unchosen arms (only entered children
+ * fire enter/exit). THIS function is the SECOND channel — the value flowing into
+ * env bindings. onSymbolResolved reads value.provenance directly, so the value
+ * itself must carry union(pred, arm) before the binding fires.
  */
 function restrictControlFlowProvenance(predicate: SchemeValue, armResult: SchemeValue): SchemeValue {
   if (!(armResult instanceof AValue)) return armResult;
   if (!(predicate instanceof AValue) || predicate.provenance.size === 0) return armResult;
   const prov = unionProvenance([predicate, armResult]);
-  // unionProvenance returns the same reference when only one distinct set
-  // contributed — no allocation needed unless the predicate genuinely adds
-  // new origin ids the arm didn't already carry.
+  // Same reference when only one distinct set contributed — no allocation.
   return prov === armResult.provenance ? armResult : armResult.withProvenance(prov);
 }
 
 /**
- * Build the `onResolve` hook that applies control-flow provenance restriction
- * to a branch arm result — but ONLY when the predicate actually carries
- * provenance. When it doesn't (the overwhelmingly common no-tap / plain-value
- * case), return `undefined` so the branch's tail `{ call }` carries no hook.
+ * onResolve hook for control-flow provenance restriction — ONLY when the
+ * predicate carries provenance. Otherwise return undefined so the branch's
+ * tail `{ call }` carries no hook.
  *
- * Why this matters for TCO: branch arms run in tail position, so the arm's
- * `{ call }` is marked `tail: true` and may collapse when the arm tail-calls
- * a lambda. Collapsed slots' `onResolve` hooks are RETAINED as composed
- * closures on the replacement slot (so the transform still fires when the
- * tail chain returns). If we attached a hook unconditionally, a deep tail
- * loop threaded through `if`/`cond`/`when` would accumulate one closure per
- * iteration — O(n) memory, defeating the constant-space guarantee. Returning
- * `undefined` for the no-provenance case keeps the steady-state loop O(1);
- * provenance-bearing predicates (rare in a tight loop) pay the O(n) cost,
- * which the spec accepts as reduced tail-loop fidelity. The trampoline applies
- * the returned hook before sending the arm value back, so the arm handlers
- * (evalIf/cond/case/when/unless) just return `armResult` unstamped.
+ * TCO invariant: branch arms are tail:true and may collapse. Collapsed slots'
+ * onResolve hooks are RETAINED as composed closures. Unconditional attachment
+ * would accumulate one closure per iteration of a deep if/cond/when tail loop —
+ * O(n) memory, defeating constant-space. No-provenance case keeps O(1);
+ * provenance-bearing predicates (rare in a tight loop) pay O(n) — accepted as
+ * reduced tail-loop fidelity.
  */
 function controlFlowResolve(predicate: SchemeValue): ((value: unknown) => unknown | undefined) | undefined {
   if (!(predicate instanceof AValue) || predicate.provenance.size === 0) return undefined;
@@ -1215,8 +965,7 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
       const name = foldSubstitutedDictKey(keyForm);
       if (seen.has(name)) {
         throw new EvalError(`duplicate dict literal key :${name} after quasiquote substitution — each key may appear once`, {
-          code: "E-DICT-DUP-KEY",
-        });
+          code: "E-DICT-DUP-KEY" });
       }
       seen.add(name);
       // foldSubstitutedDictKey only accepts AString/ASymbol/plain-string (else throws
@@ -1417,11 +1166,10 @@ function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   return theVoid;
 }
 
-// `set!` — one of the purity omissions (preamble): doored in r7rs/binding. Lexical
-// rebinding severs the WHERE-bound lineage every value carries. The
-// `AmbientRuntime.ref` / `Resolver.env.ref` mutation-targeting walk has no evaluator
-// caller — it survives only for hygiene's `Capabilities.refFrame` IDENTITY probe,
-// which is not a mutation path.
+// set! is a purity omission (preamble): doored in r7rs/binding. Lexical rebinding
+// severs the WHERE-bound lineage every value carries. AmbientRuntime.ref /
+// Resolver.env.ref has no evaluator mutation caller — survives only as hygiene's
+// Capabilities.refFrame IDENTITY probe.
 
 /** `(lambda args body)` — closes over the definition-time env; body starts in tail position (R7RS §3.5). */
 function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
@@ -1433,15 +1181,13 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // Capture the resolver (lexical scope) at definition time
   const closureResolver = ctxResolver(ctx);
 
-  // The runner — the lambda body, INJECTED into the ALambda value (the value layer
-  // names no evaluator symbol; same seam `Macro` uses). `canBounce` drives the bounce
-  // protocol (preamble): true ⇒ hand back the body generator as a Bounce; false ⇒ run
-  // to completion for a JS/HOF caller. The LEXICAL axis stays definition-time (that is
-  // what a closure IS — `closureResolver` captured the minting scope); only the RUN axis
-  // swaps to the CALLING run at invocation (`callCtx.runCtx`: meter, strict, channels,
-  // config/resources, signal, cache). tf/apply is the sole meeting point of immutable
-  // description and run state, and must hand over the PRESENT — so `bodyCtx` takes its
-  // resolver/dynamic frame from def-time `ctx` but its runCtx/strict/signal from `callCtx`.
+  // Runner — lambda body INJECTED into the ALambda value (value layer names no
+  // evaluator symbol; same seam Macro uses). canBounce drives the bounce protocol
+  // (preamble): true ⇒ Bounce token; false ⇒ run to completion for a JS/HOF caller.
+  // LEXICAL axis stays definition-time (closureResolver); RUN axis swaps to the
+  // CALLING run at invocation (callCtx.runCtx: meter, strict, channels, signal,
+  // cache). bodyCtx takes resolver/dynamic frame from def-time ctx, runCtx/strict/
+  // signal from callCtx.
   const runner = (values: SchemeValue[], callCtx: CallCtx, canBounce: boolean): CallResult => {
     const callResolver = closureResolver.child("lambda", "lambda");
     let argNode: SchemeValue = args;
@@ -1452,29 +1198,24 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       i++;
       argNode = argNode.cdr;
     }
-    // Rest arg: (lambda (a b . rest) …) — allocate against the CALLER's meter (the run
-    // axis this invocation charges), not the def-time run's.
+    // Rest arg: (lambda (a b . rest) …) — allocate against the CALLER's meter.
     if (argNode instanceof ASymbol) {
       bindValue(callResolver.env, argNode, APair.fromArray(callCtx.runCtx, values.slice(i), false));
     }
-    // Dynamic call site: the caller (evaluatePair / wrapLambdaValue) set the holder just before
-    // invoking; else fall back to the lexical ctx's invocation. Read here in the synchronous
-    // prologue, so a wrapLambdaValue finally-restore after this point is harmless (bodyCtx captured it).
+    // Dynamic call site: set by evaluatePair / wrapLambdaValue just before invoke;
+    // else fall back to lexical ctx. Read in the synchronous prologue so a later
+    // finally-restore is harmless (bodyCtx already captured it).
     const dynamicInv = currentDynamicCallSite() ?? ctx.currentInvocation;
-    // Lambda body starts in tail position (preamble TAIL PROPAGATION): tail=true here
-    // propagates through evalBegin/evalIf/… to the terminal body expr.
+    // Body starts in tail position (preamble TAIL PROPAGATION).
     const bodyCtx: EvalContext = {
       ...ctx,
       resolver: callResolver,
       currentInvocation: dynamicInv,
       tail: true,
-      // Run axis (call-time): swap the run and its flat EvalContext mirrors. Everything
-      // else on `ctx` (resolver already overridden, tap) is the lexical/observability
-      // axis and stays def-time.
+      // Run axis (call-time). Everything else on ctx stays def-time.
       runCtx: callCtx.runCtx,
       strict: callCtx.runCtx.strict,
-      signal: callCtx.runCtx.signal,
-    };
+      signal: callCtx.runCtx.signal };
     if (canBounce) return makeBounce(evalBegin(body, bodyCtx));
     return run(evalBegin(body, bodyCtx), { signal: callCtx.runCtx.signal });
   };
@@ -1493,8 +1234,7 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     name: "lambda",
     arity: { min: params.length, max: hasRest ? null : params.length },
     scope: closureResolver,
-    runner,
-  });
+    runner });
   lambda.__params__ = params;
   return lambda;
 }
@@ -1548,39 +1288,22 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
     // Forward signal so macro expansion is also budget-bounded.
     return run(evalBegin(body, { ...evalArgs, resolver: macroResolver }), {
-      signal: evalArgs.signal,
-    });
+      signal: evalArgs.signal });
   });
   bindValue(ctxResolver(ctx).env, name, macro);
 
   return theVoid;
 }
 
-// ============================================================================
-// Core Macros (implemented as special forms for performance)
-// ============================================================================
-
 // ── let-family bracket-binding consumption ──────────────────────────────────
-// Consumption site for the bracket-bindings superset. The model — both surfaces
-// (BG2a whole-list / BG2b per-element / BG2c mixing), the R7RS/Racket/Clojure
-// union table, and the non-intersection argument (each bracket surface has ONE
-// dialect reading, so one input shape → one meaning with no context branch) —
-// is docs/grammar.md §BINDINGS. This is where it lands: `normalizeBindings` runs
-// the BG3 pure syntactic rewrite ONCE, before the existing per-binding walk,
-// lowering either bracket surface to the SAME cons-list-of-pairs a hand-written
-// paren form produces — so every downstream line evaluates a plain list and the
-// equivalence is structural, not case-by-case. Detection is `evalElements === true`
-// at a binding-position node (BG1 — no reader/lexer change); `#(…)`
-// (`evalElements === false`) falls straight through the generic `is_pair` invariant
-// (BG5, never consumed). Malformed shapes throw the BG4 door codes
-// (E-LET-BRACKET-BINDINGS-LIST / E-LET-BRACKET-BINDING) built by the constructors below.
-//
-// BG-numbering: this file's local rules are named BG1–BG6/BG9 per §BINDINGS's
-// BG-numbering note — the doc's rename of the evaluator's original R1–R6/R9 off
-// RULINGS.md's global R-ledger, keeping the two ledgers apart in source too.
-//
-// Executable spec: src/reader/__tests__/polyglot/macro-special-brackets.spec.ts;
-// error taxonomy in docs/grammar.md §ERRORS.
+// Consumption site for the bracket-bindings superset (docs/grammar.md §BINDINGS).
+// normalizeBindings runs a pure syntactic rewrite ONCE, before the per-binding
+// walk, lowering either bracket surface to the SAME cons-list-of-pairs a hand-
+// written paren form produces — equivalence is structural. Detection is
+// evalElements === true at a binding-position node; #(…) (evalElements === false)
+// falls through the generic is_pair invariant. Malformed shapes throw door codes
+// E-LET-BRACKET-BINDINGS-LIST / E-LET-BRACKET-BINDING.
+// Executable spec: src/reader/__tests__/polyglot/macro-special-brackets.spec.ts.
 
 /** `do` doesn't accept the whole-list form (BG2a exclusion) — its 3-element
  *  steps make pairwise grouping ambiguous; the other five forms consume this
@@ -1817,14 +1540,12 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
         // lexical `letResolver` stays def-time.
         runCtx: callCtx.runCtx,
         strict: callCtx.runCtx.strict,
-        signal: callCtx.runCtx.signal,
-      };
+        signal: callCtx.runCtx.signal };
       if (canBounce) {
         return makeBounce(evalBegin(body, bodyCtx));
       }
       return run(evalBegin(body, bodyCtx), {
-        signal: callCtx.runCtx.signal,
-      });
+        signal: callCtx.runCtx.signal });
     };
 
     // letrec shape (R7RS's own definition of named let: `(letrec ((name (lambda
@@ -1838,8 +1559,7 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       name: symbol_name(name),
       arity: { min: params.length, max: params.length },
       scope: letResolver,
-      runner,
-    });
+      runner });
     loopLambda.__name__ = symbol_name(name);
     loopLambda.__params__ = params.map((p) => symbol_name(p));
 
@@ -2067,44 +1787,22 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
   // hands back a Bounce so a self-recursive `=>` collapses (TCO); an ANativeProcedure/
   // ARosettaProcedure returns a value/promise (canBounce ignored). Every
   // scheme-authored lambda (including named-let's loop binding) is a callable VALUE.
-  // `is_applyable` subsumes the nominal `is_callable_value` here (every ACallable
-  // declares the apply term this arm dispatches through).
-  if (is_applyable(proc)) {
-    const __savedDynamicCallSite = currentDynamicCallSite();
-    setDynamicCallSite(dynSite);
-    let r: CallResult;
-    try {
-      r = proc[tf("apply")](wrapLambdaArgs([arg], dynSite), callCtx, is_lambda(proc));
-    } finally {
-      setDynamicCallSite(__savedDynamicCallSite);
-    }
-    if (is_bounce(r)) {
-      if (ctx.tail) return yield { tailCall: { generator: r.generator } } as unknown as SchemeValue;
-      return yield { call: r.generator, tail: true };
-    }
-    return is_promise(r) ? yield r : (r as SchemeValue);
+  // is_applyable subsumes is_callable_value here (every ACallable declares the
+  // apply term). Bare host fns are doored by the is_callable gate above.
+  SpecialFormShapeError.invariant(is_applyable(proc), "=>", "requires a procedure");
+  const __savedDynamicCallSite = currentDynamicCallSite();
+  setDynamicCallSite(dynSite);
+  let r: CallResult;
+  try {
+    r = proc[tf("apply")](wrapLambdaArgs([arg], dynSite), callCtx, is_lambda(proc));
+  } finally {
+    setDynamicCallSite(__savedDynamicCallSite);
   }
-
-  // Builtins: direct apply (no Scheme body to tail into).
-  // bare-fn survivor arm — a P1 membrane-leak witness; retires when raw fns leave env value space.
-  SpecialFormShapeError.invariant(is_function(proc), "=>", "requires a procedure");
-  // The bare-fn callable surface is heterogeneous (metadata-bearing `AProcedure`, plain
-  // bare-fn) with no single call signature, so invoke reflectively — `Reflect.apply`
-  // takes the arg array honestly, the same convention the main apply path uses. A
-  // builtin yields a value or a Promise, never a Bounce, so rule the bounce arm out
-  // explicitly (a builtin handing one back is a real invariant violation). `this =
-  // callCtx` matches the shape the main apply path hands a builtin: a native impl reads
-  // `this.runCtx`, and an undefined `this` crashes the `=>` arm (`(cond (test => cadr))`).
-  let result: SchemeValue | SchemeBounceMarker | Promise<SchemeValue> = maybeThen(
-    Reflect.apply(proc, callCtx, [arg]),
-    // Same bare-fn boxing seam as the main apply arm — see its comment.
-    (v) => jsToScheme(ctx.runCtx, v, {}),
-  ) as SchemeValue | SchemeBounceMarker | Promise<SchemeValue>;
-  invariant(!is_bounce_marker(result), "=> builtin returned a bounce sentinel");
-  if (is_promise(result)) {
-    result = yield result;
+  if (is_bounce(r)) {
+    if (ctx.tail) return yield { tailCall: { generator: r.generator } } as unknown as SchemeValue;
+    return yield { call: r.generator, tail: true };
   }
-  return result;
+  return is_promise(r) ? yield r : (r as SchemeValue);
 }
 
 // ── bracket CLAUSE consumption (cond / case / do) ───────────────────────────────
@@ -2207,8 +1905,7 @@ function* evalCond(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
           return yield {
             call: applyArrowProc(proc, testResult, ctx),
             tail: ctx.tail === true,
-            onResolve: controlFlowResolve(testResult),
-          };
+            onResolve: controlFlowResolve(testResult) };
         }
       }
 
@@ -2256,8 +1953,7 @@ function* evalCase(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
         return yield {
           call: applyArrowProc(arrowProc, key, ctx),
           tail: ctx.tail === true,
-          onResolve: controlFlowResolve(key),
-        };
+          onResolve: controlFlowResolve(key) };
       }
       return yield { call: evalBegin(exprs, ctx), tail: ctx.tail === true };
     }
@@ -2289,8 +1985,7 @@ function* evalCase(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
         return yield {
           call: applyArrowProc(arrowProc, key, ctx),
           tail: ctx.tail === true,
-          onResolve: controlFlowResolve(key),
-        };
+          onResolve: controlFlowResolve(key) };
       }
       // Per spec §5.3 the case key plays the predicate role — its lineage picked this
       // arm; provenance rides as onResolve (preamble CONTROL-FLOW PROVENANCE).
@@ -2609,8 +2304,7 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
         // Forward signal: a catch handler running an unbounded computation
         // (e.g. a recovery loop) must respect the same budget.
         result = await run(evalBegin(handlers, { ...ctx, resolver: catchResolver, tail: false }), {
-          signal: ctx.signal,
-        });
+          signal: ctx.signal });
         caughtError = null; // handled
       } catch (error) {
         caughtError = error instanceof Error ? error : new Error(String(error));
@@ -2664,8 +2358,7 @@ function foldSubstitutedDictKey(v: SchemeValue): string {
   if (v instanceof AString || v instanceof ASymbol) return foldKeyName(v);
   if (typeof v === "string") return v;
   throw new EvalError(`dict literal key substituted a non-string value (${String(v)}) — keys must be :keywords or "strings"`, {
-    code: "E-DICT-BAD-KEY",
-  });
+    code: "E-DICT-BAD-KEY" });
 }
 
 // ============================================================================
@@ -2763,8 +2456,7 @@ export function* evaluate(
       onReject: (error) => {
         tap.exit(inv, { error });
         return undefined;
-      },
-    };
+      } };
   }
 
   return yield* evaluatePair(code, ctx);
@@ -2826,8 +2518,7 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
   const frame: StackFrame = {
     code,
     env_name: String(ctxResolver(ctx).env.__name__),
-    procedure: first instanceof ASymbol ? symbol_name(first) : undefined,
-  };
+    procedure: first instanceof ASymbol ? symbol_name(first) : undefined };
 
   // Head and args evaluate NON-tail; only the final fn.apply is tail (preamble TAIL
   // PROPAGATION). The parent's tail flag passes into the special handler, which threads
@@ -2877,38 +2568,34 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
       ctx.tap?.onSymbolResolved?.(ctx.currentInvocation ?? null, first, fn);
     }
   } else {
-    if (!is_function(first) && !is_applyable(first)) {
+    // Only apply-term values are first-class heads — bare host fns are doored.
+    if (!is_applyable(first)) {
       throw nonCallableHeadError(first);
     }
     fn = first;
   }
 
-  // RAW-ARG discipline FIRST (V's gate order: keyword → macro-expand → apply → non-callable):
-  // a head carrying the `TF_EXPAND` term is a macro/syntax transformer — it consumes UNEVALUATED
-  // operands and hands back a replacement FORM. Dispatched STRUCTURALLY (`is_expandable`), not by
-  // `instanceof Macro | Syntax`, so a value's calling discipline travels with its terms, not its
-  // class. A computed head (pair) or a literal head can only be a value; macros are not first-class.
+  // RAW-ARG discipline FIRST (keyword → macro-expand → apply → non-callable):
+  // a head carrying TF_EXPAND is a macro/syntax transformer — consumes UNEVALUATED
+  // operands, hands back a replacement FORM. Dispatched STRUCTURALLY (is_expandable),
+  // not by instanceof — calling discipline travels with the value's terms. Macros are
+  // not first-class (a computed head can only be a value).
   if (is_expandable(fn)) {
     const useResolver = ctxResolver(ctx);
     const evalArgs = {
-      // The macro's `this` is the use-site LEXICAL frame (a define-macro fexpr body runs with
-      // `env` as `this`; see Macro.invoke). Sourced FROM the resolver so `env`/`resolver` stay
-      // structurally synced, not coincidentally equal.
+      // Macro's `this` is the use-site LEXICAL frame (Macro.invoke). Sourced FROM
+      // the resolver so env/resolver stay structurally synced.
       env: useResolver.env,
-      // The use-site resolver — the def-time Resolver a `Syntax` captures is what hygiene
-      // actually consults; this is the call-site one.
+      // Use-site resolver; hygiene consults the def-time Resolver a Syntax captures.
       resolver: useResolver,
-      // So the syntax-rules expander reads its `debug` option from ctx.
-      runCtx: ctx.runCtx,
-    };
+      runCtx: ctx.runCtx };
 
-    // Uniform expansion — the `TF_EXPAND` term reconciles both transformer SHAPES into one
-    // `{ expr, scope? }`: a `Syntax` supplies the hygiene `scope` (and matches the FULL `code`,
-    // its keyword occupying the pattern's first slot); a define-macro fexpr omits `scope` (and
-    // consumes the keyword-stripped `code.cdr`) — the term itself carries that code-vs-rest
-    // off-by-one (src/__tests__/syntax-rules-arity-offbyone.test.ts), so the gate need not.
+    // TF_EXPAND reconciles both transformer shapes into `{ expr, scope? }`:
+    // Syntax supplies hygiene scope (matches FULL code); define-macro fexpr omits
+    // scope (consumes keyword-stripped code.cdr). The term carries that code-vs-rest
+    // off-by-one, so the gate need not.
     const expansion = fn[TF_EXPAND](code, evalArgs);
-    // `expr` may be a promise (an async define-macro `__fn__`); await before evaluating.
+    // expr may be a promise (async define-macro __fn__); await before evaluating.
     let expr = expansion.expr;
     if (is_promise(expr)) {
       expr = yield expr;
@@ -2919,15 +2606,14 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
       return expr;
     }
 
-    // A hygiene `scope` (Syntax) evaluates the transcription in a fresh Resolver over that scope,
-    // still resolving builtins through the run's capability base (thread evalArgs.resolver's
-    // capabilities, NOT a glass re-derivation from the null-rooted merge env — under glass same
-    // globalRoot ⇒ byte-identical, D3). A scope-less expansion (fexpr) evaluates in the use-site
-    // ctx. Either way the expansion takes the PARENT's tail flag: a TCO-critical form rewritten
-    // through a macro (`when` → `(if test body)`) must keep its tail position, so form-returning
-    // gives a tail-position macro the same O(1) TCO as a special form (a transformer is Exp→Exp;
-    // it must never evaluate inside itself). A tail call is never a JS promise, so the post-yield
-    // promise check collapses past it safely.
+    // Hygiene scope (Syntax) → fresh Resolver over that scope, still resolving
+    // builtins through the run's capability base (thread evalArgs.resolver's
+    // capabilities, NOT a glass re-derivation from the null-rooted merge env).
+    // Scope-less (fexpr) → use-site ctx. Either way the expansion takes the
+    // PARENT's tail flag: a TCO-critical form rewritten through a macro
+    // (`when` → `(if test body)`) must keep its tail position — form-returning
+    // gives a tail-position macro the same O(1) TCO as a special form
+    // (transformer is Exp→Exp; it must never evaluate inside itself).
     const expansionCtx: EvalContext = expansion.scope
       ? { ...ctx, resolver: new Resolver(expansion.scope, evalArgs.resolver.capabilities) }
       : ctx;
@@ -2938,49 +2624,35 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
     return result;
   }
 
-  // EVAL-ARG discipline: a head carrying `tf("apply")` (or a bare JS fn) is a procedure — its
-  // operands evaluate first. `is_applyable` subsumes the nominal `is_callable_value` (every
-  // ACallable declares the apply term), so the gate needs only `is_function || is_applyable`;
-  // the macro case already returned above (no `!is_macro` guard needed). A callable VALUE
-  // (ANativeProcedure — a first-class AValue, not a bare fn) enters the same block: it shares the
-  // arg-eval / bounce plumbing, and only the invocation primitive below branches (apply vs Reflect).
-  // `is_function(fn) ||` is the bare-fn survivor arm — a P1 membrane-leak witness; retires when
-  // raw fns leave env value space (is_applyable alone would then suffice).
-  if (is_function(fn) || is_applyable(fn)) {
+  // EVAL-ARG discipline: a head carrying tf("apply") is a procedure — operands
+  // evaluate first. is_applyable alone is the call-head gate (every ACallable
+  // declares the apply term; self-applying keywords too). Macro case returned above.
+  if (is_applyable(fn)) {
     const argsResult = yield { call: evaluateArgs(rest, nonTailCtx) };
-    // evaluateArgs's generator return type is `unknown` at this yield site; narrow.
     invariant(Array.isArray(argsResult), "evaluateArgs must return array");
     const args = argsResult;
 
-    // Thread the dynamic call site so user lambdas invoked synchronously from native JS
-    // (map/filter) pick up THIS Pair's invocation as parent, not the lexical one captured
-    // at lambda creation. Two-pronged: (a) the module-level holder for synchronous HOF
-    // iteration; (b) a per-lambda wrapper for HOFs that recurse via promises (reduce/fold/
-    // find call `maybeThen().then(callback)` from a microtask AFTER finally restores the
-    // holder) — each wrapped lambda re-installs its site per invocation, so iter N+1 still
-    // sees the right parent.
+    // Thread the dynamic call site so user lambdas invoked from native JS
+    // (map/filter) pick up THIS Pair's invocation as parent. Two-pronged:
+    // (a) module-level holder for synchronous HOF iteration; (b) per-lambda
+    // wrapper for HOFs that recurse via promises (reduce/fold/find fire from
+    // a microtask AFTER finally restores the holder) — wrapLambdaArgs re-installs
+    // per invocation so iter N+1 still sees the right parent.
     //
-    // `canBounce = is_lambda(fn)` opts a Scheme lambda into the bounce protocol (preamble):
-    // a plain per-call local (nothing reads it ambiently), passed as the apply term's third
-    // argument.
+    // canBounce = is_lambda(fn) opts a Scheme lambda into the bounce protocol.
     const dynSite = ctx.currentInvocation;
-    // Built ONCE here — the invocation this dispatch site actually holds — and threaded WHOLE
-    // through the apply term (callable branch) or as `this` (bare-fn branch) below, rather than
-    // reconstructed downstream from ambient state. `fn` is passed as the resolved value (Stage
-    // 1b, docs/execution.md §CALLCTX) so `makeCallCtx` enriches `callCtx` with that capability's
-    // `configuration`/`resources` when `common/capability.ts` associated one at bind time — a
-    // plain WeakMap miss (no-op) for every callable with no activation (lambdas, resource-less
-    // capabilities' procs, the bare-fn registry survivors, …).
+    // Built ONCE and threaded WHOLE through the apply term. fn is passed as the
+    // resolved value (docs/execution.md §CALLCTX) so makeCallCtx enriches callCtx
+    // with that capability's configuration/resources when one was associated at
+    // bind time — WeakMap miss (no-op) for every callable with no activation.
     const callCtx = makeCallCtx(ctx.runCtx, dynSite as InvocationLike | undefined, undefined, fn);
     const __savedDynamicCallSite = currentDynamicCallSite();
     setDynamicCallSite(dynSite);
     const canBounce = is_lambda(fn);
     const __savedRunResolver = globalThis.__arrivalRunResolver;
     // Publish the composed resolver as the rosetta membrane's env back-channel
-    // (llm-plane-arrival-env/prompt.ts reads `currentRunEnv()` under a ctx-less `apply`;
-    // `require` reads the full `currentRunResolver()` so module forms keep the run's
-    // capability base). Only the env/resolver rides this holder — meter/strict run-state
-    // travel on `ctx.runCtx` / the operand ctx.
+    // (ctx-less apply readers use currentRunEnv; require uses currentRunResolver).
+    // Meter/strict travel on ctx.runCtx, not this holder.
     globalThis.__arrivalRunResolver = ctxResolver(ctx);
     const wrappedArgs = wrapLambdaArgs(args, dynSite);
     let result: SchemeValue;
@@ -2988,21 +2660,8 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
       // A callable VALUE dispatches through its apply term with the computed `canBounce`
       // (the whole `callCtx` threaded explicitly, no `this`-smuggling); an ALambda bounces in
       // tail position, an ANativeProcedure ignores canBounce. NOT `applyCallback`, which forces
-      // canBounce=false (the HOF-callback contract). A bare fn keeps the legacy
-      // `this: CallCtx` apply.
-      result =
-        is_applyable(fn)
-          ? (fn[tf("apply")](wrappedArgs, callCtx, canBounce) as SchemeValue)
-          : // Only the plain-JS-function case remains (the ternary excluded the other two
-            // the outer gate admits). Its result boxes through the membrane: this bare-fn
-            // survivor path (registry packs / legacy env.set of raw fns) is the last exit
-            // whose raw scalar returns could reach value space unboxed and die at exec's R1
-            // strict exit. `jsToScheme` is identity on already-boxed values, so
-            // self-boxing wrappers (legacy defineRosetta) pay one instanceof.
-            (maybeThen(
-              Reflect.apply(fn as (...args: unknown[]) => unknown, callCtx, wrappedArgs),
-              (v) => jsToScheme(ctx.runCtx, v, {}),
-            ) as SchemeValue);
+      // canBounce=false (the HOF-callback contract).
+      result = fn[tf("apply")](wrappedArgs, callCtx, canBounce) as SchemeValue;
     } finally {
       setDynamicCallSite(__savedDynamicCallSite);
       globalThis.__arrivalRunResolver = __savedRunResolver;
