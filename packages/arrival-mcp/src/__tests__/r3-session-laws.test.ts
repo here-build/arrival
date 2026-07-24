@@ -210,11 +210,21 @@ describe("R3 law — INTERIM dispose-spy (§2.8, first tranche)", () => {
     await t.call({ expr: "(greet)", who: "ada" }, { session });
     expect(disposeSpy).not.toHaveBeenCalled();
 
-    await t.call({ expr: "(greet)", who: "bob" }, { session }); // digest change ⇒ old warm disposed
-    expect(disposeSpy).toHaveBeenCalledOnce();
+    // Digest change ⇒ TWO disposals, both correct — the law is BALANCE (every spawned bag
+    // wound down; the live run's bag never wound down while warm), not a count of one:
+    // `foldIntoFreshRun` disposes the stale warm pair, then its Phase-1 fold-replay re-runs
+    // the session log on a THROWAWAY run — the replayed `(greet)` touches `this.resources`,
+    // so that run lazily spawns its own bag and winds it down in the fold's `finally`. A
+    // second live bag never overlaps: stale dies before the fold spawns, the fold dies
+    // before the live mint.
+    await t.call({ expr: "(greet)", who: "bob" }, { session });
+    expect(disposeSpy).toHaveBeenCalledTimes(2);
+
+    await t.call({ expr: "(greet)", who: "bob" }, { session }); // same digest ⇒ warm reuse, no churn
+    expect(disposeSpy).toHaveBeenCalledTimes(2);
 
     await t.closeSession(session.id); // the session-close hook (a host wires this to its transport's close event)
-    expect(disposeSpy).toHaveBeenCalledTimes(2);
+    expect(disposeSpy).toHaveBeenCalledTimes(3);
   });
 });
 
