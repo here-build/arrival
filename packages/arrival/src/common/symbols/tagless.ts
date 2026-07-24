@@ -1,42 +1,35 @@
-// symbol.tagless — per-tag factory file assembled into `symbol` by ./index.ts; shared
-// types live in ./_bake.js. docs/environments.md §SYMBOL-KINDS — the `tagless` row (no impl;
-// dispatch to the operand's own term, receiver = last scheme arg, a missing method THROWS).
+// symbol.tagless — no impl; dispatch to operand's tagless-final method (receiver = last
+// scheme arg; missing method THROWS). Per-tag factory; shared types in ./_bake.js.
+// docs/environments.md §SYMBOL-KINDS. Algebra on terms (AValue) is the source of truth.
 
-import * as z from "../scheme-zod.js";
-import {
-  CallCtx,
-  describeReceiver,
-  parseNameDoc,
-  resolveMethod,
-  type ProvenanceRole,
-  type TaglessSymbolDef,
-} from "./_bake.js";
+import * as z from "../scheme-zod/index.js";
+import { CallCtx } from "../../run/CallCtx.js";
+import { parseNameDoc, resolveMethod, type TaglessSymbolDef } from "./_bake.js";
 import { tf, type TaglessOp } from "../../values/tagless-final.js";
 import { attachOffendingValue, TaglessProtocolError } from "../../errors.js";
-import { ANativeProcedure } from "../../values/primitives/ACallable.js";
+import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
+import { AValue } from "../../values/primitives/AValue.js";
 import { type SchemeValue } from "../../values/types.js";
 
-/** Tagless host op — `symbol.tagless\`name: doc\`` binds a symbol that dispatches to the receiver's
- *  own `arrival/tagless-final/name` term method (the LAST scheme arg is the receiver; a missing
- *  method THROWS — the hard op, dual of the graceful `taglessGuard`). No central Record and no JS
- *  impl: the real per-op types/impls live as `arrival/tagless-final/<name>` members on the terms
- *  (primitives/AValue.ts), the source of truth — `tagless-final.ts` derives the op-name type from
- *  there. The algebra, not this binder, is the completeness gate. */
+/** Receiver description for type-mismatch error. Local to this factory's door. */
+function describeReceiver(v: unknown): string {
+  if (v === null || v === undefined) return String(v);
+  if (v instanceof AValue) return v.kind;
+  return Array.isArray(v) ? "array" : typeof v;
+}
+
+/** Tagless host op — dispatches to receiver's `arrival/tagless-final/name`. Missing method throws. */
 export function tagless(tpl: TemplateStringsArray, ...sub: unknown[]): ANativeProcedure {
   const { name, doc } = parseNameDoc(tpl, sub);
-  // `function`, not arrow: tagless is ctx-aware (needs runCtx for the receiver's method),
-  // and the evaluator hands `CallCtx` via `this`, which an arrow body can never read.
+  // function, not arrow: needs CallCtx via `this` for runCtx.
   const run = async function (this: CallCtx, ...args: unknown[]): Promise<unknown> {
     const runCtx = this.runCtx;
     const schemeArgs = args;
     const receiver = schemeArgs[schemeArgs.length - 1];
     const leading = schemeArgs.slice(0, -1);
-    // `name` is a free author string; cast to the declared `TaglessOp` union at this one
-    // boundary. A typo'd op just resolves no method and hits the teaching throw below.
+    // Free author string cast to TaglessOp at this boundary; typo just resolves no method.
     const fn = resolveMethod(receiver, tf(name as TaglessOp));
-    // MODEL-REACHABLE door — (car 1) lands here, so per Rule 0 this throws plain: an
-    // `invariant` would prefix "Invariant failed: ", which reads like an engine bug
-    // rather than a program mistake (see the not-callable doors note in evaluator.ts).
+    // Model-reachable door — plain throw, not invariant (would read like an engine bug).
     if (fn === undefined) {
       throw attachOffendingValue(
         new TaglessProtocolError(name, describeReceiver(receiver), tf(name as TaglessOp)),
@@ -45,18 +38,18 @@ export function tagless(tpl: TemplateStringsArray, ...sub: unknown[]): ANativePr
     }
     return await fn.call(receiver, ...leading, runCtx);
   };
-  // No `Contract` param here (see `TaglessSymbolDef.provenance`'s doc) — always "pipe".
-  const def: TaglessSymbolDef = { kind: "tagless", name, doc, in: z.array(z.schemeValue), out: z.schemeValue, run, provenance: "pipe" };
-  // Stage A2 — mint the ANativeProcedure directly (tagless shares native's class per D1).
-  // `withCallbackRoles` (declared BESIDE this factory in `_bake.ts`) stamps `callbackRoles`
-  // onto the minted value in place — a caller declaring the acc-chain marker (srfi-1's
-  // `reduce`) still gets the SAME proc back, mutated, never a re-wrap.
-  const proc = new ANativeProcedure({
+  // No Contract param — always "pipe". withCallbackRoles stamps acc-chain in place.
+  return new ANativeProcedure({
     name,
     arity: { min: 0, max: null },
-    contract: def,
+    contract: {
+      kind: "tagless",
+      name,
+      doc,
+      in: z.array(z.schemeValue),
+      out: z.schemeValue,
+      run,
+      provenance: "pipe" } satisfies TaglessSymbolDef,
     impl: (args, callCtx) => run.apply(callCtx, args) as Promise<SchemeValue>,
-  });
-  (proc as { provenanceRole?: ProvenanceRole }).provenanceRole = "pipe";
-  return proc;
+    provenanceRole: "pipe" });
 }

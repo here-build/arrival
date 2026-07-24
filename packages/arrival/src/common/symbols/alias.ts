@@ -1,43 +1,18 @@
-// symbol.alias — per-tag factory file assembled into `symbol` by ./index.ts; shared types
-// live in ./_bake.js (imported by sibling factories only — this one needs none of them).
-// docs/environments.md §SYMBOL-KINDS — the `alias` row (a fourth arm outside AEntity's discriminant,
-// resolved before per-kind dispatch, binds byte-identically). The bind-time mechanics are local.
-//
-// `symbol.alias`originalName`` declares a DUPLICATE binding of an EXISTING symbol under a
-// new name — dissolution semantics: the record KEY it's placed under (a sibling of
-// `originalName` in the SAME `symbols` record) becomes the alias's own bound name; the
-// template head holds the TARGET name it dissolves to, never a contract/impl of its own.
-//
-// Resolution happens at CAPABILITY bind time (`common/capability.ts`'s apply loop), the same
-// locus `notImplemented`'s `DoorCause` stamping uses and for the identical reason: this
-// factory runs inside a `symbols` record literal, before the owning `EnvCapability` exists,
-// so it cannot look up a sibling key itself. By the time the bind loop runs, `symbolsRec` is
-// already a fully-built object (JS object-literal construction completes before any
-// consumption), so resolving `target` against it there carries no forward-reference hazard.
-// The bind loop substitutes the TARGET's already-baked def in place of this marker and binds
-// it a SECOND time under the alias's own name through the exact same per-kind dispatch every
-// other entry goes through — byte-equivalent runtime, never a wrapper indirection. A `target`
-// absent from the SAME capability's own `symbols` record is a declaration bug, not a runtime
-// condition: the bind loop throws a teaching error at assembly (errors-as-doors) rather than
-// silently binding nothing.
-//
-// UNCATALOGUED by construction: `AliasSymbolDef` carries no `metadata` field and its `kind`
-// ("alias") is not one of the baked `AEntity` kinds — a catalog walk that reads `spec.symbols`
-// directly (arrival-mcp's `McpEnvCapability`) and only recognizes baked-kind defs simply never
-// sees it, so an alias is invisible to the MCP catalog even when its target is exposed.
+// symbol.alias — duplicate binding of an existing symbol under a new name.
+// docs/environments.md §SYMBOL-KINDS. Resolved at capability bind time (same locus as
+// DoorCause stamping): factory runs inside a symbols literal before EnvCapability exists.
+// Bind loop substitutes the target's baked def and binds a second time under the alias name —
+// byte-equivalent runtime, no wrapper. Target absent from same capability ⇒ assembly error.
+// Uncatalogued: kind "alias" is not an AEntity member; catalog walks skip it.
 
-/** The marker `symbol.alias` produces — resolved (never bound directly) by
- *  `common/capability.ts`'s apply loop. Not a member of `AEntity` (_bake.ts's baked-kind
- *  union): it never reaches a `run`/`impl` call itself, only ever stands in for its target. */
+/** Marker symbol.alias produces — resolved (never bound) by capability.ts apply loop. */
 export interface AliasSymbolDef {
   readonly kind: "alias";
-  /** The EXISTING symbol name (a sibling key in the SAME capability's `symbols` record)
-   *  this dissolves to. */
+  /** Existing sibling key in the same capability's symbols record. */
   readonly target: string;
 }
 
-/** `symbol.alias`originalName`` — the template head is read WHOLE as the target name (no
- *  `name: doc` split — an alias carries no doc of its own; it inherits the target's). */
+/** Template head is the whole target name (no name:doc split — inherits target's doc). */
 export function alias(tpl: TemplateStringsArray, ...sub: (string | number)[]): AliasSymbolDef {
   let target = "";
   for (let i = 0; i < tpl.length; i++) {
