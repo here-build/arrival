@@ -36,8 +36,7 @@ import {
   readPayloadEnvelope,
   runReferenceWorkload,
   storeMetadataBytes,
-  WORKLOAD_SHAPE,
-} from "./support/provenance-budget-workload.js";
+  WORKLOAD_SHAPE } from "./support/provenance-budget-workload.js";
 
 const corpusClassifier: Classifier = { roleOf: (op) => CORPUS_ROLES[op] };
 const corpusIsBaseName = (n: string): boolean => CORPUS_BASE_NAMES.has(n);
@@ -168,8 +167,7 @@ describe("C3 — drill-in answers carry an honest evidence tier (Q18's executor 
       replay: () => replayGraphEgress({ program, frozen: run.frozen, basePacks: [] }),
       fallback: async () => {
         throw new Error("fallback should not run — replay must succeed for the program's own egress wire");
-      },
-    });
+      } });
 
     expect(answer.tier).toBe("replayed");
     expect(answer.value).toEqual(run.egress);
@@ -217,8 +215,7 @@ describe("C3 — drill-in answers carry an honest evidence tier (Q18's executor 
         // claimed scope. This is the teaching door, not a stand-in for a bug.
         throw new ReplayScopeError("mint", "mint-node@0", "a mint's payload is recorded, never re-derived by γ");
       },
-      fallback: () => tierMachine.read(hash),
-    });
+      fallback: () => tierMachine.read(hash) });
 
     expect(answer.tier).toBe("recorded");
     expect(answer.value).toBe(42);
@@ -240,8 +237,7 @@ describe("C3 — drill-in answers carry an honest evidence tier (Q18's executor 
       replay: async () => {
         throw new ReplayScopeError("mint", "mint-node@1", "same door as the recorded case");
       },
-      fallback: () => tierMachine.read(hash),
-    });
+      fallback: () => tierMachine.read(hash) });
 
     expect(answer.tier).toBe("stub");
     expect(answer.value).toBeUndefined(); // value dropped
@@ -259,8 +255,7 @@ describe("C3 — drill-in answers carry an honest evidence tier (Q18's executor 
       templateHash,
       ingress: ingressFromMints(run.mints),
       streamEpoch: "arrival-provenance-v0",
-      regionId: run.regionId,
-    };
+      regionId: run.regionId };
     const response = await executor.drillIn(request);
     expect(response.evidenceTier).toBe("replayed");
     expect(response.trust).toBe("matched");
@@ -280,8 +275,7 @@ describe("C3 — drill-in answers carry an honest evidence tier (Q18's executor 
     const verified = await executor2.drillIn({
       ...request,
       streamEpoch: "arrival-provenance-v1",
-      verificationPool: pool,
-    });
+      verificationPool: pool });
     expect(verified.evidenceTier).toBe("replayed");
     expect(verified.trust).toBe("verified");
   });
@@ -350,8 +344,7 @@ describe("break-order probe 3 — ring misconfiguration (undersized ring → bac
           kind: "mint",
           id: { templateHash: "probe3", ordinalPath: [i], regionEpoch: "e0" },
           seq,
-          payloadHash: hash,
-        });
+          payloadHash: hash });
         await h.tierMachine.flush(hash); // the backstop: cap=1 byte means every put immediately exceeds it
         hashes.push(hash);
       }
@@ -390,8 +383,7 @@ describe("break-order probe 4 — drill-in CPU (γ per-drill cost vs the interac
         templateHash,
         ingress: ingressFromMints(freshRun.mints),
         streamEpoch: "arrival-provenance-v0",
-        regionId: freshRun.regionId,
-      });
+        regionId: freshRun.regionId });
       timings.push(performance.now() - start);
       expect(response.evidenceTier).toBe("replayed");
     }

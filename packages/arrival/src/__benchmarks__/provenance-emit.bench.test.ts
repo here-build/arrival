@@ -77,8 +77,7 @@ describe("emission overhead — flag ON (real store/payload work per record)", (
           regionId: REGION,
           id: idAt(i),
           value: { i, note: "a small mint payload" },
-          stampIds: [i, i + 1],
-        });
+          stampIds: [i, i + 1] });
         expect(record).toBeDefined();
       }
       report("emitMint (flag ON)", ITERATIONS, performance.now() - start);
@@ -107,8 +106,7 @@ describe("emission overhead — flag ON (real store/payload work per record)", (
         await emitIngressBinding({
           store,
           regionId: REGION,
-          id: { templateHash: `ingress-${i}`, ordinalPath: [i], regionEpoch: "e0" },
-        });
+          id: { templateHash: `ingress-${i}`, ordinalPath: [i], regionEpoch: "e0" } });
       report("emitIngressBinding (flag ON)", ITERATIONS, performance.now() - ingressStart);
     } finally {
       setEmissionEnabled(false);
