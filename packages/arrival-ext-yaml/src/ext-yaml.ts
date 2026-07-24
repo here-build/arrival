@@ -1,4 +1,4 @@
-// ext/yaml — the `.yaml`/`.yml` file-type resolver as an opt-in capability.
+// yaml — the `.yaml`/`.yml` file-type resolver as an opt-in capability.
 //
 // The dep-bearing data formats left `@inhuman.tools/arrival/loader`'s builtin table so the
 // loader sheds its external deps (per .claude/rules/env-quasi-packages.md — split to
@@ -49,11 +49,11 @@ const typeYaml: RequireTypeProvider = (source) => {
  *  which the editor never builds) and cannot carry a type provider through itself. */
 export const yamlHandler: ExtensionHandler = { resolve: resolveYaml, type: typeYaml };
 
-export const arrivalYamlCapability = EnvCapability.define("ext/yaml", {
+export const arrivalYamlCapability = EnvCapability.define("yaml", {
   // Loader first in C3: prelude calls require/register-extension (preludeOnly on loader).
   deps: [arrivalLoaderCapability],
   symbols: (symbol, z) => ({
-    "ext/yaml/resolve": symbol.native`ext/yaml/resolve: resolves .yaml/.yml module contents to a ResolverResult (loader registry verb)`(
+    "yaml/parse": symbol.native`yaml/parse: resolves .yaml/.yml module contents to a ResolverResult (loader registry verb)`(
       { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
       resolveYaml as never,
     ),
@@ -61,7 +61,7 @@ export const arrivalYamlCapability = EnvCapability.define("ext/yaml", {
   // Bare symbol — `require/register-extension` is a MACRO so the resolver name is
   // unevaluated (no String(fn) registry poison). Strings still work for compat.
   prelude: `
-  (require/register-extension ".yaml" ext/yaml/resolve)
-  (require/register-extension ".yml" ext/yaml/resolve)
+  (require/register-extension ".yaml" yaml/parse)
+  (require/register-extension ".yml" yaml/parse)
 `,
 });

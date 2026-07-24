@@ -1,7 +1,7 @@
 // ext-toml.test.ts — Stage B4 (docs archaeology: stage-b-runcontext-absorbs-assembly.md,
 // hazards ledger): the require-extension per-type law for `.toml`, on the DEFAULT (vocabulary)
 // `exec({ capabilities })` path. Proves `arrivalTomlCapability`'s prelude
-// (`(require/register-extension ".toml" ext/toml/resolve)`) registers into THIS run's own
+// (`(require/register-extension ".toml" toml/parse)`) registers into THIS run's own
 // per-run registry resource (arrival/loader, Stage B4) and that a real `(require "x.toml")`
 // resolves through it end-to-end — plus the re-registration door and the per-run freshness law.
 // Twin of arrival-ext-yaml's `ext-yaml.test.ts` — same laws, same idioms.

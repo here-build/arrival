@@ -1,4 +1,4 @@
-// ext/toml — the `.toml` file-type resolver as an opt-in capability.
+// toml — the `.toml` file-type resolver as an opt-in capability.
 //
 // The twin of `ext-yaml.ts` (see its header for the whole story — the dep-isolation
 // split AND the lost-in-translation recovery): this capability OWNS the `smol-toml`
@@ -17,7 +17,7 @@ import {
   type RequireTypeProvider,
 } from "@inhuman.tools/arrival/loader";
 
-const RESOLVE = "ext/toml/resolve";
+const RESOLVE = "toml/parse";
 
 /** `.toml` → `{ kind: "value" }` DATA. Bound as a `symbol.native` verb (the raw `{ value }`
  *  arm is retired — see ext-yaml.ts's `resolveYaml` note): `require` dispatches its apply
@@ -40,11 +40,11 @@ const typeToml: RequireTypeProvider = (source) => {
 /** See `ext-yaml.ts`'s `yamlHandler` — the exact same bundling rationale. */
 export const tomlHandler: ExtensionHandler = { resolve: resolveToml, type: typeToml };
 
-export const arrivalTomlCapability = EnvCapability.define("ext/toml", {
+export const arrivalTomlCapability = EnvCapability.define("toml", {
   // Loader first in C3: prelude calls require/register-extension (preludeOnly on loader).
   deps: [arrivalLoaderCapability],
   symbols: (symbol, z) => ({
-    [RESOLVE]: symbol.native`ext/toml/resolve: resolves .toml module contents to a ResolverResult (loader registry verb)`(
+    [RESOLVE]: symbol.native`toml/parse: resolves .toml module contents to a ResolverResult (loader registry verb)`(
       { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
       resolveToml as never,
     ),
