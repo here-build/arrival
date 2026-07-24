@@ -79,7 +79,7 @@ capability's shared config bag, validated against the declared type at the membr
 
 ```typescript
 import { exec } from '@inhuman.tools/arrival';
-import { overridableCapability } from '@inhuman.tools/arrival/overridable';
+import { overridableCapability } from "@inhuman.tools/arrival/capabilities/overridable";
 
 const users = [{ id: "alice", priority: 15 }, { id: "bob", priority: 5 }];
 
@@ -126,7 +126,9 @@ The subset is deep where it counts: **proper tail calls** via a flat trampoline
 (Ganz–Friedman–Wand), **multiple values** inside the runtime (user-facing binders doored by design
 — free multi-return packaging is the weak form of continuation arity, and a value's identity is a
 single construction site), the **full R7RS exception tower**, an **exact numeric tower**
-(bigint-backed rationals — `(+ (/ 1 3) (/ 2 3))` is exactly `1`), **datum labels**. Twelve SRFIs
+(safe-integer `AExact` — num/denom are JS safe integers; arithmetic that overflows
+throws; host `bigint` is not a Scheme number — `(+ (/ 1 3) (/ 2 3))` is exactly `1`),
+**datum labels**. Twelve SRFIs
 assemble by default (1, 2, 8, 13, 26, 28, 43, 95, 128, 151, 189, 235 — `src/env/srfi/`); the
 deliberately-absent ones (hash tables, random, time/date, …) are doored stubs naming why they're
 out and what to use instead — exactly the symbols an LLM agent predictably reaches for.
@@ -153,10 +155,10 @@ silently degrades.
 - **Promises are defanged, not banned.** An async return is awaited before it crosses; a Promise
   *inside* a structure settles lazily on first entry read; a bare Promise handed directly to the
   membrane gets a teaching door.
-- **Refusals are loud.** A bare JS function crossing as a *value* (not through a contract)
-  materializes as `#void` with a printed warning; unique JS symbols, having no portable identity,
-  void loudly the same way. Registered symbols (`Symbol.for("status")`) enter as the keyword
-  `:status`.
+- **Bare functions become callables.** A bare JS function crossing as a *value* (not through a
+  contract) enters as an `ARosettaProcedure` — a callable lens that marshals args/result on each
+  call. Unique JS symbols, having no portable identity, are refused with a teaching door
+  (`NoLensError`). Registered symbols (`Symbol.for("status")`) enter as the keyword `:status`.
 
 **JS sits beneath the language as a peer, not above it as a host** — no ambient `console`,
 `process`, or `require` to escape to, so a real effect is always a recorded crossing, never a side
@@ -208,7 +210,8 @@ value** (the Galois-slicing `uneval` of Perera–Cheney; purity is the theorem t
 slice exist).
 
 ```typescript
-import { EvalTrace, buildUneval } from '@inhuman.tools/arrival/provenance';
+import { EvalTrace } from '@inhuman.tools/arrival/provenance';
+import { buildUneval } from '@inhuman.tools/arrival-provenance/analysis';
 
 const t = new EvalTrace();
 const src = `
@@ -218,7 +221,7 @@ const src = `
 `;
 const state = await execState(src, { capabilities: [scanner], tap: t });
 
-const run = buildUneval({ env: state.scope.env, result: state.values.at(-1), trace: t, source: src, forms: [] });
+const run = buildUneval({ scope: state.scope, result: state.values.at(-1), trace: t, source: src, forms: [] });
 const head = await run.uneval('(car result)');
 
 head.value;        // "malware: evil.exe"
@@ -332,9 +335,11 @@ consumers skip the pass for such programs (the runtime doors remain the backstop
   validation pass.
 - `forwardCone`, `backwardCone` (from `/provenance`) — the traced lineage cone; `deepProvenance` —
   the deep provenance read; `schemeToJs` — the boxed→plain exit read.
-- `EvalTrace` / `buildUneval` (from `/provenance`) — the traced-run recorder and reverse slicer;
+- `EvalTrace` (from `/provenance`) — the traced-run recorder (capture spine lives in core);
   `trace.toolNameFor(id)` / `trace.invocationById(id)` resolve a `deepProvenance` ordinal to the
   verb / invocation that minted it.
+- `buildUneval` (from `@inhuman.tools/arrival-provenance/analysis`) — reverse slicer over a finished
+  traced run; options take `scope: state.scope` (not `env`).
 
 **Subpath exports** — granular, tree-shaken entries: `/reflect-internals`, `/lsp-internals`,
 `/host-internals`, `/capability`, `/resources`, `/symbol`, `/emit`, `/schema-tag`, `/attestation`,
@@ -358,7 +363,7 @@ Sibling packages build an editing and serving stack over the language; each has 
 | `@inhuman.tools/arrival-codemirror` | CodeMirror 6 plugin: language modes for classic Scheme and Sugarcoat, `schemeIde(backend)`, paredit-style structural editing over the real reader with a verify-reparse net, inlay hints, `schemeGhost` inline completion. |
 | `@inhuman.tools/arrival-sugarcoat` | Bidirectional lens over canonical s-expressions — renders Scheme as JS/Python/Kotlin-shaped syntax and folds edits back losslessly (`ast(sugarcoatToScheme(schemeToSugarcoat(x), x)) ≡ ast(x)`). Ships the runtime-free reader (`parseSexprs` / `printScheme`), a TextMate grammar, `GRAMMAR.md`, and the 5-minute tour `LEARN.md`. |
 | `@inhuman.tools/arrival-sampler` | Constrained-decode consumer of `/oracle`: substrate-free mask kernel, Σ∩T type-lens narrowing, node-llama-cpp wiring, an OpenAI-compatible server. The mask kernel is tested; decode strategies keep the *experimental* tag. |
-| `@inhuman.tools/arrival-provenance` | Read-only trace analysis: `groundingVerdict`, the `whyOf` / `whereOf` / `howOf` queries, render-models. |
+| `@inhuman.tools/arrival-provenance` | Trace analysis owned natively here (forest, statechart, region tree, flow graph, reverse-chain slicer `buildUneval`, `groundingVerdict` / `whyOf` / `whereOf` / `howOf`). Core keeps only the capture spine (`EvalTrace`, stamping); this package re-exports capture and supplies the mobx-reactive `ObservableEvalTrace`. |
 | `@inhuman.tools/arrival-mcp` | The language as an MCP surface — discovery/action tools over the same capability envs, serializer budgets on every result. |
 | `@inhuman.tools/arrival-manifold` | N MCP servers → one `scheme-repl` tool (the measured benchmark below). |
 | `@inhuman.tools/arrival-serializer` | Budget-bounded rendering: under a budget, per-element caps shrink fairly across siblings and re-render — never a tail-cut. |
@@ -399,11 +404,12 @@ host globals (`window` / `global` / `process` / `require`). But at 0.x, sandbox 
 feasible — at least via property access and some rosetta-layer aspects — so do not yet treat the
 isolation as a hard security boundary for untrusted input.
 
-One shared-state default hosts must know: bare `exec` calls (no explicit `scope`) land their
-top-level `define`s on a realm-cached default root, so definitions accumulate across calls within
-the process — the documented session semantic for a single-tenant REPL, and the wrong default for a
-multi-tenant host. Give every tenant its own `LexicalScope.fresh()` (or a per-tenant assembled
-ambient); without one, one tenant's program can read and clobber another's top-level bindings.
+Bare `exec` / `execState` calls (no explicit `scope`) mint a fresh scope per call —
+`scope ?? LexicalScope.fresh()` — so top-level `define`s do **not** accumulate across bare calls.
+Cross-call accumulation is opt-in: pass the same `LexicalScope` (minted once via
+`LexicalScope.fresh()`) on every call that should share bindings, as the Sessions section shows.
+Multi-tenant hosts that want isolation get it by default; multi-turn sessions opt into a shared
+scope deliberately.
 
 **Do not**: expose to untrusted user input without additional isolation; use in security-critical
 contexts; deploy without containerization; trust sandbox isolation.

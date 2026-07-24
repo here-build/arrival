@@ -149,13 +149,16 @@ registry in `rosetta.ts` (§INBOUND):
    `AJSArray` (a JS array **is** an R7RS vector — the faithful Rosetta mapping), a
    plain object becomes an `AJSObject`. Both are thin, read-only views that keep the
    `source` by reference and box elements lazily on access (§HYGIENE, §MEMBER-READ).
-3. **RAW (the third lane)** — three carriers cross by identity, unboxed, because they
-   are not value-intent and have no faithful Scheme form: `bigint` (an opaque host
-   value — **not** a Scheme number: `number?` answers `#f`, arithmetic coercion doors,
-   and `bigintToNumber` is the one explicit safe-range door out of it), binary FFI
+3. **RAW (the third lane)** — two carriers cross by identity, unboxed, because they
+   are not value-intent and have no faithful Scheme form: binary FFI
    (`Uint8Array`/`ArrayBuffer`/`DataView`/`Buffer`, identity-preserving for the
-   polymorphic bytevector ops), and a `Promise` (kept raw for the evaluator trampoline
-   to await). These ride out again through the matching raw arm on egress.
+   polymorphic bytevector ops), and a `Promise` at `fromJS` only (kept raw for the
+   evaluator trampoline to await; a bare Promise into `jsToScheme` doors). Host
+   `bigint` is **not** raw — it DOORS (`NoLensError` kind `"bigint"`, same spirit as
+   unique-symbol): exact numbers are safe-integer ratios; convert with
+   `Number`/`bigintToNumber` in the safe range (or pass an inexact/string) before
+   re-crossing. Codecs that speak `bigint` on the host face (`z.bigint`) encode to
+   `AExact` BEFORE the membrane.
 
 **Two host bottoms map to two Scheme absences, never collapsing to one:** JS `null` →
 `nil` (the empty list — the list-end bottom), JS `undefined` → `#void` (the
@@ -163,12 +166,10 @@ no-value bottom, silently — a lens, not a warn; see §CALLABLE-LENS above). A 
 that folded them together would make `(null? x)` and a void check indistinguishable
 at the boundary.
 
-The BOXED/RAW split is why `bigint` is the one `typeof` tag `boxing.ts` returns
-unboxed: it widens the boxer's return by exactly one member (`AValue | bigint`), and
-every caller already treats the result as a cast target. `undefined` takes the plain
-`#void` lens; a bare function takes the CALLABLE lens (§CALLABLE-LENS, mints/reuses
-an `ARosettaProcedure`); a registered symbol (`Symbol.for("x")`) has a portable key
-and boxes to the keyword `:x`; a UNIQUE symbol has no lens at all and doors (§INBOUND).
+`undefined` takes the plain `#void` lens; a bare function takes the CALLABLE lens
+(§CALLABLE-LENS, mints/reuses an `ARosettaProcedure`); a registered symbol
+(`Symbol.for("x")`) has a portable key and boxes to the keyword `:x`; a UNIQUE
+symbol and a host `bigint` have no lens at all and door (§INBOUND).
 
 **The freeze contract, stated once.** A borrowed source is frozen
 (`Object.freeze`) on the *first Scheme read* of its wrapper, so a `pure` rosetta — one
@@ -176,11 +177,12 @@ that declares it only transforms its inputs and forwards their provenance — *p
 cannot* mutate what it borrowed: prevention by construction, replacing a dev-only
 purity assert. The freeze is idempotent and lazy (a borrowed array's whole contract is
 that `.length` and `schemeToJs` never touch elements, so an eager scan would pay the
-cost the class exists to avoid). `RunContext.freezeRosettaReturns: false` opts out
-(the host keeps its object mutable). The contract has one home here; its four code
-sites are pointers: `AJSArray.freezeSource`, `AJSObject.freezeSource`,
-`createRosettaWrapper`'s `pure` comment, and the `RunContext.freezeRosettaReturns`
-field (default `true`).
+cost the class exists to avoid). **Always freezes today** — `AJSArray`/`AJSObject`
+no longer carry a per-value run ctx, so `RunContext.freezeRosettaReturns` is stored
+but unread at the freeze sites (the historical opt-out is unreachable until a run
+context is re-sourced onto the wrappers). The contract has one home here; its code
+sites are pointers: `AJSArray.freezeSource`, `AJSObject.freezeSource`, and
+`createRosettaWrapper`'s `pure` comment.
 
 **Enforcement sites:** `membrane/boxing.ts`, `membrane/rosetta.ts`,
 `membrane/AJSArray.ts`, `membrane/AJSObject.ts`, `run/RunContext.ts`.
@@ -275,21 +277,23 @@ to completion before phase 2, phase 2 before phase 3's catch-all doors):
    containment ladder (one row, Array.isArray checked first — not two order-dependent
    siblings); a host `Error` (borrowed `AJSObject`, `stack` hidden by the interop
    policy — its own declared lens, not a Date/Map-style exotic); scalars to the
-   `boxing.ts` boxer table (`bigint` deliberately excluded — it would be minted into
-   an `AExact`, the silent reinterpretation the raw lane forbids); a REGISTERED symbol
-   to the keyword `:x`; the two DECLARED raw-identity lanes (binary FFI; `bigint`);
-   and — the row the 2026-07-23 ruling left open, RESOLVED 2026-07-24 (§CALLABLE-LENS)
-   — a bare host function mints/reuses a genuine scheme-callable `ARosettaProcedure`
-   (the reverse-membrane lens), completing the callable bifunctor `hostProjectionOf`
-   already gave the other direction.
+   `boxing.ts` boxer table (`bigint` deliberately excluded — it is phase 3's door,
+   not a silent AExact mint); a REGISTERED symbol to the keyword `:x`; the DECLARED
+   raw-identity lane (binary FFI); and — the row the 2026-07-23 ruling left open,
+   RESOLVED 2026-07-24 (§CALLABLE-LENS) — a bare host function mints/reuses a genuine
+   scheme-callable `ARosettaProcedure` (the reverse-membrane lens), completing the
+   callable bifunctor `hostProjectionOf` already gave the other direction.
 3. **PHASE 3 — the incompatibility door.** Reached only when phases 1-2 both miss.
    Every remaining shape is EXPLICITLY INCOMPATIBLE, never a silent degrade: a bare
    `Promise` doors (settle first; a Promise INSIDE a structure never reaches here —
    the holding container settles it lazily on entry read); a UNIQUE (unregistered)
-   symbol doors (no portable cross-realm key); an unbranded/exotic object (`Date`,
-   `Map`, `Set`, `RegExp`, a plain class instance, …) doors, naming its two cures
-   (brand the class `@arrival.private`, or hand plain data instead) — the flip from
-   the old warn-and-borrow tolerance tier, which this ruling retires.
+   symbol doors (no portable cross-realm key); a host `bigint` doors (exact numbers
+   are safe-integer ratios — convert with `Number`/`bigintToNumber` in range, or
+   pass inexact/string; codecs encode to `AExact` before the membrane); an
+   unbranded/exotic object (`Date`, `Map`, `Set`, `RegExp`, a plain class instance,
+   …) doors, naming its two cures (brand the class `@arrival.private`, or hand plain
+   data instead) — the flip from the old warn-and-borrow tolerance tier, which this
+   ruling retires.
 
 The fold is total by construction; a miss is a programmer error (`invariant`, not a
 silent leak). A `seen: WeakSet` shortcut is router infrastructure, not a claim: a
@@ -545,7 +549,7 @@ same reasoning the note-sink exists for. The 2026-07-23/24 rulings retired every
 producer on the `fromJS`/`jsToScheme` inbound path itself (`undefined` is a plain
 lens, a unique symbol doors, a bare function is now §CALLABLE-LENS's callable — none
 warn); the mechanism survives for ONE remaining caller, unrelated to a fresh inbound
-crossing: `values/primitives/deep-restamp.ts`'s re-stamp of a LEGACY bare-fn
+crossing: `values/primitives/deep-restamp.ts`'s re-stamp of a bare host-fn
 `AProcedure` already living in a scheme spine (`SchemeValue`'s pre-`ACallable`
 survivor arm) — a shape this document's §CALLABLE-LENS does not cover, since it is
 never a JS→scheme crossing, only a re-stamp of something already inside the algebra.

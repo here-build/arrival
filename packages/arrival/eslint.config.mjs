@@ -118,6 +118,19 @@ export default [
     rules: { "no-restricted-syntax": ["error", arrowFnTrap] },
   },
   {
-    ignores: ["node_modules/*", "dist/*", "**/*.config.*", "debug-*.ts", "lib/**", "vendor/**", "src/__benchmarks__/**", "src/__tests__/**", "**/*.test.ts", "**/*.spec.ts"],
+    ignores: [
+      "node_modules/*",
+      "dist/*",
+      "**/*.config.*",
+      "debug-*.ts",
+      "lib/**",
+      "vendor/**",
+      "src/__benchmarks__/**",
+      "src/__tests__/**",
+      "**/*.test.ts",
+      "**/*.spec.ts",
+      // Scripts are plain mjs — typed rules (prefer-optional-chain, etc.) crash without projectService.
+      "scripts/**",
+    ],
   },
 ];

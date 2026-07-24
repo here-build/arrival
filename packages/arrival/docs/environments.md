@@ -115,7 +115,7 @@ bytevectors, errorObjects]`) is the array actually folded into a run's tuple —
 are the only former `NATIVE_PACKS` members with no `BASE_PACKS`-side `deps` reaching them
 already (see next).
 
-**Bootstrap is now a SINGLE self-hosting fold, not a two-root sequence — the legacy split is
+**Bootstrap is a SINGLE self-hosting fold, not a two-root sequence — the retired split is
 retired.** The pre-Stage-C bootstrap assembled `NATIVE_PACKS` (the JS-implemented R7RS
 domains — numeric, strings, vectors, equality, …) onto a `global_env` root and `BASE_PACKS`
 (the `.scm`-defined stdlib — core, macros, polyglot, r7rs, srfi preludes) onto a child
@@ -256,7 +256,7 @@ has its own document. This section states only the seam a baked verb crosses; §
 
 **The codec IS the crossing, stated once to end the double-framing.** There is one crossing
 spine described from two sides: the `symbol.rosetta` bake wrapper (`common/symbols/rosetta.ts`)
-and the legacy `createRosettaWrapper` (`membrane/rosetta.ts`) share `schemeToJs → fn →
+and `createRosettaWrapper` (`membrane/rosetta.ts`) share `schemeToJs → fn →
 jsToScheme`, with the contract codecs standing in for the generic conversions. A rosetta
 verb's `run` decodes the scheme args to JS (the input codecs), calls the ctx-free impl,
 awaits, encodes the return (the output codecs), then deep-stamps provenance. A *callable*
@@ -269,7 +269,7 @@ ordered, law-pinned claim registry: a recognized value boxes, an exotic object b
 that leaks internal representation three calls later (P5).
 
 **Source mints, pipe forwards — at the crossing.** A `source`-role rosetta mints a fresh
-provenance point off the invocation (`mintsPoint = pure !== true` in the legacy path;
+provenance point off the invocation (`mintsPoint` when the op is not a pure pipe; historical `pure !== true` path;
 `provenance !== "pipe"` in the baked path); a `pipe`-role rosetta forwards the input-provenance
 union instead and mints nothing. With no invocation in ctx (a direct-JS call, no evaluator
 frame) a source falls back to the input union. This is P11 (mint at the edge) made mechanical:
@@ -374,12 +374,12 @@ Both `view` and `pure` stay provenance `source` on the lineage axis — a cachea
 introduces external data. `infer` is the standing proof: a `source` declaring
 `cacheClass: "pure"`.
 
-**The `pure` naming hazard, stated once.** Legacy `defineRosetta`'s `pure: true` meant
-provenance **pipe** (mints nothing). Today's `cacheClass: "pure"` is a cache class **on a
-source**. Different axes, same word: a legacy `pure: true` ports to `provenance: "pipe"`, never
-to `cacheClass: "pure"`. `native`/`sequence` carry a `cacheClass` channel but the run-cache
-interception lives on the rosetta membrane only (a native is a contour, not a penetration); the
-resolved field still rides every def uniformly for downstream readers.
+**The `pure` naming hazard, stated once.** `cacheClass: "pure"` is a cache class **on a
+source** (mint still happens). It is not provenance **pipe** (mints nothing). Different axes,
+same word — do not map "pure" from one axis onto the other. `native`/`sequence` carry a
+`cacheClass` channel but the run-cache interception lives on the rosetta membrane only (a native
+is a contour, not a penetration); the resolved field still rides every def uniformly for
+downstream readers.
 
 **Callback roles ride alongside, one per `z.lambda` arm in lambda order** (`element-transformer`,
 `control`, `effect`, `accumulator`), shape-extracted where shape decides, declared where it
@@ -442,13 +442,13 @@ carries no resolver leg.
 
 ### 7a. PRELUDE — the VOCABULARY PATH contract (Stage B2)
 
-Everything above this subsection describes the LEGACY `lower()`/`assembleEnv` path (bootstrap's
+Everything above this subsection describes the retired `lower()`/`assembleEnv` path (bootstrap's
 `ctx.preludeScope` overlay, mid-run `require`'s discarded child scope `C'`). The vocabulary path
 (`env/vocabulary.ts` + `env/assemble-run.ts`) — the internal `ExecOptions.vocabularyPath` routing
 flag that once selected it at Stage B1 is itself retired; it is the ONLY bootstrap path today —
 realizes the SAME contract — prelude is assembly-time-only, a closure survives by lexical
 capture not by a leaked binding — through a DIFFERENT mechanism, worth stating on its own terms
-rather than as a diff against the legacy prose.
+rather than as a diff against the retired prose.
 
 **Prelude is PER-RUN SYSTEM CODE, not a definition mechanism.** `env/vocabulary.ts`'s
 `buildVocabulary` COLLECTS every `.spec.prelude` in the tuple's C3 closure into
@@ -475,7 +475,7 @@ the built-in regression DETECTOR for this law: manually re-running a capability'
 against an ALREADY-assembled run's `runCtx` must hit the door, because the run's registry
 already holds that entry.
 
-**The prelude scope is NULL-ROOTED, not the legacy bootstrap's live base.** A fresh
+**The prelude scope is NULL-ROOTED, not the retired bootstrap's live base.** A fresh
 `mintResolvingFrame("assemble-run-prelude")` — no parent at all (Stage C Cut 2's
 self-contained posture, matching `vocabulary.ts`'s own `bakeEnv`), never reused, never
 returned, discarded once the pass completes — is seeded with the main map (`Vocabulary.map`)
@@ -489,7 +489,7 @@ path's user-facing chain frame program code resolves against is built separately
 `Vocabulary.map` alone (never `preludeOnly`, never a prelude `define` — see next).
 
 **Prelude `(define …)` is DISCARDED with the scope, uniformly — no bootstrap/mid-run asymmetry.**
-The legacy path's split (bootstrap's defines land in the runtime env; mid-run's are lost with
+The retired path's split (bootstrap's defines land in the runtime env; mid-run's are lost with
 `C'`) collapses on the vocabulary path: EVERY prelude's defines land in the per-run scope and
 vanish when the pass returns, full stop. A name a prelude defines is a plain unbound variable
 from user code — the SAME `UnboundVariableError` any other absent name throws. This is
@@ -534,9 +534,8 @@ Frame *birth* is `mintFrame`/`mintPlainFrame`/`mintResolvingFrame` (subtype-pres
 `inferenceEnv` — or `env/vocabulary.ts`'s own null-rooted `bakeEnv` — stays resolver-capable
 with no ceremony). Binding is `bindValue`. Both are
 module-internal, never barrel-exported; the legitimate writers are all inside the membrane — the
-evaluator's frame binds, capability assembly (`apply()` and the Pass-2 define binds), the retired
-`defineRosetta` wiring's two surviving producers, and the replay playback frame. A new call site
-elsewhere is a regression onto the retired public API.
+evaluator's frame binds, capability assembly (`apply()` and the Pass-2 define binds), internal
+rosetta bind, and the replay playback frame. A new public bind API elsewhere is a regression.
 
 **Storage is inside the membrane, and the read face doors on a raw scalar.** Every writer boxes
 at its own boundary before `bindValue`; so a raw JS scalar (string/number/bigint/boolean)

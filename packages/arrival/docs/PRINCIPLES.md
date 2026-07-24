@@ -64,7 +64,7 @@ layer, runCtx threading and mint/propagate classification on the box layer. A ba
 function is a value-layer-only term: the moment it enters value space, the program has a
 region the second interpreter cannot enter.
 *Revealed by:* the AProcedure arm, the LAMBDA brand passthrough, curry's bare-arrow leak —
-every one a JS artifact living in value space without lineage. (The legacy `SymbolDeclaration`
+every one a JS artifact living in value space without lineage. (The forbidden bare `{ fn }` `SymbolDeclaration` shape
 bare-fn bind arm this used to also cite — capability.ts, wired through `AmbientRuntime.ts`'s
 internal `bindRosetta` — is retired: every capability now binds first-class ANativeProcedures
 instead, per capability.ts's own retirement note.)

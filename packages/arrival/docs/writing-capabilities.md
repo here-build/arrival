@@ -55,9 +55,9 @@ on *each* — the standing migrator trap. The axis definitions and the `pure`-na
   `"pure"` (deterministic-from-args, recovery is re-call), or absent (the safe default, re-runs on
   replay). Both `view` and `pure` stay provenance `source` — a cacheable read still introduces
   external data (`infer` is the proof: a `source` declaring `cacheClass: "pure"`).
-- **the trap** — legacy `defineRosetta`'s `pure: true` meant provenance **pipe**; today's
-  `cacheClass: "pure"` is a cache class on a **source**. A legacy `pure: true` ports to
-  `provenance: "pipe"`, never to `cacheClass: "pure"`.
+- **the trap** — `cacheClass: "pure"` is a cache class on a **source**, not provenance **pipe**
+  (mint nothing). Different axes, same word: use `provenance: "pipe"` for pipe; never map "pure"
+  onto `cacheClass` when you mean pipe.
 
 ## Effects are sinks, and danger is a property of the verb
 

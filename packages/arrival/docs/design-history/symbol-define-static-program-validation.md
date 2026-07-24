@@ -2,7 +2,7 @@
 
 Why capability vocabulary is declared per symbol instead of authored as a prelude text blob, and how a program is validated against a sealed environment before anything evaluates.
 
-A capability's scheme-bodied vocabulary used to live in `prelude:` — an opaque string of defines with no per-define identity, no contracts, and no static-analysis surface. Decomposed into individual declarations, every define carries a contract, a description, a content hash, and a statically checkable reference discipline — which makes an eslint-style parse-phase validation pass possible: **all errors gathered at once (unbound symbols + capability/config requirements), before execution, never crash-on-first.** This works because the environment is non-dynamic and immutable: a sealed chain's name set is complete and frozen, so "unbound" judged at parse phase cannot be invalidated by evaluation.
+A capability's scheme-bodied vocabulary used to live in `prelude:` — an opaque string of defines with no per-define identity, no contracts, and no static-analysis surface. Decomposed into individual declarations, every define carries a contract, a description, and a statically checkable reference discipline — which makes an eslint-style parse-phase validation pass possible: **all errors gathered at once (unbound symbols + capability/config requirements), before execution, never crash-on-first.** This works because the environment is non-dynamic and immutable: a sealed chain's name set is complete and frozen, so "unbound" judged at parse phase cannot be invalidated by evaluation.
 
 The pass also dissolves the strict-vs-teaching-doors question rather than answering it. Without it, a legitimately absent symbol (`require` in a loader-less env) is simply never bound — indistinguishable from a typo. With door-set degradation (§3.7) the symbol binds as an introspectable door carrying its absence-reason as data, and the pass reports every door the program actually references — before evaluation, all at once, with the causal chain. Strictness becomes program-scoped instead of capability-scoped.
 
@@ -35,11 +35,10 @@ A shapeless contract (`{ input: z.array(z.value), output: [z.value] }`) stays LE
 
 **`z.custom` is forbidden on define contracts.** Define contracts double as the TYPE ORIGIN for compiler emission (emitted TS types derive from the declaration's zod contracts — one type source for runtime validation and emission both), and `z.custom` has no type-level content to emit and, with no predicate, validates nothing. Where the emittable schema subset cannot express a define's honest runtime check, the contract splits, documented per site: the runtime-validate schema (full zod) and the emit-type annotation (the `type?:` override) may differ — a declared, visible split, never a silent widening.
 
-### 1.3 Body parsing, spans, identity
+### 1.3 Body parsing and spans
 
 - **Parsed at bake.** The declaration stores the body STRING; bake parses and evaluates it against the assembly env — never at module load (the same laziness posture as resource spin-up).
 - **Span totality extends into the body.** The reader is called with `source = "«capability-name»#«symbol-name»"`, so every Pair in a define body is located and errors name `scheme/srfi-1#fold-right:3:8` instead of an anonymous prelude blob. LIMIT: the TS declaration site is not captured — capability#name is the designed address.
-- **Per-define content identity.** `bodyHash` = FNV-1a over name + body + the contract's stable text, minted eagerly at declaration construction. Cache-key and cross-deploy identity material (§5).
 
 ### 1.4 Provenance role — DERIVED from the body, declaration checked against derivation
 
@@ -58,7 +57,6 @@ export interface DefineSymbolDef {
   readonly out: z.ZodTypeAny;
   readonly callable: boolean;           // procedure vs constant (§1.1)
   readonly body: string;                // the authored RHS expression
-  readonly bodyHash: string;            // §1.3 identity
   readonly provenance: ProvenanceRole;  // DERIVED (§1.4)
   readonly declaredProvenance?: ProvenanceRole;  // drift-door input only
   readonly type?: string;               // harvest override, as everywhere
@@ -71,7 +69,6 @@ export interface DefineSyntaxSymbolDef {
   readonly name: string;
   readonly doc?: string;
   readonly body: string;                // the expander lambda
-  readonly bodyHash: string;
   readonly macroAttribute: "opaque" | "expression" | "binder";  // §3.4
   readonly preludeOnly?: boolean;
 }
@@ -264,7 +261,7 @@ Wrapping hot recursive procedures in per-call zod decode is real overhead (ident
 
 ## 5. What it unlocks
 
-Per-define provenance (the lineage classifier reads capability defines with program-define visibility, §1.4); cross-deploy identity (`bodyHash` gives the chain hash a value axis — scheme bodies are stable text where zod schemas don't hash; the display rule travels with it: hashes address machines, surfaces resolve to `name @ capability`); doc generation and discovery (name + description + contract signature + derived role = the catalog row, mechanically); and compiler lowering — capability defines as declared scheme text make the vocabulary itself lowerable to TS, with the referenced define set (FV ∩ exports, transitively) as the tree-shake.
+Per-define provenance (the lineage classifier reads capability defines with program-define visibility, §1.4); doc generation and discovery (name + description + contract signature + derived role = the catalog row, mechanically); and compiler lowering — capability defines as declared scheme text make the vocabulary itself lowerable to TS, with the referenced define set (FV ∩ exports, transitively) as the tree-shake.
 
 ## 6. EXCLUDED / LIMIT register
 
