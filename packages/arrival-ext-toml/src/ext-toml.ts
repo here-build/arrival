@@ -15,7 +15,7 @@ import {
   type ContentResolver,
   type ExtensionHandler,
   type RequireTypeProvider,
-} from "@inhuman.tools/arrival/loader";
+} from "@inhuman.tools/arrival/capabilities/loader";
 
 const RESOLVE = "toml/parse";
 

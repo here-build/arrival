@@ -1,6 +1,6 @@
 import { z as sz, type SymbolDeclaration } from "@inhuman.tools/arrival";
 import type { Activation } from "@inhuman.tools/arrival/capability";
-import { Contract, symbol, VectorSpec } from "@inhuman.tools/arrival/symbol";
+import { Contract, symbol, VectorSpec } from "@inhuman.tools/arrival";
 import * as z from "zod";
 
 /** Parse `"name: human doc"` off a tagged-template head — shared by every `tool.*` factory

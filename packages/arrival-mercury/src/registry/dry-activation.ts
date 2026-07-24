@@ -27,7 +27,7 @@
  * omitted symbol just falls down the fallback ladder to shim/door.
  */
 import type { Activation } from "@inhuman.tools/arrival/capability";
-import type { DoorSymbolDef } from "@inhuman.tools/arrival/symbol";
+import type { DoorSymbolDef } from "@inhuman.tools/arrival";
 
 type AnyActivation = Activation<any, any>;
 type DegradationInfo = AnyActivation["degradation"];

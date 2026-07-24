@@ -43,7 +43,7 @@
 
 import { type SchemeValue, z } from "@inhuman.tools/arrival";
 import { APair, ASymbol, AString, nil } from "@inhuman.tools/arrival/reflect-internals";
-import { symbol, type CallCtx } from "@inhuman.tools/arrival/symbol";
+import { symbol, type CallCtx } from "@inhuman.tools/arrival";
 import type { SymbolDeclaration } from "@inhuman.tools/arrival/capability";
 // `writeForm` is the SOURCE writer (provenance/slice.ts) — it renders a parsed form back to the
 // text a human/model wrote. NOT `toSExprString`, which is the VALUE printer: that renders the

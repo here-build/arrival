@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from "vitest";
 import { exec } from "@inhuman.tools/arrival";
-import { loaderFromResolver } from "@inhuman.tools/arrival/loader";
+import { loaderFromResolver } from "@inhuman.tools/arrival/capabilities/loader";
 import { EnvCapability } from "@inhuman.tools/arrival/capability";
 
 import { arrivalHandlebarsCapability } from "../capability.js";
@@ -31,7 +31,7 @@ describe("arrivalHandlebarsCapability — .hbs on the vocabulary (default) path"
   });
 
   it("a SEPARATE run that never roots arrivalHandlebarsCapability cannot resolve .hbs at all (per-run isolation)", async () => {
-    const { arrivalLoaderCapability } = await import("@inhuman.tools/arrival/loader");
+    const { arrivalLoaderCapability } = await import("@inhuman.tools/arrival/capabilities/loader");
     await expect(
       exec(`(require "unseen.hbs")`, {
         capabilities: [arrivalLoaderCapability],

@@ -197,7 +197,7 @@ per run), so reaching it from the API means arming the capability explicitly alo
 
 ```js
 import { exec } from "@inhuman.tools/arrival";
-import { overridableCapability } from "@inhuman.tools/arrival/overridable";
+import { overridableCapability } from "@inhuman.tools/arrival/capabilities/overridable";
 
 exec(src, { capabilities: [overridableCapability], config: { params: { city: "Paris" } } });
 ```

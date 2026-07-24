@@ -30,7 +30,7 @@ import type { EnvCapability, SymbolDeclaration } from "@inhuman.tools/arrival/ca
 import type { EmitRule, RefPolicy } from "@inhuman.tools/arrival/emit";
 import { ownerOf } from "@inhuman.tools/arrival/host-internals";
 import { contractOf } from "@inhuman.tools/arrival/lsp-internals";
-import type { AEntity, CacheClass, ProvenanceRole } from "@inhuman.tools/arrival/symbol";
+import type { AEntity, CacheClass, ProvenanceRole } from "@inhuman.tools/arrival";
 import type { RunContext } from "@inhuman.tools/arrival";
 
 import { dryActivation } from "./dry-activation.js";
@@ -195,7 +195,7 @@ function harvestFromCapabilities(capabilities: readonly EnvCapability[]): EmitRe
       // Stage A2 (arrival core, 2026-07-22): the symbol.* factories mint the runtime
       // A-value directly now — `contractOf` (the shared read-side seam every describe/
       // catalog/harvest reader dispatches through) pulls the AEntity CONTRACT off
-      // `.contract`/`.door`, `undefined` for the legacy {fn}/{value}/alias arms (no
+      // `.contract`/`.door`, `undefined` for the non-contract `{fn}`/`{value}`/alias arms (no
       // `.emit` possible either way).
       const entity = contractOf(rawDef);
       if (entity === undefined) continue;

@@ -11,7 +11,7 @@
  */
 import { EnvCapability, jsToScheme, parse, schemeToJsUntyped } from "@inhuman.tools/arrival";
 import { Call, type EmitRule, type R } from "@inhuman.tools/arrival/emit";
-import { arrivalLoaderCapability } from "@inhuman.tools/arrival/loader";
+import { arrivalLoaderCapability } from "@inhuman.tools/arrival/capabilities/loader";
 
 import { asCompiledTemplate, compileTemplate, renderTemplateCall, runCompiledTemplate } from "./compile.js";
 import { hbsContentsToSchemeSource } from "./scheme.js";

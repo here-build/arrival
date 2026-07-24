@@ -24,7 +24,7 @@ import {
 import { freshIfSingleton, isAttested } from "@inhuman.tools/arrival/attestation";
 import { EnvCapability, type SymbolDeclaration } from "@inhuman.tools/arrival/capability";
 import { EvalTrace } from "@inhuman.tools/arrival/provenance";
-import { symbol, type CallCtx } from "@inhuman.tools/arrival/symbol";
+import { symbol, type CallCtx } from "@inhuman.tools/arrival";
 import {
   normalizeSymbolName,
   type ArgsFailureTracker,
@@ -196,7 +196,7 @@ const toolSchemasByVocabulary = new WeakMap<object, readonly ToolSchemaEntry[]>(
 
 /** Recover the raw JSON Schemas registered for `runCtx`'s world, or `undefined` if that
  *  world was never built by `buildManifoldEnv` (or `runCtx` carries no vocabulary at all —
- *  a legacy/bare mint outside the vocabulary path). */
+ *  a bare mint outside the vocabulary path). */
 export function toolSchemasForRun(runCtx: RunContext): readonly ToolSchemaEntry[] | undefined {
   return runCtx.vocabulary === undefined ? undefined : toolSchemasByVocabulary.get(runCtx.vocabulary);
 }
@@ -566,7 +566,7 @@ export async function buildManifoldEnv(
   // host extensions + the per-tool binding loop above) — the injected `(symbol, z)` pair is
   // unused here on purpose: every `symbol.rosetta`/`z.*` use in this file lives in the
   // standalone `validatorDef`/`normalizerDef`/`rosettaDef` helpers above, which read the
-  // module-level `@inhuman.tools/arrival/symbol` / `@inhuman.tools/arrival/scheme-zod`
+  // module-level `@inhuman.tools/arrival` / `@inhuman.tools/arrival/scheme-zod`
   // imports directly (they're called from more than one place, not just this callback).
   const capability = EnvCapability.define("manifold", { symbols: () => symbols });
   const capabilities: readonly EnvCapability[] = [capability];

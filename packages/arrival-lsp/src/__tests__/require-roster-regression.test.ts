@@ -19,7 +19,7 @@
 // Per `.claude/rules/tests.md` this is a `__tests__/` verdict (boolean pass/fail).
 
 import { rosettaTypesOf } from "@inhuman.tools/arrival/lsp-internals";
-import { resolveRequireType } from "@inhuman.tools/arrival/loader";
+import { resolveRequireType } from "@inhuman.tools/arrival/capabilities/loader";
 import { buildArrivalSession } from "@inhuman.tools/arrival-run";
 import { loaderFromResolver } from "@inhuman.tools/llm-plane-arrival-chain";
 import { beforeAll, describe, expect, it } from "vitest";

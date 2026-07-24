@@ -31,7 +31,7 @@ import {
   type SessionScope,
 } from "@inhuman.tools/arrival";
 import { StaticValidationError, tokenize, type Diagnostic } from "@inhuman.tools/arrival/lsp-internals";
-import { arrivalLoaderCapability } from "@inhuman.tools/arrival/loader";
+import { arrivalLoaderCapability } from "@inhuman.tools/arrival/capabilities/loader";
 import { toSExprString } from "@inhuman.tools/arrival-serializer";
 
 import type { ArmedCapabilities } from "./capabilities.js";

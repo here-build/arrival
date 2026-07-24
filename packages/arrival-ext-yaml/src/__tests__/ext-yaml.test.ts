@@ -8,7 +8,7 @@
 import { describe, expect, it } from "vitest";
 import { exec, execState } from "@inhuman.tools/arrival";
 import { schemeToJs } from "@inhuman.tools/arrival";
-import { loaderFromResolver } from "@inhuman.tools/arrival/loader";
+import { loaderFromResolver } from "@inhuman.tools/arrival/capabilities/loader";
 import { EnvCapability } from "@inhuman.tools/arrival/capability";
 
 import { arrivalYamlCapability } from "../ext-yaml.js";
@@ -40,7 +40,7 @@ describe("arrivalYamlCapability — .yaml/.yml on the vocabulary (default) path"
   });
 
   it("a SEPARATE run that never roots arrivalYamlCapability cannot resolve .yaml at all (per-run isolation)", async () => {
-    const { arrivalLoaderCapability } = await import("@inhuman.tools/arrival/loader");
+    const { arrivalLoaderCapability } = await import("@inhuman.tools/arrival/capabilities/loader");
     await expect(
       exec(`(require "unseen.yaml")`, {
         capabilities: [arrivalLoaderCapability],

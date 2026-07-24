@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { EnvCapability } from "@inhuman.tools/arrival/capability";
 import type { EmitRule } from "@inhuman.tools/arrival/emit";
-import { symbol, withContractFields } from "@inhuman.tools/arrival/symbol";
+import { symbol, withContractFields } from "@inhuman.tools/arrival";
 
 import { openOracleSession, type OracleSession } from "../registry/greenfield-session.js";
 import { emitRegistryOf } from "../registry/index.js";
@@ -234,12 +234,12 @@ describe("row shape and precedence", () => {
     expect(registry.lookup("x")?.capability).toBe("test/self");
   });
 
-  it("skips alias + the legacy {fn} record; a symbol.value def harvests as a contract-less row", () => {
+  it("skips alias + the forbidden `{fn}` authoring record; a symbol.value def harvests as a contract-less row", () => {
     // The untagged `{ value }` and bare-fn arms are RETIRED from SymbolDeclaration — data
     // constants author as `symbol.value` (a baked kind: harvests a row, but with no
     // emit/contract fields to carry); the `{ fn }` record survives for the postponed MCP
     // surface and stays kind-less, so the harvest still skips it.
-    const cap = new EnvCapability("test/legacy", {
+    const cap = new EnvCapability("test/harvest-skip", {
       symbols: {
         boxed: symbol.value`boxed: data constant`(42),
         wrapped: { fn: () => 42 },
