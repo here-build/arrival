@@ -21,7 +21,9 @@ import { z } from "zod";
 import { EnvCapability } from "../../../common/capability.js";
 import { execState } from "../../../eval/generator-exec.js";
 import { PurityError } from "../../../errors.js";
-import { DoorProcedure, ALambda, ANativeProcedure, ARosettaProcedure } from "../ACallable.js";
+import { DoorProcedure, ALambda } from "../ACallable.js";
+import { ANativeProcedure } from "../ANativeProcedure.js";
+import { ARosettaProcedure } from "../ARosettaProcedure.js";
 import { is_callable_value } from "../../value-guards.js";
 
 async function lastValue(src: string, opts?: Parameters<typeof execState>[1]): Promise<unknown> {
@@ -50,9 +52,7 @@ describe("LAW — callable arrival/toJS is the reverse membrane", () => {
       symbols: (symbol, sz) => ({
         "shout": symbol.rosetta`shout: upper-case a string`({ input: [sz.string], output: [sz.string] }, (s) =>
           (s as string).toUpperCase(),
-        ),
-      }),
-    });
+        ) }) });
     const proc = (await lastValue("shout", { capabilities: [cap], config: {} })) as ARosettaProcedure;
     expect(proc).toBeInstanceOf(ARosettaProcedure);
     const fn = proc["arrival/toJS"]() as (...args: unknown[]) => unknown;
@@ -71,9 +71,7 @@ describe("LAW — callable arrival/toJS is the reverse membrane", () => {
           function (this: { configuration?: { key?: string } }) {
             return this.configuration?.key ?? "?";
           },
-        ),
-      }),
-    });
+        ) }) });
     // No config ⇒ the bind chooses a door.
     const door = (await lastValue("gated", { capabilities: [cap], config: {} })) as DoorProcedure;
     expect(door).toBeInstanceOf(DoorProcedure);

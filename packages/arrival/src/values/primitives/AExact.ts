@@ -1,18 +1,14 @@
 // AExact — exact number (integers and rationals) over SAFE-INTEGER `number` components.
-// Per docs/design-history/arrival-one-number-rework.md §2.0/§2.1 ("RATIO with
-// crash-on-overflow"): `num`/`denom` are both plain JS `number`s, each always satisfying
-// `Number.isSafeInteger` (the safe-operand invariant, §0.2) — never `bigint`. Given safe
-// operands, IEEE double arithmetic on integers is exact whenever the true result is in
-// safe range, and a true result ≥ 2^53 can never round back INTO safe range — so a
-// post-op `Number.isSafeInteger` check is a sound exactness gate for the closed `+ − ×`
-// algebra (§0.2). A result whose num or denom would leave safe range THROWS (§0.3,
-// `ExactOverflowError` via `../mint-numeric.js`) — never silently coerces to inexact.
 //
-// The AExact↔numbers.ts edges (lte→schemeCompare/toReal) and AExact↔AInexact (toInexact,
-// cross-exactness ops) are BENIGN runtime cycles — method-body calls, nothing needed at
-// module-eval (same shape as AJSArray↔AVector). AExact↔mint-numeric.ts is the same
-// pattern (see that file's header): mint-numeric constructs `new AExact` only inside
-// function bodies, this file calls mint-numeric's helpers only inside method bodies.
+// SAFE-INTEGER EXACT: `num`/`denom` are plain JS `number`s, each always
+// `Number.isSafeInteger` — never `bigint`. Given safe operands, IEEE double
+// arithmetic on integers is exact whenever the true result is in safe range, and
+// a true result ≥ 2^53 can never round back INTO safe range — so a post-op
+// `Number.isSafeInteger` check is a sound exactness gate for the closed `+ − ×`
+// algebra. A result whose num or denom would leave safe range THROWS
+// (`ExactOverflowError` via `../mint-numeric.js`) — never silently coerces to inexact.
+//
+// AExact↔numbers.ts and AExact↔AInexact edges are benign runtime cycles (method-body only).
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { schemeCompare } from "../numbers.js";
@@ -24,8 +20,7 @@ import {
   checkedSub,
   debugCrossCheckRational,
   isNumericDebugEnabled,
-  mintExact,
-} from "../mint-numeric.js";
+  mintExact } from "../mint-numeric.js";
 
 export class AExact extends AValue {
   readonly kind = "number" as const;
@@ -41,11 +36,9 @@ export class AExact extends AValue {
   ) {
     super(provenance, location);
     invariant(denom !== 0, "Division by zero");
-    // Internal invariant, NOT the overflow door: a caller minting exact arithmetic must
-    // have pre-checked every intermediate via checkedMul/checkedAdd/checkedSub (or gone
-    // through mintExact) BEFORE reaching this constructor. Landing here with an already-
-    // unsafe component is an arrival bug (a gate leak), not a program-level event — hence
-    // a plain invariant, never `ExactOverflowError`.
+    // Internal invariant, NOT the overflow door: callers must pre-check via
+    // checkedMul/checkedAdd/checkedSub or mintExact. Unsafe components here are an
+    // arrival bug (gate leak), not a program-level event — plain invariant, never ExactOverflowError.
     invariant(
       Number.isSafeInteger(num),
       `AExact: num ${num} is not a safe integer — the caller must check via checkedMul/checkedAdd/checkedSub (or mintExact) before constructing`,
@@ -61,13 +54,11 @@ export class AExact extends AValue {
     }
     const g = AExact.gcd(num, denom);
     const normNum = num / g;
-    // Exact -0 is unconstructible (Number.isSafeInteger(-0) is true, so the check above
-    // doesn't catch it) — normalize the -0 that `0 / g` (g>0) can produce (§0.6).
+    // Exact -0 is unconstructible — normalize the -0 that `0 / g` can produce.
     this.num = normNum === 0 ? 0 : normNum;
     this.denom = denom / g;
   }
 
-  // Tower predicates - check mathematical properties
   get isInteger(): boolean {
     return this.denom === 1;
   }
@@ -77,19 +68,17 @@ export class AExact extends AValue {
   }
 
   get isReal(): boolean {
-    return true; // all rationals are real
+    return true;
   }
 
   get isComplex(): boolean {
     return true; // real ⊂ complex; predicate stays total
   }
 
-  // Exactness
   get isExact(): boolean {
     return true;
   }
 
-  // Value checks
   get isZero(): boolean {
     return this.num === 0;
   }
@@ -103,16 +92,14 @@ export class AExact extends AValue {
   }
 
   get isNaN(): boolean {
-    return false; // exact numbers are never NaN
+    return false;
   }
 
   get isFinite(): boolean {
-    return true; // exact numbers are always finite
+    return true;
   }
 
-  /** Euclid over safe-int `number`s. `%` never grows the magnitude past its larger
-   *  operand, so no intermediate here can overflow given safe-int inputs — no checked
-   *  helper needed. */
+  /** Euclid over safe-int `number`s. `%` never grows magnitude past its larger operand. */
   private static gcd(a: number, b: number): number {
     a = a < 0 ? -a : a;
     b = b < 0 ? -b : b;
@@ -124,14 +111,11 @@ export class AExact extends AValue {
     return a;
   }
 
-  // Conversion to JS
   valueOf(): number {
     return this.num / this.denom;
   }
 
-  /** Egress divides (§2.0's projection∘borrow law, same as nil-as-array): every
-   *  `AExact.num` is a safe-int `number` by construction, so the integer arm is a bare
-   *  return, and the rational arm's float division is the intentional face
+  /** Egress divides: integer arm is bare return; rational arm's float division is intentional
    *  (`toJS(1/3)` = `0.333…`). */
   ["arrival/toJS"](): number {
     if (this.denom === 1) {
@@ -144,7 +128,6 @@ export class AExact extends AValue {
     return new AExact(this.num, this.denom, p, this.location);
   }
 
-  // String representation
   toString(): string {
     if (this.denom === 1) {
       return this.num.toString();
@@ -156,14 +139,9 @@ export class AExact extends AValue {
     return this.toString();
   }
 
-  // Comparison (same-type). Cross-multiplies for exactness, but — unlike arithmetic —
-  // a comparison never crashes on overflow: if `this.num*other.denom` (or the
-  // subtraction) would leave safe range, the comparison falls back to a float
-  // (`valueOf()`) compare. That's sound because a comparator only needs to answer
-  // ORDER, never reconstruct a value — a monotonic float approximation of two safe-int
-  // rationals is a correct comparator even where the exact cross-multiplied integer
-  // can't be formed (§2.1 schemeCompare note; the checked-intermediate law still
-  // applies to the fast path, it just degrades to floats instead of throwing).
+  // Same-type comparison. Cross-multiplies for exactness, but a comparison never
+  // crashes on overflow: if the intermediate would leave safe range, falls back to
+  // float (`valueOf()`) compare — a comparator only needs ORDER, never a reconstructed value.
   cmp(other: AExact): -1 | 0 | 1 {
     const left = this.num * other.denom;
     const right = other.num * this.denom;
@@ -186,27 +164,22 @@ export class AExact extends AValue {
     return this.num === other.num && this.denom === other.denom;
   }
 
-  // Setoid — exact ≡ exact ONLY, never equal to inexact (R7RS eqv?). structuralEqual/equal?
-  // consult this BEFORE the valueOf fast path, which is what makes `(equal? 1 1.0)` #f.
+  // Setoid — exact ≡ exact ONLY, never equal to inexact (R7RS eqv?).
+  // structuralEqual/equal? consults this BEFORE the valueOf fast path, so `(equal? 1 1.0)` is #f.
   ["arrival/tagless-final/equals"](other: unknown): boolean {
     return other instanceof AExact && this.equals(other);
   }
 
-  // Ord (extends Setoid) — numeric value comparison via schemeCompare: `(<= 1 1.0)` is #t
-  // (cross-type via toReal), unlike the representation Setoid above where exact ≠ inexact.
-  // NaN ⇒ schemeCompare returns NaN ⇒ `NaN <= 0` is #f, so every derived relation collapses
-  // to #f on a NaN operand, matching the numeric `<=` operator. Non-number → false.
+  // Ord — numeric via schemeCompare: `(<= 1 1.0)` is #t (cross-type), unlike Setoid.
+  // NaN ⇒ schemeCompare returns NaN ⇒ every derived relation collapses to #f.
   ["arrival/tagless-final/lte"](other: unknown): boolean {
     return (other instanceof AExact || other instanceof AInexact) && schemeCompare(this, other) <= 0;
   }
 
-  // Same-type arithmetic. Each cross-multiplied intermediate (the `ad`/`bc` cross terms,
-  // the `ad+bc`/`ad-bc` numerator, the `bd` denominator) is checked BEFORE the
-  // gcd-normalizing constructor runs (§0.3) — mintExact's own re-check is defense in
-  // depth, not the primary gate, because a float product that already silently
-  // overflowed can round back to something that LOOKS safe by the time mintExact sees
-  // it. The DEBUG belt (ARRIVAL_NUMERIC_DEBUG) cross-checks the reduced result against
-  // BigInt arithmetic — zero cost when the flag is unset.
+  // Same-type arithmetic. Each cross-multiplied intermediate is checked BEFORE the
+  // gcd-normalizing constructor — mintExact's re-check is defense in depth (a float
+  // product that already overflowed can round back to something that LOOKS safe).
+  // DEBUG belt (ARRIVAL_NUMERIC_DEBUG) cross-checks against BigInt when set.
   add(other: AExact): AExact {
     const num = checkedAdd(
       checkedMul(this.num, other.denom, "exact +"),
@@ -248,9 +221,8 @@ export class AExact extends AValue {
   div(other: AExact): AExact {
     const num = checkedMul(this.num, other.denom, "exact /");
     const denom = checkedMul(this.denom, other.num, "exact /");
-    // Zero-denominator (i.e. dividing by exact zero) still throws — via the AExact
-    // constructor's own "Division by zero" invariant inside mintExact, unrelated to the
-    // overflow door. R7RS: exact `(/ x 0)` errors; only `0.0` division is IEEE `inf`/`nan`.
+    // Zero-denominator still throws via AExact's "Division by zero" invariant inside mintExact.
+    // R7RS: exact `(/ x 0)` errors; only `0.0` division is IEEE `inf`/`nan`.
     const result = mintExact(num, denom, undefined, "exact /");
     if (isNumericDebugEnabled()) {
       debugCrossCheckRational("div", this.num, this.denom, other.num, other.denom, result.num, result.denom);
@@ -270,16 +242,12 @@ export class AExact extends AValue {
     return mintExact(this.denom, this.num, undefined, "exact inverse");
   }
 
-  // Floor, ceiling, truncate, round - return exact integers. `r`/`q` below are computed
-  // via `%` then exact subtraction-then-division (never `Math.trunc(num/denom)` directly)
-  // so the quotient is the TRUE truncated integer: `num - r` is exactly divisible by
-  // `denom` by construction, and IEEE division of two doubles whose true quotient is
-  // itself an integer in safe range is correctly rounded to exactly that integer.
+  // Floor/ceiling/truncate/round return exact integers. Quotient via `%` then
+  // exact subtraction-then-division so the result is the TRUE truncated integer.
   floor(): AExact {
     if (this.denom === 1) return this;
     const r = this.num % this.denom;
     const q = (this.num - r) / this.denom;
-    // Floor: round toward negative infinity
     if (this.num < 0 && r !== 0) {
       return mintExact(q - 1, 1, undefined, "exact floor");
     }
@@ -290,7 +258,6 @@ export class AExact extends AValue {
     if (this.denom === 1) return this;
     const r = this.num % this.denom;
     const q = (this.num - r) / this.denom;
-    // Ceiling: round toward positive infinity
     if (this.num > 0 && r !== 0) {
       return mintExact(q + 1, 1, undefined, "exact ceiling");
     }
@@ -299,7 +266,6 @@ export class AExact extends AValue {
 
   truncate(): AExact {
     if (this.denom === 1) return this;
-    // Truncate: round toward zero
     const r = this.num % this.denom;
     const q = (this.num - r) / this.denom;
     return mintExact(q, 1, undefined, "exact truncate");
@@ -311,8 +277,7 @@ export class AExact extends AValue {
     const r = this.num % this.denom;
     const q = (this.num - r) / this.denom;
     const absR = r < 0 ? -r : r;
-    // Dividing a safe-int by 2 is always exact in a double (a pure exponent shift), so
-    // `Math.trunc(denom / 2)` is the exact floored half — odd-denominator quirks included.
+    // Dividing a safe-int by 2 is always exact in a double (exponent shift).
     const halfDenom = Math.trunc(this.denom / 2);
 
     if (absR < halfDenom) {
@@ -320,7 +285,6 @@ export class AExact extends AValue {
     } else if (absR > halfDenom) {
       return mintExact(this.num < 0 ? q - 1 : q + 1, 1, undefined, "exact round");
     } else {
-      // Tie: round to even
       if (q % 2 === 0) {
         return mintExact(q, 1, undefined, "exact round");
       }
@@ -328,7 +292,6 @@ export class AExact extends AValue {
     }
   }
 
-  // Integer operations (only valid when isInteger)
   mod(other: AExact): AExact {
     invariant(this.isInteger && other.isInteger, "mod requires integers");
     return mintExact(this.num % other.num, 1, undefined, "exact modulo");
@@ -346,7 +309,6 @@ export class AExact extends AValue {
     return mintExact(AExact.gcd(this.num, other.num), 1, undefined, "gcd");
   }
 
-  // Convert to inexact
   toInexact(): AInexact {
     return new AInexact(this.valueOf());
   }

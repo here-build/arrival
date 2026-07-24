@@ -59,7 +59,7 @@ const opsOf = (cap: EnvCapability): Record<string, (...a: any[]) => any> =>
   Object.fromEntries(
     // Stage A2: the CONTRACT (native's raw `.impl`) rides `.contract` on the minted
     // ANativeProcedure now; `harvestContracts` pulls it off (the shared read-side seam).
-    // The legacy `{ value }` form is the fallback for any entry not yet on the symbol.*
+    // The untagged `{ value }` form is the fallback for any entry not yet on the symbol.*
     // API. Entries resolving to neither (no `impl`, no `value`) are DROPPED so the
     // record's values are honestly all-functions — the op-helpers below call them as such.
     Object.entries(harvestContracts(cap.spec.symbols)).flatMap(([k, v]) => {

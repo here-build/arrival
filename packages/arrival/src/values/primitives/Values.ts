@@ -6,11 +6,8 @@ import type { SchemeValue } from "../types.js";
 // multiple-values return is distinguishable from a single value that happens
 // to be a collection.
 export class Values {
-  /** Interop boundary: Values sits outside the AValue hierarchy the FAMILY RULE in
-   *  interop-access.ts covers, so it carries its own explicit stamp. `type()` (utils/
-   *  typecheck.ts) no longer has a brand to report for Values either — it falls to
-   *  the `foreign:Values` rung, an accepted behavior change (no test pins the old
-   *  "values" text). */
+  /** Outside AValue — explicit interop stamp (FAMILY RULE misses non-AValue).
+   *  `type()` reports `foreign:Values`. */
   static [INTEROP_BOUNDARY] = true;
 
   __values__: SchemeValue[];

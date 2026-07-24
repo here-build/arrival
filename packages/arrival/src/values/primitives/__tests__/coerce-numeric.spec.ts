@@ -11,10 +11,10 @@
  * RE-PINNED (one-number rework, RATIO — docs/design-history/arrival-one-number-rework.md
  * §2.3): `AExact`'s payload is a safe-int `number` now, not `bigint` — every `.num`/`.denom`
  * assertion below dropped the trailing `n`. More substantively, §2.3 makes a raw host
- * `bigint` an OPAQUE pass-through value, never a scheme number — `coerceNumeric` (verified
- * directly against `values/op-helpers.ts`) now THROWS a TypeError on both the bare-bigint
- * and the `valueOf() → bigint` arms, pointing the caller at the explicit
- * `bigint->number` (safe-range-checked) conversion instead of silently minting an exact.
+ * `bigint` a membrane NoLensError door, never a scheme number — `coerceNumeric` (verified
+ * directly against `values/op-helpers.ts`) THROWS a TypeError on both the bare-bigint
+ * and the `valueOf() → bigint` arms if one still reaches arithmetic, pointing the caller
+ * at Number/bigintToNumber (safe-range-checked) before re-crossing.
  * This inverts the two "converts bigint..." cases below from a passing conversion to an
  * expected door.
  */

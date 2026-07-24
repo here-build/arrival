@@ -45,8 +45,7 @@ functorLaws<APair<any, any>, number>("Pair", {
   arb: nonEmptyIntList,
   f: (x) => x + 1,
   g: (x) => x * 2,
-  eq,
-});
+  eq });
 
 // ----------------------------------------------------------------------
 // Semigroup (list append) — associativity over structuralEqual. (Cannot use
@@ -184,8 +183,7 @@ describe("Pair — Traversable (traverse)", () => {
         // and `other` wraps the rest — combine into a Pair.
         // @ts-expect-error `this` is untyped in this mock applicative
         return Id(new APair(this.value, other.value));
-      },
-    });
+      } });
     const list = APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2), new AExact(3)], false);
     // @ts-expect-error traverse result is the mock applicative, not a SchemeValue
     const result = (list)[tf("traverse")]((v: unknown) => Id(v), (x: unknown) => Id(x)) as unknown as { value: unknown };

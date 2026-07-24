@@ -63,8 +63,7 @@ functorLaws<AVector, number>("SchemeVector", {
   // the mapped structure re-boxes it on access, so no manual re-boxing is needed here.
   f: (x: number) => x + 1,
   g: (x: number) => x * 2,
-  eq: boxedEq,
-});
+  eq: boxedEq });
 
 describe("SchemeVector Setoid/Semigroup/Functor — boundaries", () => {
   it("structural value equality over distinct heap payloads", () => {

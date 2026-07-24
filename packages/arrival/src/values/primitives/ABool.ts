@@ -7,11 +7,7 @@ import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
  * pattern.
  */
 export class ABool extends AValue {
-  // "boolean", not "bool" — the retired `static [CLASS]` brand said "boolean" and every
-  // error text built on it (typeErrorMessage's "expected a boolean, got …" phrasing) keeps
-  // saying "boolean", so `kind` was renamed to match rather than the reverse (see
-  // AValue.ts's ValueKind union, provenance/slice.ts, and arrival-overridable-lens's
-  // schema-fold.ts for the other readers this rename touched).
+  // "boolean" (not "bool") — matches error phrasing ("expected a boolean") and ValueKind.
   readonly kind = "boolean" as const;
 
   constructor(

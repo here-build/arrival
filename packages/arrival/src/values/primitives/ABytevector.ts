@@ -17,10 +17,7 @@ import { withInputProvenance } from "../op-helpers.js";
 import type { SourceLocation } from "../../errors.js";
 
 
-/**
- * Anything that can seed a bytevector. Coerced to a Uint8Array payload in the
- * constructor (the old `asBytevector` coercion surface, now co-located here).
- */
+/** Anything that can seed a bytevector — coerced to Uint8Array in the constructor. */
 type BytevectorSource =
   | Uint8Array
   | ArrayBuffer

@@ -49,8 +49,7 @@ const characters: Record<string, string> = {
   us: "\u001F",
   si: "\u000F",
   esc: "\u001B",
-  del: "\u007F",
-};
+  del: "\u007F" };
 
 export { characters };
 

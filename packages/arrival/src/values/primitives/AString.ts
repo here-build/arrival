@@ -1,10 +1,8 @@
 // String wrapper — immutable (string-set!/string-fill! are notImplemented stubs; every
-// "mutator" below returns a fresh AString) over a code-point view, with provenance and
-// Fantasy Land algebras on the instance. `freeze()` is JS-level defense-in-depth
-// (Object.defineProperty non-writable/non-configurable) for a parsed literal, not a
+// "mutator" returns a fresh AString) over a code-point view, with provenance and Fantasy
+// Land algebras. `freeze()` is JS-level defense-in-depth for a parsed literal, not a
 // runtime-enforced mutation guard.
-// Lineage: R7RS-small §6.7 strings; the representation-blind Setoid + Functor/
-// Semigroup/Monoid/Applicative are Fantasy Land (fantasyland/fantasy-land).
+// Lineage: R7RS-small §6.7 strings; Setoid + Functor/Semigroup/Monoid/Applicative are Fantasy Land.
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import type { ANumeric } from "../numbers.js";
 import { ACharacter } from "./ACharacter.js";
@@ -30,7 +28,6 @@ export class AString extends AValue {
 
   get length(): number {
     // R7RS strings are sequences of Unicode code points, not UTF-16 code units.
-    // Spread iterates by code point so astral chars (emoji, U+10000+) count once.
     return [...this.__string__].length;
   }
 
@@ -38,17 +35,12 @@ export class AString extends AValue {
     return x instanceof AString || typeof x === "string";
   }
 
-  // Monoid (Fantasy Land) — the empty string is the identity for append. No dispatcher/
-  // caller of `tagless-final/empty` exists today. A no-arg static has no crossing to
-  // derive a live ctx from.
+  // Monoid — empty string is identity for append. No-arg static has no crossing to derive a live ctx from.
   static ["arrival/tagless-final/empty"](): AString {
     return new AString("");
   }
 
-  // Applicative (Fantasy Land) — lift a value into a SchemeString. No dispatcher/caller
-  // of `tagless-final/of` exists today either. Same "no crossing to derive from" reasoning
-  // as `empty` above — if a Monoid/Applicative dispatcher ever lands, this needs a designed
-  // answer, not an invented ctx source.
+  // Applicative — lift a value into a SchemeString. Same "no crossing" note as empty.
   static ["arrival/tagless-final/of"](value: unknown): AString {
     return new AString(String(value));
   }
@@ -69,14 +61,10 @@ export class AString extends AValue {
     delete (this as Partial<AString>).__string__;
     Object.defineProperty(this, "__string__", {
       value: string,
-      // Non-configurable + non-writable so a later re-defineProperty or
-      // assignment can't defeat the freeze — frozen string literals are
-      // immutable per R7RS § 6.7 (string-set!/string-fill! on a literal is an
-      // error). `configurable: true` previously left the door open.
+      // Non-configurable + non-writable — frozen string literals are immutable per R7RS §6.7.
       configurable: false,
       writable: false,
-      enumerable: true,
-    });
+      enumerable: true });
   }
 
   get(n: NumberLike): string {
@@ -95,51 +83,34 @@ export class AString extends AValue {
     }
   }
 
-  // Setoid — REPRESENTATION-BLIND value equality: a boxed AString equals BOTH another
-  // AString of the same content AND the same value UNBOXED (a plain JS string). A string has
-  // no exact/inexact-style grade, so its identity is purely its characters — and the chain
-  // plane boxes inconsistently (provenance-carrying op → boxed; literal/rosetta-unwrap →
-  // plain), so equal? routinely meets a boxed string against a plain one. Comparing only
-  // `instanceof AString` made `(equal? boxed "x")` ⇒ #f, silently breaking every dedup/
-  // `member?` over derived strings (the sift/closure.scm browser hang). `this.__string__ ===
-  // other` lets a plain-string `other` match by content and a non-string `other` fall through
-  // to #f. structuralEqual consults the Setoid before its valueOf check, so this is THE place
-  // string equality is decided.
+  // Setoid — REPRESENTATION-BLIND: boxed AString equals both another AString of the same
+  // content AND the same value unboxed. A string has no exact/inexact-style grade; identity
+  // is purely its characters. Comparing only `instanceof AString` made `(equal? boxed "x")`
+  // ⇒ #f and broke dedup/`member?` over derived strings. structuralEqual consults Setoid
+  // before valueOf, so this is THE place string equality is decided.
   ["arrival/tagless-final/equals"](other: unknown): boolean {
     return this.__string__ === (other instanceof AString ? other.__string__ : other);
   }
 
-  // Ord (extends Setoid) — lexicographic via JS `<=`, a total code-unit order
-  // (totality/antisymmetry/transitivity/consistency-with-equals all hold against the Setoid
-  // above). Non-AString → false.
+  // Ord — lexicographic via JS `<=` (total code-unit order). Non-AString → false.
   ["arrival/tagless-final/lte"](other: unknown): boolean {
     return other instanceof AString && this.__string__ <= other.__string__;
   }
 
-  // Functor — map over the characters. Iterates by code point (spread), so astral chars map
-  // as single graphemes. `f` receives and returns a string char; the result is the joined
-  // string. SYNC (a pure char-map) and present WITHOUT reduce/filter, so the fl-interop
-  // overlay never routes a string through its async sequence dispatch — this is the
-  // borrowed-protocol rename only.
+  // Functor — map over characters by code point. SYNC; no reduce/filter (keeps fl-interop
+  // from routing strings through async sequence dispatch).
   ["arrival/tagless-final/map"](f: (char: string) => string): AString {
     return new AString([...this.__string__].map(f).join(""));
   }
 
-  // Element-count — generalized `length` over a string (code-point count). A string's
-  // characters carry NO element ids (chars aren't separately grounded), so — UNLIKE the
-  // Pair/Vector element-union — this carries the STRING's OWN provenance (container prov),
-  // matching `string-length` (a separate `symbol.native` binding; THIS is the generalized
-  // `length` dispatching here). `withInputProvenance([this], count)` always boxes the count
-  // post bare-value purge (A4/P4) — stamped with this string's provenance when non-empty,
-  // a fresh empty-provenance `AExact` otherwise. Code-point length (spread), so astral chars
-  // count once — identical to the `length` getter / `string-length`.
-  // No heap-charge / no strict-gating, so the trailing runCtx `symbol.tagless` threads is ignored.
+  // Element-count — code-point length. Characters carry no element ids, so this carries
+  // the STRING's OWN provenance (unlike Pair/Vector element-union). Code-point length
+  // (spread), so astral chars count once.
   ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
     return withInputProvenance([this], [...this.__string__].length);
   }
 
-  // Semigroup — string append. `this ⋄ other` concatenates the two underlying strings.
-  // Associative; equality via the Setoid above.
+  // Semigroup — string append.
   ["arrival/tagless-final/concat"](other: AString): AString {
     return new AString(this.__string__ + other.valueOf());
   }
@@ -164,7 +135,6 @@ export class AString extends AValue {
     return this.__string__;
   }
 
-  // Print protocol — the raw string (display form, unquoted).
   ["arrival/print"](): string {
     return this.toString();
   }
@@ -187,16 +157,8 @@ export class AString extends AValue {
     function (this: AString, ...args: unknown[]) {
       return fn.apply(this.__string__, args);
     };
-  // The two casts here are IRREDUCIBLE reflection bridges, not laziness: this loop
-  // indexes `String.prototype` by a runtime-discovered string `key` and writes the
-  // wrapped method onto `AString.prototype` by that same dynamic key. TS models
-  // `String.prototype` as a fixed set of named methods (no string index signature)
-  // and a class prototype as non-writable-by-arbitrary-key — neither dynamic access
-  // is expressible without the `as unknown as Record<...>` widening. The exfiltration
-  // hazard this creates (own grafted methods bypass the accessMember boundary) is
-  // documented + mitigated below. The `typeof` guard keeps the graft to callables, so
-  // a future non-method own prop on `String.prototype` (e.g. an accessor) is skipped
-  // rather than copied as a broken "method".
+  // Irreducible reflection bridges: indexes String.prototype by a runtime key and writes
+  // onto AString.prototype. `typeof` keeps the graft to callables.
   const proto = AString.prototype as unknown as Record<string, unknown>;
   const strProto = String.prototype as unknown as Record<string, unknown>;
   for (const key of _keys) {
@@ -205,21 +167,8 @@ export class AString extends AValue {
   }
 }
 
-// ============================================================================
-// INTEROP BOUNDARY: the loop above grafts EVERY method from `String.prototype` onto
-// `AString.prototype` as OWN enumerable properties — `.replace`, `.match`, `.split`, the
-// entire surface. Because they're OWN (not inherited), `accessMember`'s fast path returns
-// them without checking any boundary, and symbol-to-field auto-resolution means an
-// inference-plane holder of an AString can reach every one of these via scheme property
-// access. The methods are harmless on the string payload, but the surface is unaudited —
-// any future graft (e.g. a method that returns the underlying object) becomes an
-// exfiltration vector.
-//
-// The nominal FAMILY RULE in interop-access.ts (`instanceof AValue` covers the whole value
-// hierarchy in one check; no per-class stamp) makes `isInteropBoundary(proto)` return true
-// when the prototype-chain walk in `accessMember` reaches the AString prototype, blocking
-// the inherited surface. Own
-// properties remain accessible (the fast path is untouched) — correct because grafted
-// methods are own, so the boundary only blocks future inherited additions, not the current
-// intended API. Defense-in-depth via the AValue base's explicit stamp.
-// ============================================================================
+// INTEROP BOUNDARY: the loop grafts String.prototype methods as OWN enumerable properties.
+// accessMember's fast path returns own props without boundary checks; symbol-to-field
+// resolution would otherwise expose the whole surface. The nominal FAMILY RULE in
+// interop-access.ts (`instanceof AValue`) blocks inherited surface on the prototype walk.
+// Own properties remain accessible (grafted methods are own — intended API).

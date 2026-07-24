@@ -20,16 +20,11 @@ import { attachOffendingValue } from "../../errors.js";
  */
 const UNINTERNED = Symbol("UNINTERNED");
 
-// Per-RUN-CONTEXT flyweight intern tables. TODO(ctx-elimination): this used to be keyed by
-// the minting call's OWN ctx (a per-run table, collectable once the run ctx is GC'd, so a
-// `(string->symbol unique)` loop didn't leak permanent global entries). Since AValue no
-// longer carries a per-value ctx, every mint now keys off CONSTANT_CTX — i.e. ONE permanent
-// table for every run. Accepted breakage (see AValue.ts's ctx-removal note): a per-run
-// scope needs an ambient/active run-context to restore. A `Map` is inherently
-// key-pollution-safe — `(string->symbol "__proto__")` sets a Map entry, never reaching
-// Object.prototype. Interning stays pure flyweight (eq? compares `__name__`, not reference —
-// see `equals`/`is`), so the collapsed scoping changes no symbol EQUALITY semantics, only
-// lifetime.
+// Flyweight intern tables keyed by RunContext. Live mints use CONSTANT_CTX (AValue
+// carries no per-value ctx) — one permanent table unless a call site passes another
+// ctx. Map is key-pollution-safe (`__proto__` is an entry, not Object.prototype).
+// Equality is `__name__`-based (`equals`/`is`); table lifetime is separate from eq?.
+// deferred: ambient active-run ctx would restore per-run collectable tables.
 const internTables = new WeakMap<RunContext, Map<string, ASymbol>>();
 function internTableFor(ctx: RunContext): Map<string, ASymbol> {
   let table = internTables.get(ctx);
@@ -83,18 +78,15 @@ export class ASymbol extends AValue {
     }
 
     if (intern !== UNINTERNED && typeof unwrapped === "string") {
-      // TODO(ctx-elimination): always the CONSTANT_CTX table now — see internTables above.
+      // Intern under CONSTANT_CTX (see internTables). deferred: ambient run ctx.
       const table = internTableFor(CONSTANT_CTX);
       const hit = table.get(unwrapped);
       // Flyweight HIT: return the canonical shared instance — no allocation.
       if (hit !== undefined) {
         return hit;
       }
-      // MISS: a fresh symbol is an allocation — charge the run's heap meter so a
-      // `(string->symbol unique)` mint-loop hits the budget instead of growing
-      // unbounded. TODO(ctx-elimination): CONSTANT_CTX always no-ops chargeHeap now (see
-      // AValue.ts's ctx-removal note) — this call is a stub until an ambient run-context
-      // is restored.
+      // MISS: charge heap so a mint-loop hits budget. CONSTANT_CTX no-ops chargeHeap
+      // today — deferred until ambient run ctx restores a real meter.
       chargeHeap(CONSTANT_CTX, 1);
       this.__name__ = unwrapped;
       table.set(unwrapped, this);
@@ -212,8 +204,7 @@ export class AKeywordSymbol extends ASymbol {
     if (args.length === 0) return this;
     const target = args[0] as unknown as Record<string, unknown> | null | undefined;
     const getter = target?.["arrival/tagless-final/get"];
-    // `get` is a SEPARATE tagless op (unaffected by this stage) that still takes the bare
-    // `runCtx` — read it off the whole `callCtx` this apply term now receives.
+    // `get` takes bare `runCtx` — pull it off `callCtx`.
     if (typeof getter === "function") return getter.call(target, this, callCtx.runCtx) as CallResult;
     // B2 (benchmark-defect-register.md): a receiver with NO `arrival/tagless-final/get`
     // term splits into two facts a bare `nil` fall-through would conflate:
@@ -256,12 +247,6 @@ function is_gensym(symbol: unknown): boolean {
   return false;
 }
 
-// ============================================================================
-// INTEROP BOUNDARY: ASymbol tracks gensym metadata via well-known symbols (`literal`
-// is the live one; `object` is a write-only legacy carrier — dotted-path resolution was
-// ruled out, so nothing reads it); symbol-to-field auto-resolution would otherwise expose
-// any class- or prototype-level property to inference-plane scheme. The nominal FAMILY RULE
-// in interop-access.ts (`instanceof AValue` covers the whole value hierarchy in one check;
-// no per-class stamp) blocks inherited-property access on instances. Interning lives in the module-scope
-// `internTables` WeakMap (not a class member), so it isn't symbol-field reachable at all.
-// ============================================================================
+// INTEROP: gensym metadata rides well-known symbols (`literal` live; `object` write-only,
+// nothing reads it). FAMILY RULE (`instanceof AValue`) blocks prototype field walks;
+// interning is module-scope `internTables`, not a class member.

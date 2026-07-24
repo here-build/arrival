@@ -13,17 +13,11 @@
  *
  * Behavior:
  *  - same-provenance / empty-provenance children pass through by identity;
- *  - `seen` terminates cyclic spines: a re-encountered node returns AS-IS (the outer
- *    clone already carries the stamp), so shared/diamond substructure past the first
- *    occurrence keeps its original box;
- *  - a bare JS function in a value slot (the legacy AProcedure arm of SchemeValue,
- *    predating ACallable) has no portable re-stampable value → #void, loudly. UNLIKE
- *    a fresh inbound crossing (docs/membrane.md §CALLABLE-LENS: a bare host function
- *    reaching jsToScheme/fromJs now mints a genuine ARosettaProcedure callable), this
- *    is a re-stamp of something ALREADY living inside a scheme spine, never a
- *    js→scheme crossing — the callable lens has no purchase here, so the legacy void
- *    behavior stands;
- *  - non-AValue scheme orphans (EOF / Values / R7RSError) carry no provenance → identity.
+ *  - `seen` terminates cyclic spines: re-encounter returns AS-IS (outer clone already
+ *    stamped); shared/diamond past first occurrence keeps original box;
+ *  - residual bare JS function in a spine → #void + warn (not a fresh crossing; inbound
+ *    mints ARosettaProcedure via hostFnToCallable — docs/membrane.md §CALLABLE-LENS);
+ *  - non-AValue orphans (EOF / Values / R7RSError) carry no provenance → identity.
  *
  * Leaf-ish module: imports the AValue base, the #void singleton and the membrane warn
  * flag — never the router (rosetta.ts), so APair/AVector can import it without widening
@@ -53,10 +47,7 @@ export function reStampChild(
     return theVoid;
   }
   if (child === null) return p === EMPTY_PROVENANCE ? nil : new ANil(p);
-  // Legacy bare-fn procedure arm (pre-ACallable SchemeValue survivor) — a re-stamp of a
-  // value ALREADY in the spine, not a js→scheme crossing, so docs/membrane.md
-  // §CALLABLE-LENS's inbound reverse-membrane lens does not apply here (see this
-  // file's header doc).
+  // Residual bare-fn already in a spine — re-stamp, not a fresh js→scheme crossing.
   if (typeof child === "function") {
     warnMembrane("a JS function");
     return theVoid;

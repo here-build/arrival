@@ -32,8 +32,7 @@ semigroupLaws("SchemeString", arb);
 functorLaws<AString, string>("SchemeString", {
   arb,
   f: (c) => c.toUpperCase(),
-  g: (c) => (c === c.toLowerCase() ? c.toUpperCase() : c.toLowerCase()),
-});
+  g: (c) => (c === c.toLowerCase() ? c.toUpperCase() : c.toLowerCase()) });
 
 // ----------------------------------------------------------------------
 // Monoid — "" is the identity for append.
