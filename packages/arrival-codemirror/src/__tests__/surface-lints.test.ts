@@ -1,30 +1,18 @@
 /**
- * Sugarcoat surface lints — valid-but-suspicious patterns the reader must not reject
- * (faithful-where-valid) but the editor should flag. Origin: LEARN.md custdev loop,
- * an agent wrote `@s[:baseline]` expecting keyed access and got literal prose.
+ * Sugarcoat surface lints — face-only warnings. Tight `@id[…]` is now the
+ * canonical keyed-access surface inside at-bodies (not a lint target).
  */
 import { describe, it, expect } from "vitest";
 import { sugarcoatSurfaceLints } from "../sugarcoat-ide.js";
 
-describe("@id[ interpolation-subscript lint", () => {
-  it("flags a tight bracket after a bare interpolation", () => {
-    const src = "@{from @s[:baseline] to @s[:current]}";
-    const lints = sugarcoatSurfaceLints(src);
-    expect(lints).toHaveLength(2);
-    expect(lints[0]!.start).toBe(src.indexOf("@s["));
-    expect(lints[0]!.messageText).toMatch(/literal prose.*@\(:key name\)/s);
-    expect(lints[0]!.severity).toBe("warning");
+describe("sugarcoatSurfaceLints", () => {
+  it("stays quiet on tight @id[…] accessor surface (canonical)", () => {
+    expect(sugarcoatSurfaceLints("@{from @s[:baseline] to @s[:current]}")).toHaveLength(0);
   });
 
-  it("stays quiet on the explicit-boundary form — the author already marked the boundary", () => {
-    expect(sugarcoatSurfaceLints("@{v: @|ver|[beta]}")).toHaveLength(0);
-  });
-
-  it("stays quiet on the correct graft spelling", () => {
+  it("stays quiet on grafts, boundaries, and ordinary forms", () => {
     expect(sugarcoatSurfaceLints("@{from @(:baseline s) to @(:current s)}")).toHaveLength(0);
-  });
-
-  it("stays quiet on unquote-splicing and spaced brackets", () => {
+    expect(sugarcoatSurfaceLints("@{v: @|ver|[beta]}")).toHaveLength(0);
     expect(sugarcoatSurfaceLints("`(a ,@xs[0])")).toHaveLength(0);
     expect(sugarcoatSurfaceLints("@{count @n [approx]}")).toHaveLength(0);
   });

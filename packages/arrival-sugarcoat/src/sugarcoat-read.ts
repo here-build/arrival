@@ -233,8 +233,9 @@ const QUOTE_WRAP: Record<string, string> = {
 };
 
 // ── at-expressions (prose / tagged-template sub-reader) ─────────────────────────
-// `@head{ text }` → (head <part>…); headless `@{…}` defaults to `str`; `@dedent{…}`
-// dissolves to (str <dedented>). Inside a body the only escape is `@`: `@id`
+// `@head{ text }` → (head <part>…); headless `@{…}` and `@str{…}` both → `(str …)`
+// (`str` is the explicit alias of the headless default); `@dedent{…}` dissolves to
+// (str <dedented>). Inside a body the only escape is `@`: `@id`
 // interpolates, `@(datum)` grafts code, `@head{…}` nests. Everything else — quotes,
 // newlines, balanced `{}` — is literal text.
 
@@ -272,7 +273,7 @@ function dedentParts(parts: Node[]): Node[] {
   );
 }
 
-/** Bare `@id` interpolation, restricted class (§3b). `i` points past the `@`. */
+/** Bare `@id` interpolation name, restricted class (§3b). `i` points past the `@`. */
 function readInterpId(src: string, i: number): { id: string; end: number } {
   let id = "";
   while (i < src.length && AT_INTERP.test(src[i])) {
@@ -280,6 +281,34 @@ function readInterpId(src: string, i: number): { id: string; end: number } {
     i++;
   }
   return { id, end: i };
+}
+
+/**
+ * Tight trailing `[…]` subscript chain after a bare interp name — the surface
+ * `@persona[:id]` / `@xs[0][1:]`. String-aware so a dynamic key's quoted text
+ * can't spoof the bracket balance. Returns `end === start` when no chain.
+ */
+function readTightSubscripts(src: string, start: number): { end: number } {
+  let i = start;
+  while (i < src.length && src[i] === "[") {
+    let depth = 0;
+    let inStr = false;
+    for (; i < src.length; i++) {
+      const c = src[i];
+      if (inStr) {
+        if (c === "\\") i++;
+        else if (c === '"') inStr = false;
+        continue;
+      }
+      if (c === '"') inStr = true;
+      else if (c === "[") depth++;
+      else if (c === "]" && --depth === 0) {
+        i++;
+        break;
+      }
+    }
+  }
+  return { end: i };
 }
 
 /** `@(datum)` graft — read the balanced `(…)` raw (string/escape aware) and parse it
@@ -311,7 +340,9 @@ function tryReadAtExpr(src: string, i: number): { node: Node; end: number } | nu
   let j = i + 1;
   while (j < src.length && AT_HEAD.test(src[j])) j++;
   if (src[j] !== "{") return null;
-  const head = src.slice(i + 1, j) || "str"; // headless `@{…}` → str
+  // headless `@{…}` → str; `@str{…}` is the same head (explicit alias, not R7RS `string`).
+  const rawHead = src.slice(i + 1, j);
+  const head = rawHead === "" || rawHead === "str" ? "str" : rawHead;
   const { parts, end } = parseAtBody(src, j + 1); // past `{` — RAW literal parts
   // dedent runs on raw text (real newlines), THEN literal parts get source-escaped.
   const finalParts = escapeStrParts(head === "dedent" ? dedentParts(parts) : parts);
@@ -384,11 +415,21 @@ function parseAtBody(src: string, i: number): { parts: Node[]; end: number } {
         i = nested.end;
         continue;
       }
-      const { id, end } = readInterpId(src, i + 1);
+      const { id, end: idEnd } = readInterpId(src, i + 1);
       if (id.length > 0) {
         flush();
-        parts.push(atom(id));
-        i = end;
+        // Tight `@id[…][…]` — sugarcoat accessor surface (not literal prose).
+        // Spaced `@id […]` leaves the brackets as prose (deliberate boundary).
+        const { end: chainEnd } = readTightSubscripts(src, idEnd);
+        if (chainEnd > idEnd) {
+          // `id + chain` without the leading `@` — same grammar as code-context
+          // `persona[:id]`, so one reader path for both.
+          parts.push(readSugarcoatExpr(src.slice(i + 1, chainEnd)));
+          i = chainEnd;
+        } else {
+          parts.push(atom(id));
+          i = idEnd;
+        }
         continue;
       }
       buf += c; // lone `@` → literal

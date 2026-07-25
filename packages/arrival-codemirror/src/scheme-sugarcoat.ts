@@ -83,11 +83,19 @@ function tokenizeAtText(stream: StringStream, state: SchemeSugarcoatState): stri
     stream.next(); // consume `@`
     const n = stream.peek();
     if (n === "(") {
-      // graft — consume the balanced `(…)` on this line
+      // graft — consume the balanced `(…)` on this line (string-aware so a
+      // quoted `)` inside the graft doesn't close early).
       let depth = 0;
+      let inStr = false;
       let ch: string | void;
       while ((ch = stream.next()) != null) {
-        if (ch === "(") depth++;
+        if (inStr) {
+          if (ch === "\\") stream.next();
+          else if (ch === '"') inStr = false;
+          continue;
+        }
+        if (ch === '"') inStr = true;
+        else if (ch === "(") depth++;
         else if (ch === ")" && --depth === 0) break;
       }
       return INTERP;
@@ -99,6 +107,24 @@ function tokenizeAtText(stream: StringStream, state: SchemeSugarcoatState): stri
       return INTERP;
     }
     stream.eatWhile(AT_INTERP); // bare `@id` (or a nested `@head` — its `{` bumps atDepth)
+    // Tight `@id[…][…]` subscript chain — part of the same interpolation
+    // (mirrors sugarcoat-read's bare-interp + trailing subscripts). Spaced
+    // `@id […]` leaves the brackets as prose.
+    while (stream.peek() === "[") {
+      let depth = 0;
+      let inStr = false;
+      let ch: string | void;
+      while ((ch = stream.next()) != null) {
+        if (inStr) {
+          if (ch === "\\") stream.next();
+          else if (ch === '"') inStr = false;
+          continue;
+        }
+        if (ch === '"') inStr = true;
+        else if (ch === "[") depth++;
+        else if (ch === "]" && --depth === 0) break;
+      }
+    }
     return INTERP;
   }
   stream.eatWhile((x: string) => x !== "@" && x !== "{" && x !== "}"); // prose run

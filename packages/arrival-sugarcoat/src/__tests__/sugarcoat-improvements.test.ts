@@ -118,46 +118,34 @@ describe("'() renders as nil (shadow-aware)", () => {
   });
 });
 
-// ── 6. string-append → @string-append{…} at-expression (SOUND, default) ──
-// The graft `@(…)` interpolates any call-form (rendered classic-prefix), so a
-// separator-only template with call holes now surfaces — and round-trips.
-describe("string-append → @string-append{…} (sound, round-trips)", () => {
+// ── 6. string-append → @{…} (default strTolerant modernize) ──
+// Default projection: headless `@{…}` + drop redundant scalar→string coercions.
+// One-way: reads back as `str`, not `string-append`. Strict mode keeps the old lens.
+describe("string-append → @{…} (default: strip coercions, headless str)", () => {
   const matchstate =
     '(string-append "MATCHSTATE:" (number->string view) ":" (number->string (state-hand-id state)) ":" (state-betting-string state) ":" (matchstate-holes-string state view) (matchstate-board-string state))';
-  it("renders as a single @string-append at-expression", () => {
+  it("renders as a single @{…} at-expression with coercions stripped", () => {
+    // `@|view|` / `@|…|` guards when the next literal starts with `:` (interp-class).
     expect(render(matchstate)).toBe(
+      "@{MATCHSTATE:@|view|:@(state-hand-id state):@(state-betting-string state):@(matchstate-holes-string state view)@(matchstate-board-string state)}",
+    );
+  });
+  it("modernize is one-way: reads back as str, not string-append", () => {
+    const back = readSugarcoat(render(matchstate)).map(printScheme).join("\n");
+    expect(back).toContain("(str");
+    expect(back).toContain("view");
+    expect(back).not.toContain("number->string");
+    expect(back).not.toContain("string-append");
+  });
+  // colon-separated, no spaces, one call hole (no coercion to strip)
+  it("a separator template with a call hole surfaces as @{…}", () => {
+    expect(render('(string-append "a:" (f x) ":b")')).toBe("@{a:@(f x):b}");
+  });
+  it("strict mode keeps @string-append + coercions", () => {
+    expect(render(matchstate, { strTolerant: false })).toBe(
       "@string-append{MATCHSTATE:@(number->string view):@(number->string (state-hand-id state)):@(state-betting-string state):@(matchstate-holes-string state view)@(matchstate-board-string state)}",
     );
-  });
-  it("round-trips to the exact string-append", () => expect(roundtrip(matchstate)).toBe(canon(matchstate)));
-  // colon-separated, no spaces, one call hole
-  it("a separator template with a call hole surfaces", () => {
-    expect(render('(string-append "a:" (f x) ":b")')).toBe("@string-append{a:@(f x):b}");
-  });
-});
-
-// ── 7. str-tolerant NORMALIZATION (opt-in): collapse to @{…}, drop redundant coercions ──
-// str coerces every arg (repr), so `(number->string x)` inside it is plumbing. This
-// is a one-way normalization (reads back as `str`, NOT `string-append`) — hence opt-in.
-describe("strTolerant: normalize string-append → str, strip coercions (opt-in)", () => {
-  const matchstate =
-    '(string-append "MATCHSTATE:" (number->string view) ":" (number->string (state-hand-id state)) ":" (state-betting-string state))';
-  it("collapses to @{…} and drops number->string", () => {
-    // `@|view|` — the guard-bars are load-bearing: the next literal starts with `:`
-    // (an interp-class char), so a bare `@view:` would read the colon into the symbol.
-    expect(render(matchstate, { strTolerant: true })).toBe(
-      "@{MATCHSTATE:@|view|:@(state-hand-id state):@(state-betting-string state)}",
-    );
-  });
-  it("normalized form reads back as str (not string-append)", () => {
-    const back = readSugarcoat(render(matchstate, { strTolerant: true })).map(printScheme).join("\n");
-    expect(back).toContain("(str");
-    expect(back).toContain("view"); // the number->string wrapper is gone
-    expect(back).not.toContain("number->string");
-  });
-  it("default (no flag) leaves string-append + coercions intact", () => {
-    expect(render(matchstate)).toContain("@string-append{");
-    expect(render(matchstate)).toContain("number->string");
+    expect(roundtrip(matchstate, { strTolerant: false })).toBe(canon(matchstate));
   });
 });
 

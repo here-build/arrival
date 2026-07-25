@@ -58,4 +58,22 @@ describe("at-expression highlighting", () => {
     const toks = tokens("(@ obj key)");
     expect(toks.some(([, tag]) => tag === "sugarcoatAtOpen")).toBe(false);
   });
+
+  it("tight @id[…] accessor chain is one interpolation token", () => {
+    const toks = tokens("@{/@config/hero-id@persona[:id]@replay-idx}");
+    expect(toks).toEqual([
+      ["@{", "sugarcoatAtOpen"],
+      ["/", "string"],
+      ["@config/hero-id", "sugarcoatInterp"],
+      ["@persona[:id]", "sugarcoatInterp"],
+      ["@replay-idx", "sugarcoatInterp"],
+      ["}", "sugarcoatCurly"],
+    ]);
+  });
+
+  it("spaced @id […] leaves brackets as prose", () => {
+    const toks = tokens("@{count @n [approx]}");
+    expect(toks.filter(([, tag]) => tag === "sugarcoatInterp").map(([txt]) => txt)).toEqual(["@n"]);
+    expect(toks.some(([txt, tag]) => tag === "string" && txt.includes("[approx]"))).toBe(true);
+  });
 });

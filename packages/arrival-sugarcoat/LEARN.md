@@ -177,7 +177,12 @@ prose glues to the name:
 
 ```scheme
 @{hello, @|name|!}          ;; ≡ (str "hello, " name "!")
-@string-append{a @x b}      ;; ≡ (string-append "a " x " b")
+@str{hello, @|name|!}       ;; ≡ same — explicit alias of headless @{}
+
+;; classic (string-append …) with scalar casts projects as @{…}:
+;;   (string-append "a " (number->string x) " b")  →  @{a @x b}
+;; (str already coerces; number->string / symbol->string / ->string drop)
+;; Strict surface (opt-out): @string-append{a @x b} ≡ (string-append "a " x " b")
 
 @dedent{
   multi-line prose
@@ -185,20 +190,23 @@ prose glues to the name:
 }                            ;; ≡ (str …) with the common indent stripped
 ```
 
-**Inside a body, `@x` interpolates a bare name and nothing more** — no subscripts, no
-dots, no infix attach to it. For anything richer, graft a form with `@(…)`, and inside
-the graft you are writing **classic prefix Scheme** (the parens are the form's own
-parens, not a wrapper):
+**Inside a body, `@x` interpolates a bare name.** A tight trailing subscript chain
+rides along — `@s[:baseline]` / `@xs[0]` — the same accessor surface as code context.
+For calls and anything richer, graft a form with `@(…)`; inside the graft you are
+writing **classic prefix Scheme** (the parens are the form's own envelope, not a
+wrapper — so postfix sugar like `persona[:id]` must stay bare, not `@(persona[:id])`):
 
 ```scheme
 @{Visit #@(+ visits 1)}       ;; ≡ (str "Visit #" (+ visits 1))
-@{from @(:baseline s)}        ;; ≡ (str "from " (:baseline s))
+@{from @s[:baseline]}         ;; ≡ (str "from " (:baseline s))
+@{/@config/hero-id@persona[:id]@replay-idx}
 
 @{Visit #@(visits + 1)}       ;; ✗ calls `visits` — graft is prefix context, no infix
-@{from @s[:baseline]}         ;; ✗ interpolates s, then "[:baseline]" is literal prose
+@{from @s [:baseline]}        ;; ✗ space breaks the chain — "[:baseline]" is prose
 ```
 
-Headless `@{…}` defaults to `(str …)`. Racket's `at-exp` is the ancestor.
+Headless `@{…}` defaults to `(str …)`; `@str{…}` is the same head. Racket's `at-exp`
+is the ancestor.
 
 ---
 

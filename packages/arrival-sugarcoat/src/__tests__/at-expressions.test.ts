@@ -9,10 +9,12 @@ const readAll = (sugarcoat: string): string => readSugarcoat(sugarcoat).map((f) 
 // @head{text} → (head <part>…); headless → str; @dedent{…} dissolves to (str <dedented>).
 describe("read: at-expressions → (head part…)", () => {
   const cases: Array<[string, string]> = [
-    // headless defaults to str
+    // headless defaults to str; @str{…} is the explicit alias
     ["@{hello}", '(str "hello")'],
+    ["@str{hello}", '(str "hello")'],
     ["@{a @x b}", '(str "a " x " b")'],
-    // explicit head, general reader
+    ["@str{a @x b}", '(str "a " x " b")'],
+    // explicit non-str head, general reader (strict surface still readable)
     ["@string-append{a @x b}", '(string-append "a " x " b")'],
     // quotes are literal — no \" escaping in source
     ['@{Say "@x" loud}', '(str "Say \\"" x "\\" loud")'],
@@ -28,6 +30,10 @@ describe("read: at-expressions → (head part…)", () => {
     ["@{use {curly} raw}", '(str "use {curly} raw")'],
     // lone @ with no valid interp is literal
     ["@{a @ b}", '(str "a @ b")'],
+    // tight bare-interp + subscript chain (the accessor surface)
+    ["@{from @s[:baseline]}", '(str "from " (:baseline s))'],
+    ["@{/@config/hero-id@persona[:id]@replay-idx}", '(str "/" config/hero-id (:id persona) replay-idx)'],
+    ["@{x@persona[:id]y}", '(str "x" (:id persona) "y")'],
   ];
   for (const [sugarcoat, scheme] of cases) it(`${sugarcoat} → ${scheme}`, () => expect(read(sugarcoat)).toBe(scheme));
 });
@@ -58,14 +64,25 @@ describe("read: multi-line at-body through the I-expression coalescer", () => {
 
 const render = (scheme: string): string => schemeToSugarcoat(scheme).trim();
 
-describe("render: (str …) → single-line at-expression", () => {
+describe("render: (str …) / (string-append …) → single-line at-expression", () => {
   const cases: Array<[string, string]> = [
     ['(str "a " x " b")', "@{a @x b}"],
-    ['(string-append "a " x " b")', "@string-append{a @x b}"],
+    // default strTolerant: string-append modernizes to headless @{…} (not @string-append)
+    ['(string-append "a " x " b")', "@{a @x b}"],
     ['(str "Say \\"" x "\\" loud")', '@{Say "@x" loud}'],
     ['(str "role: " (field lead "role"))', '@{role: @(field lead "role")}'],
+    // keyword / pair accessors surface as bare @recv[:k], not classic @(:k recv)
+    ['(str "/" config/hero-id (:id persona) replay-idx)', "@{/@config/hero-id@persona[:id]@replay-idx}"],
+    ['(str "x" (:id persona) "y")', "@{x@persona[:id]y}"],
+    ['(str "from " (:baseline s))', "@{from @s[:baseline]}"],
   ];
   for (const [scheme, sugarcoat] of cases) it(`${scheme} → ${sugarcoat}`, () => expect(render(scheme)).toBe(sugarcoat));
+
+  it("strict mode keeps string-append as @string-append{…}", () => {
+    expect(schemeToSugarcoat('(string-append "a " x " b")', { strTolerant: false }).trim()).toBe(
+      "@string-append{a @x b}",
+    );
+  });
 
   // preference / soundness — these stay classic
   const classic: string[] = [
@@ -78,13 +95,24 @@ describe("render: (str …) → single-line at-expression", () => {
 
 describe("read∘render = id (the moat) for single-line at-expressions", () => {
   const canon = (s: string): string => printScheme(parseSexprs(s)[0]);
+  // strict round-trip for string-append (default modernize is one-way → str)
+  const roundtripStrict = (s: string): string =>
+    printScheme(readSugarcoatExpr(schemeToSugarcoat(s, { strTolerant: false }).trim()));
   const roundtrip = (s: string): string => printScheme(readSugarcoatExpr(render(s)));
   for (const s of [
     '(str "a " x " b")',
-    '(string-append "Pitch \\"" product "\\" now")',
     '(str "role: " (field lead "role"))',
+    '(str "/" config/hero-id (:id persona) replay-idx)',
+    '(str "from " (:baseline s))',
   ])
     it(`round-trips ${s}`, () => expect(roundtrip(s)).toBe(canon(s)));
+  it('strict-round-trips (string-append …)', () => {
+    const s = '(string-append "Pitch \\"" product "\\" now")';
+    expect(roundtripStrict(s)).toBe(canon(s));
+  });
+  it("default modernize: string-append → str (one-way)", () => {
+    expect(roundtrip('(string-append "a " x " b")')).toBe('(str "a " x " b")');
+  });
 });
 
 describe("render: multi-line (str …) → @dedent{…} (the pretty projection)", () => {

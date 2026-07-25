@@ -239,11 +239,12 @@ export interface SugarcoatOpts {
    *  only when the program doesn't shadow `nil` with a non-empty binding (a `(define
    *  nil '())` is fine). Off for bare-node callers so a stray render stays literal. */
   nilGlyph: boolean;
-  /** OPT-IN normalization: treat `str` as the tolerant concatenator it is — render
-   *  `string-append` as headless `@{…}` and DROP redundant string coercions
-   *  (`(number->string x)` → `x`). NOT a lens: the result reads back as `str`, not
-   *  `string-append`, so this mutates the stored form on save. Off by default so the
-   *  round-trip corpus gate is untouched; callers opt in for a one-way modernize. */
+  /** Modernize string assembly for the sugarcoat surface: render `string-append` as
+   *  headless `@{…}` (≡ `@str{…}` on read) and DROP redundant string coercions
+   *  (`(number->string x)` → `x`, same for `symbol->string` / `->string`). `str` already
+   *  coerces non-strings via `repr`, so those wrappers are pure plumbing. ONE-WAY: the
+   *  result reads back as `str`, not `string-append` — save rewrites storage. Default
+   *  ON (the sugarcoat projection); pass `false` to keep a strict string-append lens. */
   strTolerant: boolean;
 }
 export const DEFAULT_OPTS: SugarcoatOpts = {
@@ -253,7 +254,7 @@ export const DEFAULT_OPTS: SugarcoatOpts = {
   kwargHeads: new Set(["dict"]),
   skin: "ascii",
   nilGlyph: false,
-  strTolerant: false,
+  strTolerant: true,
 };
 
 /** A `(string-append …)` tolerates a wider line than the general budget before it
@@ -439,9 +440,11 @@ const isInfix = (items: Node[], o: SugarcoatOpts): boolean =>
 const isKeyword = (nd: Node): boolean => isAtom(nd) && !nd.str && nd.atom.startsWith(":") && nd.atom.length > 1;
 
 // ── at-expressions render (inverse of sugarcoat-read's @-reader) ─────────────────────
-// `(str …)`→`@{…}`, `(string-append …)`→`@string-append{…}`. dedent never appears in
-// canonical scheme (the reader dissolved it), so a multi-line `(str …)` renders as
-// `@dedent{…}` (handled in the broken renderer); the single-line forms live here.
+// `(str …)`→`@{…}`; under default `strTolerant`, `(string-append …)` also →`@{…}` with
+// known scalar→string coercions stripped (`number->string`/`symbol->string`/`->string`).
+// Strict mode (`strTolerant: false`) keeps `(string-append …)`→`@string-append{…}`.
+// dedent never appears in canonical scheme (the reader dissolved it); multi-line
+// `(str …)` renders as `@dedent{…}`. `@str{…}` is a read-side alias of headless `@{…}`.
 const AT_TEXT_HEADS = new Set(["str", "string-append"]);
 // a bare `@id` interpolation must FULLY match the reader's restricted class (no `.`).
 const INTERP_ID = /^[A-Za-z0-9!$%&*/:<=>?^_~+-]+$/;
@@ -450,8 +453,9 @@ const unescapeScheme = (s: string): string =>
 const isStrNode = (n: Node): n is { atom: string; str: true } => isAtom(n) && !!(n as { str?: boolean }).str;
 
 // String coercions that `str` (the tolerant concatenator) makes redundant — stripped
-// under `strTolerant`. Only scalar→string coercions: `(list->string x)` is NOT here,
-// str would repr the list, not join its chars, so dropping it would change meaning.
+// under `strTolerant` (default). Only scalar→string coercions: `(list->string x)` is
+// NOT here — str would repr the list, not join its chars, so dropping it would change
+// meaning.
 const COERCE_STRIP = new Set(["number->string", "symbol->string", "->string"]);
 const stripCoercion = (nd: Node): Node =>
   !isAtom(nd) &&
@@ -462,19 +466,40 @@ const stripCoercion = (nd: Node): Node =>
     ? nd.list[1]
     : nd;
 
+/**
+ * Pure accessor/subscript chain on a bare-name base — the at-body spelling
+ * `@persona[:id]` / `@xs[0][1:]` (no graft parens). null when the form needs a
+ * `@(…)` graft (method dots, compound base, non-subscript steps).
+ *
+ * Graft parens are wrong for postfix sugar: `@(persona[:id])` re-reads as a
+ * ONE-element list around the accessor (`((:id persona))`), so bare is the only
+ * sound surface for these chains.
+ */
+function bareInterpAccessor(nd: Node, o: SugarcoatOpts): string | null {
+  const { base, steps, emit } = peelChain(nd, o);
+  if (!emit || steps.length === 0) return null;
+  if (!steps.every((s) => "sub" in s)) return null;
+  if (!isAtom(base) || base.str || !INTERP_ID.test(base.atom)) return null;
+  return `@${base.atom}${steps.map((s) => ("sub" in s ? s.sub : "")).join("")}`;
+}
+
 /** Emit one interpolation part. A simple symbol → `@id`, guarded to `@|id|` when the
  *  NEXT literal starts with an interp-class char (else the reader reads them glued).
- *  Any other node → an `@(…)` graft of its CLASSIC-prefix form. Classic (not sugar) is
- *  load-bearing: the `@(datum)` reader parses the graft as one sexpr, so a method-chain
- *  (`x.f`, no parens) or a re-parenthesized sugar form (`(xs.map{…})` → double-wrap)
- *  wouldn't round-trip — but `(f x)` classic reads back verbatim. A non-INTERP_ID atom
- *  has no spelling → null (caller bails to classic). */
-function interpPiece(p: Node, next: Node | undefined, _o: SugarcoatOpts): string | null {
+ *  Pure accessor chains → bare `@recv[:k]` / `@xs[0]` (the sugarcoat surface). Any
+ *  other compound → `@(…)` graft of its CLASSIC-prefix form. Classic (not sugar) is
+ *  load-bearing for grafts: the `@(datum)` reader peels the outer parens as the
+ *  graft envelope, so a method-chain (`x.f`, no parens) or a re-parenthesized sugar
+ *  form (`(persona[:id])` → double-wrap) wouldn't round-trip — but `(f x)` classic
+ *  reads back verbatim. A non-INTERP_ID atom has no spelling → null (caller bails
+ *  to classic). */
+function interpPiece(p: Node, next: Node | undefined, o: SugarcoatOpts): string | null {
   if (isAtom(p)) {
     if (p.str || !INTERP_ID.test(p.atom)) return null;
     const glue = next != null && isStrNode(next) && INTERP_ID.test(unescapeScheme(next.atom)[0] ?? "");
     return glue ? `@|${p.atom}|` : `@${p.atom}`;
   }
+  const bare = bareInterpAccessor(p, o);
+  if (bare != null) return bare;
   // inlineScheme of a list is already parenthesized (`(f x)`), which IS the `@(datum)`
   // graft body — so `@` + it, not `@(` + it + `)` (that would double-wrap to `@((f x))`).
   return `@${inlineScheme(p)}`;

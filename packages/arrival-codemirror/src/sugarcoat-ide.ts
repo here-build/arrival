@@ -18,35 +18,16 @@ import type {
   SchemeIdeQuickInfo,
 } from "./ide.js";
 
-/** Diagnostic code namespace for sugarcoat-surface lints (not tsc codes). */
-const SURFACE_LINT_INTERP_SUBSCRIPT = 90001;
-
 /**
  * Surface-face lints — patterns that are VALID sugarcoat (so the reader must not
  * reject them; prose is prose) but near-certainly not what the author meant.
  *
- * `@id[` — an at-body interpolation stops at the bare name, so a tight `[:key]`
- * after it is literal prose, silently: an author who writes `@s[:baseline]`
- * expecting keyed access gets prose instead. Excluded: `,@` splices,
- * spaced brackets, and the explicit-boundary form `@|id|[` — an author who wrote
- * the boundary already decided where the name ends, so trailing prose brackets
- * are plausibly deliberate. A bare tight `@id[` has no other plausible intent.
+ * Tight `@id[…]` is the CANONICAL keyed-access surface inside at-bodies
+ * (reads as `(:key id)` / `(@ id key)`), so it is not linted. Hook reserved for
+ * future face-only warnings that don't need classic projection.
  */
-export function sugarcoatSurfaceLints(sugarcoat: string): SchemeIdeDiagnostic[] {
-  const out: SchemeIdeDiagnostic[] = [];
-  const interpThenBracket = /(?<!,)@([A-Za-z!$%&*/<=>?^_~][\w!$%&*/<=>?^_~-]*)\[/g;
-  for (const m of sugarcoat.matchAll(interpThenBracket)) {
-    out.push({
-      start: m.index,
-      length: m[0].length,
-      severity: "warning",
-      code: SURFACE_LINT_INTERP_SUBSCRIPT,
-      messageText:
-        "interpolation stops at the name — the '[…]' here is literal prose; " +
-        "for keyed access graft a form: @(:key name)",
-    });
-  }
-  return out;
+export function sugarcoatSurfaceLints(_sugarcoat: string): SchemeIdeDiagnostic[] {
+  return [];
 }
 
 /** Per-buffer memo (all queries see same doc between edits). */
