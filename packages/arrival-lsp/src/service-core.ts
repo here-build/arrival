@@ -384,9 +384,16 @@ const DEFAULT_OPTIONS: ts.CompilerOptions = {
   noEmit: true,
   strict: true,
   target: ts.ScriptTarget.ES2022,
+  // ES modules so `import x from "__req__/….ts"` (require-as-import faces) resolve.
+  module: ts.ModuleKind.ESNext,
+  moduleResolution: ts.ModuleResolutionKind.Bundler,
   lib: ["lib.es2022.d.ts"],
   types: [],
   skipLibCheck: false,
+  // Default export of virtual data/prompt modules is a declare const — allow
+  // synthetic defaults if a face ever ships as CJS-shaped text.
+  allowSyntheticDefaultImports: true,
+  esModuleInterop: true,
 };
 
 /** Map a tsc `DiagnosticCategory` to the LSP/CodeMirror severity vocabulary. */
@@ -584,6 +591,12 @@ export function createSchemeLanguageServiceCore(
   // Mutable program cell + version, bumped each time we set a new emitted module.
   let programText = "export {};\n";
   let programVersion = 0;
+  // Per-require virtual modules (data/prompt): one file each, `export default` the
+  // require shape. Require-as-import: the open buffer `import`s them instead of a
+  // flat `declare function require("path")` overload bag — individual file
+  // preservation for the checker (and a step toward real module faces).
+  let dataModules = new Map<string, string>();
+  let dataModuleVersion = 0;
   // Emitted TS identifier → the ORIGINAL scheme source spelling it was minted from (see
   // `emitTypes`'s `declaredNames`) — the MAIN program's own defines only (a required file's
   // names are out of scope for THIS buffer's completions). Consumed by `computeEntries` to
@@ -593,13 +606,49 @@ export function createSchemeLanguageServiceCore(
   // not derived by inverting the emitted name).
   let programDeclaredNames: ReadonlyMap<string, string> = new Map();
 
-  const inMemory = (fn: string): string | undefined => preludeFiles.get(fn) ?? supportFiles.get(fn);
+  /** Normalize paths TS resolves (often `/__req__/…` or `./__req__/…`) to map keys. */
+  const normPath = (fn: string): string => {
+    if (fn === PROGRAM_FILE || fn.endsWith(`/${PROGRAM_FILE}`)) return PROGRAM_FILE;
+    return fn.replace(/^\.\//, "").replace(/^\//, "");
+  };
+
+  const inMemory = (fn: string): string | undefined => {
+    const key = normPath(fn);
+    return (
+      preludeFiles.get(key) ??
+      preludeFiles.get(fn) ??
+      supportFiles.get(key) ??
+      supportFiles.get(fn) ??
+      dataModules.get(key) ??
+      dataModules.get(fn)
+    );
+  };
+
+  /** Resolve `import … from "__req__/path"` / `./__req__/path` to our virtual module. */
+  const resolveDataModule = (moduleName: string): string | undefined => {
+    const raw = normPath(moduleName);
+    const candidates = [raw, raw.endsWith(".ts") ? raw : `${raw}.ts`, `__req__/${raw}`, `__req__/${raw}.ts`];
+    for (const c of candidates) {
+      if (dataModules.has(c)) return c;
+    }
+    // Import specifier is the full virt key without leading junk.
+    for (const key of dataModules.keys()) {
+      if (key === raw || key === `${raw}.ts` || key.endsWith(`/${raw}`) || key.endsWith(`/${raw}.ts`)) return key;
+    }
+    return undefined;
+  };
 
   const host: ts.LanguageServiceHost = {
-    getScriptFileNames: () => [...preludeFiles.keys(), PROGRAM_FILE],
-    getScriptVersion: (fn) => (fn === PROGRAM_FILE ? String(programVersion) : "1"),
+    getScriptFileNames: () => [...preludeFiles.keys(), ...dataModules.keys(), PROGRAM_FILE],
+    getScriptVersion: (fn) => {
+      const key = normPath(fn);
+      if (key === PROGRAM_FILE) return String(programVersion);
+      if (dataModules.has(key) || dataModules.has(fn)) return String(dataModuleVersion);
+      return "1";
+    },
     getScriptSnapshot: (fn) => {
-      if (fn === PROGRAM_FILE) return ts.ScriptSnapshot.fromString(programText);
+      const key = normPath(fn);
+      if (key === PROGRAM_FILE) return ts.ScriptSnapshot.fromString(programText);
       const inMem = inMemory(fn);
       if (inMem !== undefined) return ts.ScriptSnapshot.fromString(inMem);
       try {
@@ -612,15 +661,31 @@ export function createSchemeLanguageServiceCore(
     getCurrentDirectory: () => "/",
     getCompilationSettings: () => options,
     getDefaultLibFileName: (o) => env.getDefaultLibFileName(o),
-    fileExists: (fn) => fn === PROGRAM_FILE || inMemory(fn) !== undefined || (env.sys?.fileExists(fn) ?? false),
+    fileExists: (fn) => {
+      const key = normPath(fn);
+      return key === PROGRAM_FILE || inMemory(fn) !== undefined || (env.sys?.fileExists(fn) ?? false);
+    },
     readFile: (fn) => {
-      if (fn === PROGRAM_FILE) return programText;
+      const key = normPath(fn);
+      if (key === PROGRAM_FILE) return programText;
       return inMemory(fn) ?? env.sys?.readFile(fn);
     },
     readDirectory: (path, extensions, exclude, include, depth) =>
       env.sys?.readDirectory(path, extensions, exclude, include, depth) ?? [],
-    directoryExists: (dir) => env.sys?.directoryExists(dir) ?? false,
+    directoryExists: (dir) => env.sys?.directoryExists(dir) ?? true,
     getDirectories: (dir) => env.sys?.getDirectories(dir) ?? [],
+    resolveModuleNameLiterals: (literals) =>
+      literals.map((lit) => {
+        const resolved = resolveDataModule(lit.text);
+        if (resolved === undefined) return { resolvedModule: undefined };
+        return {
+          resolvedModule: {
+            resolvedFileName: resolved,
+            extension: ts.Extension.Ts,
+            isExternalLibraryImport: false,
+          },
+        };
+      }),
   };
 
   const service = ts.createLanguageService(host, ts.createDocumentRegistry());
@@ -662,10 +727,6 @@ export function createSchemeLanguageServiceCore(
     // Requires are walked when EITHER seam is present: `resolveModule` emits
     // `.scm` deps into scope, `resolveRequireType` emits data-file overloads.
     programRequires = resolve === undefined && resolveReqType === undefined ? [] : scanRequires(scheme);
-    // `(require "data.json")` overloads, collected during the dep walk (a data
-    // path is an overload, NOT a scheme dep — see emitDep). Prepended to the
-    // module as a `declare global` augmentation so they merge into ArrShape.
-    const requireOverloads: string[] = [];
     // 1. Emit every unit (deps first), tracking raw segments + LOCAL mappings.
     interface RawUnit {
       path: string;
@@ -697,46 +758,74 @@ export function createSchemeLanguageServiceCore(
       }
     };
     collectDataReqs(scheme);
+    // First walk scheme deps only to collect nested data requires (no emit yet).
+    if (programRequires.length > 0 && resolve !== undefined) {
+      const visitedCollect = new Set<string>();
+      const collectDepTree = (path: string): void => {
+        if (visitedCollect.has(path)) return;
+        visitedCollect.add(path);
+        if (dataReqTypes.has(path) || (resolveReqType?.(path) ?? null) !== null) return;
+        const source = resolve(path);
+        if (source === null) return;
+        collectDataReqs(source);
+        for (const nested of scanRequires(source)) collectDepTree(nested.path);
+      };
+      for (const r of programRequires) collectDepTree(r.path);
+    }
+    // Data/prompt requires → require-as-import (per-file default export):
+    //   // __req__/react.prompt.ts
+    //   const __default = null as any as (vars: {…}) => string;
+    //   export default __default;
+    //   import __req0 from "./__req__/react.prompt.ts";
+    // Host.resolveModuleNameLiterals wires the specifier to the virtual file.
+    const nextData = new Map<string, string>();
+    const importLines: string[] = [];
+    const requireBindings = new Map<string, string>();
+    let reqI = 0;
+    for (const [path, reqType] of dataReqTypes) {
+      const virt = `__req__/${path}.ts`;
+      nextData.set(virt, `const __default = null as any as ${reqType};\nexport default __default;\n`);
+      const binding = `__req${reqI++}`;
+      importLines.push(`import ${binding} from ${JSON.stringify(`./${virt}`)};`);
+      requireBindings.set(path, binding);
+    }
+    dataModules = nextData;
+    dataModuleVersion += 1;
+    const importBlock = importLines.length > 0 ? `${importLines.join("\n")}\n` : "";
+
+    // Emit scheme deps (with requireBindings so nested data requires stay imports).
+    let depsText = "";
     if (programRequires.length > 0) {
       const visited = new Set<string>();
       const emitDep = (path: string): void => {
         if (visited.has(path)) return;
         visited.add(path);
-        // A data file (registry yields a shape) is an OVERLOAD, not a scheme
-        // dep — emitting its source as scheme would parse JSON/YAML as forms and
-        // bind nothing. Its overload is collected by collectDataReqs; stop here.
         if (dataReqTypes.has(path) || (resolveReqType?.(path) ?? null) !== null) return;
         if (resolve === undefined) return;
         const source = resolve(path);
         if (source === null) return;
-        collectDataReqs(source);
         for (const nested of scanRequires(source)) emitDep(nested.path);
         const dep = emitTypes(source, {
           hostMembers: emitterMembers(),
           kwargsMembers: emitterKwargsMembers(),
+          requireBindings,
         });
         const text = dep.ts.replace(/export \{\};\n$/, "");
-        rawDeps.push({ path, base: prefix.length, length: text.length, source, localMappings: dep.mappings });
-        prefix += text;
+        const base = prefix.length + importBlock.length + depsText.length;
+        rawDeps.push({ path, base, length: text.length, source, localMappings: dep.mappings });
+        depsText += text;
         for (const [emittedName, original] of dep.declaredNames) depDeclaredNames.set(emittedName, original);
       };
       for (const r of programRequires) emitDep(r.path);
     }
-    for (const [path, reqType] of dataReqTypes) {
-      requireOverloads.push(`require(specifier: ${JSON.stringify(path)}): ${reqType};`);
-    }
-    // String-literal `require` overloads as ambient declare functions (program is
-    // a module — `declare global` would also work, but bare ambient overloads via
-    // a synthetic .d.ts-style prefix keep parity with builtin leaves). Unmapped.
-    if (requireOverloads.length > 0) {
-      prefix += requireOverloads.map((o) => `declare function ${o}`).join("\n") + "\n";
-    }
+
     const { ts: emitted, mappings, declaredNames } = emitTypes(scheme, {
       hostMembers: emitterMembers(),
       kwargsMembers: emitterKwargsMembers(),
+      requireBindings,
     });
-    const programBase = prefix.length;
-    programText = prefix + emitted;
+    const programBase = prefix.length + importBlock.length + depsText.length;
+    programText = prefix + importBlock + depsText + emitted;
     programVersion += 1;
     // The main program's OWN names win on collision (a local shadowing a required name is
     // legal scheme — same precedence the completion subtraction/dedup elsewhere gives locals).

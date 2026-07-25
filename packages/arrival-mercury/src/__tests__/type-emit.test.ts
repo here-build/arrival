@@ -200,12 +200,13 @@ describe("type-emit: inputRest kwargs vs keyword-as-fn", () => {
     expect(r.ts).not.toContain("where({");
   });
 
-  it("kwargs head collapses :k v into trailing options object", () => {
+  it("kwargs head collapses :k v; single leading positional → key in the bag", () => {
     const r = emitTypes('(tool "path" :label "L" :reasons xs)', {
       hostMembers: new Set(["tool"]),
       kwargsMembers: new Set(["tool"]),
     });
-    expect(r.ts).toContain('tool("path", { label: "L", reasons: xs })');
+    // One arg: leading "path" promoted to key (same rule as .prompt call-sites).
+    expect(r.ts).toContain('tool({ key: "path", label: "L", reasons: xs })');
     expect(r.ts).not.toContain("undefined as unknown");
   });
 
@@ -218,18 +219,25 @@ describe("type-emit: inputRest kwargs vs keyword-as-fn", () => {
     expect(r.ts).not.toContain("field({");
   });
 
-  it('((require "x.prompt") path :label l) collapses kwargs on prompt require', () => {
+  it('((require "x.prompt") path :label l) — path promotes to key in the kwargs bag', () => {
     const r = emitTypes('((require "x.prompt") "cache/key" :label lab :reasons rs)');
-    expect(r.ts).toContain('require("x.prompt")("cache/key", { label: lab, reasons: rs })');
+    // Leading positional is call-site identity → `key` field, one arg (not 2).
+    expect(r.ts).toContain('require("x.prompt")({ key: "cache/key", label: lab, reasons: rs })');
+    expect(r.ts).not.toContain('require("x.prompt")("cache/key"');
     expect(r.ts).not.toContain("undefined as unknown");
     expect(r.ts).not.toContain("sexpr(");
+  });
+
+  it("explicit :key wins over positional promotion", () => {
+    const r = emitTypes('((require "x.prompt") :key "k" :label lab)');
+    expect(r.ts).toContain('require("x.prompt")({ key: "k", label: lab })');
   });
 
   it("local binding of (require ….prompt) is a kwargs head", () => {
     const r = emitTypes(
       '(define triage (require "triage.prompt"))\n(triage "k" :summary s :tagline t)',
     );
-    expect(r.ts).toContain('triage("k", { summary: s, tagline: t })');
+    expect(r.ts).toContain('triage({ key: "k", summary: s, tagline: t })');
   });
 });
 

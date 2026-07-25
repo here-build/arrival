@@ -174,6 +174,12 @@ interface Ctx {
    *  record the mint site so completions can show the scheme spelling without a
    *  decode round-trip. */
   declaredNames: Map<string, string>;
+  /**
+   * Require-as-import: scheme path → TS binding for a virtual module's default
+   * export. When set, `(require "path")` emits the binding (not `require("path")`)
+   * so span mappings stay exact (no post-hoc string rewrite).
+   */
+  requireBindings: ReadonlyMap<string, string>;
 }
 
 /** Emit a single TS expression for `n` into `ctx.buf`. */
@@ -375,6 +381,18 @@ function recordSpan(ctx: Ctx, start: number, node: Node): void {
 
 function emitBuiltinCall(name: string, n: ListNode, ctx: Ctx): void {
   const start = ctx.buf.offset;
+  // Require-as-import: `(require "data.prompt")` → the imported default binding.
+  if (name === "require" && n.list.length >= 2) {
+    const pathNode = n.list[1];
+    if (isAtom(pathNode) && pathNode.str) {
+      const binding = ctx.requireBindings.get(pathNode.atom);
+      if (binding !== undefined) {
+        ctx.buf.raw(binding);
+        recordSpan(ctx, start, n);
+        return;
+      }
+    }
+  }
   ctx.buf.raw(encodeSchemeIdent(name)).raw("(");
   emitArgs(n.list.slice(1), ctx, headTakesKwargs(name, ctx));
   ctx.buf.raw(")");
@@ -459,7 +477,7 @@ function emitCall(fn: Node, args: Node[], ctx: Ctx, form: ListNode): void {
     ctx.buf.raw(")");
   } else if (kwargs) {
     // Computed kwargs head (e.g. `(require "x.prompt")`) — same call shape as named:
-    // `require("x.prompt")(path, { k: v })`, not sexpr with peeled keywords as junk.
+    // `fn({ key?, … })` after leading-positional→key promotion (see emitArgs).
     emitExpr(fn, ctx);
     ctx.buf.raw("(");
     emitArgs(args, ctx, true);
@@ -510,14 +528,25 @@ function emitArgs(args: Node[], ctx: Ctx, kwargs: boolean): void {
     kwPairs.push([keywordName(k), v ?? { atom: "#f" }]);
     i += 2;
   }
+  // Prompt/kwargs call shape: one bag. A single leading positional is the call-site
+  // identity (`key`) — demos historically wrote `(prompt cache-key :k v …)`. Promote
+  // it into the object so TS sees one arg matching `(vars: { key?: string; … }) => …`,
+  // not a free first positional (which 2554'd under a vars-only type). Explicit
+  // `:key …` in kwPairs wins (no double-insert).
+  const pairs: [string, Node][] = [...kwPairs];
+  const hasExplicitKey = pairs.some(([k]) => k === "key");
+  if (positional.length === 1 && !hasExplicitKey) {
+    pairs.unshift(["key", positional[0]!]);
+    positional.length = 0;
+  }
   for (const [idx, p] of positional.entries()) {
     if (idx > 0) ctx.buf.raw(", ");
     emitExpr(p, ctx);
   }
-  if (kwPairs.length > 0) {
+  if (pairs.length > 0) {
     if (positional.length > 0) ctx.buf.raw(", ");
     ctx.buf.raw("{ ");
-    for (const [idx, [k, v]] of kwPairs.entries()) {
+    for (const [idx, [k, v]] of pairs.entries()) {
       if (idx > 0) ctx.buf.raw(", ");
       // Typelevel keys stay scheme-spelled (quoted when needed) — not camelCase.
       ctx.buf.raw(`${tsKey(k)}: `);
@@ -1121,6 +1150,11 @@ export interface EmitTypesOptions {
    * with names bound to `(require "….prompt")` in the program. See `Ctx.kwargsMembers`.
    */
   kwargsMembers?: ReadonlySet<string>;
+  /**
+   * Require-as-import map: scheme require path → TS import binding. When present,
+   * `(require "path")` emits the binding (default import of a virtual module).
+   */
+  requireBindings?: ReadonlyMap<string, string>;
 }
 
 export function emitTypes(source: string | readonly Node[], opts?: EmitTypesOptions): EmitTypesResult {
@@ -1150,6 +1184,7 @@ export function emitTypes(source: string | readonly Node[], opts?: EmitTypesOpti
     narrowsMembers: opts?.narrowsMembers ?? EMPTY_SET,
     kwargsMembers,
     declaredNames: new Map(),
+    requireBindings: opts?.requireBindings ?? new Map(),
   };
 
   for (const [idx, form] of forest.entries()) {

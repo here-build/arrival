@@ -54,9 +54,12 @@ describe("(require data-file) → granular shape", () => {
   });
 
   it("misusing a field's type bites — the shape is real, not unknown", () => {
-    // `age` is number; passing it where a list is expected (`car`) must error,
-    // proving the field type flows (an `unknown` require would NOT bite).
-    const scheme = `(define personas (require "personas.json"))\n(car (@ (car personas) "age"))`;
+    // `age` is number; string-append wants string — must error, proving the field
+    // type flows (an `unknown` require would NOT bite). (car sugarcoats to [0]
+    // which no longer rejects numbers under noImplicitAny:false.)
+    const scheme =
+      `(define personas (require "personas.json"))\n` +
+      `(string-append (@ (car personas) "age") "x")`;
     const diags = ls.getSemanticDiagnostics(scheme);
     expect(diags.length).toBeGreaterThan(0);
   });
