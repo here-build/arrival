@@ -133,7 +133,7 @@ export function suggestFromVocabulary(unboundName: string, vocabulary: Iterable<
 //
 // A DISJOINT, NAME-EXACT gate from the fuzzy vocabulary matcher above: names with
 // no declaration site AND no near-vocabulary match — a model reaching for another
-// dialect's syntax (Racket's `#:kwargs`), or a capability that sounds standard but
+// dialect's syntax, or a capability that sounds standard but
 // was never bound here (`require`, `read-all`). Names that ARE declared doors (e.g.
 // `with-input-from-file` in env/r7rs/host.ts) must NOT appear here — dual-path is a
 // lie (unbound-variable routing never runs once the name resolves as a live door).
@@ -157,15 +157,10 @@ const IDIOM_ROUTES: ReadonlyMap<string, string> = new Map([
   ["read-all", NO_FILE_IO_HINT],
 ]);
 
-/** `#:name` is Racket's keyword-argument syntax; arrival's reader has no `#:` dispatch
- *  branch (`reader/Lexer.ts`), so the whole token lexes as one ordinary (unbound) symbol
- *  named literally `#:name` — this checks the PREFIX rather than a table entry, since the
- *  suffix varies per call. */
+/** Known dead-end idioms (name-exact). Racket `#:name` used to route here as "drop
+ *  the `#`" — it now mints as the keyword `:name` at `ASymbol` construction
+ *  (identical to arrival's spelling), so it never reaches unbound-variable. */
 function idiomRoutingHint(name: string): string | undefined {
-  if (name.startsWith("#:")) {
-    const bare = name.slice(2);
-    return `\`#:\` is Racket keyword syntax; arrival spells keyword arguments \`:${bare}\` — drop the \`#\`.`;
-  }
   return IDIOM_ROUTES.get(name);
 }
 

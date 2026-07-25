@@ -35,10 +35,24 @@ function internTableFor(ctx: RunContext): Map<string, ASymbol> {
   return table;
 }
 
-/** A real keyword name: `:`-prefixed, length > 1 (a bare `:` is not one) — matches
- *  `provenance/lineage.ts`'s `memberRead`/`type-layer/lower.ts`'s `isKeyword`. */
-function isKeywordName(name: string): name is string {
-  return typeof name === "string" && name.length > 1 && name.startsWith(":");
+/**
+ * A real keyword name — either arrival's `:limit` or Racket's `#:limit` spelling.
+ * Bare `:` / `#:` alone are not keywords. Matches `provenance/lineage.ts`'s
+ * `memberRead` / `type-layer/lower.ts`'s `isKeyword` for the `:` form; the `#:`
+ * twin is accepted at construction and canonicalized to `:` (see below).
+ */
+function isKeywordName(name: string): boolean {
+  return (
+    typeof name === "string" &&
+    ((name.length > 1 && name.startsWith(":") && !name.startsWith("::")) ||
+      (name.length > 2 && name.startsWith("#:")))
+  );
+}
+
+/** Canonical intern key for a keyword: `#:limit` → `:limit`. Arrival's one
+ *  keyword identity is the `:`-prefixed name; Racket's `#:` is accepted input. */
+function canonicalizeKeywordName(name: string): string {
+  return name.startsWith("#:") ? `:${name.slice(2)}` : name;
 }
 
 export class ASymbol extends AValue {
@@ -72,9 +86,10 @@ export class ASymbol extends AValue {
     // `new ASymbol(':a')` directly" (redirect) from "AKeywordSymbol's own super() call"
     // (already the right class — proceed as normal below). The redirect happens before
     // interning so the CACHED instance (whichever branch mints or hits it) is always the
-    // correctly-typed one.
+    // correctly-typed one. Racket `#:limit` canonicalizes to `:limit` so both spellings
+    // intern as the same keyword identity.
     if (new.target === ASymbol && typeof unwrapped === "string" && isKeywordName(unwrapped)) {
-      return new AKeywordSymbol(unwrapped, provenance, intern);
+      return new AKeywordSymbol(canonicalizeKeywordName(unwrapped), provenance, intern);
     }
 
     if (intern !== UNINTERNED && typeof unwrapped === "string") {
