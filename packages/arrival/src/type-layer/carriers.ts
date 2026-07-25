@@ -46,8 +46,27 @@ export declare function cdr<T>(xs: List<T>): List<T>;
 export declare function cdr<T>(p: Tuple<unknown, T>): T;
 
 // ── the closed tagless algebra — generic globals over List AND vector ─────────
+// `map` multi-list = index-zip (same as lists.ts capability type / multiListMap).
 export declare function map<T, B>(f: (x: T) => B, xs: List<T>): List<B>;
 export declare function map<T, B>(f: (x: T) => B, xs: readonly T[]): readonly B[];
+export declare function map<A, B, R>(f: (a: A, b: B) => R, as: List<A>, bs: List<B>): List<R>;
+export declare function map<A, B, R>(
+  f: (a: A, b: B) => R,
+  as: readonly A[],
+  bs: readonly B[],
+): readonly R[];
+export declare function map<A, B, C, R>(
+  f: (a: A, b: B, c: C) => R,
+  as: List<A>,
+  bs: List<B>,
+  cs: List<C>,
+): List<R>;
+export declare function map<A, B, C, R>(
+  f: (a: A, b: B, c: C) => R,
+  as: readonly A[],
+  bs: readonly B[],
+  cs: readonly C[],
+): readonly R[];
 export declare function filter<T>(p: (x: T) => unknown, xs: List<T>): List<T>;
 export declare function filter<T>(p: (x: T) => unknown, xs: readonly T[]): readonly T[];
 export declare function reduce<T, A>(f: (acc: A, x: T) => A, init: A, xs: List<T> | readonly T[]): A;

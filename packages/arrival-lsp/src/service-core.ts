@@ -112,7 +112,12 @@ export interface SchemeLanguageServiceOptions {
    *     head in this set via bare `encodeSchemeIdent(name)(…)` so
    *     `Parameters<typeof head>` resolves → the SLOT side narrows.
    */
-  host?: { prelude: string; members: readonly string[] };
+  host?: {
+    prelude: string;
+    members: readonly string[];
+    /** Heads with record-shaped Contract inputRest — see HostPrelude.kwargsMembers. */
+    kwargsMembers?: readonly string[];
+  };
   /**
    * The scheme STDLIB preamble source (arrival's `BUILTIN_PREAMBLE`) — the
    * `(define …)` helpers that are themselves written in scheme (`field`,
@@ -476,6 +481,10 @@ export function createSchemeLanguageServiceCore(
     memberRoster ??= new Set([...builtinCompletions().map((e) => e.name), ...(opts?.host?.members ?? [])]);
     return memberRoster;
   };
+  /** Record-shaped inputRest heads (kwargs channel) — host harvest only; emit also
+   *  discovers local `(require "….prompt")` bindings itself. */
+  const emitterKwargsMembers = (): ReadonlySet<string> =>
+    new Set(opts?.host?.kwargsMembers ?? []);
 
   // The scheme stdlib preamble, emitted ONCE to TS and cached — it's constant
   // for the service's lifetime. Sits at the very front of every program module
@@ -488,7 +497,10 @@ export function createSchemeLanguageServiceCore(
       schemePreludeTs =
         opts?.schemePrelude === undefined
           ? ""
-          : emitTypes(opts.schemePrelude, { hostMembers: emitterMembers() }).ts.replace(/export \{\};\n$/, "");
+          : emitTypes(opts.schemePrelude, {
+              hostMembers: emitterMembers(),
+              kwargsMembers: emitterKwargsMembers(),
+            }).ts.replace(/export \{\};\n$/, "");
     }
     return schemePreludeTs;
   };
@@ -623,7 +635,10 @@ export function createSchemeLanguageServiceCore(
         if (source === null) return;
         collectDataReqs(source);
         for (const nested of scanRequires(source)) emitDep(nested.path);
-        const dep = emitTypes(source, { hostMembers: emitterMembers() });
+        const dep = emitTypes(source, {
+          hostMembers: emitterMembers(),
+          kwargsMembers: emitterKwargsMembers(),
+        });
         const text = dep.ts.replace(/export \{\};\n$/, "");
         rawDeps.push({ path, base: prefix.length, length: text.length, source, localMappings: dep.mappings });
         prefix += text;
@@ -640,7 +655,10 @@ export function createSchemeLanguageServiceCore(
     if (requireOverloads.length > 0) {
       prefix += requireOverloads.map((o) => `declare function ${o}`).join("\n") + "\n";
     }
-    const { ts: emitted, mappings, declaredNames } = emitTypes(scheme, { hostMembers: emitterMembers() });
+    const { ts: emitted, mappings, declaredNames } = emitTypes(scheme, {
+      hostMembers: emitterMembers(),
+      kwargsMembers: emitterKwargsMembers(),
+    });
     const programBase = prefix.length;
     programText = prefix + emitted;
     programVersion += 1;

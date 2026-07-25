@@ -33,6 +33,12 @@ export interface HostPrelude {
   prelude: string;
   /** The host member names (scheme spelling) — the emitter's head roster. */
   members: string[];
+  /**
+   * Heads whose Contract `inputRest` is a **plain record** (kwargs channel).
+   * Threaded into `emitTypes({ kwargsMembers })` so trailing `:k v` collapse
+   * only for true kwargs callees — not for positional HOFs like `map`/`where`.
+   */
+  kwargsMembers: string[];
 }
 
 export interface AssembleHostPreludeOptions {
@@ -42,12 +48,17 @@ export interface AssembleHostPreludeOptions {
    * `import`/`export` — it is concatenated into the shared global ambient scope.
    */
   preamble?: string;
+  /**
+   * Subset of entry names with record-shaped `inputRest`. When omitted, empty
+   * (emitter still discovers local `(require "….prompt")` bindings itself).
+   */
+  kwargsMembers?: readonly string[];
 }
 
 /**
- * Build the `{ prelude, members }` host option from `[name, type]` rosetta entries
- * (e.g. `[...rosettaTypesOf(env)]`). Order-independent; duplicate names keep the
- * last entry (a re-registration overrides).
+ * Build the `{ prelude, members, kwargsMembers }` host option from `[name, type]`
+ * rosetta entries (e.g. `[...rosettaTypesOf(env)]`). Order-independent; duplicate
+ * names keep the last entry (a re-registration overrides).
  */
 export function assembleHostPrelude(
   entries: Iterable<readonly [name: string, type: string]>,
@@ -55,6 +66,9 @@ export function assembleHostPrelude(
 ): HostPrelude {
   const byName = new Map<string, string>(entries);
   const members = [...byName.keys()];
+  const kwargsSet = new Set(opts?.kwargsMembers ?? []);
+  // Only keep kwargs names that are also host members (no orphans).
+  const kwargsMembers = members.filter((m) => kwargsSet.has(m));
 
   return {
     prelude: [
@@ -64,5 +78,6 @@ export function assembleHostPrelude(
       "",
     ].join("\n"),
     members,
+    kwargsMembers,
   };
 }

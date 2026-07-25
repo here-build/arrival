@@ -95,8 +95,9 @@ const TYPE_EMIT_CASES: readonly TypeEmitCase[] = [
     name: "lowers and to native && — the constitution's own second guard shape",
     src: "(if (and (pair? x) (pair? (cdr x))) 1 2)",
     opts: { narrowsMembers: NARROWS },
-    contains: ['((pair$qmark$(x) && pair$qmark$(cdr(x))) ? 1 : 2)'],
-    excludes: ["__scmTruth", "and"],
+    // cdr → .slice(1) (sugarcoat-alike / phase1 representation collapse)
+    contains: ['((pair$qmark$(x) && pair$qmark$((x).slice(1))) ? 1 : 2)'],
+    excludes: ["__scmTruth", "and", "cdr("],
   },
   {
     topic: "type-emit: narrowing-form grammar (§5.3)",
@@ -184,6 +185,92 @@ describe("type-emit: all-or-nothing (mixed clauses wrap whole)", () => {
   for (const c of casesIn("type-emit: all-or-nothing (mixed clauses wrap whole)")) {
     it(c.name, () => runTypeEmitCase(c));
   }
+});
+
+describe("type-emit: inputRest kwargs vs keyword-as-fn", () => {
+  it("(map :id xs) — positional keyword-as-fn, not kwargs collapse", () => {
+    const r = emitTypes("(map :id xs)");
+    expect(r.ts).toContain('map((x) => x["id"], xs)');
+    expect(r.ts).not.toContain("map({");
+  });
+
+  it("(where :mismatch #f) — two positionals, key is accessor eta", () => {
+    const r = emitTypes("(define (where key val) (lambda (r) (equal? (key r) val)))\n(where :mismatch #f)");
+    expect(r.ts).toContain('where((x) => x["mismatch"], false)');
+    expect(r.ts).not.toContain("where({");
+  });
+
+  it("kwargs head collapses :k v into trailing options object", () => {
+    const r = emitTypes('(tool "path" :label "L" :reasons xs)', {
+      hostMembers: new Set(["tool"]),
+      kwargsMembers: new Set(["tool"]),
+    });
+    expect(r.ts).toContain('tool("path", { label: "L", reasons: xs })');
+    expect(r.ts).not.toContain("undefined as unknown");
+  });
+
+  it("non-kwargs host head keeps :keyword as accessor (no collapse)", () => {
+    const r = emitTypes("(field :name row)", {
+      hostMembers: new Set(["field"]),
+      // field is NOT in kwargsMembers
+    });
+    expect(r.ts).toContain('field((x) => x["name"], row)');
+    expect(r.ts).not.toContain("field({");
+  });
+
+  it('((require "x.prompt") path :label l) collapses kwargs on prompt require', () => {
+    const r = emitTypes('((require "x.prompt") "cache/key" :label lab :reasons rs)');
+    expect(r.ts).toContain('require("x.prompt")("cache/key", { label: lab, reasons: rs })');
+    expect(r.ts).not.toContain("undefined as unknown");
+    expect(r.ts).not.toContain("sexpr(");
+  });
+
+  it("local binding of (require ….prompt) is a kwargs head", () => {
+    const r = emitTypes(
+      '(define triage (require "triage.prompt"))\n(triage "k" :summary s :tagline t)',
+    );
+    expect(r.ts).toContain('triage("k", { summary: s, tagline: t })');
+  });
+});
+
+describe("type-emit: cxr → index/slice (sugarcoat-alike)", () => {
+  const cases: Array<[string, string]> = [
+    ["(car x)", "(x)[0]"],
+    ["(cdr x)", "(x).slice(1)"],
+    ["(cadr x)", "(x)[1]"],
+    ["(caddr x)", "(x)[2]"],
+    ["(cadddr x)", "(x)[3]"],
+    ["(cddr x)", "(x).slice(2)"],
+    ["(cdddr x)", "(x).slice(3)"],
+    ["(caar x)", "(x)[0][0]"],
+    ["(cdar x)", "(x)[0].slice(1)"],
+    ["(caadr x)", "(x)[1][0]"],
+    ["(cadar x)", "(x)[0][1]"],
+  ];
+  for (const [src, fragment] of cases) {
+    it(`${src} → ${fragment}`, () => {
+      const r = emitTypes(src);
+      expect(r.ts).toContain(fragment);
+      // Not ambient car/cdr/cadr(…) calls for the unary form.
+      expect(r.ts).not.toMatch(/\b(car|cdr|cadr|caddr|cadddr|cddr|cdddr|caar|cdar|caadr|cadar)\s*\(/);
+    });
+  }
+
+  it("bare car in value position stays the ambient name (eta / map car)", () => {
+    const r = emitTypes("(map car xs)");
+    expect(r.ts).toContain("map(car, xs)");
+    expect(r.ts).not.toContain("[0]");
+  });
+
+  it("nested (car (cdr x)) emits both steps (does not fuse to cadr)", () => {
+    const r = emitTypes("(car (cdr x))");
+    expect(r.ts).toContain("((x).slice(1))[0]");
+  });
+
+  it("wrong-arity car falls through to ambient call so tsc can bite", () => {
+    const r = emitTypes("(car)");
+    expect(r.ts).toContain("car()");
+  });
 });
 
 describe("type-emit: grammar gates (shadowing, Law F, value position)", () => {

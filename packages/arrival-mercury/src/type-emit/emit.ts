@@ -17,9 +17,12 @@
  * that is *type-checked, never run*, against the
  * `@inhuman.tools/arrival-internals-types-prelude` prelude (`PRE`). Every builtin
  * (and host) application lowers to a bare ambient call
- * `encodeSchemeIdent(name)(…)` — e.g. `car(…)`, `string$dash$append(…)`,
+ * `encodeSchemeIdent(name)(…)` — e.g. `string$dash$append(…)`,
  * `null$qmark$(…)` — so TS checks it against a global `declare function`.
- * Opaque heads fall back to PRE's `sexpr<F>(…)`.
+ * Pair accessors are the exception: sugarcoat-alike representation collapse
+ * `(car x)` → `(x)[0]`, `(cdr x)` → `(x).slice(1)`, `(cadr x)` → `(x)[1]`
+ * (same fold as phase1 `cxrCall` / sugarcoat subscripts). Opaque heads fall
+ * back to PRE's `sexpr<F>(…)`.
  *
  * Because we never run the output, binding forms lower to PURE TS BLOCK
  * STATEMENTS, not IIFEs — block-scoping is correct for type-checking and adds no
@@ -46,7 +49,7 @@ import {
 } from "../front/nodes.js";
 import { parseSexprs } from "../front/parse.js";
 import { resolveNames } from "../front/scheme-scope.js";
-import { isBuiltin } from "./builtins.js";
+import { decodeCxr, isAccessor, isBuiltin } from "./builtins.js";
 import { encodeSchemeIdent } from "./scheme-ident.js";
 
 /** One span-lens entry: a [tsStart, tsLength) range of the emitted TS that came
@@ -157,6 +160,14 @@ interface Ctx {
   /** The narrowing-form grammar's base-case set — see `EmitTypesOptions.narrowsMembers`.
    *  Threaded exactly like `hostMembers`. */
   narrowsMembers: ReadonlySet<string>;
+  /**
+   * Heads whose Contract has a **record-shaped** `inputRest` (kwargs channel).
+   * Only these collapse trailing `:k v` pairs into a trailing options object.
+   * Everything else treats `:keyword` args as positional values (keyword-as-fn →
+   * `(x) => x["k"]`). Mirrors runtime `normalizeInputVector`: plain-record rest
+   * ⇒ kwargs; ZodType rest ⇒ variadic values.
+   */
+  kwargsMembers: ReadonlySet<string>;
   /** Emitted TS identifier → the ORIGINAL scheme source text it was minted from,
    *  populated at every `define`/`define/overridable` binding site (`emitDefine`).
    *  With {@link encodeSchemeIdent} the map is lossless/invertible, but we still
@@ -196,13 +207,20 @@ function emitAtom(a: Atom, ctx: Ctx): void {
     ctx.buf.spanned(a.atom, a);
     return;
   }
-  // A bare `:keyword` in value position is meaningless (accessor/kwarg-only) —
-  // degrade to a transparent `unknown` rather than emit a broken identifier.
+  // Bare `:keyword` in value position = keyword-as-fn (field accessor eta).
+  // Kwargs pairs never reach here — `emitArgs` peels them before emitting values.
   if (a.atom.length > 1 && a.atom.startsWith(":")) {
-    ctx.buf.spanned("(undefined as unknown)", a);
+    emitKeywordAsFn(keywordName(a), a, ctx);
     return;
   }
   ctx.buf.spanned(emitName(a, ctx), a);
+}
+
+/** `(x) => x["k"]` — eta of `(:k ·)` / keyword-as-fn for HOF first args. */
+function emitKeywordAsFn(key: string, node: Node, ctx: Ctx): void {
+  const start = ctx.buf.offset;
+  ctx.buf.raw(`(x) => x[${JSON.stringify(key)}]`);
+  recordSpan(ctx, start, node);
 }
 
 // The object-accessor family. A dict is a primitive object, so these all lower to
@@ -332,6 +350,9 @@ function emitList(n: ListNode, ctx: Ctx): void {
       ) {
         return;
       }
+      // `c[ad]+r` → index/slice chain (sugarcoat-alike / phase1 representation collapse).
+      // Only the unary call form; bare `car` as a value still emits the ambient name.
+      if (isAccessor(hName) && tryEmitCxr(hName, n, ctx)) return;
       // A builtin OR a host-injected rosetta tool → ambient global function call.
       if (isBuiltin(hName) || ctx.hostMembers.has(hName)) return emitBuiltinCall(hName, n, ctx);
     }
@@ -355,63 +376,148 @@ function recordSpan(ctx: Ctx, start: number, node: Node): void {
 function emitBuiltinCall(name: string, n: ListNode, ctx: Ctx): void {
   const start = ctx.buf.offset;
   ctx.buf.raw(encodeSchemeIdent(name)).raw("(");
-  emitArgs(n.list.slice(1), ctx);
+  emitArgs(n.list.slice(1), ctx, headTakesKwargs(name, ctx));
   ctx.buf.raw(")");
   recordSpan(ctx, start, n);
 }
 
+/** True iff `name` is a known kwargs head (record-shaped inputRest). */
+function headTakesKwargs(name: string, ctx: Ctx): boolean {
+  return ctx.kwargsMembers.has(name);
+}
+
+/** `(require "….prompt")` — prompts are kwargs callables (path + :k v rest). */
+function isRequirePromptForm(fn: Node): boolean {
+  return (
+    isList(fn) &&
+    !isNil(fn) &&
+    fn.list.length === 2 &&
+    isAtom(fn.list[0]) &&
+    fn.list[0]!.atom === "require" &&
+    isAtom(fn.list[1]) &&
+    !!fn.list[1]!.str &&
+    fn.list[1]!.atom.endsWith(".prompt")
+  );
+}
+
+/**
+ * Names bound to `(require "….prompt")` in this forest — local kwargs heads
+ * (same collection sugarcoat uses for kwarg render). Merged with opts.kwargsMembers.
+ */
+function collectPromptKwargHeads(forest: readonly Node[]): Set<string> {
+  const heads = new Set<string>();
+  const visit = (n: Node): void => {
+    if (!isList(n) || isNil(n)) return;
+    const h = n.list[0];
+    if (isAtom(h) && !h.str && (h.atom === "define" || h.atom === "define/overridable")) {
+      // (define name (require "x.prompt")) or (define (name …) …) — only value form.
+      const nameNode = n.list[1];
+      const val = h.atom === "define/overridable" ? n.list[3] : n.list[2];
+      if (isAtom(nameNode) && !nameNode.str && val && isRequirePromptForm(val)) {
+        heads.add(nameNode.atom);
+      }
+    }
+    for (const c of n.list) visit(c);
+  };
+  for (const f of forest) visit(f);
+  return heads;
+}
+
+/**
+ * `(car x)` → `(x)[0]`, `(cdr x)` → `(x).slice(1)`, `(cadr x)` → `(x)[1]`, …
+ * Same index/slice fold as phase1 `cxrCall` and sugarcoat subscripts.
+ * Returns false when arity ≠ 1 (fall through to ambient call so tsc bites).
+ */
+function tryEmitCxr(hName: string, n: ListNode, ctx: Ctx): boolean {
+  const steps = decodeCxr(hName);
+  if (!steps || steps.length === 0) return false;
+  const obj = n.list[1];
+  if (obj === undefined || n.list.length !== 2) return false;
+  const start = ctx.buf.offset;
+  ctx.buf.raw("(");
+  emitExpr(obj, ctx);
+  ctx.buf.raw(")");
+  for (const step of steps) {
+    if (step.kind === "index") ctx.buf.raw(`[${step.at}]`);
+    else ctx.buf.raw(`.slice(${step.from})`);
+  }
+  recordSpan(ctx, start, n);
+  return true;
+}
+
 /** A call whose head is NOT a builtin: a typed local / free fn → direct call;
- *  an opaque computed head → `sexpr(head, …args)`. */
+ *  an opaque computed head → direct call when kwargs-shaped, else `sexpr`. */
 function emitCall(fn: Node, args: Node[], ctx: Ctx, form: ListNode): void {
   const start = ctx.buf.offset;
+  const kwargs =
+    (isAtom(fn) && !fn.str && headTakesKwargs(fn.atom, ctx)) || isRequirePromptForm(fn);
   if (isAtom(fn) && !fn.str) {
-    // A named head — emit a direct call `f(a, b)`. TS checks it against the
-    // binding's inferred type (or `any` if free), which is the faithful behavior.
+    // Named head — direct call; kwargs collapse only when inputRest is a record.
     emitExpr(fn, ctx);
     ctx.buf.raw("(");
-    emitArgs(args, ctx);
+    emitArgs(args, ctx, kwargs);
+    ctx.buf.raw(")");
+  } else if (kwargs) {
+    // Computed kwargs head (e.g. `(require "x.prompt")`) — same call shape as named:
+    // `require("x.prompt")(path, { k: v })`, not sexpr with peeled keywords as junk.
+    emitExpr(fn, ctx);
+    ctx.buf.raw("(");
+    emitArgs(args, ctx, true);
     ctx.buf.raw(")");
   } else {
-    // Opaque / computed head → the typed-apply fallback so arg↔param checking is
-    // preserved across the indirect application.
+    // Opaque non-kwargs head → typed-apply fallback (all args positional).
     ctx.buf.raw("sexpr(");
     emitExpr(fn, ctx);
-    for (const a of args) {
+    if (args.length > 0) {
       ctx.buf.raw(", ");
-      emitExpr(a, ctx);
+      emitArgs(args, ctx, false);
     }
     ctx.buf.raw(")");
   }
   recordSpan(ctx, start, form);
 }
 
-/** Comma-separated argument expressions. Keyword args `(:k v)` collapse into a
- *  single trailing options object `{ k: v }`, mirroring the call convention. */
-function emitArgs(args: Node[], ctx: Ctx): void {
+/**
+ * Comma-separated argument expressions.
+ *
+ * `kwargs === true` (record-shaped `inputRest` on the head): trailing `:k v`
+ * pairs collapse into one options object `{ k: v }` after positionals.
+ *
+ * `kwargs === false`: every arg is positional. A bare `:keyword` becomes
+ * keyword-as-fn via {@link emitExpr} → `(x) => x["k"]`.
+ */
+function emitArgs(args: Node[], ctx: Ctx, kwargs: boolean): void {
+  if (!kwargs) {
+    for (const [idx, a] of args.entries()) {
+      if (idx > 0) ctx.buf.raw(", ");
+      emitExpr(a, ctx);
+    }
+    return;
+  }
   const positional: Node[] = [];
-  const kwargs: [string, Node][] = [];
+  const kwPairs: [string, Node][] = [];
   let i = 0;
   while (i < args.length && !isKeyword(args[i])) positional.push(args[i++]!);
   while (i < args.length) {
     const k = args[i]!;
     if (!isKeyword(k)) {
-      // A positional after a keyword is malformed; degrade transparently.
+      // Positional after a keyword is malformed; degrade transparently.
       positional.push(k);
       i += 1;
       continue;
     }
     const v = args[i + 1];
-    kwargs.push([keywordName(k), v ?? { atom: "#f" }]);
+    kwPairs.push([keywordName(k), v ?? { atom: "#f" }]);
     i += 2;
   }
   for (const [idx, p] of positional.entries()) {
     if (idx > 0) ctx.buf.raw(", ");
     emitExpr(p, ctx);
   }
-  if (kwargs.length > 0) {
+  if (kwPairs.length > 0) {
     if (positional.length > 0) ctx.buf.raw(", ");
     ctx.buf.raw("{ ");
-    for (const [idx, [k, v]] of kwargs.entries()) {
+    for (const [idx, [k, v]] of kwPairs.entries()) {
       if (idx > 0) ctx.buf.raw(", ");
       // Typelevel keys stay scheme-spelled (quoted when needed) — not camelCase.
       ctx.buf.raw(`${tsKey(k)}: `);
@@ -922,6 +1028,11 @@ export interface EmitTypesOptions {
    * value-position analog: no witness ⇒ conservative, never reversed.
    */
   narrowsMembers?: ReadonlySet<string>;
+  /**
+   * Heads with **record-shaped** Contract `inputRest` (kwargs channel). Merged
+   * with names bound to `(require "….prompt")` in the program. See `Ctx.kwargsMembers`.
+   */
+  kwargsMembers?: ReadonlySet<string>;
 }
 
 export function emitTypes(source: string | readonly Node[], opts?: EmitTypesOptions): EmitTypesResult {
@@ -938,12 +1049,18 @@ export function emitTypes(source: string | readonly Node[], opts?: EmitTypesOpti
 
   const nameOf = resolveNames(forest, []);
   const setVars = collectSetBangNames(forest, nameOf);
+  // inputRest-record heads: host harvest ∪ local prompt bindings ∪ inline require-prompt.
+  const kwargsMembers = new Set<string>([
+    ...(opts?.kwargsMembers ?? EMPTY_SET),
+    ...collectPromptKwargHeads(forest),
+  ]);
   const ctxBase: Ctx = {
     buf,
     nameOf,
     setVars,
     hostMembers: opts?.hostMembers ?? EMPTY_SET,
     narrowsMembers: opts?.narrowsMembers ?? EMPTY_SET,
+    kwargsMembers,
     declaredNames: new Map(),
   };
 
