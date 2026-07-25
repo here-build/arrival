@@ -677,9 +677,97 @@ function emitNarrowingForm(n: Node, ctx: Ctx): void {
   emitBuiltinCall(h.atom, n, ctx); // records its own span — no duplicate entry
 }
 
+/**
+ * Unary list→element ops used in compose/pipe pipelines. Forward: List<T>→T;
+ * reverse constraint wraps `List<…>`; result path indexes `[number]`.
+ * (cdr is List→List — not in this set.)
+ */
+const PIPELINE_ELEM_OPS = new Set([
+  "last",
+  "first",
+  "car",
+  "second",
+  "third",
+  "cadr",
+  "caddr",
+  "cadddr",
+]);
+
+/** One step of a pure unary pipeline (compose/pipe desugar, or hand-written). */
+type PipelineStep = { kind: "field"; key: string } | { kind: "elem" };
+
+/**
+ * If `body` is a pure unary chain ending at `param` — only keyword accessors and
+ * {@link PIPELINE_ELEM_OPS} — return steps in **application order** (innermost
+ * first). Else null (fall back to an untyped arrow).
+ *
+ * `(compose :state last :versions)` desugars to
+ * `(:state (last (:versions it)))` → steps `[{field:versions}, {elem}, {field:state}]`.
+ */
+function extractUnaryPipeline(body: Node, param: Atom): PipelineStep[] | null {
+  // Walk outside-in, then reverse to application order.
+  const outerFirst: PipelineStep[] = [];
+  let cur: Node = body;
+  for (;;) {
+    if (isAtom(cur) && !cur.str && cur.atom === param.atom) {
+      return outerFirst.length === 0 ? null : outerFirst.slice().reverse();
+    }
+    if (!isList(cur) || cur.list.length !== 2) return null;
+    const h = cur.list[0]!;
+    const arg = cur.list[1]!;
+    if (isKeyword(h)) {
+      outerFirst.push({ kind: "field", key: keywordName(h) });
+      cur = arg;
+      continue;
+    }
+    if (isAtom(h) && !h.str && PIPELINE_ELEM_OPS.has(h.atom)) {
+      outerFirst.push({ kind: "elem" });
+      cur = arg;
+      continue;
+    }
+    return null;
+  }
+}
+
+/** Input constraint + return type path for a pipeline, as TS type text over `A`. */
+function pipelineGenericTypes(steps: readonly PipelineStep[]): { constraint: string; result: string } {
+  // Reverse through steps: result type any ← field k ← List ← … → input constraint.
+  let c = "any";
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const s = steps[i]!;
+    if (s.kind === "field") {
+      const k = TS_IDENT.test(s.key) ? s.key : JSON.stringify(s.key);
+      c = `{ ${k}: ${c} }`;
+    } else {
+      c = `List<${c}>`;
+    }
+  }
+  let r = "A";
+  for (const s of steps) {
+    if (s.kind === "field") r = `${r}[${JSON.stringify(s.key)}]`;
+    else r = `${r}[number]`;
+  }
+  return { constraint: c, result: r };
+}
+
 function emitLambda(n: ListNode, ctx: Ctx): void {
   const start = ctx.buf.offset;
   const params = paramAtoms(n.list[1]);
+  const bodyForms = n.list.slice(2);
+  // compose/pipe desugar to `(lambda (it) (f (g (h it))))`. Emit a structural
+  // generic so `last`/field chains typecheck without a call-site domain and so
+  // call sites refine A → precise return (pipe-style I/O generics, single arrow).
+  if (params.length === 1 && !params[0]!.rest && bodyForms.length === 1) {
+    const steps = extractUnaryPipeline(bodyForms[0]!, params[0]!.atom);
+    if (steps !== null) {
+      const { constraint, result } = pipelineGenericTypes(steps);
+      const pname = emitName(params[0]!.atom, ctx);
+      ctx.buf.raw(`<A extends ${constraint}>(${pname}: A): ${result} => `);
+      emitArrowBody(bodyForms, ctx);
+      recordSpan(ctx, start, n);
+      return;
+    }
+  }
   ctx.buf.raw("(");
   for (const [idx, p] of params.entries()) {
     if (idx > 0) ctx.buf.raw(", ");
@@ -689,7 +777,7 @@ function emitLambda(n: ListNode, ctx: Ctx): void {
     // is the faithful default. (A NUM-aware pass may annotate later.)
   }
   ctx.buf.raw(") => ");
-  emitArrowBody(n.list.slice(2), ctx);
+  emitArrowBody(bodyForms, ctx);
   recordSpan(ctx, start, n);
 }
 

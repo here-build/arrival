@@ -172,6 +172,37 @@ describe("the loop stays closed through requires", () => {
   });
 });
 
+describe("compose/pipe pipeline generics (I/O over A)", () => {
+  it("(compose :state last :versions) alone is clean — no unknown-index cry", () => {
+    const scheme = `(define state-of (compose :state last :versions))`;
+    expect(ls.getSemanticDiagnostics(scheme)).toHaveLength(0);
+    const info = ls.getQuickInfoAtPosition(scheme, scheme.indexOf("state-of") + 1);
+    expect(info?.displayText).toMatch(/extends/);
+    expect(info?.displayText).toMatch(/versions/);
+  });
+
+  it("a typed call site refines the return; a wrong call bites on the arg", () => {
+    const good =
+      `(define state-of (compose :state last :versions))\n` +
+      `(define p (dict :versions (list (dict :state "a"))))\n` +
+      `(define s (state-of p))`;
+    expect(ls.getSemanticDiagnostics(good)).toHaveLength(0);
+
+    const bad =
+      `(define state-of (compose :state last :versions))\n` +
+      `(define s (state-of 1))`;
+    const diags = ls.getSemanticDiagnostics(bad);
+    expect(diags).toHaveLength(1);
+    expect(bad.slice(diags[0]!.start, diags[0]!.start + diags[0]!.length)).toBe("1");
+    expect(diags[0]!.code).toBe(2345);
+  });
+
+  it("(pipe :versions last :state) matches compose (LTR vs RTL)", () => {
+    const scheme = `(define f (pipe :versions last :state))`;
+    expect(ls.getSemanticDiagnostics(scheme)).toHaveLength(0);
+  });
+});
+
 describe("usage-based parameter inference (V's infer-from-consumers)", () => {
   it("the canonical example: (concat str1 str2) infers both params from string-append", () => {
     const prog = `(define (concat str1 str2) (string-append str1 "/" str2))\n`;

@@ -233,6 +233,28 @@ describe("type-emit: inputRest kwargs vs keyword-as-fn", () => {
   });
 });
 
+describe("type-emit: compose/pipe pipeline generics", () => {
+  it("(compose :state last :versions) → structural generic over A", () => {
+    const r = emitTypes("(define state-of (compose :state last :versions))");
+    // Input: { versions: List<{ state: any }> }; return A["versions"][number]["state"]
+    expect(r.ts).toContain('<A extends { versions: List<{ state: any }> }>');
+    expect(r.ts).toContain('(it: A): A["versions"][number]["state"]');
+    expect(r.ts).toContain('(last((it)["versions"]))["state"]');
+  });
+
+  it("(pipe :versions last :state) is the same shape (LTR desugar)", () => {
+    const r = emitTypes("(define state-of (pipe :versions last :state))");
+    expect(r.ts).toContain('<A extends { versions: List<{ state: any }> }>');
+    expect(r.ts).toContain('A["versions"][number]["state"]');
+  });
+
+  it("(compose car) → List domain, element return", () => {
+    const r = emitTypes("(define head1 (compose car))");
+    expect(r.ts).toContain("<A extends List<any>>");
+    expect(r.ts).toContain("(it: A): A[number]");
+  });
+});
+
 describe("type-emit: cxr → index/slice (sugarcoat-alike)", () => {
   const cases: Array<[string, string]> = [
     ["(car x)", "(x)[0]"],
