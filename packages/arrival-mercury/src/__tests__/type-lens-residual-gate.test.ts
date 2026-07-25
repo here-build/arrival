@@ -15,11 +15,12 @@ import ts from "typescript";
 
 import { emitTypes } from "../type-emit/emit.js";
 
-/** Minimal carriers + list algebra ambient (subset of type-layer carriers + prelude). */
+/**
+ * PRE dialect ambient (matches arrival-internals-types-prelude types.d.ts):
+ * `List<T> = T[]`, empty list is `[]` (not Cons|null / null).
+ */
 const AMBIENT = `
-declare const LIST_BRAND: unique symbol;
-interface Cons<out T> { readonly [LIST_BRAND]: T; }
-type List<T> = Cons<T> | null;
+type List<T> = T[];
 declare function list<T>(...xs: T[]): List<T>;
 declare function cons<H, T>(h: H, t: List<T>): List<H | T>;
 declare function append<T>(...xs: List<T>[]): List<T>;
@@ -105,6 +106,15 @@ const SUBJECTS: { name: string; scheme: string }[] = [
     (frontier-of history+)
     (loop history+)))
 (loop '())
+`,
+  },
+  {
+    name: "empty-list-if-branch",
+    // (if … '()) must be [] not null under PRE List=T[]
+    scheme: `
+(define (use xs) (map (lambda (e) (:k e)) xs))
+(define (maybe-empty flag)
+  (use (if flag (list (dict :k 1)) '())))
 `,
   },
   {

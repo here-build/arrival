@@ -1512,13 +1512,16 @@ function emitQuoteDatum(datum: Node | undefined, ctx: Ctx): void {
     else ctx.buf.raw(JSON.stringify(datum.atom)); // quoted symbol → string
     return;
   }
-  // Empty list ≡ null (List brand: List<T> = Cons<T> | null). Not [] — that is
-  // unknown[] and breaks seed args like (loop … '()).
+  // Empty list: PRE dialect is `List<T> = T[]` (arrival-internals-types-prelude
+  // types.d.ts). Empty is `[]` (never[] → assignable to any List<T>), NOT
+  // `null` (carriers Cons|null brand — that is the type-layer, not the lens PRE).
+  // Emitting null made (if … '()) / (loop … '()) fail List slots.
   if (isNil(datum) || datum.list.length === 0) {
-    ctx.buf.raw("null");
+    ctx.buf.raw("[]");
     return;
   }
-  // Non-empty quoted list → list(...) so the brand is List, not a TS array.
+  // Non-empty quoted list → list(...) so element type is inferred, not a
+  // widened object[] from a bare array literal of heterogeneous forms.
   ctx.buf.raw("list(");
   for (const [idx, d] of datum.list.entries()) {
     if (idx > 0) ctx.buf.raw(", ");

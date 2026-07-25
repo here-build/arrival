@@ -168,9 +168,9 @@ describe("nested accessor coherence — binder demand harvest", () => {
       ts,
       "loop history must pick up List domain through (cons entry history) under frontier-of",
     ).toMatch(/loop = \(history:\s*List<\s*\{\s*tagline:\s*any;\s*reactions:\s*any\s*\}/);
-    // Empty quote is List null brand, not unknown[]
-    expect(ts).toContain("loop(null)");
-    expect(ts).not.toMatch(/loop\(\[\]\)/);
+    // Empty quote is [] under PRE List = T[] (never[] → any List slot)
+    expect(ts).toContain("loop([])");
+    expect(ts).not.toMatch(/loop\(null\)/);
   });
 
   it("append/take/drop reverse under List domain (arity-aware — n not List)", () => {
