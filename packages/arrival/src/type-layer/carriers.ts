@@ -69,7 +69,12 @@ export declare function map<A, B, C, R>(
 ): readonly R[];
 export declare function filter<T>(p: (x: T) => unknown, xs: List<T>): List<T>;
 export declare function filter<T>(p: (x: T) => unknown, xs: readonly T[]): readonly T[];
-export declare function reduce<T, A>(f: (acc: A, x: T) => A, init: A, xs: List<T> | readonly T[]): A;
+/** Scheme/runtime order: (element, acc) → acc — not JS Array.reduce (acc, element). */
+export declare function reduce<T, A>(
+  f: (x: T, acc: A) => A,
+  init: NoInfer<A>,
+  xs: List<T> | readonly T[],
+): A;
 export declare function length(xs: List<unknown> | readonly unknown[] | string): number;
 
 // ── the slot probes (the lens's narrowing queries) ────────────────────────────

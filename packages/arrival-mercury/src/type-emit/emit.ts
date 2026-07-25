@@ -750,7 +750,10 @@ const PIPELINE_ELEM_OPS = new Set([
 ]);
 
 /** One step of a pure unary pipeline (compose/pipe desugar, or hand-written). */
-type PipelineStep = { kind: "field"; key: string } | { kind: "elem" };
+type PipelineStep =
+  | { kind: "field"; key: string }
+  /** `op` is the Scheme head (car/cadr/first/…) — used when joining list demands. */
+  | { kind: "elem"; op: string };
 
 /**
  * If `body` is a pure unary chain ending at `param` — only keyword accessors and
@@ -777,7 +780,7 @@ function extractUnaryPipeline(body: Node, param: Atom): PipelineStep[] | null {
       continue;
     }
     if (isAtom(h) && !h.str && PIPELINE_ELEM_OPS.has(h.atom)) {
-      outerFirst.push({ kind: "elem" });
+      outerFirst.push({ kind: "elem", op: h.atom });
       cur = arg;
       continue;
     }
@@ -815,7 +818,7 @@ const LIST_PRESERVE_OPS = new Set(["cdr", "cddr", "cdddr", "cddddr", "rest", "ta
 
 type DemandShape =
   | { kind: "any" }
-  | { kind: "list"; elem: DemandShape }
+  | { kind: "list"; elem: DemandShape; /** car/cadr/… when from pure chain; omitted when unknown */ slot?: string }
   | { kind: "obj"; fields: Map<string, DemandShape> };
 
 const DEMAND_ANY: DemandShape = { kind: "any" };
@@ -837,7 +840,7 @@ function tryPureChain(expr: Node): { root: string; steps: PipelineStep[] } | nul
       continue;
     }
     if (isAtom(h) && !h.str && PIPELINE_ELEM_OPS.has(h.atom)) {
-      outerFirst.push({ kind: "elem" });
+      outerFirst.push({ kind: "elem", op: h.atom });
       cur = arg;
       continue;
     }
@@ -850,7 +853,7 @@ function shapeFromSteps(steps: readonly PipelineStep[]): DemandShape {
   for (let i = steps.length - 1; i >= 0; i--) {
     const step = steps[i]!;
     if (step.kind === "field") s = { kind: "obj", fields: new Map([[step.key, s]]) };
-    else s = { kind: "list", elem: s };
+    else s = { kind: "list", elem: s, slot: step.op };
   }
   return s;
 }
@@ -858,22 +861,51 @@ function shapeFromSteps(steps: readonly PipelineStep[]): DemandShape {
 /** Replace deepest `any` leaf with `leaf` (one-hop init: field chain → bound demand). */
 function substituteLeaf(s: DemandShape, leaf: DemandShape): DemandShape {
   if (s.kind === "any") return leaf;
-  if (s.kind === "list") return { kind: "list", elem: substituteLeaf(s.elem, leaf) };
+  if (s.kind === "list") {
+    return { kind: "list", elem: substituteLeaf(s.elem, leaf), slot: s.slot };
+  }
   const fields = new Map<string, DemandShape>();
   for (const [k, v] of s.fields) fields.set(k, substituteLeaf(v, leaf));
   return { kind: "obj", fields };
 }
 
+/** True when two object shapes share no field names (zip-pair car vs cadr slots). */
+function objFieldsDisjoint(a: DemandShape & { kind: "obj" }, b: DemandShape & { kind: "obj" }): boolean {
+  if (a.fields.size === 0 || b.fields.size === 0) return false;
+  for (const k of a.fields.keys()) {
+    if (b.fields.has(k)) return false;
+  }
+  return true;
+}
+
 /**
  * Join consumer demands. Constructor conflict (list vs object) → null.
  * Nested key conflicts widen that key to `any` (not whole-shape skip).
+ *
+ * List elements that are disjoint objects (car vs cadr of a zip pair) → List&lt;any&gt;
+ * rather than a false super-object. Same-object multi-field joins
+ * (`(:tagline click)` ⊔ `(:reaction click)`) still merge keys.
  */
 function joinShapes(a: DemandShape, b: DemandShape): DemandShape | null {
   if (a.kind === "any") return b;
   if (b.kind === "any") return a;
   if (a.kind === "list" && b.kind === "list") {
+    // car vs cadr (different slots) with disjoint field sets → List<any>, not a
+    // super-object. Same slot (two fields via car) still merges object keys.
+    if (
+      a.slot !== undefined &&
+      b.slot !== undefined &&
+      a.slot !== b.slot &&
+      a.elem.kind === "obj" &&
+      b.elem.kind === "obj" &&
+      objFieldsDisjoint(a.elem, b.elem)
+    ) {
+      return { kind: "list", elem: DEMAND_ANY };
+    }
     const e = joinShapes(a.elem, b.elem);
-    return e === null ? null : { kind: "list", elem: e };
+    if (e === null) return null;
+    const slot = a.slot === b.slot ? a.slot : undefined;
+    return { kind: "list", elem: e, slot };
   }
   if (a.kind === "obj" && b.kind === "obj") {
     const fields = new Map(a.fields);
@@ -1169,6 +1201,16 @@ function collectDemandsInNode(
   // This form as a pure chain.
   const chain = tryPureChain(n);
   if (chain !== null) mergeDemand(into, chain.root, shapeFromSteps(chain.steps));
+
+  // (cons h t) — tail must be a list (acc in reduce (lambda (x acc) (cons h acc))).
+  if (isAtom(n.list[0]) && !n.list[0]!.str && n.list[0]!.atom === "cons" && n.list.length >= 3) {
+    const tail = n.list[2]!;
+    if (isAtom(tail) && !tail.str) {
+      mergeDemand(into, tail.atom, { kind: "list", elem: DEMAND_ANY });
+    } else {
+      applyDomainToArg(tail, { kind: "list", elem: DEMAND_ANY }, into);
+    }
+  }
 
   // List-preserving: (cdr ts) / (cdr (car …)) etc.
   if (n.list.length === 2 && isAtom(n.list[0]) && !n.list[0]!.str && LIST_PRESERVE_OPS.has(n.list[0]!.atom)) {

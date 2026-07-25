@@ -21,8 +21,8 @@
 //                    throws "Expecting string got pair"). Do NOT type it (List,List)→List.
 //   • flatten      — DEEP, fully-recursive flatten; depth unbounded → element type
 //                    collapses to `unknown`, but the argument stays pinned to a list.
-//   • fold         — the (fn, init, list) order with callback (acc, x) — the Haskell/
-//                    Ramda-tradition alias of reduce, NOT SRFI-1 fold's (kons knil list).
+//   • fold         — (fn, init, list) with callback (element, acc) — same Scheme
+//                    convention as `reduce` (arrival runtime / SRFI-1 left-fold).
 //   • nth          — INDEX-first, list-LAST → the element, or the miss value out of range.
 //   • for-each     — (fn, list…) for side effects; yields the unspecified value (void).
 //   • count        — PRED-first, list-LAST → how many elements satisfy pred (number).
@@ -42,8 +42,9 @@ declare function concat(...parts: string[]): string;
   // the argument is still pinned to a list so a non-list bites.
 declare function flatten(xs: List<unknown>): List<unknown>;
 
-  // Left fold (fn, init, list) with callback (acc, x). Threads the accumulator type B.
-declare function fold<A, B>(f: (acc: B, x: A) => B, init: B, xs: List<A>): B;
+  // Left fold (fn, init, list) with callback (element, acc) — Scheme order.
+  // NoInfer on init so empty `[]` seed does not pin B to never[] before the body.
+declare function fold<A, B>(f: (x: A, acc: B) => B, init: NoInfer<B>, xs: List<A>): B;
 
   // Indexed element read. Index-first, list-last; out-of-range is the miss value.
 declare function nth<T>(index: number, xs: List<T>): T | undefined;

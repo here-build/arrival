@@ -210,6 +210,25 @@ describe("nested accessor coherence — binder demand harvest", () => {
     expect(ts).toContain("const b =");
   });
 
+  it("reduce Scheme order (element, acc) + cons tail List + empty seed", () => {
+    // Runtime: fn(element, acc). PRE mistakenly had (acc, x) — swapped annotations.
+    const { ts } = emitTypes(`
+(define (triage-one persona reaction tagline)
+  (dict :id (:id persona) :verdict (:verdict reaction)))
+(define (triage-bouncers personas reactions tagline)
+  (reduce (lambda (pr acc)
+            (let ((persona (car pr)) (reaction (cadr pr)))
+              (if (bouncing? (:verdict reaction))
+                  (cons (triage-one persona reaction tagline) acc) acc)))
+          '() (map list personas reactions)))
+`);
+    // element first (pr), then acc: List
+    expect(ts).toMatch(/reduce\(\(pr(?::[^,)]+)?,\s*acc:\s*List</);
+    // not the JS order annotation pattern alone on pr as sole rich List
+    expect(ts).toContain("cons(triage$dash$one(");
+    expect(ts).toMatch(/,\s*\[\]/); // empty seed
+  });
+
   it("optional accumulator: named-let (click #f) + field uses → T | false; cond uses !== false", () => {
     const { ts } = emitTypes(`
 (define (persona-result pid results)

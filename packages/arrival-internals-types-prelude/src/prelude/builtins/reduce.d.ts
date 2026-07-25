@@ -1,10 +1,13 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // `reduce` — left fold over a list with an explicit seed.
 //
-// Scheme semantics: (reduce fn init list) → fold `fn` over `list`, threading the
-// accumulator, seeded by `init`. Arg order is (fn, init, collection); the binary
-// `fn` receives (acc, element). Polymorphic in element type A and accumulator
-// type B — A may differ from B (e.g. fold a list of strings into a number).
+// Scheme / runtime: (reduce fn init list) — `fn` is **(element, acc) → acc**
+// (SRFI-1 / arrival tagless: "scheme convention fn(element, acc)", NOT JS
+// Array.reduce's (acc, element)). Arg order of reduce itself is (fn, init, xs).
+// Polymorphic in element A and accumulator B (e.g. strings → number).
+//
+// `NoInfer<B>` on init: empty seed `[]` must not pin B to `never[]` before the
+// callback return is known — otherwise (cons x acc) under `'()` fails.
 // // ─────────────────────────────────────────────────────────────────────────────
 
-declare function reduce<A, B>(fn: (acc: B, x: A) => B, init: B, xs: List<A>): B;
+declare function reduce<A, B>(fn: (x: A, acc: B) => B, init: NoInfer<B>, xs: List<A>): B;

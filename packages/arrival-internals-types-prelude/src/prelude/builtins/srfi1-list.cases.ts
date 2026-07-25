@@ -25,9 +25,9 @@ expectTypeOf(
   ]),
 ).toEqualTypeOf<List<unknown>>();
 
-// fold — accumulator type B threads from seed through callback to result
-expectTypeOf(fold((acc: number, x: number): number => acc + x, 0, [1, 2, 3])).toEqualTypeOf<number>();
-expectTypeOf(fold((a: List<number>, x: number): List<number> => a, [], [1, 2, 3])).toEqualTypeOf<List<number>>();
+// fold — Scheme callback (element, acc); B threads from seed through body
+expectTypeOf(fold((x: number, acc: number): number => acc + x, 0, [1, 2, 3])).toEqualTypeOf<number>();
+expectTypeOf(fold((x: number, a: List<number>): List<number> => a, [], [1, 2, 3])).toEqualTypeOf<List<number>>();
 
 // nth — index-first, element-or-undefined
 expectTypeOf(nth(1, [10, 20, 30])).toEqualTypeOf<number | undefined>();
@@ -57,9 +57,9 @@ concat(1, 2, 3, 4);
 // @ts-expect-error flatten — argument is not a list
 flatten(5);
 // @ts-expect-error fold — callback acc type disagrees with the seed type (string acc vs number seed)
-fold((acc: string, x: number): string => acc, 0, [1, 2, 3]);
+fold((x: number, acc: string): string => acc, 0, [1, 2, 3]);
 // @ts-expect-error fold — element type mismatches the callback's x param (string x over number list)
-fold((acc: number, x: string): number => acc, 0, [1, 2, 3]);
+fold((x: string, acc: number): number => acc, 0, [1, 2, 3]);
 // @ts-expect-error nth — args swapped (list where the index goes)
 nth([10, 20], 1);
 // @ts-expect-error nth — wrong element type threaded out
