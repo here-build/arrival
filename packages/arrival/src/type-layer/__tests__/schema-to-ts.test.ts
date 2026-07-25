@@ -141,31 +141,29 @@ describe("printType — compounds", () => {
 });
 
 describe("sTagToTsType — the s/* schema-DSL tag → TS type-string bridge", () => {
-  // `tagToJsonSchema`'s object case sets `additionalProperties: false` — zod's
-  // reconstruction (`z.fromJSONSchema`) renders that as an explicit index
-  // signature banning extra keys, so every object in these expectations carries
-  // a trailing `[x: string]: never` member (real, correct TS — not noise).
+  // `additionalProperties: false` would print `[x: string]: never` via zod; the lens
+  // strips that (structural objects already reject unknown keys; never-index is hover noise).
   it.each([
     {
       name: "an object tag's scalar fields",
       tag: ["object", ["title", "string"], ["count", "number"]] as const,
-      expected: "{ title: string; count: number; [x: string]: never }" },
+      expected: "{ title: string; count: number }" },
     {
       name: "a field description prints as a JSDoc comment (zod-to-ts's own convention)",
       tag: ["object", ["summary", "string", "a one-line summary"]] as const,
-      expected: "{ /** a one-line summary */ summary: string; [x: string]: never }" },
+      expected: "{ /** a one-line summary */ summary: string }" },
     {
       name: "a nested array field",
       tag: ["object", ["tags", ["array", "string"]]] as const,
-      expected: "{ tags: string[]; [x: string]: never }" },
+      expected: "{ tags: string[] }" },
     {
-      name: "a nested object field (itself carrying the never-index signature)",
+      name: "a nested object field (closed-never stripped at every level)",
       tag: ["object", ["author", ["object", ["name", "string"]]]] as const,
-      expected: "{ author: { name: string; [x: string]: never }; [x: string]: never }" },
+      expected: "{ author: { name: string } }" },
     {
       name: "an optional field's /optional suffix drops it from `required` — TS marks it `?` (zod's own `?: T | undefined`)",
       tag: ["object", ["title", "string"], ["nickname", "string/optional"]] as const,
-      expected: "{ title: string; nickname?: string | undefined; [x: string]: never }" },
+      expected: "{ title: string; nickname?: string | undefined }" },
   ])("prints $name", ({ tag, expected }) => {
     expect(sTagToTsType(tag)).toBe(expected);
   });

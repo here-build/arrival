@@ -197,6 +197,21 @@ export function printType(schema: z.ZodTypeAny): string {
 }
 
 /**
+ * Zod prints `additionalProperties: false` objects with a trailing
+ * `[x: string]: never` index. That is faithful to closed JSON Schema, but in the
+ * type lens it is hover noise: structural `{ a: string }` already rejects unknown
+ * keys on read, and the never-index creates ugly unions with open dict literals
+ * (`{ summary; key-points: string[] } | { summary; key-points: never[]; [x: string]: never }`).
+ * Strip it for lens-facing schema→TS (prompt faces, etc.).
+ */
+function stripClosedNeverIndex(tsType: string): string {
+  return tsType
+    .replace(/;\s*\[x: string\]:\s*never/g, "")
+    .replace(/\{\s*\[x: string\]:\s*never;\s*/g, "{ ")
+    .replace(/\[x: string\]:\s*never;\s*/g, "");
+}
+
+/**
  * Print an s/* schema-DSL TAG (`tagToJsonSchema`'s own input shape — e.g.
  * `["object", ["summary", "string", "a one-line summary"]]`) as a TS type string —
  * the STATIC projection `env/schema/schema.ts`'s header promises alongside the runtime one
@@ -208,7 +223,9 @@ export function printType(schema: z.ZodTypeAny): string {
  */
 export function sTagToTsType(tag: unknown): string {
   try {
-    return printType(z.fromJSONSchema(tagToJsonSchema(tag) as Parameters<typeof z.fromJSONSchema>[0]));
+    return stripClosedNeverIndex(
+      printType(z.fromJSONSchema(tagToJsonSchema(tag) as Parameters<typeof z.fromJSONSchema>[0])),
+    );
   } catch {
     return "unknown";
   }
