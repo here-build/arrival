@@ -7,7 +7,7 @@
 // Per `.claude/rules/tests.md` this is a `__tests__/` verdict (boolean pass/fail).
 
 import { resolveRequireType } from "@inhuman.tools/arrival/capabilities/loader";
-import { loaderFromResolver } from "@inhuman.tools/llm-plane-arrival-chain";
+import { loaderFromResolver, resolveRequireTypeWithPrompts } from "@inhuman.tools/llm-plane-arrival-chain";
 import { describe, expect, it } from "vitest";
 
 import { assembleHostPrelude } from "../host-prelude.js";
@@ -72,3 +72,48 @@ describe("(require data-file) → granular shape", () => {
     expect(info?.displayText ?? "").not.toContain("name");
   });
 });
+
+// Regression: incomplete specialized `require("path")` overloads made a second
+// data path fail with `'"summary-of-persona.hbs"' is not assignable to
+// parameter of type '"personas.yaml"'`. Require-as-import gives each path its
+// own default-export module instead.
+describe("require-as-import — multi-path faces (no overload bag)", () => {
+  const multiFiles: Record<string, string> = {
+    "personas.yaml": `name: Ada\nage: 36\n`,
+    "summary-of-persona.hbs": "Hello {{name}}",
+  };
+  const multiLoader = loaderFromResolver((p) => multiFiles[p] ?? null);
+  const multiLs = createSchemeLanguageService({
+    compilerOptions: { noImplicitAny: false },
+    host: assembleHostPrelude([["require", "(specifier: SStr): unknown"]]),
+    resolveModule: (p) => multiFiles[p] ?? null,
+    resolveRequireType: (p) => {
+      const text = multiFiles[p];
+      if (text === undefined) return null;
+      return resolveRequireTypeWithPrompts(multiLoader, p, text);
+    },
+  });
+
+  it("yaml + hbs together: no path-literal overload clash", () => {
+    const scheme =
+      `(define personas (require "personas.yaml"))\n` +
+      `(define summary (require "summary-of-persona.hbs"))\n` +
+      `(summary personas)\n`;
+    const program = multiLs.getTypelevelProgram(scheme);
+    expect(program).toMatch(/import __req\d+ from "\.\/__req__\/personas\.yaml\.ts"/);
+    expect(program).toMatch(/import __req\d+ from "\.\/__req__\/summary-of-persona\.hbs\.ts"/);
+    expect(program).not.toMatch(/declare function require\(specifier: "/);
+    expect(program).not.toMatch(/require\("/);
+
+    const modules = multiLs.getTypelevelModules();
+    expect(Object.keys(modules).some((k) => k.includes("personas.yaml"))).toBe(true);
+    expect(Object.keys(modules).some((k) => k.includes("summary-of-persona.hbs"))).toBe(true);
+
+    const diags = multiLs.getSemanticDiagnostics(scheme);
+    const clash = diags.filter((d) =>
+      /No overload matches|not assignable to parameter of type '"/.test(String(d.messageText ?? d.message ?? "")),
+    );
+    expect(clash).toEqual([]);
+  });
+});
+

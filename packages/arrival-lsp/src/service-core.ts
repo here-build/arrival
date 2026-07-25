@@ -146,11 +146,15 @@ export interface SchemeLanguageServiceOptions {
    * (`resolveRequireType` over the kernel loader), so a custom extension's
    * `type` provider reaches the editor too.
    *
-   * For each require path that yields a non-null shape, the lens emits a
-   * `declare function require(specifier: "<path>"): <T>;` string-literal
-   * overload so `(require "data.json")` resolves to the precise shape instead of
-   * `unknown`. A path with a shape is ALSO skipped as a scheme dependency (it is
-   * data, not loadable forms). Absent → every require stays `unknown`. */
+   * For each require path that yields a non-null shape, the lens builds a
+   * virtual module `__req__/<path>.ts` with `export default` of that face
+   * (require-as-import — not a flat `declare function require("path")` overload
+   * bag, which broke when only a subset of paths had shapes: `"x.hbs"` was not
+   * assignable to the only specialized parameter `"y.yaml"`). The program
+   * `import`s those defaults; `emitTypes` rewrites `(require "path")` to the
+   * binding. A shaped path is ALSO skipped as a scheme dependency (data, not
+   * loadable forms). Absent → every require stays `unknown` via the host
+   * ambient. */
   resolveRequireType?: (path: string) => string | null;
 }
 
@@ -530,13 +534,21 @@ export interface SchemeLanguageService {
   getSlotIsStringTyped(scheme: string, schemeOffset: number): boolean | null;
   /**
    * Debug dump: the virtual `__program.ts` the lens typechecks for `scheme` —
-   * require-closure + data-file `require` overloads + emitted program + usage-
+   * require-as-import lines + scheme-prelude/deps + emitted program + usage-
    * based param annotations. Never runs; exists only so a CLI/host can print
    * what the checker sees. Side-effects the same `programText` cell as every
    * other query (subsequent diagnostics/hover share this snapshot until the
-   * next load).
+   * next load). Pair with {@link getTypelevelModules} for a self-contained
+   * offline typecheck (the program `import`s those virtual faces).
    */
   getTypelevelProgram(scheme: string): string;
+  /**
+   * Virtual require-face modules from the last {@link getTypelevelProgram} /
+   * diagnostics load — keys like `__req__/personas.yaml.ts`, values are the
+   * face TS text. Empty when no data/prompt/hbs requires were resolved.
+   * Plain record (not Map) so it survives postMessage / offline materialize.
+   */
+  getTypelevelModules(): Readonly<Record<string, string>>;
 }
 
 /**
@@ -592,10 +604,10 @@ export function createSchemeLanguageServiceCore(
   // Mutable program cell + version, bumped each time we set a new emitted module.
   let programText = "export {};\n";
   let programVersion = 0;
-  // Per-require virtual modules (data/prompt): one file each, `export default` the
-  // require shape. Require-as-import: the open buffer `import`s them instead of a
-  // flat `declare function require("path")` overload bag — individual file
-  // preservation for the checker (and a step toward real module faces).
+  // Per-require virtual modules (data/prompt/hbs): one file each, `export default`
+  // the require face. Require-as-import: the open buffer `import`s them instead of
+  // a flat `declare function require("path")` overload bag (incomplete bags made
+  // `"x.hbs"` fail against the only specialized `"y.yaml"` parameter).
   let dataModules = new Map<string, string>();
   let dataModuleVersion = 0;
   // Emitted TS identifier → the ORIGINAL scheme source spelling it was minted from (see
@@ -726,7 +738,7 @@ export function createSchemeLanguageServiceCore(
     const resolve = opts?.resolveModule;
     const resolveReqType = opts?.resolveRequireType;
     // Requires are walked when EITHER seam is present: `resolveModule` emits
-    // `.scm` deps into scope, `resolveRequireType` emits data-file overloads.
+    // `.scm` deps into scope, `resolveRequireType` drives require-as-import faces.
     programRequires = resolve === undefined && resolveReqType === undefined ? [] : scanRequires(scheme);
     // 1. Emit every unit (deps first), tracking raw segments + LOCAL mappings.
     interface RawUnit {
@@ -745,10 +757,11 @@ export function createSchemeLanguageServiceCore(
     // of the require closure. Untracked in rawDeps: it has no Scheme mapper, so
     // its defines are in scope but its own spans never lift to a diagnostic.
     let prefix = emittedSchemePrelude();
-    // Data-file requires resolve to a shape (overload), scheme requires load into
-    // scope (dep). A path is a data file iff the registry yields a type for it.
-    // Collected over the WHOLE tree (value-position `(define x (require …))`
-    // included), deduped, so each `(require "data.json")` gets its precise shape.
+    // Data-file requires resolve to a shape face (virtual module), scheme requires
+    // load into scope (dep). A path is a data file iff the registry yields a type
+    // for it. Collected over the WHOLE tree (value-position
+    // `(define x (require …))` included), deduped, so each `(require "data.json")`
+    // gets its precise shape.
     const dataReqTypes = new Map<string, string>();
     const collectDataReqs = (source: string): void => {
       if (resolveReqType === undefined) return;
@@ -1240,6 +1253,10 @@ export function createSchemeLanguageServiceCore(
     getTypelevelProgram(scheme): string {
       loadSource(scheme);
       return programText;
+    },
+
+    getTypelevelModules(): Readonly<Record<string, string>> {
+      return Object.fromEntries(dataModules);
     },
   };
 

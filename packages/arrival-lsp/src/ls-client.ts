@@ -85,6 +85,7 @@ export const LS_METHODS = [
   "getHeadReturnsArray",
   "getSlotIsStringTyped",
   "getTypelevelProgram",
+  "getTypelevelModules",
 ] as const;
 
 /** Connect to a served port. Resolves once the server acknowledges the init —
@@ -146,6 +147,7 @@ export function connectSchemeLs(
           getHeadReturnsArray: rpc("getHeadReturnsArray"),
           getSlotIsStringTyped: rpc("getSlotIsStringTyped"),
           getTypelevelProgram: rpc("getTypelevelProgram"),
+          getTypelevelModules: rpc("getTypelevelModules"),
           setProjectFiles: (files: Record<string, string>) => call<void>({ kind: "files", files }),
           setRequireTypes: (types: Record<string, string>) => call<void>({ kind: "requireTypes", types }),
         });
