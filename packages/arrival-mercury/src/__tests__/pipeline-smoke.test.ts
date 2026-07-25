@@ -8,7 +8,7 @@
  *
  *   - registry → grammar: `narrowsMembersOf` reduces the `null?` row's Law-N
  *     `narrows` declaration to the key set `emitTypes` consumes, so the
- *     condition emits as the BARE NForm `__arr["null?"](xs)` (boolean-typed);
+ *     condition emits as the BARE NForm `null$qmark$(xs)` (boolean-typed);
  *   - tsc → facts: `extractFacts` derives `{ boolean: true }` on the condition
  *     App node, keyed by the SAME NodeIds `walk` reads (`extraction.facts`
  *     flows into `WalkOptions.facts` with no cast — the type-alignment proof);

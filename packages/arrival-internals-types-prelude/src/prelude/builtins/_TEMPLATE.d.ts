@@ -13,7 +13,7 @@
 //      (from `stdlib.ts` / `inference-env.ts`) — the `any` impl you SHARPEN.
 //      Do NOT import that impl; you are authoring a precise *signature* for it.
 //   3. Write the signature in plain TS scalars (`string`/`number`/`boolean`/`void`)
-//      plus PRE's structural types (`List<T>`, `Pair<H,T>`, `Nil`, `Dict<P>`,
+//      plus PRE's structural types (`List<T>`, `Tuple<A,B>`, plain records,
 //      `Field<O,K>`, `sexpr`). The membrane makes a boundary value its plain JS
 //      type, so no scalar dialect is needed.
 //   4. Operator / TS-illegal names → bracketed string key: `"+"`, `"<"`,

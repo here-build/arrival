@@ -38,70 +38,69 @@
 // Tags are written as the runtime symbol strings ('just'/'nothing'/'left'/'right').
 // `?`/`>`/`/`-bearing names → bracketed string keys.
 // ─────────────────────────────────────────────────────────────────────────────
-interface ArrShape {
+
   // ── Maybe constructors ──────────────────────────────────────────────────────
-  just<T>(x: T): readonly ["just", T];
-  nothing(): readonly ["nothing"];
+declare function just<T>(x: T): readonly ["just", T];
+declare function nothing(): readonly ["nothing"];
 
   // ── Either constructors ─────────────────────────────────────────────────────
-  left<L>(x: L): readonly ["left", L];
-  right<R>(x: R): readonly ["right", R];
+declare function left<L>(x: L): readonly ["left", L];
+declare function right<R>(x: R): readonly ["right", R];
 
   // ── Tag predicates — accept any value (impl guards with pair?), return boolean ─
   // Arg typed `unknown`: these are GUARDS, valid to call on a non-Maybe (→ #f).
-  "just?"(m: unknown): boolean;
-  "nothing?"(m: unknown): boolean;
-  "maybe?"(m: unknown): boolean;
-  "left?"(e: unknown): boolean;
-  "right?"(e: unknown): boolean;
+declare function just$qmark$(m: unknown): boolean;
+declare function nothing$qmark$(m: unknown): boolean;
+declare function maybe$qmark$(m: unknown): boolean;
+declare function left$qmark$(e: unknown): boolean;
+declare function right$qmark$(e: unknown): boolean;
 
   // ── Maybe combinators ───────────────────────────────────────────────────────
   // maybe-bind: Nothing short-circuits (returns the Nothing). Result unions the
   // bound function's Maybe with the passed-through Nothing — faithful to the impl.
-  "maybe-bind"<T, R extends readonly ["just", unknown] | readonly ["nothing"]>(
+declare function maybe$dash$bind<T, R extends readonly ["just", unknown] | readonly ["nothing"]>(
     m: readonly ["just", T] | readonly ["nothing"],
     f: (x: T) => R,
   ): R | readonly ["nothing"];
   // maybe-map: maps the wrapped value, preserving Nothing. NOTE: impl arg order is
   // (f m) — function FIRST, unlike maybe-bind's (m f).
-  "maybe-map"<T, B>(
+declare function maybe$dash$map<T, B>(
     f: (x: T) => B,
     m: readonly ["just", T] | readonly ["nothing"],
   ): readonly ["just", B] | readonly ["nothing"];
   // maybe-ref: unwrap a Just to its value. (Nothing → calls failure thunk / errors;
   // statically the success type is the wrapped T.)
-  "maybe-ref"<T>(m: readonly ["just", T] | readonly ["nothing"], ...failure: [(() => T)?]): T;
+declare function maybe$dash$ref<T>(m: readonly ["just", T] | readonly ["nothing"], ...failure: [(() => T)?]): T;
   // maybe-ref/default: Just value, else the default D — honest union.
-  "maybe-ref/default"<T, D>(m: readonly ["just", T] | readonly ["nothing"], dflt: D): T | D;
+declare function maybe$dash$ref$slash$default<T, D>(m: readonly ["just", T] | readonly ["nothing"], dflt: D): T | D;
 
   // ── Maybe ⇄ Either / List coercions ─────────────────────────────────────────
   // maybe->either: Just x → (right x); Nothing → (left no-just).
-  "maybe->either"<T, N>(
+declare function maybe$dash$$greater$either<T, N>(
     m: readonly ["just", T] | readonly ["nothing"],
     noJust: N,
   ): readonly ["right", T] | readonly ["left", N];
   // maybe->list: Just x → (x); Nothing → ().
-  "maybe->list"<T>(m: readonly ["just", T] | readonly ["nothing"]): List<T>;
+declare function maybe$dash$$greater$list<T>(m: readonly ["just", T] | readonly ["nothing"]): List<T>;
   // list->maybe: () → Nothing; (x …) → (just x).
-  "list->maybe"<T>(lst: List<T>): readonly ["just", T] | readonly ["nothing"];
+declare function list$dash$$greater$maybe<T>(lst: List<T>): readonly ["just", T] | readonly ["nothing"];
 
   // ── Either combinators ──────────────────────────────────────────────────────
   // either-bind: Left short-circuits. (e f) — Either FIRST.
-  "either-bind"<L, R, O extends readonly ["left", unknown] | readonly ["right", unknown]>(
+declare function either$dash$bind<L, R, O extends readonly ["left", unknown] | readonly ["right", unknown]>(
     e: readonly ["left", L] | readonly ["right", R],
     f: (x: R) => O,
   ): O | readonly ["left", L];
   // either-map: maps a Right, preserving Left. (f e) — function FIRST.
-  "either-map"<L, R, B>(
+declare function either$dash$map<L, R, B>(
     f: (x: R) => B,
     e: readonly ["left", L] | readonly ["right", R],
   ): readonly ["left", L] | readonly ["right", B];
   // either-ref: unwrap a Right to its value (Left → failure/error).
-  "either-ref"<L, R>(e: readonly ["left", L] | readonly ["right", R], ...failure: [((l: L) => R)?]): R;
+declare function either$dash$ref<L, R>(e: readonly ["left", L] | readonly ["right", R], ...failure: [((l: L) => R)?]): R;
   // either-ref/default: Right value, else default D.
-  "either-ref/default"<L, R, D>(e: readonly ["left", L] | readonly ["right", R], dflt: D): R | D;
+declare function either$dash$ref$slash$default<L, R, D>(e: readonly ["left", L] | readonly ["right", R], dflt: D): R | D;
   // either-swap: (left x) ⇄ (right x) — sides flip, payload types swap roles.
-  "either-swap"<L, R>(e: readonly ["left", L] | readonly ["right", R]): readonly ["right", L] | readonly ["left", R];
+declare function either$dash$swap<L, R>(e: readonly ["left", L] | readonly ["right", R]): readonly ["right", L] | readonly ["left", R];
   // either->list: Right x → (x); Left → ().
-  "either->list"<L, R>(e: readonly ["left", L] | readonly ["right", R]): List<R>;
-}
+declare function either$dash$$greater$list<L, R>(e: readonly ["left", L] | readonly ["right", R]): List<R>;

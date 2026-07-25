@@ -1,7 +1,7 @@
 {
   "name": "@inhuman.tools/arrival-internals-types-prelude",
   "version": "0.9.0",
-  "description": "The TypeScript type vocabulary for arrival builtins — the PRE prelude plus per-builtin `.d.ts` leaves that teach tsc arrival's runtime (`__arr`, `sexpr`, `Dict`, `__scmTruth`, list/string/math ops). The shared type surface both the interactive LSP and the batch typefacts extractor stand on; loaded via fs (Node) or a vite-inlined `?raw` glob (browser).",
+  "description": "The TypeScript type vocabulary for arrival builtins — the PRE prelude plus per-builtin `.d.ts` leaves that teach tsc arrival's runtime (`__arr`, `sexpr`, `List`/`Tuple`, `__scmTruth`, list/string/math ops). The shared type surface both the interactive LSP and the batch typefacts extractor stand on; loaded via fs (Node) or a vite-inlined `?raw` glob (browser).",
   "homepage": "https://github.com/here-build/arrival#readme",
   "bugs": {
     "url": "https://github.com/here-build/arrival/issues"

@@ -11,8 +11,7 @@
 // `Field<O, K>` type so wrong-typing it downstream bites with 2322. Cohesive
 // family — one file, three members in the same `interface ArrShape` block.
 // ─────────────────────────────────────────────────────────────────────────────
-interface ArrShape {
-  "@"<O, K extends keyof O>(obj: O, key: K): Field<O, K>;
-  "@?"<O extends object, K extends string>(obj: O, key: K): HasField<O, K>;
-  "@keys"<O extends object>(obj: O): List<string>;
-}
+
+declare function $at$<O, K extends keyof O>(obj: O, key: K): Field<O, K>;
+declare function $at$$qmark$<O extends object, K extends string>(obj: O, key: K): HasField<O, K>;
+declare function $at$keys<O extends object>(obj: O): List<string>;

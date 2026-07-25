@@ -5,8 +5,6 @@
 // accumulator, seeded by `init`. Arg order is (fn, init, collection); the binary
 // `fn` receives (acc, element). Polymorphic in element type A and accumulator
 // type B — A may differ from B (e.g. fold a list of strings into a number).
-// merge contract: ../types.d.ts THE LEAF MERGE CONTRACT
-// ─────────────────────────────────────────────────────────────────────────────
-interface ArrShape {
-  reduce<A, B>(fn: (acc: B, x: A) => B, init: B, xs: List<A>): B;
-}
+// // ─────────────────────────────────────────────────────────────────────────────
+
+declare function reduce<A, B>(fn: (acc: B, x: A) => B, init: B, xs: List<A>): B;

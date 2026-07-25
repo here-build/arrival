@@ -12,15 +12,13 @@
 //   (equal? a b)  → #t iff a and b are structurally equal
 //   (eq? a b)     → #t iff a and b are identical (reference equal)
 //
-// merge contract: ../types.d.ts THE LEAF MERGE CONTRACT
-// ─────────────────────────────────────────────────────────────────────────────
-interface ArrShape {
-  "zero?"(n: number): boolean;
-  "even?"(n: number): boolean;
-  "odd?"(n: number): boolean;
-  "null?"(xs: List<unknown>): boolean;
-  "empty?"(xs: List<unknown>): boolean;
-  not(v: unknown): boolean;
-  "equal?"(a: unknown, b: unknown): boolean;
-  "eq?"(a: unknown, b: unknown): boolean;
-}
+// // ─────────────────────────────────────────────────────────────────────────────
+
+declare function zero$qmark$(n: number): boolean;
+declare function even$qmark$(n: number): boolean;
+declare function odd$qmark$(n: number): boolean;
+declare function null$qmark$(xs: List<unknown>): boolean;
+declare function empty$qmark$(xs: List<unknown>): boolean;
+declare function not(v: unknown): boolean;
+declare function equal$qmark$(a: unknown, b: unknown): boolean;
+declare function eq$qmark$(a: unknown, b: unknown): boolean;

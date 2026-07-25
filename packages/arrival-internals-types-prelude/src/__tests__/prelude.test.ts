@@ -138,12 +138,12 @@ describe("PRE prelude — bite + merge contract", () => {
     expect(diags[0]!.code).toBe(2339);
   });
 
-  it("the Dict mapped type + field accessor bite on a mis-keyed read", () => {
-    // Exercises PRE's Dict + Field directly (no leaf needed): a precise object
-    // built from entry-tuples, then a wrong-key access.
+  it("an ordinary record + field accessor bite on a mis-keyed read", () => {
+    // Exercises PRE's Field over a plain object type (no named Dict wrapper):
+    // precise record, then a wrong-key access.
     const { diagnostics } = check(
       `export {};
-type Row = Dict<[["name", string], ["age", number]]>;
+type Row = { name: string; age: number };
 declare const row: Row;
 const nm: string = row.name;
 const ag: number = row.age;

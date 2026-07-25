@@ -2,7 +2,7 @@
 // across BOTH live array surfaces (`(list …)` and `'(…)`), where the existing slot probes lose it.
 //
 // THE BUG this probe fixes: at an array value slot the element-type bit is lost the instant the cursor
-// descends past the opener. `(list …)` lowers to the generic `__arr.list(…)` whose `Parameters[i]` is
+// descends past the opener. `(list …)` lowers to the generic `list(…)` whose `Parameters[i]` is
 // `unknown` (so getSlotAcceptsBareWord reports stringy=true → a bare multi-word word slips in); `'(…)`
 // lowers to a TS array-LITERAL with no enclosing call (so the slot probes find nothing — null). This
 // probe reads the element via the enclosing array-producer's CONTEXTUAL type instead, so both surfaces

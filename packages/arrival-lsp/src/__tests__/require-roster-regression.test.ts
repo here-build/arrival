@@ -95,7 +95,7 @@ describe("require roster reaches the lens (the codemirror-plugin bug)", () => {
     const scheme = `(define personas (require "personas.json"))\n(car personas)`;
     const at = scheme.lastIndexOf("personas") + 1;
     const info = ls.getQuickInfoAtPosition(scheme, at);
-    // No `require` member → no `__arr.require` lowering → no granular shape.
+    // No `require` member → no `require` lowering → no granular shape.
     expect(info?.displayText ?? "").not.toContain("age");
   });
 });

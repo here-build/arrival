@@ -19,7 +19,7 @@
  *   2. TS-side CONTAINMENT: the mapped ts range selects the TIGHTEST TS node
  *      covering the WHOLE range (never a sub-token — an exact whole-form mapping
  *      resolves to the call expression, not its `__arr` head; a wrapped
- *      condition resolves to the INNER pre-`__scmTruth` expression because the
+ *      condition resolves to the INNER pre-coerce expression because the
  *      wrapper records no span of its own — spec §8 item 3's high-stakes
  *      sub-assumption, probe-verified).
  *   3. Several exact mappings for one span (desugar duplication): derive at
@@ -174,7 +174,7 @@ function indexMappings(mappings: readonly Mapping[]): Map<string, Mapping[]> {
 /**
  * The instantiated-signature probe (spec §4) for a Ref in argument position.
  *
- * For `(map car xs)` → `__arr.map(car, xs)` — `car` a FREE identifier, since
+ * For `(map car xs)` → `map(car, xs)` — `car` a FREE identifier, since
  * value-position lowering has not landed (spec §4's flagged prerequisite) —
  * `getContextualType` delivers `(a: number) => unknown` with the param side
  * instantiated from `xs`'s element type. The probe is positional, not

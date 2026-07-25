@@ -8,7 +8,7 @@
  * deliver the instantiated signature for a symbol in argument position?" —
  * VERIFIES, empirically, on today's emitter output (probe run 2026-07-14,
  * tsc 6.0.2, this prelude): for `(map car xs)` the virtual TS is
- * `__arr.map(car, xs)` with `car` a FREE identifier (value-position lowering,
+ * `map(car, xs)` with `car` a FREE identifier (value-position lowering,
  * spec §4's flagged unowned prerequisite, has NOT landed), and STILL
  * `checker.getContextualType(car)` returns `(a: number) => unknown` — the slot's
  * expected type, param side instantiated from `xs`'s element type; the secondary
@@ -107,10 +107,10 @@ function nodeAt<K extends CoreForm["kind"]>(
 // ── boolean — the highest-stakes fact (§8 item 3) ─────────────────────────────
 
 describe("extractFacts: boolean fact", () => {
-  it("derives boolean on a comparison-typed condition — through the __scmTruth wrap", () => {
+  it("derives boolean on a comparison-typed condition — through the === true coerce", () => {
     const src = `(define b (if (= 1 2) "y" "n"))`;
     const r = extractFacts(src, { narrowsMembers: NARROWS }); // `=` is NOT narrows-flagged → wrapped
-    expect(r.virtualTs).toContain("__scmTruth("); // precondition: this row exercises the wrapped path
+    expect(r.virtualTs).toContain("=== true"); // precondition: this row exercises the coerce path
     const cond = nodeAt(r.classified!, "App", spanOf(src, "(= 1 2)"));
     expect(r.facts.get(cond.id)).toEqual({ boolean: true });
     expect(r.holes.has(cond.id)).toBe(false);
@@ -118,7 +118,7 @@ describe("extractFacts: boolean fact", () => {
 
   it("NO boolean fact on an unknown-typed condition — the wrapper's own boolean return never leaks in", () => {
     // `(begin)` emits `(undefined as unknown)` → x: unknown. The condition wraps
-    // as `__scmTruth(x)` whose CALL is boolean-typed — deriving from the wrapper
+    // as `(x === true)` whose CALL is boolean-typed — deriving from the coerce
     // instead of the inner expression would false-positive `boolean` here and
     // reintroduce the §5.1 live bug. The exact-span join resolves to the inner
     // `x` (the wrapper records no span of its own).
@@ -132,7 +132,7 @@ describe("extractFacts: boolean fact", () => {
   it("a native (unwrapped) narrowing condition still carries boolean on the App row", () => {
     const src = `(define xs (list 1 2 3))\n(define r (if (pair? xs) 1 2))`;
     const r = extractFacts(src, { narrowsMembers: NARROWS });
-    expect(r.virtualTs).not.toContain("__scmTruth"); // the grammar fired
+    expect(r.virtualTs).not.toContain("=== true"); // the grammar fired
     const cond = nodeAt(r.classified!, "App", spanOf(src, "(pair? xs)"));
     expect(r.facts.get(cond.id)?.boolean).toBe(true);
   });

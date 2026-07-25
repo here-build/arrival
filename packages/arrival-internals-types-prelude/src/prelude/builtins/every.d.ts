@@ -7,6 +7,5 @@
 // the list's element type `T`, so passing a predicate that expects the wrong
 // element type bites. Return is `boolean`.
 // ─────────────────────────────────────────────────────────────────────────────
-interface ArrShape {
-  every<T>(pred: (x: T) => boolean, xs: List<T>): boolean;
-}
+
+declare function every<T>(pred: (x: T) => boolean, xs: List<T>): boolean;

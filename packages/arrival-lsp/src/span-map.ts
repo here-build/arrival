@@ -47,7 +47,7 @@ export class Mapper {
   /**
    * Lift a TS offset OUT to a Scheme span. Picks the TIGHTEST mapping whose TS
    * range `[tsStart, tsStart+tsLength)` contains `tsOffset` — the innermost
-   * emitted construct — so a diagnostic on `5` inside `__arr.car(5)` lifts onto
+   * emitted construct — so a diagnostic on `5` inside `car(5)` lifts onto
    * the `5` form, not the whole call. Returns `null` when no mapping covers the
    * offset (unmapped prelude/infrastructure span — never surface a wrong position).
    */
@@ -66,7 +66,7 @@ export class Mapper {
    * range `[schemeStart, schemeStart+schemeLength)` contains `schemeOffset` (the
    * innermost form under the cursor), then projects the offset to the same
    * relative position inside the TS run — clamped to the TS run so a longer Scheme
-   * source span (e.g. `car` → `__arr.car`) still lands inside the emitted text.
+   * source span (e.g. `car` → `car`) still lands inside the emitted text.
    * Returns `null` when no mapping covers the offset.
    */
   toTs(schemeOffset: number): number | null {
@@ -78,7 +78,7 @@ export class Mapper {
     if (best === null) return null;
     const rel = schemeOffset - best.schemeStart;
     // Clamp into the TS run: the TS and Scheme extents need not be equal length
-    // (e.g. `(car …)` head `car` → `__arr.car`), so a relative offset past the TS
+    // (e.g. `(car …)` head `car` → `car`), so a relative offset past the TS
     // run's end pins to its last position rather than escaping the mapping.
     const clamped = rel < best.tsLength ? rel : Math.max(0, best.tsLength - 1);
     return best.tsStart + clamped;

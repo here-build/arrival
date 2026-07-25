@@ -12,7 +12,6 @@
 // never produces a false bite on value-flavored uses. Empty calls degenerate to
 // plain boolean (T[number] of [] is never).
 // ─────────────────────────────────────────────────────────────────────────────
-interface ArrShape {
-  and<T extends readonly unknown[]>(...xs: T): T[number] | boolean;
-  or<T extends readonly unknown[]>(...xs: T): T[number] | boolean;
-}
+
+declare function and<T extends readonly unknown[]>(...xs: T): T[number] | boolean;
+declare function or<T extends readonly unknown[]>(...xs: T): T[number] | boolean;

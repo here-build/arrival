@@ -15,7 +15,6 @@
 // failure, and arithmetic on the unchecked result SHOULD bite — that is a
 // latent bug, not lens noise.
 // ─────────────────────────────────────────────────────────────────────────────
-interface ArrShape {
-  "number->string"(n: number, radix?: number): string;
-  "string->number"(s: string, radix?: number): number | boolean;
-}
+
+declare function number$dash$$greater$string(n: number, radix?: number): string;
+declare function string$dash$$greater$number(s: string, radix?: number): number | boolean;

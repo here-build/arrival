@@ -156,25 +156,25 @@ function rawProbe(label: string, tsBody: string, marker: string): void {
 }
 
 // (a) positional slot — cursor at the `cuisine` (2nd positional) value position.
-//     Emitted: __arr["find_restaurants"]("x", /*HERE*/, 5)
-rawProbe("(a) positional cuisine value slot", `__arr["find_restaurants"]("x", /*HERE*/, 5);`, "/*HERE*/");
+//     Emitted: find_restaurants("x", /*HERE*/, 5)
+rawProbe("(a) positional cuisine value slot", `find_restaurants("x", /*HERE*/, 5);`, "/*HERE*/");
 
 // (b) keyword slot — cursor at the OBJECT-LITERAL MEMBER position (the kwarg keys).
-//     Emitted: __arr["find_restaurants"]("x", "thai", 5, { /*HERE*/ })
-rawProbe("(b) keyword (object-member) slot", `__arr["find_restaurants"]("x", "thai", 5, { /*HERE*/ });`, "/*HERE*/");
+//     Emitted: find_restaurants("x", "thai", 5, { /*HERE*/ })
+rawProbe("(b) keyword (object-member) slot", `find_restaurants("x", "thai", 5, { /*HERE*/ });`, "/*HERE*/");
 
 // (c) value-after-keyword — cursor at the kwarg VALUE position.
-//     Emitted: __arr["find_restaurants"]("x", "thai", 5, { dietary_requirements: /*HERE*/ })
+//     Emitted: find_restaurants("x", "thai", 5, { dietary_requirements: /*HERE*/ })
 rawProbe(
   "(c) value-after-keyword (dietary_requirements value)",
-  `__arr["find_restaurants"]("x", "thai", 5, { dietary_requirements: /*HERE*/ });`,
+  `find_restaurants("x", "thai", 5, { dietary_requirements: /*HERE*/ });`,
   "/*HERE*/",
 );
 
 // also: operating_hours value (a number — should be free-form, no enum to list)
 rawProbe(
   "(c2) value-after-keyword (operating_hours value, free-form number)",
-  `__arr["find_restaurants"]("x", "thai", 5, { operating_hours: /*HERE*/ });`,
+  `find_restaurants("x", "thai", 5, { operating_hours: /*HERE*/ });`,
   "/*HERE*/",
 );
 
@@ -265,7 +265,7 @@ function rawKwKeys(preamble: string): string[] {
     getDirectories: () => [],
   };
   const service = ts.createLanguageService(host, ts.createDocumentRegistry());
-  const body = `__arr["find_restaurants"]("x", "thai", 5, {  });`;
+  const body = `find_restaurants("x", "thai", 5, {  });`;
   programText = body;
   version += 1;
   const offset = body.indexOf("{ ") + 2;

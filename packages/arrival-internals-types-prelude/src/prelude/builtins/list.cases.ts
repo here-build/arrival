@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Bite cases for `list` — variadic list constructor (list.d.ts → `list<T>(...xs: T[]): List<T>`).
-// expect-type assertions over the ambient `__arr`; inputs are WIDENED literals so
+// expect-type assertions over the ambient global functions; inputs are WIDENED literals so
 // results are exact brands — positives pin with `.toEqualTypeOf<T>()` (an arg-rot
 // OR a return→any rot both bite). Empty invocation → List<never>. Negatives use
 // `// @ts-expect-error`: a heterogeneous arg bites at the call (2345), a wrong-typed
@@ -10,11 +10,11 @@
 import { expectTypeOf } from "vitest";
 
 // Constructing a List<number> from number arguments — result is List<number>.
-expectTypeOf(__arr.list(1, 2, 3)).toEqualTypeOf<List<number>>();
+expectTypeOf(list(1, 2, 3)).toEqualTypeOf<List<number>>();
 // Empty invocation — no args, so T widens to unknown → List<unknown>.
-expectTypeOf(__arr.list()).toEqualTypeOf<List<unknown>>();
+expectTypeOf(list()).toEqualTypeOf<List<unknown>>();
 
 // @ts-expect-error heterogeneous args: 'oops' is not assignable to the inferred T=number
-__arr.list(1, "oops");
+list(1, "oops");
 // @ts-expect-error assigning a List<number> to a scalar number bites (2322)
-const n: number = __arr.list(1, 2, 3);
+const n: number = list(1, 2, 3);

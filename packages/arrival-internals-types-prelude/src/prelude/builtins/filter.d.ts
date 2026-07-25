@@ -5,8 +5,6 @@
 // for which `(pred x)` is truthy. Element type is preserved (filter narrows the
 // COUNT, not the type), so the result is `List<T>` over the same `T`.
 //
-// merge contract: ../types.d.ts THE LEAF MERGE CONTRACT
-// ─────────────────────────────────────────────────────────────────────────────
-interface ArrShape {
-  filter<T>(pred: (x: T) => boolean, xs: List<T>): List<T>;
-}
+// // ─────────────────────────────────────────────────────────────────────────────
+
+declare function filter<T>(pred: (x: T) => boolean, xs: List<T>): List<T>;

@@ -24,7 +24,7 @@ const FILES: Record<string, string> = {
 // registry — the SAME registry the runtime resolves with — to a TS type string.
 const loader = loaderFromResolver((p) => FILES[p] ?? null);
 // `require` must be a HOST MEMBER for the emitter to lower `(require …)` →
-// `__arr.require(…)` (a bare `require` would resolve to Node's global → any).
+// `require(…)` (a bare `require` would resolve to Node's global → any).
 // In studio this comes from `rosettaTypesOf(env)`; here a one-entry roster.
 const host = assembleHostPrelude([["require", "(specifier: SStr): unknown"]]);
 const ls = createSchemeLanguageService({
@@ -54,7 +54,7 @@ describe("(require data-file) → granular shape", () => {
   });
 
   it("misusing a field's type bites — the shape is real, not unknown", () => {
-    // `age` is SNum; passing it where a list is expected (`car`) must error,
+    // `age` is number; passing it where a list is expected (`car`) must error,
     // proving the field type flows (an `unknown` require would NOT bite).
     const scheme = `(define personas (require "personas.json"))\n(car (@ (car personas) "age"))`;
     const diags = ls.getSemanticDiagnostics(scheme);

@@ -30,18 +30,17 @@
 //     so a downstream list use SHOULD bite — a latent bug, not lens noise (same
 //     shape as `string->number`'s `number | boolean`).
 //
-// `string-ref` returns `string | Nil`: LIPS yields `nil` on an out-of-range index,
+// `string-ref` returns `string | null`: LIPS yields `nil` on an out-of-range index,
 // so the absence must be accounted for downstream.
 // ─────────────────────────────────────────────────────────────────────────────
-interface ArrShape {
-  "symbol->string"(sym: unknown): string;
-  "string->symbol"(s: string): unknown;
-  "string-ref"(s: string, i: number): string | Nil;
-  substring(s: string, start: number, end?: number): string;
-  split(separator: string, s: string): List<string>;
-  join(separator: string, list: List<unknown>): string;
-  replace(pattern: string, replacement: string, s: string): string;
-  search(pattern: string, s: string): number;
-  match(pattern: string, s: string): List<string> | boolean;
-  "escape-regex"(s: string): string;
-}
+
+declare function symbol$dash$$greater$string(sym: unknown): string;
+declare function string$dash$$greater$symbol(s: string): unknown;
+declare function string$dash$ref(s: string, i: number): string | null;
+declare function substring(s: string, start: number, end?: number): string;
+declare function split(separator: string, s: string): List<string>;
+declare function join(separator: string, list: List<unknown>): string;
+declare function replace(pattern: string, replacement: string, s: string): string;
+declare function search(pattern: string, s: string): number;
+declare function match(pattern: string, s: string): List<string> | boolean;
+declare function escape$dash$regex(s: string): string;

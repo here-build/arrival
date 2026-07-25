@@ -1,10 +1,11 @@
 // carriers — the type-layer's carrier vocabulary.
 //
-// "Scheme is a TS subset except lists and pairs." These are the *only* hand-written
+// "Scheme is a TS subset except lists." These are the *only* hand-written
 // generic types — the closed tagless algebra zod cannot express. Harvested tool
 // signatures and the lowered program reference this vocabulary; the lens prepends an
 // ambient projection of it to its virtual compile. nil = null; vector = readonly T[]
-// (native TS array); scalars/dict project to plain TS directly.
+// (native TS array); scalars/records project to plain TS directly. Fixed 2-products
+// are Tuple (not a Pair brand); list generalizes pair spines.
 //
 // Authored as an `export declare` module (types-only — the lens never RUNS these; the
 // emitted TS is inference-only) so bite-guards under __tests__/ import the same
@@ -27,28 +28,22 @@ export interface Cons<out T> {
   readonly [LIST_BRAND]: T;
 }
 
-/** A proper list: a chain of `Cons` ending in nil. The empty list IS `null`. */
+/** A proper list: a chain of `Cons` ending in null. The empty list IS `null`. */
 export type List<T> = Cons<T> | null;
 
-/** The empty list / nil. */
-export type Nil = null;
-
-/** Dotted/improper pair — `car`/`cdr` are field reads. Disjoint from `List`. */
-export interface Pair<out H, out T> {
-  readonly car: H;
-  readonly cdr: T;
-}
+/** Fixed-arity product (replaces the old Pair brand). Native 2-tuple. */
+export type Tuple<A = unknown, B = unknown> = readonly [A, B];
 
 // ── constructors (lowering targets for '(…), (list …), (cons …)) ──────────────
 export declare function list<T>(...xs: T[]): List<T>;
 export declare function cons<H, T>(h: H, t: List<T>): List<H | T>; // prepend → List
-export declare function cons<H, T>(h: H, t: T): Pair<H, T>; //          dotted  → Pair
+export declare function cons<H, T>(h: H, t: T): Tuple<H, T>; //       dotted  → Tuple
 
-// ── accessors — serve BOTH a proper List and a dotted Pair (disjoint → overloads) ──
+// ── accessors — serve BOTH a proper List and a fixed Tuple ────────────────────
 export declare function car<T>(xs: List<T>): T;
-export declare function car<H>(p: Pair<H, unknown>): H;
+export declare function car<H>(p: Tuple<H, unknown>): H;
 export declare function cdr<T>(xs: List<T>): List<T>;
-export declare function cdr<T>(p: Pair<unknown, T>): T;
+export declare function cdr<T>(p: Tuple<unknown, T>): T;
 
 // ── the closed tagless algebra — generic globals over List AND vector ─────────
 export declare function map<T, B>(f: (x: T) => B, xs: List<T>): List<B>;

@@ -2,8 +2,6 @@
 // `second` — second element of a list.
 //
 // Scheme semantics: (second list) → the element at index 1 of a non-empty list.
-// merge contract: ../types.d.ts THE LEAF MERGE CONTRACT
-// ─────────────────────────────────────────────────────────────────────────────
-interface ArrShape {
-  second<T>(xs: List<T>): T;
-}
+// // ─────────────────────────────────────────────────────────────────────────────
+
+declare function second<T>(xs: List<T>): T;

@@ -6,13 +6,13 @@
  *
  * Adaptations from the source chunks:
  *   - REDUCED to head classification. The type pass asks exactly one question —
- *     "does this head lower to an ambient `__arr` member call?" — so only the KEY
- *     SETS survive; the string `Emitter` bodies are run-plane machinery the
+ *     "does this head lower to an ambient global function call?" — so only the
+ *     KEY SETS survive; the string `Emitter` bodies are run-plane machinery the
  *     Residual algebra replaces (constitution §3.4) and must not seed the
  *     greenfield tree. The three lists mirror the source's STDLIB / BINOP / UNOP
  *     tables 1:1 (BINOP/UNOP overlap STDLIB — kept verbatim for diffability).
  *   - `decodeAccessor`'s PULL/DROP chain is dropped: the type pass emits the
- *     accessor WORD itself as an `__arr` member (`(cadr p)` → `__arr.cadr(p)`)
+ *     accessor WORD itself as a bare ambient call (`(cadr p)` → `cadr(p)`)
  *     and never decomposes it, so only the `c[ad]+r` acceptance regex is kept.
  *   - Transitional module: the registry harvest (`../registry`) becomes the name
  *     authority when the engine walker integrates (registry-emit.md) — this
@@ -96,6 +96,7 @@ const BUILTIN_NAMES: ReadonlySet<string> = new Set([...STDLIB_NAMES, ...BINOP_NA
  *  `decodeAccessor`'s acceptance test, without the PULL/DROP decomposition. */
 const isAccessor = (name: string): boolean => /^c[ad]+r$/.test(name);
 
-/** Is `name` a stdlib builtin (so it is emitted as an ambient `__arr` member call,
- *  never a free identifier)? Mirrors stdlib.ts's `isBuiltin` exactly. */
+/** Is `name` a stdlib builtin (so it is emitted as an ambient global function
+ *  call via `encodeSchemeIdent`, never a free unresolved identifier)?
+ *  Mirrors stdlib.ts's `isBuiltin` exactly. */
 export const isBuiltin = (name: string): boolean => BUILTIN_NAMES.has(name) || isAccessor(name);

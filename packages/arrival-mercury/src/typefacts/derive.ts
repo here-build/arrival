@@ -12,7 +12,8 @@
  *   - an INTERSECTION claims a fact iff SOME constituent claims it (∃ — the value
  *     IS every constituent simultaneously, so any member's guarantee holds);
  *     `lengthAtLeast` takes the max. This is the shape `pair?`-narrowing actually
- *     produces (`List<number> & Pair<unknown, unknown>` — probe-verified).
+ *     produces (`List<number> & NonEmptyList<unknown>` after pair?-narrowing —
+ *     probe-verified; historically `List & Pair`).
  */
 import ts from "typescript";
 
@@ -32,9 +33,10 @@ export interface DeriveContext {
   /** The queried occurrence — positional anchor for `getTypeOfSymbolAtLocation`
    *  (per-occurrence discipline, spec §5). */
   readonly atNode: ts.Node;
-  /** The prelude's virtual file name — the `Pair` alias declaration-identity
-   *  anchor (spec §3: a name-only match would false-positive against any
-   *  host-injected `.d.ts` that happens to declare its own `Pair`). */
+  /** The prelude's virtual file name — declaration-identity anchor for named
+   *  structural aliases (`Tuple` / `NonEmptyList`; historically `Pair`). Spec §3:
+   *  a name-only match would false-positive against any host-injected `.d.ts`
+   *  that happens to declare the same name. */
   readonly preludeFile: string;
 }
 
@@ -85,18 +87,14 @@ function scalarClaim(t: ts.Type, flag: ts.TypeFlags): boolean {
   return false;
 }
 
-/** Tuple fixed-prefix depth (`target.minLength` — `[T, ...T[]]` has prefix 1), OR
- *  the Pair cons-chain floor (`pairChainFloor`) for a `Pair<H,T>` alias
- *  instantiation — checked FIRST at every node of the union/intersection walk,
- *  never falling through to `isTupleType`'s raw minLength for a Pair. Reading
- *  `Pair<H,T>`'s own tuple arity (2: `[head, tail]`) as a list length overclaims
- *  a 1-element list (`Pair<number, Nil>`) by one — the tail slot is the CDR
- *  (rest-of-list), not a second list element. Law F forbids that direction, so
- *  Pair floors ALWAYS come from the cons-chain walk. `null` when not provably
- *  either. */
+/** Tuple fixed-prefix depth (`target.minLength` — `[T, ...T[]]` / `NonEmptyList`
+ *  has prefix ≥1). Historical `Pair<H,T>` cons-chain floors are gone with the
+ *  Pair brand — list generalizes pair; a fixed 2-product is a `Tuple` whose
+ *  minLength is 2, which is also the honest list length for that product.
+ *  `null` when not provably a tuple / non-empty list. */
 function tupleClaim(t: ts.Type, ctx: DeriveContext): number | null {
-  const pairFloor = pairChainFloor(t, ctx, 0);
-  if (pairFloor !== null) return pairFloor;
+  if (isPreludeAlias(t, ctx, "NonEmptyList")) return 1;
+  if (isPreludeAlias(t, ctx, "Tuple")) return 2;
   if (ctx.checker.isTupleType(t)) return (t as ts.TupleTypeReference).target.minLength;
   if (t.isUnion()) {
     if (t.types.length === 0) return null;
@@ -119,21 +117,6 @@ function tupleClaim(t: ts.Type, ctx: DeriveContext): number | null {
   return null;
 }
 
-/** `Pair<H,T>`'s CONS-CHAIN floor: 1 (the CAR) plus however far the CDR's own
- *  Pair-chain proves before hitting a non-Pair cdr (`List<T>`, `Nil`, `unknown`,
- *  a narrowing target's default `T = unknown`, …). NOT the alias's own 2-element
- *  tuple arity — see `tupleClaim`'s header. Depth-capped like every other nested
- *  derivation (`DEPTH_CAP`) so a self-referential alias instantiation cannot loop
- *  this walk forever. `null` when `t` is not provably the Pair alias at all
- *  (the non-Pair case; `tupleClaim` falls through to its own tuple check). */
-function pairChainFloor(t: ts.Type, ctx: DeriveContext, depth: number): number | null {
-  if (!isPairAlias(t, ctx)) return null;
-  if (depth >= DEPTH_CAP) return 1;
-  const cdr = t.aliasTypeArguments?.[1];
-  const cdrFloor = cdr ? pairChainFloor(cdr, ctx, depth + 1) : null;
-  return 1 + (cdrFloor ?? 0);
-}
-
 function listClaim(t: ts.Type, checker: ts.TypeChecker): boolean {
   if (checker.isArrayLikeType(t)) return true;
   if (t.isUnion()) return t.types.length > 0 && t.types.every((m) => listClaim(m, checker));
@@ -144,16 +127,18 @@ function listClaim(t: ts.Type, checker: ts.TypeChecker): boolean {
 /** Alias-symbol detection ONLY, with the declaration-identity check (spec §3 +
  *  §6 E7: `aliasSymbol` does not survive every type operation — under-fire is
  *  accepted, Law F direction; the identity check guards the OVER-fire direction). */
-function isPairAlias(t: ts.Type, ctx: DeriveContext): boolean {
+function isPreludeAlias(t: ts.Type, ctx: DeriveContext, name: string): boolean {
   const alias = t.aliasSymbol;
   return (
-    alias?.name === "Pair" &&
+    alias?.name === name &&
     (alias.declarations?.some((d) => d.getSourceFile().fileName === ctx.preludeFile) ?? false)
   );
 }
 
+/** `pair` fact: non-empty list or fixed Tuple product (list generalizes pair). */
 function pairClaim(t: ts.Type, ctx: DeriveContext): boolean {
-  if (isPairAlias(t, ctx)) return true;
+  if (isPreludeAlias(t, ctx, "NonEmptyList") || isPreludeAlias(t, ctx, "Tuple")) return true;
+  if (ctx.checker.isTupleType(t) && (t as ts.TupleTypeReference).target.minLength >= 1) return true;
   if (t.isUnion()) return t.types.length > 0 && t.types.every((m) => pairClaim(m, ctx));
   if (t.isIntersection()) return t.types.some((m) => pairClaim(m, ctx));
   return false;

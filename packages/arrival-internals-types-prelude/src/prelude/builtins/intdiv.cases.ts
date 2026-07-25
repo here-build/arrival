@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Bite cases for `modulo` / `remainder` / `quotient` — integer division family.
-// expect-type assertions over the ambient `__arr` (typed by the merged `ArrShape`;
+// expect-type assertions over the ambient global functions (typed by the ambient declare functions;
 // base vocab `number` is ambient from ../types.d.ts).
 //   • positives  → `expectTypeOf(...).toEqualTypeOf<number>()` pins the EXACT result
 //     type, so an arg-rot OR a return→any rot both bite.
@@ -11,15 +11,15 @@
 import { expectTypeOf } from "vitest";
 
 // modulo: two numbers → number
-expectTypeOf(__arr.modulo(10, 3)).toEqualTypeOf<number>();
+expectTypeOf(modulo(10, 3)).toEqualTypeOf<number>();
 // remainder: two numbers → number
-expectTypeOf(__arr.remainder(10, 3)).toEqualTypeOf<number>();
+expectTypeOf(remainder(10, 3)).toEqualTypeOf<number>();
 // quotient: two numbers → number
-expectTypeOf(__arr.quotient(10, 3)).toEqualTypeOf<number>();
+expectTypeOf(quotient(10, 3)).toEqualTypeOf<number>();
 
 // @ts-expect-error string argument is not number
-__arr.modulo("10", 3);
+modulo("10", 3);
 // @ts-expect-error boolean argument is not number
-__arr.quotient(true, 2);
+quotient(true, 2);
 // @ts-expect-error missing second argument (arity must be exactly 2)
-__arr.remainder(10);
+remainder(10);

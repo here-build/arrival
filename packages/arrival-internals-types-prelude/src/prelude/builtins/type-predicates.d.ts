@@ -20,7 +20,7 @@
 // in PRE vocab, these narrow `unknown` so a guarded branch types precisely:
 //   string?  → x is string        number? → x is number      boolean? → x is boolean
 //   array?   → x is List<unknown> (Array.isArray)
-//   pair?    → x is Pair<unknown> (the dotted-pair brand)
+//   pair?    → x is NonEmptyList<unknown> (the dotted-pair brand)
 //   list?    → x is List<unknown> (proper list)
 // The rest (`symbol?`, `function?`, `object?`, `regex?`) have no clean PRE brand
 // for their target — PRE has no Symbol/Function/RegExp/plain-object alias — so
@@ -28,16 +28,15 @@
 // number (it rejects NaN / non-reals), so narrowing to `x is number` would over-claim;
 // kept plain `boolean`.
 // ─────────────────────────────────────────────────────────────────────────────
-interface ArrShape {
-  "string?"(v: unknown): v is string;
-  "number?"(v: unknown): v is number;
-  "boolean?"(v: unknown): v is boolean;
-  "array?"(v: unknown): v is List<unknown>;
-  "list?"(v: unknown): v is List<unknown>;
-  "pair?"(v: unknown): v is Pair<unknown>;
-  "symbol?"(v: unknown): boolean;
-  "function?"(v: unknown): boolean;
-  "object?"(v: unknown): boolean;
-  "regex?"(v: unknown): boolean;
-  "real?"(v: unknown): boolean;
-}
+
+declare function string$qmark$(v: unknown): v is string;
+declare function number$qmark$(v: unknown): v is number;
+declare function boolean$qmark$(v: unknown): v is boolean;
+declare function array$qmark$(v: unknown): v is List<unknown>;
+declare function list$qmark$(v: unknown): v is List<unknown>;
+declare function pair$qmark$(v: unknown): v is NonEmptyList<unknown>;
+declare function symbol$qmark$(v: unknown): boolean;
+declare function function$qmark$(v: unknown): boolean;
+declare function object$qmark$(v: unknown): boolean;
+declare function regex$qmark$(v: unknown): boolean;
+declare function real$qmark$(v: unknown): boolean;

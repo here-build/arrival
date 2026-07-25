@@ -7,10 +7,8 @@
 //   the default JS `Array.prototype.sort` ordering.
 //   NOTE: runtime arg order is (LIST, comparator?) — list FIRST, comparator
 //   OPTIONAL second — NOT the `(cmp, xs)` shape; grounded below.
-// merge contract: ../types.d.ts THE LEAF MERGE CONTRACT
-// Element type `T` is preserved in → out so a mis-typed comparator or a
+// // Element type `T` is preserved in → out so a mis-typed comparator or a
 // wrong-typed result bites.
 // ─────────────────────────────────────────────────────────────────────────────
-interface ArrShape {
-  sort<T>(xs: List<T>, cmp?: (a: T, b: T) => number): List<T>;
-}
+
+declare function sort<T>(xs: List<T>, cmp?: (a: T, b: T) => number): List<T>;

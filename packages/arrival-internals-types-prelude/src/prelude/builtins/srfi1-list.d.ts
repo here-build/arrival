@@ -30,30 +30,29 @@
 // Mis-arg bites (2345); wrong-typing a threaded result bites (2322). Base types
 // (`List`/`Pair`/`Nil` + plain `number`/`string`/`boolean`/`void`) come from PRE (../types.d.ts).
 // ─────────────────────────────────────────────────────────────────────────────
-interface ArrShape {
+
   // Prefix / suffix by count. Count-first, list-last; element type preserved.
-  take<T>(n: number, xs: List<T>): List<T>;
-  drop<T>(n: number, xs: List<T>): List<T>;
+declare function take<T>(n: number, xs: List<T>): List<T>;
+declare function drop<T>(n: number, xs: List<T>): List<T>;
 
   // ⚠️ STRING concat (LIPS native) — variadic over strings → string. NOT list append.
-  concat(...parts: string[]): string;
+declare function concat(...parts: string[]): string;
 
   // Deep recursive flatten. Depth unbounded → element type collapses to `unknown`;
   // the argument is still pinned to a list so a non-list bites.
-  flatten(xs: List<unknown>): List<unknown>;
+declare function flatten(xs: List<unknown>): List<unknown>;
 
   // Left fold (fn, init, list) with callback (acc, x). Threads the accumulator type B.
-  fold<A, B>(f: (acc: B, x: A) => B, init: B, xs: List<A>): B;
+declare function fold<A, B>(f: (acc: B, x: A) => B, init: B, xs: List<A>): B;
 
   // Indexed element read. Index-first, list-last; out-of-range is the miss value.
-  nth<T>(index: number, xs: List<T>): T | undefined;
+declare function nth<T>(index: number, xs: List<T>): T | undefined;
 
   // Side-effecting iteration. Callback param bound to the element type; yields void.
-  "for-each"<A>(f: (a: A) => unknown, xs: List<A>): void;
+declare function for$dash$each<A>(f: (a: A) => unknown, xs: List<A>): void;
 
   // Count elements satisfying a predicate. Pred-first, list-last; result is a number.
-  count<A>(pred: (a: A) => unknown, xs: List<A>): number;
+declare function count<A>(pred: (a: A) => unknown, xs: List<A>): number;
 
   // Inverse filter — drop the elements matching pred.
-  remove<T>(pred: (x: T) => boolean, xs: List<T>): List<T>;
-}
+declare function remove<T>(pred: (x: T) => boolean, xs: List<T>): List<T>;

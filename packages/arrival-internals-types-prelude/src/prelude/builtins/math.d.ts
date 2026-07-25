@@ -9,13 +9,11 @@
 //   (min x ...)      → smallest of one or more numbers
 //   (max x ...)      → largest of one or more numbers
 //
-// merge contract: ../types.d.ts THE LEAF MERGE CONTRACT
-// ─────────────────────────────────────────────────────────────────────────────
-interface ArrShape {
-  abs(x: number): number;
-  sqrt(x: number): number;
-  floor(x: number): number;
-  round(x: number): number;
-  min(...n: number[]): number;
-  max(...n: number[]): number;
-}
+// // ─────────────────────────────────────────────────────────────────────────────
+
+declare function abs(x: number): number;
+declare function sqrt(x: number): number;
+declare function floor(x: number): number;
+declare function round(x: number): number;
+declare function min(...n: number[]): number;
+declare function max(...n: number[]): number;

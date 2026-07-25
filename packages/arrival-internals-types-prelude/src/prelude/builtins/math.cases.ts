@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Bite cases for `abs` `sqrt` `floor` `round` `min` `max` — numeric math cluster.
-// expect-type assertions over the ambient `__arr` (typed by the merged `ArrShape`;
+// expect-type assertions over the ambient global functions (typed by the ambient declare functions;
 // base vocab `number` is ambient from ../types.d.ts).
 //   • positives  → `expectTypeOf(...).toEqualTypeOf<number>()` pins the EXACT result
 //     type, so an arg-rot OR a return→any rot both bite.
@@ -11,20 +11,20 @@
 import { expectTypeOf } from "vitest";
 
 // abs of a number returns number
-expectTypeOf(__arr.abs(-5)).toEqualTypeOf<number>();
+expectTypeOf(abs(-5)).toEqualTypeOf<number>();
 // sqrt of a number returns number
-expectTypeOf(__arr.sqrt(9)).toEqualTypeOf<number>();
+expectTypeOf(sqrt(9)).toEqualTypeOf<number>();
 // floor of a number returns number
-expectTypeOf(__arr.floor(3.7)).toEqualTypeOf<number>();
+expectTypeOf(floor(3.7)).toEqualTypeOf<number>();
 // round of a number returns number
-expectTypeOf(__arr.round(2.5)).toEqualTypeOf<number>();
+expectTypeOf(round(2.5)).toEqualTypeOf<number>();
 // min/max are variadic — one or more number args
-expectTypeOf(__arr.min(1, 2, 3)).toEqualTypeOf<number>();
-expectTypeOf(__arr.max(4, 5, 6)).toEqualTypeOf<number>();
+expectTypeOf(min(1, 2, 3)).toEqualTypeOf<number>();
+expectTypeOf(max(4, 5, 6)).toEqualTypeOf<number>();
 
 // @ts-expect-error abs requires number, not a string
-__arr.abs("hello");
+abs("hello");
 // @ts-expect-error min requires number args, not strings
-__arr.min("a", "b");
+min("a", "b");
 // @ts-expect-error sqrt requires number, not boolean
-__arr.sqrt(true);
+sqrt(true);

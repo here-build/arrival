@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Bite cases for SRFI-189 Maybe & Either (srfi189-maybe-either.d.ts) — expect-type
-// assertions over the ambient `__arr`. Maybe/Either are the FAITHFUL tagged-list
+// assertions over the ambient global functions. Maybe/Either are the FAITHFUL tagged-list
 // unions  ['just',T]|['nothing']  and  ['left',L]|['right',R]  (written INLINE —
 // PRE forbids a top-level Maybe/Either alias). Constructors over WIDENED literal
 // inputs thread a LITERAL through their type var, so the literal-returning
@@ -19,68 +19,68 @@
 import { expectTypeOf } from "vitest";
 
 // constructors keep the tag + payload type (literal through the type var)
-expectTypeOf(__arr.just(1)).toExtend<readonly ["just", number]>();
-expectTypeOf(__arr.just(1)).not.toBeAny();
-expectTypeOf(__arr.nothing()).toEqualTypeOf<readonly ["nothing"]>();
-expectTypeOf(__arr.left("err")).toExtend<readonly ["left", string]>();
-expectTypeOf(__arr.left("err")).not.toBeAny();
-expectTypeOf(__arr.right(42)).toExtend<readonly ["right", number]>();
-expectTypeOf(__arr.right(42)).not.toBeAny();
+expectTypeOf(just(1)).toExtend<readonly ["just", number]>();
+expectTypeOf(just(1)).not.toBeAny();
+expectTypeOf(nothing()).toEqualTypeOf<readonly ["nothing"]>();
+expectTypeOf(left("err")).toExtend<readonly ["left", string]>();
+expectTypeOf(left("err")).not.toBeAny();
+expectTypeOf(right(42)).toExtend<readonly ["right", number]>();
+expectTypeOf(right(42)).not.toBeAny();
 
 // tag predicates accept any value, return boolean
-expectTypeOf(__arr["just?"](__arr.just(1))).toEqualTypeOf<boolean>();
-expectTypeOf(__arr["maybe?"]("anything")).toEqualTypeOf<boolean>();
-expectTypeOf(__arr["right?"](__arr.right(1))).toEqualTypeOf<boolean>();
+expectTypeOf(just$qmark$(just(1))).toEqualTypeOf<boolean>();
+expectTypeOf(maybe$qmark$("anything")).toEqualTypeOf<boolean>();
+expectTypeOf(right$qmark$(right(1))).toEqualTypeOf<boolean>();
 
 // maybe-map threads the wrapped type through the callback (T → B) → exact brand
-expectTypeOf(__arr["maybe-map"]((x: number): string => `${x}`, __arr.just(1))).toEqualTypeOf<
+expectTypeOf(maybe$dash$map((x: number): string => `${x}`, just(1))).toEqualTypeOf<
   readonly ["just", string] | readonly ["nothing"]
 >();
 // maybe-bind: function returns a Maybe; result unions with Nothing (number bind → exact)
-expectTypeOf(__arr["maybe-bind"](__arr.just(1), (x: number) => __arr.just(x))).toEqualTypeOf<
+expectTypeOf(maybe$dash$bind(just(1), (x: number) => just(x))).toEqualTypeOf<
   readonly ["just", number] | readonly ["nothing"]
 >();
 // maybe-ref unwraps to the wrapped value type (literal through T)
-expectTypeOf(__arr["maybe-ref"](__arr.just(7))).toExtend<number>();
-expectTypeOf(__arr["maybe-ref"](__arr.just(7))).not.toBeAny();
+expectTypeOf(maybe$dash$ref(just(7))).toExtend<number>();
+expectTypeOf(maybe$dash$ref(just(7))).not.toBeAny();
 // maybe-ref/default honest union of value | default
-expectTypeOf(__arr["maybe-ref/default"](__arr.just(7), "fallback")).toExtend<number | string>();
-expectTypeOf(__arr["maybe-ref/default"](__arr.just(7), "fallback")).not.toBeAny();
+expectTypeOf(maybe$dash$ref$slash$default(just(7), "fallback")).toExtend<number | string>();
+expectTypeOf(maybe$dash$ref$slash$default(just(7), "fallback")).not.toBeAny();
 // maybe->either flips into Either with payload preserved
-expectTypeOf(__arr["maybe->either"](__arr.just(1), "no")).toExtend<
+expectTypeOf(maybe$dash$$greater$either(just(1), "no")).toExtend<
   readonly ["right", number] | readonly ["left", string]
 >();
-expectTypeOf(__arr["maybe->either"](__arr.just(1), "no")).not.toBeAny();
+expectTypeOf(maybe$dash$$greater$either(just(1), "no")).not.toBeAny();
 // maybe->list collects to a list of the wrapped type
-expectTypeOf(__arr["maybe->list"](__arr.just(1))).toExtend<List<number>>();
-expectTypeOf(__arr["maybe->list"](__arr.just(1))).not.toBeAny();
+expectTypeOf(maybe$dash$$greater$list(just(1))).toExtend<List<number>>();
+expectTypeOf(maybe$dash$$greater$list(just(1))).not.toBeAny();
 // list->maybe wraps the element type (widened list → exact brand)
-expectTypeOf(__arr["list->maybe"]([1, 2, 3])).toEqualTypeOf<readonly ["just", number] | readonly ["nothing"]>();
+expectTypeOf(list$dash$$greater$maybe([1, 2, 3])).toEqualTypeOf<readonly ["just", number] | readonly ["nothing"]>();
 // either-map threads the Right payload through (R → B), Left preserved → exact brand
 expectTypeOf(
-  __arr["either-map"](
+  either$dash$map(
     (x: number): boolean => x > 0,
-    __arr.right(1) as readonly ["left", string] | readonly ["right", number],
+    right(1) as readonly ["left", string] | readonly ["right", number],
   ),
 ).toEqualTypeOf<readonly ["left", string] | readonly ["right", boolean]>();
 // either-ref unwraps the Right value type (literal through R)
-expectTypeOf(__arr["either-ref"](__arr.right(5))).toExtend<number>();
-expectTypeOf(__arr["either-ref"](__arr.right(5))).not.toBeAny();
+expectTypeOf(either$dash$ref(right(5))).toExtend<number>();
+expectTypeOf(either$dash$ref(right(5))).not.toBeAny();
 // either-swap swaps the sides (explicit type args pin L/R so the swap is observable)
-expectTypeOf(__arr["either-swap"]<string, number>(__arr.left("x"))).toEqualTypeOf<
+expectTypeOf(either$dash$swap<string, number>(left("x"))).toEqualTypeOf<
   readonly ["right", string] | readonly ["left", number]
 >();
 // either->list collects the Right payload (literal through R)
-expectTypeOf(__arr["either->list"](__arr.right(9))).toExtend<List<number>>();
-expectTypeOf(__arr["either->list"](__arr.right(9))).not.toBeAny();
+expectTypeOf(either$dash$$greater$list(right(9))).toExtend<List<number>>();
+expectTypeOf(either$dash$$greater$list(right(9))).not.toBeAny();
 
 // @ts-expect-error just's payload type is captured: a Just<number> is not assignable to Just<string>
-const bad: readonly ["just", string] = __arr.just(1);
+const bad: readonly ["just", string] = just(1);
 // @ts-expect-error maybe-map callback param must match the wrapped element type (string param over Just<number>)
-__arr["maybe-map"]((x: string): string => x, __arr.just(1));
+maybe$dash$map((x: string): string => x, just(1));
 // @ts-expect-error maybe-ref result is the wrapped number, not assignable to string
-const w: string = __arr["maybe-ref"](__arr.just(7));
+const w: string = maybe$dash$ref(just(7));
 // @ts-expect-error either-map callback must consume the Right payload type (string param over Right<number>)
-__arr["either-map"]((x: string): string => x, __arr.right(1) as readonly ["left", string] | readonly ["right", number]);
+either$dash$map((x: string): string => x, right(1) as readonly ["left", string] | readonly ["right", number]);
 // @ts-expect-error maybe->list returns a list of the wrapped type, not List<string>
-const wl: List<string> = __arr["maybe->list"](__arr.just(1));
+const wl: List<string> = maybe$dash$$greater$list(just(1));

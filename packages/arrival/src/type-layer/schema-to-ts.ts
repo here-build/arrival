@@ -37,7 +37,7 @@ import type { AEntity } from "../symbol/index.js";
 // membrane makes a boundary value its plain JS type; list/pair/vector project to the
 // carrier vocabulary. Keyed by SCHEMA IDENTITY. `z.pair` is `cons(schemeValue, schemeValue)`
 // (scheme-zod.ts on `pair`) — named "cons", not "pair" — so it prints via the named-
-// generic pre-check as `Pair<SchemeValue, SchemeValue>`, not this table. Unmapped
+// generic pre-check as `Tuple<SchemeValue, SchemeValue>`, not this table. Unmapped
 // custom/instanceof primitives degrade to `unknown` (total-harvest; never throw).
 type Ts = typeof import("typescript");
 type NodeBuilder = (ts: Ts) => import("typescript").TypeNode;
@@ -72,7 +72,7 @@ const lambdaNode: NodeBuilder = (ts) => {
 // hand-synced on every new scheme-zod primitive. scheme-zod.ts owns identity; this file
 // only knows how to PRINT a given name.
 const IMAGE_BY_NAME: ReadonlyMap<string, NodeBuilder> = new Map<string, NodeBuilder>([
-  // no "pair" — `z.pair` is named "cons"; prints via named-generic pre-check as Pair<…>
+  // no "pair" — `z.pair` is named "cons"; prints via named-generic pre-check as Tuple<…>
   ["string", stringNode],
   ["exact", numberNode],
   ["inexact", numberNode],
@@ -129,8 +129,10 @@ const instanceofOverride: OptionalTypeOverrideFunction = (schema, typescript) =>
       return typescript.factory.createTypeReferenceNode("List", [harvestNode(element as z.ZodTypeAny)]);
     }
     if (name === "cons" && Array.isArray(element)) {
+      // Fixed 2-product — Tuple, not a Pair brand. List generalizes pair spines;
+      // a cons of two arbitrary slots is just a native 2-tuple.
       const [carE, cdrE] = element as readonly [z.ZodTypeAny, z.ZodTypeAny];
-      return typescript.factory.createTypeReferenceNode("Pair", [harvestNode(carE), harvestNode(cdrE)]);
+      return typescript.factory.createTypeReferenceNode("Tuple", [harvestNode(carE), harvestNode(cdrE)]);
     }
   }
   // Registered vocabulary name → its image. MUST run before the leaf guard: primitives are
@@ -175,7 +177,7 @@ function flatten(printed: string): string {
  *
  * Codecs print their DECODED (output) side (io:"output"): z.string → "string",
  * z.exact → "number" (safe-integer ratio of `number`s — never a real bigint).
- * instanceof primitives print via the override (z.pair → "Pair"). Compounds compose
+ * instanceof primitives print via the override (z.pair → "Tuple"). Compounds compose
  * (z.object → "{ k: T; … }", z.array → "T[]", z.tuple → "[A, B]", z.union → "A | B").
  */
 // Raw zod-to-ts TypeNode (before flatten/print). Split so the named-generic pre-check

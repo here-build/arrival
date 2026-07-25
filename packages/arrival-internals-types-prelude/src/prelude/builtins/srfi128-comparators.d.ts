@@ -43,9 +43,9 @@
 //
 // `?`/punctuation names → bracketed string keys.
 // ─────────────────────────────────────────────────────────────────────────────
-interface ArrShape {
+
   // Construct a comparator. 4th `hash` arg accepted (ignored at runtime) → optional.
-  "make-comparator"(
+declare function make$dash$comparator(
     typeTest: (x: unknown) => boolean,
     equality: (a: unknown, b: unknown) => boolean,
     ordering: (a: unknown, b: unknown) => boolean,
@@ -58,13 +58,13 @@ interface ArrShape {
   ];
 
   // The default total-order comparator — both are NULLARY and RETURN a comparator.
-  "make-default-comparator"(): readonly [
+declare function make$dash$default$dash$comparator(): readonly [
     "comparator",
     (x: unknown) => boolean,
     (a: unknown, b: unknown) => boolean,
     (a: unknown, b: unknown) => boolean,
   ];
-  "default-comparator"(): readonly [
+declare function default$dash$comparator(): readonly [
     "comparator",
     (x: unknown) => boolean,
     (a: unknown, b: unknown) => boolean,
@@ -72,10 +72,10 @@ interface ArrShape {
   ];
 
   // Tag predicate — accepts any value, returns boolean.
-  "comparator?"(x: unknown): boolean;
+declare function comparator$qmark$(x: unknown): boolean;
 
   // Extractors — pull the bundled predicate back out of a comparator tuple.
-  "comparator-type-test-predicate"(
+declare function comparator$dash$type$dash$test$dash$predicate(
     c: readonly [
       "comparator",
       (x: unknown) => boolean,
@@ -83,7 +83,7 @@ interface ArrShape {
       (a: unknown, b: unknown) => boolean,
     ],
   ): (x: unknown) => boolean;
-  "comparator-equality-predicate"(
+declare function comparator$dash$equality$dash$predicate(
     c: readonly [
       "comparator",
       (x: unknown) => boolean,
@@ -91,7 +91,7 @@ interface ArrShape {
       (a: unknown, b: unknown) => boolean,
     ],
   ): (a: unknown, b: unknown) => boolean;
-  "comparator-ordering-predicate"(
+declare function comparator$dash$ordering$dash$predicate(
     c: readonly [
       "comparator",
       (x: unknown) => boolean,
@@ -100,7 +100,7 @@ interface ArrShape {
     ],
   ): (a: unknown, b: unknown) => boolean;
   // Always #f at runtime, but the signature is still a boolean-returning predicate.
-  "comparator-hashable?"(
+declare function comparator$dash$hashable$qmark$(
     c: readonly [
       "comparator",
       (x: unknown) => boolean,
@@ -110,7 +110,7 @@ interface ArrShape {
   ): boolean;
 
   // Relational chain ops — (cmp, a, b, …rest) → boolean. Comparator is the FIRST arg.
-  "=?"(
+declare function $eq$$qmark$(
     c: readonly [
       "comparator",
       (x: unknown) => boolean,
@@ -121,7 +121,7 @@ interface ArrShape {
     b: unknown,
     ...rest: unknown[]
   ): boolean;
-  "<?"(
+declare function $less$$qmark$(
     c: readonly [
       "comparator",
       (x: unknown) => boolean,
@@ -132,7 +132,7 @@ interface ArrShape {
     b: unknown,
     ...rest: unknown[]
   ): boolean;
-  "<=?"(
+declare function $less$$eq$$qmark$(
     c: readonly [
       "comparator",
       (x: unknown) => boolean,
@@ -143,7 +143,7 @@ interface ArrShape {
     b: unknown,
     ...rest: unknown[]
   ): boolean;
-  ">?"(
+declare function $greater$$qmark$(
     c: readonly [
       "comparator",
       (x: unknown) => boolean,
@@ -154,7 +154,7 @@ interface ArrShape {
     b: unknown,
     ...rest: unknown[]
   ): boolean;
-  ">=?"(
+declare function $greater$$eq$$qmark$(
     c: readonly [
       "comparator",
       (x: unknown) => boolean,
@@ -165,4 +165,3 @@ interface ArrShape {
     b: unknown,
     ...rest: unknown[]
   ): boolean;
-}

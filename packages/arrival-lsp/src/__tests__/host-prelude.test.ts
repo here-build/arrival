@@ -1,8 +1,10 @@
 // host-prelude — the single-source seam. Proves assembleHostPrelude turns a rosetta
-// type registry into a `{ prelude, members }` that (a) merges into ArrShape so injected
-// tools narrow as candidates, and (b) routes their heads via the member roster so they
-// narrow as call slots. Unit-level; the sift package proves the full forensic surface.
+// type registry into a `{ prelude, members }` that (a) ambient-declares encoded
+// functions so injected tools narrow as candidates, and (b) routes their heads via
+// the member roster so they narrow as call slots.
 import { describe, expect, it } from "vitest";
+
+import { encodeSchemeIdent } from "@inhuman.tools/arrival-mercury/type-emit";
 
 import { assembleHostPrelude } from "../host-prelude.js";
 import { createSchemeLanguageService } from "../language-service.js";
@@ -19,12 +21,13 @@ interface SchemeIP { readonly __ip: unique symbol; }
 `;
 
 describe("assembleHostPrelude — registry → { prelude, members }", () => {
-  it("members are the registered names; prelude declares one merged ArrShape leaf", () => {
+  it("members are the registered names; prelude declares encoded ambient functions", () => {
     const { prelude, members } = assembleHostPrelude(REGISTRY, { preamble: ENTITIES });
     expect(new Set(members)).toEqual(new Set(REGISTRY.map(([n]) => n)));
-    // ONE re-opened interface (declaration-merge target), with each name as a quoted member.
-    expect(prelude.match(/interface ArrShape/g)).toHaveLength(1);
-    expect(prelude).toContain('"ip/external-c2-candidate?"(ip: SchemeIP): SBool;');
+    expect(prelude).not.toMatch(/ArrShape|__arr/);
+    expect(prelude).toContain(
+      `declare function ${encodeSchemeIdent("ip/external-c2-candidate?")}(ip: SchemeIP): SBool;`,
+    );
     expect(prelude).toContain(ENTITIES.trim().split("\n")[1]); // the preamble is included
   });
 

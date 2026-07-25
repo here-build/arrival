@@ -40,29 +40,28 @@
 //
 // `?`-names → bracketed string keys.
 // ─────────────────────────────────────────────────────────────────────────────
-interface ArrShape {
+
   // Construct a vector from its elements (v1: a List<T>). Variadic in elements.
-  vector<T>(...elems: T[]): List<T>;
+declare function vector<T>(...elems: T[]): List<T>;
   // Tag/type predicate — accepts any value, returns boolean.
-  "vector?"(x: unknown): boolean;
+declare function vector$qmark$(x: unknown): boolean;
 
   // Folds — kons is (acc, elt) → acc'; the accumulator type A threads through.
-  "vector-fold"<A, T>(kons: (acc: A, elt: T) => A, knil: A, vec: List<T>): A;
-  "vector-fold-right"<A, T>(kons: (acc: A, elt: T) => A, knil: A, vec: List<T>): A;
+declare function vector$dash$fold<A, T>(kons: (acc: A, elt: T) => A, knil: A, vec: List<T>): A;
+declare function vector$dash$fold$dash$right<A, T>(kons: (acc: A, elt: T) => A, knil: A, vec: List<T>): A;
 
   // Count of indices where the predicate holds → number.
-  "vector-count"<T>(pred: (elt: T) => unknown, vec: List<T>): number;
+declare function vector$dash$count<T>(pred: (elt: T) => unknown, vec: List<T>): number;
   // First matching index, or #f → number | boolean.
-  "vector-index"<T>(pred: (elt: T) => unknown, vec: List<T>): number | boolean;
+declare function vector$dash$index<T>(pred: (elt: T) => unknown, vec: List<T>): number | boolean;
 
   // Short-circuiting search — returns the truthy (pred elt) result, or #f.
-  "vector-any"<T, R>(pred: (elt: T) => R, vec: List<T>): R | boolean;
+declare function vector$dash$any<T, R>(pred: (elt: T) => R, vec: List<T>): R | boolean;
   // Returns the last (pred elt) if all truthy, or #f.
-  "vector-every"<T, R>(pred: (elt: T) => R, vec: List<T>): R | boolean;
+declare function vector$dash$every<T, R>(pred: (elt: T) => R, vec: List<T>): R | boolean;
 
   // Length-0 test → boolean.
-  "vector-empty?"<T>(vec: List<T>): boolean;
+declare function vector$dash$empty$qmark$<T>(vec: List<T>): boolean;
 
   // Binary search — (vec, value, cmp) where cmp(elt, value) → number sign; index | #f.
-  "vector-binary-search"<T>(vec: List<T>, value: T, cmp: (elt: T, value: T) => number): number | boolean;
-}
+declare function vector$dash$binary$dash$search<T>(vec: List<T>, value: T, cmp: (elt: T, value: T) => number): number | boolean;

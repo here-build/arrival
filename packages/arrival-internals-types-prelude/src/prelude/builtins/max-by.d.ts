@@ -6,10 +6,8 @@
 //   with `>`, so `key` must yield a number. Empty list errors at runtime.
 //     `${list}.reduce((acc, el) => (${key(el)} > ${key("acc")} ? el : acc))`
 //
-// merge contract: ../types.d.ts THE LEAF MERGE CONTRACT
-// The key function is generic over the element type `T` so a mis-typed key
+// // The key function is generic over the element type `T` so a mis-typed key
 // callback bites; the return is `T` (an element), NOT `number` (the key value).
 // ─────────────────────────────────────────────────────────────────────────────
-interface ArrShape {
-  "max-by"<T>(key: (x: T) => number, xs: List<T>): T;
-}
+
+declare function max$dash$by<T>(key: (x: T) => number, xs: List<T>): T;

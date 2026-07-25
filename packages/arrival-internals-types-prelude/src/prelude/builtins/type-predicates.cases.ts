@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Bite cases for the type-predicates family. References `__arr` + ambient PRE
+// Bite cases for the type-predicates family. References `/*__arr*/` + ambient PRE
 // vocab (../types.d.ts).
 //
 // For the guard predicates (string?/number?/…) the bite is the NARROWING: we pin
@@ -10,34 +10,34 @@
 import { expectTypeOf } from "vitest";
 
 // guard predicates narrow to their target type
-expectTypeOf(__arr["string?"]).guards.toEqualTypeOf<string>();
-expectTypeOf(__arr["number?"]).guards.toEqualTypeOf<number>();
-expectTypeOf(__arr["array?"]).guards.toEqualTypeOf<List<unknown>>();
-expectTypeOf(__arr["list?"]).guards.toEqualTypeOf<List<unknown>>();
-expectTypeOf(__arr["pair?"]).guards.toEqualTypeOf<Pair<unknown>>();
+expectTypeOf(string$qmark$).guards.toEqualTypeOf<string>();
+expectTypeOf(number$qmark$).guards.toEqualTypeOf<number>();
+expectTypeOf(array$qmark$).guards.toEqualTypeOf<List<unknown>>();
+expectTypeOf(list$qmark$).guards.toEqualTypeOf<List<unknown>>();
+expectTypeOf(pair$qmark$).guards.toEqualTypeOf<NonEmptyList<unknown>>();
 
 // the narrowing threads inside a guarded branch
 {
   const v: unknown = "x";
-  if (__arr["string?"](v)) expectTypeOf(v).toEqualTypeOf<string>();
+  if (string$qmark$(v)) expectTypeOf(v).toEqualTypeOf<string>();
 }
 {
   const w: unknown = 1;
-  if (__arr["number?"](w)) expectTypeOf(w).toEqualTypeOf<number>();
+  if (number$qmark$(w)) expectTypeOf(w).toEqualTypeOf<number>();
 }
 
 // non-guard predicates return boolean
-expectTypeOf(__arr["symbol?"]("x" as unknown)).toEqualTypeOf<boolean>();
-expectTypeOf(__arr["function?"](0 as unknown)).toEqualTypeOf<boolean>();
-expectTypeOf(__arr["object?"](0 as unknown)).toEqualTypeOf<boolean>();
-expectTypeOf(__arr["regex?"](0 as unknown)).toEqualTypeOf<boolean>();
-expectTypeOf(__arr["real?"](0 as unknown)).toEqualTypeOf<boolean>();
-expectTypeOf(__arr["boolean?"](0 as unknown)).toEqualTypeOf<boolean>();
+expectTypeOf(symbol$qmark$("x" as unknown)).toEqualTypeOf<boolean>();
+expectTypeOf(function$qmark$(0 as unknown)).toEqualTypeOf<boolean>();
+expectTypeOf(object$qmark$(0 as unknown)).toEqualTypeOf<boolean>();
+expectTypeOf(regex$qmark$(0 as unknown)).toEqualTypeOf<boolean>();
+expectTypeOf(real$qmark$(0 as unknown)).toEqualTypeOf<boolean>();
+expectTypeOf(boolean$qmark$(0 as unknown)).toEqualTypeOf<boolean>();
 
 // after string? narrows to string, using it as number bites
 {
   const v: unknown = "x";
-  if (__arr["string?"](v)) {
+  if (string$qmark$(v)) {
     // @ts-expect-error narrowed to string, not number
     const n: number = v;
     void n;
@@ -46,7 +46,7 @@ expectTypeOf(__arr["boolean?"](0 as unknown)).toEqualTypeOf<boolean>();
 // after number? narrows to number, using it as string bites
 {
   const w: unknown = 1;
-  if (__arr["number?"](w)) {
+  if (number$qmark$(w)) {
     // @ts-expect-error narrowed to number, not string
     const s: string = w;
     void s;

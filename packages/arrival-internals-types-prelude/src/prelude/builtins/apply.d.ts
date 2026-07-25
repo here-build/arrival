@@ -7,8 +7,6 @@
 // own parameter tuple `A` (a `List<A[number]>` view), and the call yields `R`. A
 // wrong-element-typed list (`apply` of a numeric fn over a list of strings) or a
 // non-function first arg fails.
-// merge contract: ../types.d.ts THE LEAF MERGE CONTRACT
-// ─────────────────────────────────────────────────────────────────────────────
-interface ArrShape {
-  apply<A extends readonly unknown[], R>(f: (...a: A) => R, args: A): R;
-}
+// // ─────────────────────────────────────────────────────────────────────────────
+
+declare function apply<A extends readonly unknown[], R>(f: (...a: A) => R, args: A): R;

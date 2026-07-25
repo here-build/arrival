@@ -120,22 +120,15 @@ describe("getQuickInfoAtPosition — hover in Scheme coordinates", () => {
     expect(info!.displayText).toBe("const n: 5");
   });
 
-  // KNOWN GAP (emitter coordination): a cursor on the OPERATOR HEAD `car` in
-  // `(car xs)` does NOT resolve to the builtin's signature, because `emitTypes`
-  // emits only a WHOLE-FORM mapping for `(car xs)` → `__arr.car(xs)` and no
-  // token mapping for the head `car` → the `.car` member access. The cursor
-  // therefore projects into the `__arr` prefix and hover yields `__arr`'s type.
-  // Querying the SAME service at the TS member offset returns the precise
-  // `(method) ArrShape.car<number>(xs: List<number>): number` — so the lens is
-  // correct; it is the MAPPING granularity that is missing upstream. This test
-  // PINS the current behavior so the day the emitter adds head-token mappings,
-  // it flips and we tighten it. (Fix lives in arrival-chain-view/types-emit.ts.)
-  it("KNOWN GAP — operator-head hover lands on __arr (needs emitter head mapping)", () => {
+  // Whole-form mapping: cursor on the operator head `car` in `(car xs)` still
+  // projects into the call `car(xs)` (no per-token head span yet). Hover may
+  // show the call's return type or the ambient function — either is better than
+  // the old `__arr: ArrShape` prefix. Pin that we no longer surface ArrShape.
+  it("operator-head hover does not surface retired ArrShape/__arr", () => {
     const scheme = `(define xs (list 1 2 3))\n(car xs)`;
     const carAt = scheme.lastIndexOf("car") + 1;
     const info = ls.getQuickInfoAtPosition(scheme, carAt);
-    // Today this resolves the `__arr` prefix, not `car`. Documented, not desired.
-    expect(info?.displayText).toBe("const __arr: ArrShape");
+    expect(info?.displayText ?? "").not.toMatch(/ArrShape|__arr/);
   });
 });
 
@@ -379,7 +372,7 @@ describe("getTypeValidCandidates — Layer T, the type-narrowed mask", () => {
 
 // ── Layer T, the LITERAL case: a quoted string at a string-literal-union slot ──
 // The shipping BFCL-typed path emits enum members as BOUND TYPED value-symbols
-// (`celsius: T_unit`), which already narrow (`typeof __arr["celsius"]` resolves
+// (`celsius: T_unit`), which already narrow (`typeof celsius` resolves
 // to the union). This block covers the OTHER shape: a raw quoted string `"thai"`
 // at a literal-union param. Before the fix it degraded to `typeof
 // __arr["\"thai\""]` = any ⇒ every literal survived (wrong-enum + non-member

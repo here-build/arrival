@@ -19,7 +19,7 @@ function sig(def: Parameters<typeof contractOf>[0]): string {
 describe("printType — native identity primitives (scheme primitive → plain-TS image)", () => {
   // REBASELINE (fe2c848ee7, 2026-07-08): `z.pair` is now `cons(schemeValue, schemeValue)` — a
   // real codec named "cons", not a bare-instanceof "pair" — so it prints via the named-generic
-  // pre-check as `Pair<SchemeValue, SchemeValue>`, same as any other `cons(A, B)`; `z.union([z.pair,
+  // pre-check as `Tuple<SchemeValue, SchemeValue>`, same as any other `cons(A, B)`; `z.union([z.pair,
   // z.nil])` composes structurally member-by-member (no more "pair"→List-style name override).
   // The numeric tower: exact and inexact both print "number" via the name-keyed image, not
   // the raw union — z.bigint is retired (exact is a safe-integer ratio of `number`s per
@@ -28,9 +28,9 @@ describe("printType — native identity primitives (scheme primitive → plain-T
   // below, ledger/index.law.test.ts GAPS: "schema-to-ts vector union not deduped").
   it.each([
     {
-      name: "z.pair → Pair<SchemeValue, SchemeValue> (cons(schemeValue, schemeValue), not a standalone name)",
+      name: "z.pair → Tuple<SchemeValue, SchemeValue> (cons(schemeValue, schemeValue), not a standalone name)",
       schema: z.pair,
-      expected: "Pair<SchemeValue, SchemeValue>" },
+      expected: "Tuple<SchemeValue, SchemeValue>" },
     { name: "z.string → string", schema: z.string, expected: "string" },
     { name: "z.bigint (exact) → number", schema: z.bigint, expected: "number" },
     { name: "z.inexact → number", schema: z.inexact, expected: "number" },
@@ -56,9 +56,9 @@ describe("printType — native identity primitives (scheme primitive → plain-T
       schema: z.schemeNumber,
       expected: "number | number" },
     {
-      name: "the list union z.pair | z.nil → Pair<SchemeValue, SchemeValue> | null",
+      name: "the list union z.pair | z.nil → Tuple<SchemeValue, SchemeValue> | null",
       schema: z.union([z.pair, z.nil]),
-      expected: "Pair<SchemeValue, SchemeValue> | null" },
+      expected: "Tuple<SchemeValue, SchemeValue> | null" },
   ])("prints $name", ({ schema, expected }) => {
     expect(printType(schema)).toBe(expected);
   });
@@ -115,7 +115,7 @@ describe("printType — rosetta codecs (decoded JS side, io:output)", () => {
 
 describe("printType — compounds", () => {
   // REBASELINE (fe2c848ee7): see the native-identity describe's top note on
-  // z.pair → Pair<SchemeValue, SchemeValue>.
+  // z.pair → Tuple<SchemeValue, SchemeValue>.
   it.each([
     {
       name: "z.object as a single-line member list (no dangling semicolon)",
@@ -128,12 +128,12 @@ describe("printType — compounds", () => {
     {
       name: "z.array of an identity primitive as 'T[]'",
       schema: z.array(z.pair),
-      expected: "Pair<SchemeValue, SchemeValue>[]" },
+      expected: "Tuple<SchemeValue, SchemeValue>[]" },
     { name: "a tuple as '[A, B]'", schema: z.tuple([z.string, z.number]), expected: "[string, number]" },
     {
       name: "a tuple mixing codec + identity members",
       schema: z.tuple([z.pair, z.string]),
-      expected: "[Pair<SchemeValue, SchemeValue>, string]" },
+      expected: "[Tuple<SchemeValue, SchemeValue>, string]" },
     { name: "a union as 'A | B'", schema: z.union([z.string, z.number]), expected: "string | number" },
   ])("prints $name", ({ schema, expected }) => {
     expect(printType(schema)).toBe(expected);
@@ -214,7 +214,7 @@ describe("signatureOf — the args-vector → function-signature composer", () =
       (a) => a,
     );
     expect(sig(def)).toBe(
-      "(a: Pair<SchemeValue, SchemeValue>, b: Pair<SchemeValue, SchemeValue>) => Pair<SchemeValue, SchemeValue>",
+      "(a: Tuple<SchemeValue, SchemeValue>, b: Tuple<SchemeValue, SchemeValue>) => Tuple<SchemeValue, SchemeValue>",
     );
   });
 
@@ -243,7 +243,7 @@ describe("signatureOf — the args-vector → function-signature composer", () =
       (p) => [p, p] as [typeof p, typeof p],
     );
     expect(sig(def)).toBe(
-      "(a: Pair<SchemeValue, SchemeValue>) => [Pair<SchemeValue, SchemeValue>, Pair<SchemeValue, SchemeValue>]",
+      "(a: Tuple<SchemeValue, SchemeValue>) => [Tuple<SchemeValue, SchemeValue>, Tuple<SchemeValue, SchemeValue>]",
     );
   });
 

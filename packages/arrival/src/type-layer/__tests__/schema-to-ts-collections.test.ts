@@ -1,4 +1,4 @@
-// Named-generic printing for the `list`/`cons` collections: List<T> / Pair<Car, Cdr>.
+// Named-generic printing for the `list`/`cons` collections: List<T> / Tuple<Car, Cdr>.
 //
 // schema-to-ts.ts's named-generic pre-check sources the `list`/`cons` element registry from the
 // scheme-zod vocabulary and prints the ambient carrier reference by name instead of decomposing
@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import * as z from "../../common/scheme-zod/index.js";
 import { printType } from "../schema-to-ts.js";
 
-describe("printType — named-generic collections (List<T> / Pair<Car, Cdr>)", () => {
+describe("printType — named-generic collections (List<T> / Tuple<Car, Cdr>)", () => {
   // INVARIANT: printType(z.list(z.string)) prints the named generic "List<string>", not the
   // structural Cons<string>|null.
   it("prints list(string) as List<string>, not the structural Cons<string> | null", () => {
@@ -26,10 +26,10 @@ describe("printType — named-generic collections (List<T> / Pair<Car, Cdr>)", (
     expect(printType(z.list(z.char))).toBe("List<string>");
   });
 
-  // INVARIANT: z.cons(string, boolean) prints the named generic "Pair<string, boolean>",
-  // not a structural tuple.
-  it("prints cons(string, boolean) as Pair<string, boolean>, not the structural [string, boolean]", () => {
-    expect(printType(z.cons(z.string, z.boolean))).toBe("Pair<string, boolean>");
+  // INVARIANT: z.cons(string, boolean) prints the named generic "Tuple<string, boolean>",
+  // not a structural tuple (the name keeps the product distinct from a bare array).
+  it("prints cons(string, boolean) as Tuple<string, boolean>, not the structural [string, boolean]", () => {
+    expect(printType(z.cons(z.string, z.boolean))).toBe("Tuple<string, boolean>");
   });
 
   // INVARIANT: a fixed-heads z.list([A, B]) (no single element) falls through to the

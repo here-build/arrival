@@ -1,25 +1,13 @@
 /**
  * COPY-AS-CHUNK (constitution §4.5 — greenfield package, never shared imports).
  * Source: arrival/packages/mercury/src/types-emit.ts (already carrying
- * Phase 0's unconditional `__scmTruth` wrap in `emitIf`).
- *
  * Adaptations from the source chunk:
  *   - imports re-homed: parse/desugar/nodes/names/scheme-scope → `../front/` (this
  *     package's copies; `parseSexprs` no longer imports `@inhuman.tools/arrival-sugarcoat`),
  *     stdlib → `./builtins.js` (roster-only reduction).
- *   - Law T upgraded from Phase 0 (wrap EVERY condition) to the §5.3 narrowing-form
- *     grammar: a condition that is an NForm over `opts.narrowsMembers` emits NATIVE
- *     `!`/`&&`/`||`/bare-call so tsc's control-flow narrowing composes; everything
- *     else keeps the `__scmTruth` wrap (type-emit-lawt.md Mechanics §1–2). New:
- *     `EmitTypesOptions.narrowsMembers`, `Ctx.narrowsMembers`, `emitCondition`,
- *     `isNarrowingForm`, `emitNarrowingForm`.
- *   - `emitTypes` additionally accepts a pre-parsed forest (`readonly Node[]`,
- *     `parseSexprs` output — desugar still runs here). The lens pipeline feeds
- *     STRINGS (the required path); an engine already holding the parse forest may
- *     skip re-parsing. A CLASSIFIED forest (CoreForm) is deliberately NOT accepted:
- *     CoreForm nodes don't retain the raw `Node`s this walker (and its Atom-keyed
- *     `nameOf`) consumes — that representation swap is the spec's "CoreForm-era"
- *     slice (type-emit-lawt.md Mechanics §6), byte-compatible by contract.
+ *   - Law T: narrowing forms emit native `!`/`&&`/`||`/bare-call; other conditions
+ *     coerce with `(expr === true)` (no ambient `__scmTruth` helper).
+ *   - `emitTypes` additionally accepts a pre-parsed forest (`readonly Node[]`).
  *
  * ── original module doc ──────────────────────────────────────────────────────
  *
@@ -27,9 +15,11 @@
  *
  * Distinct from the RUN-faithful idiomatic emitters: this one emits virtual TS
  * that is *type-checked, never run*, against the
- * `@inhuman.tools/arrival-internals-types-prelude` prelude (`PRE`). Every builtin application lowers to a direct `__arr.<name>(…)`
- * call so TS checks it natively against the merged `ArrShape`; opaque heads fall
- * back to PRE's `sexpr<F>(…)`.
+ * `@inhuman.tools/arrival-internals-types-prelude` prelude (`PRE`). Every builtin
+ * (and host) application lowers to a bare ambient call
+ * `encodeSchemeIdent(name)(…)` — e.g. `car(…)`, `string$dash$append(…)`,
+ * `null$qmark$(…)` — so TS checks it against a global `declare function`.
+ * Opaque heads fall back to PRE's `sexpr<F>(…)`.
  *
  * Because we never run the output, binding forms lower to PURE TS BLOCK
  * STATEMENTS, not IIFEs — block-scoping is correct for type-checking and adds no
@@ -41,7 +31,6 @@
  * at a TS offset lifts back onto the right `.scm` form.
  */
 import { desugar } from "../front/desugar.js";
-import { cleanName } from "../front/names.js";
 import {
   type Atom,
   head,
@@ -58,6 +47,7 @@ import {
 import { parseSexprs } from "../front/parse.js";
 import { resolveNames } from "../front/scheme-scope.js";
 import { isBuiltin } from "./builtins.js";
+import { encodeSchemeIdent } from "./scheme-ident.js";
 
 /** One span-lens entry: a [tsStart, tsLength) range of the emitted TS that came
  *  from a [schemeStart, schemeLength) range of the source `.scm`. */
@@ -84,9 +74,6 @@ const TS_IDENT = /^[A-Z_$][\w$]*$/i;
 
 /** Shared empty member set — the default when no host/narrows roster is injected. */
 const EMPTY_SET: ReadonlySet<string> = new Set();
-
-/** `__arr.car` for an identifier-safe builtin, `__arr["string-append"]` otherwise. */
-const arrMember = (name: string): string => (TS_IDENT.test(name) ? `__arr.${name}` : `__arr[${JSON.stringify(name)}]`);
 
 /**
  * The emit buffer: appends strings while tracking the running TS offset, and
@@ -146,7 +133,8 @@ function collectSetBangNames(forest: readonly Node[], nameOf: NameOf): Set<strin
     if (!isList(n)) return;
     if (head(n) === "set!") {
       const target = n.list[1];
-      if (isAtom(target)) out.add(nameOf.get(target) ?? cleanName(target.atom));
+      // Always encode — must match emitName; do not use nameOf's cleanName ladder.
+      if (isAtom(target)) out.add(encodeSchemeIdent(target.atom));
     }
     for (const c of n.list) visit(c);
   };
@@ -160,25 +148,20 @@ interface Ctx {
   nameOf: NameOf;
   setVars: Set<string>;
   /**
-   * Host-injected ambient members (sift's rosetta tools). A head in this set lowers
-   * to `__arr["<name>"](…)` exactly like a builtin — so `typeof __arr["<name>"]`
-   * resolves against the host's `ArrShape` leaf and `Parameters<…>` of the call
-   * narrows the argument slot. The runtime evaluator is unaffected (this emitter is
-   * the type-lens only); host tools are conceptually the same category as builtins —
-   * ambient functions resolved through `__arr` — so this is the third head case, not
-   * a special-case hack. Empty by default → behavior identical to pre-roster emit.
+   * Host-injected ambient members (sift's rosetta tools). A head in this set
+   * lowers to a bare `encodeSchemeIdent(name)(…)` call exactly like a builtin —
+   * so `typeof <encoded>` resolves against the host's ambient `declare function`
+   * and `Parameters<…>` of the call narrows the argument slot. Empty by default.
    */
   hostMembers: ReadonlySet<string>;
   /** The narrowing-form grammar's base-case set — see `EmitTypesOptions.narrowsMembers`.
    *  Threaded exactly like `hostMembers`. */
   narrowsMembers: ReadonlySet<string>;
-  /** Emitted TS identifier → the ORIGINAL scheme source text it was minted from, populated
-   *  at every `define`/`define/overridable` binding site (`emitDefine`). `cleanName` is
-   *  lossy/many-to-one (predicate markers `?!*` are stripped, not encoded; `config/audience`,
-   *  `config-audience`, `config_audience` all collapse to the same `configAudience`), so a
-   *  pure inverse function is impossible — this tracks the mapping AT THE POINT it's minted
-   *  instead. Exposed on `EmitTypesResult` so a consumer (autocomplete) can backport an
-   *  emitted identifier to what the user actually typed. */
+  /** Emitted TS identifier → the ORIGINAL scheme source text it was minted from,
+   *  populated at every `define`/`define/overridable` binding site (`emitDefine`).
+   *  With {@link encodeSchemeIdent} the map is lossless/invertible, but we still
+   *  record the mint site so completions can show the scheme spelling without a
+   *  decode round-trip. */
   declaredNames: Map<string, string>;
 }
 
@@ -190,9 +173,14 @@ function emitExpr(n: Node, ctx: Ctx): void {
   ctx.buf.raw("(undefined as unknown)");
 }
 
-/** The emitted name for a bound identifier occurrence (namer's, or cleanName). */
-function emitName(a: Atom, ctx: Ctx): string {
-  return ctx.nameOf.get(a) ?? cleanName(a.atom);
+/**
+ * Typelevel binding / free-ref name: always {@link encodeSchemeIdent} of the
+ * scheme atom. Scope resolution (`nameOf`) is used only for *binding presence*
+ * (shadow checks); the lossless encoding already prevents the cleanName
+ * collisions that forced the lexical namer (`picked` vs `picked?`).
+ */
+function emitName(a: Atom, _ctx: Ctx): string {
+  return encodeSchemeIdent(a.atom);
 }
 
 function emitAtom(a: Atom, ctx: Ctx): void {
@@ -250,7 +238,7 @@ function staticKeywordSeq(node: Node | undefined): string[] | null {
 }
 
 /** Lower an accessor head to native indexed access; false → caller emits the
- *  generic `__arr.<name>(…)` call (dynamic key/path, or wrong arity). */
+ *  generic ambient call (dynamic key/path, or wrong arity). */
 function tryEmitAccessor(hName: string, n: ListNode, ctx: Ctx): boolean {
   const a = n.list.slice(1);
   let obj: Node | undefined;
@@ -344,7 +332,7 @@ function emitList(n: ListNode, ctx: Ctx): void {
       ) {
         return;
       }
-      // A builtin OR a host-injected rosetta tool → ambient `__arr` member call.
+      // A builtin OR a host-injected rosetta tool → ambient global function call.
       if (isBuiltin(hName) || ctx.hostMembers.has(hName)) return emitBuiltinCall(hName, n, ctx);
     }
   }
@@ -366,7 +354,7 @@ function recordSpan(ctx: Ctx, start: number, node: Node): void {
 
 function emitBuiltinCall(name: string, n: ListNode, ctx: Ctx): void {
   const start = ctx.buf.offset;
-  ctx.buf.raw(arrMember(name)).raw("(");
+  ctx.buf.raw(encodeSchemeIdent(name)).raw("(");
   emitArgs(n.list.slice(1), ctx);
   ctx.buf.raw(")");
   recordSpan(ctx, start, n);
@@ -425,7 +413,8 @@ function emitArgs(args: Node[], ctx: Ctx): void {
     ctx.buf.raw("{ ");
     for (const [idx, [k, v]] of kwargs.entries()) {
       if (idx > 0) ctx.buf.raw(", ");
-      ctx.buf.raw(`${tsKey(cleanName(k))}: `);
+      // Typelevel keys stay scheme-spelled (quoted when needed) — not camelCase.
+      ctx.buf.raw(`${tsKey(k)}: `);
       emitExpr(v, ctx);
     }
     ctx.buf.raw(" }");
@@ -485,33 +474,30 @@ function emitIf(n: ListNode, ctx: Ctx): void {
 }
 
 /**
- * Law T's dispatcher — `if`'s condition slot (type-emit-lawt.md Mechanics §1).
+ * Law T's dispatcher — `if`'s condition slot.
  *
- * A narrowing form emits NATIVE so tsc's control-flow narrowing composes; every
- * other condition wraps in `__scmTruth` (`(x: unknown) => boolean` — declared by
- * the LENS PRELUDE, arrival-internals-types-prelude `src/prelude/types.d.ts`; this emitter only
- * REFERENCES it, never declares it). The plain-boolean wrapper carries no type
- * information back onto its argument, which blocks truthiness NARROWING of arm
- * references to the tested value — `(if x x 'fallback)` must not drop the
- * Scheme-truthy `0`/`""` from the true arm's type (§5.1's reproducible shape).
- * Deliberately not `x is Exclude<T, false>`: for a literal never itself `false`,
- * that excludes nothing forward and folds the false branch to `never` — the same
- * fold one level down (type-emit-lawt.md, "Owned interfaces" §4).
+ * A narrowing form emits NATIVE so tsc's control-flow narrowing composes
+ * (`null?` / `and` / `or` / `not` over predicates). Every other condition is
+ * projected as a TS boolean via `expr === true` — no ambient `__scmTruth`
+ * helper. Typelevel already wants conditions as booleans; an inline comparison
+ * is the coerce at the boundary without an opaque `(x: unknown) => boolean`
+ * that erases type-predicate information when mis-applied.
  *
- * The wrap branch records no span of its own: the nested expression already
- * records its spans at the already-shifted offsets (Buf appends forward — the
- * `"__scmTruth("` prefix lands BEFORE the inner emission fires, so no retroactive
- * arithmetic exists to get wrong); a diagnostic on the literal wrapper text falls
- * back to the enclosing `if`'s recordSpan — coarser, never dropped.
+ * Note: runtime Scheme truth is `x !== false` (only `#f` is false). Typelevel
+ * uses `=== true` so only actual booleans pass — aligned with "produce TS
+ * booleans," not a full runtime dual of Scheme truthiness for `0`/`""`.
+ *
+ * The coerce records no span of its own: the nested expression already records
+ * its spans; a diagnostic on `=== true` falls back to the enclosing `if`.
  */
 function emitCondition(c: Node, ctx: Ctx): void {
   if (isNarrowingForm(c, ctx)) {
     emitNarrowingForm(c, ctx);
     return;
   }
-  ctx.buf.raw("__scmTruth(");
-  emitExpr(c, ctx); // UNCHANGED value-position emission, nested
-  ctx.buf.raw(")");
+  ctx.buf.raw("(");
+  emitExpr(c, ctx); // value-position emission, then coerce to TS boolean
+  ctx.buf.raw(" === true)");
 }
 
 /**
@@ -522,8 +508,8 @@ function emitCondition(c: Node, ctx: Ctx): void {
  * ALL-OR-NOTHING: this test runs over the WHOLE condition tree before one byte is
  * emitted (emitCondition dispatches on its verdict) — a single non-flagged operand
  * anywhere fails the whole form, and the entire condition wraps as one
- * `__scmTruth(…)` around the unchanged value-position lowering. A mixed clause
- * thus loses ALL narrowing rather than composing half-native, half-opaque text.
+ * `(… === true)` coerce around value-position lowering. A mixed clause thus loses
+ * ALL narrowing rather than composing half-native, half-opaque text.
  *
  * `not`/`and`/`or` are recognized STRUCTURALLY by fixed name — never themselves
  * gated on `narrowsMembers` — only the base case (an arbitrary predicate
@@ -549,7 +535,7 @@ function isNarrowingForm(n: Node, ctx: Ctx): boolean {
 
 /**
  * Native emission for a grammar-approved condition: `!`/`&&`/`||` composition over
- * bare `__arr` predicate calls, so tsc narrowing composes exactly as it already
+ * bare ambient predicate calls, so tsc narrowing composes exactly as it already
  * does for one bare guard (`(if (not (null? xs)) (car xs) …)`,
  * `(if (and (pair? x) (pair? (cdr x))) …)` — the dominant guard shapes, §5.3).
  *
@@ -602,7 +588,9 @@ function emitLambda(n: ListNode, ctx: Ctx): void {
 }
 
 /** The body of a lambda/define arrow. A single expression → `expr`; a sequence →
- *  a `{ … return last; }` block. An object-literal sole body is parenthesized. */
+ *  a `{ … return last; }` block. An object-literal sole body is parenthesized
+ *  (`() => ({ … })`) so `{` is not parsed as a block (which turns `k: v` into
+ *  labels and drops the return value). */
 function emitArrowBody(forms: Node[], ctx: Ctx): void {
   if (forms.length === 0) {
     ctx.buf.raw("(undefined as unknown)");
@@ -621,10 +609,14 @@ function emitArrowBody(forms: Node[], ctx: Ctx): void {
         emitBeginBlock(only.list.slice(1), ctx, "return ");
         return;
       }
+      // `(lambda (…) (dict …))` → `() => ({ … })`, never `() => { … }`.
+      if (h === "dict") {
+        ctx.buf.raw("(");
+        emitExpr(only, ctx);
+        ctx.buf.raw(")");
+        return;
+      }
     }
-    // No emitted EXPRESSION starts with a bare `{` (object literals lower to
-    // `__arr.dict(…)`, blocks are handled above), so a plain expression body needs
-    // no defensive parenthesization.
     emitExpr(only, ctx);
     return;
   }
@@ -808,6 +800,15 @@ function emitStmtInner(form: Node, ctx: Ctx): void {
     emitBeginBlock(form.list.slice(1), ctx, "");
     return;
   }
+  // Object literal as an expression statement must be parenthesized — a leading
+  // `{` is a block, not a value (same rule as arrow expression bodies).
+  // Covers top-level results and `return ({…})` when lastPrefix is `return `.
+  if (isList(form) && head(form) === "dict") {
+    ctx.buf.raw("(");
+    emitExpr(form, ctx);
+    ctx.buf.raw(")");
+    return;
+  }
   emitExpr(form, ctx);
 }
 
@@ -895,9 +896,9 @@ function decodeString(raw: string): string {
 /**
  * Emit type-faithful virtual TS for an arrival Scheme program, with a span lens
  * back to the source. The emitted module references the
- * `@inhuman.tools/arrival-internals-types-prelude` prelude globals (`__arr`,
- * `sexpr`, `Dict`, `__scmTruth`) —
- * prepend `PRE` (unmapped) before type-checking; nothing is declared here.
+ * `@inhuman.tools/arrival-internals-types-prelude` prelude globals
+ * (`declare function car…`, `sexpr`, `List`, …) — prepend PRE (unmapped)
+ * before type-checking; nothing is declared here.
  *
  * Each top-level form is emitted under its own try/catch: a parse/emit failure on
  * one form degrades THAT form to an unmapped `unknown` (recorded in
@@ -906,8 +907,9 @@ function decodeString(raw: string): string {
  * are module-scoped and never collide across files in a shared program.
  */
 export interface EmitTypesOptions {
-  /** Host-injected ambient member names (sift rosetta tools) — heads lowered via
-   *  `__arr[...]` so the type-lens resolves their signatures. See `Ctx.hostMembers`. */
+  /** Host-injected ambient function names (sift rosetta tools) — heads lowered via
+   *  bare `encodeSchemeIdent(name)(…)` so the type-lens resolves their signatures.
+   *  See `Ctx.hostMembers`. */
   hostMembers?: ReadonlySet<string>;
   /**
    * Registry-harvested Law-N witnesses: head names whose Contract carries

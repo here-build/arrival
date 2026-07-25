@@ -23,8 +23,8 @@ const LIST_DUAL = dedent`
 `;
 const PAIR_DUAL = dedent`
   {
-    (x: unknown): x is Pair<unknown, unknown>;
-    <T>(x: T): x is Extract<T, Pair<any, any>>;
+    (x: unknown): x is NonEmptyList<unknown>;
+    <T>(x: T): x is Extract<T, NonEmptyList<any>>;
   }
 `;
 const VECTOR_DUAL = dedent`
@@ -38,7 +38,8 @@ const AMBIENT = `
 declare const LIST_BRAND: unique symbol;
 interface Cons<out T> { readonly [LIST_BRAND]: T; }
 type List<T> = Cons<T> | null;
-interface Pair<out H, out T> { readonly car: H; readonly cdr: T; }
+type NonEmptyList<T> = readonly [T, ...T[]];
+type Tuple<A = unknown, B = unknown> = readonly [A, B];
 `;
 
 function narrowedType(opts: { guardSig: string; inputType: string }): string {
@@ -136,12 +137,11 @@ describe("dual guard control-flow narrowing (lens-critical)", () => {
     expect(t).not.toMatch(/string/);
   });
 
-  it("pair?: string | Pair<number, boolean> keeps Pair", () => {
+  it("pair?: string | NonEmptyList<number> keeps NonEmptyList", () => {
     const t = narrowedType({
       guardSig: PAIR_DUAL,
-      inputType: "string | Pair<number, boolean>" });
+      inputType: "string | NonEmptyList<number>" });
     expect(t).toMatch(/number/);
-    expect(t).toMatch(/boolean/);
     expect(t).not.toMatch(/string/);
   });
 

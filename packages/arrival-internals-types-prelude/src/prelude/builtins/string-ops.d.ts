@@ -9,12 +9,10 @@
 //   (string-downcase s)   → `s` converted to lowercase.
 //   (string-contains s sub) → #t/#f whether `sub` appears in `s`.
 //
-// merge contract: ../types.d.ts THE LEAF MERGE CONTRACT
-// ─────────────────────────────────────────────────────────────────────────────
-interface ArrShape {
-  "string-append"(...s: string[]): string;
-  "string-length"(s: string): number;
-  "string-upcase"(s: string): string;
-  "string-downcase"(s: string): string;
-  "string-contains"(s: string, sub: string): boolean;
-}
+// // ─────────────────────────────────────────────────────────────────────────────
+
+declare function string$dash$append(...s: string[]): string;
+declare function string$dash$length(s: string): number;
+declare function string$dash$upcase(s: string): string;
+declare function string$dash$downcase(s: string): string;
+declare function string$dash$contains(s: string, sub: string): boolean;

@@ -6,12 +6,10 @@
 //   they accept ≥2 number arguments and return a boolean. The emitter lowers them
 //   via `chainCompare` which chains pairwise `&&`-joined comparisons for n>2.
 //
-// merge contract: ../types.d.ts THE LEAF MERGE CONTRACT
-// ─────────────────────────────────────────────────────────────────────────────
-interface ArrShape {
-  "<"(...n: number[]): boolean;
-  ">"(...n: number[]): boolean;
-  "<="(...n: number[]): boolean;
-  ">="(...n: number[]): boolean;
-  "="(...n: number[]): boolean;
-}
+// // ─────────────────────────────────────────────────────────────────────────────
+
+declare function $less$(...n: number[]): boolean;
+declare function $greater$(...n: number[]): boolean;
+declare function $less$$eq$(...n: number[]): boolean;
+declare function $greater$$eq$(...n: number[]): boolean;
+declare function $eq$(...n: number[]): boolean;

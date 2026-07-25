@@ -8,8 +8,7 @@
 // All three take exactly 2 numeric arguments and return a number.
 //
 // ─────────────────────────────────────────────────────────────────────────────
-interface ArrShape {
-  modulo(a: number, b: number): number;
-  remainder(a: number, b: number): number;
-  quotient(a: number, b: number): number;
-}
+
+declare function modulo(a: number, b: number): number;
+declare function remainder(a: number, b: number): number;
+declare function quotient(a: number, b: number): number;

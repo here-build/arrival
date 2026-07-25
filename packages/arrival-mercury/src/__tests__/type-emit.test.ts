@@ -5,12 +5,7 @@
  * these are the emit-shape rows — the tsc-behavior oracle rows [narrowing
  * actually composing at the checker] are the oracle/typefacts components' turf).
  *
- * `__scmTruth` DECLARATION ownership (documented expectation): the emitter only
- * ever REFERENCES `__scmTruth(…)`; the ambient declaration
- * `declare function __scmTruth(x: unknown): boolean` is the LENS PRELUDE's —
- * arrival/packages/arrival-internals-types-prelude/src/prelude/types.d.ts carries it since
- * Phase 0 — so the emitted module must contain no `declare` of its own (asserted
- * below), exactly like `__arr`/`sexpr`/`Dict`.
+ * Condition coerce is inline `(expr === true)` — no ambient helper.
  */
 import { describe, expect, it } from "vitest";
 
@@ -57,26 +52,26 @@ const TYPE_EMIT_CASES: readonly TypeEmitCase[] = [
     topic: "type-emit: Law T wrap (default)",
     name: "wraps the self-referencing headline shape — (if x x 'fallback)",
     src: "(if x x 'fallback)",
-    contains: ['(__scmTruth(x) ? x : "fallback")'],
+    contains: ['((x === true) ? x : "fallback")'],
   },
   {
     topic: "type-emit: Law T wrap (default)",
     name: "wraps a bare literal condition — unconditional-wrap policy",
     src: "(if 0 'a 'b)",
-    contains: ['(__scmTruth(0) ? "a" : "b")'],
+    contains: ['((0 === true) ? "a" : "b")'],
   },
   {
     topic: "type-emit: Law T wrap (default)",
     name: "wraps a non-narrowing predicate call",
     src: "(if (zero? n) 1 2)",
     opts: { narrowsMembers: NARROWS },
-    contains: ['(__scmTruth(__arr["zero?"](n)) ? 1 : 2)'],
+    contains: ['((zero$qmark$(n) === true) ? 1 : 2)'],
   },
   {
     topic: "type-emit: Law T wrap (default)",
     name: "wraps each nested if's condition independently — (if (if a b c) x y)",
     src: "(if (if a b c) x y)",
-    contains: ["(__scmTruth((__scmTruth(a) ? b : c)) ? x : y)"],
+    contains: ["((((a === true) ? b : c) === true) ? x : y)"],
   },
 
   {
@@ -84,7 +79,7 @@ const TYPE_EMIT_CASES: readonly TypeEmitCase[] = [
     name: "emits a flagged predicate bare — (if (null? xs) …)",
     src: "(if (null? xs) 1 2)",
     opts: { narrowsMembers: NARROWS },
-    contains: ['(__arr["null?"](xs) ? 1 : 2)'],
+    contains: ['(null$qmark$(xs) ? 1 : 2)'],
     excludes: ["__scmTruth"],
   },
   {
@@ -92,23 +87,23 @@ const TYPE_EMIT_CASES: readonly TypeEmitCase[] = [
     name: "lowers not to native ! — (if (not (null? xs)) …)",
     src: "(if (not (null? xs)) 1 2)",
     opts: { narrowsMembers: NARROWS },
-    contains: ['(!__arr["null?"](xs) ? 1 : 2)'],
-    excludes: ["__scmTruth", "__arr.not"],
+    contains: ['(!null$qmark$(xs) ? 1 : 2)'],
+    excludes: ["__scmTruth", "not"],
   },
   {
     topic: "type-emit: narrowing-form grammar (§5.3)",
     name: "lowers and to native && — the constitution's own second guard shape",
     src: "(if (and (pair? x) (pair? (cdr x))) 1 2)",
     opts: { narrowsMembers: NARROWS },
-    contains: ['((__arr["pair?"](x) && __arr["pair?"](__arr.cdr(x))) ? 1 : 2)'],
-    excludes: ["__scmTruth", "__arr.and"],
+    contains: ['((pair$qmark$(x) && pair$qmark$(cdr(x))) ? 1 : 2)'],
+    excludes: ["__scmTruth", "and"],
   },
   {
     topic: "type-emit: narrowing-form grammar (§5.3)",
     name: "lowers or (and not-inside-or) to native || / !",
     src: "(if (or (string? x) (not (number? x))) 1 2)",
     opts: { narrowsMembers: NARROWS },
-    contains: ['((__arr["string?"](x) || !__arr["number?"](x)) ? 1 : 2)'],
+    contains: ['((string$qmark$(x) || !number$qmark$(x)) ? 1 : 2)'],
     excludes: ["__scmTruth"],
   },
 
@@ -117,7 +112,7 @@ const TYPE_EMIT_CASES: readonly TypeEmitCase[] = [
     name: "wraps the WHOLE condition when one and-operand is not flagged",
     src: "(if (and (pair? x) (f x)) 1 2)",
     opts: { narrowsMembers: NARROWS, hostMembers: HOSTS },
-    contains: ['(__scmTruth(__arr.and(__arr["pair?"](x), f(x))) ? 1 : 2)'],
+    contains: ['((and(pair$qmark$(x), f(x)) === true) ? 1 : 2)'],
     excludes: [" && "],
   },
   {
@@ -125,21 +120,21 @@ const TYPE_EMIT_CASES: readonly TypeEmitCase[] = [
     name: "wraps on a bare-variable operand too — (and (string? x) flag)",
     src: "(if (and (string? x) flag) 1 2)",
     opts: { narrowsMembers: NARROWS, hostMembers: HOSTS },
-    contains: ['(__scmTruth(__arr.and(__arr["string?"](x), flag)) ? 1 : 2)'],
+    contains: ['((and(string$qmark$(x), flag) === true) ? 1 : 2)'],
   },
   {
     topic: "type-emit: all-or-nothing (mixed clauses wrap whole)",
     name: "zero-arity (and) is a value form, not a guard — wraps, no invalid `()`",
     src: "(if (and) 1 2)",
     opts: { narrowsMembers: NARROWS },
-    contains: ["(__scmTruth(__arr.and()) ? 1 : 2)"],
+    contains: ["((and() === true) ? 1 : 2)"],
   },
   {
     topic: "type-emit: all-or-nothing (mixed clauses wrap whole)",
     name: "wrong-arity not is not an NForm — (not a b) wraps",
     src: "(if (not a b) 1 2)",
     opts: { narrowsMembers: NARROWS },
-    contains: ["(__scmTruth(__arr.not(a, b)) ? 1 : 2)"],
+    contains: ["((not(a, b) === true) ? 1 : 2)"],
   },
 ];
 
@@ -156,10 +151,10 @@ describe("type-emit: Law T wrap (default)", () => {
     it(c.name, () => runTypeEmitCase(c));
   }
 
-  it("never declares __scmTruth — the lens prelude owns the ambient declaration", () => {
-    const r = emitTypes("(if 0 1 2)");
-    expect(r.ts).toContain("__scmTruth(");
-    expect(r.ts).not.toContain("declare");
+  it("coerces non-narrowing conditions with === true (no __scmTruth helper)", () => {
+    const r = emitTypes("(if x 1 2)");
+    expect(r.ts).toContain("(x === true)");
+    expect(r.ts).not.toContain("__scmTruth");
   });
 });
 
@@ -178,10 +173,10 @@ describe("type-emit: narrowing-form grammar (§5.3)", () => {
     for (const r of [bare, wrapped]) {
       const [m] = mappingAt(r, leafStart, "(string? x)".length);
       expect(m).toBeDefined();
-      expect(r.ts.slice(m!.tsStart, m!.tsStart + m!.tsLength)).toBe('__arr["string?"](x)');
+      expect(r.ts.slice(m!.tsStart, m!.tsStart + m!.tsLength)).toBe('string$qmark$(x)');
     }
-    expect(bare.ts).toContain('(__arr["string?"](x) ? 1 : 2)');
-    expect(wrapped.ts).toContain('(__scmTruth(__arr["string?"](x)) ? 1 : 2)');
+    expect(bare.ts).toContain('(string$qmark$(x) ? 1 : 2)');
+    expect(wrapped.ts).toContain('((string$qmark$(x) === true) ? 1 : 2)');
   });
 });
 
@@ -194,39 +189,40 @@ describe("type-emit: all-or-nothing (mixed clauses wrap whole)", () => {
 describe("type-emit: grammar gates (shadowing, Law F, value position)", () => {
   it("Law F: absent narrowsMembers ⇒ every condition wraps, even a would-be guard", () => {
     const r = emitTypes("(if (string? x) 1 2)", { hostMembers: HOSTS });
-    expect(r.ts).toContain('(__scmTruth(__arr["string?"](x)) ? 1 : 2)');
+    expect(r.ts).toContain('((string$qmark$(x) === true) ? 1 : 2)');
   });
 
   it("a user rebinding shadows the grammar exactly like builtin dispatch", () => {
     const r = emitTypes("(define (null? x) #t)\n(if (null? y) 1 2)", { narrowsMembers: NARROWS });
-    // cleanName("null?") → "null" → reserved-word escape "null_"
-    expect(r.ts).toContain("const null_ = (x) => true");
-    expect(r.ts).toContain("(__scmTruth(null_(y)) ? 1 : 2)");
-    expect(r.ts).not.toContain('__arr["null?"]');
+    // encodeSchemeIdent("null?") → null$qmark$; user const shadows ambient declare function
+    expect(r.ts).toContain("const null$qmark$ = (x) => true");
+    expect(r.ts).toContain("((null$qmark$(y) === true) ? 1 : 2)");
   });
 
-  it("value-position and/or stay __arr calls — emitCondition never leaks", () => {
+  it("value-position and/or stay ambient calls — emitCondition never leaks", () => {
     const r = emitTypes("(define ok (and (pair? x) (pair? y)))", { narrowsMembers: NARROWS, hostMembers: HOSTS });
-    expect(r.ts).toContain('const ok = __arr.and(__arr["pair?"](x), __arr["pair?"](y))');
+    expect(r.ts).toContain('const ok = and(pair$qmark$(x), pair$qmark$(y))');
     expect(r.ts).not.toContain(" && ");
     expect(r.ts).not.toContain("__scmTruth");
   });
 });
 
 describe("type-emit: span lens (mappings for the extractor)", () => {
-  it("maps the wrapped condition's inner expression at its shifted offset", () => {
+  it("maps the coerced condition's inner expression at its shifted offset", () => {
     const src = "(if x x 'fallback)";
     const r = emitTypes(src);
     // condition `x` (offset 4) — mapped; its TS extent is exactly the identifier
     const [cond] = mappingAt(r, 4, 1);
     expect(cond).toBeDefined();
     expect(r.ts.slice(cond!.tsStart, cond!.tsStart + cond!.tsLength)).toBe("x");
-    // and it sits INSIDE the wrapper — the prefix was appended before the inner emit
-    expect(r.ts.slice(cond!.tsStart - "__scmTruth(".length, cond!.tsStart)).toBe("__scmTruth(");
+    // sits inside `(x === true)` — suffix after the identifier
+    expect(r.ts.slice(cond!.tsStart + cond!.tsLength, cond!.tsStart + cond!.tsLength + " === true)".length)).toBe(
+      " === true)",
+    );
     // the whole-if span still records around everything
     const [whole] = mappingAt(r, 0, src.length);
     expect(whole).toBeDefined();
-    expect(r.ts.slice(whole!.tsStart, whole!.tsStart + whole!.tsLength)).toBe('(__scmTruth(x) ? x : "fallback")');
+    expect(r.ts.slice(whole!.tsStart, whole!.tsStart + whole!.tsLength)).toBe('((x === true) ? x : "fallback")');
   });
 
   it("records a span PER NForm level — leaf, not-form, and the inner argument", () => {
@@ -236,10 +232,10 @@ describe("type-emit: span lens (mappings for the extractor)", () => {
     const leafForm = "(null? xs)";
     const [notM] = mappingAt(r, src.indexOf(notForm), notForm.length);
     expect(notM).toBeDefined();
-    expect(r.ts.slice(notM!.tsStart, notM!.tsStart + notM!.tsLength)).toBe('!__arr["null?"](xs)');
+    expect(r.ts.slice(notM!.tsStart, notM!.tsStart + notM!.tsLength)).toBe('!null$qmark$(xs)');
     const [leafM] = mappingAt(r, src.indexOf(leafForm), leafForm.length);
     expect(leafM).toBeDefined();
-    expect(r.ts.slice(leafM!.tsStart, leafM!.tsStart + leafM!.tsLength)).toBe('__arr["null?"](xs)');
+    expect(r.ts.slice(leafM!.tsStart, leafM!.tsStart + leafM!.tsLength)).toBe('null$qmark$(xs)');
     const [argM] = mappingAt(r, src.indexOf("xs"), 2);
     expect(argM).toBeDefined();
     expect(r.ts.slice(argM!.tsStart, argM!.tsStart + argM!.tsLength)).toBe("xs");
@@ -252,7 +248,7 @@ describe("type-emit: span lens (mappings for the extractor)", () => {
     const [andM] = mappingAt(r, src.indexOf(andForm), andForm.length);
     expect(andM).toBeDefined();
     expect(r.ts.slice(andM!.tsStart, andM!.tsStart + andM!.tsLength)).toBe(
-      '(__arr["string?"](x) && __arr["number?"](y))',
+      '(string$qmark$(x) && number$qmark$(y))',
     );
   });
 });
@@ -276,13 +272,35 @@ describe("type-emit: input surface + module frame (byte-identical chunk behavior
   it("skips (require …) directives and records the drop", () => {
     const r = emitTypes('(require "lib/util.scm")\n(if 0 1 2)');
     expect(r.droppedForms).toEqual([0]);
-    expect(r.ts).toContain("(__scmTruth(0) ? 1 : 2)");
+    expect(r.ts).toContain("((0 === true) ? 1 : 2)");
     expect(r.ts).not.toContain("require");
   });
 
   it("desugared conditions classify too — (when (null? xs) 1) reaches the grammar as if", () => {
     const r = emitTypes("(when (null? xs) 1)", { narrowsMembers: NARROWS });
-    expect(r.ts).toContain('(__arr["null?"](xs) ? 1 : ');
+    expect(r.ts).toContain('(null$qmark$(xs) ? 1 : ');
+  });
+
+  it("parenthesizes a sole dict body on an arrow — else `{` is a block, not a return", () => {
+    // `(lambda (a b) (dict :a a :b b))` must be `=> ({ a: a, b: b })`, never
+    // `=> { a: a, b: b }` (labels, no value).
+    const r = emitTypes("(define (make a b) (dict :a a :b b))");
+    expect(r.ts).toContain("const make = (a, b) => ({ ");
+    expect(r.ts).toContain("a: a");
+    expect(r.ts).toContain("b: b");
+    expect(r.ts).toMatch(/=> \(\{[\s\S]*\}\)/);
+    // Unparenthesized block form must not appear as the arrow body.
+    expect(r.ts).not.toMatch(/=> \{\s*a:/);
+  });
+
+  it("parenthesizes a top-level dict expression statement — else `{` is a block", () => {
+    // Bare `{ tree: … };` is a block (labels), not a value expression.
+    const r = emitTypes('(define buckets 1)\n(dict :tree results :buckets buckets)');
+    expect(r.ts).toContain("const buckets = 1;");
+    expect(r.ts).toMatch(/\(\{\s*tree: results/);
+    expect(r.ts).toMatch(/buckets: buckets\s*\}\);/);
+    // Must not be an unparenthesized block statement.
+    expect(r.ts).not.toMatch(/\n\{\s*tree:/);
   });
 });
 

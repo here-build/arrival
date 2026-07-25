@@ -16,7 +16,7 @@ import { PROGRAM_FILE } from "@inhuman.tools/arrival-internals-types-prelude/vir
 import { parseSexprs, type Node } from "@inhuman.tools/arrival-sugarcoat";
 // Subpath only — package root pulls model/oracle graph; type-emit is front+Buf only
 // (avoids circular load with arrival-mercury ↔ type-lens at the module level).
-import { emitTypes } from "@inhuman.tools/arrival-mercury/type-emit";
+import { emitTypes, encodeSchemeIdent, decodeSchemeIdent } from "@inhuman.tools/arrival-mercury/type-emit";
 import ts from "typescript";
 
 import { balancePrefix, stringLiteralType } from "./balance.js";
@@ -105,12 +105,12 @@ export interface SchemeLanguageServiceOptions {
    * mask narrow on injected symbols — not just the builtins. Two coupled parts, both
    * derived from ONE source (the env's rosetta-type registry, `rosettaTypesOf` —
    * host tools register via `symbol.rosetta` / internal bind), via `assembleHostPrelude`:
-   *   • `prelude` — ambient `.d.ts` text re-opening `interface ArrShape { "<name>": … }`
-   *     (+ the host's entity types), merged into the same global scope as the builtin
-   *     leaves. Makes `typeof __arr["<name>"]` resolve → the CANDIDATE side narrows.
-   *   • `members` — the host member names. The emitter lowers a head in this set via
-   *     `__arr["<name>"](…)` (like a builtin) so `Parameters<typeof head>` resolves →
-   *     the SLOT side narrows (a host tool as the enclosing call head).
+   *   • `prelude` — ambient `.d.ts` text with `declare function <encoded>…` per tool
+   *     (+ the host's entity types), same global scope as the builtin leaves. Makes
+   *     `typeof <encoded>` resolve → the CANDIDATE side narrows.
+   *   • `members` — the host member names (scheme spelling). The emitter lowers a
+   *     head in this set via bare `encodeSchemeIdent(name)(…)` so
+   *     `Parameters<typeof head>` resolves → the SLOT side narrows.
    */
   host?: { prelude: string; members: readonly string[] };
   /**
@@ -129,19 +129,17 @@ export interface SchemeLanguageServiceOptions {
   /**
    * `(require "data.json")` → granular SHAPE — the editor twin of the runtime
    * loader registry. Given a `(require)`d path verbatim, return the TS type the
-   * lens should give that require (in the lens vocabulary: `SStr`/`SNum`/
-   * `List<…>`/object literals), or null when the path has no static shape (a
-   * `.scm` library, an opaque blob). DERIVED host-side from the SAME loader
-   * registry the runtime parses with (`resolveRequireType` over the kernel
-   * loader), so a custom extension's `type` provider reaches the editor too.
+   * lens should give that require (plain TS + `List<…>`/object literals), or
+   * null when the path has no static shape (a `.scm` library, an opaque blob).
+   * DERIVED host-side from the SAME loader registry the runtime parses with
+   * (`resolveRequireType` over the kernel loader), so a custom extension's
+   * `type` provider reaches the editor too.
    *
    * For each require path that yields a non-null shape, the lens emits a
-   * `declare global { interface ArrShape { require(specifier: "<path>"): <T>; } }`
-   * string-literal overload — TS hoists it ahead of the general
-   * `(specifier: SStr): unknown` so `(require "data.json")` resolves to the
-   * precise shape instead of `unknown`. A path with a shape is ALSO skipped as a
-   * scheme dependency (it is data, not loadable forms). Absent → every require
-   * stays `unknown`. */
+   * `declare function require(specifier: "<path>"): <T>;` string-literal
+   * overload so `(require "data.json")` resolves to the precise shape instead of
+   * `unknown`. A path with a shape is ALSO skipped as a scheme dependency (it is
+   * data, not loadable forms). Absent → every require stays `unknown`. */
   resolveRequireType?: (path: string) => string | null;
 }
 
@@ -388,7 +386,7 @@ export interface SchemeLanguageService {
    * The ELEMENT-type verdict at an ARRAY-ELEMENT cursor — the inner twin of {@link getSlotAcceptsBareWord}
    * for a value sitting INSIDE an array surface (`(list …)`, `'(…)`, `[…]`). At an array value slot the
    * element-type bit is LOST the instant the cursor descends past the opener: `(list …)` lowers to the
-   * generic `__arr.list(…)` whose `Parameters[i]` is `unknown` (→ stringy=true → a bare multi-word word
+   * generic `list(…)` whose `Parameters[i]` is `unknown` (→ stringy=true → a bare multi-word word
    * slips in), and `'(…)` lowers to a TS array-LITERAL with no enclosing call (→ the slot probes find
    * nothing). This probe recovers the element type DESPITE the surface:
    *  - `(list …)` / `[…]` / `(array …)`: the cursor is inside a list-MATERIALIZER call — walk OUT to the
@@ -441,6 +439,15 @@ export interface SchemeLanguageService {
    * the non-string-literal masking inert (superset-safe — a `#`-literal / number stays admitted).
    */
   getSlotIsStringTyped(scheme: string, schemeOffset: number): boolean | null;
+  /**
+   * Debug dump: the virtual `__program.ts` the lens typechecks for `scheme` —
+   * require-closure + data-file `require` overloads + emitted program + usage-
+   * based param annotations. Never runs; exists only so a CLI/host can print
+   * what the checker sees. Side-effects the same `programText` cell as every
+   * other query (subsequent diagnostics/hover share this snapshot until the
+   * next load).
+   */
+  getTypelevelProgram(scheme: string): string;
 }
 
 /**
@@ -458,15 +465,12 @@ export function createSchemeLanguageServiceCore(
   const options: ts.CompilerOptions = { ...DEFAULT_OPTIONS, ...opts?.compilerOptions };
   const preludeFiles = env.rootFiles;
   const supportFiles = env.supportFiles ?? new Map<string, string>();
-  // Host-injected leaf (sift's tool declarations) — merged into the same global ArrShape.
+  // Host-injected ambient declare functions (sift's tool declarations).
   if (opts?.host !== undefined) preludeFiles.set("__host.d.ts", opts.host.prelude);
-  // The emitter's member roster — a head in this set lowers to `__arr[…]` so its
-  // signature bites and its slots narrow. DERIVED, not listed: the merged
-  // ArrShape itself (prelude leaves + host leaf, read back off the checker via
-  // the `__arr[""]` probe) is the single source of truth. Authoring a new
-  // builtins/ leaf is the ONLY step to teach both the emitter and completions a
-  // name; a hand-kept roster here would be a third list drifting against the
-  // leaves and chain-view's projection stdlib. Lazy: the probe needs `service`.
+  // The emitter's member roster — a head in this set lowers to a bare encoded
+  // global call so its signature bites and its slots narrow. DERIVED from the
+  // ambient declare functions (prelude leaves + host), read back off the checker.
+  // Lazy: the probe needs `service`.
   let memberRoster: ReadonlySet<string> | null = null;
   const emitterMembers = (): ReadonlySet<string> => {
     memberRoster ??= new Set([...builtinCompletions().map((e) => e.name), ...(opts?.host?.members ?? [])]);
@@ -630,13 +634,11 @@ export function createSchemeLanguageServiceCore(
     for (const [path, reqType] of dataReqTypes) {
       requireOverloads.push(`require(specifier: ${JSON.stringify(path)}): ${reqType};`);
     }
-    // The string-literal `require` overloads merge into the global ArrShape via
-    // `declare global` (the program is a module, so a bare `interface ArrShape`
-    // would be module-local). TS hoists these specialized overloads ahead of the
-    // general `(specifier: SStr): unknown`, so each `(require "data.json")`
-    // resolves to its precise shape. Unmapped (ambient) — never lifts a span.
+    // String-literal `require` overloads as ambient declare functions (program is
+    // a module — `declare global` would also work, but bare ambient overloads via
+    // a synthetic .d.ts-style prefix keep parity with builtin leaves). Unmapped.
     if (requireOverloads.length > 0) {
-      prefix += `declare global { interface ArrShape {\n${requireOverloads.map((o) => `  ${o}`).join("\n")}\n} }\n`;
+      prefix += requireOverloads.map((o) => `declare function ${o}`).join("\n") + "\n";
     }
     const { ts: emitted, mappings, declaredNames } = emitTypes(scheme, { hostMembers: emitterMembers() });
     const programBase = prefix.length;
@@ -770,13 +772,9 @@ export function createSchemeLanguageServiceCore(
               ? `Cannot find name '${atom ?? lifted}' in this file (\`require\`d names aren't resolved yet).`
               : `Cannot find name '${atom ?? lifted}' in this file or its \`require\`s.`;
         }
-        // 2339 on ArrShape: the emitter lowered a head it believes is a builtin,
-        // but the prelude has no leaf — OUR roster gap, not the user's bug.
-        else if (d.code === 2339 && messageText.includes("'ArrShape'")) {
-          const prop = /Property '([^']+)'/.exec(messageText)?.[1];
-          severity = "suggestion";
-          messageText = `'${prop ?? lifted}' has no builtin type signature yet — the call is unchecked.`;
-        }
+        // Former ArrShape-gap (2339) is now a free-name miss (2304) when the
+        // emitter roster has a head but no ambient declare function leaf.
+        // Softened above via the 2304 path when resolveModule is set.
         out.push({
           start: span.start,
           length: span.length,
@@ -876,17 +874,15 @@ export function createSchemeLanguageServiceCore(
         ...(role.kind === "argument"
           ? {
               slot: {
-                // role.calleeText is TS-side currency (probeTypes embeds it in
-                // probe source, so a builtin MUST stay `__arr["…"]` there); the
-                // user-facing slot surfaces the SCHEME name — same glass rule
-                // as the 2304/2552 message rewrite. BOTH emitter spellings
-                // unwrap: element access (`__arr["string-append"]`) AND dot
-                // access (`__arr.map`, identifier-safe names) — the dot form
-                // otherwise leaks TS currency into the slot card.
-                callee:
-                  /^__arr\["(.+)"\]$/.exec(role.calleeText)?.[1] ??
-                  /^__arr\.([A-Za-z_$][\w$]*)$/.exec(role.calleeText)?.[1] ??
-                  role.calleeText,
+                // role.calleeText is TS-side currency (encoded ident). Surface
+                // the scheme spelling to the user.
+                callee: (() => {
+                  try {
+                    return decodeSchemeIdent(role.calleeText);
+                  } catch {
+                    return role.calleeText;
+                  }
+                })(),
                 argIndex: role.argIndex,
                 ...(paramType === undefined ? {} : { paramType }),
               },
@@ -1012,6 +1008,11 @@ export function createSchemeLanguageServiceCore(
       if (role.kind !== "argument") return null; // not a typed-call argument slot → no string-typed verdict
       return probeSlotIsStringTyped(scheme, role.calleeText, role.argIndex);
     },
+
+    getTypelevelProgram(scheme): string {
+      loadSource(scheme);
+      return programText;
+    },
   };
 
   /** Resolve the call slot's expected type `__E = Parameters<typeof <callee>>[<arg>]` and read back
@@ -1070,7 +1071,7 @@ export function createSchemeLanguageServiceCore(
    *  list/array materializer). The ReturnType TWIN of {@link probeSlotIsArray}: `ReturnType<typeof <ref>>`
    *  instead of `Parameters<…>[i]`, same `[…] extends [readonly unknown[]]` test, ONE program load, one
    *  alias. `typeofRef` resolves the head exactly as the candidate probe does (a program local via
-   *  `typeof <name>`, a builtin/operator via `typeof __arr["…"]`). `true` ⇒ provably array (mask it at a
+   *  `typeof <name>`, a builtin/operator via `typeof $u2026$`). `true` ⇒ provably array (mask it at a
    *  scalar slot); `false` ⇒ provably not (an element-returning `car`/`first`/accessor — ADMIT); `null` ⇒
    *  unresolved (un-nameable head, unbound name → error-any return → ADMIT). The `[…]`-tuple wrapping defeats
    *  union distribution. A NON-callable head makes `ReturnType<…>` an error-any ⇒ `null` ⇒ admitted. */
@@ -1132,11 +1133,11 @@ export function createSchemeLanguageServiceCore(
    * resolve through ONE primitive — `getContextualType` does the outer-slot resolution for free:
    *  - `'(…)` lowered to a TS array LITERAL `[…]`: `getContextualType(literal)` = the expected array type
    *    (`T_diet[]` / `readonly unknown[]`); its number-index is the element type.
-   *  - `(list …)` lowered to `__arr.list(…)`: `getContextualType(thatCall)` = the same expected array type
-   *    (TS flows the outer slot INTO the call's contextual position: `__arr.list(x)` filling a
+   *  - `(list …)` lowered to `list(…)`: `getContextualType(thatCall)` = the same expected array type
+   *    (TS flows the outer slot INTO the call's contextual position: `list(x)` filling a
    *    `T_diet[]` slot has contextual type `T_diet[]`, NOT the generic `list`'s `unknown`); number-index → element.
    * A regular nested call (`(find-y …)`) is NOT a materializer — its args are typed by ITS OWN signature, so
-   * it is deliberately NOT treated as an array producer (only an array literal, or a `__arr.list` call, is).
+   * it is deliberately NOT treated as an array producer (only an array literal, or a `list` call, is).
    * Returns `{ isStringy: null, enum: null }` when the cursor is not inside such a surface (the gate no-ops).
    */
   function probeElementType(sentinelScheme: string): { isStringy: boolean | null; enum: string[] | null } {
@@ -1160,7 +1161,7 @@ export function createSchemeLanguageServiceCore(
     const s = (sentinel as ts.Node).getStart(sf);
     const e = (sentinel as ts.Node).getEnd();
     // Walk up to the INNERMOST array-producing expression directly containing the sentinel: a TS array
-    // literal (the `'(…)` lowering), or a `__arr.list(…)` materializer CALL whose argument is the sentinel.
+    // literal (the `'(…)` lowering), or a `list(…)` materializer CALL whose argument is the sentinel.
     let producer: ts.Expression | null = null;
     for (let p: ts.Node | undefined = (sentinel as ts.Node).parent; p; p = p.parent) {
       if (ts.isArrayLiteralExpression(p)) {
@@ -1189,11 +1190,11 @@ export function createSchemeLanguageServiceCore(
     return deriveElementVerdict(checker, elem);
   }
 
-  /** Is `calleeText` the list-materializer `list` (the `(list …)` surface lowers its head to `__arr.list`
-   *  / `__arr["list"]`)? Only this exact constructor is an array producer whose arguments ARE the elements;
+  /** Is `calleeText` the list-materializer `list` (the `(list …)` surface lowers its head to bare `list`)?
+   *  Only this exact constructor is an array producer whose arguments ARE the elements;
    *  every other call is a regular function whose arguments are its own params. */
   function isListMaterializerCallee(calleeText: string): boolean {
-    return calleeText === "__arr.list" || calleeText === '__arr["list"]';
+    return calleeText === "list" || calleeText === encodeSchemeIdent("list");
   }
 
   /** From the resolved ELEMENT `ts.Type`, derive the array-element verdict:
@@ -1234,7 +1235,7 @@ export function createSchemeLanguageServiceCore(
     // The prefix is mid-edit (usually unbalanced) — balance it so it parses; the cursor
     // offset is unchanged (closers append at the end). Query tsc at the ATOM'S
     // START, not the raw cursor: the end of a partial atom falls off its token
-    // mapping into the enclosing form's mapping (→ `__arr.car`), where tsc
+    // mapping into the enclosing form's mapping (→ `car`), where tsc
     // answers MEMBER completions — the whole scope vanishes.
     const mapper = loadSource(balancePrefix(scheme));
     const tsOffset = mapper.toTs(atomBoundsAt(scheme, schemeOffset)[0]);
@@ -1258,7 +1259,14 @@ export function createSchemeLanguageServiceCore(
       // collide with a substrate name (`(define Array …)` — a const, vs the
       // baseline's type-only `Array` interface) must survive. Name-only
       // matching would treat it as the baseline entry and drop it.
-      if (baseline.has(`${e.name} ${e.kind}`) || e.name.startsWith("__") || seen.has(e.name)) continue;
+      if (
+        baseline.has(`${e.name} ${e.kind}`) ||
+        e.name.startsWith("__") ||
+        e.name === "sexpr" ||
+        seen.has(e.name)
+      ) {
+        continue;
+      }
       seen.add(e.name);
       // Backport: tsc answers in EMITTED terms (`cleanName` may have renamed a program
       // local — `config/audience` → `configAudience`); a completion the user selects must
@@ -1307,30 +1315,42 @@ export function createSchemeLanguageServiceCore(
   }
 
   /** The builtin roster under its REAL scheme names (`car`, `string-append`, `+`,
-   *  `odd?`, …, plus host-injected rosetta tools): string-literal completions at
-   *  a raw `__arr[""]` ELEMENT-ACCESS position — exactly ArrShape's merged
-   *  members. Element access, not `__arr.` member access: after a dot tsc omits
-   *  every non-identifier name (un-typeable there), which silently drops the
-   *  kebab/operator/`?` builtins — most of the roster. Bypasses the emitter
-   *  (like `probeTypes`); scheme-wise these are in scope everywhere. */
+   *  `odd?`, …, plus host-injected rosetta tools). Completions are taken from the
+   *  ambient global function scope (empty program), then decoded from
+   *  `encodeSchemeIdent` form back to scheme spelling. */
   function builtinCompletions(): SchemeCompletionEntry[] {
     if (builtinEntries === null) {
-      // Same transient-probe hazard as `jsGlobalBaseline` — restore the real
-      // program's state afterward so this one-time warm-up is invisible to
-      // whatever real request triggered it.
-      const saved = { text: programText, declaredNames: programDeclaredNames, depUnits };
-      programText = '__arr[""];\nexport {};\n';
-      programVersion += 1;
-      const c = service.getCompletionsAtPosition(PROGRAM_FILE, '__arr["'.length, undefined);
-      builtinEntries = (c?.entries ?? [])
-        .filter((e) => !e.name.startsWith("__"))
-        // tsc tags string-literal completions kind:"string"; semantically these
-        // are the callable builtins — present them as methods.
-        .map((e) => ({ name: e.name, kind: "method", sortText: e.sortText }));
-      programText = saved.text;
-      programDeclaredNames = saved.declaredNames;
-      depUnits = saved.depUnits;
-      programVersion += 1;
+      // Harvest scheme names from ambient `declare function <encoded>…` leaves
+      // (and host prelude). No TS completion probe — that re-entered loadSource
+      // via emitterMembers and blew the stack once ArrShape went away.
+      const seen = new Set<string>();
+      const entries: SchemeCompletionEntry[] = [];
+      const absorb = (text: string): void => {
+        for (const m of text.matchAll(/\bdeclare\s+function\s+([A-Za-z_$][\w$]*)/g)) {
+          const enc = m[1]!;
+          // Lens infrastructure, not scheme vocabulary.
+          if (enc === "sexpr" || enc.startsWith("__")) continue;
+          let schemeName = enc;
+          try {
+            schemeName = decodeSchemeIdent(enc);
+          } catch {
+            /* bare car / map / … */
+          }
+          if (seen.has(schemeName)) continue;
+          seen.add(schemeName);
+          entries.push({ name: schemeName, kind: "method", sortText: schemeName });
+        }
+      };
+      for (const text of preludeFiles.values()) absorb(text);
+      if (opts?.host !== undefined) {
+        absorb(opts.host.prelude);
+        for (const m of opts.host.members) {
+          if (seen.has(m)) continue;
+          seen.add(m);
+          entries.push({ name: m, kind: "method", sortText: m });
+        }
+      }
+      builtinEntries = entries;
     }
     return builtinEntries;
   }
@@ -1405,22 +1425,14 @@ export function createSchemeLanguageServiceCore(
     return service.getProgram()?.getTypeChecker() ?? null;
   }
 
-  /** The TYPE EXPRESSION a candidate contributes to `__ok<…>`. THREE cases:
-   *   • a STRING-LITERAL candidate (`"thai"` — the model emitted a quoted string,
-   *     not a bound symbol) → the literal type ITSELF (`"thai"`), so `__ok`
-   *     checks `["thai"] extends [__E]`. A literal union slot
-   *     (`"thai"|"italian"`) narrows the wrong member out; a free-form `string`
-   *     slot keeps it (`["thai"] extends [string]` = true) — never a wrong
-   *     restriction. Without this the candidate degraded to
-   *     `typeof __arr["\"thai\""]` = `any` ⇒ every literal survived (the gap).
-   *   • an identifier-shaped non-builtin → `typeof <name>` (a program local).
-   *   • everything else (builtins, kebab/operator names) → `typeof __arr["…"]`.
-   *  The string-literal case is read off `isStringLiteralCandidate`. */
-  function typeofRef(name: string, builtinNames: ReadonlySet<string>): string {
+  /** The TYPE EXPRESSION a candidate contributes to `__ok<…>`. TWO cases:
+   *   • a STRING-LITERAL candidate (`"thai"`) → the literal type ITSELF.
+   *   • everything else (locals, builtins, host tools) → `typeof <encodeSchemeIdent(name)>`
+   *     — typelevel names are always the lossless encoding (no `__arr` bag). */
+  function typeofRef(name: string, _builtinNames: ReadonlySet<string>): string {
     const lit = stringLiteralType(name);
     if (lit !== null) return lit;
-    if (!builtinNames.has(name) && /^[A-Z_$][\w$]*$/i.test(name)) return `typeof ${name}`;
-    return `typeof __arr[${JSON.stringify(name)}]`;
+    return `typeof ${encodeSchemeIdent(name)}`;
   }
 
   /** Load a probe module and read, per candidate, whether it is type-valid in the given call slot.
@@ -1484,13 +1496,12 @@ export function createSchemeLanguageServiceCore(
   }
 
   /** Builtin signatures, rendered once per service (the roster is constant):
-   *  ONE ambient probe tuple `[typeof __arr["car"], …]`, element-wise reads. */
+   *  ONE ambient probe tuple `[typeof car, typeof string$dash$append, …]`. */
   function builtinSignatures(): Map<string, string> {
     if (builtinSigs === null) {
       const names = builtinCompletions().map((e) => e.name);
       const probeProgram = [
-        "__arr;",
-        `declare const __sigs: [${names.map((n) => `typeof __arr[${JSON.stringify(n)}]`).join(", ")}];`,
+        `declare const __sigs: [${names.map((n) => `typeof ${encodeSchemeIdent(n)}`).join(", ")}];`,
         "export {};",
       ].join("\n");
       const elements = readProbeTuple(probeProgram, "__sigs");
