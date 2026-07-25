@@ -1,6 +1,6 @@
 // type-emit — the TYPE pass: emits virtual TypeScript (type-checked, never run).
-// Non-narrowing conditions lower as `(expr === true)`; narrowing forms emit
-// native boolean ops (see emit.ts).
+// Non-narrowing conditions lower as `(expr !== false)` (Scheme truth); narrowing
+// forms emit native boolean ops (see emit.ts).
 export {
   emitTypes,
   type EmitTypesOptions,

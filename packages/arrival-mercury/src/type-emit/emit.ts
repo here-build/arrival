@@ -6,7 +6,7 @@
  *     package's copies; `parseSexprs` no longer imports `@inhuman.tools/arrival-sugarcoat`),
  *     stdlib → `./builtins.js` (roster-only reduction).
  *   - Law T: narrowing forms emit native `!`/`&&`/`||`/bare-call; other conditions
- *     coerce with `(expr === true)` (no ambient `__scmTruth` helper).
+ *     coerce with `(expr !== false)` — Scheme truth (only `#f` is false).
  *   - `emitTypes` additionally accepts a pre-parsed forest (`readonly Node[]`).
  *
  * ── original module doc ──────────────────────────────────────────────────────
@@ -639,17 +639,18 @@ function emitIf(n: ListNode, ctx: Ctx): void {
  *
  * A narrowing form emits NATIVE so tsc's control-flow narrowing composes
  * (`null?` / `and` / `or` / `not` over predicates). Every other condition is
- * projected as a TS boolean via `expr === true` — no ambient `__scmTruth`
- * helper. Typelevel already wants conditions as booleans; an inline comparison
- * is the coerce at the boundary without an opaque `(x: unknown) => boolean`
- * that erases type-predicate information when mis-applied.
+ * projected as a TS boolean via `expr !== false` — exact Scheme truthiness
+ * (only `#f` is false; objects, 0, "", lists are truthy). No ambient
+ * `__scmTruth` helper: an inline comparison is the coerce at the boundary
+ * without an opaque `(x: unknown) => boolean` that erases type-predicate
+ * information when mis-applied.
  *
- * Note: runtime Scheme truth is `x !== false` (only `#f` is false). Typelevel
- * uses `=== true` so only actual booleans pass — aligned with "produce TS
- * booleans," not a full runtime dual of Scheme truthiness for `0`/`""`.
+ * Prior mistaken dual used `=== true` (boolean-only); that broke optional
+ * accumulators `(let walk ((click #f)) (cond (click …)))` where click is
+ * `#f | {…}`. Runtime walker already uses `!== false` (walk.ts Law T).
  *
  * The coerce records no span of its own: the nested expression already records
- * its spans; a diagnostic on `=== true` falls back to the enclosing `if`.
+ * its spans; a diagnostic on `!== false` falls back to the enclosing `if`.
  */
 function emitCondition(c: Node, ctx: Ctx): void {
   if (isNarrowingForm(c, ctx)) {
@@ -658,7 +659,7 @@ function emitCondition(c: Node, ctx: Ctx): void {
   }
   ctx.buf.raw("(");
   emitExpr(c, ctx); // value-position emission, then coerce to TS boolean
-  ctx.buf.raw(" === true)");
+  ctx.buf.raw(" !== false)");
 }
 
 /**
@@ -669,7 +670,7 @@ function emitCondition(c: Node, ctx: Ctx): void {
  * ALL-OR-NOTHING: this test runs over the WHOLE condition tree before one byte is
  * emitted (emitCondition dispatches on its verdict) — a single non-flagged operand
  * anywhere fails the whole form, and the entire condition wraps as one
- * `(… === true)` coerce around value-position lowering. A mixed clause thus loses
+ * `(… !== false)` coerce around value-position lowering. A mixed clause thus loses
  * ALL narrowing rather than composing half-native, half-opaque text.
  *
  * `not`/`and`/`or` are recognized STRUCTURALLY by fixed name — never themselves
@@ -1270,6 +1271,31 @@ function demandsForFormals(
   return out;
 }
 
+/** Scheme `#f` literal (named-let optional-accumulator seed). */
+function isFalseLiteral(n: Node): boolean {
+  return isAtom(n) && !n.str && n.atom === "#f";
+}
+
+/**
+ * Optional accumulator: init `#f` + structural body demand → `T | false`.
+ * Without this, `(let walk ((click #f)) (:tagline click) …)` annotates only the
+ * object arm and rejects the seed / recursive `false` arm.
+ */
+function unionFalseWhenInitF(
+  demands: Map<string, string>,
+  names: readonly string[],
+  inits: readonly Node[],
+): void {
+  for (let i = 0; i < names.length; i++) {
+    const name = names[i]!;
+    const ann = demands.get(name);
+    if (ann === undefined) continue;
+    if (!isFalseLiteral(inits[i]!)) continue;
+    if (ann.includes("| false")) continue;
+    demands.set(name, `${ann} | false`);
+  }
+}
+
 /** Write `(a: T, b, ...rest)` using demand annotations when present. */
 function emitAnnotatedParams(
   params: { atom: Atom; rest: boolean }[],
@@ -1427,10 +1453,13 @@ function emitNamedLetBlock(n: ListNode, ctx: Ctx, lastPrefix: string): void {
     }
   }
   const bodyForms = n.list.slice(3);
-  const demands = demandsForFormals(
-    bodyForms,
-    varAtoms.filter((a) => !a.str).map((a) => a.atom),
-    ctx.demandCtx,
+  const formalNames = varAtoms.filter((a) => !a.str).map((a) => a.atom);
+  const demands = demandsForFormals(bodyForms, formalNames, ctx.demandCtx);
+  // Align indices with varAtoms (including any string-named skips — rare).
+  unionFalseWhenInitF(
+    demands,
+    varAtoms.map((a) => a.atom),
+    inits,
   );
   ctx.buf.raw("{ ");
   ctx.buf.raw(`const ${name} = (`);

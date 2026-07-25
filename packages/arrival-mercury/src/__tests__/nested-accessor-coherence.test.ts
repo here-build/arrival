@@ -209,4 +209,28 @@ describe("nested accessor coherence — binder demand harvest", () => {
     expect(ts).toContain("const a =");
     expect(ts).toContain("const b =");
   });
+
+  it("optional accumulator: named-let (click #f) + field uses → T | false; cond uses !== false", () => {
+    const { ts } = emitTypes(`
+(define (persona-result pid results)
+  (let walk ((rs results) (click #f))
+    (cond
+      ((null? rs)
+       (cond (click (dict :tagline (:tagline click) :reaction (:reaction click)))
+             (else #f)))
+      (else
+       (let ((node (car rs)))
+         (walk (cdr rs)
+               (if (clicking? (:verdict node))
+                   (dict :tagline (:tagline node) :reaction node)
+                   click)))))))
+`);
+    expect(ts).toMatch(
+      /click:\s*\{\s*tagline:\s*any;\s*reaction:\s*any\s*\}\s*\|\s*false/,
+    );
+    expect(ts).toContain("walk(results, false)");
+    // Scheme truth coerce — not === true (object never equals true)
+    expect(ts).toMatch(/\(click\s*!==\s*false\)/);
+    expect(ts).not.toMatch(/\(click\s*===\s*true\)/);
+  });
 });

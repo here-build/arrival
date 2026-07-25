@@ -5,7 +5,7 @@
  * these are the emit-shape rows — the tsc-behavior oracle rows [narrowing
  * actually composing at the checker] are the oracle/typefacts components' turf).
  *
- * Condition coerce is inline `(expr === true)` — no ambient helper.
+ * Condition coerce is inline `(expr !== false)` — Scheme truth; no ambient helper.
  */
 import { describe, expect, it } from "vitest";
 
@@ -52,26 +52,26 @@ const TYPE_EMIT_CASES: readonly TypeEmitCase[] = [
     topic: "type-emit: Law T wrap (default)",
     name: "wraps the self-referencing headline shape — (if x x 'fallback)",
     src: "(if x x 'fallback)",
-    contains: ['((x === true) ? x : "fallback")'],
+    contains: ['((x !== false) ? x : "fallback")'],
   },
   {
     topic: "type-emit: Law T wrap (default)",
     name: "wraps a bare literal condition — unconditional-wrap policy",
     src: "(if 0 'a 'b)",
-    contains: ['((0 === true) ? "a" : "b")'],
+    contains: ['((0 !== false) ? "a" : "b")'],
   },
   {
     topic: "type-emit: Law T wrap (default)",
     name: "wraps a non-narrowing predicate call",
     src: "(if (zero? n) 1 2)",
     opts: { narrowsMembers: NARROWS },
-    contains: ['((zero$qmark$(n) === true) ? 1 : 2)'],
+    contains: ['((zero$qmark$(n) !== false) ? 1 : 2)'],
   },
   {
     topic: "type-emit: Law T wrap (default)",
     name: "wraps each nested if's condition independently — (if (if a b c) x y)",
     src: "(if (if a b c) x y)",
-    contains: ["((((a === true) ? b : c) === true) ? x : y)"],
+    contains: ["((((a !== false) ? b : c) !== false) ? x : y)"],
   },
 
   {
@@ -113,7 +113,7 @@ const TYPE_EMIT_CASES: readonly TypeEmitCase[] = [
     name: "wraps the WHOLE condition when one and-operand is not flagged",
     src: "(if (and (pair? x) (f x)) 1 2)",
     opts: { narrowsMembers: NARROWS, hostMembers: HOSTS },
-    contains: ['((and(pair$qmark$(x), f(x)) === true) ? 1 : 2)'],
+    contains: ['((and(pair$qmark$(x), f(x)) !== false) ? 1 : 2)'],
     excludes: [" && "],
   },
   {
@@ -121,21 +121,21 @@ const TYPE_EMIT_CASES: readonly TypeEmitCase[] = [
     name: "wraps on a bare-variable operand too — (and (string? x) flag)",
     src: "(if (and (string? x) flag) 1 2)",
     opts: { narrowsMembers: NARROWS, hostMembers: HOSTS },
-    contains: ['((and(string$qmark$(x), flag) === true) ? 1 : 2)'],
+    contains: ['((and(string$qmark$(x), flag) !== false) ? 1 : 2)'],
   },
   {
     topic: "type-emit: all-or-nothing (mixed clauses wrap whole)",
     name: "zero-arity (and) is a value form, not a guard — wraps, no invalid `()`",
     src: "(if (and) 1 2)",
     opts: { narrowsMembers: NARROWS },
-    contains: ["((and() === true) ? 1 : 2)"],
+    contains: ["((and() !== false) ? 1 : 2)"],
   },
   {
     topic: "type-emit: all-or-nothing (mixed clauses wrap whole)",
     name: "wrong-arity not is not an NForm — (not a b) wraps",
     src: "(if (not a b) 1 2)",
     opts: { narrowsMembers: NARROWS },
-    contains: ["((not(a, b) === true) ? 1 : 2)"],
+    contains: ["((not(a, b) !== false) ? 1 : 2)"],
   },
 ];
 
@@ -152,9 +152,9 @@ describe("type-emit: Law T wrap (default)", () => {
     it(c.name, () => runTypeEmitCase(c));
   }
 
-  it("coerces non-narrowing conditions with === true (no __scmTruth helper)", () => {
+  it("coerces non-narrowing conditions with !== false (Scheme truth, no __scmTruth helper)", () => {
     const r = emitTypes("(if x 1 2)");
-    expect(r.ts).toContain("(x === true)");
+    expect(r.ts).toContain("(x !== false)");
     expect(r.ts).not.toContain("__scmTruth");
   });
 });
@@ -177,7 +177,7 @@ describe("type-emit: narrowing-form grammar (§5.3)", () => {
       expect(r.ts.slice(m!.tsStart, m!.tsStart + m!.tsLength)).toBe('string$qmark$(x)');
     }
     expect(bare.ts).toContain('(string$qmark$(x) ? 1 : 2)');
-    expect(wrapped.ts).toContain('((string$qmark$(x) === true) ? 1 : 2)');
+    expect(wrapped.ts).toContain('((string$qmark$(x) !== false) ? 1 : 2)');
   });
 });
 
@@ -332,14 +332,14 @@ describe("type-emit: cxr → index/slice (sugarcoat-alike)", () => {
 describe("type-emit: grammar gates (shadowing, Law F, value position)", () => {
   it("Law F: absent narrowsMembers ⇒ every condition wraps, even a would-be guard", () => {
     const r = emitTypes("(if (string? x) 1 2)", { hostMembers: HOSTS });
-    expect(r.ts).toContain('((string$qmark$(x) === true) ? 1 : 2)');
+    expect(r.ts).toContain('((string$qmark$(x) !== false) ? 1 : 2)');
   });
 
   it("a user rebinding shadows the grammar exactly like builtin dispatch", () => {
     const r = emitTypes("(define (null? x) #t)\n(if (null? y) 1 2)", { narrowsMembers: NARROWS });
     // encodeSchemeIdent("null?") → null$qmark$; user const shadows ambient declare function
     expect(r.ts).toContain("const null$qmark$ = (x) => true");
-    expect(r.ts).toContain("((null$qmark$(y) === true) ? 1 : 2)");
+    expect(r.ts).toContain("((null$qmark$(y) !== false) ? 1 : 2)");
   });
 
   it("value-position and/or stay ambient calls — emitCondition never leaks", () => {
@@ -358,14 +358,14 @@ describe("type-emit: span lens (mappings for the extractor)", () => {
     const [cond] = mappingAt(r, 4, 1);
     expect(cond).toBeDefined();
     expect(r.ts.slice(cond!.tsStart, cond!.tsStart + cond!.tsLength)).toBe("x");
-    // sits inside `(x === true)` — suffix after the identifier
-    expect(r.ts.slice(cond!.tsStart + cond!.tsLength, cond!.tsStart + cond!.tsLength + " === true)".length)).toBe(
-      " === true)",
+    // sits inside `(x !== false)` — suffix after the identifier
+    expect(r.ts.slice(cond!.tsStart + cond!.tsLength, cond!.tsStart + cond!.tsLength + " !== false)".length)).toBe(
+      " !== false)",
     );
     // the whole-if span still records around everything
     const [whole] = mappingAt(r, 0, src.length);
     expect(whole).toBeDefined();
-    expect(r.ts.slice(whole!.tsStart, whole!.tsStart + whole!.tsLength)).toBe('((x === true) ? x : "fallback")');
+    expect(r.ts.slice(whole!.tsStart, whole!.tsStart + whole!.tsLength)).toBe('((x !== false) ? x : "fallback")');
   });
 
   it("records a span PER NForm level — leaf, not-form, and the inner argument", () => {
@@ -415,7 +415,7 @@ describe("type-emit: input surface + module frame (byte-identical chunk behavior
   it("skips (require …) directives and records the drop", () => {
     const r = emitTypes('(require "lib/util.scm")\n(if 0 1 2)');
     expect(r.droppedForms).toEqual([0]);
-    expect(r.ts).toContain("((0 === true) ? 1 : 2)");
+    expect(r.ts).toContain("((0 !== false) ? 1 : 2)");
     expect(r.ts).not.toContain("require");
   });
 
