@@ -180,6 +180,12 @@ interface Ctx {
    * so span mappings stay exact (no post-hoc string rewrite).
    */
   requireBindings: ReadonlyMap<string, string>;
+  /**
+   * Local unary domains from same-forest compose/pipe/pipeline-lambda defines
+   * (scheme name → input shape). Used to fuse callee expectations onto args
+   * e.g. `(state-of persona)` merges state-of's compose constraint onto persona.
+   */
+  localDomains: ReadonlyMap<string, DemandShape>;
 }
 
 /** Emit a single TS expression for `n` into `ctx.buf`. */
@@ -918,8 +924,41 @@ function isPlainLetForm(n: ListNode): boolean {
   );
 }
 
-/** Harvest structural demands from pure field/elem (and list-preserve) uses. */
-function collectDemandsInNode(n: Node, into: Map<string, DemandShape>): void {
+/**
+ * Unary input domains of same-forest pipeline defines (compose/pipe → lambda).
+ * Scheme name → demand shape on the single parameter.
+ */
+function collectLocalDomains(forest: readonly Node[]): Map<string, DemandShape> {
+  const out = new Map<string, DemandShape>();
+  for (const form of forest) {
+    if (!isList(form) || head(form) !== "define") continue;
+    const sig = form.list[1];
+    const val = form.list[2];
+    if (!isAtom(sig) || sig.str || val === undefined) continue;
+    // Desugared compose/pipe is (lambda (it) …pipeline…).
+    if (!isList(val) || head(val) !== "lambda") continue;
+    const params = paramAtoms(val.list[1]);
+    if (params.length !== 1 || params[0]!.rest) continue;
+    const bodyForms = val.list.slice(2);
+    if (bodyForms.length !== 1) continue;
+    const steps = extractUnaryPipeline(bodyForms[0]!, params[0]!.atom);
+    if (steps === null || steps.length === 0) continue;
+    out.set(sig.atom, shapeFromSteps(steps));
+  }
+  return out;
+}
+
+/**
+ * Harvest structural demands: pure field/elem chains, list-preserve, and
+ * **fused callee domains** from local compose/pipe defines (same forest).
+ * Join is structural meet (key-union on objects, List element join) — never
+ * drop a demand because of a second consumer.
+ */
+function collectDemandsInNode(
+  n: Node,
+  into: Map<string, DemandShape>,
+  localDomains: ReadonlyMap<string, DemandShape>,
+): void {
   if (!isList(n) || isNil(n)) return;
 
   // Named let: body demands on loop vars + one-hop init → outer free roots.
@@ -937,7 +976,7 @@ function collectDemandsInNode(n: Node, into: Map<string, DemandShape>): void {
       }
     }
     const local = new Map<string, DemandShape>();
-    for (const f of bodyForms) collectDemandsInNode(f, local);
+    for (const f of bodyForms) collectDemandsInNode(f, local, localDomains);
     for (const { name, init } of pairs) {
       const Cp = local.get(name);
       if (Cp === undefined) continue;
@@ -945,7 +984,7 @@ function collectDemandsInNode(n: Node, into: Map<string, DemandShape>): void {
       if (chain !== null) {
         mergeDemand(into, chain.root, substituteLeaf(shapeFromSteps(chain.steps), Cp));
       }
-      collectDemandsInNode(init, into);
+      collectDemandsInNode(init, into, localDomains);
     }
     for (const [name, shape] of local) {
       if (!localNames.has(name)) mergeDemand(into, name, shape);
@@ -968,7 +1007,7 @@ function collectDemandsInNode(n: Node, into: Map<string, DemandShape>): void {
       }
     }
     const local = new Map<string, DemandShape>();
-    for (const f of bodyForms) collectDemandsInNode(f, local);
+    for (const f of bodyForms) collectDemandsInNode(f, local, localDomains);
     for (const { name, init } of pairs) {
       const Cp = local.get(name);
       if (Cp !== undefined) {
@@ -977,7 +1016,7 @@ function collectDemandsInNode(n: Node, into: Map<string, DemandShape>): void {
           mergeDemand(into, chain.root, substituteLeaf(shapeFromSteps(chain.steps), Cp));
         }
       }
-      collectDemandsInNode(init, into);
+      collectDemandsInNode(init, into, localDomains);
     }
     for (const [name, shape] of local) {
       if (!localNames.has(name)) mergeDemand(into, name, shape);
@@ -1002,13 +1041,38 @@ function collectDemandsInNode(n: Node, into: Map<string, DemandShape>): void {
     }
   }
 
-  for (const c of n.list) collectDemandsInNode(c, into);
+  // Callee domain fusion: (state-of persona) → merge state-of's input shape onto persona.
+  // Unary domain only (compose/pipe). Positional args before any keyword.
+  if (isAtom(n.list[0]) && !n.list[0]!.str) {
+    const domain = localDomains.get(n.list[0]!.atom);
+    if (domain !== undefined) {
+      for (let i = 1; i < n.list.length; i++) {
+        const a = n.list[i]!;
+        if (isKeyword(a)) break;
+        if (isAtom(a) && !a.str) mergeDemand(into, a.atom, domain);
+        // (state-of (car xs)) — domain applies to chain root as element demand
+        else {
+          const argChain = tryPureChain(a);
+          if (argChain !== null) {
+            // domain is required of the *value* of the chain → substitute leaf
+            mergeDemand(into, argChain.root, substituteLeaf(shapeFromSteps(argChain.steps), domain));
+          }
+        }
+      }
+    }
+  }
+
+  for (const c of n.list) collectDemandsInNode(c, into, localDomains);
 }
 
-/** Demands for a set of formal names from body forms (render-ready). */
-function demandsForFormals(bodyForms: readonly Node[], formalNames: readonly string[]): Map<string, string> {
+/** Demands for formals: pure chains ⊔ list-preserve ⊔ local callee domains (fused). */
+function demandsForFormals(
+  bodyForms: readonly Node[],
+  formalNames: readonly string[],
+  localDomains: ReadonlyMap<string, DemandShape>,
+): Map<string, string> {
   const shapes = new Map<string, DemandShape>();
-  for (const f of bodyForms) collectDemandsInNode(f, shapes);
+  for (const f of bodyForms) collectDemandsInNode(f, shapes, localDomains);
   const out = new Map<string, string>();
   const want = new Set(formalNames);
   for (const name of want) {
@@ -1058,6 +1122,7 @@ function emitLambda(n: ListNode, ctx: Ctx): void {
   const demands = demandsForFormals(
     bodyForms,
     params.filter((p) => !p.rest).map((p) => p.atom.atom),
+    ctx.localDomains,
   );
   ctx.buf.raw("(");
   emitAnnotatedParams(params, demands, ctx);
@@ -1177,6 +1242,7 @@ function emitNamedLetBlock(n: ListNode, ctx: Ctx, lastPrefix: string): void {
   const demands = demandsForFormals(
     bodyForms,
     varAtoms.filter((a) => !a.str).map((a) => a.atom),
+    ctx.localDomains,
   );
   ctx.buf.raw("{ ");
   ctx.buf.raw(`const ${name} = (`);
@@ -1312,6 +1378,7 @@ function emitDefine(n: ListNode, ctx: Ctx): void {
     const demands = demandsForFormals(
       bodyForms,
       params.filter((p) => !p.rest).map((p) => p.atom.atom),
+      ctx.localDomains,
     );
     const kw = ctx.setVars.has(name) ? "let" : "const";
     ctx.buf.raw(`${kw} ${name} = (`);
@@ -1456,6 +1523,8 @@ export function emitTypes(source: string | readonly Node[], opts?: EmitTypesOpti
     ...(opts?.kwargsMembers ?? EMPTY_SET),
     ...collectPromptKwargHeads(forest),
   ]);
+  // Compose/pipe domains for fusing callee expectations onto binder formals.
+  const localDomains = collectLocalDomains(forest);
   const ctxBase: Ctx = {
     buf,
     nameOf,
@@ -1465,6 +1534,7 @@ export function emitTypes(source: string | readonly Node[], opts?: EmitTypesOpti
     kwargsMembers,
     declaredNames: new Map(),
     requireBindings: opts?.requireBindings ?? new Map(),
+    localDomains,
   };
 
   for (const [idx, form] of forest.entries()) {

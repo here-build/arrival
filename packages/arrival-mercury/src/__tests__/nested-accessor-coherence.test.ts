@@ -77,4 +77,29 @@ describe("nested accessor coherence — binder demand harvest", () => {
     const { ts } = emitTypes("(map :score xs)");
     expect(ts).toContain("<A,>(x: A): A extends { score: infer S } ? S : unknown");
   });
+
+  it("fuses pure-chain + local compose domain (not incomplete { id } alone)", () => {
+    // (:id persona) ⊔ (state-of persona) → { id; versions: List<{ state }> }
+    const { ts } = emitTypes(`
+(define state-of (compose :state last :versions))
+(define (triage-one persona reaction tagline)
+  (str (:id persona) (state-of persona) tagline reaction))
+`);
+    expect(ts).toMatch(/persona:\s*\{[^}]*id:\s*any/);
+    expect(ts).toMatch(/persona:\s*\{[^}]*versions:\s*List<\s*\{\s*state:\s*any\s*\}\s*>/);
+    // Collapsed single annotation (both keys), not bare and not id-only.
+    expect(ts).toMatch(/\(persona:\s*\{[^)]*id:\s*any[^)]*versions:/);
+  });
+
+  it("fuses multi list demands on one param (field chains + car)", () => {
+    // (map :field value) not in pure chain on value as list root the same way —
+    // (:field (car value)) + (:test (car value)) + (cdr value)
+    const { ts } = emitTypes(`
+(define (probe value)
+  (list (:field (car value)) (:test (car value)) (cdr value)))
+`);
+    // List of objects with both field and test
+    expect(ts).toMatch(/value:\s*List<\s*\{[^}]*field:\s*any/);
+    expect(ts).toMatch(/value:\s*List<\s*\{[^}]*test:\s*any/);
+  });
 });
