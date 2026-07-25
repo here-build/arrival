@@ -4,6 +4,13 @@
 export { emitTypes, type EmitTypesOptions, type EmitTypesResult, type Mapping } from "./emit.js";
 export { narrowsMembersOf } from "./narrows.js";
 export {
+  emitDataRequireFace,
+  emitHbsRequireFace,
+  emitPromptRequireFace,
+  emitRequireFaceModule,
+  emitTypedRequireFace,
+} from "./require-face.js";
+export {
   decodeSchemeIdent,
   encodeSchemeIdent,
   isPlainIdent,

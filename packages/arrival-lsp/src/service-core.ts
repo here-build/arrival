@@ -17,6 +17,7 @@ import { parseSexprs, type Node } from "@inhuman.tools/arrival-sugarcoat";
 // Subpath only — package root pulls model/oracle graph; type-emit is front+Buf only
 // (avoids circular load with arrival-mercury ↔ type-lens at the module level).
 import {
+  emitRequireFaceModule,
   emitTypes,
   encodeSchemeIdent,
   decodeSchemeIdent,
@@ -772,19 +773,23 @@ export function createSchemeLanguageServiceCore(
       };
       for (const r of programRequires) collectDepTree(r.path);
     }
-    // Data/prompt requires → require-as-import (per-file default export):
-    //   // __req__/react.prompt.ts
-    //   const __default = null as any as (vars: {…}) => string;
-    //   export default __default;
-    //   import __req0 from "./__req__/react.prompt.ts";
-    // Host.resolveModuleNameLiterals wires the specifier to the virtual file.
+    // Data/prompt/hbs requires → require-as-import (per-file default export).
+    // Face text from type-emit/require-face.ts (simplified twin of build/*-module).
+    // Content from resolveModule when the host files table has it (studio/build-typelevel).
     const nextData = new Map<string, string>();
     const importLines: string[] = [];
     const requireBindings = new Map<string, string>();
     let reqI = 0;
     for (const [path, reqType] of dataReqTypes) {
       const virt = `__req__/${path}.ts`;
-      nextData.set(virt, `const __default = null as any as ${reqType};\nexport default __default;\n`);
+      const content = resolve?.(path) ?? null;
+      nextData.set(
+        virt,
+        emitRequireFaceModule(path, content, reqType, {
+          hostMembers: emitterMembers(),
+          kwargsMembers: emitterKwargsMembers(),
+        }),
+      );
       const binding = `__req${reqI++}`;
       importLines.push(`import ${binding} from ${JSON.stringify(`./${virt}`)};`);
       requireBindings.set(path, binding);
