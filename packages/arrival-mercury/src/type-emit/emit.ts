@@ -995,7 +995,10 @@ function formalShapesOf(
   return result;
 }
 
-/** Apply a required shape to an argument expression (atom / list / pure chain). */
+/**
+ * Push a required shape through an argument expression onto free roots.
+ * Handles: bare atom, (list …), (cons h t), pure field/elem chains.
+ */
 function applyDomainToArg(
   arg: Node,
   domain: DemandShape,
@@ -1012,9 +1015,40 @@ function applyDomainToArg(
     }
     return;
   }
+  // (cons h t) + List<E> → h needs E, t needs List<E>
+  if (isList(arg) && head(arg) === "cons" && domain.kind === "list" && arg.list.length >= 3) {
+    applyDomainToArg(arg.list[1]!, domain.elem, into);
+    applyDomainToArg(arg.list[2]!, domain, into);
+    return;
+  }
   const argChain = tryPureChain(arg);
   if (argChain !== null) {
     mergeDemand(into, argChain.root, substituteLeaf(shapeFromSteps(argChain.steps), domain));
+  }
+}
+
+/**
+ * Let / named-let: body demands + reverse one-hop through binding inits
+ * (pure chain, list, cons) so free roots in inits pick up consumer domains.
+ * Reverse order: later bindings (history+) first so their demand reaches earlier
+ * free roots (history) via (cons entry history).
+ */
+function harvestLetLike(
+  pairs: { name: string; init: Node }[],
+  bodyForms: readonly Node[],
+  into: Map<string, DemandShape>,
+  dctx: DemandHarvestCtx,
+): void {
+  const localNames = new Set(pairs.map((p) => p.name));
+  const local = new Map<string, DemandShape>();
+  for (const f of bodyForms) collectDemandsInNode(f, local, dctx);
+  for (const { name, init } of [...pairs].reverse()) {
+    const Cp = local.get(name);
+    if (Cp !== undefined) applyDomainToArg(init, Cp, local);
+    collectDemandsInNode(init, local, dctx);
+  }
+  for (const [name, shape] of local) {
+    if (!localNames.has(name)) mergeDemand(into, name, shape);
   }
 }
 
@@ -1030,66 +1064,35 @@ function collectDemandsInNode(
 ): void {
   if (!isList(n) || isNil(n)) return;
 
-  // Named let: body demands on loop vars + one-hop init → outer free roots.
+  // Named let: body demands + reverse one-hop through inits → outer free roots.
   if (isNamedLetForm(n)) {
     const bindings = n.list[2];
     const bodyForms = n.list.slice(3);
-    const localNames = new Set<string>();
     const pairs: { name: string; init: Node }[] = [];
     if (isList(bindings)) {
       for (const b of bindings.list) {
         if (isList(b) && isAtom(b.list[0]) && !b.list[0]!.str) {
-          localNames.add(b.list[0]!.atom);
           pairs.push({ name: b.list[0]!.atom, init: b.list[1] ?? { atom: "#f" } });
         }
       }
     }
-    const local = new Map<string, DemandShape>();
-    for (const f of bodyForms) collectDemandsInNode(f, local, dctx);
-    for (const { name, init } of pairs) {
-      const Cp = local.get(name);
-      if (Cp === undefined) continue;
-      const chain = tryPureChain(init);
-      if (chain !== null) {
-        mergeDemand(into, chain.root, substituteLeaf(shapeFromSteps(chain.steps), Cp));
-      }
-      collectDemandsInNode(init, into, dctx);
-    }
-    for (const [name, shape] of local) {
-      if (!localNames.has(name)) mergeDemand(into, name, shape);
-    }
+    harvestLetLike(pairs, bodyForms, into, dctx);
     return;
   }
 
-  // Plain let: same one-hop for bindings.
+  // Plain let / let*: same reverse one-hop (list, cons, pure chain).
   if (isPlainLetForm(n)) {
     const bindings = n.list[1];
     const bodyForms = n.list.slice(2);
-    const localNames = new Set<string>();
     const pairs: { name: string; init: Node }[] = [];
     if (isList(bindings)) {
       for (const b of bindings.list) {
         if (isList(b) && isAtom(b.list[0]) && !b.list[0]!.str) {
-          localNames.add(b.list[0]!.atom);
           pairs.push({ name: b.list[0]!.atom, init: b.list[1] ?? { atom: "#f" } });
         }
       }
     }
-    const local = new Map<string, DemandShape>();
-    for (const f of bodyForms) collectDemandsInNode(f, local, dctx);
-    for (const { name, init } of pairs) {
-      const Cp = local.get(name);
-      if (Cp !== undefined) {
-        const chain = tryPureChain(init);
-        if (chain !== null) {
-          mergeDemand(into, chain.root, substituteLeaf(shapeFromSteps(chain.steps), Cp));
-        }
-      }
-      collectDemandsInNode(init, into, dctx);
-    }
-    for (const [name, shape] of local) {
-      if (!localNames.has(name)) mergeDemand(into, name, shape);
-    }
+    harvestLetLike(pairs, bodyForms, into, dctx);
     return;
   }
 
@@ -1111,26 +1114,32 @@ function collectDemandsInNode(
   }
 
   // (map (lambda (e) …) history) → history : List<demands(e)>
+  // (map (lambda (p r) …) personas reactions) → zip: each list gets List<demands(param_i)>
   // (map :field xs) → xs : List<{ field: any }>
   if (isAtom(n.list[0]) && !n.list[0]!.str && n.list[0]!.atom === "map" && n.list.length >= 3) {
     const f = n.list[1]!;
-    const xs = n.list[2]!;
-    let elemShape: DemandShape | null = null;
     if (isList(f) && head(f) === "lambda") {
       const params = paramAtoms(f.list[1]);
-      if (params.length >= 1 && !params[0]!.rest) {
-        const lamBody = f.list.slice(2);
-        const local = new Map<string, DemandShape>();
-        for (const b of lamBody) collectDemandsInNode(b, local, dctx);
-        const s = local.get(params[0]!.atom.atom);
-        if (s !== undefined && s.kind !== "any") elemShape = s;
+      const lamBody = f.list.slice(2);
+      const local = new Map<string, DemandShape>();
+      for (const b of lamBody) collectDemandsInNode(b, local, dctx);
+      // Multi-list zip: param i ↔ list arg at index 2+i
+      for (let i = 0; i < params.length; i++) {
+        if (params[i]!.rest) break;
+        const listArg = n.list[2 + i];
+        if (listArg === undefined) break;
+        const s = local.get(params[i]!.atom.atom);
+        if (s !== undefined && s.kind !== "any") {
+          applyDomainToArg(listArg, { kind: "list", elem: s }, into);
+        }
       }
     } else if (isKeyword(f)) {
       // isKeyword already means :field atom (not bare ":")
-      elemShape = { kind: "obj", fields: new Map([[keywordName(f), DEMAND_ANY]]) };
-    }
-    if (elemShape !== null) {
-      applyDomainToArg(xs, { kind: "list", elem: elemShape }, into);
+      const elemShape: DemandShape = {
+        kind: "obj",
+        fields: new Map([[keywordName(f), DEMAND_ANY]]),
+      };
+      applyDomainToArg(n.list[2]!, { kind: "list", elem: elemShape }, into);
     }
   }
 
@@ -1420,12 +1429,19 @@ function emitQuoteDatum(datum: Node | undefined, ctx: Ctx): void {
     else ctx.buf.raw(JSON.stringify(datum.atom)); // quoted symbol → string
     return;
   }
-  ctx.buf.raw("[");
+  // Empty list ≡ null (List brand: List<T> = Cons<T> | null). Not [] — that is
+  // unknown[] and breaks seed args like (loop … '()).
+  if (isNil(datum) || datum.list.length === 0) {
+    ctx.buf.raw("null");
+    return;
+  }
+  // Non-empty quoted list → list(...) so the brand is List, not a TS array.
+  ctx.buf.raw("list(");
   for (const [idx, d] of datum.list.entries()) {
     if (idx > 0) ctx.buf.raw(", ");
     emitQuoteDatum(d, ctx);
   }
-  ctx.buf.raw("]");
+  ctx.buf.raw(")");
 }
 
 // ── statement-position emit (top-level + body) ───────────────────────────────

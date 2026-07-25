@@ -130,4 +130,46 @@ describe("nested accessor coherence — binder demand harvest", () => {
       /parent\$dash\$best\$dash\$entry:\s*\{\s*tagline:\s*any;\s*reactions:\s*any\s*\}/,
     );
   });
+
+  it("multi-list map zips each lambda param onto its list (reactions-summary)", () => {
+    // (map (lambda (p r) (:id p) (:verdict r) (:concern r)) personas reactions)
+    // must demand reactions : List<{ verdict; concern }>, not only personas.
+    const { ts } = emitTypes(`
+(define (reactions-summary reactions personas)
+  (map (lambda (p r)
+         (dict :persona (:id p) :verdict (:verdict r) :concern (:concern r)))
+       personas reactions))
+(define (next-tagline current reactions personas)
+  (reactions-summary reactions personas))
+`);
+    expect(ts).toMatch(/reactions\$dash\$summary = \(reactions:\s*List<\s*\{[^)]*verdict:\s*any/);
+    expect(ts).toMatch(/reactions\$dash\$summary = \(reactions:\s*List<\s*\{[^)]*concern:\s*any/);
+    // Callee formal domain fuse onto next-tagline's reactions
+    expect(ts).toMatch(
+      /next\$dash\$tagline = \(current,\s*reactions:\s*List<\s*\{[^)]*verdict:\s*any/,
+    );
+  });
+
+  it("cons reverse + let* one-hop: history formal gets List from frontier-of via history+", () => {
+    // (history+ (cons entry history)) (frontier-of history+) must annotate
+    // loop's history as List<{ tagline; reactions }>, not leave it bare → List<unknown>.
+    const { ts } = emitTypes(`
+(define (frontier-of history)
+  (map (lambda (e) (list (:tagline e) (:reactions e))) history))
+(define (gepa)
+  (define (loop history)
+    (let* ((entry (dict :tagline "t" :score 1 :reactions '()))
+           (history+ (cons entry history))
+           (fr (frontier-of history+)))
+      (loop history+)))
+  (loop '()))
+`);
+    expect(
+      ts,
+      "loop history must pick up List domain through (cons entry history) under frontier-of",
+    ).toMatch(/loop = \(history:\s*List<\s*\{\s*tagline:\s*any;\s*reactions:\s*any\s*\}/);
+    // Empty quote is List null brand, not unknown[]
+    expect(ts).toContain("loop(null)");
+    expect(ts).not.toMatch(/loop\(\[\]\)/);
+  });
 });
