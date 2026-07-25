@@ -188,15 +188,20 @@ describe("type-emit: all-or-nothing (mixed clauses wrap whole)", () => {
 });
 
 describe("type-emit: inputRest kwargs vs keyword-as-fn", () => {
-  it("(map :id xs) — positional keyword-as-fn, not kwargs collapse", () => {
+  it("(map :id xs) — unconstrained A + conditional return (HOF-safe)", () => {
     const r = emitTypes("(map :id xs)");
-    expect(r.ts).toContain('map((x) => x["id"], xs)');
+    // Free A so map's (a: unknown) => … accepts this; return precise when A is a row.
+    expect(r.ts).toContain('<A,>(x: A): A extends { id: infer S } ? S : unknown => (x as any)["id"]');
     expect(r.ts).not.toContain("map({");
+    expect(r.ts).not.toContain('(x) => x["id"]');
+    expect(r.ts).not.toContain("A extends { id: any }");
   });
 
   it("(where :mismatch #f) — two positionals, key is accessor eta", () => {
     const r = emitTypes("(define (where key val) (lambda (r) (equal? (key r) val)))\n(where :mismatch #f)");
-    expect(r.ts).toContain('where((x) => x["mismatch"], false)');
+    expect(r.ts).toContain(
+      '<A,>(x: A): A extends { mismatch: infer S } ? S : unknown => (x as any)["mismatch"]',
+    );
     expect(r.ts).not.toContain("where({");
   });
 
@@ -215,7 +220,9 @@ describe("type-emit: inputRest kwargs vs keyword-as-fn", () => {
       hostMembers: new Set(["field"]),
       // field is NOT in kwargsMembers
     });
-    expect(r.ts).toContain('field((x) => x["name"], row)');
+    expect(r.ts).toContain(
+      'field(<A,>(x: A): A extends { name: infer S } ? S : unknown => (x as any)["name"], row)',
+    );
     expect(r.ts).not.toContain("field({");
   });
 
@@ -238,6 +245,25 @@ describe("type-emit: inputRest kwargs vs keyword-as-fn", () => {
       '(define triage (require "triage.prompt"))\n(triage "k" :summary s :tagline t)',
     );
     expect(r.ts).toContain('triage({ key: "k", summary: s, tagline: t })');
+  });
+});
+
+describe("type-emit: bare formals (lambda args …)", () => {
+  it("(lambda args …) → (...args) => … — polyglot str shape, not zero-arg", () => {
+    // R5RS bare formals: whole arg list bound to `args`. Without rest emit this
+    // collapsed to `() => …` and (str a b c d) reported "Expected 0 arguments, but got 4".
+    const r = emitTypes(
+      '(define str (lambda args (apply string-append (map (lambda (x) x) args))))\n(str "a" 1 "b" "c")',
+    );
+    expect(r.ts).toMatch(/\(\.\.\.args\)\s*=>/);
+    expect(r.ts).toContain('str("a", 1, "b", "c")');
+    expect(r.ts).not.toMatch(/const str = \(\)\s*=>/);
+  });
+
+  it("(lambda (a . rest) …) still dotted-rest emits", () => {
+    const r = emitTypes("(define f (lambda (a . rest) rest))\n(f 1 2 3)");
+    expect(r.ts).toMatch(/\(a, \.\.\.rest\)\s*=>/);
+    expect(r.ts).toContain("f(1, 2, 3)");
   });
 });
 

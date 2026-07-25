@@ -222,10 +222,26 @@ function emitAtom(a: Atom, ctx: Ctx): void {
   ctx.buf.spanned(emitName(a, ctx), a);
 }
 
-/** `(x) => x["k"]` — eta of `(:k ·)` / keyword-as-fn for HOF first args. */
+/**
+ * Keyword-as-fn / field-accessor eta for HOF first args: `(map :score xs)`.
+ *
+ * Not a plain `(x) => x["k"]` (under map that becomes `(x: unknown) => any` and
+ * bites "'x' is of type 'unknown'"). Not `A extends { k: any }` either — that
+ * is *too* strict for HOFs: when the collection is `List<unknown>`, map asks
+ * for `(a: unknown) => …`, and a constrained A is not assignable (contravariance).
+ *
+ * Unconstrained A + conditional return:
+ *   `<A,>(x: A): A extends { score: infer S } ? S : unknown => (x as any)["score"]`
+ * — accepts unknown from map; when A is a known row, return is A["score"].
+ */
 function emitKeywordAsFn(key: string, node: Node, ctx: Ctx): void {
   const start = ctx.buf.offset;
-  ctx.buf.raw(`(x) => x[${JSON.stringify(key)}]`);
+  const kJson = JSON.stringify(key);
+  // Type-position property: bare ident when legal, else quoted.
+  const kType = TS_IDENT.test(key) ? key : kJson;
+  ctx.buf.raw(
+    `<A,>(x: A): A extends { ${kType}: infer S } ? S : unknown => (x as any)[${kJson}]`,
+  );
   recordSpan(ctx, start, node);
 }
 
@@ -1082,8 +1098,23 @@ function emitDefine(n: ListNode, ctx: Ctx): void {
 
 // ── pure helpers ─────────────────────────────────────────────────────────────
 
-/** Parameter atoms, dotted rest `(a b . rest)` flagged. */
+/**
+ * Parameter atoms for lambda / define formals.
+ *
+ * - `(a b c)` → fixed params
+ * - `(a b . rest)` → fixed + rest (`...rest`)
+ * - bare atom `args` → rest-only (`...args`) — R5RS formals-as-symbol
+ *
+ * **Bare formals law** (polyglot `str`, etc.): the formal is *arbitrary length*
+ * (`...args`). The element type is not invented here — emit is unannotated;
+ * the lens's "infer from consumers" pass finds the common denominator of body
+ * (and call-site) uses of `args`. Wrong: zero-arity `() => …` (arity false-
+ * positive "Expected 0 arguments, but got N").
+ */
 function paramAtoms(node: Node | undefined): { atom: Atom; rest: boolean }[] {
+  if (node === undefined) return [];
+  // `(lambda args body)` — whole arg list as one rest binding.
+  if (isAtom(node) && !node.str) return [{ atom: node, rest: true }];
   if (!isList(node)) return [];
   const out: { atom: Atom; rest: boolean }[] = [];
   for (let i = 0; i < node.list.length; i++) {

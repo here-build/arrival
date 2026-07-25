@@ -102,7 +102,15 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
       // Genuinely variadic-any input (any value has a display form); the output
       // is unconditionally a string.
       str: symbol.define`str: Clojure — concatenate the display form of every arg (strings as-is, everything else via repr)`(
-        { input: [], inputRest: z.schemeValue, output: [z.string] },
+        {
+          input: [],
+          inputRest: z.schemeValue,
+          output: [z.string],
+          // Honest ambient type: any arity, any values (lists included — printed
+          // via repr, not auto-joined). Without this the lens overfitted rest to
+          // List<string> from string-only call sites and rejected (str "\n" (map …)).
+          type: "(...args: unknown[]) => string",
+        },
         `(lambda args
          (apply string-append (map (lambda (x) (if (string? x) x (repr x))) args)))`,
       ),

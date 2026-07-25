@@ -368,6 +368,120 @@ function annotatableType(rendered: string): boolean {
   return true;
 }
 
+/** Rest annotations that carry no information — leave bare `...args` instead. */
+function isTrivialRestType(rendered: string): boolean {
+  return (
+    rendered === "any" ||
+    rendered === "unknown" ||
+    rendered === "any[]" ||
+    rendered === "unknown[]" ||
+    rendered === "List<any>" ||
+    rendered === "List<unknown>" ||
+    rendered === "readonly any[]" ||
+    rendered === "readonly unknown[]"
+  );
+}
+
+/**
+ * `List<string>` / `string[]` as a *rest* annotation is almost always an overfit:
+ * multi-pass inference pins the map callback to `string` (string-append / narrow),
+ * then forces `args: List<string>`, rejecting polymorphic rest (polyglot `str`
+ * accepts any via `repr`). Bare rest is honest; body still typechecks.
+ */
+function isOverfitPrimitiveRestList(rendered: string): boolean {
+  return /^(List|ReadonlyArray|readonly\s+\w+\[\]|Array)<(string|number|boolean)>$/.test(rendered)
+    || /^(string|number|boolean)\[\]$/.test(rendered)
+    || /^readonly (string|number|boolean)\[\]$/.test(rendered);
+}
+
+/**
+ * Common denominator of rendered types from consumers.
+ * One type → that type. Several → small union when all annotatable. Else null
+ * (no forced annotation — better bare than a wrong invent).
+ */
+function commonDenominatorType(types: ReadonlySet<string>): string | null {
+  const usable = [...types].filter((t) => annotatableType(t) && !isTrivialRestType(t));
+  if (usable.length === 0) return null;
+  if (usable.length === 1) return usable[0]!;
+  if (usable.length <= 4) return [...usable].sort().join(" | ");
+  return null;
+}
+
+/**
+ * Rest / bare-formals annotation.
+ *
+ * 1. Body consumers of the rest *list* (e.g. `map(f, args)` expects a list) —
+ *    one non-trivial type wins.
+ * 2. Body present but only trivial (`List<any>`) or conflicting → **leave bare**.
+ *    Do NOT mine call-site elements: partial usage overfits (polyglot `str` is
+ *    often called with strings, so call sites said `List<string>`, then
+ *    `(str "\n" (map …))` failed — but runtime `str` accepts any via `repr`).
+ * 3. Body completely silent (no contextual uses) → call-site *element* common
+ *    denom as `List<T>`.
+ */
+function inferRestParamAnnotation(
+  restName: string,
+  body: ts.ConciseBody,
+  boundName: string | undefined,
+  restParamIndex: number,
+  sf: ts.SourceFile,
+  checker: ts.TypeChecker,
+): string | null {
+  const bodyTypes = expectedTypesOf(restName, body, checker);
+  if (bodyTypes !== null && bodyTypes.size >= 1) {
+    if (bodyTypes.size === 1) {
+      const t = [...bodyTypes][0]!;
+      if (
+        !isTrivialRestType(t) &&
+        !isOverfitPrimitiveRestList(t) &&
+        annotatableType(t)
+      ) {
+        return t;
+      }
+    }
+    // Trivial / primitive-list overfit / multi: bare rest (polymorphic domain).
+    return null;
+  }
+  // Body silent — hand off to call-site elements.
+  if (boundName === undefined) return null;
+  const elements = expectedRestElementTypesFromCallSites(boundName, restParamIndex, sf, checker);
+  if (elements === null) return null;
+  const el = commonDenominatorType(elements);
+  if (el === null) return null;
+  if (/^List</.test(el) || /\[\]$/.test(el) || /^readonly /.test(el)) return el;
+  return `List<${el}>`;
+}
+
+/**
+ * Element types contributed to a rest param by call sites of `fnName`.
+ * For `f(a, b, c)` with rest at index 1 → types of `b` and `c` (not `a`).
+ * Bare formals rest at 0 → every argument's type.
+ */
+function expectedRestElementTypesFromCallSites(
+  fnName: string,
+  restParamIndex: number,
+  sf: ts.SourceFile,
+  checker: ts.TypeChecker,
+): Set<string> | null {
+  const expected = new Set<string>();
+  let blocked = false;
+  const walk = (n: ts.Node): void => {
+    if (blocked) return;
+    if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === fnName) {
+      for (let i = restParamIndex; i < n.arguments.length; i++) {
+        const raw = checker.getTypeAtLocation(n.arguments[i]!);
+        const t = checker.getBaseTypeOfLiteralType(raw);
+        const rendered = checker.typeToString(t);
+        if (annotatableType(rendered)) expected.add(rendered);
+        else if (rendered !== "any" && rendered !== "unknown" && rendered !== "never") blocked = true;
+      }
+    }
+    ts.forEachChild(n, walk);
+  };
+  walk(sf);
+  return blocked ? null : expected;
+}
+
 // schemeifyTsText — re-exported from mercury/type-emit (single source of truth).
 export { schemeifyTsText } from "@inhuman.tools/arrival-mercury/type-emit";
 
@@ -912,6 +1026,10 @@ export function createSchemeLanguageServiceCore(
    *
    * Unanimous annotatable type → insert. Conflict / unprintable → skip
    * (never a wrong annotation).
+   *
+   * **Rest / bare formals** (`...args` from `(lambda args …)`): arbitrary length;
+   * type is a handoff to consumers — common denominator of body list uses, else
+   * of call-site *element* types. See {@link inferRestParamAnnotation}.
    */
   function inferParamInsertions(): { pos: number; text: string }[] {
     const program = service.getProgram();
@@ -924,15 +1042,17 @@ export function createSchemeLanguageServiceCore(
         const boundName = constBindingNameOfArrow(node);
         node.parameters.forEach((param, paramIndex) => {
           if (param.type !== undefined || !ts.isIdentifier(param.name)) return;
-          // Rest params (`...items`): a call site's *one* argument at this index is a
-          // single value (`"a"`), not the rest array. Annotating `...items: "a"` is
-          // illegal TS ("rest parameter must be of an array type") and produced
-          // phantom "required file has N type errors" on clean util helpers whose
-          // rest was refined from a consumer call. Body use-sites still type rest.
           if (param.dotDotDotToken !== undefined) {
-            const body = expectedTypesOf(param.name.text, node.body, checker);
-            if (body !== null && body.size === 1) {
-              insertions.push({ pos: param.name.end, text: `: ${[...body][0]!}` });
+            const restAnn = inferRestParamAnnotation(
+              param.name.text,
+              node.body,
+              boundName,
+              paramIndex,
+              sf,
+              checker,
+            );
+            if (restAnn !== null) {
+              insertions.push({ pos: param.name.end, text: `: ${restAnn}` });
             }
             return;
           }
