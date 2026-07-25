@@ -7,6 +7,7 @@ export {
   decodeSchemeIdent,
   encodeSchemeIdent,
   isPlainIdent,
+  schemeifyTsText,
   schemeIdentIsBareTs,
   SCHEME_IDENT_CHAR_TOKENS,
   SCHEME_IDENT_RESERVED,

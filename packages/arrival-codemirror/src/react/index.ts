@@ -6,4 +6,7 @@ export {
   setSchemeIdeFiles,
   setSchemeIdeRequireTypes,
   configureSchemeIdeHost,
+  getSchemeIdeAudit,
+  type SchemeIdeAudit,
+  type SchemeIdeCanary,
 } from "./use-scheme-ide.js";

@@ -27,7 +27,7 @@ export type {
   SchemeLanguageServiceOptions,
   ServiceEnvironment,
 } from "./service-core.js";
-export { createSchemeLanguageServiceCore } from "./service-core.js";
+export { createSchemeLanguageServiceCore, schemeifyTsText } from "./service-core.js";
 
 // Direct from installed `typescript` (fs + strip) to match browser exactly.
 function loadNodeTsLibFiles(): readonly (readonly [string, string])[] {

@@ -16,7 +16,12 @@ import { PROGRAM_FILE } from "@inhuman.tools/arrival-internals-types-prelude/vir
 import { parseSexprs, type Node } from "@inhuman.tools/arrival-sugarcoat";
 // Subpath only — package root pulls model/oracle graph; type-emit is front+Buf only
 // (avoids circular load with arrival-mercury ↔ type-lens at the module level).
-import { emitTypes, encodeSchemeIdent, decodeSchemeIdent } from "@inhuman.tools/arrival-mercury/type-emit";
+import {
+  emitTypes,
+  encodeSchemeIdent,
+  decodeSchemeIdent,
+  schemeifyTsText,
+} from "@inhuman.tools/arrival-mercury/type-emit";
 import ts from "typescript";
 
 import { balancePrefix, stringLiteralType } from "./balance.js";
@@ -281,14 +286,79 @@ function expectedTypesOf(name: string, body: ts.Node, checker: ts.TypeChecker): 
   return blocked ? null : expected;
 }
 
+/**
+ * Call-site twin of {@link expectedTypesOf}: for a const-bound arrow
+ *   `const f = (a, b) => …`  with later  `f(x, y)`
+ * collect the checker type of argument `paramIndex` at every call of `f`.
+ *
+ * This is what makes compose pipelines work without `any` leaf overloads:
+ *   `(define state-of (compose :state last :versions))`
+ *   → `const state$dash$of = (it) => last(it["versions"])["state"]`
+ *   + `state$dash$of(persona)` where `persona` is a typed row
+ *   → annotate `it: <persona type>` so `last` returns a row with `.state`.
+ *
+ * Body use-site contextual typing cannot see this (indexing `it["versions"]`
+ * has no useful expected type). Call sites are the domain of the function.
+ *
+ * Empty set = no usable call-site evidence (not blocked). `null` = blocked.
+ */
+function expectedTypesFromCallSites(
+  fnName: string,
+  paramIndex: number,
+  sf: ts.SourceFile,
+  checker: ts.TypeChecker,
+): Set<string> | null {
+  const expected = new Set<string>();
+  let blocked = false;
+  const walk = (n: ts.Node): void => {
+    if (blocked) return;
+    if (
+      ts.isCallExpression(n) &&
+      ts.isIdentifier(n.expression) &&
+      n.expression.text === fnName &&
+      n.arguments[paramIndex] !== undefined
+    ) {
+      const t = checker.getTypeAtLocation(n.arguments[paramIndex]!);
+      const rendered = checker.typeToString(t);
+      if (annotatableType(rendered)) expected.add(rendered);
+      // any/unknown at a call site is "no evidence", not a block — skip.
+      else if (rendered !== "any" && rendered !== "unknown" && rendered !== "never") blocked = true;
+    }
+    ts.forEachChild(n, walk);
+  };
+  walk(sf);
+  return blocked ? null : expected;
+}
+
+/**
+ * If `arrow` is the initializer of a `const name = (params) => …` binding,
+ * return `name`. Only direct const binding — reassignments / exports skipped.
+ */
+function constBindingNameOfArrow(arrow: ts.ArrowFunction): string | undefined {
+  const parent = arrow.parent;
+  if (!ts.isVariableDeclaration(parent)) return undefined;
+  if (parent.initializer !== arrow) return undefined;
+  if (!ts.isIdentifier(parent.name)) return undefined;
+  // Prefer const — let/var reassignment would make call-site types lie.
+  const list = parent.parent;
+  if (!ts.isVariableDeclarationList(list)) return undefined;
+  if ((list.flags & ts.NodeFlags.Const) === 0) return undefined;
+  return parent.name.text;
+}
+
 /** The rendered-type gate for inferred annotations: reject the unknowable and
  *  the unprintable (an annotation must round-trip through the ambient
  *  prelude's vocabulary). */
 function annotatableType(rendered: string): boolean {
   if (rendered === "any" || rendered === "unknown" || rendered === "never") return false;
-  if (rendered.length > 60 || rendered.includes("qzcursorzq") || rendered.includes("__")) return false;
+  // Compose/persona shapes can be wide object types — allow more than 60 chars
+  // but still reject noise sentinels and runaway dumps.
+  if (rendered.length > 200 || rendered.includes("qzcursorzq") || rendered.includes("__")) return false;
   return true;
 }
+
+// schemeifyTsText — re-exported from mercury/type-emit (single source of truth).
+export { schemeifyTsText } from "@inhuman.tools/arrival-mercury/type-emit";
 
 // An atom character (arrival's lexer: not whitespace/bracket/string/quote/comment) —
 // the same class the sampler's typed-scanner uses for partial-atom stripping.
@@ -666,13 +736,16 @@ export function createSchemeLanguageServiceCore(
     // legal scheme — same precedence the completion subtraction/dedup elsewhere gives locals).
     programDeclaredNames = new Map([...depDeclaredNames, ...declaredNames]);
 
-    // 2. Parameter inference: each unannotated arrow param's USE SITES are
-    //    asked (checker.getContextualType) what they expect; unanimous →
-    //    `: T` injected at the param. Then every coordinate system shifts:
-    //    an insertion at p moves positions ≥ p and widens spans containing p.
-    const insertions = inferParamInsertions();
-    let programMappings: { tsStart: number; tsLength: number; schemeStart: number; schemeLength: number }[];
-    if (insertions.length > 0) {
+    // 2. Parameter inference (multi-pass): inject `: T` from call sites + body
+    // contextual types. Multiple passes so annotations flow through chains —
+    // e.g. `demo(sample)` types `p`, then `state-of(p)` types `it` for compose.
+    // Each pass recompiles (programVersion++) so the checker sees prior inserts.
+    let programMappings: { tsStart: number; tsLength: number; schemeStart: number; schemeLength: number }[] =
+      mappings.map((m) => ({ ...m, tsStart: m.tsStart + programBase }));
+    const MAX_INFER_PASSES = 4;
+    for (let pass = 0; pass < MAX_INFER_PASSES; pass++) {
+      const insertions = inferParamInsertions();
+      if (insertions.length === 0) break;
       let next = "";
       let at = 0;
       for (const ins of insertions) {
@@ -695,13 +768,11 @@ export function createSchemeLanguageServiceCore(
         u.length = shiftAt(u.base + u.length) - newBase;
         u.base = newBase;
       }
-      programMappings = mappings.map((m) => ({
+      programMappings = programMappings.map((m) => ({
         ...m,
-        tsLength: widen(programBase + m.tsStart, m.tsLength),
-        tsStart: shiftAt(programBase + m.tsStart),
+        tsLength: widen(m.tsStart, m.tsLength),
+        tsStart: shiftAt(m.tsStart),
       }));
-    } else {
-      programMappings = mappings.map((m) => ({ ...m, tsStart: m.tsStart + programBase }));
     }
 
     // 3. Mappers over the FINAL text.
@@ -714,14 +785,20 @@ export function createSchemeLanguageServiceCore(
     return new Mapper(programMappings, scheme, programText);
   }
 
-  /** "Infer from consumers": for every UNANNOTATED arrow parameter in the
-   *  current program module, collect what its use sites EXPECT
-   *  (checker.getContextualType — `(string-append str1 …)` expects SStr at
-   *  str1's slot) and, when all sites agree on one rendered type, produce a
-   *  `: T` insertion at the parameter. Shadowed inner re-bindings are skipped;
-   *  conflicting or unknowable sites leave the param unannotated (the
-   *  conservative degrade — never a wrong annotation, TS generics can't do
-   *  this at all: they infer at call sites, never from bodies). */
+  /**
+   * "Infer from consumers" — for every UNANNOTATED arrow parameter, collect a
+   * type from TS's checker and inject `: T` when evidence agrees:
+   *
+   *  1. **Call sites** (preferred for const-bound arrows): `const f = (it) => …`
+   *     + `f(persona)` → type of `persona` via `getTypeAtLocation`. This is how
+   *     compose pipelines get a domain type so `last(it["versions"])["state"]`
+   *     is not `unknown["state"]`.
+   *  2. **Body use sites** (fallback): `getContextualType` at each occurrence
+   *     of the param (e.g. `(string-append str1 …)` expects string at str1).
+   *
+   * Unanimous annotatable type → insert. Conflict / unprintable → skip
+   * (never a wrong annotation).
+   */
   function inferParamInsertions(): { pos: number; text: string }[] {
     const program = service.getProgram();
     const sf = program?.getSourceFile(PROGRAM_FILE);
@@ -730,13 +807,26 @@ export function createSchemeLanguageServiceCore(
     const insertions: { pos: number; text: string }[] = [];
     const visit = (node: ts.Node): void => {
       if (ts.isArrowFunction(node)) {
-        for (const param of node.parameters) {
-          if (param.type !== undefined || !ts.isIdentifier(param.name)) continue;
-          const expected = expectedTypesOf(param.name.text, node.body, checker);
+        const boundName = constBindingNameOfArrow(node);
+        node.parameters.forEach((param, paramIndex) => {
+          if (param.type !== undefined || !ts.isIdentifier(param.name)) return;
+          // Call-site domain first (compose / named helpers).
+          let expected: Set<string> | null = null;
+          if (boundName !== undefined) {
+            expected = expectedTypesFromCallSites(boundName, paramIndex, sf, checker);
+          }
+          // Body contextual types if call sites gave nothing usable.
+          if (expected !== null && expected.size === 0) {
+            expected = expectedTypesOf(param.name.text, node.body, checker);
+          } else if (expected === null) {
+            // Call sites blocked — still try body; if body also blocked, skip.
+            const body = expectedTypesOf(param.name.text, node.body, checker);
+            expected = body;
+          }
           if (expected !== null && expected.size === 1) {
             insertions.push({ pos: param.name.end, text: `: ${[...expected][0]!}` });
           }
-        }
+        });
       }
       ts.forEachChild(node, visit);
     };
@@ -783,12 +873,17 @@ export function createSchemeLanguageServiceCore(
         // an unresolvable path / runtime-injected binding) → SUGGESTION, named
         // by the SCHEME atom (the TS message carries the cleanName'd twin).
         if (d.code === 2304 || d.code === 2552 || NOISY_SUGGESTION_TS_CODES.has(d.code)) {
-          const atom = SCHEME_ATOM.test(lifted) ? lifted : /Cannot find name '([^']+)'/.exec(messageText)?.[1];
+          const rawAtom = SCHEME_ATOM.test(lifted) ? lifted : /Cannot find name '([^']+)'/.exec(messageText)?.[1];
+          // TS message may quote the encoded name; prefer scheme spelling.
+          const atom = rawAtom !== undefined ? schemeifyTsText(rawAtom) : schemeifyTsText(lifted);
           severity = "suggestion";
           messageText =
             opts?.resolveModule === undefined
-              ? `Cannot find name '${atom ?? lifted}' in this file (\`require\`d names aren't resolved yet).`
-              : `Cannot find name '${atom ?? lifted}' in this file or its \`require\`s.`;
+              ? `Cannot find name '${atom}' in this file (\`require\`d names aren't resolved yet).`
+              : `Cannot find name '${atom}' in this file or its \`require\`s.`;
+        } else {
+          // Type mismatches, arity, etc. — rewrite encoded idents in the prose.
+          messageText = schemeifyTsText(messageText);
         }
         // Former ArrShape-gap (2339) is now a free-name miss (2304) when the
         // emitter roster has a head but no ambient declare function leaf.
@@ -828,8 +923,8 @@ export function createSchemeLanguageServiceCore(
       const info = service.getQuickInfoAtPosition(PROGRAM_FILE, tsOffset);
       if (info === undefined) return null;
       return {
-        displayText: ts.displayPartsToString(info.displayParts),
-        documentation: ts.displayPartsToString(info.documentation),
+        displayText: schemeifyTsText(ts.displayPartsToString(info.displayParts)),
+        documentation: schemeifyTsText(ts.displayPartsToString(info.documentation)),
         span: mapper.toScheme(info.textSpan.start),
       };
     },
@@ -878,13 +973,16 @@ export function createSchemeLanguageServiceCore(
         paramType = probed.paramType;
       }
       const rich: SchemeRichCompletion[] = entries.map((e, i) => {
-        const detail = builtinSigs.get(e.name) ?? localSigs.get(e.name);
+        const rawDetail = builtinSigs.get(e.name) ?? localSigs.get(e.name);
+        // Detail may already be schemeified (builtin cache) or still encoded (locals).
+        const detail = rawDetail === undefined ? undefined : schemeifyTsText(rawDetail);
         const fits = verdicts?.[i];
         return {
           ...e,
           ...(detail === undefined ? {} : { detail }),
           ...(fits === null || fits === undefined ? {} : { fits }),
-          ...(detail === undefined ? {} : { callable: CALLABLE_SIG.test(detail) }),
+          // CALLABLE_SIG matches encoded or scheme "function …" prefixes.
+          ...(detail === undefined ? {} : { callable: CALLABLE_SIG.test(detail) || CALLABLE_SIG.test(rawDetail!) }),
         };
       });
       return {
@@ -894,15 +992,9 @@ export function createSchemeLanguageServiceCore(
               slot: {
                 // role.calleeText is TS-side currency (encoded ident). Surface
                 // the scheme spelling to the user.
-                callee: (() => {
-                  try {
-                    return decodeSchemeIdent(role.calleeText);
-                  } catch {
-                    return role.calleeText;
-                  }
-                })(),
+                callee: schemeifyTsText(role.calleeText),
                 argIndex: role.argIndex,
-                ...(paramType === undefined ? {} : { paramType }),
+                ...(paramType === undefined ? {} : { paramType: schemeifyTsText(paramType) }),
               },
             }
           : {}),
@@ -920,7 +1012,7 @@ export function createSchemeLanguageServiceCore(
       for (const d of defs) {
         if (d.fileName !== PROGRAM_FILE) {
           // A builtin's `.d.ts` definition — no scheme source anywhere.
-          out.push({ name: d.name, kind: d.kind, span: null });
+          out.push({ name: schemeifyTsText(d.name), kind: d.kind, span: null });
           continue;
         }
         // Inside the concatenated module: a REQUIRED file's segment lifts via
@@ -929,10 +1021,19 @@ export function createSchemeLanguageServiceCore(
         const dep = depAt(d.textSpan.start);
         if (dep !== null) {
           const span = dep.mapper.toScheme(d.textSpan.start - dep.base);
-          out.push({ name: d.name, kind: d.kind, span, ...(span === null ? {} : { file: dep.path }) });
+          out.push({
+            name: schemeifyTsText(d.name),
+            kind: d.kind,
+            span,
+            ...(span === null ? {} : { file: dep.path }),
+          });
           continue;
         }
-        out.push({ name: d.name, kind: d.kind, span: mapper.toScheme(d.textSpan.start) });
+        out.push({
+          name: schemeifyTsText(d.name),
+          kind: d.kind,
+          span: mapper.toScheme(d.textSpan.start),
+        });
       }
       return out;
     },
@@ -1528,7 +1629,8 @@ export function createSchemeLanguageServiceCore(
       if (elements !== null && checker !== null) {
         for (const [i, n] of names.entries()) {
           const el = elements[i];
-          if (el !== undefined) builtinSigs!.set(n, checker.typeToString(el));
+          // Cache scheme-spelled signatures — completion detail is user-facing.
+          if (el !== undefined) builtinSigs!.set(n, schemeifyTsText(checker.typeToString(el)));
         }
       }
     }
@@ -1556,7 +1658,8 @@ export function createSchemeLanguageServiceCore(
       const el = elements[i];
       if (el === undefined) continue;
       const text = checker.typeToString(el);
-      if (text !== "any") out.set(n, text);
+      // User-facing local signatures — scheme spellings (same as builtinSigs).
+      if (text !== "any") out.set(n, schemeifyTsText(text));
     }
     return out;
   }

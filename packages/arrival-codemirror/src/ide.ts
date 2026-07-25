@@ -26,6 +26,8 @@ import {
   type ViewUpdate,
 } from "@codemirror/view";
 
+import { schemeifyTsText } from "@inhuman.tools/arrival-mercury/type-emit";
+
 import { schemeGhost, type SchemeGhostOptions } from "./ghost.js";
 import { CONTROL_KEYWORDS, DEFINITION_KEYWORDS } from "./scheme-sugarcoat.js";
 
@@ -126,7 +128,8 @@ export function toCmDiagnostics(diags: readonly SchemeIdeDiagnostic[], docLength
       from,
       to,
       severity: d.severity === "error" ? "error" : d.severity === "warning" ? "warning" : "info",
-      message: d.messageText,
+      // Belt-and-suspenders: schemeify even if the worker predates server-side rewrite.
+      message: schemeifyTsText(d.messageText),
       source: `scheme-ts(${d.code})`,
     });
   }
@@ -200,13 +203,15 @@ export function schemeHover(backend: SchemeIdeBackend): Extension {
           if (info.displayText !== "") {
             const sig = document.createElement("code");
             sig.className = "cm-scheme-quickinfo-signature";
-            sig.textContent = info.displayText;
+            // Scheme spelling for humans (`number->string`, not `number$dash$$greater$string`).
+            // Also covers a worker built before server-side schemeify landed.
+            sig.textContent = schemeifyTsText(info.displayText);
             dom.append(sig);
           }
           if (info.documentation !== "") {
             const doc = document.createElement("div");
             doc.className = "cm-scheme-quickinfo-docs";
-            doc.textContent = info.documentation;
+            doc.textContent = schemeifyTsText(info.documentation);
             dom.append(doc);
           }
           return { dom };
@@ -274,7 +279,7 @@ function toRichCmCompletion(e: SchemeIdeRichCompletion): Completion {
     type: COMPLETION_TYPE[e.kind] ?? "variable",
     section,
     boost: boostOf(e, isLocal),
-    ...(e.detail === undefined ? {} : { detail: e.detail }),
+    ...(e.detail === undefined ? {} : { detail: schemeifyTsText(e.detail) }),
     // Info panel only when row doesn't say it (signature already in `detail`).
     // Demoted entries get the "does not fit" note.
     ...(e.fits === false ? { info: () => infoDom(e) } : {}),

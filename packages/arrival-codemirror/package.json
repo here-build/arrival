@@ -60,6 +60,7 @@
     "@codemirror/view": "6.43.0",
     "@inhuman.tools/arrival-sugarcoat": "workspace:^",
     "@inhuman.tools/arrival-lsp": "workspace:^",
+    "@inhuman.tools/arrival-mercury": "workspace:^",
     "@here.build/editor-theme": "workspace:^",
     "@lezer/highlight": "1.2.1",
     "@uiw/react-codemirror": "4.25.9"

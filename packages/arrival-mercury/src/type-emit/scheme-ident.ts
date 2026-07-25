@@ -244,6 +244,27 @@ export function isPlainIdent(s: string): boolean {
 }
 
 /**
+ * Reconstruct scheme spellings inside a TS checker/display string for humans.
+ *
+ * Encoded idents (`pair$qmark$`, `string$dash$append`, `$plus$`) → scheme
+ * (`pair?`, `string-append`, `+`). Tokens without `$` pass through (`List`,
+ * `car`, `string`). Malformed `$…$` runs stay as emitted (never throw).
+ *
+ * For USER-FACING text only (diagnostics, hover, completion detail). Injected
+ * program annotations must stay encoded so they remain valid TS.
+ */
+export function schemeifyTsText(text: string): string {
+  return text.replace(/[A-Za-z_$][\w$]*/g, (tok) => {
+    if (!tok.includes("$")) return tok;
+    try {
+      return decodeSchemeIdent(tok);
+    } catch {
+      return tok;
+    }
+  });
+}
+
+/**
  * True when `name` needs no `$…$` runs — already a legal non-reserved TS binding.
  * Useful for emitters that want a fast path print.
  */
