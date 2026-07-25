@@ -13,6 +13,12 @@ import { expectTypeOf } from "vitest";
 expectTypeOf(apply((a: number, b: number) => a + b, [1, 2] as const)).toEqualTypeOf<number>();
 expectTypeOf(apply((x: string) => x, ["hi"] as const)).toEqualTypeOf<string>();
 
+// (apply + xs) / (apply * xs) — List is readonly; rest leaves used to be mutable
+// `number[]`, so apply rejected List and rolled up phantom "required file has 1 type
+// error" on clean helpers like custdev `_util` avg.
+expectTypeOf(apply($plus$, [1, 2, 3] as List<number>)).toEqualTypeOf<number>();
+expectTypeOf(apply($star$, [2, 3, 4] as List<number>)).toEqualTypeOf<number>();
+
 // @ts-expect-error second arg is a string but the callee's 2nd param is number → TS2345
 apply((a: number, b: number) => a + b, [1, "x"] as const);
 // @ts-expect-error first arg is not a function → TS2345

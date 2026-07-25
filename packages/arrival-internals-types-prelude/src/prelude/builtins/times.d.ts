@@ -5,4 +5,5 @@
 // // Operator name `*` is not a valid TS identifier → bracketed string key.
 // ─────────────────────────────────────────────────────────────────────────────
 
-declare function $star$(...n: number[]): number;
+// Rest is `readonly` so `(apply * xs)` accepts `List<number>` (see plus.d.ts).
+declare function $star$(...n: readonly number[]): number;

@@ -22,7 +22,8 @@ import { scanRequires } from "../service-core.js";
 const FILES: Record<string, string> = {
   "lib/util.scm": `(define greeting "hello")\n(define (shout s) (string-append s "!"))\n(define base-port 8080)\n(define ports (list 80 443))`,
   "lib/nested.scm": `(require "lib/util.scm")\n(define (greet-loud name) (shout (string-append greeting " " name)))`,
-  "lib/broken.scm": `(define bad (car 5))\n(define worse (car 6))`,
+  // Real type errors (not car — car sugarcoats to [0] and no longer bites on scalars).
+  "lib/broken.scm": `(define bad (+ 5 "x"))\n(define worse (* "a" 2))`,
   "lib/cycle-a.scm": `(require "lib/cycle-b.scm")\n(define from-a 1)`,
   "lib/cycle-b.scm": `(require "lib/cycle-a.scm")\n(define from-b 2)`,
 };
@@ -48,10 +49,9 @@ describe("required defines in scope", () => {
   });
 
   it("misusing a required value bites IN THIS BUFFER with the right span", () => {
-    // NB through a BUILTIN slot: a required FUNCTION's params are `any` (the
-    // same param-inference limitation as local functions — noImplicitAny off),
-    // so the proof rides required VALUE types, which DO flow.
-    const scheme = `(require "lib/util.scm")\n(define bad (car greeting))`;
+    // Required VALUE types flow; a string cannot go into a number slot.
+    // (car sugarcoats to [0] — use + so the slot is a real declare-function param.)
+    const scheme = `(require "lib/util.scm")\n(define bad (+ greeting 1))`;
     const diags = ls.getSemanticDiagnostics(scheme);
     expect(diags).toHaveLength(1);
     expect(scheme.slice(diags[0]!.start, diags[0]!.start + diags[0]!.length)).toBe("greeting");
@@ -105,6 +105,30 @@ describe("dep problems roll up; never mis-span", () => {
     expect(scheme.slice(d.start, d.start + d.length)).toBe(`(require "lib/broken.scm")`);
     expect(d.messageText).toContain("2 type errors");
   });
+
+  it("calling a clean required helper does NOT invent dep type errors", () => {
+    // Repro class: util alone is clean; consumer calls avg/string-concat → used to
+    // roll up "required file has N type errors" from (a) apply(+ List) readonly
+    // mismatch and (b) rest-param call-site infer writing `...items: "a"`.
+    const FILES_LOCAL: Record<string, string> = {
+      ...FILES,
+      "lib/helpers.scm":
+        `(define (avg xs) (if (null? xs) 0 (/ (apply + xs) (length xs))))\n` +
+        `(define (string-concat sep . items) (apply string-append items))\n`,
+    };
+    const local = createSchemeLanguageService({
+      compilerOptions: { noImplicitAny: false },
+      resolveModule: (path) => FILES_LOCAL[path] ?? null,
+    });
+    const avgOnly = `(require "lib/helpers.scm")\n(define y (avg (list 1 2 3)))`;
+    expect(local.getSemanticDiagnostics(avgOnly).filter((d) => d.code === 0)).toHaveLength(0);
+    expect(local.getSemanticDiagnostics(avgOnly)).toHaveLength(0);
+
+    const concatCall =
+      `(require "lib/helpers.scm")\n(define y (string-concat "," "a" "b"))`;
+    const concatDiags = local.getSemanticDiagnostics(concatCall);
+    expect(concatDiags.filter((d) => d.messageText.includes("required file"))).toHaveLength(0);
+  });
 });
 
 describe("scheme-legal shapes stay legal", () => {
@@ -135,15 +159,16 @@ describe("scheme-legal shapes stay legal", () => {
 
 describe("the loop stays closed through requires", () => {
   it("Σ∩T verdicts cover REQUIRED candidates (the probe rides the closure)", () => {
-    // (car •) wants a List: the required `ports` fits; the required `greeting`
-    // (a string) is proven out. (A required FUNCTION'S own slots stay
-    // unjudged — its params are `any`, the param-inference limitation.)
-    const scheme = `(require "lib/util.scm")\n(car `;
+    // (string-append •) wants a string: required `greeting` fits; required
+    // `base-port` (a number) is proven out. (car sugarcoats to [0] — no typed
+    // call slot — so the probe rides a declare-function leaf.)
+    const scheme = `(require "lib/util.scm")\n(string-append `;
     const ctx = ls.getCompletionContext(scheme, scheme.length);
     expect(ctx.position).toBe("argument");
     const byName = new Map(ctx.entries.map((e) => [e.name, e]));
-    expect(byName.get("ports")?.fits).toBe(true);
-    expect(byName.get("greeting")?.fits).toBe(false);
+    expect(byName.get("greeting")?.fits).toBe(true);
+    // A list is never a string-append argument (scalar string slot).
+    expect(byName.get("ports")?.fits).toBe(false);
   });
 });
 

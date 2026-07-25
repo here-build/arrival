@@ -15,5 +15,6 @@ declare function abs(x: number): number;
 declare function sqrt(x: number): number;
 declare function floor(x: number): number;
 declare function round(x: number): number;
-declare function min(...n: number[]): number;
-declare function max(...n: number[]): number;
+// Rest is `readonly` so `(apply min xs)` accepts `List<number>` (see plus.d.ts).
+declare function min(...n: readonly number[]): number;
+declare function max(...n: readonly number[]): number;

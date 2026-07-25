@@ -9,4 +9,7 @@
 // non-function first arg fails.
 // // ─────────────────────────────────────────────────────────────────────────────
 
-declare function apply<A extends readonly unknown[], R>(f: (...a: A) => R, args: A): R;
+// `args` accepts A or Readonly<A>: rest-parameter callables often surface as
+// mutable `number[]` in Parameters, while Scheme lists are `List<T>` (= readonly).
+// Without Readonly, `(apply + xs)` with xs: List<number> falsely failed (TS2345).
+declare function apply<A extends readonly unknown[], R>(f: (...a: A) => R, args: A | Readonly<A>): R;

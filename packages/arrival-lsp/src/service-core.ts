@@ -291,7 +291,7 @@ function expectedTypesOf(name: string, body: ts.Node, checker: ts.TypeChecker): 
  *   `const f = (a, b) => …`  with later  `f(x, y)`
  * collect the checker type of argument `paramIndex` at every call of `f`.
  *
- * This is what makes compose pipelines work without `any` leaf overloads:
+ * Used when body use-sites give no domain (compose pipelines):
  *   `(define state-of (compose :state last :versions))`
  *   → `const state$dash$of = (it) => last(it["versions"])["state"]`
  *   + `state$dash$of(persona)` where `persona` is a typed row
@@ -299,6 +299,9 @@ function expectedTypesOf(name: string, body: ts.Node, checker: ts.TypeChecker): 
  *
  * Body use-site contextual typing cannot see this (indexing `it["versions"]`
  * has no useful expected type). Call sites are the domain of the function.
+ *
+ * Literal args are widened (`5` → `number`, `"a"` → `string`) so a single
+ * call never pins a param to a singleton literal that then fights the body.
  *
  * Empty set = no usable call-site evidence (not blocked). `null` = blocked.
  */
@@ -318,7 +321,10 @@ function expectedTypesFromCallSites(
       n.expression.text === fnName &&
       n.arguments[paramIndex] !== undefined
     ) {
-      const t = checker.getTypeAtLocation(n.arguments[paramIndex]!);
+      const raw = checker.getTypeAtLocation(n.arguments[paramIndex]!);
+      // Widen 5/"hi"/true so call-site domain is a type, not a singleton literal.
+      // (Object/row types from compose consumers stay as-is — base of non-literal is itself.)
+      const t = checker.getBaseTypeOfLiteralType(raw);
       const rendered = checker.typeToString(t);
       if (annotatableType(rendered)) expected.add(rendered);
       // any/unknown at a call site is "no evidence", not a block — skip.
@@ -789,12 +795,13 @@ export function createSchemeLanguageServiceCore(
    * "Infer from consumers" — for every UNANNOTATED arrow parameter, collect a
    * type from TS's checker and inject `: T` when evidence agrees:
    *
-   *  1. **Call sites** (preferred for const-bound arrows): `const f = (it) => …`
-   *     + `f(persona)` → type of `persona` via `getTypeAtLocation`. This is how
-   *     compose pipelines get a domain type so `last(it["versions"])["state"]`
-   *     is not `unknown["state"]`.
-   *  2. **Body use sites** (fallback): `getContextualType` at each occurrence
-   *     of the param (e.g. `(string-append str1 …)` expects string at str1).
+   *  1. **Body use sites** (preferred — the function's own contract):
+   *     `getContextualType` at each occurrence (e.g. `(string-append str1 …)`
+   *     expects string at str1). A misuse call `(concat 5 "b")` must bite on `5`,
+   *     not re-annotate `str1: 5` and cry inside the body.
+   *  2. **Call sites** (fallback when body has no domain — compose pipelines):
+   *     `const f = (it) => …` + `f(persona)` → type of `persona`. Body indexing
+   *     `it["versions"]` has no useful expected type; call sites are the domain.
    *
    * Unanimous annotatable type → insert. Conflict / unprintable → skip
    * (never a wrong annotation).
@@ -810,18 +817,26 @@ export function createSchemeLanguageServiceCore(
         const boundName = constBindingNameOfArrow(node);
         node.parameters.forEach((param, paramIndex) => {
           if (param.type !== undefined || !ts.isIdentifier(param.name)) return;
-          // Call-site domain first (compose / named helpers).
-          let expected: Set<string> | null = null;
-          if (boundName !== undefined) {
-            expected = expectedTypesFromCallSites(boundName, paramIndex, sf, checker);
-          }
-          // Body contextual types if call sites gave nothing usable.
-          if (expected !== null && expected.size === 0) {
-            expected = expectedTypesOf(param.name.text, node.body, checker);
-          } else if (expected === null) {
-            // Call sites blocked — still try body; if body also blocked, skip.
+          // Rest params (`...items`): a call site's *one* argument at this index is a
+          // single value (`"a"`), not the rest array. Annotating `...items: "a"` is
+          // illegal TS ("rest parameter must be of an array type") and produced
+          // phantom "required file has N type errors" on clean util helpers whose
+          // rest was refined from a consumer call. Body use-sites still type rest.
+          if (param.dotDotDotToken !== undefined) {
             const body = expectedTypesOf(param.name.text, node.body, checker);
-            expected = body;
+            if (body !== null && body.size === 1) {
+              insertions.push({ pos: param.name.end, text: `: ${[...body][0]!}` });
+            }
+            return;
+          }
+          // Body contract first — misuse call sites must not rewrite the domain.
+          let expected = expectedTypesOf(param.name.text, node.body, checker);
+          if (expected !== null && expected.size === 0 && boundName !== undefined) {
+            // No body evidence (compose / opaque body) — take domain from callers.
+            expected = expectedTypesFromCallSites(boundName, paramIndex, sf, checker);
+          } else if (expected === null && boundName !== undefined) {
+            // Body blocked (conflicting use sites) — do not paper over with call sites.
+            expected = null;
           }
           if (expected !== null && expected.size === 1) {
             insertions.push({ pos: param.name.end, text: `: ${[...expected][0]!}` });
