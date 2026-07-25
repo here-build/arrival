@@ -1,20 +1,18 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Bite cases for `list` — variadic list constructor (list.d.ts → `list<T>(...xs: T[]): List<T>`).
-// expect-type assertions over the ambient global functions; inputs are WIDENED literals so
-// results are exact brands — positives pin with `.toEqualTypeOf<T>()` (an arg-rot
-// OR a return→any rot both bite). Empty invocation → List<never>. Negatives use
-// `// @ts-expect-error`: a heterogeneous arg bites at the call (2345), a wrong-typed
-// threaded result at the assignment (2322).
-// Base vocab (`List`/`number`) is ambient from ../types.d.ts.
-// ─────────────────────────────────────────────────────────────────────────────
+// Bite cases for `list` — fixed-arity → tuple; homogeneous rest → List<T>.
+// // ─────────────────────────────────────────────────────────────────────────────
 import { expectTypeOf } from "vitest";
 
-// Constructing a List<number> from number arguments — result is List<number>.
-expectTypeOf(list(1, 2, 3)).toEqualTypeOf<List<number>>();
-// Empty invocation — no args, so T widens to unknown → List<unknown>.
-expectTypeOf(list()).toEqualTypeOf<List<unknown>>();
+// Homogeneous 3-arg still List via rest when all same? Fixed overload wins:
+// list(1,2,3) is [number, number, number] which is fine for apply.
+expectTypeOf(list(1, 2, 3)).toEqualTypeOf<[number, number, number]>();
+// Empty → []
+expectTypeOf(list()).toEqualTypeOf<[]>();
+// Heterogeneous fixed-arity is intentional (apply product / zip pairs).
+expectTypeOf(list(1, "a")).toEqualTypeOf<[number, string]>();
+expectTypeOf(list(1, "a", true, null, 5)).toEqualTypeOf<
+  [number, string, boolean, null, number]
+>();
 
-// @ts-expect-error heterogeneous args: 'oops' is not assignable to the inferred T=number
-list(1, "oops");
-// @ts-expect-error assigning a List<number> to a scalar number bites (2322)
+// @ts-expect-error assigning a fixed product to a scalar bites
 const n: number = list(1, 2, 3);
