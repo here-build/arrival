@@ -172,4 +172,41 @@ describe("nested accessor coherence — binder demand harvest", () => {
     expect(ts).toContain("loop(null)");
     expect(ts).not.toMatch(/loop\(\[\]\)/);
   });
+
+  it("append/take/drop reverse under List domain (arity-aware — n not List)", () => {
+    // Avoid name `pipe` — desugars as pipeline form.
+    const { ts } = emitTypes(`
+(define (needs-hist h) (map (lambda (e) (:tagline e)) h))
+(define (plumb xs ys n)
+  (needs-hist (append xs ys))
+  (needs-hist (take n xs))
+  (needs-hist (drop n ys))
+  (needs-hist (reverse xs)))
+`);
+    expect(ts).toMatch(/plumb = \(xs:\s*List<\s*\{\s*tagline:\s*any/);
+    expect(ts).toMatch(/ys:\s*List<\s*\{\s*tagline:\s*any/);
+    // count arg must stay bare — not List (G4)
+    expect(ts).toMatch(/\(xs:\s*List<[^)]+,\s*ys:\s*List<[^)]+,\s*n\)/);
+    expect(ts).not.toMatch(/n:\s*List</);
+  });
+
+  it("map named compose first-arg pushes List domain onto xs", () => {
+    const { ts } = emitTypes(`
+(define state-of (compose :state last :versions))
+(define (states personas)
+  (map state-of personas))
+`);
+    expect(ts).toMatch(/personas:\s*List<\s*\{\s*versions:\s*List<\s*\{\s*state:\s*any/);
+  });
+
+  it("R5: mutual recursion formalShapesOf does not throw (cycle → empty mid-visit, named opaque)", () => {
+    // Eng-review G7 — visible residual, not silent crash. Cycle returns empty map mid-visit.
+    const { ts } = emitTypes(`
+(define (a x) (b x))
+(define (b x) (a (:k x)))
+`);
+    // Must emit; annotations may be incomplete under cycle (opaque receipt).
+    expect(ts).toContain("const a =");
+    expect(ts).toContain("const b =");
+  });
 });

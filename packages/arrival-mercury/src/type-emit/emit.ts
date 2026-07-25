@@ -996,8 +996,64 @@ function formalShapesOf(
 }
 
 /**
+ * List-domain reverse table (eng-review G3/G4 — mandatory, arity-aware).
+ * When domain is `List<E>` on an expression headed by these, push onto free roots.
+ * Arg indices are 0-based into call arguments (after the head).
+ *
+ * Roles (demand-harvest totality plan §3):
+ *   list-elements     (list a b) + List<E> → each arg ← E
+ *   cons              (cons h t) + List<E> → h←E, t←List<E>
+ *   list-preserve-all (append xs ys) + List<E> → each arg ← List<E>
+ *   list-preserve-arg (reverse xs)/(take n xs)/(drop n xs)/(filter p xs)
+ *                     — only the list slot (not the count/pred)
+ */
+type ListDomainReverse =
+  | { kind: "list-elements" }
+  | { kind: "cons" }
+  | { kind: "list-preserve-all" }
+  | { kind: "list-preserve-arg"; argIndex: number };
+
+/** Exhaustive reverser heads — census test fails if emit adds a special case outside this map. */
+export const LIST_DOMAIN_REVERSERS: ReadonlyMap<string, ListDomainReverse> = new Map([
+  ["list", { kind: "list-elements" }],
+  ["cons", { kind: "cons" }],
+  ["append", { kind: "list-preserve-all" }],
+  ["reverse", { kind: "list-preserve-arg", argIndex: 0 }],
+  // SRFI-1 / prelude: (take n xs) (drop n xs) — list is arg 1, never annotate n
+  ["take", { kind: "list-preserve-arg", argIndex: 1 }],
+  ["drop", { kind: "list-preserve-arg", argIndex: 1 }],
+  // (filter pred xs) (remove pred xs) — list is arg 1
+  ["filter", { kind: "list-preserve-arg", argIndex: 1 }],
+  ["remove", { kind: "list-preserve-arg", argIndex: 1 }],
+]);
+
+/**
+ * Heads that are demand **sources** (generate DemandShape), not reversers.
+ * Census / docs — not an open if-chain.
+ */
+export const DEMAND_SOURCE_HEADS = [
+  "map", // multi-list λ zip + keyword + named/compose first-arg
+  // pure chains use keywords / PIPELINE_ELEM_OPS, not a single head
+  // compose/pipe: collectComposeDomains
+  // callee formals: formalShapesOf
+] as const;
+
+/**
+ * Explicit opaque heads (demand stops — residual OK if named).
+ * R5: formalShapesOf mutual-recursion cycle returns empty mid-visit (visible, not silent).
+ */
+export const DEMAND_OPAQUE_HEADS = [
+  "cut",
+  "apply",
+  "dict",
+  "require",
+  "case-lambda",
+  "do",
+] as const;
+
+/**
  * Push a required shape through an argument expression onto free roots.
- * Handles: bare atom, (list …), (cons h t), pure field/elem chains.
+ * Handles: bare atom, LIST_DOMAIN_REVERSERS heads, pure field/elem chains.
  */
 function applyDomainToArg(
   arg: Node,
@@ -1008,18 +1064,31 @@ function applyDomainToArg(
     mergeDemand(into, arg.atom, domain);
     return;
   }
-  // (list a b c) + List<E> → each of a,b,c needs E
-  if (isList(arg) && head(arg) === "list" && domain.kind === "list") {
-    for (let i = 1; i < arg.list.length; i++) {
-      applyDomainToArg(arg.list[i]!, domain.elem, into);
+  if (isList(arg) && domain.kind === "list") {
+    const h = head(arg);
+    const rev = h !== undefined ? LIST_DOMAIN_REVERSERS.get(h) : undefined;
+    if (rev !== undefined) {
+      const args = arg.list.slice(1);
+      switch (rev.kind) {
+        case "list-elements":
+          for (const a of args) applyDomainToArg(a, domain.elem, into);
+          return;
+        case "cons":
+          if (args.length >= 2) {
+            applyDomainToArg(args[0]!, domain.elem, into);
+            applyDomainToArg(args[1]!, domain, into);
+          }
+          return;
+        case "list-preserve-all":
+          for (const a of args) applyDomainToArg(a, domain, into);
+          return;
+        case "list-preserve-arg": {
+          const a = args[rev.argIndex];
+          if (a !== undefined) applyDomainToArg(a, domain, into);
+          return;
+        }
+      }
     }
-    return;
-  }
-  // (cons h t) + List<E> → h needs E, t needs List<E>
-  if (isList(arg) && head(arg) === "cons" && domain.kind === "list" && arg.list.length >= 3) {
-    applyDomainToArg(arg.list[1]!, domain.elem, into);
-    applyDomainToArg(arg.list[2]!, domain, into);
-    return;
   }
   const argChain = tryPureChain(arg);
   if (argChain !== null) {
@@ -1116,6 +1185,7 @@ function collectDemandsInNode(
   // (map (lambda (e) …) history) → history : List<demands(e)>
   // (map (lambda (p r) …) personas reactions) → zip: each list gets List<demands(param_i)>
   // (map :field xs) → xs : List<{ field: any }>
+  // (map f xs) named/compose — unary domain of f onto xs (cut stays opaque)
   if (isAtom(n.list[0]) && !n.list[0]!.str && n.list[0]!.atom === "map" && n.list.length >= 3) {
     const f = n.list[1]!;
     if (isList(f) && head(f) === "lambda") {
@@ -1134,12 +1204,25 @@ function collectDemandsInNode(
         }
       }
     } else if (isKeyword(f)) {
-      // isKeyword already means :field atom (not bare ":")
       const elemShape: DemandShape = {
         kind: "obj",
         fields: new Map([[keywordName(f), DEMAND_ANY]]),
       };
       applyDomainToArg(n.list[2]!, { kind: "list", elem: elemShape }, into);
+    } else if (isAtom(f) && !f.str) {
+      // Named f / compose pipeline define — unary first formal only (multi-arg HOF opaque)
+      let elemShape: DemandShape | undefined = dctx.composeDomains.get(f.atom);
+      if (elemShape === undefined) {
+        const shapes = formalShapesOf(f.atom, dctx);
+        const def = findFunctionDefine(dctx.forest, f.atom);
+        if (def !== null && def.formals.length === 1) {
+          elemShape = shapes.get(def.formals[0]!);
+        }
+      }
+      if (elemShape !== undefined && elemShape.kind !== "any") {
+        applyDomainToArg(n.list[2]!, { kind: "list", elem: elemShape }, into);
+      }
+      // cut / multi-arg named f: DEMAND_OPAQUE — no push
     }
   }
 
