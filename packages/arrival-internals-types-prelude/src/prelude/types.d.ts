@@ -21,19 +21,21 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── Structural carriers ──────────────────────────────────────────────────────
-// A Scheme list is modeled as a readonly array. List generalizes the pair spine:
-// there is no separate `Pair` brand — a proper list is just `List<T>`, empty is
-// `null` (or `List<never>` / `[]` where a list shape is required).
-type List<T> = readonly T[];
+// A Scheme list is modeled as a plain array (`T[]`). Runtime is immutable; we
+// do NOT mark lists `readonly` in PRE — TS's readonly/mutable split is pure
+// friction (rest params, apply, reduce) with no Scheme semantics to protect.
+// One array dialect; immutability is the env's job.
+// Empty is `null` (or `List<never>` / `[]` where a list shape is required).
+type List<T> = T[];
 
 // Fixed-arity product. Replaces the old `Pair<H,T> = [head, tail]` brand for
 // cases that are genuinely 2-products (cons of a non-list tail, entry tuples
 // for `dict`, alists as `List<Tuple<K, V>>`). Native TS tuple — no phantom.
-type Tuple<A = unknown, B = unknown> = readonly [A, B];
+type Tuple<A = unknown, B = unknown> = [A, B];
 
 // Non-empty list — the honest target of `pair?` (a cons cell / non-empty list).
 // Empty list is a list but not a pair; `null` is neither.
-type NonEmptyList<T> = readonly [T, ...T[]];
+type NonEmptyList<T> = [T, ...T[]];
 
 // Scalar-compat aliases (each ≡ its primitive). Leaves write the primitive
 // directly now; these are retained ONLY so older rosetta `type:` strings and

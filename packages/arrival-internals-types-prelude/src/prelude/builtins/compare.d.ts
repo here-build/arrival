@@ -8,9 +8,8 @@
 //
 // // ─────────────────────────────────────────────────────────────────────────────
 
-// Rest is `readonly` so `(apply < xs)` etc. accept `List<number>` (see plus.d.ts).
-declare function $less$(...n: readonly number[]): boolean;
-declare function $greater$(...n: readonly number[]): boolean;
-declare function $less$$eq$(...n: readonly number[]): boolean;
-declare function $greater$$eq$(...n: readonly number[]): boolean;
-declare function $eq$(...n: readonly number[]): boolean;
+declare function $less$(...n: number[]): boolean;
+declare function $greater$(...n: number[]): boolean;
+declare function $less$$eq$(...n: number[]): boolean;
+declare function $greater$$eq$(...n: number[]): boolean;
+declare function $eq$(...n: number[]): boolean;

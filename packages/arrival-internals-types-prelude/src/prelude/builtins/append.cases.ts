@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Bite cases for `append` (append.d.ts → `append<T>(...xs: readonly List<T>[]): List<T>`).
+// Bite cases for `append` (append.d.ts → `append<T>(...xs: List<T>[]): List<T>`).
 // expect-type assertions over the ambient global functions; inputs are WIDENED list literals
 // so the result is an exact brand — positives pin with `.toEqualTypeOf<T>()`.
 // Every argument must be a list of the same element type T; the result is List<T>.
@@ -16,8 +16,8 @@ expectTypeOf(append(["a", "b", "c"])).toEqualTypeOf<List<string>>();
 // append three lists of the same element type
 expectTypeOf(append([1], [2], [3])).toEqualTypeOf<List<number>>();
 
-// (apply append (map …)) — args is List<List<T>> (readonly array of lists).
-// Mutable rest `List<T>[]` used to reject this; readonly rest must accept it.
+// (apply append (map …)) — args is List<List<T>> (array of lists).
+// Mutable rest `List<T>[]` used to reject this; rest must accept it.
 expectTypeOf(
   apply(append, map((x: List<number>): List<number> => x, [[1], [2]] as List<List<number>>)),
 ).toEqualTypeOf<List<number>>();

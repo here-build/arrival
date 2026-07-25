@@ -19,12 +19,12 @@
 import { expectTypeOf } from "vitest";
 
 // constructors keep the tag + payload type (literal through the type var)
-expectTypeOf(just(1)).toExtend<readonly ["just", number]>();
+expectTypeOf(just(1)).toExtend<["just", number]>();
 expectTypeOf(just(1)).not.toBeAny();
-expectTypeOf(nothing()).toEqualTypeOf<readonly ["nothing"]>();
-expectTypeOf(left("err")).toExtend<readonly ["left", string]>();
+expectTypeOf(nothing()).toEqualTypeOf<["nothing"]>();
+expectTypeOf(left("err")).toExtend<["left", string]>();
 expectTypeOf(left("err")).not.toBeAny();
-expectTypeOf(right(42)).toExtend<readonly ["right", number]>();
+expectTypeOf(right(42)).toExtend<["right", number]>();
 expectTypeOf(right(42)).not.toBeAny();
 
 // tag predicates accept any value, return boolean
@@ -34,11 +34,11 @@ expectTypeOf(right$qmark$(right(1))).toEqualTypeOf<boolean>();
 
 // maybe-map threads the wrapped type through the callback (T → B) → exact brand
 expectTypeOf(maybe$dash$map((x: number): string => `${x}`, just(1))).toEqualTypeOf<
-  readonly ["just", string] | readonly ["nothing"]
+  ["just", string] | ["nothing"]
 >();
 // maybe-bind: function returns a Maybe; result unions with Nothing (number bind → exact)
 expectTypeOf(maybe$dash$bind(just(1), (x: number) => just(x))).toEqualTypeOf<
-  readonly ["just", number] | readonly ["nothing"]
+  ["just", number] | ["nothing"]
 >();
 // maybe-ref unwraps to the wrapped value type (literal through T)
 expectTypeOf(maybe$dash$ref(just(7))).toExtend<number>();
@@ -48,39 +48,39 @@ expectTypeOf(maybe$dash$ref$slash$default(just(7), "fallback")).toExtend<number 
 expectTypeOf(maybe$dash$ref$slash$default(just(7), "fallback")).not.toBeAny();
 // maybe->either flips into Either with payload preserved
 expectTypeOf(maybe$dash$$greater$either(just(1), "no")).toExtend<
-  readonly ["right", number] | readonly ["left", string]
+  ["right", number] | ["left", string]
 >();
 expectTypeOf(maybe$dash$$greater$either(just(1), "no")).not.toBeAny();
 // maybe->list collects to a list of the wrapped type
 expectTypeOf(maybe$dash$$greater$list(just(1))).toExtend<List<number>>();
 expectTypeOf(maybe$dash$$greater$list(just(1))).not.toBeAny();
 // list->maybe wraps the element type (widened list → exact brand)
-expectTypeOf(list$dash$$greater$maybe([1, 2, 3])).toEqualTypeOf<readonly ["just", number] | readonly ["nothing"]>();
+expectTypeOf(list$dash$$greater$maybe([1, 2, 3])).toEqualTypeOf<["just", number] | ["nothing"]>();
 // either-map threads the Right payload through (R → B), Left preserved → exact brand
 expectTypeOf(
   either$dash$map(
     (x: number): boolean => x > 0,
-    right(1) as readonly ["left", string] | readonly ["right", number],
+    right(1) as ["left", string] | ["right", number],
   ),
-).toEqualTypeOf<readonly ["left", string] | readonly ["right", boolean]>();
+).toEqualTypeOf<["left", string] | ["right", boolean]>();
 // either-ref unwraps the Right value type (literal through R)
 expectTypeOf(either$dash$ref(right(5))).toExtend<number>();
 expectTypeOf(either$dash$ref(right(5))).not.toBeAny();
 // either-swap swaps the sides (explicit type args pin L/R so the swap is observable)
 expectTypeOf(either$dash$swap<string, number>(left("x"))).toEqualTypeOf<
-  readonly ["right", string] | readonly ["left", number]
+  ["right", string] | ["left", number]
 >();
 // either->list collects the Right payload (literal through R)
 expectTypeOf(either$dash$$greater$list(right(9))).toExtend<List<number>>();
 expectTypeOf(either$dash$$greater$list(right(9))).not.toBeAny();
 
 // @ts-expect-error just's payload type is captured: a Just<number> is not assignable to Just<string>
-const bad: readonly ["just", string] = just(1);
+const bad: ["just", string] = just(1);
 // @ts-expect-error maybe-map callback param must match the wrapped element type (string param over Just<number>)
 maybe$dash$map((x: string): string => x, just(1));
 // @ts-expect-error maybe-ref result is the wrapped number, not assignable to string
 const w: string = maybe$dash$ref(just(7));
 // @ts-expect-error either-map callback must consume the Right payload type (string param over Right<number>)
-either$dash$map((x: string): string => x, right(1) as readonly ["left", string] | readonly ["right", number]);
+either$dash$map((x: string): string => x, right(1) as ["left", string] | ["right", number]);
 // @ts-expect-error maybe->list returns a list of the wrapped type, not List<string>
 const wl: List<string> = maybe$dash$$greater$list(just(1));

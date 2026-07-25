@@ -13,5 +13,5 @@
 // plain boolean (T[number] of [] is never).
 // ─────────────────────────────────────────────────────────────────────────────
 
-declare function and<T extends readonly unknown[]>(...xs: T): T[number] | boolean;
-declare function or<T extends readonly unknown[]>(...xs: T): T[number] | boolean;
+declare function and<T extends unknown[]>(...xs: T): T[number] | boolean;
+declare function or<T extends unknown[]>(...xs: T): T[number] | boolean;

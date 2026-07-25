@@ -18,7 +18,7 @@
 import { expectTypeOf } from "vitest";
 
 // the comparator tuple shape, named once for the assertions below
-type Cmp = readonly [
+type Cmp = [
   "comparator",
   (x: unknown) => boolean,
   (a: unknown, b: unknown) => boolean,

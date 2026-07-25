@@ -7,11 +7,12 @@
 // `__arr.dict([[key, value], …] as const)` so each entry's value type is captured
 // precisely and reflected into PRE's `Dict<Pairs>` mapped type.
 //
-// // The `Pairs` type param is captured from the `as const` entry-tuple the lens
-// emits, so `(dict :name "a" :age 30)` infers `{ name: string; age: number }`
-// precisely (mis-keyed/mis-typed reads then bite via the `Field`/accessor leaves).
+// The `Pairs` type param is captured from the entry-tuple the caller passes
+// (often `as const` in tests; the lens itself lowers dict → object literals).
+// Constraint is structural (`{0,1}` + length) so both mutable and const-tuple
+// entry arrays unify — no PRE `readonly` keyword needed.
 // ─────────────────────────────────────────────────────────────────────────────
 
-declare function dict<const Pairs extends readonly (readonly [string, unknown])[]>(
-  entries: Pairs,
-): { [K in Pairs[number] as K[0] & string]: K[1] };
+declare function dict<
+  const Pairs extends { length: number; [n: number]: { 0: string; 1: unknown } },
+>(entries: Pairs): { [K in Pairs[number] as K[0] & string]: K[1] };

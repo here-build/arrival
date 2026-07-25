@@ -13,7 +13,7 @@
 // `remove` is the inverse-filter (drop the elements matching pred) — a
 // predicate-filter, NOT an index splice.
 //
-// The lens models a Scheme list as PRE's `List<T>` = `readonly T[]`. Semantics that
+// The lens models a Scheme list as PRE's `List<T>` = `T[]`. Semantics that
 // change the signatures:
 //   • take / drop  — COUNT-first, list-LAST: prefix / suffix of length n.
 //   • concat       — ⚠️ the LIVE `concat` is the LIPS STRING concat, variadic over

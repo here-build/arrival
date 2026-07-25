@@ -6,5 +6,4 @@
 // // Operator name `/` is not a valid TS identifier → bracketed string key.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Rest is `readonly` so `(apply / xs)` accepts `List<number>` (see plus.d.ts).
-declare function $slash$(first: number, ...rest: readonly number[]): number;
+declare function $slash$(first: number, ...rest: number[]): number;

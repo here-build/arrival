@@ -50,7 +50,7 @@ declare function make$dash$comparator(
     equality: (a: unknown, b: unknown) => boolean,
     ordering: (a: unknown, b: unknown) => boolean,
     ...hash: [((x: unknown) => number)?]
-  ): readonly [
+  ): [
     "comparator",
     (x: unknown) => boolean,
     (a: unknown, b: unknown) => boolean,
@@ -58,13 +58,13 @@ declare function make$dash$comparator(
   ];
 
   // The default total-order comparator — both are NULLARY and RETURN a comparator.
-declare function make$dash$default$dash$comparator(): readonly [
+declare function make$dash$default$dash$comparator(): [
     "comparator",
     (x: unknown) => boolean,
     (a: unknown, b: unknown) => boolean,
     (a: unknown, b: unknown) => boolean,
   ];
-declare function default$dash$comparator(): readonly [
+declare function default$dash$comparator(): [
     "comparator",
     (x: unknown) => boolean,
     (a: unknown, b: unknown) => boolean,
@@ -76,7 +76,7 @@ declare function comparator$qmark$(x: unknown): boolean;
 
   // Extractors — pull the bundled predicate back out of a comparator tuple.
 declare function comparator$dash$type$dash$test$dash$predicate(
-    c: readonly [
+    c: [
       "comparator",
       (x: unknown) => boolean,
       (a: unknown, b: unknown) => boolean,
@@ -84,7 +84,7 @@ declare function comparator$dash$type$dash$test$dash$predicate(
     ],
   ): (x: unknown) => boolean;
 declare function comparator$dash$equality$dash$predicate(
-    c: readonly [
+    c: [
       "comparator",
       (x: unknown) => boolean,
       (a: unknown, b: unknown) => boolean,
@@ -92,7 +92,7 @@ declare function comparator$dash$equality$dash$predicate(
     ],
   ): (a: unknown, b: unknown) => boolean;
 declare function comparator$dash$ordering$dash$predicate(
-    c: readonly [
+    c: [
       "comparator",
       (x: unknown) => boolean,
       (a: unknown, b: unknown) => boolean,
@@ -101,7 +101,7 @@ declare function comparator$dash$ordering$dash$predicate(
   ): (a: unknown, b: unknown) => boolean;
   // Always #f at runtime, but the signature is still a boolean-returning predicate.
 declare function comparator$dash$hashable$qmark$(
-    c: readonly [
+    c: [
       "comparator",
       (x: unknown) => boolean,
       (a: unknown, b: unknown) => boolean,
@@ -111,7 +111,7 @@ declare function comparator$dash$hashable$qmark$(
 
   // Relational chain ops — (cmp, a, b, …rest) → boolean. Comparator is the FIRST arg.
 declare function $eq$$qmark$(
-    c: readonly [
+    c: [
       "comparator",
       (x: unknown) => boolean,
       (a: unknown, b: unknown) => boolean,
@@ -122,7 +122,7 @@ declare function $eq$$qmark$(
     ...rest: unknown[]
   ): boolean;
 declare function $less$$qmark$(
-    c: readonly [
+    c: [
       "comparator",
       (x: unknown) => boolean,
       (a: unknown, b: unknown) => boolean,
@@ -133,7 +133,7 @@ declare function $less$$qmark$(
     ...rest: unknown[]
   ): boolean;
 declare function $less$$eq$$qmark$(
-    c: readonly [
+    c: [
       "comparator",
       (x: unknown) => boolean,
       (a: unknown, b: unknown) => boolean,
@@ -144,7 +144,7 @@ declare function $less$$eq$$qmark$(
     ...rest: unknown[]
   ): boolean;
 declare function $greater$$qmark$(
-    c: readonly [
+    c: [
       "comparator",
       (x: unknown) => boolean,
       (a: unknown, b: unknown) => boolean,
@@ -155,7 +155,7 @@ declare function $greater$$qmark$(
     ...rest: unknown[]
   ): boolean;
 declare function $greater$$eq$$qmark$(
-    c: readonly [
+    c: [
       "comparator",
       (x: unknown) => boolean,
       (a: unknown, b: unknown) => boolean,
