@@ -26,6 +26,11 @@ export { rosettaTypesOf } from "../env/env-registries.js";
 // the actually-assembled capability set, never a hand-picked subset.
 export { contractOf, collectPrelude, collectSymbolDefines } from "../common/capability-internals.js";
 
+// Runtime always folds BASE_ROSTER into every session (`execStateViaVocabulary`).
+// The type lens must walk the same set — otherwise polyglot defines (`str`,
+// `get-in`, …) resolve at run and free-name in the editor.
+export { BASE_ROSTER } from "../env/base-roster.js";
+
 // Type-layer: the Σ∩T narrow's flatten (so a hand-rolled `declare const` prints
 // identically to a harvested signature), the diagnose lens, and the harvested-prelude
 // assembly-from-signatures path (also reachable via `/type-layer` — additive, granular).
