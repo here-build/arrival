@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { schemeToSugarcoat, sugarcoatToScheme } from "@inhuman.tools/arrival-sugarcoat";
@@ -21,6 +21,13 @@ const editorTheme = EditorView.theme({
   "&": { height: "100%" },
   ".cm-scroller": { fontFamily: FONT_WRITING, fontSize: "12.5px" },
 });
+
+// Stable identity — @uiw/react-codemirror reconfigures ALL extensions whenever
+// `basicSetup` or `onChange` identity changes. A fresh object/callback per
+// render restarts StreamLanguage parse from scratch; the first parse slice
+// covers the head (~50–70 lines), and the rest flashes unhighlighted until the
+// parse worker catches up. Module-level constants keep that off the keystroke path.
+const BASIC_SETUP = { lineNumbers: true, highlightActiveLine: false, foldGutter: true } as const;
 
 function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -94,63 +101,89 @@ export function SchemeEditor({
   const [sugarcoat, setSugarcoat] = useState("");
   const [sugarcoatErr, setSugarcoatErr] = useState<string | null>(null);
 
+  // Live prop refs so stable callbacks never reconfigure CM on parent re-render.
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const onSugarcoatErrorRef = useRef(onSugarcoatError);
+  onSugarcoatErrorRef.current = onSugarcoatError;
+  const onCreateEditorRef = useRef(onCreateEditor);
+  onCreateEditorRef.current = onCreateEditor;
+  const onNavigateRef = useRef(onNavigate);
+  onNavigateRef.current = onNavigate;
+  const textRef = useRef(text);
+  textRef.current = text;
+
   // Seed sugarcoat only on entering sugarcoat (view dep). A text change while sugarcoat
   // is active came from sugarcoat itself — reseeding would destroy formatting.
   useEffect(() => {
     if (view !== "sugarcoat") return;
     try {
-      setSugarcoat(schemeToSugarcoat(text));
+      setSugarcoat(schemeToSugarcoat(textRef.current));
       setSugarcoatErr(null);
     } catch (error) {
-      setSugarcoat(text); // un-renderable scheme: fall back to raw, still editable
+      setSugarcoat(textRef.current); // un-renderable scheme: fall back to raw, still editable
       setSugarcoatErr(errMsg(error));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);
 
   // External file change (not our optimistic echo) re-seeds text.
   // value === text for our own edits (studio is optimistic).
   useEffect(() => {
-    if (value !== text) setText(value);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (value !== textRef.current) setText(value);
   }, [value]);
 
   // Surface the parse state to the studio's switch (only meaningful in sugarcoat).
-  useEffect(() => onSugarcoatError?.(view === "sugarcoat" ? sugarcoatErr : null), [sugarcoatErr, view, onSugarcoatError]);
+  useEffect(() => {
+    onSugarcoatErrorRef.current?.(view === "sugarcoat" ? sugarcoatErr : null);
+  }, [sugarcoatErr, view]);
 
   // The classic view handle goes null whenever the classic editor unmounts —
   // switching to the sugarcoat lens or unmounting entirely — so a host never
   // dispatches into a destroyed view.
   useEffect(() => {
-    if (view === "sugarcoat") onCreateEditor?.(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (view === "sugarcoat") onCreateEditorRef.current?.(null);
   }, [view]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => () => onCreateEditor?.(null), []);
+  useEffect(() => () => onCreateEditorRef.current?.(null), []);
 
-  const onSchemeChange = (v: string): void => {
+  // Stable identity for @uiw — see BASIC_SETUP comment. Parent onChange is
+  // reached through a ref so host re-renders never reconfigure the editor.
+  const onSchemeChange = useCallback((v: string): void => {
     setText(v);
-    onChange?.(v);
-  };
+    onChangeRef.current?.(v);
+  }, []);
 
-  const onSugarcoatChange = (v: string): void => {
+  const onSugarcoatChange = useCallback((v: string): void => {
     setSugarcoat(v); // never reflow user's sugarcoat formatting
     try {
       // Forward: unchanged top forms keep exact bytes; edited ones reprint.
-      const classic = sugarcoatToScheme(v, text);
+      const classic = sugarcoatToScheme(v, textRef.current);
       setText(classic);
-      onChange?.(classic);
+      onChangeRef.current?.(classic);
       setSugarcoatErr(null);
     } catch (error) {
       setSugarcoatErr(errMsg(error)); // hold last good classic
     }
-  };
+  }, []);
+
+  // Stable mount callback — inline `(v) => onCreateEditor?.(v)` is a new
+  // function every render (not in uiw's reconfigure deps, but still wasteful
+  // and easy to trip if uiw adds it later).
+  const handleCreateEditor = useCallback((v: EditorView) => {
+    onCreateEditorRef.current?.(v);
+  }, []);
 
   // The IDE backend (type-checked diagnostics / hover / completion / goto-def)
   // loads lazily and lands when ready; until then the editor is plain. The
   // backend answers in classic scheme coordinates; the sugarcoat lens mounts the
   // SAME backend through `sugarcoatIdeBackend` (the sugarcoat↔classic span aligner).
   const ide = useSchemeIde(true);
+
+  // Stable openFile for schemeIde so classicExt/sugarcoatExt don't rebuild on
+  // every parent identity of onNavigate.
+  const openFile = useCallback((path: string, span: { start: number; length: number }) => {
+    onNavigateRef.current?.(path, span);
+  }, []);
+  const hasNavigate = onNavigate !== undefined;
 
   const classicExt = useMemo<Extension[]>(
     // Parameter inlay hints + structural (paredit) editing are .scm-only, and
@@ -168,14 +201,9 @@ export function SchemeEditor({
       overlayTheme,
       ...(ide === null
         ? []
-        : [
-            schemeIde(ide, {
-              ...(onNavigate === undefined ? {} : { openFile: onNavigate }),
-            }),
-          ]),
+        : [schemeIde(ide, hasNavigate ? { openFile } : {})]),
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ide, onNavigate, structuralEditing],
+    [ide, openFile, hasNavigate, structuralEditing, classicExtensions],
   );
   // The sugarcoat lens always shows a .scm, so it always gets the (sugarcoat) hints —
   // plus the full IDE through the sugarcoat↔classic aligner. (Structural ops stay
@@ -188,12 +216,10 @@ export function SchemeEditor({
       paramHintsExtension("sugarcoat"),
       ...(ide === null
         ? []
-        : [overlayTheme, schemeIde(sugarcoatIdeBackend(ide), onNavigate === undefined ? {} : { openFile: onNavigate })]),
+        : [overlayTheme, schemeIde(sugarcoatIdeBackend(ide), hasNavigate ? { openFile } : {})]),
     ],
-    [ide, onNavigate],
+    [ide, openFile, hasNavigate],
   );
-
-  const basicSetup = { lineNumbers: true, highlightActiveLine: false, foldGutter: true };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
@@ -208,7 +234,7 @@ export function SchemeEditor({
             theme="none"
             height="100%"
             style={{ height: "100%" }}
-            basicSetup={basicSetup}
+            basicSetup={BASIC_SETUP}
           />
         ) : (
           <CodeMirror
@@ -217,11 +243,11 @@ export function SchemeEditor({
             extensions={classicExt}
             editable={!readOnly}
             onChange={onSchemeChange}
-            onCreateEditor={(view) => onCreateEditor?.(view)}
+            onCreateEditor={handleCreateEditor}
             theme="none"
             height="100%"
             style={{ height: "100%" }}
-            basicSetup={basicSetup}
+            basicSetup={BASIC_SETUP}
           />
         )}
       </div>
