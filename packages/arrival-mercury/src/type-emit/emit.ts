@@ -795,6 +795,248 @@ function pipelineGenericTypes(steps: readonly PipelineStep[]): { constraint: str
   return { constraint: c, result: r };
 }
 
+// ── binder demand harvest (nested accessor coherence) ─────────────────────────
+// Pure field/elem consumers contribute structural demands on free roots; formals
+// are annotated once. Native index/slice emit stays. See nested-accessor-coherence-DRAFT.
+
+/** List-preserving ops: param must be List; element shape unconstrained by the op alone. */
+const LIST_PRESERVE_OPS = new Set(["cdr", "cddr", "cdddr", "cddddr", "rest", "tail"]);
+
+type DemandShape =
+  | { kind: "any" }
+  | { kind: "list"; elem: DemandShape }
+  | { kind: "obj"; fields: Map<string, DemandShape> };
+
+const DEMAND_ANY: DemandShape = { kind: "any" };
+
+/** Pure field+elem chain ending at a free atom (application order steps). */
+function tryPureChain(expr: Node): { root: string; steps: PipelineStep[] } | null {
+  const outerFirst: PipelineStep[] = [];
+  let cur: Node = expr;
+  for (;;) {
+    if (isAtom(cur) && !cur.str) {
+      return outerFirst.length === 0 ? null : { root: cur.atom, steps: outerFirst.slice().reverse() };
+    }
+    if (!isList(cur) || cur.list.length !== 2) return null;
+    const h = cur.list[0]!;
+    const arg = cur.list[1]!;
+    if (isKeyword(h)) {
+      outerFirst.push({ kind: "field", key: keywordName(h) });
+      cur = arg;
+      continue;
+    }
+    if (isAtom(h) && !h.str && PIPELINE_ELEM_OPS.has(h.atom)) {
+      outerFirst.push({ kind: "elem" });
+      cur = arg;
+      continue;
+    }
+    return null;
+  }
+}
+
+function shapeFromSteps(steps: readonly PipelineStep[]): DemandShape {
+  let s: DemandShape = DEMAND_ANY;
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const step = steps[i]!;
+    if (step.kind === "field") s = { kind: "obj", fields: new Map([[step.key, s]]) };
+    else s = { kind: "list", elem: s };
+  }
+  return s;
+}
+
+/** Replace deepest `any` leaf with `leaf` (one-hop init: field chain → bound demand). */
+function substituteLeaf(s: DemandShape, leaf: DemandShape): DemandShape {
+  if (s.kind === "any") return leaf;
+  if (s.kind === "list") return { kind: "list", elem: substituteLeaf(s.elem, leaf) };
+  const fields = new Map<string, DemandShape>();
+  for (const [k, v] of s.fields) fields.set(k, substituteLeaf(v, leaf));
+  return { kind: "obj", fields };
+}
+
+/**
+ * Join consumer demands. Constructor conflict (list vs object) → null.
+ * Nested key conflicts widen that key to `any` (not whole-shape skip).
+ */
+function joinShapes(a: DemandShape, b: DemandShape): DemandShape | null {
+  if (a.kind === "any") return b;
+  if (b.kind === "any") return a;
+  if (a.kind === "list" && b.kind === "list") {
+    const e = joinShapes(a.elem, b.elem);
+    return e === null ? null : { kind: "list", elem: e };
+  }
+  if (a.kind === "obj" && b.kind === "obj") {
+    const fields = new Map(a.fields);
+    for (const [k, v] of b.fields) {
+      const prev = fields.get(k);
+      if (prev === undefined) fields.set(k, v);
+      else {
+        const m = joinShapes(prev, v);
+        fields.set(k, m === null ? DEMAND_ANY : m);
+      }
+    }
+    return { kind: "obj", fields };
+  }
+  return null; // constructor conflict
+}
+
+function mergeDemand(into: Map<string, DemandShape>, name: string, shape: DemandShape): void {
+  const prev = into.get(name);
+  if (prev === undefined) {
+    into.set(name, shape);
+    return;
+  }
+  const j = joinShapes(prev, shape);
+  if (j === null) into.delete(name); // conflict → no annotation
+  else into.set(name, j);
+}
+
+function renderShape(s: DemandShape): string {
+  if (s.kind === "any") return "any";
+  if (s.kind === "list") return `List<${renderShape(s.elem)}>`;
+  const parts: string[] = [];
+  for (const [k, v] of s.fields) {
+    const key = TS_IDENT.test(k) ? k : JSON.stringify(k);
+    parts.push(`${key}: ${renderShape(v)}`);
+  }
+  return `{ ${parts.join("; ")} }`;
+}
+
+function isNamedLetForm(n: ListNode): boolean {
+  const h = head(n);
+  return (
+    (h === "let" || h === "let*" || h === "letrec" || h === "letrec*") &&
+    isAtom(n.list[1]) &&
+    !n.list[1]!.str
+  );
+}
+
+function isPlainLetForm(n: ListNode): boolean {
+  const h = head(n);
+  return (
+    (h === "let" || h === "let*" || h === "letrec" || h === "letrec*") &&
+    isList(n.list[1])
+  );
+}
+
+/** Harvest structural demands from pure field/elem (and list-preserve) uses. */
+function collectDemandsInNode(n: Node, into: Map<string, DemandShape>): void {
+  if (!isList(n) || isNil(n)) return;
+
+  // Named let: body demands on loop vars + one-hop init → outer free roots.
+  if (isNamedLetForm(n)) {
+    const bindings = n.list[2];
+    const bodyForms = n.list.slice(3);
+    const localNames = new Set<string>();
+    const pairs: { name: string; init: Node }[] = [];
+    if (isList(bindings)) {
+      for (const b of bindings.list) {
+        if (isList(b) && isAtom(b.list[0]) && !b.list[0]!.str) {
+          localNames.add(b.list[0]!.atom);
+          pairs.push({ name: b.list[0]!.atom, init: b.list[1] ?? { atom: "#f" } });
+        }
+      }
+    }
+    const local = new Map<string, DemandShape>();
+    for (const f of bodyForms) collectDemandsInNode(f, local);
+    for (const { name, init } of pairs) {
+      const Cp = local.get(name);
+      if (Cp === undefined) continue;
+      const chain = tryPureChain(init);
+      if (chain !== null) {
+        mergeDemand(into, chain.root, substituteLeaf(shapeFromSteps(chain.steps), Cp));
+      }
+      collectDemandsInNode(init, into);
+    }
+    for (const [name, shape] of local) {
+      if (!localNames.has(name)) mergeDemand(into, name, shape);
+    }
+    return;
+  }
+
+  // Plain let: same one-hop for bindings.
+  if (isPlainLetForm(n)) {
+    const bindings = n.list[1];
+    const bodyForms = n.list.slice(2);
+    const localNames = new Set<string>();
+    const pairs: { name: string; init: Node }[] = [];
+    if (isList(bindings)) {
+      for (const b of bindings.list) {
+        if (isList(b) && isAtom(b.list[0]) && !b.list[0]!.str) {
+          localNames.add(b.list[0]!.atom);
+          pairs.push({ name: b.list[0]!.atom, init: b.list[1] ?? { atom: "#f" } });
+        }
+      }
+    }
+    const local = new Map<string, DemandShape>();
+    for (const f of bodyForms) collectDemandsInNode(f, local);
+    for (const { name, init } of pairs) {
+      const Cp = local.get(name);
+      if (Cp !== undefined) {
+        const chain = tryPureChain(init);
+        if (chain !== null) {
+          mergeDemand(into, chain.root, substituteLeaf(shapeFromSteps(chain.steps), Cp));
+        }
+      }
+      collectDemandsInNode(init, into);
+    }
+    for (const [name, shape] of local) {
+      if (!localNames.has(name)) mergeDemand(into, name, shape);
+    }
+    return;
+  }
+
+  // This form as a pure chain.
+  const chain = tryPureChain(n);
+  if (chain !== null) mergeDemand(into, chain.root, shapeFromSteps(chain.steps));
+
+  // List-preserving: (cdr ts) / (cdr (car …)) etc.
+  if (n.list.length === 2 && isAtom(n.list[0]) && !n.list[0]!.str && LIST_PRESERVE_OPS.has(n.list[0]!.atom)) {
+    const arg = n.list[1]!;
+    if (isAtom(arg) && !arg.str) {
+      mergeDemand(into, arg.atom, { kind: "list", elem: DEMAND_ANY });
+    } else {
+      const inner = tryPureChain(arg);
+      if (inner !== null) {
+        mergeDemand(into, inner.root, { kind: "list", elem: shapeFromSteps(inner.steps) });
+      }
+    }
+  }
+
+  for (const c of n.list) collectDemandsInNode(c, into);
+}
+
+/** Demands for a set of formal names from body forms (render-ready). */
+function demandsForFormals(bodyForms: readonly Node[], formalNames: readonly string[]): Map<string, string> {
+  const shapes = new Map<string, DemandShape>();
+  for (const f of bodyForms) collectDemandsInNode(f, shapes);
+  const out = new Map<string, string>();
+  const want = new Set(formalNames);
+  for (const name of want) {
+    const s = shapes.get(name);
+    if (s !== undefined && s.kind !== "any") out.set(name, renderShape(s));
+  }
+  return out;
+}
+
+/** Write `(a: T, b, ...rest)` using demand annotations when present. */
+function emitAnnotatedParams(
+  params: { atom: Atom; rest: boolean }[],
+  demands: Map<string, string>,
+  ctx: Ctx,
+): void {
+  for (const [idx, p] of params.entries()) {
+    if (idx > 0) ctx.buf.raw(", ");
+    if (p.rest) ctx.buf.raw("...");
+    const name = emitName(p.atom, ctx);
+    ctx.buf.raw(name);
+    // Rest formals: leave bare (polymorphic domain; see rest inference law).
+    if (!p.rest) {
+      const ann = demands.get(p.atom.atom);
+      if (ann !== undefined) ctx.buf.raw(`: ${ann}`);
+    }
+  }
+}
+
 function emitLambda(n: ListNode, ctx: Ctx): void {
   const start = ctx.buf.offset;
   const params = paramAtoms(n.list[1]);
@@ -813,14 +1055,12 @@ function emitLambda(n: ListNode, ctx: Ctx): void {
       return;
     }
   }
+  const demands = demandsForFormals(
+    bodyForms,
+    params.filter((p) => !p.rest).map((p) => p.atom.atom),
+  );
   ctx.buf.raw("(");
-  for (const [idx, p] of params.entries()) {
-    if (idx > 0) ctx.buf.raw(", ");
-    if (p.rest) ctx.buf.raw("...");
-    ctx.buf.raw(emitName(p.atom, ctx));
-    // No param type annotation: TS infers from usage / contextual typing, which
-    // is the faithful default. (A NUM-aware pass may annotate later.)
-  }
+  emitAnnotatedParams(params, demands, ctx);
   ctx.buf.raw(") => ");
   emitArrowBody(bodyForms, ctx);
   recordSpan(ctx, start, n);
@@ -918,7 +1158,7 @@ function emitLetBlock(n: ListNode, ctx: Ctx, lastPrefix: string): void {
   ctx.buf.raw("}");
 }
 
-/** A named let → `{ const loop = (x) => {…}; <lastPrefix>loop(inits); }`. */
+/** A named let → `{ const loop = (x: C) => {…}; <lastPrefix>loop(inits); }`. */
 function emitNamedLetBlock(n: ListNode, ctx: Ctx, lastPrefix: string): void {
   const nameAtom = n.list[1] as Atom;
   const name = emitName(nameAtom, ctx);
@@ -933,14 +1173,22 @@ function emitNamedLetBlock(n: ListNode, ctx: Ctx, lastPrefix: string): void {
       }
     }
   }
+  const bodyForms = n.list.slice(3);
+  const demands = demandsForFormals(
+    bodyForms,
+    varAtoms.filter((a) => !a.str).map((a) => a.atom),
+  );
   ctx.buf.raw("{ ");
   ctx.buf.raw(`const ${name} = (`);
   for (const [idx, v] of varAtoms.entries()) {
     if (idx > 0) ctx.buf.raw(", ");
-    ctx.buf.raw(emitName(v, ctx));
+    const pn = emitName(v, ctx);
+    ctx.buf.raw(pn);
+    const ann = demands.get(v.atom);
+    if (ann !== undefined) ctx.buf.raw(`: ${ann}`);
   }
   ctx.buf.raw(") => ");
-  emitArrowBody(n.list.slice(3), ctx);
+  emitArrowBody(bodyForms, ctx);
   ctx.buf.raw("; ");
   ctx.buf.raw(lastPrefix);
   ctx.buf.raw(`${name}(`);
@@ -1055,20 +1303,21 @@ function emitDefine(n: ListNode, ctx: Ctx): void {
   const start = ctx.buf.offset;
   const sig = n.list[1];
   if (isList(sig)) {
-    // `(define (f a b) body)` → `const f = (a, b) => { … };`
+    // `(define (f a b) body)` → `const f = (a: C, b) => { … };` when demand harvest hits.
     const nameAtom = isAtom(sig.list[0]) ? sig.list[0] : undefined;
     const name = nameAtom ? emitName(nameAtom, ctx) : "_";
     if (nameAtom) ctx.declaredNames.set(name, nameAtom.atom);
     const params = paramAtoms({ list: sig.list.slice(1) });
+    const bodyForms = n.list.slice(2);
+    const demands = demandsForFormals(
+      bodyForms,
+      params.filter((p) => !p.rest).map((p) => p.atom.atom),
+    );
     const kw = ctx.setVars.has(name) ? "let" : "const";
     ctx.buf.raw(`${kw} ${name} = (`);
-    for (const [idx, p] of params.entries()) {
-      if (idx > 0) ctx.buf.raw(", ");
-      if (p.rest) ctx.buf.raw("...");
-      ctx.buf.raw(emitName(p.atom, ctx));
-    }
+    emitAnnotatedParams(params, demands, ctx);
     ctx.buf.raw(") => ");
-    emitArrowBody(n.list.slice(2), ctx);
+    emitArrowBody(bodyForms, ctx);
   } else {
     // `(define x v)` → `const x = <v>;`
     const name = isAtom(sig) ? emitName(sig, ctx) : "_";
