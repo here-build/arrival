@@ -180,12 +180,16 @@ interface Ctx {
    * so span mappings stay exact (no post-hoc string rewrite).
    */
   requireBindings: ReadonlyMap<string, string>;
-  /**
-   * Local unary domains from same-forest compose/pipe/pipeline-lambda defines
-   * (scheme name → input shape). Used to fuse callee expectations onto args
-   * e.g. `(state-of persona)` merges state-of's compose constraint onto persona.
-   */
-  localDomains: ReadonlyMap<string, DemandShape>;
+  /** Demand harvest context (compose domains + lazy multi-arg formal shapes). */
+  demandCtx: DemandHarvestCtx;
+}
+
+/** Shared state for binder demand harvest over one desugared forest. */
+interface DemandHarvestCtx {
+  forest: readonly Node[];
+  composeDomains: ReadonlyMap<string, DemandShape>;
+  fnFormalShapes: Map<string, Map<string, DemandShape>>;
+  visiting: Set<string>;
 }
 
 /** Emit a single TS expression for `n` into `ctx.buf`. */
@@ -928,14 +932,13 @@ function isPlainLetForm(n: ListNode): boolean {
  * Unary input domains of same-forest pipeline defines (compose/pipe → lambda).
  * Scheme name → demand shape on the single parameter.
  */
-function collectLocalDomains(forest: readonly Node[]): Map<string, DemandShape> {
+function collectComposeDomains(forest: readonly Node[]): Map<string, DemandShape> {
   const out = new Map<string, DemandShape>();
   for (const form of forest) {
     if (!isList(form) || head(form) !== "define") continue;
     const sig = form.list[1];
     const val = form.list[2];
     if (!isAtom(sig) || sig.str || val === undefined) continue;
-    // Desugared compose/pipe is (lambda (it) …pipeline…).
     if (!isList(val) || head(val) !== "lambda") continue;
     const params = paramAtoms(val.list[1]);
     if (params.length !== 1 || params[0]!.rest) continue;
@@ -948,16 +951,82 @@ function collectLocalDomains(forest: readonly Node[]): Map<string, DemandShape> 
   return out;
 }
 
+function findFunctionDefine(
+  forest: readonly Node[],
+  name: string,
+): { formals: string[]; body: Node[] } | null {
+  for (const form of forest) {
+    if (!isList(form) || head(form) !== "define") continue;
+    const sig = form.list[1];
+    if (!isList(sig) || !isAtom(sig.list[0]) || sig.list[0]!.str) continue;
+    if (sig.list[0]!.atom !== name) continue;
+    const formals = paramAtoms({ list: sig.list.slice(1) })
+      .filter((p) => !p.rest)
+      .map((p) => p.atom.atom);
+    return { formals, body: form.list.slice(2) };
+  }
+  return null;
+}
+
 /**
- * Harvest structural demands: pure field/elem chains, list-preserve, and
- * **fused callee domains** from local compose/pipe defines (same forest).
- * Join is structural meet (key-union on objects, List element join) — never
- * drop a demand because of a second consumer.
+ * Lazy formal-shape analysis for a multi-arg function define.
+ * e.g. frontier-of's `history` gets List<{ tagline; reactions }> from its map lambda.
+ */
+function formalShapesOf(
+  fnName: string,
+  dctx: DemandHarvestCtx,
+): Map<string, DemandShape> {
+  const cached = dctx.fnFormalShapes.get(fnName);
+  if (cached !== undefined) return cached;
+  if (dctx.visiting.has(fnName)) return new Map();
+  dctx.visiting.add(fnName);
+  const def = findFunctionDefine(dctx.forest, fnName);
+  const result = new Map<string, DemandShape>();
+  if (def !== null) {
+    const into = new Map<string, DemandShape>();
+    for (const f of def.body) collectDemandsInNode(f, into, dctx);
+    for (const p of def.formals) {
+      const s = into.get(p);
+      if (s !== undefined && s.kind !== "any") result.set(p, s);
+    }
+  }
+  dctx.fnFormalShapes.set(fnName, result);
+  dctx.visiting.delete(fnName);
+  return result;
+}
+
+/** Apply a required shape to an argument expression (atom / list / pure chain). */
+function applyDomainToArg(
+  arg: Node,
+  domain: DemandShape,
+  into: Map<string, DemandShape>,
+): void {
+  if (isAtom(arg) && !arg.str) {
+    mergeDemand(into, arg.atom, domain);
+    return;
+  }
+  // (list a b c) + List<E> → each of a,b,c needs E
+  if (isList(arg) && head(arg) === "list" && domain.kind === "list") {
+    for (let i = 1; i < arg.list.length; i++) {
+      applyDomainToArg(arg.list[i]!, domain.elem, into);
+    }
+    return;
+  }
+  const argChain = tryPureChain(arg);
+  if (argChain !== null) {
+    mergeDemand(into, argChain.root, substituteLeaf(shapeFromSteps(argChain.steps), domain));
+  }
+}
+
+/**
+ * Harvest structural demands: pure field/elem chains, list-preserve, map/lambda
+ * element push, and fused callee formal domains (compose + multi-arg defines).
+ * Join is structural meet — never drop a demand for a second consumer.
  */
 function collectDemandsInNode(
   n: Node,
   into: Map<string, DemandShape>,
-  localDomains: ReadonlyMap<string, DemandShape>,
+  dctx: DemandHarvestCtx,
 ): void {
   if (!isList(n) || isNil(n)) return;
 
@@ -976,7 +1045,7 @@ function collectDemandsInNode(
       }
     }
     const local = new Map<string, DemandShape>();
-    for (const f of bodyForms) collectDemandsInNode(f, local, localDomains);
+    for (const f of bodyForms) collectDemandsInNode(f, local, dctx);
     for (const { name, init } of pairs) {
       const Cp = local.get(name);
       if (Cp === undefined) continue;
@@ -984,7 +1053,7 @@ function collectDemandsInNode(
       if (chain !== null) {
         mergeDemand(into, chain.root, substituteLeaf(shapeFromSteps(chain.steps), Cp));
       }
-      collectDemandsInNode(init, into, localDomains);
+      collectDemandsInNode(init, into, dctx);
     }
     for (const [name, shape] of local) {
       if (!localNames.has(name)) mergeDemand(into, name, shape);
@@ -1007,7 +1076,7 @@ function collectDemandsInNode(
       }
     }
     const local = new Map<string, DemandShape>();
-    for (const f of bodyForms) collectDemandsInNode(f, local, localDomains);
+    for (const f of bodyForms) collectDemandsInNode(f, local, dctx);
     for (const { name, init } of pairs) {
       const Cp = local.get(name);
       if (Cp !== undefined) {
@@ -1016,7 +1085,7 @@ function collectDemandsInNode(
           mergeDemand(into, chain.root, substituteLeaf(shapeFromSteps(chain.steps), Cp));
         }
       }
-      collectDemandsInNode(init, into, localDomains);
+      collectDemandsInNode(init, into, dctx);
     }
     for (const [name, shape] of local) {
       if (!localNames.has(name)) mergeDemand(into, name, shape);
@@ -1041,38 +1110,65 @@ function collectDemandsInNode(
     }
   }
 
-  // Callee domain fusion: (state-of persona) → merge state-of's input shape onto persona.
-  // Unary domain only (compose/pipe). Positional args before any keyword.
+  // (map (lambda (e) …) history) → history : List<demands(e)>
+  // (map :field xs) → xs : List<{ field: any }>
+  if (isAtom(n.list[0]) && !n.list[0]!.str && n.list[0]!.atom === "map" && n.list.length >= 3) {
+    const f = n.list[1]!;
+    const xs = n.list[2]!;
+    let elemShape: DemandShape | null = null;
+    if (isList(f) && head(f) === "lambda") {
+      const params = paramAtoms(f.list[1]);
+      if (params.length >= 1 && !params[0]!.rest) {
+        const lamBody = f.list.slice(2);
+        const local = new Map<string, DemandShape>();
+        for (const b of lamBody) collectDemandsInNode(b, local, dctx);
+        const s = local.get(params[0]!.atom.atom);
+        if (s !== undefined && s.kind !== "any") elemShape = s;
+      }
+    } else if (isKeyword(f)) {
+      // isKeyword already means :field atom (not bare ":")
+      elemShape = { kind: "obj", fields: new Map([[keywordName(f), DEMAND_ANY]]) };
+    }
+    if (elemShape !== null) {
+      applyDomainToArg(xs, { kind: "list", elem: elemShape }, into);
+    }
+  }
+
+  // Callee domain fusion — compose unary + multi-arg function formals.
   if (isAtom(n.list[0]) && !n.list[0]!.str) {
-    const domain = localDomains.get(n.list[0]!.atom);
-    if (domain !== undefined) {
-      for (let i = 1; i < n.list.length; i++) {
-        const a = n.list[i]!;
-        if (isKeyword(a)) break;
-        if (isAtom(a) && !a.str) mergeDemand(into, a.atom, domain);
-        // (state-of (car xs)) — domain applies to chain root as element demand
-        else {
-          const argChain = tryPureChain(a);
-          if (argChain !== null) {
-            // domain is required of the *value* of the chain → substitute leaf
-            mergeDemand(into, argChain.root, substituteLeaf(shapeFromSteps(argChain.steps), domain));
-          }
+    const fname = n.list[0]!.atom;
+    // Compose/pipe unary
+    const composeDom = dctx.composeDomains.get(fname);
+    if (composeDom !== undefined && n.list.length >= 2 && !isKeyword(n.list[1])) {
+      applyDomainToArg(n.list[1]!, composeDom, into);
+    }
+    // Multi-arg: (frontier-of (list entry) personas hints)
+    const formalShapes = formalShapesOf(fname, dctx);
+    if (formalShapes.size > 0) {
+      const def = findFunctionDefine(dctx.forest, fname);
+      if (def !== null) {
+        let ai = 1;
+        for (const formal of def.formals) {
+          if (ai >= n.list.length || isKeyword(n.list[ai])) break;
+          const dom = formalShapes.get(formal);
+          if (dom !== undefined) applyDomainToArg(n.list[ai]!, dom, into);
+          ai += 1;
         }
       }
     }
   }
 
-  for (const c of n.list) collectDemandsInNode(c, into, localDomains);
+  for (const c of n.list) collectDemandsInNode(c, into, dctx);
 }
 
-/** Demands for formals: pure chains ⊔ list-preserve ⊔ local callee domains (fused). */
+/** Demands for formals: pure chains ⊔ list-preserve ⊔ map/lambda ⊔ callee domains. */
 function demandsForFormals(
   bodyForms: readonly Node[],
   formalNames: readonly string[],
-  localDomains: ReadonlyMap<string, DemandShape>,
+  dctx: DemandHarvestCtx,
 ): Map<string, string> {
   const shapes = new Map<string, DemandShape>();
-  for (const f of bodyForms) collectDemandsInNode(f, shapes, localDomains);
+  for (const f of bodyForms) collectDemandsInNode(f, shapes, dctx);
   const out = new Map<string, string>();
   const want = new Set(formalNames);
   for (const name of want) {
@@ -1122,7 +1218,7 @@ function emitLambda(n: ListNode, ctx: Ctx): void {
   const demands = demandsForFormals(
     bodyForms,
     params.filter((p) => !p.rest).map((p) => p.atom.atom),
-    ctx.localDomains,
+    ctx.demandCtx,
   );
   ctx.buf.raw("(");
   emitAnnotatedParams(params, demands, ctx);
@@ -1242,7 +1338,7 @@ function emitNamedLetBlock(n: ListNode, ctx: Ctx, lastPrefix: string): void {
   const demands = demandsForFormals(
     bodyForms,
     varAtoms.filter((a) => !a.str).map((a) => a.atom),
-    ctx.localDomains,
+    ctx.demandCtx,
   );
   ctx.buf.raw("{ ");
   ctx.buf.raw(`const ${name} = (`);
@@ -1378,7 +1474,7 @@ function emitDefine(n: ListNode, ctx: Ctx): void {
     const demands = demandsForFormals(
       bodyForms,
       params.filter((p) => !p.rest).map((p) => p.atom.atom),
-      ctx.localDomains,
+      ctx.demandCtx,
     );
     const kw = ctx.setVars.has(name) ? "let" : "const";
     ctx.buf.raw(`${kw} ${name} = (`);
@@ -1523,8 +1619,13 @@ export function emitTypes(source: string | readonly Node[], opts?: EmitTypesOpti
     ...(opts?.kwargsMembers ?? EMPTY_SET),
     ...collectPromptKwargHeads(forest),
   ]);
-  // Compose/pipe domains for fusing callee expectations onto binder formals.
-  const localDomains = collectLocalDomains(forest);
+  // Demand harvest: compose domains + lazy multi-arg formal shapes (map/lambda, calls).
+  const demandCtx: DemandHarvestCtx = {
+    forest,
+    composeDomains: collectComposeDomains(forest),
+    fnFormalShapes: new Map(),
+    visiting: new Set(),
+  };
   const ctxBase: Ctx = {
     buf,
     nameOf,
@@ -1534,7 +1635,7 @@ export function emitTypes(source: string | readonly Node[], opts?: EmitTypesOpti
     kwargsMembers,
     declaredNames: new Map(),
     requireBindings: opts?.requireBindings ?? new Map(),
-    localDomains,
+    demandCtx,
   };
 
   for (const [idx, form] of forest.entries()) {

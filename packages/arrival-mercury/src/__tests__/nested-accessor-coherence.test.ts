@@ -102,4 +102,32 @@ describe("nested accessor coherence — binder demand harvest", () => {
     expect(ts).toMatch(/value:\s*List<\s*\{[^}]*field:\s*any/);
     expect(ts).toMatch(/value:\s*List<\s*\{[^}]*test:\s*any/);
   });
+
+  it("callee formal List domain pushes through (list x) onto x (frontier-of / child-task-of)", () => {
+    // frontier-of's history is List<{ tagline; reactions }> from its map lambda.
+    // (frontier-of (list parent-best-entry) …) must fuse that element shape onto
+    // parent-best-entry — not leave it as { tagline } from the pure :tagline read alone.
+    const { ts } = emitTypes(`
+(define (frontier-of history personas inherited)
+  (append inherited
+    (map (lambda (e) (list (:tagline e) (:reactions e)))
+         history)))
+(define (child-task-of parent-task parent-best-entry parent-node-id unsatisfied)
+  (let ((personas (:personas parent-task))
+        (hints    (:hints parent-task)))
+    (list (map :persona unsatisfied)
+          (:tagline parent-best-entry)
+          parent-node-id
+          (frontier-of (list parent-best-entry) personas hints))))
+`);
+    // Callee formal harvest
+    expect(ts).toMatch(/history:\s*List<\s*\{\s*tagline:\s*any;\s*reactions:\s*any\s*\}/);
+    // Call-site list-element push ⊔ pure :tagline chain
+    expect(
+      ts,
+      "parent-best-entry must pick up reactions via (list ·) under frontier-of's history domain",
+    ).toMatch(
+      /parent\$dash\$best\$dash\$entry:\s*\{\s*tagline:\s*any;\s*reactions:\s*any\s*\}/,
+    );
+  });
 });
