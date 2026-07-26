@@ -41,9 +41,13 @@ function contractOf(def: SymbolDeclaration): RosettaSymbolDef {
   return (def as { contract: unknown }).contract as RosettaSymbolDef;
 }
 
-/** Invoke a baked rosetta procedure via its apply term (the sole membrane spine). */
-function fire(proc: { ["arrival/tagless-final/apply"](args: any[], callCtx: any): any }, callCtx: any, ...args: any[]) {
-  return proc["arrival/tagless-final/apply"](args, callCtx);
+/** Invoke a baked rosetta procedure via its apply term (the sole membrane spine).
+ *  `tool.*` returns the wide `SymbolDeclaration` (tool.ts `.d.ts` emission); at runtime every
+ *  value this suite hands `fire` is the baked `ARosettaProcedure` with the apply term. */
+function fire(proc: SymbolDeclaration, callCtx: any, ...args: any[]) {
+  return (proc as { ["arrival/tagless-final/apply"](args: any[], callCtx: any): any })[
+    "arrival/tagless-final/apply"
+  ](args, callCtx);
 }
 
 

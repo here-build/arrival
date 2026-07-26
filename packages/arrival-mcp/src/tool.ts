@@ -102,28 +102,29 @@ function toolView<S extends z.ZodRawShape, const O extends VectorSpec>(
     // ruling), so this function's declared return type must be a NAMEABLE, non-conditional
     // type (`SymbolDeclaration`) for `.d.ts` emission to succeed at all. The cast below is
     // where that narrowing actually happens; see its own note for what it costs.
+    // The cast: `symbol.rosetta`'s ContractKindMismatch branch (its OWN compile-time ban on
+    // a `z.schemeValue`-branded rosetta slot) is a distinct type from `ARosettaProcedure`,
+    // and `O` is still an unresolved generic HERE — TS cannot prove which branch a not-yet-
+    // instantiated caller will land on, so neither the contract arg (`CrossingContract<…, O>`)
+    // nor a bare `SymbolDeclaration` return-type annotation type-checks without help.
+    // KNOWN, ACCEPTED NARROWING: this cast (and the matching one in `toolPure`) makes
+    // `tool.view`/`tool.pure` ALWAYS report `SymbolDeclaration` to a caller, even one who
+    // (mis)supplies a `z.schemeValue`-branded `output` — that specific misuse loses ITS
+    // COMPILE-TIME catch through THESE TWO SUGAR ARMS ONLY. `symbol.rosetta` called
+    // directly keeps the full ban (this file's own `_bake.ts`-shared gate, unaffected). No
+    // current call site in this package uses `z.schemeValue` as a `tool.view`/`tool.pure`
+    // output; the RUNTIME shape gates (`assertCacheClassShape` for `view`, tombstone/void
+    // gates for `effect`) are completely separate and still fire unconditionally, regardless
+    // of this cast.
     return symbol.rosetta`${name}: ${doc}`(
       {
         input: [],
         inputRest: hasArgs ? shape : {},
         output: contract.output,
         cacheClass: "view",
-      },
+      } as any,
       (argsObj: any) => impl(argsObj),
       { metadata: { description: doc, ...meta } },
-      // The cast: `symbol.rosetta`'s ContractKindMismatch branch (its OWN compile-time ban on
-      // a `z.schemeValue`-branded rosetta slot) is a distinct type from `ARosettaProcedure`,
-      // and `O` is still an unresolved generic HERE — TS cannot prove which branch a not-yet-
-      // instantiated caller will land on, so a bare `SymbolDeclaration` return-type annotation
-      // doesn't type-check without help. KNOWN, ACCEPTED NARROWING: this cast (and the
-      // matching one in `toolPure`) makes `tool.view`/`tool.pure` ALWAYS report
-      // `SymbolDeclaration` to a caller, even one who (mis)supplies a `z.schemeValue`-branded
-      // `output` — that specific misuse loses ITS COMPILE-TIME catch through THESE TWO SUGAR
-      // ARMS ONLY. `symbol.rosetta` called directly keeps the full ban (this file's own
-      // `_bake.ts`-shared gate, unaffected). No current call site in this package uses
-      // `z.schemeValue` as a `tool.view`/`tool.pure` output; the RUNTIME shape gates
-      // (`assertCacheClassShape` for `view`, tombstone/void gates for `effect`) are
-      // completely separate and still fire unconditionally, regardless of this cast.
     ) as SymbolDeclaration;
   };
 }
@@ -142,18 +143,18 @@ function toolPure<S extends z.ZodRawShape, const O extends VectorSpec>(
     const shape: S = contract.shape;
     const hasArgs = Object.keys(shape).length > 0;
     // See `toolView`'s matching cast for the full reasoning: `O` is still generic here, so
-    // `symbol.rosetta`'s own `ContractKindMismatch`-vs-`ARosettaProcedure` conditional can't
-    // resolve without help. Same accepted narrowing — `tool.pure`'s compile-time
-    // `z.schemeValue`-in-output catch is lost through this sugar arm; `symbol.rosetta` direct
-    // keeps it, and `tool.pure` declares no runtime shape gate to begin with (nothing of a
-    // `pure` result is persisted, so there was never a shape gate here to weaken).
+    // both the contract arg and the return need help. Same accepted narrowing —
+    // `tool.pure`'s compile-time `z.schemeValue`-in-output catch is lost through this sugar
+    // arm; `symbol.rosetta` direct keeps it, and `tool.pure` declares no runtime shape gate
+    // to begin with (nothing of a `pure` result is persisted, so there was never a shape
+    // gate here to weaken).
     return symbol.rosetta`${name}: ${doc}`(
       {
         input: [],
         inputRest: hasArgs ? shape : {},
         output: contract.output ?? [sz.dynamic],
         cacheClass: "pure",
-      },
+      } as any,
       (argsObj: any) => impl(argsObj),
       { metadata: { description: doc, ...meta } },
     ) as SymbolDeclaration;
