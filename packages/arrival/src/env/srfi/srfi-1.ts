@@ -537,7 +537,7 @@ export default EnvCapability.define("scheme/srfi-1", {
           output: [z.pair],
           type: dedent`
           {
-            <T>(xs: List<T>): Pair<T, List<T> | T>;
+            <T>(xs: List<T>): Tuple<T, List<T> | T>;
           }
         ` },
         `(lambda (xs)

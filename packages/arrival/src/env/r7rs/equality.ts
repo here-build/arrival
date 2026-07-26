@@ -240,10 +240,12 @@ export default EnvCapability.define("scheme/equality", {
     // tagless: receiver's own tf(pair?); default #f — no instanceof APair reach-around.
     // Law-N witness: runtime proves the narrowing. Fields via object-spread (tagless-guard).
     "pair?": withContractFields(symbol.taglessGuard`pair?: #t iff obj is a pair (cons cell)`, {
+      // NonEmptyList — list generalizes pair; empty list is a list but not a pair.
+      // (Fixed 2-products use Tuple elsewhere; pair? is the cons-cell / non-empty gate.)
       type: dedent`
           {
-            (x: unknown): x is Pair<unknown, unknown>;
-            <T>(x: T): x is Extract<T, Pair<any, any>>;
+            (x: unknown): x is NonEmptyList<unknown>;
+            <T>(x: T): x is Extract<T, NonEmptyList<any>>;
           }
         `,
       emit: pairQEmitRule,

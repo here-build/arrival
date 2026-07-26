@@ -407,7 +407,7 @@ export default EnvCapability.define("scheme/lists", {
         type: dedent`
           {
             <H, T>(h: H, t: List<T>): List<H | T>;
-            <H, T>(h: H, t: T): Pair<H, T>;
+            <H, T>(h: H, t: T): Tuple<H, T>;
           }
         `,
         emit: consEmitRule },

@@ -179,6 +179,11 @@ describe("scheme/strings Contract precision — 2026-07-05 audit: 8 fixes on the
     const mapDef = nativeDef("string-map");
     expect(mapDef.in.safeParse([probeFn, str("abc")]).success).toBe(true);
     expect(mapDef.in.safeParse([probeFn, "raw-js-string"]).success).toBe(false);
+    // for-each shares the same rest precision (was only asserted on map in the central
+    // contract-precision-fixes file — ownership moved here per redundancy receipts).
+    const eachDef = nativeDef("string-for-each");
+    expect(eachDef.in.safeParse([probeFn, str("abc")]).success).toBe(true);
+    expect(eachDef.in.safeParse([probeFn, "raw-js-string"]).success).toBe(false);
   });
 });
 
