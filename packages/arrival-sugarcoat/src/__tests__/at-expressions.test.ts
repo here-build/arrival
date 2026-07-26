@@ -34,6 +34,14 @@ describe("read: at-expressions → (head part…)", () => {
     ["@{from @s[:baseline]}", '(str "from " (:baseline s))'],
     ["@{/@config/hero-id@persona[:id]@replay-idx}", '(str "/" config/hero-id (:id persona) replay-idx)'],
     ["@{x@persona[:id]y}", '(str "x" (:id persona) "y")'],
+    // nested templates + method chains; `;` is literal prose (not a line comment)
+    ["@{a@{b@x}c}", '(str "a" (str "b" x) "c")'],
+    ["@{;@hints}", '(str ";" hints)'],
+    ["@{;@hints.map{(h) => h}}", '(str ";" (map (lambda (h) h) hints))'],
+    [
+      '@{;@hints.map{(h) => @{@h[:tagline]:@(join "," h[:reached])}}}',
+      '(str ";" (map (lambda (h) (str (:tagline h) ":" (join "," (:reached h)))) hints))',
+    ],
   ];
   for (const [sugarcoat, scheme] of cases) it(`${sugarcoat} → ${scheme}`, () => expect(read(sugarcoat)).toBe(scheme));
 });
@@ -75,6 +83,13 @@ describe("render: (str …) / (string-append …) → single-line at-expression"
     ['(str "/" config/hero-id (:id persona) replay-idx)', "@{/@config/hero-id@persona[:id]@replay-idx}"],
     ['(str "x" (:id persona) "y")', "@{x@persona[:id]y}"],
     ['(str "from " (:baseline s))', "@{from @s[:baseline]}"],
+    // nested templates + tagless method chains inside at-bodies
+    ['(str "a" (str "b" x) "c")', "@{a@{b@x}c}"],
+    ['(str "x" (map (lambda (it) (str it "!")) xs))', "@{x@xs.map{ @{@|it|!} }}"],
+    [
+      '(str ";" (map (lambda (h) (str (:tagline h) ":" (join "," (:reached h)))) hints))',
+      '@{;@hints.map{(h) => @{@h[:tagline]:@(join "," h[:reached])}}}',
+    ],
   ];
   for (const [scheme, sugarcoat] of cases) it(`${scheme} → ${sugarcoat}`, () => expect(render(scheme)).toBe(sugarcoat));
 

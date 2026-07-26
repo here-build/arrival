@@ -50,9 +50,10 @@ const decimalMatcher =
 const SYMBOL_BODY = /[\w\-!$%&*+./<=>?@^~]/;
 
 interface SchemeSugarcoatState {
-  mode: false | "string" | "comment" | "attext";
+  mode: false | "string" | "comment" | "attext" | "atgraft";
   afterDefineHead: boolean; // next atom after `(define ...` → DEFNAME
-  atDepth: number;          // literal {} depth inside @head{...} (0 closes)
+  atDepth: number; // literal {} depth inside @head{...} (0 closes the body)
+  graftDepth: number; // paren depth inside @() graft (0 = just closed)
 }
 
 // @head{ opener (mirrors arrival-sugarcoat AT_HEAD) + balanced literal {} inside body.
@@ -61,7 +62,7 @@ const AT_INTERP = /[A-Za-z0-9!$%&*/:<=>?^_~+-]/;
 
 /** @text body tokenizer. atDepth tracks literal braces (close only at 0).
  *  Returns null at EOL for multi-line @dedent bodies. Bare @ (no {) falls
- *  through to symbols. */
+ *  through to symbols. `@(` enters atgraft so the graft is code-highlighted. */
 function tokenizeAtText(stream: StringStream, state: SchemeSugarcoatState): string | null {
   const c = stream.peek();
   if (c == null) return null; // end of line — stay in attext (multi-line body)
@@ -83,22 +84,11 @@ function tokenizeAtText(stream: StringStream, state: SchemeSugarcoatState): stri
     stream.next(); // consume `@`
     const n = stream.peek();
     if (n === "(") {
-      // graft — consume the balanced `(…)` on this line (string-aware so a
-      // quoted `)` inside the graft doesn't close early).
-      let depth = 0;
-      let inStr = false;
-      let ch: string | void;
-      while ((ch = stream.next()) != null) {
-        if (inStr) {
-          if (ch === "\\") stream.next();
-          else if (ch === '"') inStr = false;
-          continue;
-        }
-        if (ch === '"') inStr = true;
-        else if (ch === "(") depth++;
-        else if (ch === ")" && --depth === 0) break;
-      }
-      return INTERP;
+      // Enter graft mode — highlight the interior as code, not one opaque INTERP blob.
+      stream.next(); // consume `(`
+      state.mode = "atgraft";
+      state.graftDepth = 1;
+      return INTERP; // `@(` opener pops as interp against the prose
     }
     if (n === "|") {
       stream.next(); // opening `|`
@@ -106,10 +96,15 @@ function tokenizeAtText(stream: StringStream, state: SchemeSugarcoatState): stri
       stream.eat("|"); // closing `|`
       return INTERP;
     }
-    stream.eatWhile(AT_INTERP); // bare `@id` (or a nested `@head` — its `{` bumps atDepth)
-    // Tight `@id[…][…]` subscript chain — part of the same interpolation
-    // (mirrors sugarcoat-read's bare-interp + trailing subscripts). Spaced
-    // `@id […]` leaves the brackets as prose.
+    // Nested `@head{` / `@{` — stay in attext; the `{` bumps atDepth as literal…
+    // but nested at-expr heads should read as INTERP openers. Match opener and bump.
+    if (n != null && AT_OPENER.test(stream.string.slice(stream.pos))) {
+      stream.match(AT_OPENER); // head + `{`
+      state.atDepth++; // nested body; outer close still at 0
+      return ATOPEN;
+    }
+    stream.eatWhile(AT_INTERP); // bare `@id`
+    // Tight `@id[…][…]` subscript chain
     while (stream.peek() === "[") {
       let depth = 0;
       let inStr = false;
@@ -123,6 +118,45 @@ function tokenizeAtText(stream: StringStream, state: SchemeSugarcoatState): stri
         if (ch === '"') inStr = true;
         else if (ch === "[") depth++;
         else if (ch === "]" && --depth === 0) break;
+      }
+    }
+    // Tight method chain `.op` / `.op()` / `.op{}` (mirrors sugarcoat-read;
+    // op class excludes `:` so prose separators after unary methods stay prose)
+    const AT_METHOD_OP = /[A-Za-z0-9!$%&*/<=>?^_~+-]/;
+    while (stream.peek() === ".") {
+      const afterDot = stream.string.slice(stream.pos + 1);
+      if (!AT_METHOD_OP.test(afterDot[0] ?? "")) break;
+      stream.next(); // .
+      stream.eatWhile(AT_METHOD_OP);
+      if (stream.peek() === "(") {
+        let depth = 0;
+        let inStr = false;
+        let ch: string | void;
+        while ((ch = stream.next()) != null) {
+          if (inStr) {
+            if (ch === "\\") stream.next();
+            else if (ch === '"') inStr = false;
+            continue;
+          }
+          if (ch === '"') inStr = true;
+          else if (ch === "(") depth++;
+          else if (ch === ")" && --depth === 0) break;
+        }
+      }
+      if (stream.peek() === "{") {
+        let depth = 0;
+        let inStr = false;
+        let ch: string | void;
+        while ((ch = stream.next()) != null) {
+          if (inStr) {
+            if (ch === "\\") stream.next();
+            else if (ch === '"') inStr = false;
+            continue;
+          }
+          if (ch === '"') inStr = true;
+          else if (ch === "{") depth++;
+          else if (ch === "}" && --depth === 0) break;
+        }
       }
     }
     return INTERP;
@@ -141,11 +175,123 @@ const DEFNAME = "sugarcoatDefName"; // defined name → definition(variableName)
 const ATOPEN = "sugarcoatAtOpen"; // @head{ opener → keyword (the tagged-template head)
 const INTERP = "sugarcoatInterp"; // @id / @(…) / @|…| inside a text body → variableName pop
 
+/**
+ * Code-mode token inside an `@()` graft. Mirrors the main code tokenizer for
+ * strings, comments, symbols, keywords — but never enters attext (a `@head{`
+ * inside a graft is rare and would desync the outer at-body). `(`/`)` depth is
+ * tracked by the caller (atgraft branch); this only classifies one token.
+ * Strings/block-comments are consumed inline so we stay in atgraft (multi-line
+ * strings inside grafts are vanishingly rare).
+ */
+function tokenizeGraftCode(stream: StringStream, _state: SchemeSugarcoatState): string | null {
+  const ch = stream.next();
+  if (ch == null) return null;
+
+  if (ch === '"') {
+    let escaped = false;
+    let next: string | void;
+    while ((next = stream.next()) != null) {
+      if (next === '"' && !escaped) break;
+      escaped = !escaped && next === "\\";
+    }
+    return "string";
+  }
+
+  if (ch === ";") {
+    stream.skipToEnd();
+    return "lineComment";
+  }
+
+  if (ch === "#" && stream.eat("|")) {
+    let maybeEnd = false;
+    let next: string | void;
+    while ((next = stream.next()) != null) {
+      if (next === "#" && maybeEnd) break;
+      maybeEnd = next === "|";
+    }
+    return "blockComment";
+  }
+
+  if (ch === "'" || ch === "`") return "meta";
+  if (ch === ",") {
+    stream.eat("@");
+    return "meta";
+  }
+
+  if (ch === "[" || ch === "]") return "squareBracket";
+  if (ch === "{" || ch === "}") return CURLY;
+
+  if (ch === ":" && SYMBOL_BODY.test(stream.peek() ?? "")) {
+    stream.eatWhile(SYMBOL_BODY);
+    return KEY;
+  }
+
+  if (ch === "=" && stream.peek() === ">") {
+    stream.next();
+    return ARROW;
+  }
+  if (ch === "=" && stream.peek() === "=") {
+    stream.next();
+    return COMPARE;
+  }
+  if (ch === "&" && stream.peek() === "&") {
+    stream.next();
+    return LOGIC;
+  }
+  if (ch === "|" && stream.peek() === "|") {
+    stream.next();
+    return LOGIC;
+  }
+
+  if (/[-+0-9.]/.test(ch)) {
+    stream.backUp(1);
+    if (stream.match(decimalMatcher)) return "number";
+    stream.next();
+  }
+
+  stream.eatWhile(SYMBOL_BODY);
+  if (stream.peek() === ":") {
+    stream.next();
+    return KEY;
+  }
+  const word = stream.current();
+  if (DEFINITION_KEYWORDS.has(word)) return "definitionKeyword";
+  if (CONTROL_KEYWORDS.has(word)) return "controlKeyword";
+  return "variableName";
+}
+
 export const parser: StreamParser<SchemeSugarcoatState> = {
   name: "scheme-sugarcoat",
-  startState: () => ({ mode: false, afterDefineHead: false, atDepth: 0 }),
+  startState: () => ({ mode: false, afterDefineHead: false, atDepth: 0, graftDepth: 0 }),
 
   token(stream, state): string | null {
+    // ── inside @() graft: code-highlight until the balanced close ──
+    // Re-uses the normal code path below via a depth counter; on the closing
+    // `)` we return to attext so prose/interp resume.
+    if (state.mode === "atgraft") {
+      if (stream.eatSpace()) return null;
+      const ch = stream.peek();
+      if (ch == null) return null;
+      // closing paren of the graft
+      if (ch === ")") {
+        stream.next();
+        state.graftDepth--;
+        if (state.graftDepth === 0) {
+          state.mode = "attext";
+          return INTERP; // graft closer pops against prose
+        }
+        return "paren";
+      }
+      if (ch === "(") {
+        stream.next();
+        state.graftDepth++;
+        return "paren";
+      }
+      // Fall through to the normal code tokenizer for this token, but keep
+      // mode=atgraft (don't let `@head{` inside a graft start an at-body).
+      // We handle the common cases inline; the rest mirrors the code path.
+      return tokenizeGraftCode(stream, state);
+    }
     // continue multi-line string
     if (state.mode === "string") {
       let escaped = false;

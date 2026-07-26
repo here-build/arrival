@@ -86,6 +86,27 @@ describe("newline method chains (⏎.op)", () => {
     expect(lines[0]).toBe("the-closure-collection");
     expect(lines.every((l, i) => i === 0 || l.trimStart().startsWith("."))).toBe(true);
   });
+
+  it("a single long map/filter keeps method surface (not prefix map ⏎ lambda)", () => {
+    // Over-width body used to fall through to classic `map` ⏎ `lambda` ⏎ coll.
+    const scheme = `(map (lambda (pov)
+      (let ((entry (gepa-until-plateau initial personas hints (:system pov))))
+        (dict :pov (:name pov) :entry entry)))
+    (active-povs))`;
+    const out = schemeToSugarcoat(scheme).trim();
+    expect(out).toContain("(active-povs).map{(pov) =>");
+    expect(out).not.toMatch(/^map\b/m);
+    expect(out).not.toMatch(/^\s*lambda\b/m);
+    // body may break multi-line classic (I-expr can't live inside braces) but still
+    // sugarcoats nested accessors
+    expect(out).toContain("pov[:system]");
+    expect(out).toContain("pov[:name]");
+    // round-trip: method surface re-reads as map + lambda
+    const classic = readAll(out);
+    expect(classic).toMatch(/\(map\b/);
+    expect(classic).toMatch(/\(lambda\s+\(pov\)/);
+    expect(classic).toContain("(active-povs)");
+  });
 });
 
 // §1 rewrite_L — a `\.` is a LITERAL dot in the symbol (unescaped on read, re-escaped

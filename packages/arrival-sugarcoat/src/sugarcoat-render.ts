@@ -182,7 +182,10 @@ export function parseSexprs(src: string): Node[] {
       default: {
         const start = i;
         while (i < n && !isDelim(src[i])) i++;
-        node = { atom: src.slice(start, i) };
+        // Racket `#:limit` ≡ arrival `:limit` (same mint as ASymbol keywords).
+        let name = src.slice(start, i);
+        if (name.length > 2 && name.startsWith("#:")) name = `:${name.slice(2)}`;
+        node = { atom: name };
       }
     }
     if (lead.length > 0) node.lead = lead;
@@ -483,15 +486,22 @@ function bareInterpAccessor(nd: Node, o: SugarcoatOpts): string | null {
   return `@${base.atom}${steps.map((s) => ("sub" in s ? s.sub : "")).join("")}`;
 }
 
-/** Emit one interpolation part. A simple symbol → `@id`, guarded to `@|id|` when the
- *  NEXT literal starts with an interp-class char (else the reader reads them glued).
- *  Pure accessor chains → bare `@recv[:k]` / `@xs[0]` (the sugarcoat surface). Any
- *  other compound → `@(…)` graft of its CLASSIC-prefix form. Classic (not sugar) is
- *  load-bearing for grafts: the `@(datum)` reader peels the outer parens as the
- *  graft envelope, so a method-chain (`x.f`, no parens) or a re-parenthesized sugar
- *  form (`(persona[:id])` → double-wrap) wouldn't round-trip — but `(f x)` classic
- *  reads back verbatim. A non-INTERP_ID atom has no spelling → null (caller bails
- *  to classic). */
+/**
+ * Can this sugarcoat surface ride as a bare `@…` at-interp (no graft parens)?
+ * Must start with a name so the at-body reader can take `id` + postfix chain.
+ * Forms that start with `(`/`{`/`@` need a graft or are already full at-exprs.
+ */
+const bareAtInterpSurface = (sugar: string): boolean =>
+  sugar.length > 0 && INTERP_ID.test(sugar[0]!) && sugar[0] !== "(" && sugar[0] !== "{" && sugar[0] !== "@";
+
+/** Emit one interpolation part.
+ *  - simple symbol → `@id` (guarded `@|id|` when the next literal would glue)
+ *  - pure accessor chain → bare `@recv[:k]`
+ *  - nested `(str …)` / `(string-append …)` → nested `@{…}` (full at-expr, already `@`-led)
+ *  - other sugarcoat surfaces that start with a name (method chains `hints.map{…}`)
+ *    → bare `@hints.map{…}` (reader takes id + tight postfix)
+ *  - else → `@(…)` classic graft (paren envelope is the graft, not a sugar list wrap)
+ */
 function interpPiece(p: Node, next: Node | undefined, o: SugarcoatOpts): string | null {
   if (isAtom(p)) {
     if (p.str || !INTERP_ID.test(p.atom)) return null;
@@ -500,8 +510,17 @@ function interpPiece(p: Node, next: Node | undefined, o: SugarcoatOpts): string 
   }
   const bare = bareInterpAccessor(p, o);
   if (bare != null) return bare;
-  // inlineScheme of a list is already parenthesized (`(f x)`), which IS the `@(datum)`
-  // graft body — so `@` + it, not `@(` + it + `)` (that would double-wrap to `@((f x))`).
+  // Nested template — renderAtExpr returns `@{…}` / `@string-append{…}` with the `@`.
+  const nested = renderAtExpr(p.list, o);
+  if (nested != null) return nested;
+  // Method chains / other sugarcoat that can ride as bare `@name…`
+  const sugar = inlineSugarcoat(p, o);
+  if (bareAtInterpSurface(sugar)) return `@${sugar}`;
+  // Parenthesized sugarcoat graft — envelope is the outer `(…)`, interior keeps
+  // accessors/methods (`@(join "," h[:reached])`). Avoids double-wrapping
+  // postfix forms (those take the bare path above).
+  if (sugar.startsWith("(") && sugar.endsWith(")")) return `@${sugar}`;
+  // Classic graft fallback.
   return `@${inlineScheme(p)}`;
 }
 
@@ -841,6 +860,62 @@ function renderTrailingLambda(lam: Node, o: SugarcoatOpts): string {
   const bodyTxt = inlineArrowBody(body, o);
   const implicit = names.length === 1 && names[0] === "it" && !(!isAtom(body) && isArrowLambda(body.list));
   return implicit ? `{ ${bodyTxt} }` : `{(${names.join(" ")}) ${lamArrow(o)} ${bodyTxt}}`;
+}
+
+/**
+ * Body of a braced method — must stay fully parenthesized when multi-line.
+ * Coalesce flattens multi-line `{…}` to one token stream (indentation forms do
+ * NOT group inside braces; see trailingLambda's door). Short → inlineSugarcoat;
+ * long → classic skeleton with sugarcoat leaves (accessors, nested methods).
+ */
+function formatBraceBody(nd: Node, col: number, o: SugarcoatOpts): string {
+  const flat = inlineSugarcoat(nd, o);
+  if (isAtom(nd) || col + flat.length <= o.width) return flat;
+  const items = nd.list;
+  if (items.length <= 1) return flat;
+  const pair = `${inlineSugarcoat(items[0], o)} ${inlineSugarcoat(items[1], o)}`;
+  const pull = isAtom(items[0]) && items.length > 2 && col + 1 + pair.length <= o.width;
+  const lead = pull ? pair : inlineSugarcoat(items[0], o);
+  const pad = " ".repeat(col + 2);
+  const rest = items.slice(pull ? 2 : 1).map((it) => pad + formatBraceBody(it, col + 2, o));
+  return `(${lead}\n${rest.join("\n")})`;
+}
+
+/**
+ * Broken layout for a single braced method step (`recv.map{…}`, `recv.fold(knil){…}`).
+ * Tagless HOFs (map/filter/…) always keep method surface — even when the body
+ * overflows the width budget (previously fell through to prefix `map` ⏎ `lambda`).
+ */
+function formatBracedMethod(
+  baseFlat: string,
+  step: { op: string; lam: Node; args?: Node[] },
+  col: number,
+  o: SugarcoatOpts,
+): string {
+  const params = childList(step.lam)[1];
+  const names = childList(params).map((p) => atomText(p));
+  const body = childList(step.lam)[2];
+  const argsTxt =
+    step.args && step.args.length > 0 ? `(${step.args.map((a) => inlineSugarcoat(a, o)).join(" ")})` : "";
+  const opTxt = `.${escSym(step.op)}${argsTxt}`;
+  const pad = " ".repeat(col);
+  const pad2 = " ".repeat(col + 2);
+  const bodyFlat = inlineSugarcoat(body, o);
+  const implicit = names.length === 1 && names[0] === "it" && !(!isAtom(body) && isArrowLambda(body.list));
+
+  if (implicit) {
+    // recv.op{ B } — break as recv.op{\n  body\n}
+    if (col + baseFlat.length + opTxt.length + 3 + bodyFlat.length + 1 <= o.width) {
+      return `${baseFlat}${opTxt}{ ${bodyFlat} }`;
+    }
+    return `${baseFlat}${opTxt}{\n${pad2}${formatBraceBody(body, col + 2, o)}\n${pad}}`;
+  }
+  // recv.op{(p…) => B}
+  const head = `${baseFlat}${opTxt}{(${names.join(" ")}) ${lamArrow(o)}`;
+  if (col + head.length + 1 + bodyFlat.length + 1 <= o.width) {
+    return `${head} ${bodyFlat}}`;
+  }
+  return `${head}\n${pad2}${formatBraceBody(body, col + 2, o)}\n${pad}}`;
 }
 
 /** One postfix step on the render side: a subscript/key run (`[…]`), or a method
@@ -1251,23 +1326,26 @@ function formatSugarcoatCore(nd: Node, col: number, o: SugarcoatOpts): string {
   }
   if (isInfix(items, o)) return formatInfix(items, col, o); // operator-led break when over width
 
-  // long method chain (§3.4): base on the head line, one `.op` per indented line —
-  // where the pipe reads best. Only ALL-method chains break this way: a `[…]`
-  // subscript step can't lead a line (its first token is `[`, not `.`, so the reader
-  // wouldn't fold it back as a step). Require the base to render on one line, so its
-  // own indentation can't collide with the step lines; otherwise fall through to the
-  // generic prefix break (still faithful, just not dotted).
+  // Method surface breaks (§3.4) — keep the postfix form even when over width.
+  // Previously a single long `map`/`filter`/… fell through to the generic prefix
+  // break (`map` ⏎ `lambda` ⏎ coll), undoing the tagless-method flip. Two shapes:
+  //   • ≥2 all-method steps: base ⏎ one `.op` per line (newline chains).
+  //   • single braced HOF step (`recv.map{Λ}`): base.op{params => ⏎ body ⏎ }.
+  // A `[…]` subscript step can't lead a line (first token is `[`, not `.`). Require
+  // the base on one line so its indentation can't collide with step lines.
   {
     const chain = peelChain(nd, o);
-    const baseFlat = inlineSugarcoat(chain.base, o);
-    if (
-      chain.emit &&
-      chain.steps.length >= 2 &&
-      chain.steps.every((s) => "op" in s) &&
-      col + baseFlat.length <= o.width
-    ) {
-      const pad = " ".repeat(col + 2);
-      return [baseFlat, ...chain.steps.map((s) => pad + stepText(s, o))].join("\n");
+    if (chain.emit && col + inlineSugarcoat(chain.base, o).length <= o.width) {
+      const baseFlat = inlineSugarcoat(chain.base, o);
+      if (chain.steps.length >= 2 && chain.steps.every((s) => "op" in s)) {
+        const pad = " ".repeat(col + 2);
+        return [baseFlat, ...chain.steps.map((s) => pad + stepText(s, o))].join("\n");
+      }
+      // Single braced method (map/filter/… with a lambda, or any lone step carrying Λ)
+      const lone = chain.steps.length === 1 ? chain.steps[0] : null;
+      if (lone != null && "op" in lone && lone.lam != null) {
+        return formatBracedMethod(baseFlat, { op: lone.op, lam: lone.lam, args: lone.args }, col, o);
+      }
     }
   }
 

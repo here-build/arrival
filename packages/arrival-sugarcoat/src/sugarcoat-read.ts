@@ -311,6 +311,66 @@ function readTightSubscripts(src: string, start: number): { end: number } {
   return { end: i };
 }
 
+/**
+ * Tight trailing method chain after a bare interp name / subscripts —
+ * `@hints.map{(h) => …}` / `@xs.filter{ it > 0 }.length`. Only TIGHT
+ * `.op` / `.op(…)` / `.op{…}` (no space before `(`/`{`), matching the
+ * code-context method reader. Returns `end === start` when no chain.
+ *
+ * Op names exclude `:` — otherwise `@view.number->string:` (next prose is
+ * a separator colon) greedily eats `number->string:` as one symbol.
+ */
+const AT_METHOD_OP = /[A-Za-z0-9!$%&*/<=>?^_~+-]/; // AT_INTERP minus `:`
+function readTightMethodChain(src: string, start: number): { end: number } {
+  let i = start;
+  while (i < src.length && src[i] === ".") {
+    // op name — at least one method-op char
+    let j = i + 1;
+    if (j >= src.length || !AT_METHOD_OP.test(src[j]!)) break;
+    while (j < src.length && AT_METHOD_OP.test(src[j]!)) j++;
+    // optional tight (args)
+    if (src[j] === "(") {
+      let depth = 0;
+      let inStr = false;
+      for (; j < src.length; j++) {
+        const c = src[j]!;
+        if (inStr) {
+          if (c === "\\") j++;
+          else if (c === '"') inStr = false;
+          continue;
+        }
+        if (c === '"') inStr = true;
+        else if (c === "(") depth++;
+        else if (c === ")" && --depth === 0) {
+          j++;
+          break;
+        }
+      }
+    }
+    // optional tight { trailing-lambda / curly body }
+    if (src[j] === "{") {
+      let depth = 0;
+      let inStr = false;
+      for (; j < src.length; j++) {
+        const c = src[j]!;
+        if (inStr) {
+          if (c === "\\") j++;
+          else if (c === '"') inStr = false;
+          continue;
+        }
+        if (c === '"') inStr = true;
+        else if (c === "{") depth++;
+        else if (c === "}" && --depth === 0) {
+          j++;
+          break;
+        }
+      }
+    }
+    i = j;
+  }
+  return { end: i };
+}
+
 /** `@(datum)` graft — read the balanced `(…)` raw (string/escape aware) and parse it
  *  as one sugarcoat expression. `i` points at the `(`. */
 function readGraftParen(src: string, i: number): { node: Node; end: number } {
@@ -335,13 +395,18 @@ function readGraftParen(src: string, i: number): { node: Node; end: number } {
 }
 
 /** An at-expression iff `@`, optional head, then `{`. Returns null for a bare
- *  `@`/`@foo` (stays an ordinary symbol — backwards-compat, §2). `i` points at `@`. */
+ *  `@`/`@foo` (stays an ordinary symbol — backwards-compat, §2). `i` points at `@`.
+ *
+ *  Heads containing `.` are rejected — `@hints.map{…}` is a bare-interp method
+ *  chain, not an at-expr with head `hints.map` (AT_HEAD would otherwise eat the
+ *  dots and steal the method brace as a text body). */
 function tryReadAtExpr(src: string, i: number): { node: Node; end: number } | null {
   let j = i + 1;
-  while (j < src.length && AT_HEAD.test(src[j])) j++;
+  while (j < src.length && AT_HEAD.test(src[j]!)) j++;
   if (src[j] !== "{") return null;
   // headless `@{…}` → str; `@str{…}` is the same head (explicit alias, not R7RS `string`).
   const rawHead = src.slice(i + 1, j);
+  if (rawHead.includes(".")) return null; // method chain, not at-expr head
   const head = rawHead === "" || rawHead === "str" ? "str" : rawHead;
   const { parts, end } = parseAtBody(src, j + 1); // past `{` — RAW literal parts
   // dedent runs on raw text (real newlines), THEN literal parts get source-escaped.
@@ -418,12 +483,14 @@ function parseAtBody(src: string, i: number): { parts: Node[]; end: number } {
       const { id, end: idEnd } = readInterpId(src, i + 1);
       if (id.length > 0) {
         flush();
-        // Tight `@id[…][…]` — sugarcoat accessor surface (not literal prose).
-        // Spaced `@id […]` leaves the brackets as prose (deliberate boundary).
-        const { end: chainEnd } = readTightSubscripts(src, idEnd);
+        // Tight postfix after `@id`: subscripts then method chain —
+        // `@persona[:id]`, `@hints.map{(h) => @{…}}`. Spaced `@id […]` /
+        // `@id .map` leaves the rest as prose (deliberate boundary).
+        const afterSubs = readTightSubscripts(src, idEnd).end;
+        const chainEnd = readTightMethodChain(src, afterSubs).end;
         if (chainEnd > idEnd) {
-          // `id + chain` without the leading `@` — same grammar as code-context
-          // `persona[:id]`, so one reader path for both.
+          // `id + postfix` without the leading `@` — same grammar as
+          // code-context `hints.map{…}` / `persona[:id]`.
           parts.push(readSugarcoatExpr(src.slice(i + 1, chainEnd)));
           i = chainEnd;
         } else {
@@ -506,7 +573,10 @@ function tokenize(src: string, base?: number): Tok[] {
   return toks;
 }
 
-const atom = (w: string, str?: boolean): Node => (str ? { atom: w, str: true } : { atom: w });
+/** Racket `#:limit` ≡ arrival `:limit` — same identity as ASymbol keyword mint. */
+const canonKeyword = (w: string): string => (w.length > 2 && w.startsWith("#:") ? `:${w.slice(2)}` : w);
+const atom = (w: string, str?: boolean): Node =>
+  str ? { atom: w, str: true } : { atom: canonKeyword(w) };
 const isColonKey = (t: Tok): t is Extract<Tok, { t: "word" }> =>
   t.t === "word" && !t.str && t.v.length > 1 && t.v.endsWith(":") && !t.v.slice(0, -1).includes(":");
 
@@ -916,12 +986,26 @@ function parseNode(lines: LogLine[], idx: number, accessorDepth?: number): { ele
  *  lead/trail). Length-PRESERVING (comment → spaces, not removed) so every other
  *  char keeps its offset: that's what lets sugarcoat-text spans (for the parameter
  *  hints) stay valid in the editor's comment-bearing buffer. tokenize skips the
- *  spaces, so the parsed Nodes are identical to before. Newlines are kept. */
+ *  spaces, so the parsed Nodes are identical to before. Newlines are kept.
+ *
+ *  At-expression text bodies treat `;` as LITERAL prose (`@{;@x}` is semicolon +
+ *  interp, not a comment). `@()` grafts re-enter code mode so `;` is a comment
+ *  again inside the graft. */
 function stripComments(text: string): string {
   let out = "";
   let inStr = false;
+  // -1 = code; ≥0 = at-body brace depth (0 = body, ready to close on `}`)
+  let atDepth = -1;
+  const blankComment = (from: number): number => {
+    let i = from;
+    while (i < text.length && text[i] !== "\n") {
+      out += " ";
+      i++;
+    }
+    return i - 1; // caller for-loop i++ re-lands on \n / end
+  };
   for (let i = 0; i < text.length; i++) {
-    const c = text[i];
+    const c = text[i]!;
     if (inStr) {
       out += c;
       if (c === "\\") {
@@ -930,17 +1014,77 @@ function stripComments(text: string): string {
       } else if (c === '"') inStr = false;
       continue;
     }
+    if (atDepth >= 0) {
+      // ── at-expression text body ──
+      if (c === "{") {
+        atDepth++;
+        out += c;
+        continue;
+      }
+      if (c === "}") {
+        if (atDepth === 0) atDepth = -1;
+        else atDepth--;
+        out += c;
+        continue;
+      }
+      if (c === "@" && text[i + 1] === "(") {
+        // graft: code mode until the balanced `)`
+        out += "@(";
+        i += 2;
+        let depth = 1;
+        let gStr = false;
+        for (; i < text.length && depth > 0; i++) {
+          const g = text[i]!;
+          if (gStr) {
+            out += g;
+            if (g === "\\") {
+              out += text[i + 1] ?? "";
+              i++;
+            } else if (g === '"') gStr = false;
+            continue;
+          }
+          if (g === '"') {
+            gStr = true;
+            out += g;
+            continue;
+          }
+          if (g === ";") {
+            i = blankComment(i);
+            continue;
+          }
+          if (g === "(") depth++;
+          else if (g === ")") depth--;
+          out += g;
+        }
+        i--; // outer for-loop advances
+        continue;
+      }
+      // `;` is literal prose in at-body (not a comment)
+      out += c;
+      continue;
+    }
+    // ── code ──
     if (c === '"') {
       inStr = true;
       out += c;
       continue;
     }
-    if (c === ";") {
-      while (i < text.length && text[i] !== "\n") {
-        out += " ";
+    // `@head{` / `@{` — enter at-body after the opening brace
+    if (c === "@" && /^[^\s{}()[\]"@]*\{/.test(text.slice(i + 1))) {
+      out += "@";
+      i++;
+      while (i < text.length && text[i] !== "{") {
+        out += text[i];
         i++;
       }
-      i--; // the for-loop's i++ re-lands on the \n (or past end), copied next iteration
+      if (i < text.length && text[i] === "{") {
+        out += "{";
+        atDepth = 0;
+      }
+      continue;
+    }
+    if (c === ";") {
+      i = blankComment(i);
       continue;
     }
     out += c;

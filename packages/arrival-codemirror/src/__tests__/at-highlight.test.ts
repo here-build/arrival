@@ -42,7 +42,11 @@ describe("at-expression highlighting", () => {
       ['Say "', "string"],
       ["@x", "sugarcoatInterp"],
       ['" or ', "string"],
-      ["@(f y)", "sugarcoatInterp"],
+      ["@(", "sugarcoatInterp"],
+      ["f", "variableName"],
+      [" ", ""],
+      ["y", "variableName"],
+      [")", "sugarcoatInterp"],
       ["}", "sugarcoatCurly"],
     ]);
   });
@@ -75,5 +79,26 @@ describe("at-expression highlighting", () => {
     const toks = tokens("@{count @n [approx]}");
     expect(toks.filter(([, tag]) => tag === "sugarcoatInterp").map(([txt]) => txt)).toEqual(["@n"]);
     expect(toks.some(([txt, tag]) => tag === "string" && txt.includes("[approx]"))).toBe(true);
+  });
+
+  it("@() graft interior is code-highlighted (not one opaque interp blob)", () => {
+    const toks = tokens("@{pre@(map (lambda (h) h) xs)post}");
+    expect(toks[0]).toEqual(["@{", "sugarcoatAtOpen"]);
+    // map is a controlKeyword in the highlighter; lambda is definitionKeyword
+    expect(toks.some(([txt, tag]) => txt === "map" && tag === "controlKeyword")).toBe(true);
+    expect(toks.some(([txt, tag]) => txt === "lambda" && tag === "definitionKeyword")).toBe(true);
+    expect(toks.some(([txt, tag]) => txt === "@(" && tag === "sugarcoatInterp")).toBe(true);
+    expect(toks.some(([txt, tag]) => txt === ")" && tag === "sugarcoatInterp")).toBe(true);
+    const prose = toks.filter(([, tag]) => tag === "string").map(([txt]) => txt).join("");
+    expect(prose).toContain("pre");
+    expect(prose).toContain("post");
+  });
+
+  it("nested @{…} opener is recognized inside an at-body", () => {
+    const toks = tokens("@{a@{b@x}c}");
+    const opens = toks.filter(([, tag]) => tag === "sugarcoatAtOpen").map(([txt]) => txt);
+    expect(opens).toContain("@{");
+    // nested @{
+    expect(opens.length).toBeGreaterThanOrEqual(2);
   });
 });

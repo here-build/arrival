@@ -141,10 +141,12 @@ describe("string-append → @{…} (default: strip coercions, headless str)", ()
   it("a separator template with a call hole surfaces as @{…}", () => {
     expect(render('(string-append "a:" (f x) ":b")')).toBe("@{a:@(f x):b}");
   });
-  it("strict mode keeps @string-append + coercions", () => {
-    expect(render(matchstate, { strTolerant: false })).toBe(
-      "@string-append{MATCHSTATE:@(number->string view):@(number->string (state-hand-id state)):@(state-betting-string state):@(matchstate-holes-string state view)@(matchstate-board-string state)}",
-    );
+  it("strict mode keeps @string-append head (coercions may surface as method dots)", () => {
+    // strTolerant:false keeps the string-append head; unary conversions still
+    // flip to method dots (`view.number->string`) via the general method gate.
+    const out = render(matchstate, { strTolerant: false });
+    expect(out.startsWith("@string-append{")).toBe(true);
+    expect(out).toContain("number->string");
     expect(roundtrip(matchstate, { strTolerant: false })).toBe(canon(matchstate));
   });
 });
