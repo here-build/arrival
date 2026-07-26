@@ -91,13 +91,12 @@ export type ContentResolver = (contents: string | Uint8Array, ctx: { path: strin
 
 /** The EDITOR twin of a {@link ContentResolver}: given a `(require)`d file's raw
  *  source, synthesize the TS type the lens should give `(require "path")` —
- *  expressed in the lens vocabulary (`SStr`/`SNum`/`SBool`/`List<…>`/object
- *  literals), the same dialect rosetta `type:` strings already speak. Returns
- *  `null` when the handler has no static shape to offer (the lens falls back to
- *  `unknown`). PURE — it parses the source the same way `resolve` does, but
- *  never touches the runtime env. Co-located with `resolve` so a single
- *  registration teaches BOTH the runtime parse and the editor shape: register
- *  once → runtime + editor both updated, no drift. */
+ *  plain TS (`string`/`number`/`boolean`/`null`) + scheme carriers (`List<…>` /
+ *  object literals). Same surface leaf signatures and schema harvest use after
+ *  the branded-scalar abandonment (`types.d.ts`: membrane values ARE their JS
+ *  types). Returns `null` when the handler has no static shape (lens →
+ *  `unknown`). PURE — parses like `resolve`, never touches a run env.
+ *  Co-located with `resolve` so one registration teaches runtime + editor. */
 export type RequireTypeProvider = (source: string, ctx: { path: string }) => string | null;
 
 /** An extension's handler: its runtime `resolve` and its optional editor `type`
@@ -211,11 +210,15 @@ export function dataToScheme(v: unknown): SchemeVal {
 //
 // Synthesize the TS type string the lens gives `(require "data.json")`. Mirrors
 // the runtime wrap (`jsToScheme`): a JS array becomes a scheme LIST (`List<T>`), a
-// plain object an accessible record (`{ "k": T; … }`), scalars the branded base
-// types. Pure + recursive with depth/breadth guards so a pathological blob
-// degrades to `unknown` instead of emitting a megabyte of types. The output is
-// the lens dialect (`SStr`/`SNum`/`SBool`/`List`), the same vocabulary rosetta
-// `type:` strings are written in.
+// plain object an accessible record (`{ "k": T; … }`), scalars their PLAIN JS
+// types (`string`/`number`/`boolean`/`null`). Pure + recursive with depth/
+// breadth guards so a pathological blob degrades to `unknown` instead of
+// emitting a megabyte of types.
+//
+// Scalars are NOT `SStr`/`SNum`/`SBool` — those aliases still exist as a compat
+// bridge in the prelude, but leaf signatures and schema harvest print natives
+// (`types.d.ts` header). Emitting brands here reintroduced a second dialect for
+// require shapes alone; wrong.
 
 const TS_TYPE_MAX_DEPTH = 8;
 const TS_TYPE_MAX_KEYS = 200;
@@ -237,11 +240,11 @@ export function valueToTsType(value: unknown, depth = 0): string {
   if (value === null) return "null";
   switch (typeof value) {
     case "string":
-      return "SStr";
+      return "string";
     case "number":
-      return "SNum";
+      return "number";
     case "boolean":
-      return "SBool";
+      return "boolean";
     default:
       break;
   }
@@ -301,7 +304,7 @@ export function defaultResolvers(): Map<string, ExtensionHandler> {
       { resolve: async (contents, { path }) => ({ kind: "load", forms: await parse(String(contents), path) }) },
     ],
     ...dataHandlers,
-    [".txt", { resolve: (contents) => ({ kind: "value", value: String(contents) }), type: () => "SStr" }],
+    [".txt", { resolve: (contents) => ({ kind: "value", value: String(contents) }), type: () => "string" }],
     // No entry for the dep-bearing formats (`.hbs`/`.yaml`/`.toml`/`.prompt`): a bare loader
     // rooting none of their capabilities has no fallback here, so requiring one is a clean
     // no-resolver error — which IS the scoping guarantee (you must root the owning capability).
