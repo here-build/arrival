@@ -20,19 +20,25 @@ import { is_applyable } from "../values/value-guards.js";
 import type { OracleEnv } from "./contract.js";
 import type { OracleEnvΣ } from "./sigma.js";
 
-/** True iff a bound value can be a form head — the two callable shapes, tested WITHOUT a runtime
- *  edge into the evaluator:
+/** True iff a bound value can be a form head — the three callable shapes, tested WITHOUT a
+ *  runtime edge into the evaluator:
  *    1. a callable-as-value class (`is_applyable`, a values/value-guards.ts leaf — the tagless-
- *       final procedures a capability's `symbol.rosetta`/`symbol.native` declarations bind;
- *       bare host fns are not env-resident);
- *    2. a Macro / Syntax special-form head (`if`, `let`, `quote`, syntax-rules macros).
- *  Macro/Syntax are matched by walking the prototype chain's constructor NAMES, not by importing
- *  the class (a Syntax-extends-Macro subclass is caught too). Macro/Syntax imports are
- *  `import type`, erased at compile; `is_applyable` is a value-kernel leaf — zero runtime edge
- *  into the evaluator. */
+ *       final procedures a capability's `symbol.rosetta`/`symbol.native` declarations bind);
+ *    2. a bare host function — the callability MARKER on a flat grant map
+ *       (`oracleEnvFromBindings`). Grant envs are never executed; they only answer Σ's
+ *       "is this name an admissible operator?" bit. Production AmbientRuntime frames do not
+ *       host bare fns (the membrane only admits is_applyable), so this arm is grant-only.
+ *    3. a Macro / Syntax special-form head (`if`, `let`, `quote`, syntax-rules macros),
+ *       matched by walking the prototype chain's constructor NAMES (not by importing the
+ *       class — a Syntax-extends-Macro subclass is caught too).
+ *  Macro/Syntax imports are `import type`, erased at compile; `is_applyable` is a value-kernel
+ *  leaf — zero runtime edge into the evaluator. */
 function isCallableValue(value: unknown): value is Function | Macro | Syntax {
   if (value === undefined || value === null) return false;
   if (is_applyable(value)) return true;
+  // Flat-grant callability bit — see arm (2) above. Must precede the proto walk: a bare fn's
+  // prototype is `Function.prototype`, whose constructor name is "Function", not Macro/Syntax.
+  if (typeof value === "function") return true;
   let proto: object | null = Object.getPrototypeOf(value as object);
   while (proto) {
     const name = (proto.constructor as { name?: string } | undefined)?.name;

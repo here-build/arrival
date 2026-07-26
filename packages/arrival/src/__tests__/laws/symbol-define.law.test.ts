@@ -17,9 +17,14 @@
 import { describe, expect, it } from "vitest";
 import { symbol } from "../../symbol/index.js";
 import { EnvCapability } from "../../common/capability.js";
-import { execOverFrame, execStateOverFrame } from "../../eval/generator-exec.js";
+import { execInFrame, execOverFrame, execStateOverFrame } from "../../eval/generator-exec.js";
 import { applyCapability, freshEnv } from "../_fresh-env.js";
+import { buildVocabulary } from "../../env/vocabulary.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../errors.js";
+import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
+
+const evalScheme = (env: unknown, src: unknown): unknown =>
+  execInFrame(src as string, env as ResolvingAmbient);
 
 describe("symbol.define — bake round-trip, two-phase order, sequential-RHS, contract enforcement", () => {
   it("declares → assembles → calls: a define referencing a SAME-CAPABILITY rosetta sibling", async () => {
@@ -110,6 +115,20 @@ describe("symbol.define — the §2.1 bake FV locality law (the drift door)", ()
       symbols: (symbol, z) => ({
         "bad-ref": symbol.define`bad-ref: references an undeclared free name`(z.number, `undeclared-free-name`) }) });
     await expect(applyCapability(env, [cap])).rejects.toThrow(DefineLocalityError);
+  });
+
+  // Canonical NEG for migration PRE-FIX pins (test-redundancy receipts §2):
+  // pack-shaped define body free on stdlib names (`not`) with NO deps → bake door.
+  // Retires N copy-paste "LOCAL reproduction of the PRE-FIX shape" rows once packs
+  // are harvested for positive bake-clean.
+  it("PRE-FIX pack shape: define body free on stdlib `not` with NO deps throws DefineLocalityError", async () => {
+    const undeclaredCap = EnvCapability.define("test/pre-fix-free-stdlib", {
+      symbols: (symbol, z) => ({
+        "bad-not": symbol.define`bad-not: free not with no deps (migration PRE-FIX shape)`(
+          { input: [z.boolean], output: [z.boolean] },
+          `(lambda (b) (not b))`,
+        ) }) });
+    await expect(buildVocabulary([undeclaredCap], undefined, evalScheme)).rejects.toThrow(DefineLocalityError);
   });
 
   it("a body referencing a SAME-CAPABILITY sibling (any kind) passes the FV law", async () => {

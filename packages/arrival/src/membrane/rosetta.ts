@@ -202,6 +202,13 @@ function schemeToJsImpl(value: unknown, options: RosettaOptions): unknown {
     ) {
       return value;
     }
+    // `@arrival.private` host classes (LLMModel, McpServer, ChatSession, …) — opaque
+    // handles. Trace serialization / schemeToJs must not throw: project to the class face
+    // (`#<LLMModel>`), same as scheme-ward printing. Structural poke stays blocked.
+    if (isMarkedInteropPrivate(value)) {
+      const name = (value as { constructor?: { name?: string } }).constructor?.name ?? "Object";
+      return `#<${name}>`;
+    }
     throw schemeToJsUnrecognizedDoor(value);
   }
 

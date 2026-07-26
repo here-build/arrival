@@ -311,14 +311,7 @@ describe("isSchemeValue completeness — every native AValue subtype is recognis
     expect(isSchemeValue(new AJSObject({}))).toBe(true);
   });
 
-  // Nil clones — should be recognized but aren't. See clone-identity.test.ts
-  // for the full enumeration of `=== nil` sites. This is a duplicate of the
-  // membrane.ts:71 site, deliberately kept here for the completeness map.
-  // INVARIANT: a Nil clone (via withProvenance) is recognized as a scheme value
-  it("Nil clone → true (see membrane.ts:71 + clone-identity.test.ts; fixed via `instanceof Nil`)", () => {
-    const clone = nil.withProvenance(new Set<number>([1]));
-    expect(isSchemeValue(clone)).toBe(true);
-  });
+  // Nil-clone isSchemeValue: owned by identity.law (membrane.ts section) — not re-pinned here.
 
   // Plain JS values should NOT be Scheme values. Negative cases keep the
   // boundary's other direction honest.
