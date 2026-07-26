@@ -1361,16 +1361,22 @@ function emitLambda(n: ListNode, ctx: Ctx): void {
   const start = ctx.buf.offset;
   const params = paramAtoms(n.list[1]);
   const bodyForms = n.list.slice(2);
-  // compose/pipe desugar to `(lambda (it) (f (g (h it))))`. Emit a structural
-  // generic so `last`/field chains typecheck without a call-site domain and so
-  // call sites refine A → precise return (pipe-style I/O generics, single arrow).
+  // compose/pipe desugar to `(lambda (it) (f (g (h it))))`. Pure field/elem
+  // pipelines share this path. HOF-safe: unconstrained A + conditional return
+  // (same law as keyword-as-fn). `A extends C` on the param is *too* strict for
+  // `(map (lambda (d) (:name d)) privileged)` when the list only proved a
+  // partial row — contravariance rejects the lambda. Body casts through
+  // `as any` so unconstrained A still typechecks the index chain.
   if (params.length === 1 && !params[0]!.rest && bodyForms.length === 1) {
     const steps = extractUnaryPipeline(bodyForms[0]!, params[0]!.atom);
     if (steps !== null) {
       const { constraint, result } = pipelineGenericTypes(steps);
       const pname = emitName(params[0]!.atom, ctx);
-      ctx.buf.raw(`<A extends ${constraint}>(${pname}: A): ${result} => `);
+      ctx.buf.raw(
+        `<A,>(${pname}: A): A extends ${constraint} ? ${result} : unknown => ((${pname}: any) => `,
+      );
       emitArrowBody(bodyForms, ctx);
+      ctx.buf.raw(`)(${pname})`);
       recordSpan(ctx, start, n);
       return;
     }

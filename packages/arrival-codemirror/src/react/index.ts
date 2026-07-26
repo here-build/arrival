@@ -5,6 +5,7 @@ export {
   loadSchemeIde,
   setSchemeIdeFiles,
   setSchemeIdeRequireTypes,
+  setSchemeIdeOpenPath,
   configureSchemeIdeHost,
   getSchemeIdeAudit,
   type SchemeIdeAudit,

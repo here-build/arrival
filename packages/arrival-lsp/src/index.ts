@@ -20,3 +20,11 @@ export { Mapper, type Mapping, type Span, type LineCol } from "./span-map.js";
 export { narrowByType, type Scanner, type ScannerState, type TypeLens } from "./typed-scanner.js";
 export { assembleHostPrelude, type HostPrelude, type AssembleHostPreludeOptions } from "./host-prelude.js";
 export { scanRequires, schemeifyTsText, type RequireRef } from "./service-core.js";
+export {
+  lookupProjectFile,
+  lookupProjectRequireType,
+  resolveRequireProjectKey,
+  projectDirname,
+  projectJoin,
+  type RequirePathLookupOptions,
+} from "./require-path.js";

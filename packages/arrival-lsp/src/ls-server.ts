@@ -17,6 +17,7 @@
 
 import { createBrowserSchemeLanguageService } from "./browser.js";
 import { LS_METHODS, type LsPort, type LsReply, type LsRequest, type SchemeLsWorkerOptions } from "./ls-client.js";
+import { lookupProjectFile, lookupProjectRequireType } from "./require-path.js";
 import type { SchemeLanguageService, SchemeLanguageServiceOptions } from "./service-core.js";
 
 type MethodName = (typeof LS_METHODS)[number];
@@ -31,8 +32,14 @@ const isMethodName = (m: string): m is MethodName => LS_METHODS.some((x) => x ==
  *  dispatches messages one at a time and the service's methods are fully
  *  synchronous — the slot is set for exactly one call's duration. */
 let activeFiles: Readonly<Record<string, string>> | null = null;
+/** Open buffer path (project-relative) for relative require resolution. */
+let activeOpenPath: string | null = null;
 const resolveThroughActiveFiles = (path: string): string | null =>
-  activeFiles?.[path] ?? activeFiles?.[path.replace(/^\.\//, "")] ?? null;
+  lookupProjectFile(activeFiles, path, {
+    fromFile: activeOpenPath,
+    log: true,
+    logLabel: "scheme-ls-require",
+  });
 
 /** The require-TYPE twin of `activeFiles`: a precomputed `{ path → TS type }`
  *  map pushed by the connection ({kind:"requireTypes"}). Read through the same
@@ -40,7 +47,11 @@ const resolveThroughActiveFiles = (path: string): string | null =>
  *  postMessage, so the type is synthesized host-side and the result shipped. */
 let activeRequireTypes: Readonly<Record<string, string>> | null = null;
 const resolveThroughActiveRequireTypes = (path: string): string | null =>
-  activeRequireTypes?.[path] ?? activeRequireTypes?.[path.replace(/^\.\//, "")] ?? null;
+  lookupProjectRequireType(activeRequireTypes, path, {
+    fromFile: activeOpenPath,
+    log: false, // files resolver already logs misses; avoid double spam
+    logLabel: "scheme-ls-require-type",
+  });
 
 /** Service per options-profile — THE sharing point. */
 const sharedServices = new Map<string, SchemeLanguageService>();
@@ -78,6 +89,7 @@ export function serveSchemeLs(port: LsPort): void {
   let service: SchemeLanguageService | null = null;
   let files: Readonly<Record<string, string>> | null = null;
   let requireTypes: Readonly<Record<string, string>> | null = null;
+  let openPath: string | null = null;
   port.onmessage = (ev) => {
     const msg = ev.data as LsRequest;
     try {
@@ -100,10 +112,16 @@ export function serveSchemeLs(port: LsPort): void {
         port.postMessage({ kind: "reply", id: msg.id, ok: true, value: null } satisfies LsReply);
         return;
       }
+      if (msg.kind === "openPath") {
+        openPath = msg.path;
+        port.postMessage({ kind: "reply", id: msg.id, ok: true, value: null } satisfies LsReply);
+        return;
+      }
       if (service === null) throw new Error("scheme-ls: call before init");
       if (!isMethodName(msg.method)) throw new Error(`scheme-ls: unknown method ${msg.method}`);
       activeFiles = files;
       activeRequireTypes = requireTypes;
+      activeOpenPath = openPath;
       let value: unknown;
       try {
         // The dynamic dispatch: `service[name]` is a union of the LS_METHODS
@@ -113,6 +131,7 @@ export function serveSchemeLs(port: LsPort): void {
       } finally {
         activeFiles = null;
         activeRequireTypes = null;
+        activeOpenPath = null;
       }
       port.postMessage({ kind: "reply", id: msg.id, ok: true, value } satisfies LsReply);
     } catch (error) {

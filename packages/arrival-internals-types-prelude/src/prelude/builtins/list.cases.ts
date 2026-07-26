@@ -3,11 +3,12 @@
 // // ─────────────────────────────────────────────────────────────────────────────
 import { expectTypeOf } from "vitest";
 
-// Homogeneous 3-arg still List via rest when all same? Fixed overload wins:
-// list(1,2,3) is [number, number, number] which is fine for apply.
+// Homogeneous 3-arg: fixed overload wins → tuple (fine for apply).
 expectTypeOf(list(1, 2, 3)).toEqualTypeOf<[number, number, number]>();
 // Empty → []
 expectTypeOf(list()).toEqualTypeOf<[]>();
+// Singleton is List (pool/seed), not a 1-tuple.
+expectTypeOf(list(1)).toEqualTypeOf<List<number>>();
 // Heterogeneous fixed-arity is intentional (apply product / zip pairs).
 expectTypeOf(list(1, "a")).toEqualTypeOf<[number, string]>();
 expectTypeOf(list(1, "a", true, null, 5)).toEqualTypeOf<

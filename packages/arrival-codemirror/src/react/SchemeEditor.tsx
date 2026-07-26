@@ -13,7 +13,7 @@ import {
   sugarcoatIdeBackend,
   type SchemeStructuralOptions,
 } from "../index.js";
-import { useSchemeIde } from "./use-scheme-ide.js";
+import { setSchemeIdeOpenPath, useSchemeIde } from "./use-scheme-ide.js";
 
 // JetBrains Mono — the WRITING font (the reading fonts live in the popup; see
 // @here.build/editor-theme's fonts.css for the writing/reading split).
@@ -39,6 +39,12 @@ export interface SchemeEditorProps {
   value: string;
   onChange?: (value: string) => void;
   readOnly?: boolean;
+  /**
+   * Project-relative path of this buffer (e.g. `inhuman-custdev/best-tagline.scm`).
+   * When set, relative `(require "config.scm")` resolves against this file's
+   * directory via the scheme IDE files table.
+   */
+  path?: string;
   /** Which lens to show. CONTROLLED by the studio's unified
    *  `[scheme][sugarcoat][graph]` switch (the graph mode is handled above this — when
    *  graph is shown, FileEditor isn't mounted). */
@@ -87,6 +93,7 @@ export function SchemeEditor({
   value,
   onChange,
   readOnly,
+  path,
   view = "scheme",
   onSugarcoatError,
   onNavigate,
@@ -94,6 +101,16 @@ export function SchemeEditor({
   onCreateEditor,
   structuralEditing = false,
 }: SchemeEditorProps): React.ReactElement {
+  // Relative require resolution joins against this buffer's directory.
+  useEffect(() => {
+    if (path === undefined) return;
+    setSchemeIdeOpenPath(path);
+    return () => {
+      // Only clear if we still own the slot (another editor may have taken over).
+      setSchemeIdeOpenPath(null);
+    };
+  }, [path]);
+
   // The classic scheme is canonical truth (mirrors File.body).
   const [text, setText] = useState(value);
   // The sugarcoat buffer: the truth WHILE the sugarcoat view is open. Seeded from the

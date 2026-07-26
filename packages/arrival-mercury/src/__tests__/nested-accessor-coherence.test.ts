@@ -68,14 +68,22 @@ describe("nested accessor coherence — binder demand harvest", () => {
     expect(ts).not.toMatch(/\(p:\s*\{\s*name:/);
   });
 
-  it("compose lambda generics still special-case (no regress)", () => {
+  it("compose lambda generics stay HOF-safe (unconstrained A + conditional)", () => {
     const { ts } = emitTypes("(define state-of (compose :state last :versions))");
-    expect(ts).toContain("<A extends { versions: List<{ state: any }> }>");
+    expect(ts).toContain("<A,>");
+    expect(ts).toContain("A extends { versions: List<{ state: any }> }");
   });
 
   it("keyword-as-fn HOF eta still unconstrained (no regress)", () => {
     const { ts } = emitTypes("(map :score xs)");
     expect(ts).toContain("<A,>(x: A): A extends { score: infer S } ? S : unknown");
+  });
+
+  it("map pure-chain lambda is HOF-safe (not A extends { name })", () => {
+    const { ts } = emitTypes(`(define offenders (map (lambda (d) (:name d)) privileged))`);
+    expect(ts).toContain("<A,>");
+    expect(ts).toMatch(/A extends \{ name: any \}/);
+    expect(ts).not.toMatch(/<A extends \{ name: any \}>/);
   });
 
   it("fuses pure-chain + local compose domain (not incomplete { id } alone)", () => {

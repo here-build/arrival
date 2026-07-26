@@ -32,12 +32,15 @@ export type LsFiles = { kind: "files"; files: Record<string, string> };
 /** The require-TYPE twin of {@link LsFiles}: a precomputed `{ path → TS type }`
  *  snapshot synthesized host-side. */
 export type LsRequireTypes = { kind: "requireTypes"; types: Record<string, string> };
+/** Open buffer path (project-relative) so relative `(require "config.scm")`
+ *  resolves against the editor's directory in a multi-package tree. */
+export type LsOpenPath = { kind: "openPath"; path: string | null };
 /** Every request payload (sans correlation id) — the one named source of truth
  *  both sides dispatch on. `id` lives only on the wire ({@link LsRequest}): the
  *  caller passes a payload, `call` stamps the id. Modelled id-less so the union
  *  can be widened/narrowed by `kind` without `Omit` collapsing it to the shared
  *  keys (a union `Omit` keeps only common members — it would drop the payloads). */
-export type LsMessage = LsInit | LsCall | LsFiles | LsRequireTypes;
+export type LsMessage = LsInit | LsCall | LsFiles | LsRequireTypes | LsOpenPath;
 /** A request as it crosses postMessage: a payload plus its correlation id.
  *  Intersection distributes over the union, so every member keeps its own keys. */
 export type LsRequest = LsMessage & { id: number };
@@ -69,6 +72,8 @@ export type AsyncSchemeLanguageService = {
    *  can't cross postMessage, so the host pushes the resolved snapshot instead —
    *  re-push on project change, replace-wholesale. */
   setRequireTypes(types: Record<string, string>): Promise<void>;
+  /** Project-relative path of the open buffer (relative require resolution). */
+  setOpenPath(path: string | null): Promise<void>;
 };
 
 export const LS_METHODS = [
@@ -150,6 +155,7 @@ export function connectSchemeLs(
           getTypelevelModules: rpc("getTypelevelModules"),
           setProjectFiles: (files: Record<string, string>) => call<void>({ kind: "files", files }),
           setRequireTypes: (types: Record<string, string>) => call<void>({ kind: "requireTypes", types }),
+          setOpenPath: (path: string | null) => call<void>({ kind: "openPath", path }),
         });
       } catch (error) {
         clearTimeout(timer);

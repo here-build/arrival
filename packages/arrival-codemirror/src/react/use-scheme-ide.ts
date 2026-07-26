@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { LsPort } from "@inhuman.tools/arrival-lsp/ls-client";
+import { lookupProjectFile, lookupProjectRequireType } from "@inhuman.tools/arrival-lsp/require-path";
 
 import type { SchemeIdeBackend } from "../index.js";
 
@@ -46,6 +47,8 @@ export interface SchemeIdeAudit {
   /** Project file paths last pushed for require resolution. */
   projectFileCount: number;
   requireTypeCount: number;
+  /** Open buffer path last set for relative require resolution. */
+  openPath: string | null;
 }
 
 export interface SchemeIdeCanary {
@@ -68,6 +71,7 @@ const AUDIT: SchemeIdeAudit = {
   canaries: [],
   projectFileCount: 0,
   requireTypeCount: 0,
+  openPath: null,
 };
 
 function publishAudit(): void {
@@ -86,6 +90,7 @@ function publishAudit(): void {
       ideReadyAt: AUDIT.ideReadyAt,
       projectFileCount: AUDIT.projectFileCount,
       requireTypeCount: AUDIT.requireTypeCount,
+      openPath: AUDIT.openPath,
       canaries: AUDIT.canaries.map((c) => ({
         label: c.label,
         emitHead: c.emitHead,
@@ -210,6 +215,10 @@ let pushFiles: ((files: Record<string, string>) => void) | null = null;
 let requireTypes: Record<string, string> = {};
 let pushRequireTypes: ((types: Record<string, string>) => void) | null = null;
 
+/** Open buffer path (project-relative) — relative `(require "config.scm")`. */
+let openPath: string | null = null;
+let pushOpenPath: ((path: string | null) => void) | null = null;
+
 /** Publish the project's files for `(require "path")` resolution — call on
  *  project open and whenever files change (replace-wholesale; keys are the
  *  require-style paths). Idempotent and cheap; safe before the IDE loads. */
@@ -217,6 +226,10 @@ export function setSchemeIdeFiles(files: Record<string, string>): void {
   projectFiles = files;
   AUDIT.projectFileCount = Object.keys(files).length;
   pushFiles?.(files);
+  console.info("[inhuman scheme-ide] project files", {
+    count: AUDIT.projectFileCount,
+    sample: Object.keys(files).slice(0, 16),
+  });
 }
 
 /** Publish data-file require TYPES (`{ path → TS type string }`) so a
@@ -227,6 +240,20 @@ export function setSchemeIdeRequireTypes(types: Record<string, string>): void {
   requireTypes = types;
   AUDIT.requireTypeCount = Object.keys(types).length;
   pushRequireTypes?.(types);
+}
+
+/**
+ * Open buffer path for relative require resolution. Call when a `.scm` editor
+ * mounts / switches files so `(require "config.scm")` joins against the
+ * buffer's directory in a multi-package project tree.
+ */
+export function setSchemeIdeOpenPath(path: string | null): void {
+  openPath = path;
+  AUDIT.openPath = path;
+  pushOpenPath?.(path);
+  if (path !== null) {
+    console.info("[inhuman scheme-ide] open path for require", path);
+  }
 }
 
 /** Canary probes — PRE builtins (should resolve without host) + value-position ops. */
@@ -306,6 +333,7 @@ function loadIde(): Promise<SchemeIdeBackend | null> {
         AUDIT.transport = "shared-worker";
         wireFilesPush(backend);
         wireRequireTypesPush(backend);
+        wireOpenPathPush(backend);
         await finishIdeReady(backend);
         return backend;
       } catch (error) {
@@ -318,6 +346,7 @@ function loadIde(): Promise<SchemeIdeBackend | null> {
         AUDIT.transport = "worker";
         wireFilesPush(backend);
         wireRequireTypesPush(backend);
+        wireOpenPathPush(backend);
         await finishIdeReady(backend);
         return backend;
       } catch (error) {
@@ -326,12 +355,22 @@ function loadIde(): Promise<SchemeIdeBackend | null> {
     }
     try {
       const m = await import("@inhuman.tools/arrival-lsp/browser");
-      // In-thread rung: resolve straight off the live table.
+      // In-thread rung: resolve via shared lookup (relative + unique basename).
       const backend = m.createBrowserSchemeLanguageService({
         ...LS_OPTIONS,
         ...hostConfig,
-        resolveModule: (path) => projectFiles[path] ?? projectFiles[path.replace(/^\.\//, "")] ?? null,
-        resolveRequireType: (path) => requireTypes[path] ?? requireTypes[path.replace(/^\.\//, "")] ?? null,
+        resolveModule: (path) =>
+          lookupProjectFile(projectFiles, path, {
+            fromFile: openPath,
+            log: true,
+            logLabel: "scheme-ide-require",
+          }),
+        resolveRequireType: (path) =>
+          lookupProjectRequireType(requireTypes, path, {
+            fromFile: openPath,
+            log: false,
+            logLabel: "scheme-ide-require-type",
+          }),
       });
       AUDIT.transport = "main-thread";
       await finishIdeReady(backend);
@@ -368,6 +407,14 @@ function wireRequireTypesPush(backend: SchemeIdeBackend): void {
   if (push === undefined) return;
   pushRequireTypes = (types) => void push.call(backend, types).catch(() => undefined);
   if (Object.keys(requireTypes).length > 0) pushRequireTypes(requireTypes);
+}
+
+/** Wire open-buffer path for relative require resolution over the worker. */
+function wireOpenPathPush(backend: SchemeIdeBackend): void {
+  const push = (backend as { setOpenPath?: (p: string | null) => Promise<void> }).setOpenPath;
+  if (push === undefined) return;
+  pushOpenPath = (path) => void push.call(backend, path).catch(() => undefined);
+  if (openPath !== null) pushOpenPath(openPath);
 }
 
 const idle = (fn: () => void): void => {

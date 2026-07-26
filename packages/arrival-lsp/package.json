@@ -49,6 +49,10 @@
     "./span-map": {
       "types": "./dist/span-map.d.ts",
       "import": "./dist/span-map.js"
+    },
+    "./require-path": {
+      "types": "./dist/require-path.d.ts",
+      "import": "./dist/require-path.js"
     }
   },
   "main": "./dist/index.js",

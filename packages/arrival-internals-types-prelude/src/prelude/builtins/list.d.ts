@@ -3,13 +3,16 @@
 //
 // Scheme: (list x₀ … xₙ) → a proper list of the arguments.
 //
-// Fixed-arity overloads return TS tuples so `(apply f (list a b c))` unifies
-// against `f`'s parameter list (apply.d.ts: `args: A` where A is the param
-// tuple). Homogeneous rest falls through to `List<T>`.
+// Fixed-arity overloads (arity ≥ 2) return TS tuples so `(apply f (list a b c))`
+// unifies against `f`'s parameter list (apply.d.ts: `args: A` where A is the
+// param tuple). Singleton `(list x)` is a homogeneous List — seeds/pools like
+// `(iterate step (list seed) n)` must stay `List<T>`, not a 1-tuple that rejects
+// recursive `step(pool)` results of variable length.
+// Homogeneous rest (9+) falls through to `List<T>`.
 // // ─────────────────────────────────────────────────────────────────────────────
 
 declare function list(): [];
-declare function list<A>(a: A): [A];
+declare function list<A>(a: A): List<A>;
 declare function list<A, B>(a: A, b: B): [A, B];
 declare function list<A, B, C>(a: A, b: B, c: C): [A, B, C];
 declare function list<A, B, C, D>(a: A, b: B, c: C, d: D): [A, B, C, D];
