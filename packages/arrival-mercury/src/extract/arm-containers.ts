@@ -148,6 +148,12 @@ const MUX_HEADS: Readonly<Record<string, number | "self">> = {
   cdr: "self",
   first: "self",
   rest: "self",
+  // white-room completion product fields — projection of the mint, like car on (infer …)
+  value: "self",
+  text: "self",
+  messages: "self",
+  stop: "self",
+  usage: "self",
   nth: 1, // (nth lst index) — index is the second positional arg
   "vector-ref": 1, // (vector-ref v index)
   assoc: 0, // (assoc key alist) — R7RS key-first order
@@ -217,6 +223,8 @@ const STRING_HEADS: Readonly<Record<string, true>> = {
 const MINT_HEADS: Readonly<Record<string, MintIntegrity>> = {
   infer: "evidence",
   "infer/chat": "evidence",
+  // white-room (zero-debt cut): tools-on-model completion is the evidence crossing
+  "chat/completion": "evidence",
   "read-file": "evidence",
   "require/eval": "evidence",
   now: "ambient",
