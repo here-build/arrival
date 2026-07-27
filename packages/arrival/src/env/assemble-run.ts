@@ -24,11 +24,11 @@
 // runs of this tuple). `opts.evalPrelude` is RUN-time — required iff the closure has
 // at least one `.spec.prelude`.
 //
-// RUNCTX REUSE: `opts.runCtx` supplied ⇒ reuse verbatim (REPL continuity). Invariant:
-// reused run's vocabulary must be THIS tuple's — checked by IDENTITY against the
-// memoized `Vocabulary.map`. Mismatch → `RunContextVocabularyMismatchError` (no silent
-// misresolve). Match ⇒ skip prelude (already ran at original mint; re-running would
-// double-fire effects).
+// RUNCTX REUSE: `opts.runCtx` supplied ⇒ reuse verbatim (REPL continuity), and the run's OWN
+// vocabulary is authoritative — read it with `vocabularyOf`. Assembly is a spawn-time act, so a
+// reusing call rebuilds nothing and re-preludes nothing (a second prelude pass would double-fire
+// its effects). The caller does not re-supply `(capabilities, config)`: the run it holds already
+// carries their product.
 
 import type { EnvCapability } from "../common/capability.js";
 import type { EvalPreludeInto, EvalSchemeInto } from "../common/scheme-env.js";
@@ -37,9 +37,8 @@ import type { RunCache } from "../run/run-cache.js";
 import type { EffectLog } from "../run/effect-log.js";
 import type { ReadGuard } from "../run/read-guard.js";
 import { RunContext } from "../run/RunContext.js";
-import { buildVocabulary } from "./vocabulary.js";
+import { buildVocabulary, type Vocabulary } from "./vocabulary.js";
 import { bindValue, mintResolvingFrame } from "./AmbientRuntime.js";
-import { RunContextVocabularyMismatchError } from "../errors.js";
 import invariant from "tiny-invariant";
 
 export interface AssembleRunOptions {
@@ -63,21 +62,37 @@ export interface AssembleRunOptions {
   readonly reads?: ReadGuard;
   readonly notes?: NoteSink;
   readonly display?: DisplaySink;
-  /** Reuse an existing RunContext (REPL continuity) — tuple-identity checked, prelude
-   *  not re-run (module header). */
+  /** Reuse an existing RunContext (REPL continuity). The run carries its own vocabulary, so
+   *  `capabilities`/`config` are ignored on this path and no prelude re-runs. */
   readonly runCtx?: RunContext;
+}
+
+/** The `Vocabulary` a RunContext was spawned against.
+ *
+ *  A WeakMap rather than a `RunContext` field: `RunContext.vocabulary` is deliberately an opaque
+ *  `ReadonlyMap` so the run leaf never imports the env layer (`run/CallCtx.ts`), and the full
+ *  `Vocabulary` would break that opacity. Same shape as `sealedChainByVocabulary`'s own memo.
+ *
+ *  Absent for a RunContext minted outside this function (`CONSTANT_CTX`, the internal live-frame
+ *  family) — a reusing caller falls back to assembling from its tuple. */
+const vocabularyByRunCtx = new WeakMap<RunContext, Vocabulary>();
+
+/** The vocabulary `runCtx` was spawned against; `undefined` if it was not spawned here. */
+export function vocabularyOf(runCtx: RunContext): Vocabulary | undefined {
+  return vocabularyByRunCtx.get(runCtx);
 }
 
 /** Obtain (or build) this tuple's {@link Vocabulary} and mint a fresh `RunContext`
  *  armed with it. `capabilityResources` starts empty (spawn lazily on first dispatch).
- *  `opts.runCtx` supplied ⇒ reuse (tuple-identity checked, no re-prelude). */
+ *  `opts.runCtx` supplied ⇒ reuse verbatim: the run already carries its vocabulary, so nothing is
+ *  rebuilt and no prelude re-runs. */
 export async function assembleRun(opts: AssembleRunOptions): Promise<RunContext> {
-  const vocabulary = await buildVocabulary(opts.capabilities, opts.config, opts.evalScheme);
+  // REUSE — before any assembly. Re-deriving a vocabulary from this call's arguments in order to
+  // compare it against the one the run already carries is work whose only product is the chance to
+  // disagree with itself.
+  if (opts.runCtx !== undefined) return opts.runCtx;
 
-  if (opts.runCtx !== undefined) {
-    if (opts.runCtx.vocabulary !== vocabulary.map) throw new RunContextVocabularyMismatchError();
-    return opts.runCtx;
-  }
+  const vocabulary = await buildVocabulary(opts.capabilities, opts.config, opts.evalScheme);
 
   // Mint first: prelude pass dispatches through THIS run's runCtx.
   const runCtx = new RunContext({
@@ -93,6 +108,8 @@ export async function assembleRun(opts: AssembleRunOptions): Promise<RunContext>
     capabilityConfigurations: vocabulary.configsByCapability,
     vocabulary: vocabulary.map,
     degraded: vocabulary.degraded });
+  // The run owns what it was spawned against — see `vocabularyByRunCtx`.
+  vocabularyByRunCtx.set(runCtx, vocabulary);
 
   // Per-run prelude (module header). preludes already C3-ordered + identity-deduped.
   if (vocabulary.preludes.length > 0) {

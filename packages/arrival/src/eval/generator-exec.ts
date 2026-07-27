@@ -12,7 +12,7 @@
 
 import { AmbientRuntime, mintPlainFrame, isAmbientRuntime, bindValue } from "../env/AmbientRuntime.js";
 import { buildVocabulary, type Vocabulary } from "../env/vocabulary.js";
-import { assembleRun } from "../env/assemble-run.js";
+import { assembleRun, vocabularyOf } from "../env/assemble-run.js";
 import { BASE_ROSTER } from "../env/base-roster.js";
 import { inferenceEnv } from "../env/inference-env.js";
 import run, { evaluate, expectValue, type EvalTap } from "./evaluator.js";
@@ -333,10 +333,15 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
 
   const program = passedProgram ?? (await parseProgram(code, { strict }));
 
-  // THE FOLD — see this function's doc for the ordering rationale.
+  // THE FOLD — see this function's doc for the ordering rationale. Skipped entirely on the reuse
+  // path: a run carries the vocabulary it was spawned against, so re-folding a tuple to rebuild
+  // one is redundant. `capabilities`/`config` are SPAWN inputs; a call that already holds a run
+  // needs neither.
   const effectiveCapabilities = [...(capabilities ?? []), ...BASE_ROSTER];
 
-  const vocabulary = await buildVocabulary(effectiveCapabilities, config, capabilityEvalScheme);
+  const vocabulary =
+    (passedRunCtx === undefined ? undefined : vocabularyOf(passedRunCtx)) ??
+    (await buildVocabulary(effectiveCapabilities, config, capabilityEvalScheme));
   const { chainFrame, chain } = sealedVocabularyChain(vocabulary);
 
   // ISOLATION — fresh null-rooted scope per call unless caller opts into continuity.

@@ -9,12 +9,10 @@
  * equivalent TO, and no second branch a router could route to) and are dropped. What survives,
  * unaffected by the router's collapse (neither pins ambient/glass at all):
  *
- *  LAW 2 (runCtx-reuse tuple-mismatch teaching error): `assembleRun`'s ONE invariant on a
- *    supplied `runCtx` — its `.vocabulary` must be THIS tuple's (identity-checked) — throws
- *    `RunContextVocabularyMismatchError` on a mismatch (a different tuple, or a bare
- *    `new RunContext({})` with no vocabulary at all), and threading the SAME tuple's runCtx
- *    through two `execState` passes (the REPL-continuity idiom, pre-minted via the exported
- *    `assembleRun`) skips a second prelude execution.
+ *  LAW 2 (runCtx reuse — the run is authoritative): a supplied `runCtx` is returned verbatim.
+ *    Assembly happens at SPAWN, so the run carries its own vocabulary and a reusing call
+ *    rebuilds nothing: `capabilities`/`config` on that call are inert. Threading the same runCtx
+ *    through two `execState` passes (the REPL-continuity idiom) skips a second prelude execution.
  *
  *  LAW 3 (static validation on the vocabulary path): `staticValidation: "on"` produces the
  *    `missing-configuration` diagnostic — thrown at parse phase, with ZERO side effects fired
@@ -34,7 +32,6 @@ import { BASE_ROSTER } from "../../env/base-roster.js";
 import { isAmbientRuntime } from "../../env/AmbientRuntime.js";
 import { disposeRunContext } from "../../run/run-lifecycle.js";
 import { RunContext } from "../../run/RunContext.js";
-import { RunContextVocabularyMismatchError } from "../../errors.js";
 import { StaticValidationError } from "../../static-validation/validate-program.js";
 import { nil } from "../../values/primitives/ANil.js";
 
@@ -48,28 +45,32 @@ const realEvalPrelude: EvalPreludeInto = (env, src, runCtx) => {
   return execInFrame(src, env, runCtx);
 };
 
-describe("LAW 2 — runCtx reuse: tuple-identity invariant", () => {
-  it("reusing a RunContext minted against a DIFFERENT capability set throws the teaching error", async () => {
+describe("LAW 2 — runCtx reuse: the run is authoritative", () => {
+  it("a supplied runCtx comes back verbatim; this call's capabilities are not consulted", async () => {
     const capA = EnvCapability.define("law/b3-runctx-a", { symbols: () => ({}) });
     const capB = EnvCapability.define("law/b3-runctx-b", { symbols: () => ({}) });
 
     const runA = await assembleRun({ capabilities: [capA], evalScheme: realEvalScheme });
     try {
-      await expect(assembleRun({ capabilities: [capB], evalScheme: realEvalScheme, runCtx: runA })).rejects.toThrow(
-        RunContextVocabularyMismatchError,
-      );
+      // Assembly is a SPAWN act: `runA` carries the vocabulary it was built against, so a reusing
+      // call rebuilds nothing and compares nothing. A different capability set here is inert, not
+      // an error — `capabilities`/`config` are spawn inputs, and the run already holds their product.
+      const reused = await assembleRun({ capabilities: [capB], evalScheme: realEvalScheme, runCtx: runA });
+      expect(reused).toBe(runA);
+      expect(reused.vocabulary).toBe(runA.vocabulary);
     } finally {
       await disposeRunContext(runA);
     }
   });
 
-  it("reusing a bare-minted RunContext (no .vocabulary at all) also mismatches", async () => {
+  it("a bare-minted RunContext, carrying no vocabulary of its own, is reused verbatim too", async () => {
     const cap = EnvCapability.define("law/b3-runctx-empty", { symbols: () => ({}) });
-    // Bare `new RunContext(...)` — carries no vocabulary handle.
+    // Bare `new RunContext(...)` — not spawned here, so it holds no vocabulary. Reuse still returns
+    // it: the caller named this run, and reuse does not second-guess that.
     const bareRunCtx = new RunContext({});
-    await expect(
-      assembleRun({ capabilities: [cap], evalScheme: realEvalScheme, runCtx: bareRunCtx }),
-    ).rejects.toThrow(RunContextVocabularyMismatchError);
+    const reused = await assembleRun({ capabilities: [cap], evalScheme: realEvalScheme, runCtx: bareRunCtx });
+    expect(reused).toBe(bareRunCtx);
+    expect(reused.vocabulary).toBeUndefined();
   });
 
   it("threading the SAME tuple's RunContext through two execState passes skips a second prelude run", async () => {
