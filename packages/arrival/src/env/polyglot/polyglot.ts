@@ -33,6 +33,8 @@ import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { ACharacter } from "../../values/primitives/ACharacter.js";
 import { ADict, foldKeyName, type DictKey } from "../../values/primitives/ADict.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
+import { AVector } from "../../values/primitives/AVector.js";
+import { APair } from "../../values/primitives/APair.js";
 import { chargeHeap } from "../../heap-budget.js";
 import { type SchemeValue } from "../../values/types.js";
 import { type AValue } from "../../values/primitives/AValue.js";
@@ -57,6 +59,42 @@ function normalizeMemberKey(key: unknown): string | null {
   let keyStr = String(rawKey);
   if (keyStr.startsWith(":")) keyStr = keyStr.slice(1);
   return keyStr;
+}
+
+/** Enumerate a receiver's own members through its OWN terms — `keys`, then `get` per key —
+ *  and build an OWNED vector from the results.
+ *
+ *  NOT `schemeToJs` + `Object.values` + `jsToScheme`. That round trip unwraps a borrowed
+ *  container to its `source` by identity, enumerates whatever the store holds, and re-borrows
+ *  the result: if the store was ever populated with already-crossed values, the rebuilt array
+ *  carries `AValue`s into a JS-world store and violates §HYGIENE. Reading through the terms
+ *  never leaves scheme space, so the hazard cannot arise regardless of what the receiver
+ *  borrows.
+ *
+ *  Term-less receiver ⇒ empty vector, matching `@keys`: absence is the semantics.
+ *
+ *  A Promise-valued member (a lazy pending cell — pending-entry.ts) makes the whole read
+ *  async: unlike `@`, which hands its single cell to the dispatch wrapper to await, a vector
+ *  cannot be minted until every element has settled. */
+function collectMembers(
+  ctx: CallCtx,
+  obj: unknown,
+  build: (key: string, value: SchemeValue) => SchemeValue,
+): AVector | Promise<AVector> {
+  const keysTerm = obj == null ? undefined : (obj as Partial<AValue>)["arrival/tagless-final/keys"];
+  const getter = obj == null ? undefined : (obj as Partial<AValue>)["arrival/tagless-final/get"];
+  if (typeof keysTerm !== "function" || typeof getter !== "function") return new AVector([]);
+  const names = keysTerm.call(obj);
+  chargeHeap(ctx.runCtx, names.length);
+  const reads = names.map((key) => getter.call(obj, key));
+  const isThenable = (v: unknown): v is Promise<SchemeValue> =>
+    typeof (v as { then?: unknown } | null)?.then === "function";
+  if (reads.some(isThenable)) {
+    return Promise.all(reads).then(
+      (settled) => new AVector(settled.map((value, i) => build(names[i]!, value as SchemeValue))),
+    );
+  }
+  return new AVector(reads.map((value, i) => build(names[i]!, value as SchemeValue)));
 }
 
 // ─── Contract vocabulary local to this pack ─────────────────────────────────────
@@ -119,10 +157,14 @@ export default EnvCapability.define("scheme/polyglot", {
           return schemeBool(typeof has === "function" ? has.call(obj, keyStr) : false);
         },
       ),
-      "@keys": symbol.native`@keys: the own member keys of obj`(
-        // The keys term returns raw JS strings; the scheme face boxes each to AString
-        // (z.array(z.string)'s scheme side — Face split).
-        { input: [z.schemeValue], output: [z.array(z.string)] },
+      "@keys": symbol.native`@keys: the own member keys of obj, as a vector`(
+        // A VECTOR of AString, not a raw JS array of them. `symbol.native` applies no output
+        // codec (native.ts), so whatever the impl returns IS the scheme value: a bare JS array
+        // has no `arrival/tagless-final/*` terms, so `(car (@keys d))` and `(map f (@keys d))`
+        // both refuse it and `toJS` doors it as a non-scheme value — while the dict stubs
+        // teach `fold over (@keys d)` as the iteration idiom. Owned AVector, matching
+        // `@values`/`@entries`: one return convention across the trio.
+        { input: [z.schemeValue], output: [z.vector(z.string)] },
         function (this: CallCtx, obj: unknown) {
           const keys = obj == null ? undefined : (obj as Partial<AValue>)["arrival/tagless-final/keys"];
           const names = typeof keys === "function" ? keys.call(obj) : [];
@@ -130,7 +172,24 @@ export default EnvCapability.define("scheme/polyglot", {
           // carried by `this: CallCtx` (dispatch's `hostImpl.apply(makeCallCtx(runCtx),
           // args)`, common/capability.ts). Under CONSTANT_CTX the result strings mint
           // run-invisible: outside the run's heap meter, cache, and effect tracking.
-          return names.map((k) => new AString(k));
+          return new AVector(names.map((k) => new AString(k)));
+        },
+      ),
+      "@values": symbol.native`@values: the own member values of obj, as a vector`(
+        { input: [z.schemeValue], output: [z.vector(z.schemeValue)] },
+        function (this: CallCtx, obj: unknown) {
+          return collectMembers(this, obj, (_key, value) => value);
+        },
+      ),
+      "@entries": symbol.native`@entries: the own members of obj as (key . value) pairs, in a vector`(
+        // BOTH carriers, each for its own reason. A member is a 2-product with no tail — ONE
+        // cons cell, `assoc`-compatible — so an entry is an APair, never a 2-list `(k v)`.
+        // The COLLECTION is enumeration over own keys, the same face `@keys`/`@values`
+        // present, so it is a vector. Reading `(cdr entry)` yields the value itself; a
+        // 2-list would yield a one-element list wrapping it.
+        { input: [z.schemeValue], output: [z.vector(z.pair)] },
+        function (this: CallCtx, obj: unknown) {
+          return collectMembers(this, obj, (key, value) => new APair(new AString(key), value));
         },
       ),
       // `dict` — the Scheme-side companion to the `:key` accessor and the `@` read:

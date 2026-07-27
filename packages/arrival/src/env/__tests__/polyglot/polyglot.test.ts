@@ -43,10 +43,11 @@ describe("@inhuman.tools/arrival/polyglot (shared core)", () => {
 
     const str = async (src: string) => String((await exec(src, { env }))[0]);
     expect(await str('(@ (dict :a 1) :a)')).toBe("1");
-    // @keys mints a raw JS string array (not a scheme list — see polyglot.ts's
-    // header note on why %dict-set/dict-keys lift it via vector->list) — plain
-    // String() on that array joins with commas, not scheme list syntax.
-    expect(await str('(@keys (dict :a 1))')).toBe("a");
+    // @keys answers a VECTOR of keys, so it composes with the vector verbs and with
+    // `@` — assert through that surface rather than stringifying the container.
+    expect(await num('(vector-length (@keys (dict :a 1 :b 2)))')).toBe(2);
+    expect(await str('(vector-ref (@keys (dict :a 1)) 0)')).toBe("a");
+    expect(await num('(@ (dict :a 1) (vector-ref (@keys (dict :a 1)) 0))')).toBe(1);
   });
 
   // INVARIANT (partial — retired the "-> macro in prelude" half of the original claim: the
