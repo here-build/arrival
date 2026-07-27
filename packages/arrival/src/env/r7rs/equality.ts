@@ -22,6 +22,7 @@
  */
 
 import { AJSArray } from "../../membrane/AJSArray.js";
+import { strictGate } from "../../errors.js";
 import dedent from "dedent";
 import { withContractFields, type CallCtx } from "../../symbol/index.js";
 import { ABool, schemeFalse, schemeTrue } from "../../values/primitives/ABool.js";
@@ -269,15 +270,30 @@ export default EnvCapability.define("scheme/equality", {
       // ANil (and provenance clones). Raw JS null/undefined never arrive (membrane
       // boxes null→nil, undefined→theVoid).
       //
-      // TOLERANCE: empty AJSArray (borrowed tool JSON []) also answers #t. Genuine
-      // scheme vector `(null? #())` stays #f — R7RS disjointness holds. Only AJSArray
-      // (chart not yet chosen): contracted list verbs already see nil via adoption;
-      // bare null? on a raw tool result is the remaining path. At the empty value the
-      // two charts converge ("no elements"); answering #f forces a chart the caller
-      // never asked for and makes `(if (null? results) … (car results))` take the else
-      // branch on empty tool data. Cost: one value answers #t to both null? and vector?.
+      // TOLERANCE (loose mode): an empty AJSArray — a borrowed JSON `[]`, which a required
+      // data file or a tool result both produce — also answers #t. Genuine scheme vector
+      // `(null? #())` stays #f: R7RS disjointness holds for values that were always vectors.
+      // At the EMPTY value the vector and list charts converge on "no elements", and
+      // answering #f makes `(if (null? results) … (car results))` take the else branch on
+      // empty data, which is the reading nobody wants. Contracted list verbs never reach
+      // here — they see nil through adoption.
+      //
+      // STRICT mode refuses instead of answering: the tolerance is a loose-mode convenience,
+      // and a program declaring strict portability is asking to be told that this value is a
+      // vector, not a list. The two modes disagree ON PURPOSE, which is what `strictGate`
+      // exists to express — the cost of the loose answer is one value reading #t to both
+      // `null?` and `vector?`, and strict declines to pay it.
       function (this: CallCtx, obj) {
-        return bool(obj instanceof ANil || (obj instanceof AJSArray && obj.source.length === 0));
+        if (obj instanceof ANil) return bool(true);
+        if (obj instanceof AJSArray && obj.source.length === 0) {
+          strictGate(this.runCtx, {
+            op: "null?",
+            rule: "an empty borrowed JSON array is a VECTOR, and `null?` holds only of the empty LIST",
+            alternative: "test `(vector? x)` / `(= 0 (vector-length x))`, or adopt the list chart first",
+          });
+          return bool(true);
+        }
+        return bool(false);
       },
     ),
 
