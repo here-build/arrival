@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { schemeToSugarcoat, sugarcoatToScheme } from "@inhuman.tools/arrival-sugarcoat";
-import { darcula, FONT_WRITING, overlayTheme } from "@here.build/editor-theme";
+import { editorFill, ideaSearch, theme } from "@here.build/editor-theme";
 import CodeMirror from "@uiw/react-codemirror";
 
 import {
@@ -15,19 +15,18 @@ import {
 } from "../index.js";
 import { setSchemeIdeOpenPath, useSchemeIde } from "./use-scheme-ide.js";
 
-// JetBrains Mono — the WRITING font (the reading fonts live in the popup; see
-// @here.build/editor-theme's fonts.css for the writing/reading split).
-const editorTheme = EditorView.theme({
-  "&": { height: "100%" },
-  ".cm-scroller": { fontFamily: FONT_WRITING, fontSize: "12.5px" },
-});
-
 // Stable identity — @uiw/react-codemirror reconfigures ALL extensions whenever
 // `basicSetup` or `onChange` identity changes. A fresh object/callback per
 // render restarts StreamLanguage parse from scratch; the first parse slice
 // covers the head (~50–70 lines), and the rest flashes unhighlighted until the
 // parse worker catches up. Module-level constants keep that off the keystroke path.
-const BASIC_SETUP = { lineNumbers: true, highlightActiveLine: false, foldGutter: true } as const;
+// searchKeymap: false — ideaSearch() owns Mod-f / Mod-Alt-f (stock panel is ugly).
+const BASIC_SETUP = {
+  lineNumbers: true,
+  highlightActiveLine: false,
+  foldGutter: true,
+  searchKeymap: false,
+} as const;
 
 function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -208,14 +207,14 @@ export function SchemeEditor({
     // structural ops there would be wrong, not just unmapped.
     () => [
       schemeSugarcoat(),
-      darcula,
-      editorTheme,
+      theme,
+      editorFill,
+      ideaSearch(),
       ...(classicExtensions ?? []),
       paramHintsExtension("scheme"),
       ...(structuralEditing === false
         ? []
         : [schemeStructural(structuralEditing === true ? undefined : structuralEditing)]),
-      overlayTheme,
       ...(ide === null
         ? []
         : [schemeIde(ide, hasNavigate ? { openFile } : {})]),
@@ -228,12 +227,13 @@ export function SchemeEditor({
   const sugarcoatExt = useMemo<Extension[]>(
     () => [
       schemeSugarcoat(),
-      darcula,
-      editorTheme,
+      theme,
+      editorFill,
+      ideaSearch(),
       paramHintsExtension("sugarcoat"),
       ...(ide === null
         ? []
-        : [overlayTheme, schemeIde(sugarcoatIdeBackend(ide), hasNavigate ? { openFile } : {})]),
+        : [schemeIde(sugarcoatIdeBackend(ide), hasNavigate ? { openFile } : {})]),
     ],
     [ide, openFile, hasNavigate],
   );
