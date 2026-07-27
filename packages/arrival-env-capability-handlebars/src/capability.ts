@@ -11,7 +11,7 @@
  */
 import { EnvCapability, jsToScheme, parse, schemeToJsUntyped } from "@inhuman.tools/arrival";
 import { Call, type EmitRule, type R } from "@inhuman.tools/arrival/emit";
-import { arrivalLoaderCapability } from "@inhuman.tools/arrival/capabilities/loader";
+import { arrivalLoaderCapability, contentsToText } from "@inhuman.tools/arrival/capabilities/loader";
 
 import { asCompiledTemplate, compileTemplate, renderTemplateCall, runCompiledTemplate } from "./compile.js";
 import { hbsContentsToSchemeSource } from "./scheme.js";
@@ -48,7 +48,7 @@ export const arrivalHandlebarsCapability = EnvCapability.define("arrival/handleb
       { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
       (async (contents: unknown) => ({
         kind: "eval" as const,
-        forms: await parse(hbsContentsToSchemeSource(String(contents))),
+        forms: await parse(hbsContentsToSchemeSource(contentsToText(contents as string | Uint8Array))),
       })) as never,
     ),
     "handlebars/parse": symbol.rosetta`handlebars/parse: compiles a handlebars template source once (cached by source)`(

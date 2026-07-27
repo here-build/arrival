@@ -187,6 +187,25 @@ export const normalizeToJson = (v: unknown): unknown => JSON.parse(JSON.stringif
  *  host config loaders share the exact same dialect as `(require "…json")`. */
 export { parseJsonc } from "./parse-jsonc.js";
 
+/** Decode a `Loader.read` result to source text — the ONE coercion every
+ *  {@link ContentResolver} must use, in place of `String(contents)`.
+ *
+ *  `read` is contractually `string | Uint8Array` (a byte-returning fs — node's
+ *  `fs.promises.readFile(path)` with no encoding, plexus-vfs's `.promises`, an
+ *  FS-Access handle — is a first-class loader source). `String()` on a
+ *  `Uint8Array` joins byte VALUES with commas rather than decoding UTF-8:
+ *  `String(new TextEncoder().encode(";;"))` is `"59,59"`, not `";;"`. Fed to
+ *  `parse`, that garble reads as a number followed by a free `,` — surfacing as
+ *  `Unbound variable \`unquote'` at line 1 of a file whose bytes are perfectly
+ *  valid scheme. Every resolver routes through here so no format can regress
+ *  into that silent mistranslation.
+ *
+ *  Exported for the dep-bearing ext capabilities (`ext/yaml`, `ext/toml`,
+ *  `arrival/handlebars`), which resolve contents outside this module — same
+ *  one-definition-no-drift reason as {@link normalizeToJson}. */
+export const contentsToText = (contents: string | Uint8Array): string =>
+  typeof contents === "string" ? contents : new TextDecoder().decode(contents);
+
 /** Shape a required DATA value into the program's world: arrays → scheme LISTS (Pair
  *  chains) at EVERY depth, plain objects rebuilt with shaped values (then wrapped as
  *  member-readable records by `jsToScheme`), scalars boxed by `jsToScheme`.
@@ -294,7 +313,7 @@ export function defaultResolvers(): Map<string, ExtensionHandler> {
     {
       resolve: (contents) => ({
         kind: "value",
-        value: normalizeToJson(DATA_PARSERS[ext]!(String(contents))) }),
+        value: normalizeToJson(DATA_PARSERS[ext]!(contentsToText(contents))) }),
       type: (source) => {
         try {
           return valueToTsType(normalizeToJson(DATA_PARSERS[ext]!(source)));
@@ -308,10 +327,10 @@ export function defaultResolvers(): Map<string, ExtensionHandler> {
     // `path:line` in the scheme stack (L3).
     [
       ".scm",
-      { resolve: async (contents, { path }) => ({ kind: "load", forms: await parse(String(contents), path) }) },
+      { resolve: async (contents, { path }) => ({ kind: "load", forms: await parse(contentsToText(contents), path) }) },
     ],
     ...dataHandlers,
-    [".txt", { resolve: (contents) => ({ kind: "value", value: String(contents) }), type: () => "string" }],
+    [".txt", { resolve: (contents) => ({ kind: "value", value: contentsToText(contents) }), type: () => "string" }],
     // No entry for the dep-bearing formats (`.hbs`/`.yaml`/`.toml`/`.prompt`): a bare loader
     // rooting none of their capabilities has no fallback here, so requiring one is a clean
     // no-resolver error — which IS the scoping guarantee (you must root the owning capability).
@@ -361,8 +380,9 @@ export function loaderFromResolver(resolver: RequireResolver): Loader {
 /** The minimal read surface {@link makeFsLoader} needs. node:fs's `fs.promises`
  *  and plexus-vfs's `createFsClient(vfs).promises` both satisfy it as-is (both
  *  expose `readFile(path)`); a browser FileSystem-Access-API directory handle
- *  adapts with a tiny shim. `read` returns bytes OR text — the resolvers `String()`
- *  text files and the binary path stays `Uint8Array`. */
+ *  adapts with a tiny shim. `read` returns bytes OR text — text formats decode
+ *  through {@link contentsToText} (UTF-8, never `String()`), and the binary path
+ *  stays `Uint8Array`, so a bytes-only `readFile` needs no encoding argument. */
 export interface FsReadLike {
   readFile(path: string): MaybePromise<string | Uint8Array>;
 }

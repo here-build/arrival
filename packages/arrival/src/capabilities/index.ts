@@ -21,6 +21,7 @@ export {
   type ContentResolver,
   type RequireTypeProvider,
   type ResolverResult,
+  contentsToText,
   normalizeToJson,
   parseJsonc,
   valueToTsType,

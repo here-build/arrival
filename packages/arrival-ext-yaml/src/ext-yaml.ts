@@ -11,6 +11,7 @@ import { EnvCapability } from "@inhuman.tools/arrival/capability";
 import {
   arrivalLoaderCapability,
   type ContentResolver,
+  contentsToText,
   type ExtensionHandler,
   normalizeToJson,
   type RequireTypeProvider,
@@ -25,7 +26,7 @@ import { parse as parseYaml } from "yaml";
  *  never marshals). */
 const resolveYaml: ContentResolver = (contents) => ({
   kind: "value",
-  value: normalizeToJson(parseYaml(String(contents))),
+  value: normalizeToJson(parseYaml(contentsToText(contents))),
 });
 
 /** The editor twin of `resolveYaml` — same parser, same `normalizeToJson` projection,

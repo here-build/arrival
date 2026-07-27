@@ -10,6 +10,7 @@ import { parse as parseToml } from "smol-toml";
 
 import {
   arrivalLoaderCapability,
+  contentsToText,
   normalizeToJson,
   valueToTsType,
   type ContentResolver,
@@ -24,7 +25,7 @@ const RESOLVE = "toml/parse";
  *  term with `(contents, {path}) → ResolverResult`, raw either way. */
 const resolveToml: ContentResolver = (contents) => ({
   kind: "value",
-  value: normalizeToJson(parseToml(String(contents))),
+  value: normalizeToJson(parseToml(contentsToText(contents))),
 });
 
 /** The editor twin of `resolveToml` — see `ext-yaml.ts`'s `typeYaml` for the whole
