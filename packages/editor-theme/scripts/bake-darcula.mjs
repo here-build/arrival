@@ -13,8 +13,8 @@
  *   L_nominal    = target_AL − 0.14 · C · hue_factor(h)
  */
 
-// Nayatani-1997 VAC shape, 3-harmonic Fourier on OKLCH hue° (R²≈0.98). Not the retired
-// two-lobe warm+blue curve. Inherently ~[0.54, 0.92] — no clamp.
+// Nayatani-1997 VAC shape: 3-harmonic Fourier on OKLCH hue° (R²≈0.98).
+// Inherently ~[0.54, 0.92] — no clamp.
 function hueFactor(h) {
   const r = (h * Math.PI) / 180;
   return (
