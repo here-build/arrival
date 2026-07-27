@@ -81,6 +81,19 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
     expect(cfg).toMatchObject({ name: "world" });
   });
 
+  it("JSONC (.json with // comments + trailing commas) resolves like strict JSON", async () => {
+    const src = `{
+      // provider roster
+      "name": "world",
+      "tags": ["a", "b",],
+    }`;
+    const results = await exec(`(define cfg (require "cfg.json")) cfg`, {
+      capabilities: [arrivalLoaderCapability],
+      config: { loader: files({ "cfg.json": src }) } });
+    const cfg = plain(results.at(-1)) as Record<string, unknown>;
+    expect(cfg).toMatchObject({ name: "world", tags: ["a", "b"] });
+  });
+
   it("a .scm require spills its defines into the RUN env (the ctx-read frame)", async () => {
     const results = await exec(`(require "lib.scm") (+ lib-answer 1)`, {
       capabilities: [arrivalLoaderCapability],

@@ -6,8 +6,8 @@
 //   • ARM — `arrivalLoaderCapability`, `Loader`, `makeFsLoader`/`FsReadLike`,
 //     `loaderFromResolver`/`RequireResolver`
 //   • EXT-AUTHOR — `ExtensionHandler`/`ContentResolver`/`RequireTypeProvider`/
-//     `ResolverResult`, `normalizeToJson`/`valueToTsType`/`resolveRequireType`,
-//     `SchemeForm`/`MaybePromise`
+//     `ResolverResult`, `normalizeToJson`/`parseJsonc`/`valueToTsType`/
+//     `resolveRequireType`, `SchemeForm`/`MaybePromise`
 export {
   type Loader,
   type FsReadLike,
@@ -19,6 +19,7 @@ export {
   type RequireTypeProvider,
   type ResolverResult,
   normalizeToJson,
+  parseJsonc,
   valueToTsType,
   resolveRequireType,
   type SchemeForm,

@@ -17,6 +17,7 @@ import { CONSTANT_CTX } from "../run/RunContext.js";
 import { nil } from "../values/primitives/ANil.js";
 import type { SchemeEnv } from "../common/scheme-env.js";
 import { RunResolverUnreachableError, RequirePathError } from "../errors.js";
+import { parseJsonc } from "./parse-jsonc.js";
 
 export type MaybePromise<T> = T | Promise<T>;
 
@@ -155,22 +156,24 @@ export function dirOf(path: string): string {
 
 // ── data parsers ──────────────────────────────────────────────────────────────
 //
-// Only the DEP-FREE formats parse here (`JSON.parse`). Dep-bearing formats — `.yaml`/`.yml`
-// (`yaml`), `.toml` (`smol-toml`) — live in their own opt-in ext capabilities (arrival-chain
-// `packs/ext-yaml.ts` / `ext-toml.ts`), each owning its parser, so the loader carries no external
-// dep (per .claude/rules/env-quasi-packages.md — split to isolate an external dependency). Those
-// capabilities register their resolver by NAME at bootstrap; `require`'s ext→name overlay resolves
-// it. Known wart: that overlay is the RUNTIME face only — the editor type seam (`resolveRequireType`)
-// reads this static table, so `.yaml`/`.toml` carry no lens type provider and hover as `unknown`
-// (see `defaultResolvers`).
+// Only the DEP-FREE formats parse here. `.json` accepts JSONC (// and /* */ comments +
+// trailing commas — the tsconfig/VS Code dialect); strict JSON is a subset. Dep-bearing
+// formats — `.yaml`/`.yml` (`yaml`), `.toml` (`smol-toml`) — live in their own opt-in
+// ext capabilities (arrival-chain `packs/ext-yaml.ts` / `ext-toml.ts`), each owning its
+// parser, so the loader carries no external dep (per .claude/rules/env-quasi-packages.md
+// — split to isolate an external dependency). Those capabilities register their resolver
+// by NAME at bootstrap; `require`'s ext→name overlay resolves it. Known wart: that
+// overlay is the RUNTIME face only — the editor type seam (`resolveRequireType`) reads
+// this static table, so `.yaml`/`.toml` carry no lens type provider and hover as
+// `unknown` (see `defaultResolvers`).
 const DATA_PARSERS: Record<string, (text: string) => unknown> = {
-  ".json": (text) => JSON.parse(text),
+  ".json": (text) => parseJsonc(text),
   ".ndjson": (text) =>
     text
       .split("\n")
       .map((line) => line.trim())
-      .filter((line) => line.length > 0)
-      .map((line) => JSON.parse(line)) };
+      .filter((line) => line.length > 0 && !line.startsWith("//"))
+      .map((line) => parseJsonc(line)) };
 
 /** Project a parsed value onto its JSON shape (Dates → ISO strings, drops undefined) so a required
  *  data file enters the program as plain JSON-shaped data. NOT a deep clone — `structuredClone`
@@ -179,6 +182,10 @@ const DATA_PARSERS: Record<string, (text: string) => unknown> = {
  *  builtin data resolvers use — one definition, no drift. */
 // eslint-disable-next-line unicorn/prefer-structured-clone -- JSON projection, not a clone
 export const normalizeToJson = (v: unknown): unknown => JSON.parse(JSON.stringify(v));
+
+/** JSONC parse — see `parse-jsonc.ts`. Re-exported so mercury's data-module and
+ *  host config loaders share the exact same dialect as `(require "…json")`. */
+export { parseJsonc } from "./parse-jsonc.js";
 
 /** Shape a required DATA value into the program's world: arrays → scheme LISTS (Pair
  *  chains) at EVERY depth, plain objects rebuilt with shaped values (then wrapped as

@@ -6,8 +6,8 @@
  *   • ARM — `arrivalLoaderCapability`, `Loader`, `makeFsLoader`/`FsReadLike`,
  *     `loaderFromResolver`/`RequireResolver`
  *   • EXT-AUTHOR — `ExtensionHandler`/`ContentResolver`/`RequireTypeProvider`/
- *     `ResolverResult`, `normalizeToJson`/`valueToTsType`/`resolveRequireType`,
- *     `SchemeForm`/`MaybePromise` (riders those signatures need).
+ *     `ResolverResult`, `normalizeToJson`/`parseJsonc`/`valueToTsType`/
+ *     `resolveRequireType`, `SchemeForm`/`MaybePromise` (riders those signatures need).
  *
  * `arrivalLoaderCapability` is the declarative face — the one EnvCapability an assembling
  * consumer roots; sibling modules carry the machinery. A loader-derivable env (fs or a
@@ -42,6 +42,7 @@ export {
   type RequireTypeProvider,
   type ResolverResult,
   normalizeToJson,
+  parseJsonc,
   valueToTsType,
   resolveRequireType,
   type SchemeForm,

@@ -43,6 +43,15 @@ describe("resolveRequireType — route a file's source through the registry", ()
     expect(ts).toBe(`List<{ "name": string; "age": number }>`);
   });
 
+  it("JSONC comments/trailing commas still yield the same granular shape", () => {
+    const ts = resolveRequireType(
+      loader,
+      "personas.json",
+      `// people roster\n[{"name":"a","age":30,},]\n`,
+    );
+    expect(ts).toBe(`List<{ "name": string; "age": number }>`);
+  });
+
   it(".txt is a string; .scm (no type provider) and unknown extensions are null", () => {
     expect(resolveRequireType(loader, "notes.txt", "hello")).toBe("string");
     expect(resolveRequireType(loader, "lib.scm", "(define x 1)")).toBeNull();

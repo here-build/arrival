@@ -22,6 +22,7 @@ export {
   type RequireTypeProvider,
   type ResolverResult,
   normalizeToJson,
+  parseJsonc,
   valueToTsType,
   resolveRequireType,
   type SchemeForm,

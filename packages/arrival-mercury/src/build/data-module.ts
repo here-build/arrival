@@ -8,7 +8,12 @@
  * value is already a plain, finite, acyclic JS value (arrays/objects/scalars) —
  * `JSON.stringify` prints valid TypeScript object/array-literal syntax for
  * exactly that domain, so there is no walker/registry/naming machinery to run.
+ *
+ * `.json` is JSONC (// and /* *\/ comments + trailing commas), via the same
+ * `parseJsonc` the runtime `(require "…json")` path uses — require-time and
+ * build-time dialects stay identical.
  */
+import { parseJsonc } from "@inhuman.tools/arrival/capabilities/loader";
 import { parse as parseYaml } from "yaml";
 
 import type { CompileFileResult } from "./types.js";
@@ -17,7 +22,7 @@ import type { CompileFileResult } from "./types.js";
  *  one function (rather than three near-duplicates) since the ONLY difference
  *  between them is the parser — the print/shape step is identical. */
 function parseDataFile(ext: string, content: string): unknown {
-  if (ext === ".json") return JSON.parse(content);
+  if (ext === ".json") return parseJsonc(content);
   if (ext === ".yaml" || ext === ".yml") return parseYaml(content);
   if (ext === ".txt") return content;
   throw new Error(`data-module: unhandled data extension "${ext}"`);
