@@ -618,7 +618,14 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
         // Swallow tap exceptions — must not mask the real error.
       }
     }
-    if (error instanceof ArrivalError) throw error;
+    // ArrivalError is rethrown (not re-wrapped) so doors keep `.enriched` / subclass
+    // fields — but a sync throw inside a generator often has an EMPTY schemeStack
+    // (the throw site never yielded `{ call, frame }`). Stamp the live trampoline
+    // frames so hosts can print WHERE the form was.
+    if (error instanceof ArrivalError) {
+      mergeSchemeFrames(error, frames);
+      throw error;
+    }
     if (!(error instanceof Error)) {
       // R7RS raise accepts ANY scheme object (§6.11). ArrivalError.cause is
       // typed Error — stash the original in the side channel so guard/catch
@@ -789,14 +796,32 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
 
     return valueToSend as T;
   } catch (error) {
+    const frames = frameStack.filter((f): f is StackFrame => f !== undefined);
     if (error instanceof ArrivalError) {
+      mergeSchemeFrames(error, frames);
       throw error;
     }
-    const frames = frameStack.filter((f): f is StackFrame => f !== undefined);
     throw error instanceof Error
       ? new ForeignThrowError(error.message, frames, error)
       : new ForeignThrowError(String(error), frames, undefined);
   }
+}
+
+/**
+ * Attach trampoline frames onto an ArrivalError that is being rethrown without a
+ * wrapper. Sync throws (e.g. UnboundVariableError on a call head) often already
+ * carry the innermost form frame from the throw site; parent frames from the
+ * trampoline are prepended. Never clobbers a stack the thrower already filled.
+ */
+function mergeSchemeFrames(error: ArrivalError, frames: StackFrame[]): void {
+  if (frames.length === 0) return;
+  if (error.schemeStack.length === 0) {
+    error.schemeStack.push(...frames);
+    return;
+  }
+  const seen = new Set(error.schemeStack.map((f) => f.code));
+  const parents = frames.filter((f) => !seen.has(f.code));
+  if (parents.length > 0) error.schemeStack.unshift(...parents);
 }
 
 export default run;
@@ -2410,7 +2435,20 @@ export function* evaluate(
   // Symbol lookup. A symbol can resolve to a value OR — via the define-syntax
   // mechanism (a `let`-bound transformer returned to be bound) — a Macro/Syntax.
   if (code instanceof ASymbol) {
-    const value = resolvedBindingOrThrow(ctxResolver(ctx).resolve(code, ctx.runCtx), code);
+    let value: SchemeValue | Macro | Syntax;
+    try {
+      value = resolvedBindingOrThrow(ctxResolver(ctx).resolve(code, ctx.runCtx), code);
+    } catch (error) {
+      // Bare-symbol miss has no pair frame yet — stamp the symbol so the door
+      // can still show location / name on the host error surface.
+      if (error instanceof ArrivalError && error.schemeStack.length === 0) {
+        error.schemeStack.push({
+          code,
+          env_name: String(ctxResolver(ctx).env.__name__),
+        });
+      }
+      throw error;
+    }
     // The tap reports resolved VALUES; skip it for a macro/syntax binding (no value).
     if (!is_macro(value)) {
       ctx.tap?.onSymbolResolved?.(ctx.currentInvocation ?? null, code, value);
@@ -2561,7 +2599,17 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
       fn = yield fn;
     }
   } else if (first instanceof ASymbol) {
-    fn = resolvedBindingOrThrow(ctxResolver(ctx).resolve(first, ctx.runCtx), first);
+    try {
+      fn = resolvedBindingOrThrow(ctxResolver(ctx).resolve(first, ctx.runCtx), first);
+    } catch (error) {
+      // Call-head unbound throws BEFORE this pair yields `{ call, frame }` onto the
+      // trampoline — so failAndWrap would only see parent frames. Stamp THIS pair
+      // (the form that was applied) as the innermost scheme stack frame first.
+      if (error instanceof ArrivalError && error.schemeStack.length === 0) {
+        error.schemeStack.push(frame);
+      }
+      throw error;
+    }
     // Fire the tap on this call-head fast path (it bypasses `evaluate()`), else tracers
     // miss every function name's resolved value. Skip it for a macro/syntax operator.
     if (!is_macro(fn)) {
