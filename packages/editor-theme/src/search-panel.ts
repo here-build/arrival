@@ -10,6 +10,7 @@
 //   extensions: [theme, ideaSearch()]
 //   // ideaSearch includes search({ createPanel }) + theme + keymap
 
+import { redo, undo } from "@codemirror/commands";
 import {
   closeSearchPanel,
   findNext,
@@ -459,10 +460,18 @@ export const openIdeaReplace: Command = (view) => {
   return true;
 };
 
-/** Keymap: Mod-f find, Mod-Alt-f replace; rest of searchKeymap without Mod-f. */
+/**
+ * Keymap: Mod-f find, Mod-Alt-f replace; rest of searchKeymap without Mod-f.
+ * Undo/redo are re-bound for `search-panel` scope — stock historyKeymap is
+ * editor-only, so Mod-z in the strip would otherwise no-op (or undo the input).
+ */
 export const ideaSearchKeymap: readonly KeyBinding[] = [
   { key: "Mod-f", run: openIdeaSearch, scope: "editor search-panel" },
   { key: "Mod-Alt-f", run: openIdeaReplace, scope: "editor search-panel" },
+  // History — panel-scoped only (editor already has historyKeymap).
+  { key: "Mod-z", run: undo, scope: "search-panel", preventDefault: true },
+  { key: "Mod-y", mac: "Mod-Shift-z", run: redo, scope: "search-panel", preventDefault: true },
+  { linux: "Ctrl-Shift-z", run: redo, scope: "search-panel", preventDefault: true },
   ...searchKeymap.filter((b) => b.key !== "Mod-f"),
 ];
 
