@@ -8,13 +8,16 @@
 // (env/pack-helpers.ts, the eager list->array path used by append/join/reverse/…) and the
 // sequence-op dispatch (filter/map/reduce, which walk the spine/array directly via each
 // term's own tagless-final method). The dispatch-level charge is necessary because value
-// terms must stay EVALUATOR-FREE (no currentRunEnv import; the meter is run-scoped context
+// terms must stay EVALUATOR-FREE (no run-resolver import; the meter is run-scoped context
 // state, not a value-algebra concern) — `to_array` alone can't see ops that bypass it.
 //
-// The charge site reads `ctxOf(operand).heapMeter` (or the `runCtx` threaded through a
-// CallCtx) directly — no env-node courier, no parent-chain walk — because every value built
-// during a run carries the SAME RunContext (docs/execution.md §HERMETIC), which is also
-// what makes the meter safe against async interleaving of concurrent runs.
+// The charge site is meant to read the operand's run-context heap-meter (or the
+// `runCtx` threaded through a CallCtx) directly — no env-node courier, no parent-chain
+// walk. NOTE: AValue currently carries NO per-value ctx field, so sites that resolved
+// the ctx off the operand (`to_array`, `spineToArray`) read CONSTANT_CTX.heapMeter ===
+// undefined and the charge is inert; only the CallCtx-threaded path actually meters.
+// Restoring per-value metering requires re-threading RunContext onto AValue or through
+// the op dispatch.
 
 import type { RunContext } from "./run/RunContext.js";
 import { BudgetExceededError } from "./errors.js";

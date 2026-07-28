@@ -180,7 +180,7 @@ describe("V7 pin — the MONADIC contract (hermetic-Environment ruling, 2026-07-
   // capabilities or overrides. Concretely pinned:
   //   1. the JS side cannot `set` — the method is gone from the concrete class (so no
   //      instance, however obtained — `LexicalScope.fresh().env`, minted children,
-  //      `currentRunEnv()` — answers it) and from the `SchemeEnv` contract;
+  //      the run resolver's env frame — answers it) and from the `SchemeEnv` contract;
   //   2. a raw JS scalar found IN storage is a teaching door on read, never a silent
   //      re-box (the read-path `box()` fallback is deleted — the constant-ctx audit's
   //      #1 provenance drop);

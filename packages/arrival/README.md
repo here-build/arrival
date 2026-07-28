@@ -314,8 +314,7 @@ consumers skip the pass for such programs (the runtime doors remain the backstop
   `scope` (a `LexicalScope`; `.fresh()` mints an isolated session), `runCtx` (reuse an existing
   `RunContext` for REPL continuity), `staticValidation: "on" | "off"`, `signal`, `budgetMs` /
   `heapBudget` (opt-in wall-clock / allocation bounds; `signal` is the one that reaches into native
-  calls), `strict` (turns off nil-tolerance, caller-scoped), `freezeRosettaReturns`, `tap` (trace
-  recording).
+  calls), `strict` (turns off nil-tolerance, caller-scoped), `tap` (trace recording).
 - `parse(code)` — the reader, standalone (`tokenize` lives on `/lsp-internals`).
 
 **Declaration**
@@ -333,17 +332,20 @@ consumers skip the pass for such programs (the runtime doors remain the backstop
 
 - `validateProgram` / `vocabularyFromChain` (from `/lsp-internals`) — the complete-diagnostic-list
   validation pass.
-- `forwardCone`, `backwardCone` (from `/provenance`) — the traced lineage cone; `deepProvenance` —
-  the deep provenance read; `schemeToJs` — the boxed→plain exit read.
+- `forwardCone`, `backwardCone` (from `@inhuman.tools/arrival-provenance/analysis`) — the traced
+  lineage cone; `deepProvenance` (from this package) — the deep provenance read; `schemeToJs` —
+  the boxed→plain exit read.
 - `EvalTrace` (from `/provenance`) — the traced-run recorder (capture spine lives in core);
   `trace.toolNameFor(id)` / `trace.invocationById(id)` resolve a `deepProvenance` ordinal to the
   verb / invocation that minted it.
 - `buildUneval` (from `@inhuman.tools/arrival-provenance/analysis`) — reverse slicer over a finished
   traced run; options take `scope: state.scope` (not `env`).
 
-**Subpath exports** — granular, tree-shaken entries: `/reflect-internals`, `/lsp-internals`,
-`/host-internals`, `/capability`, `/resources`, `/symbol`, `/emit`, `/schema-tag`, `/attestation`,
-`/provenance`, `/provenance/store`, `/type-layer`, `/loader`, `/overridable`, `/schema`.
+**Subpath exports** — granular, tree-shaken entries (see `package.json` `exports` for the
+authoritative list): `/reflect-internals`, `/lsp-internals`, `/host-internals`, `/capability`,
+`/capabilities`, `/capabilities/overridable`, `/capabilities/schema`, `/capabilities/loader`,
+`/resources`, `/emit`, `/schema-tag`, `/attestation`, `/provenance`, `/provenance/store`,
+`/type-layer`.
 
 **Decomposed processing** — for cases the three declared doors (`capabilities` / `config` /
 `scope`) don't cover: the self-hosted `Vocabulary` a capability tuple builds into is memoized by
@@ -362,7 +364,7 @@ Sibling packages build an editing and serving stack over the language; each has 
 | `@inhuman.tools/arrival-lsp` | Scheme→TypeScript type lens as a language service — programs lower into a typed TS view against a declaration-merged prelude, `tsc` checks it, diagnostics lift back to `.scm` spans. Contracts get generics for free (a contract's `type` field carries the full TS signature language). `SchemeLanguageService`: diagnostics, hover, completions, goto, semantic tokens; in-process or behind a worker so `tsc` never blocks the editor. |
 | `@inhuman.tools/arrival-codemirror` | CodeMirror 6 plugin: language modes for classic Scheme and Sugarcoat, `schemeIde(backend)`, paredit-style structural editing over the real reader with a verify-reparse net, inlay hints, `schemeGhost` inline completion. |
 | `@inhuman.tools/arrival-sugarcoat` | Bidirectional lens over canonical s-expressions — renders Scheme as JS/Python/Kotlin-shaped syntax and folds edits back losslessly (`ast(sugarcoatToScheme(schemeToSugarcoat(x), x)) ≡ ast(x)`). Ships the runtime-free reader (`parseSexprs` / `printScheme`), a TextMate grammar, `GRAMMAR.md`, and the 5-minute tour `LEARN.md`. |
-| `@inhuman.tools/arrival-sampler` | Constrained-decode consumer of `/oracle`: substrate-free mask kernel, Σ∩T type-lens narrowing, node-llama-cpp wiring, an OpenAI-compatible server. The mask kernel is tested; decode strategies keep the *experimental* tag. |
+| `@inhuman.tools/arrival-sampler` | *(experimental — lives under `experimental/`, not a sibling here)* Constrained-decode consumer of `/oracle`: substrate-free mask kernel, Σ∩T type-lens narrowing, node-llama-cpp wiring, an OpenAI-compatible server. The mask kernel is tested; decode strategies keep the *experimental* tag. |
 | `@inhuman.tools/arrival-provenance` | Trace analysis owned natively here (forest, statechart, region tree, flow graph, reverse-chain slicer `buildUneval`, `groundingVerdict` / `whyOf` / `whereOf` / `howOf`). Core keeps only the capture spine (`EvalTrace`, stamping); this package re-exports capture and supplies the mobx-reactive `ObservableEvalTrace`. |
 | `@inhuman.tools/arrival-mcp` | The language as an MCP surface — discovery/action tools over the same capability envs, serializer budgets on every result. |
 | `@inhuman.tools/arrival-manifold` | N MCP servers → one `scheme-repl` tool (the measured benchmark below). |

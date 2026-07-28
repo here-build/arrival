@@ -5,6 +5,9 @@ import type { SchemeValue } from "../values/types.js";
 import type { APair } from "../values/primitives/APair.js";
 import type { AmbientRuntime } from "../env/AmbientRuntime.js";
 import type { Resolver } from "./Resolver.js";
+// Type-only: `Syntax` is a sibling transformer class; importing its type here
+// (it imports types from this file) does not create a runtime cycle.
+import type { Syntax } from "./Syntax.js";
 
 /**
  * Uniform result of the `TF_EXPAND` term — a transcribed FORM plus, for a
@@ -15,11 +18,15 @@ import type { Resolver } from "./Resolver.js";
  * evaluating (thin sync wrapper; trampoline owns the await).
  */
 export interface Expansion {
-  expr: SchemeValue;
+  expr: SchemeValue | Promise<SchemeValue>;
   scope?: AmbientRuntime;
 }
 
 export interface MacroInvokeContext {
+  /** Use-site env (REQUIRED at invoke — both `Macro.invoke` and `Syntax.expand`
+   *  bind it as `this` on the transformer). NOT on the bag a transformer RECEIVES:
+   *  `MacroTransformer`'s ctx param is `Omit<MacroInvokeContext, "env">` so env
+   *  travels as `this`, never duplicated on the args object. */
   env: unknown;
   /** Per-run context, threaded to the macro engine's mint door
    *  (eval/syntax-rules.ts) so expander-minted values charge the allocation
@@ -31,6 +38,49 @@ export interface MacroInvokeContext {
   resolver?: Resolver;
   [key: string]: unknown;
 }
+
+/** The args bag a macro transformer RECEIVES (its second parameter). `env` is
+ *  omitted — it travels as `this`, not on the bag. Declared as its own interface
+ *  (not `Omit<MacroInvokeContext, "env">`) so the named fields keep their types
+ *  through destructuring — `MacroInvokeContext`'s `[key: string]: unknown` index
+ *  signature would otherwise widen every field to `unknown` under `Omit`. */
+export interface TransformerArgs {
+  /** Per-run context — see {@link MacroInvokeContext.runCtx}. */
+  runCtx: RunContext;
+  /** Use-site resolver — see {@link MacroInvokeContext.resolver}. */
+  resolver?: Resolver;
+  [key: string]: unknown;
+}
+
+/**
+ * Expansion record a `Syntax` transformer returns: the transcribed FORM plus the
+ * hygiene scope it must evaluate in. Co-defined with `Macro` (not in Syntax.ts)
+ * so `MacroTransformer` below can name it without a cycle.
+ */
+export interface MacroExpansion {
+  expr: SchemeValue | Promise<SchemeValue>;
+  scope: AmbientRuntime;
+}
+
+/**
+ * Duck-shape of a macro-transformer body — the function `__fn__` both `Macro`
+ * (define-macro fexpr) and `Syntax` (syntax-rules) close over. Invoked via
+ * `.call(env, code, ctx, name)`: `this` is bound to the use-site AmbientRuntime,
+ * the first arg is the UNEVALUATED code/form, the second the invoke context, the
+ * third the transformer name.
+ *
+ * Return is polymorphic by use site: a define-macro fexpr returns a replacement
+ * `SchemeValue` FORM (the trampoline evaluates it; may be a Promise the trampoline
+ * awaits); a `Syntax` transformer returns a `MacroExpansion` (form + hygiene scope);
+ * the `syntax-rules` CONSTRUCTOR body returns a `Macro`/`Syntax` transformer VALUE
+ * the macro engine special-cases.
+ */
+export type MacroTransformer = (
+  this: AmbientRuntime,
+  code: SchemeValue,
+  ctx: TransformerArgs,
+  name: string | symbol,
+) => SchemeValue | Promise<SchemeValue> | MacroExpansion | Macro | Syntax;
 
 /**
  * A define-macro fexpr: receives UNEVALUATED code and returns a replacement
@@ -49,7 +99,7 @@ export class Macro {
   readonly ["arrival/is-macro"] = true;
 
   __name__: string;
-  __fn__: Function;
+  __fn__: MacroTransformer;
   __doc__?: string;
   __defmacro__?: boolean;
   /** Ternary static-walk attribute, stamped by `symbol.defineSyntax`'s bind arm
@@ -59,7 +109,7 @@ export class Macro {
    *  (static-validation/vocabulary.ts). */
   macroAttribute?: "opaque" | "expression" | "binder";
 
-  constructor(name: string, fn: Function, doc?: string, dump?: boolean) {
+  constructor(name: string, fn: MacroTransformer, doc?: string, dump?: boolean) {
     if (doc) {
       this.__doc__ = dump
         ? doc
@@ -73,9 +123,15 @@ export class Macro {
   }
 
   // Exp→Exp: returns a replacement FORM (SchemeValue), never an expansion
-  // record — that is Syntax.expand's job. Body runs with `env` as `this`.
-  invoke(code: unknown, { env, ...rest }: MacroInvokeContext, macro_expand: boolean = false): SchemeValue {
-    return this.__fn__.call(env, code, { ...rest, macro_expand }, this.__name__) as SchemeValue;
+  // record — that is Syntax.expand's job. `env` binds as `this` on the transformer
+  // (the contract is `this: AmbientRuntime`; `MacroInvokeContext.env` is `unknown`
+  // because Resolver.env is duck-typed, hence the cast). Stripped from the args bag
+  // so it isn't passed twice — `TransformerArgs` is `Omit<MacroInvokeContext, "env">`.
+  invoke(code: unknown, ctx: MacroInvokeContext, macro_expand: boolean = false): SchemeValue | Promise<SchemeValue> {
+    const { env, ...rest } = ctx;
+    return this.__fn__.call(env as AmbientRuntime, code as SchemeValue, { ...rest, macro_expand }, this.__name__) as
+      | SchemeValue
+      | Promise<SchemeValue>;
   }
 
   // RAW-ARG dispatch term (head gate via is_expandable). Consumes keyword-stripped

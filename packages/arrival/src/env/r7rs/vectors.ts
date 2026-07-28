@@ -22,8 +22,8 @@
 import dedent from "dedent";
 import { applyCallback } from "../../values/primitives/ACallable.js";
 import { CallCtx } from "../../run/CallCtx.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { withContractFields } from "../../common/symbols/_bake.js";
-import { ctxOf } from "../../values/primitives/AValue.js";
 import { AVector } from "../../values/primitives/AVector.js";
 import { AJSArray } from "../../membrane/AJSArray.js";
 import { type AVoid, theVoid } from "../../values/primitives/AVoid.js";
@@ -195,8 +195,8 @@ export default EnvCapability.define("scheme/vectors", {
         const arr = asVector(vec, "vector->list");
         const s = start === undefined ? 0 : toIndex(start);
         const e = end === undefined ? arr.length : toIndex(end);
-        // vec is unknown (asVector accepts raw arrays); ctxOf falls back to CONSTANT_CTX.
-        return APair.fromArray(ctxOf(vec as SchemeValue), arr.slice(s, e));
+        // vec is unknown (asVector accepts raw arrays); CONSTANT_CTX — AValue carries no per-value ctx.
+        return APair.fromArray(CONSTANT_CTX, arr.slice(s, e));
       },
     ),
 

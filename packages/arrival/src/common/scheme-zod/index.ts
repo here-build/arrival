@@ -16,22 +16,21 @@ import { ACharacter } from "../../values/primitives/ACharacter.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
 import { AVoid } from "../../values/primitives/AVoid.js";
-import { AValue, ctxOf } from "../../values/primitives/AValue.js";
+import { AValue } from "../../values/primitives/AValue.js";
 import { AOpaqueHandle } from "../../values/primitives/AOpaqueHandle.js";
 import { ADict, isDictShaped, type DictKey } from "../../values/primitives/ADict.js";
 import { AJSObject } from "../../membrane/AJSObject.js";
 import { AJSArray } from "../../membrane/AJSArray.js";
 import { markSpineAdopting } from "../spine-adoption.js";
 import { Values } from "../../values/primitives/Values.js";
-import { BudgetExceededError, CodecFidelityError, R7RSError } from "../../errors.js";
-import { chargeHeap, heapBudgetMessage } from "../../heap-budget.js";
+import { CodecFidelityError, R7RSError } from "../../errors.js";
 import { ALambda, DoorProcedure, applyCallback } from "../../values/primitives/ACallable.js";
 import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
 import { ARosettaProcedure } from "../../values/primitives/ARosettaProcedure.js";
 import { currentRegionScope, DETACHED_SCOPE, withRegionCall } from "../../membrane/region-scope.js";
 // Leaf with ZERO own imports — safe from scheme-zod cycles (same as rosetta.ts).
 import { withDynamicCallSite } from "../../eval/dynamic-call-site.js";
-import type { AList, AListAlike, SchemeValue } from "../../values/types.js";
+import type { AListAlike, SchemeValue } from "../../values/types.js";
 
 /**
  * Codec vocabulary — membrane per-arg codecs.
@@ -184,7 +183,7 @@ export const dynamic = dynamicSchema as CrossingOnly<typeof dynamicSchema>;
 
 // ── Marshal ctx ────────────────────────────────────────────────────────────
 //
-// Scalar `encode` receives a bare JS primitive — no `AValue` for `ctxOf()`.
+// Scalar `encode` receives a bare JS primitive — no per-value run-context to read.
 // Minting under CONSTANT_CTX drops the crossing off the run's heap meter /
 // cache / effects / reads / signal; everything built from that value inherits
 // the wrong run.
@@ -214,18 +213,6 @@ export function withMarshalCtx<T>(ctx: RunContext, fn: () => T): T {
 
 function marshalCtx(): RunContext {
   return _marshalRunCtx ?? currentRegionScope()?.runCtx ?? CONSTANT_CTX;
-}
-
-/** Ctx a freshly-minted CONTAINER inherits: first already-boxed element's run.
- *  By encode time every element has already run through its element schema, so
- *  the first non-CONSTANT_CTX is the live run. Falls to {@link marshalCtx} for
- *  an empty container. */
-function firstCtx(elements: readonly SchemeValue[]): RunContext {
-  for (const e of elements) {
-    const c = ctxOf(e);
-    if (c !== CONSTANT_CTX) return c;
-  }
-  return marshalCtx();
 }
 
 // ── Scalar primitives ──────────────────────────────────────────────────────
@@ -498,20 +485,16 @@ export const lambda = named(
 const listContainer = z.custom<AListAlike>((x) => x instanceof APair || x instanceof ANil);
 
 // Walk pair spine → car array; reject cycles and improper lists. Out-schema
-// validates elements/arity. HEAP-METERED: same unbounded walk as
-// `env/pack-helpers.ts` `to_array` — charge off the OPERAND's ctx (`ctxOf(l)`),
-// never CONSTANT_CTX. Decode walk and a later list ENCODE are independent
-// allocations — charging both is not a double-charge of one value.
+// validates elements/arity. Heap-metering is INERT: AValue carries no per-value ctx,
+// so the charge resolves to CONSTANT_CTX.heapMeter === undefined (no meter). Restoring
+// metering is a deliberate phase (workboard D1) — it needs the crossing's RunContext
+// threaded here, not a silent swap to marshalCtx() mid-cleanup.
 function spineToArray(l: AListAlike): unknown[] {
-  const meter = ctxOf(l).heapMeter;
   const out: unknown[] = [];
   let node: unknown = l;
   while (node instanceof APair) {
     if (node.have_cycles("cdr")) throw new CodecFidelityError("list", "cannot decode a circular list");
     out.push(node.car);
-    if (meter !== undefined && ++meter.used > meter.max) {
-      throw new BudgetExceededError(heapBudgetMessage(meter.max), []);
-    }
     node = node.cdr;
   }
   if (!(node instanceof ANil)) throw new CodecFidelityError("list", "cannot decode an improper list");
@@ -548,13 +531,10 @@ export function list(headsOrElement: z.ZodTypeAny | readonly z.ZodTypeAny[] = sc
     "list",
     z.codec(listContainer, out as z.ZodArray<z.ZodTypeAny>, {
       decode: (l) => spineToArray(l) as never,
-      // MINT-time charge: spine is a fresh allocation, independent of the
-      // `spineToArray` walk charge. `firstCtx` inherits the run; empty → no charge.
-      encode: (arr) => {
-        const ctx = firstCtx(arr as SchemeValue[]);
-        chargeHeap(ctx, arr.length);
-        return APair.fromArray(ctx, arr as SchemeValue[], false) as AListAlike;
-      } }),
+      // Heap-metering INERT (CONSTANT_CTX; restoration is workboard D1). The spine mint
+      // inherits CONSTANT_CTX — no charge today.
+      encode: (arr) => APair.fromArray(CONSTANT_CTX, arr as SchemeValue[], false) as AListAlike,
+    }),
   );
   // Homogeneous form → `List<E>`. Fixed-heads register nothing (structural print).
   if (heads.length === 0) COLLECTION_ELEMENT.set(schema, effectiveTail ?? schemeValue);
@@ -610,12 +590,9 @@ export function vector<E extends z.ZodTypeAny = typeof schemeValue>(element: E =
     z.union([
       z.codec(z.instanceof(AVector), z.array(element), {
         decode: (v) => v.__vector__ as z.input<E>[],
-        // MINT-time charge — same rule as list encode.
-        encode: (arr) => {
-          const ctx = firstCtx(arr as SchemeValue[]);
-          chargeHeap(ctx, arr.length);
-          return new AVector(arr as SchemeValue[]);
-        } }),
+        // Heap-metering INERT (same rule as list encode; restoration is workboard D1).
+        encode: (arr) => new AVector(arr as SchemeValue[]),
+      }),
       // Borrowed arm is DECODE-ONLY. A borrowed array is membrane-minted from a
       // JS-world array with the crossing's ctx + provenance. Encoding scheme
       // values into that store would violate AJSArray's JS-world-only hygiene
@@ -668,18 +645,13 @@ export function dict<S extends Record<string, z.ZodTypeAny>>(shape: S = {} as S)
           // lazy proxy with values already unwrapped — membrane exit, not
           // the inside-sandbox record this out-schema expects).
           const names = keys.length ? keys : src.keys();
-          // HEAP-METERED — open-key walk is unbounded; charge off SOURCE ctx.
-          chargeHeap(ctxOf(src), names.length);
+          // Heap-metering INERT (restoration is workboard D1).
           return Object.fromEntries(names.map((k) => [k, src.get(k)])) as never;
         },
         encode: (rec: Record<string, unknown>) => {
           const entries = Object.entries(rec);
-          // MINT-time charge off record values via firstCtx; ctx also mints
-          // each key's ASymbol so key and value ride the same run.
-          const ctx = firstCtx(entries.map(([, v]) => v as SchemeValue));
-          chargeHeap(ctx, entries.length);
-          return new ADict(entries.map(([k, v]) => [new ASymbol(k), v as SchemeValue] as [DictKey, SchemeValue]),
-          );
+          // Heap-metering INERT (restoration is workboard D1).
+          return new ADict(entries.map(([k, v]) => [new ASymbol(k), v as SchemeValue] as [DictKey, SchemeValue]));
         } },
     ),
   );
@@ -703,7 +675,7 @@ export const box = named(
  *
  * Decode unwraps + asserts class (wrong handle → humanized door). Encode
  * mints/reuses via `AOpaqueHandle.for` under {@link marshalCtx} (no boxed
- * operand for `firstCtx` — same ambient channel as scalar encode).
+ * operand — same ambient channel as scalar encode).
  *
  * CrossingOnly (like `dynamic`): membrane concept, compile-banned from contour
  * slots. Composes free under `list`/`vector`/`dict` element marshaling — unlike

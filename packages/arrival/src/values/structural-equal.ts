@@ -33,20 +33,16 @@ import { tf } from "./tagless-final.js";
  */
 export type SeenMap = Map<object, Set<object>>;
 
-export function structuralEqual(a: any, b: any, seen: SeenMap = new Map()): boolean {
+export function structuralEqual(a: unknown, b: unknown, seen: SeenMap = new Map()): boolean {
   // Fast paths: identity, then valueOf-equality (covers SchemeExact/Inexact,
   // boxed primitives, SchemeCharacter's __char__ via valueOf) and SchemeString's
   // `__string__`.
   if (a === b) return true;
   if (a == null || b == null) return a === b;
 
-  // Co-induction bookkeeping — record the (a, b) partner pair BEFORE descending,
-  // generically for any object pair. A re-encountered (a, b) short-circuits to
-  // true, so cyclic structures (Pair/Vector/array/plain object) terminate.
-  // Recording here, before the Setoid dispatch, lets each term's
-  // `arrival/tagless-final/equals` recurse through `structuralEqual` with a
-  // shared `seen` and never re-record. Primitives can't carry cycles; they fall
-  // straight through to the leaf fallbacks.
+  // Co-induction bookkeeping applies only to object pairs; record the (a, b)
+  // partner BEFORE descending so cyclic structures (Pair/Vector/array/plain
+  // object) terminate. Primitives can't carry cycles and fall straight through.
   if (typeof a === "object" && typeof b === "object") {
     const partners = seen.get(a);
     if (partners?.has(b)) return true;
@@ -61,13 +57,25 @@ export function structuralEqual(a: any, b: any, seen: SeenMap = new Map()): bool
   // also own it; an entity compared to a non-entity (a bare literal) returns false.
   // Symmetric. The `seen` is forwarded so a Setoid's element recursion co-inducts
   // through the SAME visited set this harness just recorded into.
-  if (typeof a[tf("equals")] === "function") return Boolean(a[tf("equals")](b, seen));
-  if (typeof b[tf("equals")] === "function") return Boolean(b[tf("equals")](a, seen));
+  // Narrow to a record only for the bracket dispatch; the original operand keeps its
+  // type for the valueOf/`__string__` primitive fast-paths below.
+  const ao = a as Record<PropertyKey, unknown>;
+  const bo = b as Record<PropertyKey, unknown>;
+  const aEquals = ao[tf("equals")];
+  if (typeof aEquals === "function") return Boolean(aEquals.call(ao, b, seen));
+  const bEquals = bo[tf("equals")];
+  if (typeof bEquals === "function") return Boolean(bEquals.call(bo, a, seen));
 
-  const av = a?.valueOf?.();
-  const bv = b?.valueOf?.();
+  // valueOf covers SchemeExact/Inexact, boxed primitives, SchemeCharacter; __string__
+  // covers SchemeString. These fast-paths are reachable for BOTH objects and primitives
+  // (a boxed SchemeString vs a raw string compares equal here), so they run before the
+  // object-only recursion below.
+  const av = (ao.valueOf as (() => unknown) | undefined)?.call(ao);
+  const bv = (bo.valueOf as (() => unknown) | undefined)?.call(bo);
   if (av === bv && (typeof av !== "object" || av === null)) return true;
-  if (a.__string__ != null && b.__string__ != null) return a.__string__ === b.__string__;
+  const aStr = ao.__string__ as unknown;
+  const bStr = bo.__string__ as unknown;
+  if (aStr != null && bStr != null) return aStr === bStr;
 
   // Both must be objects to recurse; otherwise they're unequal primitives.
   if (typeof a !== "object" || typeof b !== "object") return false;
@@ -76,9 +84,11 @@ export function structuralEqual(a: any, b: any, seen: SeenMap = new Map()): bool
   const aArr = Array.isArray(a);
   const bArr = Array.isArray(b);
   if (aArr || bArr) {
-    if (!aArr || !bArr || a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) {
-      if (!structuralEqual(a[i], b[i], seen)) return false;
+    if (!aArr || !bArr || (a as unknown[]).length !== (b as unknown[]).length) return false;
+    const aArr2 = a as unknown[];
+    const bArr2 = b as unknown[];
+    for (let i = 0; i < aArr2.length; i++) {
+      if (!structuralEqual(aArr2[i], bArr2[i], seen)) return false;
     }
     return true;
   }
@@ -87,9 +97,11 @@ export function structuralEqual(a: any, b: any, seen: SeenMap = new Map()): bool
   const aKeys = Object.keys(a);
   const bKeys = Object.keys(b);
   if (aKeys.length !== bKeys.length) return false;
+  const ao2 = a as Record<string, unknown>;
+  const bo2 = b as Record<string, unknown>;
   for (const k of aKeys) {
-    if (!Object.prototype.hasOwnProperty.call(b, k)) return false;
-    if (!structuralEqual(a[k], b[k], seen)) return false;
+    if (!Object.prototype.hasOwnProperty.call(bo2, k)) return false;
+    if (!structuralEqual(ao2[k], bo2[k], seen)) return false;
   }
   return true;
 }

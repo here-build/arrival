@@ -1,8 +1,7 @@
 // js-wrapper-freeze — the borrowed-source FREEZE contract (prevention, replacing the deleted
 // dev-only purity ASSERT). A borrowed JS object/array, once Scheme READS it through
 // AJSObject/AJSArray, has its `source` Object.freeze'd — so the host can no longer mutate a value
-// it returned across the membrane. `freezeRosettaReturns: false` in the run ctx opts out (the
-// borrowed source stays mutable for hosts that intend to keep writing it).
+// it returned across the membrane. Freezing is unconditional on first read.
 //
 // Why this is sound — and why flipping it broke no interpreter test: arrival is PURE DATAFLOW. The
 // mutation verbs (vector-set!/set-car!/…) are DOORED off (PurityError, see purity.ts), so the

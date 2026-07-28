@@ -8,9 +8,7 @@
 // operating. Every bitwise result on a value wider than 2^31 is silent corruption:
 // no error, no warning, a confidently wrong number. That is precisely the
 // wrong-value class the one-number rework exists to abolish, and correct wide
-// bitwise needs the arbitrary-precision ALU the representation deliberately gave
-// up. The former bigint-based implementations here and in env/r7rs/numeric.ts were
-// correct but are stranded by this rework; git has them.
+// bitwise needs the arbitrary-precision ALU the representation deliberately gave up.
 //
 // Arrival's domain (LLM orchestration — counts, indices, scores, temperatures) has
 // produced zero demand for bitwise: no in-repo .scm uses any of these verbs. If a

@@ -207,12 +207,6 @@ export interface ExecOptions {
    */
   strict?: boolean;
   /**
-   * Opt out of freezing borrowed rosetta returns. Default (undefined/true)
-   * Object.freezes the borrowed JS source inside AJSObject/AJSArray the first
-   * time Scheme reads it. Set false to keep borrowed returns mutable.
-   */
-  freezeRosettaReturns?: boolean;
-  /**
    * THE STATIC VALIDATION PASS. `"on"` runs validateProgram over the parsed
    * forms against the sealed chain + session scope after parse, before the
    * first form evaluates; error-tier diagnostics throw ONE StaticValidationError
@@ -328,7 +322,6 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     notes,
     display,
     strict,
-    freezeRosettaReturns,
     staticValidation } = options;
 
   const program = passedProgram ?? (await parseProgram(code, { strict }));
@@ -366,7 +359,6 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     runCtx: passedRunCtx,
     strict,
     heapBudget,
-    freezeRosettaReturns,
     signal,
     cache,
     effects,
@@ -618,8 +610,7 @@ export async function execStateOverFrame(code: string | SchemeValue, options: Ex
     reads,
     notes,
     display,
-    strict,
-    freezeRosettaReturns } = options;
+    strict } = options;
   if (!isAmbientRuntime(env)) throw new AmbientShapeError("execStateOverFrame", "expected a concrete AmbientRuntime");
   await ensureInferenceEnvPopulated();
 
@@ -628,7 +619,7 @@ export async function execStateOverFrame(code: string | SchemeValue, options: Ex
   const runCtxOwned = passedRunCtx === undefined;
   const runCtx =
     passedRunCtx ??
-    new RunContext({ strict: strict ?? false, heapBudget, freezeRosettaReturns, signal, cache, effects, reads, notes, display });
+    new RunContext({ strict: strict ?? false, heapBudget, signal, cache, effects, reads, notes, display });
 
   try {
     const results: SchemeValue[] = [];

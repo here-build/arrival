@@ -109,24 +109,6 @@ describe("scheme/lists Contract precision — genuinely REFINED schemas reject w
     expect(def.in.safeParse([exact(0), [1, 2, 3]]).success).toBe(false); // raw JS array, genuinely rejected by z.schemeValue
   });
 
-  // @ledger: list->array phantom symbol — test targets a never-bound scheme name
-  // GAP (src/__tests__/ledger/index.law.test.ts GAPS table, id above): repo-wide grep confirms
-  // no pack (r7rs, srfi, or the historical env/lists.ts) has ever bound a scheme symbol literally
-  // named "list->array" — R7RS itself has no such builtin (only vector->list/list->vector).
-  // `list->array` is purely an internal error-message LABEL (`to_array("list->array")`, this
-  // file's lists.ts / strings.ts) for the pack-local `listToArray` helper, never an exported
-  // native def. This row predates the identity-box dissolution sweep (the sibling
-  // "append/reverse: untouched" test in this file documents array->list's own dissolution) —
-  // it.fails, not it.todo: there's no live plan to ADD a bound "list->array" symbol; this row
-  // just needs retiring/redirecting once someone owns the sunset-suite cleanup pass.
-  it.fails("list->array: output is now z.array(z.schemeValue) — a non-array used to slip through the old z.unknown()", () => {
-    const def = nativeDef("list->array");
-    expect(def.out.safeParse([[exact(1), exact(2)]]).success).toBe(true);
-    expect(def.out.safeParse([[]]).success).toBe(true); // empty array is a valid array
-    expect(def.out.safeParse(["not-an-array"]).success).toBe(false); // was true before the fix
-    expect(def.out.safeParse([properList(1, 2)]).success).toBe(false); // a Pair is not an array, was true before
-  });
-
   // INVERTED (docs/design-history/halfbaked-existence-review.md, VERDICT KILL): output was
   // pinned z.schemeValue ONLY because a still-filling collection's Tier-2 speculation could hand back
   // a live AHalfBaked carrier instead of a settled number — the carrier is gone, so the
@@ -163,7 +145,7 @@ describe("scheme/lists Contract precision — STATIC-only fixes (documented, not
     const def = sequenceDef("map");
     expect(def.in.safeParse([fn, properList(1, 2, 3)]).success).toBe(true);
     expect(def.in.safeParse([fn]).success).toBe(true); // 0 further lists — still legal (map over one term)
-    // z.lambda's predicate is ACallable-only (W8) — a MISSING head position decodes to
+    // z.lambda's predicate is ACallable-only — a MISSING head position decodes to
     // `undefined`, which fails that check, so an empty array is genuinely rejected.
     expect(def.in.safeParse([]).success).toBe(false);
   });

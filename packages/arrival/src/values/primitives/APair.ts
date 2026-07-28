@@ -29,7 +29,7 @@ import { promise_all } from "../../utils/promises.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { reStampChild } from "./deep-restamp.js";
 import { egressContainerProxy } from "../../membrane/egress-proxy.js";
-import { type AList, AListAlike, AListAlikeValue, APairAsListValue, type MembraneExit, type SchemeValue } from "../types.js";
+import { AListAlike, APairAsListValue, type MembraneExit, type SchemeValue } from "../types.js";
 import { AString } from "./AString.js";
 import { ASymbol } from "./ASymbol.js";
 import { AExact } from "./AExact.js";
@@ -582,7 +582,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
 
   // Functor map — preserves every element's box. Concurrent fn; re-cons shallow.
   // LENGTH-PRESERVING — PROXY container stamp. Seam-routed (not bare fn(x)).
-  // Callback is ACallable only (W8) — bare host fns are not scheme-applicable;
+  // Callback is ACallable only — bare host fns are not scheme-applicable;
   // mint ANativeProcedure / hostFnToCallable. RegExp is a host-side filter sugar
   // evaluated without applyCallback.
   ["arrival/tagless-final/map"](fn: ACallable, runCtx: RunContext): MaybePromise<AListAlike> {
@@ -648,7 +648,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   }
 
   // Structure-preserving sort — LENGTH-PRESERVING, PROXIED stamp (must agree with AVector).
-  // Comparator is ACallable (W8) when supplied — bare host less? mints via contourCallback in tests.
+  // Comparator is ACallable when supplied — bare host less? mints via contourCallback in tests.
   ["arrival/tagless-final/sort"](comparator: ACallable | undefined, runCtx: RunContext): AListAlike {
     chargeHeap(runCtx, countPairElements(this));
     const out: SchemeValue[] = [];

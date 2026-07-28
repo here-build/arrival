@@ -169,7 +169,9 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
     assertCacheClassShape(name, cacheClass, inSchema, outSchema);
     const callbackRoles = extractCallbackRoles(name, provenance, inSchema, outSchema, contract.callbackRoles);
     const forwards = provenance === "pipe";
-    const defaultValidate = opts.validate !== false;
+    // `opts.validate` has no effect on the rosetta path (rosetta always shape-checks via
+    // its contract); it's honored only on `symbol.define`. The shared `BakeRuntimeOpts`
+    // type accepts it for API symmetry.
     // Erase DecodedArgsWithRest → unknown[] once (same boundary as native's AnyFn).
     const rawImpl = impl as (...args: unknown[]) => unknown;
 
@@ -184,7 +186,6 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
     const checkDynamicSlots = buildDynamicSlotCheck(name, dynSlots);
     const unwrapOpaqueHandles = buildOpaqueHandleUnwrap(dynSlots);
 
-    void defaultValidate; // TODO: wire into membrane apply or delete BakeRuntimeOpts.validate
     return new ARosettaProcedure({
       name,
       arity: { min: 0, max: null },

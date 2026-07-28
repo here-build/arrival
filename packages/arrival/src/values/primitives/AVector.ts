@@ -174,7 +174,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
 
   // Functor map — PRESERVES every mapped element's box, rebuilds fresh AVector.
   // LENGTH-PRESERVING — PROXY container's own stamp through unchanged.
-  // Callback is ACallable only (W8) — same discipline as APair.
+  // Callback is ACallable only — same discipline as APair.
   ["arrival/tagless-final/map"](fn: ACallable, runCtx: RunContext): AVector | Promise<AVector> {
     strictGate(runCtx, {
       op: "map",
@@ -226,7 +226,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   }
 
   // Structure-preserving sort — LENGTH-PRESERVING, PROXIED stamp (must agree with APair).
-  // Comparator is ACallable (W8) when supplied.
+  // Comparator is ACallable when supplied.
   ["arrival/tagless-final/sort"](
     comparator: ACallable | undefined,
     runCtx: RunContext,

@@ -56,9 +56,6 @@ export class RunContext {
   readonly strict: boolean;
   /** Per-run allocation bound; `undefined` ⇒ unbounded (default). */
   readonly heapMeter: HeapMeter | undefined;
-  /** Freeze borrowed AJSObject/AJSArray on first Scheme read (docs/membrane.md §BOXING).
-   *  `false` opts out. Default `true`. */
-  readonly freezeRosettaReturns: boolean;
   /** Execution-budget signal — same AbortSignal the trampoline reads. */
   readonly signal: AbortSignal | undefined;
   /** Run cache; `undefined` ⇒ no interception. Armed ⇒ gates record/replay by cache class
@@ -92,7 +89,6 @@ export class RunContext {
     opts: {
       strict?: boolean;
       heapBudget?: number;
-      freezeRosettaReturns?: boolean;
       signal?: AbortSignal;
       cache?: RunCache;
       effects?: EffectLog;
@@ -112,7 +108,6 @@ export class RunContext {
   ) {
     this.strict = opts.strict ?? false;
     this.heapMeter = opts.heapBudget === undefined ? undefined : { used: 0, max: opts.heapBudget };
-    this.freezeRosettaReturns = opts.freezeRosettaReturns ?? true;
     this.signal = opts.signal;
     this.cache = opts.cache;
     this.effects = opts.effects;

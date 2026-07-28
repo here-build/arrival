@@ -37,8 +37,9 @@ function schemeExactList(n: number, ctx = new RunContext({ heapBudget: TIGHT_BUD
 }
 
 // TODO(ctx-elimination): these laws pin per-operand/per-run heap metering, which rode on the
-// now-removed AValue.ctx (chargeHeap via ctxOf → CONSTANT_CTX no-op). Skipped until the
-// ambient/active run-context phase restores metering; un-skip and re-verify then.
+// removed AValue.ctx (the ctxOf shim that returned CONSTANT_CTX was deleted; charge sites now
+// pass CONSTANT_CTX explicitly and are inert). Skipped until a deliberate metering-restoration
+// phase threads the crossing's RunContext into the codec charge sites; un-skip and re-verify then.
 describe.skip("LAW — list codec DECODE (spineToArray) charges the operand's own heap meter", () => {
   it("decoding a large list arg under a tight budget dies on the budget door", () => {
     const ctx = new RunContext({ heapBudget: TIGHT_BUDGET });
@@ -58,7 +59,7 @@ describe.skip("LAW — list codec DECODE (spineToArray) charges the operand's ow
   });
 });
 
-// TODO(ctx-elimination): see the DECODE law above — same per-operand metering, restored later.
+// TODO(ctx-elimination): see the DECODE law above — same inert metering, restored later.
 describe.skip("LAW — list/vector/dict codec ENCODE mints under the crossing's own run, heap-charged", () => {
   it("encoding a large array into a list under a tight budget dies on the budget door", () => {
     const ctx = new RunContext({ heapBudget: TIGHT_BUDGET });
@@ -90,9 +91,9 @@ describe.skip("LAW — list/vector/dict codec ENCODE mints under the crossing's 
     const ctx = new RunContext({ heapBudget: TIGHT_BUDGET });
     // Keys/values minted under CONSTANT_CTX (ASymbol interning charges its OWN heap on
     // construction — unrelated to this law) — the ADict CONTAINER itself is built directly
-    // under the tight `ctx`, so this test isolates the DECODE-side (key-walk) charge, which
-    // reads `ctxOf(src)` (the dict's own ctx), from both ASymbol's charge and the ENCODE-side
-    // (mint) charge pinned separately above.
+    // under the tight `ctx`, so this test isolates the DECODE-side (key-walk) charge (which
+    // reads the source's run ctx) from both ASymbol's charge and the ENCODE-side (mint)
+    // charge pinned separately above.
     const entries: [ASymbol, SchemeValue][] = Array.from({ length: 500 }, (_, i) => [
       new ASymbol(`k${i}`),
       new AExact(i),

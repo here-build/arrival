@@ -2,21 +2,11 @@ import { TF_EXPAND } from "../values/tagless-final.js";
 import { INTEROP_BOUNDARY } from "../membrane/interop-access.js";
 import type { AmbientRuntime } from "../env/AmbientRuntime.js";
 import type { SchemeValue } from "../values/types.js";
-import type { Expansion, MacroInvokeContext } from "./Macro.js";
+import type { Expansion, MacroExpansion, MacroInvokeContext, MacroTransformer } from "./Macro.js";
 import type { APair } from "../values/primitives/APair.js";
 import type { Resolver } from "./Resolver.js";
 
-type SyntaxLike = Syntax | Function;
-
-/**
- * Result of expanding a Syntax: the transcribed FORM plus the hygiene scope
- * it must evaluate in. A transformer is Exp→Exp — form, never a value. Shape
- * is fixed by the class (env/macros/macros.ts returns it unconditionally).
- */
-interface MacroExpansion {
-  expr: SchemeValue;
-  scope: AmbientRuntime;
-}
+type SyntaxLike = Syntax | MacroTransformer;
 
 /**
  * A `syntax-rules` transformer. NOT a Macro: Macro is a runtime fexpr value;
@@ -55,7 +45,7 @@ export class Syntax {
   };
 
   __name__: string;
-  __fn__: Function;
+  __fn__: MacroTransformer;
   __defmacro__: boolean;
   __env__: unknown;
   /**
@@ -70,7 +60,7 @@ export class Syntax {
    */
   __resolver__: Resolver | undefined;
 
-  constructor(fn: Function, env: unknown, resolver?: Resolver) {
+  constructor(fn: MacroTransformer, env: unknown, resolver?: Resolver) {
     this.__name__ = "";
     this.__fn__ = fn;
     this.__env__ = env;
@@ -88,7 +78,7 @@ export class Syntax {
       // Use-site resolver + the def-time one captured on this Syntax.
       resolver,
       defResolver: this.__resolver__ };
-    return this.__fn__.call(env, code, args, this.__name__ || "syntax") as MacroExpansion;
+    return this.__fn__.call(env as AmbientRuntime, code as SchemeValue, args, this.__name__ || "syntax") as MacroExpansion;
   }
 
   // RAW-ARG dispatch term. Matches against the FULL form (`code` — keyword

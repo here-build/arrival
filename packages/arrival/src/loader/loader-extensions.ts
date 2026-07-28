@@ -20,7 +20,7 @@
 // conflict door and longest-suffix match in one place.
 
 import { ExtensionSuffixConflictError } from "../errors.js";
-import { Macro } from "../eval/Macro.js";
+import { Macro, type TransformerArgs } from "../eval/Macro.js";
 import { ANil } from "../values/primitives/ANil.js";
 import { nil } from "../values/primitives/ANil.js";
 import { APair } from "../values/primitives/APair.js";
@@ -96,7 +96,7 @@ export function lookupExtensionResolverIn(registry: ExtensionResolverRegistry, p
 export function makeRegisterExtensionMacro(resolveRegistry: (runCtx: RunContext) => ExtensionResolverRegistry): Macro {
   return new Macro(
     "require/register-extension",
-    function (rest: SchemeValue, ctx: { runCtx: RunContext }) {
+    function (this: unknown, rest: SchemeValue, ctx: TransformerArgs): SchemeValue {
       invariant(rest instanceof APair, "require/register-extension: expected (suffix resolver-name)");
       const suffixForm = rest.car;
       invariant(rest.cdr instanceof APair, "require/register-extension: missing resolver-name");

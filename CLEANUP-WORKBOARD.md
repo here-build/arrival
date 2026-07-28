@@ -1,10 +1,9 @@
 # Arrival cleanup — orchestration workboard
 
-**Status:** EXECUTION — go-wave **landed in tree, not committed**.  
-**STOP effects/CQS path design** until go-wave is reviewed/committed/verified.  
-**Parked design (full write-up):** `packages/arrival/docs/design-history/resource-paths-cqs-DRAFT.md`  
-**Package focus:** `packages/arrival` (siblings only where named).  
-**Last updated:** 2026-07-24 (park resource-paths; return to go-wave first).
+**Status:** POST-GO-WAVE. The 2026-07-24 go-wave (M1–M6 + W8) **landed and was committed** — `packages/arrival/` worktree is clean as of 2026-07-28. Several streams this board tracked as "landed, awaiting commit" (README refresh, R7RS doors, ambient bare-fn cleanup, buildUneval e2e) shipped in commits `7ee0f9d88b` / `2fd9f03245` / `a5c1144bd1` and later; §0, §10, §12, §13 below still describe the pre-landing state and need re-reading against the tree before acting on them.
+**Parked design (full write-up):** `packages/arrival/docs/design-history/resource-paths-cqs-DRAFT.md` (committed in `a5c1144bd1`; `effects-conflict-reexec-DRAFT.md` likewise).
+**Package focus:** `packages/arrival` (siblings only where named).
+**Last updated:** 2026-07-28 (status sweep after independent in-depth audit confirmed go-wave is committed; see §10).
 
 This file is the durable handoff: postponed work, next stages, code-debt list, expanded semantic-delta plan, and the **implementation DAG** for parallel agents. Prefer updating this file over re-deriving from chat.
 
@@ -12,24 +11,26 @@ This file is the durable handoff: postponed work, next stages, code-debt list, e
 
 ## 0. Framing corrections (locked)
 
-| Topic | Wrong reading | Correct reading |
-|---|---|---|
-| Dual interpretation | “Two interpreters always run” | **Structural promise of a second reading**: provenance layer can be re-run / armed when needed (**lazy** on the provenance plane). Value plane is the default hot path. |
-| Numeric tower | “bigint-backed rationals” | **Safe-integer ratios** (`AExact` num/denom as JS safe integers). Host `bigint` is **not** a Scheme number; membrane must **ban** raw bigint (door). Full tower integration is not promised. |
-| `buildUneval` | Assumed working from README | Flagship; needs **in-depth validation** that the closed loop fully works. Retrospective half lives in `arrival-provenance`. |
-| Bare `exec` + defines | Realm-cached shared root (README Security) | **Fixed:** `scope ?? LexicalScope.fresh()` per call. Accumulation is **opt-in**. README claim is STALE — remove. |
-| Ambient host fns | “None” | Bare-fn survivor path still exists in evaluator; **must clean up**. |
-| Complex numbers | Maybe migrate to DoorProcedure | **Keep as-is:** unsupported at **grammar**; parser door already. Agents do not ride complexes. |
-| `bigint->number` | Maybe bind as Scheme verb | **Host helper / codec only.** Scheme is not aware of bigint. |
-| R7RS silent names | Staged dooring | **Door all now.** |
-| **`strict` / chibi** | Single chibi run under default loose | **Run chibi twice, different expected outcomes.** (1) **strict** = R7RS goldens (pass where faithful). (2) **loose** = product tolerances — a **fail-if / mode-split registry**: forms whose outcome *must differ* by mode (e.g. `(car '())` throws strict, soft loose) pin both sides so neither tolerance nor faithfulness regresses silently. Today harness is mostly default `strict:false` with permanent it.fails for nil-tolerant car/cdr — dual-run is the proper architecture. |
-| **Vectors / lists / listalike** | Spine-adopt host arrays into pairs | **Vectors preferred** for host/tool data; **cons is Scheme-native**. Loose processes **vectors as lists where applicable**. **No listalike campaign** — do not default array→pair spine; rare native-only exceptions. |
-| Effects / CQS resource paths | **PARKED** — full design written | See `docs/design-history/resource-paths-cqs-DRAFT.md`. **Do not implement until go-wave closed.** |
-| MCP confirm-burst uneval | Wire now | **Postpone** until uneval e2e is proven. |
-| Manifold benchmark audit | — | **Postpone.** |
-| Comment cleanup | More docs | **Less comments**, production-writing law; Stage-C journal kill after extract. |
-| Academic lineage | Brag / museum | **npm-for-ideas**: short pin, offload ontology. |
-| Consciousness / IFS | — | **Must not appear** in arrival package (confirmed clean). |
+> **2026-07-28 audit:** rows marked ✅ below were verified fixed in code (and, where a README claim was involved, in the README) by the 2026-07-24/25 go-wave commits. The "Wrong reading" column is retained as history. Unmarked rows are still live.
+
+| Topic | Wrong reading | Correct reading | Status |
+|---|---|---|---|
+| Dual interpretation | “Two interpreters always run” | **Structural promise of a second reading**: provenance layer can be re-run / armed when needed (**lazy** on the provenance plane). Value plane is the default hot path. | live |
+| Numeric tower | “bigint-backed rationals” | **Safe-integer ratios** (`AExact` num/denom as JS safe integers). Host `bigint` is **not** a Scheme number; membrane must **ban** raw bigint (door). Full tower integration is not promised. | ✅ README wording already correct (`README.md:129-130`); bigint membrane ban still tracked as W2 |
+| `buildUneval` | Assumed working from README | Flagship; needs **in-depth validation** that the closed loop fully works. Retrospective half lives in `arrival-provenance`. | ✅ e2e suite now exists (`arrival-provenance/src/__tests__/build-uneval.e2e.test.ts`, 6 `it` blocks); more coverage may still be wanted but "zero tests" is no longer true |
+| Bare `exec` + defines | Realm-cached shared root (README Security) | **Fixed:** `scope ?? LexicalScope.fresh()` per call. Accumulation is **opt-in**. README claim is STALE — remove. | ✅ README `Security Status` already states fresh-scope-per-call (`README.md:407-412`); code matches at `generator-exec.ts:348` |
+| Ambient host fns | “None” | Bare-fn survivor path still exists in evaluator; **must clean up**. | ✅ **Runtime survivor gone** (W8): `ACallable.ts:295` throws on bare host fns, `AmbientRuntime.ts:212` refuses at bind, `hostFnToCallable` is the sanctioned lens. ⚠️ **Type residue remains:** `__fn__: Function` in `Macro.ts:52,62` / `Syntax.ts:58,73` (D3 type half). |
+| Complex numbers | Maybe migrate to DoorProcedure | **Keep as-is:** unsupported at **grammar**; parser door already. Agents do not ride complexes. | live |
+| `bigint->number` | Maybe bind as Scheme verb | **Host helper / codec only.** Scheme is not aware of bigint. | ✅ live; note the `bigintToNumber` host helper at `rosetta.ts:529` is itself **never called** (only cited in error strings) — delete candidate. |
+| R7RS silent names | Staged dooring | **Door all now.** | ✅ W4b doors landed (`2fd9f03245`) |
+| **`strict` / chibi** | Single chibi run under default loose | **Run chibi twice, different expected outcomes.** (1) **strict** = R7RS goldens (pass where faithful). (2) **loose** = product tolerances — a **fail-if / mode-split registry**: forms whose outcome *must differ* by mode (e.g. `(car '())` throws strict, soft loose) pin both sides so neither tolerance nor faithfulness regresses silently. Today harness is mostly default `strict:false` with permanent it.fails for nil-tolerant car/cdr — dual-run is the proper architecture. | live (M5) |
+| **Vectors / lists / listalike** | Spine-adopt host arrays into pairs | **Vectors preferred** for host/tool data; **cons is Scheme-native**. Loose processes **vectors as lists where applicable**. **No listalike campaign** — do not default array→pair spine; rare native-only exceptions. | ✅ campaign cancelled (confirmed clean) |
+| Effects / CQS resource paths | **PARKED** — full design written | See `docs/design-history/resource-paths-cqs-DRAFT.md`. **Do not implement until go-wave closed.** | live — go-wave closed, but design stays parked for post-0.9 (DRAFT files committed in `a5c1144bd1`) |
+| MCP confirm-burst uneval | Wire now | **Postpone** until uneval e2e is proven. | live — e2e suite now exists; re-evaluate entry criteria |
+| Manifold benchmark audit | — | **Postpone.** | live |
+| Comment cleanup | More docs | **Less comments**, production-writing law; Stage-C journal kill after extract. | live (W13 in flight — wave 2 landed; residual: `W8` tag leak, journal preambles in `inference-env.ts`/`typecheck.ts`/`uneval.ts`) |
+| Academic lineage | Brag / museum | **npm-for-ideas**: short pin, offload ontology. | live |
+| Consciousness / IFS | — | **Must not appear** in arrival package (confirmed clean). | ✅ confirmed clean |
 
 ---
 
@@ -68,11 +69,11 @@ Do not fix in prep agents; track for the dedicated debt pass.
 
 | ID | Debt | Location hints | Severity |
 |---|---|---|---|
-| D1 | `ctxOf` is no-op after `AValue.ctx` removal | `values/primitives/AValue.ts` | Med — dead API surface |
-| D2 | `__arrivalRunResolver` ambient back-channel | `eval/evaluator.ts`, require/membrane readers | High — concurrent/hermetic smell |
-| D3 | Bare JS function apply survivor | `evaluator.ts` Reflect.apply path | High — “no ambient host fns” cleanup |
-| D4 | `freezeRosettaReturns` may be dead (always freeze) | `AJSObject`/`AJSArray`, RunContext | Med — API lie |
-| D5 | `modeKeyOf` always `"mem"` | `membrane/rosetta.ts` | Low — intentional; document or delete dead modes |
+| D1 | ~~`ctxOf` is no-op after `AValue.ctx` removal~~ **RESOLVED 2026-07-28** — `ctxOf` deleted; 9 call sites + scheme-zod container codecs pass `CONSTANT_CTX` explicitly (inert — `heapMeter === undefined`). The `to_array` dead meter branch was deleted. **Restoring metering is a separate deliberate phase** (threads the crossing's `RunContext` into the charge sites); the skipped laws `scheme-zod-container-heap.law.test.ts` pin the target behavior. | `values/primitives/AValue.ts` (deleted) | ~~Med~~ done |
+| D2 | `__arrivalRunResolver` ambient back-channel | `eval/evaluator.ts`, require/membrane readers | High — concurrent/hermetic smell (resolver stays for `require`; the `currentRunEnv` reader was deleted 2026-07-28 as zero-consumer) |
+| D3 | Bare JS function apply survivor | `evaluator.ts` Reflect.apply path | ~~High~~ **runtime RESOLVED (W8)** — `applyCallback` throws on bare host fns; **type residue RESOLVED 2026-07-28** — `Macro`/`Syntax` `__fn__: Function` → precise `MacroTransformer` type |
+| D4 | ~~`freezeRosettaReturns` may be dead (always freeze)~~ **RESOLVED 2026-07-28** — field + plumbing deleted from `RunContext`/`assemble-run`/`generator-exec`; `freezeSource()` always freezes; README + `docs/membrane.md` updated. | `AJSObject`/`AJSArray`, ~~RunContext~~ | ~~Med~~ done |
+| D5 | `modeKeyOf` always `"mem"` | `membrane/rosetta.ts` | Low — intentional scaffolding (single classification site + `_modeKeyExhaustive` guard); documented at `rosetta.ts:48-55`. Kept. |
 | D6 | Nil dual identity residual (`=== nil` sites) | `identity.law.test.ts`, grep | Med if production residual |
 | D7 | Listalike / spine adoption expansion | `listalike-*.law.test.ts` | **Deprioritized** — only fix real hangs; no adoption push |
 | D8 | Contour/crossing brand education gaps | `_bake.ts`, scheme-zod, host authoring | Med DX |
@@ -393,6 +394,7 @@ Phase 0–1 start now (prep); Phase 2+ postponed.
 | 2026-07-24 | **GO.** Decisions: O1 golden-loose car/cdr first; O4 live det + research showcase; O5 no bare-fn legacy; Class B hold; effects draft file uncommitted. Spawned parallel impl: M1 M2 M3 M4 M5 M6 W8. |
 | 2026-07-24 | **Wave landed.** All 7 streams complete; cross-fix: W8 bare-fn broke member/assoc defaultCompare → fixed to structuralEqual default path. Verified: chibi-srfi1 Pass A, golden-loose car/cdr, crossing.law, build-uneval.e2e green. |
 | 2026-07-24 | Resource-path CQS design fully written (`resource-paths-cqs-DRAFT.md`) + effects conflict draft. **PARKED.** Return to go-wave: review, full test, atomic commits. |
+| 2026-07-28 | **Independent in-depth audit.** Go-wave verified **committed** (worktree clean); prior "landed, not committed" status was stale. 5-agent horde + main-agent verification surfaced: (a) stale workboard rows (§0/§12/§13 above — now annotated ✅); (b) dead plumbing — `ctxOf` no-op (D1), `freezeRosettaReturns` unread (D4), `modeKeyOf` constant (D5), `currentRunEnv` zero-consumer, `bigintToNumber` never-called; (c) README subpath-export list names 4 non-existent paths (`/symbol`, `/loader`, `/overridable`, `/schema`); (d) type residue of W8 (`__fn__: Function` in Macro/Syntax); (e) one real bug: `deriveSortCompare` bypasses `call_function` (SRFI-95 comparator, masked by `it.fails`). See P0–P4 fix plan in chat; changes unstaged in the working tree (user auditing before commit). |
 
 ---
 
@@ -444,7 +446,7 @@ Vectors-as-lists under loose; no array→list adoption push; rare native excepti
 |---|---|
 | Total boundary | confirmed; Promise dual door (fromJS pass / jsToScheme door) residual |
 | Exception rewrap | confirmed value path |
-| freezeRosettaReturns | **always freeze; flag is doc-lie (D4)** |
+| freezeRosettaReturns | **RESOLVED 2026-07-28** — flag + plumbing deleted; freeze unconditional |
 | Nil dual | production confirmed; ledger stale |
 | Contour/crossing | confirmed; education residual |
 | Listalike | campaign cancelled — vector-as-list under loose |
@@ -483,9 +485,9 @@ Honest scan of the plan after all reframes. **Must / should / later / open decis
 
 | # | Gap | Stream |
 |---|---|---|
-| S1 | Bare-fn ambient cleanup (D3) | W8 |
-| S2 | Freeze flag dead API / README (D4) — can ride W1 | W1 or debt |
-| S3 | `__arrivalRunResolver` debt (D2) — design before delete | W14 / later |
+| S1 | ~~Bare-fn ambient cleanup (D3)~~ **DONE 2026-07-28** (runtime W8 + type `MacroTransformer`) | W8 |
+| S2 | ~~Freeze flag dead API / README (D4)~~ **DONE 2026-07-28** — field deleted, docs fixed | ~~W1~~ done |
+| S3 | `__arrivalRunResolver` debt (D2) — resolver stays for `require`; `currentRunEnv` reader deleted 2026-07-28 (zero-consumer) | W14 / later |
 | S4 | Freedom-to-go Phase 0 extension inventory | W12 |
 | S5 | Loose product tests for non-chibi idioms (vector-as-list, polyglot) — not covered by dual chibi alone | W6 adjacent |
 | S6 | Contour/crossing author notes (minimal) | W11 |

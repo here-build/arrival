@@ -19,7 +19,7 @@
 import { INTEROP_BOUNDARY } from "../../membrane/interop-access.js";
 import type { SeenMap } from "../structural-equal.js";
 import type { MembraneExit, SchemeBounceMarker, SchemeValue } from "../types.js";
-import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
+import type { RunContext } from "../../run/RunContext.js";
 import type { CallCtx } from "../../run/CallCtx.js";
 import { LOCATION } from "../../well-known-symbols.js";
 import type { SourceLocation } from "../../errors.js";
@@ -28,19 +28,6 @@ export const EMPTY_PROVENANCE: ReadonlySet<number> = new Set<number>();
 
 /** `arrival/provenanceChildren` default — shared frozen empty so scalars allocate nothing. */
 const EMPTY_CHILDREN: readonly unknown[] = Object.freeze([]);
-
-/**
- * Run-context of a maybe-boxed operand.
- *
- * AValue carries no per-value `ctx` field — primary heap-metering threads `runCtx`
- * as an explicit op parameter. This always answers `fallback` (default CONSTANT_CTX).
- * `x` stays a parameter so call sites keep compiling; ambient/active run-context
- * restoration is deferred.
- */
-export function ctxOf(x: SchemeValue, fallback: RunContext = CONSTANT_CTX): RunContext {
-  void x;
-  return fallback;
-}
 
 export type AKind =
   | "string"
@@ -165,7 +152,7 @@ export abstract class AValue {
   ["arrival/tagless-final/lower"]?(): SchemeValue | null;
   /** Element count — per-primitive divergence lives on the term. */
   ["arrival/tagless-final/length"]?(runCtx?: RunContext): AValue | number;
-  /** Functor — map over elements. `runCtx` REQUIRED. Callback is ACallable (W8). */
+  /** Functor — map over elements. `runCtx` REQUIRED. Callback is ACallable. */
   ["arrival/tagless-final/map"]?(fn: unknown, runCtx: RunContext): SchemeValue | Promise<SchemeValue>;
   /** Filterable — ACallable pred or host RegExp sugar. `runCtx` required. */
   ["arrival/tagless-final/filter"]?(

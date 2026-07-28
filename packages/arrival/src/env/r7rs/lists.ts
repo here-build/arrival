@@ -36,7 +36,7 @@ import { withInputProvenance } from "../../values/op-helpers.js";
 import { schemeFalse } from "../../values/primitives/ABool.js";
 import invariant from "tiny-invariant";
 import { APair, concatPair, isCircularList } from "../../values/primitives/APair.js";
-import { ctxOf } from "../../values/primitives/AValue.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { is_false } from "../../values/value-guards.js";
 import { is_promise } from "../../eval/guards.js";
 import { is_applyable } from "../../values/value-guards.js";
@@ -178,10 +178,10 @@ function multiListMap(
   }
   if (results.some(is_promise)) {
     return (promise_all(results) as Promise<unknown[]>).then((resolved) =>
-      APair.fromArray(ctxOf(lists[0]), resolved as SchemeValue[]),
+      APair.fromArray(CONSTANT_CTX, resolved as SchemeValue[]),
     );
   }
-  return APair.fromArray(ctxOf(lists[0]), results);
+  return APair.fromArray(CONSTANT_CTX, results);
 }
 
 // Zip-map used by `for-each` (result discarded). Kept separate from multiListMap:
@@ -218,10 +218,10 @@ function mapImpl(
   const hasPromises = results.some(is_promise);
   if (hasPromises) {
     return (promise_all(results) as Promise<unknown[]>).then((resolved) =>
-      APair.fromArray(ctxOf(lists[0]), resolved as SchemeValue[]),
+      APair.fromArray(CONSTANT_CTX, resolved as SchemeValue[]),
     );
   }
-  return APair.fromArray(ctxOf(lists[0]), results);
+  return APair.fromArray(CONSTANT_CTX, results);
 }
 
 // ════════════════════════════════════════════════════════════════════════════

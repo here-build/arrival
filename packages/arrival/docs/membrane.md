@@ -174,18 +174,15 @@ symbol and a host `bigint` have no lens at all and door (§INBOUND).
 **The freeze contract, stated once.** A borrowed source is frozen
 (`Object.freeze`) on the *first Scheme read* of its wrapper, so a `pure` rosetta — one
 that declares it only transforms its inputs and forwards their provenance — *physically
-cannot* mutate what it borrowed: prevention by construction, replacing a dev-only
-purity assert. The freeze is idempotent and lazy (a borrowed array's whole contract is
-that `.length` and `schemeToJs` never touch elements, so an eager scan would pay the
-cost the class exists to avoid). **Always freezes today** — `AJSArray`/`AJSObject`
-no longer carry a per-value run ctx, so `RunContext.freezeRosettaReturns` is stored
-but unread at the freeze sites (the historical opt-out is unreachable until a run
-context is re-sourced onto the wrappers). The contract has one home here; its code
+cannot* mutate what it borrowed: prevention by construction. The freeze is idempotent
+and lazy (a borrowed array's whole contract is that `.length` and `schemeToJs` never
+touch elements, so an eager scan would pay the cost the class exists to avoid), and
+unconditional — there is no per-run opt-out. The contract has one home here; its code
 sites are pointers: `AJSArray.freezeSource`, `AJSObject.freezeSource`, and
 `createRosettaWrapper`'s `pure` comment.
 
 **Enforcement sites:** `membrane/boxing.ts`, `membrane/rosetta.ts`,
-`membrane/AJSArray.ts`, `membrane/AJSObject.ts`, `run/RunContext.ts`.
+`membrane/AJSArray.ts`, `membrane/AJSObject.ts`.
 
 ---
 

@@ -16,11 +16,10 @@ import { EnvCapability } from "../../common/capability.js";
 import { Syntax } from "../../eval/Syntax.js";
 import { bindValue, AmbientRuntime, mintFrame } from "../AmbientRuntime.js";
 import { extract_patterns, restore_data_gensyms, transform_syntax } from "../../eval/syntax-rules.js";
-import { is_nil } from "../../values/value-guards.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { APair } from "../../values/primitives/APair.js";
 import { Resolver } from "../../eval/Resolver.js";
-import type { MacroInvokeContext } from "../../eval/Macro.js";
+import type { TransformerArgs } from "../../eval/Macro.js";
 import type { SchemeValue } from "../../values/types.js";
 import { ANil } from "../../values/primitives/ANil.js";
 
@@ -31,7 +30,7 @@ export default EnvCapability.define("scheme/macros", {
       macro: SchemeValue,
       // `resolver` is the evaluator's resolver at define-syntax time (threaded through
       // Macro.invoke), carrying the run's capability base.
-      { resolver: defSiteResolver }: MacroInvokeContext,
+      { resolver: defSiteResolver }: TransformerArgs,
     ) {
       // deferred: freeze def-scope identifiers at definition time.
       // Def-time Resolver: define-syntax env is the hygiene identity root; capabilities
@@ -71,7 +70,7 @@ export default EnvCapability.define("scheme/macros", {
           code: SchemeValue,
           // `runCtx` is the EXPANDING run's live context (threaded through Syntax.expand):
           // expansion's minted cells charge THAT run's meter, never the defining run's.
-          { macro_expand, resolver: useSiteResolver, runCtx }: MacroInvokeContext,
+          { macro_expand, resolver: useSiteResolver, runCtx }: TransformerArgs,
         ) {
           // Use-site Resolver: the evaluator's resolver at expansion time. NOT a fresh
           // `new Resolver(this)`, which would re-derive a wrong globalRoot from the null-rooted
@@ -128,7 +127,9 @@ export default EnvCapability.define("scheme/macros", {
                   names,
                   ellipsis,
                   ctx: runCtx });
-                // TODO: throw when the template expands to nothing.
+                // deferred: a template that expands to nothing (falsy new_expr) is silently
+                // skipped here, keeping the prior expr. R7RS does not mandate an error for an
+                // empty expansion; revisit if a real macro surfaces a confusing silent skip.
                 if (new_expr) {
                   expr = new_expr;
                 }

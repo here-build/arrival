@@ -30,15 +30,12 @@ import {
 import { collapseProvenance, taintString } from "../../provenance/provenance-collapse.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
-import { APair, isCircularList } from "../../values/primitives/APair.js";
-import { ANil, nil } from "../../values/primitives/ANil.js";
+import { APair } from "../../values/primitives/APair.js";
+import { nil } from "../../values/primitives/ANil.js";
 import { ACharacter } from "../../values/primitives/ACharacter.js";
 import { is_promise } from "../../eval/guards.js";
 import { promise_all } from "../../utils/promises.js";
 import { EnvCapability } from "../../common/capability.js";
-import { heapBudgetMessage } from "../../heap-budget.js";
-import { ArrivalError } from "../../errors.js";
-import { ctxOf } from "../../values/primitives/AValue.js";
 import { type AVoid, theVoid } from "../../values/primitives/AVoid.js";
 import {
   complex_bare_re,
@@ -49,7 +46,7 @@ import {
   rational_bare_re,
   rational_re } from "../../reader/lexical-grammar.js";
 import { parse_complex, parse_float, parse_integer, parse_rational } from "../../reader/parsing.js";
-import type { AList, AListAlike, SchemeValue } from "../../values/types.js";
+import type { AListAlike, SchemeValue } from "../../values/types.js";
 
 import { to_array } from "../pack-helpers.js";
 

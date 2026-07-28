@@ -122,7 +122,7 @@ import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { Resolver } from "./Resolver.js";
 import { AVector } from "../values/primitives/AVector.js";
-import { Macro } from "./Macro.js";
+import { Macro, type TransformerArgs } from "./Macro.js";
 import { Syntax } from "./Syntax.js";
 import { APair } from "../values/primitives/APair.js";
 import { DATA } from "../well-known-symbols.js";
@@ -259,15 +259,14 @@ interface RunOptions {
 /**
  * Run-scoped CURRENT RESOLVER, set to `ctxResolver(ctx)` at the apply boundary
  * alongside the dynamic call site (saved + restored in the surrounding finally).
- * Two readers: (1) the rosetta MEMBRANE's env back-channel (`currentRunEnv()` =
- * `.env`); (2) `(require …)`'s module-eval seam (`currentRunResolver()`), which
- * needs the WHOLE composed resolver — under the cut, builtins live on the
- * capability base, not the lexical frame's `__parent__` chain. runCtx cannot
- * supply either — it carries run-CONSTANT data, not an env/resolver.
+ * Reader: `(require …)`'s module-eval seam (`currentRunResolver()`), which needs
+ * the WHOLE composed resolver — under the cut, builtins live on the capability
+ * base, not the lexical frame's `__parent__` chain. runCtx cannot supply it —
+ * it carries run-CONSTANT data, not a resolver.
  *
- * Module-level because readers are variadic / HOF builtins whose arity a trailing
- * `ctx` would corrupt. Single-threaded JS makes the holder safe; nesting is
- * save/restore. The meter is found by walking `__parent__` from this env.
+ * Module-level because the reader is a variadic / HOF builtin whose arity a
+ * trailing `ctx` would corrupt. Single-threaded JS makes the holder safe;
+ * nesting is save/restore.
  */
 declare global {
   // eslint-disable-next-line no-var
@@ -279,13 +278,8 @@ declare global {
 // the other → "no run resolver reachable". globalThis shares one holder.
 // Single-threaded JS keeps save/restore nesting safe.
 
-/** Run's current env at apply time — the published resolver's lexical frame.
- *  Read by to_array's heap-meter lookup (env/pack-helpers.ts). */
-export const currentRunEnv = (): AmbientRuntime | undefined => globalThis.__arrivalRunResolver?.env;
-
 /**
- * Run's current COMPOSED resolver at apply time — same save/restore holder as
- * {@link currentRunEnv}, publishing the whole Resolver. Needed by `(require …)`:
+ * Run's current COMPOSED resolver at apply time. Needed by `(require …)`:
  * a required module's forms must evaluate through the SAME scope+capability
  * composition. Under the cut the lexical frame is null-rooted and builtins live
  * on the capability base — an env-only back-channel loses that half.
@@ -1285,14 +1279,13 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   const macro = new Macro(symbol_name(name), function (
     this: AmbientRuntime,
     code: SchemeValue,
-    evalArgs: EvalContext,
+    evalArgs: TransformerArgs,
   ): Promise<SchemeValue> {
     const macroResolver = defResolver.child("macro", "macro");
 
     // Fexpr semantics: parameters bind to unevaluated argument forms, not values.
     let argNode: SchemeValue = args;
     let codeNode: SchemeValue = code;
-    let i = 0;
 
     while (argNode instanceof APair) {
       const argName = argNode.car;
@@ -1300,7 +1293,6 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
         const value = codeNode instanceof APair ? codeNode.car : nil;
         bindValue(macroResolver.env, argName, value);
       }
-      i++;
       argNode = argNode.cdr;
       if (codeNode instanceof APair) {
         codeNode = codeNode.cdr;
@@ -1311,9 +1303,10 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       bindValue(macroResolver.env, argNode, codeNode);
     }
 
-    // Forward signal so macro expansion is also budget-bounded.
+    // Forward signal so macro expansion is also budget-bounded. `signal` rides the
+    // index signature on TransformerArgs (the evaluator threads it on the ctx bag).
     return run(evalBegin(body, { ...evalArgs, resolver: macroResolver }), {
-      signal: evalArgs.signal });
+      signal: evalArgs.signal as AbortSignal | undefined });
   });
   bindValue(ctxResolver(ctx).env, name, macro);
 
@@ -2699,8 +2692,8 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
     const canBounce = is_lambda(fn);
     const __savedRunResolver = globalThis.__arrivalRunResolver;
     // Publish the composed resolver as the rosetta membrane's env back-channel
-    // (ctx-less apply readers use currentRunEnv; require uses currentRunResolver).
-    // Meter/strict travel on ctx.runCtx, not this holder.
+    // (require uses currentRunResolver). Meter/strict travel on ctx.runCtx, not
+    // this holder.
     globalThis.__arrivalRunResolver = ctxResolver(ctx);
     const wrappedArgs = wrapLambdaArgs(args, dynSite);
     let result: SchemeValue;

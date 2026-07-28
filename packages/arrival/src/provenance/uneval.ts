@@ -1,16 +1,15 @@
-// provenance/uneval.ts — the WIRE-EMISSION half of arrival-provenance's original `uneval.ts`:
-// a wire is a closed arrival lambda. The wireframe builder hands `unevalWire` a surface
-// expression, the `let`-frames it sat under, and the designated subterms it CUT to nodes;
-// `unevalWire` closes the residue into `(lambda (p…) body)` — pure data, serializable,
-// content-addressable (hashed by the wireframe hasher), applied by γ.
+// provenance/uneval.ts — the WIRE-EMISSION half of uneval: a wire is a closed arrival
+// lambda. The wireframe builder hands `unevalWire` a surface expression, the `let`-frames it
+// sat under, and the designated subterms it CUT to nodes; `unevalWire` closes the residue into
+// `(lambda (p…) body)` — pure data, serializable, content-addressable (hashed by the wireframe
+// hasher), applied by γ.
 //
-// STAYS in core (provenance analysis-stack relocation): this is a wireframe-BUILD-time
-// production dependency (`wireframe/builder.ts`'s `emitWire` calls `unevalWire` directly),
-// not analysis of a finished trace — it belongs to the static plane alongside the rest of
-// `wireframe/`. Its sibling, the RETROSPECTIVE half (`buildUneval`/`Uneval`/`UnevalContainer`
-// — reverse-slices a FINISHED trace) moved to `@inhuman.tools/arrival-provenance`'s
-// `analysis/uneval.ts`; the two halves shared a file only because both start from "a closed
-// re-derivation of a value" — they share no code, no helpers, no imports.
+// This is a wireframe-BUILD-time production dependency (`wireframe/builder.ts`'s `emitWire`
+// calls `unevalWire` directly), not analysis of a finished trace — it belongs to the static
+// plane alongside the rest of `wireframe/`. The retrospective sibling (`buildUneval`/
+// `Uneval`/`UnevalContainer` — reverse-slices a FINISHED trace) lives in
+// `@inhuman.tools/arrival-provenance`'s `analysis/uneval.ts`; the two share no code, helpers,
+// or imports.
 
 import { WireLocalityError } from "../errors.js";
 

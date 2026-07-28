@@ -9,11 +9,9 @@ import { AJSObject } from "../membrane/AJSObject.js";
  * THE KIND IS (MOST OF) THE TYPE: every AValue subclass carries a concrete
  * `readonly kind: AKind` field (AValue.ts), and this module is a thin reader over
  * that field for the value family — no central instanceof switch over the value
- * kernel. The retired `static [CLASS]` brand covered a WIDER set (every arrival
- * class, value or not); `kind` covers only the AValue family, so classes outside it
- * (Macro, Syntax, AmbientRuntime, the errors.ts hierarchy, …) now fall through to the
- * `foreign:<CtorName>` rung below instead of reporting their old brand name — an
- * accepted behavior change (audited: no test pins those exotic brand strings).
+ * kernel. `kind` covers only the AValue family; classes outside it (Macro, Syntax,
+ * AmbientRuntime, the errors.ts hierarchy, …) fall through to the `foreign:<CtorName>`
+ * rung below.
  *
  * TWO FACES, visible in the function body: the IN-MONAD face (the membrane arms +
  * the `kind` read) handles a properly-boxed AValue; the LEAK face (the raw-JS
@@ -22,13 +20,10 @@ import { AJSObject } from "../membrane/AJSObject.js";
  * see the inline notes; retiring a leak at its membrane crossing deletes the
  * corresponding rung here, never renames it into `kind` vocabulary.
  *
- * NOT a pure leaf anymore: this module now imports AJSArray/AJSObject (membrane/) for
- * the two explicit membrane arms below. Still cycle-safe — neither class (nor
- * anything either one imports: values/*, membrane/rosetta.js, membrane/interop-access.js,
- * errors.js, eval/guards.js) imports Macro/Syntax or this module, so no ESM init cycle
- * opens. `instanceof` on an imported class is fine here; the retired brand-read only
- * needed to stay structural to dodge a DIFFERENT cycle (an eval-layer import), which
- * this rewrite no longer risks since AJSArray/AJSObject live in membrane/, not eval/.
+ * NOT a pure leaf: this module imports AJSArray/AJSObject (membrane/) for the two
+ * explicit membrane arms below. Cycle-safe — neither class (nor anything either one
+ * imports: values/*, membrane/rosetta.js, membrane/interop-access.js, errors.js,
+ * eval/guards.js) imports Macro/Syntax or this module, so no ESM init cycle opens.
  *
  * Deliberate treatments (each defends a non-obvious branch):
  * - `null` guard stays FIRST: `null.constructor` throws.

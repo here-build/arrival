@@ -22,11 +22,10 @@ import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeEr
 import { APair } from "../../values/primitives/APair.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { nil } from "../../values/primitives/ANil.js";
-import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { type ACallable } from "../../values/primitives/ACallable.js";
 import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
 import { call_function } from "../../eval/call-function.js";
-import { Macro, type MacroInvokeContext } from "../../eval/Macro.js";
+import { Macro, type TransformerArgs } from "../../eval/Macro.js";
 import type { SchemeValue } from "../../values/types.js";
 import type { EvalSchemeInto, SchemeEnv } from "../scheme-env.js";
 import type { PreludeBindTarget } from "../kernel.js";
@@ -291,7 +290,7 @@ function buildMacro(verb: string, def: DefineSyntaxSymbolDef, closureValue: unkn
   const closure = closureValue as ACallable;
   const macro = new Macro(
     verb,
-    function (this: unknown, code: unknown, evalArgs: MacroInvokeContext): Promise<SchemeValue> {
+    function (this: unknown, code: unknown, evalArgs: TransformerArgs): Promise<SchemeValue> {
       const argForms = formsOf(code);
       // evalArgs.runCtx is required — is_macro dispatch always threads live EvalContext.runCtx.
       return Promise.resolve(call_function(closure, argForms, { runCtx: evalArgs.runCtx })) as Promise<SchemeValue>;

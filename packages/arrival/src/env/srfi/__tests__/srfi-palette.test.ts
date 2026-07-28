@@ -250,18 +250,20 @@ describe("SRFI-95 sort — end-to-end behavior (previously uncovered via the bui
     expect(schemeToJs(result, {})).toEqual([1, 2, 3]);
   });
 
-  // it.fails (not it): DISCOVERED, NOT FIXED here — out of scope for this file. `deriveSortCompare`
-  // (values/op-helpers.ts) calls a user-supplied comparator directly (`comparator(a, b)`), not via
-  // `call_function` (eval/call-function.ts, which resolves bounces/promises for a Scheme lambda
-  // value). Any REAL Scheme-evaluated lambda comparator — regardless of body/direction, verified
-  // with both `>` and an explicit `(if (> a b) #t #f)` — scrambles to the same wrong order; only
-  // the no-comparator path (native `arrival/tagless-final/lte`, no lambda involved) is unaffected.
-  // Asserts the IDEAL SRFI-95 behavior so this auto-promotes to a hard failure (prompting `it()`)
-  // the day someone fixes the comparator call site — mirrors src/__tests__/js-interop.test.ts's
-  // established it.fails convention for a documented, characterized gap.
-  // INVARIANT: sort does not honor an explicit less? comparator correctly — scrambles to
-  // the wrong order (documented broken; see comment above)
-  it.fails("honors an explicit less? comparator (SRFI-95 signature) — BROKEN: see comment", async () => {
+  // A Scheme LAMBDA comparator cannot drive `Array.sort`: the lambda evaluates through
+  // the trampoline, so `applyCallback` returns a Promise, and `Array.sort`'s comparator
+  // contract is synchronous. `deriveSortCompare` (values/op-helpers.ts) invokes the
+  // comparator through the sanctioned `applyCallback` seam (the earlier "bare
+  // `comparator(a, b)`" call-site bug is FIXED), then DOORS the async result with a
+  // teaching TypeError instead of silently mis-ordering. Native callable comparators
+  // (`<`, `>`, a `symbol.native`/`tagless` bound op) work — their `applyCallback` result
+  // is synchronous; only an `ALambda` comparator hits this door.
+  //
+  // The door itself (lambda comparator throws) is pinned in
+  // src/__tests__/sort-lambda-comparator.test.ts with both `<` and `>` — not duplicated
+  // here. Supporting lambda comparators is real feature work (a sync lambda eval path,
+  // or an async sort). The IDEAL row below stays `it.fails` until that lands.
+  it.fails("IDEAL: a lambda less? comparator sorts descending (needs async sort)", async () => {
     const raw = await sortEnv();
     const [result] = await raw("(sort (list 1 3 2) (lambda (a b) (> a b)))");
     expect(schemeToJs(result, {})).toEqual([3, 2, 1]);

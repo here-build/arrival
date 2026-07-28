@@ -323,8 +323,7 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
   }
 
   // Freeze contract — docs/membrane.md §BOXING. Idempotent (Object.isFrozen).
-  // deferred: freezes always; per-run freezeRosettaReturns opt-out died with AValue
-  // per-value ctx. Re-source from an active run-context once one is restored.
+  // Always freezes on first read.
   private freezeSource(): void {
     if (!Object.isFrozen(this.source)) {
       try {

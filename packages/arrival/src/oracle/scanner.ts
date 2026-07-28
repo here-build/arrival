@@ -49,7 +49,7 @@ const CLOSE = new Set([")", "]", "}"]);
 const QUOTE_PREFIXES = new Set(["'", "`"]);
 for (const p of QUOTE_PREFIXES) {
   if (!specials.names().includes(p)) {
-    throw new Error(`oracle/scanner: quote prefix ${p} is no longer an arrival reader macro`);
+    throw new Error(`oracle/scanner: quote prefix ${p} is not an arrival reader macro`);
   }
 }
 

@@ -55,7 +55,6 @@ export interface AssembleRunOptions {
   readonly evalPrelude?: EvalPreludeInto;
   readonly strict?: boolean;
   readonly heapBudget?: number;
-  readonly freezeRosettaReturns?: boolean;
   readonly signal?: AbortSignal;
   readonly cache?: RunCache;
   readonly effects?: EffectLog;
@@ -98,7 +97,6 @@ export async function assembleRun(opts: AssembleRunOptions): Promise<RunContext>
   const runCtx = new RunContext({
     strict: opts.strict,
     heapBudget: opts.heapBudget,
-    freezeRosettaReturns: opts.freezeRosettaReturns,
     signal: opts.signal,
     cache: opts.cache,
     effects: opts.effects,

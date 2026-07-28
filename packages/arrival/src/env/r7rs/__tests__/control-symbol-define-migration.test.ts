@@ -154,17 +154,23 @@ describe("ROW 4 — FV law: N/A structurally (no symbol.define body exists to wa
     // define-bake.ts's FV/locality/forward-reference/role-shape checks only run
     // for `kind === "define"` entries; this pack has none, so these errors are
     // structurally unreachable — asserted as a negative, mirroring srfi-26's
-    // ROW 3 and binding's ROW 2.
+    // ROW 3 and binding's ROW 2. Re-throw any OTHER error so a real regression
+    // surfaces instead of being swallowed by the catch.
     let caught: unknown;
     try {
       await buildVocabulary([controlPack], undefined, evalScheme);
     } catch (e) {
-      caught = e;
+      if (
+        e instanceof DefineLocalityError ||
+        e instanceof DefineForwardReferenceError ||
+        e instanceof ProvenanceRoleShapeError
+      ) {
+        caught = e;
+      } else {
+        throw e;
+      }
     }
     expect(caught).toBeUndefined();
-    expect(caught).not.toBeInstanceOf(DefineLocalityError);
-    expect(caught).not.toBeInstanceOf(DefineForwardReferenceError);
-    expect(caught).not.toBeInstanceOf(ProvenanceRoleShapeError);
   });
 
   it("exports() derives exactly the door-name surface from spec.symbols alone (the prelude half of the union is vacuous)", async () => {
