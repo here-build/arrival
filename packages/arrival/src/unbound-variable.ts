@@ -155,6 +155,21 @@ const NO_FILE_IO_HINT =
 const IDIOM_ROUTES: ReadonlyMap<string, string> = new Map([
   ["require", "the parsers are already bound here — try (parse-json s) or (detect-parse s), not require."],
   ["read-all", NO_FILE_IO_HINT],
+  // Free `,` / `,@` outside quasiquote: the reader always expands them to (unquote …)
+  // / (unquote-splicing …); evaluating that as a call looks up the name and hits this
+  // door. Not a missing capability — unquote is syntax only inside `` ` ``.
+  [
+    "unquote",
+    "`,` is R7RS unquote — only legal inside quasiquote (`…`). A free `,x` or `(unquote x)` " +
+      "is evaluated as a call and fails. Scheme lists use spaces, not JS commas: write " +
+      "(list 1 2 3), not (list 1, 2, 3). Inside `[…]` / `{…}` one comma per element " +
+      "boundary is absorbed as a separator (docs/grammar.md §COMMA).",
+  ],
+  [
+    "unquote-splicing",
+    "`,@` is R7RS unquote-splicing — only legal inside quasiquote (`…`). Free `,@xs` outside " +
+      "` is evaluated as a call and fails.",
+  ],
 ]);
 
 /** Known dead-end idioms (name-exact). Racket `#:name` used to route here as "drop

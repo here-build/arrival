@@ -85,3 +85,37 @@ describe("unboundVariableError — idiom routing (Tier C: require / file IO dead
     }
   });
 });
+
+describe("unboundVariableError — idiom routing (free unquote / JS-comma footgun)", () => {
+  it("unquote routes to the free-comma / quasiquote teaching", () => {
+    const err = unboundVariableError("unquote");
+    expect(err.message).toMatch(/quasiquote/);
+    expect(err.message).toMatch(/list 1 2 3/);
+    expect(err.enriched).toBe(true);
+  });
+
+  it("unquote-splicing routes similarly", () => {
+    const err = unboundVariableError("unquote-splicing");
+    expect(err.message).toMatch(/quasiquote/);
+    expect(err.enriched).toBe(true);
+  });
+
+  it("LIVE: free ,x throws the unquote door (not a bare wall)", async () => {
+    await expect(exec(",59")).rejects.toThrow(/Unbound variable `unquote'.*quasiquote/s);
+  });
+
+  it("LIVE: free unquote call-head stamps the form on the scheme stack", async () => {
+    try {
+      await exec("(unquote 59)");
+      throw new Error("expected throw");
+    } catch (e) {
+      const err = e as Error & { schemeStack?: { code: unknown }[] };
+      expect(err.message).toMatch(/unquote/);
+      expect(Array.isArray(err.schemeStack) && err.schemeStack.length > 0).toBe(true);
+      // Innermost frame is the applied form — hosts print this in the run-error strip.
+      const top = err.schemeStack![err.schemeStack!.length - 1]!;
+      expect(String(top.code)).toMatch(/unquote/);
+      expect(String(err)).toMatch(/Scheme Stack Trace/);
+    }
+  });
+});
