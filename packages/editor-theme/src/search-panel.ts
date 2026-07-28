@@ -130,7 +130,8 @@ class IdeaSearchPanel implements Panel {
   wordBtn: HTMLButtonElement;
   reBtn: HTMLButtonElement;
   countEl: HTMLElement;
-  replaceRow: HTMLElement;
+  /** Second-row grid cells (replace field + actions). Hidden when collapsed. */
+  row2: HTMLElement[];
   expandBtn: HTMLButtonElement;
   query: SearchQuery;
   expanded: boolean;
@@ -195,94 +196,106 @@ class IdeaSearchPanel implements Panel {
       this.expanded ? "▾" : "▸",
     ) as HTMLButtonElement;
 
-    const findRow = el(
+    const findField = el(
       "div",
-      { class: "cm-search-idea-row cm-search-idea-find" },
-      this.expandBtn,
-      el(
-        "div",
-        { class: "cm-search-idea-field" },
-        el("span", { class: "cm-search-idea-leading", "aria-hidden": "true" }, "⌕"),
-        this.searchField,
-      ),
-      el("div", { class: "cm-search-idea-toggles" }, this.caseBtn, this.wordBtn, this.reBtn),
-      this.countEl,
-      iconBtn("prev", "Previous Match", "↑", () => {
-        findPrevious(view);
-      }, { className: "cm-search-idea-nav" }),
-      iconBtn("next", "Next Match", "↓", () => {
-        findNext(view);
-      }, { className: "cm-search-idea-nav" }),
-      el(
-        "button",
-        {
-          type: "button",
-          name: "close",
-          class: "cm-search-idea-close",
-          title: "Close",
-          "aria-label": "Close",
-          onclick: (e) => {
-            e.preventDefault();
-            closeSearchPanel(view);
-            view.focus();
-          },
+      { class: "cm-search-idea-field cm-search-idea-find-field" },
+      el("span", { class: "cm-search-idea-leading", "aria-hidden": "true" }, "⌕"),
+      this.searchField,
+    );
+
+    const toggles = el(
+      "div",
+      { class: "cm-search-idea-toggles" },
+      this.caseBtn,
+      this.wordBtn,
+      this.reBtn,
+    );
+
+    const prevBtn = iconBtn("prev", "Previous Match", "↑", () => {
+      findPrevious(view);
+    }, { className: "cm-search-idea-nav cm-search-idea-prev" });
+    const nextBtn = iconBtn("next", "Next Match", "↓", () => {
+      findNext(view);
+    }, { className: "cm-search-idea-nav cm-search-idea-next" });
+
+    const closeBtn = el(
+      "button",
+      {
+        type: "button",
+        name: "close",
+        class: "cm-search-idea-close",
+        title: "Close",
+        "aria-label": "Close",
+        onclick: (e) => {
+          e.preventDefault();
+          closeSearchPanel(view);
+          view.focus();
         },
-        "×",
-      ),
+      },
+      "×",
     );
 
-    const replaceActions: Node[] = view.state.readOnly
-      ? []
-      : [
-          el(
-            "button",
-            {
-              type: "button",
-              name: "replace",
-              class: "cm-search-idea-action",
-              onclick: (e) => {
-                e.preventDefault();
-                replaceNext(view);
-              },
-            },
-            "Replace",
-          ),
-          el(
-            "button",
-            {
-              type: "button",
-              name: "replaceAll",
-              class: "cm-search-idea-action",
-              onclick: (e) => {
-                e.preventDefault();
-                replaceAll(view);
-              },
-            },
-            "Replace All",
-          ),
-        ];
-
-    this.replaceRow = el(
+    // Row 2 cells — always in the tree; grid + .cm-search-idea-expanded shows them.
+    const replaceField = el(
       "div",
-      { class: "cm-search-idea-row cm-search-idea-replace" },
-      el("div", { class: "cm-search-idea-expand-spacer", "aria-hidden": "true" }),
-      el(
-        "div",
-        { class: "cm-search-idea-field" },
-        el("span", { class: "cm-search-idea-leading", "aria-hidden": "true" }, "⌕"),
-        this.replaceField,
-      ),
-      el("div", { class: "cm-search-idea-replace-actions" }, ...replaceActions),
+      { class: "cm-search-idea-field cm-search-idea-replace-field cm-search-idea-row2" },
+      el("span", { class: "cm-search-idea-leading", "aria-hidden": "true" }, "⌕"),
+      this.replaceField,
     );
 
+    const replaceActions = el(
+      "div",
+      { class: "cm-search-idea-replace-actions cm-search-idea-row2" },
+      ...(view.state.readOnly
+        ? []
+        : [
+            el(
+              "button",
+              {
+                type: "button",
+                name: "replace",
+                class: "cm-search-idea-action",
+                onclick: (e) => {
+                  e.preventDefault();
+                  replaceNext(view);
+                },
+              },
+              "Replace",
+            ),
+            el(
+              "button",
+              {
+                type: "button",
+                name: "replaceAll",
+                class: "cm-search-idea-action",
+                onclick: (e) => {
+                  e.preventDefault();
+                  replaceAll(view);
+                },
+              },
+              "Replace All",
+            ),
+          ]),
+    );
+
+    this.row2 = [replaceField, replaceActions];
+
+    // Flat grid children — columns: expand | field | toggles | count | prev | next | close
     this.dom = el(
       "div",
       {
         class: "cm-search cm-search-idea",
         onkeydown: (e) => this.keydown(e as KeyboardEvent),
       },
-      findRow,
-      this.replaceRow,
+      this.expandBtn,
+      findField,
+      toggles,
+      this.countEl,
+      prevBtn,
+      nextBtn,
+      closeBtn,
+      replaceField,
+      replaceActions,
     );
 
     this.applyExpanded();
@@ -315,11 +328,13 @@ class IdeaSearchPanel implements Panel {
     this.replaceField.select();
   }
 
+  /** Sync DOM + a11y with `expanded`. CSS grid uses `.cm-search-idea-expanded` for row 2. */
   private applyExpanded() {
-    this.dom.classList.toggle("cm-search-idea-expanded", this.expanded);
-    this.expandBtn.setAttribute("aria-expanded", this.expanded ? "true" : "false");
-    this.expandBtn.textContent = this.expanded ? "▾" : "▸";
-    this.replaceRow.hidden = !this.expanded || this.view.state.readOnly;
+    const show = this.expanded && !this.view.state.readOnly;
+    this.dom.classList.toggle("cm-search-idea-expanded", show);
+    this.expandBtn.setAttribute("aria-expanded", show ? "true" : "false");
+    this.expandBtn.textContent = show ? "▾" : "▸";
+    for (const cell of this.row2) cell.hidden = !show;
   }
 
   private toggle(key: "caseSensitive" | "wholeWord" | "regexp") {
@@ -388,8 +403,9 @@ class IdeaSearchPanel implements Panel {
           this.applyQuery(effect.value);
         }
         if (effect.is(setSearchOpenMode)) {
-          if (effect.value === "replace") this.focusReplace();
-          else this.focusFind();
+          // Mode owns row-2 visibility; focus follows.
+          if (effect.value === "replace") this.setExpanded(true, true);
+          else this.setExpanded(false, true);
         }
       }
     }
@@ -453,68 +469,150 @@ export const ideaSearchKeymap: readonly KeyBinding[] = [
 // ── chrome styles (IDEA Darcula strip) ────────────────────────────────────
 
 export const ideaSearchTheme: Extension = EditorView.theme({
+  // Single grid: row1 = find chrome, row2 = replace (only when .cm-search-idea-expanded).
+  // Columns: expand | field | toggles | count | prev | next | close
   ".cm-panel.cm-search.cm-search-idea": {
+    display: "grid",
+    // Last track is a dedicated close column (form-theme absolutely positions stock [name=close]).
+    gridTemplateColumns: "1lh minmax(12ch, 1fr) auto auto auto auto 1lh",
+    gridTemplateRows: "1lh",
+    alignItems: "center",
+    gap: "0",
     padding: "0",
     fontFamily: 'var(--font-mono, "JetBrains Mono", ui-monospace, monospace)',
-    backgroundColor: "#3c3f41",
-    color: "oklch(0.85 0 0)",
+    backgroundColor: "inherit",
     border: "none",
     boxShadow: "none",
-    fontSize: "12px",
-  },
-  ".cm-search-idea-row": {
-    display: "flex",
-    alignItems: "center",
-    gap: "6px",
-    padding: "4px 8px",
-    minHeight: "28px",
+    fontSize: "1rem",
     boxSizing: "border-box",
+    // Kill stock search-panel absolute close + side padding for this panel only.
+    position: "relative",
+    "& [name=close]": {
+      position: "static",
+      top: "auto",
+      right: "auto",
+    },
   },
-  ".cm-search-idea-find": {
-    borderBottom: "1px solid oklch(1 0 0 / 0.06)",
+  ".cm-panel.cm-search.cm-search-idea.cm-search-idea-expanded": {
+    gridTemplateRows: "1lh 1lh",
   },
+
+  // ── placement ──────────────────────────────────────────────────────────
   ".cm-search-idea-expand": {
-    flex: "0 0 auto",
-    width: "20px",
-    height: "20px",
+    gridColumn: "1",
+    gridRow: "1",
+    width: "100%",
+    height: "100%",
     padding: "0",
-    border: "1px solid oklch(1 0 0 / 0.12)",
-    borderRadius: "4px",
-    background: "oklch(0 0 0 / 0.2)",
+    border: "none",
+    background: "transparent",
     color: "oklch(0.75 0 0)",
     cursor: "pointer",
-    fontSize: "10px",
-    lineHeight: "18px",
-    textAlign: "center",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    lineHeight: "1",
     "&:hover": {
-      background: "oklch(1 0 0 / 0.08)",
       color: "oklch(0.92 0 0)",
     },
   },
-  ".cm-search-idea-expand-spacer": {
-    flex: "0 0 auto",
-    width: "20px",
+  ".cm-search-idea-find-field": {
+    gridColumn: "2",
+    gridRow: "1",
   },
-  ".cm-search-idea-field": {
-    flex: "1 1 auto",
+  ".cm-search-idea-toggles": {
+    gridColumn: "3",
+    gridRow: "1",
     display: "flex",
     alignItems: "center",
-    gap: "4px",
-    minWidth: "120px",
-    background: "oklch(0 0 0 / 0.28)",
-    border: "1px solid oklch(1 0 0 / 0.1)",
-    borderRadius: "4px",
-    padding: "0 6px",
-    height: "22px",
+    gap: "2px",
+    margin: "0 1ch",
+  },
+  ".cm-search-idea-count": {
+    gridColumn: "4",
+    gridRow: "1",
+    minWidth: "4.5em",
+    textAlign: "right",
+    color: "oklch(0.6 0 0)",
+    fontSize: "11px",
+    userSelect: "none",
+    padding: "0 4px",
+  },
+  ".cm-search-idea-prev": {
+    gridColumn: "5",
+    gridRow: "1",
+  },
+  ".cm-search-idea-next": {
+    gridColumn: "6",
+    gridRow: "1",
+  },
+  ".cm-search-idea-close": {
+    gridColumn: "7",
+    gridRow: "1",
+    width: "100%",
+    height: "100%",
+    padding: "0",
+    margin: "0",
+    border: "none",
+    background: "transparent",
+    color: "oklch(0.6 0 0)",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    lineHeight: "1",
+    "&:hover": {
+      color: "oklch(0.92 0 0)",
+    },
+  },
+  // Row 2 — participate only when expanded (hidden attr + class both gate)
+  ".cm-search-idea-replace-field": {
+    gridColumn: "2",
+    gridRow: "2",
+  },
+  // Span toggles→next only — leave close column free
+  ".cm-search-idea-replace-actions": {
+    gridColumn: "3 / 7",
+    gridRow: "2",
+    display: "flex",
+    alignItems: "center",
+    gap: "1ch",
+    margin: "0 1ch",
+  },
+  // Collapsed: ensure row2 never paints even if hidden is stripped
+  ".cm-search-idea:not(.cm-search-idea-expanded) > .cm-search-idea-row2": {
+    display: "none",
+  },
+
+  // ── field chrome ───────────────────────────────────────────────────────
+  ".cm-search-idea-field": {
+    display: "flex",
+    alignItems: "center",
+    gap: "1ch",
+    minWidth: "0",
+    background: "transparent",
+    borderStyle: "solid",
+    borderColor: "oklch(1 0 0 / 0.1)",
+    borderWidth: "0 1px",
+    borderRadius: "0",
+    padding: "0 0.5ch",
+    height: "1lh",
     boxSizing: "border-box",
+  },
+  // Continuous border box when both fields stack in column 2
+  ".cm-search-idea-expanded .cm-search-idea-find-field": {
+    borderWidth: "0 1px 0",
+  },
+  ".cm-search-idea-expanded .cm-search-idea-replace-field": {
+    borderWidth: "1px 1px 0",
   },
   ".cm-search-idea-leading": {
     color: "oklch(0.55 0 0)",
-    fontSize: "13px",
     userSelect: "none",
   },
   ".cm-search-idea-input.cm-textfield, .cm-search-idea .cm-textfield": {
     flex: "1 1 auto",
+    minWidth: "0",
     border: "none",
     background: "transparent",
     padding: "0",
@@ -531,14 +629,7 @@ export const ideaSearchTheme: Extension = EditorView.theme({
       outline: "none",
     },
   },
-  ".cm-search-idea-toggles": {
-    display: "flex",
-    alignItems: "center",
-    gap: "2px",
-    flex: "0 0 auto",
-  },
   ".cm-search-idea-iconbtn": {
-    flex: "0 0 auto",
     minWidth: "22px",
     height: "22px",
     padding: "0 4px",
@@ -566,43 +657,9 @@ export const ideaSearchTheme: Extension = EditorView.theme({
     fontSize: "12px",
     fontWeight: "500",
   },
-  ".cm-search-idea-count": {
-    flex: "0 0 auto",
-    minWidth: "4.5em",
-    textAlign: "right",
-    color: "oklch(0.6 0 0)",
-    fontSize: "11px",
-    userSelect: "none",
-    padding: "0 4px",
-  },
-  ".cm-search-idea-close": {
-    flex: "0 0 auto",
-    width: "22px",
-    height: "22px",
-    padding: "0",
-    margin: "0",
-    border: "none",
-    background: "transparent",
-    color: "oklch(0.6 0 0)",
-    fontSize: "14px",
-    lineHeight: "20px",
-    cursor: "pointer",
-    borderRadius: "3px",
-    "&:hover": {
-      color: "oklch(0.92 0 0)",
-      background: "oklch(1 0 0 / 0.08)",
-    },
-  },
-  ".cm-search-idea-replace-actions": {
-    display: "flex",
-    alignItems: "center",
-    gap: "6px",
-    flex: "0 0 auto",
-    marginLeft: "auto",
-  },
   ".cm-search-idea-action": {
-    height: "22px",
-    padding: "0 10px",
+    height: "1lh",
+    padding: "0 1ch",
     margin: "0",
     border: "1px solid oklch(1 0 0 / 0.18)",
     borderRadius: "4px",
