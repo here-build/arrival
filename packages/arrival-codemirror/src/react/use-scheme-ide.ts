@@ -37,11 +37,11 @@ export interface SchemeIdeAudit {
   schemePreludeHead: string;
   /**
    * Whether loadIde ran before configureSchemeIdeHost (boot race).
-   * If true, worker may have been init'd with empty host — PRE leaves still load,
-   * but host rosettas (require, values-of, …) will be missing until hard reload
-   * after a rebuild that waits for the roster.
+   * Sugarcoat modernizes string-append→str; without schemePrelude that free-name fails.
    */
   loadBeforeHostConfig: boolean;
+  /** Host config generation — advances on each configureSchemeIdeHost. */
+  hostConfigGeneration: number;
   /** Canary emit + diagnostics after LS ready (probes PRE builtins + host require). */
   canaries: readonly SchemeIdeCanary[];
   /** Project file paths last pushed for require resolution. */
@@ -68,11 +68,20 @@ const AUDIT: SchemeIdeAudit = {
   schemePreludeChars: 0,
   schemePreludeHead: "",
   loadBeforeHostConfig: false,
+  hostConfigGeneration: 0,
   canaries: [],
   projectFileCount: 0,
   requireTypeCount: 0,
   openPath: null,
 };
+
+/**
+ * Minimal polyglot defines the sugarcoat lens needs even if env harvest is late.
+ * Sugarcoat modernizes `string-append` → `str` (`@{…}`); classic R7RS still has
+ * string-append as a PRE leaf — so missing prelude only breaks the sugarcoat path.
+ * Body matches polyglot-clojure (repr for non-strings).
+ */
+const FALLBACK_POLYGLOT_PRELUDE = `(define str (lambda args (apply string-append (map (lambda (x) (if (string? x) x (if (number? x) (number->string x) ""))) args))))`;
 
 function publishAudit(): void {
   if (typeof globalThis === "undefined") return;
@@ -116,12 +125,19 @@ let hostConfig: {
 /** Resolves when configureSchemeIdeHost has run at least once (or timeout). */
 let hostConfigSeen = false;
 let hostConfigWaiters: Array<() => void> = [];
+/** Bumps on every configure; useSchemeIde re-subscribes so a late roster reloads the backend. */
+let hostConfigGeneration = 0;
+let hostConfigListeners: Array<() => void> = [];
+/** Generation the current idePromise was started with (−1 = none). */
+let ideLoadedGeneration = -1;
 
 function notifyHostConfig(): void {
   hostConfigSeen = true;
   const waiters = hostConfigWaiters;
   hostConfigWaiters = [];
   for (const w of waiters) w();
+  const listeners = hostConfigListeners;
+  for (const l of listeners) l();
 }
 
 /** Wait until host roster is published, or `ms` elapses (boot race barrier). */
@@ -140,18 +156,51 @@ function waitForHostConfig(ms: number): Promise<void> {
   });
 }
 
+/** Merge host config with a polyglot fallback so sugarcoat's `str` always resolves. */
+function connectOptionsFromHost(): {
+  compilerOptions: { noImplicitAny: boolean };
+  host?: { prelude: string; members: readonly string[]; kwargsMembers?: readonly string[] };
+  schemePrelude: string;
+} {
+  const schemePrelude =
+    hostConfig.schemePrelude && hostConfig.schemePrelude.length > 0
+      ? hostConfig.schemePrelude
+      : FALLBACK_POLYGLOT_PRELUDE;
+  return {
+    ...LS_OPTIONS,
+    ...hostConfig,
+    schemePrelude,
+  };
+}
+
 /** Supply the env-derived name roster (host rosettas + scheme stdlib preamble)
- *  to the scheme IDE. Call once at app boot, before {@link preloadSchemeIde}. */
+ *  to the scheme IDE. Call once at app boot, before {@link preloadSchemeIde}.
+ *  Late calls invalidate a backend that already connected without this roster. */
 export function configureSchemeIdeHost(config: {
   host?: { prelude: string; members: readonly string[]; kwargsMembers?: readonly string[] };
   schemePrelude?: string;
 }): void {
   hostConfig = config;
+  hostConfigGeneration += 1;
+  AUDIT.hostConfigGeneration = hostConfigGeneration;
   AUDIT.hostConfiguredAt = new Date().toISOString();
   AUDIT.hostMembers = [...(config.host?.members ?? [])];
   AUDIT.hostPreludeChars = config.host?.prelude?.length ?? 0;
-  AUDIT.schemePreludeChars = config.schemePrelude?.length ?? 0;
-  AUDIT.schemePreludeHead = (config.schemePrelude ?? "").slice(0, 500);
+  const prelude = config.schemePrelude ?? "";
+  AUDIT.schemePreludeChars = prelude.length;
+  AUDIT.schemePreludeHead = prelude.slice(0, 500);
+  // Drop a backend that was started with an empty/stale roster so the next
+  // useSchemeIde/loadIde reconnects with full schemePrelude (str / polyglot).
+  if (idePromise !== null && ideLoadedGeneration !== hostConfigGeneration) {
+    console.info("[inhuman scheme-ide] configureSchemeIdeHost — invalidating IDE started without current roster", {
+      ideLoadedGeneration,
+      hostConfigGeneration,
+      schemePreludeChars: prelude.length,
+      schemePreludeHasStr: /\(define str\b/.test(prelude),
+    });
+    idePromise = null;
+    ideLoadedGeneration = -1;
+  }
   notifyHostConfig();
   console.info(
     "[inhuman scheme-ide] configureSchemeIdeHost",
@@ -160,7 +209,9 @@ export function configureSchemeIdeHost(config: {
       sample: AUDIT.hostMembers.slice(0, 40),
       kwargsMembers: config.host?.kwargsMembers?.length ?? 0,
       schemePreludeChars: AUDIT.schemePreludeChars,
+      schemePreludeHasStr: /\(define str\b/.test(prelude),
       hostPreludeChars: AUDIT.hostPreludeChars,
+      hostConfigGeneration,
       // Spot-check names that _util.scm / custdev need
       has: {
         require: AUDIT.hostMembers.includes("require"),
@@ -179,7 +230,7 @@ let idePromise: Promise<SchemeIdeBackend | null> | null = null;
 
 async function workerBackend(shared: boolean): Promise<SchemeIdeBackend> {
   const { connectSchemeLs } = await import("@inhuman.tools/arrival-lsp/ls-client");
-  const connectOptions = { ...LS_OPTIONS, ...hostConfig };
+  const connectOptions = connectOptionsFromHost();
   // Inline new URL(...) — bundlers only recognize this exact pattern for
   // worker bundling. Hoisting the URL breaks it.
   const target = shared
@@ -266,6 +317,8 @@ const CANARY_PROBES: readonly { label: string; scheme: string }[] = [
   { label: "value:number->string", scheme: "(define x number->string)" },
   { label: "call:join", scheme: '(define x (join "," (list "a" "b")))' },
   { label: "call:require", scheme: '(define x (require "people.json"))' },
+  // Polyglot / schemePrelude — sugarcoat modernizes string-append→str.
+  { label: "call:str", scheme: '(define x (str "a" 1 "b"))' },
 ];
 
 async function runCanaries(backend: SchemeIdeBackend): Promise<void> {
@@ -303,28 +356,51 @@ async function runCanaries(backend: SchemeIdeBackend): Promise<void> {
 }
 
 function loadIde(): Promise<SchemeIdeBackend | null> {
-  idePromise ??= (async () => {
+  // If a late configureSchemeIdeHost invalidated us, start a new connect.
+  if (idePromise !== null && ideLoadedGeneration === hostConfigGeneration) {
+    return idePromise;
+  }
+  const gen = hostConfigGeneration;
+  ideLoadedGeneration = gen;
+  idePromise = (async () => {
     // Boot race: Studio fire-and-forgets ensureSchemeIdeRoster(); editors may
-    // call loadIde first. Wait a short window for configureSchemeIdeHost so the
-    // worker init snapshot includes host members + schemePrelude.
+    // call loadIde first. Wait for configureSchemeIdeHost so the worker init
+    // snapshot includes host members + schemePrelude (polyglot `str` for sugarcoat).
     if (!hostConfigSeen) {
       AUDIT.loadBeforeHostConfig = true;
       console.warn(
-        "[inhuman scheme-ide] loadIde before configureSchemeIdeHost — waiting up to 3s for roster",
+        "[inhuman scheme-ide] loadIde before configureSchemeIdeHost — waiting up to 8s for roster",
       );
-      await waitForHostConfig(3_000);
+      await waitForHostConfig(8_000);
       if (!hostConfigSeen) {
         console.warn(
-          "[inhuman scheme-ide] roster still missing after wait — LS will start with empty host (PRE leaves only)",
+          "[inhuman scheme-ide] roster still missing after wait — using FALLBACK_POLYGLOT_PRELUDE (str) + empty host",
         );
       }
     }
 
-    const connectWith = { ...LS_OPTIONS, ...hostConfig };
+    // Another configure may have landed while we waited — restart if so.
+    if (hostConfigGeneration !== gen) {
+      idePromise = null;
+      ideLoadedGeneration = -1;
+      return loadIde();
+    }
+
+    const connectWith = connectOptionsFromHost();
+    // Record what the worker actually gets (not only configureSchemeIdeHost).
+    // Without this, Storybook/boot race left audit at schemePreludeChars:0 even
+    // when FALLBACK or a late roster was applied at connect.
+    AUDIT.schemePreludeChars = connectWith.schemePrelude.length;
+    AUDIT.schemePreludeHead = connectWith.schemePrelude.slice(0, 500);
+    AUDIT.hostMembers = [...(connectWith.host?.members ?? [])];
+    AUDIT.hostPreludeChars = connectWith.host?.prelude?.length ?? 0;
     console.info("[inhuman scheme-ide] loadIde connecting", {
       hostMembers: connectWith.host?.members?.length ?? 0,
       schemePreludeChars: connectWith.schemePrelude?.length ?? 0,
+      schemePreludeHasStr: /\(define str\b/.test(connectWith.schemePrelude),
+      usedFallbackPrelude: !(hostConfig.schemePrelude && hostConfig.schemePrelude.length > 0),
       loadBeforeHostConfig: AUDIT.loadBeforeHostConfig,
+      hostConfigGeneration: gen,
     });
 
     if (typeof SharedWorker === "function") {
@@ -357,8 +433,7 @@ function loadIde(): Promise<SchemeIdeBackend | null> {
       const m = await import("@inhuman.tools/arrival-lsp/browser");
       // In-thread rung: resolve via shared lookup (relative + unique basename).
       const backend = m.createBrowserSchemeLanguageService({
-        ...LS_OPTIONS,
-        ...hostConfig,
+        ...connectWith,
         resolveModule: (path) =>
           lookupProjectFile(projectFiles, path, {
             fromFile: openPath,
@@ -439,9 +514,17 @@ export function loadSchemeIde(): Promise<SchemeIdeBackend | null> {
 }
 
 /** The shared scheme IDE backend, or `null` while loading / when unavailable /
- *  when `enabled` is false. Flips state at most once per mount. */
+ *  when `enabled` is false. Reloads when configureSchemeIdeHost advances generation. */
 export function useSchemeIde(enabled: boolean): SchemeIdeBackend | null {
   const [ide, setIde] = useState<SchemeIdeBackend | null>(null);
+  const [gen, setGen] = useState(hostConfigGeneration);
+  useEffect(() => {
+    const onConfig = (): void => setGen(hostConfigGeneration);
+    hostConfigListeners.push(onConfig);
+    return () => {
+      hostConfigListeners = hostConfigListeners.filter((l) => l !== onConfig);
+    };
+  }, []);
   useEffect(() => {
     if (!enabled) return;
     let live = true;
@@ -451,6 +534,6 @@ export function useSchemeIde(enabled: boolean): SchemeIdeBackend | null {
     return () => {
       live = false;
     };
-  }, [enabled]);
+  }, [enabled, gen]);
   return enabled ? ide : null;
 }
