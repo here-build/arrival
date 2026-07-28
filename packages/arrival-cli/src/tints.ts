@@ -106,7 +106,7 @@ export function paint(text: string, tint: TintName, mode: ReturnType<typeof colo
 
 /**
  * The repo's compensated-Darcula TOKEN palette — copied from
- * `arrival/packages/editor-theme/src/theme-darcula.ts` (the source of truth; re-sync if it
+ * `commons/packages/editor-theme/src/theme-darcula.ts` (the source of truth; re-sync if it
  * changes). Used by BOTH the code highlighter (`highlight.ts`) and the value colorizer
  * (`sexpr-color.ts`) so the input line, the settled-block source, and the output value all
  * share ONE palette — a `:keyword` is the same purple everywhere, a number the same blue.

@@ -76,9 +76,8 @@ Everything else comes on top of the language, in a variety of shapes:
   the compiler itself must not carry.
 - `arrival-codemirror` — CodeMirror 6 for arrival Scheme (classic +
   sugarcoat): structural editing, ghost text, param hints, and the full IDE
-  surface (lint/hover/completion/goto).
-- `editor-theme` — the redistributable editor theme: self-hosted fonts
-  (OFL) and the H-K-compensated Darcula syntax theme for CodeMirror. No CDN.
+  surface (lint/hover/completion/goto). Theme chrome lives in
+  `@here.build/editor-theme` (commons).
 - `arrival-manifold` — collapse N MCP servers into one discovery-shaped
   tool: a scheme `expr` surface over every bound remote tool.
 - `arrival-ext-toml` / `arrival-ext-yaml` — opt-in EnvCapability packs that
