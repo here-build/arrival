@@ -5,7 +5,7 @@
  *
  *  1. Law-N coverage: every narrows-flagged witness has a registered
  *     `PREDICATE_CONSUMERS` entry — a witness with NONE is a hard red,
- *     unconditionally (`arrival-ts-transpiler-design.md — Law N, §5.2` — no "not wired
+ *     unconditionally (`arrival-mercury/docs/constitution.md — Law N, §5.2` — no "not wired
  *     yet" carve-out).
  *  2. Per witness×consumer: `fc.assert(fc.asyncProperty(...))` samples
  *     `arbitrarySchemeValue()`, synthesizes `(let ((x <val>)) (if (<witness> x)
@@ -123,7 +123,7 @@ describe("schema-driven fuzzer — Law N narrows-flagged rows (oracle-harness.md
     expect(
       missing,
       `narrows-flagged witnesses with ZERO PREDICATE_CONSUMERS entries (Law N hard red, ` +
-        `unconditional per arrival-ts-transpiler-design.md — Law N, §5.2): ${missing.join(", ")}`,
+        `unconditional per arrival-mercury/docs/constitution.md — Law N, §5.2): ${missing.join(", ")}`,
     ).toEqual([]);
   });
 

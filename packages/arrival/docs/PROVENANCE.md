@@ -123,7 +123,10 @@ shape), with declaration override only where the contract underdetermines:
 - EXCLUDED (for now): the selector/decision split inside `control` and the second cone
   color it implies — one control role and ONE cone color until a product query needs
   "why sorted this way" separately from "where did element k come from". DEFERRED, not
-  dead: the wires are distinct in the graph; splitting later is additive.
+  dead: the wires are distinct in the graph; splitting later is additive. Scope bound
+  when it lands: a runtime trace only has the taken path, so any second cone color is
+  typed edges on the taken path — the full semiring `how` (the branch NOT taken, the
+  `+` alternatives) is unrecoverable in principle, an approximation by construction.
 - Clarification: struct-fact wires are value wires carrying a fact TAG, not a second
   edge species; "color" names the query traversal, of which there is one.
 - LIMIT — the drift alarm catches CONTRADICTIONS, not lies: a JS body that fans while

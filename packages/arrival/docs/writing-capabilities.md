@@ -41,6 +41,17 @@ boundary, and barred from `cacheClass: "view"` (a raw crossing doesn't serialize
 refuses it). Declare the codec whenever one exists; `grep schemeToJsUntyped` is the audit list of
 every place the untyped crossing was reached for.
 
+## Parametric ops are tagless by construction
+
+A zod schema is a **value**, not a type-level function — a contracted symbol
+(`symbol.native`/`symbol.rosetta`) can only express a concrete, monomorphic `in → out`. A
+genuinely parametric op (`car`: `Pair<A,B> → A`, `map<A,B>`) cannot declare an honest
+contract, so it belongs on the **tagless** path (`symbol.tagless`/`symbol.taglessGuard`),
+where dispatch goes to the operand's own term method and the contract slot is empty by law
+(`environments.md` §SYMBOL-KINDS). One home per symbol: term-algebra/parametric → tagless;
+authored monomorphic host fn → a contracted symbol. Reaching for `z.dynamic` to fake a
+parametric contract is the tell that you wanted tagless.
+
 ## Two axes: a provenance role, optionally a cache class
 
 Every symbol carries a **provenance role** (where results come from) and, optionally, a **cache

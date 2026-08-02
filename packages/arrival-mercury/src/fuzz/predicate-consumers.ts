@@ -7,7 +7,7 @@
  * grows only by hand, and only when a new guarded-residual consumer registers.
  *
  * Law N (constitution §5.2; oracle-harness.md §4.4/§6, unconditional per
- * `arrival-ts-transpiler-design.md:336`): a harvested narrows-flagged row with ZERO
+ * `docs/constitution.md:336`): a harvested narrows-flagged row with ZERO
  * entries here is a HARD RED — no "no consumer yet" carve-out.
  * `narrows-fuzz.test.ts` enforces this every run over the LIVE harvested set, so a
  * future narrows-flagged row landing without a table entry fails CI immediately,

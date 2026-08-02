@@ -29,7 +29,7 @@
  * `dataToScheme`, `dirOf`, `defaultResolvers`, `pickHandler`, and the whole
  * `loader-extensions.ts` registry.
  *
- * Design doc: docs/package-specific/arrival-chain/require-import-loader.md.
+ * Design doc retired (superseded by require-and-load-typed-loaders; see arrival/packages/arrival/docs/design-history/).
  */
 export {
   type Loader,

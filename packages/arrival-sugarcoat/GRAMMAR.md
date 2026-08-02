@@ -107,6 +107,10 @@ StepLine       ← INDENT DOT Word Args? TrailingLambda?   ; child line starting
 receiver seats in the *last* argument slot; a trailing lambda seats first. Chains fold left:
 `x.f.g` ⇒ `(g (f x))`. StepLines produce the identical CST — layout only.
 
+**Render gate.** Read is unconditional; render emits a dot/subscript chain iff it peels **≥ 2
+steps**, or the single step is an accessor, key, or braced method. A lone bare unary `(op recv)`
+stays prefix — `(not p)` is never `p.not`, but `x.f.g` and `xs.map{…}` both surface.
+
 **Index classification** (inside `Subscript`):
 
 ```
@@ -117,7 +121,9 @@ Index  ← INT           ; x[0] → (car x), x[1] → (cadr x) … pull-k access
 ```
 
 The `c[ad]+r` family is the accessor codec (`decodeAccessor`/`encodeAccessor`): any composition
-of pulls and drops round-trips to the fused canonical word (`x[0][0]` ⇔ `caar`).
+of pulls and drops round-trips to the fused canonical word (`x[0][0]` ⇔ `caar`). Fusion caps at
+`R7RS_ACCESSOR_DEPTH` (4) letters — a longer run splits into nested portable words rather than one
+non-portable `caddadar`; a keyed step (`[:k]`, `[k]`) always breaks the run.
 
 ## 4. Curly-infix
 

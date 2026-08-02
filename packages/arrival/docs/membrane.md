@@ -29,6 +29,18 @@ of the bake-side seam this document is the destination for — the bake contract
 (§CONTRACT) and the provenance/cache axes (§AXES) stay there; the membrane internals
 they defer to (proxies, region discipline, egress projection) are here.
 
+**The guest-language frame (why a membrane at all).** Arrival is a **guest language**;
+JS is merely its *current host* — the relationship is GraalVM polyglot, not
+language-on-top-of-JS. Host and guest are peer worlds meeting only through this uniform
+interop surface, the way a Truffle foreign value answers `InteropLibrary` messages
+instead of exposing raw host mechanics (§HYGIENE, §MEMBER-READ). The operational
+criterion is **portability**: arrival stays architecturally re-hostable onto Python,
+Rust, or Go with no program breaking — re-hosting re-implements the host-side protocol
+translations while the reader, the base stdlib, and every Scheme program move intact.
+The membrane therefore *translates concepts* (application, sequence, member-access,
+absence), never hands off opaque pointers: `rosetta` is named for Apple's Rosetta —
+binary translation, runs as-if-native — not the Stone.
+
 ---
 
 ## THE CALLABLE LENS — the reverse membrane completes the bifunctor

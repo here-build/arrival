@@ -25,6 +25,30 @@ provenance-vocabulary-v2.md, callback-track-graphs.md.*
 | Replay-not-store thesis | Zaharia et al. *RDD*, NSDI 2012 (Best Paper); Mokhov–Mitchell–Peyton Jones ICFP 2018; Unison; rr / deterministic record-replay (CACM) | **recompute-from-lineage; early cutoff; store-nondeterminism-replay-determinism** | Spark = the thesis at partition granularity for fault tolerance; we push it to value-level cones with membrane boundaries. rr's spectrum ("storage > recomputation for sparse access") names our tradeoff — we cut it at port crossings |
 | Drill-in-by-replay | Lewis ODB, AADEBUG 2003; Ko & Myers *Whyline*, CHI 2004 | omniscient debugging; **interrogative debugging** | we are omniscient debugging's storage-dual: same "why did" query power at record-replay footprint |
 
+### 1b. Membrane engineering prior art (non-academic)
+
+Beyond Miller/Van Cutsem above: **cljs-bean** (https://github.com/mfikes/cljs-bean) — the
+wrap-don't-convert O(1) thin-wrapper move behind the borrowed `AJS*` wrappers (we add
+freeze-on-first-Scheme-read); **PyO3** (`IntoPy`/`FromPyObject`,
+https://pyo3.rs/main/conversions/traits.html) — per-type conversion protocol, our
+per-class `arrival/toJS` representation authority; **SES** (`harden()`/Compartments) and
+**Salesforce observable-membrane** were early sandboxing/tracking references, both
+superseded by the door model and the provenance stack.
+
+### 1c. Industry provenance cohort (non-academic; corroborating, not originating)
+
+- **Excel trace precedents/dependents** — the most-used provenance UI on earth: local,
+  lazy, bidirectional, one-hop. Corroborates the demand lattice / one-hop frontier over
+  forest-dumping. https://support.microsoft.com/en-us/office/display-the-relationships-between-formulas-and-cells-a59bef2b-3701-46bf-8ff1-d3518771d507
+- **OpenLineage** (emit vs query split) + **Marquez** column lineage — maps onto our
+  stream (emit, cheap hot path) / cone queries / the plane.
+  https://openlineage.io/getting-started/ · https://marquezproject.ai/blog/column-lineage-demo/
+- **ProvenanceWidgets** — capture/aggregate/visualize as three layers; same cut.
+- **SLSA / in-toto / Sigstore** — signed `(subject, predicate, materials)` at the export
+  boundary only (`materials` ≈ resolved origin set); too heavy in-loop, right for
+  eject/MCP — the framing the sift attestation carries.
+  https://slsa.dev/spec/v0.1/provenance
+
 ## 2. The coeffect frame (adjacent, not yet adopted)
 
 The adopted vocabulary (prospective/retrospective, backward/forward slice,

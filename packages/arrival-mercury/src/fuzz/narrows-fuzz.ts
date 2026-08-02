@@ -44,7 +44,7 @@ export function synthesizeSingleWitnessProgram(witness: string, consumer: string
 
 /**
  * Law N's mechanical coverage check (constitution §5.2, unconditional per
- * `arrival-ts-transpiler-design.md:336`): every harvested narrows-flagged witness
+ * `docs/constitution.md:336`): every harvested narrows-flagged witness
  * must have at least one `PREDICATE_CONSUMERS` entry. Returns the witnesses with
  * NONE — empty ⇒ green; non-empty ⇒ the caller fails the build (no carve-out, no
  * "warn and continue").
