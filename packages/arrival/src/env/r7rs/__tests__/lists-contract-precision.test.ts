@@ -21,7 +21,7 @@
 // still-permissive runtime behavior where relevant. This file's assertions focus on the
 // SUBSET of fixes that gained a genuine zod REFINEMENT (instanceof / Array.isArray /
 // fixed-arity) and therefore reject a wrongly-shaped value the old `z.unknown()` accepted:
-// make-list's output (now z.pair|z.nil), nth's index (now z.schemeNumber), and list->array's
+// make-list's output (now z.pair|z.nil), and list->array's
 // output (now z.array(z.schemeValue) — Array.isArray refinement).
 import { describe, expect, it } from "vitest";
 import listsPack from "../lists.js";
@@ -90,24 +90,7 @@ describe("scheme/lists Contract precision — genuinely REFINED schemas reject w
     expect(def.in.safeParse(["not-a-scheme-number"]).success).toBe(false); // k must be schemeNumber
   });
 
-  // INVARIANT: nth's index must be a real scheme number; obj deliberately stays
-  // representation-blind (array|pair polymorphism)
-  it("nth: index is now z.schemeNumber — a raw JS number/string used to slip through the old z.unknown()", () => {
-    const def = nativeDef("nth");
-    expect(def.in.safeParse([exact(0), properList(1, 2, 3)]).success).toBe(true);
-    expect(def.in.safeParse([0, properList(1, 2, 3)]).success).toBe(false); // raw JS number, was true before the fix
-    expect(def.in.safeParse(["0", properList(1, 2, 3)]).success).toBe(false); // raw JS string, was true before the fix
-    // REBASELINE: the uniform-scheme-zod-vocabulary migration
-    // retired z.unknown() from this env layer entirely —
-    // scheme-zod.ts's v2 doesn't even re-export it (see srfi-95.ts's own note: "z.schemeValue is the
-    // typed replacement for z.unknown() at exactly this kind of native scheme-value slot"). So
-    // obj is z.schemeValue (isSchemeValue: instanceof AValue or a function), NOT genuinely host-blind
-    // — a raw JS array is now a KNOWN, acknowledged harvest-precision gap (nth's runtime `else
-    // if (Array.isArray(obj))` branch still works fine; the ZOD SCHEMA just doesn't model that
-    // domain member — Contract.type's own author-asserted signature `<T>(index: number, list:
-    // T[]): T | null` already documents the real intent, independent of this schema).
-    expect(def.in.safeParse([exact(0), [1, 2, 3]]).success).toBe(false); // raw JS array, genuinely rejected by z.schemeValue
-  });
+  // nth moved to scheme/polyglot-clojure (Clojure index-first); contract pins live there.
 
   // INVERTED (docs/design-history/halfbaked-existence-review.md, VERDICT KILL): output was
   // pinned z.schemeValue ONLY because a still-filling collection's Tier-2 speculation could hand back
@@ -251,7 +234,7 @@ describe("scheme/lists Contract precision — regression guard: unaffected/alrea
     // the exported R7RS freshness-copy operation this describe block's title once conflated it with).
     expect(nativeDef("append").in.safeParse([properList(1), properList(2)]).success).toBe(true);
     // reverse's impl only handles ANil/APair (a final `else` throws) — a raw array is genuinely
-    // rejected (array->list, the LIPS array-or-pair polymorphism this once contrasted with, is
+    // rejected (array->list, the array-or-pair polymorphism this once contrasted with, is
     // dissolved — no longer bound in this pack).
     expect(nativeDef("reverse").in.safeParse([[1, 2, 3]]).success).toBe(false);
     expect(nativeDef("reverse").in.safeParse([properList(1, 2, 3)]).success).toBe(true);
@@ -299,10 +282,10 @@ describe("scheme/lists Contract precision — blanket sweep: genuinely-variadic-
     expect(stragglers.sort()).toEqual([]);
   });
 
-  // INVARIANT: the lists pack exports exactly 23 symbols (deliberate drift alarm — forces
-  // a reviewer to touch this test when a symbol is added/removed)
-  it("sanity: the pack exports exactly 23 symbols (the scope this review must cover)", () => {
-    expect(Object.keys(symbols)).toHaveLength(23);
+  // INVARIANT: the lists pack exports exactly 22 symbols (deliberate drift alarm — forces
+  // a reviewer to touch this test when a symbol is added/removed). nth moved to polyglot-clojure.
+  it("sanity: the pack exports exactly 22 symbols (the scope this review must cover)", () => {
+    expect(Object.keys(symbols)).toHaveLength(22);
   });
 });
 

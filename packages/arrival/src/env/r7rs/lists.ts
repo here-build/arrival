@@ -772,7 +772,7 @@ export default EnvCapability.define("scheme/lists", {
     ),
 
     reverse: symbol.native`reverse: the list reversed`(
-      // pair|nil only — no raw-array branch (unlike nth).
+      // pair|nil only — no raw-array branch.
       {
         input: [z.listAlike],
         output: [z.schemeValue],
@@ -792,40 +792,6 @@ export default EnvCapability.define("scheme/lists", {
         throw attachOffendingValue(new TypeError(typeErrorMessage("reverse", type(arg), "array or pair")), arg);
       },
     ),
-
-    nth: symbol.native`nth: the element at index (polymorphic over array/pair)`(
-      // index = z.schemeNumber; obj/output stay z.schemeValue (pair | raw JS array path).
-      {
-        input: [z.schemeNumber, z.schemeValue],
-        output: [z.schemeValue],
-        type: dedent`
-          {
-            <T>(index: number, list: List<T>): T | null;
-            <T>(index: number, list: readonly T[]): T | null;
-          }
-        ` },
-      function (this: CallCtx, index, obj) {
-        const idx = Number(index);
-        if (obj instanceof APair) {
-          let node = obj;
-          let count = 0;
-          while (count < idx) {
-            const next = node.cdr;
-            if (!next || next instanceof ANil || node.have_cycles("cdr")) {
-              return nil;
-            }
-            // Improper tail at index → theVoid (membrane-boxed undefined).
-            if (!(next instanceof APair)) {
-              return theVoid;
-            }
-            node = next;
-            count++;
-          }
-          return node.car;
-        } else if (Array.isArray(obj)) {
-          return obj[idx];
-        } else {
-          throw attachOffendingValue(new TypeError(typeErrorMessage("nth", type(obj), "array or pair", 2)), obj);
-        }
-      },
-    ) }) });
+    // `nth` (index-first, array|pair) is Clojure — scheme/polyglot-clojure, not R7RS.
+    // R7RS indexed access is `list-ref` (list first).
+  }) });

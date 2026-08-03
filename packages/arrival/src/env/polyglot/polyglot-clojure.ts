@@ -15,7 +15,8 @@
 //
 // NOTE: `first` (SRFI-1) and `curry` (SRFI-235-adjacent, srfi-235.ts) are ALREADY
 // bound elsewhere — deliberately not redefined here. `flatten` is not bound
-// (compose with SRFI-1 / list ops); do not invent a LIPS-era residual.
+// (compose with SRFI-1 / list ops). `nth` is bound HERE (Clojure index-first
+// accessor; R7RS twin is list-ref on scheme/lists).
 //
 // ATTRIBUTE JUDGMENT for `->`/`->>`: every argument position is ORDINARY
 // EXPRESSION SPACE — `x` is an evaluated seed, each form is either a call form
@@ -45,6 +46,13 @@
 
 import { EnvCapability } from "../../common/capability.js";
 import dedent from "dedent";
+import { CallCtx } from "../../run/CallCtx.js";
+import { type, typeErrorMessage } from "../../utils/typecheck.js";
+import { attachOffendingValue } from "../../errors.js";
+import { APair } from "../../values/primitives/APair.js";
+import { ANil, nil } from "../../values/primitives/ANil.js";
+import { theVoid } from "../../values/primitives/AVoid.js";
+import type { SchemeValue } from "../../values/types.js";
 import polyglot from "./polyglot.js";
 import equality from "../r7rs/equality.js";
 import numeric from "../r7rs/numeric.js";
@@ -96,6 +104,45 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
       // ═══════════════════════════════════════════════════════════════════════════
       // STDLIB COMPLETION — pure functions over primitives already bound elsewhere
       // ═══════════════════════════════════════════════════════════════════════════
+      // nth — Clojure: (nth coll index) is index-FIRST, collection second (opposite
+      // R7RS list-ref). Walks pairs; also accepts a raw JS array (membrane face).
+      // Out-of-range on a proper list → nil; improper tail at the index → void.
+      nth: symbol.native`nth: the element at index (Clojure — index first; polymorphic over array/pair)`(
+        {
+          input: [z.schemeNumber, z.schemeValue],
+          output: [z.schemeValue],
+          type: dedent`
+          {
+            <T>(index: number, list: List<T>): T | null;
+            <T>(index: number, list: readonly T[]): T | null;
+          }
+        `,
+        },
+        function (this: CallCtx, index: SchemeValue, obj: SchemeValue) {
+          const idx = Number(index);
+          if (obj instanceof APair) {
+            let node: APair = obj;
+            let count = 0;
+            while (count < idx) {
+              const next = node.cdr;
+              if (!next || next instanceof ANil || node.have_cycles("cdr")) {
+                return nil;
+              }
+              if (!(next instanceof APair)) {
+                return theVoid;
+              }
+              node = next;
+              count++;
+            }
+            return node.car;
+          } else if (Array.isArray(obj)) {
+            return obj[idx];
+          } else {
+            throw attachOffendingValue(new TypeError(typeErrorMessage("nth", type(obj), "array or pair", 2)), obj);
+          }
+        },
+      ),
+
       // str — Clojure: concatenate the display form of every arg. Strings pass
       // through as-is; everything else prints via `repr` (the external-representation
       // protocol, r7rs/equality.ts) before concatenating with string-append.

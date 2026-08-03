@@ -113,9 +113,9 @@ describe("lists Contract precision — member/assoc: obj is z.schemeValue (not z
   });
 });
 
-describe("lists Contract precision — nth: index is z.schemeNumber, not z.custom<unknown>() (obj stays z.custom<unknown>() BY DESIGN — LIPS-polymorphic array|pair, matches reverse's own precedent)", () => {
-  // INVARIANT: nth's index decodes as a scheme number, obj deliberately stays unknown
-  test("NEW shape: [z.schemeNumber, z.custom<unknown>()] decodes [AExact|AInexact, unknown] — matches nth's real migrated contract", () => {
+describe("lists Contract precision — index-first access schema (historical pin for polyglot-clojure nth; R7RS uses list-ref)", () => {
+  // INVARIANT: index-first (nth) schema shape — now owned by scheme/polyglot-clojure
+  test("NEW shape: [z.schemeNumber, z.custom<unknown>()] decodes [AExact|AInexact, unknown] — matches nth's polyglot-clojure contract", () => {
     expectTypeOf<DecodedArgs<[typeof z.schemeNumber, z.ZodCustom<unknown>]>>().toEqualTypeOf<
       [z.output<typeof z.schemeNumber>, unknown]
     >();

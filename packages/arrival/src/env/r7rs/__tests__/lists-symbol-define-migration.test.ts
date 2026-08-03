@@ -2,18 +2,19 @@
 // `scheme/lists` (docs/design-history/symbol-define-static-program-validation.md §1/§2.1/§3.3b/§4.2).
 //
 // Unlike control.ts's H2 sibling (ALL doors) this pack is ALREADY the shape §4.2's
-// Pass 2 exists to migrate a pack TOWARD: 18 `symbol.native` + 1 `symbol.sequence`
+// Pass 2 exists to migrate a pack TOWARD: 17 `symbol.native` + 1 `symbol.sequence`
 // (`map`), every callable/constant contract-authored per-define (never a shapeless
 // default except the two genuinely-variadic-any ops, `list`/`append`, which are an
 // authored judgment call per §1.2's own carve-out — not migration debt), plus 4
-// `symbol.notImplemented` purity doors on the mutator family. It never carried a
+// `symbol.notImplemented` purity doors on the mutator family. (`nth` lives on
+// scheme/polyglot-clojure — Clojure index-first.) It never carried a
 // `prelude` field (the census's "23 production preludes", §4.1, does not include
 // it — grep-verified: `grep -rln "prelude:" src/env/` does not return this file).
 // Pass 1 (mechanical decomposition) has NOTHING to run over: zero `symbol.define`,
 // zero `symbol.defineSyntax`. What DOES apply, one row each:
 //
-//   ROW 1 — structural: no prelude field; the exact 23-symbol population and its
-//     kind split (18 native / 1 sequence / 4 door); every native/sequence def
+//   ROW 1 — structural: no prelude field; the exact 22-symbol population and its
+//     kind split (17 native / 1 sequence / 4 door); every native/sequence def
 //     carries a real `in`/`out` contract (never `undefined`); every door carries
 //     no contract surface (§1.1/§1.2 apply only to `symbol.define`).
 //   ROW 2 — bake: `.lower({})` succeeds with zero deps/config (this pack
@@ -28,7 +29,7 @@
 //     srfi-26's ROW 3): `define-bake.ts`'s §2.1 FV/locality/forward-reference/
 //     role-shape checks only walk `kind === "define"` bodies; this pack has none,
 //     so `lower({})` cannot throw any of them — structurally unreachable, not
-//     merely unexercised. `exports()` (§2.2) derives the 23-name surface purely
+//     merely unexercised. `exports()` (§2.2) derives the 22-name surface purely
 //     from `spec.symbols` keys (the `macroAwareDefineNames(spec.prelude)` half of
 //     the union is vacuous — no prelude to parse).
 //   ROW 5 — the R7RS §6.4 domain boundary the task names explicitly: this pack
@@ -87,7 +88,6 @@ const NATIVE_NAMES = [
   "assoc",
   "append",
   "reverse",
-  "nth",
 ] as const;
 
 const SEQUENCE_NAMES = ["map"] as const;
@@ -101,12 +101,12 @@ function doorDef(name: string): DoorSymbolDef {
   return def;
 }
 
-describe("ROW 1 — structural: no prelude, the 23-symbol population is exactly native/sequence/door", () => {
+describe("ROW 1 — structural: no prelude, the 22-symbol population is exactly native/sequence/door", () => {
   it("the capability declares no prelude field", () => {
     expect(listsPack.spec.prelude).toBeUndefined();
   });
 
-  it("the capability's symbol population is EXACTLY the documented 23 names", () => {
+  it("the capability's symbol population is EXACTLY the documented 22 names (nth lives on polyglot-clojure)", () => {
     expect(Object.keys(symbols).sort()).toEqual([...ALL_NAMES].sort());
   });
 
@@ -211,7 +211,7 @@ describe("ROW 4 — FV law: N/A structurally (no symbol.define body exists to wa
     expect(caught).not.toBeInstanceOf(ProvenanceRoleShapeError);
   });
 
-  it("exports() derives exactly the 23-name surface from spec.symbols alone (the prelude half of the union is vacuous)", async () => {
+  it("exports() derives exactly the 22-name surface from spec.symbols alone (the prelude half of the union is vacuous)", async () => {
     const exported = await listsPack.exports();
     expect([...exported].sort()).toEqual([...ALL_NAMES].sort());
   });
