@@ -793,7 +793,7 @@ export default EnvCapability.define("scheme/lists", {
       },
     ),
 
-    nth: symbol.native`nth: the element at index (LIPS-polymorphic over array/pair)`(
+    nth: symbol.native`nth: the element at index (polymorphic over array/pair)`(
       // index = z.schemeNumber; obj/output stay z.schemeValue (pair | raw JS array path).
       {
         input: [z.schemeNumber, z.schemeValue],
