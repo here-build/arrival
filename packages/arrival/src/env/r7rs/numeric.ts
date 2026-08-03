@@ -1466,7 +1466,7 @@ export default EnvCapability.define("scheme/numeric", {
     "bitwise-not": symbol.notImplemented`bitwise-not: ${BITWISE_DOOR}`,
     "arithmetic-shift": symbol.notImplemented`arithmetic-shift: ${BITWISE_DOOR}`,
 
-    // ── LIPS-style aliases (canonical-named cores under the alias key) ────────────
+    // ── Polyglot aliases (canonical-named cores under the alias key) ────────────
     "**": symbol.native`**: exponentiation (alias of expt)`(contractFromSpec(exptSpec), exptOp),
     "%": symbol.native`%: remainder (alias)`(contractFromSpec(remainderSpec), remainderOp),
     "==": symbol.native`==: numeric equality (alias of =)`(contractFromSpec(numEqSpec), numEqOp),
