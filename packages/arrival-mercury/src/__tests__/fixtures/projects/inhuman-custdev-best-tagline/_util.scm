@@ -9,9 +9,8 @@
 ;;   (string-concat ", " a b c)             loose scalars  → "a, b, c"
 ;;   (string-concat "" (map :id xs))        sep "" = concat → "id1id2id3"
 (define (string-concat sep . items)
-  (join sep
-    (apply append
-      (map (lambda (x) (if (or (pair? x) (null? x)) x (list x))) items))))
+  (string-join (apply append
+      (map (lambda (x) (if (or (pair? x) (null? x)) x (list x))) items)) sep))
 
 (define (min-int a b) (if (< a b) a b))
 

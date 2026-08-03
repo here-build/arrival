@@ -115,7 +115,7 @@
 
 (define (hints-signature hints)
   (string-concat ";"
-    (map (lambda (h) (string-append (:tagline h) ":" (join "," (:reached h))))
+    (map (lambda (h) (string-append (:tagline h) ":" (string-join (:reached h) ",")))
          hints)))
 
 ;; ── reflection ───────────────────────────────────────────────────────
@@ -131,7 +131,7 @@
       :sys        sys
       :current    current
       :reactions  (reactions-summary reactions personas)
-      :hints      (map (lambda (h) (dict :tagline (:tagline h) :reached (join ", " (:reached h))))
+      :hints      (map (lambda (h) (dict :tagline (:tagline h) :reached (string-join (:reached h) ", ")))
                     hints))))
 
 ;; ── inner GEPA loop ──────────────────────────────────────────────────

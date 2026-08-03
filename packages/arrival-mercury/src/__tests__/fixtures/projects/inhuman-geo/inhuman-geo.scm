@@ -39,7 +39,7 @@
 
 ;; ── prelude (same helpers the reference pipeline spills) ──────────────────
 (define n->s number->string)
-(define (lines xs) (join "\n" xs))
+(define (lines xs) (string-join xs "\n"))
 (define (mean xs) (/ (apply + xs) (length xs)))
 
 ;; ── model environment (materialization — swap envs by editing only this) ──

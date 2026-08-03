@@ -189,7 +189,7 @@
 ;; ── Stage C: audit (Sonnet, structured, NO recovery) ──────────────────────
 (define (cluster->text c)
   (string-append (:title c) " (" (n->s (:count c)) "): " (:description c)
-    "\n    forms: " (join "; " (:forms c))))
+    "\n    forms: " (string-join (:forms c) "; ")))
 
 (define audit
   (run-audit "audit" :meta (dict :model auditor)

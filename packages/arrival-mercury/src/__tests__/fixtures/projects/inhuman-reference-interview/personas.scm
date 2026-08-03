@@ -23,7 +23,7 @@
 
 ;; ── shared prelude (spilled into interview.scm too) ───────────────────────
 (define n->s number->string)
-(define (lines xs) (join "\n" xs))
+(define (lines xs) (string-join xs "\n"))
 
 ;; stable de-dup preserving first-seen order (LIPS reduce is element-first: (x acc))
 (define (dedupe xs)

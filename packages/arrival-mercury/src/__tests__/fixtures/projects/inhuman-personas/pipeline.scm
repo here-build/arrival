@@ -33,7 +33,7 @@
 
 ;; ── tiny prelude ─────────────────────────────────────────────────────────
 (define n->s number->string)
-(define (lines xs) (join "\n" xs))
+(define (lines xs) (string-join xs "\n"))
 
 ;; stable de-dup preserving first-seen order (reduce here is element-first: (x acc))
 (define (dedupe xs)
