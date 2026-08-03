@@ -48,8 +48,6 @@ import {
 import { parse_complex, parse_float, parse_integer, parse_rational } from "../../reader/parsing.js";
 import type { AListAlike, SchemeValue } from "../../values/types.js";
 
-import { to_array } from "../pack-helpers.js";
-
 export default EnvCapability.define("scheme/strings", {
   symbols: (symbol, z) => ({
     "make-string": symbol.native`make-string: a string of k copies of a fill character`(
@@ -205,33 +203,12 @@ export default EnvCapability.define("scheme/strings", {
       },
     ),
 
-    // Substring search. `string-contains` is SRFI-13: the index of the first
-    // occurrence of `sub` in `str`, or #f when absent. (#f is the ONLY false value
-    // in Scheme — an index of 0 is truthy — so `(if (string-contains h n) …)` reads
-    // naturally.) `string-contains?` is its boolean-predicate twin (the `?`-suffix
-    // predicate convention). Both carry the lineage of the strings they searched, so a
-    // "this name contains 'Alloy'" decision over an evidence read stays grounded.
-    "string-contains": symbol.native`string-contains: index of the first occurrence of sub, or #f`(
-      { input: [z.string, z.string], output: [z.union([z.exact, z.boolean])] },
-      function (this: CallCtx, str, sub) {
-        const i = stringValue(str).indexOf(stringValue(sub));
-        return withInputProvenance([str, sub], i === -1 ? bool(false) : new AExact(i));
-      },
-    ),
-
-    "string-contains?": symbol.native`string-contains?: #t iff str contains sub`(
-      { input: [z.string, z.string], output: [z.boolean] },
-      function (this: CallCtx, str, sub) {
-        return withInputProvenance([str, sub], bool(stringValue(str).includes(stringValue(sub))));
-      },
-    ),
-
     "string-append": symbol.native`string-append: concatenation of all string arguments`(
       { input: [], inputRest: z.string, output: [z.union([z.string, z.string])] },
       // Collapsing op: the result inherits lineage from every input — and DEEP, so a
       // nested structure (a list/vector/array of inference-stamped values) is hoisted,
       // not just the top-level AValue args. Without this, `(string-append prefix
-      // (join "" parts))` forgets where `parts` came from. See provenance-collapse.ts.
+      // (string-join parts ""))` forgets where `parts` came from. See provenance-collapse.ts.
       function (this: CallCtx, ...strs) {
         return taintString(strs.map(stringValue).join(""), collapseProvenance(...strs));
       },
@@ -393,12 +370,11 @@ export default EnvCapability.define("scheme/strings", {
       },
     ),
 
-    // ---------------------------------------------------------------------
-    // `concat`/`join` are non-R7RS extension names (`split` is NOT bound
-    // in this pack — `string-split` lives in srfi-13.ts); `substring`
-    // and `string->number` are genuine R7RS. `native` means the (identity) zod
-    // contract never runs — the impls receive Scheme values directly.
-    // ---------------------------------------------------------------------
+    // `substring` and `string->number` are genuine R7RS. `native` means the
+    // (identity) zod contract never runs — the impls receive Scheme values directly.
+    // String fold-with-separator is SRFI-13 `string-join` (list first); the sep-first
+    // polyglot spelling `join` lives in scheme/polyglot. Substring search is SRFI-13
+    // `string-contains` / `string-contains?`.
     substring: symbol.native`substring: the slice of the string between start and end`(
       { input: [z.string, z.schemeNumber, z.schemeNumber.optional()], output: [z.string] },
       function (this: CallCtx, string, start, end) {
@@ -411,24 +387,6 @@ export default EnvCapability.define("scheme/strings", {
             end === undefined ? undefined : Number(coerceNumeric(end).valueOf()),
           ),
         );
-      },
-    ),
-
-    concat: symbol.rosetta`concat: the concatenation of all string arguments (arrival extension)`(
-      { input: [z.string], inputRest: z.string, output: [z.string] },
-      function (this: CallCtx, ...args) {
-        return args.join("");
-      },
-    ),
-
-    join: symbol.native`join: the list elements folded to one string with a separator (arrival extension)`(
-      { input: [z.string, z.listAlike], output: [z.union([z.string, z.string])] },
-      function (this: CallCtx, separator: SchemeValue, list: SchemeValue): AString {
-        // Collapsing op: fold the list to one string, then re-stamp the DEEP union of
-        // every element's lineage (+ the separator's) — else `(join sep inferred-list)`
-        // strips the provenance the trace wires on. See provenance-collapse.ts.
-        const joined = to_array("list->array")(list).join(stringValue(separator));
-        return taintString(String(joined), collapseProvenance(separator, list));
       },
     ),
 
