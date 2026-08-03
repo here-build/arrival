@@ -106,6 +106,22 @@ export const RUNTIME_MANIFEST: Readonly<Record<string, RuntimeEntry>> = {
   car: e("car", "stage0"),
   cdr: e("cdr", "stage0"),
 
+  // ── Env-native (live inhuman plane already binds these) ───────────────────
+  // Census gap that made `inhuman build --no-emit` throw on real examples.
+  "number->string": e("numberToString", "stage0"),
+  "string?": e("stringP", "stage0"),
+  "string-join": e("stringJoin", "stage0"), // SRFI-13 (list, [delimiter])
+  join: e("join_", "stage0"), // polyglot sep-first twin of string-join
+  abs: e("abs_", "stage0"),
+  range: e("range_", "stage0"), // plane helper, not R7RS
+  // reverse: ramda reverse matches list face under loose arrays
+  reverse: e("reverse_", "ramda", "reverse"),
+
+  // Polyglot member access (genesis seed / examples dialect — not plane field/values-of)
+  "@": e("at", "stage0"),
+  "@values": e("atValues", "stage0"),
+  "@keys": e("atKeys", "stage0"),
+
   // ── cold stdlib → ramda (loose-friendly polymorphism) ─────────────────────
   length: e("length_", "ramda", "length"),
 

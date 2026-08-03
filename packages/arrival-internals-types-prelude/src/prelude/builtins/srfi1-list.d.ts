@@ -1,6 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // the SRFI-1-adjacent list family bound in the inference env: `take`,
-// `drop`, `concat`, `flatten`, `fold`, `nth`, `for-each`, `count`, `remove`.
+// `drop`, `fold`, `nth`, `for-each`, `count`, `remove`.
+// (`concat` deleted — use R7RS string-append / SRFI-13 string-join; `flatten` not bound.)
 //
 // NOT typed here, despite SRFI-1-familiar names — unbound in the inference env,
 // so typing them would advertise symbols the sampler can select but the
@@ -16,27 +17,11 @@
 // The lens models a Scheme list as PRE's `List<T>` = `T[]`. Semantics that
 // change the signatures:
 //   • take / drop  — COUNT-first, list-LAST: prefix / suffix of length n.
-//   • concat       — ⚠️ the LIVE `concat` is the LIPS STRING concat, variadic over
-//                    strings → a string. It is NOT list append (`(concat (list 1 2) …)`
-//                    throws "Expecting string got pair"). Do NOT type it (List,List)→List.
-//   • flatten      — DEEP, fully-recursive flatten; depth unbounded → element type
-//                    collapses to `unknown`, but the argument stays pinned to a list.
-//   • fold         — (fn, init, list) with callback (element, acc) — same Scheme
-//                    convention as `reduce` (arrival runtime / SRFI-1 left-fold).
-//   • nth          — INDEX-first, list-LAST → the element, or the miss value out of range.
-//   • for-each     — (fn, list…) for side effects; yields the unspecified value (void).
-//   • count        — PRED-first, list-LAST → how many elements satisfy pred (number).
-//
-// Mis-arg bites (2345); wrong-typing a threaded result bites (2322). Base types
-// (`List`/`Pair`/`Nil` + plain `number`/`string`/`boolean`/`void`) come from PRE (../types.d.ts).
-// ─────────────────────────────────────────────────────────────────────────────
 
   // Prefix / suffix by count. Count-first, list-last; element type preserved.
 declare function take<T>(n: number, xs: List<T>): List<T>;
 declare function drop<T>(n: number, xs: List<T>): List<T>;
 
-  // ⚠️ STRING concat (LIPS native) — variadic over strings → string. NOT list append.
-declare function concat(...parts: string[]): string;
 
   // Deep recursive flatten. Depth unbounded → element type collapses to `unknown`;
   // the argument is still pinned to a list so a non-list bites.

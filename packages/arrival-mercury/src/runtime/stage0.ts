@@ -342,6 +342,62 @@ export function stringCiEq(...ss: string[]): boolean {
   return ss.slice(1).every((s) => s.toLowerCase() === first);
 }
 
+// ── Env-native shims the live inhuman plane already has; emit must match. ─────
+// R7RS / polyglot / SRFI names used by examples and notebooks. Membrane face:
+// lists are arrays, dicts are plain objects (require json/yaml, schema'd output).
+
+/** `number->string` — R7RS §6.7; radix optional (default 10). */
+export const numberToString = (n: number, radix?: number): string =>
+  radix === undefined ? String(n) : Number(n).toString(radix);
+
+/** `string?` — R7RS type predicate. */
+export const stringP = (v: unknown): boolean => typeof v === "string";
+
+/** `string-join` — SRFI-13: (string-join list [delimiter]) → string. Default delimiter: space. */
+export const stringJoin = (list: readonly unknown[], delimiter?: string): string =>
+  list.map((x) => (x == null ? "" : String(x))).join(delimiter === undefined ? " " : delimiter);
+
+/** `join` — polyglot sep-first twin: (join separator list) → string. */
+export const join_ = (separator: string, list: readonly unknown[]): string =>
+  list.map((x) => (x == null ? "" : String(x))).join(separator);
+
+/** `abs` — R7RS numeric. */
+export const abs_ = (n: number): number => Math.abs(n);
+
+/** `range` — plane helper: (range n) → (0 1 … n-1). */
+export const range_ = (n: number): number[] => {
+  const len = Math.max(0, Math.floor(Number(n)) || 0);
+  const out: number[] = [];
+  for (let i = 0; i < len; i++) out.push(i);
+  return out;
+};
+
+/**
+ * `@` — polyglot member read. Loose emit face: plain objects / arrays.
+ * Missing key → "" (same as the plane's `field` rosetta, not polyglot's nil).
+ */
+export function at(obj: unknown, key: unknown): unknown {
+  if (obj == null) return "";
+  const k = key == null ? "" : String(key).replace(/^:/, "");
+  if (Array.isArray(obj)) {
+    const i = Number(k);
+    return Number.isInteger(i) && i >= 0 && i < obj.length ? obj[i] : "";
+  }
+  if (typeof obj === "object") {
+    const rec = obj as Record<string, unknown>;
+    return Object.hasOwn(rec, k) ? rec[k] : "";
+  }
+  return "";
+}
+
+/** `@values` — own member values (vector-as-array on the membrane). */
+export const atValues = (obj: unknown): unknown[] =>
+  obj != null && typeof obj === "object" && !Array.isArray(obj) ? Object.values(obj as object) : [];
+
+/** `@keys` — own member keys. */
+export const atKeys = (obj: unknown): string[] =>
+  obj != null && typeof obj === "object" && !Array.isArray(obj) ? Object.keys(obj as object) : [];
+
 // NOTE: do NOT re-export runtime-manifest from this file. The oracle copies
 // stage0.ts verbatim into a scratch dir (self-contained, zero imports).
 // Manifest lives only in ./runtime-manifest.ts.
