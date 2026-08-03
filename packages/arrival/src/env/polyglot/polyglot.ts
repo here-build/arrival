@@ -7,9 +7,11 @@
 //   scheme/polyglot-racket   — threading (~>/~>>), dict-*, assoc-ref
 //
 // HERE: member-access (@/@?/@keys/dict) + universal composition (compose/pipe/flow)
-// — not any one dialect's idiom (dialect aliases like `comp` live in their packs).
-// `nil` (empty-list alias) and `%interleave` (cross-dialect dict/zipmap/alist helper)
-// stay here (multi-consumer). `%dict-guard` lives in polyglot-racket (sole consumers).
+// + `join` (sep-first string fold — polyglot twin of SRFI-13 `string-join`, which is
+// list-first) — not any one dialect's idiom (dialect aliases like `comp` live in
+// their packs). `nil` (empty-list alias) and `%interleave` (cross-dialect
+// dict/zipmap/alist helper) stay here (multi-consumer). `%dict-guard` lives in
+// polyglot-racket (sole consumers).
 //
 // Member access model: docs/grammar.md §MEMBER-ACCESS; mechanism: docs/membrane.md
 // §MEMBER-READ. Two syntaxes over one interop read → receiver's tf(get|has|keys).
@@ -27,7 +29,8 @@
 import { EnvCapability } from "../../common/capability.js";
 import { type CallCtx } from "../../symbol/index.js";
 import dedent from "dedent";
-import { schemeBool } from "../../values/op-helpers.js";
+import { schemeBool, stringValue } from "../../values/op-helpers.js";
+import { collapseProvenance, taintString } from "../../provenance/provenance-collapse.js";
 import { AString } from "../../values/primitives/AString.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { ACharacter } from "../../values/primitives/ACharacter.js";
@@ -38,6 +41,7 @@ import { APair } from "../../values/primitives/APair.js";
 import { chargeHeap } from "../../heap-budget.js";
 import { type SchemeValue } from "../../values/types.js";
 import { type AValue } from "../../values/primitives/AValue.js";
+import { to_array } from "../pack-helpers.js";
 import equality from "../r7rs/equality.js";
 import lists from "../r7rs/lists.js";
 
@@ -248,6 +252,29 @@ export default EnvCapability.define("scheme/polyglot", {
       // so this binds exactly that. A CONSTANT define: the contract is the single
       // value schema `z.nil`, validated once at bake.
       nil: symbol.define`nil: the polyglot alias for the empty list '() (the ANil singleton)`(z.nil, `'()`),
+
+      // ═══════════════════════════════════════════════════════════════════════════
+      // STRING FOLD — sep-first (polyglot); list-first is SRFI-13 string-join
+      // ═══════════════════════════════════════════════════════════════════════════
+      // `join` — (join separator list) → string. Same fold as SRFI-13 `string-join`,
+      // but separator FIRST (Clojure `clojure.string/join`, Python `"sep".join`, and
+      // the form models reach for). Not R7RS; not an "arrival invention" in the core
+      // string pack — lives here as the shared polyglot spelling. Impl is native (not
+      // a define body calling string-join) so this pack stays free of an srfi-13 dep
+      // edge (C3: srfi-13 sits earlier in BASE_PACKS than polyglot).
+      join: symbol.native`join: list elements folded to one string with separator first — polyglot twin of SRFI-13 string-join`(
+        {
+          input: [z.string, z.listAlike],
+          output: [z.union([z.string, z.string])],
+          type: "(separator: string, list: List<string>) => string",
+        },
+        function (this: CallCtx, separator: SchemeValue, list: SchemeValue): AString {
+          const joined = to_array("join")(list)
+            .map(stringValue)
+            .join(stringValue(separator));
+          return taintString(joined, collapseProvenance(separator, list));
+        },
+      ),
 
       // ═══════════════════════════════════════════════════════════════════════════
       // COMPOSITION (shared lineage — compose/pipe are Racket/CL/Clojure-adjacent
