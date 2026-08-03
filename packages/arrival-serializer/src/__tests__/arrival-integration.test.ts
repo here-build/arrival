@@ -1,18 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { toSExprString } from "../serializer";
-// Import what we can from lips
+// Arrival evaluator + value types
 import { exec, execState, EnvCapability, schemeToJs, ANil, LexicalScope } from "@inhuman.tools/arrival";
 import { AExact, AString, ASymbol, APair } from "@inhuman.tools/arrival/reflect-internals";
 // Import custom matchers
 import "@inhuman.tools/arrival";
 
-describe("LIPS Integration", () => {
-  it("should handle simple lips evaluation results", async () => {
-    // Test basic lips evaluation
+describe("Arrival Integration", () => {
+  it("should handle simple evaluation results", async () => {
+    // Test basic evaluation
     const result = await exec("(+ 1 2)");
-    console.log("lips result:", result);
-    console.log("lips result type:", typeof result);
-    console.log("lips result constructor:", result?.constructor?.name);
+    console.log("result:", result);
+    console.log("result type:", typeof result);
+    console.log("result constructor:", result?.constructor?.name);
 
     // Try to serialize the result
     const serialized = toSExprString(result);
@@ -23,42 +23,42 @@ describe("LIPS Integration", () => {
     expect(serialized).not.toContain(":__value__"); // Should not expose internals
   });
 
-  it("should handle lips list results", async () => {
-    // Test lips list evaluation
+  it("should handle list results", async () => {
+    // Test list evaluation
     const result = await exec("(list 1 2 3)");
-    console.log("lips list result:", result);
-    console.log("lips list result type:", typeof result);
-    console.log("lips list result constructor:", result?.constructor?.name);
+    console.log("list result:", result);
+    console.log("list result type:", typeof result);
+    console.log("list result constructor:", result?.constructor?.name);
 
     // Try to serialize the result
     const serialized = toSExprString(result);
-    console.log("lips list serialized:", serialized);
+    console.log("list serialized:", serialized);
     expect(serialized).toBeDefined();
   });
 
-  it("should handle lips symbol results", async () => {
-    // Test lips symbol evaluation
+  it("should handle symbol results", async () => {
+    // Test symbol evaluation
     const result = await exec("'hello");
-    console.log("lips symbol result:", result);
-    console.log("lips symbol result type:", typeof result);
-    console.log("lips symbol result constructor:", result?.constructor?.name);
+    console.log("symbol result:", result);
+    console.log("symbol result type:", typeof result);
+    console.log("symbol result constructor:", result?.constructor?.name);
 
     // Try to serialize the result
     const serialized = toSExprString(result);
-    console.log("lips symbol serialized:", serialized);
+    console.log("symbol serialized:", serialized);
     expect(serialized).toBeDefined();
   });
 
-  it("should handle complex lips results", async () => {
-    // Test more complex lips evaluation
+  it("should handle complex results", async () => {
+    // Test more complex evaluation
     const result = await exec("(map (lambda (x) (* x 2)) (list 1 2 3))");
-    console.log("lips complex result:", result);
-    console.log("lips complex result type:", typeof result);
-    console.log("lips complex result constructor:", result?.constructor?.name);
+    console.log("complex result:", result);
+    console.log("complex result type:", typeof result);
+    console.log("complex result constructor:", result?.constructor?.name);
 
     // Try to serialize the result
     const serialized = toSExprString(result);
-    console.log("lips complex serialized:", serialized);
+    console.log("complex serialized:", serialized);
 
     // Should get a clean representation of the mapped results
     expect(serialized).toBeDefined();
@@ -68,8 +68,8 @@ describe("LIPS Integration", () => {
     expect(serialized).toContain("6"); // 3 * 2
   });
 
-  it("should handle various lips types", async () => {
-    // Test different types that LIPS can return
+  it("should handle various scheme types", async () => {
+    // Test different types the evaluator can return
     const tests = [
       { expr: "42", expected: "42" },
       { expr: "3.14", expected: "3.14" }, // LNumber float
@@ -90,7 +90,7 @@ describe("LIPS Integration", () => {
     }
   });
 
-  it("should research keyword vs symbol distinction in LIPS", async () => {
+  it("should research keyword vs symbol distinction", async () => {
     const tests = [
       { expr: "'hello", desc: "quoted symbol" },
       { expr: ":hello", desc: "colon syntax (keyword?)" },
@@ -121,8 +121,8 @@ describe("LIPS Integration", () => {
     }
   });
 
-  it("should handle special lips types", async () => {
-    // Test special LIPS types
+  it("should handle special scheme types", async () => {
+    // Test special scheme types
     const specialTests = [
       { expr: "#\\a", desc: "character" }, // LCharacter
       { expr: "(values 1 2 3)", desc: "multiple values" }, // Values
@@ -174,7 +174,7 @@ describe("exec with proper environment", () => {
     expect(rawResults[2].__name__).toBe("hello");
   });
 
-  it("should handle lists (returns LIPS Pair)", async () => {
+  it("should handle lists (returns Pair)", async () => {
     const result = (await execState("(list 1 2 3)")).values[0];
     expect(result).toBeInstanceOf(APair);
     expect(result.car).toBeInstanceOf(AExact);
@@ -197,7 +197,7 @@ describe("exec with proper environment", () => {
     expect(result).toBe(true);
   });
 
-  it("should handle complex expressions (returns LIPS structures)", async () => {
+  it("should handle complex expressions (returns Pair structures)", async () => {
     const result = (await execState("(map (lambda (x) (* x 2)) (list 1 2 3))")).values[0];
     expect(result).toBeInstanceOf(APair);
     // Result is Pair with SchemeExact values
