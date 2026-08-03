@@ -13,7 +13,7 @@
 //   (The genuinely-impure cousin — println — is doored instead, in
 //   env/polyglot-stubs.ts's Clojure section.)
 //
-// NOTE: `first` (SRFI-1), `flatten` (r7rs/lists.ts, LIPS extension) and `curry`
+// NOTE: `first` (SRFI-1), `flatten` (r7rs/lists.ts, arrival extension) and `curry`
 // (SRFI-235-adjacent, srfi-235.ts) are ALREADY bound elsewhere — deliberately not
 // redefined here.
 //
