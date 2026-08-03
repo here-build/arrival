@@ -18,7 +18,7 @@
 // (errors-as-doors — the rejection teaches, a wrong answer doesn't).
 //
 // The r7rs/numeric.ts pack doors the core five (`bitwise-and`/`bitwise-ior`/
-// `bitwise-xor`/`bitwise-not`/`arithmetic-shift`) and the LIPS aliases
+// `bitwise-xor`/`bitwise-not`/`arithmetic-shift`) and the polyglot aliases
 // (`|` `&` `~` `>>` `<<`) with the same rationale; this pack doors the one verb it
 // ever owned, `bit-count`.
 
