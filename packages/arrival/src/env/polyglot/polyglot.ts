@@ -237,17 +237,17 @@ export default EnvCapability.define("scheme/polyglot", {
       ),
 
       // ═══════════════════════════════════════════════════════════════════════════
-      // LIPS DIALECT (shared — empty-list alias)
+      // POLYGLOT EMPTY-LIST ALIAS
       // ═══════════════════════════════════════════════════════════════════════════
-      // nil — the LIPS-dialect alias for the empty list. Same principle as the
-      // sibling packs' idioms: LLMs and humans reach for whichever Lisp idiom they
-      // already know. R7RS spells the empty list '() ; LIPS (and the Scheme the
-      // models were trained on) also binds the symbol `nil` to it. Because polyglot
-      // is a base pack assembled onto user_env, `nil` inherits everywhere (the
-      // inference plane is a user_env child, so it gets it for free). '() reads to the
-      // ANil singleton, so this binds exactly that. A CONSTANT define: the
-      // contract is the single value schema `z.nil`, validated once at bake.
-      nil: symbol.define`nil: the LIPS-dialect alias for the empty list '() (the ANil singleton)`(z.nil, `'()`),
+      // nil — polyglot alias for the empty list. Same principle as the sibling
+      // packs' idioms: LLMs and humans reach for whichever Lisp idiom they already
+      // know. R7RS spells the empty list '() ; many Lisps (and the Scheme the models
+      // were trained on) also bind the symbol `nil` to it. Because polyglot is a base
+      // pack assembled onto user_env, `nil` inherits everywhere (the inference plane
+      // is a user_env child, so it gets it for free). '() reads to the ANil singleton,
+      // so this binds exactly that. A CONSTANT define: the contract is the single
+      // value schema `z.nil`, validated once at bake.
+      nil: symbol.define`nil: the polyglot alias for the empty list '() (the ANil singleton)`(z.nil, `'()`),
 
       // ═══════════════════════════════════════════════════════════════════════════
       // COMPOSITION (shared lineage — compose/pipe are Racket/CL/Clojure-adjacent
