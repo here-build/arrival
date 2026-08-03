@@ -693,12 +693,8 @@ const BITWISE_DOOR =
   "doored under the one-number representation (safe-integer exacts, no bigints): JS bitwise operators truncate to 32 bits — silent corruption above 2^31; here lieth the dragons. See the Bitwise section note in env/r7rs/numeric.ts and arrival-one-number-rework.md";
 
 // ════════════════════════════════════════════════════════════════════════════
-// Reused op specs / cores — aliases (`**`/`%`/`==`/`|`/`&`/`~`) bind the SAME op
-// object as their canonical sibling. Asymmetry: `==` binds the raw `numEqOp` core,
-// canonical `=` binds it wrapped in `looseCompare` (nil-tolerant overlay) — the alias
-// skips the overlay. Specs named so an alias's `symbol.native` declaration builds the
-// SAME Contract shape (`contractFromSpec(spec)`) while passing the shared impl ref.
-// `arithmeticShiftSpec` also consumed by `>>`/`<<` inline ops.
+// Reused op specs / cores — shared by the canonical R7RS bindings below.
+// JS-shaped aliases (`**` `%` `==` `|` `&` `~` `>>` `<<`) live in scheme/sugarcoat.
 // ════════════════════════════════════════════════════════════════════════════
 
 const exptSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: schemeExpt };
@@ -1466,13 +1462,7 @@ export default EnvCapability.define("scheme/numeric", {
     "bitwise-not": symbol.notImplemented`bitwise-not: ${BITWISE_DOOR}`,
     "arithmetic-shift": symbol.notImplemented`arithmetic-shift: ${BITWISE_DOOR}`,
 
-    // ── Polyglot aliases (canonical-named cores under the alias key) ────────────
-    "**": symbol.native`**: exponentiation (alias of expt)`(contractFromSpec(exptSpec), exptOp),
-    "%": symbol.native`%: remainder (alias)`(contractFromSpec(remainderSpec), remainderOp),
-    "==": symbol.native`==: numeric equality (alias of =)`(contractFromSpec(numEqSpec), numEqOp),
-    "|": symbol.notImplemented`|: bitwise alias — ${BITWISE_DOOR}`,
-    "&": symbol.notImplemented`&: bitwise alias — ${BITWISE_DOOR}`,
-    "~": symbol.notImplemented`~: bitwise alias — ${BITWISE_DOOR}`,
+    // JS-shaped aliases (** % == | & ~ >> <<) live in scheme/sugarcoat — not R7RS.
 
     // ── Inline misc ops (own coercion + marshalled call; no provenance layer) ─────
     // Each impl below has a CONCRETE fixed-arity signature (unlike nativeNumericOp/
@@ -1506,8 +1496,6 @@ export default EnvCapability.define("scheme/numeric", {
       ONE_ARG_NUM_OUTPUT_CONTRACT,
       oneMinusFn as (...args: unknown[]) => unknown,
     ),
-    ">>": symbol.notImplemented`>>: bitwise-shift alias — ${BITWISE_DOOR}`,
-    "<<": symbol.notImplemented`<<: bitwise-shift alias — ${BITWISE_DOOR}`,
     inexact: symbol.native`inexact: exact→inexact conversion`(
       INEXACT_CONTRACT,
       inexactFn as (...args: unknown[]) => unknown,

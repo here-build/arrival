@@ -35,11 +35,15 @@ import polyglot from "./polyglot/polyglot.js";
 import polyglotClojure from "./polyglot/polyglot-clojure.js";
 import polyglotLisp from "./polyglot/polyglot-lisp.js";
 import polyglotRacket from "./polyglot/polyglot-racket.js";
+import sugarcoat from "./sugarcoat/sugarcoat.js";
 import { allR7rs, binding, exceptions, lists } from "./r7rs/index.js";
 import { allSrfi, srfi1 } from "./srfi/index.js";
 
 // polyglotStubs is its OWN entry (not a SRFI) — cross-dialect doors with no SRFI/R7RS lineage.
+// sugarcoat is its OWN entry — JS-shaped aliases (** % == …) for the sugarcoat surface.
 // binding/lists/exceptions/srfi1 pulled out of spreads for C3 tail placement (header).
+// sugarcoat deps [numeric, lists]: lists is in the C3 tail, so sugarcoat sits in the tail
+// ahead of lists (dependent before dependency). numeric is NATIVE (pulled via deps).
 const r7rsWithoutRepositioned = allR7rs.filter((pack) => pack !== lists && pack !== exceptions && pack !== binding);
 const srfiWithoutRepositioned = allSrfi.filter((pack) => pack !== srfi1);
 
@@ -54,6 +58,7 @@ export const BASE_PACKS: readonly EnvCapability[] = [
   polyglotClojure,
   polyglotLisp,
   polyglot,
+  sugarcoat,
   srfi1,
   binding,
   exceptions,
