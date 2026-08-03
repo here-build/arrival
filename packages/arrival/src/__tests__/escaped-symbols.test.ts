@@ -1,8 +1,8 @@
 import { CONSTANT_CTX } from "../run/RunContext.js";
 /**
- * Test escaped symbols and edge cases in LIPS
+ * Test escaped symbols and edge cases in arrival
  *
- * LIPS supports escaped symbols like |symbol with spaces| or |24|
+ * arrival supports escaped symbols like |symbol with spaces| or |24|
  * These tests verify proper resolution and interop with JS
  *
  * The pure `|...|` bar-quoted SYMBOL-GRAMMAR reader cases (empty ||, escaped
@@ -167,7 +167,7 @@ describe("Escaped Symbol Resolution", () => {
         { "item-id": "3", "24": "first" },
       ];
 
-      // Convert to LIPS list — scheme filter expects pair chains, not JS arrays
+      // Convert to scheme list — scheme filter expects pair chains, not JS arrays
       bindValue(inferenceEnv, "items", jsToScheme(CONSTANT_CTX, items));
 
       // Use `string=?` for string comparison — `eq?` is reference identity (R7RS § 6.1)

@@ -63,7 +63,7 @@ describe("ROW 1 — structural: scheme/strings was never prelude-carrying, and s
     );
   });
 
-  it("R7RS §6.7 string names are present — no LIPS residual (concat/join/string-contains live elsewhere)", () => {
+  it("R7RS §6.7 string names are present — no residual extensions (concat/join/string-contains live elsewhere)", () => {
     expect(Object.keys(stringsSymbols).sort()).toEqual(
       [
         "make-string",

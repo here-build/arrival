@@ -8,7 +8,7 @@
 // `env/core/core.ts`'s file header for the full inventory.
 //
 // `single` (the blob's fourth form) was DELETED post-migration (W4-H4 residual,
-// V ruling 2026-07-10 "stay aligned to srfi where we can": non-SRFI LIPS heritage,
+// V ruling 2026-07-10 "stay aligned to srfi where we can": non-SRFI heritage residual,
 // always-`#f` body predating the nil/false split, zero call sites). What survives it
 // is the LIVE-CATCH regression pin below: its body's `pair?`/`not` calls were an
 // UNDECLARED cross-capability reference (scheme/r7rs/equality) that worked only via

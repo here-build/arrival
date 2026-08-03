@@ -1,6 +1,6 @@
 // Algebras-in-entities cell (wave 2): SchemeString's structure-algebras —
 // Functor (char map), Semigroup (string-append), Monoid ("" identity).
-// Migrated from the fantasy-land-lips.ts monkey-patch INTO the SchemeString
+// Migrated from the the dissolved fantasy-land bridge monkey-patch INTO the SchemeString
 // class body (plan-2026-06-10-algebras-in-entities.md).
 //
 // SchemeString HAS `arrival/tagless-final/equals` (wave-1 Setoid), so the law harness's

@@ -45,7 +45,7 @@ import { bindValue } from "../../env/AmbientRuntime.js";
 // When Scheme code calls `(eval x)` with no second argument, the host-side
 // `env` parameter is `undefined`, so eval falls back to `global_env`. The
 // global env contains EVERY wrappedOps entry (~hundreds of names: `+`, `*`,
-// `load`, `set-obj!`, `new`, `instanceof`, plus the entire LIPS bootstrap).
+// `load`, `set-obj!`, `new`, `instanceof`, plus the entire interpreter bootstrap).
 // Any of those are reachable from inside the sandbox via
 // `(eval (quote name))`. The returned value is the unwrapped JS function.
 // ============================================================================
@@ -93,7 +93,7 @@ describe("CRITICAL: sandbox escape vectors", () => {
 
   /**
    * `load` / `set-obj!` / `new` / `instanceof` were the host-language verbs the
-   * eval-escape historically reached (the LIPS bootstrap registered them in
+   * eval-escape historically reached (the interpreter bootstrap registered them in
    * global_env; `(eval (quote set-obj!))` handed back the JS function). The
    * sweep deleted all of them — and eval itself — so there is nothing left to
    * reach and nothing to reach it with.
@@ -148,7 +148,7 @@ describe("CRITICAL: sandbox escape vectors", () => {
 // gated for `@`/`field` (they route through `sandboxedAccess` →
 // SchemeJSObject.get), but TWO other property-access paths bypass it for RAW
 // (non-SchemeJSObject) values:
-//   - `lips.ts` `get` (dot-notation `x.y`) — `else` branch does raw `object[name]`.
+//   - `the dissolved husk` `get` (dot-notation `x.y`) — `else` branch does raw `object[name]`.
 //   - `AmbientRuntime.ts` `:keyword` plucker — raw branch does `obj[key]` after
 //     `Object.hasOwn`, never consulting BLOCKED_PROPERTY_NAMES.
 // A lambda / rosetta is a raw JS function in sandbox scope, so `(:constructor f)`
@@ -192,7 +192,7 @@ describe("CRITICAL: accessor isolation leaks", () => {
   });
 
   it("accessMember (the dot-notation / membrane read policy) blocks raw constructor/__proto__ access", () => {
-    // The LIPS `get` dot-notation wrapper was DELETED in the husk dissolution — it
+    // The arrival `get` dot-notation wrapper was DELETED in the husk dissolution — it
     // was a dead path (no runtime caller, only this test). Its policy IS
     // `accessMember` (interop-access): the primitive AmbientRuntime.get's dotted
     // resolution (`foo.bar`) AND the `@` membrane reads both call directly. So the
@@ -305,7 +305,7 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
     // The budget lives on the GENERATOR-EXEC trampoline (`run()` in
     // evaluator.ts), which is the path the actual sandbox/MCP runtime uses
     // (arrival-chain's loader calls `execGeneratorExpr`). The file-level `exec`
-    // import is `lips.exec` (REPL evaluator) — used by the other tests
+    // import is `exec` (REPL evaluator) — used by the other tests
     // here — so we import the generator-exec `exec` locally for the budget API.
     // `budgetMs` throws a ArrivalError(/budget/) at the existing 1000-iter / 5ms
     // event-loop yield once the deadline passes; it composes with `signal`

@@ -1,6 +1,6 @@
 // Algebras-in-entities cell (wave 2): Pair's structure-algebras — Functor,
 // Filterable, Foldable, Traversable, Chain, Semigroup (list-append), Monoid
-// (nil identity). Migrated from the fantasy-land-lips.ts monkey-patch INTO the
+// (nil identity). Migrated from the the dissolved fantasy-land bridge monkey-patch INTO the
 // Pair class body (plan-2026-06-10-algebras-in-entities.md).
 //
 // Pair has NO `arrival/tagless-final/equals` BY DESIGN — `structuralEqual` IS its Setoid

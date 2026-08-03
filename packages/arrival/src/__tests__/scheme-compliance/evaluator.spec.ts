@@ -1,5 +1,5 @@
 /**
- * Tests for the generator-based evaluator using real LIPS types
+ * Tests for the generator-based evaluator using real scheme types
  */
 
 import { beforeEach, describe, expect, it } from "vitest";
@@ -31,7 +31,7 @@ import { type SchemeValue } from "../../values/types.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
 import { bindValue } from "../../env/AmbientRuntime.js";
 
-describe("Generator Evaluator with Real LIPS Types", () => {
+describe("Generator Evaluator with Real Scheme Types", () => {
   // `ResolvingAmbient`, not the plain `AmbientRuntime` its raw evaluator-level content
   // would otherwise need: `execExprOverFrame(code, { env })` types `env` as `SchemeEnv` (V2,
   // arrival-environment-privatization.md §II.3/D2), which `ResolvingAmbient`

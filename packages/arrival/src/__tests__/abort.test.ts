@@ -81,7 +81,7 @@ describe("AbortSignal execution budget", () => {
     // Pre-abort fast path: no trampoline state allocated, throw on entry.
     // This should be effectively instantaneous (sub-millisecond), but we
     // give a wide margin to allow for parse/import overhead from the lazy
-    // lips bootstrap on first invocation in the suite.
+    // interpreter bootstrap on first invocation in the suite.
     expect(Date.now() - start).toBeLessThan(500);
   });
 

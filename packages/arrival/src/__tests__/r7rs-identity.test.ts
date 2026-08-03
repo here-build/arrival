@@ -10,10 +10,10 @@
  * `case` dispatch.
  *
  * Our current `eq?` and `eqv?` are both aliased to a single `equal` helper at
- * `lips.ts:3634-3635`. That helper takes a partial-deep stance:
+ * `the dissolved husk (then line 3634)-3635`. That helper takes a partial-deep stance:
  *   - For Pair / Array / unknown objects it falls through to `else x === y`
- *     (lips.ts:674) — happens to match the R7RS pointer-grade answer.
- *   - For strings (lips.ts:670-672) it value-compares via `valueOf()` — wrong:
+ *     (the dissolved husk (then line 674)) — happens to match the R7RS pointer-grade answer.
+ *   - For strings (the dissolved husk (then line 670)-672) it value-compares via `valueOf()` — wrong:
  *     two distinct heap SchemeString instances compare equal, collapsing
  *     eq?/eqv? into a string-equal? shape.
  *
@@ -57,8 +57,8 @@ describe("r7rs identity — passing invariants (regression guards)", () => {
   });
 
   it("eq? on two distinct (list 1) calls is #f (R7RS § 6.1)", async () => {
-    // Each `list` call mints a fresh Pair → in `equal` (lips.ts:633) Pair has
-    // no special-case branch → falls through to `else x === y` (lips.ts:674)
+    // Each `list` call mints a fresh Pair → in `equal` (the dissolved husk (then line 633)) Pair has
+    // no special-case branch → falls through to `else x === y` (the dissolved husk (then line 674))
     // → returns false. Correct by accident — guard against a future "let's
     // deepEqual into pairs" rewrite that would silently flip this to #t.
     const r = await evalScheme("(eq? (list 1) (list 1))");
@@ -92,7 +92,7 @@ describe("r7rs identity — eq?/eqv? string-identity fixes (regression guards)",
   it(
     "eq? on two distinct string-copy results is #f (R7RS § 6.1)",
     async () => {
-      // FIXED (was: `lips.ts:670-672` compared strings via `.valueOf()`, returning #t
+      // FIXED (was: `the dissolved husk (then line 670)-672` compared strings via `.valueOf()`, returning #t
       // for two unrelated heap instances — collapsing eq?/eqv? into string-equal? shape).
       // R7RS § 6.1: `(eq? "x" "x")` on literals is implementation-defined, but distinct
       // heap instances (`string-copy` minted fresh objects) should not compare eq? — the

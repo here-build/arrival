@@ -47,7 +47,7 @@ describe("fuzz — provenance algebra invariants at depth", () => {
 
           // Both routes must agree on membership — associativity is what
           // makes the runtime free to choose either depending on evaluation
-          // order (currying, partial application, generator vs lips).
+          // order (currying, partial application, generator vs legacy evaluator).
           expect(new Set(acc.provenance)).toEqual(new Set(flatResult));
         },
       ),

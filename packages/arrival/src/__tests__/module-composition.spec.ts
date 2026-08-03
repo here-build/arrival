@@ -7,7 +7,7 @@
  * - Resolvers can yield by returning undefined
  *
  * Note: These tests use _lookupWithResolvers directly to avoid
- * dependency on lips runtime (which patch_value requires).
+ * dependency on arrival runtime (which patch_value requires).
  *
  * [RETAG — deliberate internal-module unit suite, not a test-only-API artifact]
  * (2026-07-09 suite consolidation, [P16]): `_lookupWithResolvers` is real production

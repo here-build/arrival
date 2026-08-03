@@ -102,7 +102,7 @@ async function run(src: string): Promise<unknown> {
 const DEPTH = 50000;
 
 /** Per-test budget: one DEPTH loop runs in ~2s; the first test also pays the
- *  one-time lazy lips bootstrap. */
+ *  one-time lazy interpreter bootstrap. */
 const T = 30000;
 
 describe("tail-call optimization (R7RS §3.5)", () => {

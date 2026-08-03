@@ -73,7 +73,7 @@ const opsOf = (cap: EnvCapability): Record<string, (...a: any[]) => any> =>
 const listOps = opsOf(listsCap); // r7rs scheme/lists — assoc lives here now
 
 // ── DR5 helpers (provOf is the canonical one; never `equal?`) ─────────────────
-/** A provenance-bearing scalar element. SchemeString so `unwrapLipsValue` (the
+/** A provenance-bearing scalar element. SchemeString so `unwrapSchemeValue` (the
  *  asyncFLMap box-strip) treats it as a real boxed value, not an inert host num. */
 const el = (s: string, p: number) => new AString(s, new Set([p]));
 /** Element-level provenance of a returned collection, in order — the soundness
@@ -286,7 +286,7 @@ describe("G6 sound — sort over a SchemeVector (DR4 fix: container-preserving, 
 // carriers. The audit flagged these as ZERO-coverage cells, yet car/cdr IS the
 // §5.3 element projection and the wrong-carrier silent-nil/throw is the DR4 risk.
 // Characterization (run-pinned): which carriers project the box, which fall
-// through to a LIPS builtin that typechecks pair|nil and throws.
+// through to a scheme builtin that typechecks pair|nil and throws.
 // ════════════════════════════════════════════════════════════════════════════
 describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", () => {
   // car/cdr project ONE element — its box must survive (this IS §5.3 element

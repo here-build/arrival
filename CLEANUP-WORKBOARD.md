@@ -513,7 +513,7 @@ Honest scan of the plan after all reframes. **Must / should / later / open decis
 | O2 | Class B dispositions | **HOLD — do not solve yet** |
 | O3 | Effects T3 default | post-0.9; draft at `docs/design-history/effects-conflict-reexec-DRAFT.md` (uncommitted read) |
 | O4 | Uneval “works” | **LOCKED: live deterministic + research agent models demo showcase first**, then e2e |
-| O5 | Bare-fn / legacy | **LOCKED: no legacy left** — LIPS residue and prior looser bare-fn paths cleaned in W8 (not deferred) |
+| O5 | Bare-fn / legacy | **LOCKED: no legacy left** — heritage residue and prior looser bare-fn paths cleaned in W8 (not deferred) |
 
 ### Explicitly **not** missing (closed / cancelled)
 

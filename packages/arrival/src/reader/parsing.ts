@@ -1,6 +1,6 @@
 // Pure token→value parsers for the Scheme numeric tower (exact/inexact, rational, complex, radix
 // prefixes), string literals, characters, and symbols. No I/O, no lexer state — given a token string,
-// returns the boxed value. Numeric-grammar helpers originate from the LIPS reader.
+// returns the boxed value. Numeric-grammar helpers originate from the heritage reader.
 import invariant from "tiny-invariant";
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { AString } from "../values/primitives/AString.js";
@@ -264,7 +264,7 @@ function parse_string(string: string, loc?: SourceLocation): AString {
       }
       return out;
     })
-    .replaceAll("\n", String.raw`\n`); // in LIPS strings can be multiline
+    .replaceAll("\n", String.raw`\n`); // scheme strings can be multiline
   const m = string.match(/(\\*)(\\x[0-9A-F])/i);
   if (m && m[1].length % 2 === 0) {
     throw new ParseError(`Invalid string literal, unclosed: ${m[2]}`, undefined, "E-STRING-UNCLOSED");

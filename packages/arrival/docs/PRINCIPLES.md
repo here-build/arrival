@@ -244,9 +244,9 @@ observability frameworks (mobx et al.) as core dependencies — adapters wrap th
 **P13. The platform's own grain decides the surface; departures are named supersets.**
 R7RS semantics faithfully; Racket/Clojure forms only where R7RS leaves undefined behavior,
 each a deliberate, documented, compile-coherent choice (bracket bindings, curly dicts,
-keyword accessors). No LIPS-style "JS is the real semantics underneath" — a hidden host
+keyword accessors). No host-under-the-hood "JS is the real semantics underneath" — a hidden host
 semantics is a third, undeclared interpretation the other layers never agreed to.
-*Revealed by:* the whole LIPS stratum — dotted-symbol object walks, `-->`/`set-obj!`,
+*Revealed by:* the pre-arrival host-interop stratum — dotted-symbol object walks, `-->`/`set-obj!`,
 JS-truthiness harnesses asserting `===` as `equal?`.
 *Forbids:* host-language semantics reachable from scheme without a membrane crossing; syntax
 whose meaning is "whatever JS does".

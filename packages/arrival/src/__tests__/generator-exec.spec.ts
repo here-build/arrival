@@ -2,7 +2,7 @@
  * Tests for the generator-exec entry point
  *
  * Verifies that the generator-based evaluator works correctly when
- * wired to the LIPS parser.
+ * wired to the scheme parser.
  */
 
 import { describe, expect, it } from "vitest";

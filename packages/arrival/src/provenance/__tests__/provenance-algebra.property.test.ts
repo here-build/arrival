@@ -4,7 +4,7 @@
  * the rest of the runtime relies on:
  *
  *   - Commutativity / associativity / idempotence — `wrapOperator` and the
- *     two `withInputProvenance` twins (lips.ts:2046, bridge.ts:271) must
+ *     two `withInputProvenance` twins (the dissolved husk (then line 2046), bridge.ts:271) must
  *     produce the same provenance regardless of arg order, sub-grouping,
  *     or self-duplication. Without these, `(+ x x)` and `(+ x x x)` would
  *     produce visibly different sets at a downstream consumer.

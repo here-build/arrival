@@ -31,7 +31,7 @@ their text.
 widening is a bounded, named, compile-erased superset.** This is P13 made concrete for
 the language surface: Racket and Clojure forms appear *only* at positions R7RS calls
 malformed, each lowering to a form stock Scheme already accepts. There is no
-LIPS-style "JS is the real semantics underneath" — a hidden host interpretation is a
+Host-under-the-hood style "JS is the real semantics underneath" — a hidden host interpretation is a
 third reading the provenance and type layers never agreed to (P13's forbidden state).
 
 A superset earns its place iff it (a) lowers to pure spec with zero non-spec output
