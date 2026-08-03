@@ -120,18 +120,18 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
           ) }) }),
         ]);
 
-      // Create test data (this is tricky in LIPS, so we'll inject it)
+      // Create test data (inject via jsToScheme rather than constructing pairs by hand)
       const testData = [
         { name: "first", value: 10 },
         { name: "second", value: 20 },
         { name: "third", value: 30 },
       ];
 
-      // Convert to LIPS and call function
-      const lipsData = jsToScheme(CONSTANT_CTX, testData, {});
+      // Convert to scheme and call function
+      const schemeData = jsToScheme(CONSTANT_CTX, testData, {});
       const verb = inferenceEnv.get("extract-values");
       invariant(isRosettaVerb(verb), "extract-values must resolve to a bound rosetta verb");
-      const result = await invoke(verb, lipsData);
+      const result = await invoke(verb, schemeData);
 
       console.log("Complex data result:", result);
 
@@ -169,13 +169,13 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
         { name: "span1", style: { display: "block" } },
       ];
 
-      // Convert to LIPS and filter
-      const lipsNodes = jsToScheme(CONSTANT_CTX, testNodes, {});
+      // Convert to scheme and filter
+      const schemeNodes = jsToScheme(CONSTANT_CTX, testNodes, {});
       const verb = inferenceEnv.get("filter-by-css-property");
       invariant(isRosettaVerb(verb), "filter-by-css-property must resolve to a bound rosetta verb");
       // The string args cross the membrane as real scheme values — the `z.string`
       // codec decodes them the same way a scheme-level call would.
-      const result = await invoke(verb, lipsNodes, new AString("overflow"), new AString("hidden"));
+      const result = await invoke(verb, schemeNodes, new AString("overflow"), new AString("hidden"));
 
       console.log("CSS filtering result:", result);
 
@@ -215,10 +215,10 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
         { style: { overflow: "hidden", display: "flex" } },
       ];
 
-      const lipsNodes = jsToScheme(CONSTANT_CTX, testNodes, {});
+      const schemeNodes = jsToScheme(CONSTANT_CTX, testNodes, {});
       const verb = inferenceEnv.get("css-property-stats");
       invariant(isRosettaVerb(verb), "css-property-stats must resolve to a bound rosetta verb");
-      const result = await invoke(verb, lipsNodes);
+      const result = await invoke(verb, schemeNodes);
 
       console.log("CSS stats result:", result);
 
