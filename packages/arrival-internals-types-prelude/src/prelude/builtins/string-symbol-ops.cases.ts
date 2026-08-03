@@ -8,7 +8,7 @@
 // directive becomes the failure.
 //
 // ★ Precedence corrections baked into the asserted return types:
-//   • `search` returns number (LIPS string `.search` index, NOT ramda `R.find`).
+//   • `search` returns number (string `.search` index, NOT ramda `R.find`).
 //   • `split`/`replace`/`match` take (sep|pat) FIRST then the string; `split`/`match`
 //     return Scheme LISTS. `match` honestly returns `List<string> | boolean` (#f on no
 //     match) so a downstream list use SHOULD bite.

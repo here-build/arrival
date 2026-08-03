@@ -114,7 +114,7 @@ describe("S-Expression Serializer", () => {
 
   describe("object serialization as Scheme records", () => {
     it("serializes plain objects with dict notation", () => {
-      expect(toSExprString({ name: "LIPS", version: "1.0" })).toBe('(dict :name LIPS :version "1.0")'); // AI-readable: symbols not quoted unless needed
+      expect(toSExprString({ name: "arrival", version: "1.0" })).toBe('(dict :name arrival :version "1.0")'); // AI-readable: symbols not quoted unless needed
     });
 
     it("handles nested objects", () => {

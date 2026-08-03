@@ -25,7 +25,7 @@
 (define n->s number->string)
 (define (lines xs) (string-join xs "\n"))
 
-;; stable de-dup preserving first-seen order (LIPS reduce is element-first: (x acc))
+;; stable de-dup preserving first-seen order (reduce is element-first: (x acc))
 (define (dedupe xs)
   (reduce (lambda (x acc) (if (member x acc) acc (append acc (list x)))) '() xs))
 

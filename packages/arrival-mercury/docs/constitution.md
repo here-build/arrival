@@ -68,7 +68,7 @@ The membrane defines, per value kind, what a Scheme value looks like on the JS s
 
 Compiler consequences — deletions:
 - `set!`/`call/cc`/`dynamic-wind` in source classify as **`Door(prohibited-dynamics)`** — a named door category whose message teaches the provenance rationale.
-- **No mutated-binding census exists** (`collectSetBangNames`, const-vs-let analysis — LIPS-era relics, deleted not ported). Every user binding emits as `const`, in both the virtual TS and the artifact.
+- **No mutated-binding census exists** (`collectSetBangNames`, const-vs-let analysis — heritage-era relics, deleted not ported). Every user binding emits as `const`, in both the virtual TS and the artifact.
 - **No closure boxing or escape analysis exists.** Under immutability, capture-by-value ≡ capture-by-reference — lambdas lower to plain TS arrows capturing directly; the entire closure-conversion problem class never gets built.
 - **The compiled world is acyclic by assumption** — without mutation, in-language code cannot construct a cyclic structure, so compiled list operations assume acyclic spines (no Floyd guards, no seen-maps). The interpreter keeps its cycle machinery for its two remaining cycle sources — reader datum-labels (`#0=(… . #0#)`, the sanctioned frozen-construction knot) and host-injected JS cycles through the membrane — neither of which reaches compiled code (no datum labels in compiled inputs is a compile-front check; host cycles behave as native JS does).
 

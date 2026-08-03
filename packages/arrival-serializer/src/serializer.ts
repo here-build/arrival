@@ -6,7 +6,7 @@ const isNil = (element: any) => element?.constructor?.name === "ANil";
  * S-expression serializer for Arrival — two phases over any JavaScript value.
  *
  * `toSExpr` walks a value into an `SExpr` intermediate tree, dispatching each node through a
- * `Symbol.toSExpr` custom representation (LIPS pairs/exacts/symbols, AValues, the context marker
+ * `Symbol.toSExpr` custom representation (scheme pairs/exacts/symbols, AValues, the context marker
  * objects) and detecting cycles with a DFS path-set. `formatSExpr` renders that tree to text.
  * Three entry points share the one walk: `toSExprString` (text), `toSExprStringWithElisions`
  * (+ the collected `ElisionRecord`s), and `serializeWithExtras` (+ extracted binary blobs). The
@@ -549,7 +549,7 @@ function toSExprDispatch(obj: any, visited: Set<any>): SExpr {
     }
   }
 
-  // Handle LIPS-specific types before generic Symbol.toSExpr
+  // Handle scheme value types before generic Symbol.toSExpr
   if (obj && typeof obj === "object") {
     // SchemeExact (exact integers/rationals) — num/denom are safe-integer `number`s,
     // never bigint: exact is a gcd-normalized (num, denom) ratio of `number`s, and the
@@ -596,38 +596,38 @@ function toSExprDispatch(obj: any, visited: Set<any>): SExpr {
       return `#\\${obj.__char__}`; // Return character with #\ prefix
     }
 
-    // LIPS Values (multiple return values)
+    // Values (multiple return values)
     if (obj.constructor?.name === "Values" && "__values__" in obj) {
       // Convert to array of values
       return ["values", ...capItems(obj.__values__, (v: any) => toSExpr(v, visited))];
     }
 
-    // LIPS Pair (linked list structure)
+    // Pair (linked list structure)
     if (obj.constructor?.name === "APair" && "car" in obj && "cdr" in obj) {
       return ["list", ...convertPairToArray(obj, visited)];
     }
 
-    // LIPS Nil (empty list) - be more specific to avoid catching plain objects
+    // Nil (empty list) - be more specific to avoid catching plain objects
     if (obj.constructor?.name === "ANil") {
       return []; // Return empty list
     }
 
-    // LIPS EOF (end of file marker)
+    // EOF (end of file marker)
     if (obj.constructor?.name === "EOF") {
       return "#<eof>";
     }
 
-    // LIPS Macro (macro objects)
+    // Macro (macro objects)
     if (obj.constructor?.name === "Macro") {
       return ["macro", obj.name || "<anonymous>"];
     }
 
-    // LIPS Syntax (special syntax objects)
+    // Syntax (special syntax objects)
     if (obj.constructor?.name === "Syntax") {
       return ["syntax", obj.name || "<syntax>"];
     }
 
-    // LIPS Input/Output Ports
+    // Input/Output Ports
     if (obj.constructor?.name === "InputPort" || obj.constructor?.name === "OutputPort") {
       return `#<${obj.constructor.name.toLowerCase()}>`;
     }

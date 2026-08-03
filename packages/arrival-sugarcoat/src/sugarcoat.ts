@@ -2,7 +2,7 @@
 // `.scm` source and the fold back to scheme. This subpath carries ONLY the
 // reader + renderer: `sugarcoat-render` imports nothing, `sugarcoat-read` imports only
 // `sugarcoat-render`, so neither pulls a line of the eval engine (backends, Plexus,
-// the LIPS interpreter, the openai/anthropic SDKs).
+// the arrival interpreter, the openai/anthropic SDKs).
 //
 // Import from here when you want the lens WITHOUT the runtime — e.g. an editor
 // UI that renders/edits the sugarcoat view. The barrel `.` export drags the whole

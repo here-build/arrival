@@ -6,7 +6,7 @@
 //   (string->number s [radix]) → the parsed number, or #f when unparseable
 //
 // Runtime truth (the `any` impl this SHARPENS — do NOT import it):
-//   arrival-scheme runtime (LIPS R7RS core) — these are interpreter builtins
+//   arrival runtime (R7RS core) — these are interpreter builtins
 //   the JS-projection stdlib does not list yet; the lens reaches them through
 //   LENS_EXTRA_MEMBERS (service-core.ts), which lowers their call heads to
 //   `__arr[…]` via the hostMembers seam.
