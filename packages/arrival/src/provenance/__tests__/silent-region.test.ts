@@ -29,7 +29,7 @@ import { mintFrame, type ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { execStateOverFrame } from "../../eval/generator-exec.js";
 import { EvalTrace } from "../../provenance/trace.js";
 import { inferenceEnv } from "../../env/inference-env.js";
-import { schemeToJs } from "../../membrane/rosetta.js";
+import { toJS } from "../../membrane/membrane.js";
 import { withRecordCoordinateAsync, type EmissionSink, type RecordCoordinate } from "../../eval/provenance-hooks.js";
 import {
   closeRegionScope,
@@ -94,7 +94,7 @@ describe("A. silent-region mode suppresses emission, never doors (§4 CHOSEN, ro
       const scope = withTrackCoordinate(TRACK_COORD, trackSink, () =>
         openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined }),
       );
-      const wrapper = withRegionScope(scope, () => schemeToJs(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
+      const wrapper = withRegionScope(scope, () => toJS(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
       expect(await wrapper(41)).toBe(41); // the real call still works, unaffected
       closeRegionScope(scope);
 
@@ -104,7 +104,7 @@ describe("A. silent-region mode suppresses emission, never doors (§4 CHOSEN, ro
       const result = await withRecordCoordinateAsync(RECORD_COORD, mintSink, () =>
         execStateOverFrame("(fetch-item)", { env, tap: trace }),
       );
-      expect(schemeToJs(result.values[0], {})).toBe(42); // real program result, unaffected
+      expect(toJS(result.values[0])).toBe(42); // real program result, unaffected
     });
 
     await Promise.resolve();
@@ -125,7 +125,7 @@ describe("A. silent-region mode suppresses emission, never doors (§4 CHOSEN, ro
     const scope = withTrackCoordinate(TRACK_COORD, trackSink, () =>
       openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined }),
     );
-    const wrapper = withRegionScope(scope, () => schemeToJs(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
+    const wrapper = withRegionScope(scope, () => toJS(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
     await wrapper(41);
     closeRegionScope(scope);
 
@@ -159,7 +159,7 @@ describe("A. silent-region mode suppresses emission, never doors (§4 CHOSEN, ro
         freshTrackSink,
         () => openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined }),
       );
-      const wrapper = withRegionScope(scope, () => schemeToJs(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
+      const wrapper = withRegionScope(scope, () => toJS(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
       await wrapper(1);
       closeRegionScope(scope);
 
@@ -184,7 +184,7 @@ describe("A. silent-region mode suppresses emission, never doors (§4 CHOSEN, ro
     setEmissionEnabled(true);
     await withSilentRegion(async () => {
       const scope = openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined });
-      const wrapper = withRegionScope(scope, () => schemeToJs(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
+      const wrapper = withRegionScope(scope, () => toJS(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
 
       // incomplete door: a call started but never awaited before close.
       const inFlight = wrapper(1);
@@ -221,7 +221,7 @@ describe("A. silent-region mode suppresses emission, never doors (§4 CHOSEN, ro
     const scope = withTrackCoordinate(TRACK_COORD, sink, () =>
       openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined }),
     );
-    const wrapper = withRegionScope(scope, () => schemeToJs(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
+    const wrapper = withRegionScope(scope, () => toJS(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
 
     await wrapper(1); // loud — recorded
     await withSilentRegion(() => wrapper(2)); // silent — suppressed
@@ -253,7 +253,7 @@ describe("A. silent-region mode suppresses emission, never doors (§4 CHOSEN, ro
       const scope = withTrackCoordinate(TRACK_COORD, sink, () =>
         openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined }),
       );
-      const wrapper = withRegionScope(scope, () => schemeToJs(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
+      const wrapper = withRegionScope(scope, () => toJS(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
       await wrapper(1);
       closeRegionScope(scope);
 
@@ -329,7 +329,7 @@ describe("C. glass whole-program replay — the SAME silent discipline generaliz
     const real = await withRecordCoordinateAsync(RECORD_COORD, sink, () =>
       execStateOverFrame("(fetch-item)", { env: env1, tap: trace1 }),
     );
-    expect(schemeToJs(real.values[0], {})).toBe(42);
+    expect(toJS(real.values[0])).toBe(42);
 
     await Promise.resolve();
     await Promise.resolve();
@@ -345,7 +345,7 @@ describe("C. glass whole-program replay — the SAME silent discipline generaliz
     const replayed = await withSilentRegion(() =>
       withRecordCoordinateAsync(RECORD_COORD, sink, () => execStateOverFrame("(fetch-item)", { env: env2, tap: trace2 })),
     );
-    expect(schemeToJs(replayed.values[0], {})).toBe(42); // same behavior…
+    expect(toJS(replayed.values[0])).toBe(42); // same behavior…
 
     await Promise.resolve();
     await Promise.resolve();

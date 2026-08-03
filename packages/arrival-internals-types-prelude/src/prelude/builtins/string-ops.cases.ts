@@ -20,6 +20,9 @@ expectTypeOf(string$dash$upcase("hello")).toEqualTypeOf<string>();
 expectTypeOf(string$dash$downcase("HELLO")).toEqualTypeOf<string>();
 // string-contains returns boolean
 expectTypeOf(string$dash$contains("hello world", "world")).toEqualTypeOf<boolean>();
+// string=? / string-ci=? — case-sensitive / case-insensitive equality
+expectTypeOf(string$eq$$qmark$("a", "a")).toEqualTypeOf<boolean>();
+expectTypeOf(string$dash$ci$eq$$qmark$("A", "a")).toEqualTypeOf<boolean>();
 
 // @ts-expect-error string-append requires string args, not number
 string$dash$append(42, "world");
@@ -27,3 +30,5 @@ string$dash$append(42, "world");
 string$dash$length(42);
 // @ts-expect-error string-contains requires two string args, not a number as second arg
 string$dash$contains("hello", 42);
+// @ts-expect-error string-ci=? requires string args
+string$dash$ci$eq$$qmark$(42, "a");

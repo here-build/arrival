@@ -140,7 +140,7 @@ export interface GroundingVerdict {
  *  `forms`) so one destructuring feeds both. */
 export interface GroundingVerdictOptions {
   /** The run's final value as a RAW boxed value (provenance intact — never the
-   *  `schemeToJs`-peeled projection; peeling strips the provenance this seal reads). */
+   *  `toJS`-peeled projection; peeling strips the provenance this seal reads). */
   result: unknown;
   /** The finished run's trace (core `EvalTrace` or this package's observable one). */
   trace: CoreEvalTrace;
@@ -260,7 +260,7 @@ function leafOrigin(v: unknown): LeafOrigin {
 }
 
 /** Report-safe projection of a leaf. Strings quoted (so "" is visible), booleans as
- *  #t/#f; every other boxed value renders via its own display repr. No `schemeToJs`
+ *  #t/#f; every other boxed value renders via its own display repr. No `toJS`
  *  here — projection must never throw on a value the walk already accepted. */
 function displayLeaf(v: unknown): string {
   if (v instanceof AString) return JSON.stringify(v.__string__);

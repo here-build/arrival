@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { deepProvenance, EnvCapability, execState, schemeToJs } from "../../index.js";
+import { deepProvenance, EnvCapability, execState, toJS } from "../../index.js";
 import { EvalTrace } from "../../provenance/index.js";
 
 const weather = EnvCapability.define("test/weather", {
@@ -30,7 +30,7 @@ describe("EvalTrace.toolNameFor — deepProvenance ordinals resolve to verb name
       values: [line] } = await execState(`(string-append "today: " (forecast-for "berlin"))`, {
       capabilities: [weather],
       tap: trace });
-    expect(schemeToJs(line, {})).toBe("today: cloudy in berlin");
+    expect(toJS(line)).toBe("today: cloudy in berlin");
     const ids = [...deepProvenance(line)];
     expect(ids).toHaveLength(1);
     expect(trace.toolNameFor(ids[0]!)).toBe("forecast-for");

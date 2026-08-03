@@ -36,7 +36,7 @@
  */
 
 // Value-level `Nil` — defence for DIRECT-JS callers of the coercions below. In the
-// exec path `schemeToJs(v, {})` lowers an empty scheme list (`(list)` / `'()`) to a
+// exec path `toJS(v, {})` lowers an empty scheme list (`(list)` / `'()`) to a
 // JS `[]` at every depth, so a Nil instance never reaches these functions from a
 // verb; the `instanceof ANil` arms cover a caller that hands over raw scheme values
 // without the conversion pass. This couples only to the engine's own value type,
@@ -144,7 +144,7 @@ export const inertSqlResolver: SqlEffectResolver = (_ctx, effect) => {
 
 /** "No value" as it crosses the rosetta membrane: a missing field is JS
  *  `undefined`/`null`. (An empty scheme list is NOT "no value" on this path:
- *  `schemeToJs` lowers `(list)`/`'()` to a JS `[]`, so an empty-list param element
+ *  `toJS` lowers `(list)`/`'()` to a JS `[]`, so an empty-list param element
  *  arrives as an ARRAY and rejects as non-scalar rather than folding to SQL NULL.
  *  The `ANil` arm is defence for direct-JS callers holding raw scheme values.)
  *  (Duplicated in the http pack by design: each capability pack is self-contained,
@@ -171,14 +171,14 @@ function dataTypeName(v: unknown): string {
  * keys on `params` verbatim (a junk element ⇒ a wrong content key).
  *
  * Three arg shapes arrive across the membrane (verified against the rosetta
- * boundary — `schemeToJs(v, {})` lowers every scheme list to a JS array):
+ * boundary — `toJS(v, {})` lowers every scheme list to a JS array):
  *   - a scheme list `(list a b)`  → a JS array  → bind each element;
  *   - the empty list `(list)` / `'()` → a JS `[]` → the `Array.isArray` arm ⇒ no binds;
  *   - omitted (no params arg)     → `undefined`  → no binds;
  *   - a bare scalar `42` (sugar for `(list 42)`) → wrapped as one element.
  *
  * The `ANil` arm is defence for a DIRECT-JS caller that hands the coercion a raw
- * scheme value without the `schemeToJs` pass (an empty list then arrives as a `Nil`
+ * scheme value without the `toJS` pass (an empty list then arrives as a `Nil`
  * instance, and must still mean "no binds" rather than binding a spurious sentinel
  * to a placeholder-free query).
  *

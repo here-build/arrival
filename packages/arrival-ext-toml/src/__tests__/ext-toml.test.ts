@@ -8,13 +8,10 @@
 
 import { describe, expect, it } from "vitest";
 import { exec, execState } from "@inhuman.tools/arrival";
-import { schemeToJs } from "@inhuman.tools/arrival";
 import { loaderFromResolver } from "@inhuman.tools/arrival/capabilities/loader";
 import { EnvCapability } from "@inhuman.tools/arrival/capability";
 
 import { arrivalTomlCapability } from "../ext-toml.js";
-
-const plain = (v: unknown): unknown => schemeToJs(v as never, {});
 
 const files = (table: Record<string, string>) =>
   loaderFromResolver((path) => {
@@ -25,11 +22,12 @@ const files = (table: Record<string, string>) =>
 
 describe("arrivalTomlCapability — .toml on the vocabulary (default) path", () => {
   it("(require \"x.toml\") resolves through THIS run's per-run registry, JSON-shaped", async () => {
+    // `exec` already exits through `toJS` — assert the JS face directly.
     const results = await exec(`(require "personas.toml")`, {
       capabilities: [arrivalTomlCapability],
       config: { loader: files({ "personas.toml": 'name = "Ada"\nage = 30\n' }) },
     });
-    expect(plain(results.at(-1))).toMatchObject({ name: "Ada", age: 30 });
+    expect(results.at(-1)).toMatchObject({ name: "Ada", age: 30 });
   });
 
   it("a SEPARATE run that never roots arrivalTomlCapability cannot resolve .toml at all (per-run isolation)", async () => {
@@ -65,8 +63,8 @@ describe("arrivalTomlCapability — .toml on the vocabulary (default) path", () 
     const config = { loader: files({ "a.toml": "v = 1\n" }) };
     const resultsA = await exec(`(require "a.toml")`, { capabilities: [arrivalTomlCapability], config });
     const resultsB = await exec(`(require "a.toml")`, { capabilities: [arrivalTomlCapability], config });
-    expect(plain(resultsA.at(-1))).toMatchObject({ v: 1 });
-    expect(plain(resultsB.at(-1))).toMatchObject({ v: 1 });
+    expect(resultsA.at(-1)).toMatchObject({ v: 1 });
+    expect(resultsB.at(-1)).toMatchObject({ v: 1 });
     const runA = await execState(`(require "a.toml")`, { capabilities: [arrivalTomlCapability], config });
     const runB = await execState(`(require "a.toml")`, { capabilities: [arrivalTomlCapability], config });
     expect(runA.runCtx).not.toBe(runB.runCtx);

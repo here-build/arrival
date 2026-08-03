@@ -15,7 +15,7 @@
  * `TraceRegionFold` (`trace-region-fold.ts`) maintains incrementally O(Δ). Parity: strict
  * deep-equal test over EXPORTED pure helpers (`leafFor`, `conditionOf`, `regionsAt`, …).
  */
-import { deepProvenance, schemeToJs, type SchemeValue } from "@inhuman.tools/arrival";
+import { deepProvenance, toJS, type SchemeValue } from "@inhuman.tools/arrival";
 import { APair } from "@inhuman.tools/arrival/reflect-internals";
 import { schemeToSugarcoat } from "@inhuman.tools/arrival-sugarcoat";
 
@@ -554,8 +554,8 @@ export interface RegionWalkCtx {
   valueById: (id: number) => unknown;
   /** Live value of an invocation id (for decision-operand provenance) — the snapshot
    *  drops plumbing values, so the decision path reads the live trace. `SchemeValue |
-   *  undefined`, not `unknown`: RAW pre-`schemeToJs` value — matches `Invocation.value`
-   *  (trace.ts) so `schemeToJs(liveValueById(...))` satisfies schemeToJs's bound without
+   *  undefined`, not `unknown`: RAW scheme-side `Invocation.value` (trace.ts).
+   *  Decision peels use `toJS` once on that raw value; never soft-peel plain JS.
    *  a cast. */
   liveValueById: (id: number) => SchemeValue | undefined;
   /** Live INVOCATION provenance of an id — snapshot zeroes plumbing provenance, pruner
@@ -623,6 +623,14 @@ export const walkSpine = (entry: PlainInv): PlainInv[] => {
 const lastRegionId = (rs: Region[]): number | undefined => (rs.length > 0 ? rs.at(-1)!.id : undefined);
 
 /**
+ * Scheme truth of a **live** boxed value (only `#f` is false). Absent / not-yet-settled
+ * is not a verdict (`undefined` — not soft-peeled plain JS). One membrane exit.
+ */
+function schemeTruth(raw: SchemeValue | undefined): unknown {
+  return raw === undefined ? undefined : toJS(raw);
+}
+
+/**
  * The decision marker for a provenance-gated `filter` (see the fanout arm). Returns
  * `undefined` unless BOTH gates pass:
  *  - LIVE: this invocation's settled per-element predicate outcomes are MIXED (some kept,
@@ -641,7 +649,7 @@ function filterDecision(inv: PlainInv, applChildren: PlainInv[], ctx: RegionWalk
   let dropped = 0;
   for (const c of applChildren) {
     if (c.state === "running") continue;
-    if (schemeToJs(ctx.liveValueById(c.id)) === false) dropped++;
+    if (schemeTruth(ctx.liveValueById(c.id)) === false) dropped++;
     else kept++;
   }
   if (kept === 0 || dropped === 0) return undefined; // one-way selection — invisible plumbing
@@ -679,7 +687,7 @@ function filterDecision(inv: PlainInv, applChildren: PlainInv[], ctx: RegionWalk
           const elementOrigins = new Set<number>();
           if (param !== undefined) resolveInto(ctx.boundPointsOf!(c.id, param), elementOrigins);
           if (elementOrigins.size === 0 && collection) resolveInto(deepProvenance(collection[j]), elementOrigins);
-          return [{ kept: schemeToJs(ctx.liveValueById(c.id)) !== false, origins: [...elementOrigins] }];
+          return [{ kept: schemeTruth(ctx.liveValueById(c.id)) !== false, origins: [...elementOrigins] }];
         })
       : undefined;
   const id = applChildren[0]!.id; // a pred application never becomes a region itself — free id
@@ -1219,16 +1227,18 @@ function buildRegions(snap: PlainTrace, trace: EvalTrace): RegionGraph {
   const pointIds = new Set(points.map((p) => p.id));
 
   // Live-value accessor for decision-operand substitution (memoized; pays the
-  // `schemeToJs` cost only for operands a decision actually references).
+  // membrane exit only for operands a decision actually references).
   // `Map<number, Invocation>` — `liveById` holds live invocations themselves (every reader
   // wants a DIFFERENT field: `.value`, `.provenance`, `.children`/`.isProvenancePoint`),
   // so the declared type is the real one, not a value-only projection readers cast past.
+  // Live values are scheme-side; peel once with `toJS`. Absent → undefined (no soft peel).
   const liveById = new Map<number, Invocation>();
   for (const rec of trace.records.values()) for (const inv of rec.bindings) liveById.set(inv.id, inv);
   const valCache = new Map<number, unknown>();
   const valueById = (id: number): unknown => {
     if (valCache.has(id)) return valCache.get(id);
-    const v = schemeToJs(liveById.get(id)?.value);
+    const raw = liveById.get(id)?.value;
+    const v = raw === undefined ? undefined : toJS(raw);
     valCache.set(id, v);
     return v;
   };

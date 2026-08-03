@@ -20,7 +20,7 @@
  */
 import readline from "node:readline";
 
-import { disposeRunContext, execState, schemeToJs } from "@inhuman.tools/arrival";
+import { disposeRunContext, execState } from "@inhuman.tools/arrival";
 import { scan } from "@inhuman.tools/arrival/lsp-internals";
 import { EMPTY_REPL_MODEL, foldReplEvent, type ReplBlock, type ReplFoldModel } from "@inhuman.tools/mcp-substrate";
 
@@ -30,7 +30,7 @@ import { identityLine, readOwnVersion } from "./greeting.js";
 import { replInk } from "./repl-ink.js";
 import type { Lens } from "./lens.js";
 import { paintRegion, renderTurn } from "./painter.js";
-import { budgets, loaderSession, printError, printValue, type LoaderSession } from "./session.js";
+import { budgets, loaderSession, printError, printSchemeValue, type LoaderSession } from "./session.js";
 import { CLEAR_SCREEN, CURSOR_HOME } from "./ansi.js";
 
 const PROMPT = "arrival> ";
@@ -68,7 +68,7 @@ async function replPlain(session: LoaderSession): Promise<number> {
     buffer = "";
     try {
       const { values } = await execState(src, { capabilities, config, runCtx, scope, ...budgets() });
-      for (const v of values) printValue(schemeToJs(v, {}));
+      for (const v of values) printSchemeValue(v);
     } catch (e) {
       printError(e);
     }

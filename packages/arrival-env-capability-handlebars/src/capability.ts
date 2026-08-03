@@ -9,7 +9,7 @@
  * Compiler: Contract.emit → RuntimeRef; RUNTIME_MANIFEST maps those symbols to
  * this package's `/runtime` subpath (the mercury reference example).
  */
-import { EnvCapability, jsToScheme, parse, schemeToJsUntyped } from "@inhuman.tools/arrival";
+import { EnvCapability, jsToScheme, parse, toJS, type SchemeValue } from "@inhuman.tools/arrival";
 import { Call, type EmitRule, type R } from "@inhuman.tools/arrival/emit";
 import { arrivalLoaderCapability, contentsToText } from "@inhuman.tools/arrival/capabilities/loader";
 
@@ -37,7 +37,7 @@ export const arrivalHandlebarsCapability = EnvCapability.define("arrival/handleb
           emit: runtimeEmit("template/handlebars"),
         },
         (source, args) => {
-          const a = schemeToJsUntyped(args, {});
+          const a = toJS(args as SchemeValue);
           return renderTemplateCall(source, Array.isArray(a) ? a : [a]);
         },
       ),
@@ -57,7 +57,7 @@ export const arrivalHandlebarsCapability = EnvCapability.define("arrival/handleb
         // TODO(@arrival.private): `CompiledTemplate` is a plain interface (render fn + info),
         // not yet a branded class — once it is, this becomes `instance(CompiledTemplateClass)`
         // (a real codec, the whiteroom opaque-crossing contract). Until then z.dynamic is the
-        // honest escape hatch: the raw box crosses untouched (jsToScheme/schemeToJsUntyped).
+        // honest escape hatch: the raw box crosses untouched (jsToScheme/toJS).
         output: [z.dynamic],
         provenance: "pipe",
         type: "(source: string): CompiledTemplate",
@@ -79,8 +79,8 @@ export const arrivalHandlebarsCapability = EnvCapability.define("arrival/handleb
         emit: runtimeEmit("handlebars/run"),
       },
       (compiledRaw, argsRaw) => {
-        const a = schemeToJsUntyped(argsRaw, {});
-        return runCompiledTemplate(asCompiledTemplate(schemeToJsUntyped(compiledRaw, {})), Array.isArray(a) ? a : [a]);
+        const a = toJS(argsRaw as SchemeValue);
+        return runCompiledTemplate(asCompiledTemplate(toJS(compiledRaw as SchemeValue)), Array.isArray(a) ? a : [a]);
       },
     ),
   }),

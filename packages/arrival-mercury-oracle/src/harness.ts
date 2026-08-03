@@ -10,7 +10,7 @@
  * reused across rows; a FRESH `LexicalScope` per program so program N's defines
  * never leak into program N+1 (spec §4.1, edge §5.6). Mirrors `runProgram`'s
  * own per-form loop: `execState` per parsed top-level form, thenable-await,
- * `schemeToJs` at the exit.
+ * `toJS` at the exit.
  *
  * Compiled side — SUBJECT-ROUTED (constitution §9 "the dual-path rule"): the
  * gate subject is `"greenfield"` (default) — the NEW pipeline end to end,
@@ -59,7 +59,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { execState, LexicalScope, parse as parseGenerator, schemeToJsUntyped } from "@inhuman.tools/arrival";
+import { execState, LexicalScope, parse as parseGenerator, toJS, type SchemeValue } from "@inhuman.tools/arrival";
 import { register } from "tsx/esm/api";
 
 import {
@@ -100,7 +100,7 @@ const messageOf = (e: unknown): string => (e instanceof Error ? e.message : Stri
 let scopeCounter = 0;
 
 /** Evaluate `source` in the shared session under a fresh scope; the value is the
- *  interpreter's membrane JS face (`schemeToJs`, the same exit `runProgram` takes). */
+ *  interpreter's membrane JS face (`toJS`, the same exit `runProgram` takes). */
 export async function evalInterpreter(session: OracleSession, source: string): Promise<Outcome> {
   try {
     // Fresh scope over the shared session — plane prelude (range/take/field/…) is already
@@ -118,7 +118,7 @@ export async function evalInterpreter(session: OracleSession, source: string): P
       last = state.values.at(-1);
       if (isThenable(last)) last = await last; // the evaluator can hand back an unforced Promise
     }
-    return { kind: "value", value: schemeToJsUntyped(last, {}) };
+    return { kind: "value", value: last === undefined ? undefined : toJS(last as SchemeValue) };
   } catch (e) {
     const errorClass = (e as { "arrival/error-category"?: ErrorClass })["arrival/error-category"] ?? "other";
     return { kind: "throw", errorClass, message: messageOf(e), raw: e };

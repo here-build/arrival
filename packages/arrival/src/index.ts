@@ -42,10 +42,19 @@ export { LexicalScope, type SessionScope } from "./eval/LexicalScope.js";
 export { RunContext } from "./run/RunContext.js";
 export { disposeRunContext } from "./run/run-lifecycle.js";
 
-// Membrane crossing — `exec`'s return values are already crossed; these are for a host
-// building its own JS↔Scheme bridge around a run (handing a JS value into `{ scope }`
-// accumulation, or reading a crossed callback's result by hand).
-export { schemeToJs, schemeToJsUntyped, jsToScheme } from "./membrane/rosetta.js";
+// Membrane crossing — `exec`'s return values are already crossed (via `toJS`); these
+// are for a host building its own JS↔Scheme bridge around a run (handing a JS value
+// into `{ scope }` accumulation, or reading a boxed COMPLEX-tier value by hand).
+//
+// Public outbound exit: `toJS` — dispatches each box's `arrival/toJS` protocol (P7).
+// Inbound twin: `jsToScheme`. Worlds do not mix: scheme-side values cross with `toJS`
+// once; JS-side values (e.g. `exec` results) never re-cross. `isSchemeValue` is a
+// membrane predicate for double-wrap prevention / codec gates — not a soft peel.
+//
+// `schemeToJs` / `schemeToJsUntyped` remain exported as TEMPORARY aliases. New code
+// uses `toJS`; do not add new `schemeToJs*` or `isSchemeValue ? toJS : id` call sites.
+export { toJS, isSchemeValue } from "./membrane/membrane.js";
+export { jsToScheme, schemeToJs, schemeToJsUntyped } from "./membrane/rosetta.js";
 // Membrane null/absent leaf — crosses both ways, so it travels with the eval surface
 // rather than the value-class reflection tier (`/reflect-internals`).
 export { ANil } from "./values/primitives/ANil.js";

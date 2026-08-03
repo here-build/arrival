@@ -9,7 +9,7 @@
 // shaping (`httpOptions`) is imported straight from `http-effect.ts` — one shaping
 // implementation, one registration site.
 
-import { EnvCapability, schemeToJs, z, type SchemeValue } from "@inhuman.tools/arrival";
+import { EnvCapability, toJS, z, type SchemeValue } from "@inhuman.tools/arrival";
 
 import { type HttpEffectResolver, type HttpMethod, httpOptions, inertHttpResolver } from "./http-effect.js";
 
@@ -22,7 +22,7 @@ export const arrivalHttpCapability = EnvCapability.define("arrival/http", {
   // re-reads it from `this.configuration.http` at REAL DISPATCH instead (the injected
   // `symbol.rosetta`'s typed `this` — `this.invocation` rides the same CallCtx channel it always
   // did). VARIADIC identity input (`z.array(z.dynamic)`) keeps open ARITY TOLERANCE (opts
-  // may be omitted). Each arg is `schemeToJs`'d explicitly inside the impl (crossing face).
+  // may be omitted). Each present arg crosses once via `toJS` (membrane exit).
   // Each verb is a `symbol.rosetta` SOURCE (no pure-pipe ⇒ mints a fresh provenance point at the
   // membrane crossing).
   symbols: (symbol) => {
@@ -33,9 +33,8 @@ export const arrivalHttpCapability = EnvCapability.define("arrival/http", {
         // contract demands SchemeValue — asserted at the verb table, same as arrival-reflect.
         function (...args: unknown[]) {
           const resolve = this.configuration.http ?? inertHttpResolver;
-          // Boundary narrow: the verb table receives raw scheme args (unknown[]); schemeToJs's
-          // honest signature demands SchemeValue — asserted once at the destructure, same as
-          // the boundary-assert return cast below.
+          // Boundary narrow: the verb table receives raw scheme args (unknown[]); required
+          // slots are SchemeValue, optional opts may be omitted (arity tolerance).
           const [label, path, opts] = args as (SchemeValue | undefined)[];
           // Boundary assert: the resolver returns `Promise<unknown>` by design (host data); the
           // z.dynamic contract demands `MaybePromise<SchemeValue>` — asserted at the return, same
@@ -44,9 +43,9 @@ export const arrivalHttpCapability = EnvCapability.define("arrival/http", {
           return resolve(this.invocation, {
             kind: "http",
             method,
-            label: String(schemeToJs(label, {})),
-            path: String(schemeToJs(path, {})),
-            ...httpOptions(method, schemeToJs(opts, {})),
+            label: String(toJS(label as SchemeValue)),
+            path: String(toJS(path as SchemeValue)),
+            ...httpOptions(method, opts === undefined ? undefined : toJS(opts)),
           }) as Promise<SchemeValue>;
         },
       );

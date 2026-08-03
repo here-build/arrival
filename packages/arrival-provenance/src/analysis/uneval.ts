@@ -22,7 +22,7 @@
 // (verified: no shared helpers, no shared imports) and this relocation is the first point they
 // needed genuinely different homes.
 
-import { execState, parse, schemeToJs, type LexicalScope, type SchemeValue } from "@inhuman.tools/arrival";
+import { execState, parse, toJS, type LexicalScope, type SchemeValue } from "@inhuman.tools/arrival";
 import { bindValue } from "@inhuman.tools/arrival/host-internals";
 import {
   buildSlice,
@@ -63,7 +63,7 @@ export interface UnevalContainer {
 }
 
 /** Build the `{result, meta, uneval}` container from a finished traced run. `result` is the run's
- *  final value as a raw AValue (provenance intact — NOT schemeToJs-peeled); `scope` is the post-run
+ *  final value as a raw AValue (provenance intact — NOT `toJS`-peeled); `scope` is the post-run
  *  lexical scope (so the selector evaluates with the run's defines visible and `result` bound, and
  *  — since Stage C Cut 3b — the selector's heads resolve through the SAME self-hosted base every
  *  run shares, `execState`'s own `BASE_ROSTER` fold, not a caller-supplied ambient handle); `trace`
@@ -91,13 +91,14 @@ export function buildUneval(opts: {
   // output expression rendered back to source.
   const resultExpr = outputForm === undefined ? "result" : (outputName ?? writeForm(outputForm));
 
+  /** One scheme→JS exit; void / absent values stay `undefined` (no soft peel of plain JS). */
+  const peel = (v: unknown): unknown => (v === undefined ? undefined : toJS(v as SchemeValue));
+
   return {
     // `result`/`v` (below) are declared `unknown` at this public boundary (this file's own
     // `scope.define("result", result as never)` already casts the same value to bind it into
-    // the interpreter's scope — it must genuinely be a SchemeValue to be usable there), so the
-    // schemeToJs cast here documents the same pre-existing contract rather than widening
-    // schemeToJs's own honest input bound.
-    result: schemeToJs(result as SchemeValue | undefined, {}),
+    // the interpreter's scope — it must genuinely be a SchemeValue to be usable there).
+    result: peel(result),
     meta: { forms: forms.length },
     uneval: async (selector: string): Promise<Uneval> => {
       // Bind the run's output as `result`, then evaluate the selector as ONE more tapped step —
@@ -121,7 +122,7 @@ export function buildUneval(opts: {
       const program = slice.program ? `${slice.program}\n${tail}` : tail;
       // `v` is the tapped step's result — same evaluator-output contract as `result` above.
       return {
-        value: schemeToJs(v as SchemeValue | undefined, {}),
+        value: peel(v),
         provenance,
         program,
         points: slice.points,

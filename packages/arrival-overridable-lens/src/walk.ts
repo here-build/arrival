@@ -28,7 +28,7 @@ export const OVERRIDABLE_DEFINE_HEAD = "define/overridable";
  *  argument (fold it with `foldSchemaTag`); `defaultNode` is the `default` argument (evaluate
  *  it with `execState`, or read it structurally, per the consumer's need). Both are
  *  `SchemeValue` — they came straight out of `parse`, so the evaluating consumer feeds them to
- *  `execState`/`schemeToJs` directly while a folding consumer still treats them as `unknown`. */
+ *  `execState`/`toJS` directly while a folding consumer still treats them as `unknown`. */
 export interface OverridableForm {
   name: string;
   typeNode: SchemeValue;

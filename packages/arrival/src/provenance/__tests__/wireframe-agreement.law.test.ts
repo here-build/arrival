@@ -32,7 +32,7 @@ import { freeVars } from "../../provenance/wireframe/free-vars.js";
 import type { WireframeGraph } from "../../provenance/wireframe/types.js";
 import { WireLocalityError } from "../../errors.js";
 import { scopeId } from "../../provenance/scope-id.js";
-import { schemeToJs } from "../../membrane/rosetta.js";
+import { toJS } from "../../membrane/membrane.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { isEagerProvenanceOracleEnabled, setEagerProvenanceOracleEnabled } from "../../values/op-helpers.js";
 import { EnvCapability } from "../../common/capability.js";
@@ -114,7 +114,7 @@ describe("wire-locality (§1 CHOSEN: a wire is a closed arrival lambda) — FLIP
       const [result] = (
         await execState(`(${w.source} 41)`, { capabilities: base.capabilities, config: base.config, scope: base.scope, runCtx: base.runCtx })
       ).values;
-      expect(schemeToJs(result)).toBe(42);
+      expect(toJS(result)).toBe(42);
     },
   );
 
@@ -527,7 +527,7 @@ describe("Q7 — program prelude: a pure helper stays a REFERENCE, the positive 
       const [result] = (
         await execState("(caller 41)", { capabilities: base.capabilities, config: base.config, scope: base.scope, runCtx: base.runCtx })
       ).values;
-      expect(schemeToJs(result)).toBe(42);
+      expect(toJS(result)).toBe(42);
 
       // `helper` is a REAL bound name resolved through the root scope — not
       // something the (empty) ingress bag carried.

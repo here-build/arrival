@@ -21,7 +21,7 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 
-import { schemeToJs } from "../../membrane/rosetta.js";
+import { toJS } from "../../membrane/membrane.js";
 import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
 import {
   closeRegionScope,
@@ -67,7 +67,7 @@ describe("track-open/track-close: real B3 counters through withRegionCall", () =
     const sink: TrackEmissionSink = { store, regionId: REGION };
 
     const scope = withTrackCoordinate(COORD, sink, () => openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined }));
-    const wrapper = withRegionScope(scope, () => schemeToJs(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
+    const wrapper = withRegionScope(scope, () => toJS(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
 
     expect(await wrapper(41)).toBe(41); // sanity: the real call still works
     closeRegionScope(scope);
@@ -93,7 +93,7 @@ describe("track-open/track-close: real B3 counters through withRegionCall", () =
     const sink: TrackEmissionSink = { store, regionId: REGION };
 
     const scope = withTrackCoordinate(COORD, sink, () => openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined }));
-    const wrapper = withRegionScope(scope, () => schemeToJs(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
+    const wrapper = withRegionScope(scope, () => toJS(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
 
     await wrapper(1);
     await wrapper(2);
@@ -117,7 +117,7 @@ describe("track-open/track-close: real B3 counters through withRegionCall", () =
     const sink: TrackEmissionSink = { store, regionId: REGION };
 
     const scope = withTrackCoordinate(COORD, sink, () => openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined }));
-    const wrapper = withRegionScope(scope, () => schemeToJs(makeThrowingProc()) as (...a: unknown[]) => Promise<unknown>);
+    const wrapper = withRegionScope(scope, () => toJS(makeThrowingProc()) as (...a: unknown[]) => Promise<unknown>);
 
     await expect(wrapper()).rejects.toThrow(/deliberate failure/);
     closeRegionScope(scope);
@@ -138,7 +138,7 @@ describe("track-open/track-close: real B3 counters through withRegionCall", () =
     const sink: TrackEmissionSink = { store, regionId: REGION };
 
     const scope = withTrackCoordinate(COORD, sink, () => openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined }));
-    const wrapper = withRegionScope(scope, () => schemeToJs(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
+    const wrapper = withRegionScope(scope, () => toJS(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
 
     expect(await wrapper(41)).toBe(41); // identical program behavior to the ON case above
     closeRegionScope(scope);
@@ -155,7 +155,7 @@ describe("track-open/track-close: real B3 counters through withRegionCall", () =
     // today (rosetta.ts's `openRegionScope` call is unchanged; nothing installs a
     // TrackCoordinate ambiently yet).
     const scope = openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined });
-    const wrapper = withRegionScope(scope, () => schemeToJs(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
+    const wrapper = withRegionScope(scope, () => toJS(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
     expect(await wrapper(41)).toBe(41);
     expect(() => closeRegionScope(scope)).not.toThrow();
     // No store to assert against — there IS no sink; the point is the run completes
@@ -206,7 +206,7 @@ describe("host-schedule: accumulate-then-flush-at-close (§5 D5)", () => {
     const store = new ProvenanceStoreFake();
     const sink: TrackEmissionSink = { store, regionId: REGION };
     const scope = withTrackCoordinate(COORD, sink, () => openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined }));
-    const wrapper = withRegionScope(scope, () => schemeToJs(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
+    const wrapper = withRegionScope(scope, () => toJS(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
 
     recordHostScheduleVerdict(scope, [0], [1], 1);
     const call = wrapper(1); // started, deliberately never awaited before close

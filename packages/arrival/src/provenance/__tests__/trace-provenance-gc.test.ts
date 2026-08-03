@@ -16,7 +16,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { EnvCapability, execState, schemeToJs } from "../../index.js";
+import { EnvCapability, execState, toJS } from "../../index.js";
 import { EvalTrace } from "../../provenance/index.js";
 
 /** One provenance-source tool that mints a large string — the retained-value shape a
@@ -35,7 +35,7 @@ describe("EvalTrace.stats() / .points() / .clear() — explicit provenance GC", 
     const trace = new EvalTrace();
     const cap = bigTextCapability(1_000_000);
     const { values } = await execState(`(big-text)`, { capabilities: [cap], tap: trace });
-    expect(schemeToJs(values[0], {})).toHaveLength(1_000_000);
+    expect(toJS(values[0])).toHaveLength(1_000_000);
 
     const before = trace.stats();
     expect(before.points).toBe(1);
@@ -63,7 +63,7 @@ describe("EvalTrace.stats() / .points() / .clear() — explicit provenance GC", 
 
     const { values: first } = await execState(`(big-text)`, { capabilities: [cap], tap: trace });
     const firstId = [...trace.points()][0]!.id;
-    expect(schemeToJs(first[0], {})).toBe("xxxxxxxxxx");
+    expect(toJS(first[0])).toBe("xxxxxxxxxx");
 
     trace.clear();
     // Old id is gone — the invocation that minted it no longer exists in this trace.
@@ -71,7 +71,7 @@ describe("EvalTrace.stats() / .points() / .clear() — explicit provenance GC", 
 
     const { values: second } = await execState(`(big-text)`, { capabilities: [cap], tap: trace });
     const secondId = [...trace.points()][0]!.id;
-    expect(schemeToJs(second[0], {})).toBe("xxxxxxxxxx");
+    expect(toJS(second[0])).toBe("xxxxxxxxxx");
 
     expect(secondId).toBeGreaterThan(firstId);
     // New id resolves fine post-clear.
@@ -96,7 +96,7 @@ describe("EvalTrace.stats() / .points() / .clear() — explicit provenance GC", 
           },
         ) }) });
     const { values } = await execState(`(mid-run)`, { capabilities: [guarded], tap: trace });
-    expect(schemeToJs(values[0], {})).toBe("ok");
+    expect(toJS(values[0])).toBe("ok");
     expect(threw).toBe(true);
     // Once the run has actually finished (no invocation open), clear() is legal.
     expect(() => trace.clear()).not.toThrow();
@@ -108,7 +108,7 @@ describe("EvalTrace.stats() / .points() / .clear() — explicit provenance GC", 
 
     const cap = bigTextCapability(5);
     const { values } = await execState(`(big-text)`, { capabilities: [cap], tap: trace });
-    expect(schemeToJs(values[0], {})).toBe("xxxxx");
+    expect(toJS(values[0])).toBe("xxxxx");
 
     const [point] = [...trace.points()];
     expect(point!.id).toBeGreaterThanOrEqual(1_000);

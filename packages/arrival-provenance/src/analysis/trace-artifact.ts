@@ -8,21 +8,20 @@
  * explicit compatibility discipline (additive-by-default; a breaking change
  * bumps the version and the visualizer supports the window).
  *
- * Why a serialize step at all — the live render path (`shell.tsx`,
- * `runTraced`) RECOMPUTES the graph in-browser straight off a finished
- * `EvalTrace`, so its region `value`/`meta` fields still hold RAW scheme values
- * (a `Pair`/cons list, a boxed exact/inexact number — `trace-to-regions.ts`
- * stores `value: inv.value` verbatim). `JSON.stringify` would mangle those. The
- * artifact is the same graph with every scheme value lowered to plain JS via the
- * `schemeToJs` membrane, so a trace JSON on disk renders with NO server and NO
- * re-eval (ADR-019 D2/D3).
+ * Membrane discipline — peel once, at the snapshot:
+ *   `snapshotTrace` is the scheme→JS boundary (`toJS` on `PlainInv.value`;
+ *   `metadata` is host-side POJO and never crosses into scheme). `traceToRegions`
+ *   copies those already-plain fields onto leaf/output regions. This serializer
+ *   does NOT re-cross the membrane — a second peel would be the soft-idempotent
+ *   smell (`schemeToJs` on mixed world). Fanout structure is cloned so the
+ *   artifact owns its tree; no AValue should remain after the snapshot boundary.
  *
  * `serializeTrace` / `loadTraceArtifact` are the ONLY format-aware functions —
  * the SERDE discipline used for `GlobalVariant` in `token-variance.ts`. Keep all
  * version-gating here; downstream consumers take `{ graph }` and never branch on
  * the wire shape.
  */
-import { ArrivalError, schemeToJs, type ErrorClass, type SchemeValue } from "@inhuman.tools/arrival";
+import { ArrivalError, type ErrorClass } from "@inhuman.tools/arrival";
 
 import { traceToRegions, type Region, type RegionGraph } from "./trace-to-regions.js";
 import type { EvalTrace } from "@inhuman.tools/arrival/provenance";
@@ -69,47 +68,35 @@ export const TRACE_PROTOCOL_VERSION = 1;
 export interface TraceArtifact {
   /** Matches `TRACE_PROTOCOL_VERSION` at emit time. */
   version: number;
-  /** The blueprint structure, with all scheme values lowered to plain JS. */
+  /** The blueprint structure — plain JS from the snapshot membrane exit. */
   graph: RegionGraph;
 }
 
-/** Deep-lower one region's scheme-bearing fields (`value`, `meta`) to plain JS,
- *  recursing through a fanout's nested iterations. `schemeToJs` is idempotent on
- *  already-plain JS, so applying it uniformly is safe; everything else on a
- *  region (ids, labels, scopes, `condition`, port strings) is already plain. */
-function lowerRegion(region: Region): Region {
+/**
+ * Own the region tree so later live-trace mutation cannot touch the artifact.
+ * Values/meta are already plain; only fanout nesting needs structural copy.
+ */
+function cloneRegion(region: Region): Region {
   switch (region.kind) {
-    case "leaf":
-      // `region.meta`/`.value` are declared `unknown` on the wire `Region` type (it also
-      // describes the POST-lowering shape this same function produces) — but per this
-      // file's header, at THIS call they still hold the RAW scheme values `trace-to-
-      // regions.ts` stored verbatim (`value: inv.value`). The cast documents that
-      // pre-lowering contract; schemeToJs's own idempotence (this fn's doc) keeps a
-      // stray already-lowered re-entry safe regardless.
-      return {
-        ...region,
-        meta: schemeToJs(region.meta as SchemeValue | undefined),
-        value: schemeToJs(region.value as SchemeValue | undefined),
-      };
-    case "output":
-      return { ...region, value: schemeToJs(region.value as SchemeValue | undefined) };
     case "fanout":
-      return { ...region, iterations: region.iterations.map((body) => body.map(lowerRegion)) };
+      return { ...region, iterations: region.iterations.map((body) => body.map(cloneRegion)) };
+    case "leaf":
+    case "output":
     case "decision":
-      return region; // condition is an already-rendered string; nothing scheme-bearing
+      return { ...region };
   }
 }
 
 /**
- * Emit a `TraceArtifact` from a finished `EvalTrace` — `traceToRegions` for the
- * structure, then `schemeToJs` over every scheme-bearing field so the result is
- * JSON-safe. The only emitter-side format-aware function.
+ * Emit a `TraceArtifact` from a finished `EvalTrace`. Graph construction
+ * (`traceToRegions` → `snapshotTrace`) already exited the membrane; this only
+ * versions + owns the tree. The only emitter-side format-aware function.
  */
 export function serializeTrace(trace: EvalTrace): TraceArtifact {
   const graph = traceToRegions(trace);
   return {
     version: TRACE_PROTOCOL_VERSION,
-    graph: { ...graph, roots: graph.roots.map(lowerRegion) },
+    graph: { ...graph, roots: graph.roots.map(cloneRegion) },
   };
 }
 

@@ -16,9 +16,8 @@
  * value/provenance via `valueById` / `liveValueById`. Live reads into the snapshot
  * mirror deferred to Phase-2 (worker boundary); see `trace-snapshot.ts`.
  */
-import { schemeToJs } from "@inhuman.tools/arrival";
 import type { APair } from "@inhuman.tools/arrival/reflect-internals";
-import type { SchemeValue } from "@inhuman.tools/arrival";
+import { toJS, type SchemeValue } from "@inhuman.tools/arrival";
 
 import { carrierFieldEdges, scopedBindings, subtreeIds } from "./carrier-fields.js";
 import { scopeId, type PlainInv, type EvalTrace, type Invocation } from "@inhuman.tools/arrival/provenance";
@@ -289,10 +288,12 @@ export class TraceRegionFold {
     }
 
     // Fresh value memo per build (mirrors from-scratch `valCache`; parity with one-shot).
+    // Live values are scheme-side — peel once with `toJS`; absent stays undefined.
     this.#valCache = new Map<number, unknown>();
     const valueById = (id: number): unknown => {
       if (this.#valCache.has(id)) return this.#valCache.get(id);
-      const v = schemeToJs(this.#liveById.get(id)?.value);
+      const raw = this.#liveById.get(id)?.value;
+      const v = raw === undefined ? undefined : toJS(raw);
       this.#valCache.set(id, v);
       return v;
     };
@@ -430,7 +431,13 @@ export class TraceRegionFold {
       const isRoot = plain.parent === null;
       const isBranchChild = BRANCH_FORMS.has(this.#headName(plain.parent?.node) ?? "");
       plain.state = live.state;
-      plain.value = isPoint || isRoot || isBranchChild ? schemeToJs(live.value) : undefined;
+      // Match `snapshotTrace`: peel at the plain-mirror boundary (scheme → JS once).
+      plain.value =
+        isPoint || isRoot || isBranchChild
+          ? live.value === undefined
+            ? undefined
+            : toJS(live.value)
+          : undefined;
       plain.metadata = isPoint ? live.metadata : undefined;
       // A leaf parked while `running` may have REJECTED since — re-copy error/cache so the
       // settled mirror matches a fresh snapshot.
@@ -458,7 +465,13 @@ export class TraceRegionFold {
       children: [],
       provenance: inv.parent?.isProvenancePoint || isRoot ? new Set(inv.provenance) : EMPTY_NUM,
       isProvenancePoint: isPoint,
-      value: isPoint || isRoot || isBranchChild ? schemeToJs(inv.value) : undefined,
+      // Match `snapshotTrace`: peel at the plain-mirror boundary (scheme → JS once).
+      value:
+        isPoint || isRoot || isBranchChild
+          ? inv.value === undefined
+            ? undefined
+            : toJS(inv.value)
+          : undefined,
       metadata: isPoint ? inv.metadata : undefined,
       state: inv.state,
       error: isPoint && inv.state === "rejected" ? errText(inv.error) : undefined,
@@ -519,11 +532,12 @@ export class TraceRegionFold {
       const par = plain.parent;
       if (par && BRANCH_FORMS.has(headOf(par))) branchTouched.add(par.id);
     }
-    // Transient `schemeToJs` memo for operand-value reads `decisionInputProducers` needs.
+    // Transient memo for operand-value reads `decisionInputProducers` needs (live scheme → toJS).
     const valCache = new Map<number, unknown>();
     const valueById = (vid: number): unknown => {
       if (valCache.has(vid)) return valCache.get(vid);
-      const v = schemeToJs(this.#liveById.get(vid)?.value);
+      const raw = this.#liveById.get(vid)?.value;
+      const v = raw === undefined ? undefined : toJS(raw);
       valCache.set(vid, v);
       return v;
     };
@@ -594,7 +608,10 @@ export class TraceRegionFold {
   /** Every operand producer SETTLED (not running) — "not wired" verdict is final
    *  (provenance won't grow). Decides whether to lock in or defer the dynamic-capability check. */
   #operandsResolved(inv: PlainInv): boolean {
-    const valueById = (vid: number): unknown => schemeToJs(this.#liveById.get(vid)?.value);
+    const valueById = (vid: number): unknown => {
+      const raw = this.#liveById.get(vid)?.value;
+      return raw === undefined ? undefined : toJS(raw);
+    };
     for (const { producerId } of decisionInputProducers(inv, valueById)) {
       if (this.#liveById.get(producerId)?.state === "running") return false;
     }

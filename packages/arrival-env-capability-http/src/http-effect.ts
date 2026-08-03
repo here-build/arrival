@@ -38,7 +38,7 @@
  */
 
 // Value-level `Nil` — defence for DIRECT-JS callers of the coercions below. In the
-// exec path `schemeToJs(v, {})` lowers an empty scheme list (`(list)` / `'()`) to a
+// exec path `toJS(v, {})` lowers an empty scheme list (`(list)` / `'()`) to a
 // JS `[]` at every depth, so a Nil instance never reaches these functions from a
 // verb; the `instanceof ANil` arms cover a caller that hands over raw scheme values
 // without the conversion pass. This couples only to the engine's own value type,
@@ -173,7 +173,7 @@ function isQueryScalar(v: unknown): v is string | number | boolean {
 
 /** "No value" as it crosses the rosetta membrane: a missing dict field is JS
  *  `undefined`/`null`. (An empty scheme list is NOT "no value" on this path:
- *  `schemeToJs` lowers `(list)`/`'()` to a JS `[]`, so an empty-list field arrives
+ *  `toJS` lowers `(list)`/`'()` to a JS `[]`, so an empty-list field arrives
  *  as an ARRAY and is treated as a structured value — rejected for query/headers —
  *  not omitted. A scheme dict literal cannot express undefined/null, so in practice
  *  the omission arm fires for JS-side callers; the `ANil` arm is defence for
@@ -274,7 +274,7 @@ function coerceHttpHeaders(raw: unknown): HttpEffect["headers"] {
  *   - CLEAN MATERIALISATION — the resolver receives `undefined` (no body to send),
  *     never a scheme-internal sentinel it would try to JSON-serialise.
  *
- * An empty scheme list is NOT dropped: `schemeToJs` lowers `(list)` to `[]`, which
+ * An empty scheme list is NOT dropped: `toJS` lowers `(list)` to `[]`, which
  * passes through verbatim as an empty-array body — structure is the payload, even
  * when empty. Any other real value (dict / list / scalar) likewise passes through
  * unchanged. `undefined` in (no `:body` field) ⇒ `undefined` out (no `body` key on
@@ -285,7 +285,7 @@ function coerceHttpBody(raw: unknown): HttpEffect["body"] {
 }
 
 /** Shape an HTTP options dict (`(dict :query … :headers … :body …)`) — already
- *  schemeToJs'd to a plain record by the rosetta wrapper — into the `HttpEffect`
+ *  toJS'd to a plain record by the rosetta wrapper — into the `HttpEffect`
  *  request fields, per method. `query`/`headers` coercion is shared (both verbs
  *  want faithfully-scalar values); the body is the per-method axis: a read verb
  *  (GET/HEAD) carries NO body — a request body on a read is spec-discouraged,

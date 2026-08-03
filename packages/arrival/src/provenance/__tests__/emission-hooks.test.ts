@@ -13,7 +13,7 @@
  *      hand-built `RecordId`/payload;
  *   2. "sunset byte-identical when off" is true of the REAL program result, not just
  *      "the emit* functions no-op in isolation" — the SAME program, same env, same
- *      inputs, produces an identical `schemeToJs` result whether the flag is on or
+ *      inputs, produces an identical `toJS` result whether the flag is on or
  *      off (the sidecar is provably inert on the primary execution path).
  */
 import { afterEach, describe, expect, it } from "vitest";
@@ -22,7 +22,7 @@ import { mintFrame, type ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { EvalTrace } from "../../provenance/trace.js";
 import { inferenceEnv } from "../../env/inference-env.js";
-import { schemeToJs } from "../../membrane/rosetta.js";
+import { toJS } from "../../membrane/membrane.js";
 import { withRecordCoordinateAsync, type EmissionSink, type RecordCoordinate } from "../../eval/provenance-hooks.js";
 import { PayloadStoreFake, ProvenanceStoreFake } from "../../provenance/store/fakes.js";
 import { setEmissionEnabled } from "../../provenance/store/emit.js";
@@ -60,7 +60,7 @@ describe("the real port site: a rosetta crossing through evaluator.ts's generic 
     await registerSource(env);
 
     const result = await withRecordCoordinateAsync(COORD, sink, () => execState("(fetch-item)", { env, tap: trace }));
-    expect(schemeToJs(result.values[0], {})).toBe(42);
+    expect(toJS(result.values[0])).toBe(42);
 
     // Emission is DETACHED (fire-and-forget off the settled Promise) — give its
     // microtask a turn before asserting the store's contents.
@@ -84,7 +84,7 @@ describe("the real port site: a rosetta crossing through evaluator.ts's generic 
     await registerSource(env);
 
     const result = await withRecordCoordinateAsync(COORD, sink, () => execState("(fetch-item)", { env, tap: trace }));
-    expect(schemeToJs(result.values[0], {})).toBe(42); // identical program output to the ON case above
+    expect(toJS(result.values[0])).toBe(42); // identical program output to the ON case above
 
     await Promise.resolve();
     await Promise.resolve();
@@ -102,7 +102,7 @@ describe("the real port site: a rosetta crossing through evaluator.ts's generic 
     // today, since the wireframe-walking driver (Q15/Q16) that would install one
     // doesn't exist yet.
     const result = await execState("(fetch-item)", { env, tap: trace });
-    expect(schemeToJs(result.values[0], {})).toBe(42);
+    expect(toJS(result.values[0])).toBe(42);
     // No assertion is possible against "the store" here — there IS no sink; the point
     // of this row is that the run completes identically without one, i.e. the hook's
     // `coordinate === undefined || sink === undefined` early return is exercised on a
@@ -118,7 +118,7 @@ describe("the real port site: a rosetta crossing through evaluator.ts's generic 
     const env = mintFrame(inferenceEnv, "emission-hooks-non-rosetta");
 
     const result = await withRecordCoordinateAsync(COORD, sink, () => execState("(+ 1 2)", { env, tap: trace }));
-    expect(schemeToJs(result.values[0], {})).toBe(3);
+    expect(toJS(result.values[0])).toBe(3);
 
     await Promise.resolve();
     await Promise.resolve();

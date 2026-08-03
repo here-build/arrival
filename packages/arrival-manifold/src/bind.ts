@@ -16,7 +16,7 @@ import {
   execState,
   jsToScheme,
   LexicalScope,
-  schemeToJs,
+  toJS,
   z,
   type RunContext,
   type SchemeValue,
@@ -302,7 +302,7 @@ function alistShapedObject(value: unknown): Record<string, unknown> | undefined 
 function validatorDef(name: ValidatorName): SymbolDeclaration {
   const { article, test } = VALIDATORS[name];
   const impl = (decoded: z.output<typeof z.dynamic>): z.output<typeof z.dynamic> => {
-    const jsValue = schemeToJs(decoded);
+    const jsValue = toJS(decoded as SchemeValue);
     if (test(jsValue)) return freshIfSingleton(decoded);
     throw new Error(`s/${name}: expected ${article} ${name}, got ${typeNameOf(jsValue)}: ${previewOf(jsValue)}`);
   };
@@ -344,7 +344,7 @@ function validatorSymbols(): Record<string, SymbolDeclaration> {
  *  in-REPL condition, never a tool.invoke rejection. */
 function normalizerDef(entry: NormalizerPreludeSymbol): SymbolDeclaration {
   const impl = function (this: CallCtx, decoded: z.output<typeof z.dynamic>): SchemeValue {
-    const jsValue = schemeToJs(decoded);
+    const jsValue = toJS(decoded as SchemeValue);
     if (typeof jsValue !== "string") {
       throw new TypeError(`${entry.name}: expected a string, got ${typeNameOf(jsValue)}: ${previewOf(jsValue)}`);
     }
@@ -487,7 +487,7 @@ function rosettaDef(
         // came through the z.dynamic codec — SchemeValue by construction.
         // If the tool DECLARES this param an object and the value crossed as an alist-shaped array,
         // read it as the slot says — see `alistShapedObject` above. Everything else is untouched.
-        const crossed = schemeToJs(decoded[p.name] as SchemeValue);
+        const crossed = toJS(decoded[p.name] as SchemeValue);
         const jsValue = p.schema?.type === "object" ? (alistShapedObject(crossed) ?? crossed) : crossed;
         if (mode !== "off" && !isAttested(decoded[p.name])) {
           if (mode === "required") throw new Error(attestationErrorMessage(p, jsValue));
@@ -513,7 +513,7 @@ function rosettaDef(
     // this tool now — its next misuse failure starts a fresh L1 lesson, never an inherited L3.
     argsTracker?.recordSuccess(qualifiedName);
     // `output: [z.dynamic]` is the scheme-identity codec (js face IS SchemeValue) — the
-    // MCP tool's raw JS result needs lifting, mirroring the schemeToJs decode above.
+    // MCP tool's raw JS result needs lifting, mirroring the toJS decode above.
     return jsToScheme(this.runCtx, result);
   };
   return symbol.rosetta(

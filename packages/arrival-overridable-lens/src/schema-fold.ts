@@ -13,7 +13,7 @@
  * registry symbol (`Symbol.for("__location__")`) read off Pairs without importing primitives.
  */
 import type { SourceLocation } from "@inhuman.tools/arrival/provenance";
-import { schemeToJsUntyped } from "@inhuman.tools/arrival";
+import { toJS, type SchemeValue } from "@inhuman.tools/arrival";
 
 export type { SourceLocation } from "@inhuman.tools/arrival/provenance";
 
@@ -48,7 +48,7 @@ export const locationOf = (form: unknown): SourceLocation | undefined =>
 // fold too, the same two a `define/overridable` type tag could always be: a bare
 // self-evaluating atom (`"string"`, kind-tagged by the reader at parse time already) and a
 // quoted list literal (`'("enum" "a" "b")`, parsed as `(quote datum)` — `datum` is already
-// pure boxed data by `quote`'s own semantics, so `schemeToJs` unboxes the Pair-chain with no
+// pure boxed data by `quote`'s own semantics, so `toJS` unboxes the Pair-chain with no
 // evaluation either, exactly the free lunch a bare atom gets).
 //
 // This produces the SAME canonical tagged-list core's `tagToJsonSchema` then consumes — the
@@ -61,7 +61,7 @@ const kindOf = (v: unknown): unknown => (v !== null && typeof v === "object" && 
 function literalAtom(node: unknown): { ok: true; value: string | number | boolean } | { ok: false } {
   const kind = kindOf(node);
   if (kind === "string" || kind === "number" || kind === "boolean") {
-    return { ok: true, value: schemeToJsUntyped(node, {}) as string | number | boolean };
+    return { ok: true, value: toJS(node as SchemeValue) as string | number | boolean };
   }
   return { ok: false };
 }
@@ -136,13 +136,13 @@ export function foldSchemaTag(node: unknown): { ok: true; value: unknown } | { o
   const head = node.car;
 
   // `(quote datum)` — the `'datum` shorthand desugars to this. `datum` is pure literal data
-  // by quote's own semantics (never evaluated), so `schemeToJs` unboxes the Pair-chain of
+  // by quote's own semantics (never evaluated), so `toJS` unboxes the Pair-chain of
   // literals into a JS array/scalar directly.
   if (isSymbol(head) && symName(head) === "quote") {
     const quoted = listOf(node.cdr);
     if (quoted.length !== 1) return { ok: false };
     try {
-      return { ok: true, value: schemeToJsUntyped(quoted[0], {}) };
+      return { ok: true, value: toJS(quoted[0] as SchemeValue) };
     } catch {
       return { ok: false };
     }

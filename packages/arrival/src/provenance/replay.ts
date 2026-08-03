@@ -22,7 +22,8 @@ import { bindRosetta, type AmbientValue } from "../env/AmbientRuntime.js";
 import { BASE_ROSTER } from "../env/base-roster.js";
 import { collapseProvenance } from "./provenance-collapse.js";
 import { AValue } from "../values/primitives/AValue.js";
-import { jsToScheme, schemeToJs } from "../membrane/rosetta.js";
+import { toJS } from "../membrane/membrane.js";
+import { jsToScheme } from "../membrane/rosetta.js";
 import { CONSTANT_CTX } from "../run/RunContext.js";
 import { withSilentRegion } from "../membrane/region-scope.js";
 import type { SchemeValue } from "../values/types.js";
@@ -120,7 +121,7 @@ export async function replayGraphEgress(opts: ReplayGraphOptions): Promise<Repla
     // Standard-base fold is this call site's job (see hermetic-env / gamma).
     const base = await hermeticEnv([...basePacks, ...BASE_ROSTER], program.prelude.source, {}, config);
     const boxed = await replayGraphIn(base, program, graph, frozen, slots, decisions);
-    return { boxed, value: schemeToJs(boxed, {}) };
+    return { boxed, value: toJS(boxed) };
   });
 }
 
@@ -188,7 +189,7 @@ async function replayGraphIn(
         const selBoxed = await gammaWire(wireFor(idx, "selector"));
         let arm = decisions?.get(idx);
         if (arm === undefined) {
-          const taken = schemeToJs(selBoxed, {}) !== false; // only #f is false
+          const taken = toJS(selBoxed) !== false; // only #f is false
           arm = taken ? 0 : 1;
         }
         const armValue = await gammaWire(wireFor(idx, `arm${arm}`));
@@ -295,7 +296,7 @@ export async function replayProgramWithPlayback(opts: PlaybackReplayOptions): Pr
     if (boxed === undefined) {
       throw new ReplayScopeError("port", "program", "the program evaluated zero forms — nothing to replay");
     }
-    return { boxed, value: schemeToJs(boxed, {}) };
+    return { boxed, value: toJS(boxed) };
   });
 }
 
@@ -360,8 +361,8 @@ export async function replayBetweenRecords(opts: ReplayBetweenRecordsOptions): P
       acc = await applyWireInEnv(base, stretch.wire, {
         [stretch.accParam]: acc,
         [stretch.eventParam]: boxPayload(frozen) });
-      steps.push({ kind: "pure", value: schemeToJs(acc, {}) });
+      steps.push({ kind: "pure", value: toJS(acc) });
     }
-    return { steps, egress: schemeToJs(acc, {}), egressBoxed: acc };
+    return { steps, egress: toJS(acc), egressBoxed: acc };
   });
 }

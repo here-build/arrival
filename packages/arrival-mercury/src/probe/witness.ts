@@ -169,7 +169,7 @@ function genericWitnesses(mint: () => string): Witness[] {
  * (never just one overall; see the file header). `value` is a recorded
  * crossing's result (a `ProbeTableEntry.result` from `./session.js`), so its
  * runtime type is whatever shape a JS value crossing the membrane can take: a
- * primitive, an array, or a plain object (the shapes `schemeToJs`/`jsToScheme`
+ * primitive, an array, or a plain object (the shapes `toJS`/`jsToScheme`
  * round-trip).
  */
 export function witnessesFor(value: unknown, opts?: WitnessOptions): Witness[] {

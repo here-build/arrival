@@ -39,7 +39,7 @@
  * interpreter change, no carried metadata (P2) — the substitution happens
  * AT THE MEMBRANE, where effects already are.
  */
-import { EnvCapability, execState, jsToScheme, LexicalScope, parse, schemeToJsUntyped } from "@inhuman.tools/arrival";
+import { EnvCapability, execState, jsToScheme, LexicalScope, parse, toJS, type SchemeValue } from "@inhuman.tools/arrival";
 import { buildArrivalSession, type ArrivalSession } from "@inhuman.tools/arrival-run";
 
 /**
@@ -273,7 +273,7 @@ async function runWithTable(
       last = state.values.at(-1);
       if (isThenable(last)) last = await last; // the evaluator can hand back an unforced Promise
     }
-    return { value: schemeToJsUntyped(last, {}), calls };
+    return { value: toJS(last as SchemeValue), calls };
   } finally {
     router.current = undefined; // never leave a stale resolver armed for an unrelated later call
     router.busy = false;

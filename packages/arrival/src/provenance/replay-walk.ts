@@ -41,7 +41,7 @@ import { withSilentRegion } from "../membrane/region-scope.js";
 import { applyWireInEnv } from "./gamma.js";
 import { hermeticEnv, type HermeticEnv, type IngressBindings } from "./hermetic-env.js";
 import { boxPayload, FrozenMints, ReplayScopeError, withUnionedProvenance, type ReplayedValue } from "./replay.js";
-import { schemeToJs } from "../membrane/rosetta.js";
+import { toJS } from "../membrane/membrane.js";
 import type { EmittedWire, Wire, WireframeGraph, WireframeProgram } from "./wireframe/types.js";
 
 /** One γ step: a wire's application, its consumer coordinate (which node/slot it
@@ -127,7 +127,7 @@ async function* nodeValueStep(
       );
       let arm = decisions?.get(idx);
       if (arm === undefined) {
-        const taken = schemeToJs(selBoxed, {}) !== false; // scheme truth: only #f is false
+        const taken = toJS(selBoxed) !== false; // scheme truth: only #f is false
         arm = taken ? 0 : 1;
       }
       const armValue = yield* gammaWireStep(
@@ -237,7 +237,7 @@ async function* gammaWireStep(
     }
   }
   const boxed = await withSilentRegion(() => applyWireInEnv(base, wire, ingress));
-  const step: ReplayWalkStep = { node, slot, span: wire.span, boxed, value: schemeToJs(boxed, {}) };
+  const step: ReplayWalkStep = { node, slot, span: wire.span, boxed, value: toJS(boxed) };
   yield step;
   return boxed;
 }
@@ -288,5 +288,5 @@ export async function* walkGraphReplay(opts: ReplayWalkOptions): AsyncGenerator<
   // (see that module's own header; `replay.ts`'s `replayGraphEgress` mirrors this).
   const base = await withSilentRegion(() => hermeticEnv([...basePacks, ...BASE_ROSTER], program.prelude.source, {}, config));
   const boxed = yield* graphEgressStep(base, program, graph, frozen, slots, decisions);
-  return { boxed, value: schemeToJs(boxed, {}) };
+  return { boxed, value: toJS(boxed) };
 }

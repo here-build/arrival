@@ -9,7 +9,7 @@
 // shaping (`sqlParams`) is imported straight from `sql-effect.ts` — one shaping
 // implementation, one registration site.
 
-import { EnvCapability, schemeToJs, z, type SchemeValue } from "@inhuman.tools/arrival";
+import { EnvCapability, toJS, z, type SchemeValue } from "@inhuman.tools/arrival";
 
 import { type SqlEffectResolver, inertSqlResolver, sqlParams } from "./sql-effect.js";
 
@@ -22,7 +22,7 @@ export const arrivalSqlCapability = EnvCapability.define("arrival/sql", {
   // re-reads it from `this.configuration.sql` at REAL DISPATCH instead (the injected
   // `symbol.rosetta`'s typed `this` — `this.invocation` rides the same CallCtx channel it always
   // did). VARIADIC identity input (`z.array(z.dynamic)`) keeps open ARITY TOLERANCE (params
-  // may be omitted). Each arg is `schemeToJs`'d explicitly inside the impl (crossing face).
+  // may be omitted). Each present arg crosses once via `toJS` (membrane exit).
   // The verb is a `symbol.rosetta` SOURCE (no pure-pipe ⇒ mints a fresh provenance point at the
   // membrane crossing).
   symbols: (symbol) => ({
@@ -32,9 +32,8 @@ export const arrivalSqlCapability = EnvCapability.define("arrival/sql", {
       // contract demands SchemeValue — asserted at the verb table, same as arrival-reflect.
       function (...args: unknown[]) {
         const resolve = this.configuration.sql ?? inertSqlResolver;
-        // Boundary narrow: the verb table receives raw scheme args (unknown[]); schemeToJs's
-        // honest signature demands SchemeValue — asserted once at the destructure, same as
-        // the boundary-assert return cast below.
+        // Boundary narrow: the verb table receives raw scheme args (unknown[]); required
+        // slots are SchemeValue, optional params may be omitted (arity tolerance).
         const [label, query, params] = args as (SchemeValue | undefined)[];
         // Boundary assert: the resolver returns `Promise<unknown>` by design (host data); the
         // z.dynamic contract demands `MaybePromise<SchemeValue>` — asserted at the return, same
@@ -42,9 +41,9 @@ export const arrivalSqlCapability = EnvCapability.define("arrival/sql", {
         // contextually infers as `ImplThis<Config, Resources>` off the injected `symbol.rosetta`).
         return resolve(this.invocation, {
           kind: "sql",
-          label: String(schemeToJs(label, {})),
-          query: String(schemeToJs(query, {})),
-          params: sqlParams(schemeToJs(params, {})),
+          label: String(toJS(label as SchemeValue)),
+          query: String(toJS(query as SchemeValue)),
+          params: sqlParams(params === undefined ? undefined : toJS(params)),
         }) as Promise<SchemeValue>;
       },
     ),

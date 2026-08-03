@@ -22,7 +22,7 @@ import type { OrdinalPath, RegionEpoch, RegionId, TemplateHash } from "../proven
 import type { PayloadStore, ProvenanceStore } from "../provenance/store/interfaces.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { isSilentRegion } from "../membrane/region-scope.js";
-import { schemeToJs } from "../membrane/rosetta.js";
+import { toJS } from "../membrane/membrane.js";
 import type { SchemeValue } from "../values/types.js";
 
 /** One port's static address — everything an emission needs BESIDES which
@@ -72,11 +72,10 @@ interface ProvenancePointInvocation {
   readonly isProvenancePoint?: boolean;
 }
 
-/** Peel a settled call result into a mint's payload shape. Same schemeToJs
- *  peel as provenance/uneval.ts. */
+/** Peel a settled call result into a mint's payload shape — one membrane exit. */
 function payloadOf(value: SchemeValue): { readonly value: unknown; readonly stampIds: readonly number[] } {
   const stampIds = value instanceof AValue ? [...value.provenance] : [];
-  return { value: schemeToJs(value, {}), stampIds };
+  return { value: toJS(value), stampIds };
 }
 
 /**

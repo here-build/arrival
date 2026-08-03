@@ -43,7 +43,8 @@ import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import { idContour, keepAllContour, filterContour, contourCallback } from "../../__tests__/_contour-callback.js";
 import { provOf } from "../../provenance/lineage.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
-import { schemeToJs, type InvocationLike } from "../../membrane/rosetta.js";
+import { toJS } from "../../membrane/membrane.js";
+import { type InvocationLike } from "../../membrane/rosetta.js";
 import { EnvCapability, type SymbolFactory } from "../../common/capability.js";
 import { applyCapability } from "../../__tests__/_fresh-env.js";
 import { makeCallCtx } from "../../symbol/index.js";
@@ -554,10 +555,10 @@ describe("named sheds — the only legal losses", () => {
     expect(r instanceof AValue ? r["arrival/toJS"]() : r).toBe(3);
   });
 
-  it("egress: schemeToJs leaves lineage in the trace keyed by scope; the returned JS value carries no provenance property", async () => {
+  it("egress: toJS leaves lineage in the trace keyed by scope; the returned JS value carries no provenance property", async () => {
     const raw = await runRaw(`a`, { a: sStr("a", 100) });
     expect(provOf(raw)).toEqual([100]); // pre-egress: the boxed value IS stamped
-    const egressed: unknown = schemeToJs(raw);
+    const egressed: unknown = toJS(raw);
     expect(egressed).toBe("a");
     // The trace keeps the lineage keyed by scope (P4/P12); the crossed-over JS value
     // itself carries no `provenance` property at all — not an empty one, ABSENT.

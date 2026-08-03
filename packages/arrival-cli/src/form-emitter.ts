@@ -16,7 +16,7 @@
 import {
   execState,
   parse,
-  schemeToJs,
+  toJS,
   type EnvCapability,
   type LexicalScope,
   type RunContext,
@@ -116,7 +116,7 @@ export async function emitForms(source: string, opts: FormEmitterOptions): Promi
       const meter = state.runCtx.heapMeter;
       const texts: string[] = [];
       for (const boxed of state.values) {
-        const value = schemeToJs(boxed, {});
+        const value = toJS(boxed);
         if (value === undefined) continue; // defines print nothing — REPL norm (session.ts's printValue)
         texts.push(toSExprString(value, PRINT_OPTS));
       }

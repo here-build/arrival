@@ -12,10 +12,13 @@ import { currentRunResolver } from "../eval/evaluator.js";
 import { execExpr, parse } from "../eval/generator-exec.js";
 import type { Resolver } from "../eval/Resolver.js";
 import { jsToScheme } from "../membrane/rosetta.js";
+import { ADict } from "../values/primitives/ADict.js";
 import { APair } from "../values/primitives/APair.js";
+import { ASymbol } from "../values/primitives/ASymbol.js";
 import { CONSTANT_CTX } from "../run/RunContext.js";
 import { nil } from "../values/primitives/ANil.js";
 import type { SchemeEnv } from "../common/scheme-env.js";
+import type { SchemeValue } from "../values/types.js";
 import { RunResolverUnreachableError, RequirePathError } from "../errors.js";
 import { parseJsonc } from "./parse-jsonc.js";
 
@@ -207,17 +210,20 @@ export const contentsToText = (contents: string | Uint8Array): string =>
   typeof contents === "string" ? contents : new TextDecoder().decode(contents);
 
 /** Shape a required DATA value into the program's world: arrays → scheme LISTS (Pair
- *  chains) at EVERY depth, plain objects rebuilt with shaped values (then wrapped as
- *  member-readable records by `jsToScheme`), scalars boxed by `jsToScheme`.
+ *  chains) at EVERY depth, plain objects → {@link ADict} (scheme values stored as-is),
+ *  scalars boxed by `jsToScheme`.
  *
  *  The loader's OWN data contract, done explicitly — NOT delegated to `jsToScheme`, whose
  *  rosetta boundary makes a borrowed JS array a VECTOR (so `(append (require "x.json") …)`
- *  would throw "Expecting nil or pair got js-array"). The loader is not a borrowed-host
- *  boundary — it is WHERE a data file is parsed INTO scheme, and required data is consumed
- *  with list idioms (`car`/`append`/destructuring folds), so arrays list-ify HERE, eagerly
- *  (a data file is finite and read once per run — the single-flight cache holds the shaped
- *  value). Exported for `require`'s declaration (loader-capability.ts), which shapes a
- *  `kind: "value"` result through this. */
+ *  would throw "Expecting nil or pair got js-array") and a plain object an AJSObject whose
+ *  source must stay pure-JS. Pre-shaping leaves into an AJSObject source mixed the worlds
+ *  (nested AString/AExact in a "JS" object) so `toJS` identity-unwrapped a contaminated
+ *  source. ADict is the native carrier for already-evaluated scheme entries — its
+ *  `arrival/toJS` peels nested values correctly.
+ *
+ *  Arrays list-ify HERE, eagerly (a data file is finite and read once per run — the
+ *  single-flight cache holds the shaped value). Exported for `require`'s declaration
+ *  (loader-capability.ts), which shapes a `kind: "value"` result through this. */
 export function dataToScheme(v: unknown): SchemeVal {
   if (Array.isArray(v)) {
     let tail: SchemeVal = nil;
@@ -225,9 +231,11 @@ export function dataToScheme(v: unknown): SchemeVal {
     return tail;
   }
   if (v !== null && typeof v === "object" && (Object.getPrototypeOf(v) === Object.prototype || Object.getPrototypeOf(v) === null)) {
-    const shaped: Record<string, unknown> = {};
-    for (const [k, val] of Object.entries(v as Record<string, unknown>)) shaped[k] = dataToScheme(val);
-    return jsToScheme(CONSTANT_CTX, shaped);
+    const pairs: Array<readonly [ASymbol, SchemeValue]> = [];
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+      pairs.push([new ASymbol(k), dataToScheme(val) as SchemeValue]);
+    }
+    return new ADict(pairs);
   }
   return jsToScheme(CONSTANT_CTX, v);
 }

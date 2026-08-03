@@ -7,13 +7,10 @@
 
 import { describe, expect, it } from "vitest";
 import { exec, execState } from "@inhuman.tools/arrival";
-import { schemeToJs } from "@inhuman.tools/arrival";
 import { loaderFromResolver } from "@inhuman.tools/arrival/capabilities/loader";
 import { EnvCapability } from "@inhuman.tools/arrival/capability";
 
 import { arrivalYamlCapability } from "../ext-yaml.js";
-
-const plain = (v: unknown): unknown => schemeToJs(v as never, {});
 
 const files = (table: Record<string, string>) =>
   loaderFromResolver((path) => {
@@ -24,11 +21,12 @@ const files = (table: Record<string, string>) =>
 
 describe("arrivalYamlCapability — .yaml/.yml on the vocabulary (default) path", () => {
   it("(require \"x.yaml\") resolves through THIS run's per-run registry, JSON-shaped", async () => {
+    // `exec` already exits through `toJS` — assert the JS face directly.
     const results = await exec(`(require "personas.yaml")`, {
       capabilities: [arrivalYamlCapability],
       config: { loader: files({ "personas.yaml": "name: Ada\nage: 30\n" }) },
     });
-    expect(plain(results.at(-1))).toMatchObject({ name: "Ada", age: 30 });
+    expect(results.at(-1)).toMatchObject({ name: "Ada", age: 30 });
   });
 
   it(".yml is registered alongside .yaml, same resolver", async () => {
@@ -36,7 +34,7 @@ describe("arrivalYamlCapability — .yaml/.yml on the vocabulary (default) path"
       capabilities: [arrivalYamlCapability],
       config: { loader: files({ "config.yml": "flag: true\n" }) },
     });
-    expect(plain(results.at(-1))).toMatchObject({ flag: true });
+    expect(results.at(-1)).toMatchObject({ flag: true });
   });
 
   it("a SEPARATE run that never roots arrivalYamlCapability cannot resolve .yaml at all (per-run isolation)", async () => {
@@ -72,8 +70,8 @@ describe("arrivalYamlCapability — .yaml/.yml on the vocabulary (default) path"
     const config = { loader: files({ "a.yaml": "v: 1\n" }) };
     const resultsA = await exec(`(require "a.yaml")`, { capabilities: [arrivalYamlCapability], config });
     const resultsB = await exec(`(require "a.yaml")`, { capabilities: [arrivalYamlCapability], config });
-    expect(plain(resultsA.at(-1))).toMatchObject({ v: 1 });
-    expect(plain(resultsB.at(-1))).toMatchObject({ v: 1 });
+    expect(resultsA.at(-1)).toMatchObject({ v: 1 });
+    expect(resultsB.at(-1)).toMatchObject({ v: 1 });
     // Distinct RunContexts (never a leaked shared registry) — the boxed-value COMPLEX tier,
     // asserted on identity alone (content is already proven via the SIMPLE tier above).
     const runA = await execState(`(require "a.yaml")`, { capabilities: [arrivalYamlCapability], config });

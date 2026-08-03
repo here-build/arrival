@@ -6,19 +6,18 @@
  * `exec` with the capability rooted and a per-call config, exactly as production
  * arms it.
  */
-import { exec, schemeToJs, type SchemeValue } from "@inhuman.tools/arrival";
+import { exec } from "@inhuman.tools/arrival";
 import { describe, expect, it } from "vitest";
 
 import { arrivalSqlCapability } from "../sql-capability.js";
 import type { SqlEffect, SqlEffectResolver } from "../sql-effect.js";
 
-/** Run scheme against a per-call assembly of the sql verb; return the last (awaited) value,
- *  schemeToJs-peeled (the run surface's own final peel). */
+/** Run scheme against a per-call assembly of the sql verb; return the last (awaited)
+ *  value. `exec` already exits through `toJS` — no second peel. */
 async function runScm(scm: string, resolve?: SqlEffectResolver): Promise<unknown> {
   const r = await exec(scm, { capabilities: [arrivalSqlCapability], config: resolve ? { sql: resolve } : {} });
   const last = r.at(-1);
-  const awaited = last && typeof (last as { then?: unknown }).then === "function" ? await last : last;
-  return schemeToJs(awaited as SchemeValue, {});
+  return last && typeof (last as { then?: unknown }).then === "function" ? await last : last;
 }
 
 /** A stub resolver that records every descriptor it receives, then replies. */

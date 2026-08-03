@@ -26,9 +26,10 @@ import {
   execState,
   LexicalScope,
   RunContext,
-  schemeToJsUntyped,
   type EnvCapability,
   type SessionScope,
+  type SchemeValue,
+  toJS,
 } from "@inhuman.tools/arrival";
 import { StaticValidationError, tokenize, type Diagnostic } from "@inhuman.tools/arrival/lsp-internals";
 import { arrivalLoaderCapability } from "@inhuman.tools/arrival/capabilities/loader";
@@ -129,10 +130,14 @@ export const REQUIRE_SKIP_NOTE =
 const PRINT_OPTS = { maxItems: 64, maxStringChars: 1024, maxTotalChars: 16_384 };
 
 /**
- * One top-level form's value → stdout. `undefined` (define / void) prints nothing —
- * REPL norm. `mode` is the display boundary (output-mode.ts): omit it (the REPL's plain
- * path) and the output is plain uncolored s-expr. Pass a mode (the `run` verb) to opt
+ * One top-level form's **JS-side** value → stdout (from `exec`, which already
+ * membrane-crosses). `undefined` (define / void) prints nothing — REPL norm.
+ * `mode` is the display boundary (output-mode.ts): omit it (the REPL's plain path)
+ * and the output is plain uncolored s-expr. Pass a mode (the `run` verb) to opt
  * into `--json` machine output or TTY color.
+ *
+ * Scheme-side values (from `execState`) must cross first — use {@link printSchemeValue}.
+ * Never soft-peel here: mixed-world "maybe scheme maybe JS" is a membrane discipline leak.
  */
 export function printValue(v: unknown, mode?: OutputMode): void {
   if (v === undefined) return;
@@ -140,12 +145,17 @@ export function printValue(v: unknown, mode?: OutputMode): void {
     // One JSON value per top-level form → NDJSON a `| jq` consumes. A non-serializable
     // value (a procedure → `undefined` under JSON.stringify) prints nothing, same as a
     // void form would; never a bare `undefined` line.
-    const json = JSON.stringify(schemeToJsUntyped(v, {}));
+    const json = JSON.stringify(v);
     if (json !== undefined) console.log(json);
     return;
   }
   const text = toSExprString(v, PRINT_OPTS);
   console.log(mode?.color === true ? colorizeSexpr(text) : text);
+}
+
+/** `execState` result → stdout: one scheme→JS crossing, then {@link printValue}. */
+export function printSchemeValue(v: SchemeValue, mode?: OutputMode): void {
+  printValue(toJS(v), mode);
 }
 
 export function formatDiagnostic(d: Diagnostic): string {

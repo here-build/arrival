@@ -16,13 +16,15 @@ import { z } from "zod";
 
 import { TypeTagError } from "../../errors.js";
 import { EnvCapability } from "../../common/capability.js";
-import { jsToScheme, schemeToJs } from "../../membrane/rosetta.js";
+import { toJS } from "../../membrane/membrane.js";
+import { jsToScheme } from "../../membrane/rosetta.js";
 import { stripOptionalSuffix, tagToJsonSchema } from "../../common/schema-tag.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
+import type { SchemeValue } from "../../values/types.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { schemaCapability } from "../schema/schema.js";
 
-/** Lower a `define/overridable` type tag (an evaluated scheme value, already `schemeToJs`'d
+/** Lower a `define/overridable` type tag (an evaluated scheme value, already `toJS`'d
  *  into canonical JS tagged-list form) to the zod schema that validates a JS value against it.
  *  Routes through the ONE canonical lowering — `tagToJsonSchema` + `z.fromJSONSchema`, the same
  *  bridge the wire schema and HTTP validator use — so every tag the s/* DSL expresses is accepted,
@@ -81,11 +83,11 @@ export const overridableCapability = EnvCapability.define("arrival/overridable",
           type: "(name: symbol, type: string|list, default: any): any" },
         function (nameSym, typeTag, defaultVal) {
           const bindingName = (nameSym as ASymbol).literal();
-          const jsTag = schemeToJs(typeTag);
+          const jsTag = toJS(typeTag as SchemeValue);
           const zodType = lowerTag(jsTag, bindingName);
 
           const hasOverride = Object.prototype.hasOwnProperty.call(this.configuration.params, bindingName);
-          const raw = hasOverride ? this.configuration.params[bindingName] : schemeToJs(defaultVal);
+          const raw = hasOverride ? this.configuration.params[bindingName] : toJS(defaultVal as SchemeValue);
           const source = hasOverride ? "an environment override" : "the in-form default";
 
           const outcome = zodType.safeParse(raw);
