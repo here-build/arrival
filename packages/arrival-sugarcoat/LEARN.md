@@ -35,17 +35,17 @@ rows.map{(r) => (dict :id r[:id] :label r[:label].strip)}
 ## Curly-infix
 
 `{…}` switches to infix with the precedence ladder you already know
-(`||` < `&&` < comparisons < `+ -` < `* / modulo`):
+(`or` < `and` < comparisons < `+ -` < `* / modulo`):
 
 ```scheme
 {a + b + c}              ;; ≡ (+ (+ a b) c)
-{v == "a" || v == "b"}   ;; ≡ (or (equal? v "a") (equal? v "b"))
+{v == "a" or v == "b"}   ;; ≡ (or (equal? v "a") (equal? v "b"))
 {a - b < c}              ;; ≡ (< (- a b) c)   — tighter child needs no braces
 {{a + b} * c}            ;; ≡ (* (+ a b) c)   — looser child keeps them
 ```
 
-`==` is `equal?`; `=`, `eq?`, `eqv?` render as themselves, so equality *kind* survives
-the round-trip.
+`==` is `equal?`; `and`/`or`, `=`, `eq?`, `eqv?` render as themselves, so equality *kind*
+and logical intent survive the round-trip.
 
 **Infix exists only inside `{…}`.** A naked operator line is an application, not arithmetic:
 
@@ -149,25 +149,51 @@ cond
 ;; ≡ (cond ((< n 0) "neg") ((= n 0) "zero") (else "pos"))
 ```
 
-## Dicts and kwargs
+## Dicts, lists, and kwargs
 
-Canonical dicts are `(dict :k v …)` (arrival's core reader also accepts the Clojure-style
-input literal `{:k v …}` for the same form). Sugarcoat shows the block form as colon-pairs:
+`{}` and `[]` are collection literals on the sugarcoat surface (same glyphs as arrival's
+reader). They fold to `(dict …)` / `(list …)`:
+
+```scheme
+{:name "Ada" :age 36}     ;; ≡ (dict :name "Ada" :age 36)
+{}                        ;; ≡ (dict)
+[1 2 3]                   ;; ≡ (list 1 2 3)
+[]                        ;; ≡ (list)
+[{:a 1} {:b 2}]           ;; ≡ (list (dict :a 1) (dict :b 2))
+```
+
+**`{}` is shared with n-expr.** Discrimination is odd/even at the top level:
+
+| shape | meaning |
+|---|---|
+| even forms (incl. empty) | dict — kv pairs |
+| odd, `operand op operand…` | n-expr — curly-infix |
+| single form | unwrap (`{x}` ≡ `x`) |
+
+```scheme
+{a + b}                   ;; ≡ (+ a b)          — odd, op in the middle
+{:a 1 :b 2}               ;; ≡ (dict :a 1 :b 2) — even, no ops
+{a and b or c}            ;; ≡ (or (and a b) c)
+```
+
+Suffix keys flip inside braces: `{name: "Ada"}` ≡ `{:name "Ada"}`.
+
+**`[]` is free list only when not tight.** Tight postfix is still subscript access:
+
+```scheme
+xs[0]                     ;; ≡ (car xs)         — tight subscript
+(f [1 2])                 ;; ≡ (f (list 1 2))   — spaced free list
+```
+
+Kwarg-taking heads other than `dict` (e.g. a `.prompt` require) still use the block
+colon-pair form under the head name. The legacy unbraced dict block still reads:
 
 ```scheme
 dict
   name: "Ada Lovelace"
   age: 36
-
 ;; ≡ (dict :name "Ada Lovelace" :age 36)
 ```
-
-The same `key: value` rendering applies to any kwarg-taking head — e.g. a `.prompt`
-require's named arguments.
-
-The `key:` suffix spelling is a **block-layout affordance** — it works on indented lines
-under a kwarg head. Inline, inside parens, use the `:key` prefix:
-`(dict :id r[:id])`, not `(dict id: r[:id])`.
 
 ## At-expressions — prose without escaping
 

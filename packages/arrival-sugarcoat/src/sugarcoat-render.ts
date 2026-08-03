@@ -9,7 +9,9 @@
  * not from layout optimality.
  *
  * Layers rendered:
- *   • curly-infix     (- n 1)            → {n - 1}        ; arithmetic/comparison only
+ *   • curly-infix     (- n 1)            → {n - 1}        ; n-expr (odd operand·op·operand)
+ *   • dict literal    (dict :k v …)      → {:k v …}       ; even kv pairs share `{}` with n-expr
+ *   • list literal    (list a b …)       → [a b …]        ; free `[]` (tight `xs[0]` is subscript)
  *   • neoteric        (f x y)            → f(x y)         ; optional (reads odd for data/pairs)
  *   • indentation     big forms          → head on a line, children indented
  *   • at-expressions  (str "a " x)       → @{a @x}        ; prose/template heads
@@ -232,7 +234,7 @@ export interface SugarcoatOpts {
    *  rendered as a pair line. Homoiconic: the pair is a tree node in the VIEW
    *  that collapses back to the flat `… k v …` canonical on read. */
   kwargHeads: Set<string>;
-  /** Glyph vocabulary. `"ascii"` (default) — `&&`/`||`/`==`/`=>`, keyboard-typeable.
+  /** Glyph vocabulary. `"ascii"` (default) — `and`/`or`/`==`/`=>`, keyboard-typeable.
    *  `"math"` — the Agda-style Unicode skin: `∧`/`∨`/`≡`/`≈`/`≃`/`≤`/`≥`, lambda arrow
    *  `↦`, cond/case receiver `⇀`. Still a bidirectional lens (the reader accepts BOTH
    *  vocabularies), just prettier and harder to type — for render eloquence. */
@@ -293,18 +295,17 @@ const INFIX = new Set([
 ]);
 // Canonical op → display glyph. STORED op unchanged; the view swaps in the familiar
 // symbol. The map is INJECTIVE for a faithful round-trip: only `equal?`→`==` (the
-// structural-equality common case), `and`/`or`→`&&`/`||`. `=` (numeric), `eq?`,
-// `eqv?` render AS THEMSELVES — they're different ops, and collapsing them to `==`
-// would make view+save rewrite `(= n 0)` → `(equal? n 0)`. `{n = 0}` reads fine as a
-// comparison; the assignment association is weak inside a visibly-expression curly.
+// structural-equality common case). `and`/`or` render AS THEMSELVES — they are already
+// readable symbols, and swapping them for `&&`/`||` was a C/JS habit that rewrote
+// scheme intent. `=` (numeric), `eq?`, `eqv?` also stay themselves — collapsing them
+// to `==` would make view+save rewrite `(= n 0)` → `(equal? n 0)`. `{n = 0}` reads
+// fine as a comparison; the assignment association is weak inside a visibly-expression curly.
 const INFIX_GLYPH: Record<string, string> = {
   "equal?": "==",
-  and: "&&",
-  or: "||",
 };
-// The math skin (Agda-style). `∧`/`∨` also retire the `||` overload with symbol-bar
-// `|…|` syntax. `≡` structural-equal, wavy `≈`/`≃` for the identity pair (eq?/eqv?),
-// `≤`/`≥`. Numeric `=`, `<`, `>`, arithmetic stay themselves. Reader accepts both skins.
+// The math skin (Agda-style). `∧`/`∨` for logicals, `≡` structural-equal, wavy
+// `≈`/`≃` for the identity pair (eq?/eqv?), `≤`/`≥`. Numeric `=`, `<`, `>`,
+// arithmetic stay themselves. Reader accepts both skins.
 const MATH_GLYPH: Record<string, string> = {
   "equal?": "≡",
   and: "∧",
@@ -349,8 +350,8 @@ const negContent = (neg: { glyph: string; operands: Node[] }, o: SugarcoatOpts):
 // Precedence ladder (higher binds tighter), keyed on the CANONICAL op. This is a
 // deliberate departure from SRFI-105 (which is precedence-free): it lets a child
 // that binds tighter than its parent drop its braces, so compound expressions read
-// like C/JS — {v == "click" || v == "keep-reading"} instead of {{…} || {…}}.
-//   `||` ⟨ `&&` ⟨ comparison ⟨ additive ⟨ multiplicative
+// like C/JS — {v == "click" or v == "keep-reading"} instead of {{…} or {…}}.
+//   `or` ⟨ `and` ⟨ comparison ⟨ additive ⟨ multiplicative
 const INFIX_PREC: Record<string, number> = {
   or: 1,
   and: 2,
@@ -1022,6 +1023,13 @@ function stepText(s: RStep, o: SugarcoatOpts): string {
   return `.${escSym(s.op)}${args}${lam}`;
 }
 
+/** `(list …)` → free-standing `[…]` (not a tight subscript). */
+const isListLit = (items: Node[]): boolean =>
+  items.length >= 1 && isAtom(items[0]) && !items[0].str && items[0].atom === "list";
+/** `(dict …)` → `{…}` even-kv brace form (shared delimiter with n-expr; odd/even on read). */
+const isDictLit = (items: Node[]): boolean =>
+  items.length >= 1 && isAtom(items[0]) && !items[0].str && items[0].atom === "dict";
+
 /** One-line rendering, no width check. */
 export function inlineSugarcoat(nd: Node, o: SugarcoatOpts): string {
   // A bare `=>` symbol is always a RECEIVER arrow (cond/case's `(datum => proc)`, the
@@ -1033,6 +1041,19 @@ export function inlineSugarcoat(nd: Node, o: SugarcoatOpts): string {
   if (items.length === 0) return "()";
   if (o.nilGlyph && isEmptyQuote(items)) return "nil";
   if (isQuoteForm(items)) return QUOTE_PREFIX[atomText(items[0])] + inlineSugarcoat(items[1], o);
+  // Collection literals first — before neoteric/prefix, so `(list 1 2)` is never `(list…)`.
+  if (isListLit(items)) {
+    return `[${items
+      .slice(1)
+      .map((it) => inlineSugarcoat(it, o))
+      .join(" ")}]`;
+  }
+  if (isDictLit(items)) {
+    return `{${items
+      .slice(1)
+      .map((it) => inlineSugarcoat(it, o))
+      .join(" ")}}`;
+  }
   const at = renderAtExpr(items, o);
   if (at != null) return at;
   const neg = negComparison(items, o); // (not (= a b)) → {a ≠ b} (math skin)
@@ -1353,7 +1374,43 @@ function formatSugarcoatCore(nd: Node, col: number, o: SugarcoatOpts): string {
   // The pair is a synthetic (=> k v) view-node; it stays atomic (never split
   // mid-pair — the failure the flat indenter had). Leading positionals (e.g. a
   // .prompt cache-key) render before the first keyword, untouched.
-  if (isKwargHead(items, o)) {
+  // Dict literal — broken form keeps the `{}` envelope (same delimiter as n-expr;
+  // odd/even on read). Pairs as trailing-colon lines inside the braces.
+  if (isDictLit(items)) {
+    const pad = " ".repeat(col + 2);
+    const out = ["{"];
+    let i = 1;
+    while (i < items.length) {
+      if (isKeyword(items[i]) && i + 1 < items.length) {
+        const raw = atomText(items[i]);
+        const keyPart = `${raw.slice(1)}:`;
+        const vFlat = inlineSugarcoat(items[i + 1], o);
+        if (col + 2 + keyPart.length + 1 + vFlat.length <= o.width) {
+          out.push(`${pad + keyPart} ${vFlat}`);
+        } else {
+          out.push(pad + keyPart);
+          out.push(" ".repeat(col + 4) + formatSugarcoat(items[i + 1], col + 4, o));
+        }
+        i += 2;
+      } else {
+        out.push(pad + formatSugarcoat(items[i], col + 2, o));
+        i++;
+      }
+    }
+    out.push(`${" ".repeat(col)}}`);
+    return out.join("\n");
+  }
+  // Free list literal — broken form keeps the `[]` envelope.
+  if (isListLit(items)) {
+    const pad = " ".repeat(col + 2);
+    const out = ["["];
+    for (const el of items.slice(1)) out.push(pad + formatSugarcoat(el, col + 2, o));
+    out.push(`${" ".repeat(col)}]`);
+    return out.join("\n");
+  }
+
+  // Non-dict kwarg heads (prompt requires, etc.): block form with colon-pair lines.
+  if (isKwargHead(items, o) && !(isAtom(items[0]) && !items[0].str && items[0].atom === "dict")) {
     let line = inlineSugarcoat(items[0], o);
     let i = 1;
     if (i < items.length && !isKeyword(items[i])) {

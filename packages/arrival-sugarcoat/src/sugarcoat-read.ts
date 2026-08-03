@@ -7,13 +7,14 @@
  *   1. I-expressions (indentation): a line + its more-indented descendants form a
  *      list. `define (f x)` ⏎ body → (define (f x) body). A 1-token line with no
  *      children is just that token; multi-token / has-children becomes a list.
- *   2. delimited sub-exprs: `(…)` classic lists and `{…}` curly-infix (precedence
- *      ladder + arrow → lambda + display glyphs). Bracket mode overrides
- *      indentation — a `{…}` may span physical lines (the broken-infix case), so
+ *   2. delimited sub-exprs: `(…)` classic lists, free `[…]` → `(list …)`, and `{…}`
+ *      which is ODD/EVEN-split: even-arity kv pairs → `(dict …)`; odd operand·op·operand
+ *      alternation → curly-infix n-expr (precedence ladder + arrow → lambda + glyphs).
+ *      Bracket mode overrides indentation — a `{…}`/`[…]` may span physical lines, so
  *      lines with unbalanced brackets are coalesced before indentation grouping.
  *   plus colon-pairs: under kwarg calls a `key: value` line contributes :key + value.
  *
- * SRFI-105 space-significance: inside `{}` an operator is a whitespace-isolated
+ * SRFI-105 space-significance: inside n-expr `{}` an operator is a whitespace-isolated
  * token equal to an operator string (so `config/min-for-boundary` is one atom).
  */
 import invariant from "tiny-invariant";
@@ -28,16 +29,16 @@ import {
   type PairStep,
 } from "./sugarcoat-render.js";
 
-// glyph → canonical op (inverse of INFIX_GLYPH). INJECTIVE: only ==←equal?, &&←and,
-// ||←or are remapped; everything else (=, eq?, eqv?, arithmetic, comparison) is its
-// own op. So read∘render = id for every equality kind.
-// Both skins fold to the canonical op: ASCII (`==`/`&&`/`||`) AND the math skin
-// (`≡`/`∧`/`∨`/`≈`/`≃`/`≤`/`≥`). The reader is skin-agnostic — it accepts either
-// vocabulary (or a mix), so a math-rendered view saves back to the same canonical scheme.
+// glyph → canonical op (inverse of INFIX_GLYPH). INJECTIVE: only ==←equal? is remapped
+// in the default ASCII skin; `and`/`or` surface as themselves. Math-skin glyphs
+// (`≡`/`∧`/`∨`/…) and legacy `&&`/`||` (older sugarcoat views) also fold to the
+// canonical op. Everything else (=, eq?, eqv?, arithmetic, comparison) is its own op.
+// So read∘render = id for every equality kind. The reader is skin-agnostic — it accepts
+// either vocabulary (or a mix), so a math-rendered view saves back to the same scheme.
 const GLYPH_OP: Record<string, string> = {
   "==": "equal?",
-  "&&": "and",
-  "||": "or",
+  "&&": "and", // legacy alias — render now emits `and`
+  "||": "or", // legacy alias — render now emits `or`
   "≡": "equal?",
   "∧": "and",
   "∨": "or",
@@ -56,13 +57,15 @@ const opOf = (glyph: string): string => GLYPH_OP[glyph] ?? glyph;
 const NEG_READ: Record<string, string> = { "≠": "=", "≢": "equal?", "≉": "eq?", "≄": "eqv?" };
 
 // glyph → precedence — must mirror sugarcoat-render's INFIX_PREC. `=>`/`↦` loosest.
-// Each math glyph mirrors its ASCII twin's precedence (see GLYPH_OP).
+// Canonical `and`/`or` are first-class ops; math glyphs + legacy `&&`/`||` mirror them.
 const GLYPH_PREC: Record<string, number> = {
   "=>": 0,
   "↦": 0, // math lambda arrow (maps-to) — same as `=>`
-  "||": 1,
+  or: 1,
+  "||": 1, // legacy
   "∨": 1,
-  "&&": 2,
+  and: 2,
+  "&&": 2, // legacy
   "∧": 2,
   "==": 3,
   "≡": 3,
@@ -97,9 +100,67 @@ const GLYPH_PREC: Record<string, number> = {
   remainder: 5,
 };
 const isOp = (w: string): boolean => w in GLYPH_PREC;
+const isAtomNode = (n: Node): n is { atom: string; str?: boolean } => "atom" in n;
+/** True when a flat curly item is a bare operator atom (not a string, not a list). */
+const isOpAtom = (n: Node): n is { atom: string } => isAtomNode(n) && !n.str && isOp(n.atom);
+
+/**
+ * Classify a flat sequence of forms inside `{…}` (ops are ordinary atoms here).
+ *   empty              → dict
+ *   one form           → unwrap (SRFI-105 identity; braces are noise)
+ *   odd ≥3, ops at 1,3,5… and non-ops at 0,2,4… → n-expr (curly-infix)
+ *   even, no op-at-odd → dict
+ *   anything else      → error (broken infix or odd non-infix)
+ */
+type CurlyKind = "dict" | "unwrap" | "infix" | "error";
+function classifyCurly(items: Node[]): CurlyKind {
+  if (items.length === 0) return "dict";
+  if (items.length === 1) return "unwrap";
+  // Full operand·op·operand… alternation (odd length, ops only on odd indices).
+  if (items.length % 2 === 1) {
+    let alt = true;
+    for (let i = 0; i < items.length; i++) {
+      if ((i % 2 === 1) !== isOpAtom(items[i]!)) {
+        alt = false;
+        break;
+      }
+    }
+    if (alt) return "infix";
+    // Odd but not alternating — e.g. `{a b c}`, or `{a + b c}` (op then trailing junk).
+    return "error";
+  }
+  // Even length: dict unless an operator sits where an operand/key should, or an
+  // odd slot holds an op (truncated infix like `{a +}` → [a, +]).
+  for (let i = 0; i < items.length; i++) {
+    if (i % 2 === 1 && isOpAtom(items[i]!)) return "error"; // `{a +}` or `{a + b +}`
+    if (i % 2 === 0 && isOpAtom(items[i]!)) return "error"; // `{+ 1}` as broken n-expr
+  }
+  return "dict";
+}
+
+/** Suffix-key flip at dict KEY positions: `name:` → `:name` (arrival dict-grammar). */
+function normalizeDictKeys(items: Node[]): Node[] {
+  const out: Node[] = [];
+  for (let i = 0; i < items.length; i += 2) {
+    let k = items[i]!;
+    const v = items[i + 1];
+    if (
+      isAtomNode(k) &&
+      !k.str &&
+      k.atom.length > 1 &&
+      k.atom.endsWith(":") &&
+      !k.atom.startsWith(":") &&
+      !k.atom.endsWith("::")
+    ) {
+      k = { atom: `:${k.atom.slice(0, -1)}` };
+    }
+    out.push(k);
+    if (v !== undefined) out.push(v);
+  }
+  return out;
+}
 
 const LET_FAMILY = new Set(["let", "let*", "letrec", "letrec*"]);
-const isAtomNode = (n: Node): n is { atom: string; str?: boolean } => "atom" in n;
 const bindingShaped = (n: Node): boolean => !isAtomNode(n) && n.list.length === 2 && isAtomNode(n.list[0]);
 /** Re-introduce the elided bindings `(( ))` for a let-family form. The render drops
  *  it (each binding shown `name`⏎`value`); here we collect the leading binding-shaped
@@ -618,8 +679,16 @@ function parseElements(toks: Tok[], accessorDepth: number = R7RS_ACCESSOR_DEPTH)
       pairs = [];
       letters = 0;
     };
-    while (peek()?.t === "[" || peek()?.t === ".") {
-      if (peek()!.t === ".") {
+    // Tight `[` only — a spaced `[…]` is a free list literal (`(f [1 2])`), not a
+    // subscript. Same adjacency rule as method-arg `(` / trailing-lambda `{`.
+    for (;;) {
+      const p = peek();
+      if (p?.t === "[" && p.tight) {
+        // fall through to subscript arm below
+      } else if (p?.t === ".") {
+        // method-dot arm
+      } else break;
+      if (p.t === ".") {
         // method-dot step `.op`, `.op { B }`, `.op(args)`, `.op(args){ B }` — the
         // receiver-last fold: every step seats the receiver in the LAST arg slot,
         // exactly as a subscript does. A method breaks the c[ad]+r run (flush first).
@@ -718,9 +787,19 @@ function parseElements(toks: Tok[], accessorDepth: number = R7RS_ACCESSOR_DEPTH)
     next();
     return { list: items };
   }
+  /** Free-standing `[…]` → `(list …)`. Tight postfix `xs[0]` never reaches here
+   *  (withSubscripts peels those after the base datum is read). */
+  function freeList(): Node {
+    const items: Node[] = [];
+    while (peek() && peek()!.t !== "]") items.push(datum());
+    invariant(peek()?.t === "]", "unbalanced [");
+    next();
+    return { list: [atom("list"), ...items] };
+  }
   function classicDatum(): Node {
     const t = next();
     if (t.t === "(") return classicList();
+    if (t.t === "[") return freeList();
     if (t.t === "{") return curly();
     if (t.t === "at") return t.node;
     if (t.t === "word") return wordNode(t.v, t.str);
@@ -733,6 +812,10 @@ function parseElements(toks: Tok[], accessorDepth: number = R7RS_ACCESSOR_DEPTH)
     if (t.t === "(") {
       next();
       return classicList();
+    }
+    if (t.t === "[") {
+      next();
+      return freeList();
     }
     if (t.t === "{") {
       next();
@@ -747,6 +830,41 @@ function parseElements(toks: Tok[], accessorDepth: number = R7RS_ACCESSOR_DEPTH)
       return wordNode(t.v, t.str);
     }
     invariant(false, () => `expected operand in curly, got '${t.t === "word" ? t.v : t.t}'`);
+  }
+  /** Flat curly item: same as an operand, but operator words are allowed as atoms
+   *  so classification can see the operand·op·operand skeleton. */
+  function curlyFlatItem(): Node {
+    return spanned(() =>
+      withSubscripts(
+        spanned(() =>
+          quoted(() => {
+            const t = peek();
+            invariant(!!t, "unexpected end in curly");
+            if (t.t === "(") {
+              next();
+              return classicList();
+            }
+            if (t.t === "[") {
+              next();
+              return freeList();
+            }
+            if (t.t === "{") {
+              next();
+              return curly();
+            }
+            if (t.t === "at") {
+              next();
+              return t.node;
+            }
+            if (t.t === "word") {
+              next();
+              return wordNode(t.v, t.str);
+            }
+            invariant(false, () => `unexpected '${t.t}' in curly`);
+          }),
+        ),
+      ),
+    );
   }
   function curlyOperand(): Node {
     // double-spanned like `datum`: infix operands are read OUTSIDE classicList's
@@ -790,11 +908,57 @@ function parseElements(toks: Tok[], accessorDepth: number = R7RS_ACCESSOR_DEPTH)
       );
     invariant(false, () => `unbalanced {${context}`);
   }
+  /**
+   * `{…}` is shared by dicts and n-exprs. Classify by flat shape first:
+   *   {} / even kv pairs → (dict …)
+   *   single form → unwrap
+   *   odd operand·op·operand… → Pratt infix (reset + reparse)
+   *   else → door naming the odd/even rule
+   * Trailing-lambda bodies call `infix` directly (always n-expr context).
+   */
   function curly(): Node {
-    const e = infix(0);
-    requireCurlyClose("");
-    next();
-    return e;
+    if (peek()?.t === "}") {
+      next();
+      return { list: [atom("dict")] };
+    }
+    const start = pos;
+    const items: Node[] = [];
+    while (peek() && peek()!.t !== "}") items.push(curlyFlatItem());
+    const kind = classifyCurly(items);
+    if (kind === "dict") {
+      invariant(peek()?.t === "}", "unbalanced {");
+      next();
+      return { list: [atom("dict"), ...normalizeDictKeys(items)] };
+    }
+    if (kind === "unwrap") {
+      invariant(peek()?.t === "}", "unbalanced {");
+      next();
+      return items[0]!;
+    }
+    if (kind === "infix") {
+      pos = start; // reparse with precedence climber (handles mixed ops + =>)
+      const e = infix(0);
+      requireCurlyClose("");
+      next();
+      return e;
+    }
+    // Broken shape — name the rule so the door teaches odd/even separation.
+    // Prefer the unknown-operator phrasing when an odd slot holds a non-op word
+    // (`{a ?? b}`), so mid-edit typos still point at the operator vocabulary.
+    const oddSlot = items.find((it, i) => i % 2 === 1 && isAtomNode(it) && !it.str && !isOp(it.atom));
+    if (oddSlot && isAtomNode(oddSlot)) {
+      invariant(
+        false,
+        () =>
+          `expected '}' or an infix operator, got '${oddSlot.atom}' — operators: ${Object.keys(GLYPH_PREC).join(" ")}`,
+      );
+    }
+    invariant(
+      false,
+      () =>
+        `ambiguous or broken '{…}' — even forms are a dict (kv pairs); odd operand·op·operand is an n-expr; ` +
+        `operators: ${Object.keys(GLYPH_PREC).join(" ")}`,
+    );
   }
 
   // A `{ … }` trailing lambda after `.op` (caller has consumed the `{`). The body

@@ -63,7 +63,7 @@
     },
     "operators": {
       "name": "keyword.operator.sugarcoat",
-      "match": "(?<=[\\s])(==|&&|\\|\\||<=|>=|<|>|=|\\+|-|\\*|/|modulo|quotient|remainder)(?=[\\s])"
+      "match": "(?<=[\\s])(==|and|or|<=|>=|<|>|=|\\+|-|\\*|/|modulo|quotient|remainder)(?=[\\s])"
     },
     "method-dot": {
       "patterns": [

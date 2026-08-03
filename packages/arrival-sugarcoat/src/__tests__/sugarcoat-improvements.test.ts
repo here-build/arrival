@@ -39,7 +39,7 @@ describe("lone-unary → method dot (gated)", () => {
 
   // V's exact example: ok? collapses to the method-chain reading
   it("ok? predicate body collapses (V's example)", () => {
-    expect(render("(and (list? x) (= (length x) 2) (eq? (car x) 'ok))")).toBe("{x.list? && x.length = 2 && x[0] eq? 'ok}");
+    expect(render("(and (list? x) (= (length x) 2) (eq? (car x) 'ok))")).toBe("{x.list? and x.length = 2 and x[0] eq? 'ok}");
   });
 
   for (const [scheme] of flips) it(`round-trips ${scheme}`, () => expect(roundtrip(scheme)).toBe(canon(scheme)));
@@ -149,6 +149,29 @@ describe("string-append → @{…} (default: strip coercions, headless str)", ()
     expect(out).toContain("number->string");
     expect(roundtrip(matchstate, { strTolerant: false })).toBe(canon(matchstate));
   });
+});
+
+// ── 7. logicals stay as scheme symbols (`and`/`or`), not C/JS `&&`/`||` ──
+describe("and/or surface as themselves (no &&/|| rewrite)", () => {
+  it("binary and/or render as word glyphs", () => {
+    expect(render("(and a b)")).toBe("{a and b}");
+    expect(render("(or a b)")).toBe("{a or b}");
+  });
+  it("n-ary and precedence over or", () => {
+    expect(render("(or (and a b) c)")).toBe("{a and b or c}");
+    expect(render("(and a (or b c))")).toBe("{a and {b or c}}");
+  });
+  it("reads the word forms back to canonical", () => {
+    expect(read1("{a and b}")).toBe("(and a b)");
+    expect(read1("{a or b}")).toBe("(or a b)");
+    expect(read1("{a and b or c}")).toBe("(or (and a b) c)");
+  });
+  it("legacy &&/|| still fold on read (older views)", () => {
+    expect(read1("{a && b}")).toBe("(and a b)");
+    expect(read1("{a || b}")).toBe("(or a b)");
+  });
+  for (const s of ["(and a b c)", "(or (and p q) r)", "(and (list? x) (or (eq? a b) (<= c d)))"])
+    it(`round-trips ${s}`, () => expect(roundtrip(s)).toBe(canon(s)));
 });
 
 // ── 8. math skin (opt-in Agda-style Unicode) — Family A infix + arrows, bidirectional ──

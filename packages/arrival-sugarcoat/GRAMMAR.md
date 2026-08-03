@@ -125,7 +125,21 @@ of pulls and drops round-trips to the fused canonical word (`x[0][0]` ⇔ `caar`
 `R7RS_ACCESSOR_DEPTH` (4) letters — a longer run splits into nested portable words rather than one
 non-portable `caddadar`; a keyed step (`[:k]`, `[k]`) always breaks the run.
 
-## 4. Curly-infix
+## 4. Curly braces — dict vs n-expr (odd/even)
+
+A free `{…}` is classified from its **flat top-level form sequence** (ops are ordinary atoms
+during classification):
+
+| kind | rule | folds to |
+|---|---|---|
+| dict | empty, or even length with no operator on an odd index | `(dict …)` |
+| unwrap | exactly one form | that form (SRFI-105 identity) |
+| n-expr | odd length ≥ 3, operators exactly at odd indices | Pratt infix fold |
+| error | anything else (e.g. `{a b c}`, truncated `{a +}`) | door |
+
+Suffix keys flip in dict key slots: `name:` → `:name`. Nested `{…}`/`[…]`/`(…)` count as one form.
+
+### 4.1 N-expr (curly-infix)
 
 `Infix⟨p⟩`: read one operand; while the next token is an operator `g` with `prec(g) ≥ p`, fold a
 maximal same-glyph run (`{a + b + c}` is one n-ary node), operands read at `Infix⟨prec(g)+1⟩`.
@@ -135,12 +149,19 @@ maximal same-glyph run (`{a + b + c}` is one n-ary node), operands read at `Infi
 | 5 | `*` `/` `modulo` `quotient` `remainder` | same |
 | 4 | `+` `-` | same |
 | 3 | `<` `>` `<=` `>=` `=` `eq?` `eqv?` `equal?` | `equal?`→`==`, rest same |
-| 2 | `and` | `&&` |
-| 1 | `or` | `\|\|` |
+| 2 | `and` | same |
+| 1 | `or` | same |
 | 0 | `=>` | `=>` |
 
-The glyph map is injective (`==`→`equal?`, `&&`→`and`, `\|\|`→`or`, all else identity) — equality
-*kind* survives the round-trip. Unknown ops render at level 3.
+The glyph map is injective (`==`→`equal?`, all else identity) — equality *kind* survives the
+round-trip. `and`/`or` stay as scheme symbols (no `&&`/`||` rewrite). Unknown ops render at level 3.
+The reader still accepts legacy `&&`/`||` and math-skin `∧`/`∨` as aliases.
+
+### 4.2 Free lists `[…]`
+
+A free-standing `[…]` (not tight against a preceding value) folds to `(list …)`. Tight postfix
+`xs[0]` / `f[:k]` remains subscript access (§3). Adjacency is the discriminator — same rule as
+method-arg `(` and trailing-lambda `{`.
 
 **Arrow lambda.** At level 0, `{(p₁ … pₖ) => body}` ⇒ `(lambda (p₁ … pₖ) body)`. A TrailingLambda
 body without a top-level `=>` is the implicit-`it` form: `{body}` ⇒ `(lambda (it) body)`.
@@ -202,7 +223,7 @@ the CodeMirror mode emit):
 | keyword | `:name`, `name:` |
 | method | `.word` after a value |
 | subscript | `[0]`, `[1:]`, `[:key]` |
-| operator | infix glyphs incl. `=>`, `==`, `&&`, `\|\|` |
+| operator | infix glyphs incl. `=>`, `==`, `and`, `or` |
 | definition | `define`, `lambda`, `let` family, `cond`, `if`, `else` head words |
 | constant | numbers, `#t` `#f`, `#\char` |
 
