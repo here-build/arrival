@@ -237,10 +237,13 @@ export class TraceRegionFold {
       // never precedes parent). Children of `inv` get linked at THEIR own pass-2 step.
     }
     // The snapshot keeps provenance only for children-of-points + roots. A child mirrored
-    // before its parent was known to be a point would lack it — but the parent's
-    // `isProvenancePoint` is set at rosetta-call time (before the child enters), so the
-    // child's mirror already has it. The root case is stable (parentless from birth). No
-    // back-fix pass needed; asserted by parity test.
+    // before its parent was known to be a point would lack it. The membrane marks a
+    // rosetta point only when its host fn SETTLES; hosts that stream (the studio's
+    // inference planes) mark earlier, at the provider crossing — but that still leaves an
+    // enter→crossing window (arg evaluation, which can itself contain a slow nested
+    // point) in which a tick can mirror the parent as a non-point and its children
+    // without provenance. `#refreshRunning` repairs both when the live flag flips
+    // (`#promoteLatePoint`); the root case is stable (parentless from birth).
 
     // ── recursion + branch signals (extend the monotonic sets) ────────────────────
     this.#extendSignals(fresh);
@@ -426,6 +429,12 @@ export class TraceRegionFold {
         this.#runningIds.delete(id);
         continue;
       }
+      // LATE POINT PROMOTION — the mirror froze `isProvenancePoint` at ingest, but a
+      // streaming host marks the point at the provider crossing, which can land AFTER a
+      // tick ingested the invocation mid-arg-evaluation. Without promotion the leaf stays
+      // invisible forever (the points pass walks only fresh invocations). Promote while
+      // still running so the render shows the in-flight card, not just the settled one.
+      if (live.isProvenancePoint && !plain.isProvenancePoint) this.#promoteLatePoint(live, plain);
       if (live.state === "running") continue; // in flight — re-check next tick.
       const isPoint = plain.isProvenancePoint;
       const isRoot = plain.parent === null;
@@ -448,6 +457,35 @@ export class TraceRegionFold {
       if (plain.parent?.isProvenancePoint || isRoot) plain.provenance = new Set(live.provenance);
       this.#runningIds.delete(id);
     }
+  }
+
+  /** Repair a mirror whose live invocation was marked a provenance point AFTER ingest
+   *  (see `#refreshRunning`). Flips the mirror's flag + metadata, re-copies its direct
+   *  children's provenance (frozen EMPTY while the parent read as a non-point — exactly
+   *  what `upstreamOfPoint` reads), and inserts the point into `#points`/`#baseEdges` at
+   *  its ascending-id position so the fold's output stays deep-equal to the from-scratch
+   *  build. Downstream Hasse entries need no re-derivation: the promotion happens while
+   *  the point is still unresolved, so no later point can have consumed its output yet
+   *  (the infer-as-infer-arg upstream residual noted above is unchanged). */
+  #promoteLatePoint(live: Invocation, plain: PlainInv): void {
+    plain.isProvenancePoint = true;
+    plain.metadata = live.metadata;
+    for (const child of plain.children) {
+      const liveChild = this.#liveById.get(child.id);
+      if (liveChild) child.provenance = new Set(liveChild.provenance);
+    }
+    const points = this.#points;
+    let i = points.length;
+    while (i > 0 && points[i - 1]!.id > plain.id) i--;
+    points.splice(i, 0, plain);
+    this.#pointIds.add(plain.id);
+    const up = upstreamOfPoint(plain, this.#pointIds);
+    const { edges: added } = addPointToHasse(plain.id, up, this.#reach);
+    // Base edges stay grouped ascending by target point (parity with from-scratch).
+    const edges = this.#baseEdges;
+    let j = edges.length;
+    while (j > 0 && edges[j - 1]!.to > plain.id) j--;
+    edges.splice(j, 0, ...added);
   }
 
   /** Mirror ONE live invocation as `snapshotTrace` pass 1 does: scalar fields + pre-derived
