@@ -394,7 +394,7 @@ export default EnvCapability.define("scheme/strings", {
     ),
 
     // ---------------------------------------------------------------------
-    // `concat`/`join` are LIPS-era names, kept as extensions (`split` is NOT bound
+    // `concat`/`join` are non-R7RS extension names (`split` is NOT bound
     // in this pack — `string-split` lives in srfi-13.ts); `substring`
     // and `string->number` are genuine R7RS. `native` means the (identity) zod
     // contract never runs — the impls receive Scheme values directly.
@@ -414,14 +414,14 @@ export default EnvCapability.define("scheme/strings", {
       },
     ),
 
-    concat: symbol.rosetta`concat: the concatenation of all string arguments (LIPS extension)`(
+    concat: symbol.rosetta`concat: the concatenation of all string arguments (arrival extension)`(
       { input: [z.string], inputRest: z.string, output: [z.string] },
       function (this: CallCtx, ...args) {
         return args.join("");
       },
     ),
 
-    join: symbol.native`join: the list elements folded to one string with a separator (LIPS extension)`(
+    join: symbol.native`join: the list elements folded to one string with a separator (arrival extension)`(
       { input: [z.string, z.listAlike], output: [z.union([z.string, z.string])] },
       function (this: CallCtx, separator: SchemeValue, list: SchemeValue): AString {
         // Collapsing op: fold the list to one string, then re-stamp the DEEP union of
