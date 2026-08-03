@@ -4,8 +4,10 @@ import { tags as t } from "@lezer/highlight";
 /**
  * StreamLanguage for classic Scheme + sugarcoat superset (readable lens).
  *
- * Covers s-exprs + curly-infix, `k:` / `:key`, `=>`, `== && ||`.
- * Radix/string/comment handling lifted from the CodeMirror scheme mode.
+ * Covers s-exprs + curly-infix, dict `{}` / list `[]`, `k:` / `:key`, `=>`, `==`.
+ * Delimiters discriminate at the opener (same odd/even + tight rules as the
+ * sugarcoat reader) and stack so closes match. Radix/string/comment handling
+ * lifted from the CodeMirror scheme mode.
  *
  * Emits ONLY tags (bring your own theme). Every custom token in tokenTable
  * or it renders as nothing — this is the contract with StreamLanguage.
@@ -49,11 +51,233 @@ const decimalMatcher =
 // minus the colon (colon is handled separately so `k:` / `:key` can tokenize).
 const SYMBOL_BODY = /[\w\-!$%&*+./<=>?@^~]/;
 
+/** Code-context delimiter family — open/close share a kind via delimStack. */
+export type DelimKind = "dict" | "nexpr" | "list" | "sub" | "ambig" | "err";
+
 interface SchemeSugarcoatState {
   mode: false | "string" | "comment" | "attext" | "atgraft";
   afterDefineHead: boolean; // next atom after `(define ...` → DEFNAME
   atDepth: number; // literal {} depth inside @head{...} (0 closes the body)
   graftDepth: number; // paren depth inside @() graft (0 = just closed)
+  /** Code-context brace/bracket stack (not at-body). Close tags match open kind. */
+  delimStack: DelimKind[];
+}
+
+// ── delimiter discrimination (mirrors arrival-sugarcoat reader) ─────────────
+// Must stay in lockstep with sugarcoat-read GLYPH_PREC / classifyCurly / tight `[`.
+const INFIX_OPS = new Set([
+  "=>",
+  "↦",
+  "or",
+  "||",
+  "∨",
+  "and",
+  "&&",
+  "∧",
+  "==",
+  "≡",
+  "=",
+  "eq?",
+  "≈",
+  "eqv?",
+  "≃",
+  "<",
+  ">",
+  "<=",
+  "≤",
+  ">=",
+  "≥",
+  "≠",
+  "≢",
+  "≉",
+  "≄",
+  "∷",
+  "∈",
+  "+",
+  "-",
+  "∘",
+  "*",
+  "/",
+  "modulo",
+  "quotient",
+  "remainder",
+]);
+
+/** Prev char (before current stream.pos) is a value-ending glyph → tight postfix. */
+function prevIsTightValue(stream: StringStream): boolean {
+  if (stream.pos === 0) return false;
+  const prev = stream.string[stream.pos - 1]!;
+  if (/\s/.test(prev)) return false;
+  // After an open delimiter the next `[`/`{` starts a free literal, not a postfix.
+  if ("([{,".includes(prev)) return false;
+  // Value-ending: symbol/number/string/close-paren/quote tails.
+  return /[\w!$%&*+\-./<=>?@^~)\]}"'0-9]/.test(prev);
+}
+
+/** Forced n-expr: tight trailing-lambda after `.op` or method-arg `)`. */
+function forcedNexprCurly(stream: StringStream): boolean {
+  if (stream.pos === 0 || /\s/.test(stream.string[stream.pos - 1]!)) return false;
+  const left = stream.string.slice(0, stream.pos);
+  // `.map{` / `.fold{` / `xs.map{`
+  if (/\.[\w!$%&*/<=>?^_~+-]+$/.test(left)) return true;
+  // `.fold(0){` — tight after method-args close
+  if (/\)$/.test(left)) return true;
+  return false;
+}
+
+/**
+ * Scan top-level forms inside a curly body (same line). Depth-aware, string-aware.
+ * Returns forms up to depth-0 `}` or EOL. `closed` = saw matching close.
+ */
+export function scanCurlyBody(src: string, from: number): { forms: string[]; closed: boolean } {
+  const forms: string[] = [];
+  let i = from;
+  let depth = 0; // nested {} () [] relative to body (body itself is depth 0 content)
+  let form = "";
+  const flush = () => {
+    const t = form.trim();
+    if (t.length > 0) forms.push(t);
+    form = "";
+  };
+  while (i < src.length) {
+    const c = src[i]!;
+    if (c === "}" && depth === 0) {
+      flush();
+      return { forms, closed: true };
+    }
+    if (c === '"' ) {
+      form += c;
+      i++;
+      while (i < src.length) {
+        form += src[i];
+        if (src[i] === "\\" && i + 1 < src.length) {
+          form += src[i + 1];
+          i += 2;
+          continue;
+        }
+        if (src[i] === '"') {
+          i++;
+          break;
+        }
+        i++;
+      }
+      continue;
+    }
+    if (c === "(" || c === "[" || c === "{") {
+      const open = c;
+      const close = c === "(" ? ")" : c === "[" ? "]" : "}";
+      let d = 1;
+      form += c;
+      i++;
+      while (i < src.length && d > 0) {
+        const x = src[i]!;
+        form += x;
+        if (x === '"') {
+          i++;
+          while (i < src.length) {
+            form += src[i];
+            if (src[i] === "\\" && i + 1 < src.length) {
+              form += src[i + 1];
+              i += 2;
+              continue;
+            }
+            if (src[i] === '"') {
+              i++;
+              break;
+            }
+            i++;
+          }
+          continue;
+        }
+        if (x === open) d++;
+        else if (x === close) d--;
+        // nested different brackets still nest for depth of THIS pair only —
+        // track per-type would be more accurate; mixed nests are rare in form
+        // heads. For form-splitting we treat any open/close of same pair.
+        i++;
+      }
+      continue;
+    }
+    if (/\s/.test(c) && depth === 0) {
+      flush();
+      i++;
+      continue;
+    }
+    form += c;
+    i++;
+  }
+  flush();
+  return { forms, closed: false };
+}
+
+/** Classify flat forms inside `{…}` — pure, unit-tested. Mirrors sugarcoat-read.classifyCurly. */
+export function classifyCurlyForms(forms: string[], opts: { closed: boolean; provisional?: boolean } = { closed: true }): DelimKind {
+  if (forms.length === 0) return "dict";
+  if (forms.length === 1) return "nexpr"; // unwrap / degenerate
+  const isOp = (w: string) => INFIX_OPS.has(w);
+  if (forms.length % 2 === 1) {
+    let alt = true;
+    for (let i = 0; i < forms.length; i++) {
+      if ((i % 2 === 1) !== isOp(forms[i]!)) {
+        alt = false;
+        break;
+      }
+    }
+    if (alt) return "nexpr";
+    // Odd non-alternating: if an odd slot has a non-op, error when closed; provisional nexpr while typing.
+    if (!opts.closed || opts.provisional) return "ambig";
+    return "err";
+  }
+  // even
+  for (let i = 0; i < forms.length; i++) {
+    if (i % 2 === 1 && isOp(forms[i]!)) return opts.closed ? "err" : "ambig"; // `{a +}` truncated
+    if (i % 2 === 0 && isOp(forms[i]!)) return opts.closed ? "err" : "ambig";
+  }
+  return "dict";
+}
+
+function classifyCurlyOpen(stream: StringStream): DelimKind {
+  if (forcedNexprCurly(stream)) return "nexpr";
+  // Look ahead on this line only (StreamLanguage paints one line at a time).
+  const { forms, closed } = scanCurlyBody(stream.string, stream.pos + 1); // after `{`
+  if (!closed) {
+    // Multi-line / incomplete: prefer n-expr/ambig so we don't flash dict on half-typed infix.
+    if (forms.length === 0) return "dict"; // typing `{}`
+    const k = classifyCurlyForms(forms, { closed: false, provisional: true });
+    return k === "dict" ? "dict" : k === "nexpr" ? "nexpr" : "ambig";
+  }
+  return classifyCurlyForms(forms, { closed: true });
+}
+
+function classifyBracketOpen(stream: StringStream): DelimKind {
+  return prevIsTightValue(stream) ? "sub" : "list";
+}
+
+const DELIM_TOKEN: Record<DelimKind, string> = {
+  dict: "sugarcoatDictBrace",
+  nexpr: "sugarcoatNexprBrace",
+  list: "sugarcoatListBracket",
+  sub: "sugarcoatSubBracket",
+  ambig: "sugarcoatCurlyAmbig",
+  err: "sugarcoatCurlyError",
+};
+
+function openDelim(state: SchemeSugarcoatState, kind: DelimKind): string {
+  state.delimStack.push(kind);
+  return DELIM_TOKEN[kind];
+}
+
+function closeCurly(state: SchemeSugarcoatState): string {
+  const kind = state.delimStack.pop() ?? "nexpr";
+  // Only curly kinds; if stack had a bracket, still emit something sensible.
+  if (kind === "list" || kind === "sub") return DELIM_TOKEN.nexpr;
+  return DELIM_TOKEN[kind];
+}
+
+function closeBracket(state: SchemeSugarcoatState): string {
+  const kind = state.delimStack.pop() ?? "list";
+  if (kind === "list" || kind === "sub") return DELIM_TOKEN[kind];
+  return DELIM_TOKEN.list;
 }
 
 // @head{ opener (mirrors arrival-sugarcoat AT_HEAD) + balanced literal {} inside body.
@@ -70,7 +294,7 @@ function tokenizeAtText(stream: StringStream, state: SchemeSugarcoatState): stri
     stream.next();
     if (state.atDepth === 0) {
       state.mode = false;
-      return CURLY; // body close
+      return ATCLOSE; // body close — not a code-context dict/n-expr brace
     }
     state.atDepth--;
     return "string"; // literal closing brace
@@ -169,8 +393,14 @@ function tokenizeAtText(stream: StringStream, state: SchemeSugarcoatState): stri
 const KEY = "sugarcoatKey"; // :key / k: colon-pairs → propertyName
 const ARROW = "sugarcoatArrow"; // => → controlOperator
 const COMPARE = "sugarcoatCompare"; // == → compareOperator
-const LOGIC = "sugarcoatLogic"; // && || → logicOperator
-const CURLY = "sugarcoatCurly"; // { } infix braces → brace
+const LOGIC = "sugarcoatLogic"; // && || → logicOperator (legacy aliases)
+const DICT_BRACE = "sugarcoatDictBrace"; // { } dict literal
+const NEXPR_BRACE = "sugarcoatNexprBrace"; // { } curly-infix / trailing-λ
+const LIST_BRACKET = "sugarcoatListBracket"; // free [ ]
+const SUB_BRACKET = "sugarcoatSubBracket"; // tight subscript [ ]
+const CURLY_AMBIG = "sugarcoatCurlyAmbig"; // mid-edit provisional { }
+const CURLY_ERR = "sugarcoatCurlyError"; // broken curly shape
+const ATCLOSE = "sugarcoatAtClose"; // @head{…} body close `}`
 const DEFNAME = "sugarcoatDefName"; // defined name → definition(variableName)
 const ATOPEN = "sugarcoatAtOpen"; // @head{ opener → keyword (the tagged-template head)
 const INTERP = "sugarcoatInterp"; // @id / @(…) / @|…| inside a text body → variableName pop
@@ -183,7 +413,28 @@ const INTERP = "sugarcoatInterp"; // @id / @(…) / @|…| inside a text body �
  * Strings/block-comments are consumed inline so we stay in atgraft (multi-line
  * strings inside grafts are vanishingly rare).
  */
-function tokenizeGraftCode(stream: StringStream, _state: SchemeSugarcoatState): string | null {
+function tokenizeGraftCode(stream: StringStream, state: SchemeSugarcoatState): string | null {
+  // Delimiters classified before consuming so prev-char tight checks see the right pos.
+  const peek = stream.peek();
+  if (peek === "{") {
+    const kind = classifyCurlyOpen(stream);
+    stream.next();
+    return openDelim(state, kind);
+  }
+  if (peek === "}") {
+    stream.next();
+    return closeCurly(state);
+  }
+  if (peek === "[") {
+    const kind = classifyBracketOpen(stream);
+    stream.next();
+    return openDelim(state, kind);
+  }
+  if (peek === "]") {
+    stream.next();
+    return closeBracket(state);
+  }
+
   const ch = stream.next();
   if (ch == null) return null;
 
@@ -217,9 +468,6 @@ function tokenizeGraftCode(stream: StringStream, _state: SchemeSugarcoatState): 
     stream.eat("@");
     return "meta";
   }
-
-  if (ch === "[" || ch === "]") return "squareBracket";
-  if (ch === "{" || ch === "}") return CURLY;
 
   if (ch === ":" && SYMBOL_BODY.test(stream.peek() ?? "")) {
     stream.eatWhile(SYMBOL_BODY);
@@ -262,7 +510,7 @@ function tokenizeGraftCode(stream: StringStream, _state: SchemeSugarcoatState): 
 
 export const parser: StreamParser<SchemeSugarcoatState> = {
   name: "scheme-sugarcoat",
-  startState: () => ({ mode: false, afterDefineHead: false, atDepth: 0, graftDepth: 0 }),
+  startState: () => ({ mode: false, afterDefineHead: false, atDepth: 0, graftDepth: 0, delimStack: [] }),
 
   token(stream, state): string | null {
     // ── inside @() graft: code-highlight until the balanced close ──
@@ -376,22 +624,34 @@ export const parser: StreamParser<SchemeSugarcoatState> = {
       return "lineComment";
     }
 
-    // ── sugarcoat curly-infix braces ──
-    if (ch === "{" || ch === "}") return CURLY;
+    // ── curly braces: dict vs n-expr (classify at opener; stack for close) ──
+    // We already consumed `ch` via stream.next() — back up for tight/lookahead.
+    if (ch === "{") {
+      stream.backUp(1);
+      const kind = classifyCurlyOpen(stream);
+      stream.next();
+      return openDelim(state, kind);
+    }
+    if (ch === "}") return closeCurly(state);
 
-    // ── round/square brackets ──
-    if (ch === "(" || ch === "[") {
+    // ── round / square brackets ──
+    if (ch === "(") {
       // Peek the head word to detect `(define NAME …)`-style definitions so the
       // bound name can read as a definition. We do NOT consume it — the head is
       // tokenized on the next pass — we only set a flag if the head is a def form.
       const rest = stream.string.slice(stream.pos);
       const head = /^\s*([\w\-!$%&*+./<=>?@^~λ]+)/.exec(rest)?.[1];
       state.afterDefineHead = head != null && DEFINITION_KEYWORDS.has(head) && head.startsWith("def");
-      return ch === "(" ? "paren" : "squareBracket";
+      return "paren";
     }
-    if (ch === ")" || ch === "]") {
-      return ch === ")" ? "paren" : "squareBracket";
+    if (ch === "[") {
+      stream.backUp(1);
+      const kind = classifyBracketOpen(stream);
+      stream.next();
+      return openDelim(state, kind);
     }
+    if (ch === ")") return "paren";
+    if (ch === "]") return closeBracket(state);
 
     // ── leading-colon accessor `:key` ──
     if (ch === ":" && SYMBOL_BODY.test(stream.peek() ?? "")) {
@@ -467,7 +727,15 @@ export const parser: StreamParser<SchemeSugarcoatState> = {
     [ARROW]: t.controlOperator,
     [COMPARE]: t.compareOperator,
     [LOGIC]: t.logicOperator,
-    [CURLY]: t.brace,
+    // Delimiter family: n-expr keeps sweet italic `brace`; dict is special(brace)
+    // (data, no italic); list is squareBracket (recede); sub is special(squareBracket).
+    [DICT_BRACE]: t.special(t.brace),
+    [NEXPR_BRACE]: t.brace,
+    [LIST_BRACKET]: t.squareBracket,
+    [SUB_BRACKET]: t.special(t.squareBracket),
+    [CURLY_AMBIG]: t.brace, // provisional — same family as n-expr (no wrong flash to dict)
+    [CURLY_ERR]: t.invalid,
+    [ATCLOSE]: t.keyword, // @body close — pairs with ATOPEN, not code curlies
     [DEFNAME]: t.definition(t.variableName),
     [ATOPEN]: t.keyword, // @head{ — the tagged-template head reads as a keyword
     [INTERP]: t.variableName, // @id / @(…) / @|…| — interpolation pops against the prose

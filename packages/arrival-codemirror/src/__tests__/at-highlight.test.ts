@@ -31,7 +31,7 @@ describe("at-expression highlighting", () => {
       ["Pitch ", "string"],
       ["@product", "sugarcoatInterp"],
       [" now", "string"],
-      ["}", "sugarcoatCurly"],
+      ["}", "sugarcoatAtClose"],
     ]);
   });
 
@@ -47,7 +47,7 @@ describe("at-expression highlighting", () => {
       [" ", ""],
       ["y", "variableName"],
       [")", "sugarcoatInterp"],
-      ["}", "sugarcoatCurly"],
+      ["}", "sugarcoatAtClose"],
     ]);
   });
 
@@ -55,7 +55,7 @@ describe("at-expression highlighting", () => {
     const toks = tokens("@dedent{first @a\n  second @b}");
     // spot-check: interps on both lines pop, close brace ends it
     expect(toks.filter(([, tag]) => tag === "sugarcoatInterp").map(([txt]) => txt)).toEqual(["@a", "@b"]);
-    expect(toks.at(-1)).toEqual(["}", "sugarcoatCurly"]);
+    expect(toks.at(-1)).toEqual(["}", "sugarcoatAtClose"]);
   });
 
   it("bare @foo (no brace) stays a symbol, not an at-opener", () => {
@@ -71,7 +71,7 @@ describe("at-expression highlighting", () => {
       ["@config/hero-id", "sugarcoatInterp"],
       ["@persona[:id]", "sugarcoatInterp"],
       ["@replay-idx", "sugarcoatInterp"],
-      ["}", "sugarcoatCurly"],
+      ["}", "sugarcoatAtClose"],
     ]);
   });
 
