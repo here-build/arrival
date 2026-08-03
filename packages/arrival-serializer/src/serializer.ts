@@ -604,7 +604,7 @@ function toSExprDispatch(obj: any, visited: Set<any>): SExpr {
 
     // LIPS Pair (linked list structure)
     if (obj.constructor?.name === "APair" && "car" in obj && "cdr" in obj) {
-      return ["list", ...convertLipsPairToArray(obj, visited)];
+      return ["list", ...convertPairToArray(obj, visited)];
     }
 
     // LIPS Nil (empty list) - be more specific to avoid catching plain objects
@@ -970,19 +970,19 @@ export function formatSExpr(sexpr: SExpr, indent = 0): string {
 const isImproperTail = (current: any): boolean =>
   current && !isNil(current) && !(current.constructor?.name === "Object" && Object.keys(current).length === 0);
 
-/** Middle-elision variant of `convertLipsPairToArray`, taken when elision is ON. Unlike the
+/** Middle-elision variant of `convertPairToArray`, taken when elision is ON. Unlike the
  *  streaming OFF path, this MATERIALIZES the list first — a tail window needs to know the
  *  total length, which a forward-only cdr walk can't get cheaply. Scheme list observations
  *  share the same practical size ceiling as their JS-array sibling, so this is the same
  *  trade-off `capItems` already accepts, not a new cost story. */
-function convertLipsPairToArrayElided(pair: any, visited: Set<any>): SExpr[] {
+function convertPairToArrayElided(pair: any, visited: Set<any>): SExpr[] {
   const items: any[] = [];
   let current = pair;
   while (current && current.constructor?.name === "APair") {
     items.push(current.car);
     current = current.cdr;
     if (current && typeof current === "object" && visited.has(current)) {
-      throw new Error("Circular reference in LIPS Pair");
+      throw new Error("Circular reference in Pair");
     }
   }
 
@@ -991,10 +991,10 @@ function convertLipsPairToArrayElided(pair: any, visited: Set<any>): SExpr[] {
   return rendered;
 }
 
-// Convert LIPS Pair linked list to JavaScript array
-function convertLipsPairToArray(pair: any, visited: Set<any>): SExpr[] {
+// Convert Pair linked list to JavaScript array
+function convertPairToArray(pair: any, visited: Set<any>): SExpr[] {
   if (Number.isFinite(activeCaps.elideHead) && activeCaps.elideHead + activeCaps.elideTail > 0) {
-    return convertLipsPairToArrayElided(pair, visited);
+    return convertPairToArrayElided(pair, visited);
   }
 
   // OFF path — TODAY's behaviour, unchanged: streaming, the tail of a huge list is never
@@ -1027,7 +1027,7 @@ function convertLipsPairToArray(pair: any, visited: Set<any>): SExpr[] {
 
     // Handle circular references
     if (current && typeof current === "object" && visited.has(current)) {
-      throw new Error("Circular reference in LIPS Pair");
+      throw new Error("Circular reference in Pair");
     }
   }
 
