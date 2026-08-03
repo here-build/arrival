@@ -157,28 +157,12 @@ describe("numeric Contract precision — the real exported ops reject wrongly-ty
     expect(stragglers).toEqual([]);
   });
 
-  // INVARIANT: aliased ops (**, %, |, &, ~) bind the identical impl object as their
-  // canonical sibling; == and = are deliberately distinct (pins implementation, not behavior)
-  it("alias invariant preserved: **/%/==/|/&/~ bind the SAME impl object as their canonical sibling", () => {
-    // The file's own documented invariant (predates this fix — see the "Reused op specs"
-    // section in numeric.ts): an alias must NOT get a freshly-built impl, only a freshly-built
-    // Contract. The refactor threads `spec` (for the Contract) and the shared `impl` reference
-    // as SEPARATE bindOp arguments specifically so this identity survives.
-    expect(nativeDef("**").impl).toBe(nativeDef("expt").impl);
-    expect(nativeDef("%").impl).toBe(nativeDef("remainder").impl);
-    // `|`/`&`/`~` (and `>>`/`<<`) are DOORS now — the whole bitwise family is doored
-    // under the one-number ruling (2026-07-14, "here lieth the dragons" — numeric.ts's
-    // Bitwise section note). Door-hood is pinned by srfi-151-bitwise.test.ts; the
-    // alias-identity invariant no longer applies to them.
-    // "==" binds the RAW numEqOp (no looseCompare overlay); "=" wraps it — this is a
-    // pre-existing, deliberate DIFFERENCE (not an identity), so they must NOT be equal.
-    expect(nativeDef("==").impl).not.toBe(nativeDef("=").impl);
-  });
+  // JS-shaped aliases (** % == | & ~ >> <<) moved to scheme/sugarcoat — not on this pack.
 
-  // INVARIANT: the numeric pack exports exactly 84 symbols (deliberate drift alarm — forces
-  // a reviewer to touch this test when a symbol is added/removed). S2 added square,
-  // exact-integer-sqrt, rationalize on top of the prior 81.
-  it("sanity: the pack exports exactly 84 symbols (the scope this fix must cover)", () => {
-    expect(Object.keys(symbols)).toHaveLength(84);
+  // INVARIANT: the numeric pack exports exactly 76 symbols (deliberate drift alarm — forces
+  // a reviewer to touch this test when a symbol is added/removed). Dropped 8 sugarcoat
+  // aliases from the prior 84.
+  it("sanity: the pack exports exactly 76 symbols (the scope this fix must cover)", () => {
+    expect(Object.keys(symbols)).toHaveLength(76);
   });
 });

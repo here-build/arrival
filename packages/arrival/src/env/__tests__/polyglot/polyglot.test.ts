@@ -78,7 +78,7 @@ describe("@inhuman.tools/arrival/polyglot (shared core)", () => {
   });
 });
 
-describe("@inhuman.tools/arrival/polyglot — nil (LIPS dialect alias, shared)", () => {
+describe("@inhuman.tools/arrival/polyglot — nil (polyglot empty-list alias, shared)", () => {
   it("nil is the empty list", async () => {
     // `(if …)` normalizes over the boxed-ABool representation (same convention
     // the sibling dialect test files use for boolean-verdict assertions).

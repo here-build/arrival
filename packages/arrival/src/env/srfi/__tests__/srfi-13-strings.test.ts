@@ -1,16 +1,14 @@
 /**
  * SRFI-13 string library (env/srfi/srfi-13.ts) — the completion pack.
  *
- * The base env already binds `string-contains` (SRFI-13) and the case trio, so a
- * model correctly extrapolates to the REST of the standard string library — then
- * crashes on `Unbound variable 'string-split'`. This suite pins the completed
- * surface: predicates, index/count (char OR one-arg predicate criteria — no
- * charsets), slices (take/drop and -right twins, out-of-range IS an error),
- * trim/pad, reverse, join/tokenize, and SRFI-152's `string-split`.
+ * scheme/srfi-13 owns `string-contains` / `string-contains?` plus the rest of the
+ * standard string library the case trio (scheme/strings) does not cover. This suite
+ * pins the completed surface: contains, predicates, index/count (char OR one-arg
+ * predicate criteria — no charsets), slices (take/drop and -right twins, out-of-range
+ * IS an error), trim/pad, reverse, join/tokenize, and SRFI-152's `string-split`.
  *
- * Provenance discipline mirrors string-contains.test.ts: booleans/indices carry
- * the searched strings' lineage; derived strings carry the source's; split/tokenize
- * taint EACH piece so list elements stay grounded.
+ * Provenance: booleans/indices carry the searched strings' lineage; derived strings
+ * carry the source's; split/tokenize taint EACH piece so list elements stay grounded.
  */
 
 import { describe, it, expect } from "vitest";

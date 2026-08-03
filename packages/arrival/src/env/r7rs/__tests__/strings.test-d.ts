@@ -20,12 +20,11 @@ import { describe, expectTypeOf, test } from "vitest";
 import * as z from "../../../common/scheme-zod/index.js";
 import { symbol } from "../../../symbol/index.js";
 import { type DecodedArgs, type DecodedReturn } from "../../../common/symbols/_bake.js";
-import type { AList, AListAlike, SchemeValue } from "../../../values/types.js";
-import type { APair } from "../../../values/primitives/APair.js";
+import type { SchemeValue } from "../../../values/types.js";
 import type { ACharacter } from "../../../values/primitives/ACharacter.js";
 import type { AString } from "../../../values/primitives/AString.js";
 
-describe("scheme/strings Contract precision — array-element tightening (string / comparisons / string-append / concat)", () => {
+describe("scheme/strings Contract precision — array-element tightening (string / comparisons / string-append)", () => {
   // OLD-shape row DELETED (2026-07-09 suite consolidation, [P16]
   // "env test-d museum rows") — decoded a retired synthetic schema, no reachable
   // production path. NEW-side rows below are the load-bearing proof.
@@ -35,35 +34,24 @@ describe("scheme/strings Contract precision — array-element tightening (string
     expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.char>>, "scheme">>().toEqualTypeOf<ACharacter[]>();
   });
 
-  // INVARIANT: comparison/string-append/concat's element schema decodes to AString[], not
-  // unknown[]
-  test("NEW comparison/string-append/concat shape: z.array(z.schemeString) decodes to AString[], not unknown[]", () => {
+  // INVARIANT: comparison/string-append's element schema decodes to AString[], not unknown[]
+  test("NEW comparison/string-append shape: z.array(z.schemeString) decodes to AString[], not unknown[]", () => {
     expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.string>>, "scheme">>().toEqualTypeOf<AString[]>();
   });
 });
 
-describe("scheme/strings Contract precision — list-shaped slots (string->list output / list->string input / join 2nd-arg / split output)", () => {
+describe("scheme/strings Contract precision — list-shaped slots (string->list output / list->string input)", () => {
   const listSchema = z.union([z.pair, z.nil]);
 
   // OLD-shape row DELETED (same sweep/rationale as the array-element block above).
-  // INVARIANT: string->list/split's list-shaped output decodes to APair|null
-  test("NEW shape: [z.union([z.pair, z.nil])] decodes the OUTPUT to APair | null, not unknown (string->list / split) — nil's JS face is null, not ANil; AList is the scheme face", () => {
+  // INVARIANT: string->list's list-shaped output decodes to APair|null
+  test("NEW shape: [z.union([z.pair, z.nil])] decodes the OUTPUT to APair | null, not unknown (string->list) — nil's JS face is null, not ANil; AList is the scheme face", () => {
     expectTypeOf<DecodedReturn<[typeof listSchema]>>().toEqualTypeOf<[SchemeValue, SchemeValue] | null>();
   });
 
   // INVARIANT: list->string's list-shaped input decodes to [APair|null]
   test("NEW shape: [z.union([z.pair, z.nil])] decodes the INPUT to [APair | null], not [unknown] (list->string)", () => {
     expectTypeOf<DecodedArgs<[typeof listSchema]>>().toEqualTypeOf<[[SchemeValue, SchemeValue] | null]>();
-  });
-
-  // INVARIANT: join's second-arg slot decodes as [AString, AListAlike]
-  test("NEW shape: join's 2nd-arg slot decodes to [AString, APair | ANil], not [AString, SchemeValue]", () => {
-    // Explicit AList<SchemeValue, SchemeValue>, not bare AList — bare AList relies on its
-    // default type params, which toEqualTypeOf can't reconcile against a computed type here
-    // (a real expect-type limitation with defaulted generics, verified directly).
-    expectTypeOf<DecodedArgs<[typeof z.string, typeof listSchema], "scheme">>().toEqualTypeOf<
-      [AString, AListAlike]
-    >();
   });
 });
 

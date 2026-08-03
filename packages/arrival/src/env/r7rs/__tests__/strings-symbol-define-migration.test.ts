@@ -4,9 +4,8 @@
 // THE FINDING (structural, verified against HEAD and the pack's entire git
 // history via `git log --all -p --follow -- src/env/r7rs/strings.ts`): this
 // pack has NEVER carried a `prelude` field and contains ZERO `define-macro`
-// forms. Every one of its 24 symbols is `symbol.native` (21), `symbol.
-// notImplemented` (2 — string-set!/string-fill!/string-copy!, the purity
-// doors), or `symbol.rosetta` (1 — `concat`). §4.1's census (23 production
+// forms. Every symbol is `symbol.native` or `symbol.notImplemented` (purity
+// doors for string-set!/string-fill!/string-copy!). §4.1's census (23 production
 // `EnvCapability` preludes, script-regeneratable) does NOT list `scheme/
 // strings` — this pack was never prelude-carrying, so there is no Pass 1
 // (mechanical decomposition) and no Pass 2 (contract authoring, §4.2) surface
@@ -58,13 +57,13 @@ describe("ROW 1 — structural: scheme/strings was never prelude-carrying, and s
 
   it("every symbol's baked kind is native, door, or rosetta — zero define/define-syntax entries", () => {
     const kinds = new Set(Object.values(stringsSymbols).map((def) => def.kind));
-    expect(kinds).toEqual(new Set(["native", "door", "rosetta"]));
+    expect(kinds).toEqual(new Set(["native", "door"]));
     expect(Object.values(stringsSymbols).some((def) => def.kind === "define" || def.kind === "define-syntax")).toBe(
       false,
     );
   });
 
-  it("all 24 R7RS §6.7 + LIPS-extension names are present, none dropped by this audit", () => {
+  it("R7RS §6.7 string names are present — no LIPS residual (concat/join/string-contains live elsewhere)", () => {
     expect(Object.keys(stringsSymbols).sort()).toEqual(
       [
         "make-string",
@@ -83,8 +82,6 @@ describe("ROW 1 — structural: scheme/strings was never prelude-carrying, and s
         "string-ci>?",
         "string-ci<=?",
         "string-ci>=?",
-        "string-contains",
-        "string-contains?",
         "string-append",
         "string->list",
         "list->string",
@@ -95,8 +92,6 @@ describe("ROW 1 — structural: scheme/strings was never prelude-carrying, and s
         "string-foldcase",
         "string-map",
         "string-for-each",
-        "concat",
-        "join",
         "substring",
         "string->number",
       ].sort(),

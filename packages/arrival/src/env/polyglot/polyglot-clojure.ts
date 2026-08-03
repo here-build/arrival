@@ -13,9 +13,9 @@
 //   (The genuinely-impure cousin — println — is doored instead, in
 //   env/polyglot-stubs.ts's Clojure section.)
 //
-// NOTE: `first` (SRFI-1), `flatten` (r7rs/lists.ts, arrival extension) and `curry`
-// (SRFI-235-adjacent, srfi-235.ts) are ALREADY bound elsewhere — deliberately not
-// redefined here.
+// NOTE: `first` (SRFI-1) and `curry` (SRFI-235-adjacent, srfi-235.ts) are ALREADY
+// bound elsewhere — deliberately not redefined here. `flatten` is not bound
+// (compose with SRFI-1 / list ops); do not invent a LIPS-era residual.
 //
 // ATTRIBUTE JUDGMENT for `->`/`->>`: every argument position is ORDINARY
 // EXPRESSION SPACE — `x` is an evaluated seed, each form is either a call form

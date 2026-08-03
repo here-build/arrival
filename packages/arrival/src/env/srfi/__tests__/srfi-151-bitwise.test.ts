@@ -3,7 +3,7 @@
  *
  * This suite pins the DOORS, not behavior: every bitwise verb — the numeric-pack
  * five (`bitwise-and`/`bitwise-ior`/`bitwise-xor`/`bitwise-not`/`arithmetic-shift`),
- * the LIPS aliases (`|` `&` `~` `>>` `<<`), and srfi-151's `bit-count` — must reject
+ * the sugarcoat aliases (`|` `&` `~` `>>` `<<`), and srfi-151's `bit-count` — must reject
  * with the dragons door, never compute. Rationale (env/srfi/srfi-151.ts header +
  * docs/design-history/arrival-one-number-rework.md): under the one-number
  * representation, exact integers are safe-range JS numbers, and JS's native bitwise
@@ -35,7 +35,7 @@ const DOOR_FORMS = [
   "(bitwise-xor 12 10)",
   "(bitwise-not 5)",
   "(arithmetic-shift 1 4)",
-  // LIPS aliases. (`|` is doored at the BINDING too, but unreachable from the reader
+  // sugarcoat aliases. (`|` is doored at the BINDING too, but unreachable from the reader
   // regardless — R7RS `|…|` vertical-bar symbol syntax claims the token, so `(| 12 10)`
   // is a parse error; true before the door as well. Not row-testable.)
   "(& 12 10)",

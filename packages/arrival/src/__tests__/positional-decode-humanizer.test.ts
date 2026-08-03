@@ -9,23 +9,34 @@
 // Fix: `common/symbols/positional-rejection.ts` (this arm's own sibling of
 // kwargs-rejection.ts's `issueLines`, keyed on ARG INDEX not kwarg NAME), wired into
 // rosetta.ts's positional decode arm via try/catch(ZodError).
+//
+// Probe verb is a local rosetta (not a stdlib name): the gate is about decode
+// humanization, not any particular R7RS/SRFI binding.
 import { describe, expect, it } from "vitest";
-import { execStateOverFrame as execState } from "../eval/generator-exec.js";
-import { mintFrame } from "../env/AmbientRuntime.js";
-import { inferenceEnv } from "../env/inference-env.js";
+import { exec } from "../eval/generator-exec.js";
+import { EnvCapability } from "../common/capability.js";
 
-const run = (code: string) => execState(code, { env: mintFrame(inferenceEnv, "positional-decode-humanizer") });
+const probe = EnvCapability.define("test/positional-decode-probe", {
+  symbols: (symbol, z) => ({
+    "probe-join": symbol.rosetta`probe-join: concatenate two strings (test probe for positional decode humanization)`(
+      { input: [z.string, z.string], output: [z.string] },
+      (a: string, b: string) => a + b,
+    ),
+  }),
+});
+
+const run = (code: string) => exec(code, { capabilities: [probe] });
 
 describe("B4 — a positional decode rejection is humanized, not a raw ZodError dump", () => {
-  it("(concat \"a\" 5) names the verb and the offending arg position", async () => {
-    await expect(run('(concat "a" 5)')).rejects.toThrow(/concat/);
-    await expect(run('(concat "a" 5)')).rejects.toThrow(/arg 2/);
+  it('(probe-join "a" 5) names the verb and the offending arg position', async () => {
+    await expect(run('(probe-join "a" 5)')).rejects.toThrow(/probe-join/);
+    await expect(run('(probe-join "a" 5)')).rejects.toThrow(/arg 2/);
   });
 
-  it("(concat \"a\" 5) message does NOT contain the raw zod issues JSON", async () => {
+  it('(probe-join "a" 5) message does NOT contain the raw zod issues JSON', async () => {
     try {
-      await run('(concat "a" 5)');
-      throw new Error("expected concat to throw, it didn't");
+      await run('(probe-join "a" 5)');
+      throw new Error("expected probe-join to throw, it didn't");
     } catch (e) {
       const message = (e as Error).message;
       expect(message).not.toMatch(/"code"/);

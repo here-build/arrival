@@ -15,11 +15,11 @@
 //   3. `string-append`     — homogeneous variadic strings: z.array(z.unknown()) → z.array(z.schemeString)
 //   4. `string->list`      — output is a proper list of chars: [z.unknown()] → [z.union([z.pair, z.nil])]
 //   5. `list->string`      — input walks a Pair (a list of chars): [z.unknown()] → [z.union([z.pair, z.nil])]
-//   6. `join`               — 2nd arg is a list: z.schemeValue → z.union([z.pair, z.nil])
-//   7. `concat`             — args are strings: z.array(z.schemeValue) → z.array(z.schemeString)
+//   (former #6 `join` / #7 `concat` removed from scheme/strings — join is scheme/polyglot,
+//    concat deleted in favor of string-append; string-join/string-contains live in srfi-13)
 //
 // (item #8, `split`'s output-side fix, was a stale/misfiled reference in the original audit —
-// no `split` symbol is bound in this pack; LIPS's `string-split` lives in `scheme/srfi-13`.)
+// no `split` symbol is bound in this pack; `string-split` lives in `scheme/srfi-13`.)
 //
 // #4 is an OUTPUT-side fix — unlike the other 5 (pure input-side, contravariant-safe,
 // zero impl signature changes needed), narrowing an OUTPUT schema is a COVARIANT position:
@@ -29,8 +29,8 @@
 // are byte-for-byte unchanged, only the compile-time annotation tightens). See the report.
 //
 // Blanket sweep note: a single fixed-size "garbage" probe only exercises ELEMENT precision
-// for the genuinely-unbounded array-ish ops (string / comparisons / string-append / concat —
-// #1-3, #7); the fixed-arity tuple ops (#4-6) reject an over-length garbage array on
+// for the genuinely-unbounded array-ish ops (string / comparisons / string-append —
+// #1-3); the fixed-arity tuple ops (#4-5) reject an over-length garbage array on
 // ARITY alone regardless of element precision, so their fixes are proven by dedicated
 // single-element probes instead (a same-arity, wrong-shaped value).
 
@@ -64,15 +64,6 @@ function nativeDef(name: string) {
   return def;
 }
 
-// `concat` migrated to `symbol.rosetta` since this audit's own header was written (still
-// carries `.in`/`.out`, same as native — only the bind KIND differs), so it needs its own
-// accessor rather than `nativeDef`'s native-only guard.
-function rosettaDef(name: string) {
-  const def = symbols[name];
-  if (def === undefined) throw new Error(`strings pack: no symbol named ${name}`);
-  if (def.kind !== "rosetta") throw new Error(`strings pack: ${name} is not a rosetta def (got ${def.kind})`);
-  return def;
-}
 
 const ch = (c: string): ACharacter => new ACharacter(c);
 const str = (s: string): AString => new AString(s);
@@ -134,26 +125,9 @@ describe("scheme/strings Contract precision — 2026-07-05 audit: 8 fixes on the
     expect(def.in.safeParse(["not-a-list"]).success).toBe(false);
   });
 
-  // INVARIANT: join's second argument must be a proper list, rejecting a raw string
-  it("join: 2nd arg must be a proper list (Pair|Nil) — a raw string no longer satisfies it (was z.schemeValue)", () => {
-    const def = nativeDef("join");
-    expect(def.in.safeParse([str(", "), properList()]).success).toBe(true);
-    expect(def.in.safeParse([str(", "), nil]).success).toBe(true);
-    expect(def.in.safeParse([str(", "), "not-a-list"]).success).toBe(false);
-  });
 
-  // INVARIANT: concat (migrated to symbol.rosetta) accepts real AString elements,
-  // rejecting raw JS strings
-  it("concat: accepts real strings, rejects raw JS strings as elements (was z.array(z.schemeValue)) — since migrated to symbol.rosetta", () => {
-    const def = rosettaDef("concat");
-    expect(def.in.safeParse([str("a"), str("b")]).success).toBe(true);
-    expect(def.in.safeParse(["a", "b"]).success).toBe(false);
-  });
 
-  // NOTE: no symbol named `split` is bound in this pack (verified: `grep -rn '"split"'
-  // src/env/`). LIPS's `string-split` lives in `scheme/srfi-13` (env/srfi/srfi-13.ts), a
-  // DIFFERENT capability — this item was a stale/misfiled reference in the original audit
-  // header (item #8), not a fix that ever landed here. Dropped rather than faked.
+  // NOTE: no symbol named `split` is bound in this pack. `string-split` lives in scheme/srfi-13.
 
   // INVARIANT: no native op in the strings pack accepts an arbitrary-shape raw-JS-garbage
   // array — no stragglers
@@ -167,10 +141,11 @@ describe("scheme/strings Contract precision — 2026-07-05 audit: 8 fixes on the
     expect(stragglers).toEqual([]);
   });
 
-  // INVARIANT: the strings pack exports exactly 32 symbols (deliberate drift alarm —
-  // forces a reviewer to touch this test when a symbol is added/removed)
-  it("sanity: the pack exports exactly 32 symbols — the scope this fix must cover", () => {
-    expect(Object.keys(symbols)).toHaveLength(32);
+  // INVARIANT: the strings pack exports exactly 28 symbols (deliberate drift alarm —
+  // forces a reviewer to touch this test when a symbol is added/removed).
+  // Dropped from 32: concat, join, string-contains, string-contains? (relocated/deleted).
+  it("sanity: the pack exports exactly 28 symbols — the scope this fix must cover", () => {
+    expect(Object.keys(symbols)).toHaveLength(28);
   });
 
   // INVARIANT: string-map/string-for-each's earlier inputRest fix remains intact —
