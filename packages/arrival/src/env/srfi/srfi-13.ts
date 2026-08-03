@@ -1,8 +1,9 @@
 // SRFI-13 — string library completion. Sole definition site (base-packs via allSrfi).
 //
-// Completes the grain scheme/strings already starts (string-contains, case trio):
-// predicates, slices, trim/pad, index/count, join/tokenize, plus SRFI-152 string-split
-// (most-reached missing name). implement-or-door for the rest.
+// Completes the grain scheme/strings starts (case trio + R7RS string core):
+// string-contains / string-contains?, predicates, slices, trim/pad, index/count,
+// join/tokenize, plus SRFI-152 string-split (most-reached missing name).
+// implement-or-door for the rest.
 //
 // Scope vs full SRFI-13:
 //   • criteria = CHAR or 1-arg PREDICATE (no char-sets; SRFI-14 doored in srfi-stubs)
@@ -44,7 +45,7 @@ import type { AList, AListAlike, SchemeValue } from "../../values/types.js";
 
 // ── implement-or-door inventory (official SRFI-13 names not live in this pack) ─
 // R7RS peers (scheme/strings) cover string?/make-string/string/length/ref/append/
-// list conversion/copy/map/for-each/upcase/downcase/contains + mutator doors.
+// list conversion/copy/map/for-each/upcase/downcase + mutator doors.
 const PURITY =
   "every value is frozen by design — mutating a string after construction would falsify the provenance lineage it carries; construct a new string instead";
 const SHARED =
@@ -393,6 +394,25 @@ export default EnvCapability.define("scheme/srfi-13", {
       },
     ),
 
+    // Substring search (SRFI-13). Index-or-#f: #f is the ONLY false value in Scheme,
+    // so index 0 is truthy and `(if (string-contains h n) …)` reads naturally.
+    // `string-contains?` is the boolean-predicate twin. Both stamp the lineage of
+    // the strings they searched.
+    "string-contains": symbol.native`string-contains: index of the first occurrence of sub, or #f (SRFI-13)`(
+      { input: [z.string, z.string], output: [z.union([z.exact, z.boolean])] },
+      function (this: CallCtx, str, sub) {
+        const i = stringValue(str).indexOf(stringValue(sub));
+        return withInputProvenance([str, sub], i === -1 ? schemeBool(false) : new AExact(i));
+      },
+    ),
+
+    "string-contains?": symbol.native`string-contains?: #t iff str contains sub (SRFI-13)`(
+      { input: [z.string, z.string], output: [z.boolean] },
+      function (this: CallCtx, str, sub) {
+        return withInputProvenance([str, sub], schemeBool(stringValue(str).includes(stringValue(sub))));
+      },
+    ),
+
     "string-join":
       symbol.native`string-join: the list of strings folded to one with a delimiter (default single space) (SRFI-13)`(
         {
@@ -407,7 +427,7 @@ export default EnvCapability.define("scheme/srfi-13", {
           const parts = to_array("string-join")(list);
           const sep = delimiter === undefined ? " " : stringValue(delimiter);
           // Collapsing op: fold the list to one string, then re-stamp the DEEP union of
-          // every element's lineage (+ the delimiter's) — see string-append/join.
+          // every element's lineage (+ the delimiter's) — see string-append.
           return taintString(parts.map(stringValue).join(sep), collapseProvenance(list, delimiter));
         },
       ),
