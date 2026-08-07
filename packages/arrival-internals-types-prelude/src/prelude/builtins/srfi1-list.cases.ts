@@ -14,10 +14,8 @@ import { expectTypeOf } from "vitest";
 expectTypeOf(take(2, [1, 2, 3, 4])).toEqualTypeOf<List<number>>();
 expectTypeOf(drop(1, ["a", "b", "c"])).toEqualTypeOf<List<string>>();
 
-// concat — string concat, variadic strings → string
-expectTypeOf(concat("a", "b", "c")).toEqualTypeOf<string>();
-
 // flatten — argument is a list; element type is unknown
+// (`concat` is not bound — string concat is R7RS string-append / SRFI-13 string-join.)
 expectTypeOf(
   flatten([
     [1, 2],
@@ -52,8 +50,6 @@ expectTypeOf(remove((x: number): boolean => x > 1, [1, 2, 3])).toEqualTypeOf<Lis
 take([1, 2, 3], 2);
 // @ts-expect-error drop — wrong-typing the threaded result (string list cannot be number list)
 const x: List<number> = drop(1, ["a", "b"]);
-// @ts-expect-error concat — number where string required
-concat(1, 2, 3, 4);
 // @ts-expect-error flatten — argument is not a list
 flatten(5);
 // @ts-expect-error fold — callback acc type disagrees with the seed type (string acc vs number seed)

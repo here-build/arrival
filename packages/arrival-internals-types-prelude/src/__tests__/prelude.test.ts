@@ -1,15 +1,15 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Bite + merge proof for the PRE prelude.
+// Bite + leaf-ambient proof for the PRE prelude.
 //
-// Proves the whole leaf → merge → bite chain works BEFORE the 34-way fan-out:
-//   1. The empty `interface ArrShape` in PRE + the `car` member declared in a
-//      SEPARATE leaf file (builtins/car.d.ts) merge into one `__arr` shape.
-//   2. A well-typed call (`__arr.car([1,2,3])`) is clean (0 diagnostics) and its
-//      type resolves to `number`.
-//   3. An ill-typed call (`__arr.car(5)`) BITES — exactly one diagnostic.
-//   4. `car` is resolved via interface declaration-merging from the LEAF file,
-//      not from PRE (PRE declares it empty) — proving the merge contract the 34
-//      agents rely on.
+// Proves the leaf → ambient-global → bite chain works BEFORE the full fan-out:
+//   1. PRE declares only shared carriers (`List`, `Tuple`, field helpers, `sexpr`).
+//      Builtin leaves each `declare function <encodeSchemeIdent(name)>…` into the
+//      same ambient global scope (no `__arr` / `ArrShape` bag).
+//   2. A well-typed call (`car([1,2,3])`) is clean (0 diagnostics) and its type
+//      resolves to `number`.
+//   3. An ill-typed call (`car(5)`) BITES — exactly one diagnostic.
+//   4. `car` is supplied by the LEAF file, not by PRE — PRE alone yields
+//      "Cannot find name 'car'" (2304).
 //
 // We run the REAL prelude `.d.ts` files from disk through a bare
 // `ts.LanguageService` over an in-memory host (the same shape the lens's MCP
@@ -72,24 +72,24 @@ function check(programSource: string): { diagnostics: ts.Diagnostic[] } {
   return { diagnostics: [...service.getSemanticDiagnostics("__program.ts")] };
 }
 
-describe("PRE prelude — bite + merge contract", () => {
+describe("PRE prelude — bite + leaf ambient contract", () => {
   it("a well-typed (car (list …)) call is clean", () => {
-    const { diagnostics } = check(`export {};\n__arr.car([1, 2, 3]);`);
+    const { diagnostics } = check(`export {};\ncar([1, 2, 3]);`);
     expect(diagnostics).toHaveLength(0);
   });
 
-  it("(car (list of numbers)) resolves to number — the merged leaf signature is precise, not any", () => {
-    // If car had merged as `any` (the regression we guard against), the explicit
+  it("(car (list of numbers)) resolves to number — the leaf signature is precise, not any", () => {
+    // If car had resolved as `any` (the regression we guard against), the explicit
     // `: number` annotation below would still pass; so instead we force a type
     // CONFLICT that only a precise `number` return can produce.
-    const { diagnostics } = check(`export {};\nconst s: string = __arr.car([1, 2, 3]);`);
+    const { diagnostics } = check(`export {};\nconst s: string = car([1, 2, 3]);`);
     // number is not assignable to string → exactly the bite proving precision.
     expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0]!.code).toBe(2322);
   });
 
   it("an ill-typed (car 5) call BITES — exactly one diagnostic", () => {
-    const { diagnostics } = check(`export {};\n__arr.car(5);`);
+    const { diagnostics } = check(`export {};\ncar(5);`);
     expect(diagnostics).toHaveLength(1);
     // 2345: Argument of type 'number' is not assignable to parameter 'List<…>'.
     expect(diagnostics[0]!.code).toBe(2345);
@@ -97,11 +97,11 @@ describe("PRE prelude — bite + merge contract", () => {
     expect(msg).toContain("not assignable");
   });
 
-  it("car resolves via interface-merge from the LEAF file (PRE alone leaves __arr empty)", () => {
-    // Without the leaf, `__arr.car` does not exist → property-access bite (2339).
+  it("car is supplied by the LEAF file (PRE alone has no ambient car)", () => {
+    // Without the leaf, `car` is not a global name → cannot-find-name bite (2304).
     const files = new Map<string, string>([
       ["__pre.d.ts", PRE],
-      ["__program.ts", `export {};\n__arr.car([1, 2, 3]);`],
+      ["__program.ts", `export {};\ncar([1, 2, 3]);`],
     ]);
     const options: ts.CompilerOptions = {
       noEmit: true,
@@ -133,9 +133,11 @@ describe("PRE prelude — bite + merge contract", () => {
     };
     const service = ts.createLanguageService(host, ts.createDocumentRegistry());
     const diags = service.getSemanticDiagnostics("__program.ts");
-    // PRE alone: `car` is NOT a member of the empty ArrShape → property bite.
+    // PRE alone: no ambient `car` declare → name bite.
     expect(diags).toHaveLength(1);
-    expect(diags[0]!.code).toBe(2339);
+    expect(diags[0]!.code).toBe(2304);
+    const msg = ts.flattenDiagnosticMessageText(diags[0]!.messageText, "\n");
+    expect(msg).toContain("car");
   });
 
   it("an ordinary record + field accessor bite on a mis-keyed read", () => {

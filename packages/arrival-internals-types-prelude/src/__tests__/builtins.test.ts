@@ -9,7 +9,8 @@
 // This runner compiles ONE program = PRE prelude + every leaf `.d.ts` + every
 // `.cases.ts` (the file set of tsconfig.cases.json) and asserts zero diagnostics.
 // That single-program composition proves two things across the whole fan-out:
-//   1. all leaf `interface ArrShape` re-declarations merge with no conflict, and
+//   1. all leaf ambient `declare function <encodeSchemeIdent(name)>…` coexist
+//      in one global scope with no name collision, and
 //   2. every case assertion holds (no signature silently regressed to `any`).
 // The compiler is the assertion engine; there is no per-snippet string harness.
 
