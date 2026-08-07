@@ -177,9 +177,9 @@ const CLAIMS: readonly ClaimRow[] = [
       ["(delete-duplicates '(1 1 2 2 3))", "[1 2 3]"],
       ["(every odd? '(1 3 5))", "true"],
       ["(some even? '(1 2 3))", "true"],
-      // `values` isn't a collection literal itself — it stays word+parens — but its nested
-      // lists still flip to brackets (the "nested structures recurse" rule).
-      ["(partition odd? '(1 2 3 4))", "(values\n  [1 3]\n  [2 4])"],
+      // Multi-value returns are omitted from arrival by design — partition packages
+      // both arms as one list-of-lists product; nested lists still flip to brackets.
+      ["(partition odd? '(1 2 3 4))", "[[1 3] [2 4]]"],
     ],
   },
   {

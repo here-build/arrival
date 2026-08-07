@@ -82,12 +82,14 @@ describe("renderObservation — real arrival exec() results", () => {
     expect(renderObservation(value)).toBe("{:a 1 :b [2 3]}");
   });
 
-  it("renders nested values head-recursively at any depth (values-wrapped lists still bracket)", async () => {
+  it("renders nested lists head-recursively at any depth (partition's two arms as one product)", async () => {
     const env = freshEnv();
-    // Multiple return values are only observable boxed: exec's plain-JS exit unwraps them to
-    // a JS array by convention (the arrival membrane's Values arm), so this reads execState.
+    // Multi-value returns (`values` / `call-with-values`) are omitted from arrival by
+    // design — free multi-return packaging is the weak form of continuation arity.
+    // `partition` therefore returns ONE structured product: a list of the two arms
+    // (odds, then evens). Nested lists still flip to brackets at any depth.
     const state = await execState("(partition odd? '(1 2 3 4))", { capabilities, config, runCtx, scope: env });
-    expect(renderObservation(state.values[0])).toBe("(values\n  [1 3]\n  [2 4])");
+    expect(renderObservation(state.values[0])).toBe("[[1 3] [2 4]]");
   });
 });
 
