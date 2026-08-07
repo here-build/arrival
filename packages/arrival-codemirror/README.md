@@ -51,6 +51,9 @@ call *and watch the argument's type error appear* — the same buffer, the same 
 
 - **`paramHintsExtension("scheme" | "sugarcoat")`** — inlay parameter-name hints before the
   arguments of local defines. Pure static analysis, view-only widgets, never in buffer text.
+  Labels **hang** into free whitespace when there is room (full indent on a leading-arg line;
+  surplus mid-line spaces, keeping one separator) so values stay put instead of always shifting
+  right; shortfall still pushes the remainder.
 
 - **`sugarcoatIdeBackend(backend)`** — the same IDE on the Sugarcoat face. Wraps a
   classic-coordinate backend with the sugarcoat↔classic span aligner, so
