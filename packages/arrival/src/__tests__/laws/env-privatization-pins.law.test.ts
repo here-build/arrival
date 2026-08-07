@@ -15,8 +15,8 @@
  *      unlike the V1-era cuts above (a zero-consumer removal), this one is a DELIBERATE
  *      relocation: it moved to `/lsp-internals` (a sibling-contract subpath, not this tier) as
  *      part of shrinking the root barrel to the three-concern surface (eval + capability
- *      authoring + provenance-as-data) V's minimal-surface ruling calls for. Root is now
- *      EXACTLY 24 names — see the full-set pin below for the enumerated list.
+ *      authoring + provenance-as-data) V's minimal-surface ruling calls for. Root is the
+ *      enumerated set in the full-set pin below (that list IS the contract).
  *   2. Glass byte-identity — DROPPED (Cut 3b): `ExecOptions.env` no longer exists at all, so
  *      there is nothing left to pin byte-identity against. The internal live-frame seam
  *      (`execStateOverFrame`/`execOverFrame`, generator-exec.ts) is the narrow, non-public
@@ -88,6 +88,9 @@ describe("V0 pin — barrel surface", () => {
         "disposeRunContext",
         "exec",
         "execState",
+        // Membrane: public outbound exit + double-wrap predicate (see index.ts).
+        // `schemeToJs*` remain as temporary aliases; new code uses `toJS`.
+        "isSchemeValue",
         "jsToScheme",
         "makeCallCtx",
         "parse",
@@ -95,6 +98,7 @@ describe("V0 pin — barrel surface", () => {
         "schemeToJsUntyped",
         "symbol",
         "testCallCtx",
+        "toJS",
         "withContractFields",
         "z",
       ].sort(),

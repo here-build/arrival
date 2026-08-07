@@ -33,6 +33,16 @@ import { exec } from "../../index.js";
 import { PurityError } from "../../errors.js";
 import { BASE_PACKS } from "../../env/base-packs.js";
 import { contractOf } from "../../common/capability-internals.js";
+import { ASymbol } from "../../values/primitives/ASymbol.js";
+
+/** Source spelling of a door name that the reader can re-parse as that same name.
+ *  Most doors are bare identifiers (`println`, `>>`, `**`); a few are reader-special
+ *  (notably `|` — the R7RS bar-quote delimiter, declared as the sugarcoat bitwise-or
+ *  door). `ASymbol.toString(true)` is the write-side of that round-trip: bare when legal,
+ *  `|…|` (with `\|` / `\\` escapes) when the name would otherwise be misread. */
+function identifierSource(name: string): string {
+  return new ASymbol(name).toString(true);
+}
 
 /** Every `symbol.notImplemented` door declared by a BASE_PACKS capability, as
  *  {name, reason, pack}. Builder-form `symbols`
@@ -63,14 +73,15 @@ const DOORS = declaredDoors();
 // 1. Every declared door FIRES AT APPLY with teaching
 // ============================================================================
 //
-// Call shape: `(<name>)` — ZERO arguments, uniformly, for every entry regardless of
-// the symbol's real arity. Deliberate: per capability.ts's "door" binding
-// (`env.set(verb, () => { throw new PurityError(...) })`), the door is a closure that
-// throws UNCONDITIONALLY, before any argument is even looked at — JS doesn't enforce
-// arity on a plain function, so calling with 0 args never reaches a "wrong number of
-// arguments" problem, and nothing is evaluated before the call (calling WITH an
-// unbound-variable argument would evaluate that argument BEFORE the door fires, since
-// doors are procedures, not macros).
+// Call shape: `(<id>)` — ZERO arguments, uniformly, for every entry regardless of
+// the symbol's real arity. `<id>` is `identifierSource(name)` (bare, or bar-quoted when
+// the name is reader-special — see `|` / scheme/sugarcoat). Deliberate: per
+// capability.ts's "door" binding (`env.set(verb, () => { throw new PurityError(...) })`),
+// the door is a closure that throws UNCONDITIONALLY, before any argument is even looked
+// at — JS doesn't enforce arity on a plain function, so calling with 0 args never reaches
+// a "wrong number of arguments" problem, and nothing is evaluated before the call
+// (calling WITH an unbound-variable argument would evaluate that argument BEFORE the
+// door fires, since doors are procedures, not macros).
 
 // INVARIANT (carried from the dissolved polyglot-rich-errors-stubs.test.ts, generalized: every
 // declared door — including each well-known cross-dialect stub, e.g. type-of/<>/make-hash/
@@ -94,15 +105,16 @@ describe("F6 doors — every DECLARED notImplemented door fires at apply with te
     expect(DOORS.length).toBeGreaterThan(0);
   });
 
-  /** Shared body: fires `(<name>)`, confirms a PurityError door, returns the message. */
+  /** Shared body: fires `(<id>)` for the door name, confirms a PurityError door, returns the message. */
   async function fireDoor(name: string): Promise<string> {
+    const id = identifierSource(name);
     let caught: unknown;
     try {
-      await exec(`(${name})`);
+      await exec(`(${id})`);
     } catch (e) {
       caught = e;
     }
-    expect(caught, `expected (${name}) to throw`).toBeDefined();
+    expect(caught, `expected (${id}) to throw`).toBeDefined();
     const direct = caught instanceof PurityError;
     const viaCause = (caught as { cause?: unknown })?.cause instanceof PurityError;
     const message = (caught as Error)?.message ?? String(caught);
