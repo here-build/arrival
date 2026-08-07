@@ -58,20 +58,54 @@ const sortNames = (names: ImportName[]): void => {
   });
 };
 
+/** Every `RuntimeRef.symbol` still living in the residual unit (post peephole/asyncness). */
+function collectRuntimeRefSymbols(unit: CompilationUnit): Set<string> {
+  const out = new Set<string>();
+  const visit = (n: R): R => {
+    if (n.t === "RuntimeRef") out.add(n.symbol);
+    return mapChildren(n, visit);
+  };
+  const visitDecl = (d: Decl): void => {
+    switch (d.t) {
+      case "FnDecl":
+        for (const s of d.body.stmts) visit(s);
+        break;
+      case "ConstDecl":
+        visit(d.init);
+        break;
+      case "DeclComment":
+        visitDecl(d.decl);
+        break;
+      default:
+        break;
+    }
+  };
+  for (const d of unit.decls) visitDecl(d);
+  for (const s of unit.body) visit(s);
+  return out;
+}
+
 /**
  * Materialize runtime imports: one Import decl per source module that is used,
  * rewrite every RuntimeRef to a Ref. Pure — empty symbols → same unit reference.
  *
  * Sources: ramda + stage0 (built-in), then `"pkg"` rows keyed by `entry.module`
  * (capability-owned runtimes — handlebars is the reference).
+ *
+ * Symbol set = `sm.importsOf` ∪ RuntimeRefs actually in the residual tree. The
+ * second half closes the importsOf-disagree class (peepholes / asyncness can
+ * introduce RuntimeRefs the model walk never saw — see model-imports-agree).
  */
 export function materializeImports(unit: CompilationUnit, opts: MaterializeImportsOptions): CompilationUnit {
-  if (opts.symbols.size === 0) return unit;
   const locals = opts.manifest ?? RUNTIME_LOCALS;
   const full = opts.runtimeManifest ?? RUNTIME_MANIFEST;
   const ramdaModule = opts.ramdaModule ?? RAMDA_MODULE;
 
-  const symbols = [...opts.symbols].sort(); // UTF-16 determinism
+  const fromTree = collectRuntimeRefSymbols(unit);
+  const symbolSet = new Set<string>([...opts.symbols, ...fromTree]);
+  if (symbolSet.size === 0) return unit;
+
+  const symbols = [...symbolSet].sort(); // UTF-16 determinism
   void locals; // reserved for walk-parity override checks / future injectivity cross-check
   const unresolved = symbols.filter((s) => full[s] === undefined);
   if (unresolved.length > 0) throw new MaterializeImportsDoorError(unresolved);
@@ -135,9 +169,10 @@ export function materializeImports(unit: CompilationUnit, opts: MaterializeImpor
     if (n.t !== "RuntimeRef") return mapChildren(n, rewrite);
     const binding = aliasOf.get(n.symbol);
     if (binding === undefined) {
+      // Should be unreachable: symbolSet unions tree RuntimeRefs above.
       throw new Error(
-        `materializeImports: \`${n.symbol}\` occurs in the tree but is not in the model's importsOf set — ` +
-          `the model and the walked tree disagree (see model-imports-agree.test.ts).`,
+        `materializeImports: \`${n.symbol}\` occurs in the tree but has no alias — ` +
+          `internal materializeImports bug (see model-imports-agree.test.ts).`,
       );
     }
     return { t: "Ref", binding, origin: n.origin };
