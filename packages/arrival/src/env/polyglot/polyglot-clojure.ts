@@ -121,7 +121,7 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
         function (this: CallCtx, index: SchemeValue, obj: SchemeValue) {
           const idx = Number(index);
           if (obj instanceof APair) {
-            let node: APair = obj;
+            let node: APair<SchemeValue, SchemeValue> = obj;
             let count = 0;
             while (count < idx) {
               const next = node.cdr;
