@@ -110,8 +110,7 @@ export const RUNTIME_MANIFEST: Readonly<Record<string, RuntimeEntry>> = {
   // Census gap that made `inhuman build --no-emit` throw on real examples.
   "number->string": e("numberToString", "stage0"),
   "string?": e("stringP", "stage0"),
-  "string-join": e("stringJoin", "stage0"), // SRFI-13 (list, [delimiter])
-  join: e("join_", "stage0"), // polyglot sep-first twin of string-join
+  "string-join": e("stringJoin", "stage0"), // SRFI-13 (list, [delimiter]) — not LIPS `join`
   abs: e("abs_", "stage0"),
   range: e("range_", "stage0"), // plane helper, not R7RS
   // reverse: ramda reverse matches list face under loose arrays

@@ -353,13 +353,10 @@ export const numberToString = (n: number, radix?: number): string =>
 /** `string?` — R7RS type predicate. */
 export const stringP = (v: unknown): boolean => typeof v === "string";
 
-/** `string-join` — SRFI-13: (string-join list [delimiter]) → string. Default delimiter: space. */
+/** `string-join` — SRFI-13: (string-join list [delimiter]) → string. Default delimiter: space.
+ *  Deliberately not LIPS `join` (sep-first) — that extension is out of the emit surface. */
 export const stringJoin = (list: readonly unknown[], delimiter?: string): string =>
   list.map((x) => (x == null ? "" : String(x))).join(delimiter === undefined ? " " : delimiter);
-
-/** `join` — polyglot sep-first twin: (join separator list) → string. */
-export const join_ = (separator: string, list: readonly unknown[]): string =>
-  list.map((x) => (x == null ? "" : String(x))).join(separator);
 
 /** `abs` — R7RS numeric. */
 export const abs_ = (n: number): number => Math.abs(n);
