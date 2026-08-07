@@ -17,7 +17,7 @@
  * read via its registry symbol (`Symbol.for("__location__")`) — no dependency
  * on the concrete primitive classes.
  */
-import { parse as parseGenerator } from "../eval/generator-exec.js";
+import { parse } from "../eval/generator-exec.js";
 
 /**
  * Source location of a parsed form — mirrors the reader's `SourceLocation`
@@ -80,7 +80,7 @@ const locationOf = (form: unknown): SourceLocation | undefined =>
 export async function extractDefines(source: string): Promise<DefineInfo[]> {
   let forms: unknown[];
   try {
-    forms = (await parseGenerator(source)) as unknown[];
+    forms = (await parse(source)) as unknown[];
   } catch {
     return [];
   }

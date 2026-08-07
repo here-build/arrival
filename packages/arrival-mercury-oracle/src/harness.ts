@@ -59,7 +59,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { execState, LexicalScope, parse as parseGenerator, toJS, type SchemeValue } from "@inhuman.tools/arrival";
+import { execState, LexicalScope, parse, toJS, type SchemeValue } from "@inhuman.tools/arrival";
 import { register } from "tsx/esm/api";
 
 import {
@@ -106,7 +106,7 @@ export async function evalInterpreter(session: OracleSession, source: string): P
     // Fresh scope over the shared session — plane prelude (range/take/field/…) is already
     // on it from assembly; do not re-exec BUILTIN_PREAMBLE.
     const scope = LexicalScope.fresh(`oracle-${scopeCounter++}`);
-    const forms = await parseGenerator(source);
+    const forms = await parse(source);
     let last: unknown;
     for (const form of forms) {
       const state = await execState(form, {
