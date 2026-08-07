@@ -11,6 +11,9 @@ export { schemeToSugarcoat, type SugarcoatOpts } from "./sugarcoat-render.js";
 // Classic-parse primitives for source-to-source consumers (e.g. arrival-chain-view
 // projecting scheme → JS/Python). Pure analysis — stays inside the runtime-free lens.
 export { parseSexprs, printScheme, type Node } from "./sugarcoat-render.js";
+// Loading the reader registers it with schemeToSugarcoat (dual-path re-entry for
+// already-sweet buffers). Keep this import after the render exports so the hook
+// installs for every facade consumer.
 export { sugarcoatToScheme, readSugarcoat } from "./sugarcoat-read.js";
 // Sugarcoat↔classic span alignment — pairs the spans both transforms already stamp
 // (lockstep walk over the structurally-equal trees). Coordinate substrate for

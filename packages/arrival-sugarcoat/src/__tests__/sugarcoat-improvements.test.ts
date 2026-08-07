@@ -151,20 +151,113 @@ describe("string-append → @{…} (default: strip coercions, headless str)", ()
   });
 });
 
-// ── 7. logicals stay as scheme symbols (`and`/`or`), not C/JS `&&`/`||` ──
+// ── KWARGS LAW: known-kwargs never n-expr / never neoteric; unknown heads keep shape ──
+describe("kwargs law (known head: no n-expr/neoteric; unknown: no pair lines)", () => {
+  it("unknown head keeps classic call shape (no k:v pair inventing)", () => {
+    // fits or breaks — never colon-pair lines under a non-kwarg head
+    expect(render("(foo :a 1 :b 2)")).toBe("(foo :a 1 :b 2)");
+    expect(render("(foo :a 1 :b 2)", { width: 8 })).toContain(":a");
+    expect(render("(foo :a 1 :b 2)", { width: 8 })).not.toMatch(/^\s*a:\s/m);
+  });
+  it("known kwarg head that is ALSO an infix op never becomes n-expr", () => {
+    // Collision case: .prompt bound to `gt` (word-form comparison is INFIX).
+    // Without the law, (gt :lo 1 :hi 9) would become {:lo > 1 > :hi > 9}.
+    const src = `(define gt (require "bounds.prompt"))\n(gt :lo 1 :hi 9)`;
+    const inline = schemeToSugarcoat(src);
+    expect(inline).toContain("(gt :lo 1 :hi 9)"); // classic kwargs call, not n-expr
+    expect(inline).not.toMatch(/\{[^}]*\}/); // no curly n-expr
+    expect(inline).not.toMatch(/\s>\s/); // no comparison glyph rewrite
+    // When broken for width, pair lines — still not n-expr.
+    const broken = schemeToSugarcoat(src, { width: 12 });
+    expect(broken).toMatch(/lo:/);
+    expect(broken).toMatch(/hi:/);
+    expect(broken).not.toMatch(/\{/);
+  });
+  it("known kwarg head never goes neoteric", () => {
+    const src = `(define react (require "x.prompt"))\n(react :persona p)`;
+    const out = schemeToSugarcoat(src, { neoteric: true });
+    expect(out).not.toMatch(/react\s*\(/);
+    expect(out).toContain(":persona");
+  });
+  it("plain infix gt (not a kwarg head) still prefers n-expr", () => {
+    expect(render("(gt a b)")).toBe("{a > b}");
+  });
+});
+
+// ── 7b. word-form comparisons → glyphs + prefer n-expr (one-way to R7RS) ──
+describe("lt/gt/lte/gte prefer n-expr with scheme glyphs", () => {
+  it("renders word forms as curly comparison", () => {
+    expect(render("(lt a b)")).toBe("{a < b}");
+    expect(render("(gt a b)")).toBe("{a > b}");
+    expect(render("(lte a b)")).toBe("{a <= b}");
+    expect(render("(gte a b)")).toBe("{a >= b}");
+  });
+  it("n-ary word forms stay one curly", () => {
+    expect(render("(lt a b c)")).toBe("{a < b < c}");
+  });
+  it("reads word-form infix to R7RS heads", () => {
+    expect(read1("{a lt b}")).toBe("(< a b)");
+    expect(read1("{a gt b}")).toBe("(> a b)");
+    expect(read1("{a lte b}")).toBe("(<= a b)");
+    expect(read1("{a gte b}")).toBe("(>= a b)");
+  });
+  it("one-way: word-form scheme rewrites to R7RS on round-trip", () => {
+    expect(roundtrip("(lt a b)")).toBe(canon("(< a b)"));
+    expect(roundtrip("(gt x y)")).toBe(canon("(> x y)"));
+    expect(roundtrip("(lte p q)")).toBe(canon("(<= p q)"));
+    expect(roundtrip("(gte p q)")).toBe(canon("(>= p q)"));
+  });
+  it("native R7RS comparisons still round-trip as themselves", () => {
+    for (const s of ["(< a b)", "(> a b)", "(<= a b)", "(>= a b)"])
+      expect(roundtrip(s)).toBe(canon(s));
+  });
+});
+
+// ── 7. logicals stay as scheme symbols (`and`/`or`), prefer flat n-expr ──
 describe("and/or surface as themselves (no &&/|| rewrite)", () => {
   it("binary and/or render as word glyphs", () => {
     expect(render("(and a b)")).toBe("{a and b}");
     expect(render("(or a b)")).toBe("{a or b}");
   });
-  it("n-ary and precedence over or", () => {
-    expect(render("(or (and a b) c)")).toBe("{a and b or c}");
-    expect(render("(and a (or b c))")).toBe("{a and {b or c}}");
+  it("n-ary flat form is the preferred n-expr", () => {
+    expect(render("(and a b c)")).toBe("{a and b and c}");
+    expect(render("(or a b c)")).toBe("{a or b or c}");
+    expect(read1("{a and b and c}")).toBe("(and a b c)");
+    expect(read1("{a or b or c}")).toBe("(or a b c)");
   });
-  it("reads the word forms back to canonical", () => {
+  it("boolean mixing is LICENSELESS — and under or (and vice versa) keeps braces", () => {
+    // Doctrine §5.2: never emit the ambiguous flat form `{a and b or c}`.
+    expect(render("(or (and a b) c)")).toBe("{{a and b} or c}");
+    expect(render("(or a (and b c) d)")).toBe("{a or {b and c} or d}");
+    expect(render("(or (and a b) (and c d) e)")).toBe("{{a and b} or {c and d} or e}");
+    expect(render("(and a (or b c))")).toBe("{a and {b or c}}");
+    expect(render("(and (or a b) c)")).toBe("{{a or b} and c}");
+  });
+  it("harness-style mixed and/or auto-containerizes each and-group", () => {
+    const scheme =
+      '(or (and kv (kv-get kv "harness.approval.mode")) (and kernel (:default-approval-mode kernel)) "ask")';
+    expect(render(scheme)).toBe(
+      '{{kv and (kv-get kv "harness.approval.mode")} or {kernel and kernel[:default-approval-mode]} or "ask"}',
+    );
+    expect(roundtrip(scheme)).toBe(canon(scheme));
+  });
+  it("associative flatten: nested same-op and/or collapse (intent, not tree spelling)", () => {
+    // Tradeoff: binary-tree nesting is lost; conjunction/disjunction intent remains.
+    expect(render("(and (and a b) c)")).toBe("{a and b and c}");
+    expect(render("(and a (and b c))")).toBe("{a and b and c}");
+    expect(render("(or (or a b) (or c d))")).toBe("{a or b or c or d}");
+    expect(roundtrip("(and (and a b) c)")).toBe(canon("(and a b c)"));
+    expect(roundtrip("(and a (and b c))")).toBe(canon("(and a b c)"));
+    // Different ops do NOT flatten into each other — and stay containerized.
+    expect(render("(and (or a b) c)")).toBe("{{a or b} and c}");
+    expect(roundtrip("(and (or a b) c)")).toBe(canon("(and (or a b) c)"));
+  });
+  it("reads braced mixed forms; doors bare mixed and/or", () => {
     expect(read1("{a and b}")).toBe("(and a b)");
     expect(read1("{a or b}")).toBe("(or a b)");
-    expect(read1("{a and b or c}")).toBe("(or (and a b) c)");
+    expect(read1("{{a and b} or c}")).toBe("(or (and a b) c)");
+    // Bare mix is a door (licenseless) — brace the groups.
+    expect(() => read1("{a and b or c}")).toThrowError(/mixed 'and'\/'or'|licenseless|brace/i);
   });
   it("legacy &&/|| still fold on read (older views)", () => {
     expect(read1("{a && b}")).toBe("(and a b)");
@@ -246,11 +339,32 @@ describe("math skin: (not (relop …)) ↔ ≠ / ≢ / ≉ / ≄", () => {
   });
 });
 
-// ── math skin: cons/member/compose become infix (opt-in, bidirectional) ──
-describe("math skin: cons ∷ / member ∈ / compose ∘ as infix", () => {
+// ── binary cons → [a b] (list surface; one-way to list on save) ──
+describe("binary cons prefers list surface [a b]", () => {
+  it("(cons a b) → [a b] (ascii and math)", () => {
+    expect(render("(cons a b)")).toBe("[a b]");
+    expect(render("(cons a b)", math)).toBe("[a b]");
+    expect(render("(cons car cdr)")).toBe("[car cdr]");
+  });
+  it("one-way: reads back as list, not cons", () => {
+    expect(roundtrip("(cons a b)")).toBe(canon("(list a b)"));
+  });
+  it("nested cons containerizes as nested lists", () => {
+    expect(render("(cons a (cons b xs))")).toBe("[a [b xs]]");
+  });
+  it("cons of a compound keeps the element sugared", () => {
+    expect(render("(cons (+ x 1) xs)")).toBe("[{x + 1} xs]");
+  });
+  // Hand-typed math ∷ still reads as cons (legacy / explicit pair intent).
+  it("math ∷ still folds to cons on read", () => {
+    expect(read1("{a ∷ b}")).toBe("(cons a b)");
+    expect(read1("{x + 1 ∷ xs}")).toBe(canon("(cons (+ x 1) xs)"));
+  });
+});
+
+// ── math skin: member ∈ / compose ∘ as infix (opt-in, bidirectional) ──
+describe("math skin: member ∈ / compose ∘ as infix", () => {
   const cases: Array<[string, string]> = [
-    ["(cons car cdr)", "{car ∷ cdr}"], // V's example
-    ["(cons a b)", "{a ∷ b}"],
     ["(member x xs)", "{x ∈ xs}"],
     ["(compose f g)", "{f ∘ g}"],
     ["(compose f g h)", "{f ∘ g ∘ h}"], // variadic
@@ -260,16 +374,8 @@ describe("math skin: cons ∷ / member ∈ / compose ∘ as infix", () => {
     it(`reads ${out} → ${scheme}`, () => expect(read1(out)).toBe(canon(scheme)));
     it(`round-trips ${scheme}`, () => expect(roundtrip(scheme, math)).toBe(canon(scheme)));
   }
-  it("cons is looser than arithmetic: (cons (+ x 1) xs) → {x + 1 ∷ xs}", () => {
-    expect(render("(cons (+ x 1) xs)", math)).toBe("{x + 1 ∷ xs}");
-    expect(read1("{x + 1 ∷ xs}")).toBe(canon("(cons (+ x 1) xs)"));
-  });
-  it("nested cons braces (render never emits the ambiguous chained form)", () => {
-    expect(render("(cons a (cons b xs))", math)).toBe("{a ∷ {b ∷ xs}}");
-    expect(roundtrip("(cons a (cons b xs))", math)).toBe(canon("(cons a (cons b xs))"));
-  });
-  it("ascii skin keeps them prefix", () => {
-    expect(render("(cons a b)")).toBe("(cons a b)");
+  it("ascii skin keeps member/compose prefix", () => {
+    expect(render("(member x xs)")).toBe("(member x xs)");
     expect(render("(compose f g)")).toBe("(compose f g)");
   });
 });

@@ -25,16 +25,18 @@ import {
   printScheme,
   encodeAccessor,
   accessorStepLetters,
+  registerSugarcoatReader,
   type Node,
   type PairStep,
 } from "./sugarcoat-render.js";
 
-// glyph → canonical op (inverse of INFIX_GLYPH). INJECTIVE: only ==←equal? is remapped
-// in the default ASCII skin; `and`/`or` surface as themselves. Math-skin glyphs
-// (`≡`/`∧`/`∨`/…) and legacy `&&`/`||` (older sugarcoat views) also fold to the
-// canonical op. Everything else (=, eq?, eqv?, arithmetic, comparison) is its own op.
-// So read∘render = id for every equality kind. The reader is skin-agnostic — it accepts
-// either vocabulary (or a mix), so a math-rendered view saves back to the same scheme.
+// glyph → canonical op (inverse of INFIX_GLYPH). INJECTIVE for equal?: only ==←equal?
+// is remapped in the default ASCII skin; `and`/`or` surface as themselves. Math-skin
+// glyphs (`≡`/`∧`/`∨`/…) and legacy `&&`/`||` also fold to the canonical op.
+// Word-form comparisons `lt`/`gt`/`lte`/`gte` (hand-typed or pre-rewrite) fold to the
+// R7RS heads — same destination as the glyphs they render to — so save prefers scheme
+// `<`/`>`/`<=`/`>=` (one-way modernization; not id for those four heads).
+// Everything else (=, eq?, eqv?, arithmetic) is its own op. Reader is skin-agnostic.
 const GLYPH_OP: Record<string, string> = {
   "==": "equal?",
   "&&": "and", // legacy alias — render now emits `and`
@@ -46,6 +48,11 @@ const GLYPH_OP: Record<string, string> = {
   "≃": "eqv?",
   "≤": "<=",
   "≥": ">=",
+  // word-form comparisons → R7RS (also accepted as infix glyphs in n-expr)
+  lt: "<",
+  gt: ">",
+  lte: "<=",
+  gte: ">=",
   "∷": "cons", // math-skin infix heads: `{a ∷ b}`, `{x ∈ xs}`, `{f ∘ g}`
   "∈": "member",
   "∘": "compose",
@@ -80,6 +87,11 @@ const GLYPH_PREC: Record<string, number> = {
   "≤": 3,
   ">=": 3,
   "≥": 3,
+  // word-form comparisons (prefer-n-expr aliases; fold via GLYPH_OP to R7RS)
+  lt: 3,
+  gt: 3,
+  lte: 3,
+  gte: 3,
   // negated-comparison glyphs (math skin) — same tier; each expands to `(not (relop …))`.
   "≠": 3,
   "≢": 3,
@@ -103,6 +115,23 @@ const isOp = (w: string): boolean => w in GLYPH_PREC;
 const isAtomNode = (n: Node): n is { atom: string; str?: boolean } => "atom" in n;
 /** True when a flat curly item is a bare operator atom (not a string, not a list). */
 const isOpAtom = (n: Node): n is { atom: string } => isAtomNode(n) && !n.str && isOp(n.atom);
+
+/** Logical op family for the licenseless-mixing door (ASCII + legacy + math). */
+const LOGICAL_AND = new Set(["and", "&&", "∧"]);
+const LOGICAL_OR = new Set(["or", "||", "∨"]);
+/** True when a flat operand·op·operand sequence mixes `and` and `or` at the top
+ *  level (no nested `{…}` to group them). Nested lists already containerize. */
+function hasBareMixedLogicals(items: Node[]): boolean {
+  let sawAnd = false;
+  let sawOr = false;
+  for (let i = 1; i < items.length; i += 2) {
+    const n = items[i];
+    if (!isOpAtom(n)) continue;
+    if (LOGICAL_AND.has(n.atom)) sawAnd = true;
+    if (LOGICAL_OR.has(n.atom)) sawOr = true;
+  }
+  return sawAnd && sawOr;
+}
 
 /**
  * Classify a flat sequence of forms inside `{…}` (ops are ordinary atoms here).
@@ -936,6 +965,18 @@ function parseElements(toks: Tok[], accessorDepth: number = R7RS_ACCESSOR_DEPTH)
       return items[0]!;
     }
     if (kind === "infix") {
+      // LICENSELESS boolean mixing (doctrine §5.2): a bare chain that mixes `and`
+      // and `or` without braces is ambiguous to humans even when precedence is
+      // defined. Render always containerizes (`{{a and b} or c}`); read doors the
+      // unbraced mix so the exit is "brace the groups".
+      if (hasBareMixedLogicals(items)) {
+        invariant(
+          false,
+          () =>
+            "mixed 'and'/'or' in one '{…}' without braces — boolean mixing is licenseless; " +
+            "brace each group, e.g. {{a and b} or c} (not {a and b or c})",
+        );
+      }
       pos = start; // reparse with precedence climber (handles mixed ops + =>)
       const e = infix(0);
       requireCurlyClose("");
@@ -1387,3 +1428,8 @@ export function sugarcoatToScheme(sugarcoatText: string, prevClassic: string, op
   }
   return out;
 }
+
+// Wire the dual-path schemeToSugarcoat: sweet orthography (I-expr, @{}, =>, …)
+// re-enters via this reader instead of the classic spine. Import of this module
+// (via sugarcoat.ts / any test that pulls readSugarcoat) installs the hook.
+registerSugarcoatReader(readSugarcoat);

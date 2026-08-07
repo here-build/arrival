@@ -153,9 +153,18 @@ maximal same-glyph run (`{a + b + c}` is one n-ary node), operands read at `Infi
 | 1 | `or` | same |
 | 0 | `=>` | `=>` |
 
-The glyph map is injective (`==`→`equal?`, all else identity) — equality *kind* survives the
-round-trip. `and`/`or` stay as scheme symbols (no `&&`/`||` rewrite). Unknown ops render at level 3.
-The reader still accepts legacy `&&`/`||` and math-skin `∧`/`∨` as aliases.
+The glyph map is injective for equality (`==`→`equal?`); `and`/`or` stay as scheme symbols.
+Word-form comparisons are a deliberate one-way rewrite: `lt`/`gt`/`lte`/`gte` → `<`/`>`/`<=`/`>=`
+(prefer n-expr; save normalizes to R7RS). Unknown ops render at level 3. The reader still
+accepts legacy `&&`/`||` and math-skin `∧`/`∨` as aliases.
+
+**Associative flatten (`and` / `or` only).** Nested same-op trees render as one n-ary chain:
+`(and (and a b) c)` → `{a and b and c}` → `(and a b c)`. Conjunction/disjunction *intent*
+survives; binary nesting does not — that is an intentional sugarcoat quotient, not a bug.
+
+**Boolean mixing is LICENSELESS.** `and` under `or` (and vice versa) never elides braces,
+even though `and` binds tighter — render emits `{{a and b} or c}`, never `{a and b or c}`.
+A human-typed bare mix is a reader door ("brace each group"). Same-operator runs stay flat.
 
 ### 4.2 Free lists `[…]`
 
@@ -195,9 +204,20 @@ span physical lines (§1.2).
 `name:` at pair position is the kwarg spelling of the keyword `:name` — but inflation is
 **head-aware**, not lexical: only kwarg-taking heads (`dict`, and names bound to `.prompt`
 requires) inflate `name: v` back to `:name v` on read. Under an unknown head, `name:` stays the
-literal symbol it is in R7RS. (Symmetrically the render only flattens `:name v` pairs under those
-same heads.) An editor grammar can safely highlight every `name:`/`:name` as a keyword — the
-distinction is semantic, not lexical.
+literal symbol it is in R7RS. (Symmetrically the render only emits `k: v` pair lines under those
+same heads — unknown heads keep the classic call shape.) An editor grammar can safely highlight
+every `name:`/`:name` as a keyword — the distinction is semantic, not lexical.
+
+### KWARGS LAW
+
+When the head is a **known** kwarg-taker, the application’s remaining arguments are kwargs
+territory:
+
+1. **Never n-expr** — do not rewrite the call to curly-infix, even if the head is also an
+   infix operator (e.g. a `.prompt` bound as `gt`). Kwargs are not `operand · op · operand`.
+2. **Never neoteric** — do not rewrite to `f(…)`; the call stays a prefix application (or
+   pair-line block when broken).
+3. **Unknown head** — no pair-line layout; leave the original expression shape.
 
 ## 7. What is deliberately NOT in the grammar
 

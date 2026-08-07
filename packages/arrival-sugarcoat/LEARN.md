@@ -47,6 +47,31 @@ rows.map{(r) => (dict :id r[:id] :label r[:label].strip)}
 `==` is `equal?`; `and`/`or`, `=`, `eq?`, `eqv?` render as themselves, so equality *kind*
 and logical intent survive the round-trip.
 
+`and` / `or` prefer a **flat n-expr** (associative collapse) for the *same* op:
+
+```scheme
+{a and b and c}          ;; ≡ (and a b c)
+;; also from (and (and a b) c) — nesting is intent-erased on purpose
+{a or b or c}            ;; ≡ (or a b c)
+```
+
+**Boolean mixing is licenseless** — mixed `and`/`or` always keeps braces (render never
+emits the flat ambiguous form; bare mixed input is a door):
+
+```scheme
+{{a and b} or c}         ;; ≡ (or (and a b) c)   — NOT {a and b or c}
+{a or {b and c} or d}    ;; ≡ (or a (and b c) d)
+;; {a and b or c}        ;; ✗ brace the groups
+```
+
+Word-form comparisons (`lt`/`gt`/`lte`/`gte` — a common agent/JS habit) prefer n-expr and
+rewrite to the R7RS glyphs on save:
+
+```scheme
+{a < b}                  ;; ≡ (< a b)     — also from (lt a b) / {a lt b}
+{x >= 0}                 ;; ≡ (>= x 0)    — also from (gte x 0)
+```
+
 **Infix exists only inside `{…}`.** A naked operator line is an application, not arithmetic:
 
 ```scheme
@@ -119,6 +144,25 @@ inlays.
 
 ## Binding forms
 
+Arrival accepts polyglot bracket bindings (Racket `[a 1]` per pair, Clojure
+`[a 1 b 2]` whole-list — see arrival `docs/grammar.md` §BINDINGS). `schemeToSugarcoat`
+lowers them to the paren image first; the view never keeps the tolerant spelling.
+Intent (names + values) is preserved:
+
+```scheme
+;; classic or polyglot input — same sugar face
+(let* ([a 1] [b 2]) (+ a b))
+(let  [a 1 b 2] (+ a b))
+(let* ((a 1) (b 2)) (+ a b))
+;; all render as:
+let*
+  a
+    1
+  b
+    2
+  {a + b}
+```
+
 `let*`/`let` elide the binding parens — each binding is a name line with its value
 indented; the body follows as a sibling:
 
@@ -160,6 +204,7 @@ reader). They fold to `(dict …)` / `(list …)`:
 [1 2 3]                   ;; ≡ (list 1 2 3)
 []                        ;; ≡ (list)
 [{:a 1} {:b 2}]           ;; ≡ (list (dict :a 1) (dict :b 2))
+[a b]                     ;; ≡ (list a b)  — also from (cons a b); save normalizes to list
 ```
 
 **`{}` is shared with n-expr.** Discrimination is odd/even at the top level:

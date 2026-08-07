@@ -20,6 +20,7 @@ export {
   inflateKwargs,
   flattenKwargs,
   nodeEq,
+  normalizePolyglot,
   DEFAULT_OPTS,
 } from "./sugarcoat-render.js";
 

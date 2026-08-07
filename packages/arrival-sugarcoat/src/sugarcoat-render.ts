@@ -12,6 +12,7 @@
  *   • curly-infix     (- n 1)            → {n - 1}        ; n-expr (odd operand·op·operand)
  *   • dict literal    (dict :k v …)      → {:k v …}       ; even kv pairs share `{}` with n-expr
  *   • list literal    (list a b …)       → [a b …]        ; free `[]` (tight `xs[0]` is subscript)
+ *   • binary cons     (cons a b)         → [a b]          ; same surface; save → (list a b)
  *   • neoteric        (f x y)            → f(x y)         ; optional (reads odd for data/pairs)
  *   • indentation     big forms          → head on a line, children indented
  *   • at-expressions  (str "a " x)       → @{a @x}        ; prose/template heads
@@ -24,14 +25,37 @@
  *   • head-line rule is fixed, not optimized (an MDL layout-cost pass would replace it).
  *   • dangling comments before a `)` (own line, no datum after) are dropped, and
  *     comments on inline-rendered operands aren't shown (only at formatSugarcoat seams).
- *   • no $ / \\ group markers, no vector (#(…)) rendering.
+ *   • no $ / \\ group markers, no vector (#(…)) rendering (use `(vector …)` for classic).
+ *
+ * POLYGLOT + FREE-SURFACE NORMALIZE (schemeToSugarcoat):
+ *   Arrival's reader accepts named supersets (docs/grammar.md §BINDINGS / §CLAUSES /
+ *   §LITERALS). The classic spine here stamps the opener on each container (`open`),
+ *   then `normalizePolyglot` lowers them to the R7RS paren image **before** render:
+ *     • BG2a whole-list `(let [a 1 b 2] …)` → `(let ((a 1) (b 2)) …)`
+ *     • BG2b per-element `(let* ([a 1] [b 2]) …)` → same paren pairs (already list-shaped)
+ *     • BG9 cond/case/do clauses `[test …]` → `(test …)`
+ *     • free `[…]` → `(list …)`  (sugarcoat list surface; use `(vector …)` for vectors)
+ *     • free even `{…}` → `(dict …)`; free odd `{a op b…}` → n-expr `(op a b…)`
+ *   Tolerant surface is erased; **intent** (binding names/values, clause structure,
+ *   collection kind list/dict) is preserved. See `__tests__/polyglot-normalize.test.ts`.
  */
 
 import invariant from "tiny-invariant";
 
+/** Opener that minted a list node. Stamped by parseSexprs; stripped by normalizePolyglot.
+ *  Absent/`"("` means a plain paren list. Used only to recover polyglot/sugar free surfaces
+ *  that classic R7RS would not write with `[]`/`{}`. */
+export type ListOpen = "(" | "[" | "{";
+
 export type Node =
   | { atom: string; str?: boolean; lead?: string[]; trail?: string[]; span?: readonly [start: number, end: number] }
-  | { list: Node[]; lead?: string[]; trail?: string[]; span?: readonly [start: number, end: number] };
+  | {
+      list: Node[];
+      open?: ListOpen;
+      lead?: string[];
+      trail?: string[];
+      span?: readonly [start: number, end: number];
+    };
 
 // null-safe: items[0] of an empty list `()` is undefined; isAtom(undefined) must
 // be false, not throw ('in' on undefined). Empty lists come from `'()` folds.
@@ -62,8 +86,18 @@ const childList = (nd: Node): Node[] => {
 export function parseSexprs(src: string): Node[] {
   let i = 0;
   const n = src.length;
+  // `{`/`}` are delimiters so free dict/n-expr surfaces parse as containers (not atom glue).
   const isDelim = (c: string | undefined) =>
-    c === undefined || /\s/.test(c) || c === "(" || c === ")" || c === "[" || c === "]" || c === '"' || c === ";";
+    c === undefined ||
+    /\s/.test(c) ||
+    c === "(" ||
+    c === ")" ||
+    c === "[" ||
+    c === "]" ||
+    c === "{" ||
+    c === "}" ||
+    c === '"' ||
+    c === ";";
 
   let pendingLead: string[] = [];
   let lastNode: Node | null = null;
@@ -149,12 +183,15 @@ export function parseSexprs(src: string): Node[] {
     }
     switch (c) {
       case "(":
-      case "[": {
-        node = readList(c === "(" ? ")" : "]");
+      case "[":
+      case "{": {
+        const close = c === "(" ? ")" : c === "[" ? "]" : "}";
+        node = readList(c, close);
         break;
       }
       case ")":
-      case "]": {
+      case "]":
+      case "}": {
         invariant(false, () => `unexpected ${c} at ${i}`);
         break;
       }
@@ -199,20 +236,22 @@ export function parseSexprs(src: string): Node[] {
     return node;
   };
 
-  function readList(close: ")" | "]"): Node {
+  function readList(open: ListOpen, close: ")" | "]" | "}"): Node {
     i++; // open
     const items: Node[] = [];
     for (;;) {
       skipWs();
       const c = src[i];
       invariant(c !== undefined, "unbalanced list");
-      if (c === ")" || c === "]") {
+      if (c === ")" || c === "]" || c === "}") {
+        // Mismatched closer still consumes (classic was permissive on ) vs ]); keep that.
         i++;
         break;
       }
       items.push(readDatum());
     }
-    return { list: items };
+    // Only stamp non-paren openers — paren is the default classic list.
+    return open === "(" ? { list: items } : { list: items, open };
   }
 
   const forms: Node[] = [];
@@ -224,6 +263,190 @@ export function parseSexprs(src: string): Node[] {
   return forms;
 }
 
+// ── polyglot / free-surface → classic image ───────────────────────────────────
+//
+// Arrival grammar.md supersets + sugarcoat free `[]`/`{}` lower here once, so the
+// renderer only ever sees pure classic heads (`list`/`dict`/paren bindings). Intent
+// (names, values, clause structure, collection kind) is preserved; tolerant spellings
+// are not.
+
+const POLY_LET_FAMILY = new Set(["let", "let*", "letrec", "letrec*"]);
+const POLY_CLAUSE_HEADS = new Set(["cond", "case"]);
+const POLY_QUOTE_HEADS = new Set(["quote", "quasiquote"]);
+
+/** Binding pair shape `(name value)` — same gate as isBindingShaped, local to avoid
+ *  forward-ref into the render section. */
+const isPairBinding = (nd: Node): boolean => !isAtom(nd) && nd.list.length === 2 && isAtom(nd.list[0]);
+
+/** Suffix keyword flip for dict keys: `name:` → `:name` (grammar.md §SUFFIX-FLIP). */
+const flipSuffixKey = (nd: Node): Node => {
+  if (!isAtom(nd) || nd.str) return nd;
+  const a = nd.atom;
+  if (a.length > 1 && a.endsWith(":") && !a.startsWith(":")) {
+    return { ...nd, atom: `:${a.slice(0, -1)}` };
+  }
+  return nd;
+};
+
+/** Free even `{k v …}` → `(dict …)`; free odd `{a op b op …}` → `(op a b …)` when ops match. */
+function lowerBrace(items: Node[], mapChild: (n: Node) => Node): Node {
+  const kids = items.map(mapChild);
+  if (kids.length % 2 === 0) {
+    // Dict: flip suffix keys in key slots (even indices).
+    const out: Node[] = [{ atom: "dict" }];
+    for (let i = 0; i < kids.length; i++) {
+      out.push(i % 2 === 0 ? flipSuffixKey(kids[i]!) : kids[i]!);
+    }
+    return { list: out };
+  }
+  // N-expr: a op b [op c …] — operators sit at odd indices and must all agree.
+  if (kids.length >= 3 && kids.length % 2 === 1) {
+    const op0 = kids[1];
+    if (isAtom(op0) && !op0.str) {
+      const op = op0.atom;
+      let ok = true;
+      for (let i = 1; i < kids.length; i += 2) {
+        const o = kids[i];
+        if (!isAtom(o) || o.str || o.atom !== op) {
+          ok = false;
+          break;
+        }
+      }
+      if (ok) {
+        const operands: Node[] = [];
+        for (let i = 0; i < kids.length; i += 2) operands.push(kids[i]!);
+        return { list: [{ atom: op }, ...operands] };
+      }
+    }
+  }
+  // Fallback: bare paren group (preserves children; render won't invent a head).
+  return { list: kids };
+}
+
+/** BG2 bindings slot → cons-list-of-pairs. Whole-list `[a 1 b 2]` pairs; per-element
+ *  `[a 1]` / paren `(a 1)` pass through as pairs. `do` keeps whole-list untouched (BG2a
+ *  exclusion — eval doors; we don't invent a wrong step shape). */
+function lowerBindings(binds: Node, form: string, mapChild: (n: Node) => Node): Node {
+  if (isAtom(binds)) return binds;
+  const open = binds.open ?? "(";
+  const els = binds.list;
+
+  // BG2a whole-list: bindings container is `[…]` and elements are NOT already pairs.
+  if (open === "[" && (els.length === 0 || !els.every(isPairBinding))) {
+    if (form === "do") {
+      // Leave vector-shaped whole-list on `do` as a free list so the shape stays
+      // visible (eval would door). Prefer list head over silent wrong pairing.
+      return { list: [{ atom: "list" }, ...els.map(mapChild)] };
+    }
+    if (els.length % 2 !== 0) {
+      // Odd whole-list — leave as free list (malformed; don't invent a value).
+      return { list: [{ atom: "list" }, ...els.map(mapChild)] };
+    }
+    const pairs: Node[] = [];
+    for (let i = 0; i < els.length; i += 2) {
+      pairs.push({ list: [mapChild(els[i]!), mapChild(els[i + 1]!)] });
+    }
+    return { list: pairs };
+  }
+
+  // BG2b / paren list of pairs (and mixed): lower each element; bracket pairs → plain.
+  return {
+    list: els.map((el) => {
+      if (isAtom(el)) return el;
+      // A bracket or paren 2-list (or do's 3-list step) → plain paren pair/step.
+      if (el.list.length === 2 || (form === "do" && el.list.length === 3)) {
+        return { list: el.list.map(mapChild) };
+      }
+      return mapChild(el);
+    }),
+  };
+}
+
+/**
+ * Lower arrival polyglot supersets + sugar free `[]`/`{}` to classic R7RS-shaped nodes.
+ * Pure tree rewrite; comments/spans on atoms are preserved via map of children only.
+ */
+export function normalizePolyglot(forms: Node[]): Node[] {
+  const mapExpr = (nd: Node): Node => mapNode(nd, "expr");
+
+  function mapNode(nd: Node, ctx: "expr" | "quote"): Node {
+    if (isAtom(nd)) return nd;
+    const open = nd.open ?? "(";
+    const items = nd.list;
+
+    // Under quote/quasiquote: still lower free []/{} so sweet data round-trips as
+    // list/dict, but do not special-case let/cond heads (they're data).
+    if (ctx === "quote") {
+      if (open === "[") return { list: [{ atom: "list" }, ...items.map((c) => mapNode(c, "quote"))] };
+      if (open === "{") return lowerBrace(items, (c) => mapNode(c, "quote"));
+      if (items.length > 0 && isAtom(items[0]) && !items[0].str && POLY_QUOTE_HEADS.has(items[0].atom)) {
+        return {
+          list: [items[0], ...items.slice(1).map((c) => mapNode(c, "quote"))],
+        };
+      }
+      return { list: items.map((c) => mapNode(c, "quote")) };
+    }
+
+    // Special forms with binding / clause slots (grammar.md §BINDINGS / §CLAUSES).
+    if (items.length > 0 && isAtom(items[0]) && !items[0].str) {
+      const h = items[0].atom;
+
+      if (POLY_QUOTE_HEADS.has(h) && items.length >= 2) {
+        return { list: [items[0], mapNode(items[1]!, "quote"), ...items.slice(2).map(mapExpr)] };
+      }
+
+      if (POLY_LET_FAMILY.has(h) || h === "do") {
+        // (let bindings body…) | (let name bindings body…) | (do steps test body…)
+        const named = h !== "do" && items.length > 2 && isAtom(items[1]) && !items[1].str;
+        const bindIdx = named ? 2 : 1;
+        if (items.length > bindIdx && items[bindIdx] !== undefined) {
+          const out: Node[] = [items[0]!];
+          if (named) out.push(items[1]!);
+          out.push(lowerBindings(items[bindIdx]!, h, mapExpr));
+          for (const rest of items.slice(bindIdx + 1)) {
+            // do's test clause may be a bracket vector — lower as free list→list head, or
+            // if it's a clause-shaped bracket of length≥1, as a plain list (BG9).
+            if (h === "do" && rest === items[bindIdx + 1] && !isAtom(rest) && rest.open === "[") {
+              out.push({ list: rest.list.map(mapExpr) });
+            } else {
+              out.push(mapExpr(rest));
+            }
+          }
+          return { list: out };
+        }
+      }
+
+      if (POLY_CLAUSE_HEADS.has(h)) {
+        // (cond clause…) | (case key clause…)
+        const clauseStart = h === "case" ? 2 : 1;
+        const out: Node[] = items.slice(0, clauseStart).map((c, i) => (i === 0 ? c : mapExpr(c)));
+        for (const cl of items.slice(clauseStart)) {
+          if (!isAtom(cl) && (cl.open === "[" || cl.open === undefined)) {
+            // BG9: clause wrapper only — element 0 of case datum list stays as-is.
+            out.push({ list: cl.list.map(mapExpr) });
+          } else {
+            out.push(mapExpr(cl));
+          }
+        }
+        return { list: out };
+      }
+    }
+
+    // Free surface containers at expression position.
+    if (open === "[") {
+      return { list: [{ atom: "list" }, ...items.map(mapExpr)] };
+    }
+    if (open === "{") {
+      return lowerBrace(items, mapExpr);
+    }
+
+    // Plain paren: recurse.
+    return { list: items.map(mapExpr) };
+  }
+
+  return forms.map(mapExpr);
+}
+
 // ── renderer ──────────────────────────────────────────────────────────────────
 export interface SugarcoatOpts {
   width: number;
@@ -231,8 +454,9 @@ export interface SugarcoatOpts {
   curly: boolean;
   /** Heads whose args are key→value pairs: `dict` + every name bound to a
    *  `(require "….prompt")` callable. Under these, a `:keyword value` run is
-   *  rendered as a pair line. Homoiconic: the pair is a tree node in the VIEW
-   *  that collapses back to the flat `… k v …` canonical on read. */
+   *  rendered as a pair line (unknown heads keep classic call shape). KWARGS LAW:
+   *  known-kwargs calls never n-expr and never neoteric. Homoiconic: the pair is a
+   *  view-only tree that collapses back to flat `… k v …` on read. */
   kwargHeads: Set<string>;
   /** Glyph vocabulary. `"ascii"` (default) — `and`/`or`/`==`/`=>`, keyboard-typeable.
    *  `"math"` — the Agda-style Unicode skin: `∧`/`∨`/`≡`/`≈`/`≃`/`≤`/`≥`, lambda arrow
@@ -283,6 +507,13 @@ const INFIX = new Set([
   ">",
   "<=",
   ">=",
+  // Word-form comparison aliases (JS/Clojure habit, mercury emit names). Prefer
+  // n-expr with the scheme glyphs — render rewrites; read folds glyphs to `<`/`>`/…
+  // not back to these words (one-way prefer-n-expr modernization).
+  "lt",
+  "gt",
+  "lte",
+  "gte",
   "modulo",
   "quotient",
   "remainder",
@@ -293,19 +524,24 @@ const INFIX = new Set([
   "and",
   "or", // logical
 ]);
-// Canonical op → display glyph. STORED op unchanged; the view swaps in the familiar
-// symbol. The map is INJECTIVE for a faithful round-trip: only `equal?`→`==` (the
-// structural-equality common case). `and`/`or` render AS THEMSELVES — they are already
-// readable symbols, and swapping them for `&&`/`||` was a C/JS habit that rewrote
-// scheme intent. `=` (numeric), `eq?`, `eqv?` also stay themselves — collapsing them
-// to `==` would make view+save rewrite `(= n 0)` → `(equal? n 0)`. `{n = 0}` reads
-// fine as a comparison; the assignment association is weak inside a visibly-expression curly.
+// Canonical op → display glyph. STORED op unchanged for equal?; word-form
+// comparisons rewrite to scheme glyphs (prefer n-expr). The map is INJECTIVE for a
+// faithful round-trip of equal?: only `equal?`→`==`. Word forms `lt`/`gt`/`lte`/`gte`
+// → `<`/`>`/`<=`/`>=` are deliberate rewrites: save normalizes to R7RS heads.
+// `and`/`or` render AS THEMSELVES. `=` (numeric), `eq?`, `eqv?` also stay themselves
+// — collapsing them to `==` would rewrite `(= n 0)` → `(equal? n 0)`.
 const INFIX_GLYPH: Record<string, string> = {
   "equal?": "==",
+  lt: "<",
+  gt: ">",
+  lte: "<=",
+  gte: ">=",
 };
 // The math skin (Agda-style). `∧`/`∨` for logicals, `≡` structural-equal, wavy
 // `≈`/`≃` for the identity pair (eq?/eqv?), `≤`/`≥`. Numeric `=`, `<`, `>`,
 // arithmetic stay themselves. Reader accepts both skins.
+// Binary `cons` is NOT math-infix anymore — it prefers the list surface `[a b]`
+// (same as `(list a b)`); hand-typed `{a ∷ b}` still reads as `(cons a b)`.
 const MATH_GLYPH: Record<string, string> = {
   "equal?": "≡",
   and: "∧",
@@ -314,15 +550,16 @@ const MATH_GLYPH: Record<string, string> = {
   "eqv?": "≃",
   "<=": "≤",
   ">=": "≥",
-  // heads that become infix ONLY in the math skin (see MATH_INFIX): `(cons a b)` →
-  // `{a ∷ b}`, `(member x xs)` → `{x ∈ xs}`, `(compose f g)` → `{f ∘ g}`.
-  cons: "∷",
+  // heads that become infix ONLY in the math skin (see MATH_INFIX):
+  // `(member x xs)` → `{x ∈ xs}`, `(compose f g)` → `{f ∘ g}`.
+  // (`cons` prefers `[a b]` list surface — hand-typed `{a ∷ b}` still reads as cons.)
   member: "∈",
   compose: "∘",
 };
-// Heads promoted to infix under the math skin only (ASCII keeps them prefix: `(cons a
-// b)`). member returns the tail/#f, not a bool — `∈` reads it as membership intent.
-const MATH_INFIX = new Set(["cons", "member", "compose"]);
+// Heads promoted to infix under the math skin only. `cons` left out — list surface
+// `[a b]` is the preferred view. member returns the tail/#f, not a bool — `∈` reads
+// it as membership intent.
+const MATH_INFIX = new Set(["member", "compose"]);
 const glyphOf = (op: string, o: SugarcoatOpts): string =>
   (o.skin === "math" ? MATH_GLYPH[op] : undefined) ?? INFIX_GLYPH[op] ?? op;
 // Skin-dependent arrows: the lambda body arrow (`↦` maps-to) and the cond/case
@@ -363,6 +600,10 @@ const INFIX_PREC: Record<string, number> = {
   ">": 3,
   "<=": 3,
   ">=": 3,
+  lt: 3,
+  gt: 3,
+  lte: 3,
+  gte: 3,
   "+": 4,
   "-": 4,
   "*": 5,
@@ -370,36 +611,77 @@ const INFIX_PREC: Record<string, number> = {
   modulo: 5,
   quotient: 5,
   remainder: 5,
-  // math-skin infix (see MATH_INFIX): cons/member at the comparison tier (looser than
-  // arithmetic, so `{x + 1 ∷ xs}` = `(cons (+ x 1) xs)`); compose binds tight like `.`.
-  cons: 3,
+  // math-skin infix (see MATH_INFIX): member at comparison tier; compose binds tight like `.`.
   member: 3,
   compose: 5,
 };
 const precOf = (op: string): number => INFIX_PREC[op] ?? 3;
 
+/** Associative logicals — nested same-op trees flatten to one n-ary n-expr.
+ *  `(and (and a b) c)` → `{a and b and c}` → `(and a b c)`. Nesting depth is
+ *  intentionally lost: sugarcoat preserves conjunction/disjunction *intent*, not
+ *  the binary-tree spelling. `+`/`*` stay unflattened (less often nested as intent). */
+const ASSOC_INFIX = new Set(["and", "or"]);
+
+/** Flatten nested same-op `and`/`or` operands into one flat arg list. */
+function flattenAssocOperands(op: string, operands: Node[]): Node[] {
+  if (!ASSOC_INFIX.has(op)) return operands;
+  const out: Node[] = [];
+  for (const x of operands) {
+    if (
+      !isAtom(x) &&
+      x.list.length >= 3 &&
+      isAtom(x.list[0]) &&
+      !x.list[0].str &&
+      x.list[0].atom === op
+    ) {
+      out.push(...flattenAssocOperands(op, x.list.slice(1)));
+    } else {
+      out.push(x);
+    }
+  }
+  return out;
+}
+
 /** Render the INSIDE of an infix node (no outer braces): `a glyph b glyph …`,
- *  recursing through operands at this op's precedence. */
+ *  recursing through operands at this op's precedence. Associative `and`/`or`
+ *  flatten nested same-op children first so one chain is one n-expr. */
 function infixContent(items: Node[], o: SugarcoatOpts): string {
   const op = atomText(items[0]);
   const myPrec = precOf(op);
-  return items
-    .slice(1)
-    .map((x) => infixOperand(x, myPrec, o))
-    .join(` ${glyphOf(op, o)} `);
+  const operands = flattenAssocOperands(op, items.slice(1));
+  return operands.map((x) => infixOperand(x, myPrec, o, op)).join(` ${glyphOf(op, o)} `);
 }
 
-/** Render an operand inside an infix at `parentPrec`. An infix operand keeps its
- *  braces only when it binds the same or looser than the parent (so grouping is
- *  preserved, incl. non-associative `-`/`/`); a tighter operand drops them and
- *  shares the zone. Non-infix operands render normally. */
-function infixOperand(nd: Node, parentPrec: number, o: SugarcoatOpts): string {
+/**
+ * Elision license for child braces inside an infix parent.
+ *   - Tighter non-logical child (e.g. `*` under `+`) → elide (licensed).
+ *   - Same-op associative `and`/`or` → elide (flat chain; already flattened).
+ *   - **Boolean mixing is LICENSELESS** — `and` under `or` (or vice versa) ALWAYS
+ *     keeps braces, even though `and` binds tighter. Render never emits the
+ *     ambiguous `{a and b or c}`; it emits `{{a and b} or c}`. (Doctrine §5.2.)
+ *   - Looser / non-assoc same-prec → keep braces.
+ */
+function mayElideInfixBraces(childOp: string, parentOp: string | undefined, parentPrec: number): boolean {
+  const opPrec = precOf(childOp);
+  // Same-op associative flat chain (parentOp known when nesting under and/or).
+  if (parentOp !== undefined && childOp === parentOp && ASSOC_INFIX.has(childOp)) return true;
+  // Boolean mixing: never elide, regardless of precedence.
+  if (ASSOC_INFIX.has(childOp) && parentOp !== undefined && ASSOC_INFIX.has(parentOp) && childOp !== parentOp)
+    return false;
+  // Standard: tighter child may drop braces.
+  if (opPrec > parentPrec) return true;
+  return false;
+}
+
+/** Render an operand inside an infix at `parentPrec` / `parentOp`. */
+function infixOperand(nd: Node, parentPrec: number, o: SugarcoatOpts, parentOp?: string): string {
   const neg = !isAtom(nd) ? negComparison(nd.list, o) : null;
   if (neg) return 3 <= parentPrec ? `{${negContent(neg, o)}}` : negContent(neg, o);
   if (!isAtom(nd) && nd.list.length >= 3 && isInfix(nd.list, o)) {
-    const opPrec = precOf(atomText(nd.list[0]));
+    const childOp = atomText(nd.list[0]);
     const content = infixContent(nd.list, o);
-    return opPrec <= parentPrec ? `{${content}}` : content;
+    return mayElideInfixBraces(childOp, parentOp, parentPrec) ? content : `{${content}}`;
   }
   return inlineSugarcoat(nd, o);
 }
@@ -412,9 +694,10 @@ const isArrowLambda = (items: Node[]): boolean =>
   items.length === 3 && isAtom(items[0]) && !items[0].str && items[0].atom === "lambda" && !isAtom(items[1]);
 
 /** Render an arrow body. `=>` is the loosest operator (precedence 0), so the body
- *  shares the arrow's `{}` — any infix body (prec ≥ 1) drops its braces. */
+ *  shares the arrow's `{}` — any infix body (prec ≥ 1) drops its braces (except
+ *  boolean-mixing stays containerized via mayElideInfixBraces). */
 function inlineArrowBody(nd: Node, o: SugarcoatOpts): string {
-  return infixOperand(nd, 0, o);
+  return infixOperand(nd, 0, o, "=>");
 }
 
 const isQuoteForm = (items: Node[]): boolean =>
@@ -433,15 +716,41 @@ const isEmptyQuote = (items: Node[]): boolean =>
 
 const hasDot = (items: Node[]): boolean => items.some((it) => isAtom(it) && !it.str && it.atom === ".");
 
+const isKeyword = (nd: Node): boolean => isAtom(nd) && !nd.str && nd.atom.startsWith(":") && nd.atom.length > 1;
+
+// ── KWARGS LAW ──────────────────────────────────────────────────────────────
+// 1. Unknown head → never invent k:v pair lines; keep the classic call shape.
+// 2. Known kwarg head (dict, .prompt requires, collected kwargHeads) → the call's
+//    inputRest is kwargs. NEVER n-expr (curly-infix) and NEVER neoteric f(…),
+//    even when the head is also an INFIX op (e.g. a .prompt bound to `gt`).
+//    Kwargs are an application with a keyword tail, not operand·op·operand.
+/** A literal `(require "….prompt")` — inline-require kwarg-taker. */
+const isRequirePrompt = (nd: Node): boolean =>
+  !isAtom(nd) &&
+  nd.list.length === 2 &&
+  isAtom(nd.list[0]) &&
+  nd.list[0].atom === "require" &&
+  isAtom(nd.list[1]) &&
+  !!nd.list[1].str &&
+  nd.list[1].atom.endsWith(".prompt");
+
+/** Head is a known kwarg-taker — pair-lines allowed; n-expr/neoteric forbidden. */
+const isKwargHead = (items: Node[], o: SugarcoatOpts): boolean =>
+  items.length > 0 &&
+  ((isAtom(items[0]) && !items[0].str && o.kwargHeads.has(items[0].atom)) || isRequirePrompt(items[0]));
+
+/** True when this application is known-kwargs territory (law §2). */
+const isKnownKwargCall = (items: Node[], o: SugarcoatOpts): boolean => isKwargHead(items, o);
+
 const isInfix = (items: Node[], o: SugarcoatOpts): boolean =>
   o.curly &&
   items.length >= 3 &&
   !hasDot(items) &&
   isAtom(items[0]) &&
   !items[0].str &&
-  (INFIX.has(items[0].atom) || (o.skin === "math" && MATH_INFIX.has(items[0].atom)));
-
-const isKeyword = (nd: Node): boolean => isAtom(nd) && !nd.str && nd.atom.startsWith(":") && nd.atom.length > 1;
+  (INFIX.has(items[0].atom) || (o.skin === "math" && MATH_INFIX.has(items[0].atom))) &&
+  // KWARGS LAW: known-kwargs rest never becomes n-expr
+  !isKnownKwargCall(items, o);
 
 // ── at-expressions render (inverse of sugarcoat-read's @-reader) ─────────────────────
 // `(str …)`→`@{…}`; under default `strTolerant`, `(string-append …)` also →`@{…}` with
@@ -669,22 +978,6 @@ function accessorSubscript(head: string): string | null {
   if (!steps) return null;
   return steps.map((s) => ("pull" in s ? `[${s.pull}]` : `[${s.drop}:]`)).join("");
 }
-
-/** A literal `(require "….prompt")` — the inline-require call style used in the
- *  examples (vs. the bound-name style `(define react (require …))` in fixtures).
- *  Both are kwarg-takers; only `.prompt` (not `.hbs`, which takes positionals). */
-const isRequirePrompt = (nd: Node): boolean =>
-  !isAtom(nd) &&
-  nd.list.length === 2 &&
-  isAtom(nd.list[0]) &&
-  nd.list[0].atom === "require" &&
-  isAtom(nd.list[1]) &&
-  !!nd.list[1].str &&
-  nd.list[1].atom.endsWith(".prompt");
-
-const isKwargHead = (items: Node[], o: SugarcoatOpts): boolean =>
-  items.length > 0 &&
-  ((isAtom(items[0]) && !items[0].str && o.kwargHeads.has(items[0].atom)) || isRequirePrompt(items[0]));
 
 /** A head is a kwarg-taker if it's `dict` or a name bound to a `.prompt` require. */
 export function collectKwargHeads(forms: Node[]): Set<string> {
@@ -1026,6 +1319,13 @@ function stepText(s: RStep, o: SugarcoatOpts): string {
 /** `(list …)` → free-standing `[…]` (not a tight subscript). */
 const isListLit = (items: Node[]): boolean =>
   items.length >= 1 && isAtom(items[0]) && !items[0].str && items[0].atom === "list";
+/** Binary `(cons a b)` → same `[a b]` surface as a 2-element list (intent of a
+ *  pair-as-data). One-way: reads back as `(list a b)`, not `cons`. */
+const isBinaryCons = (items: Node[]): boolean =>
+  items.length === 3 && isAtom(items[0]) && !items[0].str && items[0].atom === "cons";
+/** Elements of a list-shaped view node: args of `list` or the two of `cons`. */
+const listViewElems = (items: Node[]): Node[] =>
+  isBinaryCons(items) || isListLit(items) ? items.slice(1) : [];
 /** `(dict …)` → `{…}` even-kv brace form (shared delimiter with n-expr; odd/even on read). */
 const isDictLit = (items: Node[]): boolean =>
   items.length >= 1 && isAtom(items[0]) && !items[0].str && items[0].atom === "dict";
@@ -1041,10 +1341,10 @@ export function inlineSugarcoat(nd: Node, o: SugarcoatOpts): string {
   if (items.length === 0) return "()";
   if (o.nilGlyph && isEmptyQuote(items)) return "nil";
   if (isQuoteForm(items)) return QUOTE_PREFIX[atomText(items[0])] + inlineSugarcoat(items[1], o);
-  // Collection literals first — before neoteric/prefix, so `(list 1 2)` is never `(list…)`.
-  if (isListLit(items)) {
-    return `[${items
-      .slice(1)
+  // Collection literals first — before neoteric/prefix/math-cons-infix.
+  // `(list …)` and binary `(cons a b)` share the free `[…]` surface.
+  if (isListLit(items) || isBinaryCons(items)) {
+    return `[${listViewElems(items)
       .map((it) => inlineSugarcoat(it, o))
       .join(" ")}]`;
   }
@@ -1072,7 +1372,15 @@ export function inlineSugarcoat(nd: Node, o: SugarcoatOpts): string {
   // step and never enters a chain.
   const chain = peelChain(nd, o);
   if (chain.emit) return inlineSugarcoat(chain.base, o) + chain.steps.map((s) => stepText(s, o)).join("");
-  if (o.neoteric && !hasDot(items) && isAtom(items[0]) && !items[0].str && QUOTE_PREFIX[items[0].atom] === undefined) {
+  // KWARGS LAW: never neoteric — `react(:k v)` is not a call shape we own.
+  if (
+    o.neoteric &&
+    !isKnownKwargCall(items, o) &&
+    !hasDot(items) &&
+    isAtom(items[0]) &&
+    !items[0].str &&
+    QUOTE_PREFIX[items[0].atom] === undefined
+  ) {
     return `${items[0].atom}(${items
       .slice(1)
       .map((it) => inlineSugarcoat(it, o))
@@ -1400,11 +1708,11 @@ function formatSugarcoatCore(nd: Node, col: number, o: SugarcoatOpts): string {
     out.push(`${" ".repeat(col)}}`);
     return out.join("\n");
   }
-  // Free list literal — broken form keeps the `[]` envelope.
-  if (isListLit(items)) {
+  // Free list / binary-cons — broken form keeps the `[]` envelope.
+  if (isListLit(items) || isBinaryCons(items)) {
     const pad = " ".repeat(col + 2);
     const out = ["["];
-    for (const el of items.slice(1)) out.push(pad + formatSugarcoat(el, col + 2, o));
+    for (const el of listViewElems(items)) out.push(pad + formatSugarcoat(el, col + 2, o));
     out.push(`${" ".repeat(col)}]`);
     return out.join("\n");
   }
@@ -1597,9 +1905,9 @@ export function collectNilAllowed(forms: Node[]): boolean {
   return !forms.some(bindsNilToNonEmpty);
 }
 
-/** Render a whole source file's top-level forms as sugarcoat, blank-line separated. */
-export function schemeToSugarcoat(src: string, opts: Partial<SugarcoatOpts> = {}): string {
-  const forms = parseSexprs(src);
+/** Format already-classic Node forms as sugarcoat (blank-line separated). Shared by
+ *  the classic+normalize path and the sugar-reader re-entry path. */
+export function renderFormsAsSugarcoat(forms: Node[], opts: Partial<SugarcoatOpts> = {}): string {
   const o = {
     ...DEFAULT_OPTS,
     kwargHeads: collectKwargHeads(forms),
@@ -1607,4 +1915,65 @@ export function schemeToSugarcoat(src: string, opts: Partial<SugarcoatOpts> = {}
     ...opts,
   };
   return forms.map((f) => formatSugarcoat(f, 0, o)).join("\n\n");
+}
+
+/**
+ * Optional full sugarcoat reader, registered by sugarcoat-read.ts at module load.
+ * Avoids a static cycle (read → render) while letting schemeToSugarcoat re-enter a
+ * sweet buffer via the real I-expression / at-expression / arrow-lambda reader.
+ */
+let sugarcoatReader: ((src: string) => Node[]) | undefined;
+export function registerSugarcoatReader(fn: (src: string) => Node[]): void {
+  sugarcoatReader = fn;
+}
+
+/**
+ * True when `src` uses orthography the classic spine cannot recover even with
+ * opener stamps + normalizePolyglot: I-expressions, at-expressions, arrow-lambda
+ * braces, method-dot neoteric, cond receiver arrows. Free `[]`/`{}` alone do NOT
+ * force this — normalize handles those.
+ */
+export function surfaceNeedsSugarReader(src: string): boolean {
+  // At-expressions: @{…} / @word{…} / @word(…)
+  if (/@(?:[A-Za-z!$%&*/:<=>?^_~][\w!$%&*/:<=>?^_~+-]*|[({])/.test(src)) return true;
+  // Arrow lambda or cond/case receiver in a brace/line surface
+  if (/=>|↦|=\?>|⇀/.test(src)) return true;
+  // Method-dot with tight args/lambda: .map{ / .fold(
+  if (/\.\w+[\({\[]/.test(src)) return true;
+  // I-expression heads: a line whose first non-space is a special-form word (not `(`)
+  // — e.g. `let*\n  a\n    1` or `if #t\n  …`. Classic parseSexprs would see top-level atoms.
+  if (
+    /(?:^|\n)[ \t]*(?:define|let\*?|letrec\*?|if|cond|case|lambda|begin|do|when|unless|and|or)\b(?![^\n]*\))/.test(
+      src,
+    ) &&
+    !/^\s*;/.test(src)
+  ) {
+    // Only when there's real indent structure or a head-only first line (not a classic `(define …)`).
+    const codeLines = src.split("\n").filter((l) => {
+      const t = l.trim();
+      return t.length > 0 && !t.startsWith(";");
+    });
+    if (codeLines.some((l) => /^[ \t]+/.test(l))) return true;
+    if (codeLines.some((l) => /^(define|let\*?|letrec\*?|if|cond|case|lambda|begin|do)\b/.test(l.trim()) && !l.trim().startsWith("(")))
+      return true;
+  }
+  return false;
+}
+
+/** Render a whole source file's top-level forms as sugarcoat, blank-line separated.
+ *
+ *  Input domain:
+ *    1. **Classic + arrival polyglot supersets** — parse stamps openers, normalizePolyglot
+ *       lowers BG2/BG9 + free `[]`/`{}` to R7RS heads, then layout.
+ *    2. **Already-sweet buffers** (I-expr / `@{}` / `=>` / method-dot) — when the sugar
+ *       reader is registered, fold through it first so re-entry preserves intent
+ *       (mode-override list-of-dict, elided let*, …). Without the reader module loaded,
+ *       path (1) still handles free containers + polyglot bindings.
+ */
+export function schemeToSugarcoat(src: string, opts: Partial<SugarcoatOpts> = {}): string {
+  const forms =
+    sugarcoatReader && surfaceNeedsSugarReader(src)
+      ? sugarcoatReader(src)
+      : normalizePolyglot(parseSexprs(src));
+  return renderFormsAsSugarcoat(forms, opts);
 }
