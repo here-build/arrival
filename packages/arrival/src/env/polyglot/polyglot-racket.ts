@@ -37,10 +37,8 @@
 //
 // DEPS: cross-capability free names (the FV-locality rule is stated once in
 // polyglot.ts's header) —
-//   scheme/polyglot-clojure — str (dict-set/dict-update's door message,
-//                              %dict-guard's door message), and the ~>/~>>
-//                              runtime-binding reason above
-//   scheme/polyglot (core)  — @ @? @keys dict nil %interleave
+//   scheme/polyglot-clojure — ~>/~>> expand to ->/->> (runtime binding reason)
+//   scheme/polyglot (core)  — @ @? @keys dict nil %interleave str (door messages)
 //   equality                — dict? pair? string? null? procedure?
 //   numeric                 — number?
 //   vectors                 — vector? vector->list

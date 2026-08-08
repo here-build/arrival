@@ -5,7 +5,7 @@
 //   THREADING — `->`/`->>` (Clojure thread-first/thread-last) and `comp` (Clojure's
 //   name for the shared-core `compose`, aliased back onto it).
 //   STDLIB COMPLETION — famous Clojure symbols that are PURE functions over
-//   primitives already bound in the shared core / R7RS / SRFI-1: str, get-in,
+//   primitives already bound in the shared core / R7RS / SRFI-1: get-in,
 //   assoc-in, update-in, zipmap, frequencies, group-by, partial, juxt, mapv,
 //   filterv, conj, into, rest, empty?. An LLM (or human) reaching for a
 //   well-known Clojure symbol gets a REAL binding, not a teaching-stub door —
@@ -13,7 +13,8 @@
 //   (The genuinely-impure cousin — println — is doored instead, in
 //   env/polyglot-stubs.ts's Clojure section.)
 //
-// NOTE: `first` (SRFI-1) and `curry` (SRFI-235-adjacent, srfi-235.ts) are ALREADY
+// NOTE: `str` ships on scheme/polyglot (shared core — sugarcoat `@{…}` lowers to
+// it; not dialect-only). `first` (SRFI-1) and `curry` (srfi-235) are ALREADY
 // bound elsewhere — deliberately not redefined here. `flatten` is not bound
 // (compose with SRFI-1 / list ops). `nth` is bound HERE (Clojure index-first
 // accessor; R7RS twin is list-ref on scheme/lists).
@@ -31,16 +32,16 @@
 //
 // DEPS: cross-capability free names (the FV-locality rule is stated once in
 // polyglot.ts's header) —
-//   scheme/polyglot (core) — @ @keys dict %interleave compose
+//   scheme/polyglot (core) — @ @keys dict %interleave compose str
 //   srfi-1                 — filter reduce
 //   equality               — null? pair? string? repr dict?
 //   numeric                — + =
-//   strings                — string-append string-length
+//   strings                — string-length (and peers used by remaining defines)
 //   vectors                — vector? vector-length vector->list list->vector
 //   lists                  — map apply append cons length
 // deps order matches base-packs.ts's C3 tail-block order (dependents before
 // dependencies) — see base-packs.ts's own header.
-// polyglot-racket.ts depends on THIS pack (for `str`, the door messages of
+// polyglot-racket.ts depends on THIS pack (for `str` via core, the door messages of
 // dict-set/dict-update, and the runtime binding `~>`/`~>>` expand into); see
 // polyglot-racket.ts's own header.
 
@@ -143,24 +144,6 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
         },
       ),
 
-      // str — Clojure: concatenate the display form of every arg. Strings pass
-      // through as-is; everything else prints via `repr` (the external-representation
-      // protocol, r7rs/equality.ts) before concatenating with string-append.
-      // Genuinely variadic-any input (any value has a display form); the output
-      // is unconditionally a string.
-      str: symbol.define`str: Clojure — concatenate the display form of every arg (strings as-is, everything else via repr)`(
-        {
-          input: [],
-          inputRest: z.schemeValue,
-          output: [z.string],
-          // Honest ambient type: any arity, any values (lists included — printed
-          // via repr, not auto-joined). Without this the lens overfitted rest to
-          // List<string> from string-only call sites and rejected (str "\n" (map …)).
-          type: "(...args: unknown[]) => string",
-        },
-        `(lambda args
-         (apply string-append (map (lambda (x) (if (string? x) x (repr x))) args)))`,
-      ),
       // get-in — Clojure: read a value nested ks-deep through dicts (or anything
       // `@` reads), nil if any step misses. `obj` is origin-agnostic BY DESIGN (the
       // `@` read protocol's whole point) and the result is whatever is stored — both

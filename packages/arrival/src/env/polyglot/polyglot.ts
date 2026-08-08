@@ -7,11 +7,12 @@
 //   scheme/polyglot-racket   — threading (~>/~>>), dict-*, assoc-ref
 //
 // HERE: member-access (@/@?/@keys/dict) + universal composition (compose/pipe/flow)
-// + `join` (sep-first string fold — polyglot twin of SRFI-13 `string-join`, which is
-// list-first) — not any one dialect's idiom (dialect aliases like `comp` live in
-// their packs). `nil` (empty-list alias) and `%interleave` (cross-dialect
-// dict/zipmap/alist helper) stay here (multi-consumer). `%dict-guard` lives in
-// polyglot-racket (sole consumers).
+// + string folds: `str` (variadic display-concat — sugarcoat `@{…}` lowers here;
+// was historically on polyglot-clojure as a Clojure name, but the product grain is
+// shared) and `join` (sep-first twin of SRFI-13 `string-join`, list-first).
+// Dialect aliases like `comp` live in dialect packs. `nil` (empty-list alias) and
+// `%interleave` (cross-dialect dict/zipmap/alist helper) stay here (multi-consumer).
+// `%dict-guard` lives in polyglot-racket (sole consumers).
 //
 // Member access model: docs/grammar.md §MEMBER-ACCESS; mechanism: docs/membrane.md
 // §MEMBER-READ. Two syntaxes over one interop read → receiver's tf(get|has|keys).
@@ -41,6 +42,7 @@ import { APair } from "../../values/primitives/APair.js";
 import { chargeHeap } from "../../heap-budget.js";
 import { type SchemeValue } from "../../values/types.js";
 import { type AValue } from "../../values/primitives/AValue.js";
+import { printValue } from "../../values/print.js";
 import { to_array } from "../pack-helpers.js";
 import equality from "../r7rs/equality.js";
 import lists from "../r7rs/lists.js";
@@ -254,8 +256,27 @@ export default EnvCapability.define("scheme/polyglot", {
       nil: symbol.define`nil: the polyglot alias for the empty list '() (the ANil singleton)`(z.nil, `'()`),
 
       // ═══════════════════════════════════════════════════════════════════════════
-      // STRING FOLD — sep-first (polyglot); list-first is SRFI-13 string-join
+      // STRING FOLDS — display concat + sep-first join (shared, not dialect-only)
       // ═══════════════════════════════════════════════════════════════════════════
+      // `str` — (str arg…) → string. Strings pass through as content; everything else
+      // via external representation (`printValue` / the same path as `repr`). Sugarcoat
+      // headless `@{…}` lowers to `(str …)`; models reach for the Clojure name.
+      // Native (not a define over string-append) so this pack stays free of a
+      // scheme/strings dep edge — same discipline as `join` below.
+      str: symbol.native`str: concatenate the display form of every arg (strings as-is, everything else via external representation)`(
+        {
+          input: [],
+          inputRest: z.schemeValue,
+          output: [z.string],
+          type: "(...args: unknown[]) => string",
+        },
+        function (this: CallCtx, ...args: SchemeValue[]): AString {
+          const parts = args.map((x) =>
+            typeof x === "string" || x instanceof AString ? stringValue(x) : printValue(x),
+          );
+          return taintString(parts.join(""), collapseProvenance(...args));
+        },
+      ),
       // `join` — (join separator list) → string. Same fold as SRFI-13 `string-join`,
       // but separator FIRST (Clojure `clojure.string/join`, Python `"sep".join`, and
       // the form models reach for). Not R7RS; not an "arrival invention" in the core

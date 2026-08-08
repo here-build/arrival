@@ -3,18 +3,12 @@
 Sandboxed **R7RS-small Scheme**. No IO, no mutation.
 Write **prefix s-expressions**.
 
-## Values
-
-`list` · `vector` · **`dict`** (open-key map) · keyword · string · number · boolean · `nil`/`'()` · procedure
-
 ## Maps
 
 ```scheme
-(dict :id 1 :status "open")     ; {:id 1 :status "open"} same
+(dict :id 1 :status "open")
 (:status row)
-(@ row k)
 (assoc-in u (list :profile :name) "Ada")
-(get-in u (list :profile :name))
 ```
 
 **Missing key → `nil` (= `'()`).** Only `#f` is false — `nil` is truthy.
@@ -27,12 +21,10 @@ Write **prefix s-expressions**.
 ## Pipelines & lists
 
 ```scheme
-(->> xs (filter pred) (map :id))   ; ->> last-arg
-(filter p xs)  (map f xs)  (reduce f knil xs)
 (take xs n)                        ; list first (not Clojure (take n xs))
 (sort nums >)                      ; native < > = only — project dict fields first
 (frequencies (map :kind items))    ; count-by-key
-(str "x=" n)  (join ", " names)
+(str "x=" n)  (join ", " names)    ; sep-first on join
 ```
 
 ```scheme
@@ -46,12 +38,9 @@ Write **prefix s-expressions**.
 
 ## Control
 
-`if` `cond` `let` `let*` `define` `lambda` `and` `or`.
 **`let*`** when a later init needs an earlier binding (`let` is parallel).
 Return **one** value (list, vector, or dict).
 
 ## Do not use
 
-`set!` · mutators · `println`/`display` · ports/`load`/`eval` · `call/cc` ·
-multi-value `values` · hash tables · `defun`/`for/list` ·
-`nil?` (use `null?`)
+`set!` · mutators · `nil?` (use `null?`)
