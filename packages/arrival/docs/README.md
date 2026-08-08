@@ -51,6 +51,8 @@ directory name; names survive `git mv`, links rot.
 | Loader / modules | `environments.md` §LOADER | `src/loader/` |
 | Errors / doors | `grammar.md` §ERRORS | `src/errors.ts` |
 | Capability authoring | `writing-capabilities.md` | — (how-to over `src/common/`, `src/membrane/`) |
+| LLM agent card | `llm-agent-card.md` | — (system-prompt surface; custdev-measured) |
+| LLM language inventory | `llm-language-guide.md` | — (preferred vs compat; not the prompt) |
 | Test discipline | `test-suite-architecture.md` | `src/__tests__/` |
 
 The ledgers and reference material are not subsystems:
@@ -67,6 +69,9 @@ The ledgers and reference material are not subsystems:
 
 - **New contributor** — `PRINCIPLES.md` → this codemap → the one subsystem doc you are
   touching → its source dir.
+- **LLM / agent authoring** — system prompt = `llm-agent-card.md` only. Human inventory /
+  layer map = `llm-language-guide.md`. Grammar detail in `grammar.md`. Do not send
+  `PRINCIPLES.md` as a model system prompt.
 - **Reference lookup** — cite by ID: `RULINGS.md` R#, `PRINCIPLES.md` P#, a
   `reference/` table, or a subsystem doc's `§ANCHOR`. No prose reading needed.
 - **Decision archaeology** — a living doc → its `design-history/` links, where the rejected

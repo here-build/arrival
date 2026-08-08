@@ -138,6 +138,10 @@ The language stance — an R7RS-small sandboxed base, a forgiving superset layer
 in [`docs/design-history/language-design-foundations.md`](./docs/design-history/language-design-foundations.md);
 read it before adding a reader macro, literal, or borrowing.
 
+**Writing programs (agents / LLMs):** system prompt =
+[`docs/llm-agent-card.md`](./docs/llm-agent-card.md) (minimal, custdev-measured). Human inventory
+and preferred-vs-compat map: [`docs/llm-language-guide.md`](./docs/llm-language-guide.md).
+
 ## The totalic membrane — JS is a peer, not a host
 
 JS ↔ Scheme interop is a recursive wrapper membrane in the object-capability lineage
