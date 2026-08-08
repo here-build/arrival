@@ -90,3 +90,18 @@ parenthetical; drop ban-list `Clojure (take n xs)` (pipeline line still teaches 
 `invite_hit` = **1.0**. Acceptance **PASS**. Residual: longcat `pipeline-topn` (sort/lambda
 or take shape — not Sugarcoat); sonnet `group-count` oracle drift. No cross-model family.
 Vs pre-cut confirm (0.975 oracle): −0.025, still well above 0.70 threshold.
+
+## Path B micro-safe size pass (committed)
+
+Card: drop dialect footer; strip map-line comments; drop `-> first-arg` note.
+Keep load-bearing blocks (nil/null?, take/sort/freq examples, ban list, reduce line).
+
+| Model | exec | oracle | odd | under |
+|---|---:|---:|---:|---:|
+| longcat | 10/10 | 10/10 | 0 | 0 |
+| grok-4.5 | 10/10 | 10/10 | 0 | 0 |
+| fable | 10/10 | 10/10 | 0 | 0 |
+| sonnet | 10/10 | 10/10 | 0 | 0 |
+| **panel** | **1.0** | **1.0** | **0** | **0** |
+
+`invite_hit` = **1.0**. Acceptance **PASS**. Full clean — path B safe.
