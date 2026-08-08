@@ -37,10 +37,11 @@ describe("nested accessor coherence — binder demand harvest", () => {
     ).toMatch(/node:\s*\{\s*triaged:\s*List</);
   });
 
-  it("native index chain remains (no IIFE cast rewrite)", () => {
+  it("car stays ambient under the annotation (no IIFE cast rewrite)", () => {
     const { ts } = emitTypes(TRIAGE_BUFFER);
-    // Keep native path under the annotation — not (…as C) IIFE per design.
-    expect(ts).toMatch(/\(ts\)\[0\]/);
+    // Type lens: ambient car(…) for C1; field access stays native index.
+    // Not a per-demand `(… as C)` IIFE rewrite.
+    expect(ts).toContain("car(ts)");
     expect(ts).toContain('["persona"]');
     expect(ts).toContain('["id"]');
     expect(ts).not.toMatch(/as List</);
@@ -68,10 +69,14 @@ describe("nested accessor coherence — binder demand harvest", () => {
     expect(ts).not.toMatch(/\(p:\s*\{\s*name:/);
   });
 
-  it("compose lambda generics stay HOF-safe (unconstrained A + conditional)", () => {
+  it("compose with elem ops uses strict A extends (call-site bite + clean body)", () => {
+    // Elem steps (last) need a real List domain under PRE; HOF-safe unconstrained
+    // A left the body as TS2571 and silenced (state-of 1). Field-only pipelines
+    // stay HOF-safe (map pure-chain test below).
     const { ts } = emitTypes("(define state-of (compose :state last :versions))");
-    expect(ts).toContain("<A,>");
-    expect(ts).toContain("A extends { versions: List<{ state: any }> }");
+    expect(ts).toContain("<A extends { versions: List<{ state: any }> }>");
+    expect(ts).toContain("(it: A): A[\"versions\"][number][\"state\"]");
+    expect(ts).not.toMatch(/<A,>\(it: A\): A extends/);
   });
 
   it("keyword-as-fn HOF eta still unconstrained (no regress)", () => {

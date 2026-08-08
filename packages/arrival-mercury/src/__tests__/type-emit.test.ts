@@ -95,9 +95,9 @@ const TYPE_EMIT_CASES: readonly TypeEmitCase[] = [
     name: "lowers and to native && — the constitution's own second guard shape",
     src: "(if (and (pair? x) (pair? (cdr x))) 1 2)",
     opts: { narrowsMembers: NARROWS },
-    // cdr → .slice(1) (sugarcoat-alike / phase1 representation collapse)
-    contains: ['((pair$qmark$(x) && pair$qmark$((x).slice(1))) ? 1 : 2)'],
-    excludes: ["__scmTruth", "and", "cdr("],
+    // cdr stays ambient (IDE C1); and still lowers to native &&
+    contains: ["((pair$qmark$(x) && pair$qmark$(cdr(x))) ? 1 : 2)"],
+    excludes: ["__scmTruth", "and", ".slice("],
   },
   {
     topic: "type-emit: narrowing-form grammar (§5.3)",
@@ -289,26 +289,28 @@ describe("type-emit: compose/pipe pipeline generics", () => {
   });
 });
 
-describe("type-emit: cxr → index/slice (sugarcoat-alike)", () => {
+describe("type-emit: cxr → ambient PRE calls (IDE contract C1)", () => {
+  // Type lens keeps car/cdr as declare-function calls so a wrong arg is TS2345
+  // on the atom — not native index/slice (which bites as TS7053 on the form).
   const cases: Array<[string, string]> = [
-    ["(car x)", "(x)[0]"],
-    ["(cdr x)", "(x).slice(1)"],
-    ["(cadr x)", "(x)[1]"],
-    ["(caddr x)", "(x)[2]"],
-    ["(cadddr x)", "(x)[3]"],
-    ["(cddr x)", "(x).slice(2)"],
-    ["(cdddr x)", "(x).slice(3)"],
-    ["(caar x)", "(x)[0][0]"],
-    ["(cdar x)", "(x)[0].slice(1)"],
-    ["(caadr x)", "(x)[1][0]"],
-    ["(cadar x)", "(x)[0][1]"],
+    ["(car x)", "car(x)"],
+    ["(cdr x)", "cdr(x)"],
+    ["(cadr x)", "cadr(x)"],
+    ["(caddr x)", "caddr(x)"],
+    ["(cadddr x)", "cadddr(x)"],
+    ["(cddr x)", "cddr(x)"],
+    ["(cdddr x)", "cdddr(x)"],
+    ["(caar x)", "caar(x)"],
+    ["(cdar x)", "cdar(x)"],
+    ["(caadr x)", "caadr(x)"],
+    ["(cadar x)", "cadar(x)"],
   ];
   for (const [src, fragment] of cases) {
     it(`${src} → ${fragment}`, () => {
       const r = emitTypes(src);
       expect(r.ts).toContain(fragment);
-      // Not ambient car/cdr/cadr(…) calls for the unary form.
-      expect(r.ts).not.toMatch(/\b(car|cdr|cadr|caddr|cadddr|cddr|cdddr|caar|cdar|caadr|cadar)\s*\(/);
+      expect(r.ts).not.toContain("[0]");
+      expect(r.ts).not.toContain(".slice(");
     });
   }
 
@@ -318,9 +320,9 @@ describe("type-emit: cxr → index/slice (sugarcoat-alike)", () => {
     expect(r.ts).not.toContain("[0]");
   });
 
-  it("nested (car (cdr x)) emits both steps (does not fuse to cadr)", () => {
+  it("nested (car (cdr x)) stays nested ambient calls (does not fuse to cadr)", () => {
     const r = emitTypes("(car (cdr x))");
-    expect(r.ts).toContain("((x).slice(1))[0]");
+    expect(r.ts).toContain("car(cdr(x))");
   });
 
   it("wrong-arity car falls through to ambient call so tsc can bite", () => {

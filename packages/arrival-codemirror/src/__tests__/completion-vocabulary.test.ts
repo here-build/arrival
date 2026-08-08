@@ -60,7 +60,8 @@ describe("the Σ∩T-ranked pipeline (rich backend)", () => {
     const doc = `${PROG}(car na`;
     const result = await resultAt(doc, doc.length);
     const names = result!.options.find((o) => o.label === "names")!;
-    expect(names.detail).toBe("List<string>");
+    // Fixed-arity `(list a b)` → `[A, B]` under PRE (list.d.ts apply overloads).
+    expect(names.detail).toMatch(/^\[string,\s*string\]$|^List<string>$/);
     // The signature is already inline — a signature-only side panel would be a
     // duplicate tooltip. Fitting entries carry NO info…
     expect(names.info).toBeUndefined();

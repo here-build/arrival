@@ -36,7 +36,8 @@ describe("scheme-ls over a message port", () => {
     const clean = `(define xs (list 1 2 3))\n(car xs)`;
     expect(await ls.getSemanticDiagnostics(clean)).toHaveLength(0);
     const hover = await ls.getQuickInfoAtPosition(clean, clean.lastIndexOf("xs") + 1);
-    expect(hover?.displayText).toContain("List<number>");
+    // Fixed-arity list → TS tuple under PRE; List<> is the homogeneous fallthrough.
+    expect(hover?.displayText).toMatch(/\[number,\s*number,\s*number\]|List<number>/);
     const completions = await ls.getCompletionsAtPosition(clean, clean.lastIndexOf("car") + 1);
     expect(completions.map((e) => e.name)).toContain("xs");
     const spans = await ls.getSemanticClassifications(`(define (f x) (string-append "a" x))`);

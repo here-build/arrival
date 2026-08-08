@@ -19,10 +19,10 @@
  * (and host) application lowers to a bare ambient call
  * `encodeSchemeIdent(name)(…)` — e.g. `string$dash$append(…)`,
  * `null$qmark$(…)` — so TS checks it against a global `declare function`.
- * Pair accessors are the exception: sugarcoat-alike representation collapse
- * `(car x)` → `(x)[0]`, `(cdr x)` → `(x).slice(1)`, `(cadr x)` → `(x)[1]`
- * (same fold as phase1 `cxrCall` / sugarcoat subscripts). Opaque heads fall
- * back to PRE's `sexpr<F>(…)`.
+ * Pair accessors lower to ambient PRE calls (`car(x)`, `cdr(x)`, …) so a
+ * wrong-typed arg bites as TS2345 on the arg atom (IDE contract C1). Native
+ * index/slice collapse is the run compiler's job, not the type lens. Opaque
+ * heads fall back to PRE's `sexpr<F>(…)`.
  *
  * Because we never run the output, binding forms lower to PURE TS BLOCK
  * STATEMENTS, not IIFEs — block-scoping is correct for type-checking and adds no
@@ -49,7 +49,7 @@ import {
 } from "../front/nodes.js";
 import { parseSexprs } from "../front/parse.js";
 import { resolveNames } from "../front/scheme-scope.js";
-import { decodeCxr, isAccessor, isBuiltin } from "./builtins.js";
+import { isBuiltin } from "./builtins.js";
 import { encodeSchemeIdent } from "./scheme-ident.js";
 
 /** One span-lens entry: a [tsStart, tsLength) range of the emitted TS that came
@@ -382,10 +382,9 @@ function emitList(n: ListNode, ctx: Ctx): void {
       ) {
         return;
       }
-      // `c[ad]+r` → index/slice chain (sugarcoat-alike / phase1 representation collapse).
-      // Only the unary call form; bare `car` as a value still emits the ambient name.
-      if (isAccessor(hName) && tryEmitCxr(hName, n, ctx)) return;
-      // A builtin OR a host-injected rosetta tool → ambient global function call.
+      // Builtin / host / c[ad]+r → ambient PRE call. (Accessors are in
+      // isBuiltin; native `[0]`/`.slice` is run-compiler territory — type lens
+      // needs TS2345 on the arg atom, IDE contract C1.)
       if (isBuiltin(hName) || ctx.hostMembers.has(hName)) return emitBuiltinCall(hName, n, ctx);
     }
   }
@@ -465,28 +464,6 @@ function collectPromptKwargHeads(forest: readonly Node[]): Set<string> {
   };
   for (const f of forest) visit(f);
   return heads;
-}
-
-/**
- * `(car x)` → `(x)[0]`, `(cdr x)` → `(x).slice(1)`, `(cadr x)` → `(x)[1]`, …
- * Same index/slice fold as phase1 `cxrCall` and sugarcoat subscripts.
- * Returns false when arity ≠ 1 (fall through to ambient call so tsc bites).
- */
-function tryEmitCxr(hName: string, n: ListNode, ctx: Ctx): boolean {
-  const steps = decodeCxr(hName);
-  if (!steps || steps.length === 0) return false;
-  const obj = n.list[1];
-  if (obj === undefined || n.list.length !== 2) return false;
-  const start = ctx.buf.offset;
-  ctx.buf.raw("(");
-  emitExpr(obj, ctx);
-  ctx.buf.raw(")");
-  for (const step of steps) {
-    if (step.kind === "index") ctx.buf.raw(`[${step.at}]`);
-    else ctx.buf.raw(`.slice(${step.from})`);
-  }
-  recordSpan(ctx, start, n);
-  return true;
 }
 
 /** A call whose head is NOT a builtin: a typed local / free fn → direct call;
@@ -1362,21 +1339,33 @@ function emitLambda(n: ListNode, ctx: Ctx): void {
   const params = paramAtoms(n.list[1]);
   const bodyForms = n.list.slice(2);
   // compose/pipe desugar to `(lambda (it) (f (g (h it))))`. Pure field/elem
-  // pipelines share this path. HOF-safe: unconstrained A + conditional return
-  // (same law as keyword-as-fn). `A extends C` on the param is *too* strict for
-  // `(map (lambda (d) (:name d)) privileged)` when the list only proved a
-  // partial row — contravariance rejects the lambda. Body casts through
-  // `as any` so unconstrained A still typechecks the index chain.
+  // pipelines share this path — two shapes:
+  //
+  //   • Field-only (`(:name d)`, `(compose :a :b)`): HOF-safe unconstrained A +
+  //     conditional return (same law as keyword-as-fn). `A extends C` is too
+  //     strict for `(map (lambda (d) (:name d)) privileged)` when the list only
+  //     proved a partial row — contravariance rejects the lambda.
+  //   • With elem ops (`last`/`car`/…): strict `A extends C` + direct result.
+  //     Ambient `last`/`car` need a real List domain to typecheck clean under
+  //     PRE (IDE contract C2), and call sites must bite on a wrong arg (TS2345).
+  //     Compose/pipe defines almost always carry an elem step; field-only map
+  //     lambdas stay on the HOF-safe branch.
   if (params.length === 1 && !params[0]!.rest && bodyForms.length === 1) {
     const steps = extractUnaryPipeline(bodyForms[0]!, params[0]!.atom);
     if (steps !== null) {
       const { constraint, result } = pipelineGenericTypes(steps);
       const pname = emitName(params[0]!.atom, ctx);
-      ctx.buf.raw(
-        `<A,>(${pname}: A): A extends ${constraint} ? ${result} : unknown => ((${pname}: any) => `,
-      );
-      emitArrowBody(bodyForms, ctx);
-      ctx.buf.raw(`)(${pname})`);
+      const hasElem = steps.some((s) => s.kind === "elem");
+      if (hasElem) {
+        ctx.buf.raw(`<A extends ${constraint}>(${pname}: A): ${result} => `);
+        emitArrowBody(bodyForms, ctx);
+      } else {
+        ctx.buf.raw(
+          `<A,>(${pname}: A): A extends ${constraint} ? ${result} : unknown => ((${pname}: any) => `,
+        );
+        emitArrowBody(bodyForms, ctx);
+        ctx.buf.raw(`)(${pname})`);
+      }
       recordSpan(ctx, start, n);
       return;
     }

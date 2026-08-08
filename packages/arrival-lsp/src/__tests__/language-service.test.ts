@@ -98,14 +98,15 @@ describe("getSemanticDiagnostics — bites in Scheme coordinates", () => {
 
 describe("getQuickInfoAtPosition — hover in Scheme coordinates", () => {
   it("cursor on an argument identifier yields its inferred type", () => {
-    // `xs` flows through `(list 1 2 3)` → hover resolves the List<number> type.
+    // `xs` flows through `(list 1 2 3)` → fixed-arity list overloads return a
+    // TS tuple (PRE `list.d.ts`: apply-unification), not List<number>.
     // (Argument occurrences ARE token-mapped by `emitTypes`, so the cursor lands
     // precisely; the operator HEAD is not — see the known-gap test below.)
     const scheme = `(define xs (list 1 2 3))\n(car xs)`;
     const xsAt = scheme.lastIndexOf("xs") + 1;
     const info = ls.getQuickInfoAtPosition(scheme, xsAt);
     expect(info).not.toBeNull();
-    expect(info!.displayText).toContain("List<number>");
+    expect(info!.displayText).toMatch(/\[number,\s*number,\s*number\]|List<number>/);
   });
 
   it("cursor on a let-bound var (body occurrence) yields its inferred type", () => {
@@ -252,7 +253,8 @@ describe("getCompletionContext — the loop closure (Σ∩T surfaced for humans)
     const byName = new Map(ls.getCompletionContext(doc, doc.length).entries.map((e) => [e.name, e]));
     expect(byName.get("car")!.detail).toContain("List");
     expect(byName.get("car")!.callable).toBe(true);
-    expect(byName.get("names")!.detail).toBe("List<string>");
+    // Fixed-arity `(list a b)` → `[A, B]` under PRE (list.d.ts apply overloads).
+    expect(byName.get("names")!.detail).toMatch(/^\[string,\s*string\]$|^List<string>$/);
     expect(byName.get("names")!.callable).toBe(false);
     expect(byName.get("greet")!.detail).toContain("=> string");
   });
@@ -261,7 +263,7 @@ describe("getCompletionContext — the loop closure (Σ∩T surfaced for humans)
     const doc = `(define config/audience (list "ada" "grace"))\n(car `;
     const byName = new Map(ls.getCompletionContext(doc, doc.length).entries.map((e) => [e.name, e]));
     expect(byName.get("config/audience")).toBeDefined();
-    expect(byName.get("config/audience")!.detail).toBe("List<string>");
+    expect(byName.get("config/audience")!.detail).toMatch(/^\[string,\s*string\]$|^List<string>$/);
   });
 
   it('the backport survives on the VERY FIRST completion request of a fresh service (regression: jsGlobalBaseline\'s one-time loadSource("") probe used to clobber programDeclaredNames before it was ever read)', () => {

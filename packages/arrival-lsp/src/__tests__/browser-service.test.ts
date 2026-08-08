@@ -86,7 +86,8 @@ describe("browser language service — same answers, no fs", () => {
     const scheme = `(define xs (list 1 2 3))\n(car xs)`;
     const info = ls.getQuickInfoAtPosition(scheme, scheme.lastIndexOf("xs") + 1);
     expect(info).not.toBeNull();
-    expect(info!.displayText).toContain("List<number>");
+    // Fixed-arity list → TS tuple (PRE list.d.ts); List<> is the homogeneous fallthrough.
+    expect(info!.displayText).toMatch(/\[number,\s*number,\s*number\]|List<number>/);
   });
 
   it("completions surface in-scope bindings", () => {
