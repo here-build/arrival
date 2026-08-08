@@ -105,3 +105,29 @@ Keep load-bearing blocks (nil/null?, take/sort/freq examples, ban list, reduce l
 | **panel** | **1.0** | **1.0** | **0** | **0** |
 
 `invite_hit` = **1.0**. Acceptance **PASS**. Full clean — path B safe.
+
+## Full-cut experiment + `str` hoist
+
+Aggressive slim (drop Values, fat ban, `@`/`get-in`, `->>` invite, bare filter/map/reduce).
+Recovered **`(str …)` / `(join …)`** on the card after sonnet `string-report` invented `fold-left`.
+Runtime: `str` hoisted to `scheme/polyglot` (native, next to `join`).
+
+### Full-cut only (no str line) — longcat/grok/sonnet
+
+| Model | oracle |
+|---|---:|
+| longcat | 10/10 |
+| grok-4.5 | 10/10 |
+| sonnet | 8/10 (pipeline-topn lambda-sort; string-report fold-left) |
+| panel | 0.93 |
+
+### After str line + hoist — longcat/grok/sonnet
+
+| Model | oracle | notes |
+|---|---:|---|
+| longcat | 10/10 | |
+| grok-4.5 | 10/10 | |
+| sonnet | 9/10 | group-count still invents fold-left vs frequencies |
+| **panel** | **0.97** | string-report recovered; oddity 0 |
+
+Card ≈ 46 lines. Residual: frequencies underuse (sonnet only).
