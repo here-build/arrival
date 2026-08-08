@@ -45,11 +45,10 @@ Also available when needed (not card-core): `pipe`/`compose` · `group-by` · `p
 Examples the reader/env absorb without documenting on the card:
 
 - `{name: v}`, `#:name` → `:name`, JSON `{"a": 1}` (space after `:`)
-- commas inside `{…}` / `[…]` as separators
 - bracket `let` / `cond` bindings
 - name aliases: `mapcar`, `nth`, `~>`, `true`/`false`, …
 
-**Traps that are not loose-success:** `{a:1}` (one symbol), `{a + b}` (banned), free `,` as list sep (`unquote`).
+**Traps that are not loose-success:** `{a:1}` (one symbol), `{a + b}` (banned).
 
 ---
 
