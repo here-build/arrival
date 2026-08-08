@@ -53,5 +53,5 @@ Return **one** value (list, vector, or dict).
 ## Do not use
 
 `set!` · mutators · `println`/`display` · ports/`load`/`eval` · `call/cc` ·
-multi-value `values` · hash tables · `defun`/`for/list` · `{a + b}` ·
+multi-value `values` · hash tables · `defun`/`for/list` ·
 `nil?` (use `null?`)

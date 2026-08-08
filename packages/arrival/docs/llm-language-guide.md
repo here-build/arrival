@@ -30,7 +30,7 @@ Grammar: `grammar.md`. Coverage matrices: `reference/`. Custdev: `src/__custdev_
 ```scheme
 (dict :k v)  {:k v}
 (:k d)  (@ d k)  (get-in d path)  (assoc-in d path v)
-(->> xs (filter p) (map f))   ; -> first-arg thread also on the card
+(->> xs (filter p) (map f))
 (take xs n)  (sort nums >)  (frequencies (map :k xs))
 (str …)  (join sep xs)
 ```
@@ -48,7 +48,7 @@ Examples the reader/env absorb without documenting on the card:
 - bracket `let` / `cond` bindings
 - name aliases: `mapcar`, `nth`, `~>`, `true`/`false`, …
 
-**Traps that are not loose-success:** `{a:1}` (one symbol), `{a + b}` (banned).
+**Traps that are not loose-success:** `{a:1}` (one symbol — need space after `:`).
 
 ---
 
