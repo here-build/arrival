@@ -131,3 +131,27 @@ Runtime: `str` hoisted to `scheme/polyglot` (native, next to `join`).
 | **panel** | **0.97** | string-report recovered; oddity 0 |
 
 Card ≈ 46 lines. Residual: frequencies underuse (sonnet only).
+
+## Compression loop (hypothesis → cut → test)
+
+### Loop 1 — ~28% crop (46 → 33 lines)
+
+Cut: section headers, fat Control section, most ban wall, reduce-for-counts bad line,
+Clojure-long glosses. Kept: `(:k d)`, nil/`null?`, take/sort/frequencies/str/join,
+good/bad sort+take, assoc-in, set!/mutators.
+
+| Model | oracle |
+|---|---:|
+| longcat / grok-4.5 | 10/10 |
+| sonnet | 9/10 (group-count alist invent) |
+| **panel** | **0.97** |
+
+### Loop 2 — further crop (33 → 22 lines) — **regressed**
+
+Also dropped standalone `(:status row)`, inlined defaults, dropped `nil?` ban line.
+Panel oracle **0.90**. Failures:
+
+- longcat safe-default: `(cfg :timeout)` (dict as operator) — **recover `(:k d)` demo**
+- sonnet group-count / reduce-sum: `fold-left` invent
+
+**Ship Loop 1 card.** Loop 2 teaches: keyword accessor form is load-bearing; further cuts should not remove the only `(:k d)` example.
