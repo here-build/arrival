@@ -39,6 +39,7 @@ export { MemoryEffectLog, burst, BurstDrainError, type EffectEntry, type EffectL
 export {
   MemoryReadTracker,
   checkReadWriteGuard,
+  writeSetOfResourcePaths,
   ReadYourDeferredWriteError,
   type ReadEvent,
   type ReadTracker,
@@ -47,6 +48,7 @@ export {
 
 // Resource-path CQS: domain-lane temporal zoning. Ordinary runs always carry a path
 // log; `exec(src, { resourcePaths, strictCQSstrings })` injects a spy / strict mode.
+// `serializeResourcePath` is the Phase 4 host-footprint key encoding (writeSetOf / atoms).
 export {
   MemoryResourcePathLog,
   applyResourcePathCqs,
@@ -54,6 +56,7 @@ export {
   pathsOverlap,
   anyPathOverlap,
   findOverlappingPair,
+  serializeResourcePath,
   ResourcePathConflictError,
   ResourcePathDeclarationError,
   ResourcePathProducerError,

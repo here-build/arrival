@@ -118,11 +118,22 @@ export class ResourcePathConflictError extends ArrivalError {
     public readonly thisQuery: ResourcePath,
   ) {
     super(
-      `${verbName}: query path ${formatPath(thisQuery)} overlaps prior effect path ${formatPath(priorEffect)} ` +
+      `${verbName}: query path ${serializeResourcePath(thisQuery)} overlaps prior effect path ${serializeResourcePath(priorEffect)} ` +
         `in this run — a new query genesis on a domain after it was effected is illegal ` +
         `(temporal zoning of domain immutability; hold prior results instead of re-querying)`,
     );
   }
+}
+
+/**
+ * Serialize one resource path to a host footprint key (Phase 4).
+ * JSON-escapes each segment and joins with `/` so keys are equality-stable and
+ * round-trip display-safe (e.g. `["db","projects","a/b"]` → `"db"/"projects"/"a/b"`).
+ * Empty path → `"[]"`. Same encoding as door error messages — one vocabulary for
+ * read-guard write-sets, confirm-manifest rows, and (later) path-keyed atoms.
+ */
+export function serializeResourcePath(path: ResourcePath): string {
+  return path.length === 0 ? "[]" : path.map((s) => JSON.stringify(s)).join("/");
 }
 
 /** Bake-time: path producers only on rosetta. */
@@ -176,10 +187,6 @@ export class ResourcePathProducerError extends ArrivalError {
       cause instanceof Error ? cause : undefined,
     );
   }
-}
-
-function formatPath(path: ResourcePath): string {
-  return path.length === 0 ? "[]" : path.map((s) => JSON.stringify(s)).join("/");
 }
 
 /**

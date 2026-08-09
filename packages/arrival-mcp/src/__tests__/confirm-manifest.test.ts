@@ -3,8 +3,9 @@
 // end-to-end scenarios live in confirm-burst.test.ts.
 
 import { describe, expect, it } from "vitest";
+import type { EffectEntry } from "@inhuman.tools/arrival/host-internals";
 
-import { buildInvocationSource, manifestDigest } from "../confirm-manifest.js";
+import { buildConfirmManifest, buildInvocationSource, manifestDigest } from "../confirm-manifest.js";
 
 describe("manifestDigest — manifest IDENTITY only (§7.1)", () => {
   const entriesA = [{ verbName: "create-widget", decodedArgs: [{ name: "a" }] }];
@@ -39,5 +40,30 @@ describe("manifestDigest — manifest IDENTITY only (§7.1)", () => {
 describe("buildInvocationSource — the row's own minimal re-runnable program (§5)", () => {
   it("re-derives a plain 0-arg call", () => {
     expect(buildInvocationSource("wipe", [])).toBe("(wipe)");
+  });
+});
+
+// Phase 4 / T2 — surface EffectEntry.resourcePaths on ManifestRow when path E was stamped.
+describe("buildConfirmManifest — Phase 4 resourcePaths on rows", () => {
+  it("copies resourcePaths onto the row when present; omits when absent", () => {
+    const withPaths: EffectEntry = {
+      index: 0,
+      verbName: "upsert!",
+      decodedArgs: [{ id: "1" }],
+      resourcePaths: [["db", "projects", "1"]],
+    };
+    const without: EffectEntry = {
+      index: 1,
+      verbName: "ping!",
+      decodedArgs: [],
+    };
+    const manifest = buildConfirmManifest({
+      sessionId: "s1",
+      statementIndex: 0,
+      entries: [withPaths, without],
+      isRisky: () => false,
+    });
+    expect(manifest.rows[0].resourcePaths).toEqual([["db", "projects", "1"]]);
+    expect(manifest.rows[1].resourcePaths).toBeUndefined();
   });
 });

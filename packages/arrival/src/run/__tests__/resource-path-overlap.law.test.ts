@@ -12,6 +12,7 @@ import {
   pathsOverlap,
   anyPathOverlap,
   findOverlappingPair,
+  serializeResourcePath,
   type ResourcePath,
 } from "../resource-paths.js";
 
@@ -76,5 +77,14 @@ describe("resource-path algebra (S0)", () => {
     expect(pathsOverlap(a, b)).toBe(pathsOverlap(b, a));
     expect(pathsOverlap(a, a)).toBe(true);
     expect(pathsOverlap(a, c)).toBe(false);
+  });
+
+  // Phase 4 — host footprint key encoding (writeSetOf / confirm / atoms)
+  it("serializeResourcePath — equality-stable key; escapes slash segments", () => {
+    expect(serializeResourcePath(p("db", "projects", "1"))).toBe('"db"/"projects"/"1"');
+    expect(serializeResourcePath(p("a/b", "c"))).toBe('"a/b"/"c"');
+    expect(serializeResourcePath([])).toBe("[]");
+    // project vs projects stay distinct as keys (segment-wise identity, not string-prefix)
+    expect(serializeResourcePath(p("db", "project"))).not.toBe(serializeResourcePath(p("db", "projects")));
   });
 });

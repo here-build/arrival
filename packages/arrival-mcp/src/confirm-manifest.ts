@@ -13,7 +13,11 @@
  * approved row (ConfirmBurstTool, confirm-burst.ts) — it only builds the artifact.
  */
 
-import { canonicalJson, type EffectEntry } from "@inhuman.tools/arrival/host-internals";
+import {
+  canonicalJson,
+  type EffectEntry,
+  type ResourcePath,
+} from "@inhuman.tools/arrival/host-internals";
 import { writeForm, type EvalTrace } from "@inhuman.tools/arrival/provenance";
 import { groundingVerdict } from "@inhuman.tools/arrival-provenance/verdict";
 
@@ -152,6 +156,9 @@ export interface ManifestRow {
   readonly invocationSource?: string;
   /** Present iff lineage is enabled (default-on) AND `rawArgs` was captured. */
   readonly argLineage?: readonly ManifestArgLineage[];
+  /** Phase 4 / T2: contract effect paths when the path-E arm stamped them on the
+   *  entry (3b). Absent when the penetration had no path E — never invented. */
+  readonly resourcePaths?: readonly ResourcePath[];
 }
 
 export interface ConfirmManifest {
@@ -189,6 +196,10 @@ export function buildConfirmManifest(opts: BuildConfirmManifestOptions): Confirm
       lineage !== undefined && entry.rawArgs !== undefined
         ? argLineageFor(entry.rawArgs, lineage.trace, lineage.source)
         : undefined;
+    const resourcePaths =
+      entry.resourcePaths === undefined || entry.resourcePaths.length === 0
+        ? undefined
+        : entry.resourcePaths;
     return {
       effectIndex: entry.index,
       verb: entry.verbName,
@@ -196,6 +207,7 @@ export function buildConfirmManifest(opts: BuildConfirmManifestOptions): Confirm
       risky: isRisky(entry.verbName),
       ...(invocationSource === undefined ? {} : { invocationSource }),
       ...(argLineage === undefined ? {} : { argLineage }),
+      ...(resourcePaths === undefined ? {} : { resourcePaths }),
     };
   });
   return { digest: manifestDigest(sessionId, statementIndex, entries), sessionId, statementIndex, rows };

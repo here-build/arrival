@@ -30,8 +30,10 @@ import { MemoryEffectLog, type EffectEntry } from "../../run/effect-log.js";
 import {
   MemoryReadTracker,
   checkReadWriteGuard,
+  writeSetOfResourcePaths,
   ReadYourDeferredWriteError,
   type WriteSetResolver } from "../../run/read-guard.js";
+import { serializeResourcePath } from "../../run/resource-paths.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. checkReadWriteGuard — the pure function, direct
@@ -93,6 +95,70 @@ describe("checkReadWriteGuard — the pure guard function (§2.4)", () => {
     expect(() => checkReadWriteGuard(entries, [{ key: "x", clock: 1 }], writeSetOf)).toThrow(
       ReadYourDeferredWriteError,
     );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1b. Phase 4 — path-shaped write-set keys (serializeResourcePath / writeSetOfResourcePaths)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("Phase 4 host footprints — path-shaped writeSetOf keys", () => {
+  it("writeSetOfResourcePaths serializes entry.resourcePaths; abstains without them", () => {
+    expect(
+      writeSetOfResourcePaths(
+        entry({
+          verbName: "upsert!",
+          decodedArgs: ["a"],
+          resourcePaths: [
+            ["db", "projects", "1"],
+            ["db", "projects", "2"],
+          ],
+        }),
+      ),
+    ).toEqual([serializeResourcePath(["db", "projects", "1"]), serializeResourcePath(["db", "projects", "2"])]);
+    expect(writeSetOfResourcePaths(entry({ verbName: "write!", decodedArgs: ["x"] }))).toBeUndefined();
+    expect(
+      writeSetOfResourcePaths(entry({ verbName: "write!", decodedArgs: ["x"], resourcePaths: [] })),
+    ).toBeUndefined();
+  });
+
+  it("guard trips when a post-enqueue read key matches a serialized resource path", () => {
+    const path = ["test", "a", "1"] as const;
+    const key = serializeResourcePath(path);
+    const entries = [
+      entry({
+        verbName: "write!",
+        decodedArgs: ["ignored-arg-key"],
+        enqueuedAtReadClock: 0,
+        resourcePaths: [path],
+      }),
+    ];
+    expect(() => checkReadWriteGuard(entries, [{ key, clock: 1 }], writeSetOfResourcePaths)).toThrow(
+      ReadYourDeferredWriteError,
+    );
+    // disjoint path key — fine
+    expect(() =>
+      checkReadWriteGuard(
+        entries,
+        [{ key: serializeResourcePath(["test", "b"]), clock: 1 }],
+        writeSetOfResourcePaths,
+      ),
+    ).not.toThrow();
+  });
+
+  it("fired path-E entries are still skipped by the guard (deferral subject only)", () => {
+    const path = ["test", "x"] as const;
+    const key = serializeResourcePath(path);
+    const entries = [
+      entry({
+        verbName: "upsert!",
+        decodedArgs: [],
+        fired: true,
+        enqueuedAtReadClock: 0,
+        resourcePaths: [path],
+      }),
+    ];
+    expect(() => checkReadWriteGuard(entries, [{ key, clock: 1 }], writeSetOfResourcePaths)).not.toThrow();
   });
 });
 

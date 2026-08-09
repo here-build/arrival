@@ -5,9 +5,14 @@
  *
  * `ReadTracker`/`WriteSetResolver` are injectable — this module adds NO mobx/plexus import.
  * No tracker ⇒ nothing paid. Keys are host-canonicalized strings; core compares by equality only.
+ *
+ * Phase 4: when an effect entry carries path-E `resourcePaths`, prefer those as write-set
+ * keys via {@link writeSetOfResourcePaths} (serialized resource paths — same vocabulary as
+ * the CQS door and later path-keyed atoms). Hosts may still supply a custom resolver.
  */
 
 import type { EffectEntry } from "./effect-log.js";
+import { serializeResourcePath } from "./resource-paths.js";
 
 /**
  * One observed read. `clock` is this read's 1-BASED position among all reads observed so far
@@ -74,6 +79,19 @@ export class MemoryReadTracker implements ReadTracker {
  *  treated as "no writes" — an honest abstention, never a false negative dressed as fact). Any
  *  iterable is accepted, deduplicated internally. */
 export type WriteSetResolver = (entry: EffectEntry) => Iterable<string> | undefined;
+
+/**
+ * Phase 4 reference resolver: write-set keys = serialized resource paths from
+ * `EffectEntry.resourcePaths` when path E rode the entry (3b storage). Absent/empty paths
+ * ⇒ honest abstention (`undefined`), never "no writes." Compose with a host fallback when
+ * some verbs lack path producers:
+ *   `(e) => writeSetOfResourcePaths(e) ?? hostArgKeys(e)`
+ */
+export const writeSetOfResourcePaths: WriteSetResolver = (entry) => {
+  const paths = entry.resourcePaths;
+  if (paths === undefined || paths.length === 0) return undefined;
+  return paths.map(serializeResourcePath);
+};
 
 /** The seam `RunContext.reads` carries. `writeSetOf` is optional independently of `tracker`: a
  *  host may track reads without yet being able to predict write footprints — the guard then
