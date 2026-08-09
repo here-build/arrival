@@ -22,6 +22,7 @@
 
 import type { EffectLog } from "./effect-log.js";
 import type { ReadTracker } from "./read-guard.js";
+import type { ResourcePath } from "./resource-paths.js";
 
 export type RunCacheEntry =
   | { kind: "value"; value: unknown } // a `view` result — the decoded-face JS value,
@@ -194,50 +195,90 @@ async function sharedFire(
  * verbatim — never inspected here: a confirmation-manifest host needs the provenance-carrying
  * originals to compute per-argument lineage and reconstruct the effect's minimal re-runnable
  * invocation, neither of which `decodedArgs` (JS-plain, identity-stripped) can serve alone.
+ *
+ * Phase 3b resource-path storage (NO dual-key with sink):
+ *   - Arm 1 (void-sink): unchanged — `sink && effects armed && !replay` → enqueue deferred,
+ *     skip impl. Optional path E rides on the entry as `resourcePaths`.
+ *   - Arm 2 (path E≠[]): SEPARATE — after a successful non-sink fire, when path effects
+ *     non-empty and effects armed and !replay, enqueue a **fired** manifest entry carrying
+ *     `resourcePaths` (I6). Hybrid (Q and E) uses this arm too — impl runs, not void-skip (I8).
+ *   - Path Q≠[]: when cache armed and class allows (not `pure`), treat as view-style value
+ *     cache (I7). Explicit `cacheClass: "pure"` never stores.
  */
 export async function penetrateThroughCache(
   cache: RunCache | undefined,
-  penetration: { symbolName: string; cacheClass: RunCacheClass | undefined; sink: boolean; rawArgs?: readonly unknown[] },
+  penetration: {
+    symbolName: string;
+    cacheClass: RunCacheClass | undefined;
+    sink: boolean;
+    rawArgs?: readonly unknown[];
+    /** Resource-path queries from contract producers (post-decode). */
+    pathQueries?: readonly ResourcePath[];
+    /** Resource-path effects from contract producers (post-decode). */
+    pathEffects?: readonly ResourcePath[];
+  },
   decodedArgs: readonly unknown[],
   fire: () => Promise<unknown>,
   effects?: EffectLog,
   reads?: ReadTracker,
 ): Promise<unknown> {
   const { symbolName, cacheClass, sink, rawArgs } = penetration;
+  const pathQueries = penetration.pathQueries ?? [];
+  const pathEffects = penetration.pathEffects ?? [];
+  const hasPathQ = pathQueries.length > 0;
+  const hasPathE = pathEffects.length > 0;
 
-  // THE BURST ARM — a sink during a PRIME run (no cache, or cache.mode === "record")
-  // gathers instead of firing. `cache?.mode === "replay"` excludes a fold: a fold re-runs
-  // the recorded log and must hit the tombstone-skip path below, never gather twice. Sound
-  // by the void-family bake gate (docs/execution.md §BURST): the program structurally cannot
-  // read what a sink returns, so the deferral is unobservable.
+  // ARM 1 — classic void-sink gather during a PRIME run. Condition unchanged (not dual-keyed
+  // with path E). `cache?.mode === "replay"` excludes a fold. Optional path E rides along.
   if (sink && effects !== undefined && cache?.mode !== "replay") {
     effects.enqueue({
       verbName: symbolName,
       decodedArgs,
       ...(reads === undefined ? {} : { enqueuedAtReadClock: reads.log.length }),
-      ...(rawArgs === undefined ? {} : { rawArgs }) });
+      ...(rawArgs === undefined ? {} : { rawArgs }),
+      ...(hasPathE ? { resourcePaths: pathEffects } : {}) });
     return undefined;
   }
 
-  if (cache === undefined) return fire();
+  // Post-fire path-E log (ARM 2). SEPARATE from sink: never skips impl. Only on successful
+  // fire so a thrown impl does not leave a fired-manifest entry (CQS prior-E is recorded
+  // pre-impl in applyResourcePathCqs; this is the EffectLog product arm).
+  const fireWithPathELog = async (): Promise<unknown> => {
+    const value = await fire();
+    if (hasPathE && effects !== undefined && cache?.mode !== "replay") {
+      effects.enqueue({
+        verbName: symbolName,
+        decodedArgs,
+        fired: true,
+        ...(reads === undefined ? {} : { enqueuedAtReadClock: reads.log.length }),
+        ...(rawArgs === undefined ? {} : { rawArgs }),
+        resourcePaths: pathEffects });
+    }
+    return value;
+  };
+
+  if (cache === undefined) return fireWithPathELog();
 
   if (sink) {
     let key: string;
     try {
       key = runCacheKey(symbolName, decodedArgs);
     } catch {
-      return fire(); // unkeyable sink args — honest plain fire, no tombstone
+      return fireWithPathELog(); // unkeyable sink args — honest plain fire, no tombstone
     }
     if (cache.mode === "replay") {
       const entry = await cache.get(key);
       if (entry?.kind === "effect") return undefined; // tombstone hit → skip
     }
-    const result = await fire(); // record always fires; replay miss = new intent
+    const result = await fireWithPathELog(); // record always fires; replay miss = new intent
     await cache.set(key, { kind: "effect" });
     return result;
   }
 
-  if (cacheClass === "view") {
+  // Path Q≠[] elevates to view-style caching when class allows. Explicit pure never stores.
+  const treatAsView = cacheClass === "view" || (hasPathQ && cacheClass !== "pure");
+
+  if (treatAsView) {
     const key = runCacheKey(symbolName, decodedArgs); // total by the shape gate — a throw here is a real bug
     if (cache.mode === "replay") {
       const pending = pendingFor(cache).get(key);
@@ -245,7 +286,7 @@ export async function penetrateThroughCache(
       const entry = await cache.get(key);
       if (entry?.kind === "value") return entry.value; // hit → serve, never re-fire
     }
-    return sharedFire(cache, key, true, fire);
+    return sharedFire(cache, key, true, fireWithPathELog);
   }
 
   if (cacheClass === "pure") {
@@ -253,10 +294,10 @@ export async function penetrateThroughCache(
     try {
       key = runCacheKey(symbolName, decodedArgs);
     } catch {
-      return fire(); // unkeyable pure args — unshared fire (sharing is an optimization, not a contract)
+      return fireWithPathELog(); // unkeyable pure args — unshared fire
     }
-    return sharedFire(cache, key, false, fire);
+    return sharedFire(cache, key, false, fireWithPathELog);
   }
 
-  return fire(); // unclassified — regenerateable, never touches the cache
+  return fireWithPathELog(); // unclassified — regenerateable, never touches the cache
 }

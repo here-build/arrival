@@ -115,6 +115,11 @@ export class ReadYourDeferredWriteError extends Error {
  * skipped the same way — honest incompleteness, not a claim of "no writes." Reads BEFORE an
  * effect's enqueue (`read.clock <= enqueuedAtReadClock`) are the motivating query that led to
  * the effect (read `component.style`, then `set-style`) — never a violation, by construction.
+ *
+ * `fired` entries (effect-log.ts header) are skipped entirely: the guard's subject is a
+ * DEFERRED write becoming observable. A fired effect's write already landed in-run, so a later
+ * read of it is the post-write state — legal, and the CQS door owns whether re-querying that
+ * domain was allowed at all.
  */
 export function checkReadWriteGuard(
   entries: readonly EffectEntry[],
@@ -123,6 +128,7 @@ export function checkReadWriteGuard(
 ): void {
   if (writeSetOf === undefined) return;
   for (const entry of entries) {
+    if (entry.fired === true) continue;
     const writeKeys = writeSetOf(entry);
     if (writeKeys === undefined) continue;
     const keySet = writeKeys instanceof Set ? writeKeys : new Set(writeKeys);

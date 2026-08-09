@@ -22,7 +22,7 @@ import { AValue, pointProvenance, unionProvenance } from "../../values/primitive
 import { attestDeep, freshIfSingleton } from "../../values/attestation.js";
 import { jsToScheme } from "../../membrane/rosetta.js";
 import { penetrateThroughCache } from "../../run/run-cache.js";
-import { applyResourcePathCqs } from "../../run/resource-paths.js";
+import { applyResourcePathCqs, type ResourcePath } from "../../run/resource-paths.js";
 import { closeRegionScope, openRegionScope, withRegionScope } from "../../membrane/region-scope.js";
 import { decodeKwargsStrict, drainDroppedKwargNotes } from "../kwargs-rejection.js";
 import { formatPositionalRejection } from "./positional-rejection.js";
@@ -270,20 +270,25 @@ _installRosettaMembraneApply(async (proc, args, callCtx) => {
 
     // CQS path producers (CrossingContract) — not to be confused with RunContext.effects
     // (burst EffectLog). Aliases keep the two axes out of the same mental register.
-    const pathQueries = m.queries;
-    const pathEffects = m.effects;
+    const pathQueryFn = m.queries;
+    const pathEffectFn = m.effects;
     // Order (R-O2): path fns → check vs prior E → record E → then cache/impl.
     // Runs whenever path producers are declared; log undefined (CONSTANT_CTX) ⇒
     // facility off after path fns still execute (shape/throw still apply).
-    if (pathQueries !== undefined || pathEffects !== undefined) {
-      applyResourcePathCqs({
+    // Produced Q/E feed Phase 3b storage arms in penetrateThroughCache (I6–I8).
+    let producedQueries: readonly ResourcePath[] = [];
+    let producedEffects: readonly ResourcePath[] = [];
+    if (pathQueryFn !== undefined || pathEffectFn !== undefined) {
+      const produced = applyResourcePathCqs({
         verbName: name,
         decodedArgs,
-        queries: pathQueries,
-        effects: pathEffects,
+        queries: pathQueryFn,
+        effects: pathEffectFn,
         log: callCtx.runCtx.resourcePaths,
         strictCQSstrings: callCtx.runCtx.strictCQSstrings,
       });
+      producedQueries = produced.queries;
+      producedEffects = produced.effects;
     }
 
     const runCache = callCtx.runCtx.cache;
@@ -293,8 +298,13 @@ _installRosettaMembraneApply(async (proc, args, callCtx) => {
       scope
         ? withRegionScope(scope, () => m.hostImpl.call(callCtx, ...decodedArgs))
         : m.hostImpl.call(callCtx, ...decodedArgs);
+    // Fast-path: no cache, no effect-log, and no path-derived storage work → bare fire.
+    // Path Q/E with armed cache/effects must enter penetrateThroughCache (I6–I8).
+    const needsPathStorage =
+      (producedEffects.length > 0 && burstLog !== undefined) ||
+      (producedQueries.length > 0 && runCache !== undefined);
     result =
-      runCache === undefined && burstLog === undefined
+      runCache === undefined && burstLog === undefined && !needsPathStorage
         ? await fire()
         : await penetrateThroughCache(
             runCache,
@@ -302,7 +312,9 @@ _installRosettaMembraneApply(async (proc, args, callCtx) => {
               symbolName: name,
               cacheClass: proc.cacheClass,
               sink: m.sink,
-              rawArgs: args },
+              rawArgs: args,
+              pathQueries: producedQueries,
+              pathEffects: producedEffects },
             decodedArgs,
             fire,
             burstLog,

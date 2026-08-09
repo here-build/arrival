@@ -185,4 +185,27 @@ describe("burst — the drain (§2.5, minus everything W3+ owns)", () => {
     });
     expect(called).toBe(false);
   });
+
+  it("fired (path-E manifest) entries are skipped by the drain — already applied in-run", async () => {
+    const effects = new MemoryEffectLog();
+    effects.enqueue({ verbName: "deferred", decodedArgs: [1] });
+    effects.enqueue({
+      verbName: "already-fired",
+      decodedArgs: [2],
+      fired: true,
+      resourcePaths: [["test", "x"]],
+    });
+    effects.enqueue({ verbName: "deferred-2", decodedArgs: [3] });
+    const ran: string[] = [];
+    await burst(effects, (entry) => {
+      ran.push(entry.verbName);
+    });
+    expect(ran).toEqual(["deferred", "deferred-2"]);
+    // fired entry remains in the manifest
+    expect(effects.entries.map((e) => e.verbName)).toEqual([
+      "deferred",
+      "already-fired",
+      "deferred-2",
+    ]);
+  });
 });

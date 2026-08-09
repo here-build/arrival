@@ -871,3 +871,153 @@ describe("resource-path CQS — seams (cache / burst / CONSTANT_CTX / ExecOption
     expect(appendEvents.flat()).toContainEqual(["test", "a", "1"]);
   });
 });
+
+// ── S3 Storage / hybrid (Phase 3b — I6 / I7 / I8) ────────────────────────────
+//
+// Path E≠[] is a SEPARATE arm from void-sink (no dual-key). Pure path-E fires then
+// logs a fired EffectLog entry with resourcePaths. Path Q≠[] elevates to view-style
+// cache when class allows. Hybrid does both and never void-skips.
+
+describe("resource-path CQS — S3 storage / hybrid (I6–I8)", () => {
+  it("P-I6 — E≠[] + effects armed ⇒ effect-log entry carries resource paths (fired)", async () => {
+    const spies: SpyMap = {};
+    const { cap, pathLog } = makePathCap(spies);
+    const effects = new MemoryEffectLog();
+    await exec('(write "a" "1")', {
+      capabilities: [cap],
+      effects,
+      resourcePaths: pathLog,
+    });
+    expect(spies.write).toBe(1); // path-E arm is post-fire, not void-sink skip
+    expect(effects.entries).toHaveLength(1);
+    expect(effects.entries[0]).toMatchObject({
+      verbName: "write",
+      decodedArgs: ["a", "1"],
+      fired: true,
+      resourcePaths: [["test", "a", "1"]],
+    });
+    // CQS prior-E still recorded (door fuel) — orthogonal channel
+    expect(pathLog.effectPaths).toContainEqual(["test", "a", "1"]);
+  });
+
+  it("P-I7 — Q≠[] + cache armed ⇒ value stored; replay serves without re-fire", async () => {
+    const spies: SpyMap = {};
+    const { cap } = makePathCap(spies);
+    const record = new MemoryRunCache("record");
+    const [r1] = await exec('(read "a" "1")', {
+      capabilities: [cap],
+      cache: record,
+    });
+    expect(spies.read).toBe(1);
+    expect(r1).toBe("a:1");
+    // Path Q elevates unclassified → view-style: a value entry was written
+    expect([...record.entries.values()].some((e) => e.kind === "value" && e.value === "a:1")).toBe(
+      true,
+    );
+
+    const spies2: SpyMap = {};
+    const { cap: cap2 } = makePathCap(spies2);
+    const replay = new MemoryRunCache("replay", record.entries);
+    const [r2] = await exec('(read "a" "1")', {
+      capabilities: [cap2],
+      cache: replay,
+    });
+    expect(spies2.read ?? 0).toBe(0); // cache hit — impl not called
+    expect(r2).toBe("a:1");
+  });
+
+  it("P-I8 — hybrid both non-empty: impl runs, E logged, return cacheable", async () => {
+    const spies: SpyMap = {};
+    const { cap, pathLog } = makePathCap(spies);
+    const effects = new MemoryEffectLog();
+    const cache = new MemoryRunCache("record");
+    const [row] = await exec('(upsert "a" "1")', {
+      capabilities: [cap],
+      effects,
+      cache,
+      resourcePaths: pathLog,
+    });
+    expect(spies.upsert).toBe(1); // impl runs (not void-sink skip)
+    expect(row).toBe("row:a:1");
+    expect(effects.entries).toHaveLength(1);
+    expect(effects.entries[0]).toMatchObject({
+      verbName: "upsert",
+      fired: true,
+      resourcePaths: [["test", "a", "1"]],
+    });
+    expect([...cache.entries.values()].some((e) => e.kind === "value" && e.value === "row:a:1")).toBe(
+      true,
+    );
+    expect(pathLog.effectPaths).toContainEqual(["test", "a", "1"]);
+
+    // Replay: value served; path-E arm does not re-enqueue on fold
+    const spies2: SpyMap = {};
+    const { cap: cap2 } = makePathCap(spies2);
+    const effects2 = new MemoryEffectLog();
+    const replay = new MemoryRunCache("replay", cache.entries);
+    const [row2] = await exec('(upsert "a" "1")', {
+      capabilities: [cap2],
+      cache: replay,
+      effects: effects2,
+    });
+    expect(spies2.upsert ?? 0).toBe(0);
+    expect(row2).toBe("row:a:1");
+    expect(effects2.entries).toHaveLength(0);
+  });
+
+  it("N-DOOR-AFTER-HYBRID — storage does not weaken CQS: upsert then overlapping read doors", async () => {
+    const spies: SpyMap = {};
+    const { cap, pathLog, pathFnCalls } = makePathCap(spies);
+    const effects = new MemoryEffectLog();
+    const cache = new MemoryRunCache("record");
+    await expect(
+      exec('(upsert "a" "1") (read "a" "1")', {
+        capabilities: [cap],
+        effects,
+        cache,
+        resourcePaths: pathLog,
+      }),
+    ).rejects.toThrow(ResourcePathConflictError);
+    expect(spies.upsert).toBe(1);
+    expect(spies.read ?? 0).toBe(0);
+    expect(pathFnCalls.some((c) => c.name === "read")).toBe(true);
+    // Hybrid's E was logged (I6) and still feeds the door
+    expect(effects.entries).toHaveLength(1);
+    expect(effects.entries[0]?.fired).toBe(true);
+  });
+
+  it("N-HYBRID-NOT-VOID-SKIP — hybrid with effects armed must not classic void-sink skip-impl", async () => {
+    const spies: SpyMap = {};
+    const { cap } = makePathCap(spies);
+    const effects = new MemoryEffectLog();
+    // effects armed alone (no cache) — pure void-sink would skip; hybrid must fire
+    const [row] = await exec('(upsert "a" "1")', {
+      capabilities: [cap],
+      effects,
+    });
+    expect(spies.upsert).toBe(1);
+    expect(row).toBe("row:a:1");
+    expect(effects.entries[0]?.fired).toBe(true);
+    // Contrast: a real void-sink with effects armed skips (effect-log.law pins that separately).
+  });
+
+  it("P-I6 unarmed — E≠[] without effects log does not invent enqueue; door still works", async () => {
+    const spies: SpyMap = {};
+    const { cap, pathLog } = makePathCap(spies);
+    // no effects channel — write fires; CQS prior-E still recorded; no EffectLog to fill
+    await exec('(write "a" "1") (read "b" "1")', {
+      capabilities: [cap],
+      resourcePaths: pathLog,
+    });
+    expect(spies.write).toBe(1);
+    expect(spies.read).toBe(1);
+    expect(pathLog.effectPaths).toContainEqual(["test", "a", "1"]);
+    // overlapping query still doors via resourcePaths (storage arm is independent of the door)
+    await expect(
+      exec('(read "a" "1")', {
+        capabilities: [cap],
+        resourcePaths: pathLog,
+      }),
+    ).rejects.toThrow(ResourcePathConflictError);
+  });
+});
