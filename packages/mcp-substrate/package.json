@@ -50,8 +50,8 @@
     "@inhuman.tools/arrival-serializer": "workspace:^"
   },
   "devDependencies": {
-    "@here.build/eslint-configs": "workspace:^",
-    "@here.build/tsconfig": "workspace:^",
+    "@here.build/eslint-configs": "0.9.0",
+    "@here.build/tsconfig": "0.9.0",
     "@types/node": "24.0.0",
     "eslint": "9.39.2",
     "typescript": "6.0.2",

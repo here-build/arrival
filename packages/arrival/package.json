@@ -18,7 +18,7 @@
     "url": "https://github.com/here-build/arrival.git",
     "directory": "packages/arrival"
   },
-  "license": "FSL-1.1-MIT",
+  "license": "MIT",
   "author": "here.build",
   "publishConfig": {
     "access": "public"
@@ -123,8 +123,8 @@
   },
   "dependencies": {
     "@inhuman.tools/arrival-sugarcoat": "workspace:^",
-    "@here.build/error-invariant": "workspace:^",
-    "@here.build/collections": "workspace:^",
+    "@here.build/error-invariant": "0.9.0",
+    "@here.build/collections": "0.9.0",
     "fold-case": "1.0.0",
     "tiny-invariant": "1.3.3",
     "unicode-properties": "1.4.1",
@@ -136,8 +136,8 @@
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.13.2",
     "@cloudflare/workers-types": "4.20250803.0",
-    "@here.build/eslint-configs": "workspace:^",
-    "@here.build/tsconfig": "workspace:^",
+    "@here.build/eslint-configs": "0.9.0",
+    "@here.build/tsconfig": "0.9.0",
     "@types/node": "24.0.0",
     "eslint": "9.39.2",
     "fast-check": "4.8.0",

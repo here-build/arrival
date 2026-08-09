@@ -11,7 +11,7 @@
     "url": "https://github.com/here-build/arrival.git",
     "directory": "packages/arrival-internals-types-prelude"
   },
-  "license": "FSL-1.1-MIT",
+  "license": "MIT",
   "author": "here.build",
   "publishConfig": {
     "access": "public"
@@ -51,8 +51,8 @@
   },
   "dependencies": {},
   "devDependencies": {
-    "@here.build/eslint-configs": "workspace:^",
-    "@here.build/tsconfig": "workspace:^",
+    "@here.build/eslint-configs": "0.9.0",
+    "@here.build/tsconfig": "0.9.0",
     "@types/node": "24.0.0",
     "eslint": "9.39.2",
     "tslib": "2.8.1",

@@ -40,6 +40,9 @@ which expression the LLM tried to write, and the diagnostic explains how to do i
 
 ## Packages
 
+> `arrival-manifold` (MCP multi-server collapse) lives under
+> `experimental/arrival/packages/` until it graduates with arrival-bench.
+
 Everything else comes on top of the language, in a variety of shapes:
 
 - `arrival` — the interpreter, environment/capability system, and stdlib.
@@ -78,8 +81,6 @@ Everything else comes on top of the language, in a variety of shapes:
   sugarcoat): structural editing, ghost text, param hints, and the full IDE
   surface (lint/hover/completion/goto). Theme chrome lives in
   `@here.build/editor-theme` (commons).
-- `arrival-manifold` — collapse N MCP servers into one discovery-shaped
-  tool: a scheme `expr` surface over every bound remote tool.
 - `arrival-ext-toml` / `arrival-ext-yaml` — opt-in EnvCapability packs that
   own the TOML/YAML parser dependencies (the extension mechanism's own
   examples of "package owns the dep").

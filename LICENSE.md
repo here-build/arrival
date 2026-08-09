@@ -1,3 +1,18 @@
+# License
+
+This repository is dual-licensed by package:
+
+- **MIT** — `arrival`, `arrival-cli`, `arrival-codemirror`, env-capability packs
+  (handlebars/http/sql), `arrival-ext-{toml,yaml}`, `arrival-internals-types-prelude`,
+  `arrival-lsp`, `arrival-overridable-lens`, `arrival-serializer`, `arrival-sugarcoat`
+- **FSL-1.1-MIT** — `arrival-mcp`, `arrival-mcp-do`, `arrival-mercury`,
+  `arrival-mercury-oracle`, `arrival-provenance`, `mcp-substrate`, `mcp-typescript-lsp`
+
+Each package's `LICENSE.md` and `package.json` `"license"` field are authoritative.
+The FSL text below applies to FSL packages only.
+
+---
+
 # Functional Source License, Version 1.1, MIT Future License
 
 ## Abbreviation

@@ -19,7 +19,7 @@
     "url": "https://github.com/here-build/arrival.git",
     "directory": "packages/arrival-sugarcoat"
   },
-  "license": "FSL-1.1-MIT",
+  "license": "MIT",
   "author": "here.build",
   "publishConfig": {
     "access": "public"
@@ -60,13 +60,13 @@
     "custdev": "vitest run --config vitest.custdev.config.ts"
   },
   "dependencies": {
-    "@here.build/lexical-namer": "workspace:^",
+    "@here.build/lexical-namer": "0.9.0",
     "pluralize": "8.0.0",
     "tiny-invariant": "1.3.3"
   },
   "devDependencies": {
-    "@here.build/eslint-configs": "workspace:^",
-    "@here.build/tsconfig": "workspace:^",
+    "@here.build/eslint-configs": "0.9.0",
+    "@here.build/tsconfig": "0.9.0",
     "@types/node": "24.0.0",
     "@types/pluralize": "0.0.33",
     "eslint": "9.39.2",
