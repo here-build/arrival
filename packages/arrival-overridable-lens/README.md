@@ -29,4 +29,5 @@ Consumed one-way by the out-of-core overridable lenses — studio form fields, t
 
 ## License
 
-[FSL-1.1-MIT](./LICENSE.md) — Functional Source License 1.1, MIT Future License. Each version converts to MIT two years after its release date.
+[MIT](./LICENSE.md).
+

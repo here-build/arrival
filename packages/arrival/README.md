@@ -371,7 +371,7 @@ Sibling packages build an editing and serving stack over the language; each has 
 | `@inhuman.tools/arrival-sampler` | *(experimental — lives under `experimental/`, not a sibling here)* Constrained-decode consumer of `/oracle`: substrate-free mask kernel, Σ∩T type-lens narrowing, node-llama-cpp wiring, an OpenAI-compatible server. The mask kernel is tested; decode strategies keep the *experimental* tag. |
 | `@inhuman.tools/arrival-provenance` | Trace analysis owned natively here (forest, statechart, region tree, flow graph, reverse-chain slicer `buildUneval`, `groundingVerdict` / `whyOf` / `whereOf` / `howOf`). Core keeps only the capture spine (`EvalTrace`, stamping); this package re-exports capture and supplies the mobx-reactive `ObservableEvalTrace`. |
 | `@inhuman.tools/arrival-mcp` | The language as an MCP surface — discovery/action tools over the same capability envs, serializer budgets on every result. |
-| `@inhuman.tools/arrival-manifold` | N MCP servers → one `scheme-repl` tool (the measured benchmark below). |
+| `@inhuman.tools/arrival-manifold` *(not in this repository — experimental)* | N MCP servers → one `scheme-repl` tool (the measured benchmark below). |
 | `@inhuman.tools/arrival-serializer` | Budget-bounded rendering: under a budget, per-element caps shrink fairly across siblings and re-render — never a tail-cut. |
 
 The oracle (`@inhuman.tools/arrival/lsp-internals`) exposes the interpreter's own knowledge — structural
@@ -384,7 +384,7 @@ type are three projections of one contract term.
 
 ## Does the medium measurably help?
 
-`@inhuman.tools/arrival-manifold` collapses N upstream MCP servers' per-tool JSON-schema tools into
+`@inhuman.tools/arrival-manifold` *(not in this repository — experimental)* collapses N upstream MCP servers' per-tool JSON-schema tools into
 one `scheme-repl` tool whose argument is an arrival program. On **MCP-Atlas** (89 grounded
 multi-server tasks × 15 runs per configuration, LongCat-2.0 as judge, per-task fixed effects +
 paired contrasts, post-neutralization, strictly neutral client):
@@ -399,7 +399,7 @@ Composing multiple tool calls inside one program eliminates round-trips a schema
 call can't avoid — pipe a result straight into the next, filter/reduce before it re-enters the
 transcript — so the token surcharge buys task completion, not verbosity. The noise floor is real
 and no single run can be trusted alone; the full methodology is in
-`@inhuman.tools/arrival-manifold`'s own README.
+`@inhuman.tools/arrival-manifold` *(not in this repository — experimental)*'s own README.
 
 ## Security Status
 
@@ -465,38 +465,5 @@ is a gift), and **doors** (find a dead-end error, turn it into a teaching door).
 
 ## License
 
-**[FSL-1.1-MIT](./LICENSE.md)** — Functional Source License 1.1, MIT Future License. Each version
-converts to MIT two years after its release date. Until conversion, the license permits everything
-*except* Competing Use (making the Software available in a commercial product or service that
-substitutes for the Software or offers substantially similar functionality). Internal use,
-non-commercial education and research, and professional services built on top of the Software are
-always permitted.
+[MIT](./LICENSE.md).
 
-**What Competing Use means here, in plain words** (a clarification of intent, not a legal instrument
-— the license text governs): the one reserved lane is **providing services around custom
-AI-participating workflows in a self-service way** — a product whose *customers* build their own
-pipelines on arrival (a hosted pipeline-builder). That is the product we are building ourselves.
-Everything else is yours, explicitly:
-
-- **Your own agentic pipelines** — personal, team, or company-internal, at any scale, including an
-  internal platform where your own engineers build pipelines: **fair use, always.**
-- **Agency / consulting work** — building bespoke pipelines *for* clients is professional services,
-  always permitted.
-- **Agents as users** — an agent building pipelines (via MCP or otherwise) acts on behalf of its
-  operator; its operator's pipelines are personal use.
-
-The test in one question: **who types the pipeline?** You or your engineers (for yourselves or a
-client) — fair. Your customers, into your product — the reserved lane, for now.
-
-Two standing commitments: clarifications of this boundary only ever *widen* fair use, never narrow
-it retroactively — gray area? Ask, answers are public and bind us. And the reservation is a head
-start, not a moat: every release MITs on its own two-year clock, and we are open to conversations
-about converting the project to full MIT sooner.
-
-arrival grew out of [LIPS.js](https://github.com/jcubic/lips) by Jakub T. Jankiewicz (MIT licensed),
-and its copyright notices are preserved in the source where shared code — the reader and tokenizer —
-remains. The interpreter itself is a ground-up rewrite: the term algebra, the trampoline-generator
-kernel, the rosetta membrane, the capability environment, and the provenance substrate share no code
-with LIPS.
-
-For licensing questions, exemptions, or clarifications: team@here.build

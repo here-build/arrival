@@ -260,7 +260,5 @@ capability module itself executes during `check`.
 
 ## License
 
-**[FSL-1.1-MIT](./LICENSE.md)** — Functional Source License 1.1, MIT Future License; each version
-converts to MIT two years after release. Same license and same plain-words boundary as
-`@inhuman.tools/arrival` — see the core README's "What Competing Use means here" for the clarification
-(your own pipelines, agency work, and agents-as-users are always fair use). Questions: team@here.build
+[MIT](./LICENSE.md).
+

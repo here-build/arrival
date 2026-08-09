@@ -7,7 +7,7 @@ the Mercury paradigm.
 semantic model answers questions; emission is the last, dumbest step. This
 package is one *instance* of that architecture. The visual-model→React instance
 lives under `@here.build/mercury*`. The failed pass-pipeline predecessor
-`@inhuman.tools/mercury` is deprecated and dissolving into the inhuman CLI.
+`@inhuman.tools/mercury` is deprecated and downstream product CLIs consume the same compile API.
 
 ## The four organs
 

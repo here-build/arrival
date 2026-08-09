@@ -56,12 +56,5 @@ The second is why half the toolchain depends on a "syntax skin": anything that m
 
 ## License
 
-**[FSL-1.1-MIT](./LICENSE.md)** — Functional Source License 1.1, MIT Future License. Each version converts
-to MIT two years after its release date. Until conversion, the license permits everything *except*
-Competing Use (making the Software available in a commercial product or service that substitutes for the
-Software or offers substantially similar functionality). Internal use, non-commercial education and
-research, and professional services built on top of the Software are always permitted.
+[MIT](./LICENSE.md).
 
-For licensing questions, exemptions, or clarifications: team@here.build.
-
-If this package eventually becomes a commodity, we will be happy to convert it into MIT. FSL is chosen as an early-stage startup R&D defense against competitors and is not intended to be a permanent license for the whole package lifetime.

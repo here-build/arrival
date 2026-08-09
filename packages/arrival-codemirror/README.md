@@ -162,8 +162,5 @@ buffer — the caret steps over the delimiter instead, paredit-style.
 
 ## License
 
-**[FSL-1.1-MIT](./LICENSE.md)** — Functional Source License 1.1, MIT Future License; each version
-converts to MIT two years after its release. Same license and same plain-words intent as the
-[arrival core](../arrival/README.md#license): your own pipelines, agency work, and internal
-platforms are always fair use; the one reserved lane is a competing self-service product.
-Questions: team@here.build
+[MIT](./LICENSE.md).
+

@@ -40,8 +40,9 @@ which expression the LLM tried to write, and the diagnostic explains how to do i
 
 ## Packages
 
-> `arrival-manifold` (MCP multi-server collapse) lives under
-> `experimental/arrival/packages/` until it graduates with arrival-bench.
+> `arrival-manifold` (MCP multi-server collapse) and `arrival-bench` are
+> **not packaged in this repository** yet — they remain experimental in the
+> product monorepo and are not part of the publishable arrival workspace.
 
 Everything else comes on top of the language, in a variety of shapes:
 
@@ -98,4 +99,11 @@ for external PRs.
 
 ## License
 
-[Functional Source License, Version 1.1, MIT Future License](./LICENSE.md).
+Dual-licensed by package (see root [`LICENSE.md`](./LICENSE.md)):
+
+- **MIT** — language core (`arrival`), CLI, sugarcoat, serializer, LSP, codemirror,
+  env-capability packs, toml/yaml extensions, types-prelude, overridable-lens
+- **FSL-1.1-MIT** — MCP stack (`arrival-mcp`, `arrival-mcp-do`, `mcp-substrate`,
+  `mcp-typescript-lsp`), provenance, mercury compiler + oracle
+
+Each package's `LICENSE.md` and `package.json` `"license"` field are authoritative.
