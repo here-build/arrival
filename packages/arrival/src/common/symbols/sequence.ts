@@ -5,6 +5,7 @@ import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
 import { type SchemeValue } from "../../values/types.js";
 import { CallCtx } from "../../run/CallCtx.js";
 import { assertCacheClassShape, assertProvenanceRoleShape, type ContourContract, extractCallbackRoles, DecodedArgs, normalizeVector, parseNameDoc, type MetadataRecord, type SequenceImpl, type SequenceSymbolDef, type VectorSpec } from "./_bake.js";
+import { assertNoResourcePathProducers } from "../../run/resource-paths.js";
 
 /** Ctx-aware host op. Slot bans on ContourContract (`_bake.ts` §1.7). */
 export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
@@ -14,6 +15,7 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
     impl: SequenceImpl<I, O>,
     opts: { metadata?: MetadataRecord } = {},
   ): ANativeProcedure => {
+    assertNoResourcePathProducers(name, "sequence", contract as { queries?: unknown; effects?: unknown });
     const inSchema = normalizeVector(contract.input);
     const outSchema = normalizeVector(contract.output);
     const provenance = contract.provenance ?? "pipe";

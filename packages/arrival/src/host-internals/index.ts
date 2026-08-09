@@ -45,6 +45,23 @@ export {
   type ReadGuard,
   type WriteSetResolver } from "../run/read-guard.js";
 
+// Resource-path CQS: domain-lane temporal zoning. Ordinary runs always carry a path
+// log; `exec(src, { resourcePaths, strictCQSstrings })` injects a spy / strict mode.
+export {
+  MemoryResourcePathLog,
+  applyResourcePathCqs,
+  assertNoResourcePathProducers,
+  pathsOverlap,
+  anyPathOverlap,
+  findOverlappingPair,
+  ResourcePathConflictError,
+  ResourcePathDeclarationError,
+  ResourcePathProducerError,
+  type ResourcePath,
+  type ResourcePathFn,
+  type ResourcePathLog,
+} from "../run/resource-paths.js";
+
 // Per-run model-facing note channel — a renderer mints one and drains it.
 export { createNoteSink, createDisplaySink, type NoteSink, type DisplaySink } from "../run/note-sink.js";
 

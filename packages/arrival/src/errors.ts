@@ -119,7 +119,10 @@ export type ErrorClass =
   | "unsupported-form"
   | "exact-overflow" // crash-on-overflow guarantee — see ExactOverflowError
   | "prohibited-dynamics" // immutability/no-dynamics-by-design — see PurityError
+  | "domain-immutability" // temporal zoning of domain lanes (CQS) — see ResourcePathConflictError
+  | "contract-shape" // bake-time contract contradiction — ProvenanceRoleShapeError, CacheClassShapeError, ResourcePathDeclarationError
   | "user-error" // R7RS (error …) raise
+  /** @deprecated Prefer a named class — the fallback bin accumulates unrelated failures. */
   | "other";
 
 // -------------------------------------------------------------------------
@@ -262,7 +265,7 @@ export function strictGate(
 // -------------------------------------------------------------------------
 export class ProvenanceRoleShapeError extends ArrivalError {
   public readonly name = "ProvenanceRoleShapeError";
-  readonly "arrival/error-category": ErrorClass = "other";
+  readonly "arrival/error-category": ErrorClass = "contract-shape";
 
   constructor(
     /** The declaring symbol's name — routing/telemetry key. */
@@ -291,7 +294,7 @@ export class ProvenanceRoleShapeError extends ArrivalError {
 // -------------------------------------------------------------------------
 export class CacheClassShapeError extends ArrivalError {
   public readonly name = "CacheClassShapeError";
-  readonly "arrival/error-category": ErrorClass = "other";
+  readonly "arrival/error-category": ErrorClass = "contract-shape";
 
   constructor(
     /** The declaring symbol's name — routing/telemetry key. */

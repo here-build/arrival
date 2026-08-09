@@ -1,7 +1,10 @@
 # DRAFT — Effects model + conflict re-exec (post-0.9)
 
-> **Not for 0.9 implementation.** Uncommitted review draft for V.
-> Status: design only. Core gather/burst already ships; conflict re-exec is unbuilt.
+> **Living home for CQS + path producers + reactivity attachment (2026-08-10):**  
+> [`docs/working-proposals/cqs-reactivity/`](../../../../../../docs/working-proposals/cqs-reactivity/).  
+> Resource-path §0b here is snapshotted there; conflict re-exec (T3+) stays later.
+
+> **Not for 0.9 implementation of T3/T4.** Design only. Core gather/burst already ships; conflict re-exec is unbuilt.
 
 **Sources:** `run/effect-log.ts`, `run/run-cache.ts`, `run/read-guard.ts`, `docs/execution.md` §MODE-LAW / §BURST, rosetta sink penetration, membrane §REGION, `arrival-mcp` confirm-burst.
 

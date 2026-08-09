@@ -17,6 +17,7 @@ import type { RunCache } from "./run-cache.js";
 import type { DisplaySink, NoteSink } from "./note-sink.js";
 import type { EffectLog } from "./effect-log.js";
 import type { ReadGuard } from "./read-guard.js";
+import { MemoryResourcePathLog, type ResourcePathLog } from "./resource-paths.js";
 import { disposeRunContext } from "./run-lifecycle.js";
 
 /** Per-run, per-capability resource store — lazily-produced Resources bag keyed by
@@ -67,6 +68,20 @@ export class RunContext {
   /** Read-tracking + deferral-guard; `undefined` ⇒ no tracking. Armed ⇒ eval loop wraps
    *  each top-level form and runs the read∩write guard (docs/execution.md §READ-GUARD). */
   readonly reads: ReadGuard | undefined;
+  /**
+   * Resource-path prior-effect set for CQS (run/resource-paths.ts).
+   * Unlike cache/effects/reads (opt-in `undefined` = facility off), ordinary mints
+   * always get a fresh {@link MemoryResourcePathLog} so CQS is on by default for
+   * live runs. CONSTANT_CTX leaves it `undefined`. Override via ctor or
+   * ExecOptions.resourcePaths (harness spy / custom log).
+   */
+  readonly resourcePaths: ResourcePathLog | undefined;
+  /**
+   * Opt-in runtime assert that every CQS path segment is a string (default false).
+   * Type-level `ResourcePath` is the real law; this is for non-prod harness stress.
+   * Threaded from ExecOptions.strictCQSstrings.
+   */
+  readonly strictCQSstrings: boolean;
   /** Model-facing note channel; `undefined` ⇒ notes dropped. */
   readonly notes: NoteSink | undefined;
   /** Display channel — MCP runner's display affordance. `undefined` ⇒ no display verb
@@ -93,6 +108,15 @@ export class RunContext {
       cache?: RunCache;
       effects?: EffectLog;
       reads?: ReadGuard;
+      /**
+       * Override path log (harness spy). Ordinary mint: fresh MemoryResourcePathLog.
+       * CONSTANT_CTX (`_noResourceStore`): undefined unless explicitly supplied.
+       * Note: `?? new MemoryResourcePathLog()` — you cannot pass `undefined` to
+       * disable on an ordinary mint; use CONSTANT_CTX for facility-off.
+       */
+      resourcePaths?: ResourcePathLog;
+      /** See {@link RunContext.strictCQSstrings}. Default false. */
+      strictCQSstrings?: boolean;
       notes?: NoteSink;
       display?: DisplaySink;
       /** Supply seam for configuration table — `assembleRun` is the production caller. */
@@ -112,6 +136,7 @@ export class RunContext {
     this.cache = opts.cache;
     this.effects = opts.effects;
     this.reads = opts.reads;
+    this.strictCQSstrings = opts.strictCQSstrings ?? false;
     this.notes = opts.notes;
     this.display = opts.display;
     this.capabilityConfigurations = opts.capabilityConfigurations;
@@ -119,6 +144,9 @@ export class RunContext {
     this.degraded = opts.degraded;
     if (!_noResourceStore) {
       this.capabilityResources = new WeakMap<object, unknown>();
+      this.resourcePaths = opts.resourcePaths ?? new MemoryResourcePathLog();
+    } else {
+      this.resourcePaths = opts.resourcePaths;
     }
   }
 

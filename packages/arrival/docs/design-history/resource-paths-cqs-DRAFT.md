@@ -1,13 +1,15 @@
 # DRAFT — Rosetta resource paths (CQS / confluence)
 
-**Status:** design only — **not 0.9 implementation.** Uncommitted review draft.  
-**Parked:** do not implement until the cleanup go-wave (docs, bigint ban, doors, dual chibi, uneval e2e, bare-fn purge) is finished and reviewed.
+> **Living home (2026-08-10):** [`docs/working-proposals/cqs-reactivity/`](../../../../../../docs/working-proposals/cqs-reactivity/) — unified CQS + reactivity design, ship order, go-wave status. This file remains archaeology; edit the workdir for ongoing work.
+
+**Status:** design only — **not 0.9 implementation.** Snapshot also under `docs/working-proposals/cqs-reactivity/sources/`.  
+**Parked → ready for first ship (caveats):** go-wave code gates verified closed 2026-08-10 (see workdir `00-status.md`). Dual-chibi growth / T3 conflict re-exec remain non-blocking residual.
 
 **Related:**
-- Rationale (CQS as confluence): `docs/working-proposals/confluent-dataflow-graph-ir-2026-06-17.md` §6  
+- Rationale (CQS as confluence): `docs/thinking/confluent-dataflow-graph-ir-2026-06-17.md` §6  
 - Burst / deferred sinks / read-guard: `docs/working-proposals/arrival-plexus-effect-burst.md`, `docs/execution.md` §BURST / §READ-GUARD  
 - Effects conflict re-exec (post-0.9): sibling draft `effects-conflict-reexec-DRAFT.md`  
-- Cleanup board: `arrival/CLEANUP-WORKBOARD.md`
+- Cleanup board snapshot: `docs/working-proposals/cqs-reactivity/sources/CLEANUP-WORKBOARD-2026-07-28.md`
 
 ---
 

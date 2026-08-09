@@ -72,6 +72,19 @@ describe("cache class — declaration + resolution (never derived, absent = rege
 });
 
 describe("the `view` shape gate — a cache entry must serialize (bake-time door, CacheClassShapeError)", () => {
+  it("CacheClassShapeError is contract-shape (not other)", () => {
+    try {
+      symbol.rosetta`cc-view-cat: `(
+        { input: [z.lambda, z.string], output: [z.string], cacheClass: "view" },
+        (_f, s) => s,
+      );
+      expect.unreachable();
+    } catch (err) {
+      expect(err).toBeInstanceOf(CacheClassShapeError);
+      expect((err as CacheClassShapeError)["arrival/error-category"]).toBe("contract-shape");
+    }
+  });
+
   it("a `view` with a z.lambda arm throws at bake — a callable is not a boundary snapshot", () => {
     expect(() =>
       symbol.rosetta`cc-view-lambda: `(

@@ -22,6 +22,7 @@ import { AValue, pointProvenance, unionProvenance } from "../../values/primitive
 import { attestDeep, freshIfSingleton } from "../../values/attestation.js";
 import { jsToScheme } from "../../membrane/rosetta.js";
 import { penetrateThroughCache } from "../../run/run-cache.js";
+import { applyResourcePathCqs } from "../../run/resource-paths.js";
 import { closeRegionScope, openRegionScope, withRegionScope } from "../../membrane/region-scope.js";
 import { decodeKwargsStrict, drainDroppedKwargNotes } from "../kwargs-rejection.js";
 import { formatPositionalRejection } from "./positional-rejection.js";
@@ -169,6 +170,9 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
     assertCacheClassShape(name, cacheClass, inSchema, outSchema);
     const callbackRoles = extractCallbackRoles(name, provenance, inSchema, outSchema, contract.callbackRoles);
     const forwards = provenance === "pipe";
+    // Path producers (CQS) — rosetta-only; stored on membrane for the apply chokepoint.
+    const queries = contract.queries;
+    const effects = contract.effects;
     // `opts.validate` has no effect on the rosetta path (rosetta always shape-checks via
     // its contract); it's honored only on `symbol.define`. The shared `BakeRuntimeOpts`
     // type accepts it for API symmetry.
@@ -199,6 +203,8 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
         provenance,
         cacheClass,
         callbackRoles,
+        queries,
+        effects,
         type: contract.type,
         preludeOnly: contract.preludeOnly,
         requiresConfig: contract.requiresConfig,
@@ -221,7 +227,9 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
         escapeSlots,
         forwards,
         sink: provenance === "sink",
-        outputSlots: Array.isArray(contract.output) ? (contract.output as readonly unknown[]) : undefined } });
+        outputSlots: Array.isArray(contract.output) ? (contract.output as readonly unknown[]) : undefined,
+        queries,
+        effects } });
   };
 }
 
@@ -260,15 +268,33 @@ _installRosettaMembraneApply(async (proc, args, callCtx) => {
     if (m.unwrapOpaqueHandles) decodedArgs = m.unwrapOpaqueHandles(decodedArgs);
     m.checkDynamicSlots?.(decodedArgs);
 
+    // CQS path producers (CrossingContract) — not to be confused with RunContext.effects
+    // (burst EffectLog). Aliases keep the two axes out of the same mental register.
+    const pathQueries = m.queries;
+    const pathEffects = m.effects;
+    // Order (R-O2): path fns → check vs prior E → record E → then cache/impl.
+    // Runs whenever path producers are declared; log undefined (CONSTANT_CTX) ⇒
+    // facility off after path fns still execute (shape/throw still apply).
+    if (pathQueries !== undefined || pathEffects !== undefined) {
+      applyResourcePathCqs({
+        verbName: name,
+        decodedArgs,
+        queries: pathQueries,
+        effects: pathEffects,
+        log: callCtx.runCtx.resourcePaths,
+        strictCQSstrings: callCtx.runCtx.strictCQSstrings,
+      });
+    }
+
     const runCache = callCtx.runCtx.cache;
-    const runEffects = callCtx.runCtx.effects;
+    const burstLog = callCtx.runCtx.effects;
     const runReads = callCtx.runCtx.reads;
     const fire = async (): Promise<unknown> =>
       scope
         ? withRegionScope(scope, () => m.hostImpl.call(callCtx, ...decodedArgs))
         : m.hostImpl.call(callCtx, ...decodedArgs);
     result =
-      runCache === undefined && runEffects === undefined
+      runCache === undefined && burstLog === undefined
         ? await fire()
         : await penetrateThroughCache(
             runCache,
@@ -279,7 +305,7 @@ _installRosettaMembraneApply(async (proc, args, callCtx) => {
               rawArgs: args },
             decodedArgs,
             fire,
-            runEffects,
+            burstLog,
             runReads?.tracker,
           );
   } finally {

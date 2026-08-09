@@ -10,6 +10,7 @@ import { AValue } from "./AValue.js";
 import type { MembraneExit, SchemeBounceMarker, SchemeValue } from "../types.js";
 import type { CallCtx } from "../../run/CallCtx.js";
 import type { CacheClass, CallbackRoles, ProvenanceRole } from "../../common/symbols/_bake.js";
+import type { ResourcePathFn } from "../../run/resource-paths.js";
 import type { ZodTypeAny } from "zod";
 import invariant from "tiny-invariant";
 
@@ -39,6 +40,10 @@ export interface RosettaMembrane {
   readonly sink: boolean;
   /** Authored `contract.output` vector (multi-out per-slot escape encode). */
   readonly outputSlots?: readonly unknown[];
+  /** CQS query path producer — see Contract.queries / run/resource-paths.ts. */
+  readonly queries?: ResourcePathFn;
+  /** CQS effect path producer — see Contract.effects / run/resource-paths.ts. */
+  readonly effects?: ResourcePathFn;
 }
 
 const callableEquals = (self: object, other: unknown): boolean => other === self;

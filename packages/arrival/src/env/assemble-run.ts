@@ -36,6 +36,7 @@ import type { DisplaySink, NoteSink } from "../run/note-sink.js";
 import type { RunCache } from "../run/run-cache.js";
 import type { EffectLog } from "../run/effect-log.js";
 import type { ReadGuard } from "../run/read-guard.js";
+import type { ResourcePathLog } from "../run/resource-paths.js";
 import { RunContext } from "../run/RunContext.js";
 import { buildVocabulary, type Vocabulary } from "./vocabulary.js";
 import { bindValue, mintResolvingFrame } from "./AmbientRuntime.js";
@@ -59,6 +60,10 @@ export interface AssembleRunOptions {
   readonly cache?: RunCache;
   readonly effects?: EffectLog;
   readonly reads?: ReadGuard;
+  /** Opt-in CQS path-segment string assert (default false). See ExecOptions.strictCQSstrings. */
+  readonly strictCQSstrings?: boolean;
+  /** Override CQS prior-effect log (harness spy). Default: fresh MemoryResourcePathLog. */
+  readonly resourcePaths?: ResourcePathLog;
   readonly notes?: NoteSink;
   readonly display?: DisplaySink;
   /** Reuse an existing RunContext (REPL continuity). The run carries its own vocabulary, so
@@ -101,6 +106,8 @@ export async function assembleRun(opts: AssembleRunOptions): Promise<RunContext>
     cache: opts.cache,
     effects: opts.effects,
     reads: opts.reads,
+    strictCQSstrings: opts.strictCQSstrings,
+    resourcePaths: opts.resourcePaths,
     notes: opts.notes,
     display: opts.display,
     capabilityConfigurations: vocabulary.configsByCapability,

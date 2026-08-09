@@ -20,6 +20,7 @@ import {
   type DefineSyntaxSymbolDef,
   type RestSpec,
   type VectorSpec } from "./_bake.js";
+import { assertNoResourcePathProducers } from "../../run/resource-paths.js";
 
 /** Two overloads: Contract → procedure (ContourContract, no CrossingOnly); bare ZodType →
  *  constant (NoCrossingBrand — banned as bare z.dynamic/z.instance). */
@@ -46,6 +47,13 @@ export function define(tpl: TemplateStringsArray, ...sub: unknown[]): DefineFact
     opts: BakeRuntimeOpts = {},
   ): DefineSymbolDef => {
     const isConstant = contract instanceof ZodType;
+    if (!isConstant) {
+      assertNoResourcePathProducers(
+        name,
+        "define",
+        contract as { queries?: unknown; effects?: unknown },
+      );
+    }
     // Constants → 0-ary-procedure convention so harvest/arity never special-case structurally;
     // only `callable` tells the bind arm which runtime shape to build.
     const inSchema = isConstant ? normalizeVector([]) : normalizeInputVector(contract.input, contract.inputRest);

@@ -126,6 +126,10 @@ export type ProvenanceRole = "pipe" | "fan" | "source" | "sink" | "transparent" 
 /** Cache-class vocabulary — explicit declaration, never derived from lineage role. See `Contract.cacheClass`. */
 export type CacheClass = "view" | "pure";
 
+/** Resource-path producer — sole home is run/resource-paths.ts; re-exported for CrossingContract. */
+import type { ResourcePathFn } from "../../run/resource-paths.js";
+export type { ResourcePathFn };
+
 /** Per-z.lambda-arm dual of `ProvenanceRole` (host role). Shape extracts where it decides;
  *  `Contract.callbackRoles` declares where underdetermined (`extractCallbackRoles`):
  *  - `element-transformer` — return BECOMES the element (map). Parallel track composition.
@@ -230,20 +234,39 @@ type CrossingMsgRest =
   "z.dynamic / z.instance is not legal in a native/sequence/define contract's inputRest — same rule as input";
 type CrossingMsgOut =
   "z.dynamic / z.instance is not legal in a native/sequence/define contract's output — same rule as input";
-
-/** Rosetta `contract` param. Legal = identity; poisoned field glows via ContractKindMismatch. */
+/**
+ * Rosetta `contract` param. Legal = identity; poisoned field glows via ContractKindMismatch.
+ * Path producers (`queries`/`effects`) live ONLY here — not on base Contract — so annotated
+ * ContourContract / `Contract<…>` values stay assignable (no optional-field type war).
+ */
 export type CrossingContract<I extends VectorSpec, O extends VectorSpec, Rest extends RestSpec = undefined> = Contract<
   I,
   O,
   Rest
-> &
-  (HasBrand<I, z.ContourOnly<unknown>> extends true ? { input: ContractKindMismatch<ContourMsgIn> } : unknown) &
+> & {
+  /**
+   * Query path producer — domains this penetration READs (decoded args → path list).
+   * Rosetta-only. Non-empty Q arms the CQS check against prior effect paths this run.
+   * See run/resource-paths.ts; docs/working-proposals/cqs-reactivity/.
+   */
+  readonly queries?: ResourcePathFn;
+  /**
+   * Effect path producer — domains this penetration WRITES (decoded args → path list).
+   * Rosetta-only. Non-empty E is recorded into the run's prior-effect set AFTER the
+   * CQS check passes and BEFORE impl (self-door impossible — check never sees this E).
+   */
+  readonly effects?: ResourcePathFn;
+} & (HasBrand<I, z.ContourOnly<unknown>> extends true ? { input: ContractKindMismatch<ContourMsgIn> } : unknown) &
   (HasBrand<Rest, z.ContourOnly<unknown>> extends true
     ? { inputRest: ContractKindMismatch<ContourMsgRest> }
     : unknown) &
   (HasBrand<O, z.ContourOnly<unknown>> extends true ? { output: ContractKindMismatch<ContourMsgOut> } : unknown);
 
-/** Native/sequence/define `contract` param. Bans CrossingOnly instead of ContourOnly. */
+/**
+ * Native/sequence/define `contract` param. Bans CrossingOnly instead of ContourOnly.
+ * Path producers are absent (only on CrossingContract); object-literal excess-property
+ * checks refuse `queries`/`effects` at the editor. Runtime throw remains for untyped callers.
+ */
 export type ContourContract<I extends VectorSpec, O extends VectorSpec, Rest extends RestSpec = undefined> = Contract<
   I,
   O,
@@ -313,6 +336,10 @@ export interface RosettaSymbolDef<
   /** Resolved cache class. Run-cache gates on this (docs/execution.md §CHOKEPOINT). Absent = regenerateable. */
   readonly cacheClass?: CacheClass;
   readonly callbackRoles?: CallbackRoles;
+  /** See `CrossingContract.queries` (rosetta-only path producers). */
+  readonly queries?: ResourcePathFn;
+  /** See `CrossingContract.effects` (rosetta-only path producers). */
+  readonly effects?: ResourcePathFn;
   /** See `Contract.type`. */
   readonly type?: string;
   /** See `Contract.preludeOnly`. */

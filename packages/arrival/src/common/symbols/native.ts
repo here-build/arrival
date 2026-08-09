@@ -9,6 +9,7 @@ import { ANativeProcedure, type NativeSymbolDef } from "../../values/primitives/
 import { type SchemeValue } from "../../values/types.js";
 import { type CallCtx } from "../../run/CallCtx.js";
 import { assertCacheClassShape, assertProvenanceRoleShape, type ContourContract, extractCallbackRoles, normalizeInputVector, normalizeVector, parseNameDoc, type Impl, type MetadataRecord, type RestSpec, type VectorSpec } from "./_bake.js";
+import { assertNoResourcePathProducers } from "../../run/resource-paths.js";
 
 /** Native host fn over scheme values. Slot bans on ContourContract (`_bake.ts` §1.7). */
 export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
@@ -18,6 +19,7 @@ export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
     impl: Impl<I, O, Rest, "scheme">,
     opts: { metadata?: MetadataRecord } = {},
   ): ANativeProcedure => {
+    assertNoResourcePathProducers(name, "native", contract as { queries?: unknown; effects?: unknown });
     const inSchema = normalizeInputVector(contract.input, contract.inputRest);
     const outSchema = normalizeVector(contract.output);
     const provenance = contract.provenance ?? "pipe";

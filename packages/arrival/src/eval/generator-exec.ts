@@ -32,6 +32,7 @@ import type { DisplaySink, NoteSink } from "../run/note-sink.js";
 import type { RunCache } from "../run/run-cache.js";
 import type { EffectLog } from "../run/effect-log.js";
 import type { ReadGuard } from "../run/read-guard.js";
+import type { ResourcePathLog } from "../run/resource-paths.js";
 import { checkReadWriteGuard } from "../run/read-guard.js";
 // TYPE-ONLY (erased — no runtime scheme-zod edge): exec exit contract's schema type.
 import type { output as ZodOutputOf, ZodType } from "../common/scheme-zod/index.js";
@@ -188,6 +189,18 @@ export interface ExecOptions {
    */
   reads?: ReadGuard;
   /**
+   * Opt-in runtime assert that every CQS path segment is a string (default false).
+   * Type-level `ResourcePath` is the law; use this in non-prod harnesses to catch
+   * producers that smuggle non-strings past TS. Rides onto RunContext.strictCQSstrings.
+   */
+  strictCQSstrings?: boolean;
+  /**
+   * Override the per-run resource-path prior-effect log (run/resource-paths.ts).
+   * Default: fresh MemoryResourcePathLog on ordinary mint. Harness spies inject here
+   * (same channel as cache/effects/reads). CONSTANT_CTX stays facility-off.
+   */
+  resourcePaths?: ResourcePathLog;
+  /**
    * THE EXIT CONTRACT. When supplied, the LAST form's result is validated
    * against this schema at the exit boundary — AFTER toJS unwrap, so the schema
    * describes the plain-JS value exec hands back. A mismatch throws a teaching
@@ -319,6 +332,8 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     cache,
     effects,
     reads,
+    strictCQSstrings,
+    resourcePaths,
     notes,
     display,
     strict,
@@ -363,6 +378,8 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     cache,
     effects,
     reads,
+    strictCQSstrings,
+    resourcePaths,
     notes,
     display });
 
@@ -515,6 +532,8 @@ export async function execExpr(
     cache,
     effects,
     reads,
+    strictCQSstrings,
+    resourcePaths,
     runCtx: passedRunCtx }: ExecOptions = {},
 ): Promise<SchemeValue> {
   const runCtxOwned = passedRunCtx === undefined;
@@ -531,7 +550,9 @@ export async function execExpr(
       signal,
       cache,
       effects,
-      reads }));
+      reads,
+      strictCQSstrings,
+      resourcePaths }));
   let runResolver = resolver;
   if (runResolver === undefined) {
     const vocabulary = await buildVocabulary(BASE_ROSTER, undefined, capabilityEvalScheme);
@@ -608,6 +629,8 @@ export async function execStateOverFrame(code: string | SchemeValue, options: Ex
     cache,
     effects,
     reads,
+    strictCQSstrings,
+    resourcePaths,
     notes,
     display,
     strict } = options;
@@ -619,7 +642,18 @@ export async function execStateOverFrame(code: string | SchemeValue, options: Ex
   const runCtxOwned = passedRunCtx === undefined;
   const runCtx =
     passedRunCtx ??
-    new RunContext({ strict: strict ?? false, heapBudget, signal, cache, effects, reads, notes, display });
+    new RunContext({
+      strict: strict ?? false,
+      heapBudget,
+      signal,
+      cache,
+      effects,
+      reads,
+      strictCQSstrings,
+      resourcePaths,
+      notes,
+      display,
+    });
 
   try {
     const results: SchemeValue[] = [];
@@ -669,13 +703,28 @@ export async function execOverFrame(code: string | SchemeValue, options: ExecOpt
  *  minus the standalone-default machinery (caller always holds a real frame). */
 export async function execExprOverFrame(
   expr: SchemeValue,
-  { env, tap, nodeFilter, signal, budgetMs, heapBudget, cache, effects, reads, runCtx: passedRunCtx }: ExecOptionsOverFrame,
+  {
+    env,
+    tap,
+    nodeFilter,
+    signal,
+    budgetMs,
+    heapBudget,
+    cache,
+    effects,
+    reads,
+    strictCQSstrings,
+    resourcePaths,
+    runCtx: passedRunCtx,
+  }: ExecOptionsOverFrame,
 ): Promise<SchemeValue> {
   if (!isAmbientRuntime(env)) throw new AmbientShapeError("execExprOverFrame", "expected a concrete AmbientRuntime");
   await ensureInferenceEnvPopulated();
   const runResolver = new Resolver(env);
   const runCtxOwned = passedRunCtx === undefined;
-  const runCtx = passedRunCtx ?? new RunContext({ signal, heapBudget, cache, effects, reads });
+  const runCtx =
+    passedRunCtx ??
+    new RunContext({ signal, heapBudget, cache, effects, reads, strictCQSstrings, resourcePaths });
   const runSignal = runCtx.signal;
   try {
     return expectValue(
