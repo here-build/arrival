@@ -82,7 +82,9 @@
     "ramda": "0.31.3",
     "typescript": "6.0.2",
     "yaml": "2.9.0",
-    "zod": "4.3.6"
+    "zod": "4.3.6",
+    "@inhuman.tools/arrival-run": "workspace:^",
+    "@inhuman.tools/llm-plane-arrival-env": "workspace:^"
   },
   "devDependencies": {
     "@here.build/eslint-configs": "0.9.0",
@@ -104,17 +106,5 @@
     "tsx": "4.22.4",
     "vite": "7.2.7",
     "vitest": "4.1.0"
-  },
-  "peerDependencies": {
-    "@inhuman.tools/arrival-run": ">=0.1.0",
-    "@inhuman.tools/llm-plane-arrival-env": ">=0.1.0"
-  },
-  "peerDependenciesMeta": {
-    "@inhuman.tools/arrival-run": {
-      "optional": true
-    },
-    "@inhuman.tools/llm-plane-arrival-env": {
-      "optional": true
-    }
   }
 }

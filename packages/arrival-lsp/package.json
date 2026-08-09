@@ -83,7 +83,9 @@
     "@inhuman.tools/arrival-internals-types-prelude": "workspace:^",
     "@inhuman.tools/arrival-sugarcoat": "workspace:^",
     "@inhuman.tools/arrival-mercury": "workspace:^",
-    "typescript": "6.0.2"
+    "typescript": "6.0.2",
+    "@inhuman.tools/arrival-run": "workspace:^",
+    "@inhuman.tools/llm-plane-arrival-chain": "workspace:^"
   },
   "devDependencies": {
     "@inhuman.tools/arrival": "workspace:^",
@@ -94,17 +96,5 @@
     "tslib": "2.8.1",
     "vite": "7.2.7",
     "vitest": "4.1.0"
-  },
-  "peerDependencies": {
-    "@inhuman.tools/arrival-run": ">=0.1.0",
-    "@inhuman.tools/llm-plane-arrival-chain": ">=0.1.0"
-  },
-  "peerDependenciesMeta": {
-    "@inhuman.tools/arrival-run": {
-      "optional": true
-    },
-    "@inhuman.tools/llm-plane-arrival-chain": {
-      "optional": true
-    }
   }
 }
