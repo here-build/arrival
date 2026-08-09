@@ -42,6 +42,10 @@
       "types": "./dist/host-internals/index.d.ts",
       "default": "./dist/host-internals/index.js"
     },
+    "./mobx-atom-proxy": {
+      "types": "./dist/run/mobx-atom-proxy.d.ts",
+      "default": "./dist/run/mobx-atom-proxy.js"
+    },
     "./capability": {
       "types": "./dist/common/capability.d.ts",
       "default": "./dist/common/capability.js"

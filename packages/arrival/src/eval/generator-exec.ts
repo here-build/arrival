@@ -415,7 +415,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
       try {
         result = expectValue(await (runCtx.reads ? runCtx.reads.tracker.region(runForm) : runForm()));
       } catch (e) {
-        runCtx.pathAtoms?.abandonRun();
+        if (runCtxOwned) runCtx.pathAtoms?.abandonRun(); // RX-UNIT — see the commitRun note below
         if (e instanceof ArrivalError && e.cause instanceof TypeError && !isHostRuntimeBug(e.cause)) throw e.cause;
         throw e;
       }
@@ -426,7 +426,11 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
       }
     }
     // RX-CLOCK: invalidate staged path-E only when the whole run commits successfully.
-    runCtx.pathAtoms?.commitRun();
+    // RX-UNIT: the unit is the WHOLE top-level exec, so the clock is gated on
+    // `runCtxOwned` — the same flag that gates disposal. A nested exec / a REPL pass
+    // reusing a caller's runCtx is INSIDE someone else's run; firing here would flush
+    // the parent's staged effects mid-run. A host that owns the runCtx owns the clock.
+    if (runCtxOwned) runCtx.pathAtoms?.commitRun();
     return { values: results, scope: runResolver.scope, runCtx };
   } finally {
     // Only THIS call's own (freshly-minted) RunContext is disposed here.
@@ -591,10 +595,13 @@ export async function execExpr(
         { signal: runSignal, budgetMs },
       ),
     );
-    runCtx.pathAtoms?.commitRun();
+    // RX-UNIT: `require`'s module-eval loop threads the REQUIRING run's live runCtx
+    // through here, so an unowned runCtx means this call is a form inside someone
+    // else's run — never its own unit, never its own clock (see execState).
+    if (runCtxOwned) runCtx.pathAtoms?.commitRun();
     return value;
   } catch (e) {
-    runCtx.pathAtoms?.abandonRun();
+    if (runCtxOwned) runCtx.pathAtoms?.abandonRun();
     if (e instanceof ArrivalError && e.cause instanceof TypeError) throw e.cause;
     throw e;
   } finally {
@@ -697,7 +704,7 @@ export async function execStateOverFrame(code: string | SchemeValue, options: Ex
       try {
         result = expectValue(await (runCtx.reads ? runCtx.reads.tracker.region(runForm) : runForm()));
       } catch (e) {
-        runCtx.pathAtoms?.abandonRun();
+        if (runCtxOwned) runCtx.pathAtoms?.abandonRun(); // RX-UNIT — see the commitRun note below
         if (e instanceof ArrivalError && e.cause instanceof TypeError && !isHostRuntimeBug(e.cause)) throw e.cause;
         throw e;
       }
@@ -707,7 +714,7 @@ export async function execStateOverFrame(code: string | SchemeValue, options: Ex
         checkReadWriteGuard(runCtx.effects.entries, runCtx.reads.tracker.log, runCtx.reads.writeSetOf);
       }
     }
-    runCtx.pathAtoms?.commitRun();
+    if (runCtxOwned) runCtx.pathAtoms?.commitRun(); // RX-UNIT / RX-CLOCK — see execState
     return { values: results, scope: runResolver.scope, runCtx };
   } finally {
     if (runCtxOwned) await disposeRunContext(runCtx);
@@ -756,10 +763,13 @@ export async function execExprOverFrame(
         { signal: runSignal, budgetMs },
       ),
     );
-    runCtx.pathAtoms?.commitRun();
+    // RX-UNIT: `require`'s module-eval loop threads the REQUIRING run's live runCtx
+    // through here, so an unowned runCtx means this call is a form inside someone
+    // else's run — never its own unit, never its own clock (see execState).
+    if (runCtxOwned) runCtx.pathAtoms?.commitRun();
     return value;
   } catch (e) {
-    runCtx.pathAtoms?.abandonRun();
+    if (runCtxOwned) runCtx.pathAtoms?.abandonRun();
     if (e instanceof ArrivalError && e.cause instanceof TypeError) throw e.cause;
     throw e;
   } finally {

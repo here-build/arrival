@@ -6,10 +6,29 @@
  *
  * Each negative carries A-CTRL-X1: a call in the same fixture that *does* populate the
  * same set, proving the bus is capable of recording, not merely abstaining.
+ *
+ * X2 WITNESSES (suite 5a checklist #2 — X1 is white-box, X2a is normative; every case
+ * here either names the behavioral case that will subsume it at 5b, or is white-box-only):
+ *
+ *   P-RX-OBSERVE ................. P-RX-REINVOKE
+ *   P-RX-MULTI-Q ................. P-RX-PREFIX-DOWN
+ *   P-RX-DECODE .................. P-RX-REINVOKE-DECODE
+ *   P-RX-CACHE-HIT ............... P-RX-REINVOKE
+ *   P-RX-OBSERVE-ACROSS-AWAIT .... P-RX-PARITY
+ *   P-RX-INVALIDATE .............. P-RX-CROSS-UNIT
+ *   P-RX-GATHER-QUEUED .......... P-RX-GATHER-INVAL-ON-COMMIT
+ *   P-RX-HYBRID-ARM .............. P-RX-HYBRID
+ *   P-RX-UNTRACKED-NOOP ......... P-RX-CROSS-UNIT
+ *   N-RX-EFFECT-ONLY ............. N-RX-EFFECT-ONLY-DEAF
+ *   N-RX-DOORED-Q ................ P-RX-DOOR-PERSISTS
+ *   N-RX-IMPL-THROW-NO-INVAL ..... N-RX-IMPL-THROW-NO-WAKE
+ *   N-RX-REPLAY-SILENT ........... P-RX-REPLAY-DOOR-LIVE
+ *   N-RX-PURE / N-RX-PATHFN-THROW / N-RX-NONSTRING-SEGMENT / N-RX-NO-PATHS ... white-box-only
  */
 import { describe, it, expect } from "vitest";
 import { EnvCapability } from "../../common/capability.js";
 import { exec } from "../../eval/generator-exec.js";
+import { RunContext } from "../RunContext.js";
 import { MemoryRunCache } from "../run-cache.js";
 import { MemoryEffectLog } from "../effect-log.js";
 import {
@@ -77,6 +96,20 @@ function makePathCap(spies: SpyMap, opts?: { pathFnThrow?: "queries" | "effects"
         (d: string) => {
           track("read-all");
           return `all:${d}`;
+        },
+      ),
+      // ASYNC impl — the only way to author a query penetration that survives a
+      // trampoline yield (P-RX-OBSERVE-ACROSS-AWAIT).
+      "read-slow": symbol.rosetta`read-slow: `(
+        {
+          input: [z.string, z.string],
+          output: [z.string],
+          queries: q("read-slow", (d, id) => [["test", d, id]]),
+        },
+        async (d: string, id: string) => {
+          await Promise.resolve();
+          track("read-slow");
+          return `${d}:${id}`;
         },
       ),
       "read-many": symbol.rosetta`read-many: `(
@@ -228,6 +261,21 @@ describe("X1 arming positives (5a)", () => {
     const { bus } = await runRx('(read-decoded "D" "raw:42")');
     expect(bus.observed).toEqual(new Set([key("test", "D", "42")]));
     expect(bus.observed.has(key("test", "D", "raw:42"))).toBe(false);
+  });
+
+  it("P-RX-OBSERVE-ACROSS-AWAIT — both penetrations observed across a trampoline yield", async () => {
+    // Two Q penetrations either side of an async impl's await, in ONE form. This is the
+    // regression guard for the substrate constraint read-guard.ts's header names: MobX's
+    // own `Reaction` tracking is stack-synchronous and does NOT survive an await, so an
+    // implementation that armed by ambient auto-tracking would lose one of these. Arming
+    // is an explicit call at the penetration, which is why both land.
+    const { bus, spies } = await runRx('(string-append (read-slow "D" "a") (read "D" "b"))');
+    expect(bus.observed).toEqual(new Set([key("test", "D", "a"), key("test", "D", "b")]));
+    expect(spies["read-slow"]).toBe(1);
+    expect(spies.read).toBe(1);
+    // Attributed to THIS run only — a second bus that never saw the run stays empty.
+    const other = new MemoryPathAtomBus();
+    expect(other.observed.size).toBe(0);
   });
 
   it("P-RX-CACHE-HIT — second read still observed (path fns precede cache)", async () => {
@@ -407,7 +455,55 @@ describe("X1 arming negatives (5a)", () => {
   });
 });
 
-describe("X1 — ProxyPathAtomBus smoke (MobX optional; memory proxy)", () => {
+// ── RX-UNIT: who owns the run-commit clock ───────────────────────────────────
+
+describe("X1 — the commit clock belongs to the run, not to the call (RX-UNIT)", () => {
+  it("an exec over a CALLER-OWNED runCtx does not fire the clock", async () => {
+    // `require`'s module-eval loop threads the requiring run's LIVE runCtx into a nested
+    // exec, and a REPL pass reuses one runCtx across calls. Both are forms INSIDE another
+    // run — RX-UNIT says the unit is the whole top-level exec, so neither may flush the
+    // parent's staged effects. Staging still happened; only the clock is withheld.
+    const bus = new MemoryPathAtomBus();
+    const spies: SpyMap = {};
+    const { cap, pathLog } = makePathCap(spies);
+    const runCtx = new RunContext({ pathAtoms: bus, resourcePaths: pathLog });
+
+    await exec('(write "D" "id")', { capabilities: [cap], runCtx });
+    expect(spies.write).toBe(1);
+    expect(bus.invalidated.size).toBe(0); // staged, not flushed
+
+    // The runCtx's owner fires the clock; the staged effect lands then, and only then.
+    bus.commitRun();
+    expect(bus.invalidated).toEqual(new Set([key("test", "D", "id")]));
+  });
+
+  it("A-CTRL — the same program on an exec-owned runCtx does fire it", async () => {
+    const { bus } = await runRx('(write "D" "id")');
+    expect(bus.invalidated).toEqual(new Set([key("test", "D", "id")]));
+  });
+
+  it("a nested exec's throw does not abandon the outer run's staged effects", async () => {
+    const bus = new MemoryPathAtomBus();
+    const spies: SpyMap = {};
+    const { cap, pathLog } = makePathCap(spies);
+    const runCtx = new RunContext({ pathAtoms: bus, resourcePaths: pathLog });
+
+    await exec('(write "D" "id")', { capabilities: [cap], runCtx });
+    await expect(
+      exec("(no-such-verb)", { capabilities: [cap], runCtx }),
+    ).rejects.toThrow(/unbound variable/i);
+
+    // The outer run has not ended; its staged write survives the inner failure.
+    bus.commitRun();
+    expect(bus.invalidated).toEqual(new Set([key("test", "D", "id")]));
+  });
+});
+
+// The MobX-backed twin of this smoke is NOT here: the frozen suite puts any
+// MobX-proxy spike in `__experiments__/` and never a gate (SUITE §Phase gates), and
+// mobx is an optional peer — a gate that imports it is red on every install that
+// declines the peer. See src/__experiments__/mobx-atom-proxy.test.ts.
+describe("X1 — ProxyPathAtomBus smoke (memory proxy; no MobX)", () => {
   it("ProxyPathAtomBus observes via AtomProxy (no MobX import in this file)", async () => {
     const { createMemoryAtomProxy, ProxyPathAtomBus } = await import("../path-atom-bus.js");
     const proxy = createMemoryAtomProxy();
@@ -423,14 +519,19 @@ describe("X1 — ProxyPathAtomBus smoke (MobX optional; memory proxy)", () => {
     expect(proxy.stats.get(k)?.changed).toBeGreaterThanOrEqual(1);
   });
 
-  it("createMobxAtomProxy builds a live ProxyPathAtomBus (optional peer)", async () => {
-    const { createMobxAtomProxy } = await import("../mobx-atom-proxy.js");
-    const { ProxyPathAtomBus } = await import("../path-atom-bus.js");
-    const bus = new ProxyPathAtomBus(createMobxAtomProxy());
-    const spies: SpyMap = {};
-    const { cap } = makePathCap(spies);
-    await exec('(read "D" "id")', { capabilities: [cap], pathAtoms: bus });
-    // Behavioral only — no MobX API asserted
-    expect(spies.read).toBe(1);
+  it("invalidate matches SEGMENT-WISE, not by string prefix on keys", async () => {
+    const { createMemoryAtomProxy, ProxyPathAtomBus } = await import("../path-atom-bus.js");
+    const proxy = createMemoryAtomProxy();
+    const bus = new ProxyPathAtomBus(proxy);
+    // Non-string segments: key("db",1) IS a string prefix of key("db",12) while
+    // pathsOverlap is false (X-KEY-NONSTRING). A key-prefix bus wakes the wrong atom.
+    const sub = ["db", 12] as unknown as ResourcePath;
+    const write = ["db", 1] as unknown as ResourcePath;
+    bus.observe([sub]);
+    bus.invalidate([write]);
+    expect(proxy.stats.get(atomKey(sub))?.changed ?? 0).toBe(0);
+    // Control, same bus: the genuine segment-wise parent DOES wake it.
+    bus.invalidate([["db"] as unknown as ResourcePath]);
+    expect(proxy.stats.get(atomKey(sub))?.changed).toBeGreaterThanOrEqual(1);
   });
 });

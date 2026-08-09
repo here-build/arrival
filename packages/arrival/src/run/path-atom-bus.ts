@@ -162,23 +162,27 @@ export class MemoryPathAtomBus implements PathAtomBus {
  * only owns path-keyed cells.
  */
 export class ProxyPathAtomBus implements PathAtomBus {
-  private readonly atoms = new Map<string, ProxyAtom>();
+  /** key → its cell AND the path tuple the key stands for. The tuple is retained
+   *  deliberately: the key is the atom's IDENTITY (wire form), the tuple is its
+   *  SEMANTICS. Matching reads the tuple — see {@link invalidate}. */
+  private readonly atoms = new Map<string, { atom: ProxyAtom; path: ResourcePath }>();
   private staged: ResourcePath[] = [];
 
   constructor(private readonly proxy: AtomProxy) {}
 
-  private cell(key: string): ProxyAtom {
-    let a = this.atoms.get(key);
-    if (a === undefined) {
-      a = this.proxy.atom(key);
-      this.atoms.set(key, a);
+  private cell(path: ResourcePath): ProxyAtom {
+    const key = atomKey(path);
+    let entry = this.atoms.get(key);
+    if (entry === undefined) {
+      entry = { atom: this.proxy.atom(key), path };
+      this.atoms.set(key, entry);
     }
-    return a;
+    return entry.atom;
   }
 
   observe(paths: readonly ResourcePath[]): void {
     for (const p of paths) {
-      if (p.length > 0) this.cell(atomKey(p)).reportObserved();
+      if (p.length > 0) this.cell(p).reportObserved();
     }
   }
 
@@ -200,16 +204,22 @@ export class ProxyPathAtomBus implements PathAtomBus {
   }
 
   invalidate(paths: readonly ResourcePath[]): void {
-    // Notify every known atom whose path key is prefix-related to a write key.
-    // Unknown keys still mint a cell so future observers see a changed epoch.
+    // Matching is SEGMENT-WISE (`pathsOverlap`) — the same relation as the CQS door,
+    // never string-prefix on the serialized keys. The two agree only over string
+    // segments (F-RX2); on a non-string segment `["db",1]`'s key IS a string prefix of
+    // `["db",12]`'s while the paths do not overlap (X-KEY-NONSTRING). Keying by string
+    // and matching by string would silently over-invalidate exactly there, and would
+    // make correctness depend on an unenforced `strictCQSstrings: true` (RX-STRICT).
+    // `keysArePrefixRelated` stays exported as the F-RX2 bridge the suite asserts — a
+    // property of the encoding, deliberately not the mechanism.
     for (const p of paths) {
       if (p.length === 0) continue;
+      // Unknown write paths still mint a cell so a later observer of the same key
+      // shares the atom that already carries this changed epoch.
+      this.cell(p).reportChanged();
       const writeKey = atomKey(p);
-      this.cell(writeKey).reportChanged();
-      for (const [key, atom] of this.atoms) {
-        if (key !== writeKey && keysArePrefixRelated(key, writeKey)) {
-          atom.reportChanged();
-        }
+      for (const [key, entry] of this.atoms) {
+        if (key !== writeKey && pathsOverlap(entry.path, p)) entry.atom.reportChanged();
       }
     }
   }

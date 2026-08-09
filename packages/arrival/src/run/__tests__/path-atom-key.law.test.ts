@@ -148,6 +148,36 @@ describe("X0 — path-atom key algebra (5a)", () => {
     );
   });
 
+  it("F-RX1/F-RX2 over MIXED segments — soundness survives, completeness does not", () => {
+    // 5a checklist #5: the generators must include non-string segments, because that is
+    // where the string bridge stops being an equivalence. Over mixed segments only the
+    // FORWARD direction is a theorem — `pathsOverlap ⟹ keys prefix-related`. The converse
+    // is false (X-KEY-NONSTRING), which is the whole reason RX-STRICT exists.
+    const mixedSeg = fc.oneof(
+      fc.string({ minLength: 1, maxLength: 4 }),
+      fc.integer({ min: 0, max: 200 }),
+    );
+    const mixedPath = fc.array(mixedSeg, { minLength: 1, maxLength: 4 });
+    fc.assert(
+      fc.property(mixedPath, mixedPath, (rawA, rawB) => {
+        const a = rawA as unknown as ResourcePath;
+        const b = rawB as unknown as ResourcePath;
+        // F-RX1 — stability and injectivity hold regardless of segment type.
+        expect(atomKey(a)).toBe(atomKey([...a] as unknown as ResourcePath));
+        if (atomKey(a) === atomKey(b)) expect(a).toEqual(b);
+        // F-RX2, forward half only.
+        if (pathsOverlap(a, b)) {
+          expect(keysArePrefixRelated(atomKey(a), atomKey(b))).toBe(true);
+        }
+      }),
+    );
+    // The converse is NOT a theorem — one witness is enough to keep it un-promoted.
+    const sub = ["db", 12] as unknown as ResourcePath;
+    const write = ["db", 1] as unknown as ResourcePath;
+    expect(keysArePrefixRelated(atomKey(write), atomKey(sub))).toBe(true);
+    expect(pathsOverlap(write, sub)).toBe(false);
+  });
+
   it("N-RX-NO-INLANG — derive/react/latest are unbound (bare eval, no reactivity infra)", async () => {
     const { exec } = await import("../../eval/generator-exec.js");
     for (const form of ["derive", "react", "latest"]) {
