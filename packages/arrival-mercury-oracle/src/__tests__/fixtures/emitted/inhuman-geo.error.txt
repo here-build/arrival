@@ -1,0 +1,1 @@
+frame door: `abs`, `join`, `min`, `number->string`, `reverse` are not supported by the runtime module yet — no manifest export exists. Add the shim + its RUNTIME_MANIFEST row in src/runtime/runtime-manifest.ts (and stage0.ts body when source is stage0).

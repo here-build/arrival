@@ -1,0 +1,196 @@
+{
+  "goldenEpoch": 1,
+  "row": "member-assoc",
+  "source": "(list (member 2 (list 1 2 3)) (assoc 2 (list (list 1 \"a\") (list 2 \"b\"))))\n",
+  "virtualTs": "__arr.list(member(2, __arr.list(1, 2, 3)), assoc(2, __arr.list(__arr.list(1, \"a\"), __arr.list(2, \"b\"))));\nexport {};\n",
+  "facts": [
+    {
+      "span": [
+        0,
+        73
+      ],
+      "text": "(list (member 2 (list 1 2 3)) (assoc 2 (list (list 1 \"a\") (list 2 \"b\"))))",
+      "kind": "App",
+      "fact": {
+        "list": true
+      }
+    },
+    {
+      "span": [
+        6,
+        29
+      ],
+      "text": "(member 2 (list 1 2 3))",
+      "kind": "App",
+      "hole": "any-or-unknown"
+    },
+    {
+      "span": [
+        14,
+        15
+      ],
+      "text": "2",
+      "kind": "Lit",
+      "fact": {
+        "numeric": true
+      }
+    },
+    {
+      "span": [
+        16,
+        28
+      ],
+      "text": "(list 1 2 3)",
+      "kind": "App",
+      "fact": {
+        "list": true,
+        "elementFacts": {
+          "numeric": true
+        }
+      }
+    },
+    {
+      "span": [
+        22,
+        23
+      ],
+      "text": "1",
+      "kind": "Lit",
+      "fact": {
+        "numeric": true
+      }
+    },
+    {
+      "span": [
+        24,
+        25
+      ],
+      "text": "2",
+      "kind": "Lit",
+      "fact": {
+        "numeric": true
+      }
+    },
+    {
+      "span": [
+        26,
+        27
+      ],
+      "text": "3",
+      "kind": "Lit",
+      "fact": {
+        "numeric": true
+      }
+    },
+    {
+      "span": [
+        30,
+        72
+      ],
+      "text": "(assoc 2 (list (list 1 \"a\") (list 2 \"b\")))",
+      "kind": "App",
+      "hole": "any-or-unknown"
+    },
+    {
+      "span": [
+        37,
+        38
+      ],
+      "text": "2",
+      "kind": "Lit",
+      "fact": {
+        "numeric": true
+      }
+    },
+    {
+      "span": [
+        39,
+        71
+      ],
+      "text": "(list (list 1 \"a\") (list 2 \"b\"))",
+      "kind": "App",
+      "fact": {
+        "list": true,
+        "elementFacts": {
+          "list": true,
+          "elementFacts": {
+            "numeric": true
+          }
+        }
+      }
+    },
+    {
+      "span": [
+        45,
+        57
+      ],
+      "text": "(list 1 \"a\")",
+      "kind": "App",
+      "fact": {
+        "list": true,
+        "elementFacts": {
+          "numeric": true
+        }
+      }
+    },
+    {
+      "span": [
+        51,
+        52
+      ],
+      "text": "1",
+      "kind": "Lit",
+      "fact": {
+        "numeric": true
+      }
+    },
+    {
+      "span": [
+        53,
+        56
+      ],
+      "text": "\"a\"",
+      "kind": "Lit",
+      "fact": {
+        "stringy": true
+      }
+    },
+    {
+      "span": [
+        58,
+        70
+      ],
+      "text": "(list 2 \"b\")",
+      "kind": "App",
+      "fact": {
+        "list": true,
+        "elementFacts": {
+          "numeric": true
+        }
+      }
+    },
+    {
+      "span": [
+        64,
+        65
+      ],
+      "text": "2",
+      "kind": "Lit",
+      "fact": {
+        "numeric": true
+      }
+    },
+    {
+      "span": [
+        66,
+        69
+      ],
+      "text": "\"b\"",
+      "kind": "Lit",
+      "fact": {
+        "stringy": true
+      }
+    }
+  ],
+  "residual": "list(member(2, [1, 2, 3]), assoc(2, [[1, \"a\"], [2, \"b\"]]));\n"
+}

@@ -1,0 +1,76 @@
+{
+  "name": "@inhuman.tools/mcp-typescript-lsp",
+  "version": "0.9.0",
+  "description": "MCP server wrapping TypeScript Language Server with AI-native s-expression primitives — built as an arrival-mcp McpTool",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "typescript",
+    "language-server",
+    "code-intelligence",
+    "s-expression"
+  ],
+  "homepage": "https://github.com/here-build/arrival#readme",
+  "bugs": {
+    "url": "https://github.com/here-build/arrival/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/here-build/arrival.git",
+    "directory": "packages/mcp-typescript-lsp"
+  },
+  "license": "FSL-1.1-MIT",
+  "author": "here.build",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "mcp-typescript-lsp": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "src",
+    "!**/__tests__",
+    "!**/__research__",
+    "!**/__benchmarks__",
+    "!**/__custdev__",
+    "!**/__visual__",
+    "!**/*.test.*",
+    "!**/*.stories.*"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "start": "node dist/cli.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@inhuman.tools/arrival-mcp": "workspace:^",
+    "@inhuman.tools/arrival-serializer": "workspace:^",
+    "@modelcontextprotocol/sdk": "1.26.0",
+    "typescript": "6.0.2",
+    "vscode-languageserver": "9.0.1",
+    "vscode-languageserver-protocol": "3.17.5",
+    "vscode-languageserver-textdocument": "1.0.11",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@here.build/eslint-configs": "0.9.0",
+    "@here.build/tsconfig": "0.9.0",
+    "@types/node": "24.0.0",
+    "eslint": "9.39.2",
+    "vitest": "4.1.0"
+  }
+}

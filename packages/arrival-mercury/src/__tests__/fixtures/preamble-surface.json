@@ -1,0 +1,31 @@
+{
+  "goldenEpoch": 1,
+  "totalTopLevelForms": 9,
+  "rungCounts": {
+    "rule": 23,
+    "shim": 3,
+    "door": 7
+  },
+  "doors": [
+    {
+      "symbol": "@",
+      "code": "unsupported-form/unresolved-identifier",
+      "detail": "`@` is not lexically bound and is not a registry symbol."
+    },
+    {
+      "symbol": "@keys",
+      "code": "unsupported-form/unresolved-identifier",
+      "detail": "`@keys` is not lexically bound and is not a registry symbol."
+    },
+    {
+      "symbol": "reduce",
+      "code": "unsupported-form/unresolved-identifier",
+      "detail": "`reduce` is not lexically bound and is not a registry symbol."
+    },
+    {
+      "symbol": "vector->list",
+      "code": "unsupported-form/unresolved-identifier",
+      "detail": "`vector->list` is not lexically bound and is not a registry symbol."
+    }
+  ]
+}

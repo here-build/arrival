@@ -1,0 +1,67 @@
+{
+  "goldenEpoch": 1,
+  "row": "or-in-define",
+  "source": "(define (pick a b) (or a b))\n(pick 0 9)",
+  "virtualTs": "const pick = (a, b) => __arr.or(a, b);\npick(0, 9);\nexport {};\n",
+  "facts": [
+    {
+      "span": [
+        19,
+        27
+      ],
+      "text": "(or a b)",
+      "kind": "Or",
+      "hole": "any-or-unknown"
+    },
+    {
+      "span": [
+        23,
+        24
+      ],
+      "text": "a",
+      "kind": "Ref",
+      "hole": "any-or-unknown"
+    },
+    {
+      "span": [
+        25,
+        26
+      ],
+      "text": "b",
+      "kind": "Ref",
+      "hole": "any-or-unknown"
+    },
+    {
+      "span": [
+        29,
+        39
+      ],
+      "text": "(pick 0 9)",
+      "kind": "App",
+      "hole": "any-or-unknown"
+    },
+    {
+      "span": [
+        35,
+        36
+      ],
+      "text": "0",
+      "kind": "Lit",
+      "fact": {
+        "numeric": true
+      }
+    },
+    {
+      "span": [
+        37,
+        38
+      ],
+      "text": "9",
+      "kind": "Lit",
+      "fact": {
+        "numeric": true
+      }
+    }
+  ],
+  "residual": "function pick(a, b) {\n    const __or = a;\n    return __or !== false ? __or : b;\n}\npick(0, 9);\n"
+}

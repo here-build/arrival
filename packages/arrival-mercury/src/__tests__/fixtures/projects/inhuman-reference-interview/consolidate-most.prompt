@@ -1,0 +1,17 @@
+---
+# structurer role (qwen) — step 1 of the consolidation loop. Over the REMAINING
+# pooled dealbreakers, name the single underlying problem that appears in the
+# most different forms. Output is the generalized name only; gathering its
+# variants is the next call.
+output:
+  name: string, a short generalized name for the single most-recurring underlying problem
+---
+{{role "system"}}
+You are a precise analyst clustering a list of complaints. You find the ONE underlying problem that is stated, in different words, more often than any other in the list. You return only its generalized name — no commentary.
+
+{{role "user"}}
+Here is a list of missing-feature / dealbreaker complaints, gathered from many different people:
+
+{{items}}
+
+Several of these are the SAME underlying problem described in different words. Identify the single underlying problem that is named — in various forms — MOST often across this list, and give it one short generalized name.

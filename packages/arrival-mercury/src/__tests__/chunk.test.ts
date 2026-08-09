@@ -1,0 +1,442 @@
+/**
+ * The hybrid tree's hard side — E2 gate tests (engine plan §1 S1/S2, §2 E2;
+ * docs/working-proposals/arrival-mercury/e2-substrate-evidence.md). Three
+ * layers, matching the substrate's own seams:
+ *
+ *  - `residual/render.ts`'s chunk mechanics — verbatim vs substituted
+ *    printing, the mutual-recursion rule ("never assume chunks are leaves"),
+ *    and the expression/statement duality — exercised directly against
+ *    hand-built `ChunkExpr`/`ChunkStmt` values (mirrors residual-render.test.ts's
+ *    own per-constructor style).
+ *  - `walker/walk.ts`'s ingestion fold (S2) — quoted data and `list` calls
+ *    folding to chunks, the call-free slot-safety gate (`isCallFree`)
+ *    aborting exactly where it should, and `runtimeRefsOf` seeing through a
+ *    slot for the import census (mirrors walker.test.ts's own hand-rolled
+ *    registry style).
+ *  - Oracle agreement over the real session — the gate this wave answers to
+ *    (values byte-strict, never bytes).
+ *
+ *  The walker-layer describes (quoted-data folding, the three `list`-folding
+ *  topics, the import census) are ONE protocol table (`CHUNK_CASES`):
+ *  `{ topic, name, src, golden?, refs? }` — `golden` rows assert
+ *  `emit(src) === golden` byte-for-byte; `refs` rows assert the
+ *  `runtimeRefsOf(compile(src))` census with `toEqual`. The topical describes
+ *  are generated from the table in first-seen order.
+ */
+import ts from "typescript";
+import { describe, expect, it } from "vitest";
+
+import type { EmitRule } from "@inhuman.tools/arrival/emit";
+
+import {
+  asyncnessOf,
+  classify,
+  desugar,
+  materializeAsyncness,
+  parseSexprs,
+  runtimeRefsOf,
+  walk,
+} from "../index.js";
+import type { ClassifyResult, EmitRegistry, EmitRegistryRow, WalkOptions } from "../index.js";
+import { arrayChunkAst, type ChunkElement } from "../residual/chunk.js";
+import { render } from "../residual/render.js";
+import type { CompilationUnit, R } from "../residual/types.js";
+import {
+  Arrow,
+  Await,
+  Binding,
+  Block,
+  Call,
+  ChunkExpr,
+  ChunkStmt,
+  Const,
+  ConstDecl,
+  Index,
+  Lit,
+  Ref,
+  Return,
+  RuntimeRef,
+} from "../residual/types.js";
+
+const one = (node: R) => render({ decls: [], body: [node] });
+
+const x = Binding("x");
+const p = Binding("p");
+
+// ─── residual/render.ts — chunk mechanics ─────────────────────────────────────────────
+
+describe("ChunkExpr/ChunkStmt rendering (E2, engine plan §2 E2)", () => {
+  it("Phase 1 — no slots: prints ast verbatim", () => {
+    const chunk = ChunkExpr(arrayChunkAst([{ kind: "lit", value: 1 }, { kind: "lit", value: 2 }]));
+    expect(one(chunk)).toBe("[1, 2];\n");
+  });
+
+  it("an empty (but present) slots Map normalizes to the Phase-1 shape", () => {
+    const chunk = ChunkExpr(arrayChunkAst([{ kind: "lit", value: 1 }]), new Map());
+    expect(one(chunk)).toBe("[1];\n");
+  });
+
+  it("Phase 2 — one slot: precomputes then substitutes by text match", () => {
+    const chunk = ChunkExpr(
+      arrayChunkAst([{ kind: "lit", value: 1 }, { kind: "slot", id: "__slot0" }]),
+      new Map<string, R>([["__slot0", Ref(x)]]),
+    );
+    expect(one(chunk)).toBe("[1, x];\n");
+  });
+
+  it("two slots substitute independently, by id, not position", () => {
+    const chunk = ChunkExpr(
+      arrayChunkAst([
+        { kind: "slot", id: "__slot0" },
+        { kind: "lit", value: "mid" },
+        { kind: "slot", id: "__slot1" },
+      ]),
+      new Map<string, R>([
+        ["__slot0", Ref(x)],
+        ["__slot1", Lit(9)],
+      ]),
+    );
+    expect(one(chunk)).toBe('[x, "mid", 9];\n');
+  });
+
+  it("the \"ast\" element kind splices an already-built AST inline — nested literal, no slot", () => {
+    const inner = arrayChunkAst([{ kind: "lit", value: 1 }, { kind: "lit", value: 2 }]);
+    const outer = ChunkExpr(arrayChunkAst([{ kind: "ast", node: inner }, { kind: "lit", value: 3 }]));
+    expect(one(outer)).toBe("[[1, 2], 3];\n");
+  });
+
+  it("mutual recursion: a slot whose fluid value is ITSELF a chunk recurses through the same dispatch", () => {
+    const inner = ChunkExpr(arrayChunkAst([{ kind: "lit", value: 9 }]));
+    const outer = ChunkExpr(
+      arrayChunkAst([{ kind: "lit", value: 1 }, { kind: "slot", id: "__slot0" }]),
+      new Map<string, R>([["__slot0", inner]]),
+    );
+    expect(one(outer)).toBe("[1, [9]];\n");
+  });
+
+  it("a slot's fluid value needing an Await renders correctly (insideAsync threaded through)", () => {
+    const chunk = ChunkExpr(
+      arrayChunkAst([{ kind: "slot", id: "__slot0" }]),
+      new Map<string, R>([["__slot0", Await(Ref(p))]]),
+    );
+    expect(one(Arrow([], Block([Return(chunk)]), true))).toBe("async () => {\n    return [await p];\n};\n");
+  });
+
+  it("the original ast is never mutated — printing a substituted chunk twice is stable (§4.7 determinism)", () => {
+    const chunk = ChunkExpr(
+      arrayChunkAst([{ kind: "slot", id: "__slot0" }]),
+      new Map<string, R>([["__slot0", Ref(x)]]),
+    );
+    expect(one(chunk)).toBe(one(chunk));
+  });
+
+  it("ChunkExpr reaching STATEMENT position renders as a bare expression statement", () => {
+    const chunk = ChunkExpr(arrayChunkAst([{ kind: "lit", value: 1 }]));
+    expect(render({ decls: [], body: [Const(x, chunk)] })).toBe("const x = [1];\n");
+    // Statement position, value discarded — the position dispatch this wave's
+    // duality rule covers (renderStmt's explicit ChunkExpr case).
+    const asStmt: CompilationUnit = { decls: [], body: [chunk] };
+    expect(render(asStmt)).toBe("[1];\n");
+  });
+});
+
+describe("ChunkStmt duality — no fold site mints one this wave, but the substrate is built out fully", () => {
+  // No production fold site builds a ChunkStmt yet (S2's ingestion fold only
+  // ever produces expressions — see chunk.ts's own header) — a genuine
+  // ts.Statement, hand-built here, is what a FUTURE fold site (or E2b's
+  // rules-return-chunks) would hand to the ChunkStmt constructor.
+  const throwStmt = ts.factory.createThrowStatement(
+    ts.factory.createNewExpression(ts.factory.createIdentifier("Error"), undefined, [
+      ts.factory.createStringLiteral("boom"),
+    ]),
+  );
+
+  it("at STATEMENT position, prints ast verbatim as a statement", () => {
+    const stmt = ChunkStmt(throwStmt);
+    expect(render({ decls: [], body: [stmt] })).toBe('throw new Error("boom");\n');
+  });
+
+  it("reaching EXPRESSION position resolves through the SAME IIFE-vs-block rule Block uses", () => {
+    const stmt = ChunkStmt(throwStmt);
+    expect(one(Call(Ref(x), [stmt]))).toBe('x((() => {\n    throw new Error("boom");\n})());\n');
+  });
+});
+
+// ─── walker/walk.ts — the ingestion fold (S2) ─────────────────────────────────────────
+
+const row = (symbol: string, over: Partial<EmitRegistryRow> = {}): EmitRegistryRow => ({
+  symbol,
+  capability: "«test»",
+  kind: "rosetta",
+  refPolicy: "shim",
+  ...over,
+});
+const registryOf = (...rows: EmitRegistryRow[]): EmitRegistry => {
+  const m = new Map(rows.map((r) => [r.symbol, r]));
+  return { lookup: (n) => m.get(n), names: new Set(m.keys()) };
+};
+
+/** `car` folds INLINE to `Index` (no RuntimeRef at all in call position) — the
+ *  same shape the real registry's `carRule` produces, needed so a folded
+ *  `list` argument built from `(car x)` is genuinely call-free. */
+const carRule: EmitRule<R> = {
+  call: ([xs], ctx) => (xs === undefined ? ctx.door("car wants an argument") : Index(xs, Lit(0))),
+};
+
+const testRegistry = registryOf(
+  row("list"), // no `.emit` → rung 3, exactly the real ambient's "list" row
+  row("car", { emit: carRule }),
+  row("reverse"), // no emit rule → rung 3 shim, the "contains a real Call" probe
+);
+
+const cf = (src: string): ClassifyResult => classify(desugar(parseSexprs(src)));
+const compile = (src: string, over: Partial<WalkOptions> = {}): CompilationUnit =>
+  walk(cf(src), { registry: testRegistry, register: "run", ...over });
+const emit = (src: string, over: Partial<WalkOptions> = {}): string => render(compile(src, over));
+
+/** One walker-layer protocol row: `golden` present → `expect(emit(src)).toBe(golden)`;
+ *  `refs` present → `expect(runtimeRefsOf(compile(src))).toEqual(new Set(refs))`.
+ *  Exactly one of the two is set on any row. */
+interface ChunkCase {
+  /** The topical describe this row lands in (describes are generated in first-seen order). */
+  readonly topic: string;
+  /** The behavior claim — becomes the it name. */
+  readonly name: string;
+  readonly src: string;
+  /** The exact bytes `emit(src)` must render — the emit-golden rows. */
+  readonly golden?: string;
+  /** The import census `runtimeRefsOf(compile(src))` must equal — the census rows. */
+  readonly refs?: readonly string[];
+}
+
+const CHUNK_CASES: readonly ChunkCase[] = [
+  {
+    topic: "quoted-data folding (always slot-free)",
+    name: "a quoted list of constants folds to a literal array — byte-identical to the old ArrayLit path",
+    src: `'(1 2 3)`,
+    golden: `[1, 2, 3];\n`,
+  },
+  {
+    topic: "quoted-data folding (always slot-free)",
+    name: "nested quoted lists fold to ONE genuinely nested array (the \"ast\" splice, not a slot)",
+    src: `'(1 (2 3) "a")`,
+    golden: `[1, [2, 3], "a"];\n`,
+  },
+  {
+    topic: "quoted-data folding (always slot-free)",
+    name: "quoted symbols intern as strings (representation law §2.1), inside a nested list too",
+    src: `'(a b (c))`,
+    golden: `["a", "b", ["c"]];\n`,
+  },
+  {
+    topic: "quoted-data folding (always slot-free)",
+    name: "the empty quoted list still folds to []",
+    src: `'()`,
+    golden: `[];\n`,
+  },
+
+  {
+    topic: "`list` call folding — literal data (S2's named example)",
+    name: "a fully-literal `list` call folds to an array literal — the stage-0 shim never appears",
+    src: `(list 1 2 3)`,
+    golden: `[1, 2, 3];\n`,
+  },
+  {
+    topic: "`list` call folding — literal data (S2's named example)",
+    name: "zero-argument `(list)` folds to []",
+    src: `(list)`,
+    golden: `[];\n`,
+  },
+  {
+    topic: "`list` call folding — literal data (S2's named example)",
+    name: "nested `list` calls fold to one genuinely nested array (recursive ast-splice)",
+    src: `(list (list 1 2) (list 3 4))`,
+    golden: `[[1, 2], [3, 4]];\n`,
+  },
+
+  {
+    topic: "`list` call folding — mixed literal/variable (slots at variable positions)",
+    name: "a bound variable argument mints a slot",
+    src: `(define (f x) (list 1 x 2))`,
+    golden: `function f(x) {\n    return [1, x, 2];\n}\n`,
+  },
+  // The Index(x, 0) occurrence lives INSIDE the slot; the census counts it
+  // (chunks are never leaves), so the param destructures and the
+  // substitution reaches through the slot: `[head]`, not a stale `x[0]`
+  // referencing a parameter the census thought was never chain-accessed.
+  {
+    topic: "`list` call folding — mixed literal/variable (slots at variable positions)",
+    name: "a call-free derived expression (car folds inline to Index) is slot-safe — and the destructure census sees it there",
+    src: `(define (f x) (list (car x) 2))`,
+    golden: `function f([head]) {\n    return [head, 2];\n}\n`,
+  },
+  {
+    topic: "`list` call folding — mixed literal/variable (slots at variable positions)",
+    name: "a bare registry symbol used as a VALUE (never called) is slot-safe",
+    src: `(define (f) (list 1 car 2))`,
+    golden: `function f() {\n    return [1, car, 2];\n}\n`,
+  },
+
+  {
+    topic: "`list` call folding — the conservative abort gate (isCallFree)",
+    name: "an argument containing a real Call aborts the WHOLE fold — falls back to the shim, unchanged",
+    src: `(define (f x) (list 1 (reverse x) 2))`,
+    golden: `function f(x) {\n    return list(1, reverse(x), 2);\n}\n`,
+  },
+  {
+    topic: "`list` call folding — the conservative abort gate (isCallFree)",
+    name: "an embedded lambda (Arrow) aborts the fold — computation, not data (fold-scope policy; see isCallFree's doc)",
+    src: `(list 1 (lambda (y) y) 2)`,
+    golden: `list(1, y => y, 2);\n`,
+  },
+  {
+    topic: "`list` call folding — the conservative abort gate (isCallFree)",
+    name: "kwargs present aborts the fold — `list` taking a trailing options object is not the folded shape",
+    src: `(list 1 :a 2)`,
+    golden: `list(1, { a: 2 });\n`,
+  },
+  // Mirrors member-assoc.ts's real committed shape: the outer `list` (wrapping
+  // `reverse`-shaped calls) does not fold, but a NESTED literal `list` used as
+  // one of THOSE calls' own arguments still folds independently.
+  {
+    topic: "`list` call folding — the conservative abort gate (isCallFree)",
+    name: "folding is per-call-site: an outer call wrapping a Call-shaped argument still folds ITS OWN literal siblings/nested list arguments",
+    src: `(define (f x) (list (reverse (list 1 2)) x))`,
+    golden: `function f(x) {\n    return list(reverse([1, 2]), x);\n}\n`,
+  },
+
+  {
+    topic: "import census sees through a slot (runtimeRefsOf, walker/walk.ts's own copy)",
+    name: "a `list` call fully literal needs NO import at all",
+    src: `(list 1 2 3)`,
+    refs: [],
+  },
+  {
+    topic: "import census sees through a slot (runtimeRefsOf, walker/walk.ts's own copy)",
+    name: "a bare registry symbol bridged through a slot is still found for the import census",
+    src: `(define (f) (list 1 car 2))`,
+    refs: ["car"],
+  },
+  {
+    topic: "import census sees through a slot (runtimeRefsOf, walker/walk.ts's own copy)",
+    name: "an aborted fold's Call is found the ordinary way (list itself needed too)",
+    src: `(define (f x) (list 1 (reverse x) 2))`,
+    refs: ["list", "reverse"],
+  },
+];
+
+const CHUNK_TOPICS = [...new Set(CHUNK_CASES.map((c) => c.topic))];
+for (const topic of CHUNK_TOPICS) {
+  describe(topic, () => {
+    for (const c of CHUNK_CASES.filter((x) => x.topic === topic)) {
+      it(c.name, () => {
+        if (c.refs !== undefined) {
+          expect(runtimeRefsOf(compile(c.src))).toEqual(new Set(c.refs));
+        } else {
+          expect(emit(c.src)).toBe(c.golden);
+        }
+      });
+    }
+  });
+}
+
+describe("chunks are never leaves — slots are every walker's fluid re-entry points (mercury-ir.md's mutual-recursion rule)", () => {
+  // The regression net for the review correction: an earlier draft treated a
+  // chunk as a total leaf in the generic walkers, "safe" only because
+  // `isCallFree` kept computation out of every fold-site slot. E2b's
+  // rule-minted chunks won't pass through that gate, so the walkers must not
+  // lean on it — each test below FAILS under the leaf treatment.
+
+  it("REGRESSION: a seeded Call inside a slot flips the enclosing arrow async — the Await lands INSIDE the slot's rendered form", () => {
+    // Hand-built: `const f = () => [1, ⟨(infer "m" "p")⟩]` with the seeded
+    // call living in a chunk slot. Under leaf childrenOf the collection
+    // pre-pass never sees the RuntimeRef → hasAsync stays false → the arrow
+    // never flips → under-await, exactly the Law-W violation class the
+    // correction names.
+    const chunk = ChunkExpr(
+      arrayChunkAst([
+        { kind: "lit", value: 1 },
+        { kind: "slot", id: "__slot0" },
+      ]),
+      new Map<string, R>([["__slot0", Call(RuntimeRef("infer"), [Lit("m"), Lit("p")])]]),
+    );
+    const unit: CompilationUnit = { decls: [ConstDecl(Binding("f"), Arrow([], chunk))], body: [] };
+    const facts = asyncnessOf(unit, new Set(["infer"]));
+    expect(facts.hasAsync).toBe(true); // the seed is FOUND through the slot
+    // Round trip: the materialized rewrite mints the Await inside the rebuilt
+    // slot map, the arrow flips async, and render substitutes the awaited
+    // slot back into the verbatim ast.
+    expect(render(materializeAsyncness(facts))).toBe('const f = async () => [1, await infer("m", "p")];\n');
+  });
+
+  it("REGRESSION: render's containsAwait sees a slot's Await — a Block holding an awaited-slot chunk becomes an ASYNC IIFE", () => {
+    const chunk = ChunkExpr(
+      arrayChunkAst([{ kind: "slot", id: "__slot0" }]),
+      new Map<string, R>([["__slot0", Await(Ref(p))]]),
+    );
+    // Module top level is TLA-legal, so the async IIFE is awaited inline.
+    // Under leaf rChildren, containsAwait answers false → a SYNC IIFE whose
+    // body then hits the Law-W backstop throw ("Await under a non-async
+    // function boundary") instead of this clean shape.
+    expect(one(Const(x, Block([Return(chunk)])))).toBe(
+      "const x = await (async () => {\n    return [await p];\n})();\n",
+    );
+  });
+
+  it("REGRESSION: a param occurrence INSIDE a slot is visible to the destructure census — no undeclared-name emit", () => {
+    // `(car pair)` folds inline to `Index(pair, 0)` — data-like, so the folded
+    // `(list (car pair) 9)` carries the param's occurrence INSIDE a chunk
+    // slot. Under leaf childrenOf the census missed it: destructure fired on
+    // the OUTER occurrence alone and the slot kept referencing the
+    // now-undeclared `pair` — broken emitted code, reachable TODAY (no E2b
+    // needed). Seeing through the slot counts both occurrences, and the
+    // materialize substitution reaches the slot too. (`head` — the designed
+    // maxIndex-0 destructure name, naming/allocate.ts.)
+    expect(emit(`(define (f pair) (reverse (car pair) (list (car pair) 9)))`)).toBe(
+      "function f([head]) {\n    return reverse(head, [head, 9]);\n}\n",
+    );
+  });
+});
+
+// ─── E2b — a Contract-side RULE returning a ChunkExpr (residual-lite's type acceptance) ──
+//
+// `@inhuman.tools/arrival/emit`'s residual-lite.ts now accepts `ChunkExpr` as a legal
+// `EmitRule<R>` return shape (type-level only — no constructor there; that file's own
+// growth discipline waits for a real Contract rule to need one). This package owns the
+// only `ChunkExpr` constructor that exists (`residual/types.ts`, via `chunk.ts`'s
+// `arrayChunkAst`), so this is the consuming-side proof the type acceptance is safe to
+// build on: a rule minting a chunk (exactly as a future Contract rule would) round-trips
+// through `walk`/`asyncnessOf`/`materializeAsyncness`/`render` — the walker's
+// slots-are-never-leaves discipline (E2a, the "chunks are never leaves" describe block
+// above) already covers a rule-minted chunk exactly like a fold-site-minted one; nothing
+// new is needed in the walker to make this safe, only proof that it IS safe.
+describe("E2b — a rule-minted ChunkExpr round-trips through walk/asyncness/render", () => {
+  /** A hand-written EmitRule whose `call` mints a ChunkExpr wrapping its OWN
+   *  (already-lowered) argument in a slot — structurally the shape a future
+   *  Contract rule would build once residual-lite grows a real constructor. */
+  const chunkRule: EmitRule<R> = {
+    call: (args) =>
+      ChunkExpr(
+        arrayChunkAst([{ kind: "lit", value: "before" }, { kind: "slot", id: "__slot0" }]),
+        new Map([["__slot0", args[0]!]]),
+      ),
+  };
+  const chunkRegistry = registryOf(row("magic-chunk", { emit: chunkRule }), row("infer"));
+
+  it("a rule-minted chunk is a legal App residual — no walker change needed to accept it", () => {
+    expect(emit(`(magic-chunk 1)`, { registry: chunkRegistry })).toBe('["before", 1];\n');
+  });
+
+  it("a seeded call living in the rule-minted chunk's slot flips asyncness and awaits INSIDE the slot", () => {
+    // `(magic-chunk (infer "m" x))`: the walker lowers `(infer "m" x)` FIRST (the
+    // ordinary argument-lowering step in `lowerApp`), then hands the ALREADY-LOWERED
+    // `Call(RuntimeRef("infer"), …)` to `chunkRule.call` as `args[0]` — exactly the
+    // shape a Contract rule inspecting/wrapping an argument would receive.
+    const unit = walk(cf(`(define (f x) (magic-chunk (infer "m" x)))`), { registry: chunkRegistry, register: "run" });
+    const facts = asyncnessOf(unit, new Set(["infer"]));
+    expect(facts.hasAsync).toBe(true); // the seed is found THROUGH the rule-minted slot
+    expect(render(materializeAsyncness(facts))).toBe(
+      'async function f(x) {\n    return ["before", await infer("m", x)];\n}\n',
+    );
+  });
+});

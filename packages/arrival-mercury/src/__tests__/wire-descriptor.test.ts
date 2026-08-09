@@ -1,0 +1,298 @@
+/**
+ * The static wire descriptor's own contract
+ * (docs/foundations/arrival-scheme/provenance-by-perturbation.md §3). The KEY row
+ * is the fabrication-in-the-middle: a guard that reads a crossing but returns
+ * one of two hand-written literals must derive as SELECTION, never content — the
+ * whole reason the three-way verdict exists instead of v1's "grounding = movement."
+ */
+import { describe, expect, it } from "vitest";
+
+import { classify } from "../coreform/index.js";
+import type { ClassifyResult } from "../coreform/index.js";
+import { desugar } from "../front/desugar.js";
+import { parseSexprs } from "../front/parse.js";
+import { derive } from "../wire/derive.js";
+import { dataShaped, judgmentShaped, verdictFor } from "../wire/policy.js";
+import type { Literal, PVertice } from "../wire/types.js";
+
+/** The full front pipeline: parse → desugar → classify (coreform.test.ts's own
+ *  convention, mirrored so this suite reads identically to its neighbors). */
+const cf = (src: string): ClassifyResult => classify(desugar(parseSexprs(src)));
+
+describe("derive() — the backward walk", () => {
+  it("KEY ROW: (if (:guilty e) \"GUILTY\" \"INNOCENT\") derives as Case over two Literals with the vertex in the CONDITION — dataShaped FAILS (selection, not content), judgmentShaped PASSES iff the declared vocabulary is {GUILTY, INNOCENT}", () => {
+    const leaves = derive(cf(`(if (:guilty e) "GUILTY" "INNOCENT")`));
+    expect(leaves).toHaveLength(1);
+    const { path, descriptor } = leaves[0]!;
+    expect(path).toEqual([]);
+
+    // The shape: Case(cond: <(:guilty e)>, alts: [Literal "GUILTY", Literal "INNOCENT"]).
+    expect(descriptor.source.kind).toBe("Case");
+    expect(descriptor.steps).toEqual([]);
+    if (descriptor.source.kind !== "Case") throw new Error("unreachable");
+    const { cond, alts } = descriptor.source;
+
+    // The vertex sits in the CONDITION: (:guilty e) ⇒ PVertice("e") + one "guilty" step.
+    expect(cond.source.kind).toBe("PVertice");
+    expect((cond.source as PVertice).anchorName).toBe("e");
+    expect(cond.steps).toEqual([{ op: "guilty", argIndex: 0, otherArgs: [] }]);
+
+    // Both alternatives are the program's own hand-written constants.
+    expect(alts).toHaveLength(2);
+    expect(alts[0]!.source.kind).toBe("Literal");
+    expect(alts[1]!.source.kind).toBe("Literal");
+    expect((alts[0]!.source as Literal).lit.value).toEqual({ kind: "string", value: "GUILTY" });
+    expect((alts[1]!.source as Literal).lit.value).toEqual({ kind: "string", value: "INNOCENT" });
+
+    // dataShaped FAILS — this is selection, not content, no matter how real the
+    // guard's own dependence on `e` is.
+    expect(dataShaped(descriptor)).toBe(false);
+
+    // judgmentShaped PASSES iff the declared vocabulary is exactly the emitted set.
+    expect(judgmentShaped(descriptor, new Set(["GUILTY", "INNOCENT"]))).toBe(true);
+    // An undeclared constant in a judgment slot is a fabrication: drop one label…
+    expect(judgmentShaped(descriptor, new Set(["GUILTY"]))).toBe(false);
+    // …or declare an unrelated vocabulary entirely.
+    expect(judgmentShaped(descriptor, new Set(["ALLOWED", "DENIED"]))).toBe(false);
+
+    expect(verdictFor(descriptor, { role: "data" })).toEqual({ kind: "fabrication", residue: expect.any(Array) });
+    expect(verdictFor(descriptor, { role: "judgment", vocabulary: new Set(["GUILTY", "INNOCENT"]) })).toEqual({
+      kind: "judgment-shaped",
+    });
+    expect(verdictFor(descriptor, { role: "judgment", vocabulary: new Set(["GUILTY"]) }).kind).toBe("fabrication");
+  });
+
+  it('(cons (:name e) "FABRICATED") — per-leaf: car is content-grounded, cdr is a bare literal', () => {
+    const leaves = derive(cf(`(cons (:name e) "FABRICATED")`));
+    expect(leaves).toHaveLength(2);
+
+    const car = leaves.find((l) => l.path.length === 1 && l.path[0] === "car");
+    const cdr = leaves.find((l) => l.path.length === 1 && l.path[0] === "cdr");
+    expect(car).toBeDefined();
+    expect(cdr).toBeDefined();
+
+    // car: (:name e) ⇒ PVertice("e") + one "name" step — content-grounded.
+    expect(car!.descriptor.source.kind).toBe("PVertice");
+    expect((car!.descriptor.source as PVertice).anchorName).toBe("e");
+    expect(car!.descriptor.steps).toEqual([{ op: "name", argIndex: 0, otherArgs: [] }]);
+    expect(dataShaped(car!.descriptor)).toBe(true);
+
+    // cdr: a bare hand-written constant — never grounded.
+    expect(cdr!.descriptor.source.kind).toBe("Literal");
+    expect((cdr!.descriptor.source as Literal).lit.value).toEqual({ kind: "string", value: "FABRICATED" });
+    expect(cdr!.descriptor.steps).toEqual([]);
+    expect(dataShaped(cdr!.descriptor)).toBe(false);
+
+    // derive() with an explicit leafPath narrows to the one matching entry.
+    expect(derive(cf(`(cons (:name e) "FABRICATED")`), ["cdr"])).toEqual([cdr]);
+  });
+
+  it('(string-append (:id e) "-FAKE") — the content path reaches the vertex, but the LAST step carries a literal otherArg: the residue is a NODE', () => {
+    const leaves = derive(cf(`(string-append (:id e) "-FAKE")`));
+    expect(leaves).toHaveLength(1);
+    const { descriptor } = leaves[0]!;
+
+    // The main path: PVertice("e") --id--> --string-append(otherArg="-FAKE")--> result.
+    expect(descriptor.source.kind).toBe("PVertice");
+    expect((descriptor.source as PVertice).anchorName).toBe("e");
+    expect(descriptor.steps).toHaveLength(2);
+    expect(descriptor.steps[0]).toEqual({ op: "id", argIndex: 0, otherArgs: [] });
+
+    const lastStep = descriptor.steps[1]!;
+    expect(lastStep.op).toBe("string-append");
+    expect(lastStep.argIndex).toBe(0);
+    expect(lastStep.otherArgs).toHaveLength(1);
+    const residueArg = lastStep.otherArgs[0]!;
+    expect(residueArg.argIndex).toBe(1);
+    // The residue IS a node — the literal AST leaf itself, not a count of anything.
+    expect(residueArg.descriptor.source.kind).toBe("Literal");
+    expect((residueArg.descriptor.source as Literal).lit.value).toEqual({ kind: "string", value: "-FAKE" });
+
+    // Even though the vertex is reached, dataShaped FAILS: a residue anywhere in the
+    // construction — not just at the top — disqualifies the leaf.
+    expect(dataShaped(descriptor)).toBe(false);
+    const verdict = verdictFor(descriptor, { role: "data" });
+    expect(verdict.kind).toBe("fabrication");
+    if (verdict.kind === "fabrication") {
+      expect(verdict.residue).toHaveLength(1);
+      expect(verdict.residue[0]!.value).toEqual({ kind: "string", value: "-FAKE" });
+    }
+  });
+
+  it("a clean content leaf with no residue anywhere IS dataShaped", () => {
+    const leaves = derive(cf(`(string-append (:id e) (:name e))`));
+    expect(leaves).toHaveLength(1);
+    const { descriptor } = leaves[0]!;
+    expect(descriptor.source.kind).toBe("PVertice");
+    expect(dataShaped(descriptor)).toBe(true);
+    expect(verdictFor(descriptor, { role: "data" })).toEqual({ kind: "data-shaped" });
+  });
+
+  it("static blind spots emit an honest Hole, never a silent guess", () => {
+    const filterLeaves = derive(cf(`(filter pred lst)`));
+    expect(filterLeaves).toHaveLength(1);
+    expect(filterLeaves[0]!.descriptor.source).toEqual({ kind: "Hole", reason: "filter-survivor" });
+    expect(dataShaped(filterLeaves[0]!.descriptor)).toBe(false);
+
+    // A computed callee: the head is not a bound reference at all.
+    const computedCalleeLeaves = derive(cf(`((pick-fn) e)`));
+    expect(computedCalleeLeaves).toHaveLength(1);
+    expect(computedCalleeLeaves[0]!.descriptor.source).toEqual({ kind: "Hole", reason: "computed-callee" });
+  });
+
+  it("a let-bound alias forwards transparently, including through a compound constructor", () => {
+    const leaves = derive(cf(`(let ((p (cons (:name e) "FABRICATED"))) p)`));
+    expect(leaves).toHaveLength(2);
+    const car = leaves.find((l) => l.path[0] === "car")!;
+    const cdr = leaves.find((l) => l.path[0] === "cdr")!;
+    expect(dataShaped(car.descriptor)).toBe(true);
+    expect(dataShaped(cdr.descriptor)).toBe(false);
+  });
+});
+
+describe("and/or as value-returning control (craft-review #2 — was a Hole)", () => {
+  it('(or (:cached e) "DEFAULT") is a Case selecting a vertex value or a literal — NOT dataShaped', () => {
+    const leaves = derive(cf(`(or (:cached e) "DEFAULT")`));
+    const { descriptor } = leaves[0]!;
+    expect(descriptor.source.kind).toBe("Case"); // was "Hole" before the fix
+    if (descriptor.source.kind === "Case") {
+      // one alternative is a vertex value, one is the "DEFAULT" literal
+      expect(descriptor.source.alts.some((a) => a.source.kind === "PVertice")).toBe(true);
+      expect(descriptor.source.alts.some((a) => a.source.kind === "Literal")).toBe(true);
+    }
+    // a leaf that might be the literal "DEFAULT" is selection, not pure content
+    expect(dataShaped(descriptor)).toBe(false);
+  });
+
+  it("(and (:a e) (:b e)) is a Case with both alts vertex-derived ⇒ dataShaped (content either way)", () => {
+    const leaves = derive(cf(`(and (:a e) (:b e))`));
+    const { descriptor } = leaves[0]!;
+    expect(descriptor.source.kind).toBe("Case");
+    expect(dataShaped(descriptor)).toBe(true); // no literal alternative
+  });
+});
+
+describe("Tier-1 soundness", () => {
+  it("finding 1: a cyclic binding TERMINATES as an honest Hole, never hangs the static walk", () => {
+    // (define x x) x — the reference resolves to itself forever. The static plane
+    // has no fuel bound; the threat model is "the model writes the program", so this
+    // must fail closed, not hang. (If the cycle guard regressed, this test would
+    // time out rather than fail — that IS the signal.)
+    const leaves = derive(cf(`(define x x) x`));
+    expect(leaves).toHaveLength(1);
+    expect(leaves[0]!.descriptor.source).toEqual({ kind: "Hole", reason: "cyclic-binding" });
+    expect(dataShaped(leaves[0]!.descriptor)).toBe(false);
+
+    // Mutual recursion is the same class.
+    const mutual = derive(cf(`(define a b) (define b a) a`));
+    expect(mutual[0]!.descriptor.source).toEqual({ kind: "Hole", reason: "cyclic-binding" });
+  });
+
+  it("finding 3: a literal passed via a KWARG becomes visible residue — dataShaped FAILS (was a silent forge channel)", () => {
+    // `:verdict "FAKE"` reaches the output value but deriveApp used to read only
+    // positionalArgs, so the wire said clean-content while the leaf carried a
+    // fabricated constant — invisible to BOTH planes. Now the kwarg's descriptor
+    // enters otherArgs, so the residue policy rejects it.
+    const leaves = derive(cf(`(make-rec (:id e) :verdict "FAKE")`));
+    expect(leaves).toHaveLength(1);
+    const { descriptor } = leaves[0]!;
+    expect(descriptor.source.kind).toBe("PVertice"); // main traced arg is the crossing
+    expect((descriptor.source as PVertice).anchorName).toBe("e");
+    const step = descriptor.steps.at(-1)!;
+    // the kwarg literal is an otherArg (numbered after the single positional)
+    const kwResidue = step.otherArgs.find((a) => a.descriptor.source.kind === "Literal");
+    expect(kwResidue).toBeDefined();
+    expect((kwResidue!.descriptor.source as Literal).lit.value).toEqual({ kind: "string", value: "FAKE" });
+    expect(dataShaped(descriptor)).toBe(false); // fail closed
+  });
+
+  it("finding 3 dual: a call whose kwargs are ALL crossing-derived stays dataShaped (no false rejection)", () => {
+    const leaves = derive(cf(`(make-rec (:id e) :name (:name e))`));
+    const { descriptor } = leaves[0]!;
+    expect(descriptor.source.kind).toBe("PVertice");
+    expect(dataShaped(descriptor)).toBe(true); // no literal residue anywhere
+  });
+
+  it("finding 3: a kwargs-only call (no positional to trace) is an honest Hole", () => {
+    const leaves = derive(cf(`(make-rec :verdict "FAKE")`));
+    expect(leaves[0]!.descriptor.source).toEqual({ kind: "Hole", reason: "kwargs-only-call" });
+    expect(dataShaped(leaves[0]!.descriptor)).toBe(false);
+  });
+
+  it("audit Q2: a NAMED helper hiding a guard must NOT derive as clean content (the reopened guard-swap forge)", () => {
+    // `(define (f x) (if (> x 5) "SAFE" x)) (f (:score e))` — the baseline value is
+    // the constant "SAFE", but the guard is hidden inside the user helper `f`. The
+    // walk used to treat `(f arg)` as an opaque FORWARDING step (source = arg's
+    // PVertice, steps = [f]) → dataShaped TRUE, and the seal would content-attest a
+    // fabricated constant. The named `f` and its inline-lambda twin (caught as a Hole)
+    // must not disagree. Fix: resolve the user-defined callee body.
+    const { descriptor } = derive(cf(`(define (f x) (if (> x 5) "SAFE" x)) (f (:score e))`))[0]!;
+    expect(dataShaped(descriptor)).toBe(false);
+
+    // The inline-lambda twin — same program, must reach the SAME verdict.
+    const twin = derive(cf(`((lambda (x) (if (> x 5) "SAFE" x)) (:score e))`))[0]!;
+    expect(dataShaped(twin.descriptor)).toBe(false);
+
+    // A genuinely clean user helper still attests (no false rejection).
+    const clean = derive(cf(`(define (g x) (string-upcase x)) (g (:id e))`))[0]!;
+    expect(clean.descriptor.source.kind).toBe("PVertice");
+    expect(dataShaped(clean.descriptor)).toBe(true);
+  });
+
+  it("finding 6a: a Hole under role:data is NOT-ATTESTABLE, not a zero-residue 'fabrication'", () => {
+    // A bare Hole (filter survivor, computed callee, cyclic binding) is UNPROVEN, not
+    // an accusation of fabrication — reporting it as fabrication falsely accuses.
+    const holeLeaf = derive(cf(`(filter pred lst)`))[0]!;
+    expect(holeLeaf.descriptor.source.kind).toBe("Hole");
+    expect(verdictFor(holeLeaf.descriptor, { role: "data" })).toEqual({ kind: "not-attestable" });
+  });
+
+  it("finding 6c: a judgment fabrication reports ONLY the undeclared constants", () => {
+    // vocabulary declares GUILTY/INNOCENT; the program emits GUILTY or MADEUP. Only
+    // MADEUP is the fabrication — GUILTY is a legitimate declared member.
+    const { descriptor } = derive(cf(`(if (:g e) "GUILTY" "MADEUP")`))[0]!;
+    const v = verdictFor(descriptor, { role: "judgment", vocabulary: new Set(["GUILTY", "INNOCENT"]) });
+    expect(v.kind).toBe("fabrication");
+    if (v.kind === "fabrication") {
+      expect(v.residue.map((l) => (l.value.kind === "string" ? l.value.value : null))).toEqual(["MADEUP"]);
+    }
+  });
+
+  it("finding 8: a data-role fabrication residue EXCLUDES the guard constant and never double-counts or/and", () => {
+    // The `7` sits in the guard (selection), not the content — it must not be reported.
+    const guard = derive(cf(`(if (= (:v e) 7) "A" "B")`))[0]!;
+    const gv = verdictFor(guard.descriptor, { role: "data" });
+    expect(gv.kind).toBe("fabrication");
+    if (gv.kind === "fabrication") {
+      const strings = gv.residue.flatMap((l) => (l.value.kind === "string" ? [l.value.value] : []));
+      const numbers = gv.residue.flatMap((l) => (l.value.kind === "number" ? [l.value.text] : []));
+      expect(strings.toSorted()).toEqual(["A", "B"]); // the alts
+      expect(numbers).toEqual([]); // NOT the guard's 7
+    }
+
+    // (or "A" (:x e)) aliases descA as cond AND alts[0]; residue must list "A" once.
+    const orLeaf = derive(cf(`(or "A" (:x e))`))[0]!;
+    const ov = verdictFor(orLeaf.descriptor, { role: "data" });
+    if (ov.kind === "fabrication") {
+      const as = ov.residue.flatMap((l) => (l.value.kind === "string" && l.value.value === "A" ? [1] : []));
+      expect(as).toEqual([1]); // exactly once, not twice
+    }
+  });
+
+  it("finding 2: parallel-let respects binding-site scope — (let ((x (:id e)) (y x)) y) has y = the OUTER literal, not the crossing", () => {
+    // R7RS parallel `let`: `y`'s init `x` is the outer `(define x 1)`, NOT the let's
+    // own `x`. The walk used to layer all bindings eagerly and derive y → PVertice(e)
+    // — a static false "clean content." The probe rescued the seal today, but wireOf/
+    // transferOf consumers (LSP, flow audit) get no probe, so the wrong answer would ship.
+    const parallel = derive(cf(`(define x 1) (let ((x (:id e)) (y x)) y)`));
+    expect(parallel).toHaveLength(1);
+    expect(parallel[0]!.descriptor.source.kind).toBe("Literal"); // y = 1, the outer constant
+    expect(dataShaped(parallel[0]!.descriptor)).toBe(false);
+
+    // let* is sequential — there `y`'s init DOES see the let's own crossing-bound x.
+    const sequential = derive(cf(`(define x 1) (let* ((x (:id e)) (y x)) y)`));
+    expect(sequential[0]!.descriptor.source.kind).toBe("PVertice");
+    expect((sequential[0]!.descriptor.source as PVertice).anchorName).toBe("e");
+    expect(dataShaped(sequential[0]!.descriptor)).toBe(true);
+  });
+});
