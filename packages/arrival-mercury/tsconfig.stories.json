@@ -1,7 +1,0 @@
-{
-  "extends": ["./tsconfig.json", "@here.build/tsconfig/env/browser"],
-  "compilerOptions": {
-    "noEmit": true
-  },
-  "include": ["src/**/*.tsx"]
-}

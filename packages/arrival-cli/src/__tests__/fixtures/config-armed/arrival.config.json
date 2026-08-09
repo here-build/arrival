@@ -1,5 +1,0 @@
-{
-  "capabilities": [
-    { "module": "../caps/config-greet.mjs", "config": { "greeting": "from-config-file" } }
-  ]
-}

@@ -1,3 +1,0 @@
-[submodule "packages/arrival/vendor/chibi-scheme"]
-	path = packages/arrival/vendor/chibi-scheme
-	url = https://github.com/ashinn/chibi-scheme.git

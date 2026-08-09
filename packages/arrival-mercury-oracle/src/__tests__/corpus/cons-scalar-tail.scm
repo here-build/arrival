@@ -1,1 +1,0 @@
-(cons 'guilty 42)
