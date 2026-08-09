@@ -70,10 +70,11 @@ export class RunContext {
    *  each top-level form and runs the read∩write guard (docs/execution.md §READ-GUARD). */
   readonly reads: ReadGuard | undefined;
   /**
-   * Path-keyed atom bus (Phase 5 R1). `undefined` ⇒ no observe/invalidate.
+   * Path-keyed atom bus (Phase 5). `undefined` ⇒ no observe/invalidate.
    * When armed: live Q≠[] penetrations call `observe`; successful non-sink E≠[] fires
    * stage for `commitRun` at successful run end (RX-CLOCK). Replay-mode runs stay silent
-   * (rosetta gates on cache.mode). Host re-invoke envelope is R2 — this channel only arms.
+   * (rosetta gates on cache.mode). Host re-invoke envelope (reaction-envelope.ts) supplies
+   * a per-unit bus that publishes through a shared hub.
    */
   readonly pathAtoms: PathAtomBus | undefined;
   /**

@@ -66,7 +66,7 @@ export {
 } from "../run/resource-paths.js";
 
 // Phase 5 R1 — path-keyed atom bus (observe at Q≠[]; stage E for run-commit invalidate).
-// MobX sits behind AtomProxy; product law never asserts MobX API. Re-invoke envelope = R2.
+// MobX sits behind AtomProxy; product law never asserts MobX API.
 export type { AtomProxy, ProxyAtom } from "../run/atom-proxy.js";
 export {
   atomKey,
@@ -79,7 +79,22 @@ export {
   createMemoryAtomProxy,
   type PathAtomBus,
 } from "../run/path-atom-bus.js";
-export { createMobxAtomProxy } from "../run/mobx-atom-proxy.js";
+// `createMobxAtomProxy` is deliberately NOT re-exported here. Its module has a
+// top-level `import { createAtom } from "mobx"`, and mobx is an OPTIONAL peer — a
+// static re-export would make every host-internals consumer fail to resolve the
+// barrel without mobx installed, i.e. silently promote the optional peer to a hard
+// dependency. Reach it by its own subpath instead:
+//   import { createMobxAtomProxy } from "@inhuman.tools/arrival/mobx-atom-proxy";
+
+// Phase 5 R2–R3 — host reaction envelope (re-invoke = new top-level exec; self-suppress;
+// settle with OQ-CYCLE-POLICY at-most-once-per-unit). Not a public FRP surface.
+export {
+  createReactionHub,
+  type ReactionHub,
+  type ReactionEnvelope,
+  type ReactionUnitSpec,
+  type SettleOptions,
+} from "../run/reaction-envelope.js";
 
 // Per-run model-facing note channel — a renderer mints one and drains it.
 export { createNoteSink, createDisplaySink, type NoteSink, type DisplaySink } from "../run/note-sink.js";

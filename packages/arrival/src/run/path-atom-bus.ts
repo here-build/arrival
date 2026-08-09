@@ -7,7 +7,8 @@
  *
  * MobX (or a substitute) sits behind {@link AtomProxy} — this module never imports it.
  * Memory bus is the harness / X1 recording double; {@link ProxyPathAtomBus} is the
- * production shape for a host envelope (R2).
+ * production shape for MobX-backed cells. Host re-invoke lives in
+ * {@link ./reaction-envelope.ts} (R2–R3) — envelope-private buses publish through a hub.
  *
  * Design: docs/working-proposals/cqs-reactivity/
  * Suite:  docs/working-proposals/cqs-reactivity/test-suite-design/reactivity/SUITE.md
@@ -158,8 +159,8 @@ export class MemoryPathAtomBus implements PathAtomBus {
  * observe → reportObserved; invalidate → reportChanged on overlapping keys known
  * to this bus. Keys are created lazily on first observe/invalidate.
  *
- * Self-write suppression and envelope subscription sets are R2 concerns — this bus
- * only owns path-keyed cells.
+ * Self-write suppression and envelope subscription sets live on the reaction
+ * envelope / hub (reaction-envelope.ts) — this bus only owns path-keyed cells.
  */
 export class ProxyPathAtomBus implements PathAtomBus {
   /** key → its cell AND the path tuple the key stands for. The tuple is retained
