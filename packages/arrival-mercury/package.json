@@ -108,5 +108,13 @@
   "peerDependencies": {
     "@inhuman.tools/arrival-run": ">=0.9.0",
     "@inhuman.tools/llm-plane-arrival-env": ">=0.9.0"
+  },
+  "peerDependenciesMeta": {
+    "@inhuman.tools/arrival-run": {
+      "optional": true
+    },
+    "@inhuman.tools/llm-plane-arrival-env": {
+      "optional": true
+    }
   }
 }
