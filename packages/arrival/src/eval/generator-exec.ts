@@ -32,6 +32,7 @@ import type { DisplaySink, NoteSink } from "../run/note-sink.js";
 import type { RunCache } from "../run/run-cache.js";
 import type { EffectLog } from "../run/effect-log.js";
 import type { ReadGuard } from "../run/read-guard.js";
+import type { PathAtomBus } from "../run/path-atom-bus.js";
 import type { ResourcePathLog } from "../run/resource-paths.js";
 import { checkReadWriteGuard } from "../run/read-guard.js";
 // TYPE-ONLY (erased — no runtime scheme-zod edge): exec exit contract's schema type.
@@ -189,6 +190,13 @@ export interface ExecOptions {
    */
   reads?: ReadGuard;
   /**
+   * PATH-KEYED ATOM BUS (run/path-atom-bus.ts, Phase 5 R1). When set, rides onto
+   * RunContext.pathAtoms: live Q≠[] penetrations observe; successful non-sink E≠[]
+   * stage for commit at successful run end. Unset ⇒ no reactivity arming. Replay
+   * stays silent at the penetration site (not by short-circuiting CQS).
+   */
+  pathAtoms?: PathAtomBus;
+  /**
    * Opt-in runtime assert that every CQS path segment is a string (default false).
    * Type-level `ResourcePath` is the law; use this in non-prod harnesses to catch
    * producers that smuggle non-strings past TS. Rides onto RunContext.strictCQSstrings.
@@ -332,6 +340,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     cache,
     effects,
     reads,
+    pathAtoms,
     strictCQSstrings,
     resourcePaths,
     notes,
@@ -378,6 +387,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     cache,
     effects,
     reads,
+    pathAtoms,
     strictCQSstrings,
     resourcePaths,
     notes,
@@ -405,6 +415,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
       try {
         result = expectValue(await (runCtx.reads ? runCtx.reads.tracker.region(runForm) : runForm()));
       } catch (e) {
+        runCtx.pathAtoms?.abandonRun();
         if (e instanceof ArrivalError && e.cause instanceof TypeError && !isHostRuntimeBug(e.cause)) throw e.cause;
         throw e;
       }
@@ -414,6 +425,8 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
         checkReadWriteGuard(runCtx.effects.entries, runCtx.reads.tracker.log, runCtx.reads.writeSetOf);
       }
     }
+    // RX-CLOCK: invalidate staged path-E only when the whole run commits successfully.
+    runCtx.pathAtoms?.commitRun();
     return { values: results, scope: runResolver.scope, runCtx };
   } finally {
     // Only THIS call's own (freshly-minted) RunContext is disposed here.
@@ -532,6 +545,7 @@ export async function execExpr(
     cache,
     effects,
     reads,
+    pathAtoms,
     strictCQSstrings,
     resourcePaths,
     runCtx: passedRunCtx }: ExecOptions = {},
@@ -551,6 +565,7 @@ export async function execExpr(
       cache,
       effects,
       reads,
+      pathAtoms,
       strictCQSstrings,
       resourcePaths }));
   let runResolver = resolver;
@@ -565,7 +580,7 @@ export async function execExpr(
 
   try {
     // Top-level form evaluates to a value, never a bare expander — seal it.
-    return expectValue(
+    const value = expectValue(
       await run(
         evaluate(expr, {
           resolver: runResolver,
@@ -576,7 +591,10 @@ export async function execExpr(
         { signal: runSignal, budgetMs },
       ),
     );
+    runCtx.pathAtoms?.commitRun();
+    return value;
   } catch (e) {
+    runCtx.pathAtoms?.abandonRun();
     if (e instanceof ArrivalError && e.cause instanceof TypeError) throw e.cause;
     throw e;
   } finally {
@@ -629,6 +647,7 @@ export async function execStateOverFrame(code: string | SchemeValue, options: Ex
     cache,
     effects,
     reads,
+    pathAtoms,
     strictCQSstrings,
     resourcePaths,
     notes,
@@ -649,6 +668,7 @@ export async function execStateOverFrame(code: string | SchemeValue, options: Ex
       cache,
       effects,
       reads,
+      pathAtoms,
       strictCQSstrings,
       resourcePaths,
       notes,
@@ -677,6 +697,7 @@ export async function execStateOverFrame(code: string | SchemeValue, options: Ex
       try {
         result = expectValue(await (runCtx.reads ? runCtx.reads.tracker.region(runForm) : runForm()));
       } catch (e) {
+        runCtx.pathAtoms?.abandonRun();
         if (e instanceof ArrivalError && e.cause instanceof TypeError && !isHostRuntimeBug(e.cause)) throw e.cause;
         throw e;
       }
@@ -686,6 +707,7 @@ export async function execStateOverFrame(code: string | SchemeValue, options: Ex
         checkReadWriteGuard(runCtx.effects.entries, runCtx.reads.tracker.log, runCtx.reads.writeSetOf);
       }
     }
+    runCtx.pathAtoms?.commitRun();
     return { values: results, scope: runResolver.scope, runCtx };
   } finally {
     if (runCtxOwned) await disposeRunContext(runCtx);
@@ -713,6 +735,7 @@ export async function execExprOverFrame(
     cache,
     effects,
     reads,
+    pathAtoms,
     strictCQSstrings,
     resourcePaths,
     runCtx: passedRunCtx,
@@ -724,16 +747,19 @@ export async function execExprOverFrame(
   const runCtxOwned = passedRunCtx === undefined;
   const runCtx =
     passedRunCtx ??
-    new RunContext({ signal, heapBudget, cache, effects, reads, strictCQSstrings, resourcePaths });
+    new RunContext({ signal, heapBudget, cache, effects, reads, pathAtoms, strictCQSstrings, resourcePaths });
   const runSignal = runCtx.signal;
   try {
-    return expectValue(
+    const value = expectValue(
       await run(
         evaluate(expr, { resolver: runResolver, tap, nodeFilter, signal: runSignal, runCtx }),
         { signal: runSignal, budgetMs },
       ),
     );
+    runCtx.pathAtoms?.commitRun();
+    return value;
   } catch (e) {
+    runCtx.pathAtoms?.abandonRun();
     if (e instanceof ArrivalError && e.cause instanceof TypeError) throw e.cause;
     throw e;
   } finally {

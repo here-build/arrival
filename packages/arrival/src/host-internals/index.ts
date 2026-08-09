@@ -65,6 +65,22 @@ export {
   type ResourcePathLog,
 } from "../run/resource-paths.js";
 
+// Phase 5 R1 — path-keyed atom bus (observe at Q≠[]; stage E for run-commit invalidate).
+// MobX sits behind AtomProxy; product law never asserts MobX API. Re-invoke envelope = R2.
+export type { AtomProxy, ProxyAtom } from "../run/atom-proxy.js";
+export {
+  atomKey,
+  keysArePrefixRelated,
+  wouldNotify,
+  isPathAtomKey,
+  paramAtomKey,
+  MemoryPathAtomBus,
+  ProxyPathAtomBus,
+  createMemoryAtomProxy,
+  type PathAtomBus,
+} from "../run/path-atom-bus.js";
+export { createMobxAtomProxy } from "../run/mobx-atom-proxy.js";
+
 // Per-run model-facing note channel — a renderer mints one and drains it.
 export { createNoteSink, createDisplaySink, type NoteSink, type DisplaySink } from "../run/note-sink.js";
 

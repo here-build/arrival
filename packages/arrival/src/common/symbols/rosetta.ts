@@ -294,10 +294,24 @@ _installRosettaMembraneApply(async (proc, args, callCtx) => {
     const runCache = callCtx.runCtx.cache;
     const burstLog = callCtx.runCtx.effects;
     const runReads = callCtx.runCtx.reads;
-    const fire = async (): Promise<unknown> =>
-      scope
-        ? withRegionScope(scope, () => m.hostImpl.call(callCtx, ...decodedArgs))
-        : m.hostImpl.call(callCtx, ...decodedArgs);
+    const pathAtoms = callCtx.runCtx.pathAtoms;
+    // Phase 5 R1: observe live Q≠[] after CQS check (doored Q never reaches here).
+    // Replay silent (RX-REPLAY) — gate here, never by short-circuiting applyResourcePathCqs.
+    const liveAtoms = pathAtoms !== undefined && runCache?.mode !== "replay";
+    if (liveAtoms && producedQueries.length > 0) {
+      pathAtoms.observe(producedQueries);
+    }
+    const fire = async (): Promise<unknown> => {
+      const value = scope
+        ? await withRegionScope(scope, () => m.hostImpl.call(callCtx, ...decodedArgs))
+        : await m.hostImpl.call(callCtx, ...decodedArgs);
+      // Stage non-sink E only after successful impl (void-sink skips fire entirely).
+      // commitRun at successful run end flushes (RX-CLOCK); abandon on throw.
+      if (liveAtoms && producedEffects.length > 0) {
+        pathAtoms.stageEffects(producedEffects);
+      }
+      return value;
+    };
     // Fast-path: no cache, no effect-log, and no path-derived storage work → bare fire.
     // Path Q/E with armed cache/effects must enter penetrateThroughCache (I6–I8).
     const needsPathStorage =
