@@ -1,16 +1,20 @@
 /**
- * Host reaction envelope (Phase 5 R2–R3).
+ * Host reaction envelope (Phase 5 R2–R5).
  *
  * A **unit** is a whole top-level `exec` / tool (RX-UNIT). Under a live envelope:
  *   - live Q≠[] penetrations arm subscriptions (via PathAtomBus.observe)
  *   - successful non-sink E≠[] commit invalidates overlapping foreign units
  *   - foreign invalidate ∩ subs(U) ≠ ∅ ⇒ re-invoke U = NEW RUN
+ *   - **A-OPTIN** host-injected param atoms (`optInParams` + {@link ReactionHub.setParam})
+ *     re-invoke only units that opted in — never baked `define/overridable` syntax
  *
  * Fresh run (**RX-FRESH**): fresh path log + prior-E + fresh `RunCache` in `record`
  * mode — never the parent's cache (that makes the envelope a silent no-op).
  *
  * Subs live on the envelope, replaced wholesale after each **successful** run
  * (**P-RX-SUB-REPLACE** / **RX-SUBS**). A failed run keeps the last successful set.
+ * While a run is in flight, foreign writes that overlap **this-run** observations
+ * provisionally mark dirty (**P-RX-INFLIGHT** — queue, not cancel).
  *
  * Self-write suppression (**RX-SELF** / **N-RX-SELF-LOOP**): a unit is not woken by
  * its own committed effects. Attribution mechanism is unasserted — the hub skips
@@ -20,6 +24,8 @@
  * each envelope re-invokes **at most once**. That kills n-cycles (mutual wake)
  * without a timer; `maxRounds` is the cascade-depth safety cap and rejects loudly
  * with "did not quiesce in N rounds" when the dirty set cannot drain (**RX-SETTLE**).
+ * Multiple overlapping foreign writes in one settle window coalesce to one re-run
+ * (**P-RX-COALESCE** — bounded [1,k]).
  *
  * Gather/burst invalidation (**RX-CLOCK-2** / **OQ-BURST-CONFIRM**) is not wired
  * here yet — suite gather cases loud-skip until the burst-commit hook is named.
@@ -36,7 +42,7 @@ import {
   type ResourcePath,
   type ResourcePathLog,
 } from "./resource-paths.js";
-import type { PathAtomBus } from "./path-atom-bus.js";
+import { paramAtomKey, type PathAtomBus } from "./path-atom-bus.js";
 
 // ── Public types ─────────────────────────────────────────────────────────────
 
@@ -46,9 +52,19 @@ import type { PathAtomBus } from "./path-atom-bus.js";
  *
  * The envelope injects `pathAtoms`, a fresh `record` cache, and a fresh
  * resource-path log — callers must not pass those (and they are stripped if present).
+ *
+ * **A-OPTIN** (`optInParams`): host-injected param atom names. When the hub's
+ * {@link ReactionHub.setParam} changes one of those names, this unit re-invokes.
+ * Absent / empty ⇒ param changes never wake this unit (**N-RX-NO-OPTIN**). The suite
+ * asserts opt-in *behavior* only — never `define/overridable` syntax.
  */
 export type ReactionUnitSpec = {
   code: string | (() => string);
+  /**
+   * Opt-in param atom names (**A-OPTIN** / **RX-PARAM-NS**). Keys are minted via
+   * {@link paramAtomKey} — structurally disjoint from path keys.
+   */
+  optInParams?: readonly string[];
 } & Omit<ExecOptions, "pathAtoms" | "cache" | "resourcePaths" | "runCtx">;
 
 export interface SettleOptions {
@@ -80,19 +96,31 @@ export interface ReactionEnvelope {
   readonly lastPathLog: ResourcePathLog | undefined;
   /** Last **successful** subscription paths (envelope-owned; replaced on success). */
   readonly subscriptionPaths: readonly ResourcePath[];
+  /** Param names this unit opted into (**A-OPTIN**); empty when not opted in. */
+  readonly optInParams: readonly string[];
 }
 
 export interface ReactionHub {
   /**
    * Shared {@link PathAtomBus} for bare `exec` writers and the harness
-   * `invalidate` shortcut (**RX-EXT**). Envelope units use private buses that
-   * publish through this hub — they do **not** share this instance as pathAtoms.
+   * `invalidate` shortcut (**RX-EXT** / X2b foreign-write driver). Envelope units
+   * use private buses that publish through this hub — they do **not** share this
+   * instance as pathAtoms.
    */
   readonly bus: PathAtomBus;
   /** Register a live unit on this hub. */
   unit(spec: ReactionUnitSpec): ReactionEnvelope;
   /** Harness / foreign write: invalidate paths as if an external unit committed them. */
   invalidate(paths: readonly ResourcePath[]): void;
+  /**
+   * Host-owned param atom write (**A-OPTIN**). Units that listed `name` in
+   * `optInParams` mark dirty. Param keys never enter path prior-E (**N-RX-OPTIN-NOT-DOOR-FUEL**).
+   */
+  setParam(name: string, value: unknown): void;
+  /** Read a host-owned param atom value (undefined if never set). */
+  getParam(name: string): unknown | undefined;
+  /** True when the hub holds a value for this param name. */
+  hasParam(name: string): boolean;
   /** Drain dirty flags across all units on this hub. */
   settle(opts: SettleOptions): Promise<void>;
   /** Dispose every unit still registered. */
@@ -110,6 +138,8 @@ class ReactionHubImpl implements ReactionHub {
   readonly bus: PathAtomBus;
   /** @internal */
   readonly _envelopes = new Set<ReactionEnvelopeImpl>();
+  /** Host-owned param atom store (A-OPTIN). Keys are bare names; atom keys via paramAtomKey. */
+  private readonly params = new Map<string, unknown>();
 
   constructor() {
     this.bus = new HubPublicBus(this);
@@ -123,6 +153,25 @@ class ReactionHubImpl implements ReactionHub {
 
   invalidate(paths: readonly ResourcePath[]): void {
     this.publish(paths, null);
+  }
+
+  setParam(name: string, value: unknown): void {
+    // Store under bare name. Atom identity is paramAtomKey(name) — RX-PARAM-NS.
+    // Touch is host-intent: always mark opted-in units dirty (even if value equals prior).
+    this.params.set(name, value);
+    void paramAtomKey(name); // pin encoding; never path-shaped
+    for (const env of this._envelopes) {
+      if (env.disposed) continue;
+      if (env.optInParams.includes(name)) env.markDirty();
+    }
+  }
+
+  getParam(name: string): unknown | undefined {
+    return this.params.get(name);
+  }
+
+  hasParam(name: string): boolean {
+    return this.params.has(name);
   }
 
   /**
@@ -144,6 +193,8 @@ class ReactionHubImpl implements ReactionHub {
       throw new Error(`settle: maxRounds must be a non-negative number, got ${maxRounds}`);
     }
     // OQ-CYCLE-POLICY: each envelope re-invokes at most once per settle() call.
+    // Overlapping foreign writes in one window coalesce via the boolean dirty flag
+    // (P-RX-COALESCE / F-RX4 — re-runs ∈ [1, k]).
     const ran = new Set<ReactionEnvelopeImpl>();
     let rounds = 0;
     for (;;) {
@@ -257,6 +308,8 @@ class ReactionEnvelopeImpl implements ReactionEnvelope {
   readonly hub: ReactionHubImpl;
   private readonly spec: ReactionUnitSpec;
   private readonly atomBus: EnvelopeAtomBus;
+  /** Frozen opt-in set from construction (A-OPTIN). */
+  readonly optInParams: readonly string[];
 
   private _disposed = false;
   private _dirty = false;
@@ -277,6 +330,7 @@ class ReactionEnvelopeImpl implements ReactionEnvelope {
   constructor(hub: ReactionHubImpl, spec: ReactionUnitSpec) {
     this.hub = hub;
     this.spec = spec;
+    this.optInParams = Object.freeze([...(spec.optInParams ?? [])]);
     this.atomBus = new EnvelopeAtomBus(this);
   }
 
@@ -321,9 +375,12 @@ class ReactionEnvelopeImpl implements ReactionEnvelope {
     const effects = this.staged;
     this.staged = [];
     // RX-SUBS / P-RX-SUB-REPLACE: replace wholesale on success.
-    // If dispose raced mid-run, discard — do not install (N-RX-DISPOSE-INFLIGHT shape).
+    // If dispose raced mid-run, discard — do not install (N-RX-DISPOSE-INFLIGHT).
     if (!this._disposed) {
       this.subs = this.runObserved.slice();
+    } else {
+      // Disposed mid-flight: drop provisional observations; keep subs empty (already cleared).
+      this.subs = [];
     }
     this.runObserved = [];
     // Publish after subs replace so a same-tick foreign listener sees stable state.
@@ -339,11 +396,20 @@ class ReactionEnvelopeImpl implements ReactionEnvelope {
     this.runObserved = [];
   }
 
-  /** @internal */
+  /**
+   * @internal — path overlap against live subs, plus provisional this-run observations
+   * while in flight so a foreign write during `deferredRead` still queues run2
+   * (**P-RX-INFLIGHT** — no cancel, no drop).
+   */
   subsOverlap(writes: readonly ResourcePath[]): boolean {
     for (const w of writes) {
       for (const q of this.subs) {
         if (pathsOverlap(w, q)) return true;
+      }
+      if (this.running) {
+        for (const q of this.runObserved) {
+          if (pathsOverlap(w, q)) return true;
+        }
       }
     }
     return false;
@@ -386,18 +452,35 @@ class ReactionEnvelopeImpl implements ReactionEnvelope {
     this.runObserved = [];
     this.staged = [];
 
-    const { code: codeSpec, ...rest } = this.spec;
+    const { code: codeSpec, optInParams: _optIn, ...rest } = this.spec;
     const code = typeof codeSpec === "function" ? codeSpec() : codeSpec;
 
+    // A-OPTIN: merge hub param atoms into config.params for opted-in names only.
+    // Param values never touch resourcePaths / prior-E (N-RX-OPTIN-NOT-DOOR-FUEL).
+    const execOpts: ExecOptions = {
+      ...rest,
+      // Live envelope prefers strictCQSstrings (RX-STRICT); caller may override true/false.
+      strictCQSstrings: rest.strictCQSstrings ?? true,
+      pathAtoms: this.atomBus,
+      cache,
+      resourcePaths: pathLog,
+    };
+    if (this.optInParams.length > 0) {
+      const baseConfig = (rest.config ?? {}) as Record<string, unknown>;
+      const baseParams =
+        baseConfig.params !== undefined &&
+        typeof baseConfig.params === "object" &&
+        baseConfig.params !== null
+          ? { ...(baseConfig.params as Record<string, unknown>) }
+          : {};
+      for (const name of this.optInParams) {
+        if (this.hub.hasParam(name)) baseParams[name] = this.hub.getParam(name);
+      }
+      execOpts.config = { ...baseConfig, params: baseParams };
+    }
+
     try {
-      const result = await exec(code, {
-        ...rest,
-        // Live envelope prefers strictCQSstrings (RX-STRICT); caller may override true/false.
-        strictCQSstrings: rest.strictCQSstrings ?? true,
-        pathAtoms: this.atomBus,
-        cache,
-        resourcePaths: pathLog,
-      });
+      const result = await exec(code, execOpts);
       this._lastResult = result;
       return result;
     } catch (e) {
@@ -418,7 +501,8 @@ class ReactionEnvelopeImpl implements ReactionEnvelope {
     this._disposed = true;
     this._dirty = false;
     this.subs = [];
-    this.runObserved = [];
+    // Keep runObserved if mid-flight so onCommitSuccess still sees dispose and discards;
+    // do not clear runObserved here — commit path checks _disposed.
     this.staged = [];
     this.hub._unregister(this);
   }

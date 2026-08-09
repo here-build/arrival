@@ -1,29 +1,59 @@
 /**
- * LAW — Phase 5 reactivity X2a re-invoke + X5 door interop (gate 5b).
+ * LAW — Phase 5 reactivity X2a/X2b re-invoke + A-OPTIN + X5 door interop (gates 5b/5b′/5c).
  *
  * Host reaction envelope over real top-level `exec`s sharing a ReactionHub.
  * Suite: docs/working-proposals/cqs-reactivity/test-suite-design/reactivity/SUITE.md
  *
  * Gather/burst pair (**OQ-BURST-CONFIRM**) loud-skips — no burst-commit hook named yet.
- * X2b scheduling cases live elsewhere (foreign-write driver timing).
+ * X2b uses hub.invalidate as the foreign-write driver (**RX-EXT**).
+ * A-OPTIN asserts host-injected param atoms only — never define/overridable syntax.
  */
 import { describe, it, expect } from "vitest";
+import * as fc from "fast-check";
 import { EnvCapability } from "../../common/capability.js";
 import { exec } from "../../eval/generator-exec.js";
 import { MemoryEffectLog } from "../effect-log.js";
 import {
   MemoryResourcePathLog,
   ResourcePathConflictError,
+  type ResourcePath,
   type ResourcePathLog,
 } from "../resource-paths.js";
 import { createReactionHub } from "../reaction-envelope.js";
 import { MemoryRunCache } from "../run-cache.js";
+import {
+  atomKey,
+  isPathAtomKey,
+  keysArePrefixRelated,
+  paramAtomKey,
+} from "../path-atom-bus.js";
 
 // ── Shared fake capability family ────────────────────────────────────────────
 
 type SpyMap = Record<string, number>;
 
-function makePathCap(spies: SpyMap) {
+/** Harness gate for deferredRead / in-flight cases (X2b). */
+type DeferredGate = {
+  promise: Promise<void>;
+  release: () => void;
+  /** True once the deferred impl has entered (observed paths already armed). */
+  entered: Promise<void>;
+  markEntered: () => void;
+};
+
+function makeDeferredGate(): DeferredGate {
+  let release!: () => void;
+  let markEntered!: () => void;
+  const promise = new Promise<void>((r) => {
+    release = r;
+  });
+  const entered = new Promise<void>((r) => {
+    markEntered = r;
+  });
+  return { promise, release, entered, markEntered };
+}
+
+function makePathCap(spies: SpyMap, gate?: DeferredGate) {
   const base = new MemoryResourcePathLog();
   const pathLog: ResourcePathLog = {
     get effectPaths() {
@@ -50,6 +80,20 @@ function makePathCap(spies: SpyMap) {
         },
         (d: string, id: string) => {
           track("read");
+          return store.get(`${d}:${id}`) ?? `v1:${d}:${id}`;
+        },
+      ),
+      /** X2b fixture: Q arms before await; impl waits on harness gate. */
+      "deferred-read": symbol.rosetta`deferred-read: `(
+        {
+          input: [z.string, z.string],
+          output: [z.string],
+          queries: (d: string, id: string) => [["test", d, id]] as const,
+        },
+        async (d: string, id: string) => {
+          track("deferred-read");
+          gate?.markEntered();
+          if (gate) await gate.promise;
           return store.get(`${d}:${id}`) ?? `v1:${d}:${id}`;
         },
       ),
@@ -1000,6 +1044,367 @@ describe("ReactionHub.bus bare exec writer", () => {
     hub.invalidate([["test", "D", "id"]]);
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2);
+    hub.disposeAll();
+  });
+});
+
+// ── A-OPTIN (5c / R4) — host-injected param atoms ────────────────────────────
+
+describe("A-OPTIN param atoms (5c)", () => {
+  it("P-RX-OPTIN — host opts in; param atom change → one re-invoke, fresh run", async () => {
+    const spies: SpyMap = {};
+    const { cap } = makePathCap(spies);
+    const hub = createReactionHub();
+    const u = hub.unit({
+      code: '(read "D" "id")',
+      capabilities: [cap],
+      optInParams: ["filter"],
+    });
+    await u.run();
+    const cache1 = u.lastCache;
+    const log1 = u.lastPathLog;
+    expect(u.runCount).toBe(1);
+    expect(u.optInParams).toEqual(["filter"]);
+
+    hub.setParam("filter", "v2");
+    await hub.settle({ maxRounds: 8 });
+    expect(u.runCount).toBe(2);
+    expect(spies.read).toBe(2);
+    // A-EPOCH / RX-FRESH on the param-driven re-invoke
+    expect(u.lastCache).not.toBe(cache1);
+    expect(u.lastCache?.mode).toBe("record");
+    expect(u.lastPathLog).not.toBe(log1);
+    hub.disposeAll();
+  });
+
+  it("P-RX-OPTIN-SCOPE — opt-in on form A does not arm form B", async () => {
+    const spies: SpyMap = {};
+    const { cap } = makePathCap(spies);
+    const hub = createReactionHub();
+    const a = hub.unit({
+      code: '(read "A" "id")',
+      capabilities: [cap],
+      optInParams: ["filter"],
+    });
+    const b = hub.unit({
+      code: '(read "B" "id")',
+      capabilities: [cap],
+      optInParams: ["other"],
+    });
+    await a.run();
+    await b.run();
+    hub.setParam("filter", 1);
+    await hub.settle({ maxRounds: 8 });
+    expect(a.runCount).toBe(2);
+    expect(b.runCount).toBe(1); // different opt-in name — not armed
+    hub.disposeAll();
+  });
+
+  it("N-RX-NO-OPTIN — without host opt-in, param change does not re-invoke", async () => {
+    const spies: SpyMap = {};
+    const { cap } = makePathCap(spies);
+    const hub = createReactionHub();
+    // Same form shape as P-RX-OPTIN, no optInParams
+    const plain = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
+    const opted = hub.unit({
+      code: '(read "D" "id")',
+      capabilities: [cap],
+      optInParams: ["filter"],
+    });
+    await plain.run();
+    await opted.run();
+    hub.setParam("filter", "x");
+    await hub.settle({ maxRounds: 8 });
+    expect(plain.runCount).toBe(1); // no opt-in
+    expect(opted.runCount).toBe(2); // A-CTRL: same fixture with opt-in does fire
+    hub.disposeAll();
+  });
+
+  it("N-RX-OPTIN-KEY — param atoms never collide with path atoms (RX-PARAM-NS)", async () => {
+    // Encoding property + behavioral: path invalidate never uses param key space;
+    // setParam never uses path key space.
+    const param = paramAtomKey("limit");
+    expect(isPathAtomKey(param)).toBe(false);
+    expect(param.startsWith('"')).toBe(false);
+    expect(param).not.toBe("[]");
+    const pathKeys = [atomKey(["test", "D", "id"]), atomKey(["a"]), atomKey([])];
+    for (const pk of pathKeys) {
+      expect(keysArePrefixRelated(param, pk)).toBe(false);
+    }
+
+    const spies: SpyMap = {};
+    const { cap } = makePathCap(spies);
+    const hub = createReactionHub();
+    // Path-only unit — path write wakes; setParam does not
+    const pathOnly = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
+    // Param-only unit (pure form) — setParam wakes; path write does not
+    const paramOnly = hub.unit({
+      code: "(+ 1 2)",
+      capabilities: [cap],
+      optInParams: ["limit"],
+    });
+    await pathOnly.run();
+    await paramOnly.run();
+
+    hub.setParam("limit", 10);
+    await hub.settle({ maxRounds: 8 });
+    expect(paramOnly.runCount).toBe(2);
+    expect(pathOnly.runCount).toBe(1);
+
+    hub.invalidate([["test", "D", "id"]]);
+    await hub.settle({ maxRounds: 8 });
+    expect(pathOnly.runCount).toBe(2);
+    expect(paramOnly.runCount).toBe(2); // path invalidate does not touch param-only
+    hub.disposeAll();
+  });
+
+  it("N-RX-OPTIN-NOT-DOOR-FUEL — param-atom read contributes no prior E; never doors", async () => {
+    const spies: SpyMap = {};
+    const { cap } = makePathCap(spies);
+    const hub = createReactionHub();
+    const u = hub.unit({
+      code: '(read "D" "id")',
+      capabilities: [cap],
+      optInParams: ["filter"],
+    });
+    await u.run();
+    hub.setParam("filter", "noise");
+    await hub.settle({ maxRounds: 8 });
+    expect(u.runCount).toBe(2);
+    // Param change left no E fuel on the path log
+    expect(u.lastPathLog?.effectPaths ?? []).toEqual([]);
+    // A subsequent path write in a fresh run still legal after param re-invoke
+    // (param never polluted prior-E across the boundary either)
+    const w = hub.unit({
+      code: '(write "D" "id") (read "D" "id")',
+      capabilities: [cap],
+    });
+    // This shape doors within one run — prior-E from own write. Param is not involved.
+    await expect(w.run()).rejects.toThrow(ResourcePathConflictError);
+    // Param atom key must not appear as a resource path segment string that doors
+    // — door fuel is path tuples only. Probe: param key is not a path atom key.
+    expect(isPathAtomKey(paramAtomKey("filter"))).toBe(false);
+    hub.disposeAll();
+  });
+});
+
+// ── X2b scheduling (5b′ / R5) — foreign-write driver = hub.invalidate ────────
+
+describe("X2b scheduling (5b′)", () => {
+  it("P-RX-COALESCE — k=3 overlapping foreign writes in one settle ⇒ re-runs ∈ [1,3], final value", async () => {
+    const spies: SpyMap = {};
+    const { cap, store } = makePathCap(spies);
+    const hub = createReactionHub();
+    const u = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
+    await u.run();
+    expect(u.lastResult).toEqual(["v1:D:id"]);
+
+    store.set("D:id", "final-v3");
+    // k=3 overlapping invalidates before any settle — dirty flag coalesces
+    hub.invalidate([["test", "D", "id"]]);
+    hub.invalidate([["test", "D", "id"]]);
+    hub.invalidate([["test", "D", "id"]]);
+    const before = u.runCount;
+    await hub.settle({ maxRounds: 8 });
+    const reRuns = u.runCount - before;
+    expect(reRuns).toBeGreaterThanOrEqual(1);
+    expect(reRuns).toBeLessThanOrEqual(3);
+    expect(u.lastResult).toEqual(["final-v3"]);
+    hub.disposeAll();
+  });
+
+  it("P-RX-ARM-COUNT — k writes each individually settled ⇒ n = k re-invokes", async () => {
+    const spies: SpyMap = {};
+    const { cap } = makePathCap(spies);
+    const hub = createReactionHub();
+    const u = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
+    await u.run();
+    const k = 3;
+    for (let i = 0; i < k; i++) {
+      hub.invalidate([["test", "D", "id"]]);
+      await hub.settle({ maxRounds: 8 });
+    }
+    // initial + k serial re-invokes; none caused by run N's own query re-arming alone
+    expect(u.runCount).toBe(1 + k);
+    expect(spies.read).toBe(1 + k);
+    hub.disposeAll();
+  });
+
+  it("P-RX-INFLIGHT — deferred pending + foreign write + release ⇒ strictly one run2", async () => {
+    const spies: SpyMap = {};
+    const gate = makeDeferredGate();
+    const { cap, store } = makePathCap(spies, gate);
+    const hub = createReactionHub();
+    const u = hub.unit({ code: '(deferred-read "D" "id")', capabilities: [cap] });
+
+    const run1 = u.run();
+    await gate.entered; // path fn observed; impl awaiting
+    expect(u.runCount).toBe(1);
+
+    store.set("D:id", "after-foreign");
+    hub.invalidate([["test", "D", "id"]]); // provisional observe → dirty
+    expect(u.dirty).toBe(true);
+
+    gate.release();
+    await run1;
+    expect(u.runCount).toBe(1); // run1 completed; re-invoke not yet drained
+
+    await hub.settle({ maxRounds: 8 });
+    expect(u.runCount).toBe(2); // strictly one run2
+    expect(u.lastResult).toEqual(["after-foreign"]);
+    // spurious double-release must not spawn more runs
+    gate.release();
+    await hub.settle({ maxRounds: 8 });
+    expect(u.runCount).toBe(2);
+    hub.disposeAll();
+  });
+
+  it("N-RX-DISPOSE-INFLIGHT — dispose mid re-invoke discards subs; no further re-invoke", async () => {
+    const spies: SpyMap = {};
+    const gate = makeDeferredGate();
+    const { cap } = makePathCap(spies, gate);
+    const hub = createReactionHub();
+    // Arm with a normal read first so we have installed subs; re-invoke uses deferred.
+    let phase: "arm" | "deferred" = "arm";
+    const u = hub.unit({
+      code: () =>
+        phase === "arm" ? '(read "D" "id")' : '(deferred-read "D" "id")',
+      capabilities: [cap],
+    });
+    await u.run();
+    expect(u.subscriptionPaths).toEqual([["test", "D", "id"]]);
+
+    phase = "deferred";
+    hub.invalidate([["test", "D", "id"]]);
+    const settleP = hub.settle({ maxRounds: 8 });
+    await gate.entered; // re-invoke in flight
+    expect(u.runCount).toBe(2);
+
+    u.dispose();
+    gate.release();
+    await settleP;
+
+    expect(u.disposed).toBe(true);
+    expect(u.subscriptionPaths).toEqual([]); // discarded, not installed
+    const frozen = u.runCount;
+
+    // Further foreign write — no re-invoke (unregistered)
+    hub.invalidate([["test", "D", "id"]]);
+    await hub.settle({ maxRounds: 8 });
+    expect(u.runCount).toBe(frozen);
+
+    // Control: same fixture without dispose would still wake a live unit
+    const live = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
+    await live.run();
+    hub.invalidate([["test", "D", "id"]]);
+    await hub.settle({ maxRounds: 8 });
+    expect(live.runCount).toBe(2);
+    hub.disposeAll();
+  });
+});
+
+// ── F-RX property families (R5 polish; no OQ-BURST-CONFIRM dependency) ───────
+
+describe("F-RX property families (5b / 5b′)", () => {
+  it("F-RX4 — k overlapping foreign writes in one settle ⇒ re-runs ∈ [1,k], last value wins", async () => {
+    await fc.assert(
+      fc.asyncProperty(fc.integer({ min: 1, max: 5 }), async (k) => {
+        const spies: SpyMap = {};
+        const { cap, store } = makePathCap(spies);
+        const hub = createReactionHub();
+        const u = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
+        await u.run();
+        const final = `final-${k}`;
+        store.set("D:id", final);
+        for (let i = 0; i < k; i++) hub.invalidate([["test", "D", "id"]]);
+        const before = u.runCount;
+        await hub.settle({ maxRounds: 16 });
+        const reRuns = u.runCount - before;
+        expect(reRuns).toBeGreaterThanOrEqual(1);
+        expect(reRuns).toBeLessThanOrEqual(k);
+        expect(u.lastResult).toEqual([final]);
+        hub.disposeAll();
+      }),
+      { numRuns: 8 },
+    );
+  });
+
+  it("F-RX5 — legal self-write lane sequences with no foreign writes: run count = 1", async () => {
+    await fc.assert(
+      fc.asyncProperty(fc.constantFrom("D", "A", "X"), async (dom) => {
+        const spies: SpyMap = {};
+        const { cap } = makePathCap(spies);
+        const hub = createReactionHub();
+        // legal lane: query then effect on same path — self-suppressed
+        const u = hub.unit({
+          code: `(read "${dom}" "id") (write "${dom}" "id")`,
+          capabilities: [cap],
+        });
+        await u.run();
+        await hub.settle({ maxRounds: 8 });
+        expect(u.runCount).toBe(1);
+        hub.disposeAll();
+      }),
+      { numRuns: 6 },
+    );
+  });
+
+  it("F-RX5 mutual — A↔B pair quiesces within maxRounds (no hang)", async () => {
+    const spies: SpyMap = {};
+    const { cap } = makePathCap(spies);
+    const hub = createReactionHub();
+    const a = hub.unit({ code: "(read-x) (write-y)", capabilities: [cap] });
+    const b = hub.unit({ code: "(read-y) (write-x)", capabilities: [cap] });
+    await a.run();
+    await b.run();
+    await expect(hub.settle({ maxRounds: 8 })).resolves.toBeUndefined();
+    // at-most-once-per-unit per settle bounds the cascade
+    expect(a.runCount).toBeLessThanOrEqual(2);
+    expect(b.runCount).toBeLessThanOrEqual(2);
+    hub.disposeAll();
+  });
+
+  it("F-RX6 — door verdict of run N depends only on run N's own sequence", async () => {
+    const spies: SpyMap = {};
+    const { cap } = makePathCap(spies);
+    const hub = createReactionHub();
+    // run1 legal: read then write
+    let phase: "legal" | "illegal" = "legal";
+    const u = hub.unit({
+      code: () =>
+        phase === "legal"
+          ? '(read "D" "id") (write "D" "id")'
+          : '(write "D" "id") (read "D" "id")',
+      capabilities: [cap],
+    });
+    await u.run(); // legal — no door
+    phase = "illegal";
+    hub.invalidate([["test", "D", "id"]]);
+    // run2's door depends on run2's sequence only (illegal shape doors even though run1 was legal)
+    await expect(hub.settle({ maxRounds: 8 })).rejects.toThrow(ResourcePathConflictError);
+    // After the failed re-invoke, a fresh legal sequence must still be legal (epoch isolation)
+    phase = "legal";
+    await u.run();
+    expect(u.lastPathLog?.effectPaths).toEqual([["test", "D", "id"]]);
+    hub.disposeAll();
+  });
+
+  it("F-RX7 — subs(run N) = live Q of run N after success (replacement, not accumulation)", async () => {
+    const spies: SpyMap = {};
+    const { cap } = makePathCap(spies);
+    const hub = createReactionHub();
+    let domain = "A";
+    const u = hub.unit({
+      code: () => `(read "${domain}" "id")`,
+      capabilities: [cap],
+    });
+    await u.run();
+    expect(u.subscriptionPaths).toEqual([["test", "A", "id"]]);
+    domain = "B";
+    await u.run();
+    // replacement — A gone, only B
+    expect(u.subscriptionPaths).toEqual([["test", "B", "id"]]);
+    expect(u.subscriptionPaths.some((p: ResourcePath) => p[1] === "A")).toBe(false);
     hub.disposeAll();
   });
 });
