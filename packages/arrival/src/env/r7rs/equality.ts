@@ -296,6 +296,10 @@ export default EnvCapability.define("scheme/equality", {
         return bool(false);
       },
     ),
+    // Clojure / polyglot spelling — same empty-list test as null? (arrival's nil ≡ '()).
+    // Alias stays in this pack (symbol.alias is same-capability only). Card teaches null?;
+    // models that type nil? still run.
+    "nil?": symbol.alias`null?`,
 
     "boolean?": symbol.native`boolean?: boxed-or-raw boolean test`(
       {

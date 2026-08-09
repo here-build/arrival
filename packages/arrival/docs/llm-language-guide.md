@@ -46,8 +46,7 @@ Examples the reader/env absorb without documenting on the card:
 
 - `{name: v}`, `#:name` → `:name`, JSON `{"a": 1}` (space after `:`)
 - bracket `let` / `cond` bindings
-- name aliases: `mapcar`, `nth`, `~>`, `true`/`false`, …
-
+- name aliases: `mapcar`, `nth`, `~>`, `true`/`false`, `nil?` (≡ `null?`), …
 **Traps that are not loose-success:** `{a:1}` (one symbol — need space after `:`).
 
 ---

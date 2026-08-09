@@ -30,4 +30,4 @@ Missing key → `nil` (= `'()`). Only `#f` is false — `nil` is truthy.
 ;; bad  (take 2 xs)
 ```
 
-`set!` · mutators forbidden. Use `null?`, not `nil?`.
+`set!` · mutators forbidden.
