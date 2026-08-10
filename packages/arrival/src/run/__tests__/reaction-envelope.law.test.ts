@@ -56,8 +56,14 @@ function makeDeferredGate(): DeferredGate {
 function makePathCap(spies: SpyMap, gate?: DeferredGate) {
   const base = new MemoryResourcePathLog();
   const pathLog: ResourcePathLog = {
+    get events() {
+      return base.events;
+    },
     get effectPaths() {
       return base.effectPaths;
+    },
+    recordQueries(paths) {
+      base.recordQueries(paths);
     },
     recordEffects(paths) {
       base.recordEffects(paths);
@@ -587,7 +593,8 @@ describe("X2a re-invoke positives (5b)", () => {
 
   it("P-RX-DOOR-PERSISTS — failed re-run keeps last successful subs; later write re-invokes", async () => {
     // RX-SUBS: a run that doors keeps the last *successful* subscription set.
-    // Arm on A, then a re-invoke that doors mid-body, then a further write to A still wakes.
+    // Arm on A, then a re-invoke that doors mid-body (N-I4c Q→E→Q), then a further write to A still wakes.
+    // Bare write→read is LEGAL; door phase uses intervening E between overlapping Qs.
     const spies: SpyMap = {};
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
@@ -595,7 +602,7 @@ describe("X2a re-invoke positives (5b)", () => {
     const u = hub.unit({
       code: () => {
         if (phase === "arm") return '(read "A" "id")';
-        if (phase === "door") return '(read "A" "id") (write "D" "id") (read "D" "id")';
+        if (phase === "door") return '(read "D" "id") (write "D" "id") (read "D" "id")';
         return '(read "A" "id")';
       },
       capabilities: [cap],
@@ -836,6 +843,7 @@ describe("X2a re-invoke negatives (5b)", () => {
   });
 
   it("N-RX-PARTIAL-RUN-INVAL — write then door in same run does not wake subscribers", async () => {
+    // Restaged to N-I4c: bare E→Q no longer doors; Q→E→Q doors after write has staged.
     const spies: SpyMap = {};
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
@@ -843,7 +851,7 @@ describe("X2a re-invoke negatives (5b)", () => {
     await sub.run();
 
     const partial = hub.unit({
-      code: '(write "D" "id") (read "D" "id")',
+      code: '(read "D" "id") (write "D" "id") (read "D" "id")',
       capabilities: [cap],
     });
     await expect(partial.run()).rejects.toThrow(ResourcePathConflictError);
@@ -929,9 +937,9 @@ describe("X5 door interop (5b)", () => {
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
 
-    // Control: same read inside run1 doors
+    // Control: N-I4c intervening shape doors inside one run (bare E→Q is LEGAL now)
     await expect(
-      exec('(write "D" "id") (read "D" "id")', {
+      exec('(read "D" "id") (write "D" "id") (read "D" "id")', {
         capabilities: [cap],
         resourcePaths: new MemoryResourcePathLog(),
       }),
@@ -977,14 +985,15 @@ describe("X5 door interop (5b)", () => {
     hub.disposeAll();
   });
 
-  it("P-RX-REPLAY-DOOR-LIVE — replay-mode still doors on illegal N-I1 shape", async () => {
+  it("P-RX-REPLAY-DOOR-LIVE — replay-mode still doors on illegal N-I4c shape", async () => {
     // Reactivity silence must NOT short-circuit CQS. Constructed with bare exec + replay
     // cache (not envelope — envelope always uses record). Door is pre-cache.
+    // Restaged: bare E→Q is LEGAL; N-I4c Q→E→Q is the true intervening door.
     const spies: SpyMap = {};
     const { cap } = makePathCap(spies);
     const replay = new MemoryRunCache("replay");
     await expect(
-      exec('(write "D" "id") (read "D" "id")', {
+      exec('(read "D" "id") (write "D" "id") (read "D" "id")', {
         capabilities: [cap],
         cache: replay,
         resourcePaths: new MemoryResourcePathLog(),
@@ -1173,13 +1182,18 @@ describe("A-OPTIN param atoms (5c)", () => {
     expect(u.runCount).toBe(2);
     // Param change left no E fuel on the path log
     expect(u.lastPathLog?.effectPaths ?? []).toEqual([]);
-    // A subsequent path write in a fresh run still legal after param re-invoke
-    // (param never polluted prior-E across the boundary either)
-    const w = hub.unit({
+    // Param never polluted prior-E across the boundary either — bare path E→Q is legal,
+    // and a true intervening door still fires from path fuel only (N-I4c).
+    const legal = hub.unit({
       code: '(write "D" "id") (read "D" "id")',
       capabilities: [cap],
     });
-    // This shape doors within one run — prior-E from own write. Param is not involved.
+    await legal.run(); // bare E→Q LEGAL
+    const w = hub.unit({
+      code: '(read "D" "id") (write "D" "id") (read "D" "id")',
+      capabilities: [cap],
+    });
+    // N-I4c doors within one run — path prior Q/E only. Param is not involved.
     await expect(w.run()).rejects.toThrow(ResourcePathConflictError);
     // Param atom key must not appear as a resource path segment string that doors
     // — door fuel is path tuples only. Probe: param key is not a path atom key.
@@ -1368,19 +1382,19 @@ describe("F-RX property families (5b / 5b′)", () => {
     const spies: SpyMap = {};
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
-    // run1 legal: read then write
+    // run1 legal: read then write (bare E→Q also legal; illegal = N-I4c intervening)
     let phase: "legal" | "illegal" = "legal";
     const u = hub.unit({
       code: () =>
         phase === "legal"
           ? '(read "D" "id") (write "D" "id")'
-          : '(write "D" "id") (read "D" "id")',
+          : '(read "D" "id") (write "D" "id") (read "D" "id")',
       capabilities: [cap],
     });
     await u.run(); // legal — no door
     phase = "illegal";
     hub.invalidate([["test", "D", "id"]]);
-    // run2's door depends on run2's sequence only (illegal shape doors even though run1 was legal)
+    // run2's door depends on run2's sequence only (N-I4c doors even though run1 was legal)
     await expect(hub.settle({ maxRounds: 8 })).rejects.toThrow(ResourcePathConflictError);
     // After the failed re-invoke, a fresh legal sequence must still be legal (epoch isolation)
     phase = "legal";

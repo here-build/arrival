@@ -36,8 +36,14 @@ function makePathCap(spies: SpyMap, opts?: { pathFnThrow?: "queries" | "effects"
 
   /** Test-only append-on-pass spy (R-HARNESS-SPY) — records only when product records. */
   const pathLog: ResourcePathLog = {
+    get events() {
+      return base.events;
+    },
     get effectPaths() {
       return base.effectPaths;
+    },
+    recordQueries(paths) {
+      base.recordQueries(paths);
     },
     recordEffects(paths) {
       appendEvents.push(paths.map((p) => [...p]));

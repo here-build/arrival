@@ -56,6 +56,7 @@ export {
   pathsOverlap,
   anyPathOverlap,
   findOverlappingPair,
+  findInterveningDoor,
   serializeResourcePath,
   ResourcePathConflictError,
   ResourcePathDeclarationError,
@@ -63,6 +64,8 @@ export {
   type ResourcePath,
   type ResourcePathFn,
   type ResourcePathLog,
+  type ResourcePathEvent,
+  type InterveningDoorWitness,
 } from "../run/resource-paths.js";
 
 // Phase 5 R1 — path-keyed atom bus (observe at Q≠[]; stage E for run-commit invalidate).

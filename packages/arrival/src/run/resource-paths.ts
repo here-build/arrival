@@ -2,13 +2,17 @@
  * resource-paths — named domain lanes for temporal zoning of domain immutability.
  *
  * A resource path is a segment tuple (e.g. `["db","projects",id]`). Overlap is
- * segment-wise prefix either direction — not string-join. Within one run, after
- * a domain has been effected, a new query genesis overlapping that effect is
- * illegal (door before impl). Holding prior query results is fine; outer-world
- * sync is not promised.
+ * segment-wise prefix either direction — not string-join.
+ *
+ * Temporal immutability (product law): a new query genesis is illegal only when
+ * an effect intervenes *between* two overlapping queries on a shared domain
+ * (Q → E → Q door). Bare E→Q is legal. The run log is an ordered event journal
+ * of Q and E batches; door scan is intervening-E (see `findInterveningDoor`).
+ * Holding prior query results is fine; outer-world sync is not promised.
  *
  * Design: docs/working-proposals/cqs-reactivity/
  * Suite:  docs/working-proposals/cqs-reactivity/test-suite-design/SUITE.md
+ * Law:    docs/working-proposals/cqs-reactivity/test-suite-design/law-identity/
  *
  * THIS MODULE is the pure algebra + run log + door error. Path producers live
  * on CrossingContract (rosetta only); the chokepoint is the membrane apply.
@@ -20,12 +24,23 @@
  * Segment types: prefer type-level (`ResourcePath = readonly string[]`). Runtime
  * non-string segment checks are opt-in via `strictCQSstrings` (default false).
  * Top-level producer return shape (must be an array of paths) is always checked.
+ *
+ * Door: intervening-E via `findInterveningDoor`; record hybrid Q≺E after pass
+ * (REWORK-PLAN). Classic priorE∩thisQ alone is not the product door.
  */
 
 import { ArrivalError, type ErrorClass } from "../errors.js";
 
 /** One named domain location — ordered segments. Empty tuples are out of generators. */
 export type ResourcePath = readonly string[];
+
+/**
+ * One journal entry on a resource-path log. Total order across Q and E is
+ * what intervening-door needs; flat effectPaths is derived for compat.
+ */
+export type ResourcePathEvent =
+  | { readonly kind: "Q"; readonly paths: readonly ResourcePath[] }
+  | { readonly kind: "E"; readonly paths: readonly ResourcePath[] };
 
 /**
  * Decoded-arg path producer (contract field). Invoked after decode, before impl.
@@ -53,7 +68,7 @@ export function anyPathOverlap(
   return findOverlappingPair(priorEffects, thisQueries) !== undefined;
 }
 
-/** First overlapping (priorE, thisQ) pair, if any — door discriminator payload. */
+/** First overlapping (priorE, thisQ) pair, if any — classic door discriminator payload. */
 export function findOverlappingPair(
   priorEffects: readonly ResourcePath[],
   thisQueries: readonly ResourcePath[],
@@ -69,41 +84,118 @@ export function findOverlappingPair(
 }
 
 /**
- * Per-run prior-effect path set. Record only AFTER check passes (R-O2).
- * Optional query log is not required for the door.
+ * Intervening-door witness: prior Q_a, then later prior E that operationally
+ * touches thisQ (pathsOverlap(E, thisQ)), both before the current query.
+ */
+export type InterveningDoorWitness = {
+  readonly priorQuery?: ResourcePath;
+  readonly priorEffect: ResourcePath;
+  readonly thisQuery: ResourcePath;
+};
+
+/**
+ * Temporal immutability door algebra (REWORK-PLAN).
+ *
+ * Door iff ∃ thisQ ∈ thisQPaths, ∃ prior Q_a overlapping thisQ, and ∃ prior E
+ * after that Q_a with pathsOverlap(E, thisQ). Operational E-touch is E∩thisQ
+ * only (formal E∩Q_a ∨ E∩thisQ deferred).
+ *
+ * Chronological scan of prior events only — does not record.
+ */
+export function findInterveningDoor(
+  log: Pick<ResourcePathLog, "events">,
+  thisQPaths: readonly ResourcePath[],
+): InterveningDoorWitness | undefined {
+  const events = log.events;
+  for (const thisQ of thisQPaths) {
+    let seenOverlappingPriorQ = false;
+    let priorQuery: ResourcePath | undefined;
+    for (const event of events) {
+      if (event.kind === "Q") {
+        for (const p of event.paths) {
+          if (pathsOverlap(p, thisQ)) {
+            seenOverlappingPriorQ = true;
+            priorQuery = p;
+            break;
+          }
+        }
+      } else if (event.kind === "E" && seenOverlappingPriorQ) {
+        for (const priorEffect of event.paths) {
+          if (pathsOverlap(priorEffect, thisQ)) {
+            return { priorQuery, priorEffect, thisQuery: thisQ };
+          }
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Per-run ordered Q/E journal. Record only AFTER check passes (R-O2 / R-HYBRID-ORDER).
+ * `effectPaths` is the flat E-path view (compat); `events` is the total order.
  */
 export interface ResourcePathLog {
   /**
-   * Prior effect paths this run (live view of the internal array — same honesty
-   * as MemoryEffectLog.entries; do not mutate).
+   * Ordered journal of query and effect batches this run (live view — do not mutate).
+   */
+  readonly events: readonly ResourcePathEvent[];
+  /**
+   * Prior effect paths this run (flat, chronological — derived from E events;
+   * same honesty as MemoryEffectLog.entries; do not mutate).
    */
   readonly effectPaths: readonly ResourcePath[];
   /** Append effect paths that passed the CQS check (pre-impl). Empty paths ignored. */
   recordEffects(paths: readonly ResourcePath[]): void;
+  /** Append query paths that passed the CQS check (pre-impl). Empty paths ignored. */
+  recordQueries(paths: readonly ResourcePath[]): void;
 }
 
 /**
  * Default in-memory log — one instance per run. Copies path arrays on record.
- * No dedup: repeated writes grow O(effects); check is O(|priorE|×|Q|×depth).
+ * No dedup: repeated writes grow O(events); check is O(|log|×|Q|×depth).
  * Fine for Phase 3a; index later if long-run hosts need it.
  */
 export class MemoryResourcePathLog implements ResourcePathLog {
+  private readonly _events: ResourcePathEvent[] = [];
   private readonly _effects: ResourcePath[] = [];
+
+  get events(): readonly ResourcePathEvent[] {
+    return this._events;
+  }
 
   get effectPaths(): readonly ResourcePath[] {
     return this._effects;
   }
 
+  recordQueries(paths: readonly ResourcePath[]): void {
+    const frozen = freezeNonEmptyPaths(paths);
+    if (frozen.length === 0) return;
+    this._events.push(Object.freeze({ kind: "Q" as const, paths: frozen }));
+  }
+
   recordEffects(paths: readonly ResourcePath[]): void {
-    for (const path of paths) {
-      if (path.length > 0) this._effects.push(Object.freeze([...path]));
+    const frozen = freezeNonEmptyPaths(paths);
+    if (frozen.length === 0) return;
+    this._events.push(Object.freeze({ kind: "E" as const, paths: frozen }));
+    for (const path of frozen) {
+      this._effects.push(path);
     }
   }
 }
 
+function freezeNonEmptyPaths(paths: readonly ResourcePath[]): readonly ResourcePath[] {
+  const out: ResourcePath[] = [];
+  for (const path of paths) {
+    if (path.length > 0) out.push(Object.freeze([...path]));
+  }
+  return out.length === 0 ? out : Object.freeze(out);
+}
+
 /**
- * Door: prior effect paths ∩ this query paths ≠ ∅.
- * Thrown before impl; doored impl must not run.
+ * Door: intervening effect between overlapping prior query and this query
+ * (temporal immutability / inter-query coherence). Thrown before impl; doored
+ * impl must not run. Category remains domain-immutability.
  */
 export class ResourcePathConflictError extends ArrivalError {
   public readonly name = "ResourcePathConflictError";
@@ -112,15 +204,22 @@ export class ResourcePathConflictError extends ArrivalError {
   constructor(
     /** Offending symbol (the query penetration). */
     public readonly verbName: string,
-    /** One prior effect path that overlaps. */
+    /** One prior effect path that operationally touches thisQuery after a prior Q. */
     public readonly priorEffect: ResourcePath,
     /** One query path from this penetration that overlaps. */
     public readonly thisQuery: ResourcePath,
+    /** Optional prior query path that established the domain (intervening-door witness). */
+    public readonly priorQuery?: ResourcePath,
   ) {
+    const priorQPart =
+      priorQuery !== undefined
+        ? ` after prior query ${serializeResourcePath(priorQuery)}`
+        : "";
     super(
-      `${verbName}: query path ${serializeResourcePath(thisQuery)} overlaps prior effect path ${serializeResourcePath(priorEffect)} ` +
-        `in this run — a new query genesis on a domain after it was effected is illegal ` +
-        `(temporal zoning of domain immutability; hold prior results instead of re-querying)`,
+      `${verbName}: intervening effect path ${serializeResourcePath(priorEffect)} between queries ` +
+        `on ${serializeResourcePath(thisQuery)}${priorQPart} in this run — a new query genesis ` +
+        `on a domain after an intervening effect is illegal ` +
+        `(temporal immutability / inter-query coherence; hold prior results instead of re-querying)`,
     );
   }
 }
@@ -245,8 +344,8 @@ function producePaths(
 }
 
 /**
- * Run the CQS order for one penetration (R-O2):
- *   path fns → check vs prior E → record E → (caller runs impl)
+ * Run the CQS order for one penetration (R-O2 / R-HYBRID-ORDER / temporal law):
+ *   path fns → intervening-door vs prior log only → record Q then E → (caller runs impl)
  *
  * When `log` is undefined, path fns still run if provided (for observability) but
  * check/record are no-ops (facility off — CONSTANT_CTX).
@@ -254,6 +353,9 @@ function producePaths(
  * `strictCQSstrings` (default false): runtime assert every path segment is a string.
  * Prefer type-level `ResourcePath`; this flag is for non-prod harness stress only.
  * Top-level producer shape (array of arrays) is always enforced.
+ *
+ * Door is intervening-E (`findInterveningDoor`), not classic priorE∩thisQ alone.
+ * Self-door: check prior log only; record after pass (hybrid Q≺E).
  */
 export function applyResourcePathCqs(opts: {
   verbName: string;
@@ -271,13 +373,28 @@ export function applyResourcePathCqs(opts: {
     ? producePaths(opts.verbName, "effects", opts.effects, opts.decodedArgs, strict)
     : [];
   const log = opts.log;
-  if (log !== undefined && Q.length > 0) {
-    const pair = findOverlappingPair(log.effectPaths, Q);
-    if (pair !== undefined) {
-      throw new ResourcePathConflictError(opts.verbName, pair.priorEffect, pair.thisQuery);
+  if (log === undefined) {
+    return { queries: Q, effects: E };
+  }
+
+  // DOOR — prior log only (self-door: current Q/E not yet recorded)
+  if (Q.length > 0) {
+    const witness = findInterveningDoor(log, Q);
+    if (witness !== undefined) {
+      throw new ResourcePathConflictError(
+        opts.verbName,
+        witness.priorEffect,
+        witness.thisQuery,
+        witness.priorQuery,
+      );
     }
   }
-  if (log !== undefined && E.length > 0) {
+
+  // RECORD — after pass; hybrid Q≺E (R-HYBRID-ORDER)
+  if (Q.length > 0) {
+    log.recordQueries(Q);
+  }
+  if (E.length > 0) {
     log.recordEffects(E);
   }
   return { queries: Q, effects: E };

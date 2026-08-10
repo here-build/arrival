@@ -47,8 +47,14 @@ type SpyMap = Record<string, number>;
 function makePathCap(spies: SpyMap, opts?: { pathFnThrow?: "queries" | "effects" }) {
   const base = new MemoryResourcePathLog();
   const pathLog: ResourcePathLog = {
+    get events() {
+      return base.events;
+    },
     get effectPaths() {
       return base.effectPaths;
+    },
+    recordQueries(paths) {
+      base.recordQueries(paths);
     },
     recordEffects(paths) {
       base.recordEffects(paths);
@@ -341,21 +347,23 @@ describe("X1 arming negatives (5a)", () => {
   });
 
   it("N-RX-DOORED-Q — doored query observes nothing; prior write abandoned (RX-CLOCK)", async () => {
+    // Restaged to N-I4c (Q→E→Q): bare E→Q is LEGAL under temporal immutability.
     const bus = new MemoryPathAtomBus();
     const spies: SpyMap = {};
     const { cap, pathLog } = makePathCap(spies);
     await expect(
-      exec('(write "D" "id") (read "D" "id")', {
+      exec('(read "D" "id") (write "D" "id") (read "D" "id")', {
         capabilities: [cap],
         pathAtoms: bus,
         resourcePaths: pathLog,
       }),
     ).rejects.toThrow(ResourcePathConflictError);
-    // Doored read did not observe; run failed → staged write abandoned
-    expect(bus.observed.size).toBe(0);
+    // First read observed; second (doored) Q never reaches observe (post-CQS arming).
+    // Run failed → staged write abandoned (RX-CLOCK).
+    expect(bus.observed).toEqual(new Set([key("test", "D", "id")]));
     expect(bus.invalidated.size).toBe(0);
     expect(spies.write).toBe(1);
-    expect(spies.read).toBeUndefined();
+    expect(spies.read).toBe(1); // first read only; second doored before impl
     // A-CTRL-X1: successful write alone populates invalidated
     const bus2 = new MemoryPathAtomBus();
     await exec('(write "D" "id")', {
