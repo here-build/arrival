@@ -1,12 +1,13 @@
 /**
- * LAW — resource-path CQS door (Phase 3a / suite S1 core + 3a-complete door-only).
+ * LAW — temporal immutability domain (inter-query coherence).
  *
- * After a domain has been effected this run, a new query genesis that overlaps
- * that effect is structurally illegal. Everything else is free (lanes, hold
- * results, Q→Q, effects-only). Paths come from contract producers after decode,
+ * Door only when an effect intervenes BETWEEN two overlapping queries on a
+ * shared domain. Bare E→Q / E→Q→E / E→Q→Q are LEGAL. Classic priorE∩thisQ is
+ * SUPERSEDED (law-identity wave). Paths from contract producers after decode,
  * never from impl return.
  *
  * Suite: docs/working-proposals/cqs-reactivity/test-suite-design/SUITE.md
+ * Law-identity: docs/working-proposals/cqs-reactivity/test-suite-design/law-identity/
  */
 import { describe, it, expect } from "vitest";
 import { EnvCapability } from "../../common/capability.js";
@@ -321,23 +322,62 @@ describe("resource-path CQS door — core positives", () => {
     expect(spies.read).toBe(1);
   });
 
-  it("P-DECODE — path fns use decoded form only", async () => {
-    // Asymmetric raw vs decoded: write "raw:42" → E=["test","d","42"];
-    // read "42" (already decoded shape) → Q=["test","d","42"] collides only if
-    // path fns see decoded args. If they saw raw, write E would be …/"raw:42"
-    // and would NOT prefix-overlap …/"42".
+  it("P-DECODE — path fns use decoded form only (bare E→Q legal; decode still proven)", async () => {
+    // Asymmetric raw vs decoded: write "raw:42" → E=["test","d","42"] only if
+    // path fns see decoded args. Bare E→Q is LEGAL under temporal immutability;
+    // assert decode via appendEvents (decoded segment, not raw).
     const spies: SpyMap = {};
     const { cap, pathLog, appendEvents } = makePathCap(spies);
-    await expect(
-      exec('(write-decoded "d" "raw:42") (read-decoded "d" "42")', {
-        capabilities: [cap],
-        runCtx: new RunContext({ resourcePaths: pathLog }),
-      }),
-    ).rejects.toThrow(ResourcePathConflictError);
+    await exec('(write-decoded "d" "raw:42") (read-decoded "d" "42")', {
+      capabilities: [cap],
+      runCtx: new RunContext({ resourcePaths: pathLog }),
+    });
     expect(spies["write-decoded"]).toBe(1);
-    expect(spies["read-decoded"] ?? 0).toBe(0);
+    expect(spies["read-decoded"]).toBe(1);
     expect(appendEvents.flat()).toContainEqual(["test", "d", "42"]);
     expect(appendEvents.flat()).not.toContainEqual(["test", "d", "raw:42"]);
+  });
+
+  it("P-E-THEN-Q — bare write then overlapping read is legal", async () => {
+    const spies: SpyMap = {};
+    await run('(write "a" "1") (read "a" "1")', spies);
+    expect(spies.write).toBe(1);
+    expect(spies.read).toBe(1);
+  });
+
+  it("P-E-Q-E — effect then query then effect same domain legal", async () => {
+    const spies: SpyMap = {};
+    await run('(write "a" "1") (read "a" "1") (write "a" "1")', spies);
+    expect(spies.write).toBe(2);
+    expect(spies.read).toBe(1);
+  });
+
+  it("P-E-Q-Q — effect then two queries (nothing between queries) legal", async () => {
+    const spies: SpyMap = {};
+    await run('(write "a" "1") (read "a" "1") (read "a" "1")', spies);
+    expect(spies.write).toBe(1);
+    expect(spies.read).toBe(2);
+  });
+
+  it("P-PREFIX-E-THEN-Q-↑ — write child; read parent legal (bare E→Q)", async () => {
+    const spies: SpyMap = {};
+    await run('(write "a" "1") (read-all "a")', spies);
+    expect(spies.write).toBe(1);
+    expect(spies["read-all"]).toBe(1);
+  });
+
+  it("P-PREFIX-E-THEN-Q-↓ — write parent; read child legal (bare E→Q)", async () => {
+    const spies: SpyMap = {};
+    await run('(write-all "a") (read "a" "1")', spies);
+    expect(spies["write-all"]).toBe(1);
+    expect(spies.read).toBe(1);
+  });
+
+  it("P-MOVE-DST — after move(s,d); read(d) legal (no prior Q on dst)", async () => {
+    const spies: SpyMap = {};
+    await run('(move "src" "dst") (read-all "dst")', spies);
+    expect(spies.move).toBe(1);
+    expect(spies["read-all"]).toBe(1);
   });
 
   it("P-FRESH — fresh run has empty prior; prior run's effects do not carry", async () => {
@@ -401,55 +441,10 @@ describe("resource-path CQS door — core positives", () => {
   });
 });
 
-// ── S1 Core negatives ────────────────────────────────────────────────────────
+// ── S1 Core negatives (true doors = intervening E between overlapping Qs) ───
 
 describe("resource-path CQS door — core negatives (A-QUAD)", () => {
-  it("N-I1 — write D; read overlapping D", async () => {
-    const spies: SpyMap = {};
-    const { cap, pathLog, pathFnCalls } = makePathCap(spies);
-    try {
-      await exec('(write "a" "1") (read "a" "1")', {
-        capabilities: [cap],
-        runCtx: new RunContext({ resourcePaths: pathLog }),
-      });
-      expect.unreachable();
-    } catch (err) {
-      aQuad(err, spies, pathFnCalls, "read", { write: 1 });
-      const e = err as ResourcePathConflictError;
-      expect(e.priorEffect).toEqual(["test", "a", "1"]);
-      expect(e.thisQuery).toEqual(["test", "a", "1"]);
-    }
-  });
-
-  it("N-PREFIX-↑ — write child; read parent", async () => {
-    const spies: SpyMap = {};
-    const { cap, pathLog, pathFnCalls } = makePathCap(spies);
-    try {
-      await exec('(write "a" "1") (read-all "a")', {
-        capabilities: [cap],
-        runCtx: new RunContext({ resourcePaths: pathLog }),
-      });
-      expect.unreachable();
-    } catch (err) {
-      aQuad(err, spies, pathFnCalls, "read-all", { write: 1 });
-    }
-  });
-
-  it("N-PREFIX-↓ — write parent; read child", async () => {
-    const spies: SpyMap = {};
-    const { cap, pathLog, pathFnCalls } = makePathCap(spies);
-    try {
-      await exec('(write-all "a") (read "a" "1")', {
-        capabilities: [cap],
-        runCtx: new RunContext({ resourcePaths: pathLog }),
-      });
-      expect.unreachable();
-    } catch (err) {
-      aQuad(err, spies, pathFnCalls, "read", { "write-all": 1 });
-    }
-  });
-
-  it("N-I4c — read; write; read again — door on second read", async () => {
+  it("N-I4c — read; write; read again — door on second read (canonical)", async () => {
     const spies: SpyMap = {};
     const { cap, pathLog, pathFnCalls } = makePathCap(spies);
     try {
@@ -467,17 +462,22 @@ describe("resource-path CQS door — core negatives (A-QUAD)", () => {
     }
   });
 
-  it("N-CROSS-SYMBOL — write via write-many; read via read (different symbols, shared path)", async () => {
+  it("N-CROSS-SYMBOL — prior Q then E then foreign-symbol overlapping Q doors", async () => {
+    // Restaged: bare write-many→read is LEGAL; need intervening pattern.
+    // Second read uses same symbol as first — do not use aQuad (expects impl=0 on symbol).
     const spies: SpyMap = {};
     const { cap, pathLog, pathFnCalls } = makePathCap(spies);
     try {
-      await exec('(write-many "a" "1" "9") (read "a" "1")', {
+      await exec('(read "a" "1") (write-many "a" "1" "9") (read "a" "1")', {
         capabilities: [cap],
         runCtx: new RunContext({ resourcePaths: pathLog }),
       });
       expect.unreachable();
     } catch (err) {
-      aQuad(err, spies, pathFnCalls, "read", { "write-many": 1 });
+      expectDoor(err);
+      expect(spies["write-many"]).toBe(1);
+      expect(spies.read).toBe(1); // first read only; second doored
+      expect(pathFnCalls.filter((c) => c.name === "read" && c.axis === "q").length).toBe(2);
     }
   });
 
@@ -532,37 +532,47 @@ describe("resource-path CQS door — core negatives (A-QUAD)", () => {
 // ── S1 3a-complete (door-only) ───────────────────────────────────────────────
 
 describe("resource-path CQS door — 3a-complete", () => {
-  it("N-MULTI-E-PATHS — both ends of multi-path E door independently", async () => {
+  it("P-MULTI-E-PATHS — bare multi-E then probe each path is legal", async () => {
     for (const probe of ['(read "a" "1")', '(read "a" "2")'] as const) {
+      const spies: SpyMap = {};
+      await run(`(write-many "a" "1" "2") ${probe}`, spies);
+      expect(spies["write-many"]).toBe(1);
+      expect(spies.read).toBe(1);
+    }
+  });
+
+  it("P-MULTI-Q-PATHS — bare E then multi-Q with one hit is legal", async () => {
+    const spies: SpyMap = {};
+    await run('(write "a" "1") (read-many "a" "x" "1")', spies);
+    expect(spies.write).toBe(1);
+    expect(spies["read-many"]).toBe(1);
+  });
+
+  it("N-MULTI-E-PATHS — multi-path E with prior Q then probe each end doors", async () => {
+    // Re-homed under intervening law: prior Q on probe path, multi-E, re-query.
+    // Same symbol for both reads — manual A-QUAD (not aQuad's impl=0 on symbol).
+    for (const [priorQ, probe] of [
+      ['(read "a" "1")', '(read "a" "1")'],
+      ['(read "a" "2")', '(read "a" "2")'],
+    ] as const) {
       const spies: SpyMap = {};
       const { cap, pathLog, pathFnCalls } = makePathCap(spies);
       try {
-        await exec(`(write-many "a" "1" "2") ${probe}`, {
+        await exec(`${priorQ} (write-many "a" "1" "2") ${probe}`, {
           capabilities: [cap],
           runCtx: new RunContext({ resourcePaths: pathLog }),
         });
         expect.unreachable();
       } catch (err) {
-        aQuad(err, spies, pathFnCalls, "read", { "write-many": 1 });
+        expectDoor(err);
+        expect(spies["write-many"]).toBe(1);
+        expect(spies.read).toBe(1);
+        expect(pathFnCalls.filter((c) => c.name === "read" && c.axis === "q").length).toBe(2);
       }
     }
   });
 
-  it("N-MULTI-Q-PATHS — multi Q with one overlapping path doors", async () => {
-    const spies: SpyMap = {};
-    const { cap, pathLog, pathFnCalls } = makePathCap(spies);
-    try {
-      await exec('(write "a" "1") (read-many "a" "x" "1")', {
-        capabilities: [cap],
-        runCtx: new RunContext({ resourcePaths: pathLog }),
-      });
-      expect.unreachable();
-    } catch (err) {
-      aQuad(err, spies, pathFnCalls, "read-many", { write: 1 });
-    }
-  });
-
-  it("N-HYBRID-AS-E — upsert then read overlapping doors", async () => {
+  it("N-HYBRID-AS-E — upsert then read overlapping doors (hybrid Q≺E)", async () => {
     const spies: SpyMap = {};
     const { cap, pathLog, pathFnCalls } = makePathCap(spies);
     try {
@@ -576,53 +586,36 @@ describe("resource-path CQS door — 3a-complete", () => {
     }
   });
 
-  it("N-MOVE-E — after move(s,d); read(d) doors", async () => {
-    const spies: SpyMap = {};
-    const { cap, pathLog, pathFnCalls } = makePathCap(spies);
-    try {
-      await exec('(move "src" "dst") (read-all "dst")', {
-        capabilities: [cap],
-        runCtx: new RunContext({ resourcePaths: pathLog }),
-      });
-      expect.unreachable();
-    } catch (err) {
-      aQuad(err, spies, pathFnCalls, "read-all", { move: 1 });
-    }
-  });
-
   it("N-DOORED-E-NOT-RECORDED — doored move's E not on append spy", async () => {
     const spies: SpyMap = {};
     const { cap, pathLog, appendEvents, pathFnCalls } = makePathCap(spies);
     try {
-      // write src first so move's Q(src) doors; move's E(dst) must NOT record
-      await exec('(write-all "src") (move "src" "dst")', {
+      // True intervening locus: Q(src) → E(src) → move Q(src) doors; E(dst) must NOT record
+      await exec('(read-all "src") (write-all "src") (move "src" "dst")', {
         capabilities: [cap],
         runCtx: new RunContext({ resourcePaths: pathLog }),
       });
       expect.unreachable();
     } catch (err) {
-      aQuad(err, spies, pathFnCalls, "move", { "write-all": 1 });
-      // only write-all's E recorded — not move's dst
+      aQuad(err, spies, pathFnCalls, "move", { "write-all": 1, "read-all": 1 });
       const flat = appendEvents.flat();
       expect(flat).toContainEqual(["test", "src"]);
       expect(flat).not.toContainEqual(["test", "dst"]);
     }
   });
 
-  it("N-E-IMPL-THROW — effect recorded before impl; later read doors", async () => {
+  it("P-E-IMPL-THROW-THEN-Q — effect recorded before impl throw; bare later read legal", async () => {
     const spies: SpyMap = {};
     const { cap, pathLog } = makePathCap(spies);
     const runCtx = new RunContext({ resourcePaths: pathLog });
-    // fail-impl records E then throws — subsequent read same run needs host continue.
-    // We call two separate penetrations on the same runCtx via sequential exec with reuse.
     await expect(
       exec('(fail-impl "a")', { capabilities: [cap], runCtx }),
     ).rejects.toThrow(/plain-impl-boom/);
     expect(spies["fail-impl"]).toBe(1);
-    // same runCtx — prior E still there
-    await expect(
-      exec('(read "a" "1")', { capabilities: [cap], runCtx }),
-    ).rejects.toThrow(ResourcePathConflictError);
+    expect(pathLog.effectPaths).toContainEqual(["test", "a"]);
+    // bare E→Q legal under temporal immutability
+    await exec('(read "a" "1")', { capabilities: [cap], runCtx });
+    expect(spies.read).toBe(1);
   });
 
   it("N-UPSERT-TWICE — second upsert same paths doors", async () => {
@@ -641,11 +634,12 @@ describe("resource-path CQS door — 3a-complete", () => {
     }
   });
 
-  it("N-DOOR-LOCUS — illegal Q only on A in multi-lane", async () => {
+  it("N-DOOR-LOCUS — illegal Q only on A in multi-lane (true Q→E→Q on A)", async () => {
     const spies: SpyMap = {};
     const { cap, pathLog } = makePathCap(spies);
     try {
-      await exec('(write "A" "1") (read "B" "1") (read "A" "1")', {
+      // Prior Q on A, effect A, legal B, illegal re-query A
+      await exec('(read "A" "1") (write "A" "1") (read "B" "1") (read "A" "1")', {
         capabilities: [cap],
         runCtx: new RunContext({ resourcePaths: pathLog }),
       });
@@ -653,7 +647,8 @@ describe("resource-path CQS door — 3a-complete", () => {
     } catch (err) {
       expect(err).toBeInstanceOf(ResourcePathConflictError);
       expect(spies.write).toBe(1);
-      expect(spies.read).toBe(1); // B succeeded; A did not
+      // first A + B succeeded; second A doored → read impl = 2
+      expect(spies.read).toBe(2);
     }
   });
 });
@@ -731,7 +726,7 @@ describe("resource-path CQS — producer shape + strictCQSstrings", () => {
 });
 
 describe("resource-path CQS — seams (cache / burst / CONSTANT_CTX / ExecOptions)", () => {
-  it("CQS runs before cache — write then identical view-read doors; first read cached once", async () => {
+  it("N-QEQ-CACHE — Q→E→Q through cache seam doors; first read cached once", async () => {
     let readFires = 0;
     let writeFires = 0;
     const cap = EnvCapability.define("test/cqs-cache", {
@@ -772,8 +767,9 @@ describe("resource-path CQS — seams (cache / burst / CONSTANT_CTX / ExecOption
     expect(readFires).toBe(1); // second read doored before cache serve / re-fire
   });
 
-  it("burst sink + CQS — path E recorded even when impl is gathered (not fired)", async () => {
+  it("P-BURST-E-THEN-Q — path E recorded when gathered; bare later read legal", async () => {
     let writeFires = 0;
+    let readFires = 0;
     const cap = EnvCapability.define("test/cqs-burst", {
       symbols: (symbol, z) => ({
         "b-write": symbol.rosetta`b-write: `(
@@ -794,20 +790,22 @@ describe("resource-path CQS — seams (cache / burst / CONSTANT_CTX / ExecOption
             output: [z.string],
             queries: (id: string) => [["test", "b", id]],
           },
-          (id: string) => `r:${id}`,
+          (id: string) => {
+            readFires++;
+            return `r:${id}`;
+          },
         ),
       }),
     });
     const effects = new MemoryEffectLog();
     const pathLog = new MemoryResourcePathLog();
-    await expect(
-      exec('(b-write "1") (b-read "1")', {
-        capabilities: [cap],
-        effects,
-        resourcePaths: pathLog,
-      }),
-    ).rejects.toThrow(ResourcePathConflictError);
+    await exec('(b-write "1") (b-read "1")', {
+      capabilities: [cap],
+      effects,
+      resourcePaths: pathLog,
+    });
     expect(writeFires).toBe(0); // burst gather skipped impl
+    expect(readFires).toBe(1); // bare E→Q legal
     expect(effects.entries).toHaveLength(1);
     expect(pathLog.effectPaths).toContainEqual(["test", "b", "1"]);
   });
@@ -1001,7 +999,7 @@ describe("resource-path CQS — S3 storage / hybrid (I6–I8)", () => {
     // Contrast: a real void-sink with effects armed skips (effect-log.law pins that separately).
   });
 
-  it("P-I6 unarmed — E≠[] without effects log does not invent enqueue; door still works", async () => {
+  it("P-I6 unarmed — E≠[] without effects log does not invent enqueue; bare later Q legal", async () => {
     const spies: SpyMap = {};
     const { cap, pathLog } = makePathCap(spies);
     // no effects channel — write fires; CQS prior-E still recorded; no EffectLog to fill
@@ -1012,12 +1010,24 @@ describe("resource-path CQS — S3 storage / hybrid (I6–I8)", () => {
     expect(spies.write).toBe(1);
     expect(spies.read).toBe(1);
     expect(pathLog.effectPaths).toContainEqual(["test", "a", "1"]);
-    // overlapping query still doors via resourcePaths (storage arm is independent of the door)
+    // bare overlapping query is LEGAL (no prior Q before the E on a)
+    await exec('(read "a" "1")', {
+      capabilities: [cap],
+      resourcePaths: pathLog,
+    });
+    expect(spies.read).toBe(2);
+  });
+
+  it("N-I4c unarmed — intervening door works without EffectLog (resourcePaths only)", async () => {
+    const spies: SpyMap = {};
+    const { cap, pathLog } = makePathCap(spies);
     await expect(
-      exec('(read "a" "1")', {
+      exec('(read "a" "1") (write "a" "1") (read "a" "1")', {
         capabilities: [cap],
         resourcePaths: pathLog,
       }),
     ).rejects.toThrow(ResourcePathConflictError);
+    expect(spies.read).toBe(1);
+    expect(spies.write).toBe(1);
   });
 });
