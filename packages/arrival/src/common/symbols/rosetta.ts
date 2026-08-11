@@ -23,6 +23,7 @@ import { attestDeep, freshIfSingleton } from "../../values/attestation.js";
 import { jsToScheme } from "../../membrane/rosetta.js";
 import { penetrateThroughCache } from "../../run/run-cache.js";
 import { applyResourcePathCqs, type ResourcePath } from "../../run/resource-paths.js";
+import { mintReactiveAtoms } from "../../run/reactive-atoms.js";
 import { closeRegionScope, openRegionScope, withRegionScope } from "../../membrane/region-scope.js";
 import { decodeKwargsStrict, drainDroppedKwargNotes } from "../kwargs-rejection.js";
 import { formatPositionalRejection } from "./positional-rejection.js";
@@ -301,10 +302,26 @@ _installRosettaMembraneApply(async (proc, args, callCtx) => {
     if (liveAtoms && producedQueries.length > 0) {
       pathAtoms.observe(producedQueries);
     }
+    // Phase 5 R6: mint per-penetration reactiveAtoms after CQS, closed over produced Q
+    // (+ E for teaching effects-only). Only when path producers were declared and atoms
+    // are live — doored penetrations never reach here; pathAtoms-off leaves undefined.
+    const pathProducersDeclared = pathQueryFn !== undefined || pathEffectFn !== undefined;
     const fire = async (): Promise<unknown> => {
+      const implCtx: CallCtx =
+        liveAtoms && pathProducersDeclared
+          ? {
+              ...callCtx,
+              reactiveAtoms: mintReactiveAtoms({
+                verbName: name,
+                queries: producedQueries,
+                effects: producedEffects,
+                bus: pathAtoms,
+              }),
+            }
+          : callCtx;
       const value = scope
-        ? await withRegionScope(scope, () => m.hostImpl.call(callCtx, ...decodedArgs))
-        : await m.hostImpl.call(callCtx, ...decodedArgs);
+        ? await withRegionScope(scope, () => m.hostImpl.call(implCtx, ...decodedArgs))
+        : await m.hostImpl.call(implCtx, ...decodedArgs);
       // Stage non-sink E only after successful impl (void-sink skips fire entirely).
       // commitRun at successful run end flushes (RX-CLOCK); abandon on throw.
       if (liveAtoms && producedEffects.length > 0) {

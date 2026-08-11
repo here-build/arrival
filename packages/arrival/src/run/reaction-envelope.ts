@@ -43,6 +43,7 @@ import {
   type ResourcePathLog,
 } from "./resource-paths.js";
 import { paramAtomKey, type PathAtomBus } from "./path-atom-bus.js";
+import { advanceReactiveAtomsGeneration } from "./reactive-atoms.js";
 
 // ── Public types ─────────────────────────────────────────────────────────────
 
@@ -443,6 +444,9 @@ class ReactionEnvelopeImpl implements ReactionEnvelope {
     }
     this.running = true;
     this._runCount++;
+    // R7: supersede prior in-symbol bridge cells before this run mints new ones
+    // (P-RX-ATOM-SUPERSEDE — stale reportChanged no-ops).
+    advanceReactiveAtomsGeneration(this.atomBus);
     // RX-FRESH: all three axes, every time.
     const cache = new MemoryRunCache("record");
     const pathLog = new MemoryResourcePathLog();

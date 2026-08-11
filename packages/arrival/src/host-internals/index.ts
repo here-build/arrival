@@ -89,6 +89,16 @@ export {
 // dependency. Reach it by its own subpath instead:
 //   import { createMobxAtomProxy } from "@inhuman.tools/arrival/mobx-atom-proxy";
 
+// Phase 5 R6–R7 — in-symbol atoms (mint after CQS; generation supersede on envelope).
+export {
+  ReactiveAtomMembershipError,
+  mintReactiveAtoms,
+  advanceReactiveAtomsGeneration,
+  type ReactiveAtoms,
+  type ReactiveAtomCell,
+  type MintReactiveAtomsOpts,
+} from "../run/reactive-atoms.js";
+
 // Phase 5 R2–R3 — host reaction envelope (re-invoke = new top-level exec; self-suppress;
 // settle with OQ-CYCLE-POLICY at-most-once-per-unit). Not a public FRP surface.
 export {

@@ -6,6 +6,7 @@
 
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { type InvocationLike } from "../membrane/rosetta.js";
+import type { ReactiveAtoms } from "./reactive-atoms.js";
 
 /**
  * The ONE `this` every callable body sees (docs/execution.md §CALLCTX) — dispatch-level
@@ -21,6 +22,11 @@ import { type InvocationLike } from "../membrane/rosetta.js";
  * (`capabilityConfigurations` / `capabilityResources`), keyed by the value's owning
  * capability ({@link associateCapability}). No owner, or no per-capability table (bare-env
  * glass) ⇒ both `undefined`. Typed `unknown` here; capability Activation generics narrow.
+ *
+ * `reactiveAtoms` (Phase 5 R6): per-penetration Q-membership handle for path-atom bridge.
+ * Minted at rosetta impl call after CQS when `runCtx.pathAtoms` is live and the symbol
+ * declared path producers — closed over that penetration’s produced Q. Undefined when
+ * pathAtoms off, replay-silent, or no path producers (see mintReactiveAtoms).
  */
 export interface CallCtx {
   readonly runCtx: RunContext;
@@ -28,6 +34,8 @@ export interface CallCtx {
   readonly argProvenance?: readonly ReadonlySet<number>[];
   readonly configuration?: unknown;
   readonly resources?: unknown;
+  /** In-symbol path atoms (R6). Per-penetration; undefined when facility off / no paths. */
+  readonly reactiveAtoms?: ReactiveAtoms;
 }
 
 /** Value → owning-capability association. Bind loop calls {@link associateCapability} once
