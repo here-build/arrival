@@ -8,7 +8,7 @@ import { buildSlotAdopter } from "../../membrane/adopt-spine.js";
 import { ANativeProcedure, type NativeSymbolDef } from "../../values/primitives/ANativeProcedure.js";
 import { type SchemeValue } from "../../values/types.js";
 import { type CallCtx } from "../../run/CallCtx.js";
-import { assertCacheClassShape, assertProvenanceRoleShape, assertSlotKinds, type ContourContract, extractCallbackRoles, normalizeInputVector, normalizeVector, parseNameDoc, type Impl, type MetadataRecord, type RestSpec, type VectorSpec } from "./_bake.js";
+import { assertContractAxes, type ContourContract, normalizeInputVector, normalizeVector, parseNameDoc, type Impl, type MetadataRecord, type RestSpec, type VectorSpec } from "./_bake.js";
 import { assertNoResourcePathProducers } from "../../run/resource-paths.js";
 
 /** Native host fn over scheme values. Slot bans on ContourContract (`_bake.ts` §1.7). */
@@ -22,12 +22,15 @@ export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
     assertNoResourcePathProducers(name, "native", contract as { queries?: unknown; effects?: unknown });
     const inSchema = normalizeInputVector(contract.input, contract.inputRest);
     const outSchema = normalizeVector(contract.output);
-    assertSlotKinds(name, "native", inSchema, outSchema);
     const provenance = contract.provenance ?? "pipe";
-    assertProvenanceRoleShape(name, provenance, inSchema, outSchema);
     const cacheClass = contract.cacheClass;
-    assertCacheClassShape(name, cacheClass, inSchema, outSchema);
-    const callbackRoles = extractCallbackRoles(name, provenance, inSchema, outSchema, contract.callbackRoles);
+    const callbackRoles = assertContractAxes(name, "native", {
+      inSchema,
+      outSchema,
+      provenance,
+      cacheClass,
+      declaredCallbackRoles: contract.callbackRoles,
+    });
     // Spine adoption (docs/environments.md §CONTRACT): z.listAlike borrowed arrays projected
     // before impl runs — native has no validation, and .car on a raw array reads undefined.
     // Computed once; undefined when no slot adopts.

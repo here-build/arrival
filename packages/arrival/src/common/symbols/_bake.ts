@@ -143,7 +143,7 @@ export type ProvenanceRole = "pipe" | "fan" | "source" | "sink" | "transparent" 
 export type CacheClass = "view" | "pure";
 
 /** Resource-path producer — sole home is run/resource-paths.ts; re-exported for CrossingContract. */
-import { ResourcePathShapeError, type ResourcePathFn } from "../../run/resource-paths.js";
+import { ResourcePathRoleConflictError, ResourcePathShapeError, type ResourcePathFn } from "../../run/resource-paths.js";
 export type { ResourcePathFn };
 
 /** Per-z.lambda-arm dual of `ProvenanceRole` (host role). Shape extracts where it decides;
@@ -810,6 +810,32 @@ export function assertResourcePathContractShape(
   }
 }
 
+/** Path-role conflict doors (rulings 2026-08-13; hoisted from rosetta.ts inline ifs —
+ *  hermeticity audit E1, "six doors, one home"): named beside their axis-door siblings
+ *  instead of anonymous ifs at the rosetta call site.
+ *  - sink ∧ queries: under gather a sink's impl is SKIPPED — a declared Q would journal a
+ *    read for a body that never ran. sink+effects stays legal (a sink IS an effect).
+ *  - effects-only-return: the return of an effectful verb is licensed by its Q half —
+ *    upsert-with-return is the hybrid shape. Effects-only must be void-family. */
+export function assertResourcePathRoles(
+  name: string,
+  provenance: ProvenanceRole,
+  queries: ResourcePathFn | undefined,
+  effects: ResourcePathFn | undefined,
+  outSchema: z.ZodTypeAny,
+): void {
+  if (provenance === "sink" && queries !== undefined) {
+    throw new ResourcePathRoleConflictError(name, "sink-queries");
+  }
+  if (effects !== undefined && queries === undefined) {
+    const outItems = topLevelSchemas(outSchema);
+    const voidFamily = outItems !== undefined && outItems.every((item) => z.lookupName(item) === "undefinedResult");
+    if (!voidFamily) {
+      throw new ResourcePathRoleConflictError(name, "effects-only-return");
+    }
+  }
+}
+
 /** Per z.lambda arm: derive CallbackRole from shape; declared roles override underdetermined arms.
  *  - DECIDED: void-family host egress ⇒ every arm `effect` (contradiction throws).
  *  - DEFAULT: fan + value egress ⇒ `element-transformer` (overridable — filter is fan-shaped
@@ -855,6 +881,73 @@ export function extractCallbackRoles(
     roles.push(declaredRole ?? decided ?? dflt);
   }
   return roles;
+}
+
+// ── 3c. One aggregator, six doors, one home (hermeticity audit E1) ───────────
+
+/** Contract-bearing kinds `assertContractAxes` covers. Contract-less kinds
+ *  (tagless/tagless-guard) never reach a factory that calls it. */
+export type ContractAxesKind = "rosetta" | "native" | "sequence" | "define";
+
+/** Everything a factory has on hand when it's ready to gate. Optional fields are the axes a
+ *  given `kind` doesn't carry (e.g. `define`'s provenance/cacheClass resolve later, in
+ *  `define-bake.ts` — see the `kind === "define"` arm below). */
+export interface ContractAxesOpts {
+  readonly inSchema: z.ZodTypeAny;
+  readonly outSchema: z.ZodTypeAny;
+  readonly provenance?: ProvenanceRole;
+  readonly cacheClass?: CacheClass;
+  readonly declaredCallbackRoles?: readonly CallbackRole[];
+  /** Rosetta-only path producers — see `CrossingContract.queries`/`.effects`. */
+  readonly queries?: ResourcePathFn;
+  readonly effects?: ResourcePathFn;
+}
+
+/** The one call site every factory uses instead of sequencing the individual axis gates by
+ *  hand (hermeticity audit E1 — "six pairwise axis doors, five sites, no legal-region map").
+ *  Six doors + the slot-kind walls, one aggregator: `assertProvenanceRoleShape` (sink/
+ *  transparent⇒void, fan⇒lambda), `assertCacheClassShape` (view⇒serializable),
+ *  `assertResourcePathRoles` (sink∧queries ban, effects-only⇒void — hoisted from rosetta's
+ *  former inline ifs), `assertResourcePathContractShape` (queries⇒serializable), and
+ *  `assertSlotKinds` (contour/crossing brand runtime twin). `extractCallbackRoles` rides
+ *  along in the same call (not a door — a shape-derived value the caller needs back) since
+ *  its position in the sequence is load-bearing (voidEgress reads `outSchema` the same way
+ *  the doors do).
+ *
+ *  ORDER is preserved PER KIND exactly as each factory called these before consolidation —
+ *  not a single fixed order, because the pre-consolidation orders genuinely differed:
+ *  - **rosetta**: provenance-shape → cache-shape → callback-roles → path-role-conflict doors
+ *    → path-shape → slot-kinds (docs/environments.md §AXES legal-region table cites this).
+ *  - **native / sequence**: slot-kinds → provenance-shape → cache-shape → callback-roles.
+ *  - **define**: slot-kinds only — provenance/cacheClass are DERIVED later over the whole
+ *    define set (`define-bake.ts`), not gated here.
+ *  Individual gates stay exported — law tests pin them directly; this is a call-site
+ *  consolidation, not a replacement API. */
+export function assertContractAxes(
+  name: string,
+  kind: ContractAxesKind,
+  opts: ContractAxesOpts,
+): CallbackRoles | undefined {
+  const { inSchema, outSchema } = opts;
+  if (kind === "define") {
+    assertSlotKinds(name, kind, inSchema, outSchema);
+    return undefined;
+  }
+  const provenance = opts.provenance!; // rosetta/native/sequence always resolve one before baking
+  if (kind === "rosetta") {
+    assertProvenanceRoleShape(name, provenance, inSchema, outSchema);
+    assertCacheClassShape(name, opts.cacheClass, inSchema, outSchema);
+    const callbackRoles = extractCallbackRoles(name, provenance, inSchema, outSchema, opts.declaredCallbackRoles);
+    assertResourcePathRoles(name, provenance, opts.queries, opts.effects, outSchema);
+    assertResourcePathContractShape(name, opts.queries, inSchema, outSchema);
+    assertSlotKinds(name, kind, inSchema, outSchema);
+    return callbackRoles;
+  }
+  // native | sequence
+  assertSlotKinds(name, kind, inSchema, outSchema);
+  assertProvenanceRoleShape(name, provenance, inSchema, outSchema);
+  assertCacheClassShape(name, opts.cacheClass, inSchema, outSchema);
+  return extractCallbackRoles(name, provenance, inSchema, outSchema, opts.declaredCallbackRoles);
 }
 
 // Declaration channels for contract-less kinds (tagless/tagless-guard). The contract is

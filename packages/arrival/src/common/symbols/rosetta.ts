@@ -22,11 +22,7 @@ import { AValue, pointProvenance, unionProvenance } from "../../values/primitive
 import { attestDeep, freshIfSingleton } from "../../values/attestation.js";
 import { jsToScheme } from "../../membrane/rosetta.js";
 import { penetrateThroughCache } from "../../run/run-cache.js";
-import {
-  applyResourcePathCqs,
-  ResourcePathRoleConflictError,
-  type ResourcePath,
-} from "../../run/resource-paths.js";
+import { applyResourcePathCqs, type ResourcePath } from "../../run/resource-paths.js";
 import { mintReactiveAtoms } from "../../run/reactive-atoms.js";
 import { closeRegionScope, openRegionScope, withRegionScope } from "../../membrane/region-scope.js";
 import { decodeKwargsStrict, drainDroppedKwargNotes } from "../kwargs-rejection.js";
@@ -34,7 +30,7 @@ import { formatPositionalRejection } from "./positional-rejection.js";
 import type { SchemeValue } from "../../values/types.js";
 import invariant from "tiny-invariant";
 import { type CallCtx } from "../../run/CallCtx.js";
-import { assertCacheClassShape, assertProvenanceRoleShape, assertResourcePathContractShape, assertSlotKinds, type BakeRuntimeOpts, collectKwargsObject, contractMayCarryCallable, type CrossingContract, extractCallbackRoles, type Impl, isSingleOutput, normalizeInputVector, normalizeVector, parseNameDoc, type RestSpec, type RosettaSymbolDef, topLevelSchemas, type VectorSpec } from "./_bake.js";
+import { assertContractAxes, type BakeRuntimeOpts, collectKwargsObject, contractMayCarryCallable, type CrossingContract, type Impl, isSingleOutput, normalizeInputVector, normalizeVector, parseNameDoc, type RestSpec, type RosettaSymbolDef, topLevelSchemas, type VectorSpec } from "./_bake.js";
 import { WorldFlipError } from "../../errors.js";
 
 function isBareCallable(value: unknown): boolean {
@@ -192,30 +188,23 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
       : [];
     // Default "source" mints; "pipe" forwards input provenance (step 3 of membrane apply).
     const provenance = contract.provenance ?? "source";
-    assertProvenanceRoleShape(name, provenance, inSchema, outSchema);
     const cacheClass = contract.cacheClass;
-    assertCacheClassShape(name, cacheClass, inSchema, outSchema);
-    const callbackRoles = extractCallbackRoles(name, provenance, inSchema, outSchema, contract.callbackRoles);
-    const forwards = provenance === "pipe";
     // Path producers (CQS) — rosetta-only; stored on membrane for the apply chokepoint.
     const queries = contract.queries;
     const effects = contract.effects;
-    // Bake doors (rulings 2026-08-13): sink∧queries contradiction; effects-only must be
-    // void (the return is licensed by the Q half — upsert-with-return is the hybrid
-    // shape); queries-declaring contracts must serialize on both vectors.
-    if (provenance === "sink" && queries !== undefined) {
-      throw new ResourcePathRoleConflictError(name, "sink-queries");
-    }
-    if (effects !== undefined && queries === undefined) {
-      const outItems = topLevelSchemas(outSchema);
-      const voidFamily =
-        outItems !== undefined && outItems.every((item) => z.lookupName(item) === "undefinedResult");
-      if (!voidFamily) {
-        throw new ResourcePathRoleConflictError(name, "effects-only-return");
-      }
-    }
-    assertResourcePathContractShape(name, queries, inSchema, outSchema);
-    assertSlotKinds(name, "rosetta", inSchema, outSchema);
+    // One aggregator, six doors (hermeticity audit E1): provenance-shape → cache-shape →
+    // callback-roles → path-role-conflict doors (sink∧queries, effects-only⇒void) →
+    // path-shape → slot-kinds, in that order — docs/environments.md §AXES.
+    const callbackRoles = assertContractAxes(name, "rosetta", {
+      inSchema,
+      outSchema,
+      provenance,
+      cacheClass,
+      declaredCallbackRoles: contract.callbackRoles,
+      queries,
+      effects,
+    });
+    const forwards = provenance === "pipe";
     // `opts.validate` has no effect on the rosetta path (rosetta always shape-checks via
     // its contract); it's honored only on `symbol.define`. The shared `BakeRuntimeOpts`
     // type accepts it for API symmetry.

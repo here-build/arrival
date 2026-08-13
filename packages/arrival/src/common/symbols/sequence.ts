@@ -4,7 +4,7 @@
 import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
 import { type SchemeValue } from "../../values/types.js";
 import { CallCtx } from "../../run/CallCtx.js";
-import { assertCacheClassShape, assertProvenanceRoleShape, assertSlotKinds, type ContourContract, extractCallbackRoles, DecodedArgs, normalizeVector, parseNameDoc, type MetadataRecord, type SequenceImpl, type SequenceSymbolDef, type VectorSpec } from "./_bake.js";
+import { assertContractAxes, type ContourContract, DecodedArgs, normalizeVector, parseNameDoc, type MetadataRecord, type SequenceImpl, type SequenceSymbolDef, type VectorSpec } from "./_bake.js";
 import { assertNoResourcePathProducers } from "../../run/resource-paths.js";
 
 /** Ctx-aware host op. Slot bans on ContourContract (`_bake.ts` §1.7). */
@@ -18,12 +18,15 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
     assertNoResourcePathProducers(name, "sequence", contract as { queries?: unknown; effects?: unknown });
     const inSchema = normalizeVector(contract.input);
     const outSchema = normalizeVector(contract.output);
-    assertSlotKinds(name, "sequence", inSchema, outSchema);
     const provenance = contract.provenance ?? "pipe";
-    assertProvenanceRoleShape(name, provenance, inSchema, outSchema);
     const cacheClass = contract.cacheClass;
-    assertCacheClassShape(name, cacheClass, inSchema, outSchema);
-    const callbackRoles = extractCallbackRoles(name, provenance, inSchema, outSchema, contract.callbackRoles);
+    const callbackRoles = assertContractAxes(name, "sequence", {
+      inSchema,
+      outSchema,
+      provenance,
+      cacheClass,
+      declaredCallbackRoles: contract.callbackRoles,
+    });
     // Erase to non-generic run shape (same boundary as rosetta's rawImpl).
     const run = function (this: CallCtx, ...args: unknown[]) {
       return impl(args as DecodedArgs<I, "scheme">, this.runCtx);

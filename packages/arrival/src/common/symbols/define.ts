@@ -9,7 +9,7 @@ import { ZodType } from "zod";
 import { buildSlotAdopter } from "../../membrane/adopt-spine.js";
 import * as z from "../scheme-zod/index.js";
 import {
-  assertSlotKinds,
+  assertContractAxes,
   isSingleOutput,
   normalizeInputVector,
   normalizeVector,
@@ -59,7 +59,7 @@ export function define(tpl: TemplateStringsArray, ...sub: unknown[]): DefineFact
     // only `callable` tells the bind arm which runtime shape to build.
     const inSchema = isConstant ? normalizeVector([]) : normalizeInputVector(contract.input, contract.inputRest);
     const outSchema = isConstant ? normalizeVector([contract]) : normalizeVector(contract.output);
-    assertSlotKinds(name, "define", inSchema, outSchema);
+    assertContractAxes(name, "define", { inSchema, outSchema });
     const procedureContract = isConstant ? undefined : (contract as Contract<VectorSpec, VectorSpec, RestSpec>);
     return {
       kind: "define",
