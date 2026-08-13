@@ -8,8 +8,16 @@
 // a scheme callable structurally cannot return a raw array or plain object (an
 // AValue has a class prototype), so the only live callers ever hand these utilities
 // boxed SchemeValues (or promises thereof), never a structure to walk.
+//
+// Cross-cutting leaf (hermeticity audit P5): consumed by values/primitives
+// (APair/AVector/pending-entry), env/*, and eval/call-function.ts alike, so it
+// stays in utils/ rather than moving into any one layer — moving it into eval/
+// (its pre-P3 import origin for is_promise) would reintroduce exactly the
+// values→eval edge P3 closed. `is_promise` now imports from the true
+// value-kernel leaf (values/value-guards.ts), so this module's only dependency
+// is a value-type predicate — no eval or membrane edge remains.
 
-import { is_promise } from "../eval/guards.js";
+import { is_promise } from "../values/value-guards.js";
 
 /** Promise.all over a result array; non-arrays pass through unchanged. The HOF
  *  result-collection seam (map/filter/for-each families): async callbacks' results
