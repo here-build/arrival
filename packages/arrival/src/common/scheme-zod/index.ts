@@ -18,7 +18,7 @@ import { AInexact } from "../../values/primitives/AInexact.js";
 import { AVoid } from "../../values/primitives/AVoid.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { AOpaqueHandle } from "../../values/primitives/AOpaqueHandle.js";
-import { ADict, isDictShaped, type DictKey } from "../../values/primitives/ADict.js";
+import { ADict, foldKeyName, isDictShaped, type DictKey } from "../../values/primitives/ADict.js";
 import { AJSObject } from "../../membrane/AJSObject.js";
 import { AJSArray } from "../../membrane/AJSArray.js";
 import { markSpineAdopting } from "../spine-adoption.js";
@@ -73,7 +73,9 @@ import type { AListAlike, SchemeValue } from "../../values/types.js";
  * | `list` / `cons`  | array / `[car,cdr]`   | list input; cons pair    |
  * | `vector`         | array                 | AVector \| AJSArray      |
  * | `bytevector`     | `Uint8Array`          |                          |
- * | `dict`           | object                |                          |
+ * | `dict`           | object                | fixed-key struct or open boxed |
+ * | `dictRecord`     | `Record<K,V>`         | open homogeneous record  |
+ * | `foldName`       | `string`              | keyword/string name fold |
  * | `box`            | object (unwrap)       | preserves class identity |
  * | `error`          | `Error`               |                          |
  * | `procedure`      | bound function        | input only               |
@@ -178,8 +180,20 @@ export const schemeValue = schemeValueSchema as ContourOnly<typeof schemeValueSc
 // Rosetta identity hatch. Runtime door keys off the registered name `"dynamic"`
 // specifically (`common/symbols/rosetta.ts`); `instance(Ctor)` is a separate real
 // codec and never reaches those dynamic-only paths.
+// DIRECTION ASYMMETRY (world-flip ruling 2026-08-13): as INPUT, decode is identity —
+// the impl receives the raw boxed SchemeValue. As OUTPUT, the slot only skips
+// z.encode; the impl still returns RAW JS and the membrane boxes it — returning an
+// AValue (bare or nested) is an illegal world flip (`WorldFlipError`, the
+// `assertNoWorldFlip` door in common/symbols/rosetta.ts). A verb that hands back
+// scheme values belongs on the contour (`symbol.native` + `z.schemeValue`).
 const dynamicSchema = named("dynamic", z.custom<SchemeValue>(isSchemeValue));
-export const dynamic = dynamicSchema as CrossingOnly<typeof dynamicSchema>;
+/** Phantom marker carried ONLY by `z.dynamic` — `_bake.ts`'s DecodedReturn keys the
+ *  return-face flip off it (world-flip ruling: impl RECEIVES SchemeValue, RETURNS raw
+ *  JS `unknown`). Optional-phantom: never present at runtime, never on other codecs. */
+export interface DynamicHatch {
+  readonly "arrival/dynamic-hatch"?: true;
+}
+export const dynamic = dynamicSchema as CrossingOnly<typeof dynamicSchema> & DynamicHatch;
 
 // ── Marshal ctx ────────────────────────────────────────────────────────────
 //
@@ -220,7 +234,7 @@ function marshalCtx(): RunContext {
 export const boolean = named(
   "boolean",
   z.codec(z.instanceof(ABool), z.boolean(), {
-    decode: (b) => b.value,
+    decode: (b) => b["arrival/toJS"](),
     encode: (b) => new ABool(b) }),
 );
 
@@ -230,14 +244,14 @@ export const booleanFalse = boolean.refine((v): v is false => v === false);
 export const char = named(
   "char",
   z.codec(z.instanceof(ACharacter), z.string().length(1), {
-    decode: (c) => c.valueOf(),
+    decode: (c) => c["arrival/toJS"](),
     encode: (c) => new ACharacter(c) }),
 );
 
 export const string = named(
   "string",
   z.codec(z.instanceof(AString), z.string(), {
-    decode: (s) => s.valueOf(),
+    decode: (s) => s["arrival/toJS"](),
     encode: (s) => new AString(s) }),
 );
 
@@ -282,7 +296,7 @@ export const nil = named(
 export const undefinedResult = named(
   "undefinedResult",
   z.codec(z.instanceof(AVoid), z.undefined(), {
-    decode: () => undefined,
+    decode: (v) => v["arrival/toJS"](),
     encode: () => new AVoid() }),
 );
 
@@ -332,7 +346,7 @@ export const exact = named(
 export const inexact = named(
   "inexact",
   z.codec(z.instanceof(AInexact), z.number(), {
-    decode: (n) => n.real,
+    decode: (n) => n["arrival/toJS"](),
     encode: (n) => new AInexact(n) }),
 );
 
@@ -374,7 +388,7 @@ export const number = named(
   "number",
   z.union([
     z.codec(z.instanceof(AInexact), z.number(), {
-      decode: (n) => n.real,
+      decode: (n) => n["arrival/toJS"](),
       encode: (n) => new AInexact(n) }),
     z.codec(z.instanceof(AExact), z.number(), {
       decode: (n) => exactToJsNumberOrDoor(n),
@@ -622,8 +636,9 @@ export function vector<E extends z.ZodTypeAny = typeof schemeValue>(element: E =
 // ── dict / box ─────────────────────────────────────────────────────────────
 
 /**
- * Native k/v map. Keyed `dict({a: integer()})` → per-key codec; bare `dict()` →
- * open `Record<string, SchemeValue>`.
+ * Native k/v map. Keyed `dict({a: integer()})` → per-key codec (struct); bare
+ * `dict()` → open `Record<string, SchemeValue>` (values stay scheme-boxed).
+ * For an open record with *typed* values, use {@link dictRecord}.
  */
 export function dict<S extends Record<string, z.ZodTypeAny>>(shape: S = {} as S) {
   const keys = Object.keys(shape);
@@ -656,6 +671,74 @@ export function dict<S extends Record<string, z.ZodTypeAny>>(shape: S = {} as S)
     ),
   );
 }
+
+/**
+ * Open homogeneous record: `dictRecord(z.string, z.string)` → `Record<string, string>`.
+ *
+ * Distinct from:
+ * - `dict({a: z.string})` — fixed-key struct
+ * - `dict()` — open, but values stay scheme-boxed (`Record<string, SchemeValue>`)
+ *
+ * Keys fold to string identity (`:a` ≡ `"a"`, same as ADict). The key schema's
+ * JS face must accept plain strings — when the author passes the scheme-zod
+ * `string` codec (or `foldName`), the record-key position uses plain `z.string()`
+ * because the fold already produced a JS string. The value schema is the
+ * homogeneous element codec applied per entry (same container/element split as
+ * `list`/`vector`).
+ */
+export function dictRecord<K extends z.ZodTypeAny, V extends z.ZodTypeAny>(key: K, value: V) {
+  const keyName = lookupName(key);
+  // Record property names are always plain JS strings after fold. Scheme-zod
+  // `string`/`foldName` codecs expect AString/DictKey on their scheme face —
+  // they are not valid z.record key schemas. Use plain string validation there.
+  // (`as never` on the non-string arm: author-supplied key schemas that already
+  // accept plain strings, e.g. z.enum([...]), are legal; the cast is the generic
+  // boundary zod's $ZodRecordKey wants.)
+  const keyOut: z.ZodType<string | number | symbol> =
+    keyName === "string" || keyName === "foldName" ? z.string() : (key as z.ZodType<string | number | symbol>);
+  const schema = named(
+    "dictRecord",
+    z.codec(
+      z.union([z.instanceof(ADict), z.instanceof(AJSObject).refine((o) => isDictShaped(o.source))]),
+      z.record(keyOut, value),
+      {
+        // Container boundary only — out-schema (`z.record`) owns per-value marshal.
+        decode: (d) => {
+          const src = d as ADict | AJSObject;
+          // Heap-metering INERT (restoration is workboard D1).
+          return Object.fromEntries(src.keys().map((k) => [k, src.get(k)])) as never;
+        },
+        encode: (rec: Record<string, unknown>) => {
+          // Heap-metering INERT (restoration is workboard D1).
+          return new ADict(
+            Object.entries(rec).map(([k, v]) => [new ASymbol(k), v as SchemeValue] as [DictKey, SchemeValue]),
+          );
+        },
+      },
+    ),
+  );
+  COLLECTION_ELEMENT.set(schema, value);
+  return schema;
+}
+
+/**
+ * Folded name identity for name-position args that are keyword-native at the
+ * call site: keyword `:foo`, bare symbol `foo`, or string `"foo"` → `"foo"`
+ * (same fold as ADict keys / `foldKeyName`). Honest codec — not `z.dynamic`.
+ */
+export const foldName = named(
+  "foldName",
+  z.codec(
+    z.union([z.instanceof(ASymbol), z.instanceof(AString), z.instanceof(ACharacter)]),
+    z.string(),
+    {
+      decode: (k) => foldKeyName(k as DictKey),
+      // Host-minted names re-enter as bare symbols (not re-keyworded). Call sites
+      // that need a keyword on the scheme face mint `new ASymbol(":" + s)` themselves.
+      encode: (s) => new ASymbol(s),
+    },
+  ),
+);
 
 // Whole-object UNWRAP, not decomposition (unlike `dict`) — preserves class
 // identity/methods for genuinely-foreign values.

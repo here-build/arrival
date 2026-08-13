@@ -22,7 +22,11 @@ import { AValue, pointProvenance, unionProvenance } from "../../values/primitive
 import { attestDeep, freshIfSingleton } from "../../values/attestation.js";
 import { jsToScheme } from "../../membrane/rosetta.js";
 import { penetrateThroughCache } from "../../run/run-cache.js";
-import { applyResourcePathCqs, type ResourcePath } from "../../run/resource-paths.js";
+import {
+  applyResourcePathCqs,
+  ResourcePathRoleConflictError,
+  type ResourcePath,
+} from "../../run/resource-paths.js";
 import { mintReactiveAtoms } from "../../run/reactive-atoms.js";
 import { closeRegionScope, openRegionScope, withRegionScope } from "../../membrane/region-scope.js";
 import { decodeKwargsStrict, drainDroppedKwargNotes } from "../kwargs-rejection.js";
@@ -30,7 +34,8 @@ import { formatPositionalRejection } from "./positional-rejection.js";
 import type { SchemeValue } from "../../values/types.js";
 import invariant from "tiny-invariant";
 import { type CallCtx } from "../../run/CallCtx.js";
-import { assertCacheClassShape, assertProvenanceRoleShape, type BakeRuntimeOpts, collectKwargsObject, contractMayCarryCallable, type CrossingContract, extractCallbackRoles, type Impl, isSingleOutput, normalizeInputVector, normalizeVector, parseNameDoc, type RestSpec, type RosettaSymbolDef, topLevelSchemas, type VectorSpec } from "./_bake.js";
+import { assertCacheClassShape, assertProvenanceRoleShape, assertResourcePathContractShape, assertSlotKinds, type BakeRuntimeOpts, collectKwargsObject, contractMayCarryCallable, type CrossingContract, extractCallbackRoles, type Impl, isSingleOutput, normalizeInputVector, normalizeVector, parseNameDoc, type RestSpec, type RosettaSymbolDef, topLevelSchemas, type VectorSpec } from "./_bake.js";
+import { WorldFlipError } from "../../errors.js";
 
 function isBareCallable(value: unknown): boolean {
   return typeof value === "function" || is_callable_value(value);
@@ -147,6 +152,27 @@ function buildOpaqueHandleUnwrap(
   }
 }
 
+/** WORLD-FLIP DOOR (ruling 2026-08-13): a rosetta impl's return is a JS-world value — an
+ *  AValue there (bare, or nested in the plain arrays/objects jsToScheme recurses) would ride
+ *  the owned-artifact pass-through and skip the membrane's mint. Crash explicitly instead.
+ *  Runs BEFORE z.encode so coded slots teach the same cure as escape slots. */
+function assertNoWorldFlip(symbolName: string, value: unknown, seen?: WeakSet<object>): void {
+  if (value instanceof AValue) throw new WorldFlipError(symbolName, value.constructor.name);
+  if (value === null || typeof value !== "object") return;
+  const marked = seen ?? new WeakSet<object>();
+  if (marked.has(value)) return;
+  marked.add(value);
+  if (Array.isArray(value)) {
+    for (const element of value) assertNoWorldFlip(symbolName, element, marked);
+    return;
+  }
+  // Plain objects only — a class instance crosses as an opaque handle and stays opaque.
+  const proto = Object.getPrototypeOf(value) as object | null;
+  if (proto === Object.prototype || proto === null) {
+    for (const element of Object.values(value)) assertNoWorldFlip(symbolName, element, marked);
+  }
+}
+
 /** Rosetta host fn in JS-land. Returns bare ARosettaProcedure.
  *  Slot bans on CrossingContract (`_bake.ts` §1.7). */
 export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) {
@@ -174,6 +200,22 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
     // Path producers (CQS) — rosetta-only; stored on membrane for the apply chokepoint.
     const queries = contract.queries;
     const effects = contract.effects;
+    // Bake doors (rulings 2026-08-13): sink∧queries contradiction; effects-only must be
+    // void (the return is licensed by the Q half — upsert-with-return is the hybrid
+    // shape); queries-declaring contracts must serialize on both vectors.
+    if (provenance === "sink" && queries !== undefined) {
+      throw new ResourcePathRoleConflictError(name, "sink-queries");
+    }
+    if (effects !== undefined && queries === undefined) {
+      const outItems = topLevelSchemas(outSchema);
+      const voidFamily =
+        outItems !== undefined && outItems.every((item) => z.lookupName(item) === "undefinedResult");
+      if (!voidFamily) {
+        throw new ResourcePathRoleConflictError(name, "effects-only-return");
+      }
+    }
+    assertResourcePathContractShape(name, queries, inSchema, outSchema);
+    assertSlotKinds(name, "rosetta", inSchema, outSchema);
     // `opts.validate` has no effect on the rosetta path (rosetta always shape-checks via
     // its contract); it's honored only on `symbol.define`. The shared `BakeRuntimeOpts`
     // type accepts it for API symmetry.
@@ -303,22 +345,24 @@ _installRosettaMembraneApply(async (proc, args, callCtx) => {
       pathAtoms.observe(producedQueries);
     }
     // Phase 5 R6: mint per-penetration reactiveAtoms after CQS, closed over produced Q
-    // (+ E for teaching effects-only). Only when path producers were declared and atoms
-    // are live — doored penetrations never reach here; pathAtoms-off leaves undefined.
+    // (+ E for teaching effects-only). Minted whenever path producers were declared —
+    // doored penetrations never reach here. Bus off / replay-silent ⇒ INERT mint
+    // (P-RX-ATOM-OFF-INERT): membership still teaches, report* deliver nowhere, so
+    // bridge impls run unchanged outside an envelope.
     const pathProducersDeclared = pathQueryFn !== undefined || pathEffectFn !== undefined;
     const fire = async (): Promise<unknown> => {
-      const implCtx: CallCtx =
-        liveAtoms && pathProducersDeclared
-          ? {
-              ...callCtx,
-              reactiveAtoms: mintReactiveAtoms({
-                verbName: name,
-                queries: producedQueries,
-                effects: producedEffects,
-                bus: pathAtoms,
-              }),
-            }
-          : callCtx;
+      const implCtx: CallCtx = pathProducersDeclared
+        ? {
+            ...callCtx,
+            reactiveAtoms: mintReactiveAtoms({
+              verbName: name,
+              queries: producedQueries,
+              effects: producedEffects,
+              bus: liveAtoms ? pathAtoms : undefined,
+              runCtx: callCtx.runCtx,
+            }),
+          }
+        : callCtx;
       const value = scope
         ? await withRegionScope(scope, () => m.hostImpl.call(implCtx, ...decodedArgs))
         : await m.hostImpl.call(implCtx, ...decodedArgs);
@@ -354,6 +398,9 @@ _installRosettaMembraneApply(async (proc, args, callCtx) => {
   } finally {
     if (scope) closeRegionScope(scope);
   }
+
+  // World-flip door: the impl's return must be plain JS — boxing belongs to the membrane below.
+  assertNoWorldFlip(name, result);
 
   let resultProvenance = inputProvenance;
   if (!m.forwards && inv && typeof inv.id === "number") {

@@ -110,11 +110,28 @@ export class ANativeProcedure extends AValue {
     super();
     this.name = opts.name;
     this.arity = opts.arity;
-    this.contract = opts.contract;
+    // Frozen at instantiation (ruling 2026-08-13): the contract is the declaration of
+    // record — post-construction stamping made introspection lie. Declaration channels
+    // (`withContractFields`/`withCallbackRoles`) re-mint via _withDeclarationFields.
+    this.contract = opts.contract === undefined ? undefined : Object.freeze(opts.contract);
     this.provenanceRole = opts.provenanceRole;
     this.cacheClass = opts.cacheClass;
     this.callbackRoles = opts.callbackRoles;
     this.#impl = opts.impl;
+  }
+
+  /** Declaration-site re-mint (`_bake.ts` withContractFields/withCallbackRoles ONLY): the
+   *  contract freezes at construction, so the declaration channel builds a NEW instance
+   *  around the same #impl instead of stamping in place. */
+  _withDeclarationFields(contract: ANativeProcedureContract, callbackRoles?: CallbackRoles): ANativeProcedure {
+    return new ANativeProcedure({
+      name: this.name,
+      arity: this.arity,
+      contract,
+      impl: this.#impl,
+      provenanceRole: this.provenanceRole,
+      cacheClass: this.cacheClass,
+      callbackRoles: callbackRoles ?? this.callbackRoles });
   }
 
   ["arrival/toJS"](exit?: MembraneExit): unknown {

@@ -17,9 +17,7 @@ import { z } from "zod";
 import { TypeTagError } from "../../errors.js";
 import { EnvCapability } from "../../common/capability.js";
 import { toJS } from "../../membrane/membrane.js";
-import { jsToScheme } from "../../membrane/rosetta.js";
 import { stripOptionalSuffix, tagToJsonSchema } from "../../common/schema-tag.js";
-import { CONSTANT_CTX } from "../../run/RunContext.js";
 import type { SchemeValue } from "../../values/types.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { schemaCapability } from "../schema/schema.js";
@@ -94,7 +92,9 @@ export const overridableCapability = EnvCapability.define("arrival/overridable",
           if (!outcome.success) {
             throw new TypeTagError(bindingName, "value-mismatch", describeTag(jsTag), describeValue(raw), source);
           }
-          return jsToScheme(CONSTANT_CTX, outcome.data);
+          // Raw JS return — the membrane boxes it (world-flip door forbids pre-boxing here;
+          // it also means the mint runs under the CALL's ctx/provenance, not CONSTANT_CTX).
+          return outcome.data;
         },
       ),
     // macroAttribute "binder", not "expression"/"opaque": `name` is a FORMALS position spliced

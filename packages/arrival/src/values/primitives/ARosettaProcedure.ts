@@ -122,7 +122,9 @@ export class ARosettaProcedure extends AValue {
     super(provenance);
     this.name = opts.name;
     this.arity = opts.arity;
-    this.contract = opts.contract;
+    // Frozen at instantiation (ruling 2026-08-13) — same seal as ANativeProcedure's.
+    this.contract =
+      typeof opts.contract === "object" && opts.contract !== null ? Object.freeze(opts.contract) : opts.contract;
     this.strategy = opts.strategy;
     this.provenanceRole = opts.provenanceRole;
     this.cacheClass = opts.cacheClass;

@@ -309,6 +309,70 @@ export class CacheClassShapeError extends ArrivalError {
 }
 
 // -------------------------------------------------------------------------
+// :: ContractSlotKindError — CONTOUR/CROSSING slot-kind wall, runtime twin.
+//
+// The type-level brand bans (`_bake.ts` §1.7: ContourOnly bans `z.schemeValue`
+// from rosetta contracts; CrossingOnly bans `z.dynamic`/`z.instance` from
+// native/sequence/define contracts) are invisible to an untyped or `as never`
+// caller. `assertSlotKinds` (`_bake.ts`, called by every factory) re-checks the
+// same wall at ASSEMBLY (bake time), copying the `assertNoResourcePathProducers`
+// pattern. Shallow scope — same top-level slot view as the sibling shape gates.
+// -------------------------------------------------------------------------
+export class ContractSlotKindError extends ArrivalError {
+  public readonly name = "ContractSlotKindError";
+  readonly "arrival/error-category": ErrorClass = "contract-shape";
+
+  constructor(
+    /** The declaring symbol's name — routing/telemetry key. */
+    public readonly op: string,
+    /** The factory kind whose wall the slot violates. */
+    public readonly kind: "rosetta" | "native" | "sequence" | "define",
+    /** Which vector carries the illegal slot. */
+    public readonly side: "input" | "output",
+    /** The registered codec name of the illegal slot. */
+    public readonly slotName: string,
+  ) {
+    super(
+      kind === "rosetta"
+        ? `${op}: z.${slotName} is not legal in a rosetta contract's ${side} — rosetta crosses the ` +
+          `membrane, so this slot needs a real codec, z.procedure (callables), or z.dynamic ` +
+          `(genuinely-runtime-shaped data)`
+        : `${op}: z.${slotName} is not legal in a ${kind} contract's ${side} — this contour never ` +
+          `crosses the membrane, so z.schemeValue (the honest top type) or a real codec is always ` +
+          `the honest choice`,
+    );
+  }
+}
+
+// -------------------------------------------------------------------------
+// :: ContractSealError — the contract is frozen at symbol instantiation.
+//
+// A contract is the declaration of record (harvest/catalog/static readers and
+// the dispatch spine treat its fields as truth); it freezes the moment it gets
+// inside the symbol instance (ruling 2026-08-13). The ONLY post-factory
+// declaration channels are `withContractFields` (type/emit/narrows/refPolicy)
+// and `withCallbackRoles` (role vocabulary) — both RE-MINT a new instance with
+// a new frozen contract, and both enforce their whitelist at runtime. This
+// door fires when a caller pushes a gated field (queries/cacheClass/
+// provenance/…) or an out-of-vocabulary role through those channels.
+// -------------------------------------------------------------------------
+export class ContractSealError extends ArrivalError {
+  public readonly name = "ContractSealError";
+  readonly "arrival/error-category": ErrorClass = "contract-shape";
+
+  constructor(
+    /** The symbol's name — routing/telemetry key. */
+    public readonly op: string,
+    /** Which declaration channel refused. */
+    public readonly channel: "withContractFields" | "withCallbackRoles",
+    /** The teaching explanation of what was refused and where it belongs. */
+    public readonly rule: string,
+  ) {
+    super(`${op}: ${channel} refused — ${rule}`);
+  }
+}
+
+// -------------------------------------------------------------------------
 // :: InteropAccessError — a Scheme access that would cross an interop boundary.
 // -------------------------------------------------------------------------
 export class InteropAccessError extends Error {
@@ -604,10 +668,10 @@ export class RawCrossingError extends ArrivalError {
   }
 }
 
-/** `schemeToJs` reached a boxed shape with no `arrival/toJS` branch in its
- *  instanceof chain — a silent return would leak the value's internal
+/** `toJS` / element recursion reached a boxed shape with no `arrival/toJS`
+ *  protocol term — a silent return would leak the value's internal
  *  representation to a JS caller expecting a plain value (P5, docs/PRINCIPLES.md).
- *  Terminal-passthrough door: every `AValue` subclass needs an explicit branch. */
+ *  Terminal-passthrough door: every `AValue` subclass implements the protocol. */
 export class UnrecognizedCrossingError extends ArrivalError {
   public readonly name = "UnrecognizedCrossingError";
   readonly "arrival/error-category": ErrorClass = "other";
@@ -617,10 +681,36 @@ export class UnrecognizedCrossingError extends ArrivalError {
     public readonly typeName: string,
   ) {
     super(
-      `schemeToJs: no conversion for ${typeName} — every boxed shape needs an explicit branch in ` +
-        `schemeToJs's instanceof chain (rosetta.ts). Silently returning it would leak the value's ` +
-        `internal representation to a JS caller expecting a plain value; the membrane fails loudly ` +
+      `toJS: no arrival/toJS protocol term for ${typeName} — every boxed shape implements the ` +
+        `egress protocol (P7). Silently returning it would leak the value's internal ` +
+        `representation to a JS caller expecting a plain value; the membrane fails loudly ` +
         `at the crossing instead (P5, docs/PRINCIPLES.md).`,
+    );
+  }
+}
+
+/** A rosetta impl's RETURN carried a boxed scheme value (AValue) — an ILLEGAL WORLD
+ *  FLIP (ruling 2026-08-13). The impl lives on the JS side of the membrane; its return
+ *  crosses back through encode/jsToScheme, which own boxing, provenance stamping, and
+ *  attestation. An already-boxed value there would ride jsToScheme's owned-artifact
+ *  pass-through and skip the mint — the membrane crashes at the crossing instead.
+ *  Checked bare AND nested inside plain arrays/objects (the shapes jsToScheme recurses);
+ *  fires BEFORE z.encode so coded slots teach the same cure as escape slots. */
+export class WorldFlipError extends ArrivalError {
+  public readonly name = "WorldFlipError";
+  readonly "arrival/error-category": ErrorClass = "other";
+
+  constructor(
+    /** The rosetta verb whose impl flipped worlds. */
+    public readonly op: string,
+    /** The offending value's class name (e.g. "AString"). */
+    public readonly typeName: string,
+  ) {
+    super(
+      `${op}: the impl returned a boxed scheme value (${typeName}) — an illegal world flip. ` +
+        `A rosetta impl speaks plain JS; its return crosses back through the membrane, which owns ` +
+        `boxing, provenance, and attestation. Return the raw JS value and let the membrane box it — ` +
+        `or declare the verb symbol.native if it genuinely works over scheme values.`,
     );
   }
 }

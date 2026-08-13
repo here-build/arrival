@@ -30,7 +30,7 @@ import { type RunContext } from "../../run/RunContext.js";
 import { type CallCtx } from "../../run/CallCtx.js";
 import { Macro } from "../../eval/Macro.js";
 import { ZodType, ZodUnion } from "zod";
-import { CacheClassShapeError, KeywordPairingError, ProvenanceRoleShapeError } from "../../errors.js";
+import { CacheClassShapeError, ContractSealError, ContractSlotKindError, KeywordPairingError, ProvenanceRoleShapeError } from "../../errors.js";
 // TYPE-ONLY (erased — no runtime edge into capability.ts): Activation for dynamic metadata.
 import type { Activation } from "../capability.js";
 // TYPE-ONLY, one-directional (`common/symbols` → `emit`): compiler rule surface a Contract may carry.
@@ -67,10 +67,26 @@ export type SpecInfer<S extends VectorSpec, F extends Face = "js"> = S extends r
 export type DecodedArgs<S extends VectorSpec, F extends Face = "js"> =
   SpecInfer<S, F> extends readonly unknown[] ? SpecInfer<S, F> : [SpecInfer<S, F>];
 
+/** Return-face projection (world-flip ruling 2026-08-13): a `z.dynamic` OUTPUT slot's
+ *  JS face is `unknown` — the impl returns RAW JS (the membrane boxes; an AValue return
+ *  doors via `assertNoWorldFlip`). Input face is untouched: a dynamic ARG still arrives
+ *  as the raw boxed SchemeValue. Scheme face (native contour) untouched. */
+type ProjectReturnFace<S extends z.ZodTypeAny, F extends Face> = F extends "js"
+  ? S extends z.DynamicHatch
+    ? unknown
+    : ProjectFace<S, F>
+  : ProjectFace<S, F>;
+
+type SpecInferReturn<S extends VectorSpec, F extends Face> = S extends readonly z.ZodTypeAny[]
+  ? { -readonly [K in keyof S]: ProjectReturnFace<S[K] & z.ZodTypeAny, F> }
+  : S extends z.ZodTypeAny
+    ? ProjectReturnFace<S, F>
+    : never;
+
 /** Decoded return: single value when output is a 1-tuple, else values-vector. */
 export type DecodedReturn<O extends VectorSpec, F extends Face = "js"> = O extends readonly [z.ZodTypeAny]
-  ? SpecInfer<O, F>[0]
-  : SpecInfer<O, F>;
+  ? SpecInferReturn<O, F>[0]
+  : SpecInferReturn<O, F>;
 
 /** async is implicit — bake awaits. */
 export type MaybePromise<T> = T | Promise<T>;
@@ -127,7 +143,7 @@ export type ProvenanceRole = "pipe" | "fan" | "source" | "sink" | "transparent" 
 export type CacheClass = "view" | "pure";
 
 /** Resource-path producer — sole home is run/resource-paths.ts; re-exported for CrossingContract. */
-import type { ResourcePathFn } from "../../run/resource-paths.js";
+import { ResourcePathShapeError, type ResourcePathFn } from "../../run/resource-paths.js";
 export type { ResourcePathFn };
 
 /** Per-z.lambda-arm dual of `ProvenanceRole` (host role). Shape extracts where it decides;
@@ -171,9 +187,9 @@ export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest exten
    *  (contradiction throws); fan + value egress ⇒ default `element-transformer` (overridable);
    *  underdetermined+undeclared ⇒ `undefined`. Shorter than arm count OK; longer throws. */
   readonly callbackRoles?: readonly CallbackRole[];
-  /** Assembly-time-only: binds into the phase-gated prelude scope (kernel `assembleEnv`), never
-   *  the runtime env. Unbound at runtime including from lambdas a prelude defined (closures
-   *  walk the live chain). Bridge to runtime: capture the call's RESULT in an ordinary define. */
+  /** Assembly-time-only: binds into `Vocabulary.preludeOnly`; overlay only on the
+   *  discarded per-run prelude frame (`assembleRun`). Unbound from user code.
+   *  Closures minted during prelude keep lexical captures. */
   readonly preludeOnly?: boolean;
   /** Config keys this verb needs to be CALLABLE (docs/environments.md §DEGRADATION-D2).
    *  Bind loop: any declared key absent from validated `configuration` ⇒ cause-carrying
@@ -256,7 +272,22 @@ export type CrossingContract<I extends VectorSpec, O extends VectorSpec, Rest ex
    * CQS check passes and BEFORE impl (self-door impossible — check never sees this E).
    */
   readonly effects?: ResourcePathFn;
-} & (HasBrand<I, z.ContourOnly<unknown>> extends true ? { input: ContractKindMismatch<ContourMsgIn> } : unknown) &
+} & // sink ∧ queries ban (ruling 2026-08-13): under gather a sink's impl is SKIPPED — a declared
+  // Q would journal a read for a body that never ran. sink+effects stays legal (a sink IS an
+  // effect). Runtime twin: ResourcePathRoleConflictError at bake.
+  (
+    | { readonly provenance: "sink"; readonly queries?: never }
+    | { readonly provenance?: Exclude<ProvenanceRole, "sink"> }
+  ) &
+  // effects-only-return ban (ruling 2026-08-13): the return of an effectful verb is licensed
+  // by its Q half — upsert-with-return is the hybrid shape. Effects-only must be void-family.
+  // Runtime twin: ResourcePathRoleConflictError("effects-only-return") at bake.
+  (
+    | { readonly effects?: undefined }
+    | { readonly queries: ResourcePathFn }
+    | { readonly output: readonly (typeof z.undefinedResult)[] }
+  ) &
+  (HasBrand<I, z.ContourOnly<unknown>> extends true ? { input: ContractKindMismatch<ContourMsgIn> } : unknown) &
   (HasBrand<Rest, z.ContourOnly<unknown>> extends true
     ? { inputRest: ContractKindMismatch<ContourMsgRest> }
     : unknown) &
@@ -688,6 +719,34 @@ export function contractMayCarryCallable(inSchema: z.ZodTypeAny): boolean {
   });
 }
 
+/** RUNTIME TWIN of the §1.7 brand bans (audit B2a, ruling 2026-08-13): the type-level
+ *  ContourOnly/CrossingOnly walls are invisible to an untyped or `as never` caller, so every
+ *  factory re-checks at bake — same pattern as `assertNoResourcePathProducers` (I9).
+ *  - rosetta (crossing): `z.schemeValue` refuses — a crossing slot needs a real codec,
+ *    `z.procedure`, or `z.dynamic`.
+ *  - native/sequence/define (contour): `z.dynamic`/`z.instance` refuse — a contour never
+ *    crosses the membrane; `z.schemeValue` is the honest top type there.
+ *  Shallow scope — same top-level slot view (`cacheGateSlots`) as the sibling shape gates. */
+export function assertSlotKinds(
+  name: string,
+  kind: "rosetta" | "native" | "sequence" | "define",
+  inSchema: z.ZodTypeAny,
+  outSchema: z.ZodTypeAny,
+): void {
+  const banned: readonly string[] = kind === "rosetta" ? ["schemeValue"] : ["dynamic", "instance"];
+  for (const [side, schema] of [
+    ["input", inSchema],
+    ["output", outSchema],
+  ] as const) {
+    for (const slot of cacheGateSlots(schema)) {
+      const slotName = z.lookupName(slot);
+      if (slotName !== undefined && banned.includes(slotName)) {
+        throw new ContractSlotKindError(name, kind, side, slotName);
+      }
+    }
+  }
+}
+
 /** View shape gate: `view` demands serializable contract — no `z.lambda`, no `z.schemeValue`/
  *  `z.dynamic`. Both vectors (key + entry). Escape hatch: declare `pure` or nothing.
  *  docs/execution.md §CHOKEPOINT. */
@@ -720,6 +779,32 @@ export function assertCacheClassShape(
             `(a raw scheme-value slot — raw crossings don't serialize); declare "pure" (recovery = ` +
             `re-call) or narrow the slot to a data codec`,
         );
+      }
+    }
+  }
+}
+
+/** Queries shape gate (ruling 2026-08-13): a queries-declaring contract must serialize on BOTH
+ *  vectors — same slot rules as the `view` gate (`z.lambda` / `z.schemeValue` / `z.dynamic`
+ *  refuse). The path-Q view-elevation keys the value cache on decoded args and every reaction
+ *  envelope arms a record cache, so an unkeyable slot is a latent runtime crash; and the design
+ *  intent of `queries` is precisely serializable resource naming (point at an external resource
+ *  by id / well-known name). Effects-only contracts are not gated (no keyed storage). */
+export function assertResourcePathContractShape(
+  name: string,
+  queries: ResourcePathFn | undefined,
+  inSchema: z.ZodTypeAny,
+  outSchema: z.ZodTypeAny,
+): void {
+  if (queries === undefined) return;
+  for (const [side, schema] of [
+    ["input", inSchema],
+    ["output", outSchema],
+  ] as const) {
+    for (const slot of cacheGateSlots(schema)) {
+      const slotName = z.lookupName(slot);
+      if (slotName === "lambda" || slotName === "schemeValue" || slotName === "dynamic") {
+        throw new ResourcePathShapeError(name, side, slotName);
       }
     }
   }
@@ -772,23 +857,75 @@ export function extractCallbackRoles(
   return roles;
 }
 
-/** Declaration channel for contract-less kinds (tagless/tagless-guard). Shapeless `in` ⇒ no
- *  shape extract, no drift door by construction. Stamps in place on the ANativeProcedure
- *  (spreading the instance would drop `#impl`). Live use: reduce's `["accumulator"]`. */
-export function withCallbackRoles(value: ANativeProcedure, callbackRoles: readonly CallbackRole[]): ANativeProcedure {
-  (value as { callbackRoles?: CallbackRoles }).callbackRoles = callbackRoles;
-  (value.contract as { callbackRoles?: CallbackRoles }).callbackRoles = callbackRoles;
-  return value;
+// Declaration channels for contract-less kinds (tagless/tagless-guard). The contract is
+// FROZEN at instantiation (ContractSealError doc, ruling 2026-08-13), so both channels
+// RE-MINT via `_withDeclarationFields` — a new instance around the same #impl with a new
+// frozen contract — never a stamp in place. Whitelists are runtime facts, not just types:
+// an untyped caller pushing a gated field (queries/cacheClass/provenance/…) doors loudly.
+
+const CALLBACK_ROLE_VOCAB: readonly CallbackRole[] = ["element-transformer", "control", "effect", "accumulator"];
+
+function sealTargetName(value: ANativeProcedure): string {
+  const contractName = (value.contract as { name?: string } | undefined)?.name;
+  return contractName ?? (typeof value.name === "string" ? value.name : String(value.name));
 }
 
+function assertSealTarget(value: ANativeProcedure, channel: "withContractFields" | "withCallbackRoles"): void {
+  if (value.contract === undefined) {
+    throw new ContractSealError(
+      sealTargetName(value),
+      channel,
+      "this value carries no contract (synthetic/host mint) — the declaration channel extends a baked contract, it does not create one",
+    );
+  }
+}
+
+/** Declaration channel for callback roles (shapeless `in` ⇒ shape never extracts;
+ *  live use: reduce's `["accumulator"]`). Re-mints; chainable. */
+export function withCallbackRoles(value: ANativeProcedure, callbackRoles: readonly CallbackRole[]): ANativeProcedure {
+  assertSealTarget(value, "withCallbackRoles");
+  for (const role of callbackRoles) {
+    if (!CALLBACK_ROLE_VOCAB.includes(role)) {
+      throw new ContractSealError(
+        sealTargetName(value),
+        "withCallbackRoles",
+        `"${String(role)}" is not a callback role — the vocabulary is ${CALLBACK_ROLE_VOCAB.join("/")} (Contract.callbackRoles doc)`,
+      );
+    }
+  }
+  const contract = Object.freeze({
+    ...(value.contract as object),
+    callbackRoles,
+  }) as NonNullable<ANativeProcedure["contract"]>;
+  return value._withDeclarationFields(contract, callbackRoles);
+}
+
+const CONTRACT_FIELD_WHITELIST: readonly string[] = ["type", "emit", "narrows", "refPolicy"];
+
 /** Declaration-site channel for `type`/`emit`/`narrows`/`refPolicy` on contract-less kinds.
- *  Stamps onto `.contract` in place (same reason as withCallbackRoles). Chainable. */
+ *  Re-mints; chainable. Any other key is a gated contract field — it belongs in the
+ *  factory's contract param (where the bake doors see it), never here. */
 export function withContractFields(
   value: ANativeProcedure,
   fields: Partial<Pick<TaglessSymbolDef | TaglessGuardSymbolDef, "type" | "emit" | "narrows" | "refPolicy">>,
 ): ANativeProcedure {
-  Object.assign(value.contract as object, fields);
-  return value;
+  assertSealTarget(value, "withContractFields");
+  for (const key of Object.keys(fields)) {
+    if (!CONTRACT_FIELD_WHITELIST.includes(key)) {
+      throw new ContractSealError(
+        sealTargetName(value),
+        "withContractFields",
+        `"${key}" is not a declaration-site field — the channel carries ${CONTRACT_FIELD_WHITELIST.join("/")} only; ` +
+          `gated contract fields (queries/effects/cacheClass/provenance/…) are declared in the factory's ` +
+          `contract param, where the bake doors check them`,
+      );
+    }
+  }
+  const contract = Object.freeze({
+    ...(value.contract as object),
+    ...fields,
+  }) as NonNullable<ANativeProcedure["contract"]>;
+  return value._withDeclarationFields(contract);
 }
 
 /** Acc-chain marker: true iff roles carry an `accumulator` arm.
