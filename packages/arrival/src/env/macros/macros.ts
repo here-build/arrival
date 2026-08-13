@@ -9,8 +9,7 @@
 //
 // The transformer-constructor is invoked as `(syntax-rules (literals) (pattern
 // template)…)` → returns a Syntax that rewrites a matching form via the engine.
-// `this` is the define-syntax invocation env; global_env supplies the hygiene
-// identity root.
+// `this` is the define-syntax invocation env.
 
 import { EnvCapability } from "../../common/capability.js";
 import { Syntax } from "../../eval/Syntax.js";
@@ -83,6 +82,12 @@ export default EnvCapability.define("scheme/macros", {
           let useScope = useResolver.scope;
           if (useScope.kind === "merge") {
             for (const [sym, value] of useScope.ownSymbolEntries()) {
+              // Evaluator-frame-family write, not an assembly write (hermeticity audit P6):
+              // this hoists an already-hygienic gensym binding one merge-frame up during
+              // expansion, the same family as define/let/lambda frame binds — it just
+              // happens to be authored from an env pack file rather than eval/. See
+              // AmbientRuntime.ts's `bindValue` preamble (S2a) for the family census this
+              // site is counted in.
               bindValue(useScope.parent!.env, sym, value);
             }
             useScope = useScope.parent!;

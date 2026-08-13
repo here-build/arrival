@@ -11,12 +11,18 @@
  * Lineage: object-capability membranes (Miller 2006; Van Cutsem & Miller 2013).
  * Member-read protocol mirrors GraalVM Truffle InteropLibrary — see interop-access.ts.
  * Full map: `docs/membrane.md`.
+ *
+ * VALUE-IMPORTS `env/AmbientRuntime.ts` (hermeticity audit D4, `docs/strata.md` §2's
+ * `membrane → env` edge): `AmbientRuntime`/`isAmbientRuntime` join `BoxedSchemeValue`
+ * and `isSchemeValue`'s recognition switch because an env is a CONTROL form the
+ * membrane must recognize as "already scheme, don't re-wrap" (a host function can bind
+ * INTO an env, so the env itself crosses this boundary) — see `BoxedSchemeValue`'s own
+ * doc comment below for the full closed-union rationale.
  */
 
 import { CONSTANT_CTX } from "../run/RunContext.js";
 import { DefaultedWeakMap } from "@here.build/collections";
 import { AValue, EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
-import { Values } from "../values/primitives/Values.js";
 import { ABool } from "../values/primitives/ABool.js";
 import { ABytevector } from "../values/primitives/ABytevector.js";
 import { AVector } from "../values/primitives/AVector.js";
@@ -28,12 +34,11 @@ import { Macro } from "../eval/Macro.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AInexact } from "../values/primitives/AInexact.js";
 import { APair } from "../values/primitives/APair.js";
-import { jsToScheme, egressAValue, errorToHost, schemeToJsUntyped } from "./rosetta.js";
-import { R7RSError, RedundantCrossingError, NoLensError } from "../errors.js";
+import { jsToScheme } from "./rosetta.js";
+import { RedundantCrossingError, NoLensError } from "../errors.js";
 import { isMarkedInteropPrivate } from "./interop-access.js";
 import { AOpaqueHandle } from "../values/primitives/AOpaqueHandle.js";
 import { Syntax } from "../eval/Syntax.js";
-import { type SchemeValue } from "../values/types.js";
 import { type ACallable } from "../values/primitives/ACallable.js";
 import { ANil } from "../values/primitives/ANil.js";
 import { AKernelKeyword } from "../values/AKernelKeyword.js";
@@ -185,34 +190,10 @@ export function fromJS<T>(value: [T] extends [AValue] ? never : T): FromJSResult
   return jsToScheme(CONSTANT_CTX, value, {}, EMPTY_PROVENANCE) as FromJSResult;
 }
 
-/** Exit point for Scheme → JS. STRICT: only interpreter-minted boxed values cross — a
- *  raw JS value here means the caller is already on the JS side.
- *
- *  Native containers egress as lazy ref-tracking proxies. Same-box→same-proxy WeakMap
- *  lives in egress-proxy.ts's single chokepoint (every container's arrival/toJS calls it),
- *  NOT here — protocol dispatch lands in that cache whether exit came through this
- *  function or a direct protocol call. */
-export function toJS(value: SchemeValue) {
-  // Multiple values → JS array of unwrapped elements (baked rosetta encoder convention).
-  // Values sits outside AValue; without this arm, exec on values-returning programs dies
-  // on the strict-exit invariant below.
-  if (value instanceof Values) return value.__values__.map((v) => toJS(v));
-  // R7RS error AS A VALUE exits as same-class host Error via shared arm — before the
-  // strict-exit gate (R7RSError is a host Error subclass, not an AValue). Raised errors
-  // take the throw path. Irritants cross via schemeToJsUntyped (static type unknowable).
-  if (value instanceof R7RSError) {
-    return errorToHost(value, (el) => schemeToJsUntyped(el));
-  }
-  if (!isSchemeValue(value)) throw new RedundantCrossingError("toJS");
-  // Every AValue — including a scheme callable (exits as reverse-membrane region wrapper
-  // so exec's simple tier can return ALambda/ACallable as a callable host fn) — crosses
-  // via the same membrane protocol under default options. ACallable extends AValue; no
-  // special-case. egressAValue shares rosetta's default-mode slots so toJS(v) ===
-  // schemeToJs(v); nested callables get the same host-fn face as top-level ones.
-  if (value instanceof AValue) return egressAValue(value, {});
-  // Non-AValue scheme orphans — direct protocol call. Cast is the honest residual boundary.
-  return (value as { "arrival/toJS": () => unknown })["arrival/toJS"]();
-}
+/** Public Scheme → JS exit. Implementation lives next to the private element
+ *  walker in rosetta.ts so mixed-world recursion stays membrane-private.
+ *  Re-exported here so the barrel path (`membrane.js`) stays the public door. */
+export { toJS } from "./rosetta.js";
 
 // Polyglot member access lives ON the values (tagless algebra):
 // arrival/tagless-final/get|has|keys — ADict structurally, AJSObject/AJSArray through

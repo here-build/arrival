@@ -25,6 +25,15 @@
 //
 // DISPLAY DISCIPLINE: a content hash NEVER appears in diagnostic text; every identity
 // resolves to `name @ capability`. No Diagnostic field carries a hash.
+//
+// EVAL ⇄ STATIC-VALIDATION — a declared two-file mutual, not a second knot (hermeticity
+// audit D6): `vocabulary.ts` type-imports `eval/CompiledResolutionChain.ts` and
+// value-imports `eval/Macro.ts` (the sealed chain this validator judges, and the macro
+// class its firewall treats as opaque). `eval/exec-phases.ts` imports `validateProgram`/
+// `vocabularyFromChain` from here, and `eval/generator-exec.ts` imports
+// `StaticValidationError` from here, back — the evaluator calls this pass at parse phase,
+// before the first form evaluates (line 7 above). `docs/strata.md` §3 names this the
+// declared exception to "static-validation is one-directional above the knot."
 
 import type { SourceLocation } from "../errors.js";
 import type { SchemeValue } from "../values/types.js";

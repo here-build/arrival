@@ -29,8 +29,9 @@ function ownProps(obj: object): (string | symbol)[] {
 }
 
 /**
- * RAW frame minters — module-internal (NOT barrel-exported; same discipline as
- * {@link bindValue}). Constructor arm is not on the public type; assigned from each
+ * RAW frame minters — module-internal, NOT barrel-exported (unlike {@link bindValue},
+ * which gained the one sanctioned `host-internals` re-export named at its own doc — see
+ * S2b). Constructor arm is not on the public type; assigned from each
  * class's static block (only scope a protected constructor is callable from).
  * Production birth: {@link mintFrame} (subtype-preserving child) or null-parent here
  * (isolated root). Storage-law tests reach these raws for exact chain shapes.
@@ -187,13 +188,31 @@ export function assertResolvedBinding(value: unknown, name: string | symbol, res
 }
 
 /**
- * THE ONE storage write — module-internal, NOT barrel-exported, NOT a method
- * (docs/environments.md §HERMETIC: no JS-side write surface). Legitimate writers, all
- * inside the membrane:
+ * THE ONE storage write — module-internal, NOT a method (docs/environments.md §HERMETIC:
+ * no JS-side write surface). ONE sanctioned barrel re-export exists: `host-internals/index.ts`
+ * re-exports {@link bindValue} directly (its own header names the reason) for
+ * `@inhuman.tools/arrival-provenance`'s `buildUneval` (`analysis/uneval.ts`), which mutates
+ * a replay scope's `result` binding post-hoc rather than re-executing it (audit S2b).
+ * Every other consumer reaches this door only through the membrane (rosetta bind, evaluator
+ * frame bind) — never a second barrel.
  *
- *   • evaluator frame binds (`define`/let/lambda/letrec/catch)
- *   • capability assembly (symbol bind + define-bake Pass 2)
- *   • {@link bindRosetta} (replay playback frame)
+ * Legitimate writers, restated as FAMILIES (audit S2a — the enumeration had drifted to
+ * three items while five families actually write here):
+ *
+ *   • evaluator / hygiene frame binds — `define`/let/lambda/letrec/catch, PLUS
+ *     `env/macros/macros.ts`'s merge-frame gensym hoist (tagged at its own write site:
+ *     an evaluator-frame-family write authored from an env pack file, not an assembly
+ *     write — see P6).
+ *   • assembly / chain seeding — capability assembly (symbol bind + define-bake Pass 2),
+ *     `env/vocabulary.ts`'s bake-env mirror, `env/assemble-run.ts`'s prelude-seed /
+ *     prelude-defines binds, `eval/generator-exec.ts`'s chain-frame / inference-env binds.
+ *   • replay / γ ingress — `provenance/hermetic-env.ts` and `provenance/gamma.ts` bind
+ *     recorded ingress into a fresh hermetic scope under region discipline (the env ⇄
+ *     provenance charter, `docs/strata.md` §5).
+ *   • mid-run prelude overlay — `loader/loader-capability.ts`'s `require`/`extension`
+ *     surface binds a discarded child prelude scope (R12: invocation survives, reference
+ *     does not).
+ *   • {@link bindRosetta} (replay playback frame).
  *
  * CARVE-OUTS:
  *   • `Error` — catch-frame bind of a raised condition (R7RSError extends host `Error`,
@@ -203,6 +222,18 @@ export function assertResolvedBinding(value: unknown, name: string | symbol, res
  *
  * Bare host functions are DOORED. Env-resident callables are ACallable values.
  * `bindRosetta` mints ARosettaProcedure before this door.
+ *
+ * SANCTIONED RAW `__env__` READERS outside this class (audit S2c — the `.get()` door
+ * above throws `RawCrossingError` on a raw JS scalar; these three bypass it on purpose):
+ *   • `env/vocabulary.ts` — reads the just-`bindValue`d entry back (`bakeEnv.__env__[name]`)
+ *     because vocabulary must hold the chain-lookup SHAPE, and `.get()` would quote a
+ *     `APair` for host consumption — the wrong shape here (stated at its own call site).
+ *   • `env/assemble-run.ts` / `loader/loader-capability.ts` — copy a prelude frame's OWN
+ *     already-`bindValue`d names into the run's define frame (stated at each call site).
+ *   • `oracle/env.ts` — Σ's static callability probe reads `frame.__env__[id]` directly so
+ *     a malformed raw scalar (a writer bug) degrades to "not callable" instead of crashing
+ *     introspection; see the sanction comment at that file for why rerouting through
+ *     `_lookupWithResolvers` would NOT be behavior-identical (audit S3).
  */
 export function bindValue(env: AmbientRuntime, name: BindingName, value: AmbientValue): void {
   let storedValue: AmbientValue;
@@ -262,8 +293,9 @@ export class ResolvingAmbient extends AmbientRuntime implements SchemeEnv {
     return this;
   }
 
-  /** Unregister by id — seal hook: bake-scoped `preludeOnly` overlay unregisters so no
-   *  spent machinery survives assembly. No-op for unknown id. */
+  /** Unregister by id. No-op for unknown id. Production bake/seal does not call this —
+   *  `compileResolutionChain` asserts no live resolver remains; prelude uses a discarded
+   *  per-run frame (`assembleRun`). */
   unregisterResolver(id: string): this {
     const at = this.__resolvers__.findIndex((r) => r.id === id);
     if (at !== -1) this.__resolvers__.splice(at, 1);

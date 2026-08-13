@@ -63,6 +63,18 @@ export function makeOracleEnv(env: AmbientRuntime): OracleEnvΣ {
     const names = new Set<string>();
     let frame: AmbientRuntime | null = env;
     while (frame) {
+      // RAW `__env__` READ — sanctioned, not rerouted through `.get()` / `_lookupWithResolvers`
+      // (audit S3; writer-side half of this sanction is AmbientRuntime.ts's `bindValue`
+      // preamble, S2c). Two reasons, both behavior changes if rerouted:
+      //   1. `.get()` throws `RawCrossingError` on a raw JS scalar (a writer bug) — a static
+      //      probe should degrade that name to "unbound," not crash introspection.
+      //   2. `_lookupWithResolvers` on a `ResolvingAmbient` also walks `__resolvers__`, firing
+      //      a resolver callback per unmatched name per frame. That is NOT behavior-identical:
+      //      a resolver can synthesize a binding no `__env__` frame owns (capability doors like
+      //      `symbol.notImplemented` — see this class's `get()` comment), so rerouting would
+      //      silently grow Σ's admitted set to "everything a resolver could eventually answer"
+      //      instead of "names actually resident in a frame," and would run resolver side
+      //      effects during what callers expect to be a cheap read-only enumeration.
       for (const key of Object.keys(frame.__env__)) names.add(key);
       frame = frame.__parent__;
     }
@@ -76,7 +88,8 @@ export function makeOracleEnv(env: AmbientRuntime): OracleEnvΣ {
   const isCallable = (id: string): boolean => {
     // car/cdr and every c[ad]+r are kernel-synthesized accessors — always callable.
     if (/^c[ad]+r$/.test(id)) return true;
-    // Resolve the nearest binding the runtime would pick.
+    // Resolve the nearest binding the runtime would pick. RAW `__env__` read, same sanction
+    // as `boundSymbols` above (audit S3) — not `_lookupWithResolvers`.
     let frame: AmbientRuntime | null = env;
     while (frame) {
       if (Object.hasOwn(frame.__env__, id)) {

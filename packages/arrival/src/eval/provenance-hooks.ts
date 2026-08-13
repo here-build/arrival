@@ -42,6 +42,14 @@ export interface EmissionSink {
   readonly regionId: RegionId;
 }
 
+// EXTENT (docs/execution.md §HERMETIC, audit S1): this holder is per-ISOLATE, not
+// per-run — at most one recording run may be live on this isolate at a time. Two
+// concurrently recording runs would interleave each other's coordinate/sink through
+// this pair, mis-attributing emissions. Save/restore (below) makes NESTING safe
+// (a recording run started inside another recording run's install correctly restores
+// the parent's pair on exit); it does not make CONCURRENT recording safe. If that
+// stops being a real constraint, the upgrade path is keying this pair by `RunContext`
+// identity instead of holding it ambient.
 let _coordinate: RecordCoordinate | undefined;
 let _sink: EmissionSink | undefined;
 
