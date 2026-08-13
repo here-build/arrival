@@ -74,7 +74,7 @@ export class RunContext {
    * Path-keyed atom bus (Phase 5). `undefined` ⇒ no observe/invalidate.
    * When armed: live Q≠[] penetrations call `observe`; successful non-sink E≠[] fires
    * stage for `commitRun` at successful run end (RX-CLOCK). Replay-mode runs stay silent
-   * (rosetta gates on cache.mode). Host re-invoke envelope (reaction-envelope.ts) supplies
+   * (rosetta gates on cache.mode). Host re-invoke envelope (reactivity/reaction-envelope.ts) supplies
    * a per-unit bus that publishes through a shared hub.
    */
   readonly pathAtoms: PathAtomBus | undefined;

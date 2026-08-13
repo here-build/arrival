@@ -15,7 +15,7 @@ import { EnvCapability } from "../../common/capability.js";
 import { exec } from "../../eval/generator-exec.js";
 import type { CallCtx } from "../CallCtx.js";
 import { MemoryEffectLog } from "../effect-log.js";
-import { createReactionHub } from "../reaction-envelope.js";
+import { createReactionHub } from "../../reactivity/reaction-envelope.js";
 import {
   MemoryResourcePathLog,
   ResourcePathConflictError,

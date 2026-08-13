@@ -111,7 +111,7 @@ export {
   type ReactionEnvelope,
   type ReactionUnitSpec,
   type SettleOptions,
-} from "../run/reaction-envelope.js";
+} from "../reactivity/reaction-envelope.js";
 
 // Per-run model-facing note channel — a renderer mints one and drains it.
 export { createNoteSink, createDisplaySink, type NoteSink, type DisplaySink } from "../run/note-sink.js";

@@ -12,21 +12,21 @@ import { describe, it, expect } from "vitest";
 import * as fc from "fast-check";
 import { EnvCapability } from "../../common/capability.js";
 import { exec } from "../../eval/generator-exec.js";
-import { MemoryEffectLog } from "../effect-log.js";
+import { MemoryEffectLog } from "../../run/effect-log.js";
 import {
   MemoryResourcePathLog,
   ResourcePathConflictError,
   type ResourcePath,
   type ResourcePathLog,
-} from "../resource-paths.js";
+} from "../../run/resource-paths.js";
 import { createReactionHub } from "../reaction-envelope.js";
-import { MemoryRunCache } from "../run-cache.js";
+import { MemoryRunCache } from "../../run/run-cache.js";
 import {
   atomKey,
   isPathAtomKey,
   keysArePrefixRelated,
   paramAtomKey,
-} from "../path-atom-bus.js";
+} from "../../run/path-atom-bus.js";
 
 // ── Shared fake capability family ────────────────────────────────────────────
 

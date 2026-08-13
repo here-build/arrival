@@ -23,7 +23,7 @@ import {
 } from "../path-atom-bus.js";
 import type { AtomProxy } from "../atom-proxy.js";
 import type { ResourcePath } from "../resource-paths.js";
-import { createReactionHub } from "../reaction-envelope.js";
+import { createReactionHub } from "../../reactivity/reaction-envelope.js";
 
 const mobxProxy = await (async (): Promise<AtomProxy | undefined> => {
   try {

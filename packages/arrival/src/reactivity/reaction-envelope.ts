@@ -1,6 +1,10 @@
 /**
  * Host reaction envelope (Phase 5 R2–R5).
  *
+ * Tier: ABOVE eval — this module composes whole `exec` runs (fresh caches, hub
+ * scheduling), so it sits above the run stratum it draws from. `run/` itself keeps
+ * only bus + atoms + algebra (hermeticity audit B1).
+ *
  * A **unit** is a whole top-level `exec` / tool (RX-UNIT). Under a live envelope:
  *   - live Q≠[] penetrations arm subscriptions (via PathAtomBus.observe)
  *   - successful non-sink E≠[] commit invalidates overlapping foreign units
@@ -44,14 +48,14 @@
  */
 
 import { exec, type ExecOptions } from "../eval/generator-exec.js";
-import { MemoryRunCache, type RunCache } from "./run-cache.js";
+import { MemoryRunCache, type RunCache } from "../run/run-cache.js";
 import {
   MemoryResourcePathLog,
   pathsOverlap,
   type ResourcePath,
   type ResourcePathLog,
-} from "./resource-paths.js";
-import { paramAtomKey, type PathAtomBus } from "./path-atom-bus.js";
+} from "../run/resource-paths.js";
+import { paramAtomKey, type PathAtomBus } from "../run/path-atom-bus.js";
 
 // ── Public types ─────────────────────────────────────────────────────────────
 
