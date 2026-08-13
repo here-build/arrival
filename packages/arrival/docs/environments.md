@@ -450,7 +450,8 @@ realizes the SAME contract — prelude is assembly-time-only, a closure survives
 capture not by a leaked binding — through a DIFFERENT mechanism, worth stating on its own terms
 rather than as a diff against the retired prose.
 
-**Prelude is PER-RUN SYSTEM CODE, not a definition mechanism.** `env/vocabulary.ts`'s
+**Prelude is PER-RUN SYSTEM CODE — its defines are per-run bindings, never vocabulary
+members.** `env/vocabulary.ts`'s
 `buildVocabulary` COLLECTS every `.spec.prelude` in the tuple's C3 closure into
 `Vocabulary.preludes` — deps-first, deduped by capability IDENTITY — but never executes it: the
 Vocabulary is a shared, memoized, run-agnostic artifact, and a prelude's whole purpose (this
@@ -475,46 +476,63 @@ the built-in regression DETECTOR for this law: manually re-running a capability'
 against an ALREADY-assembled run's `runCtx` must hit the door, because the run's registry
 already holds that entry.
 
-**The prelude scope is NULL-ROOTED, not the retired bootstrap's live base.** A fresh
-`mintResolvingFrame("assemble-run-prelude")` — no parent at all (Stage C Cut 2's
+**The prelude pass runs over TWO frames: a discarded NULL-ROOTED seed, and an eval child
+whose defines persist** (ruling 2026-08-13, audit B4). The SEED — a fresh
+`mintResolvingFrame("assemble-run-prelude-seed")`, no parent at all (Stage C Cut 2's
 self-contained posture, matching `vocabulary.ts`'s own `bakeEnv`), never reused, never
-returned, discarded once the pass completes — is seeded with the main map (`Vocabulary.map`)
-THEN the preludeOnly overlay (`Vocabulary.preludeOnly`) — the two are disjoint by construction
-(a name lands in exactly one), so this is completing the prelude's visibility, not an override.
+returned, discarded once the pass completes — holds the main map (`Vocabulary.map`) THEN the
+preludeOnly overlay (`Vocabulary.preludeOnly`). On a cross-capability name collision between
+the two maps, **preludeOnly SHADOWS the main symbol DURING the prelude pass** — the defined
+rule (P-PRELUDE-PHASE-SHADOW), not an accident; main-phase code sees only the main symbol.
 A prelude can still call a base-pack primitive (`+`, `string-length`, …) because `BASE_ROSTER`
 is an ordinary member of THIS tuple's own `Vocabulary.map` (the caller folds it in —
-`generator-exec.ts`'s `execStateViaVocabulary`), bound directly into this scope — never via a
-parent-chain fallback onto a `user_env` realm, which this path never mints. The vocabulary
-path's user-facing chain frame program code resolves against is built separately, from
-`Vocabulary.map` alone (never `preludeOnly`, never a prelude `define` — see next).
+`generator-exec.ts`'s `execStateViaVocabulary`), bound directly into the seed — never via a
+parent-chain fallback onto a `user_env` realm, which this path never mints. The prelude TEXT
+evaluates against the EVAL child, so its `(define …)`s land apart from the seed bindings.
 
-**Prelude `(define …)` is DISCARDED with the scope, uniformly — no bootstrap/mid-run asymmetry.**
-The retired path's split (bootstrap's defines land in the runtime env; mid-run's are lost with
-`C'`) collapses on the vocabulary path: EVERY prelude's defines land in the per-run scope and
-vanish when the pass returns, full stop. A name a prelude defines is a plain unbound variable
-from user code — the SAME `UnboundVariableError` any other absent name throws. This is
-confirmed-fine (not a gap): the require-extension flows that need to carry a preludeOnly value
-into runtime do it through the SAME sanctioned channel PRELUDE always used for that — a resource
-(never a leaked binding).
+**Prelude `(define …)` PERSISTS into the main phase — "invocation survives, reference does
+not"** (ruling 2026-08-13, superseding the earlier discard contract). After the pass, the eval
+child's own defines are copied into the run's PER-RUN PRELUDE-DEFINE FRAME
+(`assemble-run.ts`'s `preludeDefinesOf`), and the exec entry roots each fresh user scope at
+it: session frame → prelude defines → the shared Vocabulary chain. Consequences, all
+law-pinned (`env/__tests__/prelude-persistence.law.test.ts`):
+- `(define (something) (prelude-symbol prelude-arg))` written in a prelude is CALLABLE from
+  user code, and its body still reaches the preludeOnly verb through ordinary lexical capture
+  into the discarded seed — while `prelude-symbol` itself stays a plain `UnboundVariableError`
+  from user code. This is the require-extension surface: a pack's prelude is its channel for
+  contributing scheme-defined wrappers.
+- A prelude define SHADOWS a same-named vocabulary symbol in the main phase (it sits above the
+  chain); a user top-level define shadows both (it sits above the define frame).
+- Defines are PER-RUN — two runs of one tuple never share them; a REPL-reused runCtx keeps
+  them without re-preluding.
+- MID-RUN `(require/extension …)` appends the extension pack's prelude defines to the SAME
+  frame (loader-capability.ts: seed child `C'` carries register-extension + preludeOnly binds
+  and dies; eval child `D'`'s own defines are copied after apply) — the live session-scope
+  walk sees them immediately. The retired "mid-run pack preludes cannot contribute runtime
+  bindings" asymmetry is gone.
+- STATIC VALIDATION stays deliberately BLIND to prelude defines (a prelude is arbitrary
+  scheme — its defines are not statically knowable): `staticValidation: "on"` may flag a
+  program that would resolve at runtime through a prelude define.
 
 **A closure a prelude mints keeps its lexical captures — pure scope math, not a temporal gate.**
-`(lambda () (some-prelude-only-symbol))`, minted while the prelude scope is live, keeps
+`(lambda () (some-prelude-only-symbol))`, minted while the prelude frames are live, keeps
 resolving `some-prelude-only-symbol` when CALLED later from user code, because a closure's
-captured scope is a reference, not a re-resolved lookup — the prelude scope being discarded
-afterward doesn't touch a reference already held. The bridge from prelude to user code stays a
-resource, same as ever: a preludeOnly registration verb stashes the prelude-minted closure into
-this run's resource bag; a public verb retrieves and applies it. Applying a STORED closure later
-must go through `applyCallback` with the CURRENT dispatch's own `CallCtx` (the same seam every
-HOF — `map`/`filter`/`fold` — uses for a callback it was handed), never through a
-`symbol.define`-baked body: a baked define's body evaluates against its DEFINITION-TIME
-`ctx.runCtx` (captured once, at vocabulary-build time, shared across every run of the tuple),
-not the call-time one — a pre-existing, documented, orthogonal limitation
-(`common/symbols/define-bake.ts`) that makes `symbol.define` the wrong tool for a body that must
-read PER-RUN resource state.
+captured scope is a reference, not a re-resolved lookup — the seed being discarded afterward
+doesn't touch a reference already held. The RESOURCE bridge remains for values that must cross
+runs or reach a verb body: a preludeOnly registration verb stashes a prelude-minted closure
+into this run's resource bag; a public verb retrieves and applies it via `applyCallback` with
+the CURRENT dispatch's own `CallCtx` (the same seam every HOF — `map`/`filter`/`fold` — uses),
+never through a `symbol.define`-baked body: a baked define's body evaluates against its
+DEFINITION-TIME `ctx.runCtx` (captured once, at vocabulary-build time, shared across every run
+of the tuple), not the call-time one — a pre-existing, documented, orthogonal limitation
+(`common/symbols/define-bake.ts`) that makes `symbol.define` the wrong tool for a body that
+must read PER-RUN resource state.
 
-**Enforcement sites:** `env/vocabulary.ts`, `env/assemble-run.ts`, `eval/generator-exec.ts`
-(`execStateViaVocabulary`, the `preludeEvalScheme` callback), `common/scheme-env.ts`
-(`EvalPreludeInto`), `env/__tests__/assemble-run.test.ts` (the law suite).
+**Enforcement sites:** `env/vocabulary.ts`, `env/assemble-run.ts` (`preludeDefinesOf` /
+`ensurePreludeDefineFrame`), `eval/generator-exec.ts` (`runRootedScope`, the
+`preludeEvalScheme` callback), `loader/loader-capability.ts` (`require/extension`),
+`common/scheme-env.ts` (`EvalPreludeInto`), `env/__tests__/assemble-run.test.ts` +
+`env/__tests__/prelude-persistence.law.test.ts` (the law suites).
 
 ---
 

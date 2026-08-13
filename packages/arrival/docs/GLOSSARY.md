@@ -55,6 +55,12 @@ unconstrained answer on any uncertainty — a wrongly-tightened verdict is a def
 tradeoff. One rule in four voices (type-lens drops-only, Σ never-drops, validator
 degrade-to-warning, classifier over-attribute). *(owner: static-plane.md §CONSERVATIVE NARROWING)*
 
+**contract seal** — the freeze a contract undergoes the moment it enters its symbol instance
+(the `ANativeProcedure`/`ARosettaProcedure` ctor, RULINGS.md R11): post-construction stamping is
+impossible; the declaration channels (`withContractFields`/`withCallbackRoles`) RE-MINT a new
+instance with a new frozen contract under runtime whitelists (`ContractSealError`). *(owner:
+environments.md §SYMBOL-KINDS; doors in common/symbols/_bake.ts)*
+
 **door** — a boundary rejection that refuses a violation at the moment of crossing and teaches
 instead of merely failing (errors-as-doors): an omitted verb is a `notImplemented` door, a bad
 grammar shape a coded reader door, an absent-config verb a degradation door. *(owner:
@@ -94,6 +100,13 @@ carries `get`/`registerResolver`/`list` and deliberately no `set`/`inherit`/`mer
 module-internal minters plus `bindValue` are the only writers. Run-state is likewise data-local
 per `exec()`, never ambient. *(owner: environments.md §HERMETIC; run-state execution.md §HERMETIC)*
 
+**hybrid (path)** — a penetration whose path producers yield BOTH `Q≠[]` and `E≠[]` (an
+upsert): impl fires (never void-sink skip), E rides the effect log, the return is cacheable,
+and the Q≺E record makes it touch its domain ONCE per run — a second identical call is its own
+Q→E→Q door with the hybrid teaching clause. The hybrid shape is what LICENSES an effectful
+verb's return (upsert-with-return): effects-only must be void-family by bake door. *(owner:
+execution.md §RESOURCE-PATHS)*
+
 **ingress** — a wire's inputs: the parameters of the lambda-lifted closed arrival lambda
 (`FV(body) ⊆ params ∪ prelude-names`, checked at emission). At replay, γ applies the wire to
 *recorded ingress* — the frozen port payloads that actually crossed at runtime. *(owner:
@@ -114,21 +127,52 @@ the impl fires and its result is written; in `replay` mode a hit answers WITHOUT
 per cache class (`view`/`sink`/`pure`/undeclared) is fixed here — the single home for the
 record/replay table. *(owner: execution.md §MODE-LAW)*
 
-**prelude-only** — a symbol bound only for the duration of assembly (the C3 bake): it rides a
-per-assembly overlay answered by a base-env resolver during the C3 loop, then is dropped at seal —
-post-seal a plain unbound variable everywhere, including from closures a prelude defined. A prelude
-carries a prelude-only value into runtime by capturing the VALUE (`(define x (the-verb …))`), never
-the verb. *(owner: environments.md §PRELUDE)*
+**path atom** — one reactive cell keyed by `serializeResourcePath` (verbatim — Phase 5 mints no
+second encoding) on a `PathAtomBus`: live `Q≠[]` penetrations observe it; committed `E≠[]`
+invalidates by SEGMENT-WISE overlap on path tuples, never string-prefix on keys. MobX sits
+behind the internal `AtomProxy` — not a public FRP surface. *(owner: execution.md §REACTIVITY)*
+
+**prelude-define frame** — the per-run frame holding every prelude `(define …)` (bootstrap pass
+AND mid-run `require/extension` packs), rooted between the user's session scope and the shared
+vocabulary chain (`session → defines → chain`), so prelude defines are main-phase bindings that
+shadow vocabulary symbols and are shadowed by user defines. Keyed-residency WeakMap off the
+RunContext (`assemble-run.ts` `preludeDefinesOf`). *(owner: environments.md §7a)*
+
+**prelude-only** — a symbol bound only into the prelude pass's discarded SEED frame, never any
+main-phase walk: its NAME is a plain unbound variable from user code, while a closure a prelude
+defined still reaches it by lexical capture — "invocation survives, reference does not" (ruling
+2026-08-13, RULINGS.md R12). During the prelude pass a preludeOnly binding shadows a same-named
+main-map symbol; main-phase code sees only the main one. *(owner: environments.md §PRELUDE/§7a)*
 
 **provenance box** — the box seen from the second interpreter: the same `AValue` unit, named to
 emphasize the ctx + lineage it carries so the box layer can execute the program. See *box*.
 *(owner: PRINCIPLES.md P0)*
+
+**reaction envelope** — a host-side unit over one whole top-level `exec`/tool under a
+`createReactionHub`: fresh run per invoke (fresh path log, prior-E, `record` cache),
+subscriptions replaced wholesale on success, self-write suppressed. NO manual trigger
+(RX-AUTO — "it's just scheme"): a unit births dirty, `settle` is the single sequential clock
+(at-most-once per unit per call, dirty-flag CARRYOVER — an undrained wake survives to the
+next settle; a live cycle stays visibly dirty), and only atoms reporting re-arms a unit.
+*(owner: execution.md §REACTIVITY)*
+
+**reactiveAtoms** — the per-penetration in-symbol bridge on `CallCtx`: exact-Q-membership-gated
+`get(path)` returning cells whose `reportChanged` is a ONE-SHOT invalidation signal per
+(penetration, path) — store liveness, never a substitute for declared `effects`. Minted
+whenever path producers are declared; INERT when the bus is off/replay (membership still
+teaches). *(owner: execution.md §REACTIVITY)*
 
 **region** — a `RegionScope`: a token `{open, pending, signal}` minted for ONE symbol invocation
 that binds every reverse-crossed callable (a Scheme lambda handed to host JS) so it re-enters the
 two-layer execution inside a real frame; call-after-return and return-with-calls-in-flight throw
 teaching doors. The same region is provenance's replay container — a wire replays as a track under
 a fresh region. *(owner: membrane.md §REGION; replay-container role PROVENANCE.md §4)*
+
+**resource path** — a segment tuple naming a world location (`["db","projects",id]`); first
+segment = domain root. Overlap is segment-wise prefix either direction, never string-join.
+Produced dynamically by rosetta-only `queries?`/`effects?` contract fns over DECODED args,
+never from the impl's return. One key encoding (`serializeResourcePath`) serves door messages,
+host footprints, confirm manifests, and path atoms. *(owner: execution.md §RESOURCE-PATHS)*
 
 **Σ∩T narrow** — constrained decoding's next-token mask: the intersection of Σ (the bound-symbol
 set the oracle proves legal by SCOPE and STRUCTURE) with T (the subset the type lens proves
@@ -154,10 +198,22 @@ property that lets N interpreters (value, box, and the static readers) share one
 instruction keys are strings so every interpreter consumes them as data. *(owner: PRINCIPLES.md
 P0/P7)*
 
+**temporal immutability** — the CQS product law (per-domain, run-local): a new query genesis is
+illegal only when an effect intervened BETWEEN two overlapping queries on that domain
+(Q→E→Q doors; bare E→Q, Q→E, E→Q→E, E→Q→Q are legal). Supersedes classic
+`priorE ∩ thisQ`. On by default for every live run via the always-minted resource-path
+journal. *(owner: execution.md §RESOURCE-PATHS)*
+
 **teaching door** — a door whose message teaches the fix and routes the caller to the correct
 subsystem rather than merely rejecting — e.g. `RegionEscapeError` naming the escaped invocation, a
 bad-key reader door steering to the prefix form, a degradation door naming the missing config key.
 See *door*. *(owner: PRINCIPLES.md P5)*
+
+**world flip** — the one scheme<>js boxing transition per membrane direction, owned by the
+membrane alone: a rosetta impl receives decoded JS (raw boxed SchemeValue only through a
+`z.dynamic` INPUT slot) and returns RAW JS — returning an `AValue`, bare or nested in plain
+arrays/objects, is the illegal move (`WorldFlipError`, the `assertNoWorldFlip` door, RULINGS.md
+R10). *(owner: membrane.md; door in common/symbols/rosetta.ts)*
 
 **wire** — a maximal pure connected subgraph of the provenance wireframe, folded to ONE closed
 arrival lambda (parameters = ingress, `FV(body) ⊆ params ∪ prelude-names`). Ports break wires by

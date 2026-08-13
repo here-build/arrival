@@ -1,4 +1,4 @@
-# RULINGS — design rules R1–R9 + key taxonomy
+# RULINGS — design rules R1–R12 + key taxonomy
 
 Numbered design rules for arrival's value, provenance, and membrane layers. Code and
 tests cite them by ID ("RULINGS.md R2"); the IDs are stable anchors.
@@ -140,6 +140,42 @@ home — proxy keying, scope-bound caches, the four enforcement sites): membrane
 Rejected alternative: eager full materialization at egress — pays the whole copy up
 front, loses aliasing (two references to one list become two arrays), and forecloses
 provenance reach-back on deep reads.
+
+## R10 — World flip: a rosetta impl's return is JS-world, always
+
+(2026-08-13, hermeticity audit B2b.) The scheme<>js membrane flips worlds exactly once
+per direction. A rosetta impl returning an already-boxed `AValue` — bare or nested in the
+plain arrays/objects `jsToScheme` recurses — is an ILLEGAL MOVE: it would ride the
+owned-artifact pass-through and skip the membrane's mint/attest. The `assertNoWorldFlip`
+door (`common/symbols/rosetta.ts`) crashes with `WorldFlipError`, BEFORE `z.encode` so
+coded slots teach the same cure as `z.dynamic` escape slots. Direction asymmetry: a
+`z.dynamic` INPUT still hands the impl the raw boxed SchemeValue; the OUTPUT face is
+`unknown` (raw JS — the type system agrees via `DynamicHatch`). A verb that hands back
+scheme values belongs on the contour (`symbol.native` + `z.schemeValue`).
+
+Rejected alternative: keeping the v2 "impl boxes its own return via jsToScheme" contract —
+it let JS-world code smuggle scheme values past provenance minting, and made the boxing
+site (and its ctx) the impl author's problem instead of the membrane's.
+
+## R11 — Contract seal: frozen at symbol instantiation
+
+(2026-08-13, hermeticity audit B3.) A contract is the declaration of record; it freezes
+the moment it gets inside the symbol instance (`ANativeProcedure`/`ARosettaProcedure`
+ctors). The only post-factory declaration channels — `withContractFields`
+(type/emit/narrows/refPolicy) and `withCallbackRoles` (role vocabulary) — RE-MINT a new
+instance around the same impl with a new frozen contract, with runtime whitelists
+(`ContractSealError`). The slot-kind walls also gained their runtime twin
+(`assertSlotKinds`/`ContractSlotKindError` in every factory — audit B2a): rosetta refuses
+`z.schemeValue`; native/sequence/define refuse `z.dynamic`/`z.instance`.
+
+## R12 — Prelude persistence: invocation survives, reference does not
+
+(2026-08-13, hermeticity audit B4.) A prelude `(define …)` PERSISTS into the main phase —
+per-run, in the prelude-define frame between the user scope and the vocabulary chain —
+while preludeOnly NAMES stay unresolvable (their seed frame is never in a main-phase
+walk; closures reach them by lexical capture). Holds for bootstrap preludes AND mid-run
+`(require/extension …)` packs — the require-extension surface. Full contract:
+docs/environments.md §7a; laws: `env/__tests__/prelude-persistence.law.test.ts`.
 
 ## Key taxonomy — PRINCIPLES P7 corollary
 
