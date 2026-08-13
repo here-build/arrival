@@ -30,6 +30,7 @@ import invariant from "tiny-invariant";
 import { RequireCycleError, RequireResolverError } from "../errors.js";
 
 import { bindValue, AmbientRuntime, type AmbientValue, mintFrame, isAmbientRuntime } from "../env/AmbientRuntime.js";
+import { ensurePreludeDefineFrame } from "../env/assemble-run.js";
 import {
   lookupExtensionResolverIn,
   makeRegisterExtensionMacro,
@@ -305,9 +306,12 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
           // Absent registry ⇒ door naming extensionRegistry (same posture as require's fs/loader).
           requiresConfig: ["extensionRegistry"] },
         // RAW-BOUND (§LOADER). Applies pack via per-env RuntimeAssembler; returns void.
-        // Mid-run discarded child scope C' (mintFrame off live env, seeded with
-        // register-extension): pack prelude defines die with C'; only declared symbols
-        // reach the live env (§PRELUDE).
+        // Mid-run scope shape (ruling 2026-08-13, audit B4): SEED child C' of the live
+        // env carries register-extension + any preludeOnly binds (discarded — never
+        // main-phase-resolvable); the pack's prelude TEXT evaluates against a child D'
+        // of C', and D's OWN defines are copied into the run's persistent
+        // prelude-define frame after apply — an extension's prelude defines ARE
+        // main-phase bindings ("invocation survives, reference does not"; §PRELUDE).
         async function (...args: unknown[]): Promise<SchemeVal> {
           const resources = this.resources as LoaderRunResources | undefined;
           invariant(
@@ -333,10 +337,18 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
           );
           const preludeScope = mintFrame(env, `prelude/${name}`);
           bindValue(preludeScope, "require/register-extension", makeRegisterExtensionMacro(loaderRegistryOf));
+          // The eval child: pack prelude defines land HERE, apart from the seed binds.
+          const preludeEvalScope = mintFrame(preludeScope, `prelude/${name}/defines`);
           await assembler.require(pack, {
             preludeScope: { set: (n, v) => bindValue(preludeScope, n, v as AmbientValue) },
             // through-unknown widen: assembler typed over structural RunEnv; frame is concrete.
-            preludeEvalScope: preludeScope as RunEnv & AmbientRuntime });
+            preludeEvalScope: preludeEvalScope as RunEnv & AmbientRuntime });
+          // Persist the pack's prelude defines into this run's define frame (own-record
+          // read, sanctioned: list() is own names; values entered through bindValue).
+          const defines = ensurePreludeDefineFrame(this.runCtx);
+          for (const defineName of preludeEvalScope.list()) {
+            bindValue(defines, defineName, preludeEvalScope.__env__[defineName]!);
+          }
           return theVoid;
         },
       ) }) });

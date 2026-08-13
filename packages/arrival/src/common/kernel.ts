@@ -11,7 +11,7 @@
 // is docs/environments.md §ASSEMBLY; this file enforces the mid-run half of it.
 
 // Errors (teaching, errors-as-doors) live in errors.ts. Imported here for the throw sites
-// below; the /env barrel surfaces them by importing errors.ts DIRECTLY (no passthrough).
+// below.
 import {
   AssembleConfigConflictError,
   AssembleCycleError,
@@ -58,12 +58,15 @@ export interface PackContext<E = unknown> {
    *  directly, no kernel-level overlay. */
   readonly preludeScope?: PreludeBindTarget;
   /** The scope a capability's `prelude` TEXT is evaluated AGAINST — distinct from
-   *  `preludeScope` (the bind target). MID-RUN: `preludeScope` = `preludeEvalScope` = a
-   *  discarded CHILD `C'` of the live env. Re-parenting a LIVE env is unsafe (concurrent
-   *  lookups), so the prelude is evaluated IN `C'` instead: lookups miss `C'` → hit
-   *  `liveEnv` → base, and `C'` (with any prelude `define`s) is simply dropped when
-   *  `require()` returns — mid-run asymmetry: a mid-run pack's prelude cannot contribute
-   *  runtime bindings. */
+   *  `preludeScope` (the bind target). MID-RUN (ruling 2026-08-13, audit B4):
+   *  `preludeScope` = a discarded seed child `C'` of the live env (register-extension +
+   *  preludeOnly binds — never main-phase-resolvable); `preludeEvalScope` = a child `D'`
+   *  of `C'` the prelude evaluates in. Re-parenting a LIVE env is unsafe (concurrent
+   *  lookups), so lookups miss `D'`/`C'` → hit `liveEnv` → base. After `require()`
+   *  returns, the CALLER (loader-capability.ts) copies `D'`'s own defines into the
+   *  run's persistent prelude-define frame — a mid-run pack's prelude DOES contribute
+   *  runtime bindings; only the seed dies. NOTE: binding persistence is CALLER-DEFINED —
+   *  bootstrap `.set` persists via `Vocabulary`; mid-run `.set` (the seed) is discarded. */
   readonly preludeEvalScope?: E;
 }
 

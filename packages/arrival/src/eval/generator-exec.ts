@@ -3,16 +3,11 @@
  * generator evaluator. Every run resolves through the self-hosted `Vocabulary`
  * (env/vocabulary.ts + env/base-roster.ts). Drives each top-level form through
  * `run()`.
- *
- * Usage:
- *   import { exec } from "./generator-exec.js";
- *   const results = await exec("(+ 1 2 3)");  // Returns [6]
- *   const results = await exec("(+ 1 2)", { capabilities: [myCapability] });
  */
 
-import { AmbientRuntime, mintPlainFrame, isAmbientRuntime, bindValue } from "../env/AmbientRuntime.js";
+import { AmbientRuntime, mintPlainFrame, mintResolvingFrame, isAmbientRuntime, bindValue } from "../env/AmbientRuntime.js";
 import { buildVocabulary, type Vocabulary } from "../env/vocabulary.js";
-import { assembleRun, vocabularyOf } from "../env/assemble-run.js";
+import { assembleRun, preludeDefinesOf, vocabularyOf } from "../env/assemble-run.js";
 import { BASE_ROSTER } from "../env/base-roster.js";
 import { inferenceEnv } from "../env/inference-env.js";
 import run, { evaluate, expectValue, type EvalTap } from "./evaluator.js";
@@ -35,6 +30,7 @@ import type { ReadGuard } from "../run/read-guard.js";
 import type { PathAtomBus } from "../run/path-atom-bus.js";
 import type { ResourcePathLog } from "../run/resource-paths.js";
 import { checkReadWriteGuard } from "../run/read-guard.js";
+import { noteReactiveAtomsRun, retireReactiveAtomsRun } from "../run/reactive-atoms.js";
 // TYPE-ONLY (erased — no runtime scheme-zod edge): exec exit contract's schema type.
 import type { output as ZodOutputOf, ZodType } from "../common/scheme-zod/index.js";
 import type { AListAlike, SchemeValue } from "../values/types.js";
@@ -297,6 +293,19 @@ function sealedVocabularyChain(vocabulary: Vocabulary): {
 }
 
 /**
+ * Fresh per-call lexical scope ROOTED at the run's prelude-define frame (ruling
+ * 2026-08-13, audit B4): session frame → prelude defines → (capabilities half).
+ * A prelude `(define …)` is thereby a main-phase binding — resolvable, shadowable
+ * by user defines, live for mid-run require/extension appends — while preludeOnly
+ * SEED bindings (held by the discarded seed frame, never here) stay unresolvable.
+ * A run minted outside assembleRun has no define frame — plain fresh root.
+ */
+function runRootedScope(runCtx: RunContext): LexicalScope {
+  const defines = preludeDefinesOf(runCtx);
+  return defines === undefined ? LexicalScope.fresh() : LexicalScope.for(mintResolvingFrame("session", {}, defines));
+}
+
+/**
  * Parse and execute Scheme code — COMPLEX tier (see {@link ExecState}). EVERY
  * run resolves through the self-hosted, memoized Vocabulary:
  *
@@ -361,16 +370,15 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     (await buildVocabulary(effectiveCapabilities, config, capabilityEvalScheme));
   const { chainFrame, chain } = sealedVocabularyChain(vocabulary);
 
-  // ISOLATION — fresh null-rooted scope per call unless caller opts into continuity.
-  const lexicalScope = scope ?? LexicalScope.fresh();
-
   // STATIC VALIDATION — AFTER the chain seals, BEFORE assembleRun's prelude pass.
+  // Validation is deliberately BLIND to prelude defines (they are dynamic — a prelude
+  // is arbitrary scheme, ruling 2026-08-13): it sees the caller's scope, or an empty
+  // fresh one, exactly what is statically knowable pre-run.
   if (staticValidation === "on") {
-    const diagnostics = validateAgainstResolution(program, chain, vocabulary.degraded, lexicalScope);
+    const diagnostics = validateAgainstResolution(program, chain, vocabulary.degraded, scope ?? LexicalScope.fresh());
     if (diagnostics.some((d) => d.severity === "error")) throw new StaticValidationError(diagnostics);
   }
 
-  const runResolver = new Resolver(lexicalScope.env, new Capabilities(chainFrame, chain));
   // assembleRun is THE ONE place preludes run — mints RunContext THEN runs the
   // per-run prelude. runCtx: passedRunCtx — REUSE when supplied (tuple-identity
   // invariant; skips re-preluding on a match — see assemble-run.ts).
@@ -392,6 +400,17 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     resourcePaths,
     notes,
     display });
+  // Atoms live per run context: an owned run starting on this bus supersedes the
+  // previous owned run's cells (P-RX-ATOM-SUPERSEDE). Reused runCtx never notes.
+  if (runCtxOwned && runCtx.pathAtoms !== undefined) noteReactiveAtomsRun(runCtx.pathAtoms, runCtx);
+
+  // ISOLATION — fresh scope per call unless the caller opts into continuity. The fresh
+  // scope roots at the run's prelude-define frame (ruling 2026-08-13, audit B4):
+  // session → prelude defines → vocabulary chain, so a prelude-defined name is a
+  // main-phase binding (and a mid-run require/extension's defines appear live) while
+  // preludeOnly seeds stay out of every walk.
+  const lexicalScope = scope ?? runRootedScope(runCtx);
+  const runResolver = new Resolver(lexicalScope.env, new Capabilities(chainFrame, chain));
 
   try {
     const results: SchemeValue[] = [];
@@ -415,7 +434,10 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
       try {
         result = expectValue(await (runCtx.reads ? runCtx.reads.tracker.region(runForm) : runForm()));
       } catch (e) {
-        if (runCtxOwned) runCtx.pathAtoms?.abandonRun(); // RX-UNIT — see the commitRun note below
+        if (runCtxOwned) {
+          runCtx.pathAtoms?.abandonRun(); // RX-UNIT — see the commitRun note below
+          retireReactiveAtomsRun(runCtx); // abandoned run's cells die (atoms live per run context)
+        }
         if (e instanceof ArrivalError && e.cause instanceof TypeError && !isHostRuntimeBug(e.cause)) throw e.cause;
         throw e;
       }
@@ -572,11 +594,12 @@ export async function execExpr(
       pathAtoms,
       strictCQSstrings,
       resourcePaths }));
+  if (runCtxOwned && runCtx.pathAtoms !== undefined) noteReactiveAtomsRun(runCtx.pathAtoms, runCtx);
   let runResolver = resolver;
   if (runResolver === undefined) {
     const vocabulary = await buildVocabulary(BASE_ROSTER, undefined, capabilityEvalScheme);
     const { chainFrame, chain } = sealedVocabularyChain(vocabulary);
-    runResolver = new Resolver(LexicalScope.fresh().env, new Capabilities(chainFrame, chain));
+    runResolver = new Resolver(runRootedScope(runCtx).env, new Capabilities(chainFrame, chain));
   }
   // Run axis is SOURCE OF TRUTH once a runCtx exists (mirrors evaluator.ts
   // lambda runner — bodyCtx.signal = callCtx.runCtx.signal).
@@ -601,7 +624,10 @@ export async function execExpr(
     if (runCtxOwned) runCtx.pathAtoms?.commitRun();
     return value;
   } catch (e) {
-    if (runCtxOwned) runCtx.pathAtoms?.abandonRun();
+    if (runCtxOwned) {
+      runCtx.pathAtoms?.abandonRun();
+      retireReactiveAtomsRun(runCtx); // abandoned run's cells die (atoms live per run context)
+    }
     if (e instanceof ArrivalError && e.cause instanceof TypeError) throw e.cause;
     throw e;
   } finally {
@@ -681,6 +707,7 @@ export async function execStateOverFrame(code: string | SchemeValue, options: Ex
       notes,
       display,
     });
+  if (runCtxOwned && runCtx.pathAtoms !== undefined) noteReactiveAtomsRun(runCtx.pathAtoms, runCtx);
 
   try {
     const results: SchemeValue[] = [];
@@ -704,7 +731,10 @@ export async function execStateOverFrame(code: string | SchemeValue, options: Ex
       try {
         result = expectValue(await (runCtx.reads ? runCtx.reads.tracker.region(runForm) : runForm()));
       } catch (e) {
-        if (runCtxOwned) runCtx.pathAtoms?.abandonRun(); // RX-UNIT — see the commitRun note below
+        if (runCtxOwned) {
+          runCtx.pathAtoms?.abandonRun(); // RX-UNIT — see the commitRun note below
+          retireReactiveAtomsRun(runCtx); // abandoned run's cells die (atoms live per run context)
+        }
         if (e instanceof ArrivalError && e.cause instanceof TypeError && !isHostRuntimeBug(e.cause)) throw e.cause;
         throw e;
       }
@@ -755,6 +785,7 @@ export async function execExprOverFrame(
   const runCtx =
     passedRunCtx ??
     new RunContext({ signal, heapBudget, cache, effects, reads, pathAtoms, strictCQSstrings, resourcePaths });
+  if (runCtxOwned && runCtx.pathAtoms !== undefined) noteReactiveAtomsRun(runCtx.pathAtoms, runCtx);
   const runSignal = runCtx.signal;
   try {
     const value = expectValue(
@@ -769,7 +800,10 @@ export async function execExprOverFrame(
     if (runCtxOwned) runCtx.pathAtoms?.commitRun();
     return value;
   } catch (e) {
-    if (runCtxOwned) runCtx.pathAtoms?.abandonRun();
+    if (runCtxOwned) {
+      runCtx.pathAtoms?.abandonRun();
+      retireReactiveAtomsRun(runCtx); // abandoned run's cells die (atoms live per run context)
+    }
     if (e instanceof ArrivalError && e.cause instanceof TypeError) throw e.cause;
     throw e;
   } finally {

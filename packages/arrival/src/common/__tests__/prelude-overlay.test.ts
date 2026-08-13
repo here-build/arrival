@@ -8,27 +8,21 @@
 // the `Vocabulary` and runs the tuple's per-run prelude pass (`env/assemble-run.ts`'s
 // `assembleRun`, step 3) as part of minting the RunContext, before any program form evaluates.
 //
-// A REAL BEHAVIORAL FINDING surfaced while re-authoring (not caused by Cut 4 — Stage B2's
-// `assemble-run.ts` already shipped this, this migration is what first exercised it end-to-end):
-// the per-run prelude pass runs preludes against a FRESH, DISCARDED-per-run scope
-// (`assemble-run.ts`'s own doc: "any `(define …)` a prelude form ran is gone with it — the
-// spec's confirmed discard ruling"). Under the retired BOOTSTRAP path, `ctx.preludeEvalScope`
-// was `undefined`, so `capability.ts`'s `lower().apply()` fell back to evaluating a prelude
-// directly against the REAL env — an ordinary `(define …)` in prelude TEXT genuinely persisted.
-// That is NO LONGER TRUE: every run (there is no other path now) discards the per-run prelude
-// scope. Facts proven here, against the CURRENT model:
+// RULING 2026-08-13 (audit B4, superseding the Stage-B2 discard finding this header used to
+// record): a prelude `(define …)` PERSISTS into the main phase — it lands in the run's
+// per-run prelude-define frame (assemble-run.ts), layered between the user's lexical scope
+// and the vocabulary chain. What stays out is the preludeOnly SEED: "invocation survives,
+// reference does not." Facts proven here, against the CURRENT model:
 //   1. a preludeOnly verb is callable from a LATER capability's prelude during the per-run
 //      prelude pass, and a plain unbound-variable error from user program code.
-//   2. an ordinary prelude `(define …)` does NOT land in the runtime env anymore — discarded
-//      with the per-run prelude scope (the reversed finding above).
+//   2. an ordinary prelude `(define …)` IS a main-phase binding for its run (per-run — never
+//      shared across runs; the full law family is env/__tests__/prelude-persistence.law.test.ts).
 //   3. the prelude scope ACCUMULATES across capabilities within ONE prelude pass (C3 dep order)
 //      — proven via side-effecting rosetta calls (recording, not defining), which still observe
 //      each other correctly within that one pass.
-//   4. NEITHER a lambda DEFINED BY a prelude NOR a value CAPTURED BY a prelude `(define …)`
-//      survives to runtime anymore — both are ordinary prelude-scope defines, discarded alike.
-//      The only way to expose a prelude-computed value as a stable runtime name now is a real
-//      `symbol.define`/`symbol.native` declaration (Pass 1/2 of `buildVocabulary`), never prelude
-//      TEXT.
+//   4. BOTH a lambda DEFINED BY a prelude (closing over a preludeOnly verb — V's blessed
+//      require-extension shape) AND a value CAPTURED BY a prelude `(define …)` survive to
+//      runtime, while the preludeOnly verb's NAME stays unresolvable from user code.
 
 import { describe, expect, it } from "vitest";
 import { exec, execState } from "../../eval/generator-exec.js";
@@ -73,17 +67,15 @@ describe("preludeOnly — the phase-gated per-run prelude pass (design §1.3, ov
     );
   });
 
-  // INVARIANT (Stage B2, reversed from the retired bootstrap path — see this file's header): an
-  // ordinary prelude `(define …)` is DISCARDED with the per-run prelude scope, never reaching
-  // user program code.
-  it("an ordinary prelude `define` does NOT land in the runtime env — discarded with the per-run prelude scope", async () => {
+  // INVARIANT (ruling 2026-08-13 — see this file's header): an ordinary prelude `(define …)`
+  // IS a main-phase binding of its run.
+  it("an ordinary prelude `define` lands in the run's prelude-define frame — resolvable from user code", async () => {
     const cap = EnvCapability.define("test/overlay-define", {
       prelude: `(define overlay-defined-value 42)`,
       symbols: () => ({}) });
     const state = await execState(`1`, { capabilities: [cap] });
-    await expect(
-      exec(`overlay-defined-value`, { capabilities: [cap], runCtx: state.runCtx }),
-    ).rejects.toThrow(/Unbound variable/);
+    const results = await exec(`overlay-defined-value`, { capabilities: [cap], runCtx: state.runCtx });
+    expect(results[0]).toBe(42);
   });
 
   // INVARIANT: the prelude scope accumulates across a chain of dependents in C3 order, WITHIN
@@ -129,33 +121,28 @@ describe("preludeOnly — the phase-gated per-run prelude pass (design §1.3, ov
     expect(cSeen).toEqual([7]);
   });
 
-  // INVARIANT (Stage B2, reversed from the retired bootstrap path — see this file's header):
-  // NEITHER a lambda DEFINED BY a prelude NOR a value CAPTURED BY a prelude `(define …)` reaches
-  // runtime anymore — both are ordinary prelude-scope defines, discarded alike. The retired
-  // bootstrap path's "capture the RESULT, not the verb" bridge no longer bridges anything at
-  // all; only a real `symbol.define`/`symbol.native` declaration (not prelude TEXT) exposes a
-  // stable runtime name now.
-  it("THE CONTRACT (reversed): neither a closure NOR a captured value defined by a prelude survives to runtime", async () => {
+  // INVARIANT (ruling 2026-08-13 — see this file's header): BOTH prelude-define bridges
+  // survive to runtime — the wrapper closure over the preludeOnly verb (V's blessed
+  // require-extension shape: "invocation survives") and the captured value — while the
+  // preludeOnly verb's own NAME stays a plain unbound variable ("reference does not").
+  it("THE CONTRACT: a prelude-defined closure AND a captured value both survive; the preludeOnly name does not", async () => {
     const cap = EnvCapability.define("test/overlay-closure", {
       symbols: (symbol, z) => ({
         "closure/secret": symbol.rosetta`closure/secret: preludeOnly source`(
           { input: [], output: [z.number], preludeOnly: true },
           () => 99,
         ) }),
-      // Two prelude defines: what the retired bootstrap path called the WRONG bridge (a lambda
-      // naming the verb) and the RIGHT bridge (capture the call's result) — both discarded now.
       prelude: `
-        (define (broken-bridge) (closure/secret))
+        (define (wrapper-bridge) (closure/secret))
         (define captured-secret (closure/secret))
       ` });
     const state = await execState(`1`, { capabilities: [cap] });
 
-    // Neither prelude define reaches user program code — the per-run prelude scope that held
-    // both is gone.
-    await expect(exec(`captured-secret`, { capabilities: [cap], runCtx: state.runCtx })).rejects.toThrow(
-      /Unbound variable/,
-    );
-    await expect(exec(`(broken-bridge)`, { capabilities: [cap], runCtx: state.runCtx })).rejects.toThrow(
+    const captured = await exec(`captured-secret`, { capabilities: [cap], runCtx: state.runCtx });
+    expect(captured[0]).toBe(99);
+    const viaWrapper = await exec(`(wrapper-bridge)`, { capabilities: [cap], runCtx: state.runCtx });
+    expect(viaWrapper[0]).toBe(99);
+    await expect(exec(`(closure/secret)`, { capabilities: [cap], runCtx: state.runCtx })).rejects.toThrow(
       /Unbound variable/,
     );
   });

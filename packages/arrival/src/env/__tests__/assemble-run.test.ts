@@ -114,18 +114,18 @@ describe("assembleRun — registration-conflict door as the execution-dedup dete
   });
 });
 
-describe("assembleRun — prelude `(define …)` is discarded, never leaks into user code", () => {
-  // INVARIANT: a prelude `(define leaked 42)` lands in the discarded per-run prelude scope —
-  // program code referencing `leaked` on the vocabulary path throws UnboundVariableError, the
-  // same as any other genuinely-unbound name.
-  it("a name a prelude `define`s is unbound from user code after assembly", async () => {
-    const cap = EnvCapability.define("test/prelude-define-discard", {
+describe("assembleRun — prelude `(define …)` PERSISTS into the main phase (ruling 2026-08-13)", () => {
+  // FLIPPED LAW (audit B4): the discard contract this block used to pin was superseded —
+  // a prelude define is now a per-run main-phase binding (the require-extension surface).
+  // The full law family lives in prelude-persistence.law.test.ts; this row keeps the
+  // flip visible at the old pin's address.
+  it("a name a prelude `define`s IS bound from user code after assembly", async () => {
+    const cap = EnvCapability.define("test/prelude-define-persists", {
       prelude: "(define leaked 42)",
       symbols: () => ({}) });
 
-    await expect(exec("leaked", { capabilities: [cap] })).rejects.toBeInstanceOf(
-      UnboundVariableError,
-    );
+    const results = await exec("leaked", { capabilities: [cap] });
+    expect(results[0]).toBe(42);
   });
 });
 
