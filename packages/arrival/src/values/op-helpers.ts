@@ -2,7 +2,8 @@
  * op-helpers — cross-cutting leaf shared by every primitive cluster.
  *
  * Type-coercion + provenance + allocation-guard helpers. Own leaf module
- * (imports only value-type classes, never env layer) so cluster packs import
+ * (value-type classes, plus the run-neutral CallCtx/RunContext leaf and named
+ * membrane crossing seams — never the env layer) so cluster packs import
  * without a cycle. Dependency: clusters → op-helpers → value-type classes.
  */
 
@@ -262,6 +263,9 @@ export function deriveSortCompare(
  * Coerce to scheme numeric. Safe ints exact; non-safe + floats inexact.
  * Host bigint doors (NoLensError at membrane) — never mint an out-of-range exact.
  * `ctx` defaults to CONSTANT_CTX; live call sites may thread their own runCtx.
+ * The default is safe: minting a numeric wrapper reads no run-varying state
+ * (no env, no clock, no counters) — it is run-neutral, so CONSTANT_CTX and a
+ * threaded live ctx are indistinguishable at this call.
  */
 export function coerceNumeric(value: unknown, ctx: RunContext = CONSTANT_CTX): ANumeric {
   switch (true) {
