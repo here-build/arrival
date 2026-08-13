@@ -40,9 +40,10 @@ function faceOf(v: unknown): unknown {
   return v;
 }
 
-/** Zod `_zod.def` — same introspection schema-to-ts uses for tuple items + rest. */
+/** Zod `_zod.def` via the sanctioned `z.defOf` doorway (E2 consolidation) — same
+ *  introspection schema-to-ts uses for tuple items + rest. */
 function zodDef(schema: unknown): { type?: string; items?: readonly ZodType[]; rest?: ZodType } {
-  return (schema as { _zod?: { def?: unknown } })?._zod?.def as never;
+  return z.defOf(schema) as { type?: string; items?: readonly ZodType[]; rest?: ZodType };
 }
 
 /** Declared schema for positional slot argIndex (fixed item or variadic rest). */

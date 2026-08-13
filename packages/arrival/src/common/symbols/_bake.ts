@@ -647,11 +647,7 @@ export function isSingleOutput(output: VectorSpec): boolean {
  *  undefined (kwargs object / bare). Local `_zod.def` copy — importing schema-to-ts would
  *  pull harvest into the bake layer. Exported for rosetta's z.dynamic-callable door. */
 export function topLevelSchemas(schema: z.ZodTypeAny): readonly z.ZodTypeAny[] | undefined {
-  const def = (
-    schema as {
-      _zod?: { def?: { type?: string; items?: readonly z.ZodTypeAny[]; element?: z.ZodTypeAny } };
-    }
-  )._zod?.def;
+  const def = z.defOf(schema) as { type?: string; items?: readonly z.ZodTypeAny[]; element?: z.ZodTypeAny } | undefined;
   if (def?.type === "tuple") return def.items ?? [];
   if (def?.type === "array" && def.element) return [def.element];
   return undefined;
@@ -698,7 +694,7 @@ export function assertProvenanceRoleShape(
 function cacheGateSlots(schema: z.ZodTypeAny): readonly z.ZodTypeAny[] {
   const items = topLevelSchemas(schema);
   if (items !== undefined) return items;
-  const def = (schema as { _zod?: { def?: { type?: string; shape?: Record<string, z.ZodTypeAny> } } })._zod?.def;
+  const def = z.defOf(schema) as { type?: string; shape?: Record<string, z.ZodTypeAny> } | undefined;
   if (def?.type === "object" && def.shape) return Object.values(def.shape);
   return [schema];
 }

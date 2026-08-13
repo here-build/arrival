@@ -146,6 +146,15 @@ export function lookupName(schema: unknown): string | undefined {
   return core ? NAMES.get(core) : undefined;
 }
 
+/** Raw `_zod.def` reach-in (E2 consolidation, hermeticity audit 2026-08-13) — the sole
+ *  sanctioned doorway for structural def introspection (tuple `items`, array `element`,
+ *  object `shape`, tuple `rest`, …). Reads the schema's OWN def — no registry walk, unlike
+ *  `resolveCore`. Loosely typed on purpose: callers narrow to the shape they need. Same
+ *  drift pin as `resolveCore` above: zod 4.3.6. */
+export function defOf(schema: unknown): Record<string, unknown> | undefined {
+  return (schema as { _zod?: { def?: Record<string, unknown> } } | undefined)?._zod?.def;
+}
+
 /** Element schema(s) a `list`/`cons` was built with — single schema / `[car,cdr]` /
  *  `undefined` for fixed-heads `list([A,B])` (structural print). Same core walk as `lookupName`. */
 export function lookupCollectionElement(
