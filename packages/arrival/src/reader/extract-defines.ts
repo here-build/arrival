@@ -17,7 +17,7 @@
  * read via its registry symbol (`Symbol.for("__location__")`) — no dependency
  * on the concrete primitive classes.
  */
-import { parse } from "../eval/generator-exec.js";
+import { parse } from "./parse.js";
 
 /**
  * Source location of a parsed form — mirrors the reader's `SourceLocation`
