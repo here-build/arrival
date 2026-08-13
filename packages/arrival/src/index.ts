@@ -3,7 +3,7 @@
 //   1. THIS BARREL is the PUBLIC surface — small on purpose, closed to three concerns:
 //        • EVAL — `exec`/`execState`/`parse` + options/state, scope continuity
 //          (`LexicalScope`/`SessionScope`), run identity (`RunContext`/`disposeRunContext`),
-//          and the membrane crossing (`schemeToJs`/`schemeToJsUntyped`/`jsToScheme`/`ANil`).
+//          and the membrane crossing (`toJS`/`jsToScheme`/`ANil`).
 //        • CAPABILITY AUTHORING — `EnvCapability`/`symbol`/`z`/`SymbolDeclaration`/
 //          `RosettaSymbolDef` — the one contract every palette pack (and every external
 //          capability author) declares against.
@@ -50,11 +50,8 @@ export { disposeRunContext } from "./run/run-lifecycle.js";
 // Inbound twin: `jsToScheme`. Worlds do not mix: scheme-side values cross with `toJS`
 // once; JS-side values (e.g. `exec` results) never re-cross. `isSchemeValue` is a
 // membrane predicate for double-wrap prevention / codec gates — not a soft peel.
-//
-// `schemeToJs` / `schemeToJsUntyped` remain exported as TEMPORARY aliases. New code
-// uses `toJS`; do not add new `schemeToJs*` or `isSchemeValue ? toJS : id` call sites.
 export { toJS, isSchemeValue } from "./membrane/membrane.js";
-export { jsToScheme, schemeToJs, schemeToJsUntyped } from "./membrane/rosetta.js";
+export { jsToScheme } from "./membrane/rosetta.js";
 // Membrane null/absent leaf — crosses both ways, so it travels with the eval surface
 // rather than the value-class reflection tier (`/reflect-internals`).
 export { ANil } from "./values/primitives/ANil.js";
@@ -78,6 +75,16 @@ export type {
   RosettaSymbolDef,
 } from "./common/symbols/_bake.js";
 export type { CallCtx } from "./run/CallCtx.js";
+// TIER RULE (hermeticity audit E3): a symbol earns the public tier over `/host-internals`
+// only when a real consumer constructs it from outside this package — not because it is
+// "dispatch machinery" or "the one construction site" in the abstract. `testCallCtx` is
+// exactly that case: `arrival-mcp`'s tool-factory tests (`packages/arrival-mcp/src/__tests__/
+// tool-factories.test.ts`) import it from `@inhuman.tools/arrival` (the root, not
+// `/host-internals`) to drive a bare `fire(def, testCallCtx(), …)` call outside a real run.
+// Demoting it would break that consumer; `makeCallCtx` ships alongside it rather than
+// splitting one construction pair across two tiers. Every OTHER dispatch-machinery symbol
+// stays on `/host-internals` by default — this pair is the named exception, not the
+// precedent.
 export { makeCallCtx, testCallCtx } from "./run/CallCtx.js";
 export { withContractFields } from "./common/symbols/_bake.js";
 export type { SymbolDeclaration } from "./common/capability.js";
