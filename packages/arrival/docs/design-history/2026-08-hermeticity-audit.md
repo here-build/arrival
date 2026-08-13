@@ -1,8 +1,16 @@
 # Hermeticity audit — 2026-08-13
 
-> **Status update (same day):** V ruled on the breaches; all four are FIXED on main
-> (red-test-first). B1 (reaction-envelope move) remains open pending the Wave B placement
-> pass. Rulings recorded as RULINGS.md **R10** (world flip — B2 grew a second half: a
+> **Status update (same day, final):** ALL findings are FIXED on main. Breaches
+> B2/B3/B4 red-test-first (rulings below); Wave B placement shipped (B1 →
+> `src/reactivity/`, P1 `run/path-algebra.ts`, P2 `run/penetration.ts`, P3 `is_promise`
+> → value-guards, P4 reader parse, P5 typecheck → membrane/ + promises repoint, E4);
+> Wave C declarations shipped (S5/S6 → `docs/strata.md` — the stratum registry this
+> audit called for; S1/S2/S4/D1–D8/E1–E3/F7–F9/W11 as doc sentences, censuses, and the
+> §AXES legal-region table; E1 also consolidated the six axis doors under
+> `assertContractAxes`; E2 under `defOf`). E3 resolved as documented-exception
+> (arrival-mcp consumes `testCallCtx` from the root barrel). S3 resolved as sanction
+> comment (rerouting through `_lookupWithResolvers` is not behavior-identical — it
+> would run resolver side effects). Rulings recorded as RULINGS.md **R10** (world flip — a
 > rosetta impl returning an AValue crashes, `WorldFlipError`; `z.dynamic`'s return face is
 > now `unknown`), **R11** (contract seal — frozen at instantiation, stampers re-mint under
 > runtime whitelists; plus `assertSlotKinds` runtime twin in every factory), **R12**
