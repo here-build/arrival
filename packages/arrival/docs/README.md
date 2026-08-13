@@ -61,6 +61,7 @@ The ledgers and reference material are not subsystems:
 |---|---|
 | `PRINCIPLES.md` | The constitution — cross-cutting invariants (P-series) every subsystem obeys. |
 | `RULINGS.md` | Numbered, append-only cross-subsystem rulings (R-series) — the shared citation vocabulary. |
+| `strata.md` | The bottom-up dependency-order registry — leaves, the closed-member-list interpreter knot, the one-directional layers above it, and the rules for extending them. The wall registry every subsystem doc's cycle notes should cite INTO. |
 | `GLOSSARY.md` | One-line canonical definition per invented term (box, membrane, egress, wire, …); a reference-canon, mints no ID series. |
 | `reference/` | Exhaustive coverage/mapping tables (r7rs, srfi). Facts only. |
 | `design-history/` | Superseded decisions and rejected-alternative rationale. Living docs link IN; nothing links OUT to a living doc. |
