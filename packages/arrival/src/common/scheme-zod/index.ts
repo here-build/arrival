@@ -1,3 +1,15 @@
+// scheme-zod — the codec layer over values/membrane: per-arg schemas that decode Scheme
+// arguments into JS and encode JS results back, both faces (`z.input`/`z.output`) of one
+// contract. A member of the declared two-interpreter core (values ⇄ eval ⇄ membrane ⇄ run
+// ⇄ common/symbols ⇄ common/scheme-zod ⇄ env — the knot; tagless-final means value classes
+// implement both interpreters, so this stratum sees run/eval-adjacent machinery).
+// Value-imports `run/CallCtx` (`makeCallCtx`, §region-scope call-site below) for the SAME
+// reason CallCtx.ts's own header gives for housing it outside `_bake.ts`: a cycle through
+// `_bake` would close badly (z.instanceof captures its class arg BY VALUE at call time — a
+// TDZ undefined would stick). `lookupName` + `defOf` are the ONLY sanctioned `_zod.def`
+// introspection doors (E2 consolidation — see their drift-pin comment). Nothing outside
+// this module imports back except type-only edges.
+
 import * as z from "zod";
 import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import { makeCallCtx } from "../../run/CallCtx.js";

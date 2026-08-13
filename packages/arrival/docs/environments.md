@@ -307,11 +307,19 @@ it is the fallback when *no* real scope is open, never a target.
 
 ---
 
-## 6. AXES — provenance role and cache class, orthogonal
+## 6. AXES — independent declaration channels, bounded by named doors
 
-**Every symbol carries a provenance role (the lineage axis — where results come from) and,
-optionally, a cache class (a serialization/replay axis). They never mix, and the same word
-`pure` names a value on *each* — the standing trap for migrators.**
+**A symbol can carry a provenance role (the lineage axis — where results come from), a cache
+class (a serialization/replay axis), and — rosetta only — path producers (the CQS axis: which
+resource domains a penetration reads/writes, `queries`/`effects`). These are independent
+DECLARATION channels, not a single combined enum: declaring one never implies or forbids
+declaring another. What keeps the product of all three from being "anything goes" is that
+every legal REGION is bounded by a named door — six pairwise-axis gates plus the slot-kind
+walls (contour/crossing brand bans), consolidated behind one call site per factory,
+`assertContractAxes` (`common/symbols/_bake.ts`; hermeticity audit E1, 2026-08-13). The
+legal-region table is below, after the axes are introduced individually. The word `pure` is
+also overloaded across axes with different meanings — the standing trap for migrators, named
+explicitly further down (§ "the `pure` naming hazard").
 
 **The lineage axis — provenance role.** One declared role per symbol, data in string-key
 space (P7), from the vocabulary `pipe · fan · source · sink · transparent · loop · opaque`
@@ -385,6 +393,28 @@ downstream readers.
 `control`, `effect`, `accumulator`), shape-extracted where shape decides, declared where it
 underdetermines, drift-doored where a declaration contradicts a shape-decided arm. The
 `accumulator` arm declares the acc-chain — the one sanctioned inter-track edge.
+
+**The legal-region table.** Every named door that bounds the axis product, one row per
+constrained pair, plus the slot-kind walls (the contour/crossing brand runtime twin — not an
+axis pair, but the same enforcement shape):
+
+| constrained pair | rule | gate function | error class |
+|---|---|---|---|
+| provenance `sink`/`transparent` × output vector | output must be void-family (no real return) | `assertProvenanceRoleShape` | `ProvenanceRoleShapeError` |
+| provenance `fan` × input vector | input must carry a `z.lambda` arm to apply | `assertProvenanceRoleShape` | `ProvenanceRoleShapeError` |
+| cacheClass `view` × both vectors | must serialize — no `z.lambda`/`z.schemeValue`/`z.dynamic` slot | `assertCacheClassShape` | `CacheClassShapeError` |
+| `queries` × both vectors (rosetta-only) | must serialize — same slot rule as `view` | `assertResourcePathContractShape` | `ResourcePathShapeError` |
+| provenance `sink` × `queries` (rosetta-only) | banned together — under gather a sink's impl is SKIPPED, so a declared Q would journal a read for a body that never ran | `assertResourcePathRoles` | `ResourcePathRoleConflictError` |
+| `effects` without `queries` × output vector (rosetta-only) | output must be void-family — an effects-only return is unlicensed (the Q half licenses a real return; upsert-with-return is the hybrid shape) | `assertResourcePathRoles` | `ResourcePathRoleConflictError` |
+| contour/crossing brand × both vectors (all kinds) | rosetta bans `z.schemeValue`; native/sequence/define ban `z.dynamic`/`z.instance` | `assertSlotKinds` | `ContractSlotKindError` |
+
+One call site per factory: `assertContractAxes(name, kind, opts)` (`common/symbols/_bake.ts`)
+sequences the gates a `kind` needs — rosetta calls all six pairwise doors plus the slot-kind
+wall; native/sequence call the role-shape, cache-shape, and slot-kind gates (no path axis —
+`queries`/`effects` are rosetta-only fields); define calls the slot-kind wall alone
+(provenance is DERIVED later, by fixpoint over the whole define set, in `define-bake.ts` —
+see above). Each individual gate function stays exported; law tests pin them directly, not
+just the aggregator.
 
 **Enforcement sites:** `common/symbols/_bake.ts`, `common/symbols/rosetta.ts`,
 `common/symbols/native.ts`, `common/symbols/sequence.ts`, `common/symbols/define-bake.ts`,
