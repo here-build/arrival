@@ -176,6 +176,17 @@ mixed:
 The string-forgery hazard (a borrowed JSON object carrying a literal `arrival/*` key) is the
 membrane's duty: a foreign value's own data key is DATA, never protocol — an F3 law row.
 
+**Syntax dispatches by CLASS, semantics by TERM** (hermeticity audit D7). These are two
+different questions at two different points, and the taxonomy above answers only the
+second. Reader SHAPE is decided once, at the boundary between reader output and the
+algebra, by `instanceof` on the value's class — `eval/evaluator.ts`'s `evaluate()`
+destructures `ANil`/`ASymbol`/`APair` this way to decide WHICH FORM a node is (special
+form vs. application vs. self-evaluating atom) before a single algebra term runs. Once
+inside the algebra, every instruction dispatches by STRING KEY, per the corollary above
+— never by re-inspecting class a second time. Conflating the two would either make the
+algebra care about reader internals (breaking P7's one-authority claim) or make special-
+form recognition pay a string-key hop it does not need.
+
 **P8. One algebra, every carrier** *(corollary of P0)*.
 A term has ONE semantics across all representations: if `map` preserves element boxes on a
 Pair, it preserves them on a Vector and a borrowed AJSArray. This is not uniformity

@@ -514,6 +514,15 @@ vector every other bake gate reads; a lambda-free verb — the overwhelming majo
 mints no scope, touches no wrapper cache, pays zero cost. (`environments.md §MEMBRANE-SEAM`
 carries the bake-side framing; the runtime discipline is here.)
 
+**The shallow-container gap.** `assertNotBareCallableInDynamicSlot`'s slot scan
+(`common/symbols/rosetta.ts`'s `dynamicSlotPositions`) is SHALLOW ONLY: a bare `z.dynamic`
+nested inside a container schema (`z.list(z.dynamic)`) is not slot-checked, because a
+container carrying a REAL element codec unwraps at its OWN decode and a bare
+`z.dynamic`-of-container never reaches this scan at all. This is a known gap, not a silent
+one — the scan's own comment names it — pending recursion into `dynamicSlotPositions` to
+walk container element schemas; until then, a `z.dynamic` callable arriving inside a
+container is undetected by this door (audit D2).
+
 **Enforcement sites:** `membrane/region-scope.ts`, `membrane/rosetta.ts`,
 `common/scheme-zod.ts`, `common/symbols/rosetta.ts`.
 

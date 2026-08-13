@@ -34,7 +34,7 @@ through every op that needs it (no value carries it — `AValue` dropped its per
 field; `run/RunContext.ts`'s own header names the removal), read off the threaded context at the
 one hermetic point, never off an ambient singleton.
 
-Three homes, by lifetime:
+Four homes, by lifetime:
 
 - **RunContext** — state CONSTANT for one run yet DIFFERING between concurrent runs: strict
   mode, the heap meter, the abort signal, the channels (§3). This is the run's identity.
@@ -44,12 +44,38 @@ Three homes, by lifetime:
   run-specific.
 - **Dynamic-extent holders** — state varying by CALL DEPTH within one run: the
   exception-handler stack, the current call-site, the current region scope (membrane.md
-  §REGION). These cannot ride a constant-per-run handle and stay the holder family (the
+  §REGION), `globalThis.__arrivalRunResolver` (`eval/evaluator.ts`), and the provenance
+  emission pair `_coordinate`/`_sink` (`eval/provenance-hooks.ts`). Five holders total — the
+  extent guarantee each of the last two carries is stated at its own definition site, cited
+  just below. These cannot ride a constant-per-run handle and stay the holder family (the
   `dynamic-call-site.ts` module-holder idiom, save/restore around the owning call, safe under
   single-threaded JS).
+- **Keyed residency** — a module-housed `WeakMap`/`WeakSet` keyed by a run-scoped object
+  (typically `RunContext` itself); lifetime = the KEY's, not the module's. Used when a leaf
+  must hold run-associated state without importing the owning layer (a `WeakMap<RunContext,
+  X>` needs no `RunContext` write access, only identity). Five sites, all independently
+  audit-found: `inFlight` (`run/penetration.ts` — the single-flight in-progress-promise table;
+  moved here from `run/run-cache.ts` when `penetrateThroughCache` did, audit P2 — cite
+  `penetration.ts`, not `run-cache.ts`),
+  `retiredRuns` / `lastRunByBus` (`run/reactive-atoms.ts` — supersede tracking for an
+  abandoned run's cells), `lifecycles` (`run/run-lifecycle.ts` — the disposal-callback table
+  `onRunContextDispose` reads and writes), `vocabularyByRunCtx` (`env/assemble-run.ts` — the
+  per-run `Vocabulary` a `CallCtx` dispatch looks up), `preludeDefinesByRunCtx`
+  (`env/assemble-run.ts` — the per-run prelude-define frame, R12's persistence mechanism).
+  A `WeakMap` entry dies with its key exactly like a `RunContext`-held field would; the
+  difference is WHERE the map lives, not how long an entry survives.
 
 The test for where a fact belongs: does it vary between concurrent runs (→ RunContext), never
-(→ global singleton), or within one run by depth (→ holder)?
+(→ global singleton), within one run by depth (→ holder), or does a leaf need it without an
+import edge to the owning layer (→ keyed residency)?
+
+**The two extent guarantees, stated where the holders live (audit S1):**
+`globalThis.__arrivalRunResolver`'s save/restore wraps a possibly-async apply
+(`eval/evaluator.ts`, the generic apply site) — its own comment states the guarantee is
+sync-only and names why an async consumer is not a live hazard today. `_coordinate`/`_sink`
+(`eval/provenance-hooks.ts`) are per-isolate, not per-run — their own comment states the
+"at most one recording run per isolate" guarantee and names keyed-by-runCtx as the upgrade
+path if that ever stops holding.
 
 *Enforcement sites: `run/RunContext.ts`, `heap-budget.ts`, `eval/generator-exec.ts`.*
 
@@ -104,10 +130,20 @@ an ordinary `new RunContext(...)` always mints a fresh `MemoryResourcePathLog`, 
 facility-off is `CONSTANT_CTX` territory. `ExecOptions.resourcePaths` injects a harness spy or
 custom log, never an off-switch. Everything else keeps the opt-in default.
 
-**One reader.** All seven are read off `this.runCtx.<channel>` at the baked rosetta `run`
-wrapper — the single hermetic point (§10). No other site consults them; a facility's whole
-armed/off behavior is decided by whether the host passed a non-`undefined` value into
-`new RunContext(...)` (plus the `resourcePaths` default above).
+**The sanctioned readers — exactly two, named here so the claim stays grep-checkable
+(audit D1 corrected the prior "one reader" text, which §8/§13 of this same document, and
+the code, already contradicted).** All seven channels are read off `this.runCtx.<channel>`
+at the baked rosetta `run` wrapper — the chokepoint (§10, `common/symbols/rosetta.ts`) —
+PER PENETRATION: `cache`/`effects`/`reads`/`pathAtoms`/`resourcePaths`/`notes` are all read
+there. The eval loop (`eval/generator-exec.ts`) is the second, narrower reader, for three
+things §8 and §13 already document and this paragraph now cross-links instead of
+contradicting: the per-form `reads.tracker.region(...)` wrap plus the post-form
+`checkReadWriteGuard` call (§8's read-guard region); the `pathAtoms?.commitRun()` /
+`abandonRun()` RX-UNIT/RX-CLOCK commit-or-abandon clock (§13); and the
+`pathAtoms !== undefined` check that arms `noteReactiveAtomsRun` at run entry (§13's
+liveness note). Nothing else consults a channel — a facility's whole armed/off behavior is
+decided by whether the host passed a non-`undefined` value into `new RunContext(...)` (plus
+the `resourcePaths` default above), read only at these two named sites.
 
 **One arming surface, stated once.** `ExecOptions`
 (`cache`/`effects`/`reads`/`notes`/`display`/`pathAtoms`/`resourcePaths`/`strictCQSstrings`)
@@ -520,6 +556,13 @@ the next settle (P-RX-SETTLE-CARRYOVER) — a live A↔B cycle stays visibly dir
 settles rather than silently absorbing the last update. A unit disposed while queued is
 skipped silently (death is final). Host lifecycle: create (enable), dispose (stop), settle.
 
+**Bare (non-envelope) writers get a degraded bus, silently.** `HubPublicBus` — the
+`PathAtomBus` a bare `exec`/`execState` call is armed with when no `createReactionHub`
+envelope owns it — implements `observe` as a documented no-op (no unit owns a bare call's
+reads, so there is nothing to subscribe); its staged effects still publish as FOREIGN on
+`commitRun`, so other envelopes' units still wake. A bare-run reader that expects its own
+OWN observe to arm a subscription will find nothing does — an envelope is required for that.
+
 **In-symbol bridge (`this.reactiveAtoms`).** Minted per penetration whenever path producers
 are declared, closed over that call's produced Q: `get(path)` is EXACT-Q-membership gated
 (E-only and undeclared paths teach via `ReactiveAtomMembershipError`); `reportObserved` joins
@@ -536,9 +579,10 @@ unchanged outside an envelope. Self-wake is allowed: `reportChanged` publishes a
 so the reporting unit re-invokes if it also observed (store liveness ≠ own effect).
 
 *Enforcement sites: `run/path-atom-bus.ts` (bus, keys, MobX behind `AtomProxy` — internal,
-optional peer), `run/reaction-envelope.ts` (hub/envelope/settle), `run/reactive-atoms.ts`
-(mint, membership, one-shot, generation), `common/symbols/rosetta.ts` (observe/stage/mint
-sites), `eval/generator-exec.ts` (commit/abandon clock). Living design:
+optional peer), `reactivity/reaction-envelope.ts` (hub/envelope/settle, incl. `HubPublicBus`
+— moved here from `run/` post-audit-B1, a tier above the knot, see `docs/strata.md` §2),
+`run/reactive-atoms.ts` (mint, membership, one-shot, generation), `common/symbols/rosetta.ts`
+(observe/stage/mint sites), `eval/generator-exec.ts` (commit/abandon clock). Living design:
 `docs/working-proposals/cqs-reactivity/` (monorepo root).*
 
 ---
@@ -580,5 +624,12 @@ three bounds (`heapBudget`, `budgetMs`, `signal`) and their edges are §5 BUDGET
 scope/capability surface — one `LexicalScope` per session, budgets per form, capabilities armed per
 call. It is this library API's first consumer, not a different model.
 
+**Disposal is capability-owned, deliberately unexported.** `onRunContextDispose`
+(`run/run-lifecycle.ts`) registers a teardown to fire when a `RunContext` disposes; it sits
+on no public or `-internals` tier — `common/capability.ts` is its only caller, registering
+capability-cell wind-down (readable resources, resource pools). A host never calls it
+directly: `disposeRunContext` (exported at the package root, §1) is the host-facing door, and
+running its registered teardowns is what "dispose" means (audit W11).
+
 *Enforcement sites: `eval/generator-exec.ts` (`exec`, `execState`), `eval/LexicalScope.ts`
-(`LexicalScope`).*
+(`LexicalScope`), `run/run-lifecycle.ts` (`onRunContextDispose`, `disposeRunContext`).*
