@@ -3,11 +3,12 @@
 > The mental model, stated once, ahead of the code. One `exec()` is a **run**: a hermetic
 > unit of interpretation whose per-run state is minted once and threaded explicitly through
 > the ops that need it, never reached for ambiently. This document says what that state IS, where it
-> lives (data-local, not global), and how the five optional per-run seams — cache, effects,
-> reads, notes, display — arm the interception facilities that turn a bare interpreter into
-> a cacheable, burstable, read-guarded one. §12 SESSIONS is the CONSUMER view (sessions,
-> scopes, budgets as a host wires them); the sections before it are the ontology under it —
-> what the machine IS, so the wiring is the only shape it could take.
+> lives (data-local, not global), and how the per-run seams — cache, effects, reads, notes,
+> display, pathAtoms, resourcePaths — arm the interception facilities that turn a bare
+> interpreter into a cacheable, burstable, read-guarded, temporally-zoned, reactive one.
+> §14 SESSIONS is the CONSUMER view (sessions, scopes, budgets as a host wires them); the
+> sections before it are the ontology under it — what the machine IS, so the wiring is the
+> only shape it could take.
 
 Section anchors are CAPS so code comments can cite `docs/execution.md §<ANCHOR>`. Each
 section closes with its enforcement sites (files, no line numbers — those rot). Every claim
@@ -36,7 +37,7 @@ one hermetic point, never off an ambient singleton.
 Three homes, by lifetime:
 
 - **RunContext** — state CONSTANT for one run yet DIFFERING between concurrent runs: strict
-  mode, the heap meter, the abort signal, the five channels. This is the run's identity.
+  mode, the heap meter, the abort signal, the channels (§3). This is the run's identity.
 - **Global singletons** — state constant across ALL runs: `nil`/`#t`/`#f`/`eof`. These bear
   no run-state, so they can be shared by reference. `car`-of-nil reads its strict projection
   from the THREADED context, not from the constant `nil`, so a constant carries nothing
@@ -58,13 +59,15 @@ Two `RunContext` species exist; only the first bears run-state, and the charter 
 on the other being run-NEUTRAL.
 
 - **Live-run** — minted by `new RunContext(...)` per `exec()`. Carries strict/meter/signal and any
-  armed subset of the five channels. This is the only species a run mutates through (the meter's
-  `used`) and the only one whose channels are non-`undefined`.
+  armed subset of the channels (§3, plus the default-armed `resourcePaths`). This is the only
+  species a run mutates through (the meter's `used`) and the only one whose channels are
+  non-`undefined`.
 - **`CONSTANT_CTX`** — the frozen, run-neutral context carried by values that OUTLIVE any run:
   the singletons, quoted-literal AST nodes (`evalQuote` returns them by reference across runs),
-  everything constructed at bootstrap before a run exists. `strict=false`, no meter, **all five
-  channels `undefined`** — and that is correct, not a gap: a note or effect is addressed to ONE
-  run, so a context outliving every run has nowhere to put one. **Nobody is listening.**
+  everything constructed at bootstrap before a run exists. `strict=false`, no meter, **every
+  channel `undefined`** (`resourcePaths` included — the one default-armed channel, §12, stays
+  off here) — and that is correct, not a gap: a note or effect is addressed to ONE run, so a
+  context outliving every run has nowhere to put one. **Nobody is listening.**
 
 Because the constant species is run-neutral by charter, a value minted before or outside a run
 drops the channels — never a leak.
@@ -79,11 +82,11 @@ landing on the VALUE's own `.location` field (AValue) — no ctx involved, and n
 
 *Enforcement sites: `run/RunContext.ts`.*
 
-## 3. CHANNELS — five independent seams, armed subset-wise
+## 3. CHANNELS — seven independent seams, armed subset-wise
 
-**`X | undefined ⇒ facility off.`** Each of the five channels on `RunContext` is an independent
-per-run seam a host arms; each `undefined` means that facility is off (the default). A run may
-carry any subset — they are siblings, none a field of another.
+**`X | undefined ⇒ facility off.`** Each channel on `RunContext` is an independent per-run
+seam; `undefined` means that facility is off. A run may carry any subset — they are siblings,
+none a field of another. Six default off; **`resourcePaths` alone defaults ON** (see below).
 
 | Channel | Facility when armed | Off (`undefined`) |
 |---|---|---|
@@ -92,13 +95,22 @@ carry any subset — they are siblings, none a field of another.
 | `reads` | read-tracking + the read∩write deferral guard (§8) | no tracking, no guard |
 | `notes` | model-facing bookkeeping sink (§9) | notes dropped |
 | `display` | host `(display …)` affordance sink (§9) | no display verb bound |
+| `pathAtoms` | path-keyed atom bus — live Q observe, commit-clock invalidate (§13) | no observe/invalidate |
+| `resourcePaths` | per-run Q/E journal + the temporal-immutability door (§12) | no journal, no door |
 
-**One reader.** All five are read off `this.runCtx.<channel>` at the baked rosetta `run`
+**The one inverted default.** `resourcePaths` is a LAW channel, not an observability channel:
+an ordinary `new RunContext(...)` always mints a fresh `MemoryResourcePathLog`, so the CQS door
+(§12) is on by default for every live run. It cannot be disabled on an ordinary mint —
+facility-off is `CONSTANT_CTX` territory. `ExecOptions.resourcePaths` injects a harness spy or
+custom log, never an off-switch. Everything else keeps the opt-in default.
+
+**One reader.** All seven are read off `this.runCtx.<channel>` at the baked rosetta `run`
 wrapper — the single hermetic point (§10). No other site consults them; a facility's whole
 armed/off behavior is decided by whether the host passed a non-`undefined` value into
-`new RunContext(...)`.
+`new RunContext(...)` (plus the `resourcePaths` default above).
 
-**One arming surface, stated once.** `ExecOptions` (`cache`/`effects`/`reads`/`notes`/`display`)
+**One arming surface, stated once.** `ExecOptions`
+(`cache`/`effects`/`reads`/`notes`/`display`/`pathAtoms`/`resourcePaths`/`strictCQSstrings`)
 is the public door: a field set rides `new RunContext(...)` onto the matching `RunContext` channel;
 a field omitted leaves it `undefined`. The per-channel `ExecOptions` field docs and the
 `run/*` file headers describe the SAME wiring from two ends — the option is the entry, the
@@ -183,7 +195,7 @@ caller mints by hand outside `assembleRun` (the over-frame seam above) carries n
 
 Three independent bounds cap a run; all three compose, and whichever fires first ends the
 **call** (never the session — the scope and its definitions survive, so a REPL loop catches and
-continues). The CONSUMER view — how a host arms them per call — is §12 SESSIONS; this section
+continues). The CONSUMER view — how a host arms them per call — is §14 SESSIONS; this section
 states the mechanism they share.
 
 - **`heapBudget` → `HeapMeter`** (allocation). The meter lives on `RunContext.heapMeter` ONLY,
@@ -213,7 +225,7 @@ that splits a hang across several forms is still bounded. In `execExpr` the mete
 `RunContext` no `execExpr` caller can inject yet.
 
 *Enforcement sites: `heap-budget.ts`, `run/RunContext.ts` (`HeapMeter`), `eval/generator-exec.ts`
-(the per-form loop, `execExpr`). Consumer view: §12 SESSIONS.*
+(the per-form loop, `execExpr`). Consumer view: §14 SESSIONS.*
 
 ## 6. MODE-LAW — record × replay × class
 
@@ -426,9 +438,112 @@ never stored, only recomputed.
 *Enforcement sites: `run/run-cache.ts` (run-model replay). γ-replay: `provenance/replay.ts`,
 specified in `docs/PROVENANCE.md §4` — cited, not absorbed.*
 
+## 12. RESOURCE-PATHS — domain lanes, temporal immutability
+
+**A resource path is a segment tuple naming a world location** (`["db","projects",id]`); its
+first segment is the domain root. Overlap is **segment-wise prefix in either direction** —
+never string-join (`["db","project"]` vs `["db","projects"]` are siblings). A rosetta contract
+may declare two dynamic **path producers**, `queries?` / `effects?`, called with DECODED args
+on every penetration — rosetta-only (natives/tagless/sequence bake-door via
+`assertNoResourcePathProducers`), and never derived from the impl's return: footprints must
+exist BEFORE the world moves.
+
+**LAW — temporal immutability (inter-query coherence).** The door is **intervening-E**, not
+classic write-then-read: a new query genesis on a domain is illegal only when an effect
+intervened BETWEEN two overlapping queries on it —
+
+```
+door on Q_b ⇔ ∃ prior Q_a, intervening E:
+  time(Q_a) < time(E) < time(Q_b),  Q_a ∩ Q_b,  E ∩ Q_b     (prefix overlap)
+```
+
+Bare E→Q is LEGAL (an effect then a first read), as are Q→E (query motivates the mutate),
+E→Q→E and E→Q→Q. What is doored is re-querying a domain this run already queried and then
+mutated — hold the first result instead. Each domain is its own lane; lanes interleave freely.
+
+**Order per penetration, load-bearing:** decode → path producers → intervening-door scan
+against the PRIOR journal only → record Q then E (hybrid Q≺E) → cache/effects arms → impl.
+Recording after the check means no self-door on a single call; the Q≺E record means a hybrid
+(upsert) **touches its domain once per run** — a second identical hybrid call is its own
+Q→E→Q and doors with the hybrid teaching clause (`ResourcePathConflictError`).
+
+**Storage cut, derived from produced paths** (never a free-form declaration for this axis):
+`E≠[]` → an effect-log entry when `effects` armed (a FIRED manifest row — separate arm from
+void-sink gather, never dual-keyed with `sink`); `Q≠[]` → view-style value cache when `cache`
+armed (explicit `pure` never stores); both → hybrid (impl fires, E logged, return cacheable);
+neither → untracked. `serializeResourcePath` is the ONE key encoding — door messages,
+`writeSetOfResourcePaths` host footprints, confirm-manifest rows, and atom keys (§13) share it.
+
+**Segment typing:** `ResourcePath = readonly string[]` is the type-level law;
+`strictCQSstrings` (default false; the reaction envelope defaults it true) adds the runtime
+assert. Producer SHAPE (array of segment-arrays) is always enforced
+(`ResourcePathProducerError`), and produced paths are frozen COPIES — a producer's own array
+mutated later never corrupts the journal, effect-log stamps, or membership closures.
+
+**Three bake doors on the axis pairing (2026-08-13):** a **queries-declaring contract must
+serialize on both vectors** (`ResourcePathShapeError` — no `z.lambda`/`z.schemeValue`/
+`z.dynamic` slots; resources are pointed at by serializable id, and the path-Q value cache
+keys on decoded args); **sink ∧ queries is a contradiction** (`ResourcePathRoleConflictError`,
+type-level twin on `CrossingContract`) — under gather a sink's impl is skipped, so a declared
+Q would journal a read for a body that never ran (sink+effects stays legal — a sink IS an
+effect); and **effects-only must be void-family** — the return of an effectful verb is
+licensed by its Q half (upsert-with-return is the hybrid shape), so a returning writer
+declares the query path or voids its output (`"effects-only-return"`, type-level twin).
+
+*Enforcement sites: `run/resource-paths.ts` (algebra, journal, door, `applyResourcePathCqs`),
+`common/symbols/rosetta.ts` (the chokepoint call), `run/run-cache.ts` (storage arms),
+`common/symbols/native.ts` / `sequence.ts` (bake door). Design history:
+`docs/design-history/resource-paths-cqs-DRAFT.md`.*
+
+## 13. REACTIVITY — path atoms, reaction envelope, in-symbol bridge
+
+Three layers over ONE path vocabulary (§12's keys); no Scheme-plane FRP verbs exist or will.
+
+**Membrane arming.** With `pathAtoms` armed and the run not replay-silent: every live `Q≠[]`
+penetration calls `bus.observe(Q)` after the CQS door passes; every successful non-sink
+`E≠[]` fire stages its paths, and `commitRun` at SUCCESSFUL whole-run end flushes them as
+invalidations (RX-CLOCK — a doored or thrown run abandons staged work). The commit clock is
+gated on `runCtxOwned`: a nested exec inside someone else's run never flushes the parent's
+staged effects. Invalidation matches by SEGMENT-WISE overlap on path tuples — never
+string-prefix on serialized keys (the two agree only over string segments).
+
+**Host reaction envelope.** A **unit** is a whole top-level `exec`/tool under a
+`createReactionHub` envelope: fresh run every invoke (fresh path log, prior-E, `record`
+cache — never the parent's), subscriptions replaced wholesale after each SUCCESSFUL run,
+self-write suppressed (a unit's own committed E never wakes it), host param atoms opt-in only
+(`optInParams`, disjoint `param:` key namespace, never door fuel). **RX-AUTO:** there is NO
+manual trigger — "it's just scheme". A unit births DIRTY; `settle({maxRounds})` is the single
+sequential clock (its first drain IS the initial run; a concurrent settle throws), and only
+atoms reporting / param atoms / `hub.invalidate` re-arm a unit. Settle drains with
+**at-most-once per unit per settle**; a wake landing AFTER a unit's turn **carries over** to
+the next settle (P-RX-SETTLE-CARRYOVER) — a live A↔B cycle stays visibly dirty across bounded
+settles rather than silently absorbing the last update. A unit disposed while queued is
+skipped silently (death is final). Host lifecycle: create (enable), dispose (stop), settle.
+
+**In-symbol bridge (`this.reactiveAtoms`).** Minted per penetration whenever path producers
+are declared, closed over that call's produced Q: `get(path)` is EXACT-Q-membership gated
+(E-only and undeclared paths teach via `ReactiveAtomMembershipError`); `reportObserved` joins
+the membrane's observe; `reportChanged` says "this query result is different now" — bridge
+liveness from an in-process store, NEVER a substitute for declared `effects`. It is a
+**one-shot invalidation signal**: at most one delivery per (penetration, path); a new
+invocation regenerates. Cells live **per run context**: an ABANDONED run's cells retire
+immediately; a new owned run on the same bus retires its predecessor's (supersede); a
+committed run with no successor keeps its cells live — that persistence IS the bridge.
+Packs bridge with one-time self-disposing watchers — keep-alive subscriptions across
+re-invokes are a leak by contract. When the bus is off or the run replay-silent the mint is
+INERT (membership still teaches; report* deliver nowhere), so bridge capabilities run
+unchanged outside an envelope. Self-wake is allowed: `reportChanged` publishes as foreign,
+so the reporting unit re-invokes if it also observed (store liveness ≠ own effect).
+
+*Enforcement sites: `run/path-atom-bus.ts` (bus, keys, MobX behind `AtomProxy` — internal,
+optional peer), `run/reaction-envelope.ts` (hub/envelope/settle), `run/reactive-atoms.ts`
+(mint, membership, one-shot, generation), `common/symbols/rosetta.ts` (observe/stage/mint
+sites), `eval/generator-exec.ts` (commit/abandon clock). Living design:
+`docs/working-proposals/cqs-reactivity/` (monorepo root).*
+
 ---
 
-## 12. SESSIONS — the consumer surface: sessions, scopes, budgets, the CLI
+## 14. SESSIONS — the consumer surface: sessions, scopes, budgets, the CLI
 
 *(The consumer view of §1–§11: how a host wires sessions, scopes, and budgets over the run
 model. The ontology is above; this is the surface a host holds.)*

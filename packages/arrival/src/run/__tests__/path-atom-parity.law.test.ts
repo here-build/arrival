@@ -134,8 +134,7 @@ describe("X4 thin parity — PathAtomBus over injected proxies (5-parity)", () =
         code: '(read "D" "id") (write "D" "id")',
         capabilities: [cap],
       });
-      await u.run();
-      await hub.settle({ maxRounds: 8 });
+      await hub.settle({ maxRounds: 8 }); // RX-AUTO: initial run = first drain
       expect(u.runCount).toBe(1); // N-RX-SELF-LOOP
 
       // coalesce: 3 invalidates → one re-run
@@ -156,10 +155,9 @@ describe("X4 thin parity — PathAtomBus over injected proxies (5-parity)", () =
       const { cap } = makeCap(spies);
       const hub = createReactionHub();
       const b = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
+      await hub.settle({ maxRounds: 8 }); // arm b before the writer exists
       const a = hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
-      await b.run();
-      await a.run();
-      await hub.settle({ maxRounds: 8 });
+      await hub.settle({ maxRounds: 8 }); // a's initial run cascades b's re-invoke
       expect(b.runCount).toBe(2);
       expect(a.runCount).toBe(1);
       hub.disposeAll();

@@ -154,7 +154,6 @@ export interface ResourcePathLog {
 /**
  * Default in-memory log — one instance per run. Copies path arrays on record.
  * No dedup: repeated writes grow O(events); check is O(|log|×|Q|×depth).
- * Fine for Phase 3a; index later if long-run hosts need it.
  */
 export class MemoryResourcePathLog implements ResourcePathLog {
   private readonly _events: ResourcePathEvent[] = [];
@@ -210,16 +209,25 @@ export class ResourcePathConflictError extends ArrivalError {
     public readonly thisQuery: ResourcePath,
     /** Optional prior query path that established the domain (intervening-door witness). */
     public readonly priorQuery?: ResourcePath,
+    /** True when the doored penetration itself also declares effects (hybrid verb). */
+    public readonly hybrid: boolean = false,
   ) {
     const priorQPart =
       priorQuery !== undefined
         ? ` after prior query ${serializeResourcePath(priorQuery)}`
         : "";
+    // A hybrid's Q≺E record makes any repeat on the same domain self-door — the
+    // generic "hold prior results" advice misreads an upsert's intent, so teach
+    // the hybrid rule explicitly (N-HYBRID-TWICE).
+    const advice = hybrid
+      ? `this verb also declares effects (hybrid) and a hybrid touches its domain once per run — ` +
+        `reuse the first call's return, or defer the repeat to the next run`
+      : `hold prior results instead of re-querying`;
     super(
       `${verbName}: intervening effect path ${serializeResourcePath(priorEffect)} between queries ` +
         `on ${serializeResourcePath(thisQuery)}${priorQPart} in this run — a new query genesis ` +
         `on a domain after an intervening effect is illegal ` +
-        `(temporal immutability / inter-query coherence; hold prior results instead of re-querying)`,
+        `(temporal immutability / inter-query coherence; ${advice})`,
     );
   }
 }
@@ -263,6 +271,62 @@ export function assertNoResourcePathProducers(
 ): void {
   if (contract.queries !== undefined || contract.effects !== undefined) {
     throw new ResourcePathDeclarationError(name, kind);
+  }
+}
+
+/**
+ * Bake-time: a queries-declaring contract must be serializable on BOTH vectors
+ * (ruling 2026-08-13). `queries: (...args) => StringTuple[]` exists precisely to
+ * force resource naming into serializable, accessible form — an external resource
+ * is pointed at by id / well-known name. An unkeyable slot (z.dynamic / z.lambda /
+ * z.schemeValue) would crash `runCacheKey` at the path-Q view-elevation the moment
+ * any cache is armed (reaction envelopes always arm one). Mirror of the view gate.
+ */
+export class ResourcePathShapeError extends ArrivalError {
+  public readonly name = "ResourcePathShapeError";
+  readonly "arrival/error-category": ErrorClass = "contract-shape";
+
+  constructor(
+    public readonly op: string,
+    public readonly side: "input" | "output",
+    public readonly slotName: string,
+  ) {
+    super(
+      `${op}: a queries-declaring contract must serialize on both vectors, but its ${side} vector ` +
+        `carries a z.${slotName} slot — a resource is pointed at by a serializable id / well-known ` +
+        `name, and the path-Q value cache keys on decoded args; narrow the slot to a data codec ` +
+        `(or drop queries)`,
+    );
+  }
+}
+
+/**
+ * Bake-time contradictions on the provenance × path pairing (rulings 2026-08-13).
+ * The axes are orthogonal interpreters, but two shapes are incoherent:
+ *   - "sink-queries": under gather a sink's impl is SKIPPED — a declared Q would
+ *     journal a read and arm a subscription for a body that never ran.
+ *     sink+effects stays legal (a sink IS an effect).
+ *   - "effects-only-return": the E+Q mixing exists to make upsert-with-return
+ *     possible — the RETURN of an effectful verb is licensed by its Q half.
+ *     Effects-only with a real return mints world data it never declared reading.
+ */
+export class ResourcePathRoleConflictError extends ArrivalError {
+  public readonly name = "ResourcePathRoleConflictError";
+  readonly "arrival/error-category": ErrorClass = "contract-shape";
+
+  constructor(
+    public readonly op: string,
+    public readonly kind: "sink-queries" | "effects-only-return" = "sink-queries",
+  ) {
+    super(
+      kind === "sink-queries"
+        ? `${op}: a sink cannot declare queries — under gather a sink's impl is skipped, so its Q ` +
+          `would journal a read and arm a live subscription for a body that never ran; drop queries, ` +
+          `or drop provenance: "sink" if this verb genuinely reads`
+        : `${op}: an effects-only contract cannot carry a real return — the return of an effectful ` +
+          `verb is licensed by its query half (upsert-with-return is the hybrid shape); declare the ` +
+          `query path this return reads, or make the output void`,
+    );
   }
 }
 
@@ -338,9 +402,12 @@ function producePaths(
         }
       }
     }
-    out.push(path as ResourcePath);
+    // Frozen COPY (N-PATHS-PRODUCER-ALIASING): a producer returning a cached/shared
+    // array later mutated must not corrupt the journal, effect-log resourcePaths
+    // stamps, or the reactiveAtoms membership closure.
+    out.push(Object.freeze([...path]) as ResourcePath);
   }
-  return out;
+  return Object.freeze(out);
 }
 
 /**
@@ -386,6 +453,7 @@ export function applyResourcePathCqs(opts: {
         witness.priorEffect,
         witness.thisQuery,
         witness.priorQuery,
+        E.length > 0, // hybrid penetration → door teaches the once-per-run rule
       );
     }
   }

@@ -35,6 +35,64 @@ describe("resource-path producers — type placement", () => {
     });
   });
 
+  test("sink + queries must NOT compile (ruling 2026-08-13)", () => {
+    EnvCapability.define("test/cqs-type-sink-q", {
+      symbols: (symbol) => ({
+        bad: symbol.rosetta`bad-sink-q: `({
+          input: [z.string],
+          output: [z.undefinedResult],
+          provenance: "sink",
+          // @ts-expect-error — sink cannot declare queries (impl skipped under gather)
+          queries: (s: string) => [["d", s]],
+        }, () => undefined),
+      }),
+    });
+  });
+
+  test("effects-only with a real return must NOT compile (return licensed by Q)", () => {
+    EnvCapability.define("test/cqs-type-e-only-ret", {
+      symbols: (symbol) => ({
+        bad: symbol.rosetta`bad-e-ret: `({
+          input: [z.string],
+          output: [z.string],
+          // @ts-expect-error — effects-only must be void-family; declare the Q path or void the output
+          effects: (s: string) => [["d", s]],
+        }, (s) => s),
+      }),
+    });
+  });
+
+  test("void effects-only and hybrid-with-return compile clean", () => {
+    EnvCapability.define("test/cqs-type-e-void-h-ret", {
+      symbols: (symbol) => ({
+        writer: symbol.rosetta`ok-e-void: `({
+          input: [z.string],
+          output: [z.undefinedResult],
+          effects: (s: string) => [["d", s]],
+        }, () => undefined),
+        upsert: symbol.rosetta`ok-h-ret: `({
+          input: [z.string],
+          output: [z.string],
+          queries: (s: string) => [["d", s]],
+          effects: (s: string) => [["d", s]],
+        }, (s) => s),
+      }),
+    });
+  });
+
+  test("sink + effects compiles clean (a sink IS an effect)", () => {
+    EnvCapability.define("test/cqs-type-sink-e", {
+      symbols: (symbol) => ({
+        ok: symbol.rosetta`ok-sink-e: `({
+          input: [z.string],
+          output: [z.undefinedResult],
+          provenance: "sink",
+          effects: (s: string) => [["d", s]],
+        }, () => undefined),
+      }),
+    });
+  });
+
   test("queries+effects on rosetta compile clean", () => {
     EnvCapability.define("test/cqs-type-rosetta-ok", {
       symbols: (symbol) => ({

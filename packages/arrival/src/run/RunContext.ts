@@ -3,8 +3,9 @@
  * `runCtx`. The run's identity: state CONSTANT for one run, DIFFERING between concurrent runs.
  *
  * Model: docs/execution.md §HERMETIC, §CTX-SPECIES, §CHANNELS — data-local run-state, two
- * ctx species (live-run / CONSTANT_CTX), five channels' arm-subset-wise
- * `X | undefined ⇒ facility off`. This file is their enforcement site.
+ * ctx species (live-run / CONSTANT_CTX), seven channels' arm-subset-wise
+ * `X | undefined ⇒ facility off` (resourcePaths alone defaults ON — §CHANNELS).
+ * This file is their enforcement site.
  *
  * PLACEMENT TEST for a new field: varies between concurrent runs → here; never → global
  * singleton; within one run by call depth → dynamic-extent holder. Only the first belongs.
@@ -117,7 +118,6 @@ export class RunContext {
       cache?: RunCache;
       effects?: EffectLog;
       reads?: ReadGuard;
-      /** Phase 5 path-atom bus — see {@link RunContext.pathAtoms}. */
       pathAtoms?: PathAtomBus;
       /**
        * Override path log (harness spy). Ordinary mint: fresh MemoryResourcePathLog.

@@ -592,6 +592,42 @@ describe("resource-path CQS door — 3a-complete", () => {
     }
   });
 
+  /**
+   * N-HYBRID-TWICE: a hybrid touches its domain ONCE per run — the second
+   * identical call's Q sees call 1's Q then call 1's E (Q≺E record) and doors
+   * as N-I4c. The door must teach the hybrid rule, not only "hold prior
+   * results" (advice that misreads an upsert's intent).
+   */
+  it("N-HYBRID-TWICE — same upsert twice in one run doors with hybrid teaching", async () => {
+    const spies: SpyMap = {};
+    const { cap, pathLog } = makePathCap(spies);
+    try {
+      await exec('(upsert "a" "1") (upsert "a" "1")', {
+        capabilities: [cap],
+        runCtx: new RunContext({ resourcePaths: pathLog }),
+      });
+      expect.unreachable();
+    } catch (err) {
+      expectDoor(err);
+      expect(spies.upsert).toBe(1); // second impl never ran
+      expect(err.message).toMatch(/hybrid/i);
+      expect(err.message).toMatch(/once per run/i);
+    }
+    // A-CTRL: the pure-query door keeps the plain wording (no hybrid clause).
+    const spies2: SpyMap = {};
+    const { cap: cap2, pathLog: pathLog2 } = makePathCap(spies2);
+    try {
+      await exec('(read "a" "1") (write "a" "1") (read "a" "1")', {
+        capabilities: [cap2],
+        runCtx: new RunContext({ resourcePaths: pathLog2 }),
+      });
+      expect.unreachable();
+    } catch (err) {
+      expectDoor(err);
+      expect(err.message).not.toMatch(/hybrid/i);
+    }
+  });
+
   it("N-DOORED-E-NOT-RECORDED — doored move's E not on append spy", async () => {
     const spies: SpyMap = {};
     const { cap, pathLog, appendEvents, pathFnCalls } = makePathCap(spies);
@@ -706,6 +742,31 @@ describe("resource-path CQS — producer shape + strictCQSstrings", () => {
       exec('(write-num "a")', { capabilities: [cap], strictCQSstrings: true }),
     ).rejects.toBeInstanceOf(ResourcePathProducerError);
     expect(fires).toBe(0);
+  });
+
+  /**
+   * N-PATHS-PRODUCER-ALIASING (ruling 2026-08-13): produced Q/E are frozen
+   * COPIES at production — a producer returning a cached/shared array that is
+   * later mutated must not corrupt the journal, effect-log `resourcePaths`
+   * stamps, or the reactiveAtoms membership closure.
+   */
+  it("N-PATHS-PRODUCER-ALIASING — produced paths are frozen copies; later mutation invisible", () => {
+    const shared: string[][] = [["d", "1"]];
+    const log = new MemoryResourcePathLog();
+    const produced = applyResourcePathCqs({
+      verbName: "alias-w",
+      decodedArgs: [],
+      queries: () => shared as never,
+      effects: () => shared as never,
+      log,
+    });
+    shared[0].push("evil");
+    shared.push(["d", "2"]);
+    expect(produced.queries).toEqual([["d", "1"]]);
+    expect(produced.effects).toEqual([["d", "1"]]);
+    expect(Object.isFrozen(produced.effects)).toBe(true);
+    expect(Object.isFrozen(produced.effects[0])).toBe(true);
+    expect(log.effectPaths).toEqual([["d", "1"]]);
   });
 
   it("producer returns non-array top-level → ResourcePathProducerError (always)", () => {

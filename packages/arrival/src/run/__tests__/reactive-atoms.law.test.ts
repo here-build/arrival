@@ -52,6 +52,12 @@ const changeStash: {
   path: ResourcePath | null;
 } = { cell: null, path: null };
 
+/** Two cells from ONE mint for the SAME path (P-RX-ATOM-ONESHOT-MINT). */
+const twinStash: {
+  a: { reportChanged(): void } | null;
+  b: { reportChanged(): void } | null;
+} = { a: null, b: null };
+
 function makeBridgeCap(spies: SpyMap) {
   const track = (name: string) => {
     spies[name] = (spies[name] ?? 0) + 1;
@@ -61,9 +67,10 @@ function makeBridgeCap(spies: SpyMap) {
   const requireAtoms = (ctx: CallCtx, verb: string) => {
     const atoms = ctx.reactiveAtoms;
     if (atoms === undefined) {
-      // Product may throw facility-off MembershipError, or leave undefined.
-      // Fixture surfaces a loud product-shaped failure for N-RX-ATOM-OFF until R6.
-      throw new ReactiveAtomMembershipError(verb, [], "facility-off");
+      // Product law (P-RX-ATOM-OFF-INERT): the handle is ALWAYS minted when path
+      // producers are declared — inert cells when the bus is off/replay. Undefined
+      // here is a mint-site wiring regression, surfaced loudly.
+      throw new Error(`harness: ${verb} reactiveAtoms undefined (mint regression)`);
     }
     return atoms;
   };
@@ -110,6 +117,22 @@ function makeBridgeCap(spies: SpyMap) {
           cell.reportObserved();
           changeStash.cell = cell;
           changeStash.path = path;
+          return store.get(`${d}:${id}`) ?? `${d}:${id}`;
+        },
+      ),
+      /** Two get() calls for the SAME Q path — one mint, twin cells. */
+      "view-change-twin": symbol.rosetta`view-change-twin: `(
+        {
+          input: [z.string, z.string],
+          output: [z.string],
+          queries: (d: string, id: string) => [["test", d, id]],
+        },
+        function (this: CallCtx, d: string, id: string) {
+          track("view-change-twin");
+          const path: ResourcePath = ["test", d, id];
+          const atoms = requireAtoms(this, "view-change-twin");
+          twinStash.a = instrument(atoms.get(path));
+          twinStash.b = instrument(atoms.get(path));
           return store.get(`${d}:${id}`) ?? `${d}:${id}`;
         },
       ),
@@ -252,6 +275,8 @@ describe.skipIf(!R6_WIRED)("X6 in-symbol reactiveAtoms — 5c membership", () =>
     bridge.reset();
     changeStash.cell = null;
     changeStash.path = null;
+    twinStash.a = null;
+    twinStash.b = null;
   });
 
   it("P-RX-ATOM-DEFINED — pathAtoms armed ⇒ reactiveAtoms defined in impl", async () => {
@@ -371,22 +396,38 @@ describe.skipIf(!R6_WIRED)("X6 in-symbol reactiveAtoms — 5c membership", () =>
     expect(spies["hybrid-split-e-get"]).toBe(1);
   });
 
-  it("N-RX-ATOM-OFF — without pathAtoms, no silent success", async () => {
+  /**
+   * P-RX-ATOM-OFF-INERT (supersedes N-RX-ATOM-OFF): with path producers declared,
+   * `this.reactiveAtoms` is ALWAYS minted — when the bus is off (bare exec, no
+   * pathAtoms) the cells are inert: get() still membership-teaches, report* no-op.
+   * Bridge capabilities run unchanged outside an envelope; no undefined-guard
+   * boilerplate, no raw TypeError.
+   */
+  it("P-RX-ATOM-OFF-INERT — bus off: handle minted, membership doors still teach, report* inert", async () => {
     const spies: SpyMap = {};
     const { cap } = makeBridgeCap(spies);
+    // 1. A bridge view runs to completion without pathAtoms.
+    const result = await exec('(view-change "D" "id")', {
+      capabilities: [cap],
+      resourcePaths: new MemoryResourcePathLog(),
+    });
+    expect(result).toEqual(["D:id"]);
+    expect(spies["view-change"]).toBe(1);
+    expect(bridge.observed).toBe(1); // impl-side call happened; downstream inert
+    // 2. report* on the inert cell: no throw, no delivery anywhere.
+    changeStash.cell!.reportChanged();
+    expect(bridge.changed).toBe(1);
+    // 3. Membership still gates identically with the bus off.
     try {
-      await exec('(view-bridge "D" "id")', {
+      await exec('(view-bad-get "D" "id")', {
         capabilities: [cap],
         resourcePaths: new MemoryResourcePathLog(),
       });
       expect.unreachable();
     } catch (err) {
-      // Product: undefined handle → fixture MembershipError facility-off, or product equivalent
       const m = unwrapMembership(err);
-      expect(m.reason).toBe("facility-off");
+      expect(m.reason).toBe("not-in-q");
     }
-    // Must not have completed as a successful store read with bridge
-    expect(bridge.observed).toBe(0);
   });
 });
 
@@ -395,6 +436,8 @@ describe.skipIf(!R6_WIRED)("X6 in-symbol reactiveAtoms — 5d wake/dispose", () 
     bridge.reset();
     changeStash.cell = null;
     changeStash.path = null;
+    twinStash.a = null;
+    twinStash.b = null;
   });
 
   /**
@@ -410,7 +453,7 @@ describe.skipIf(!R6_WIRED)("X6 in-symbol reactiveAtoms — 5d wake/dispose", () 
       code: '(view-change "D" "id")',
       capabilities: [cap],
     });
-    await u.run();
+    await hub.settle({ maxRounds: 4 });
     expect(spies["view-change"]).toBe(1);
     expect(changeStash.cell).not.toBeNull();
     expect(bridge.observed).toBe(1);
@@ -430,7 +473,7 @@ describe.skipIf(!R6_WIRED)("X6 in-symbol reactiveAtoms — 5d wake/dispose", () 
       code: '(view-change "D" "id")',
       capabilities: [cap],
     });
-    await u.run();
+    await hub.settle({ maxRounds: 4 });
     const cache1 = u.lastCache;
     const log1 = u.lastPathLog;
     expect(cache1?.mode).toBe("record");
@@ -457,8 +500,9 @@ describe.skipIf(!R6_WIRED)("X6 in-symbol reactiveAtoms — 5d wake/dispose", () 
       code: '(view-bridge "D" "id")',
       capabilities: [cap],
     });
-    await changer.run();
-    await other.run();
+    // One settle runs both initials (registration order: changer stashes first;
+    // view-bridge never touches changeStash). Reads publish nothing — no cascade.
+    await hub.settle({ maxRounds: 4 });
     expect(changer.runCount).toBe(1);
     expect(other.runCount).toBe(1);
     changeStash.cell!.reportChanged();
@@ -480,18 +524,18 @@ describe.skipIf(!R6_WIRED)("X6 in-symbol reactiveAtoms — 5d wake/dispose", () 
       capabilities: [cap],
       effects,
     });
-    await u.run();
+    await hub.settle({ maxRounds: 4 });
     expect(effects.entries).toHaveLength(0);
     changeStash.cell!.reportChanged();
     await hub.settle({ maxRounds: 4 });
     expect(effects.entries).toHaveLength(0);
     // A-CTRL: same channel can still log a real path-E write
-    const w = hub.unit({
+    hub.unit({
       code: '(write "D" "id")',
       capabilities: [cap],
       effects,
     });
-    await w.run();
+    await hub.settle({ maxRounds: 4 });
     expect(effects.entries.length).toBeGreaterThanOrEqual(1);
     hub.disposeAll();
   });
@@ -526,8 +570,7 @@ describe.skipIf(!R6_WIRED)("X6 in-symbol reactiveAtoms — 5d wake/dispose", () 
       code: '(view-bridge "D" "id")',
       capabilities: [cap],
     });
-    await dead.run();
-    await alive.run();
+    await hub.settle({ maxRounds: 4 }); // both initials; dead (registered first) stashes
     const cell = changeStash.cell!;
     const deadCount = dead.runCount;
     dead.dispose();
@@ -535,6 +578,88 @@ describe.skipIf(!R6_WIRED)("X6 in-symbol reactiveAtoms — 5d wake/dispose", () 
     await hub.settle({ maxRounds: 4 });
     expect(dead.runCount).toBe(deadCount);
     expect(alive.runCount).toBe(2);
+    hub.disposeAll();
+  });
+
+  /**
+   * N-RX-ATOM-FAILED-RUN-CELL (ruling 2026-08-13): atoms live PER RUN CONTEXT
+   * — a cell minted in a run that ABANDONED (failed) is inert immediately, not
+   * merely at the next invoke. The failed run's observation never became a
+   * subscription; its bridge must not wake peers off a world that never
+   * committed.
+   */
+  it("N-RX-ATOM-FAILED-RUN-CELL — cell from an abandoned run is inert", async () => {
+    const spies: SpyMap = {};
+    const { cap } = makeBridgeCap(spies);
+    const hub = createReactionHub();
+    const observer = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
+    await hub.settle({ maxRounds: 4 });
+    // form 1 mints + stashes the cell; form 2 fails the run → abandon
+    const failing = hub.unit({
+      code: '(view-change "D" "id") (this-symbol-does-not-exist)',
+      capabilities: [cap],
+    });
+    await expect(hub.settle({ maxRounds: 4 })).rejects.toThrow();
+    const cellFromFailedRun = changeStash.cell!;
+    cellFromFailedRun.reportChanged(); // abandoned-run mint — delivers nowhere
+    await hub.settle({ maxRounds: 4 });
+    expect(observer.runCount).toBe(1);
+    expect(failing.runCount).toBe(1);
+    // A-CTRL: a COMMITTED run's cell does wake the observer
+    hub.unit({ code: '(view-change "D" "id")', capabilities: [cap] });
+    await hub.settle({ maxRounds: 4 });
+    changeStash.cell!.reportChanged();
+    await hub.settle({ maxRounds: 4 });
+    expect(observer.runCount).toBe(2);
+    hub.disposeAll();
+  });
+
+  /**
+   * P-RX-ATOM-ONESHOT (ruling 2026-08-13): a cell is a ONE-TIME invalidation
+   * signal, not a keep-alive channel — reportChanged fires at most once per
+   * (penetration, path); a new invocation regenerates. Pins the pack contract:
+   * register one-shot watchers, nothing accumulates across re-invokes.
+   * Driver is a bare exec on hub.bus, where generation never advances — without
+   * one-shot the stashed cell could fire forever.
+   */
+  it("P-RX-ATOM-ONESHOT — a cell fires at most one invalidation; second fire inert", async () => {
+    const spies: SpyMap = {};
+    const { cap } = makeBridgeCap(spies);
+    const hub = createReactionHub();
+    const observer = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
+    await hub.settle({ maxRounds: 4 });
+    await exec('(view-change "D" "id")', {
+      capabilities: [cap],
+      pathAtoms: hub.bus,
+    });
+    const cell = changeStash.cell!;
+    cell.reportChanged();
+    await hub.settle({ maxRounds: 4 });
+    expect(observer.runCount).toBe(2);
+    cell.reportChanged(); // same cell — spent signal, must not wake anyone
+    await hub.settle({ maxRounds: 4 });
+    expect(observer.runCount).toBe(2);
+    expect(bridge.changed).toBe(2); // impl-side wrapper saw both calls; one delivery
+    hub.disposeAll();
+  });
+
+  it("P-RX-ATOM-ONESHOT-MINT — twin cells of one mint share the shot (per penetration+path)", async () => {
+    const spies: SpyMap = {};
+    const { cap } = makeBridgeCap(spies);
+    const hub = createReactionHub();
+    const observer = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
+    await hub.settle({ maxRounds: 4 });
+    await exec('(view-change-twin "D" "id")', {
+      capabilities: [cap],
+      pathAtoms: hub.bus,
+    });
+    twinStash.a!.reportChanged();
+    await hub.settle({ maxRounds: 4 });
+    expect(observer.runCount).toBe(2);
+    // Sibling cell from the SAME mint for the SAME path — signal already spent.
+    twinStash.b!.reportChanged();
+    await hub.settle({ maxRounds: 4 });
+    expect(observer.runCount).toBe(2);
     hub.disposeAll();
   });
 
@@ -546,7 +671,7 @@ describe.skipIf(!R6_WIRED)("X6 in-symbol reactiveAtoms — 5d wake/dispose", () 
       code: '(view-change "D" "id")',
       capabilities: [cap],
     });
-    await u.run();
+    await hub.settle({ maxRounds: 4 });
     const cellRun1 = changeStash.cell!;
     // First change → re-invoke installs run-2 cell
     cellRun1.reportChanged();

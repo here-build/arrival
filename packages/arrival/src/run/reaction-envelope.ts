@@ -8,6 +8,12 @@
  *   - **A-OPTIN** host-injected param atoms (`optInParams` + {@link ReactionHub.setParam})
  *     re-invoke only units that opted in — never baked `define/overridable` syntax
  *
+ * **RX-AUTO** (ruling 2026-08-13): NO explicit reactivity controls — the structural
+ * promise is "it's just scheme". A unit births DIRTY (its initial run is just the
+ * first drain), `settle` is the single sequential clock (concurrent settle throws),
+ * and nothing but atoms reporting / param atoms / `hub.invalidate` re-arms a unit.
+ * Host lifecycle controls are create (enable), dispose (stop), settle (drain).
+ *
  * Fresh run (**RX-FRESH**): fresh path log + prior-E + fresh `RunCache` in `record`
  * mode — never the parent's cache (that makes the envelope a silent no-op).
  *
@@ -20,12 +26,15 @@
  * its own committed effects. Attribution mechanism is unasserted — the hub skips
  * the publishing source.
  *
- * **OQ-CYCLE-POLICY** (product pick for R2): within one `settle({maxRounds})` call
- * each envelope re-invokes **at most once**. That kills n-cycles (mutual wake)
- * without a timer; `maxRounds` is the cascade-depth safety cap and rejects loudly
- * with "did not quiesce in N rounds" when the dirty set cannot drain (**RX-SETTLE**).
- * Multiple overlapping foreign writes in one settle window coalesce to one re-run
- * (**P-RX-COALESCE** — bounded [1,k]).
+ * **OQ-CYCLE-POLICY** (product pick for R2, carryover amendment 2026-08-13): within
+ * one `settle({maxRounds})` call each envelope re-invokes **at most once**. That
+ * bounds n-cycles (mutual wake) without a timer; `maxRounds` is the cascade-depth
+ * safety cap and rejects loudly with "did not quiesce in N rounds" when the dirty
+ * set cannot drain (**RX-SETTLE**). Wakes that land on a unit AFTER its turn this
+ * settle are NOT dropped — the dirty flag survives to the next settle
+ * (**P-RX-SETTLE-CARRYOVER**), so a live cycle stays visibly dirty rather than
+ * silently absorbing the last update. Multiple overlapping foreign writes in one
+ * settle window coalesce to one re-run (**P-RX-COALESCE** — bounded [1,k]).
  *
  * Gather/burst invalidation (**RX-CLOCK-2** / **OQ-BURST-CONFIRM**) is not wired
  * here yet — suite gather cases loud-skip until the burst-commit hook is named.
@@ -43,7 +52,6 @@ import {
   type ResourcePathLog,
 } from "./resource-paths.js";
 import { paramAtomKey, type PathAtomBus } from "./path-atom-bus.js";
-import { advanceReactiveAtomsGeneration } from "./reactive-atoms.js";
 
 // ── Public types ─────────────────────────────────────────────────────────────
 
@@ -52,7 +60,11 @@ import { advanceReactiveAtomsGeneration } from "./reactive-atoms.js";
  * program between re-invokes (e.g. **P-RX-SUB-REPLACE**, phase-gated X5 cases).
  *
  * The envelope injects `pathAtoms`, a fresh `record` cache, and a fresh
- * resource-path log — callers must not pass those (and they are stripped if present).
+ * resource-path log, and exec mints the run's own RunContext — these four fields
+ * are ENVELOPE-OWNED and refused loudly at `unit()` if a JS caller smuggles one
+ * past the `Omit` (N-RX-UNIT-OWNED-FIELDS). A smuggled `runCtx` in particular
+ * would make exec's run unowned — no commit clock, no subs replacement, a
+ * silently dead envelope.
  *
  * **A-OPTIN** (`optInParams`): host-injected param atom names. When the hub's
  * {@link ReactionHub.setParam} changes one of those names, this unit re-invokes.
@@ -74,12 +86,12 @@ export interface SettleOptions {
 }
 
 /**
- * Live host unit. `run()` arms once; foreign invalidations schedule re-invokes
- * drained by {@link ReactionHub.settle} / {@link ReactionEnvelope.settle}.
+ * Live host unit. NO manual trigger exists (RX-AUTO, ruling 2026-08-13 — "it's
+ * just scheme"): a unit births dirty, the settle clock performs its initial run,
+ * and re-invocation is driven by atoms reporting and nothing else. The host's
+ * only controls are lifecycle: create (enable), dispose (stop), settle (drain).
  */
 export interface ReactionEnvelope {
-  /** Initial (or forced) top-level exec. Arms / replaces subs on success. */
-  run(): Promise<unknown>;
   /** Drain this unit's dirty flag (and, via hub, peers) until quiet or budget. */
   settle(opts: SettleOptions): Promise<void>;
   /** Kill the envelope — no further re-invokes; in-flight completion discards new subs. */
@@ -188,38 +200,62 @@ class ReactionHubImpl implements ReactionHub {
     }
   }
 
+  /** True while a settle is draining — the single-sequential-clock guard. */
+  private settling = false;
+
   async settle(opts: SettleOptions): Promise<void> {
     const maxRounds = opts.maxRounds;
     if (!Number.isFinite(maxRounds) || maxRounds < 0) {
       throw new Error(`settle: maxRounds must be a non-negative number, got ${maxRounds}`);
     }
-    // OQ-CYCLE-POLICY: each envelope re-invokes at most once per settle() call.
-    // Overlapping foreign writes in one window coalesce via the boolean dirty flag
-    // (P-RX-COALESCE / F-RX4 — re-runs ∈ [1, k]).
-    const ran = new Set<ReactionEnvelopeImpl>();
-    let rounds = 0;
-    for (;;) {
-      const dirty = [...this._envelopes].filter((e) => e.dirty && !e.disposed);
-      if (dirty.length === 0) return;
+    // N-RX-SETTLE-CONCURRENT: settle is the single sequential clock — a racing
+    // second settle would clear flags out from under the first and manufacture
+    // re-entrant invokes. Loud beats racy.
+    if (this.settling) {
+      throw new Error("settle: already draining — settle is the single sequential clock");
+    }
+    this.settling = true;
+    try {
+      // OQ-CYCLE-POLICY: each envelope re-invokes at most once per settle() call.
+      // Overlapping foreign writes in one window coalesce via the boolean dirty flag
+      // (P-RX-COALESCE / F-RX4 — re-runs ∈ [1, k]).
+      const ran = new Set<ReactionEnvelopeImpl>();
+      let rounds = 0;
+      for (;;) {
+        const dirty = [...this._envelopes].filter((e) => e.dirty && !e.disposed);
+        if (dirty.length === 0) return;
 
-      const batch = dirty.filter((e) => !ran.has(e));
-      if (batch.length === 0) {
-        // Remaining dirty units already ran this settle — treat as quiesced
-        // (n-cycle absorbed). Clear flags so a later settle starts clean.
-        for (const e of dirty) e.clearDirty();
-        return;
-      }
+        const batch = dirty.filter((e) => !ran.has(e));
+        if (batch.length === 0) {
+          // Remaining dirty units already ran this settle. At-most-once still holds
+          // for THIS call, but the flags stay set (P-RX-SETTLE-CARRYOVER): a wake
+          // that landed after a unit's turn is real pending work — clearing it here
+          // would silently drop the freshest propagation and make staleness depend
+          // on registration order. A genuine A↔B cycle therefore stays visibly
+          // dirty across settles (each settle = one bounded round-trip) — the
+          // honest signal, in place of a phantom quiesce.
+          return;
+        }
 
-      if (rounds >= maxRounds) {
-        throw new Error(`did not quiesce in ${maxRounds} rounds`);
-      }
-      rounds++;
+        if (rounds >= maxRounds) {
+          throw new Error(`did not quiesce in ${maxRounds} rounds`);
+        }
+        rounds++;
 
-      for (const e of batch) {
-        ran.add(e);
-        e.clearDirty();
-        await e.reinvoke();
+        for (const e of batch) {
+          ran.add(e);
+          // N-RX-DISPOSE-DURING-SETTLE: disposed while queued (an earlier batch
+          // member's await) — death is final, the wake drops, settle proceeds.
+          if (e.disposed) {
+            e.clearDirty();
+            continue;
+          }
+          e.clearDirty();
+          await e.reinvoke();
+        }
       }
+    } finally {
+      this.settling = false;
     }
   }
 
@@ -329,10 +365,23 @@ class ReactionEnvelopeImpl implements ReactionEnvelope {
   private running = false;
 
   constructor(hub: ReactionHubImpl, spec: ReactionUnitSpec) {
+    // Envelope-owned fields (N-RX-UNIT-OWNED-FIELDS): the Omit is compile-time
+    // only; a JS caller smuggling one would silently break the unit clock.
+    for (const key of ["runCtx", "cache", "pathAtoms", "resourcePaths"] as const) {
+      if (key in (spec as Record<string, unknown>)) {
+        throw new Error(
+          `ReactionUnitSpec.${key} is envelope-owned — the envelope mints it fresh per invoke ` +
+            `(a smuggled runCtx would make the run unowned: no commit clock, dead envelope); ` +
+            `remove it from the unit spec`,
+        );
+      }
+    }
     this.hub = hub;
     this.spec = spec;
     this.optInParams = Object.freeze([...(spec.optInParams ?? [])]);
     this.atomBus = new EnvelopeAtomBus(this);
+    // RX-AUTO: born dirty — the initial run is just the first settle drain.
+    this._dirty = true;
   }
 
   get disposed(): boolean {
@@ -426,16 +475,14 @@ class ReactionEnvelopeImpl implements ReactionEnvelope {
     this._dirty = false;
   }
 
-  async run(): Promise<unknown> {
-    return this.invoke();
-  }
-
-  /** @internal — re-invoke after foreign invalidate (same path as run). */
+  /** @internal — the ONLY trigger: settle drains a dirty flag into an invoke (RX-AUTO). */
   async reinvoke(): Promise<unknown> {
     return this.invoke();
   }
 
   private async invoke(): Promise<unknown> {
+    // Both are invariants, not doors: settle skips disposed units and the
+    // concurrent-settle guard makes re-entrancy unreachable.
     if (this._disposed) {
       throw new Error("ReactionEnvelope: invoke after dispose");
     }
@@ -444,9 +491,9 @@ class ReactionEnvelopeImpl implements ReactionEnvelope {
     }
     this.running = true;
     this._runCount++;
-    // R7: supersede prior in-symbol bridge cells before this run mints new ones
-    // (P-RX-ATOM-SUPERSEDE — stale reportChanged no-ops).
-    advanceReactiveAtomsGeneration(this.atomBus);
+    // R7 supersede now rides exec itself: the new owned run notes itself on this
+    // envelope's bus (noteReactiveAtomsRun) and retires the prior run's cells —
+    // atoms live per run context (P-RX-ATOM-SUPERSEDE).
     // RX-FRESH: all three axes, every time.
     const cache = new MemoryRunCache("record");
     const pathLog = new MemoryResourcePathLog();

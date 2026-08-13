@@ -61,6 +61,8 @@ export {
   ResourcePathConflictError,
   ResourcePathDeclarationError,
   ResourcePathProducerError,
+  ResourcePathRoleConflictError,
+  ResourcePathShapeError,
   type ResourcePath,
   type ResourcePathFn,
   type ResourcePathLog,
@@ -89,11 +91,13 @@ export {
 // dependency. Reach it by its own subpath instead:
 //   import { createMobxAtomProxy } from "@inhuman.tools/arrival/mobx-atom-proxy";
 
-// Phase 5 R6–R7 — in-symbol atoms (mint after CQS; generation supersede on envelope).
+// Phase 5 R6–R7 — in-symbol atoms (mint after CQS; per-RunContext liveness:
+// abandon retires, an owned run on the same bus supersedes its predecessor).
 export {
   ReactiveAtomMembershipError,
   mintReactiveAtoms,
-  advanceReactiveAtomsGeneration,
+  noteReactiveAtomsRun,
+  retireReactiveAtomsRun,
   type ReactiveAtoms,
   type ReactiveAtomCell,
   type MintReactiveAtomsOpts,

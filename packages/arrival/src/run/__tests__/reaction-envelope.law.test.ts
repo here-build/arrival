@@ -307,13 +307,13 @@ describe("X2a re-invoke positives (5b)", () => {
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
     const u = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
-    const w = hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
-
-    await u.run();
+    await hub.settle({ maxRounds: 8 }); // RX-AUTO: initial run = first drain
     expect(u.runCount).toBe(1);
     expect(spies.read).toBe(1);
 
-    await w.run();
+    // Foreign writer registered AFTER u armed — its initial run publishes,
+    // the same settle cascades u's re-invoke in round 2.
+    const w = hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
 
     expect(u.runCount).toBe(2);
@@ -327,19 +327,17 @@ describe("X2a re-invoke positives (5b)", () => {
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
     const u = hub.unit({ code: '(read-decoded "D" "raw:42")', capabilities: [cap] });
-    await u.run();
+    await hub.settle({ maxRounds: 8 });
     expect(u.subscriptionPaths).toEqual([["test", "D", "42"]]);
 
     // write decoded id — wakes
-    const w = hub.unit({ code: '(write "D" "42")', capabilities: [cap] });
-    await w.run();
+    hub.unit({ code: '(write "D" "42")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2);
 
     // write raw form (different segment) — no wake
     const before = u.runCount;
-    const wRaw = hub.unit({ code: '(write "D" "raw:42")', capabilities: [cap] });
-    await wRaw.run();
+    hub.unit({ code: '(write "D" "raw:42")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(before);
     hub.disposeAll();
@@ -350,7 +348,7 @@ describe("X2a re-invoke positives (5b)", () => {
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
     const u = hub.unit({ code: '(read "D" "child")', capabilities: [cap] });
-    await u.run();
+    await hub.settle({ maxRounds: 8 });
 
     // parent write via read-parent's domain: effects on ["test","D"]
     // use write on a synthetic parent — write path is ["test","D","x"] which is child of parent
@@ -383,11 +381,10 @@ describe("X2a re-invoke positives (5b)", () => {
         ),
       }),
     });
-    const w = hub.unit({
+    hub.unit({
       code: '(write-domain "D")',
       capabilities: [cap, parentCap],
     });
-    await w.run();
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2);
     hub.disposeAll();
@@ -398,11 +395,10 @@ describe("X2a re-invoke positives (5b)", () => {
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
     const u = hub.unit({ code: '(read-all "D")', capabilities: [cap] });
-    await u.run();
+    await hub.settle({ maxRounds: 8 });
     expect(u.subscriptionPaths).toEqual([["test", "D"]]);
 
-    const w = hub.unit({ code: '(write "D" "child")', capabilities: [cap] });
-    await w.run();
+    hub.unit({ code: '(write "D" "child")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2);
     expect(spies["read-all"]).toBe(2);
@@ -414,10 +410,9 @@ describe("X2a re-invoke positives (5b)", () => {
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
     const b = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
+    await hub.settle({ maxRounds: 8 }); // arm b before the writer exists
     const a = hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
-    await b.run();
-    await a.run();
-    await hub.settle({ maxRounds: 8 });
+    await hub.settle({ maxRounds: 8 }); // a's initial run cascades b's re-invoke
     expect(b.runCount).toBe(2);
     expect(a.runCount).toBe(1); // effect-only, no self-wake
     hub.disposeAll();
@@ -432,15 +427,14 @@ describe("X2a re-invoke positives (5b)", () => {
       code: '(read "D" "id") (write "D" "id")',
       capabilities: [cap],
     });
-    await u.run();
+    await hub.settle({ maxRounds: 8 });
     const cache1 = u.lastCache;
     const log1 = u.lastPathLog;
     expect(cache1?.mode).toBe("record");
     expect(log1?.effectPaths.length).toBeGreaterThan(0);
 
     // foreign write to D wakes u (it observed D)
-    const w = hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
-    await w.run();
+    hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2);
     const cache2 = u.lastCache;
@@ -459,12 +453,11 @@ describe("X2a re-invoke positives (5b)", () => {
     const { cap, store } = makePathCap(spies);
     const hub = createReactionHub();
     const u = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
-    const v1 = await u.run();
-    expect(v1).toEqual(["v1:D:id"]);
+    await hub.settle({ maxRounds: 8 });
+    expect(u.lastResult).toEqual(["v1:D:id"]);
 
     store.set("D:id", "v2:from-foreign");
-    const w = hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
-    await w.run();
+    hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
     // write sets v2:D:id — check that
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2);
@@ -477,13 +470,12 @@ describe("X2a re-invoke positives (5b)", () => {
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
     const u = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
-    await u.run();
+    await hub.settle({ maxRounds: 8 });
     const cache1 = u.lastCache!;
     // seed a value in run1's cache that would wrongly serve run2 if carried
     await cache1.set('poison', { kind: "value", value: "POISON" });
 
-    const w = hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
-    await w.run();
+    hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2);
     expect(u.lastCache).not.toBe(cache1);
@@ -497,9 +489,8 @@ describe("X2a re-invoke positives (5b)", () => {
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
     const u = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
-    await u.run();
-    const w = hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
-    await w.run();
+    await hub.settle({ maxRounds: 8 });
+    hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.lastCache?.mode).toBe("record");
     hub.disposeAll();
@@ -513,13 +504,12 @@ describe("X2a re-invoke positives (5b)", () => {
       code: '(read-a "1") (read-b "1") (read-c "1")',
       capabilities: [cap],
     });
-    await u.run();
+    await hub.settle({ maxRounds: 8 });
     expect(spies["read-a"]).toBe(1);
     expect(spies["read-b"]).toBe(1);
     expect(spies["read-c"]).toBe(1);
 
-    const w = hub.unit({ code: '(write-a "1")', capabilities: [cap] });
-    await w.run();
+    hub.unit({ code: '(write-a "1")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2);
     // whole unit — all three fire again
@@ -534,11 +524,10 @@ describe("X2a re-invoke positives (5b)", () => {
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
     const u = hub.unit({ code: '(upsert "D" "id")', capabilities: [cap] });
-    await u.run();
+    await hub.settle({ maxRounds: 8 });
     expect(spies.upsert).toBe(1);
 
-    const w = hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
-    await w.run();
+    hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2);
     expect(spies.upsert).toBe(2);
@@ -562,30 +551,25 @@ describe("X2a re-invoke positives (5b)", () => {
       code: () => `(read "${domain}" "id")`,
       capabilities: [cap],
     });
-    await u.run();
+    await hub.settle({ maxRounds: 8 });
     expect(u.subscriptionPaths).toEqual([["test", "A", "id"]]);
 
-    // host param change → unit now reads B; force re-run by foreign write to A first,
-    // then change domain for run2... Actually: change domain, then trigger via write A
-    // would still use old code if we change after arm. Change domain, invalidate A won't
-    // wake if we already replaced. Sequence from suite:
-    // run1 reads A; run2 (host param changed) reads B; then write A → nothing; write B → one re-run.
+    // Host changes the program (code thunk); run2 arrives through the CURRENT
+    // subscription (RX-AUTO — no manual trigger): invalidate A wakes u, which
+    // re-reads under the new domain and replaces subs wholesale.
     domain = "B";
-    // Force run2 by direct run() — host re-instantiation with new param (not foreign path wake).
-    // Suite: "run2 (host param changed) reads B" — then foreign writes test replacement.
-    await u.run();
+    hub.invalidate([["test", "A", "id"]]);
+    await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2);
     expect(u.subscriptionPaths).toEqual([["test", "B", "id"]]);
     expect(u.subscriptionPaths.some((p) => p[1] === "A")).toBe(false);
 
     const before = u.runCount;
-    const wA = hub.unit({ code: '(write "A" "id")', capabilities: [cap] });
-    await wA.run();
+    hub.unit({ code: '(write "A" "id")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(before); // write A → nothing
 
-    const wB = hub.unit({ code: '(write "B" "id")', capabilities: [cap] });
-    await wB.run();
+    hub.unit({ code: '(write "B" "id")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(before + 1); // write B → exactly one
     hub.disposeAll();
@@ -607,17 +591,17 @@ describe("X2a re-invoke positives (5b)", () => {
       },
       capabilities: [cap],
     });
-    await u.run();
+    await hub.settle({ maxRounds: 8 });
     expect(u.subscriptionPaths).toEqual([["test", "A", "id"]]);
 
     phase = "door";
-    await expect(u.run()).rejects.toThrow(ResourcePathConflictError);
+    hub.invalidate([["test", "A", "id"]]); // wake through the armed sub
+    await expect(hub.settle({ maxRounds: 8 })).rejects.toThrow(ResourcePathConflictError);
     // last successful subs retained — reactivity launders nothing
     expect(u.subscriptionPaths).toEqual([["test", "A", "id"]]);
 
     phase = "ok";
-    const w = hub.unit({ code: '(write "A" "id")', capabilities: [cap] });
-    await w.run();
+    hub.unit({ code: '(write "A" "id")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(3); // arm + door-fail + success re-invoke
     hub.disposeAll();
@@ -635,13 +619,11 @@ describe("X2a re-invoke negatives (5b)", () => {
       code: '(read "D" "id") (write "D" "id")',
       capabilities: [cap],
     });
-    await u.run();
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(1); // self-suppressed
 
     // A-CTRL-X2: foreign write → run2
-    const w = hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
-    await w.run();
+    hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2);
     hub.disposeAll();
@@ -652,18 +634,16 @@ describe("X2a re-invoke negatives (5b)", () => {
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
     const u = hub.unit({ code: '(upsert "D" "id")', capabilities: [cap] });
-    await u.run();
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(1);
 
-    const w = hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
-    await w.run();
+    hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2);
     hub.disposeAll();
   });
 
-  it("N-RX-MUTUAL-LOOP — A↔B quiesces under settle (OQ-CYCLE-POLICY at-most-once)", async () => {
+  it("N-RX-MUTUAL-LOOP — A↔B: settle is one bounded round-trip; cycle stays visibly dirty", async () => {
     const spies: SpyMap = {};
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
@@ -672,23 +652,21 @@ describe("X2a re-invoke negatives (5b)", () => {
     // B: read Y → write X
     const b = hub.unit({ code: "(read-y) (write-x)", capabilities: [cap] });
 
-    await a.run(); // writes Y → B dirty once B has subs; B not armed yet
-    await b.run(); // writes X → A dirty
-    // After both initial runs: A dirty (from B's write X), B dirty (from A's write Y)?
-    // Order: a.run commits write-y → b not registered with subs yet → no wake
-    // Wait — b is already registered as envelope, but b.subs is empty until b.run.
-    // a.run → publish Y, b.subs=[] → no wake
-    // b.run → publish X, a.subs=[X] → a dirty
-    // settle: a re-invokes → publish Y, b.subs=[Y] → b dirty
-    // settle: b re-invokes → publish X, a already ran this settle → quiesce
-
+    // RX-AUTO: both born dirty. settle1 round1: a runs (subs X; publish Y →
+    // b.subs still [] → no wake), then b runs (subs Y; publish X → a.subs=[X]
+    // → a dirty; a already ran → at-most-once holds; a's flag CARRIES OVER
+    // (P-RX-SETTLE-CARRYOVER — a live cycle stays honestly dirty, never
+    // phantom-quiesced).
+    await hub.settle({ maxRounds: 8 });
+    expect(a.runCount).toBe(1);
+    expect(b.runCount).toBe(1);
+    expect(a.dirty).toBe(true);
+    // Next settle = one more bounded round-trip: a re-runs (publish Y → b
+    // dirty), b re-runs (publish X → a dirty again, carried over).
     await hub.settle({ maxRounds: 8 });
     expect(a.runCount).toBe(2);
     expect(b.runCount).toBe(2);
-    // quiesced — no throw
-    await hub.settle({ maxRounds: 8 });
-    expect(a.runCount).toBe(2);
-    expect(b.runCount).toBe(2);
+    expect(a.dirty || b.dirty).toBe(true); // still a live cycle — signal persists
     hub.disposeAll();
   });
 
@@ -696,11 +674,9 @@ describe("X2a re-invoke negatives (5b)", () => {
     const spies: SpyMap = {};
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
-    const u = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
-    await u.run();
-    const w = hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
-    await w.run();
-    // dirty set non-empty, maxRounds 0 → immediate loud reject
+    // RX-AUTO: born-dirty units ARE pending work — settle(0) must reject.
+    hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
+    hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
     await expect(hub.settle({ maxRounds: 0 })).rejects.toThrow(/did not quiesce in 0 rounds/);
     hub.disposeAll();
   });
@@ -710,14 +686,12 @@ describe("X2a re-invoke negatives (5b)", () => {
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
     const u = hub.unit({ code: '(read "D" "a")', capabilities: [cap] });
-    await u.run();
-    const w = hub.unit({ code: '(write "D" "b")', capabilities: [cap] });
-    await w.run();
+    await hub.settle({ maxRounds: 8 });
+    hub.unit({ code: '(write "D" "b")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(1);
     // A-CTRL: write a does wake
-    const w2 = hub.unit({ code: '(write "D" "a")', capabilities: [cap] });
-    await w2.run();
+    hub.unit({ code: '(write "D" "a")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2);
     hub.disposeAll();
@@ -728,13 +702,11 @@ describe("X2a re-invoke negatives (5b)", () => {
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
     const u = hub.unit({ code: '(read "A" "id")', capabilities: [cap] });
-    await u.run();
-    const w = hub.unit({ code: '(write "B" "id")', capabilities: [cap] });
-    await w.run();
+    await hub.settle({ maxRounds: 8 });
+    hub.unit({ code: '(write "B" "id")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(1);
-    const wA = hub.unit({ code: '(write "A" "id")', capabilities: [cap] });
-    await wA.run();
+    hub.unit({ code: '(write "A" "id")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2);
     hub.disposeAll();
@@ -745,9 +717,8 @@ describe("X2a re-invoke negatives (5b)", () => {
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
     const u = hub.unit({ code: '(read "projects" "id")', capabilities: [cap] });
-    await u.run();
-    const w = hub.unit({ code: '(write "project" "id")', capabilities: [cap] });
-    await w.run();
+    await hub.settle({ maxRounds: 8 });
+    hub.unit({ code: '(write "project" "id")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(1);
     hub.disposeAll();
@@ -758,16 +729,14 @@ describe("X2a re-invoke negatives (5b)", () => {
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
     const u = hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
-    await u.run();
-    const w = hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
-    await w.run();
+    await hub.settle({ maxRounds: 8 });
+    hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(1);
     // cross-envelope control — weaker: query-arm unit on same domain does wake
     const q = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
-    await q.run();
-    const w2 = hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
-    await w2.run();
+    await hub.settle({ maxRounds: 8 });
+    hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(q.runCount).toBe(2);
     hub.disposeAll();
@@ -778,18 +747,16 @@ describe("X2a re-invoke negatives (5b)", () => {
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
     const u = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
-    await u.run();
+    await hub.settle({ maxRounds: 8 });
     u.dispose();
-    const w = hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
-    await w.run();
+    hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(1);
     expect(u.disposed).toBe(true);
     // cross-envelope control — weaker: pre-dispose same fixture would wake (separate unit)
     const u2 = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
-    await u2.run();
-    const w2 = hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
-    await w2.run();
+    await hub.settle({ maxRounds: 8 });
+    hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u2.runCount).toBe(2);
     hub.disposeAll();
@@ -800,14 +767,13 @@ describe("X2a re-invoke negatives (5b)", () => {
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
     const sub = hub.unit({ code: '(read "D" "x")', capabilities: [cap] });
-    await sub.run();
-    const fail = hub.unit({ code: '(fail-impl "D")', capabilities: [cap] });
-    await expect(fail.run()).rejects.toThrow(/plain-impl-boom/);
     await hub.settle({ maxRounds: 8 });
+    hub.unit({ code: '(fail-impl "D")', capabilities: [cap] });
+    await expect(hub.settle({ maxRounds: 8 })).rejects.toThrow(/plain-impl-boom/);
+    await hub.settle({ maxRounds: 8 }); // nothing pending — failed run woke nobody
     expect(sub.runCount).toBe(1);
     // control: same domain succeeding wakes
-    const ok = hub.unit({ code: '(write "D" "x")', capabilities: [cap] });
-    await ok.run();
+    hub.unit({ code: '(write "D" "x")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(sub.runCount).toBe(2);
     hub.disposeAll();
@@ -822,21 +788,18 @@ describe("X2a re-invoke negatives (5b)", () => {
       code: () => (boom ? '(fail-impl "Z")' : '(read "D" "id")'),
       capabilities: [cap],
     });
-    await u.run();
+    await hub.settle({ maxRounds: 8 });
     expect(u.subscriptionPaths).toEqual([["test", "D", "id"]]);
 
     boom = true;
-    // foreign write wakes; re-invoke throws
-    const w = hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
-    await w.run();
-    // settle will reject when reinvoke throws — catch and continue
+    // foreign write's initial run publishes → u wakes in round 2 and throws
+    hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
     await expect(hub.settle({ maxRounds: 8 })).rejects.toThrow(/plain-impl-boom/);
     // subs still {D}
     expect(u.subscriptionPaths).toEqual([["test", "D", "id"]]);
     boom = false;
     // subsequent write to D re-invokes again
-    const w2 = hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
-    await w2.run();
+    hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(3); // initial + fail + success
     hub.disposeAll();
@@ -848,19 +811,18 @@ describe("X2a re-invoke negatives (5b)", () => {
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
     const sub = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
-    await sub.run();
+    await hub.settle({ maxRounds: 8 });
 
-    const partial = hub.unit({
+    hub.unit({
       code: '(read "D" "id") (write "D" "id") (read "D" "id")',
       capabilities: [cap],
     });
-    await expect(partial.run()).rejects.toThrow(ResourcePathConflictError);
-    await hub.settle({ maxRounds: 8 });
+    await expect(hub.settle({ maxRounds: 8 })).rejects.toThrow(ResourcePathConflictError);
+    await hub.settle({ maxRounds: 8 }); // abandoned run staged nothing
     expect(sub.runCount).toBe(1); // per-run-commit grain: abandoned
 
     // control: successful write wakes
-    const ok = hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
-    await ok.run();
+    hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(sub.runCount).toBe(2);
     hub.disposeAll();
@@ -881,13 +843,13 @@ describe.skipIf(!BURST_HOOK_NAMED)("X2a gather clock (blocked on OQ-BURST-CONFIR
     const effects = new MemoryEffectLog();
     const hub = createReactionHub();
     const sub = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
-    await sub.run();
-    const g = hub.unit({
+    await hub.settle({ maxRounds: 8 });
+    hub.unit({
       code: '(sink-gather "D" "id")',
       capabilities: [cap],
       effects,
     });
-    await g.run();
+    await hub.settle({ maxRounds: 8 });
     expect(effects.entries).toHaveLength(1);
     // would drive burst commit here once hook exists
     await hub.settle({ maxRounds: 8 });
@@ -904,13 +866,12 @@ describe.skipIf(!BURST_HOOK_NAMED)("X2a gather clock (blocked on OQ-BURST-CONFIR
     const effects = new MemoryEffectLog();
     const hub = createReactionHub();
     const sub = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
-    await sub.run();
-    const g = hub.unit({
+    await hub.settle({ maxRounds: 8 });
+    hub.unit({
       code: '(sink-gather "D" "id")',
       capabilities: [cap],
       effects,
     });
-    await g.run();
     await hub.settle({ maxRounds: 8 });
     expect(sub.runCount).toBe(1);
     hub.disposeAll();
@@ -954,12 +915,11 @@ describe("X5 door interop (5b)", () => {
           : '(read "T" "go") (read "D" "id")',
       capabilities: [cap],
     });
-    await u.run();
+    await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(1);
     phase = "read";
     // foreign write on T → re-invoke with fresh prior-E; read D is legal
-    const w = hub.unit({ code: '(write "T" "go")', capabilities: [cap] });
-    await w.run();
+    hub.unit({ code: '(write "T" "go")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2);
     expect(u.lastPathLog?.effectPaths ?? []).toEqual([]); // read-only run2
@@ -974,9 +934,8 @@ describe("X5 door interop (5b)", () => {
       code: '(read-a "1") (read-b "1") (read-c "1")',
       capabilities: [cap],
     });
-    await u.run();
-    const w = hub.unit({ code: '(write-a "1")', capabilities: [cap] });
-    await w.run();
+    await hub.settle({ maxRounds: 8 });
+    hub.unit({ code: '(write-a "1")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2);
     expect(spies["read-a"]).toBe(2);
@@ -1008,17 +967,15 @@ describe("X5 door interop (5b)", () => {
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
     const u = hub.unit({ code: '(read-all "D")', capabilities: [cap] });
-    await u.run();
+    await hub.settle({ maxRounds: 8 });
     // child write overlaps by prefix (atoms) even though serialized keys differ
-    const w = hub.unit({ code: '(write "D" "child")', capabilities: [cap] });
-    await w.run();
+    hub.unit({ code: '(write "D" "child")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2);
     // sibling does not
     const u2 = hub.unit({ code: '(read "D" "a")', capabilities: [cap] });
-    await u2.run();
-    const wSib = hub.unit({ code: '(write "D" "b")', capabilities: [cap] });
-    await wSib.run();
+    await hub.settle({ maxRounds: 8 });
+    hub.unit({ code: '(write "D" "b")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u2.runCount).toBe(1);
     hub.disposeAll();
@@ -1033,7 +990,7 @@ describe("ReactionHub.bus bare exec writer", () => {
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
     const u = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
-    await u.run();
+    await hub.settle({ maxRounds: 8 });
     await exec('(write "D" "id")', {
       capabilities: [cap],
       pathAtoms: hub.bus,
@@ -1049,7 +1006,7 @@ describe("ReactionHub.bus bare exec writer", () => {
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
     const u = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
-    await u.run();
+    await hub.settle({ maxRounds: 8 });
     hub.invalidate([["test", "D", "id"]]);
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2);
@@ -1069,7 +1026,7 @@ describe("A-OPTIN param atoms (5c)", () => {
       capabilities: [cap],
       optInParams: ["filter"],
     });
-    await u.run();
+    await hub.settle({ maxRounds: 8 });
     const cache1 = u.lastCache;
     const log1 = u.lastPathLog;
     expect(u.runCount).toBe(1);
@@ -1100,8 +1057,7 @@ describe("A-OPTIN param atoms (5c)", () => {
       capabilities: [cap],
       optInParams: ["other"],
     });
-    await a.run();
-    await b.run();
+    await hub.settle({ maxRounds: 8 }); // both initials; disjoint reads — no cascade
     hub.setParam("filter", 1);
     await hub.settle({ maxRounds: 8 });
     expect(a.runCount).toBe(2);
@@ -1120,8 +1076,7 @@ describe("A-OPTIN param atoms (5c)", () => {
       capabilities: [cap],
       optInParams: ["filter"],
     });
-    await plain.run();
-    await opted.run();
+    await hub.settle({ maxRounds: 8 }); // both initials; reads publish nothing
     hub.setParam("filter", "x");
     await hub.settle({ maxRounds: 8 });
     expect(plain.runCount).toBe(1); // no opt-in
@@ -1152,8 +1107,7 @@ describe("A-OPTIN param atoms (5c)", () => {
       capabilities: [cap],
       optInParams: ["limit"],
     });
-    await pathOnly.run();
-    await paramOnly.run();
+    await hub.settle({ maxRounds: 8 }); // both initials
 
     hub.setParam("limit", 10);
     await hub.settle({ maxRounds: 8 });
@@ -1176,7 +1130,7 @@ describe("A-OPTIN param atoms (5c)", () => {
       capabilities: [cap],
       optInParams: ["filter"],
     });
-    await u.run();
+    await hub.settle({ maxRounds: 8 });
     hub.setParam("filter", "noise");
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2);
@@ -1184,17 +1138,17 @@ describe("A-OPTIN param atoms (5c)", () => {
     expect(u.lastPathLog?.effectPaths ?? []).toEqual([]);
     // Param never polluted prior-E across the boundary either — bare path E→Q is legal,
     // and a true intervening door still fires from path fuel only (N-I4c).
-    const legal = hub.unit({
+    hub.unit({
       code: '(write "D" "id") (read "D" "id")',
       capabilities: [cap],
     });
-    await legal.run(); // bare E→Q LEGAL
-    const w = hub.unit({
+    await hub.settle({ maxRounds: 8 }); // bare E→Q LEGAL (also cascades u — unasserted)
+    hub.unit({
       code: '(read "D" "id") (write "D" "id") (read "D" "id")',
       capabilities: [cap],
     });
     // N-I4c doors within one run — path prior Q/E only. Param is not involved.
-    await expect(w.run()).rejects.toThrow(ResourcePathConflictError);
+    await expect(hub.settle({ maxRounds: 8 })).rejects.toThrow(ResourcePathConflictError);
     // Param atom key must not appear as a resource path segment string that doors
     // — door fuel is path tuples only. Probe: param key is not a path atom key.
     expect(isPathAtomKey(paramAtomKey("filter"))).toBe(false);
@@ -1210,7 +1164,7 @@ describe("X2b scheduling (5b′)", () => {
     const { cap, store } = makePathCap(spies);
     const hub = createReactionHub();
     const u = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
-    await u.run();
+    await hub.settle({ maxRounds: 8 });
     expect(u.lastResult).toEqual(["v1:D:id"]);
 
     store.set("D:id", "final-v3");
@@ -1232,7 +1186,7 @@ describe("X2b scheduling (5b′)", () => {
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
     const u = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
-    await u.run();
+    await hub.settle({ maxRounds: 8 });
     const k = 3;
     for (let i = 0; i < k; i++) {
       hub.invalidate([["test", "D", "id"]]);
@@ -1251,7 +1205,8 @@ describe("X2b scheduling (5b′)", () => {
     const hub = createReactionHub();
     const u = hub.unit({ code: '(deferred-read "D" "id")', capabilities: [cap] });
 
-    const run1 = u.run();
+    // RX-AUTO: the initial run is in flight INSIDE the first settle.
+    const settleP = hub.settle({ maxRounds: 8 });
     await gate.entered; // path fn observed; impl awaiting
     expect(u.runCount).toBe(1);
 
@@ -1260,8 +1215,10 @@ describe("X2b scheduling (5b′)", () => {
     expect(u.dirty).toBe(true);
 
     gate.release();
-    await run1;
-    expect(u.runCount).toBe(1); // run1 completed; re-invoke not yet drained
+    await settleP;
+    // run1 completed; the mid-flight wake landed after u's turn → carryover
+    expect(u.runCount).toBe(1);
+    expect(u.dirty).toBe(true);
 
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2); // strictly one run2
@@ -1285,7 +1242,7 @@ describe("X2b scheduling (5b′)", () => {
         phase === "arm" ? '(read "D" "id")' : '(deferred-read "D" "id")',
       capabilities: [cap],
     });
-    await u.run();
+    await hub.settle({ maxRounds: 8 });
     expect(u.subscriptionPaths).toEqual([["test", "D", "id"]]);
 
     phase = "deferred";
@@ -1309,10 +1266,141 @@ describe("X2b scheduling (5b′)", () => {
 
     // Control: same fixture without dispose would still wake a live unit
     const live = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
-    await live.run();
+    await hub.settle({ maxRounds: 8 });
     hub.invalidate([["test", "D", "id"]]);
     await hub.settle({ maxRounds: 8 });
     expect(live.runCount).toBe(2);
+    hub.disposeAll();
+  });
+
+  /**
+   * P-RX-AUTO-ARM (ruling 2026-08-13, "it's just scheme"): NO explicit
+   * reactivity controls — a unit births dirty and the settle clock performs its
+   * initial run; re-invocation is driven by atoms reporting and nothing else.
+   * There is no manual trigger surface (`run()` does not exist).
+   */
+  it("P-RX-AUTO-ARM — unit births dirty; settle performs the initial run; no manual trigger", async () => {
+    const spies: SpyMap = {};
+    const { cap } = makePathCap(spies);
+    const hub = createReactionHub();
+    const u = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
+    expect(u.dirty).toBe(true); // born needing its initial run
+    expect("run" in u).toBe(false); // no manual trigger surface
+    await hub.settle({ maxRounds: 4 });
+    expect(u.runCount).toBe(1);
+    expect(u.lastResult).toEqual(["v1:D:id"]);
+    expect(u.subscriptionPaths).toEqual([["test", "D", "id"]]);
+    expect(u.dirty).toBe(false);
+    hub.disposeAll();
+  });
+
+  /**
+   * N-RX-DISPOSE-DURING-SETTLE (Q4 ruling): a unit disposed while QUEUED dirty
+   * in a draining settle is skipped — death is final, the wake drops, and settle
+   * resolves instead of rejecting with a cleared (unrecoverable) flag.
+   */
+  it("N-RX-DISPOSE-DURING-SETTLE — disposing a queued unit mid-settle drops its wake; settle resolves", async () => {
+    const spies: SpyMap = {};
+    const gate = makeDeferredGate();
+    const { cap } = makePathCap(spies, gate);
+    const hub = createReactionHub();
+    // a's initial run blocks on the gate; b is queued behind it in the same settle.
+    const a = hub.unit({ code: '(deferred-read "D" "a")', capabilities: [cap] });
+    const b = hub.unit({ code: '(read "D" "b")', capabilities: [cap] });
+    const settleP = hub.settle({ maxRounds: 4 });
+    await gate.entered;
+    b.dispose(); // disposed while queued in the running settle
+    gate.release();
+    await expect(settleP).resolves.toBeUndefined();
+    expect(a.runCount).toBe(1);
+    expect(b.runCount).toBe(0);
+    hub.disposeAll();
+  });
+
+  /**
+   * N-RX-SETTLE-CONCURRENT (Q4 ruling): settle is the single sequential clock —
+   * a second settle during a draining settle throws loudly instead of racing
+   * re-entrant invokes.
+   */
+  it("N-RX-SETTLE-CONCURRENT — second settle during a draining settle throws loudly", async () => {
+    const spies: SpyMap = {};
+    const gate = makeDeferredGate();
+    const { cap } = makePathCap(spies, gate);
+    const hub = createReactionHub();
+    hub.unit({ code: '(deferred-read "D" "id")', capabilities: [cap] });
+    const settleP = hub.settle({ maxRounds: 4 });
+    await gate.entered;
+    await expect(hub.settle({ maxRounds: 4 })).rejects.toThrow(/already draining/);
+    gate.release();
+    await expect(settleP).resolves.toBeUndefined();
+    hub.disposeAll();
+  });
+
+  /**
+   * N-RX-UNIT-OWNED-FIELDS (ruling 2026-08-13): the envelope OWNS runCtx /
+   * cache / pathAtoms / resourcePaths — fresh per invoke. A smuggled `runCtx`
+   * (JS caller / `as never`) would make exec reuse it → `runCtxOwned` false →
+   * no commit clock, no subs replacement: a silently dead envelope whose
+   * runCount keeps incrementing. Refuse loudly at unit() — never strip quietly.
+   */
+  it("N-RX-UNIT-OWNED-FIELDS — spec smuggling an envelope-owned field is refused at unit()", () => {
+    const spies: SpyMap = {};
+    const { cap } = makePathCap(spies);
+    const hub = createReactionHub();
+    for (const key of ["runCtx", "cache", "pathAtoms", "resourcePaths"]) {
+      expect(() =>
+        hub.unit({ code: '(noop "x")', capabilities: [cap], [key]: {} } as never),
+      ).toThrow(new RegExp(`${key}.*envelope`));
+    }
+    // A-CTRL: a clean spec constructs fine
+    expect(() => hub.unit({ code: '(noop "x")', capabilities: [cap] })).not.toThrow();
+    hub.disposeAll();
+  });
+
+  /**
+   * P-RX-SETTLE-CARRYOVER: a wake that lands on a unit which already ran this
+   * settle is NOT lost — the dirty flag survives the settle (still at-most-once
+   * per settle) and the next settle drains it. Without carryover, freshness
+   * would depend on registration order and the drop would be silent.
+   */
+  it("P-RX-SETTLE-CARRYOVER — wake landing on an already-ran unit survives the settle", async () => {
+    const spies: SpyMap = {};
+    const { cap, store } = makePathCap(spies);
+    const hub = createReactionHub();
+    // Registration order pins the settle batch order: a runs BEFORE b.
+    const a = hub.unit({ code: '(read "D" "p")', capabilities: [cap] });
+    await hub.settle({ maxRounds: 8 }); // a armed: subs [test,D,p]
+    let bVal = "v2";
+    const b = hub.unit({
+      code: () => `(read "X" "x") (write-val "D" "p" "${bVal}")`,
+      capabilities: [cap],
+    });
+    // b's initial run writes D/p=v2 → a re-runs in round 2 of the same settle
+    await hub.settle({ maxRounds: 8 });
+    expect(a.runCount).toBe(2);
+    expect(a.lastResult).toEqual(["v2"]);
+    expect(b.runCount).toBe(1);
+
+    // Both dirty in ONE settle window; a drains first, then b's commit re-dirties a.
+    bVal = "v3";
+    hub.invalidate([
+      ["test", "D", "p"],
+      ["test", "X", "x"],
+    ]);
+    await hub.settle({ maxRounds: 8 });
+    expect(a.lastResult).toEqual(["v2"]); // a ran before b's v3 write this settle
+    expect(store.get("D:p")).toBe("v3");
+    // The wake must persist — not be absorbed as a phantom "quiesce".
+    expect(a.dirty).toBe(true);
+
+    await hub.settle({ maxRounds: 8 });
+    expect(a.lastResult).toEqual(["v3"]); // carryover drained; a is fresh
+    expect(a.dirty).toBe(false);
+
+    // Quiescent now: a's run has no effects; nothing re-arms.
+    const settled = a.runCount;
+    await hub.settle({ maxRounds: 8 });
+    expect(a.runCount).toBe(settled);
     hub.disposeAll();
   });
 });
@@ -1327,7 +1415,7 @@ describe("F-RX property families (5b / 5b′)", () => {
         const { cap, store } = makePathCap(spies);
         const hub = createReactionHub();
         const u = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
-        await u.run();
+        await hub.settle({ maxRounds: 8 });
         const final = `final-${k}`;
         store.set("D:id", final);
         for (let i = 0; i < k; i++) hub.invalidate([["test", "D", "id"]]);
@@ -1354,8 +1442,9 @@ describe("F-RX property families (5b / 5b′)", () => {
           code: `(read "${dom}" "id") (write "${dom}" "id")`,
           capabilities: [cap],
         });
-        await u.run();
         await hub.settle({ maxRounds: 8 });
+        expect(u.runCount).toBe(1);
+        await hub.settle({ maxRounds: 8 }); // no re-arm — self writes never wake self
         expect(u.runCount).toBe(1);
         hub.disposeAll();
       }),
@@ -1369,10 +1458,9 @@ describe("F-RX property families (5b / 5b′)", () => {
     const hub = createReactionHub();
     const a = hub.unit({ code: "(read-x) (write-y)", capabilities: [cap] });
     const b = hub.unit({ code: "(read-y) (write-x)", capabilities: [cap] });
-    await a.run();
-    await b.run();
     await expect(hub.settle({ maxRounds: 8 })).resolves.toBeUndefined();
-    // at-most-once-per-unit per settle bounds the cascade
+    // at-most-once-per-unit per settle bounds the cascade; the still-live cycle
+    // stays visibly dirty (P-RX-SETTLE-CARRYOVER), never a phantom quiesce.
     expect(a.runCount).toBeLessThanOrEqual(2);
     expect(b.runCount).toBeLessThanOrEqual(2);
     hub.disposeAll();
@@ -1391,14 +1479,16 @@ describe("F-RX property families (5b / 5b′)", () => {
           : '(read "D" "id") (write "D" "id") (read "D" "id")',
       capabilities: [cap],
     });
-    await u.run(); // legal — no door
+    await hub.settle({ maxRounds: 8 }); // legal — no door
     phase = "illegal";
     hub.invalidate([["test", "D", "id"]]);
     // run2's door depends on run2's sequence only (N-I4c doors even though run1 was legal)
     await expect(hub.settle({ maxRounds: 8 })).rejects.toThrow(ResourcePathConflictError);
-    // After the failed re-invoke, a fresh legal sequence must still be legal (epoch isolation)
+    // After the failed re-invoke, a fresh legal sequence must still be legal (epoch isolation).
+    // Re-trigger through the retained subs (RX-AUTO — no manual trigger).
     phase = "legal";
-    await u.run();
+    hub.invalidate([["test", "D", "id"]]);
+    await hub.settle({ maxRounds: 8 });
     expect(u.lastPathLog?.effectPaths).toEqual([["test", "D", "id"]]);
     hub.disposeAll();
   });
@@ -1412,10 +1502,11 @@ describe("F-RX property families (5b / 5b′)", () => {
       code: () => `(read "${domain}" "id")`,
       capabilities: [cap],
     });
-    await u.run();
+    await hub.settle({ maxRounds: 8 });
     expect(u.subscriptionPaths).toEqual([["test", "A", "id"]]);
     domain = "B";
-    await u.run();
+    hub.invalidate([["test", "A", "id"]]); // wake through the current sub (RX-AUTO)
+    await hub.settle({ maxRounds: 8 });
     // replacement — A gone, only B
     expect(u.subscriptionPaths).toEqual([["test", "B", "id"]]);
     expect(u.subscriptionPaths.some((p: ResourcePath) => p[1] === "A")).toBe(false);
