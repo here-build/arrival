@@ -3,8 +3,12 @@ import { Syntax } from "./Syntax.js";
 import { TF_EXPAND } from "../values/tagless-final.js";
 // Leaf value-kernel predicates live in value-guards.ts (no AmbientRuntime/Macro dep)
 // so Pair.ts can import them without the evaluator world. This module does not
-// re-export them — import leaf predicates from value-guards directly.
-import { is_function, is_callable_value } from "../values/value-guards.js";
+// re-export most of them — import leaf predicates from value-guards directly.
+// `is_promise` is the one exception: re-exported below for compatibility (P3 —
+// it moved to value-guards.ts since it has no Macro/Syntax/TF_EXPAND dependency).
+import { is_callable_value } from "../values/value-guards.js";
+
+export { is_promise } from "../values/value-guards.js";
 
 export function is_int(value: unknown): value is number {
   return typeof value === "number" && Number.parseInt(value.toString(), 10) === value;
@@ -23,13 +27,6 @@ export function is_macro(o: unknown): o is Macro | Syntax {
 // carries no term and is not a call head.
 export function is_expandable(o: unknown): o is Macro | Syntax {
   return typeof (o as Record<PropertyKey, unknown> | null | undefined)?.[TF_EXPAND] === "function";
-}
-
-export function is_promise(o: unknown): o is Promise<unknown> {
-  if (o instanceof Promise) {
-    return true;
-  }
-  return !!o && typeof o === "object" && "then" in o && is_function(o.then);
 }
 
 // A procedure: a callable VALUE (ALambda / ANativeProcedure / ARosettaProcedure /

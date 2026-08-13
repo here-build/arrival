@@ -69,6 +69,20 @@ export function is_function(o: unknown): o is Function {
   return typeof o === "function";
 }
 
+/**
+ * Native Promise or any thenable. Value-kernel leaf (hermeticity audit P3): six
+ * value modules (op-helpers.ts, ADict.ts, pending-entry.ts, APair.ts, AVector.ts,
+ * values-repr.ts) runtime-import this — it used to live in eval/guards.ts, the
+ * only values→eval runtime entanglement (that module also drags in Macro/Syntax/
+ * TF_EXPAND). eval/guards.ts re-exports it for compatibility.
+ */
+export function is_promise(o: unknown): o is Promise<unknown> {
+  if (o instanceof Promise) {
+    return true;
+  }
+  return !!o && typeof o === "object" && "then" in o && is_function(o.then);
+}
+
 // Callable-as-value guards. instanceof is call-time; no init-time cycle.
 export function is_lambda(o: unknown): o is ALambda {
   return o instanceof ALambda;

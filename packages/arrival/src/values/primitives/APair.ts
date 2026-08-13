@@ -20,8 +20,7 @@ import { AValue, EMPTY_PROVENANCE, mergeProvenance } from "./AValue.js";
 import { deriveSortCompare, withInputProvenance } from "../op-helpers.js";
 import { type SeenMap, structuralEqual } from "../structural-equal.js";
 import { NoLensError, type SourceLocation } from "../../errors.js";
-import { is_false, is_plain_object } from "../../values/value-guards.js";
-import { is_promise } from "../../eval/guards.js";
+import { is_false, is_plain_object, is_promise } from "../../values/value-guards.js";
 import { promise_all } from "../../utils/promises.js";
 // provenance-collapse.ts is a LEAF — it dispatches on the `arrival/provenanceChildren` term
 // rather than importing every value class to instanceof them. Structurally required: an import
@@ -484,7 +483,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // Cyclic SPINE throws (no finite projection). Bare: per-box identity. Membrane: full
   // recursive crossing, proxy caches per (box, mode, SCOPE).
   // `readonly`: snapshot, never a mutate handle — also lets AJSArrayList return its
-  // BORROWED source BY IDENTITY (round-trip law: schemeToJs(adopt(arr)) === arr).
+  // BORROWED source BY IDENTITY (round-trip law: toJS(adopt(arr)) === arr).
   ["arrival/toJS"](exit?: MembraneExit): readonly unknown[] {
     const spine: SchemeValue[] = [...this];
     return egressContainerProxy(
@@ -932,7 +931,7 @@ export class AJSArrayList extends APair<SchemeValue, SchemeValue> {
 
   /**
    * Crossing OUT. Bare arm special: offset 0 returns RAW BORROWED SOURCE by identity
-   * (round-trip law: schemeToJs(adopt(arr)) === arr). Past offset 0: honest slice.
+   * (round-trip law: toJS(adopt(arr)) === arr). Past offset 0: honest slice.
    * Membrane arm (`exit` present): full recursive crossing via super — no borrowed identity
    * to preserve. Overriding only the bare arm without exit would shadow the whole protocol.
    */

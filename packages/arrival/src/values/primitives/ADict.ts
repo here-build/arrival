@@ -27,7 +27,7 @@ import { nil } from "./ANil.js";
 import { type MembraneExit, type SchemeValue } from "../types.js";
 import { type SeenMap, structuralEqual } from "../structural-equal.js";
 import { attestDeep, freshIfSingleton, isAttested } from "../attestation.js";
-import { is_promise } from "../../eval/guards.js";
+import { is_promise } from "../value-guards.js";
 import { isSettleChain, settleEntry } from "./pending-entry.js";
 // Runtime import cycle (benign): jsToScheme is hoisted; called only inside get() at runtime.
 import { jsToScheme } from "../../membrane/rosetta.js";

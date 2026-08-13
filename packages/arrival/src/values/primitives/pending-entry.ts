@@ -5,7 +5,7 @@
  * LAW: native spine carriers (AVector/APair) never hold pending cells — their elements
  * are owned `SchemeValue`s structurally, so this machinery is ADict/AJSObject/AJSArray
  * ONLY. A raw scheme Promise inside a native vector/list egresses through
- * schemeToJsImpl's FFI passthrough as the Promise itself, by design — ADict's
+ * egressUnknown's FFI passthrough as the Promise itself, by design — ADict's
  * settle-then-project egress branch is law, not an oversight the other containers miss.
  *
  * Design (utils/promises.ts header): structures hold promise-valued members INERT; the
@@ -23,10 +23,10 @@
  *    either the settled box or a Promise OF the box (which the evaluator's async seams
  *    already await).
  *
- * Imports `is_promise` from eval/guards like APair/AVector already do (thenable-aware,
+ * Imports `is_promise` from value-guards like APair/AVector already do (thenable-aware,
  * not just native-Promise instanceof).
  */
-import { is_promise } from "../../eval/guards.js";
+import { is_promise } from "../value-guards.js";
 import type { SchemeValue } from "../types.js";
 
 /** The live settle chains — lets a caller whose entry SLOT doubles as the cell cache

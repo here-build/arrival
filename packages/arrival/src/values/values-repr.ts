@@ -3,11 +3,10 @@
 // and the macro engine (syntax-rules.ts). Kept as a sibling LEAF so the macro engine
 // doesn't back-edge into those higher modules — the cycle this split exists to prevent.
 //
-// `is_promise` comes from guards.ts (a *false leaf*: it carries a pre-existing
-// transitive path to AmbientRuntime), type-only at this edge so no runtime cycle.
-// Promoting it into the value-guards true-leaf is a separate task.
+// `is_promise` comes from value-guards.ts, the true value-kernel leaf (promoted out
+// of eval/guards.ts's false-leaf home — hermeticity audit P3).
 // ----------------------------------------------------------------------
-import { is_promise } from "../eval/guards.js";
+import { is_promise } from "./value-guards.js";
 import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
 import { AString } from "./primitives/AString.js";
 import { ASymbol } from "./primitives/ASymbol.js";
