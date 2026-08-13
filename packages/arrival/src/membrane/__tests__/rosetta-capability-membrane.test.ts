@@ -14,9 +14,11 @@
 import invariant from "tiny-invariant";
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
+import { AValue } from "../../values/primitives/AValue.js";
 import { AString } from "../../values/primitives/AString.js";
 import { inferenceEnv } from "../../env/inference-env.js";
-import { jsToScheme, schemeToJs, schemeToJsUntyped } from "../rosetta.js";
+import { jsToScheme } from "../rosetta.js";
+import { toJS } from "../membrane.js";
 import { execOverFrame } from "../../eval/generator-exec.js";
 import { testCallCtx } from "../../symbol/index.js";
 import { EnvCapability } from "../../common/capability.js";
@@ -68,8 +70,8 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
 
       console.log("AmbientRuntime Rosetta result:", result);
 
-      const jsResult = schemeToJs(result, {});
-      expect(jsResult).toEqual([2, 4, 6, 8, 10]);
+      // exec already unwraps via toJS — do not re-cross the JS face.
+      expect(Array.from(result as Iterable<unknown>)).toEqual([2, 4, 6, 8, 10]);
     });
 
     // INVARIANT: multiple capability-bound rosetta verbs can be chained/composed from scheme source
@@ -93,29 +95,24 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
 
       console.log("Chained Rosetta result:", result);
 
-      // Should sum the even numbers: 2 + 4 + 6 + 8 = 20
-      const jsResult = schemeToJs(result, {});
-      expect(jsResult).toBe(20);
+      // exec already unwraps via toJS — do not re-cross the JS face.
+      expect(result).toBe(20);
     });
 
     it("should work with complex data structures", async () => {
       // Arbitrary-shaped JS data (records with a `.value` field) — both slots stay
-      // `z.dynamic` (the rosetta escape hatch: "impl receives/returns raw scheme value,
-      // does its own schemeToJs/jsToScheme" — scheme-zod.ts's own doc) and the impl
-      // does the conversion inline. Manual `jsToScheme` on the way out is for TYPES
-      // only (a bare JS array isn't a `SchemeValue`); `run()`'s final jsToScheme over
-      // an already-boxed empty-provenance value is an identity no-op.
+      // `z.dynamic`. WORLD-FLIP REBASELINE (ruling 2026-08-13): the impl converts its
+      // boxed INPUT itself (`toJS`) but returns RAW JS — boxing the return is the
+      // membrane's job, and an AValue return now doors (`WorldFlipError`).
       await applyCapability(inferenceEnv, [
         EnvCapability.define("test/extract-values", {
         symbols: (symbol, z) => ({
           "extract-values": symbol.rosetta`extract-values: plucks .value off every element`(
             { input: [z.dynamic], output: [z.dynamic] },
             (rawObjects) => {
-              const objects = schemeToJsUntyped(rawObjects) as Array<{ value: unknown }>;
-              return jsToScheme(
-                CONSTANT_CTX,
-                objects.map((obj) => obj.value),
-              );
+              invariant(rawObjects instanceof AValue, "z.dynamic slot is a boxed scheme value");
+              const objects = toJS(rawObjects) as Array<{ value: unknown }>;
+              return objects.map((obj) => obj.value) as never;
             },
           ) }) }),
         ]);
@@ -135,7 +132,8 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
 
       console.log("Complex data result:", result);
 
-      const jsResult = schemeToJs(result as SchemeValue, {});
+      invariant(result instanceof AValue, "invoke returns a boxed scheme value");
+      const jsResult = toJS(result as SchemeValue);
       expect(jsResult).toEqual([10, 20, 30]);
     });
   });
@@ -152,11 +150,10 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
             symbol.rosetta`filter-by-css-property: filters nodes whose style[property] === value`(
               { input: [z.dynamic, z.string, z.string], output: [z.dynamic] },
               (rawNodes, property, value) => {
-                const nodes = schemeToJsUntyped(rawNodes) as Array<{ style?: Record<string, string> }>;
-                return jsToScheme(
-                  CONSTANT_CTX,
-                  nodes.filter((node) => node.style && node.style[property] === value),
-                );
+                invariant(rawNodes instanceof AValue, "z.dynamic slot is a boxed scheme value");
+                const nodes = toJS(rawNodes) as Array<{ style?: Record<string, string> }>;
+                // Raw JS return — the membrane boxes (world-flip rebaseline, 2026-08-13).
+                return nodes.filter((node) => node.style && node.style[property] === value) as never;
               },
             ) }) }),
         ]);
@@ -179,7 +176,8 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
 
       console.log("CSS filtering result:", result);
 
-      const jsResult = schemeToJs(result as SchemeValue, {}) as Array<{ name: string }>;
+      invariant(result instanceof AValue, "invoke returns a boxed scheme value");
+      const jsResult = toJS(result as SchemeValue) as Array<{ name: string }>;
       expect(jsResult).toHaveLength(2);
       expect(jsResult[0].name).toBe("div1");
       expect(jsResult[1].name).toBe("div3");
@@ -194,7 +192,8 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
           "css-property-stats": symbol.rosetta`css-property-stats: aggregates node style property:value counts`(
             { input: [z.dynamic], output: [z.dynamic] },
             (rawNodes) => {
-              const nodes = schemeToJsUntyped(rawNodes) as Array<{ style?: Record<string, string> }>;
+              invariant(rawNodes instanceof AValue, "z.dynamic slot is a boxed scheme value");
+              const nodes = toJS(rawNodes) as Array<{ style?: Record<string, string> }>;
               const stats: Record<string, number> = {};
               nodes.forEach((node) => {
                 if (node.style) {
@@ -204,7 +203,8 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
                   });
                 }
               });
-              return jsToScheme(CONSTANT_CTX, stats);
+              // Raw JS return — the membrane boxes (world-flip rebaseline, 2026-08-13).
+              return stats as never;
             },
           ) }) }),
         ]);
@@ -222,7 +222,8 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
 
       console.log("CSS stats result:", result);
 
-      const jsResult = schemeToJs(result as SchemeValue, {}) as Record<string, number>;
+      invariant(result instanceof AValue, "invoke returns a boxed scheme value");
+      const jsResult = toJS(result as SchemeValue) as Record<string, number>;
       expect(jsResult["overflow:hidden"]).toBe(2);
       expect(jsResult["overflow:visible"]).toBe(1);
       expect(jsResult["display:block"]).toBe(2);

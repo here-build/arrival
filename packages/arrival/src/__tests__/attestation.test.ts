@@ -27,21 +27,15 @@ import { testCallCtx } from "../symbol/index.js";
 
 /** A SOURCE rosetta (default — not pure) returning a fixed JS value; its apply term
  *  called direct-JS (no evaluator ctx) exercises exactly the bake step-4 walk.
- *  REBASELINE (v1→v2 scheme-zod swap, 4ebe73abbe, 2026-07-08): `z.value` used to be a UNION
- *  of auto-boxing codecs (v1's `value = z.union([number, string, boolean, …])`), so a raw JS
- *  return auto-boxed via whichever union member matched. v2's `value` (Q1 split: `z.dynamic`,
- *  the rosetta escape hatch — docs/plans/stage-c-corpse-deletion.md §"z.value retirement
- *  campaign") is a bare `z.custom(isSchemeValue)` predicate — a real "no automatic transform"
- *  escape hatch (see its doc comment: "the impl receives/returns the raw scheme value and does
- *  its own schemeToJs/jsToScheme"). The impl must now box its own return, exactly like the one
- *  real production consumer of this pattern (env/overridable/overridable.ts's
- *  `overridable/resolve`, which ends `return jsToScheme(CONSTANT_CTX, outcome.data)`). */
+ *  REBASELINE v3 (world-flip door, ruling 2026-08-13): the v2 shape (`z.dynamic` output +
+ *  "the impl boxes its own return via jsToScheme") is now an ILLEGAL MOVE — a rosetta
+ *  impl's return is a JS-world value, and an AValue there doors (`WorldFlipError`,
+ *  rosetta-world-flip.law.test.ts). The sanctioned shape is the original intent: return
+ *  the RAW JS value and let the membrane box it — `z.dynamic` output still skips
+ *  `z.encode`, and `jsToScheme` + `attestDeep` run at the membrane, which is exactly
+ *  the stamp site this suite pins. */
 const source = (impl: () => unknown) =>
-  symbol.rosetta`t: test source`({ input: [], output: [z.dynamic] }, () => jsToScheme(CONSTANT_CTX, impl()));
-
-/** A SOURCE rosetta echoing its scheme argument — the identity fast path through
- *  jsToScheme returns the very same box, which the return walk then deep-attests. */
-const echo = symbol.rosetta`echo: identity`({ input: [z.dynamic], output: [z.dynamic] }, (v) => v);
+  symbol.rosetta`t: test source`({ input: [], output: [z.dynamic] }, () => impl());
 
 
 /** Invoke a baked rosetta procedure via its apply term (the sole membrane spine). */
@@ -137,10 +131,14 @@ describe("bakeRosetta return walk (stamp site 1)", () => {
   });
 
   it("attests a pair spine + leaves (car/cdr on a source return are attested STORED boxes)", async () => {
-    // execState (COMPLEX tier): `echo.run` is a rosetta expecting a real boxed
-    // AValue input (RULINGS.md R1) — `exec`'s plain-JS exit would fail its decode.
-    const [pair] = (await execState("'(1 2 3)")).values;
-    const out = (await fire(echo, testCallCtx(), pair)) as APair<any, any>;
+    // World-flip rebaseline: a rosetta can no longer echo a boxed pair through
+    // z.dynamic — the impl returns RAW JS and a coded slot (z.list) has the
+    // membrane construct the pair spine, which the return walk then deep-attests.
+    const listSource = symbol.rosetta`t-list: pair-spine source`(
+      { input: [], output: [z.list(z.number)] },
+      () => [1, 2, 3],
+    );
+    const out = (await fire(listSource, testCallCtx())) as APair<any, any>;
     expect(out).toBeInstanceOf(APair);
     expect(isAttested(out)).toBe(true);
     expect(isAttested(out.car)).toBe(true);
@@ -149,8 +147,11 @@ describe("bakeRosetta return walk (stamp site 1)", () => {
   });
 
   it("attests a vector's stored elements", async () => {
-    const [vec] = (await execState("#(1 2)")).values;
-    const out = (await fire(echo, testCallCtx(), vec)) as AVector;
+    const vecSource = symbol.rosetta`t-vec: vector source`(
+      { input: [], output: [z.vector(z.number)] },
+      () => [1, 2],
+    );
+    const out = (await fire(vecSource, testCallCtx())) as AVector;
     expect(out).toBeInstanceOf(AVector);
     expect(isAttested(out)).toBe(true);
     for (const el of out.__vector__) expect(isAttested(el)).toBe(true);

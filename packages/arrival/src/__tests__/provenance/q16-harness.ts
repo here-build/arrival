@@ -26,7 +26,9 @@ import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { AmbientRuntime, mintFrame } from "../../env/AmbientRuntime.js";
 import { execStateOverFrame } from "../../eval/generator-exec.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
-import { schemeToJs } from "../../membrane/rosetta.js";
+import { toJS } from "../../membrane/membrane.js";
+import { jsToScheme } from "../../membrane/rosetta.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 import * as z from "../../common/scheme-zod/index.js";
 import { EnvCapability } from "../../common/capability.js";
 import { AValue } from "../../values/primitives/AValue.js";
@@ -97,27 +99,25 @@ export class RecordingRegistry {
    *  (eager-oracle side) and awaits a real `emitMint` under a distinct RecordId
    *  (retrospective side) — see the module header's design call.
    *
-   *  Uses a test-local `EnvCapability`
-   *  (`symbol.rosetta` verb — the migration target), same `inputRest: z.dynamic` /
-   *  `output: [z.dynamic]` untyped-source shape w1-harness.ts's `SourceRegistry.register`
-   *  uses: args decode to the raw scheme value (no automatic JS conversion), so this
-   *  impl runs `schemeToJs` on each arg itself — mirroring the retired wrapper's
-   *  automatic conversion exactly (research-env.ts's `buildResearchScope` idiom) — and
-   *  the boxed, already-stamped return crosses back out untouched via the output escape
-   *  hatch. */
+   *  Uses a test-local `EnvCapability` with a `symbol.native` verb declared
+   *  `provenance: "source"` — same WORLD-FLIP REBASELINE as w1-harness.ts's
+   *  `SourceRegistry.register` (ruling 2026-08-13): a rosetta impl may not return an
+   *  already-stamped `AValue`, and this fake source's whole point is minting its OWN
+   *  stamps — a scheme-world act, so the native contour (`z.schemeValue` slots, no
+   *  membrane, no auto-mint) is the honest home. Args arrive as raw scheme values;
+   *  the impl runs `toJS` on each itself, as before. */
   async register(env: AmbientRuntime, op: string, shape: RecordingShape): Promise<void> {
     await applyCapability(env, [
       EnvCapability.define(`test/q16-source-${op}`, {
       symbols: (symbol) => ({
-        [op]: symbol.rosetta`${op}: Q16 harness recording source`(
-          { input: [], inputRest: z.dynamic, output: [z.dynamic] },
-          // `any[]` rest param — the research-env.ts `buildResearchScope` boundary: a
-          // `z.dynamic` slot decodes to the raw SchemeValue, and `schemeToJs`'s generic
-          // constraint (`T extends SchemeValue | null | undefined`) can't be satisfied by
-          // an `unknown`-typed rest param without a cast; `any` here is the SAME erasure
-          // `symbol.rosetta`'s own `rawImpl` boundary already performs one layer down.
+        [op]: symbol.native`${op}: Q16 harness recording source`(
+          { input: [], inputRest: z.schemeValue, output: [z.schemeValue], provenance: "source" },
+          // `any[]` rest param — a `z.schemeValue` slot hands over the raw SchemeValue, and
+          // `toJS`'s generic constraint (`T extends SchemeValue | null | undefined`) can't be
+          // satisfied by an `unknown`-typed rest param without a cast; `any` here is the SAME
+          // erasure the factory's own impl boundary already performs one layer down.
           async (...args: any[]): Promise<SchemeValue> => {
-            args = args.map((a) => schemeToJs(a));
+            args = args.map((a) => toJS(a));
             this.calls.set(op, (this.calls.get(op) ?? 0) + 1);
             const callSeq = this.calls.get(op) ?? 1;
             let boxed: unknown;
@@ -150,7 +150,9 @@ export class RecordingRegistry {
                 peeledOut[field] = `${op}.${field}#${id}`;
                 stampIds.push(id);
               }
-              boxed = out;
+              // A native returns a scheme value — box the dict payload here (run-neutral
+              // mint; stamped leaves ride jsToScheme's owned pass-through).
+              boxed = jsToScheme(CONSTANT_CTX, out);
               peeled = peeledOut;
             } else {
               const id = this.mint(op);
@@ -252,7 +254,7 @@ export async function recordRun(
   }
 
   return {
-    egress: schemeToJs(egressBoxed, {}),
+    egress: toJS(egressBoxed, {}),
     egressBoxed,
     eagerCone: collapseProvenance(egressBoxed),
     mints,

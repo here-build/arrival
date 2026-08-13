@@ -49,21 +49,23 @@ import { applyCapability } from "../../__tests__/_fresh-env.js";
 const MINT_A = 500;
 const MINT_B = 600;
 
-// Deterministic fake Rosetta-IN sources, wired via a test-local `EnvCapability`;
-// see golden-prov-infer.test.ts's `inferSources` for the full `z.dynamic`-escape-hatch
-// rationale: it's what keeps a source fixture's ALREADY-stamped return value from
-// being re-encoded, so the mint id it carries survives untouched). Each ignores its
-// arg and returns an already-stamped value (the mint), so grounding is reproducible
-// with no model. Provenance role left at its "source" default (mint-on-invocation),
-// same as default source mint (no pure-pipe).
+// Deterministic fake sources, wired via a test-local `EnvCapability`; see
+// golden-prov-infer.test.ts's `inferSources` for the full WORLD-FLIP REBASELINE
+// rationale (ruling 2026-08-13): a rosetta impl may no longer return an already-
+// stamped AValue, so a fixture minting its OWN stamps is a `symbol.native` with
+// `z.schemeValue` slots — no membrane, no auto-mint, the custom stamp survives by
+// construction. `provenance: "source"` keeps the source role the old rosetta
+// defaulted to (mint-on-invocation; no pure-pipe).
 const sources: EnvSetup = async (env) => {
   const cap = EnvCapability.define("test/grounding-sources", {
     symbols: (symbol, z) => ({
-      "source-a": symbol.rosetta`source-a: fake Rosetta-IN source (A)`({ input: [z.string], output: [z.dynamic] }, () =>
-        sStr("SRC-A", MINT_A),
+      "source-a": symbol.native`source-a: fake source (A)`(
+        { input: [z.schemeValue], output: [z.schemeValue], provenance: "source" },
+        () => sStr("SRC-A", MINT_A),
       ),
-      "source-b": symbol.rosetta`source-b: fake Rosetta-IN source (B)`({ input: [z.string], output: [z.dynamic] }, () =>
-        sStr("SRC-B", MINT_B),
+      "source-b": symbol.native`source-b: fake source (B)`(
+        { input: [z.schemeValue], output: [z.schemeValue], provenance: "source" },
+        () => sStr("SRC-B", MINT_B),
       ) }) });
   await applyCapability(env, [cap]);
 };

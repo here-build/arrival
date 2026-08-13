@@ -62,48 +62,42 @@ const MINT_Y = 600; // infer-y's minted leaf
 const FIELD_ID = 700; // infer-dict's `field` slot id
 const OTHER_ID = 701; // infer-dict's `other` slot id (must be PRUNED by the projection)
 
-// Register deterministic fake Rosetta-IN sources on the run env via a test-local
+// Register deterministic fake sources on the run env via a test-local
 // `EnvCapability`. Each fake source IGNORES its argument and returns an
 // already-stamped value: this is
 // the "data is born at the membrane" behavior — the result's provenance is the mint,
 // independent of the (literal) input. Mirrors lineage-assumptions.test.ts's own
 // capability-authored fixtures (`_lineage-test-helpers.ts`).
 //
-// `output: [z.dynamic]` (the rosetta escape hatch — "impl returns raw, does its own
-// conversion") is load-bearing here, not cosmetic: it makes `run()` (common/symbols/
-// rosetta.ts) skip `z.encode` for this slot and hand the impl's return straight to
-// `jsToScheme(runCtx, result, {}, resultProvenance)` — the EXACT spine
-// `createRosettaWrapper` (rosetta.ts). With no live
-// `ctx.currentInvocation` (a direct `execState` run, same as `runRaw` here),
-// `resultProvenance` falls back to the (empty) input-provenance union, and
-// `jsToScheme`'s "AValue → identity / provenance re-stamp" inbound claim short-circuits
-// on `p === EMPTY_PROVENANCE`, returning the fixture's OWN stamp untouched — byte-
-// identical to host-fn membrane minting. Provenance role left at its "source"
-// default (mint-on-invocation) — the same default (no pure-pipe)
-// carried.
+// WORLD-FLIP REBASELINE (ruling 2026-08-13): these fixtures used to be `symbol.rosetta`
+// + `output: [z.dynamic]` ("impl returns raw, does its own conversion") so the pre-
+// stamped return rode `jsToScheme`'s AValue identity claim untouched. A rosetta impl's
+// return is now a JS-world value — an AValue there doors (`WorldFlipError`). A fake
+// source that mints its OWN stamps genuinely works over scheme values, which is exactly
+// the native contour: `z.schemeValue` slots, no membrane, no auto-mint — the custom
+// stamp survives by construction, and the declared `"source"` role keeps the lineage
+// classifier reading it as a source (the rosetta default it used to inherit).
 const inferSources: EnvSetup = async (env) => {
   const cap = EnvCapability.define("test/infer-sources", {
     symbols: (symbol, z) => ({
       // infer-x / infer-y: scalar sources, each minting a single fixed leaf.
-      "infer-x": symbol.rosetta`infer-x: fake Rosetta-IN scalar source (X)`(
-        { input: [z.string], output: [z.dynamic] },
+      "infer-x": symbol.native`infer-x: fake scalar source (X)`(
+        { input: [z.schemeValue], output: [z.schemeValue], provenance: "source" },
         () => sStr("RESULT-X", MINT_X),
       ),
-      "infer-y": symbol.rosetta`infer-y: fake Rosetta-IN scalar source (Y)`(
-        { input: [z.string], output: [z.dynamic] },
+      "infer-y": symbol.native`infer-y: fake scalar source (Y)`(
+        { input: [z.schemeValue], output: [z.schemeValue], provenance: "source" },
         () => sStr("RESULT-Y", MINT_Y),
       ),
       // infer-dict: a structured source whose fields carry DISTINCT per-field ids, so a
       // field projection has something to narrow FROM (two ids) TO (one id). The raw
-      // `{ field, other }` object isn't itself a `SchemeValue` (TS needs one for a `z.dynamic`
-      // slot) — `jsToScheme(CONSTANT_CTX, …)` at its default EMPTY provenance borrows it as
-      // an AJSObject WITHOUT touching the already-stamped field values (a shallow, lazy-
-      // entries wrap), so this pre-wrap is representationally a no-op vs. handing the raw
-      // object straight to `run()`'s own final `jsToScheme` call (which would otherwise do
-      // the identical borrow itself).
-      "infer-dict": symbol.rosetta`infer-dict: fake Rosetta-IN structured source`(
-        { input: [z.string], output: [z.dynamic] },
-        () => jsToScheme(CONSTANT_CTX, { field: sStr("FV", FIELD_ID), other: sStr("OV", OTHER_ID) }),
+      // `{ field, other }` object isn't itself a `SchemeValue` — a native may construct
+      // scheme values, so `jsToScheme(CONSTANT_CTX, …)` at its default EMPTY provenance
+      // borrows it as an AJSObject WITHOUT touching the already-stamped field values (a
+      // shallow, lazy-entries wrap).
+      "infer-dict": symbol.native`infer-dict: fake structured source`(
+        { input: [z.schemeValue], output: [z.schemeValue], provenance: "source" },
+        () => jsToScheme(CONSTANT_CTX, { field: sStr("FV", FIELD_ID), other: sStr("OV", OTHER_ID) }) as never,
       ) }) });
   await applyCapability(env, [cap]);
 };

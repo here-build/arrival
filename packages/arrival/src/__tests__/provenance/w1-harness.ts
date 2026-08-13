@@ -45,6 +45,8 @@ import { EnvCapability } from "../../common/capability.js";
 import { reachableNodes } from "../../provenance/wireframe/loops.js";
 import type { WireframeGraph, WireframeProgram } from "../../provenance/wireframe/types.js";
 import { isEagerProvenanceOracleEnabled, setEagerProvenanceOracleEnabled } from "../../values/op-helpers.js";
+import { jsToScheme } from "../../membrane/rosetta.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 import type { SchemeValue } from "../../values/types.js";
 import { applyCapability } from "../_fresh-env.js";
 
@@ -79,22 +81,22 @@ export class SourceRegistry {
    *  crossing, and the real membrane mints once per crossing regardless of how many
    *  times a fan/loop calls it (golden-prov-infer.test.ts's rationale, restated).
    *
-   *  Uses a test-local `EnvCapability`
-   *  (`symbol.rosetta` verb — the migration target). `inputRest: z.dynamic` + `output:
-   *  [z.dynamic]` is the untyped-source shape (research-env.ts's `buildResearchScope`
-   *  idiom): args are ignored anyway (the historical `void args`), and the return is an
-   *  ALREADY-STAMPED `AValue` (`stampedNum`/`stampedStr`) whose mint id must survive
-   *  untouched — `z.dynamic` on the output side is the declared no-transform escape
-   *  hatch that skips `z.encode` and hands the impl's return straight to `jsToScheme`
-   *  (golden-prov-infer.test.ts's `inferSources` rationale, restated). */
+   *  Uses a test-local `EnvCapability` with a `symbol.native` verb declared
+   *  `provenance: "source"`. WORLD-FLIP REBASELINE (ruling 2026-08-13): the earlier
+   *  `symbol.rosetta` + `z.dynamic` shape is now an illegal move — a rosetta impl's
+   *  return is a JS-world value, and an ALREADY-STAMPED `AValue` there doors
+   *  (`WorldFlipError`). A fake source that mints its OWN stamps genuinely works over
+   *  scheme values, which is exactly the native contour: `z.schemeValue` slots, no
+   *  membrane, no auto-mint — the custom stamp survives by construction, and the
+   *  declared `"source"` role keeps the lineage classifier reading it as a source. */
   async register(env: AmbientRuntime, op: string, shape: SourceShape): Promise<void> {
     const mint = this.mint.bind(this);
     await applyCapability(env, [
       EnvCapability.define(`test/w1-source-${op}`, {
         symbols: (symbol) => ({
-          [op]: symbol.rosetta`${op}: W1 harness fake Rosetta-IN source`(
-            { input: [], inputRest: z.dynamic, output: [z.dynamic] },
-            (..._args: unknown[]): SchemeValue => {
+          [op]: symbol.native`${op}: W1 harness fake source`(
+            { input: [], inputRest: z.schemeValue, output: [z.schemeValue], provenance: "source" },
+            function (this: CallCtx, ..._args: unknown[]): SchemeValue {
               if (shape === "num") {
                 const id = mint(op);
                 return stampedNum(id, id) as SchemeValue;
@@ -108,8 +110,9 @@ export class SourceRegistry {
                 const id = mint(op);
                 out[field] = stampedStr(`${op}.${field}#${id}`, id);
               }
-              // Host dict payload — dynamic out face re-boxes at the membrane.
-              return out as unknown as SchemeValue;
+              // Dict payload: box under THIS call's runCtx (a native may construct
+              // scheme values; stamped leaves ride jsToScheme's owned pass-through).
+              return jsToScheme(this.runCtx, out) as unknown as SchemeValue;
             },
           ) }) }),
     ]);
