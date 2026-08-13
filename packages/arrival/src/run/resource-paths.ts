@@ -14,8 +14,11 @@
  * Suite:  docs/working-proposals/cqs-reactivity/test-suite-design/SUITE.md
  * Law:    docs/working-proposals/cqs-reactivity/test-suite-design/law-identity/
  *
- * THIS MODULE is the pure algebra + run log + door error. Path producers live
- * on CrossingContract (rosetta only); the chokepoint is the membrane apply.
+ * THIS MODULE is the resourcePaths CHANNEL — run log + door error + CQS apply.
+ * The channel-neutral pure algebra (`ResourcePath`, `pathsOverlap`,
+ * `serializeResourcePath`, …) lives in `./path-algebra.js` and is re-exported
+ * here for compatibility (hermeticity audit P1). Path producers live on
+ * CrossingContract (rosetta only); the chokepoint is the membrane apply.
  *
  * Channel model: unlike cache/effects/reads (opt-in undefined), ordinary
  * RunContext mints always carry a fresh MemoryResourcePathLog so CQS is on by
@@ -30,9 +33,14 @@
  */
 
 import { ArrivalError, type ErrorClass } from "../errors.js";
+import { pathsOverlap, serializeResourcePath, type ResourcePath } from "./path-algebra.js";
 
-/** One named domain location — ordered segments. Empty tuples are out of generators. */
-export type ResourcePath = readonly string[];
+// Re-export the channel-neutral pure algebra so existing external imports of
+// resource-paths.ts stay valid (P1: the channel and its shared vocabulary now
+// live in separate files; this module is the resourcePaths CHANNEL — journal,
+// door, CQS apply — see src/run/path-algebra.ts for the pure half).
+export { anyPathOverlap, findOverlappingPair, pathsOverlap, serializeResourcePath } from "./path-algebra.js";
+export type { ResourcePath } from "./path-algebra.js";
 
 /**
  * One journal entry on a resource-path log. Total order across Q and E is
@@ -49,39 +57,6 @@ export type ResourcePathEvent =
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- authoring ergonomics; runtime is post-decode
 export type ResourcePathFn = (...decodedArgs: any[]) => readonly ResourcePath[];
-
-/** Segment-wise prefix overlap either direction. Empty path never overlaps. */
-export function pathsOverlap(a: ResourcePath, b: ResourcePath): boolean {
-  if (a.length === 0 || b.length === 0) return false;
-  const n = Math.min(a.length, b.length);
-  for (let i = 0; i < n; i++) {
-    if (a[i] !== b[i]) return false;
-  }
-  return true;
-}
-
-/** Any-pair multi-set overlap (door fuel). */
-export function anyPathOverlap(
-  priorEffects: readonly ResourcePath[],
-  thisQueries: readonly ResourcePath[],
-): boolean {
-  return findOverlappingPair(priorEffects, thisQueries) !== undefined;
-}
-
-/** First overlapping (priorE, thisQ) pair, if any — classic door discriminator payload. */
-export function findOverlappingPair(
-  priorEffects: readonly ResourcePath[],
-  thisQueries: readonly ResourcePath[],
-): { priorEffect: ResourcePath; thisQuery: ResourcePath } | undefined {
-  for (const priorEffect of priorEffects) {
-    for (const thisQuery of thisQueries) {
-      if (pathsOverlap(priorEffect, thisQuery)) {
-        return { priorEffect, thisQuery };
-      }
-    }
-  }
-  return undefined;
-}
 
 /**
  * Intervening-door witness: prior Q_a, then later prior E that operationally
@@ -230,17 +205,6 @@ export class ResourcePathConflictError extends ArrivalError {
         `(temporal immutability / inter-query coherence; ${advice})`,
     );
   }
-}
-
-/**
- * Serialize one resource path to a host footprint key (Phase 4).
- * JSON-escapes each segment and joins with `/` so keys are equality-stable and
- * round-trip display-safe (e.g. `["db","projects","a/b"]` → `"db"/"projects"/"a/b"`).
- * Empty path → `"[]"`. Same encoding as door error messages — one vocabulary for
- * read-guard write-sets, confirm-manifest rows, and (later) path-keyed atoms.
- */
-export function serializeResourcePath(path: ResourcePath): string {
-  return path.length === 0 ? "[]" : path.map((s) => JSON.stringify(s)).join("/");
 }
 
 /** Bake-time: path producers only on rosetta. */

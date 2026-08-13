@@ -26,7 +26,7 @@
 
 import { ArrivalError, type ErrorClass } from "../errors.js";
 import type { PathAtomBus } from "./path-atom-bus.js";
-import { serializeResourcePath, type ResourcePath } from "./resource-paths.js";
+import { serializeResourcePath, type ResourcePath } from "./path-algebra.js";
 
 /** One path-keyed cell visible inside a query impl. */
 export interface ReactiveAtomCell {

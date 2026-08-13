@@ -19,7 +19,7 @@ import {
   pathsOverlap,
   serializeResourcePath,
   type ResourcePath,
-} from "./resource-paths.js";
+} from "./path-algebra.js";
 
 // ── Key algebra (X0) ─────────────────────────────────────────────────────────
 

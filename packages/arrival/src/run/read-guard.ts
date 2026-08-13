@@ -12,7 +12,7 @@
  */
 
 import type { EffectEntry } from "./effect-log.js";
-import { serializeResourcePath } from "./resource-paths.js";
+import { serializeResourcePath } from "./path-algebra.js";
 
 /**
  * One observed read. `clock` is this read's 1-BASED position among all reads observed so far
