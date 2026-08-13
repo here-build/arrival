@@ -46,7 +46,7 @@ import { Syntax } from "./Syntax.js";
 import { eqv } from "../values/structural-equal.js";
 import { AListAlike, type SchemeValue } from "../values/types.js";
 import { ANil, nil } from "../values/primitives/ANil.js";
-import { type } from "../utils/typecheck.js";
+import { type } from "../membrane/typecheck.js";
 import { gensym, hidden_prop, is_atom, is_gensym, quote } from "../values/values-repr.js";
 
 // The type()-vs-kind fold for same_atom's discriminator: `a` is always a boxed AValue

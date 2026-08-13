@@ -40,7 +40,7 @@ import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { is_false } from "../../values/value-guards.js";
 import { is_promise } from "../../eval/guards.js";
 import { is_applyable } from "../../values/value-guards.js";
-import { type, typeErrorMessage } from "../../utils/typecheck.js";
+import { type, typeErrorMessage } from "../../membrane/typecheck.js";
 import { heapBudgetMessage } from "../../heap-budget.js";
 import { ArrivalError, attachOffendingValue, CarrierMismatchError } from "../../errors.js";
 import { eqv, structuralEqual } from "../../values/structural-equal.js";

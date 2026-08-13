@@ -35,7 +35,7 @@ import { markInteropPrivate, isMarkedInteropPrivate, arrival } from "../interop-
 import { AOpaqueHandle } from "../../values/primitives/AOpaqueHandle.js";
 import { eq, structuralEqual } from "../../values/structural-equal.js";
 import { printValue } from "../../values/print.js";
-import { type } from "../../utils/typecheck.js";
+import { type } from "../typecheck.js";
 import type { SchemeValue } from "../../values/types.js";
 
 // A host class marked `@arrival.private` — the McpServer/LLMModel stand-in.

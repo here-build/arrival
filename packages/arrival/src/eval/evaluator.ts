@@ -117,7 +117,7 @@ import {
 import { notePotentialRosettaExit } from "./provenance-hooks.js";
 // Shared scheme-visible type-namer (same helper syntax-rules uses for doors) —
 // not-callable doors name the ACTUAL type instead of typeof → "object".
-import { type } from "../utils/typecheck.js";
+import { type } from "../membrane/typecheck.js";
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { Resolver } from "./Resolver.js";
@@ -2558,20 +2558,15 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
 
   // Special-form dispatch, VALUE-FIRST: a head resolving to an AKernelKeyword marker dispatches
   // the handler by the marker's NAME, so special-ness travels with the VALUE (aliasable
-  // via `(define => lambda)`). The string-keyed fallback (`symbol_name`) stays for two
-  // INDEPENDENT reasons, not as a migration path (every form IS keyword-bound in core.ts):
-  //   1. BOOTSTRAP ORDERING — a capability's `prelude` scheme evaluates before its own
-  //      `symbols` keyword bindings resolve (phase-gated prelude scope, kernel.ts's
-  //      `assembleEnv`), so `define`'s first uses (bootstrapping `true`/`false`/… in
-  //      core.ts) hit the fallback with `resolved === undefined`, though `define` is bound.
-  //   2. LEXICAL SHADOWING — `(let ((if 5)) (if))` resolves `if` to the shadowing value,
-  //      and the fallback still dispatches `evalIf` BY NAME: a documented gap
-  //      (kernel-keyword-dispatch.test.ts). Removing it would flip to R7RS-faithful
-  //      un-specialing — a real behavior change no test covers — so it stays until fixed.
+  // via `(define => lambda)`). The string-keyed fallback (`symbol_name`) exists for
+  // LEXICAL SHADOWING — `(let ((if 5)) (if))` resolves `if` to the shadowing value,
+  // and the fallback still dispatches `evalIf` BY NAME: a documented gap
+  // (kernel-keyword-dispatch.test.ts), not a migration path (every form IS keyword-bound
+  // in core.ts). Removing it would flip to R7RS-faithful un-specialing.
   // Resolve via the RAW binding key (`first.__name__`), the SAME key env_get uses, so a
   // hygiene-renamed gensym head resolves identically: a gensym's `__name__` JS-symbol key
   // differs from its string description, so a description lookup would miss and try to CALL
-  // the resolved AKernelKeyword. `symbol_name` stays only the fallback key (bootstrap/shadowing).
+  // the resolved AKernelKeyword. `symbol_name` stays only the fallback key (shadowing).
   if (first instanceof ASymbol) {
     const resolved = ctxResolver(ctx).lookup(first.__name__, ctx.runCtx);
     const handler = resolved instanceof AKernelKeyword ? SPECIAL_FORMS[resolved.name] : SPECIAL_FORMS[symbol_name(first)];
@@ -2694,6 +2689,14 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
     // Publish the composed resolver as the rosetta membrane's env back-channel
     // (require uses currentRunResolver). Meter/strict travel on ctx.runCtx, not
     // this holder.
+    // EXTENT (docs/execution.md §HERMETIC, audit S1): save/restore below is SYNC-ONLY —
+    // it wraps this apply term, not any `await` inside the callee. A consumer reading
+    // `currentRunResolver()` from past an `await` in an async impl would see whichever
+    // resolver is ambient at resume time, not necessarily this one. No such consumer
+    // exists today (verified 2026-08-13: `currentRunResolver` readers are the rosetta
+    // membrane's env back-channel and `require`'s module-eval resolver, both synchronous
+    // reads taken before their own first await) — keep it that way, or key this holder
+    // by run instead of by isolate.
     globalThis.__arrivalRunResolver = ctxResolver(ctx);
     const wrappedArgs = wrapLambdaArgs(args, dynSite);
     let result: SchemeValue;

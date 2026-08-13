@@ -59,7 +59,7 @@ export class AOpaqueHandle extends AValue {
   readonly instance: object;
 
   /** The class face, printed as `#<ClassName>` — `instance.constructor.name`, falling back
-   *  to `"Object"` for a null-prototype/anonymous instance (mirrors utils/typecheck.ts's
+   *  to `"Object"` for a null-prototype/anonymous instance (mirrors membrane/typecheck.ts's
    *  own `foreign:<CtorName>` fallback posture, minus the `foreign:` prefix — this face is
    *  a DELIBERATE, branded exotic, not a leak). */
   readonly className: string;
@@ -112,9 +112,9 @@ export class AOpaqueHandle extends AValue {
    *  entirely (nothing to recurse into) and answers the raw instance directly — the
    *  handle's whole membrane face IS the wrapped object ("arrival/toJS on a semi-opaque
    *  = the instance itself — host gets the live object, it IS host JS"). Every
-   *  `schemeToJs`/`egressAValue` call (reverse-membrane results, nested container elements)
+   *  `toJS`/`egressAValue` call (reverse-membrane results, nested container elements)
    *  unwraps through this ONE term uniformly. `symbol.rosetta` decode does not route args
-   *  through `schemeToJs` (codec vocabulary) — it has its own unwrap chokepoint; see
+   *  through `toJS` (codec vocabulary) — it has its own unwrap chokepoint; see
    *  `buildOpaqueHandleUnwrap` and scheme-zod's `instance(Ctor)`. */
   ["arrival/toJS"](): unknown {
     return this.instance;

@@ -18,7 +18,7 @@
 
 import invariant from "tiny-invariant";
 import dedent from "dedent";
-import { type } from "../../utils/typecheck.js";
+import { type } from "../../membrane/typecheck.js";
 import { type RunContext } from "../../run/RunContext.js";
 import { applyCallback } from "../../values/primitives/ACallable.js";
 import { type CallCtx, makeCallCtx } from "../../symbol/index.js";

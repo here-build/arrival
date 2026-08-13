@@ -48,7 +48,7 @@
 import { EnvCapability } from "../../common/capability.js";
 import dedent from "dedent";
 import { CallCtx } from "../../run/CallCtx.js";
-import { type, typeErrorMessage } from "../../utils/typecheck.js";
+import { type, typeErrorMessage } from "../../membrane/typecheck.js";
 import { attachOffendingValue } from "../../errors.js";
 import { APair } from "../../values/primitives/APair.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";

@@ -47,7 +47,7 @@ import {
   isEagerAccumulationActive,
   type AOrd } from "../../values/op-helpers.js";
 import { checkedMul, mintExact } from "../../values/mint-numeric.js";
-import { type } from "../../utils/typecheck.js";
+import { type } from "../../membrane/typecheck.js";
 import { tf } from "../../values/tagless-final.js";
 
 // ════════════════════════════════════════════════════════════════════════════
