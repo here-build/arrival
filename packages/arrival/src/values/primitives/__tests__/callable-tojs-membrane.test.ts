@@ -3,7 +3,7 @@
  *
  * The protocol returns a HOST-CALLABLE function — the reverse-membrane projection: JS args
  * cross IN through jsToScheme, the apply term runs, the result crosses OUT through
- * schemeToJs. Display is `arrival/print`'s job and stays a `#<procedure:…>` string. The
+ * toJS. Display is `arrival/print`'s job and stays a `#<procedure:…>` string. The
  * previous behavior (toJS answering the print string) made the protocol lie and forced
  * every crossing to special-case callables before dispatch.
  *

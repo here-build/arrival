@@ -22,7 +22,7 @@ import { AJSArray } from "../../../membrane/AJSArray.js";
 import { ADict } from "../../../values/primitives/ADict.js";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { collapseProvenance } from "../../../provenance/provenance-collapse.js";
-import { schemeToJs } from "../../../membrane/rosetta.js";
+import { toJS } from "../../../membrane/membrane.js";
 import * as z from "../../../common/scheme-zod/index.js";
 import type { ResolvingAmbient } from "../../../env/AmbientRuntime.js";
 import type { SchemeValue } from "../../../values/types.js";
@@ -57,13 +57,13 @@ export interface LawEnv {
 /**
  * A fresh capability env armed with the two harness-only bindings every carrier's
  * `mint3` snippet needs — `src` and `borrow-array` — both ANativeProcedures (W8),
- * not rosettas, for the SAME reason: a rosetta's `schemeToJs` would strip each
+ * not rosettas, for the SAME reason: a rosetta's `toJS` would strip each
  * arg's box before the body ever saw it, which is wrong for a verb that needs to
  * re-stamp the ORIGINAL boxed value's exact type/identity. An ANativeProcedure
  * receives already-evaluated, ALREADY-BOXED scheme args — untouched by any membrane unwrap.
  *
  *  - `src`: mints one fresh provenance point per call (P11), independent of argument type.
- *  - `borrow-array`: CROSSES each already-boxed arg out to the JS world (`schemeToJs`) before
+ *  - `borrow-array`: CROSSES each already-boxed arg out to the JS world (`toJS`) before
  *    borrowing the resulting JS array, and unions the consumed args' provenance onto the
  *    CONTAINER. A borrowed store holds JS-world values only (V's hygiene law).
  */
@@ -106,7 +106,7 @@ export async function withLawEnv(): Promise<LawEnv> {
       contract: undefined,
       impl: (args) =>
         new AJSArray(
-          args.map((a) => schemeToJs(a, {})),
+          args.map((a) => toJS(a, {})),
           collapseProvenance(...args),
         ) }),
   );

@@ -42,14 +42,14 @@ import { describe, expect, it } from "vitest";
 import { EnvCapability } from "../../common/capability.js";
 import { exec, execState } from "../../eval/generator-exec.js";
 import { LexicalScope } from "../../eval/LexicalScope.js";
-import { schemeToJs } from "../../membrane/rosetta.js";
+import { toJS } from "../../membrane/membrane.js";
 
 describe("LAW 1 — bare exec rides the self-hosted vocabulary path", () => {
   it("execState(code) with no options has runCtx.vocabulary defined and resolves a base symbol", async () => {
     const state = await execState("(map (lambda (x) (+ x 1)) (list 1 2 3))");
     expect(state.runCtx.vocabulary).toBeDefined();
     expect(state.runCtx.vocabulary?.has("map")).toBe(true);
-    const [result] = state.values.map((v) => schemeToJs(v, {}));
+    const [result] = state.values.map((v) => toJS(v, {}));
     expect(result).toEqual([2, 3, 4]);
   });
 

@@ -1,8 +1,7 @@
 // SRFI-1 — list library *subset* for immutable Arrival. Scheme-bootstrap capability.
 //
-// SINGLE SOURCE: `base-packs.ts` assembles this pack (via `allSrfi`) and evals it
-// (via initBridge's assembleEnv), so this module is the sole definition site for the
-// names it owns.
+// SINGLE SOURCE: `base-packs.ts` assembles this pack (via `allSrfi`) and evals it,
+// so this module is the sole definition site for the names it owns.
 //
 // SCOPE (honest): NOT the full SRFI-1 export set. Agent-reached completion set +
 // parallel-list utilities + arrival extras, under **implement-or-door**:
@@ -32,10 +31,11 @@
 //     take/drop reject non-collection receivers even at n=0.
 //
 // DEPS: the define bodies freely reference
-//   • `not`/`equal?`/`eq?`/`pair?`/`null?`  → scheme/equality   (NATIVE_PACKS)
-//   • `<=`/`<`/`>=`/`=`/`+`/`-`/`*`         → scheme/numeric    (NATIVE_PACKS)
+//   • `not`/`equal?`/`eq?`/`pair?`/`null?`  → scheme/equality
+//   • `<=`/`<`/`>=`/`=`/`+`/`-`/`*`         → scheme/numeric
 //   • `error`                               → scheme/exceptions (BASE_PACKS)
 //   • `cons`/`reverse`/`append`/`member`/`length`/`map`/`apply`/`list` → scheme/lists
+// JS-native packs are not BASE_PACKS roots; deps is enough.
 // `deps: [equality, numeric, exceptions, vectors, lists]` (B3: `vectors` for
 // `%list-nth`'s `vector?`/`vector->list` normalization — see that helper's comment).
 // `car`/`cdr`/`cadr` need no edge: cxr synth is a kernel resolver (define-bake CXR_RE).

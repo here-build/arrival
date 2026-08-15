@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { toSExprString } from "../serializer";
 // Arrival evaluator + value types
-import { exec, execState, EnvCapability, schemeToJs, ANil, LexicalScope } from "@inhuman.tools/arrival";
+import { exec, execState, EnvCapability, toJS, ANil, LexicalScope } from "@inhuman.tools/arrival";
 import { AExact, AString, ASymbol, APair } from "@inhuman.tools/arrival/reflect-internals";
 // Import custom matchers
 import "@inhuman.tools/arrival";
@@ -154,19 +154,19 @@ describe("Arrival Integration", () => {
 
 describe("exec with proper environment", () => {
   it("should execute single expressions and return unwrapped values", async () => {
-    // execState, not exec: a raw AExact reaches schemeToJs directly here (exec's toJS
-    // would collapse it before schemeToJs ever saw it). `forceBigInt` itself is retired —
+    // execState, not exec: a raw AExact reaches toJS directly here (exec's toJS
+    // would collapse it before toJS ever saw it). `forceBigInt` itself is retired —
     // the one-number rework (docs/design-history/arrival-one-number-rework.md) makes every
     // scheme number's JS face a plain `number`; exactness is a box-class distinction
     // (AExact/AInexact), never a payload type — there is no bigint face left to force.
     const { values } = await execState("(+ 1 2)");
-    const result = schemeToJs(values)[0];
+    const result = toJS(values[0]);
     expect(result).toBe(3);
   });
 
   it("should handle multiple expressions (returns first)", async () => {
     const { values: rawResults } = await execState("(+ 1 2) (* 3 4) (quote hello)");
-    const results = schemeToJs(rawResults);
+    const results = rawResults.map((v) => toJS(v));
     expect(results[0]).toBe(3); // First result
     expect(results[1]).toBe(12); // Second result
     // Symbol needs special handling
@@ -193,7 +193,7 @@ describe("exec with proper environment", () => {
   });
 
   it("should handle booleans", async () => {
-    const result = schemeToJs(await exec("#t"))[0];
+    const result = (await exec("#t"))[0];
     expect(result).toBe(true);
   });
 
@@ -216,13 +216,13 @@ describe("exec with proper environment", () => {
     expect(result).toBeInstanceOf(APair);
 
     // Convert to JS values for easier testing
-    const values = schemeToJs(result);
+    const values = toJS(result);
     expect(values).toEqual([2, 3, 4]);
   });
 
   it("should have access to functional composition", async () => {
     const { values } = await execState("((compose (lambda (x) (+ x 1)) (lambda (x) (+ x 1))) 5)");
-    const result = schemeToJs(values)[0];
+    const result = toJS(values[0]);
     expect(result).toBe(7);
   });
 
@@ -235,7 +235,7 @@ describe("exec with proper environment", () => {
       symbols: (symbol) => ({ x: symbol.value`x: test constant`(10), y: symbol.value`y: test constant`(20) }),
     });
     const { values } = await execState("(+ x y)", { scope, capabilities: [envVars] });
-    const result = schemeToJs(values)[0];
+    const result = toJS(values[0]);
     expect(result).toBe(30);
   });
 });

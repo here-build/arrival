@@ -14,12 +14,12 @@
 // looking up by the description silently fell through to (failed) application.
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../env/AmbientRuntime.js";
-import { schemeToJs } from "../../index.js";
 import { execOverFrame as exec } from "../../eval/generator-exec.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";
 
-const val = (rs: readonly unknown[]) => schemeToJs(rs[rs.length - 1] as never, {});
+// `exec` already unwraps via `toJS`.
+const val = (rs: readonly unknown[]) => rs[rs.length - 1];
 
 describe("syntax-rules → kernel special forms (keyword unlock)", () => {
   it("a macro expanding to `if` + `begin` dispatches the kernel handlers", async () => {

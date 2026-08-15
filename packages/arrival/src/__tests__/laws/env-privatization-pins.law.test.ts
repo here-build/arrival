@@ -89,13 +89,10 @@ describe("V0 pin — barrel surface", () => {
         "exec",
         "execState",
         // Membrane: public outbound exit + double-wrap predicate (see index.ts).
-        // `schemeToJs*` remain as temporary aliases; new code uses `toJS`.
         "isSchemeValue",
         "jsToScheme",
         "makeCallCtx",
         "parse",
-        "schemeToJs",
-        "schemeToJsUntyped",
         "symbol",
         "testCallCtx",
         "toJS",

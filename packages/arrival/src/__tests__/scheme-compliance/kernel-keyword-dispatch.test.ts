@@ -11,7 +11,7 @@
 // macro-cut pass, once every special form is a keyword marker).
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../env/AmbientRuntime.js";
-import { schemeToJs } from "../../index.js";
+import { toJS } from "../../index.js";
 import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";
@@ -19,7 +19,7 @@ import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";
 describe("kernel keywords — value-carried special-form dispatch", () => {
   it("(define => lambda) — the alias IS lambda (aliasing falls out of value-carried dispatch)", async () => {
     const env = mintFrame(sandboxedEnv, "kw-alias-lambda");
-    // execState (COMPLEX tier): schemeToJs wants BOXED values — `exec` already unwraps.
+    // execState (COMPLEX tier): toJS wants BOXED values — `exec` already unwraps.
     const { values: results } = await execState(
       `
       (define => lambda)
@@ -27,12 +27,12 @@ describe("kernel keywords — value-carried special-form dispatch", () => {
       `,
       { env },
     );
-    expect(schemeToJs(results[results.length - 1], {})).toBe(36);
+    expect(toJS(results[results.length - 1], {})).toBe(36);
   });
 
   it("define and let are first-class keyword values too — bind one, use the binding as a head", async () => {
     const env = mintFrame(sandboxedEnv, "kw-alias-let");
-    // execState (COMPLEX tier): schemeToJs wants BOXED values — `exec` already unwraps.
+    // execState (COMPLEX tier): toJS wants BOXED values — `exec` already unwraps.
     const { values: results } = await execState(
       `
       (define my-let let)
@@ -40,12 +40,12 @@ describe("kernel keywords — value-carried special-form dispatch", () => {
       `,
       { env },
     );
-    expect(schemeToJs(results[results.length - 1], {})).toBe(30);
+    expect(toJS(results[results.length - 1], {})).toBe(30);
   });
 
   it("unaliased lambda / define / let still dispatch as their kernel handlers", async () => {
     const env = mintFrame(sandboxedEnv, "kw-plain");
-    // execState (COMPLEX tier): schemeToJs wants BOXED values — `exec` already unwraps.
+    // execState (COMPLEX tier): toJS wants BOXED values — `exec` already unwraps.
     const { values: results } = await execState(
       `
       (define sq (lambda (x) (* x x)))
@@ -53,6 +53,6 @@ describe("kernel keywords — value-carried special-form dispatch", () => {
       `,
       { env },
     );
-    expect(schemeToJs(results[results.length - 1], {})).toBe(49);
+    expect(toJS(results[results.length - 1], {})).toBe(49);
   });
 });

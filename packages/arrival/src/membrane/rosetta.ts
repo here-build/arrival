@@ -1,7 +1,7 @@
 /**
- * Scheme↔JS membrane: `schemeToJs` / `jsToScheme` marshal at the FFI boundary and
+ * Scheme↔JS membrane: `toJS` / `jsToScheme` marshal at the FFI boundary and
  * round-trip to identity both ways on values each side owns
- * (`schemeToJs∘jsToScheme = id`, `jsToScheme∘schemeToJs = id`).
+ * (`toJS∘jsToScheme = id`, `jsToScheme∘toJS = id`).
  *
  * `createRosettaWrapper` mints an `ARosettaProcedure` for a host fn — sole live
  * producer is `provenance/replay.ts`'s playback-frame registration via
@@ -20,7 +20,7 @@ import { EOF } from "../values/primitives/EOF.js";
 import { Values } from "../values/primitives/Values.js";
 import { AOpaqueHandle } from "../values/primitives/AOpaqueHandle.js";
 import { isMarkedInteropPrivate } from "./interop-access.js";
-import { R7RSError, UnrecognizedCrossingError, AsyncCrossingError, NoLensError } from "../errors.js";
+import { R7RSError, UnrecognizedCrossingError, AsyncCrossingError, NoLensError, RedundantCrossingError } from "../errors.js";
 import { is_promise } from "../eval/guards.js";
 import { _installCallableMarshal, hostFnToCallable, originalCallableOf, type ACallable } from "../values/primitives/ACallable.js";
 import { ARosettaProcedure } from "../values/primitives/ARosettaProcedure.js";
@@ -32,7 +32,7 @@ import { originalBoxOf } from "./egress-proxy.js";
 import { makeCallCtx, type CallCtx } from "../run/CallCtx.js";
 import { tf } from "../values/tagless-final.js";
 
-interface RosettaOptions {
+export interface RosettaOptions {
   // New field ⇒ classify in `modeKeyOf` (projection-affecting ⇒ new EgressMode;
   // wrapper-call-only ⇒ Exclude list). `_modeKeyExhaustive` fails the compile otherwise.
   returnEither?: boolean;
@@ -40,7 +40,7 @@ interface RosettaOptions {
    * When true, attaches `this.argProvenance` (flat `CallCtx`, not nested `ctx.…`) —
    * one DEEP provenance set per scheme arg (union of every reachable AValue). Needed:
    * `(list a b c)` carries no spine provenance, only elements — shallow `arg.provenance`
-   * misses per-element origins. Computed before schemeToJs strips AValue identity.
+   * misses per-element origins. Computed before toJS strips AValue identity.
    */
   argProvenance?: boolean;
 }
@@ -48,7 +48,7 @@ interface RosettaOptions {
 /**
  * Membrane-crossing cache mode for `options`. Every live crossing resolves to the
  * single non-bare mode `"mem"`; `returnEither`/`argProvenance` are wrapper-call-only
- * (read inside createRosettaWrapper packaging, never by schemeToJsImpl / inbound
+ * (read inside createRosettaWrapper packaging, never by egressUnknown / inbound
  * jsToScheme). Keys both (box, mode, scope) container slots (egress-proxy) and
  * (callable, mode, scope) wrapper slots. Kept as a function so a projection-affecting
  * option still has one classification site — see `_modeKeyExhaustive`.
@@ -95,7 +95,7 @@ export interface InvocationLike {
  * discipline, arg/result marshaling, and the scope-owned cache live on the class.
  * `egressAValue` builds the `MembraneExit` that method wants. Named export kept so
  * call sites spell "host fn for this callable," not "egress this AValue." One cache
- * either way: `schemeToJs` of a dict holding a callable and a direct
+ * either way: `toJS` of a dict holding a callable and a direct
  * `callableToHostFn`/`toJS` under the SAME scope answer the identical wrapper.
  */
 export function callableToHostFn(value: ACallable, options: RosettaOptions): (...args: unknown[]) => unknown {
@@ -106,7 +106,7 @@ export function callableToHostFn(value: ACallable, options: RosettaOptions): (..
  * Boxed-AValue egress via the single crossing protocol `arrival/toJS(exit)`.
  * Native containers (ADict/APair/AVector) thread `exit.element` through recursive
  * projection under the PINNED exporting region scope; scalars unwrap. Shared by
- * schemeToJsImpl and membrane.ts#toJS so the two exits cannot drift.
+ * the public `toJS` door and container-element recursion so they cannot drift.
  *
  * Scope is pinned ONCE here (both rosetta crossings run inside the live
  * `withRegionScope` window); every lazy element materialization re-enters via
@@ -117,13 +117,13 @@ export function callableToHostFn(value: ACallable, options: RosettaOptions): (..
 export function egressAValue(value: AValue, options: RosettaOptions): unknown {
   const pinned = currentRegionScope() ?? DETACHED_SCOPE;
   return value["arrival/toJS"]({
-    element: (el: unknown) => withRegionScope(pinned, () => schemeToJsImpl(el, options)),
+    element: (el: unknown) => withRegionScope(pinned, () => egressUnknown(el, options)),
     modeKey: modeKeyOf(options),
     cache: pinned.egressProxies });
 }
 
-/** Terminal-passthrough door (P5): every AValue subclass needs an explicit branch in
- *  schemeToJsImpl — silent return would leak internal repr. Fail at the crossing
+/** Terminal-passthrough door (P5): a boxed shape with no `arrival/toJS` term —
+ *  silent return would leak internal repr. Fail at the crossing
  *  (P5, docs/PRINCIPLES.md). Named + exported for `instanceof` in catch. */
 export function schemeToJsUnrecognizedDoor(value: object): Error {
   return new UnrecognizedCrossingError(value.constructor?.name ?? "<anonymous object>");
@@ -134,7 +134,7 @@ export function schemeToJsUnrecognizedDoor(value: object): Error {
  * resume) exits as a same-class host `Error` — message preserved, irritants crossed
  * elementwise, stack carried. A RAISED error never touches this arm (throw path).
  * R7RSError is a host `Error` subclass, NOT an AValue (`z.error` exists because of
- * that — env/r7rs/exceptions.ts). Shared by schemeToJsImpl and membrane.toJS
+ * that — env/r7rs/exceptions.ts). Shared by `toJS` and element recursion
  * (egressAValue law).
  */
 export function errorToHost(value: R7RSError, exitEl: (el: unknown) => unknown): R7RSError {
@@ -145,38 +145,42 @@ export function errorToHost(value: R7RSError, exitEl: (el: unknown) => unknown):
 }
 
 /**
- * Recursive body behind `schemeToJs`. `unknown`-typed: recursion crosses raw JS
- * intermediates no single generic can describe. LAZY: every boxed shape delegates to
- * its own `arrival/toJS` (P7). Containers egress as lazy readonly proxies
- * (egress-proxy.ts); borrowed AJSObject/AJSArray unwrap to `source` IDENTITY;
- * callables become inverse-rosetta region wrappers through the same dispatch
- * (ACallable extends AValue). HERE: only rosetta-specific surface — raw JS
- * containers elementwise, sequence-op-term preserve, FFI allow-list, P5 door.
+ * Membrane-private recursive walker behind `MembraneExit.element` (and R7RSError
+ * irritants). `unknown`-typed: recursion may see raw JS intermediates no public
+ * generic can describe. Not a public peel — mixed-world arrays/objects here are
+ * an upstream boxing bug; the public door is {@link toJS}.
+ *
+ * LAZY: every boxed shape delegates to its own `arrival/toJS` (P7). Containers
+ * egress as lazy readonly proxies (egress-proxy.ts); borrowed AJSObject/AJSArray
+ * unwrap to `source` IDENTITY; callables become inverse-rosetta region wrappers
+ * through the same dispatch (ACallable extends AValue). HERE: only membrane-
+ * internal surface — raw JS containers elementwise, sequence-op-term preserve,
+ * FFI allow-list, P5 door.
  */
-function schemeToJsImpl(value: unknown, options: RosettaOptions): unknown {
-  // null/undefined echo unchanged (matches AUnwrap non-SchemeValue arm).
+function egressUnknown(value: unknown, options: RosettaOptions): unknown {
+  // null/undefined echo unchanged.
   if (value == null) return value;
 
   // Every boxed shape — including a callable — through `egressAValue` (shared with
-  // membrane.toJS). Containers thread MembraneExit for recursive projection; callables
+  // public `toJS`). Containers thread MembraneExit for recursive projection; callables
   // mint region-scoped host wrappers; scalars unwrap. Proxies: identity per
   // (box, mode, scope) for membrane, per box for bare.
   if (value instanceof AValue) {
     return egressAValue(value, options);
   }
 
-  // RAW containers: marshalling / trace / MCP may hand raw arrays/objects whose
-  // ELEMENTS are boxed — cross elementwise so no AValue leaks into JSON.
+  // RAW containers: element recursion / error irritants may hand raw arrays/objects
+  // whose ELEMENTS are boxed — cross elementwise so no AValue leaks into JS.
   if (Array.isArray(value)) {
-    return value.map((record) => schemeToJsImpl(record, options));
+    return value.map((record) => egressUnknown(record, options));
   }
   if (typeof value === "object") {
     if (Object.getPrototypeOf(value) === Object.getPrototypeOf({}) || Object.getPrototypeOf(value) === null) {
       // `Object.entries` drops symbol keys — enumerate string keys then own symbols.
       const out: Record<string | symbol, unknown> = {};
-      for (const key of Object.keys(value)) out[key] = schemeToJsImpl((value as Record<string, unknown>)[key], options);
+      for (const key of Object.keys(value)) out[key] = egressUnknown((value as Record<string, unknown>)[key], options);
       for (const sym of Object.getOwnPropertySymbols(value)) {
-        out[sym] = schemeToJsImpl((value as Record<symbol, unknown>)[sym], options);
+        out[sym] = egressUnknown((value as Record<symbol, unknown>)[sym], options);
       }
       return out;
     }
@@ -190,8 +194,12 @@ function schemeToJsImpl(value: unknown, options: RosettaOptions): unknown {
     }
     // R7RSError AS A VALUE — raised errors take the throw path.
     if (value instanceof R7RSError) {
-      return errorToHost(value, (el) => schemeToJsImpl(el, options));
+      return errorToHost(value, (el) => egressUnknown(el, options));
     }
+    // Scheme-orphan BEFORE branded-host — same order as inbound. EOF is already a
+    // host-class singleton; projecting `#<EOF>` via INTEROP_BOUNDARY would invent
+    // a string face that cannot round-trip (jsToScheme("#<EOF>") → AString).
+    if (value instanceof EOF) return value;
     // Raw FFI passthrough — never boxed (mirrors inbound exotic carve-out).
     if (
       value instanceof Uint8Array ||
@@ -203,7 +211,7 @@ function schemeToJsImpl(value: unknown, options: RosettaOptions): unknown {
       return value;
     }
     // `@arrival.private` host classes (LLMModel, McpServer, ChatSession, …) — opaque
-    // handles. Trace serialization / schemeToJs must not throw: project to the class face
+    // handles. Trace serialization / toJS must not throw: project to the class face
     // (`#<LLMModel>`), same as scheme-ward printing. Structural poke stays blocked.
     if (isMarkedInteropPrivate(value)) {
       const name = (value as { constructor?: { name?: string } }).constructor?.name ?? "Object";
@@ -222,26 +230,28 @@ function schemeToJsImpl(value: unknown, options: RosettaOptions): unknown {
 }
 
 /**
- * Scheme → JS membrane exit. Honestly typed via `AUnwrap<T>`: `T extends SchemeValue`
- * returns exact JS shape; null/undefined echo. ONE sanctioned narrowing (P3) over
- * schemeToJsImpl — cast target is the conditional contract, never `as any`.
+ * Public Scheme → JS exit. Honestly typed via `AUnwrap<T>`. Optional
+ * `RosettaOptions` keeps region-scoped membrane crossings working; default `{}`
+ * is byte-identical to a direct `arrival/toJS` protocol call under default mode.
+ *
+ * STRICT: only interpreter-minted {@link SchemeValue}s. Raw JS is already on
+ * the JS side — `RedundantCrossingError`. Mixed-world walk of raw arrays/objects
+ * is not a public behavior.
  */
-export function schemeToJs<T extends SchemeValue | null | undefined>(
-  value: T,
-  options: RosettaOptions = {},
-): T extends SchemeValue ? AUnwrap<T> : T {
-  return schemeToJsImpl(value, options) as T extends SchemeValue ? AUnwrap<T> : T;
-}
-
-/**
- * Scheme → JS for UNTYPED crossings — static type unknowable at the call site
- * (untyped `z.procedure` HOF return, duck-typed parse tree, mixed raw/boxed).
- * Runtime IDENTICAL to {@link schemeToJs}; type contract is `unknown` in/out.
- * Prefer typed {@link schemeToJs} when a codec names the shape; using this to
- * silence a typeable value is the smell (`grep schemeToJsUntyped` = audit list).
- */
-export function schemeToJsUntyped(value: unknown, options: RosettaOptions = {}): unknown {
-  return schemeToJsImpl(value, options);
+export function toJS<T extends SchemeValue>(value: T, options: RosettaOptions = {}): AUnwrap<T> {
+  // Multiple values → JS array of unwrapped elements. Values sits outside AValue.
+  if (value instanceof Values) return value.__values__.map((v) => toJS(v, options)) as AUnwrap<T>;
+  // R7RS error AS A VALUE exits as same-class host Error via shared arm.
+  // Raised errors take the throw path. Irritants recurse through the private walker
+  // (static type unknowable).
+  if (value instanceof R7RSError) {
+    return errorToHost(value, (el) => egressUnknown(el, options)) as AUnwrap<T>;
+  }
+  // EOF is a host-class singleton (not an AValue). Identity is the only face
+  // that keeps jsToScheme∘toJS = id; inbound already claims it that way.
+  if (value instanceof EOF) return value as AUnwrap<T>;
+  if (value instanceof AValue) return egressAValue(value, options) as AUnwrap<T>;
+  throw new RedundantCrossingError("toJS");
 }
 
 /** Teaching door (P5): bare Promise reaching jsToScheme. Sanctioned paths settle first
@@ -313,7 +323,7 @@ export const OWNED_ARTIFACT_CLAIMS: readonly InboundClaim[] = [
   {
     // R9 RE-ADMISSION (docs/membrane.md §INBOUND / RULINGS.md R9): a value that crossed
     // OUT as an egress-proxy (bare/membrane/gated — all register in PROXY_ORIGIN) and
-    // crosses back IN re-admits as its ORIGINAL box — `jsToScheme(schemeToJs(box)) === box`.
+    // crosses back IN re-admits as its ORIGINAL box — `jsToScheme(toJS(box)) === box`.
     // Phase 1 before phase 2's array row is load-bearing (R9 proxy over vector is
     // Array.isArray-true). Re-dispatches through jsToSchemeImpl → AValue re-stamp row;
     // do NOT reimplement re-stamping here.
@@ -539,7 +549,7 @@ export function bigintToNumber(value: bigint): number {
 
 /**
  * Mint an `ARosettaProcedure` for a host-side rosetta body. Env storage is a first-class
- * callable value, never a bare async fn. Spine: region open → schemeToJs → host fn →
+ * callable value, never a bare async fn. Spine: region open → toJS → host fn →
  * close → mint provenance → jsToScheme. Sole live producer: replay.ts playback-frame
  * registration (untyped payload answers; no contract/codec layer).
  */
@@ -551,7 +561,7 @@ export const createRosettaWrapper = ({ fn }: RosettaFunction): ARosettaProcedure
     contract: undefined,
     strategy: undefined,
     hostApply: async (schemeArgs, callCtx) => {
-      // Collect provenance from AValue inputs before schemeToJs strips identity.
+      // Collect provenance from AValue inputs before toJS strips identity.
       // `Extract<SchemeValue, AValue>`: non-AValue SchemeValue members fail reverse
       // assignability for the TS filter predicate.
       const inputAValues = schemeArgs.filter((a): a is Extract<SchemeValue, AValue> => a instanceof AValue);
@@ -562,7 +572,7 @@ export const createRosettaWrapper = ({ fn }: RosettaFunction): ARosettaProcedure
       const inv = invocation.currentInvocation;
       // Region discipline: this ONE call (here → fn.apply settling) is the "symbol
       // invocation" any scheme callable among schemeArgs region-binds to. Open before
-      // marshaling (callable wrappers mint during schemeToJs, read ambient scope);
+      // marshaling (callable wrappers mint during toJS, read ambient scope);
       // close when fn settles (throws if a reverse call is still pending).
       const scope = openRegionScope({ runCtx, dynSite: inv });
       try {
@@ -570,7 +580,7 @@ export const createRosettaWrapper = ({ fn }: RosettaFunction): ARosettaProcedure
         try {
           rawResult = await fn.apply(
             makeCallCtx(runCtx, inv, undefined),
-            withRegionScope(scope, () => schemeArgs.map((arg) => schemeToJs(arg))),
+            withRegionScope(scope, () => schemeArgs.map((arg) => toJS(arg))),
           );
         } finally {
           closeRegionScope(scope);
@@ -601,4 +611,4 @@ export const createRosettaWrapper = ({ fn }: RosettaFunction): ARosettaProcedure
 // mode-keyed region-disciplined projection stays callableToHostFn above.
 _installCallableMarshal({
   jsToScheme: (runCtx, value) => jsToScheme(runCtx, value, {}),
-  schemeToJs: (value) => schemeToJsUntyped(value) });
+  toJS: (value) => toJS(value) });

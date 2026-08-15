@@ -9,7 +9,7 @@
  * `fromJs` function arm, and a `symbol.rosetta` impl RETURNING a function — one
  * mechanism, three entry points) becomes a genuine scheme-callable
  * `ARosettaProcedure` (`ACallable.ts`'s `hostFnToCallable`): when scheme applies it,
- * args cross scheme→js (default-options `schemeToJs`), the host fn runs, and its
+ * args cross scheme→js (default-options `toJS`), the host fn runs, and its
  * result crosses js→scheme (under the CALLING invocation's run) — promise-tolerant.
  *
  * This completes the callable bifunctor `ACallable.ts`'s `hostProjectionOf` already

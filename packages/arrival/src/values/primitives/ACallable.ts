@@ -58,7 +58,7 @@ const callableEquals = (self: object, other: unknown): boolean => other === self
 // membrane/rosetta.ts installs at its own module init. Before that init: door loudly (P5).
 interface CallableMarshal {
   jsToScheme: (runCtx: RunContext, value: unknown) => unknown;
-  schemeToJs: (value: unknown) => unknown;
+  toJS: (value: SchemeValue) => unknown;
 }
 let marshal: CallableMarshal | undefined;
 /** Module-init hook for membrane/rosetta.ts ONLY — not a public extension point. */
@@ -118,7 +118,7 @@ export function hostFnToCallable(
             "jsToScheme: a host-function callable applied before membrane init (membrane/rosetta.ts not loaded)",
           );
         }
-        const jsArgs = args.map((a) => marshal!.schemeToJs(a));
+        const jsArgs = args.map((a) => marshal!.toJS(a));
         const result = fn(...jsArgs);
         return result instanceof Promise
           ? result.then((r) => marshal!.jsToScheme(callCtx.runCtx, r) as SchemeValue)
@@ -143,7 +143,7 @@ const WRAPPER_KEY: WrapperKey = "mem";
  * Build (once per (callable, scope)) the host-callable reverse-membrane wrapper.
  * Region-disciplined: closes over scope AT MINT TIME, never re-reads ambient later.
  * `exit` when supplied is reused VERBATIM for the result leg; bare falls back to
- * marshal's default-options schemeToJs.
+ * marshal's default-options toJS.
  */
 function hostProjectionOf(self: ACallable, exit?: MembraneExit): (...args: unknown[]) => unknown {
   const scope = currentRegionScope() ?? DETACHED_SCOPE;
@@ -167,7 +167,7 @@ function hostProjectionOf(self: ACallable, exit?: MembraneExit): (...args: unkno
       // Re-entry trace nests under the exporting invocation.
       const raw = await withDynamicCallSite(scope.dynSite, () => applyCallback(self, schemeArgs, callCtx));
       invariant(!isBounceMarker(raw), "arrival/toJS: a reverse-membrane call resolved to a bounce token");
-      return withRegionScope(scope, () => (exit === undefined ? marshal!.schemeToJs(raw) : exit.element(raw)));
+      return withRegionScope(scope, () => (exit === undefined ? marshal!.toJS(raw) : exit.element(raw)));
     });
   byKey.set(WRAPPER_KEY, wrapper);
   // Register reverse-admission mapping at mint time (before returning).

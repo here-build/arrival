@@ -18,7 +18,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { CROSSINGS, VIOLATIONS } from "../../__tests__/laws/_tables/crossings.js";
 import { fromJS, toJS, isSchemeValue } from "../membrane.js";
-import { jsToScheme, schemeToJs, schemeToJsUntyped, modeKeyOf } from "../rosetta.js";
+import { jsToScheme, modeKeyOf } from "../rosetta.js";
+
 import { exec } from "../../eval/generator-exec.js";
 import { setMembraneWarnings } from "../membrane-warn.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
@@ -35,7 +36,7 @@ import { ADict } from "../../values/primitives/ADict.js";
 import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
 import { ARosettaProcedure } from "../../values/primitives/ARosettaProcedure.js";
 import { closeRegionScope, openRegionScope, withRegionScope } from "../region-scope.js";
-import { RegionEscapeError } from "../../errors.js";
+import { RedundantCrossingError, RegionEscapeError } from "../../errors.js";
 import { AJSArray } from "../AJSArray.js";
 import { AJSObject } from "../AJSObject.js";
 import type { SchemeValue } from "../../values/types.js";
@@ -206,7 +207,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
       // list's array face, matching what a non-empty list does and what the compiled
       // world emits for '() (the differential oracle compares through this face).
       it(roundTripTitle, () => {
-        expect(schemeToJs(jsToScheme(CONSTANT_CTX, null))).toEqual([]);
+        expect(toJS(jsToScheme(CONSTANT_CTX, null))).toEqual([]);
       });
       it(provenanceTitle, () => {
         const stamped = jsToScheme(CONSTANT_CTX, null, {}, PROV);
@@ -349,7 +350,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         expect(exitJS(fromJS(obj))).toBe(obj);
       });
       // Regression, carried from rosetta-environment.test.ts (retired in the 2026-07-09
-      // suite consolidation): `Object.entries` in schemeToJs used to drop symbol keys, so
+      // suite consolidation): `Object.entries` in toJS used to drop symbol keys, so
       // opaque/private backing data on objects crossing the membrane was silently lost.
       // String keys must be unchanged; symbol-keyed slots must survive the round-trip.
       it(`${roundTripTitle} — symbol-keyed properties survive alongside string keys`, () => {
@@ -383,26 +384,17 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         expect(fromJS(dv)).toBe(dv);
       });
       it(exitTitle, () => {
-        // Never boxed on entry, so there is nothing to unbox on exit. Use rosetta's
-        // schemeToJs (not membrane.toJS): toJS's strict door refuses a value that never
-        // crossed AS a scheme value in the first place — schemeToJs's generic fallback
-        // just returns it unchanged, matching the "raw" exit form honestly.
+        // Never boxed on entry — there is no SchemeValue to exit. toJS is a
+        // strict door (raw FFI identity stays on the JS side).
         const u8 = new Uint8Array([1, 2, 3]);
-        // Cast: `fromJS`'s `FromJSResult` (membrane.ts) is a boundary-wide union
-        // (Uint8Array/ArrayBuffer/DataView/Function/Promise, none SchemeValue) —
-        // `schemeToJs<T extends SchemeValue|null|undefined>` can't infer T from it. The
-        // comment above already establishes the runtime-guaranteed shape: never boxed on
-        // entry, schemeToJs's generic fallback returns it unchanged.
-        expect(schemeToJs(fromJS(u8) as SchemeValue)).toBe(u8);
+        expect(isSchemeValue(fromJS(u8))).toBe(false);
+        expect(() => toJS(fromJS(u8) as never)).toThrow(RedundantCrossingError);
       });
       it(roundTripTitle, () => {
         const u8 = new Uint8Array([1, 2, 3]);
-        // Cast: `fromJS`'s `FromJSResult` (membrane.ts) is a boundary-wide union
-        // (Uint8Array/ArrayBuffer/DataView/Function/Promise, none SchemeValue) —
-        // `schemeToJs<T extends SchemeValue|null|undefined>` can't infer T from it. The
-        // comment above already establishes the runtime-guaranteed shape: never boxed on
-        // entry, schemeToJs's generic fallback returns it unchanged.
-        expect(schemeToJs(fromJS(u8) as SchemeValue)).toBe(u8);
+        // Identity is the inbound FFI passthrough, not an egress peel.
+        expect(fromJS(u8)).toBe(u8);
+        expect(() => toJS(u8 as never)).toThrow(RedundantCrossingError);
       });
       it(provenanceTitle, () => {
         // FFI-identity named superset (P4): the binary never boxes, so a supplied
@@ -562,7 +554,6 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
       // permissive/borrowing (null → nil, [] → borrowed vector) — projection∘borrow, not id.
       it("exit: (list) — the empty list — as an empty array, not null (resolved: nil-as-array)", () => {
         expect(toJS(nil)).toEqual([]);
-        expect(schemeToJs(nil)).toEqual([]);
       });
       break;
     }
@@ -741,12 +732,12 @@ describe("R9 lazy egress laws — containers exit as ref-tracking proxies (RULIN
   });
 });
 
-describe("R9 RE-ADMISSION — jsToScheme∘schemeToJs = id on containers (the bifunctor law closes the container leg, egress-proxy.ts's PROXY_ORIGIN)", () => {
+describe("R9 RE-ADMISSION — jsToScheme∘toJS = id on containers (the bifunctor law closes the container leg, egress-proxy.ts's PROXY_ORIGIN)", () => {
   const PROV = new Set<number>([777]);
 
   it("list: round-trips to the SAME box (eq?/reference); car/cdr still work", () => {
     const list = APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2)]) as APair<AExact, any>;
-    const out = schemeToJsUntyped(list);
+    const out = toJS(list);
     const back = jsToScheme(CONSTANT_CTX, out);
     expect(back).toBe(list);
     expect((back as APair<AExact, any>).car).toBe(list.car);
@@ -754,21 +745,21 @@ describe("R9 RE-ADMISSION — jsToScheme∘schemeToJs = id on containers (the bi
 
   it("vector: round-trips to the SAME box", () => {
     const vec = new AVector([new AExact(1), new AExact(2)]);
-    const out = schemeToJsUntyped(vec);
+    const out = toJS(vec);
     const back = jsToScheme(CONSTANT_CTX, out);
     expect(back).toBe(vec);
   });
 
   it("dict: round-trips to the SAME box", () => {
     const dict = new ADict([[new ASymbol("a"), new AExact(1)]]);
-    const out = schemeToJsUntyped(dict);
+    const out = toJS(dict);
     const back = jsToScheme(CONSTANT_CTX, out);
     expect(back).toBe(dict);
   });
 
   it("re-admission goes through the SAME 'AValue → identity / provenance re-stamp' row: a fresh provenance stamp on re-entry unions onto the original box's own lineage, never overwrites", () => {
     const vec = new AVector([new AExact(1)]);
-    const out = schemeToJsUntyped(vec);
+    const out = toJS(vec);
     const stamped = jsToScheme(CONSTANT_CTX, out, {}, PROV) as AVector;
     // A fresh stamp forces a re-stamp (not the identity fast path) — but it's still the
     // registry's EXISTING "AValue → identity" row doing the work (re-dispatched with the
@@ -785,7 +776,7 @@ describe("R9 RE-ADMISSION — jsToScheme∘schemeToJs = id on containers (the bi
 
   it("an array-shaped R9 proxy (a vector's egress) is re-admitted as the ORIGINAL vector, not re-borrowed as an AJSArray — the ordering-is-load-bearing row placement", () => {
     const vec = new AVector([new AExact(9)]);
-    const out = schemeToJsUntyped(vec); // Array.isArray(out) is true — the proxy target is `[]`
+    const out = toJS(vec); // Array.isArray(out) is true — the proxy target is `[]`
     expect(Array.isArray(out)).toBe(true);
     const back = jsToScheme(CONSTANT_CTX, out);
     expect(back).toBeInstanceOf(AVector);
@@ -973,9 +964,9 @@ describe("egress membrane exit — the two modes and their identity laws", () =>
     new ADict(entries.map(([k, v]) => [new ASymbol(k), v] as const),
     );
 
-  it("nested callable crosses as a host FUNCTION via schemeToJs AND membrane.toJS (the flip, pinned)", async () => {
+  it("nested callable crosses as a host FUNCTION via toJS AND membrane.toJS (the flip, pinned)", async () => {
     const d = dictOf([["f", native("a")]]);
-    const viaRosetta = schemeToJs(d) as Record<string, unknown>;
+    const viaRosetta = toJS(d) as Record<string, unknown>;
     expect(typeof viaRosetta.f).toBe("function");
     // Invoking round-trips through the reverse membrane (DETACHED scope — always open).
     await expect((viaRosetta.f as () => Promise<unknown>)()).resolves.toBe(7);
@@ -989,9 +980,9 @@ describe("egress membrane exit — the two modes and their identity laws", () =>
     const inner = dictOf([["f", native("deep")]]);
     const outerDict = dictOf([["inner", inner]]);
     const outerVec = new AVector([inner]);
-    const viaDict = schemeToJs(outerDict) as { inner: { f: unknown } };
+    const viaDict = toJS(outerDict) as { inner: { f: unknown } };
     expect(typeof viaDict.inner.f).toBe("function");
-    const viaVec = schemeToJs(outerVec) as unknown as ReadonlyArray<{ f: unknown }>;
+    const viaVec = toJS(outerVec) as unknown as ReadonlyArray<{ f: unknown }>;
     expect(typeof viaVec[0].f).toBe("function");
     // Bare protocol answers the SAME faithful crossing (previously the print string —
     // the display/membrane conflation this law now pins the fix of). Display is
@@ -1014,8 +1005,8 @@ describe("egress membrane exit — the two modes and their identity laws", () =>
     const bare1 = d["arrival/toJS"]();
     const bare2 = d["arrival/toJS"]();
     expect(bare1).toBe(bare2);
-    const mem1 = schemeToJs(d);
-    const mem2 = schemeToJs(d);
+    const mem1 = toJS(d);
+    const mem2 = toJS(d);
     expect(mem1).toBe(mem2); // same DETACHED scope, same mode
     expect(bare1).not.toBe(mem1);
     // Wrapper-call-only options never split the mode — and since forceBigInt (the one
@@ -1028,17 +1019,17 @@ describe("egress membrane exit — the two modes and their identity laws", () =>
   it("membrane proxies are SCOPE-owned: a second invocation mints its own; the closed scope's wrapper doors", async () => {
     const d = dictOf([["f", native("scoped")]]);
     const scopeA = openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined });
-    const proxyA = withRegionScope(scopeA, () => schemeToJs(d)) as Record<string, unknown>;
+    const proxyA = withRegionScope(scopeA, () => toJS(d)) as Record<string, unknown>;
     const fnA = proxyA.f as () => Promise<unknown>; // materializes lazily — under the PINNED scopeA
     closeRegionScope(scopeA);
     await expect(fnA()).rejects.toThrow(RegionEscapeError); // A's discipline, not silent CONSTANT_CTX
     const scopeB = openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined });
-    const proxyB = withRegionScope(scopeB, () => schemeToJs(d)) as Record<string, unknown>;
+    const proxyB = withRegionScope(scopeB, () => toJS(d)) as Record<string, unknown>;
     expect(proxyB).not.toBe(proxyA); // (box, mode, SCOPE) — never resurrect A's projection
     await expect((proxyB.f as () => Promise<unknown>)()).resolves.toBe(7); // B is live
     closeRegionScope(scopeB);
     // Scope-less egress (DETACHED singleton) is a third, distinct identity.
-    const detached = schemeToJs(d);
+    const detached = toJS(d);
     expect(detached).not.toBe(proxyA);
     expect(detached).not.toBe(proxyB);
   });
@@ -1057,7 +1048,7 @@ describe("egress membrane exit — the two modes and their identity laws", () =>
 
   it("ADict pending entry settling to a callable: host FN through BOTH exits", async () => {
     const membraneDict = dictOf([["f", Promise.resolve<SchemeValue>(native("pend-m"))]]);
-    const viaMembrane = schemeToJs(membraneDict) as Record<string, unknown>;
+    const viaMembrane = toJS(membraneDict) as Record<string, unknown>;
     expect(typeof (await viaMembrane.f)).toBe("function");
     const bareDict = dictOf([["f", Promise.resolve<SchemeValue>(native("pend-b"))]]);
     const viaBare = bareDict["arrival/toJS"]() as Record<string, unknown>;
@@ -1068,19 +1059,19 @@ describe("egress membrane exit — the two modes and their identity laws", () =>
     const f = native("wrap");
     const d = dictOf([["f", f]]);
     const scope = openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined });
-    const p0 = withRegionScope(scope, () => schemeToJs(d)) as Record<string, unknown>;
+    const p0 = withRegionScope(scope, () => toJS(d)) as Record<string, unknown>;
     const w0 = p0.f;
-    const w0again = (withRegionScope(scope, () => schemeToJs(d)) as Record<string, unknown>).f;
+    const w0again = (withRegionScope(scope, () => toJS(d)) as Record<string, unknown>).f;
     expect(typeof w0).toBe("function");
     expect(w0).toBe(w0again); // same (callable, scope, mem) — the wrapper closes over options
     closeRegionScope(scope);
   });
 
-  it("THE TWO-CACHES SPLIT IS DEAD: schemeToJs of a dict holding a callable answers the SAME wrapper as a direct protocol call on that callable, under the same scope (ACallable.ts's hostProjectionOf is the ONE cache)", async () => {
+  it("THE TWO-CACHES SPLIT IS DEAD: toJS of a dict holding a callable answers the SAME wrapper as a direct protocol call on that callable, under the same scope (ACallable.ts's hostProjectionOf is the ONE cache)", async () => {
     const f = native("unified");
     const d = dictOf([["f", f]]);
     const scope = openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined });
-    const viaDict = (withRegionScope(scope, () => schemeToJs(d)) as Record<string, unknown>).f;
+    const viaDict = (withRegionScope(scope, () => toJS(d)) as Record<string, unknown>).f;
     const viaDirect = withRegionScope(scope, () => f["arrival/toJS"]());
     expect(typeof viaDict).toBe("function");
     expect(viaDict).toBe(viaDirect);

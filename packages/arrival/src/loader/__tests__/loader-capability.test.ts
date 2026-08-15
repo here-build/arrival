@@ -26,7 +26,7 @@
 import { describe, expect, it } from "vitest";
 
 import { exec, execState, execInFrame } from "../../eval/generator-exec.js";
-import { schemeToJs } from "../../membrane/rosetta.js";
+import { toJS } from "../../membrane/membrane.js";
 import type { SchemeValue } from "../../values/types.js";
 import { EnvCapability } from "../../common/capability.js";
 import { buildVocabulary } from "../../env/vocabulary.js";
@@ -45,13 +45,8 @@ import type { RunEnv } from "../loader.js";
 // because the parameter is required at the type level (`EvalSchemeInto`, no optional callers).
 const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
 
-/** Deep-unwrap an `exec` result for assertion. `exec` returns plain-JS-observable values
- *  (containers egress as lazy proxies), typed `unknown`; `schemeToJs`'s strict parameter
- *  (`SchemeValue | null | undefined`) is the membrane law's face. The narrow is the SAME
- *  seam every loader consumer crosses today (chain-env's `schemeToJs(last, {})`) — the
- *  proxy IS schemeToJs-consumable at runtime; the static story lands with the in-flight
- *  AListAlike propagation. */
-const plain = (v: unknown): unknown => schemeToJs(v as SchemeValue, {});
+/** Unwrap an `execState` boxed value. `exec` results are already JS — do not re-cross. */
+const boxed = (v: SchemeValue): unknown => toJS(v);
 
 const files = (table: Record<string, string>) =>
   loaderFromResolver((path) => {
@@ -77,7 +72,7 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
     const results = await exec(`(define cfg (require "cfg.json")) (assoc "irrelevant" (list)) cfg`, {
       capabilities: [arrivalLoaderCapability],
       config: { loader: files({ "cfg.json": `{"name":"world"}` }) } });
-    const cfg = plain(results.at(-1)) as Record<string, unknown>;
+    const cfg = results.at(-1) as Record<string, unknown>;
     expect(cfg).toMatchObject({ name: "world" });
   });
 
@@ -90,7 +85,7 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
     const results = await exec(`(define cfg (require "cfg.json")) cfg`, {
       capabilities: [arrivalLoaderCapability],
       config: { loader: files({ "cfg.json": src }) } });
-    const cfg = plain(results.at(-1)) as Record<string, unknown>;
+    const cfg = results.at(-1) as Record<string, unknown>;
     expect(cfg).toMatchObject({ name: "world", tags: ["a", "b"] });
   });
 
@@ -120,7 +115,7 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
     const config = { loader: files({ "shout.upper": "hello" }) };
     const state = await execState(`(require "shout.upper")`, { capabilities, config });
     // The prelude registration took: a `.upper` require resolves through the by-name registry.
-    expect(plain(state.values.at(-1))).toBe("HELLO");
+    expect(boxed(state.values.at(-1)!)).toBe("HELLO");
     // And the verb itself is assembly-time-only. Reuse the SAME runCtx (REPL continuity) so the
     // prelude pass does not re-fire.
     await expect(
@@ -157,7 +152,7 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
     const results = await exec(`(require/extension :greeter) (require/extension :greeter) (greeting-of)`, {
       capabilities: [arrivalLoaderCapability],
       config: { loader: files({}), extensionRegistry: registry } });
-    expect(plain(results.at(-1))).toBe("hi");
+    expect(results.at(-1)).toBe("hi");
     expect(applies).toBe(1);
   });
 
@@ -179,7 +174,7 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
       const results = await exec(`(require "cfg.json")`, {
         capabilities: [arrivalLoaderCapability],
         config: { loader: files({ "cfg.json": `{"name":"world"}` }) } });
-      const cfg = plain(results.at(-1)) as Record<string, unknown>;
+      const cfg = results.at(-1) as Record<string, unknown>;
       expect(cfg).toMatchObject({ name: "world" });
     });
 
@@ -221,7 +216,7 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
         config: {
           fs: { readFile: (p: string) => table[p] ?? "" },
           dirname: "" } });
-      expect(plain(results.at(-1))).toMatchObject({ name: "world" });
+      expect(results.at(-1)).toMatchObject({ name: "world" });
     });
   });
 });

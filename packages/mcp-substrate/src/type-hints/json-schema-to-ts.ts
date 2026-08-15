@@ -4,7 +4,7 @@
 // manifold's own type-hint prelude: bind.ts's kwargs contract decodes every property through
 // the scheme-identity codec (`z.dynamic`) — every `SymbolDef.in`/`.out` is `unknown`-typed by
 // design (bind.ts: "Every property decodes through the scheme-identity codec — we call
-// `schemeToJs` ourselves"), so harvesting from the SymbolDef gives the checker nothing to
+// `toJS` ourselves"), so harvesting from the SymbolDef gives the checker nothing to
 // narrow against (zero diagnostics — the S2 gap this file exists to close). The tool's JSON
 // Schema — carried untouched on `RemoteTool.inputSchema`/`.outputSchema`, and already read by
 // `tool-signature.ts` for the catalog text — is the one place the ACTUAL declared shape lives.

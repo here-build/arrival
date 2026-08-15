@@ -53,7 +53,7 @@ describe("(http/get …) — the read verb", () => {
   });
 
   it("an empty-list :query value crosses the membrane as a JS array — and rejects as non-scalar", async () => {
-    // schemeToJs lowers `(list)`/`'()` to `[]` at every depth (there is no Nil
+    // toJS lowers `(list)`/`'()` to `[]` at every depth (there is no Nil
     // instance on this path), so an empty-list field is a STRUCTURED value, not an
     // omitted one. The omission discipline (`isAbsentValue`) covers null/undefined,
     // which a scheme dict literal cannot express — it exists for JS-side callers.
@@ -75,7 +75,7 @@ describe("(http/post …) — the write verb", () => {
   });
 
   it("(dict :body (list)) crosses as an empty ARRAY — structure is the payload, even when empty", async () => {
-    // schemeToJs lowers `(list)` to `[]`; `coerceHttpBody` drops only null/undefined,
+    // toJS lowers `(list)` to `[]`; `coerceHttpBody` drops only null/undefined,
     // so the descriptor keeps `body: []` verbatim and the content key reflects it.
     const { resolve, seen } = recordingResolver(null);
     await runScm(`(http/post "crm" "/contacts" (dict :body (list)))`, resolve);

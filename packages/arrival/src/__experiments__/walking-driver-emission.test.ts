@@ -33,7 +33,7 @@ import { inferenceEnv } from "../env/inference-env.js";
 import { mintFrame, type ResolvingAmbient } from "../env/AmbientRuntime.js";
 import { EnvCapability } from "../common/capability.js";
 import { applyCapability } from "../__tests__/_fresh-env.js";
-import { schemeToJs } from "../membrane/rosetta.js";
+import { toJS } from "../membrane/membrane.js";
 import type { EvalTap } from "../eval/evaluator.js";
 import type { Classifier, DeclaredRole } from "../provenance/lineage.js";
 import { buildWireframe } from "../provenance/wireframe/builder.js";
@@ -126,7 +126,7 @@ describe("walking-driver spike: skeleton from parse, meat from the live walk", (
     const result = await withRecordCoordinateAsync(coordinate, sink, () =>
       execStateOverFrame(forms[0], { env, tap, nodeFilter }),
     );
-    expect(schemeToJs(result.values[0], {})).toBe(48); // (+ 6 42) — the run itself is undisturbed
+    expect(toJS(result.values[0], {})).toBe(48); // (+ 6 42) — the run itself is undisturbed
 
     // Emission is a detached sidecar (fire-and-forget off settlement) — let its
     // microtasks drain before reading the store, same as emission-hooks.test.ts.
@@ -182,7 +182,7 @@ describe("walking-driver spike: skeleton from parse, meat from the live walk", (
         tap: thinDriverTap(enters),
         nodeFilter: (node) => node instanceof APair && designatedSpans.has(scopeId(node)) }),
     );
-    expect(schemeToJs(result.values[0], {})).toBe(48);
+    expect(toJS(result.values[0], {})).toBe(48);
 
     await Promise.resolve();
     await Promise.resolve();

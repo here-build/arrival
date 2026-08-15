@@ -97,11 +97,11 @@ const GAPS: readonly LedgerRow[] = [
   { id: "ADict container carries no grouping-fact provenance", gate: "R2 container-provenance ruling", replacedBy: "laws/term-carrier equals cells (ADict)" },
   // Carried from clone-identity.test.ts (retired in the 2026-07-09 suite
   // consolidation) — the
-  // one still-open site of the `=== nil` identity-equality sweep. `schemeToJs`'s entry point special-cases `value === nil` instead
+  // one still-open site of the `=== nil` identity-equality sweep. `toJS`'s entry point special-cases `value === nil` instead
   // of `instanceof ANil`, so a provenance-bearing Nil clone (minted by
   // `restrictControlFlowProvenance`) falls through to the generic `return value` branch
   // and hands back a Nil object where callers expect `null`.
-  { id: "nil-clone schemeToJs entry loses identity", gate: "rosetta.ts:70 fix", replacedBy: "laws/identity" },
+  { id: "nil-clone toJS entry loses identity", gate: "rosetta.ts:70 fix", replacedBy: "laws/identity" },
   // ── Q9 W1 agreement corpus findings (docs/PROVENANCE.md §7 W1 agreement; provenance/
   // wireframe-agreement.law.test.ts's "FINDINGS" section) — surfaced running the
   // extended generator corpus against BOTH the eager oracle and the wireframe

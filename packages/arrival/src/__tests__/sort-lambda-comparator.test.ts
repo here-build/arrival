@@ -25,7 +25,7 @@ import { describe, expect, it } from "vitest";
 import { execStateOverFrame as execState } from "../eval/generator-exec.js";
 import { mintFrame } from "../env/AmbientRuntime.js";
 import { inferenceEnv } from "../env/inference-env.js";
-import { schemeToJs } from "../index.js";
+import { toJS } from "../index.js";
 
 const run = (code: string) => execState(code, { env: mintFrame(inferenceEnv, "sort-lambda-comparator") });
 
@@ -48,11 +48,11 @@ describe("S1 — sort with a lambda comparator throws instead of silently mis-so
     // `applyCallback` (a native/rosetta procedure, not a trampolined lambda body) — the
     // door is specific to the async (lambda) path, not comparator-bearing sort in general.
     const { values } = await run("(sort (list 3 1 2) <)");
-    expect(schemeToJs(values[0], {})).toEqual([1, 2, 3]);
+    expect(toJS(values[0], {})).toEqual([1, 2, 3]);
   });
 
   it("no comparator at all still sorts by the elements' own total order (unaffected)", async () => {
     const { values } = await run("(sort (list 3 1 2))");
-    expect(schemeToJs(values[0], {})).toEqual([1, 2, 3]);
+    expect(toJS(values[0], {})).toEqual([1, 2, 3]);
   });
 });

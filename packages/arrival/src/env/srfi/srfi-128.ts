@@ -1,18 +1,16 @@
 // SRFI-128 — comparators. Scheme-bootstrap capability.
 //
-// SINGLE SOURCE: `base-packs.ts` assembles this pack (via `allSrfi`) and evals it
-// (via initBridge's assembleEnv), so this module is the sole definition site.
+// SINGLE SOURCE: `base-packs.ts` assembles this pack (via `allSrfi`) and evals it,
+// so this module is the sole definition site.
 //
 // DEPS: every body below calls `pair?`/`eq?`/`null?`/`boolean?`/`string?`/`symbol?`/
 // `symbol->string`/`equal?`/`not` (scheme/equality), `number?`/`=`/`<` (scheme/numeric),
-// `char?`/`char<?` (scheme/chars), `string<?` (scheme/strings) — all FOUR NATIVE_PACKS
-// members — AND `list` (scheme/lists), a BASE_PACKS member. `deps: [equality, numeric,
+// `char?`/`char<?` (scheme/chars), `string<?` (scheme/strings) — JS-native packs —
+// AND `list` (scheme/lists), a BASE_PACKS member. `deps: [equality, numeric,
 // chars, strings, lists]` is the complete set, each a declared edge. `car`/`cdr`/`cadr`/
 // `caddr`/`cadddr` need NO edge — the resolver-synth `c[ad]+r` family is recognized
-// directly, unconditionally. No repositioning of base-packs.ts's array is needed:
-// `equality`/`numeric`/`chars`/`strings` are NATIVE_PACKS members (never entries of the
-// BASE_PACKS array C3 linearizes over); `lists` is already positioned in the C3 tail
-// block (see base-packs.ts's own header).
+// directly, unconditionally. JS-native packs are not BASE_PACKS roots; deps is enough.
+// `lists` is already positioned in the C3 tail block (see base-packs.ts's own header).
 //
 // Contract choices:
 //   - `comparator` is modeled precisely, not as opaque `z.schemeValue`: SRFI-128's own

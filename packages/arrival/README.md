@@ -103,12 +103,12 @@ Multi-turn agent sessions need no framework and no hidden layer: mint a scope, r
 top-level `define`s accumulate across calls.
 
 ```typescript
-import { execState, schemeToJs, LexicalScope } from '@inhuman.tools/arrival';
+import { execState, toJS, LexicalScope } from '@inhuman.tools/arrival';
 
 const scope = LexicalScope.fresh("agent-session");             // the session's mutable frame
 await execState(`(define (sq x) (* x x))`, { scope });         // turn 1 — defines land on the scope
 const { values: [v] } = await execState(`(sq 7)`, { scope });  // turn 2 — sees turn 1's define
-schemeToJs(v, {});                                             // 49
+toJS(v);                                                       // 49
 ```
 
 The run model — hermetic per-run state, budgets observed live, and the session/scope surface — is
@@ -185,7 +185,7 @@ lineage; without one, every value's provenance reads `[]` while the values thems
 trail, not an error).
 
 ```typescript
-import { execState, schemeToJs, deepProvenance } from '@inhuman.tools/arrival';
+import { execState, toJS, deepProvenance } from '@inhuman.tools/arrival';
 import { EvalTrace } from '@inhuman.tools/arrival/provenance';
 
 const trace = new EvalTrace();
@@ -337,7 +337,7 @@ consumers skip the pass for such programs (the runtime doors remain the backstop
 - `validateProgram` / `vocabularyFromChain` (from `/lsp-internals`) — the complete-diagnostic-list
   validation pass.
 - `forwardCone`, `backwardCone` (from `@inhuman.tools/arrival-provenance/analysis`) — the traced
-  lineage cone; `deepProvenance` (from this package) — the deep provenance read; `schemeToJs` —
+  lineage cone; `deepProvenance` (from this package) — the deep provenance read; `toJS` —
   the boxed→plain exit read.
 - `EvalTrace` (from `/provenance`) — the traced-run recorder (capture spine lives in core);
   `trace.toolNameFor(id)` / `trace.invocationById(id)` resolve a `deepProvenance` ordinal to the

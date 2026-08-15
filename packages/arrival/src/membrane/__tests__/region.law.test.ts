@@ -6,7 +6,7 @@
  * §7c). Every row is it.todo gated on that
  * landing; the migration is done when this file's todos become green tests.
  *
- * B3 landed §7c's reverse wrapper (`schemeToJs`'s ACallable branch in
+ * B3 landed §7c's reverse wrapper (`toJS`'s ACallable branch in
  * rosetta.ts, `z.procedure().decode` in scheme-zod.ts) — see
  * `src/membrane/region-scope.ts` for the scope token + doors this
  * file exercises. Row 8 stays `it.todo`: its own title tags it
@@ -29,7 +29,7 @@
  */
 import { describe, expect, it } from "vitest";
 import * as z from "../../common/scheme-zod/index.js";
-import { schemeToJs } from "../rosetta.js";
+import { toJS } from "../membrane.js";
 import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
 import { closeRegionScope, openRegionScope, withRegionScope } from "../region-scope.js";
 import { CONSTANT_CTX, RunContext } from "../../run/RunContext.js";
@@ -62,7 +62,7 @@ function makeHangingProc(): ANativeProcedure {
 describe("a reverse lambda is region-bound to its invocation", () => {
   it("calling the wrapper AFTER the symbol returned throws the escape door (educational, names the capability path)", async () => {
     const scope = openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined });
-    const wrapper = withRegionScope(scope, () => schemeToJs(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
+    const wrapper = withRegionScope(scope, () => toJS(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
     closeRegionScope(scope); // simulates the exporting symbol invocation returning
     await expect(wrapper(1)).rejects.toThrow(/region-bound to the calling symbol/);
     // The door also names what to do instead — a real capability, not a relaxation.
@@ -71,7 +71,7 @@ describe("a reverse lambda is region-bound to its invocation", () => {
 
   it("the symbol returning while wrapper calls are IN FLIGHT throws (pending > 0 at settle)", async () => {
     const scope = openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined });
-    const wrapper = withRegionScope(scope, () => schemeToJs(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
+    const wrapper = withRegionScope(scope, () => toJS(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
     // `wrapper(1)` runs synchronously up to its first await (`withRegionCall`'s own
     // `pending++` fires before any `await`), so `scope.pending` is already 1 the
     // instant this call returns — no need to await it first.
@@ -88,7 +88,7 @@ describe("a reverse lambda is region-bound to its invocation", () => {
     const scope = openRegionScope({ runCtx, dynSite: undefined });
     const wrapper = withRegionScope(
       scope,
-      () => schemeToJs(makeHangingProc()) as (...a: unknown[]) => Promise<unknown>,
+      () => toJS(makeHangingProc()) as (...a: unknown[]) => Promise<unknown>,
     );
     const call = wrapper();
     controller.abort(new Error("region-law abort probe"));
@@ -98,12 +98,12 @@ describe("a reverse lambda is region-bound to its invocation", () => {
   it("wrapper identity is per-(callable, scope): same lambda, same invocation → ===; new invocation → new wrapper", () => {
     const echo = makeEcho();
     const scopeA = openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined });
-    const w1 = withRegionScope(scopeA, () => schemeToJs(echo));
-    const w2 = withRegionScope(scopeA, () => schemeToJs(echo));
+    const w1 = withRegionScope(scopeA, () => toJS(echo));
+    const w2 = withRegionScope(scopeA, () => toJS(echo));
     expect(w1).toBe(w2); // same callable, same scope → same wrapper
 
     const scopeB = openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined });
-    const w3 = withRegionScope(scopeB, () => schemeToJs(echo));
+    const w3 = withRegionScope(scopeB, () => toJS(echo));
     expect(w3).not.toBe(w1); // same callable, DIFFERENT scope → a fresh wrapper
   });
 
@@ -146,7 +146,7 @@ describe("a reverse lambda is region-bound to its invocation", () => {
     // `z.procedure()` declared with no output type keeps "honest untransformed passthrough"
     // (scheme-zod.ts's own doc on the untyped HOF-callback case) — `result` is the raw scheme
     // AExact, not a plain JS number (unlike the retired bare-callable wrapper, which always
-    // ran the result back through `schemeToJs`). `Number(...)` (valueOf) is the sanity check
+    // ran the result back through `toJS`). `Number(...)` (valueOf) is the sanity check
     // that actually matters here: the re-entry ran the lambda body and produced 42.
     expect(Number(result)).toBe(42);
 
@@ -165,7 +165,7 @@ describe("a reverse lambda is region-bound to its invocation", () => {
   it("z.procedure decode adopts the same scope token — one discipline, typed and untyped paths", async () => {
     const echo = makeEcho();
     const scope = openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined });
-    const untyped = withRegionScope(scope, () => schemeToJs(echo));
+    const untyped = withRegionScope(scope, () => toJS(echo));
     const typed = withRegionScope(scope, () => z.procedure().parse(echo));
     // DISTINCT wrappers by law (the two-level (callable, scope, FAMILY) cache — see
     // RegionScope.cache's doc): the typed wrapper carries z.procedure's marshalling,
@@ -174,7 +174,7 @@ describe("a reverse lambda is region-bound to its invocation", () => {
     // to the other — typed marshalling silently lost or gained). Each family is stable
     // within itself, and BOTH adopt the same scope token — one discipline.
     expect(typed).not.toBe(untyped);
-    expect(withRegionScope(scope, () => schemeToJs(echo))).toBe(untyped);
+    expect(withRegionScope(scope, () => toJS(echo))).toBe(untyped);
     expect(withRegionScope(scope, () => z.procedure().parse(echo))).toBe(typed);
 
     closeRegionScope(scope);

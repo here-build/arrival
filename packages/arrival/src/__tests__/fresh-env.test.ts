@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { freshEnv } from "./_fresh-env.js";
 import { execOverFrame as exec, execStateOverFrame as execState } from "../eval/generator-exec.js";
-import { schemeToJs } from "../membrane/rosetta.js";
+import { toJS } from "../membrane/membrane.js";
 
 /**
  * Guards the `freshEnv()` test helper: a fresh, per-call capability-assembled env
@@ -14,8 +14,8 @@ import { schemeToJs } from "../membrane/rosetta.js";
 describe("freshEnv (capability-assembled test env)", () => {
   it("resolves native, BASE_PACK, cxr-kernel, AND still-inline builtins", async () => {
     const env = await freshEnv();
-    // execState (COMPLEX tier): schemeToJs wants the BOXED value — `exec` already unwraps.
-    const run = async (src: string): Promise<unknown> => schemeToJs((await execState(src, { env })).values[0], {});
+    // execState (COMPLEX tier): toJS wants the BOXED value — `exec` already unwraps.
+    const run = async (src: string): Promise<unknown> => toJS((await execState(src, { env })).values[0], {});
 
     expect(await run("(+ 1 2)")).toBe(3); // native value-domain
     expect(await run("(list 1 2 3)")).toEqual([1, 2, 3]); // BASE_PACK r7rs/lists
@@ -31,7 +31,7 @@ describe("freshEnv (capability-assembled test env)", () => {
   it("isolates definitions per call (fresh layer each time)", async () => {
     const a = await freshEnv();
     await exec("(define probe 42)", { env: a });
-    expect(schemeToJs((await execState("probe", { env: a })).values[0], {})).toBe(42);
+    expect(toJS((await execState("probe", { env: a })).values[0], {})).toBe(42);
 
     // a second fresh env does NOT see the first's define
     const b = await freshEnv();

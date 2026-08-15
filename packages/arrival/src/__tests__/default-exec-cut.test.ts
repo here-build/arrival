@@ -30,7 +30,7 @@ import { describe, expect, it } from "vitest";
 
 import { exec, execState } from "../eval/generator-exec.js";
 import { LexicalScope } from "../eval/LexicalScope.js";
-import { schemeToJs } from "../membrane/rosetta.js";
+import { toJS } from "../membrane/membrane.js";
 
 describe("default exec — Stage C Cut 2 isolation", () => {
   it("two SEPARATE bare exec calls do NOT share top-level defines (no cross-exec leakage)", async () => {
@@ -64,6 +64,6 @@ describe("default exec — Stage C Cut 2 isolation", () => {
     // …yet a builtin still resolves — through the self-hosted vocabulary chain, not any
     // lexical write.
     const [sum] = (await execState("(+ 1 2)")).values;
-    expect(schemeToJs(sum, {})).toBe(3);
+    expect(toJS(sum, {})).toBe(3);
   });
 });

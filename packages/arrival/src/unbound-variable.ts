@@ -172,9 +172,9 @@ const IDIOM_ROUTES: ReadonlyMap<string, string> = new Map([
   ],
 ]);
 
-/** Known dead-end idioms (name-exact). Racket `#:name` used to route here as "drop
- *  the `#`" — it now mints as the keyword `:name` at `ASymbol` construction
- *  (identical to arrival's spelling), so it never reaches unbound-variable. */
+/** Known dead-end idioms (name-exact). `#:name` mints as the keyword `:name` at
+ *  `ASymbol` construction (identical to arrival's spelling), so it never reaches
+ *  unbound-variable. */
 function idiomRoutingHint(name: string): string | undefined {
   return IDIOM_ROUTES.get(name);
 }

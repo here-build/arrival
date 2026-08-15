@@ -33,12 +33,8 @@ import { describe, expect, it } from "vitest";
 
 import { EnvCapability } from "../../common/capability.js";
 import { exec, execState } from "../../eval/generator-exec.js";
-import { schemeToJs } from "../../membrane/rosetta.js";
-import type { SchemeValue } from "../../values/types.js";
 import { arrivalLoaderCapability } from "../../loader/loader-capability.js";
 import { loaderFromResolver } from "../../loader/loader.js";
-
-const plain = (v: unknown): unknown => schemeToJs(v as SchemeValue, {});
 
 const files = (table: Record<string, string>) =>
   loaderFromResolver((path) => {

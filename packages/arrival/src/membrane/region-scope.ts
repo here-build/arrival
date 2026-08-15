@@ -1,14 +1,14 @@
 /**
  * Region discipline for reverse-crossed callables (scheme→JS).
  *
- * A reverse lambda (scheme callable handed to host JS — `schemeToJs`'s ACallable
+ * A reverse lambda (scheme callable handed to host JS — `toJS`'s ACallable
  * branch, or `z.procedure().decode`) is region-bound to the symbol invocation that
  * exported it: the wrapper closes over a scope token minted for THAT ONE call, and
  * every rule below is enforced against that token, never a global flag.
  * Full map: `docs/membrane.md` §REGION.
  *
  * AMBIENT HOLDER: `z.procedure`'s `decode` is a plain zod-codec transform with no side
- * channel for "which invocation is this reverse crossing of". Both `schemeToJs` and the
+ * channel for "which invocation is this reverse crossing of". Both `toJS` and the
  * codec read the SAME ambient current region scope — same module-holder pattern as
  * `eval/dynamic-call-site.ts` and evaluator's run-env holder. Single-threaded JS makes
  * a module holder safe; save/restore (`withRegionScope`) handles nesting. The wrapper
@@ -128,7 +128,7 @@ export interface RegionScope {
 /**
  * Permanently-open fallback for a reverse-membrane wrapper minted OUTSIDE any real
  * crossing (trace/display, unit tests without ambient scope). Nothing to close; no
- * escape/incomplete rule. Shared by schemeToJs and z.procedure so a callable crossing
+ * escape/incomplete rule. Shared by toJS and z.procedure so a callable crossing
  * either path outside a tracked invocation still gets ONE never-closing identity cache.
  */
 export const DETACHED_SCOPE: RegionScope = {

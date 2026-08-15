@@ -1,7 +1,7 @@
 // BASE_PACKS — scheme stdlib as a capability set (the `.scm`-defined half;
-// NATIVE_PACKS is the JS-implemented half). Each pack's prelude + symbols +
+// JS-native packs are the JS-implemented half). Each pack's prelude + symbols +
 // resolvers become the live scheme surface. docs/environments.md §ASSEMBLY —
-// two-root bootstrap and C3 precedence this array's ORDER feeds.
+// C3 precedence this array's ORDER feeds.
 //
 // ARRAY POSITION IS C3 PRECEDENCE: this array is the roots list for the C3 merge.
 // Cross-capability references are late-bound at CALL time, so prelude evaluation
@@ -20,7 +20,7 @@
 //   exceptions — used by srfi-189, srfi-1, racket; leads lists
 //   lists      — used by almost everyone: LAST
 //
-// equality/numeric/strings/vectors/chars are NATIVE_PACKS — no roots-order constraint here.
+// equality/numeric/strings/vectors/chars are JS-native packs — no roots-order constraint here.
 //
 // Polyglot family: shared core (`scheme/polyglot`) + three dialect packs
 // (clojure/lisp/racket). Core is a deps TARGET of dialects and of srfi-235 —
@@ -43,7 +43,7 @@ import { allSrfi, srfi1 } from "./srfi/index.js";
 // sugarcoat is its OWN entry — JS-shaped aliases (** % == …) for the sugarcoat surface.
 // binding/lists/exceptions/srfi1 pulled out of spreads for C3 tail placement (header).
 // sugarcoat deps [numeric, lists]: lists is in the C3 tail, so sugarcoat sits in the tail
-// ahead of lists (dependent before dependency). numeric is NATIVE (pulled via deps).
+// ahead of lists (dependent before dependency). numeric is JS-native (pulled via deps).
 const r7rsWithoutRepositioned = allR7rs.filter((pack) => pack !== lists && pack !== exceptions && pack !== binding);
 const srfiWithoutRepositioned = allSrfi.filter((pack) => pack !== srfi1);
 

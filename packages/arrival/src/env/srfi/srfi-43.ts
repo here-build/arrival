@@ -4,9 +4,7 @@
 // DEPS: every body below calls `vector-length`/`vector-ref` (scheme/vectors),
 // `=`/`+`/`-`/`<`/`>`/`quotient` (scheme/numeric), and `not` (scheme/equality) —
 // the complete cross-capability free-name set, each a declared `deps` edge
-// below. `equality`/`numeric`/`vectors` are NATIVE_PACKS members, never entries
-// of the BASE_PACKS array C3 linearizes over, so no repositioning of
-// base-packs.ts is needed for this pack.
+// below. JS-native packs are not BASE_PACKS roots; deps is enough.
 //
 // Contract choices:
 //   - vec slots: `z.vector(z.schemeValue)` (representation-blind, matches r7rs/vectors.ts's own

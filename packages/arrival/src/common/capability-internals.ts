@@ -63,8 +63,8 @@ export function contractOf(def: SymbolDeclaration): AEntity | undefined {
 /** `Contract.requiresConfig` auto-derive gate (`./symbols/_bake.js`): declared keys ABSENT
  *  from this activation's validated `configuration` — `undefined` when no `requiresConfig` or
  *  every declared key is present (zero-cost majority path). Read unconditionally by
- *  `native`/`rosetta` bind arms — closes the D2 departure: a bare-required config key used to
- *  fail-close at `schema.parse` before any program graph could statically explain WHY. */
+ *  `native`/`rosetta` bind arms. Bare-required keys throw at `schema.parse`;
+ *  `requiresConfig` doors optional keys the verb names. */
 export const missingRequiresConfig = (
   requiresConfig: readonly (string | readonly string[])[] | undefined,
   configuration: Record<string, unknown>,

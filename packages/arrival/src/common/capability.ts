@@ -68,9 +68,9 @@ export interface Activation<C extends ZodMap, R extends Record<string, Resource<
  *  `AliasSymbolDef` (`symbol.alias`) never binds directly (resolve in the apply loop) — it
  *  stands in for a sibling entry's already-baked value.
  *
- *  RETIREMENT PIN: `Exclude<AmbientValue, Fn>`, not bare `AmbientValue` — belt against residual
- *  `(…args) => …` via a widened AmbientValue edge. ACallable values are class instances (not
- *  `typeof "function"`), so they stay admitted. Matches `capability.test-d.ts`. */
+ *  `Exclude<AmbientValue, Fn>`, not bare `AmbientValue` — no bare `{ fn }`. ACallable
+ *  is a class instance (not `typeof "function"`), so it stays admitted. Matches
+ *  `capability.test-d.ts`. */
 export type SymbolDeclaration =
   | AmbientValue
   | MacroSymbolDef

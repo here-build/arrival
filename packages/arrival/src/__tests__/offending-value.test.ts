@@ -17,7 +17,7 @@ import { describe, expect, it } from "vitest";
 import { execStateOverFrame } from "../eval/generator-exec.js";
 import { attachOffendingValue, offendingValueOf } from "../errors.js";
 import { AString } from "../values/primitives/AString.js";
-import { schemeToJs } from "../membrane/rosetta.js";
+import { toJS } from "../membrane/membrane.js";
 import { freshEnv } from "./_fresh-env.js";
 
 /** Run `src`, catch whatever propagates, and return it — the tests below assert on
@@ -44,7 +44,7 @@ describe("OFFENDING_VALUE — collection-type-error metadata", () => {
     );
     const offending = offendingValueOf(err);
     expect(offending).toBeInstanceOf(AString);
-    expect(schemeToJs(offending as AString, {})).toBe("not-a-list");
+    expect(toJS(offending as AString, {})).toBe("not-a-list");
   });
 
   it("(vector-ref \"hello\" 0) — offendingValueOf recovers the offending string; message unchanged", async () => {
@@ -55,7 +55,7 @@ describe("OFFENDING_VALUE — collection-type-error metadata", () => {
     );
     const offending = offendingValueOf(err);
     expect(offending).toBeInstanceOf(AString);
-    expect(schemeToJs(offending as AString, {})).toBe("hello");
+    expect(toJS(offending as AString, {})).toBe("hello");
   });
 
   it('(car "not-a-pair") — the kernel cxr-unfold throw (Resolver.ts) also carries the offending value', async () => {
@@ -66,7 +66,7 @@ describe("OFFENDING_VALUE — collection-type-error metadata", () => {
     );
     const offending = offendingValueOf(err);
     expect(offending).toBeInstanceOf(AString);
-    expect(schemeToJs(offending as AString, {})).toBe("not-a-pair");
+    expect(toJS(offending as AString, {})).toBe("not-a-pair");
   });
 
   it("(reduce + 0 \"nope\") — the symbol.tagless dispatcher door (common/symbols/tagless.ts) also carries it", async () => {
@@ -74,7 +74,7 @@ describe("OFFENDING_VALUE — collection-type-error metadata", () => {
     const err = await catchEval(env, '(reduce + 0 "nope")');
     const offending = offendingValueOf(err);
     expect(offending).toBeInstanceOf(AString);
-    expect(schemeToJs(offending as AString, {})).toBe("nope");
+    expect(toJS(offending as AString, {})).toBe("nope");
   });
 
   it("a NON-type error (unbound variable) never carries offending-value metadata", async () => {

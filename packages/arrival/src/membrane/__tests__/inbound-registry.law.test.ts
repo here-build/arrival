@@ -29,7 +29,7 @@
  *    error-object-exit.law.test.ts owns that law).
  */
 import { describe, expect, it } from "vitest";
-import { INBOUND_CLAIMS, jsToScheme } from "../rosetta.js";
+import { INBOUND_CLAIMS, jsToScheme, toJS } from "../rosetta.js";
 import { NoLensError } from "../../errors.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AValue } from "../../values/primitives/AValue.js";
@@ -83,6 +83,9 @@ describe("inbound registry — the declared, ordered claim table IS the law", ()
     expect(jsToScheme(CONSTANT_CTX, eof)).toBe(eof);
     // …and a provenance stamp has no carrier on an orphan: still identity.
     expect(jsToScheme(CONSTANT_CTX, eof, {}, PROV)).toBe(eof);
+    // Outbound twin: public toJS and nested egressUnknown must not invent `#<EOF>`.
+    expect(toJS(eof)).toBe(eof);
+    expect(jsToScheme(CONSTANT_CTX, toJS(eof))).toBe(eof);
   });
 
   it("no lens ⇒ a loud door, never a silent raw leak (exotic sweep — the binary membrane's phase 3)", () => {

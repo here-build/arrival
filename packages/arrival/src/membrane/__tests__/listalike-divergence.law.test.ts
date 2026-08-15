@@ -71,7 +71,7 @@ import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../env/AmbientRuntime.js";
 import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
-import { schemeToJs } from "../../index.js";
+import { toJS } from "../../index.js";
 import { jsToScheme } from "../rosetta.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 
@@ -91,7 +91,7 @@ const runOne = async (code: string, bindings: Record<string, unknown>): Promise<
         ) }),
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error("__DEADLINE__")), DEADLINE_MS)),
     ]);
-    return `OK ${JSON.stringify(schemeToJs(values[0], {}))}`;
+    return `OK ${JSON.stringify(toJS(values[0], {}))}`;
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     // Errors are normalized to their FIRST LINE: the two charts may legitimately word a door

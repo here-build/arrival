@@ -8,8 +8,8 @@
  *   as a same-class host `Error`: message preserved, irritants crossed elementwise,
  *   original stack carried over. R7RSError is deliberately a host Error subclass, not
  *   an AValue box, so it passes neither the strict-exit invariant nor the protocol
- *   dispatch — `errorToHost` (rosetta.ts) is its arm, shared by membrane.toJS and
- *   schemeToJs so the two exits cannot drift. A RAISED error never touches the arm:
+ *   dispatch — `errorToHost` (rosetta.ts) is its arm, shared by `toJS` so the
+ *   value-exit cannot drift from element recursion. A RAISED error never touches the arm:
  *   it reaches the host through the throw path (rejection), and these tests pin that
  *   the arm did not change that.
  *
@@ -22,7 +22,7 @@
 import { describe, expect, it } from "vitest";
 import { exec, execState } from "../../eval/generator-exec.js";
 import { toJS } from "../membrane.js";
-import { errorToHost, jsToScheme, schemeToJs } from "../rosetta.js";
+import { errorToHost, jsToScheme } from "../rosetta.js";
 import { R7RSError, R7RSReadError } from "../../errors.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { EMPTY_PROVENANCE } from "../../values/primitives/AValue.js";
@@ -47,15 +47,13 @@ describe("error-object exit arm (value position)", () => {
     expect((err as R7RSError).irritants).toEqual([42]);
   });
 
-  it("the two exits cannot drift: toJS and schemeToJs agree on the same boxed error", async () => {
+  it("toJS exits a boxed error as a same-class host Error (irritants crossed)", async () => {
     const {
       values: [boxed] } = await execState(`(make-error-object "drift" 42 "tag")`);
     const viaToJS = toJS(boxed) as R7RSError;
-    const viaSchemeToJs = schemeToJs(boxed) as unknown as R7RSError;
     expect(viaToJS).toBeInstanceOf(R7RSError);
-    expect(viaSchemeToJs).toBeInstanceOf(R7RSError);
-    expect(viaSchemeToJs.message).toBe(viaToJS.message);
-    expect(viaSchemeToJs.irritants).toEqual(viaToJS.irritants);
+    expect(viaToJS.message).toBe("drift");
+    expect(viaToJS.irritants).toEqual([42, "tag"]);
   });
 
   it("subclass fidelity: same class, name, irritants crossed, original stack carried", () => {

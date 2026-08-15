@@ -83,7 +83,7 @@ export class AInexact extends AValue {
     return this.real;
   }
 
-  /** Mirrors the `schemeToJs` rosetta path (reals-only). */
+  /** Mirrors the `toJS` rosetta path (reals-only). */
   ["arrival/toJS"](): number {
     return this.real;
   }

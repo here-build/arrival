@@ -3,11 +3,11 @@
  *
  * The codebase has two parallel JS↔Scheme conversion surfaces:
  *
- *   - rosetta.ts:  schemeToJs / jsToScheme — used by rosetta wrappers + sandbox env.
+ *   - rosetta.ts:  toJS / jsToScheme — used by rosetta wrappers + sandbox env.
  *   - membrane.ts: AValue.fromJs + boxer dispatch / membrane.toJS — used by
  *                  FFI codecs (Operator/Codec) and the AValue subtype boxers.
  *
- * They should compose: jsToScheme → schemeToJs round-trips, fromJs → toJs round-trips,
+ * They should compose: jsToScheme → toJS round-trips, fromJs → toJs round-trips,
  * and the two APIs agree on the SHAPE of converted values.
  *
  * The membrane now MATERIALIZES faithfully: BOTH `jsToScheme` and `fromJS` box every
@@ -34,7 +34,7 @@ import { is_nil } from "../../values/value-guards.js";
 import { fromJS, isSchemeValue, toJS } from "../membrane.js";
 import { AJSObject } from "../AJSObject.js";
 import { AJSArray } from "../AJSArray.js";
-import { jsToScheme, schemeToJs } from "../rosetta.js";
+import { jsToScheme } from "../rosetta.js";
 import { ALambda } from "../../values/primitives/ACallable.js";
 import { ARosettaProcedure } from "../../values/primitives/ARosettaProcedure.js";
 import { ABool, schemeFalse, schemeTrue } from "../../values/primitives/ABool.js";
@@ -193,10 +193,10 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
 });
 
 // =========================================================================
-// jsToScheme → schemeToJs round-trip
+// jsToScheme → toJS round-trip
 // =========================================================================
 
-describe("jsToScheme → schemeToJs round-trip", () => {
+describe("jsToScheme → toJS round-trip", () => {
   // Option C (2026-05-28): jsToScheme deep-stamps every constructed AValue —
   // primitives now route through `AValue.fromJs` (boxer registry) so a JS
   // string in produces a `SchemeString` carrying the supplied provenance.
@@ -212,56 +212,56 @@ describe("jsToScheme → schemeToJs round-trip", () => {
   // primitive-passthrough contract.
   // INVARIANT: string round-trips by passthrough (raw in, raw out)
   it("string round-trips by passthrough (raw → raw)", () => {
-    expect(schemeToJs(jsToScheme(CONSTANT_CTX, "hello"))).toBe("hello");
+    expect(toJS(jsToScheme(CONSTANT_CTX, "hello"))).toBe("hello");
   });
 
   // INVARIANT: number round-trips by passthrough
   it("number round-trips by passthrough", () => {
-    expect(schemeToJs(jsToScheme(CONSTANT_CTX, 42))).toBe(42);
+    expect(toJS(jsToScheme(CONSTANT_CTX, 42))).toBe(42);
   });
 
   // INVARIANT: boolean round-trips by passthrough
   it("boolean round-trips by passthrough", () => {
-    expect(schemeToJs(jsToScheme(CONSTANT_CTX, true))).toBe(true);
+    expect(toJS(jsToScheme(CONSTANT_CTX, true))).toBe(true);
   });
 
-  // Arrays are properly cons'd to Pair, then schemeToJs walks the spine
+  // Arrays are properly cons'd to Pair, then toJS walks the spine
   // back into an array. The element-level cons'ing also wraps the leaves
-  // through jsToScheme (so primitives stay primitives), and schemeToJs
+  // through jsToScheme (so primitives stay primitives), and toJS
   // recurses through the Pair spine.
   // INVARIANT: array round-trips through a Pair chain
   it("array round-trips through a Pair chain", () => {
-    const result = schemeToJs(jsToScheme(CONSTANT_CTX, [1, 2, 3]));
+    const result = toJS(jsToScheme(CONSTANT_CTX, [1, 2, 3]));
     expect(result).toEqual([1, 2, 3]);
   });
 
   // INVARIANT: nested array round-trips
   it("nested array round-trips", () => {
-    const result = schemeToJs(jsToScheme(CONSTANT_CTX, [[1, 2], [3, 4]]));
+    const result = toJS(jsToScheme(CONSTANT_CTX, [[1, 2], [3, 4]]));
     expect(result).toEqual([[1, 2], [3, 4]]);
   });
 
-  // Plain objects are recursed: jsToScheme builds { k: jsToScheme(CONSTANT_CTX, v) }, schemeToJs
-  // mirrors via Object.entries → schemeToJs(value). Round-trip is correct.
+  // Plain objects are recursed: jsToScheme builds { k: jsToScheme(CONSTANT_CTX, v) }, toJS
+  // mirrors via Object.entries → toJS(value). Round-trip is correct.
   // INVARIANT: plain object round-trips
   it("plain object round-trips", () => {
-    const result = schemeToJs(jsToScheme(CONSTANT_CTX, { a: 1, b: "two" }));
+    const result = toJS(jsToScheme(CONSTANT_CTX, { a: 1, b: "two" }));
     expect(result).toEqual({ a: 1, b: "two" });
   });
 
   // INVARIANT: nested object round-trips
   it("nested object round-trips", () => {
-    const result = schemeToJs(jsToScheme(CONSTANT_CTX, { outer: { inner: 42 } }));
+    const result = toJS(jsToScheme(CONSTANT_CTX, { outer: { inner: 42 } }));
     expect(result).toEqual({ outer: { inner: 42 } });
   });
 
-  // null → nil (jsToScheme); schemeToJs(nil) → [] — the reverse delegates to
+  // null → nil (jsToScheme); toJS(nil) → [] — the reverse delegates to
   // arrival/toJS, whose face is the empty list's ARRAY (nil-as-array, V ruling
   // 2026-07-13: emptiness must not flip a list's JS type to null; matches the
   // compiled world's '() representation). The round trip is asymmetric BY LAW:
   // ingress permissive (null → nil), egress canonical (nil → []).
   it("null enters as nil and exits as [] (ingress permissive, egress canonical)", () => {
-    expect(schemeToJs(jsToScheme(CONSTANT_CTX, null))).toEqual([]);
+    expect(toJS(jsToScheme(CONSTANT_CTX, null))).toEqual([]);
   });
 });
 
@@ -359,11 +359,11 @@ describe("membrane fromJS / toJS — round-trip + wrapper-cache identity", () =>
     expect(toJS(fromJS(42))).toBe(42);
   });
 
-  // INVARIANT: host bigint DOORS both directions (NoLensError kind `"bigint"`) —
-  // never a scheme number; convert with Number/bigintToNumber before re-crossing.
+  // INVARIANT: host bigint DOORS inbound (NoLensError kind `"bigint"`) and is
+  // not a SchemeValue — outbound toJS refuses the raw host scalar.
   it("bigint DOORS at the membrane (never boxed; never raw passthrough)", () => {
     expect(() => fromJS(10n)).toThrow(/no lens for a host bigint/);
-    expect(() => schemeToJs(10n as never)).toThrow(/no lens for a host bigint/);
+    expect(() => toJS(10n as never)).toThrow(/toJS: received a non-scheme value/);
   });
 
   // LAW (nil-as-array, V 2026-07-13): null enters as nil; nil exits as [] — the

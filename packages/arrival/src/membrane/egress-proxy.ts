@@ -59,7 +59,7 @@ const gatedProxies = new WeakMap<TierGate, WeakMap<AValue, object>>();
  * R9 RE-ADMISSION: every egress proxy this module mints — under ANY of the three
  * identity laws — registers here at mint time, proxy → original box. Makes the
  * membrane a genuine bifunctor at the container boundary:
- * `jsToScheme(schemeToJs(box)) === box` (rosetta INBOUND_CLAIMS re-admits via this
+ * `jsToScheme(toJS(box)) === box` (rosetta INBOUND_CLAIMS re-admits via this
  * map instead of re-borrowing as fresh AJSArray/AJSObject). One WeakMap, keyed by
  * the PROXY (not the box) — honest inverse of bare/membrane/gated slots above.
  */

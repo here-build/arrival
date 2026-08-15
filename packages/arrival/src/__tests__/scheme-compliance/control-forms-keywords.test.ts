@@ -13,12 +13,12 @@
 // match them by `.literal()` (the un-renamed name), not the renamed symbol description.
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../env/AmbientRuntime.js";
-import { schemeToJs } from "../../index.js";
 import { execOverFrame as exec } from "../../eval/generator-exec.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";
 
-const val = (rs: readonly unknown[]) => schemeToJs(rs[rs.length - 1] as never, {});
+// `exec` already unwraps via `toJS`.
+const val = (rs: readonly unknown[]) => rs[rs.length - 1];
 // `exec` (RULINGS.md R1) now returns the plain-JS unwrap: a symbol's toJS is
 // apostrophe-prefixed (ASymbol's documented, deferred opaque-exit marker —
 // still design-pending — unchanged by this migration, only newly VISIBLE

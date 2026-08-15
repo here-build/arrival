@@ -93,7 +93,7 @@ export type SchemeValue =
   // `import type` keeps the edge compile-time only.
   | ACallable;
 
-// ── AWrap / AUnwrap — honest jsToScheme/schemeToJs membrane types (rosetta.ts).
+// ── AWrap / AUnwrap — honest jsToScheme/toJS membrane types (rosetta.ts).
 // Same tuple-wrapped conditional discipline as AListAlike. Both directions
 // short-circuit on the WIDEST possible input first (unknown / SchemeValue).
 
@@ -152,7 +152,7 @@ export type AWrap<T> = [unknown] extends [T]
                               : SchemeValue;
 
 /**
- * `schemeToJs<T>` return type — mirrors schemeToJs's instanceof chain arm-for-arm.
+ * `toJS<T>` return type — mirrors each box's `arrival/toJS` protocol term.
  */
 export type AUnwrap<T extends SchemeValue> = [SchemeValue] extends [T]
   ? unknown
@@ -182,7 +182,9 @@ export type AUnwrap<T extends SchemeValue> = [SchemeValue] extends [T]
                           ? object
                           : [T] extends [ACallable]
                             ? (...args: unknown[]) => Promise<unknown>
-                            : unknown;
+                            : [T] extends [EOF]
+                              ? EOF
+                              : unknown;
 
 export interface SchemeStringLike {
   __string__: string | string[];

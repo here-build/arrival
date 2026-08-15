@@ -1,5 +1,5 @@
 // Unified SRFI palette — assemble each capability onto a real env and run one verb.
-import { schemeToJs } from "../../../index.js";
+import { toJS } from "../../../index.js";
 import { execOverFrame, execStateOverFrame } from "../../../eval/generator-exec.js";
 import { mintFrame } from "../../AmbientRuntime.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
@@ -231,7 +231,7 @@ describe("SRFI-95 sort — end-to-end behavior (previously uncovered via the bui
   async function sortEnv() {
     const env = mintFrame(sandboxedEnv, `s95-${Math.random().toString(36).slice(2)}`);
     await applyCapability(env, [srfi95]);
-    // execState (COMPLEX tier): schemeToJs wants BOXED values — `exec` already unwraps.
+    // execState (COMPLEX tier): toJS wants BOXED values — `exec` already unwraps.
     return async (src: string) => (await execStateOverFrame(src, { env })).values;
   }
 
@@ -240,14 +240,14 @@ describe("SRFI-95 sort — end-to-end behavior (previously uncovered via the bui
   it("sorts a list by the elements' own total order (no comparator) — list in, list out", async () => {
     const raw = await sortEnv();
     const [result] = await raw("(sort (list 3 1 2))");
-    expect(schemeToJs(result, {})).toEqual([1, 2, 3]);
+    expect(toJS(result, {})).toEqual([1, 2, 3]);
   });
 
   // INVARIANT: sort with no comparator sorts a vector, container-preserving
   it("sorts a vector, container-preserving — vector in, vector out", async () => {
     const raw = await sortEnv();
     const [result] = await raw("(sort (vector 3 1 2))");
-    expect(schemeToJs(result, {})).toEqual([1, 2, 3]);
+    expect(toJS(result, {})).toEqual([1, 2, 3]);
   });
 
   // A Scheme LAMBDA comparator cannot drive `Array.sort`: the lambda evaluates through
@@ -266,6 +266,6 @@ describe("SRFI-95 sort — end-to-end behavior (previously uncovered via the bui
   it.fails("IDEAL: a lambda less? comparator sorts descending (needs async sort)", async () => {
     const raw = await sortEnv();
     const [result] = await raw("(sort (list 1 3 2) (lambda (a b) (> a b)))");
-    expect(schemeToJs(result, {})).toEqual([3, 2, 1]);
+    expect(toJS(result, {})).toEqual([3, 2, 1]);
   });
 });

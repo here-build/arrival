@@ -30,7 +30,6 @@ import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { testCallCtx } from "../../symbol/index.js";
 import { isSchemeValue, toJS } from "../../membrane/membrane.js";
-import { schemeToJs } from "../../membrane/rosetta.js";
 import listsCap from "../../env/r7rs/lists.js";
 import type { EnvCapability } from "../../common/capability.js";
 import { APair } from "../../values/primitives/APair.js";
@@ -88,18 +87,18 @@ describe("membrane.ts — `=== nil` identity-equality sites", () => {
 });
 
 describe("rosetta.ts — `=== nil` identity-equality sites", () => {
-  // Both exit as JS `[]` now — schemeToJs delegates to arrival/toJS (nil-as-array,
+  // Both exit as JS `[]` now — toJS delegates to arrival/toJS (nil-as-array,
   // V 2026-07-13); ANil's toJS returns [] whether the clone carries provenance or
   // not, so the singleton and a clone agree.
-  it("schemeToJs(nil-clone) — returns [], same as the singleton (via arrival/toJS)", () => {
-    const singletonResult = schemeToJs(nil);
+  it("toJS(nil-clone) — returns [], same as the singleton (via arrival/toJS)", () => {
+    const singletonResult = toJS(nil);
     expect(singletonResult).toEqual([]);
-    expect(schemeToJs(cloneNil())).toEqual(singletonResult);
+    expect(toJS(cloneNil())).toEqual(singletonResult);
   });
 
-  it("schemeToJs(Pair(1, nil-clone)) — proper list, not dotted (rosetta.ts:130)", () => {
+  it("toJS(Pair(1, nil-clone)) — proper list, not dotted (rosetta.ts:130)", () => {
     const p = new APair(new AExact(1), cloneNil());
-    expect(schemeToJs(p)).toEqual([1]);
+    expect(toJS(p)).toEqual([1]);
   });
 });
 

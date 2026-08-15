@@ -6,8 +6,6 @@
  *   (2.5, optional)       → {@link validateAgainstResolution} (pure function
  *                           over the parsed program + a sealed
  *                           CompiledResolutionChain)
- *
- * Export home: the `/env` subpath (src/env/index.ts), NOT the barrel.
  */
 
 import type { CompiledResolutionChain } from "./CompiledResolutionChain.js";

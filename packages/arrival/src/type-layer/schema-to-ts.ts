@@ -74,6 +74,7 @@ const lambdaNode: NodeBuilder = (ts) => {
 const IMAGE_BY_NAME: ReadonlyMap<string, NodeBuilder> = new Map<string, NodeBuilder>([
   // no "pair" — `z.pair` is named "cons"; prints via named-generic pre-check as Tuple<…>
   ["string", stringNode],
+  ["foldName", stringNode],
   ["exact", numberNode],
   ["inexact", numberNode],
   // number/exact/bigint are UNIONS of two same-output codecs; without an image they'd

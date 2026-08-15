@@ -13,7 +13,7 @@ export interface CrossingRow {
   readonly type: string;
   /** JS value entering scheme space (fromJS/jsToScheme) becomes… */
   readonly entryForm: string; // e.g. "AExact" | "AInexact" | "AString" | "borrowed AJSArray" | "VOID (refused, warn)"
-  /** scheme value exiting to JS (toJS/schemeToJs) becomes… R1-gated. */
+  /** scheme value exiting to JS (toJS/toJS) becomes… R1-gated. */
   /** ruled by R1: uniform plain-JS exit (containers = lazy ref-tracking proxy) */
   readonly exitForm: string;
   /** is a round-trip promised (P9)? if false, one-way projection only */

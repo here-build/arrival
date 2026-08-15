@@ -5,8 +5,7 @@
  *   - THIS pack: the pure predicates over already-thrown values —
  *     `error-object?` / `error-object-message` / `error-object-irritants` /
  *     `read-error?` / `file-error?`. Plain natives over the `errors.ts` classes;
- *     no evaluator machinery, no prelude — so they ride the NATIVE foundation
- *     (native-packs.ts roster, assembled onto global_env at bootstrap).
+ *     no evaluator machinery, no prelude.
  *   - `scheme/r7rs/exceptions` (./exceptions.ts): the exception FORMS
  *     (raise/raise-continuable/with-exception-handler/error/guard) and their
  *     machinery (%raise/%current-handlers/…) — those need the scheme-layer

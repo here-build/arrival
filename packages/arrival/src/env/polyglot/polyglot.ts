@@ -70,7 +70,7 @@ function normalizeMemberKey(key: unknown): string | null {
 /** Enumerate a receiver's own members through its OWN terms — `keys`, then `get` per key —
  *  and build an OWNED vector from the results.
  *
- *  NOT `schemeToJs` + `Object.values` + `jsToScheme`. That round trip unwraps a borrowed
+ *  NOT `toJS` + `Object.values` + `jsToScheme`. That round trip unwraps a borrowed
  *  container to its `source` by identity, enumerates whatever the store holds, and re-borrows
  *  the result: if the store was ever populated with already-crossed values, the rebuilt array
  *  carries `AValue`s into a JS-world store and violates §HYGIENE. Reading through the terms
@@ -248,9 +248,7 @@ export default EnvCapability.define("scheme/polyglot", {
       // nil — polyglot alias for the empty list. Same principle as the sibling
       // packs' idioms: LLMs and humans reach for whichever Lisp idiom they already
       // know. R7RS spells the empty list '() ; many Lisps (and the Scheme the models
-      // were trained on) also bind the symbol `nil` to it. Because polyglot is a base
-      // pack assembled onto user_env, `nil` inherits everywhere (the inference plane
-      // is a user_env child, so it gets it for free). '() reads to the ANil singleton,
+      // were trained on) also bind the symbol `nil` to it. '() reads to the ANil singleton,
       // so this binds exactly that. A CONSTANT define: the contract is the single
       // value schema `z.nil`, validated once at bake.
       nil: symbol.define`nil: the polyglot alias for the empty list '() (the ANil singleton)`(z.nil, `'()`),

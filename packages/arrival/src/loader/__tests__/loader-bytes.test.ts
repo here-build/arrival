@@ -13,12 +13,8 @@
 import { describe, expect, it } from "vitest";
 
 import { exec } from "../../eval/generator-exec.js";
-import { schemeToJs } from "../../membrane/rosetta.js";
-import type { SchemeValue } from "../../values/types.js";
 import { arrivalLoaderCapability } from "../loader-capability.js";
 import { makeFsLoader } from "../loader.js";
-
-const plain = (v: unknown): unknown => schemeToJs(v as SchemeValue, {});
 
 /** A loader over a byte-returning fs — `fs.promises.readFile(path)` with no encoding. */
 const byteFiles = (table: Record<string, string>) =>
@@ -41,20 +37,20 @@ describe("Loader.read returning Uint8Array", () => {
     const results = await exec(`(require "lib.scm") greeting`, {
       capabilities: [arrivalLoaderCapability],
       config: { loader: byteFiles({ "lib.scm": `(define greeting "héllo — 🌍")` }) } });
-    expect(plain(results.at(-1))).toBe("héllo — 🌍");
+    expect(results.at(-1)).toBe("héllo — 🌍");
   });
 
   it("a .json data module parses from bytes", async () => {
     const results = await exec(`(define cfg (require "cfg.json")) cfg`, {
       capabilities: [arrivalLoaderCapability],
       config: { loader: byteFiles({ "cfg.json": `{"name":"wörld"}` }) } });
-    expect(plain(results.at(-1))).toMatchObject({ name: "wörld" });
+    expect(results.at(-1)).toMatchObject({ name: "wörld" });
   });
 
   it("a .txt module yields its text, not its byte list", async () => {
     const results = await exec(`(require "note.txt")`, {
       capabilities: [arrivalLoaderCapability],
       config: { loader: byteFiles({ "note.txt": "plain words" }) } });
-    expect(plain(results.at(-1))).toBe("plain words");
+    expect(results.at(-1)).toBe("plain words");
   });
 });

@@ -59,7 +59,7 @@ const pendingCells = new WeakMap<AJSArray<any>, Map<number | string, SchemeValue
  * Rosetta translation: a JS array IS an R7RS vector, so kind is "vector". A faithful
  * vector has neither car nor cdr — (car it) throws like (car #(1 2 3)); use
  * (vector->list it). equals stays reference-identity, matching opaque-view sibling
- * AJSObject. source is kept as the borrowed reference so schemeToJs crosses it back
+ * AJSObject. source is kept as the borrowed reference so toJS crosses it back
  * out raw without materializing.
  */
 export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends AValue {
@@ -296,7 +296,7 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
       !(raw instanceof AValue),
       "AJSArray: `source` must hold JS-world values only — an AValue here means a scheme value was " +
         "pushed into a borrowed JS store without crossing the membrane (an unobserved flip). Cross it " +
-        "with `schemeToJs` first, or hold it in an AVector.",
+        "with `toJS` first, or hold it in an AVector.",
     );
     const boxed: SchemeValue = jsToScheme(CONSTANT_CTX, raw, {}, this.provenance);
     return isAttested(this) ? attestDeep(freshIfSingleton(boxed)) : boxed;

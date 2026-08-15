@@ -14,15 +14,15 @@ import { describe, expect, it } from "vitest";
 import { execOverFrame as exec, execStateOverFrame as execState } from "../eval/generator-exec.js";
 import { nativeOnlyRoot } from "./_fresh-env.js";
 import { inferenceEnv } from "../env/inference-env.js";
-import { schemeToJs } from "../membrane/rosetta.js";
+import { toJS } from "../membrane/membrane.js";
 import { ANil } from "../values/primitives/ANil.js";
 import type { ResolvingAmbient } from "../env/AmbientRuntime.js";
 
 const evalIn =
   (env: ResolvingAmbient) =>
   async (expr: string): Promise<unknown> =>
-    // execState (COMPLEX tier): schemeToJs wants the BOXED value — `exec` already unwraps.
-    schemeToJs((await execState(expr, { env })).values[0], {});
+    // execState (COMPLEX tier): toJS wants the BOXED value — `exec` already unwraps.
+    toJS((await execState(expr, { env })).values[0], {});
 
 // element index k ≡ (car (cdr^k x)) ≡ "ca" + "d"×k + "r"
 const cxrForIndex = (k: number): string => `ca${"d".repeat(k)}r`;

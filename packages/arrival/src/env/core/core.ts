@@ -26,8 +26,7 @@ import { gensym } from "../../values/values-repr.js";
 
 export default EnvCapability.define("scheme/core", {
   // gensym resolves at macro-EXPANSION time; the floor (assembled first) binds it where
-  // every consumer reaches it, including inference's cut/cute in initBridge, which reads
-  // gensym off the post-assembly user_env chain.
+  // every consumer reaches it.
   symbols: (symbol, z) => ({
     // Kernel keywords — see the preamble for why every special form is keyworded.
     lambda: symbol.keyword`lambda: create an anonymous procedure`,

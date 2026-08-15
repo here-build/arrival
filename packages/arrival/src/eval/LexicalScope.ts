@@ -14,9 +14,7 @@ import { INTEROP_BOUNDARY } from "../membrane/interop-access.js";
  * carries the real method surface the hygiene engine (syntax-rules.ts)
  * consults: `refFrame` (which frame OWNS a name, stopping below the chain
  * root), plus merge-frame plumbing (`kind`/`ownSymbolEntries`/`parent`/
- * `define`). Each is a pass-through over the env today; a future cut can swap
- * the IMPLEMENTATION (own `#bindings`, root parent `null`) without re-touching
- * the engine.
+ * `define`). Each is a pass-through over the env today.
  */
 const MERGE_SCOPE: symbol = Symbol.for("merge"); // ≡ Syntax.__merge_env__ (registered symbol)
 

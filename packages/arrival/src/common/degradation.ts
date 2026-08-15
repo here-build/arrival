@@ -21,7 +21,7 @@
 // stays fail-closed" is about a key with NO `.optional()`/`.default()` wrapper — that stays a
 // `schema.parse` throw. D2 is the ADDITIONAL, per-VERB case: a key a capability author wraps
 // `.optional()` (so `schema.parse` succeeds absent) but names in some verb's `requiresConfig`
-// is no longer silently withheld — the bind loop reads `requiresConfig` UNCONDITIONALLY and
+// — the bind loop reads `requiresConfig` UNCONDITIONALLY and
 // auto-mints the SAME `DoorCause` shape via `DegradationInfo.door` below. The two views agree
 // by construction: a `requiresConfig`-named key is, by D2's authoring rule, always
 // `.optional()`/`.default()`-wrapped, so it is exactly the set `missingOptionalKeys` already

@@ -5,9 +5,8 @@
 // procedure) — `deps: [equality, exceptions, lists]` below is the complete set,
 // each a declared edge. `car`/`cdr` are the ONE exception: the resolver-synth
 // `c[ad]+r` family needs no dep at all, bare or nested (`(car (cdr m))`).
-//   - `equality` (r7rs/equality.ts, `pair?`/`eq?`) is a NATIVE_PACKS member —
-//     never an entry of the BASE_PACKS array C3 linearizes over, so no
-//     repositioning of base-packs.ts is needed for this edge.
+//   - `equality` (r7rs/equality.ts, `pair?`/`eq?`) is a JS-native pack —
+//     not a BASE_PACKS root; deps is enough.
 //   - `lists` (r7rs/lists.ts, `list`) and `exceptions` (r7rs/exceptions.ts,
 //     `error`) ARE BASE_PACKS members, positioned in base-packs.ts's C3 tail
 //     block for exactly this kind of edge (a dependency must rank BELOW every

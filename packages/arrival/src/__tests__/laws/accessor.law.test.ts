@@ -19,7 +19,8 @@ import { mintFrame } from "../../env/AmbientRuntime.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { execOverFrame as exec, execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
-import { jsToScheme, schemeToJs } from "../../membrane/rosetta.js";
+import { jsToScheme } from "../../membrane/rosetta.js";
+import { toJS } from "../../membrane/membrane.js";
 
 async function execOne(expr: string, env = inferenceEnv): Promise<any> {
   const results = await exec(expr, { env });
@@ -59,7 +60,7 @@ describe("keyword-as-getter composes: it's ordinary callable data, so HOFs take 
     ];
     const env = mintFrame(inferenceEnv, "keyword-accessor-map", {
       users: jsToScheme(CONSTANT_CTX, users) });
-    expect(schemeToJs(await execOne(`(map :name users)`, env))).toEqual(["Alice", "Bob", "Charlie"]);
+    expect(toJS(await execOne(`(map :name users)`, env))).toEqual(["Alice", "Bob", "Charlie"]);
   });
 
   it("(filter :active items) — the getter doubles as a predicate", async () => {
@@ -70,7 +71,7 @@ describe("keyword-as-getter composes: it's ordinary callable data, so HOFs take 
     ];
     const env = mintFrame(inferenceEnv, "keyword-accessor-filter", {
       items: jsToScheme(CONSTANT_CTX, items) });
-    const filtered = schemeToJs(await execOne(`(filter :active items)`, env));
+    const filtered = toJS(await execOne(`(filter :active items)`, env));
     expect(filtered).toHaveLength(2);
     expect(filtered[0].name).toBe("Item 1");
     expect(filtered[1].name).toBe("Item 3");

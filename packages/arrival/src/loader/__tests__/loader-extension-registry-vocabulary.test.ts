@@ -20,13 +20,13 @@ import { exec, execState, execInFrame } from "../../eval/generator-exec.js";
 import { assembleRun } from "../../env/assemble-run.js";
 import { isAmbientRuntime } from "../../env/AmbientRuntime.js";
 import type { EvalPreludeInto, EvalSchemeInto } from "../../common/scheme-env.js";
-import { schemeToJs } from "../../membrane/rosetta.js";
+import { toJS } from "../../membrane/membrane.js";
 import type { SchemeValue } from "../../values/types.js";
 import { getCapabilityResources } from "../../run/CallCtx.js";
 import { arrivalLoaderCapability } from "../loader-capability.js";
 import { loaderFromResolver } from "../loader.js";
 
-const plain = (v: unknown): unknown => schemeToJs(v as SchemeValue, {});
+const boxed = (v: SchemeValue): unknown => toJS(v);
 
 const files = (table: Record<string, string>) =>
   loaderFromResolver((path) => {
@@ -68,7 +68,7 @@ describe("loader extension registry — vocabulary path (Stage B4)", () => {
     const results = await exec(`(require "shout.upper")`, {
       capabilities: [ext],
       config: { loader: files({ "shout.upper": "hello" }) } });
-    expect(plain(results.at(-1))).toBe("HELLO");
+    expect(results.at(-1)).toBe("HELLO");
   });
 
   it("PER-RUN LAW: a fresh RunContext of the SAME tuple gets a FRESH, independently-populated registry", async () => {
@@ -111,7 +111,7 @@ describe("loader extension registry — vocabulary path (Stage B4)", () => {
     const { values, runCtx } = await execState(`(require "x.diamond")`, {
       capabilities: [top],
       config: { loader: files({ "x.diamond": "hi" }) } });
-    expect(plain(values.at(-1))).toBe("HI");
+    expect(boxed(values.at(-1)!)).toBe("HI");
 
     const registry = (
       getCapabilityResources(runCtx, arrivalLoaderCapability) as { extensionResolvers: Map<string, string> }

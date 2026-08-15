@@ -1,7 +1,7 @@
 /**
  * JS-INTEROP CONTRACT — the README promises "natural interop in both directions".
  * This suite is that promise, by example: a JS consumer receives a value out of
- * `exec()` and uses it as a JS value WITHOUT calling `schemeToJs` first.
+ * `exec()` and uses it as a JS value WITHOUT calling `toJS` first.
  *
  * `it(...)`        = a promise the boxed value KEEPS today.
  * `it.fails(...)`  = a promise it BREAKS today (documented gap). The body asserts the
@@ -13,10 +13,10 @@
  * Empirical baseline (2026-06-16): strings/bools auto-unwrap to JS primitives (natural);
  * numbers coerce via valueOf but break JSON.stringify (BigInt / struct leak); Pair is
  * iterable but SchemeVector/SchemeBytevector are not; char stringifies to the Scheme
- * literal; schemeToJs is the working escape hatch except for symbols.
+ * literal; toJS is the working escape hatch except for symbols.
  */
 import { describe, expect, it } from "vitest";
-import { exec, schemeToJs } from "../../index.js";
+import { exec } from "../../index.js";
 import { ABool } from "../../values/primitives/ABool.js";
 
 const one = async (src: string): Promise<any> => (await exec(src))[0];
@@ -94,9 +94,9 @@ describe("JS-interop: symbols", () => {
 
   // Promoted from it.fails ("BROKEN: returns the internal struct") by the same
   // ruling — the plain-name egress unwraps exactly as this test always demanded.
-  it("schemeToJs(symbol) unwraps to the plain name string", async () => {
+  it("exec(symbol) unwraps to the plain name string", async () => {
     const sym = await one("'foo");
-    expect(schemeToJs(sym, {})).toBe("foo");
+    expect(sym).toBe("foo");
   });
 });
 
@@ -118,9 +118,9 @@ describe("JS-interop: lists (Pair)", () => {
     expect(JSON.stringify(lst)).toBe("[1,2,3]");
   });
 
-  // INVARIANT: schemeToJs(list) is the working escape hatch to a plain JS array
-  it("schemeToJs(list) is the working escape hatch", async () => {
-    expect(schemeToJs(await one("(list 1 2 3)"), {})).toEqual([1, 2, 3]);
+  // INVARIANT: exec(list) is the working escape hatch to a plain JS array
+  it("exec(list) is the working escape hatch", async () => {
+    expect(await one("(list 1 2 3)")).toEqual([1, 2, 3]);
   });
 });
 
@@ -136,9 +136,9 @@ describe("JS-interop: vectors", () => {
     expect([...vec].map(Number)).toEqual([1, 2, 3]);
   });
 
-  // INVARIANT: schemeToJs(vector) is the working escape hatch to a plain JS array
-  it("schemeToJs(vector) is the working escape hatch", async () => {
-    expect(schemeToJs(await one("(vector 1 2 3)"), {})).toEqual([1, 2, 3]);
+  // INVARIANT: exec(vector) is the working escape hatch to a plain JS array
+  it("exec(vector) is the working escape hatch", async () => {
+    expect(await one("(vector 1 2 3)")).toEqual([1, 2, 3]);
   });
 });
 
@@ -157,15 +157,15 @@ describe("JS-interop: dicts / objects", () => {
   // doesn't serialize at all (no own enumerable indexed properties) — so it no longer
   // throws, but it also doesn't produce anything useful: it leaks ADict's OWN wrapper
   // shape (ctx/provenance/kind), not the dict's data. No primitive in this codebase
-  // implements `toJSON()` — `schemeToJs`, asserted below, is the one documented escape
+  // implements `toJSON()` — `toJS`, asserted below, is the one documented escape
   // hatch; JSON.stringify was never a supported interop path for a boxed value.
   it("JSON.stringify(dict) no longer throws, but isn't a supported interop path either", async () => {
     const d = await one("(dict :a 1 :b 2)");
     expect(() => JSON.stringify(d)).not.toThrow();
   });
 
-  // INVARIANT: schemeToJs(dict) is the working escape hatch to a plain JS object
-  it("schemeToJs(dict) is the working escape hatch", async () => {
-    expect(schemeToJs(await one("(dict :a 1 :b 2)"), {})).toEqual({ a: 1, b: 2 });
+  // INVARIANT: exec(dict) is the working escape hatch to a plain JS object
+  it("exec(dict) is the working escape hatch", async () => {
+    expect(await one("(dict :a 1 :b 2)")).toEqual({ a: 1, b: 2 });
   });
 });

@@ -4,12 +4,9 @@
  * the mutable AmbientRuntime frame it seals from — Capabilities.globalRoot/refFrame
  * return this as the hygiene sentinel.
  *
- * Bake writes a live env chain (C3 bind, preludes, preludeOnly via kernel
- * bake-overlay resolver middleware, torn down in finally — kernel.ts). Seal merges
- * every layer's `__env__` child-wins into one flat Map. No capability-facing resolver
- * contract survives seal; ResolvingAmbient resolvers exist only for the transient
- * bake-overlay. `compileResolutionChain` asserts zero live resolvers rather than
- * silently dropping them.
+ * Seal merges every layer's own bindings child-wins into one flat Map
+ * (`env/vocabulary.ts` bake, `env/assemble-run.ts` run). `compileResolutionChain`
+ * asserts no live resolver remains — the artifact cannot represent one.
  *
  * No write surface post-seal. REPL writes go on the session frame above the chain
  * (generator-exec defaultLexicalRoot). Glass `{ env }` keeps the live walk (no bake).
@@ -80,10 +77,7 @@ function hashFlatMap(flat: ReadonlyMap<string | symbol, AmbientValue>): string {
  * child-first, merging every layer's OWN bindings into ONE flat map (a closer layer's
  * entry overwrites — child-wins union, matching the live walk's own-bindings
  * precedence). Asserts, per layer, that no live resolver remains registered — the
- * kernel's bake-overlay is the only production registrant, and it tears down before
- * `assembleEnv` resolves (kernel.ts's `finally`), so a resolver surviving to seal means
- * some caller registered one directly (or reached this function mid-bake) and the
- * artifact this module produces cannot represent it.
+ * artifact this module produces cannot represent one.
  */
 export function compileResolutionChain(base: AmbientRuntime): CompiledResolutionChain {
   const layers: AmbientRuntime[] = [];

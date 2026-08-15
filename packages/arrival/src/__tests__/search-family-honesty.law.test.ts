@@ -32,7 +32,7 @@ import { describe, expect, it } from "vitest";
 import { mintFrame } from "../env/AmbientRuntime.js";
 import { execStateOverFrame as execState } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../env/inference-env.js";
-import { schemeToJs } from "../index.js";
+import { toJS } from "../index.js";
 import { jsToScheme } from "../membrane/rosetta.js";
 import { CONSTANT_CTX } from "../run/RunContext.js";
 
@@ -46,7 +46,7 @@ const run = async (code: string, bindings: Record<string, unknown> = {}): Promis
         "search-honesty",
         Object.fromEntries(Object.entries(bindings).map(([k, v]) => [k, jsToScheme(CONSTANT_CTX, v)])),
       ) });
-    return `OK ${JSON.stringify(schemeToJs(values[0], {}))}`;
+    return `OK ${JSON.stringify(toJS(values[0], {}))}`;
   } catch (e) {
     return `DOOR ${e instanceof Error ? e.message : String(e)}`;
   }

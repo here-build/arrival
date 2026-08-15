@@ -1,7 +1,7 @@
 // @values / @entries — polyglot.ts's newest member-access verbs, siblings of @/@?/@keys.
 //
 // Both read a receiver's OWN members through its OWN `arrival/tagless-final/keys`/`get`
-// terms (the shared `collectMembers` helper) — never through schemeToJs/jsToScheme
+// terms (the shared `collectMembers` helper) — never through toJS/jsToScheme
 // round-tripping (polyglot.ts's own header note on why: a borrowed store re-crossed
 // that way could carry AValues into JS-world storage). This file proves the OBSERVABLE
 // half of that contract across every receiver kind the protocol claims to support:
@@ -20,7 +20,8 @@ import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { execOverFrame as exec, execStateOverFrame as execState } from "../../../eval/generator-exec.js";
 import { execState as execStateCapabilities } from "../../../eval/generator-exec.js";
 import { inferenceEnv } from "../../inference-env.js";
-import { jsToScheme, schemeToJs } from "../../../membrane/rosetta.js";
+import { jsToScheme } from "../../../membrane/rosetta.js";
+import { toJS } from "../../../membrane/membrane.js";
 import type { SchemeValue } from "../../../values/types.js";
 import { arrivalLoaderCapability } from "../../../loader/loader-capability.js";
 import { loaderFromResolver } from "../../../loader/loader.js";
@@ -37,23 +38,23 @@ function envWithObj(obj: SchemeValue): ResolvingAmbient {
  *  keep the oracle free of the verbs under test. */
 async function keysAndOracleValues(env: ResolvingAmbient): Promise<{ keys: string[]; oracleValues: unknown[] }> {
   const keysState = await execState(`(@keys obj)`, { env });
-  const rawKeys = schemeToJs(keysState.values[0], {}) as unknown[];
+  const rawKeys = toJS(keysState.values[0], {}) as unknown[];
   const keys = rawKeys.map((k) => String(k));
   const oracleValues: unknown[] = [];
   for (const k of keys) {
     const r = await execState(`(@ obj ${JSON.stringify(k)})`, { env });
-    oracleValues.push(schemeToJs(r.values[0], {}));
+    oracleValues.push(toJS(r.values[0], {}));
   }
   return { keys, oracleValues };
 }
 
 async function actualValues(env: ResolvingAmbient): Promise<unknown[]> {
   const r = await execState(`(@values obj)`, { env });
-  return schemeToJs(r.values[0], {}) as unknown[];
+  return toJS(r.values[0], {}) as unknown[];
 }
 
 /** `@entries` walked ENTIRELY through scheme `car`/`cdr` on each vector slot — NOT
- *  `schemeToJs` on the whole entry. APair's own `arrival/toJS` crosses to a 2-element
+ *  `toJS` on the whole entry. APair's own `arrival/toJS` crosses to a 2-element
  *  JS array regardless of whether the pair is a real dotted pair or a proper 2-list, so
  *  unwrapping the whole entry would hide exactly the regression this file exists to
  *  catch. `car`/`cdr`, called separately, cannot: `cdr` of a 2-list is a 1-list (an
@@ -61,7 +62,7 @@ async function actualValues(env: ResolvingAmbient): Promise<unknown[]> {
 async function entryAt(env: ResolvingAmbient, i: number): Promise<{ key: unknown; value: unknown }> {
   const keyState = await execState(`(car (vector-ref (@entries obj) ${i}))`, { env });
   const valueState = await execState(`(cdr (vector-ref (@entries obj) ${i}))`, { env });
-  return { key: schemeToJs(keyState.values[0], {}), value: schemeToJs(valueState.values[0], {}) };
+  return { key: toJS(keyState.values[0], {}), value: toJS(valueState.values[0], {}) };
 }
 
 /** `(dict "a" 1 "b" 2 ...)` — a genuine ADict, built through the real scheme

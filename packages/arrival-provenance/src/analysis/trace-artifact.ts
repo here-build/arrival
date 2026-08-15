@@ -13,7 +13,7 @@
  *   `metadata` is host-side POJO and never crosses into scheme). `traceToRegions`
  *   copies those already-plain fields onto leaf/output regions. This serializer
  *   does NOT re-cross the membrane — a second peel would be the soft-idempotent
- *   smell (`schemeToJs` on mixed world). Fanout structure is cloned so the
+ *   smell (`toJS` on mixed world). Fanout structure is cloned so the
  *   artifact owns its tree; no AValue should remain after the snapshot boundary.
  *
  * `serializeTrace` / `loadTraceArtifact` are the ONLY format-aware functions —

@@ -319,6 +319,53 @@ describe("scheme-zod z.dict(shape)/z.dict() — keyed to ADict.get()'s own proto
   });
 });
 
+describe("scheme-zod z.dictRecord(key, value) — open homogeneous typed record", () => {
+  // INVARIANT: open record with typed values round-trips ADict ↔ plain Record.
+  it("round-trips ADict ↔ Record<string, string> through the value codec", () => {
+    const rec = z.dictRecord(z.string, z.string);
+    const nativeDict = new ADict([
+      [new ASymbol("model"), makeString("qwen")],
+      [new ASymbol(":connection"), makeString("local")], // keyword key folds
+    ]);
+
+    expect(rec.parse(nativeDict)).toEqual({ model: "qwen", connection: "local" });
+
+    const encoded = rec.encode({ model: "rnj", connection: "c1" });
+    expect(encoded).toBeInstanceOf(ADict);
+    expect(((encoded as ADict).get("model") as AString)["arrival/toJS"]()).toBe("rnj");
+    expect(((encoded as ADict).get("connection") as AString)["arrival/toJS"]()).toBe("c1");
+  });
+
+  // INVARIANT: a wrong value type is rejected by the value codec (not silently reboxed).
+  it("rejects a value that fails the value codec", () => {
+    const rec = z.dictRecord(z.string, z.string);
+    const bad = new ADict([[new ASymbol("x"), makeExact(1)]]);
+    expect(() => rec.parse(bad)).toThrow();
+  });
+
+  // INVARIANT: dict-shaped AJSObject decodes too (same isDictShaped admission as dict).
+  it("accepts a dict-shaped AJSObject on decode", () => {
+    const rec = z.dictRecord(z.string, z.integer);
+    expect(rec.parse(new AJSObject({ n: 7 }))).toEqual({ n: 7 });
+  });
+});
+
+describe("scheme-zod z.foldName — keyword/string name identity", () => {
+  // INVARIANT: keyword, bare symbol, and string all fold to the same plain name.
+  it("folds :foo / foo / \"foo\" to the plain string \"foo\"", () => {
+    expect(z.foldName.parse(new ASymbol(":foo"))).toBe("foo");
+    expect(z.foldName.parse(new ASymbol("foo"))).toBe("foo");
+    expect(z.foldName.parse(makeString("foo"))).toBe("foo");
+  });
+
+  // INVARIANT: encode re-enters as a bare ASymbol (not re-keyworded).
+  it("encode mints a bare ASymbol for the folded name", () => {
+    const back = z.foldName.encode("completion");
+    expect(back).toBeInstanceOf(ASymbol);
+    expect((back as ASymbol).__name__).toBe("completion");
+  });
+});
+
 describe("scheme-zod z.box — whole-object unwrap, not decomposition", () => {
   // INVARIANT: z.box round-trips the SAME object reference — class identity and methods
   // survive, unlike z.dict's decomposition.

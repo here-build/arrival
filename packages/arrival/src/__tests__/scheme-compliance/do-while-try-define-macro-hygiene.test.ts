@@ -15,12 +15,12 @@
 // exactly the hygiene-renamed path the fix targets.
 import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../env/AmbientRuntime.js";
-import { schemeToJs } from "../../index.js";
 import { execOverFrame as exec } from "../../eval/generator-exec.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";
 
-const val = (rs: readonly unknown[]) => schemeToJs(rs[rs.length - 1] as never, {});
+// `exec` already unwraps via `toJS`.
+const val = (rs: readonly unknown[]) => rs[rs.length - 1];
 
 describe("do/while/try/define-macro — hygiene-renamed heads resolve via symbol.keyword", () => {
   it("user syntax-rules macro expanding to `do` resolves the keyword", async () => {
@@ -50,7 +50,7 @@ describe("do/while/try/define-macro — hygiene-renamed heads resolve via symbol
         (syntax-rules ()
           ((safely body) (try body (catch (e) 'caught)))))
       (safely (raise 'boom))`;
-    // val()/schemeToJs unwraps a symbol result to an apostrophe-prefixed string
+    // exec already unwraps a symbol result to an apostrophe-prefixed string
     // (ASymbol's documented opaque-exit marker — see control-forms-keywords.test.ts's
     // `repr` helper for the same convention).
     expect(String(val(await exec(src, { env: mintFrame(sandboxedEnv, "dw3") })))).toBe("caught");

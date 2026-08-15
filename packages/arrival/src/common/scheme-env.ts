@@ -83,10 +83,8 @@ export interface SchemeEnv {
   /** Register a catchall resolver (fires on a name the env did not bind). This is the
    *  APPLY-TIME landing door for a capability's declared `resolvers` and assembly-time
    *  producers only. There is deliberately NO `unregisterResolver` on this contract:
-   *  resolver REMOVAL is not a pack-facing operation. The kernel's bake-SEAL hook
-   *  reaches it structurally (`ResolverHostLike`, kernel.ts) on hosts that offer it —
-   *  `ResolvingAmbient` does — and falls back to the sealed-flag silencer on hosts
-   *  that don't. */
+   *  resolver REMOVAL is not a pack-facing operation. Prelude uses a discarded
+   *  per-run frame (`assembleRun`), not a resolver overlay. */
   registerResolver(resolver: ResolverSpec): void;
   /** Own bound names of THIS scope layer (string keys + symbols), not chained. The
    *  per-layer primitive `allBoundNames` walks; a consumer wanting only own-scope

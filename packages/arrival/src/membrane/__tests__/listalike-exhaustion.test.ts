@@ -26,7 +26,7 @@ import { describe, expect, it } from "vitest";
 import { mintFrame } from "../../env/AmbientRuntime.js";
 import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
-import { schemeToJs } from "../../index.js";
+import { toJS } from "../../index.js";
 import { jsToScheme } from "../rosetta.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 
@@ -42,7 +42,7 @@ const run = (code: string, bindings: Record<string, unknown> = {}) =>
 
 const out = async (code: string, bindings: Record<string, unknown> = {}) => {
   const { values } = await run(code, bindings);
-  return schemeToJs(values[0], {});
+  return toJS(values[0], {});
 };
 
 const HANG_GUARD = { timeout: 8000 } as const;
