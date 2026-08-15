@@ -15,7 +15,6 @@ import { describe, expect, it } from "vitest";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { execOverFrame as exec } from "../../eval/generator-exec.js";
 import { jsToScheme } from "../../membrane/rosetta.js";
-import { toJS } from "../../membrane/membrane.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
 import { bindValue } from "../../env/AmbientRuntime.js";
 
@@ -34,7 +33,7 @@ describe("Escaped Symbol Resolution", () => {
           |foo-bar!@#|)
       `);
 
-      expect(toJS(result, {})).toBe("special");
+      expect(result).toBe("special");
     });
   });
 
@@ -47,11 +46,11 @@ describe("Escaped Symbol Resolution", () => {
 
       // :24 should be treated as keyword and converted to "24" by @ function
       const result1 = await execOne(`(@ test-obj :24)`);
-      expect(toJS(result1, {})).toBe("numeric key value");
+      expect(result1).toBe("numeric key value");
 
       // :|24| should also work (keyword with escaped symbol)
       const result2 = await execOne(`(@ test-obj :|24|)`);
-      expect(toJS(result2, {})).toBe("numeric key value");
+      expect(result2).toBe("numeric key value");
     });
   });
 
@@ -65,7 +64,7 @@ describe("Escaped Symbol Resolution", () => {
           (define || "empty")
           ||)
       `);
-      expect(toJS(result, {})).toBe("empty");
+      expect(result).toBe("empty");
     });
 
     it("should handle unicode in escaped symbols", async () => {
@@ -75,7 +74,7 @@ describe("Escaped Symbol Resolution", () => {
           |hello-世界|)
       `);
 
-      expect(toJS(result, {})).toBe("unicode works");
+      expect(result).toBe("unicode works");
     });
 
     it("should handle pipes inside escaped symbols", async () => {
@@ -87,7 +86,7 @@ describe("Escaped Symbol Resolution", () => {
           (define |foo\\|bar| "pipe inside")
           |foo\\|bar|)
       `);
-      expect(toJS(result, {})).toBe("pipe inside");
+      expect(result).toBe("pipe inside");
     });
 
     it("should preserve case sensitivity in escaped symbols", async () => {
@@ -98,7 +97,7 @@ describe("Escaped Symbol Resolution", () => {
           (list |MyVariable| |myvariable|))
       `);
 
-      expect(toJS(result, {})).toEqual(["uppercase", "lowercase"]);
+      expect(result).toEqual(["uppercase", "lowercase"]);
     });
   });
 });

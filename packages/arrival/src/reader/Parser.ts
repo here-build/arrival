@@ -30,8 +30,7 @@ import * as specials from "./specials.js";
 import { is_nil } from "../values/value-guards.js";
 import { is_pair } from "../values/value-guards.js";
 import { is_builtin, is_bytevector_literal, is_directive, is_literal, is_special, is_symbol_extension, is_vector_literal } from "./token-guards.js";
-import type { EOF } from "../values/primitives/EOF.js";
-import { eof } from "../values/primitives/EOF.js";
+import { EOF, eof } from "../values/primitives/EOF.js";
 import { ParseError, type SourceLocation, Unterminated } from "../errors.js";
 import { Lexer } from "./Lexer.js";
 // These deps form an import cycle with the value/eval modules; ES6 live bindings
@@ -486,7 +485,7 @@ export class Parser {
     // unwrap it to the value it points at. `valueOf()` is `any`, so pin the result
     // to the public datum union here.
     const object: SchemeValue | EOF = read instanceof DatumReference ? read.valueOf() : read;
-    if (this._refs.length > 0 && object !== eof) {
+    if (this._refs.length > 0 && !(object instanceof EOF)) {
       const resolved = await this._resolve_object(object);
       if (resolved instanceof APair) {
         // mark cycles on parser level

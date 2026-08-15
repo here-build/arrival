@@ -29,7 +29,7 @@
  *    error-object-exit.law.test.ts owns that law).
  */
 import { describe, expect, it } from "vitest";
-import { INBOUND_CLAIMS, jsToScheme, toJS } from "../rosetta.js";
+import { INBOUND_CLAIMS, jsToScheme } from "../rosetta.js";
 import { NoLensError } from "../../errors.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AValue } from "../../values/primitives/AValue.js";
@@ -53,7 +53,8 @@ describe("inbound registry — the declared, ordered claim table IS the law", ()
       "AValue → identity / provenance re-stamp (class term)",
       "R9 egress proxy → original box (re-admission)",
       "reverse-membrane wrapper → original callable (re-admission)",
-      "scheme orphan (EOF/Values/R7RSError) → identity",
+      "reader token (EOF) → identity (not a SchemeValue)",
+      "scheme orphan (Values/R7RSError) → identity",
       "branded host instance → opaque handle (mint/reuse, whiteroom contract)",
       // PHASE 2 — the foreign lens table.
       "null → nil",
@@ -79,13 +80,10 @@ describe("inbound registry — the declared, ordered claim table IS the law", ()
     expect(entered.source).toBe(thenable);
   });
 
-  it("scheme orphans (EOF) pass by identity — a DECLARED claim, no longer smuggled through an exotic passthrough", () => {
+  it("reader token (EOF) passes by identity — not a SchemeValue, not an opaque handle", () => {
     expect(jsToScheme(CONSTANT_CTX, eof)).toBe(eof);
-    // …and a provenance stamp has no carrier on an orphan: still identity.
+    // …and a provenance stamp has no carrier: still identity.
     expect(jsToScheme(CONSTANT_CTX, eof, {}, PROV)).toBe(eof);
-    // Outbound twin: public toJS and nested egressUnknown must not invent `#<EOF>`.
-    expect(toJS(eof)).toBe(eof);
-    expect(jsToScheme(CONSTANT_CTX, toJS(eof))).toBe(eof);
   });
 
   it("no lens ⇒ a loud door, never a silent raw leak (exotic sweep — the binary membrane's phase 3)", () => {

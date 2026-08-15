@@ -4,9 +4,9 @@
  * type/interface/guard surface they share.
  *
  * SchemeValue is the honest union of every value the interpreter can hold:
- * every concrete AValue subclass, live non-AValue orphans (EOF, Values), and
- * ACallable values. Excludes DatumReference (reader-internal). Bare host
- * functions are not SchemeValue members.
+ * every concrete AValue subclass, live non-AValue orphans (Values, R7RSError),
+ * and ACallable values. Excludes reader-internal sentinels (DatumReference,
+ * EOF). Bare host functions are not SchemeValue members.
  */
 import type { AExact } from "./primitives/AExact.js";
 import type { AInexact } from "./primitives/AInexact.js";
@@ -86,7 +86,6 @@ export type SchemeValue =
   | ADict
   | AOpaqueHandle
   | AKernelKeyword
-  | EOF
   | Values
   | R7RSError
   // ACallable: ALambda / ANativeProcedure / ARosettaProcedure / DoorProcedure.
@@ -182,9 +181,7 @@ export type AUnwrap<T extends SchemeValue> = [SchemeValue] extends [T]
                           ? object
                           : [T] extends [ACallable]
                             ? (...args: unknown[]) => Promise<unknown>
-                            : [T] extends [EOF]
-                              ? EOF
-                              : unknown;
+                            : unknown;
 
 export interface SchemeStringLike {
   __string__: string | string[];

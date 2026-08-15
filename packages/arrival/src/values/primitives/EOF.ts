@@ -1,7 +1,8 @@
 import { INTEROP_BOUNDARY } from "../../membrane/interop-access.js";
 
-/** R7RS end-of-file object. Compared by identity against the {@link eof} singleton, so the reader can
- *  signal "input exhausted" with a sentinel distinguishable from any datum (`#f`, `nil`, etc.). */
+/** Reader-internal "source exhausted" sentinel. Compared by identity against {@link eof}
+ *  so the lexer/parser can distinguish end-of-input from any datum (`#f`, `nil`, etc.).
+ *  Not a SchemeValue — sibling of DatumReference; `eof-object` is an IO door. */
 export class EOF {
   /** Outside AValue — explicit interop stamp (FAMILY RULE misses non-AValue).
    *  `type()` reports `foreign:EOF`. */

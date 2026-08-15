@@ -1,5 +1,4 @@
 import { type ResolverSpec, type SchemeEnv } from "../common/scheme-env.js";
-import type { EOF } from "../values/primitives/EOF.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import type { Macro } from "../eval/Macro.js";
@@ -20,8 +19,8 @@ export type BindingName = string | symbol | ASymbol | AString;
 
 /** Anything storable in an environment: SchemeValues plus runtime types (Macro, Syntax, etc).
  *  Bare host functions are NOT ambient — callables are ACallable AValues already inside
- *  SchemeValue. */
-export type AmbientValue = SchemeValue | Macro | Syntax | EOF | AmbientRuntime | RegExp;
+ *  SchemeValue. EOF is a reader-internal sentinel, not a binding. */
+export type AmbientValue = SchemeValue | Macro | Syntax | AmbientRuntime | RegExp;
 
 /** Own string keys + own symbols of a binding record — what list() enumerates. */
 function ownProps(obj: object): (string | symbol)[] {

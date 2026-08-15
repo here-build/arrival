@@ -273,13 +273,13 @@ to completion before phase 2, phase 2 before phase 3's catch-all doors):
    REVERSE-MEMBRANE WRAPPER — the function-shaped sibling of the R9 row, checked
    before phase 2's function row since a wrapper is `typeof === "function"`-true —
    re-dispatches to the ORIGINAL callable it projects (`ACallable.ts`'s
-   `originalCallableOf`, §CALLABLE-LENS); a non-`AValue` scheme orphan
-   (`EOF`/`Values`/`R7RSError`, by identity); a branded `@arrival.private` host
+   `originalCallableOf`, §CALLABLE-LENS); a reader-internal EOF token (identity —
+   not a SchemeValue; `eof-object` is an IO door); a non-`AValue` scheme orphan
+   (`Values`/`R7RSError`, by identity); a branded `@arrival.private` host
    instance (mints/reuses a run-scoped `AOpaqueHandle`, the whiteroom opaque-crossing
-   contract). The scheme-orphan row MUST precede the branded-instance row:
-   `isMarkedInteropPrivate` reads the same `INTEROP_BOUNDARY` stamp our own orphan
-   classes carry for an unrelated reason (the read-policy walk), so checking
-   brand-first would mis-mint an orphan as a handle.
+   contract). Those owned non-AValue rows MUST precede the branded-instance row:
+   `isMarkedInteropPrivate` reads the same `INTEROP_BOUNDARY` stamp they carry
+   for the read-policy walk, so checking brand-first would mis-mint them as a handle.
 2. **PHASE 2 — the foreign lens table.** Every remaining row is a declared LENS, keyed
    by a distinct `typeof` tag: `null → nil`; `undefined → #void` (a lens now, no warn —
    the other host bottom, never collapsed with `null`); the array/plain-object

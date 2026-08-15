@@ -16,7 +16,6 @@ import { describe, expect, it } from "vitest";
 import { inferenceEnv } from "../env/inference-env.js";
 import { execOverFrame as exec } from "../eval/generator-exec.js";
 import { jsToScheme } from "../membrane/rosetta.js";
-import { toJS } from "../membrane/membrane.js";
 import { EnvCapability } from "../common/capability.js";
 import { applyCapability } from "./_fresh-env.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
@@ -38,7 +37,7 @@ describe("Escaped Symbol Resolution", () => {
           |24|)
       `);
 
-      expect(toJS(result, {})).toBe("twenty-four");
+      expect(result).toBe("twenty-four");
     });
 
     it("should handle symbols with spaces", async () => {
@@ -48,7 +47,7 @@ describe("Escaped Symbol Resolution", () => {
           |my variable|)
       `);
 
-      expect(toJS(result, {})).toBe(42);
+      expect(result).toBe(42);
     });
   });
 
@@ -65,7 +64,7 @@ describe("Escaped Symbol Resolution", () => {
             "42": "value-42",
             normal: "normal-value" }) }),
       );
-      expect(toJS(result, {})).toBe("value-24");
+      expect(result).toBe("value-24");
     });
   });
 
@@ -81,7 +80,7 @@ describe("Escaped Symbol Resolution", () => {
       ]);
 
       const result = await execOne(`(|get-24|)`);
-      expect(toJS(result, {})).toBe(24);
+      expect(result).toBe(24);
     });
 
     it("should define functions with space-containing names", async () => {
@@ -95,7 +94,7 @@ describe("Escaped Symbol Resolution", () => {
       ]);
 
       const result = await execOne(`(|my function| 21)`);
-      expect(toJS(result, {})).toBe(42);
+      expect(result).toBe(42);
     });
   });
 
@@ -113,7 +112,7 @@ describe("Escaped Symbol Resolution", () => {
           (@ test-obj :foo_bar))
       `);
 
-      expect(toJS(result, {})).toEqual(["hyphenated", "underscored"]);
+      expect(result).toEqual(["hyphenated", "underscored"]);
     });
   });
 
@@ -130,8 +129,7 @@ describe("Escaped Symbol Resolution", () => {
         (@ components :|794f1e9c-5726-4a0c-a8b6-c0ae5f31f4e4|)
       `);
 
-      const jsResult = toJS(result, {});
-      expect(jsResult.name).toBe("Button");
+      expect(result).toMatchObject({ name: "Button" });
     });
 
     it("should chain property access with mixed key types", async () => {
@@ -154,7 +152,7 @@ describe("Escaped Symbol Resolution", () => {
             (@ project :|24|)))
       `);
 
-      expect(toJS(result, {})).toEqual([
+      expect(result).toEqual([
         "794f1e9c-5726-4a0c-a8b6-c0ae5f31f4e4",
         "My Project",
         "numeric property value",
@@ -179,10 +177,9 @@ describe("Escaped Symbol Resolution", () => {
           items)
       `);
 
-      const jsResult = toJS(result, {});
-      expect(jsResult).toHaveLength(2);
-      expect(jsResult[0]["item-id"]).toBe("1");
-      expect(jsResult[1]["item-id"]).toBe("3");
+      expect(result).toHaveLength(2);
+      expect(result[0]["item-id"]).toBe("1");
+      expect(result[1]["item-id"]).toBe("3");
     });
   });
 });

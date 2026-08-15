@@ -196,9 +196,9 @@ function egressUnknown(value: unknown, options: RosettaOptions): unknown {
     if (value instanceof R7RSError) {
       return errorToHost(value, (el) => egressUnknown(el, options));
     }
-    // Scheme-orphan BEFORE branded-host — same order as inbound. EOF is already a
-    // host-class singleton; projecting `#<EOF>` via INTEROP_BOUNDARY would invent
-    // a string face that cannot round-trip (jsToScheme("#<EOF>") → AString).
+    // Reader token BEFORE branded-host — same order as inbound. EOF is not a
+    // SchemeValue; projecting `#<EOF>` via INTEROP_BOUNDARY would invent a
+    // string face. Identity if a walk ever sees one; public toJS does not accept it.
     if (value instanceof EOF) return value;
     // Raw FFI passthrough — never boxed (mirrors inbound exotic carve-out).
     if (
@@ -247,9 +247,6 @@ export function toJS<T extends SchemeValue>(value: T, options: RosettaOptions = 
   if (value instanceof R7RSError) {
     return errorToHost(value, (el) => egressUnknown(el, options)) as AUnwrap<T>;
   }
-  // EOF is a host-class singleton (not an AValue). Identity is the only face
-  // that keeps jsToScheme∘toJS = id; inbound already claims it that way.
-  if (value instanceof EOF) return value as AUnwrap<T>;
   if (value instanceof AValue) return egressAValue(value, options) as AUnwrap<T>;
   throw new RedundantCrossingError("toJS");
 }
@@ -282,13 +279,14 @@ export interface InboundClaim {
  * of {@link INBOUND_CLAIMS}, not a second dispatch):
  *
  *   PHASE 1 — {@link OWNED_ARTIFACT_CLAIMS}: already MARKED as ours (AValue, re-admitted
- *   egress proxy, reverse-membrane wrapper, scheme orphan, branded opaque-handle source)
+ *   egress proxy, reverse-membrane wrapper, reader-token EOF, scheme orphan,
+ *   branded opaque-handle source)
  *   before ANY foreign-shape predicate. Phase 1 before phase 2 is load-bearing: an R9
  *   proxy over a vector is `Array.isArray`-true (and a reverse-membrane wrapper is
  *   `typeof === "function"`-true) and would otherwise be mis-claimed by phase 2.
- *   Within phase 1, mostly order-free EXCEPT: scheme-orphan BEFORE branded-host —
- *   EOF/Values/R7RSError carry the same `INTEROP_BOUNDARY` stamp
- *   `isMarkedInteropPrivate` reads; reverse order would mint them as AOpaqueHandle.
+ *   Within phase 1, mostly order-free EXCEPT: owned non-AValue (reader-token EOF,
+ *   Values, R7RSError) BEFORE branded-host — they carry the same `INTEROP_BOUNDARY`
+ *   stamp `isMarkedInteropPrivate` reads; reverse order would mint them as AOpaqueHandle.
  *
  *   PHASE 2 — {@link FOREIGN_LENS_CLAIMS}: typeof-disjoint lenses (array/plain-object
  *   ladder lives INSIDE the single "object" row). Familiar crossings only — no
@@ -347,10 +345,16 @@ export const OWNED_ARTIFACT_CLAIMS: readonly InboundClaim[] = [
       return original;
     } },
   {
+    // Reader-internal sentinel (not a SchemeValue). Identity so INTEROP_BOUNDARY
+    // does not mint an AOpaqueHandle. Public toJS does not accept EOF.
+    name: "reader token (EOF) → identity (not a SchemeValue)",
+    claims: (v) => v instanceof EOF,
+    box: (_ctx, v) => v },
+  {
     // Non-AValue scheme orphans: identity, no provenance slot. BEFORE branded-host
     // (INTEROP_BOUNDARY stamp overlap with isMarkedInteropPrivate — see phase header).
-    name: "scheme orphan (EOF/Values/R7RSError) → identity",
-    claims: (v) => v instanceof EOF || v instanceof Values || v instanceof R7RSError,
+    name: "scheme orphan (Values/R7RSError) → identity",
+    claims: (v) => v instanceof Values || v instanceof R7RSError,
     box: (_ctx, v) => v },
   {
     // Branded HOST class (`@arrival.private` / markInteropPrivate) — opaque-crossing

@@ -50,10 +50,11 @@ cannot be forged by structural coincidence and cannot rot the way an enumerated
 per-class list does.
 
 Open design note: SchemeValue is too broad — the honest shape is lifecycle
-**sub-unions** with their own admissibility (EOF cannot sit inside a pair;
-Values/Keyword have positions where they are and are not legal). The sub-union
-lattice is a design problem to be solved as a whole; mechanically tightening
-`isSchemeValue` call-site by call-site just moves the imprecision around.
+**sub-unions** with their own admissibility (Values/Keyword have positions
+where they are and are not legal). EOF is no longer a member — it is a
+reader-internal sentinel, same category as DatumReference. The remaining
+sub-union lattice is a design problem to be solved as a whole; mechanically
+tightening `isSchemeValue` call-site by call-site just moves the imprecision around.
 
 ## R4 — AHalfBaked: removed (VERDICT KILL)
 
