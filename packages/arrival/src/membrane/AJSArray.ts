@@ -239,7 +239,7 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
       throw e;
     }
     if (raw === NOT_FOUND) return nil;
-    if (Array.isArray(raw)) return new AJSArray(raw);
+    if (Array.isArray(raw)) return new AJSArray(raw as readonly unknown[]);
     // Promise-valued member is a lazy pending cell — settled box carries EMPTY
     // provenance, same as the sync read below.
     if (is_promise(raw))
