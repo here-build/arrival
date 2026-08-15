@@ -3,7 +3,7 @@
  * rework doc §2.4: "straight to DO, no bridge"). Extracted from the two deployments that
  * built it twice (inhuman's `McpSessionDO`, here.build's `MCPSessionDO`); products extend
  * this abstract class and supply ONLY their capability plane — no product semantics here
- * (the `hono-plexus-do` posture).
+ * (the `plexus-do` posture).
  *
  * The DO's id derives from `mcp-session-id` (`idFromName` at the worker); the DO hosts:
  *
