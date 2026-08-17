@@ -389,8 +389,8 @@ export const phase1Rules: SymbolRuleTable = {
   // DECLARED in srfi-1.ts): grepped, confirmed absent from every
   // foundations/arrival/arrival/src/env/**/*.ts. The interpreter binds it by
   // injecting a scheme-level `(define (max-by f xs) …)` STRING into every session's
-  // prelude (arrival-run/src/run-program.ts's `BUILTIN_PREAMBLE`, flagged there as a
-  // standing TODO to migrate into a real core pack) — no Contract, so no ambient row
+  // prelude (the retired arrival-run engine's `BUILTIN_PREAMBLE`, long since migrated
+  // onto the runner plane's own symbol declarations) — no Contract, so no ambient row
   // is possible until that migration lands. This presence row is therefore the
   // entire fix: falls to the rung-3 shim (`maxBy` in runtime/stage0.ts), same tier
   // as `max` itself (`max_`). Ties: the interpreter's own body (`reduce` seeded on

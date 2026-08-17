@@ -508,8 +508,8 @@ export const CORPUS_EXPECTATIONS: readonly CorpusExpectation[] = [
 
   /**
    * `max-by` — argmax by key function (not Contract-backed anywhere; the
-   * interpreter binds it via a scheme-string preamble, `arrival-run`'s
-   * `BUILTIN_PREAMBLE` — see rules/phase1.ts's `"max-by"` row and
+   * interpreter binds it via a scheme-string preamble, the retired arrival-run
+   * engine's `BUILTIN_PREAMBLE` — see rules/phase1.ts's `"max-by"` row and
    * runtime/stage0.ts's `maxBy`). First case: plain argmax, no tie. Second case
    * PINS the tie behavior: two entries share the max key (5); the reference
    * (`(reduce (lambda (x best) (if (> (f x) (f best)) x best)) (car xs) (cdr

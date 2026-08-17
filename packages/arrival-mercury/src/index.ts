@@ -203,7 +203,7 @@ export {
 // ── the ATTRIBUTION CIRCUIT — extract (CoreForm → StaticProv, I1's totality proof) +
 //    circuitToSexpr (its homoiconic render), plus the registry `extractProgram` needs
 //    (static-prov.ts's G1 freeze; circuit-sexpr.ts's T6b). The ONE surface a host OUTSIDE
-//    the arrival-mercury → arrival-run → arrival-reflect cycle (e.g. inhuman-mcp-worker) needs
+//    the arrival-mercury → arrival-reflect edge (e.g. inhuman-mcp-worker) needs
 //    to inject a live `circuit` capability into an arrival-reflect `ResultHandle` — see
 //    arrival-reflect's `handle-provenance.ts` (`circuitOf`) for why arrival-reflect itself can
 //    never import this package directly. ──
@@ -270,7 +270,7 @@ export type {
 // this package (only extract/circuitToSexpr were, for T6b's `circuit`
 // capability) — T6c's whole job is wiring the two rails together, and the
 // wiring lives OUTSIDE this package (mcp-worker, which sits outside the
-// arrival-mercury → arrival-run → arrival-reflect cycle — see arrival-reflect's
+// arrival-mercury → arrival-reflect edge — see arrival-reflect's
 // `circuitOf` doc for why). Exporting these is pure plumbing: no logic here
 // changes, every symbol is re-exported verbatim from its owning module. ──
 export { channels, circuitVerdict, planeOf, type Channels, type ChannelAnchor, type ChannelTerminals, type CircuitRole, type CircuitVerdict, type Plane } from "./verdict/circuit-verdict.js";

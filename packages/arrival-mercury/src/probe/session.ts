@@ -8,8 +8,8 @@
  * influence… two questions, two planes") — this file never imports `../wire/`,
  * and nothing here assumes the static wire map exists yet.
  *
- * Built on the run-engine's session shape (`@inhuman.tools/arrival-run`'s
- * `ArrivalSession` — the `(runCtx, scope, capabilities, config)` tuple
+ * Built on the session tuple (this package's `MercurySession` — the
+ * `(runCtx, scope, capabilities, config)` tuple
  * `execState` mints and reuses): ONE reusable capability-DAG assembly (the
  * expensive part, §2.4's reuse contract), held across every baseline/probe
  * re-run — a FRESH `LexicalScope` per evaluated program, so one program's
@@ -26,7 +26,7 @@
  * (`@inhuman.tools/arrival-effects`'s `EffectLog`, keyed the same way —
  * `CallSignature`'s `[model, prompt, schema, cacheKey]` tuple, same shape the
  * retired capability's own key used). Rooting it as a HOST capability
- * (`buildArrivalSession`'s `opts.capabilities`, highest precedence) makes it
+ * (`openSession`'s `capabilities`, highest precedence) makes it
  * exactly as first-class as any production verb — the corpus below spells
  * `(infer "m" "p")` exactly as it always has.
  *
@@ -40,7 +40,7 @@
  * AT THE MEMBRANE, where effects already are.
  */
 import { EnvCapability, execState, jsToScheme, LexicalScope, parse, toJS, type SchemeValue } from "@inhuman.tools/arrival";
-import { buildArrivalSession, type ArrivalSession } from "@inhuman.tools/arrival-run";
+import { openSession, type MercurySession } from "../session.js";
 
 /**
  * One crossing's content identity — the `(infer …)` call-site tuple the real
@@ -169,7 +169,7 @@ interface InferRouter {
  * The session-private capability rooting `infer` (see file header — THE
  * SUBSTITUTION SEAM). A fresh instance per session (closed over that
  * session's OWN `router`), passed as a host capability at HIGHEST precedence
- * (`buildArrivalSession`'s `opts.capabilities`), so it binds `infer` exactly
+ * (`openSession`'s `capabilities`), so it binds `infer` exactly
  * like a production verb would — the corpus never sees a difference.
  *
  * `infer` egresses as a 1-element list (mirrors the retired `arrival/infer`
@@ -188,7 +188,9 @@ function buildProbeInferCapability(router: InferRouter): EnvCapability {
             );
           }
           const result = await router.current(model, prompt);
-          return jsToScheme(this.runCtx, [result]);
+          // WORLD-FLIP RULING (2026-08-13): plain JS out — the membrane boxes (z.dynamic
+          // output). The 1-element list shape is the probe corpus's own convention.
+          return [result];
         },
       ),
     }),
@@ -197,10 +199,10 @@ function buildProbeInferCapability(router: InferRouter): EnvCapability {
 
 /** One reusable capability-DAG assembly (mirrors `OracleSession` — the
  *  expensive part, held across every baseline/probe re-run of small
- *  programs). `dispose()` tears down the shared run. Literally an
- *  `ArrivalSession` — no separate wrapping shape needed now that the session
+ *  programs). `dispose()` tears down the shared run. Literally a
+ *  `MercurySession` — no separate wrapping shape needed now that the session
  *  IS the `(runCtx, scope, capabilities, config)` tuple. */
-export type ProbeSession = ArrivalSession;
+export type ProbeSession = MercurySession;
 
 const routerOf = new WeakMap<ProbeSession, InferRouter>();
 
@@ -208,7 +210,7 @@ const routerOf = new WeakMap<ProbeSession, InferRouter>();
  *  reusable across many `recordRun`/`probe` calls (§2.4's reuse contract). */
 export async function openProbeSession(): Promise<ProbeSession> {
   const router: InferRouter = {};
-  const session = await buildArrivalSession({
+  const session = await openSession({
     name: "arrival-mercury-probe",
     capabilities: [buildProbeInferCapability(router)],
     params: {},

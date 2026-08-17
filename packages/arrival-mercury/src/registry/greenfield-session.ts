@@ -5,21 +5,21 @@
  * `build/project`) can build the registry it needs WITHOUT importing the harness
  * (which loads `tsx/esm/api` at module eval — browser/edge poison).
  *
- * Transitively node-free: `buildArrivalSession` (arrival-run) and the registry /
- * rules harvest are all browser-safe. The differential oracle
- * (`arrival-mercury-oracle`) imports these back DOWN from here.
+ * Transitively node-free: `openSession` (this package's own session mint over
+ * the runner plane) and the registry / rules harvest are all browser-safe. The
+ * differential oracle (`arrival-mercury-oracle`) imports these back DOWN from here.
  */
-import { buildArrivalSession, type ArrivalSession } from "@inhuman.tools/arrival-run";
+import { openSession, type MercurySession } from "../session.js";
 
 import { phase1Rules, withRules, type OverlayEmitRegistry } from "../rules/index.js";
 
 import { emitRegistryOf } from "./index.js";
 
 /** The expensive, reusable half of a differential run — one capability-DAG
- *  assembly, held across many corpus/fuzz iterations (spec §4.1). Literally an
- *  `ArrivalSession` — the `(runCtx, scope, capabilities, config)` tuple `execState`
- *  itself mints and reuses; no separate wrapping shape needed. */
-export type OracleSession = ArrivalSession;
+ *  assembly, held across many corpus/fuzz iterations (spec §4.1). Literally a
+ *  {@link MercurySession} — the `(runCtx, scope, capabilities, config)` tuple
+ *  `execState` itself mints and reuses; no separate wrapping shape needed. */
+export type OracleSession = MercurySession;
 
 /**
  * Build the one shared interpreter session. No `loader` is passed — every
@@ -32,7 +32,7 @@ export type OracleSession = ArrivalSession;
  * existed to give `(infer …)`), so no host-side stub is needed here at all.
  */
 export async function openOracleSession(): Promise<OracleSession> {
-  return buildArrivalSession({ name: "arrival-mercury-oracle", params: {} });
+  return openSession({ name: "arrival-mercury-oracle", params: {} });
 }
 
 /** One `withRules(harvest, phase1Rules)` registry per session's `RunContext` — the
