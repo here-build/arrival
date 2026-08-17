@@ -111,7 +111,7 @@ describe("require-as-import — multi-path faces (no overload bag)", () => {
 
     const diags = multiLs.getSemanticDiagnostics(scheme);
     const clash = diags.filter((d) =>
-      /No overload matches|not assignable to parameter of type '"/.test(String(d.messageText ?? d.message ?? "")),
+      /No overload matches|not assignable to parameter of type '"/.test(String(d.messageText ?? "")),
     );
     expect(clash).toEqual([]);
   });

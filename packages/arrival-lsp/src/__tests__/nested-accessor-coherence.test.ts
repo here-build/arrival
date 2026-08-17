@@ -24,11 +24,7 @@ describe("nested accessor coherence — LSP", () => {
     expect(program).toMatch(/node:\s*\{\s*triaged:\s*List</);
     const diags = ls.getSemanticDiagnostics(TRIAGE);
     const unknownObj = diags.filter((d) =>
-      /Object is of type 'unknown'|is of type 'unknown'/.test(String(d.messageText ?? d.message ?? "")),
+      /Object is of type 'unknown'|is of type 'unknown'/.test(String(d.messageText ?? "")),
     );
-    expect(unknownObj, () => {
-      console.log(program);
-      return JSON.stringify(diags.map((d) => d.messageText ?? d.message));
-    }).toEqual([]);
-  });
+    expect(unknownObj).toEqual([]);  });
 });

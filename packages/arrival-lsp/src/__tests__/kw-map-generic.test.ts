@@ -13,10 +13,10 @@ describe("keyword-as-fn under map — HOF-safe generic", () => {
     const diags = ls.getSemanticDiagnostics(scheme);
     const bad = diags.filter((d) =>
       /is of type 'unknown'|not assignable to parameter of type '\(a: unknown\)'|Type 'unknown' is not assignable to type '\{ score/.test(
-        String(d.messageText ?? d.message ?? ""),
+        String(d.messageText ?? ""),
       ),
     );
-    expect(bad, () => JSON.stringify(diags.map((d) => d.messageText ?? d.message))).toEqual([]);
+    expect(bad).toEqual([]);
   });
 
   it("(map :score unknown-list) accepts (a: unknown) => … HOF slot", () => {
@@ -26,9 +26,9 @@ describe("keyword-as-fn under map — HOF-safe generic", () => {
     const diags = ls.getSemanticDiagnostics(scheme);
     const contravariant = diags.filter((d) =>
       /not assignable to parameter of type '\(a: unknown\)'|Type 'unknown' is not assignable to type '\{ score/.test(
-        String(d.messageText ?? d.message ?? ""),
+        String(d.messageText ?? ""),
       ),
     );
-    expect(contravariant, () => JSON.stringify(diags.map((d) => d.messageText ?? d.message))).toEqual([]);
+    expect(contravariant).toEqual([]);
   });
 });

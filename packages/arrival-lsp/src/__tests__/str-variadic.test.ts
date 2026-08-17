@@ -16,9 +16,9 @@ describe("bare formals — arbitrary length, type from consumers", () => {
     expect(program).toContain('str("a", 1, "b", "c")');
     const diags = ls.getSemanticDiagnostics(scheme);
     const arity = diags.filter((d) =>
-      /Expected 0 arguments|Expected \d+ arguments/.test(String(d.messageText ?? d.message ?? "")),
+      /Expected 0 arguments|Expected \d+ arguments/.test(String(d.messageText ?? "")),
     );
-    expect(arity, () => JSON.stringify(diags.map((d) => d.messageText ?? d.message))).toEqual([]);
+    expect(arity).toEqual([]);
   });
 
   it("rest element type is call-site common denom when body only yields List<any>", () => {
@@ -33,7 +33,7 @@ describe("bare formals — arbitrary length, type from consumers", () => {
     // Prefer List<string> (or bare rest) over inventing zero-arity.
     expect(program).not.toMatch(/const join = \(\)\s*=>/);
     const diags = ls.getSemanticDiagnostics(scheme);
-    const arity = diags.filter((d) => /Expected 0 arguments/.test(String(d.messageText ?? d.message ?? "")));
+    const arity = diags.filter((d) => /Expected 0 arguments/.test(String(d.messageText ?? "")));
     expect(arity).toEqual([]);
   });
 });

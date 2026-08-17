@@ -28,11 +28,7 @@ describe("str rest domain — any values, not List<string>-only", () => {
     expect(program).not.toMatch(/\(\.\.\.args:\s*List<string>/);
     const diags = ls.getSemanticDiagnostics(scheme);
     const listClash = diags.filter((d) =>
-      /List<string>|not assignable to parameter of type/.test(String(d.messageText ?? d.message ?? "")),
+      /List<string>|not assignable to parameter of type/.test(String(d.messageText ?? "")),
     );
-    expect(listClash, () => {
-      console.log(program);
-      return JSON.stringify(diags.map((d) => d.messageText ?? d.message));
-    }).toEqual([]);
-  });
+    expect(listClash).toEqual([]);  });
 });
