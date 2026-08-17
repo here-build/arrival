@@ -1,12 +1,12 @@
 // require-shape — `(require "data.json")` resolves to its GRANULAR shape, not
 // `unknown`. The editor twin of the runtime loader registry: the lens is fed a
-// `resolveRequireType` seam derived from the SAME `defaultResolvers()` the
-// runtime parses with (via arrival-chain's `resolveRequireType`), so a data
-// file's `(require)` hovers/checks as its precise object/list type.
+// `resolveRequireType` seam derived from the same table family the runtime
+// resolves with (arrival-chain's `resolveRequireTypeWithPrompts`: the loader's
+// builtins + the dep-bearing formats' capability handlers' editor facets), so a
+// data file's `(require)` hovers/checks as its precise object/list type.
 //
 // Per `.claude/rules/tests.md` this is a `__tests__/` verdict (boolean pass/fail).
 
-import { resolveRequireType } from "@inhuman.tools/arrival/capabilities/loader";
 import { loaderFromResolver, resolveRequireTypeWithPrompts } from "@inhuman.tools/llm-plane-arrival-chain";
 import { describe, expect, it } from "vitest";
 
@@ -31,7 +31,7 @@ const ls = createSchemeLanguageService({
   compilerOptions: { noImplicitAny: false },
   host,
   resolveModule: (p) => FILES[p] ?? null,
-  resolveRequireType: (p) => (FILES[p] === undefined ? null : resolveRequireType(loader, p, FILES[p]!)),
+  resolveRequireType: (p) => (FILES[p] === undefined ? null : resolveRequireTypeWithPrompts(loader, p, FILES[p]!)),
 });
 
 describe("(require data-file) → granular shape", () => {
