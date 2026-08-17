@@ -196,6 +196,23 @@ export function isHostRuntimeBug(e: unknown): boolean {
   );
 }
 
+/** Render a thrown error into a display-ready message for a host's run-error surface. A
+ *  non-empty `schemeStack` contributes form-by-form frames (`toString()` — form +
+ *  file:line + procedure); a `requireChain` (annotated by the loader when a throw escapes
+ *  a required module — entry → failing module) is appended. Plain errors fall back to
+ *  `.message`. `requireChain` stays duck-typed: the loader annotates it best-effort onto
+ *  whatever error escapes (loader-capability.ts), frozen targets included. */
+export function formatRunError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const err = error as Error & { schemeStack?: unknown[]; requireChain?: unknown };
+  // Only prefer toString when there is a non-empty scheme stack — empty arrays still
+  // make `"schemeStack" in error` true but add nothing over `.message`.
+  const hasStack = Array.isArray(err.schemeStack) && err.schemeStack.length > 0;
+  const base = hasStack ? error.toString() : error.message;
+  const chain = err.requireChain;
+  return Array.isArray(chain) && chain.length > 0 ? `${base}\n\nrequire chain: ${chain.join(" → ")}` : base;
+}
+
 // -------------------------------------------------------------------------
 // :: BudgetExceededError — run containment (wall-clock or heap), never a fault.
 // One class for both; call sites build their own full message.

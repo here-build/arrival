@@ -111,4 +111,5 @@ export type { Invocation } from "./eval/dynamic-call-site.js";
 // Error root — every arrival error extends `ArrivalError`. `ErrorClass` (the
 // `"arrival/error-category"` union every subclass must declare) is a cross-package type
 // import for subclasses defined outside this package (e.g. arrival-provenance).
-export { ArrivalError, type ErrorClass } from "./errors.js";
+// `formatRunError` renders scheme stack + require chain for host run-error surfaces.
+export { ArrivalError, formatRunError, type ErrorClass } from "./errors.js";

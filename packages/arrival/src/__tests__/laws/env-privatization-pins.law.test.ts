@@ -88,6 +88,8 @@ describe("V0 pin — barrel surface", () => {
         "disposeRunContext",
         "exec",
         "execState",
+        // Host run-error rendering (scheme stack + require chain) — errors.ts.
+        "formatRunError",
         // Membrane: public outbound exit + double-wrap predicate (see index.ts).
         "isSchemeValue",
         "jsToScheme",

@@ -4,7 +4,7 @@
 // host-armed `configuration.extensionRegistry`), the structural `SchemeEnv` contract a
 // pack types against, and the interop-sealing marks the whiteroom Blob-law needs.
 // The `-internals` name is the no-stability-contract signal — a sibling contract between
-// arrival core and packages that embed a run (arrival-run, llm-plane-arrival-chain,
+// arrival core and packages that embed a run (runner-capability, llm-plane-arrival-chain,
 // MCP/studio hosts), never the capability-authoring public surface.
 
 // Interop sealing — `@arrival.private` (+ `markInteropBoundary`) marks a class opaque to
