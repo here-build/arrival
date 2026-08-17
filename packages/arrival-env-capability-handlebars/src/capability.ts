@@ -9,7 +9,7 @@
  * Compiler: Contract.emit → RuntimeRef; RUNTIME_MANIFEST maps those symbols to
  * this package's `/runtime` subpath (the mercury reference example).
  */
-import { EnvCapability, jsToScheme, parse, toJS, type SchemeValue } from "@inhuman.tools/arrival";
+import { EnvCapability, parse, toJS, type SchemeValue } from "@inhuman.tools/arrival";
 import { Call, type EmitRule, type R } from "@inhuman.tools/arrival/emit";
 import { arrivalLoaderCapability, contentsToText } from "@inhuman.tools/arrival/capabilities/loader";
 
@@ -64,7 +64,10 @@ export const arrivalHandlebarsCapability = EnvCapability.define("arrival/handleb
         emit: runtimeEmit("handlebars/parse"),
       },
       function (source) {
-        return jsToScheme(this.runCtx, compileTemplate(source));
+        // WORLD-FLIP RULING (2026-08-13): return the PLAIN compiled template — the membrane
+        // boxes by reference (z.dynamic output), so JS-side consumers (`runCompiledTemplate`)
+        // still peel back to THIS object — the borrowed-identity contract holds.
+        return compileTemplate(source);
       },
     ),
     "handlebars/run": symbol.rosetta`handlebars/run: renders a previously compiled handlebars template with args`(
