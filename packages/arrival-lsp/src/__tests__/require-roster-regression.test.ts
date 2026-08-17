@@ -13,14 +13,15 @@
 //
 // This suite builds the roster the way studio does, from the REAL session, so a
 // regression in the derivation chain (defineRequireRosetta drops `type`,
-// assembleHostPrelude drops a member, buildArrivalSession stops stamping it)
+// assembleHostPrelude drops a member, the mint stops stamping it)
 // turns this red instead of silently degrading the editor.
 //
 // Per `.claude/rules/tests.md` this is a `__tests__/` verdict (boolean pass/fail).
 
+import { disposeRunContext, execState, LexicalScope } from "@inhuman.tools/arrival";
 import { rosettaTypesOf } from "@inhuman.tools/arrival/lsp-internals";
 import { resolveRequireType } from "@inhuman.tools/arrival/capabilities/loader";
-import { buildArrivalSession } from "@inhuman.tools/arrival-run";
+import { inhumanRunnerCapability } from "@inhuman.tools/runner-capability";
 import { loaderFromResolver } from "@inhuman.tools/llm-plane-arrival-chain";
 import { beforeAll, describe, expect, it } from "vitest";
 
@@ -32,17 +33,24 @@ const FILES: Record<string, string> = {
   "personas.json": `[{"name":"Ada","age":36}]`,
 };
 
-// Stubs: this session never executes requires (the lens only reads its roster).
-const stubInfer = (async () => [""]) as unknown as Parameters<typeof buildArrivalSession>[0]["infer"];
+// Stub: this session never executes requires (the lens only reads its roster).
 const stubLoader = loaderFromResolver((p) => FILES[p] ?? null);
 
-/** The runtime session — the rosetta-type registry keyed on its SCOPE frame
- *  (`rosettaTypesOf(session.scope.env)`, where `buildArrivalSession` stamps `require`) is the
- *  SINGLE SOURCE OF TRUTH studio derives the lens roster from. Built async (eval has no sync path). */
-let env: Awaited<ReturnType<typeof buildArrivalSession>>["scope"]["env"];
+/** The runtime session mint (loaderSession idiom over the runner plane) — the
+ *  rosetta-type registry keyed on its SCOPE frame (`rosettaTypesOf(scope.env)`)
+ *  is the SINGLE SOURCE OF TRUTH studio derives the lens roster from. `require`
+ *  is raw-bound by the loader capability (never `defineRosetta`-wrapped), so the
+ *  mint stamps it into the side-table by hand — the runner-side convention this
+ *  suite pins downstream of. Built async (eval has no sync path). */
+let env: LexicalScope["env"];
 beforeAll(async () => {
-  const session = await buildArrivalSession({ name: "regression", infer: stubInfer, loader: stubLoader });
-  env = session.scope.env;
+  const capabilities = [inhumanRunnerCapability] as const;
+  const config: Record<string, unknown> = { loader: stubLoader };
+  const scope = LexicalScope.fresh("regression");
+  const first = await execState("(begin)", { capabilities, config, scope });
+  rosettaTypesOf(scope.env).set("require", "(specifier: SStr): unknown");
+  await disposeRunContext(first.runCtx);
+  env = scope.env;
 });
 
 // The seam studio synthesizes host-side: route a file's source through the

@@ -4,7 +4,7 @@
  * `groundingVerdict` answers ONE question about a finished traced run: does EVERY
  * value-position leaf of the result trace back to at least one recorded source
  * point? It is the host-side API of the seal (completion-plan gap 4, V5): a host
- * (manifold post-eval, an MCP result step, an arrival-run harness) calls it AFTER
+ * (manifold post-eval, an MCP result step, a runner-plane harness) calls it AFTER
  * the run, over the same `{ result, trace, source, forms }` bag `buildUneval`
  * (core `provenance/uneval.ts`) consumes — the two compose over one run without
  * reshaping. There is deliberately no in-language `(seal result)` verb yet

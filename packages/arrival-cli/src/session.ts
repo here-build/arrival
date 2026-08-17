@@ -1,6 +1,6 @@
 /**
  * The ONE run posture every CLI verb shares: the entry-point budgets (100M heap /
- * 300s wall, env-tunable — the same knobs `arrival-run` reads), the loader-armed
+ * 300s wall, env-tunable — the same knobs runner-capability's budget.ts reads), the loader-armed
  * (runCtx, scope) WARM PAIR for require-using programs (the CUT, capability-refined:
  * `arrivalLoaderCapability` minted once via {@link execState}, jailed to a root dir, paired
  * with a {@link LexicalScope.fresh} session scope), and the two output surfaces — values
@@ -39,13 +39,13 @@ import type { ArmedCapabilities } from "./capabilities.js";
 import type { OutputMode } from "./output-mode.js";
 import { colorizeSexpr } from "./sexpr-color.js";
 
-/** Per-run ALLOCATION cap — same default + env var as arrival-run's entry point. */
+/** Per-run ALLOCATION cap — same default + env var as runner-capability's entry defaults. */
 function heapDefault(): number {
   const raw = Number(process.env.ARRIVAL_HEAP_MAX);
   return Number.isFinite(raw) && raw > 0 ? raw : 100_000_000;
 }
 
-/** Wall-clock budget — the 5-minute program class, same env var as arrival-run. */
+/** Wall-clock budget — the 5-minute program class, same env var as runner-capability. */
 function wallDefault(): number {
   const raw = Number(process.env.ARRIVAL_RUN_BUDGET_MS);
   return Number.isFinite(raw) && raw > 0 ? raw : 300_000;

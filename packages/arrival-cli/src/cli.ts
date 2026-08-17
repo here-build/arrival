@@ -134,7 +134,7 @@ async function runFile(file: string, mode: OutputMode, inspect: Inspect, armed?:
       process.stderr.write(`${REQUIRE_SKIP_NOTE}\n`);
       const { capabilities, config, runCtx, scope } = await loaderSession(
         path.dirname(path.resolve(file)),
-        `arrival-run:${path.basename(file)}`,
+        `arrival-file:${path.basename(file)}`,
         armed,
       );
       try {

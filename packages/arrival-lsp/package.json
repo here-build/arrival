@@ -81,11 +81,11 @@
   },
   "dependencies": {
     "@inhuman.tools/arrival-internals-types-prelude": "workspace:^",
-    "@inhuman.tools/arrival-sugarcoat": "workspace:^",
     "@inhuman.tools/arrival-mercury": "workspace:^",
-    "typescript": "6.0.2",
-    "@inhuman.tools/arrival-run": "workspace:^",
-    "@inhuman.tools/llm-plane-arrival-chain": "workspace:^"
+    "@inhuman.tools/arrival-sugarcoat": "workspace:^",
+    "@inhuman.tools/llm-plane-arrival-chain": "workspace:^",
+    "@inhuman.tools/runner-capability": "workspace:^",
+    "typescript": "6.0.2"
   },
   "devDependencies": {
     "@inhuman.tools/arrival": "workspace:^",
