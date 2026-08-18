@@ -13,7 +13,7 @@
  * AValue`); no per-class stamp needed.
  */
 
-import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
+import { applyMembraneClosure, CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
 import { attestDeep, freshIfSingleton, isAttested } from "../values/attestation.js";
 import { AValue, EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
 import { withInputProvenance } from "../values/op-helpers.js";
@@ -120,14 +120,14 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
     fn: Parameters<AVector["arrival/tagless-final/map"]>[0],
     runCtx: RunContext,
   ): AVector | Promise<AVector> {
-    return this.vec()[tf("map")](fn, runCtx);
+    return applyMembraneClosure(runCtx, () => this.vec()[tf("map")](fn, runCtx));
   }
 
   ["arrival/tagless-final/filter"](
     pred: Parameters<AVector["arrival/tagless-final/filter"]>[0],
     runCtx: RunContext,
   ): Promise<AVector> {
-    return this.vec()[tf("filter")](pred, runCtx);
+    return applyMembraneClosure(runCtx, () => this.vec()[tf("filter")](pred, runCtx));
   }
 
   ["arrival/tagless-final/reduce"]<Acc extends SchemeValue>(
@@ -135,36 +135,36 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
     initial: Acc,
     runCtx: RunContext,
   ): Acc | Promise<Acc> {
-    return this.vec()[tf("reduce")](fn, initial, runCtx);
+    return applyMembraneClosure(runCtx, () => this.vec()[tf("reduce")](fn, initial, runCtx));
   }
 
   ["arrival/tagless-final/sort"](
     comparator: Parameters<AVector["arrival/tagless-final/sort"]>[0],
     runCtx: RunContext,
   ): AVector {
-    return this.vec()[tf("sort")](comparator, runCtx);
+    return applyMembraneClosure(runCtx, () => this.vec()[tf("sort")](comparator, runCtx));
   }
 
   ["arrival/tagless-final/take"](n: number, runCtx: RunContext): AVector {
-    return this.vec()[tf("take")](n, runCtx);
+    return applyMembraneClosure(runCtx, () => this.vec()[tf("take")](n, runCtx));
   }
 
   ["arrival/tagless-final/drop"](n: number, runCtx: RunContext): AVector {
-    return this.vec()[tf("drop")](n, runCtx);
+    return applyMembraneClosure(runCtx, () => this.vec()[tf("drop")](n, runCtx));
   }
 
   ["arrival/tagless-final/take-while"](
     pred: (x: SchemeValue) => MaybePromise<SchemeValue>,
     runCtx: RunContext,
   ): Promise<AVector> {
-    return this.vec()[tf("take-while")](pred, runCtx);
+    return applyMembraneClosure(runCtx, () => this.vec()[tf("take-while")](pred, runCtx));
   }
 
   ["arrival/tagless-final/drop-while"](
     pred: (x: SchemeValue) => MaybePromise<SchemeValue>,
     runCtx: RunContext,
   ): Promise<AVector> {
-    return this.vec()[tf("drop-while")](pred, runCtx);
+    return applyMembraneClosure(runCtx, () => this.vec()[tf("drop-while")](pred, runCtx));
   }
 
   // SPINE READING of the borrowed array (AJSArrayList header: chart law). Asking a
@@ -175,23 +175,27 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
   // would box the ENTIRE array just to read element 0, and (cdr …) would hand back a
   // vector slice that no null? could terminate on.
   ["arrival/tagless-final/car"](runCtx?: RunContext): SchemeValue {
-    strictGate(runCtx, {
-      op: "car",
-      rule: "R7RS `car` requires a pair; a vector is not a pair",
-      alternative: "use `(vector-ref v 0)` for the first element, or `(vector->list v)`",
+    return applyMembraneClosure(runCtx, () => {
+      strictGate(runCtx, {
+        op: "car",
+        rule: "R7RS `car` requires a pair; a vector is not a pair",
+        alternative: "use `(vector-ref v 0)` for the first element, or `(vector->list v)`",
+      });
+      this.freezeSource();
+      return this.source.length > 0 ? this.elementAt(0) : nil;
     });
-    this.freezeSource();
-    return this.source.length > 0 ? this.elementAt(0) : nil;
   }
 
   ["arrival/tagless-final/cdr"](runCtx?: RunContext): AJSArrayList | ANil {
-    strictGate(runCtx, {
-      op: "cdr",
-      rule: "R7RS `cdr` requires a pair; a vector is not a pair",
-      alternative: "use vector slicing or `(vector->list v)`",
+    return applyMembraneClosure(runCtx, () => {
+      strictGate(runCtx, {
+        op: "cdr",
+        rule: "R7RS `cdr` requires a pair; a vector is not a pair",
+        alternative: "use vector slicing or `(vector->list v)`",
+      });
+      this.freezeSource();
+      return AJSArrayList.at(this, 1);
     });
-    this.freezeSource();
-    return AJSArrayList.at(this, 1);
   }
 
   /** Borrowed source's elements — raw, unboxed. Collapse walk only collects provenance
@@ -212,9 +216,11 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
   }
 
   // Length stamps the container grouping-fact, never the elements' union (R2).
-  ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
-    this.freezeSource();
-    return withInputProvenance([this], this.source.length);
+  ["arrival/tagless-final/length"](runCtx?: RunContext): AValue | number {
+    return applyMembraneClosure(runCtx, () => {
+      this.freezeSource();
+      return withInputProvenance([this], this.source.length);
+    });
   }
 
   ["arrival/tagless-final/vector?"](): boolean {
@@ -227,46 +233,54 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
   // (so car/cdr work on it); other members box via jsToScheme with EMPTY provenance
   // (historical face choice — element reads via vector-ref carry this container's
   // provenance instead; asymmetry pinned by identity/lineage suites).
-  ["arrival/tagless-final/get"](key: SchemeValue | string): SchemeValue | Promise<SchemeValue> {
-    this.freezeSource();
-    const name = foldMemberName(key);
-    let raw: unknown;
-    try {
-      raw = accessMember(this.source, name);
-    } catch (e) {
-      if (e instanceof InteropAccessError) return nil;
-      throw e;
-    }
-    if (raw === NOT_FOUND) return nil;
-    if (Array.isArray(raw)) return new AJSArray(raw as readonly unknown[]);
-    // Promise-valued member is a lazy pending cell — settled box carries EMPTY
-    // provenance, same as the sync read below.
-    if (is_promise(raw))
-      return this.pendingCell(name, raw, (settled) => jsToScheme(CONSTANT_CTX, settled, {}, EMPTY_PROVENANCE));
-    const boxed: SchemeValue = jsToScheme(CONSTANT_CTX, raw, {}, EMPTY_PROVENANCE);
-    return boxed;
+  ["arrival/tagless-final/get"](key: SchemeValue | string, runCtx?: RunContext): SchemeValue | Promise<SchemeValue> {
+    return applyMembraneClosure(runCtx, () => {
+      this.freezeSource();
+      const name = foldMemberName(key);
+      let raw: unknown;
+      try {
+        raw = accessMember(this.source, name);
+      } catch (e) {
+        if (e instanceof InteropAccessError) return nil;
+        throw e;
+      }
+      if (raw === NOT_FOUND) return nil;
+      if (Array.isArray(raw)) return new AJSArray(raw as readonly unknown[]);
+      // Promise-valued member is a lazy pending cell — settled box carries EMPTY
+      // provenance, same as the sync read below.
+      if (is_promise(raw))
+        return this.pendingCell(name, raw, (settled) => jsToScheme(CONSTANT_CTX, settled, {}, EMPTY_PROVENANCE));
+      const boxed: SchemeValue = jsToScheme(CONSTANT_CTX, raw, {}, EMPTY_PROVENANCE);
+      return boxed;
+    });
   }
 
-  ["arrival/tagless-final/has"](key: SchemeValue | string): boolean {
-    this.freezeSource();
-    return accessHas(this.source, foldMemberName(key));
+  ["arrival/tagless-final/has"](key: SchemeValue | string, runCtx?: RunContext): boolean {
+    return applyMembraneClosure(runCtx, () => {
+      this.freezeSource();
+      return accessHas(this.source, foldMemberName(key));
+    });
   }
 
-  ["arrival/tagless-final/keys"](): string[] {
-    this.freezeSource();
-    return accessKeys(this.source);
+  ["arrival/tagless-final/keys"](runCtx?: RunContext): string[] {
+    return applyMembraneClosure(runCtx, () => {
+      this.freezeSource();
+      return accessKeys(this.source);
+    });
   }
 
   // Indexed access — boxes JUST element k (no full materialize). jsToScheme carries
   // THIS container's provenance so (vector-ref borrowed k) stamps identically to
   // (vector->list borrowed). fromJS would drop provenance (CONSTANT_CTX/EMPTY).
-  ["arrival/tagless-final/vector-ref"](k: number): SchemeValue | Promise<SchemeValue> {
-    this.freezeSource();
-    const raw = this.source[k];
-    // Promise-valued element is a lazy pending cell; settled box takes the SAME boxing
-    // as the sync path (container provenance + attestation inheritance).
-    if (is_promise(raw)) return this.pendingCell(k, raw, (settled) => this.boxElement(settled));
-    return this.boxElement(raw);
+  ["arrival/tagless-final/vector-ref"](k: number, runCtx?: RunContext): SchemeValue | Promise<SchemeValue> {
+    return applyMembraneClosure(runCtx, () => {
+      this.freezeSource();
+      const raw = this.source[k];
+      // Promise-valued element is a lazy pending cell; settled box takes the SAME boxing
+      // as the sync path (container provenance + attestation inheritance).
+      if (is_promise(raw)) return this.pendingCell(k, raw, (settled) => this.boxElement(settled));
+      return this.boxElement(raw);
+    });
   }
 
   /**

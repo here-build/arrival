@@ -12,7 +12,7 @@
  * Chain/Monoid/Semigroup. Trampolined style (Ganz et al., ICFP 1999); Floyd cycle detect.
  */
 import { CYCLES, DATA, REF } from "../../well-known-symbols.js";
-import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
+import { applyMembraneClosure, CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import { makeCallCtx } from "../../run/CallCtx.js";
 import { applyCallback, type ACallable } from "./ACallable.js";
 import invariant from "tiny-invariant";
@@ -917,9 +917,11 @@ export class AJSArrayList extends APair<SchemeValue, SchemeValue> {
   // Everything NOT overridden is inherited from APair (reads this.car/this.cdr accessors).
   // map/filter/… re-cons genuine spines — views never propagate virally into results.
 
-  override ["arrival/tagless-final/car"](): SchemeValue {
-    const car = this.car;
-    return withInputProvenance([car], car);
+  override ["arrival/tagless-final/car"](runCtx?: RunContext): SchemeValue {
+    return applyMembraneClosure(runCtx, () => {
+      const car = this.car;
+      return withInputProvenance([car], car);
+    });
   }
 
   /**
@@ -928,13 +930,55 @@ export class AJSArrayList extends APair<SchemeValue, SchemeValue> {
    * ruinous (forces every remaining element on every cdr) and unnecessary (view's tail is
    * minted WITH the owner's provenance already on it).
    */
-  override ["arrival/tagless-final/cdr"](): AJSArrayList | ANil {
-    return this.cdr;
+  override ["arrival/tagless-final/cdr"](runCtx?: RunContext): AJSArrayList | ANil {
+    return applyMembraneClosure(runCtx, () => this.cdr);
   }
 
   /** O(1) — length - offset. View cannot cycle (offset strictly increases). */
-  override ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
-    return withInputProvenance([this], this.owner.source.length - this.offset);
+  override ["arrival/tagless-final/length"](runCtx?: RunContext): AValue | number {
+    return applyMembraneClosure(runCtx, () => withInputProvenance([this], this.owner.source.length - this.offset));
+  }
+
+  override ["arrival/tagless-final/get"](key: SchemeValue | string, runCtx?: RunContext): SchemeValue {
+    return applyMembraneClosure(runCtx, () => super["arrival/tagless-final/get"](key));
+  }
+
+  override ["arrival/tagless-final/map"](fn: ACallable, runCtx: RunContext): MaybePromise<AListAlike> {
+    return applyMembraneClosure(runCtx, () => super["arrival/tagless-final/map"](fn, runCtx));
+  }
+
+  override ["arrival/tagless-final/filter"](arg: ACallable | RegExp, runCtx: RunContext): MaybePromise<AListAlike> {
+    return applyMembraneClosure(runCtx, () => super["arrival/tagless-final/filter"](arg, runCtx));
+  }
+
+  override ["arrival/tagless-final/reduce"]<Acc>(fn: ACallable, initial: Acc, runCtx: RunContext): Promise<Acc> {
+    return applyMembraneClosure(runCtx, () => super["arrival/tagless-final/reduce"](fn, initial, runCtx));
+  }
+
+  override ["arrival/tagless-final/sort"](comparator: ACallable | undefined, runCtx: RunContext): AListAlike {
+    return applyMembraneClosure(runCtx, () => super["arrival/tagless-final/sort"](comparator, runCtx));
+  }
+
+  override ["arrival/tagless-final/take"](n: number, runCtx: RunContext): AListAlike {
+    return applyMembraneClosure(runCtx, () => super["arrival/tagless-final/take"](n, runCtx));
+  }
+
+  override ["arrival/tagless-final/drop"](n: number, runCtx: RunContext): SchemeValue {
+    return applyMembraneClosure(runCtx, () => super["arrival/tagless-final/drop"](n, runCtx));
+  }
+
+  override ["arrival/tagless-final/take-while"](
+    pred: (x: unknown) => unknown | Promise<unknown>,
+    runCtx: RunContext,
+  ): Promise<AListAlike> {
+    return applyMembraneClosure(runCtx, () => super["arrival/tagless-final/take-while"](pred, runCtx));
+  }
+
+  override ["arrival/tagless-final/drop-while"](
+    pred: (x: unknown) => unknown | Promise<unknown>,
+    runCtx: RunContext,
+  ): Promise<SchemeValue> {
+    return applyMembraneClosure(runCtx, () => super["arrival/tagless-final/drop-while"](pred, runCtx));
   }
 
   /**

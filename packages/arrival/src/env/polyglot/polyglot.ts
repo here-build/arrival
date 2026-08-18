@@ -90,9 +90,9 @@ function collectMembers(
   const keysTerm = obj == null ? undefined : (obj as Partial<AValue>)["arrival/tagless-final/keys"];
   const getter = obj == null ? undefined : (obj as Partial<AValue>)["arrival/tagless-final/get"];
   if (typeof keysTerm !== "function" || typeof getter !== "function") return new AVector([]);
-  const names = keysTerm.call(obj);
+  const names = keysTerm.call(obj, ctx.runCtx);
   chargeHeap(ctx.runCtx, names.length);
-  const reads = names.map((key) => getter.call(obj, key));
+  const reads = names.map((key) => getter.call(obj, key, ctx.runCtx));
   const isThenable = (v: unknown): v is Promise<SchemeValue> =>
     typeof (v as { then?: unknown } | null)?.then === "function";
   if (reads.some(isThenable)) {
@@ -148,7 +148,7 @@ export default EnvCapability.define("scheme/polyglot", {
           const keyStr = normalizeMemberKey(key);
           if (keyStr === null) return nil;
           const getter = (obj as Partial<AValue>)["arrival/tagless-final/get"];
-          return typeof getter === "function" ? getter.call(obj, keyStr) : nil;
+          return typeof getter === "function" ? getter.call(obj, keyStr, this.runCtx) : nil;
         },
       ),
       "@?": symbol.native`@?: #t iff obj has the member key`(
@@ -160,7 +160,7 @@ export default EnvCapability.define("scheme/polyglot", {
           const keyStr = normalizeMemberKey(key);
           if (keyStr === null) return schemeBool(false);
           const has = (obj as Partial<AValue>)["arrival/tagless-final/has"];
-          return schemeBool(typeof has === "function" ? has.call(obj, keyStr) : false);
+          return schemeBool(typeof has === "function" ? has.call(obj, keyStr, this.runCtx) : false);
         },
       ),
       "@keys": symbol.native`@keys: the own member keys of obj, as a vector`(
@@ -173,7 +173,7 @@ export default EnvCapability.define("scheme/polyglot", {
         { input: [z.schemeValue], output: [z.vector(z.string)] },
         function (this: CallCtx, obj: unknown) {
           const keys = obj == null ? undefined : (obj as Partial<AValue>)["arrival/tagless-final/keys"];
-          const names = typeof keys === "function" ? keys.call(obj) : [];
+          const names = typeof keys === "function" ? keys.call(obj, this.runCtx) : [];
           // Mint each key string under the live invocation ctx — `this.runCtx`,
           // carried by `this: CallCtx` (dispatch's `hostImpl.apply(makeCallCtx(runCtx),
           // args)`, common/capability.ts). Under CONSTANT_CTX the result strings mint

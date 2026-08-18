@@ -14,7 +14,7 @@
  * sandbox code can't read get/toString to reach source.
  */
 
-import { CONSTANT_CTX } from "../run/RunContext.js";
+import { applyMembraneClosure, CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
 import { nil } from "../values/primitives/ANil.js";
 import { accessHas, accessKeys, accessMember, NOT_FOUND } from "./interop-access.js";
@@ -190,16 +190,16 @@ export class AJSObject extends AValue {
 
   // @ / dict-ref / :key are one protocol over the same .get. :-strip is the receiver's
   // own fold. Promise-valued entry surfaces as its pending cell.
-  ["arrival/tagless-final/get"](key: SchemeValue | string): SchemeValue | Promise<SchemeValue> {
-    return this.get(foldMemberName(key));
+  ["arrival/tagless-final/get"](key: SchemeValue | string, runCtx?: RunContext): SchemeValue | Promise<SchemeValue> {
+    return applyMembraneClosure(runCtx, () => this.get(foldMemberName(key)));
   }
 
-  ["arrival/tagless-final/has"](key: SchemeValue | string): boolean {
-    return this.has(foldMemberName(key));
+  ["arrival/tagless-final/has"](key: SchemeValue | string, runCtx?: RunContext): boolean {
+    return applyMembraneClosure(runCtx, () => this.has(foldMemberName(key)));
   }
 
-  ["arrival/tagless-final/keys"](): string[] {
-    return this.keys();
+  ["arrival/tagless-final/keys"](runCtx?: RunContext): string[] {
+    return applyMembraneClosure(runCtx, () => this.keys());
   }
 
   toString(): string {

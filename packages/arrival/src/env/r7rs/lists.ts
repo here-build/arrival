@@ -135,7 +135,7 @@ const lengthImpl = function (this: CallCtx, obj: unknown): AExact | AInexact {
   // Bare `.length` fallback for non-term carriers (membrane-wrapped JS arrays).
   const m = (obj as Record<string, unknown>)[tf("length")];
   if (typeof m === "function") {
-    const result: unknown = m.call(obj);
+    const result: unknown = m.call(obj, this.runCtx);
     // Real terms return AExact/AInexact only (P4). A raw number here is a producer
     // bug — fail loudly rather than re-box.
     invariant(

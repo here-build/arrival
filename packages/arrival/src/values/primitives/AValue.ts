@@ -188,11 +188,11 @@ export abstract class AValue {
   /** Keyed member read — `:key` accessor and membrane `readMember` face. Absence IS
    *  the semantics: no term ⇒ no members (face answers nil). */
   ["arrival/tagless-final/get"]?(key: SchemeValue | string, runCtx?: RunContext): MaybePromise<SchemeValue>;
-  ["arrival/tagless-final/has"]?(key: SchemeValue | string): boolean;
-  ["arrival/tagless-final/keys"]?(): string[];
+  ["arrival/tagless-final/has"]?(key: SchemeValue | string, runCtx?: RunContext): boolean;
+  ["arrival/tagless-final/keys"]?(runCtx?: RunContext): string[];
   ["arrival/tagless-final/car"]?(runCtx?: RunContext): SchemeValue;
   ["arrival/tagless-final/cdr"]?(runCtx?: RunContext): SchemeValue;
-  ["arrival/tagless-final/vector-ref"]?(k: number): MaybePromise<SchemeValue>;
+  ["arrival/tagless-final/vector-ref"]?(k: number, runCtx?: RunContext): MaybePromise<SchemeValue>;
   /** Semigroup — `this ⋄ other`: container-preserving PURE append. */
   ["arrival/tagless-final/concat"]?(other: unknown): SchemeValue;
   ["arrival/tagless-final/traverse"]?(of: (x: unknown) => unknown, f: (x: unknown) => unknown): unknown;

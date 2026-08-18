@@ -178,7 +178,7 @@ export default EnvCapability.define("scheme/vectors", {
           );
         }
         const idx = typeof k === "number" ? k : (k as AExact).valueOf();
-        return (m as (i: number) => SchemeValue).call(vec, idx as number);
+        return (m as (i: number, runCtx?: unknown) => SchemeValue).call(vec, idx as number, this.runCtx);
       },
     ),
 
