@@ -416,8 +416,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     const results: SchemeValue[] = [];
     const forms = program.forms;
     const start = budgetMs === undefined ? 0 : performance.now();
-    for (let i = 0; i < forms.length; i++) {
-      const expr = forms[i];
+    for (const expr of forms) {
       const remaining = budgetMs === undefined ? undefined : budgetMs - (performance.now() - start);
       let result: SchemeValue;
       const runForm = () =>
@@ -698,6 +697,7 @@ export async function execStateOverFrame(
   await ensureInferenceEnvPopulated();
 
   const program = passedProgram ?? (await parseProgram(code, { strict }));
+  // eslint-disable-next-line unicorn/no-negated-condition -- provided scope is the live arm; a fresh Resolver(env) is the default
   const runResolver = scope !== undefined ? new Resolver(scope.env) : new Resolver(env);
   const runCtxOwned = passedRunCtx === undefined;
   const runCtx =
@@ -721,8 +721,7 @@ export async function execStateOverFrame(
     const results: SchemeValue[] = [];
     const forms = program.forms;
     const start = budgetMs === undefined ? 0 : performance.now();
-    for (let i = 0; i < forms.length; i++) {
-      const expr = forms[i];
+    for (const expr of forms) {
       const remaining = budgetMs === undefined ? undefined : budgetMs - (performance.now() - start);
       let result: SchemeValue;
       const runForm = () =>

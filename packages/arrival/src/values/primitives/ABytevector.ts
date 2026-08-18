@@ -80,6 +80,7 @@ export class ABytevector extends AValue {
   // Print protocol — R7RS external repr `#u8(byte …)` (bytes are raw numbers, no
   // element recursion).
   ["arrival/print"](): string {
+    // eslint-disable-next-line unicorn/prefer-spread -- typed-array → number[] conversion; Array.from is the conversion, not a rest-spread
     return `#u8(${Array.from(this.__bytevector__).join(" ")})`;
   }
 
@@ -90,6 +91,7 @@ export class ABytevector extends AValue {
     const a = this.__bytevector__;
     const b = other.__bytevector__;
     if (a.length !== b.length) return false;
+    // eslint-disable-next-line unicorn/no-for-loop -- pairwise byte compare; index is the walk
     for (let i = 0; i < a.length; i++) {
       if (a[i] !== b[i]) return false;
     }

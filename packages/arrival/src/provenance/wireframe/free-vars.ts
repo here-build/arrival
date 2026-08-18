@@ -181,7 +181,12 @@ export function freeVars(form: unknown, opts: FreeVarsOptions = {}): Set<string>
             if (isPair(target)) {
               const fnName = isSymbol(target.car) ? nameOf(target.car) : null;
               const params = formalNames(target.cdr);
-              const inner = new Set([...bound, ...(fnName !== null ? [fnName] : []), ...params]);
+              const inner = new Set([
+                ...bound,
+                // eslint-disable-next-line unicorn/no-negated-condition -- include the define name only when it is a symbol
+                ...(fnName !== null ? [fnName] : []),
+                ...params,
+              ]);
               walkBody(n.cdr.cdr, inner);
               return;
             }

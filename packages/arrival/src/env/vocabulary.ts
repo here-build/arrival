@@ -322,7 +322,7 @@ export async function buildVocabulary(
     },
   });
 
-  const sortedClosure = [...closureByName.values()].sort(byName);
+  const sortedClosure = [...closureByName.values()].toSorted(byName);
   return memoized(sortedClosure, config, () => buildFresh(order, closureByName, config, evalScheme));
 }
 
@@ -341,7 +341,7 @@ async function buildFresh(
   const bakeEnv: ResolvingAmbient = mintResolvingFrame("vocabulary-bake");
 
   // Deps-first (self overwrites dep); each capability fully (Pass 1 + 2) before next.
-  for (const name of [...order].reverse()) {
+  for (const name of [...order].toReversed()) {
     const cap = byNameMap.get(name)!;
     const { configuration, degraded } = await processCapability(
       cap,

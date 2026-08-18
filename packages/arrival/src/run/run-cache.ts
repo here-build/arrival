@@ -106,7 +106,8 @@ export function canonicalJson(value: unknown): string {
       "canonicalJson: a non-plain object (class instance / Map / Set / …) has no canonical JSON form — it cannot key a cache entry",
     );
   }
-  const keys = Object.keys(value as Record<string, unknown>).sort();
+  // UTF-16 code-unit order (JSON canonical keys) — not localeCompare, which is locale-sensitive.
+  const keys = Object.keys(value as Record<string, unknown>).toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   const parts = keys.map((k) => `${JSON.stringify(k)}:${canonicalJson((value as Record<string, unknown>)[k])}`);
   return `{${parts.join(",")}}`;
 }

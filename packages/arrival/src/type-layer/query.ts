@@ -425,5 +425,5 @@ function balance(scheme: string): string {
     else if (c === "{") opens.push("}");
     else if (c === ")" || c === "]" || c === "}") opens.pop();
   }
-  return scheme + (inStr ? '"' : "") + opens.reverse().join("");
+  return scheme + (inStr ? '"' : "") + opens.toReversed().join("");
 }

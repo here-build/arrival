@@ -185,7 +185,12 @@ class GraphBuilder {
       isBaseName: this.bctx.isBaseName,
     });
     const fact = this.factTagOf(expr, env);
-    this.wires.push({ ...emitted, consumer, ...(fact !== undefined ? { fact } : {}) });
+    this.wires.push({
+      ...emitted,
+      consumer,
+      // eslint-disable-next-line unicorn/no-negated-condition -- omit fact when the expr has none
+      ...(fact !== undefined ? { fact } : {}),
+    });
   }
 
   /**
@@ -494,9 +499,13 @@ class GraphBuilder {
       op,
       span: scopeId(expr),
       lengthPreserving,
+      // eslint-disable-next-line unicorn/no-negated-condition -- omit template when the fan has none
       ...(template !== undefined ? { template } : {}),
+      // eslint-disable-next-line unicorn/no-negated-condition -- omit elementParams when undeclared
       ...(elementParams !== undefined ? { elementParams } : {}),
+      // eslint-disable-next-line unicorn/no-negated-condition -- omit fnOp when the callback is not a named op
       ...(fnOp !== undefined ? { fnOp } : {}),
+      // eslint-disable-next-line unicorn/no-negated-condition -- omit callbackRoles when the classifier has none
       ...(roles !== undefined ? { callbackRoles: roles } : {}),
     });
     args.slice(1).forEach((a, i) => this.emitWire(a, { node: id, slot: i === 0 ? "source" : `source${i}` }, env));
@@ -625,6 +634,7 @@ export function buildWireframe(forms: readonly SchemeValue[], opts: WireframeBui
     preludeNames: membership.pure,
     materialNames: membership.wireframe,
     isBaseName: opts.isBaseName,
+    // eslint-disable-next-line unicorn/no-negated-condition -- omit callbackRolesOf when the caller did not supply it
     ...(opts.callbackRolesOf !== undefined ? { callbackRolesOf: opts.callbackRolesOf } : {}),
   };
 

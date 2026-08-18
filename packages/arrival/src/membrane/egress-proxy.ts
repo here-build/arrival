@@ -181,9 +181,11 @@ export function egressContainerProxy(
   const membrane = opts?.membrane;
   const gate = opts?.gate;
   const slot =
+    // eslint-disable-next-line unicorn/no-negated-condition -- present membrane, then present gate; bare slot is the default
     membrane !== undefined
       ? membraneSlot(membrane.cache, box, membrane.modeKey)
-      : gate !== undefined
+      : // eslint-disable-next-line unicorn/no-negated-condition -- present gate before the bare default
+        gate !== undefined
         ? gatedSlot(gate, box)
         : boxSlot(bareProxies, box);
 

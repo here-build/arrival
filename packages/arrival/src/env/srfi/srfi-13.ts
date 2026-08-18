@@ -398,7 +398,7 @@ export default EnvCapability.define("scheme/srfi-13", {
     "string-reverse": symbol.native`string-reverse: a reversed copy of the string (SRFI-13)`(
       { input: [z.string], output: [z.string] },
       function (this: CallCtx, str: unknown): AString {
-        return withInputProvenance([str], new AString([...stringValue(str)].reverse().join("")));
+        return withInputProvenance([str], new AString([...stringValue(str)].toReversed().join("")));
       },
     ),
 

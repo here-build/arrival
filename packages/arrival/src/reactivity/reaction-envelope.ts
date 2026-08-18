@@ -418,7 +418,9 @@ class ReactionEnvelopeImpl implements ReactionEnvelope {
     this.staged = [];
     // RX-SUBS / P-RX-SUB-REPLACE: replace wholesale on success.
     // If dispose raced mid-run, discard — do not install (N-RX-DISPOSE-INFLIGHT).
+    // eslint-disable-next-line unicorn/no-negated-condition -- live path first; dispose-raced mid-run discards observations
     if (!this._disposed) {
+      // eslint-disable-next-line unicorn/prefer-spread -- snapshot-then-clear; slice is the copy, not a rest-spread
       this.subs = this.runObserved.slice();
     } else {
       // Disposed mid-flight: drop provisional observations; keep subs empty (already cleared).

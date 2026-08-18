@@ -114,6 +114,7 @@ export default EnvCapability.define("scheme/vectors", {
       // vector() decodes the scheme face to AVector | AJSArray (borrowed array), not AVector only.
       function (this: CallCtx, ...vectors: (AVector | AJSArray)[]): AVector {
         const arrays = vectors.map((v) => asVector(v, "vector-append"));
+        // eslint-disable-next-line unicorn/prefer-spread -- dynamic list of arrays; concat(...arrays) is the variadic join
         return withInputProvenance(vectors, new AVector(([] as SchemeValue[]).concat(...arrays)));
       },
     ),

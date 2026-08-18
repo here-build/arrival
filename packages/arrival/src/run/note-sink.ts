@@ -24,6 +24,7 @@ export function createNoteSink(): NoteSink {
       if (!lines.includes(line)) lines.push(line);
     },
     drain(): readonly string[] {
+      // eslint-disable-next-line unicorn/prefer-spread -- snapshot-then-clear; slice is the copy, not a rest-spread
       const out = lines.slice();
       lines.length = 0;
       return out;
@@ -49,6 +50,7 @@ export function createDisplaySink(): DisplaySink {
       records.push(record);
     },
     drain(): readonly DisplayRecord[] {
+      // eslint-disable-next-line unicorn/prefer-spread -- snapshot-then-clear; slice is the copy, not a rest-spread
       const out = records.slice();
       records.length = 0;
       return out;

@@ -112,7 +112,7 @@ export function sampledIndices(seed: string, poolSize: number, sampleSize: numbe
     pool[i] = pool[j];
     pool[j] = tmp;
   }
-  return pool.slice(0, n).sort((a, b) => a - b);
+  return pool.slice(0, n).toSorted((a, b) => a - b);
 }
 
 /** JSON structural agree; String() fallback (values are JSON-safe by construction). */

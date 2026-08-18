@@ -115,6 +115,7 @@ export function makeCallCtx(
     runCtx,
     invocation: { currentInvocation },
     argProvenance,
+    // eslint-disable-next-line unicorn/no-negated-condition -- include configuration/resources only when the value has an owner
     ...(owner !== undefined
       ? {
           configuration: runCtx.capabilityConfigurations?.get(owner.capability),

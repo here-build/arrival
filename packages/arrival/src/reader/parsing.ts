@@ -117,6 +117,7 @@ function num_pre_parse(arg: string): {
     number?: string;
   } = {};
   if (parts![1]) {
+    // eslint-disable-next-line unicorn/prefer-spread -- prefix flags are ASCII source units (`split("")`), not code points
     const type = parts![1].replaceAll("#", "").toLowerCase().split("");
     if (type.includes("x")) {
       options.radix = 16;

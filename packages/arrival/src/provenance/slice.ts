@@ -305,7 +305,7 @@ export function buildSlice(trace: EvalTrace, outputNode: unknown): Slice {
     if (kept.has(root) || root === outputNode) points.push(inv.id);
   }
 
-  const ordered = [...kept].sort((a, b) => (formId.get(a) ?? 0) - (formId.get(b) ?? 0));
+  const ordered = [...kept].toSorted((a, b) => (formId.get(a) ?? 0) - (formId.get(b) ?? 0));
   const program = ordered.map((n) => writeForm(n)).join("\n");
   // Structural backstop: writeForm throws on a non-serializable datum, but assert no object slipped
   // through any raw path — a slice must never carry `[object Object]`.

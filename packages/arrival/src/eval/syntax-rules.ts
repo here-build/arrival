@@ -848,7 +848,7 @@ export function transform_syntax({
               bind = new_bind;
             }
             if (result instanceof APair && !is_spread) {
-              result = carrySpanSpine(listFromArray(ctx, result.to_array(false).reverse()), expr);
+              result = carrySpanSpine(listFromArray(ctx, result.to_array(false).toReversed()), expr);
             }
             // case of (list) ... (rest code)
 
@@ -897,7 +897,7 @@ export function transform_syntax({
             bind = new_bind;
           }
           if (result instanceof APair) {
-            result = carrySpanSpine(listFromArray(ctx, result.to_array(false).reverse()), expr);
+            result = carrySpanSpine(listFromArray(ctx, result.to_array(false).toReversed()), expr);
           }
           // Trailing forms after the `(x ...)` spread: a second spread `(x ... y ...)` or a
           // dotted-tail symbol `(??? . x)`, neither consumed by this ellipsis pass.

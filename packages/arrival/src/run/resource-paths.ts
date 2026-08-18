@@ -187,6 +187,7 @@ export class ResourcePathConflictError extends ArrivalError {
     /** True when the doored penetration itself also declares effects (hybrid verb). */
     public readonly hybrid: boolean = false,
   ) {
+    // eslint-disable-next-line unicorn/no-negated-condition -- mention the prior query only when one exists
     const priorQPart = priorQuery !== undefined ? ` after prior query ${serializeResourcePath(priorQuery)}` : "";
     // A hybrid's Q≺E record makes any repeat on the same domain self-door — the
     // generic "hold prior results" advice misreads an upsert's intent, so teach
@@ -336,6 +337,7 @@ function producePaths(
     );
   }
   const out: ResourcePath[] = [];
+  // eslint-disable-next-line unicorn/no-for-loop -- index rides the error message (`path at index ${pi}`)
   for (let pi = 0; pi < raw.length; pi++) {
     const path = raw[pi];
     if (!Array.isArray(path)) {
@@ -347,6 +349,7 @@ function producePaths(
       );
     }
     if (strictCQSstrings) {
+      // eslint-disable-next-line unicorn/no-for-loop -- index rides the error message (`path[${pi}][${si}]`)
       for (let si = 0; si < path.length; si++) {
         if (typeof path[si] !== "string") {
           throw new ResourcePathProducerError(

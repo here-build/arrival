@@ -568,6 +568,7 @@ export type AEntity =
  *  (`char-set:whitespace: …` → `"char-set"`). No `": "` ⇒ whole string is the name. */
 export function parseNameDoc(tpl: TemplateStringsArray, sub: readonly unknown[]): { name: string; doc?: string } {
   let raw = "";
+  // eslint-disable-next-line unicorn/no-for-loop -- tagged-template zip: tpl[i] interleaved with sub[i]
   for (let i = 0; i < tpl.length; i++) {
     raw += tpl[i];
     if (i < sub.length) raw += String(sub[i]);

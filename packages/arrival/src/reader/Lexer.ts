@@ -181,7 +181,7 @@ export class Lexer {
       return Lexer._rulesCache;
     }
     const parsable = [...Object.keys(parsable_contants), ...directives, ...hash_literals];
-    const tokens = [...specials.names(), ...parsable].sort((a, b) => {
+    const tokens = [...specials.names(), ...parsable].toSorted((a, b) => {
       return b.length - a.length || a.localeCompare(b);
     });
 

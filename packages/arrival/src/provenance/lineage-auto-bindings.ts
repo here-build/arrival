@@ -130,9 +130,9 @@ export class AutoBindings {
       if (ids && ids.size > 0) candidates.push({ invocationId, ids });
     }
     if (candidates.length === 0) return [];
-    if (pick) return [...pick(candidates)].sort((a, z) => a - z);
-    candidates.sort((a, z) => a.invocationId - z.invocationId);
-    return [...candidates[0]!.ids].sort((a, z) => a - z);
+    if (pick) return [...pick(candidates)].toSorted((a, z) => a - z);
+    const ordered = candidates.toSorted((a, z) => a.invocationId - z.invocationId);
+    return [...ordered[0]!.ids].toSorted((a, z) => a - z);
   }
 
   /**

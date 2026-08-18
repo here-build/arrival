@@ -389,8 +389,7 @@ export async function bindCapabilityDefines(args: BindCapabilityDefinesArgs): Pr
     );
     for (let i = 0; i < lambdaEntries.length; i++) lambdaValueByDef.set(lambdaEntries[i][1], lambdaValues[i]);
   }
-  for (let i = 0; i < entries.length; i++) {
-    const [verb, def] = entries[i];
+  for (const [verb, def] of entries) {
     const value = lambdaValueByDef.has(def)
       ? lambdaValueByDef.get(def)
       : await evaluateBody(scope, evalScheme, def.body);

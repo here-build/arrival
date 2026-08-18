@@ -154,6 +154,7 @@ export class RunContext {
     this.capabilityConfigurations = opts.capabilityConfigurations;
     this.vocabulary = opts.vocabulary;
     this.degraded = opts.degraded;
+    // eslint-disable-next-line unicorn/no-negated-condition -- resource-store init is the live path; _noResourceStore is the hermetic opt-out
     if (!_noResourceStore) {
       this.capabilityResources = new WeakMap<object, unknown>();
       this.resourcePaths = opts.resourcePaths ?? new MemoryResourcePathLog();

@@ -355,6 +355,7 @@ function classifyWith(ast: unknown, c: Classifier, subst: Subst): LineageNode {
       introduces: c.roleOf(fanOp) === "source",
       lengthPreserving,
       source: classifyWith(args[1], c, subst),
+      // eslint-disable-next-line unicorn/no-negated-condition -- omit template when the fan has none
       ...(template !== undefined ? { template } : {}),
     };
   }
@@ -619,7 +620,7 @@ function walk(n: LineageNode, b: Bindings, out: Set<number>, opts: { countOnly?:
 export function fullCone(n: LineageNode, b: Bindings): number[] {
   const out = new Set<number>();
   walk(n, b, out, {});
-  return [...out].sort((a, z) => a - z);
+  return [...out].toSorted((a, z) => a - z);
 }
 
 /** Minimal demand-cone for a cardinality observation (a count): prunes the
@@ -627,13 +628,13 @@ export function fullCone(n: LineageNode, b: Bindings): number[] {
 export function countCone(n: LineageNode, b: Bindings): number[] {
   const out = new Set<number>();
   walk(n, b, out, { countOnly: true });
-  return [...out].sort((a, z) => a - z);
+  return [...out].toSorted((a, z) => a - z);
 }
 
 /** Sorted provenance ids on a value; `[]` for non-AValue. Eager-stamp reader for
  *  golden-prov / checkpoint / conservation laws. */
 export function provOf(v: unknown): number[] {
-  return v instanceof AValue ? [...v.provenance].sort((a, b) => a - b) : [];
+  return v instanceof AValue ? [...v.provenance].toSorted((a, b) => a - b) : [];
 }
 
 export function sameStep(a: PathStep, z: PathStep): boolean {
@@ -650,7 +651,7 @@ export function sameStep(a: PathStep, z: PathStep): boolean {
 export function fieldCone(n: LineageNode, b: Bindings, step: PathStep): number[] {
   const out = new Set<number>();
   walk(n, b, out, { demand: step });
-  return [...out].sort((a, z) => a - z);
+  return [...out].toSorted((a, z) => a - z);
 }
 
 /** Named location only: keyword field → bare name; positional car/index → null

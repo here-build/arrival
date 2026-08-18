@@ -139,6 +139,7 @@ function charFor(token: string): string {
 export function escapeName(name: string): string {
   if (isTsIdentifier(name)) return name;
   let out = "";
+  // eslint-disable-next-line unicorn/no-for-loop -- index distinguishes a leading digit (i === 0) from a mid-name one
   for (let i = 0; i < name.length; i++) {
     const ch = name[i]!;
     const isIdentChar = /[A-Za-z0-9_]/.test(ch);

@@ -231,6 +231,7 @@ export function validateProgram(forms: readonly SchemeValue[], vocabulary: Progr
         sites,
         message,
         publicMessage,
+        // eslint-disable-next-line unicorn/no-negated-condition -- omit cause when the door has none
         ...(door.door.cause !== undefined ? { cause: door.door.cause } : {}),
       },
     });
@@ -274,6 +275,7 @@ function missingConfigDiagnostic(cfg: MissingConfigNode, referencedDoors: readon
     sites,
     message,
     publicMessage,
+    // eslint-disable-next-line unicorn/no-negated-condition -- omit cause when no referenced door carries one
     ...(cause !== undefined ? { cause } : {}),
   };
 }

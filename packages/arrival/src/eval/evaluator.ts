@@ -916,6 +916,7 @@ function* evalBegin(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   return result;
 }
 
+// eslint-disable-next-line require-yield, sonarjs/generator-without-yield -- trampoline protocol: special-form handlers are generators; quote returns the datum with no sub-evaluation
 function* evalQuote(rest: SchemeValue, _ctx: EvalContext): EvalGenerator {
   SpecialFormShapeError.invariant(rest instanceof APair, "quote", "missing argument");
   return rest.car;
@@ -1169,6 +1170,7 @@ function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 // Capabilities.refFrame IDENTITY probe.
 
 /** `(lambda args body)` — closes over the definition-time env; body starts in tail position (R7RS §3.5). */
+// eslint-disable-next-line require-yield, sonarjs/generator-without-yield -- trampoline protocol: this form constructs the closure; the injected runner yields, this handler does not
 function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   SpecialFormShapeError.invariant(rest instanceof APair, "lambda", "missing arguments");
 
@@ -1239,6 +1241,7 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 }
 
 /** `(define-macro (name . args) body)` — fexpr-style macro; params bind to UNEVALUATED argument forms. */
+// eslint-disable-next-line require-yield, sonarjs/generator-without-yield -- trampoline protocol: this form binds the Macro; expansion yields later via is_promise
 function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   SpecialFormShapeError.invariant(rest instanceof APair, "define-macro", "missing definition");
 
@@ -2274,6 +2277,7 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       // accepts ANY object), not a printed re-presentation of it.
       const rawRaised = caughtError instanceof ArrivalError ? rawRaisedValues.get(caughtError) : undefined;
       let errorValue: SchemeValue;
+      // eslint-disable-next-line unicorn/no-negated-condition -- recover the original raised value first; the host-Error unwrap is the fallback
       if (rawRaised !== undefined) {
         errorValue = rawRaised;
       } else {

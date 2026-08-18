@@ -50,7 +50,7 @@ function cxrUnfold(name: string): ANativeProcedure | undefined {
   if (!CXR_RE.test(name)) return undefined;
   const cached = cxrCache.get(name);
   if (cached !== undefined) return cached;
-  const steps = [...name.slice(1, -1)].reverse(); // innermost (rightmost) letter first
+  const steps = [...name.slice(1, -1)].toReversed(); // innermost (rightmost) letter first
   // Synthesized as ANativeProcedure, never a bare fn. Every invocation route
   // dispatches apply with an EXPLICIT CallCtx, so strict mode never degrades.
   const proc = new ANativeProcedure({

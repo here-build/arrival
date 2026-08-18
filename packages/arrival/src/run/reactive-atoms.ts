@@ -87,6 +87,7 @@ export class ReactiveAtomMembershipError extends ArrivalError {
 
 function resourcePathsEqual(a: ResourcePath, b: ResourcePath): boolean {
   if (a.length !== b.length) return false;
+  // eslint-disable-next-line unicorn/no-for-loop -- pairwise index walk of two equal-length paths
   for (let i = 0; i < a.length; i++) {
     if (a[i] !== b[i]) return false;
   }
