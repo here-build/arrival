@@ -54,7 +54,7 @@ describe("inbound registry — the declared, ordered claim table IS the law", ()
       "R9 egress proxy → original box (re-admission)",
       "reverse-membrane wrapper → original callable (re-admission)",
       "reader token (EOF) → identity (not a SchemeValue)",
-      "scheme orphan (Values/R7RSError) → identity",
+      "scheme orphan (R7RSError) → identity",
       "branded host instance → opaque handle (mint/reuse, whiteroom contract)",
       // PHASE 2 — the foreign lens table.
       "null → nil",

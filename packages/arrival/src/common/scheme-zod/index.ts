@@ -34,7 +34,6 @@ import { ADict, foldKeyName, isDictShaped, type DictKey } from "../../values/pri
 import { AJSObject } from "../../membrane/AJSObject.js";
 import { AJSArray } from "../../membrane/AJSArray.js";
 import { markSpineAdopting } from "../spine-adoption.js";
-import { Values } from "../../values/primitives/Values.js";
 import { CodecFidelityError, R7RSError } from "../../errors.js";
 import { ALambda, DoorProcedure, applyCallback } from "../../values/primitives/ACallable.js";
 import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
@@ -66,7 +65,7 @@ import type { AListAlike, SchemeValue } from "../../values/types.js";
  * observable ban.
  *
  * **Round-trip laws.** A real codec transforms both ways. A predicate
- * (`schemeValue`/`dynamic`/`values`/`lambda`/`listAlike`) does not — identity
+ * (`schemeValue`/`dynamic`/`lambda`/`listAlike`) does not — identity
  * on both faces. Returning a procedure *from* rosetta is banned (provenance
  * untraceable); procedures as arguments travel wrapped. Use `z.procedure` for
  * a declared callable crossing; a callable through `z.dynamic` is a teaching
@@ -319,16 +318,6 @@ export const undefinedResult = named(
   z.codec(z.instanceof(AVoid), z.undefined(), {
     decode: (v) => v["arrival/toJS"](),
     encode: () => new AVoid() }),
-);
-
-/** `(values a b …)` multi-values (≥2 — `Values.from` unwraps 0/1). Predicate,
- *  not a codec: multi-values never cross as a JS shape. `Values` is a non-AValue
- *  orphan that `isSchemeValue` rejects despite `SchemeValue` declaring it — same
- *  gap `error` closes for `R7RSError`. Named schema, never a silent widen of
- *  `schemeValue`. */
-export const values = named(
-  "values",
-  z.custom<Values>((x) => x instanceof Values),
 );
 
 export const error = named(

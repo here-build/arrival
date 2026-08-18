@@ -4,7 +4,7 @@
  * type/interface/guard surface they share.
  *
  * SchemeValue is the honest union of every value the interpreter can hold:
- * every concrete AValue subclass, live non-AValue orphans (Values, R7RSError),
+ * every concrete AValue subclass, the live non-AValue orphan R7RSError,
  * and ACallable values. Excludes reader-internal sentinels (DatumReference,
  * EOF). Bare host functions are not SchemeValue members.
  */
@@ -24,7 +24,6 @@ import type { AJSObject } from "../membrane/AJSObject.js";
 import type { ADict } from "./primitives/ADict.js";
 import type { AOpaqueHandle } from "./primitives/AOpaqueHandle.js";
 import type { EOF } from "./primitives/EOF.js";
-import type { Values } from "./primitives/Values.js";
 import type { AKernelKeyword } from "./AKernelKeyword.js";
 // R7RS error object — `error-object?` is `obj instanceof R7RSError`.
 // `import type` keeps the mutual edge with errors.ts compile-time only.
@@ -86,7 +85,6 @@ export type SchemeValue =
   | ADict
   | AOpaqueHandle
   | AKernelKeyword
-  | Values
   | R7RSError
   // ACallable: ALambda / ANativeProcedure / ARosettaProcedure / DoorProcedure.
   // `import type` keeps the edge compile-time only.
@@ -134,7 +132,7 @@ export type AWrap<T> = [unknown] extends [T]
               ? AExact | AInexact
               : [T] extends [string]
                 ? AString
-                : [T] extends [EOF | Values | R7RSError]
+                : [T] extends [EOF | R7RSError]
                   ? T
                   : [T] extends [Uint8Array | ArrayBuffer | DataView]
                     ? T // binary FFI passthrough — never boxed, identity

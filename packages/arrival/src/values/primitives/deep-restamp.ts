@@ -17,7 +17,7 @@
  *    stamped); shared/diamond past first occurrence keeps original box;
  *  - residual bare JS function in a spine → #void + warn (not a fresh crossing; inbound
  *    mints ARosettaProcedure via hostFnToCallable — docs/membrane.md §CALLABLE-LENS);
- *  - non-AValue orphans (Values / R7RSError) carry no provenance → identity.
+ *  - non-AValue orphans (R7RSError) carry no provenance → identity.
  *
  * Leaf-ish module: imports the AValue base, the #void singleton and the membrane warn
  * flag — never the router (rosetta.ts), so APair/AVector can import it without widening
@@ -54,7 +54,7 @@ export function reStampChild(
   }
   if (seen.has(child)) return child;
   seen.add(child);
-  // Non-AValue orphans (Values / R7RSError): no provenance slot → identity.
+  // Non-AValue orphans (R7RSError): no provenance slot → identity.
   if (!(child instanceof AValue)) return child;
   if (p === EMPTY_PROVENANCE || p === child.provenance) return child;
   // THE ADDITIVE LAW (docs/membrane.md §INBOUND): union the crossing's ids onto the child's own

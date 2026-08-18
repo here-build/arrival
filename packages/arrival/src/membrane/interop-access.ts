@@ -278,7 +278,7 @@ export const arrival = { private: markInteropPrivate };
  * answer true unless THEY carry the marker.
  *
  * AValue/ArrivalError families may also carry/inherit this marker — callers place the
- * check AFTER rows that claim AValue, the EOF reader token, and scheme orphans (Values/R7RSError); order,
+ * check AFTER rows that claim AValue, the EOF reader token, and scheme orphans (R7RSError); order,
  * not this predicate, scopes use to genuinely-new host classes.
  */
 export function isMarkedInteropPrivate(value: object): boolean {

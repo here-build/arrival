@@ -12,7 +12,7 @@
 | Bucket | Health |
 |---|---|
 | Multi-return surface (`values`, `call-with-values`, `let-values`, `let*-values`, `define-values`) | **Doors** (`r7rs/binding`) |
-| Host multi-product (`floor/`, `truncate/`) | **Impl as pair product** `(q . r)` — no `Values.from` |
+| Host multi-product (`floor/`, `truncate/`) | **Impl as pair product** `(q . r)` |
 | call/cc, delay, parameters, case-lambda | **Doors** (`r7rs/control`) |
 | Exceptions §6.11 | **Fully impl** |
 | Mutators | **Doors** on type packs + `set!` |
@@ -70,8 +70,6 @@ Macro-binding aliases stay live: `define-syntax` / `let-syntax` / `letrec-syntax
 ## Remaining out-of-scope / residue
 
 **Out of scope:** `define-record-type` (records / separate SRFI); complex tower accessors (`make-rectangular`, …).
-
-`Values` / `z.values` types still in tree with no producer — optional delete later.
 
 ---
 

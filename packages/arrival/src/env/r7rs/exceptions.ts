@@ -21,7 +21,7 @@ import { R7RSError } from "../../errors.js";
 import { AString } from "../../values/primitives/AString.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
 import { APair } from "../../values/primitives/APair.js";
-import { applyCallback, type CallResult } from "../../values/primitives/ACallable.js";
+import { applyCallback } from "../../values/primitives/ACallable.js";
 import type { RunContext } from "../../run/RunContext.js";
 import type { SchemeValue } from "../../values/types.js";
 import { schemeBool as bool } from "../../values/op-helpers.js";
@@ -117,31 +117,14 @@ export default EnvCapability.define("scheme/r7rs/exceptions", {
     "%with-restore":
       symbol.native`%with-restore: call thunk, always calling restore afterward — even if thunk throws (machinery)`(
         { input: [z.lambda, z.lambda], output: [z.schemeValue] },
-        function (thunk, restore) {
+        async function (thunk, restore) {
           // `this` IS the whole CallCtx `%with-restore` was dispatched with — thread it, not
           // just `this.runCtx`.
-          const doRestore = (): CallResult => applyCallback(restore, [], this);
-          let result: unknown;
           try {
-            result = applyCallback(thunk, [], this);
-          } catch (e) {
-            doRestore();
-            throw e;
+            return await applyCallback(thunk, [], this);
+          } finally {
+            await applyCallback(restore, [], this);
           }
-          if (result instanceof Promise) {
-            return result.then(
-              async (v) => {
-                await doRestore();
-                return v;
-              },
-              async (e) => {
-                await doRestore();
-                throw e;
-              },
-            ) as unknown as SchemeValue;
-          }
-          doRestore();
-          return result as SchemeValue;
         },
       ),
     // `error`'s message+irritants forwarding needs a scheme-list → variadic-args

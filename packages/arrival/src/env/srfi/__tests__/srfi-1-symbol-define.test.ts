@@ -286,7 +286,7 @@ describe("scheme/srfi-1 — the §2.1 bake FV law passes AS MIGRATED", () => {
       symbols: (symbol, z) => ({
         "bad-span":
           symbol.define`bad-span: reproduces the pre-migration srfi-1 bug (free values reference, no declared dep on scheme/binding)`(
-            { input: [z.lambda, z.union([z.pair, z.nil])], output: [z.values] },
+            { input: [z.lambda, z.union([z.pair, z.nil])], output: [z.schemeValue] },
             `(lambda (pred xs) (values xs xs))`,
           ) }) });
     await expect(buildVocabulary([undeclaredCap], undefined, evalScheme)).rejects.toThrow(DefineLocalityError);

@@ -17,7 +17,6 @@ import { ANil, nil } from "../values/primitives/ANil.js";
 import { theVoid } from "../values/primitives/AVoid.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { EOF } from "../values/primitives/EOF.js";
-import { Values } from "../values/primitives/Values.js";
 import { AOpaqueHandle } from "../values/primitives/AOpaqueHandle.js";
 import { isMarkedInteropPrivate } from "./interop-access.js";
 import { R7RSError, UnrecognizedCrossingError, AsyncCrossingError, NoLensError, RedundantCrossingError } from "../errors.js";
@@ -239,8 +238,6 @@ function egressUnknown(value: unknown, options: RosettaOptions): unknown {
  * is not a public behavior.
  */
 export function toJS<T extends SchemeValue>(value: T, options: RosettaOptions = {}): AUnwrap<T> {
-  // Multiple values → JS array of unwrapped elements. Values sits outside AValue.
-  if (value instanceof Values) return value.__values__.map((v) => toJS(v, options)) as AUnwrap<T>;
   // R7RS error AS A VALUE exits as same-class host Error via shared arm.
   // Raised errors take the throw path. Irritants recurse through the private walker
   // (static type unknowable).
@@ -285,7 +282,7 @@ export interface InboundClaim {
  *   proxy over a vector is `Array.isArray`-true (and a reverse-membrane wrapper is
  *   `typeof === "function"`-true) and would otherwise be mis-claimed by phase 2.
  *   Within phase 1, mostly order-free EXCEPT: owned non-AValue (reader-token EOF,
- *   Values, R7RSError) BEFORE branded-host — they carry the same `INTEROP_BOUNDARY`
+ *   R7RSError) BEFORE branded-host — they carry the same `INTEROP_BOUNDARY`
  *   stamp `isMarkedInteropPrivate` reads; reverse order would mint them as AOpaqueHandle.
  *
  *   PHASE 2 — {@link FOREIGN_LENS_CLAIMS}: typeof-disjoint lenses (array/plain-object
@@ -353,8 +350,8 @@ export const OWNED_ARTIFACT_CLAIMS: readonly InboundClaim[] = [
   {
     // Non-AValue scheme orphans: identity, no provenance slot. BEFORE branded-host
     // (INTEROP_BOUNDARY stamp overlap with isMarkedInteropPrivate — see phase header).
-    name: "scheme orphan (Values/R7RSError) → identity",
-    claims: (v) => v instanceof Values || v instanceof R7RSError,
+    name: "scheme orphan (R7RSError) → identity",
+    claims: (v) => v instanceof R7RSError,
     box: (_ctx, v) => v },
   {
     // Branded HOST class (`@arrival.private` / markInteropPrivate) — opaque-crossing

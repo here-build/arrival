@@ -275,7 +275,7 @@ to completion before phase 2, phase 2 before phase 3's catch-all doors):
    re-dispatches to the ORIGINAL callable it projects (`ACallable.ts`'s
    `originalCallableOf`, §CALLABLE-LENS); a reader-internal EOF token (identity —
    not a SchemeValue; `eof-object` is an IO door); a non-`AValue` scheme orphan
-   (`Values`/`R7RSError`, by identity); a branded `@arrival.private` host
+   (`R7RSError`, by identity); a branded `@arrival.private` host
    instance (mints/reuses a run-scoped `AOpaqueHandle`, the whiteroom opaque-crossing
    contract). Those owned non-AValue rows MUST precede the branded-instance row:
    `isMarkedInteropPrivate` reads the same `INTEROP_BOUNDARY` stamp they carry

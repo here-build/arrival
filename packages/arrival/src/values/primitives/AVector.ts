@@ -3,7 +3,7 @@
  * Fantasy Land algebras. Vectors are IMMUTABLE — vector-set!/vector-fill!/vector-copy!
  * are notImplemented stubs; every "mutator" returns a fresh AVector.
  *
- * DISAMBIGUATION: a raw JS `Array` is heavily overloaded (evaluateArgs carrier, Values,
+ * DISAMBIGUATION: a raw JS `Array` is heavily overloaded (evaluateArgs carrier,
  * syntax-rules ellipsis, JS-array-as-list at the membrane) and is NOT a vector. Only
  * vector literals / make-vector / vector builtins mint AVector. Being its own class
  * leaves `Array.isArray` sites unaffected — never widen them to accept it.
