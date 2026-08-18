@@ -27,7 +27,7 @@ export default [
   ...nodejs,
   {
     files: ["src/**/*.ts"],
-    ignores: ["**/__tests__/**", "**/*.test.ts", "**/*.spec.ts"],
+    ignores: ["**/__tests__/**", "**/*.test.ts", "**/*.spec.ts", "**/*.test-d.ts"],
     languageOptions: {
       parserOptions: {
         projectService: true,
@@ -93,6 +93,8 @@ export default [
       ],
       // Import order is less critical in interpreter code
       "import-x/order": "off",
+      // Identifier/comment strings trip entropy heuristics; this package has no secrets.
+      "no-secrets/no-secrets": "off",
       // Loop counter updates in interpreter are intentional
       "sonarjs/updated-loop-counter": "off",
       // The arrow-fn trap (Wave 0 of the CONSTANT_CTX rework, docs/working-proposals/
@@ -126,9 +128,12 @@ export default [
       "lib/**",
       "vendor/**",
       "src/__benchmarks__/**",
-      "src/__tests__/**",
+      "src/__custdev__/**",
+      "src/__experiments__/**",
+      "**/__tests__/**",
       "**/*.test.ts",
       "**/*.spec.ts",
+      "**/*.test-d.ts",
       // Scripts are plain mjs — typed rules (prefer-optional-chain, etc.) crash without projectService.
       "scripts/**",
     ],
