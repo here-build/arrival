@@ -286,7 +286,9 @@ export async function* walkGraphReplay(opts: ReplayWalkOptions): AsyncGenerator<
   const graph = opts.graph ?? program.main;
   // THE STANDARD-BASE FOLD — this call site's own responsibility, not `hermeticEnv`'s
   // (see that module's own header; `replay.ts`'s `replayGraphEgress` mirrors this).
-  const base = await withSilentRegion(() => hermeticEnv([...basePacks, ...BASE_ROSTER], program.prelude.source, {}, config));
+  const base = await withSilentRegion(() =>
+    hermeticEnv([...basePacks, ...BASE_ROSTER], program.prelude.source, {}, config),
+  );
   const boxed = yield* graphEgressStep(base, program, graph, frozen, slots, decisions);
   return { boxed, value: toJS(boxed) };
 }

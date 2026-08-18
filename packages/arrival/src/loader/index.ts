@@ -47,5 +47,6 @@ export {
   valueToTsType,
   resolveRequireType,
   type SchemeForm,
-  type MaybePromise } from "./loader.js";
+  type MaybePromise,
+} from "./loader.js";
 export { arrivalLoaderCapability } from "./loader-capability.js";

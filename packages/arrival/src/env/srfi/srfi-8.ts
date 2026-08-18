@@ -5,4 +5,6 @@ import { EnvCapability } from "../../common/capability.js";
 
 export default EnvCapability.define("scheme/srfi-8", {
   symbols: (symbol) => ({
-    receive: symbol.notImplemented`receive: multiple-value returns are omitted from arrival by design — free multi-return packaging and its binders are the weak form of continuation arity (R7RS §6.10 / SRFI-8, same family as call/cc); a value's identity is a single construction site, not a multi-return package. Return a list / vector / dict and destructure with let / car+cdr instead` }) });
+    receive: symbol.notImplemented`receive: multiple-value returns are omitted from arrival by design — free multi-return packaging and its binders are the weak form of continuation arity (R7RS §6.10 / SRFI-8, same family as call/cc); a value's identity is a single construction site, not a multi-return package. Return a list / vector / dict and destructure with let / car+cdr instead`,
+  }),
+});

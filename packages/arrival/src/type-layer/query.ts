@@ -123,12 +123,7 @@ export function createQueryLens(harvested: HarvestedPrelude): QueryLens {
   ): { checker: ts.TypeChecker; sourceFile: ts.SourceFile } | null {
     const role = roleAt(scheme, cursorOffset);
     if (role.kind !== "argument") return null;
-    const probe = [
-      preludeText,
-      `type __E = ${slotTypeExpr(role)};`,
-      `declare const __slot: __E;`,
-      ...extra,
-    ].join("\n");
+    const probe = [preludeText, `type __E = ${slotTypeExpr(role)};`, `declare const __slot: __E;`, ...extra].join("\n");
     const compiled = compile(probe);
     if (compiled === null) return null;
     const slot = typeAt(compiled.checker, compiled.sourceFile, "__slot");
@@ -216,7 +211,8 @@ export function createQueryLens(harvested: HarvestedPrelude): QueryLens {
       const compiled = probeSlot(scheme, cursorOffset, [`declare const __str: IsStringTyped<__E>;`]);
       if (compiled === null) return null;
       return readBoolLiteral(compiled.checker, typeAt(compiled.checker, compiled.sourceFile, "__str"));
-    } };
+    },
+  };
 }
 
 /** The both-null element verdict — returned on every uncertainty path (frozen so callers can't

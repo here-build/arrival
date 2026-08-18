@@ -41,7 +41,8 @@ import {
   charValue,
   stringValue,
   toIndex,
-  withInputProvenance } from "../../values/op-helpers.js";
+  withInputProvenance,
+} from "../../values/op-helpers.js";
 
 import { EnvCapability } from "../../common/capability.js";
 import { attachOffendingValue } from "../../errors.js";
@@ -58,7 +59,8 @@ export default EnvCapability.define("scheme/vectors", {
           {
             <T>(k: number, fill?: T): readonly T[];
           }
-        ` },
+        `,
+      },
       function (this: CallCtx, k: unknown, fill?: SchemeValue): AVector {
         const len = Number(typeof k === "number" ? k : (k as AExact).valueOf());
         // O(1) cap check BEFORE Array.from materializes \`len\` slots — see
@@ -89,7 +91,8 @@ export default EnvCapability.define("scheme/vectors", {
           {
             <T>(...xs: T[]): readonly T[];
           }
-        ` },
+        `,
+      },
       function (this: CallCtx, ...objs: SchemeValue[]): AVector {
         return withInputProvenance(objs, new AVector([...objs]));
       },
@@ -106,7 +109,8 @@ export default EnvCapability.define("scheme/vectors", {
           {
             <T>(...vs: (readonly T[])[]): readonly T[];
           }
-        ` },
+        `,
+      },
       // vector() decodes the scheme face to AVector | AJSArray (borrowed array), not AVector only.
       function (this: CallCtx, ...vectors: (AVector | AJSArray)[]): AVector {
         const arrays = vectors.map((v) => asVector(v, "vector-append"));
@@ -125,7 +129,8 @@ export default EnvCapability.define("scheme/vectors", {
             (x: unknown): x is readonly unknown[];
             <T>(x: T): x is Extract<T, readonly any[]>;
           }
-        ` }),
+        `,
+    }),
 
     "vector-length": symbol.native`vector-length: number of elements in vec`(
       {
@@ -136,7 +141,8 @@ export default EnvCapability.define("scheme/vectors", {
           {
             (v: readonly unknown[]): number;
           }
-        ` },
+        `,
+      },
       function (this: CallCtx, vec: unknown): AExact {
         return new AExact(asVector(vec, "vector-length").length);
       },
@@ -153,7 +159,8 @@ export default EnvCapability.define("scheme/vectors", {
           {
             <T>(v: readonly T[], k: number): T;
           }
-        ` },
+        `,
+      },
       // Dispatch to the operand's own arrival/tagless-final/vector-ref (a SchemeVector or a
       // borrowed AJSArray) — no asVector/instanceof reach-around. `vec` stays `unknown`
       // (not narrowed to AVector) deliberately: the protocol admits a borrowed AJSArray
@@ -190,7 +197,8 @@ export default EnvCapability.define("scheme/vectors", {
           {
             <T>(v: readonly T[], start?: number, end?: number): List<T>;
           }
-        ` },
+        `,
+      },
       function (this: CallCtx, vec: unknown, start?: unknown, end?: unknown): SchemeValue {
         const arr = asVector(vec, "vector->list");
         const s = start === undefined ? 0 : toIndex(start);
@@ -208,7 +216,8 @@ export default EnvCapability.define("scheme/vectors", {
           {
             <T>(xs: List<T>): readonly T[];
           }
-        ` },
+        `,
+      },
       function (this: CallCtx, list: unknown): AVector {
         const result: SchemeValue[] = [];
         let current = list;
@@ -229,7 +238,8 @@ export default EnvCapability.define("scheme/vectors", {
           {
             (v: readonly string[], start?: number, end?: number): string;
           }
-        ` },
+        `,
+      },
       function (this: CallCtx, vec: unknown, start?: unknown, end?: unknown): AString {
         const arr = asVector(vec, "vector->string");
         const s = start === undefined ? 0 : toIndex(start);
@@ -251,7 +261,8 @@ export default EnvCapability.define("scheme/vectors", {
           {
             (s: string, start?: number, end?: number): readonly string[];
           }
-        ` },
+        `,
+      },
       function (this: CallCtx, str: unknown, start?: unknown, end?: unknown): AVector {
         const s_str = stringValue(str);
         const s = start === undefined ? 0 : toIndex(start);
@@ -272,7 +283,8 @@ export default EnvCapability.define("scheme/vectors", {
           {
             <T>(v: readonly T[], start?: number, end?: number): readonly T[];
           }
-        ` },
+        `,
+      },
       function (this: CallCtx, vec: unknown, start?: unknown, end?: unknown): AVector {
         const arr = asVector(vec, "vector-copy");
         const s = start === undefined ? 0 : toIndex(start);
@@ -299,7 +311,8 @@ export default EnvCapability.define("scheme/vectors", {
             <A, B, R>(f: (a: A, b: B) => R, a: readonly A[], b: readonly B[]): readonly R[];
             <A, B, C, R>(f: (a: A, b: B, c: C) => R, a: readonly A[], b: readonly B[], c: readonly C[]): readonly R[];
           }
-        ` },
+        `,
+      },
       function (this: CallCtx, proc: unknown, ...vectors: (AVector | AJSArray)[]) {
         invariant(vectors.length > 0, "vector-map: expected at least one vector argument");
         const arrays = vectors.map((v) => asVector(v, "vector-map"));
@@ -336,7 +349,8 @@ export default EnvCapability.define("scheme/vectors", {
             <A, B>(f: (a: A, b: B) => unknown, a: readonly A[], b: readonly B[]): void;
             <A, B, C>(f: (a: A, b: B, c: C) => unknown, a: readonly A[], b: readonly B[], c: readonly C[]): void;
           }
-        ` },
+        `,
+      },
       function (this: CallCtx, proc: unknown, ...vectors: (AVector | AJSArray)[]): AVoid | Promise<AVoid> {
         invariant(vectors.length > 0, "vector-for-each: expected at least one vector argument");
         const arrays = vectors.map((v) => asVector(v, "vector-for-each"));
@@ -354,4 +368,6 @@ export default EnvCapability.define("scheme/vectors", {
         if (pending.length > 0) return (promise_all(pending) as Promise<unknown[]>).then(() => theVoid);
         return theVoid;
       },
-    ) }) });
+    ),
+  }),
+});

@@ -86,7 +86,12 @@ function positionalIssueLine(issue: ZodError["issues"][number], args: readonly u
 }
 
 /** Format positional/variadic decode rejection into the same head grammar as formatKwargsRejection. */
-export function formatPositionalRejection(qualifiedName: string, error: ZodError, args: readonly unknown[], inSchema: unknown): string {
+export function formatPositionalRejection(
+  qualifiedName: string,
+  error: ZodError,
+  args: readonly unknown[],
+  inSchema: unknown,
+): string {
   const lines = error.issues.map((issue) => positionalIssueLine(issue, args, inSchema));
   const head = qualifiedName === "" ? "arguments rejected" : `${qualifiedName}: arguments rejected`;
   return `${head} — ${lines.length} problem(s):\n${lines.join("\n")}`;

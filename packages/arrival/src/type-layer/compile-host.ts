@@ -13,14 +13,17 @@ import * as ts from "typescript";
  *  One call = one compile; diagnostics are read by the caller (query ignores them,
  *  diagnose reads them) — the compile itself is identical either way.
  *  Returns `null` when the source file fails to materialize (corrupt probe / host failure). */
-export function compile(source: string): { program: ts.Program; checker: ts.TypeChecker; sourceFile: ts.SourceFile } | null {
+export function compile(
+  source: string,
+): { program: ts.Program; checker: ts.TypeChecker; sourceFile: ts.SourceFile } | null {
   const fileName = "/__query.ts";
   const options: ts.CompilerOptions = {
     strict: true,
     target: ts.ScriptTarget.ES2022,
     lib: ["lib.es2022.d.ts"],
     noEmit: true,
-    skipLibCheck: true };
+    skipLibCheck: true,
+  };
   const host = ts.createCompilerHost(options);
   const getSourceFile = host.getSourceFile.bind(host);
   host.getSourceFile = (name, languageVersion, onError, shouldCreate) =>

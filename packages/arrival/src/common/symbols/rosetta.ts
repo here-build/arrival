@@ -17,7 +17,8 @@ import { is_callable_value } from "../../values/value-guards.js";
 import {
   ARosettaProcedure,
   _installRosettaMembraneApply,
-  rosettaDisplayName } from "../../values/primitives/ARosettaProcedure.js";
+  rosettaDisplayName,
+} from "../../values/primitives/ARosettaProcedure.js";
 import { AValue, pointProvenance, unionProvenance } from "../../values/primitives/AValue.js";
 import { attestDeep, freshIfSingleton } from "../../values/attestation.js";
 import { jsToScheme } from "../../membrane/rosetta.js";
@@ -30,7 +31,22 @@ import { formatPositionalRejection } from "./positional-rejection.js";
 import type { SchemeValue } from "../../values/types.js";
 import invariant from "tiny-invariant";
 import { type CallCtx } from "../../run/CallCtx.js";
-import { assertContractAxes, type BakeRuntimeOpts, collectKwargsObject, contractMayCarryCallable, type CrossingContract, type Impl, isSingleOutput, normalizeInputVector, normalizeVector, parseNameDoc, type RestSpec, type RosettaSymbolDef, topLevelSchemas, type VectorSpec } from "./_bake.js";
+import {
+  assertContractAxes,
+  type BakeRuntimeOpts,
+  collectKwargsObject,
+  contractMayCarryCallable,
+  type CrossingContract,
+  type Impl,
+  isSingleOutput,
+  normalizeInputVector,
+  normalizeVector,
+  parseNameDoc,
+  type RestSpec,
+  type RosettaSymbolDef,
+  topLevelSchemas,
+  type VectorSpec,
+} from "./_bake.js";
 import { WorldFlipError } from "../../errors.js";
 
 function isBareCallable(value: unknown): boolean {
@@ -243,7 +259,8 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
         emit: contract.emit,
         narrows: contract.narrows,
         refPolicy: contract.refPolicy,
-        metadata: opts.metadata } satisfies RosettaSymbolDef,
+        metadata: opts.metadata,
+      } satisfies RosettaSymbolDef,
       provenanceRole: provenance,
       cacheClass,
       callbackRoles,
@@ -261,7 +278,9 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
         sink: provenance === "sink",
         outputSlots: Array.isArray(contract.output) ? (contract.output as readonly unknown[]) : undefined,
         queries,
-        effects } });
+        effects,
+      },
+    });
   };
 }
 
@@ -360,8 +379,7 @@ _installRosettaMembraneApply(async (proc, args, callCtx) => {
     // Fast-path: no cache, no effect-log, and no path-derived storage work → bare fire.
     // Path Q/E with armed cache/effects must enter penetrateThroughCache (I6–I8).
     const needsPathStorage =
-      (producedEffects.length > 0 && burstLog !== undefined) ||
-      (producedQueries.length > 0 && runCache !== undefined);
+      (producedEffects.length > 0 && burstLog !== undefined) || (producedQueries.length > 0 && runCache !== undefined);
     result =
       runCache === undefined && burstLog === undefined && !needsPathStorage
         ? await fire()
@@ -373,7 +391,8 @@ _installRosettaMembraneApply(async (proc, args, callCtx) => {
               sink: m.sink,
               rawArgs: args,
               pathQueries: producedQueries,
-              pathEffects: producedEffects },
+              pathEffects: producedEffects,
+            },
             decodedArgs,
             fire,
             burstLog,

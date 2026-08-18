@@ -72,7 +72,8 @@ export default EnvCapability.define("scheme/r7rs/exceptions", {
       {
         input: [z.string],
         inputRest: z.schemeValue,
-        output: [z.error] },
+        output: [z.error],
+      },
       function (this: CallCtx, message, ...irritants) {
         const msg = message instanceof AString ? message.valueOf() : String(message);
         return new R7RSError(msg, ...irritants);
@@ -238,4 +239,6 @@ export default EnvCapability.define("scheme/r7rs/exceptions", {
                   ,@clauses
                   (else (raise ,var)))))))`,
         { macroAttribute: "binder" },
-      ) }) });
+      ),
+  }),
+});

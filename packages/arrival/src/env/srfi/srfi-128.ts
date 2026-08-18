@@ -63,7 +63,8 @@ export default EnvCapability.define("scheme/srfi-128", {
           {
             input: [z.lambda, z.lambda, z.union([z.lambda, z.booleanFalse])],
             inputRest: z.schemeValue,
-            output: [comparatorSchema] },
+            output: [comparatorSchema],
+          },
           `(lambda (type-test equality ordering . hash)
            (list 'comparator type-test equality ordering))`,
         ),
@@ -165,5 +166,7 @@ export default EnvCapability.define("scheme/srfi-128", {
       "default-comparator": symbol.define`default-comparator: the shared instance of make-default-comparator`(
         { input: [], output: [comparatorSchema] },
         `(lambda () (make-default-comparator))`,
-      ) };
-  } });
+      ),
+    };
+  },
+});

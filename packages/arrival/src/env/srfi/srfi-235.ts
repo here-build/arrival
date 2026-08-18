@@ -44,7 +44,8 @@ export default EnvCapability.define("scheme/srfi-235", {
           {
             <A extends unknown[], R>(fn: (...args: A) => R): (...args: A) => boolean;
           }
-        ` },
+        `,
+      },
       `(lambda (fn) (compose not fn))`,
     ),
 
@@ -58,7 +59,8 @@ export default EnvCapability.define("scheme/srfi-235", {
           {
             <T>(x: T): (...args: unknown[]) => T;
           }
-        ` },
+        `,
+      },
       `(lambda (x) (lambda args x))`,
     ),
 
@@ -70,7 +72,8 @@ export default EnvCapability.define("scheme/srfi-235", {
         output: [z.boolean],
         type: dedent`
           (...args: unknown[]) => boolean
-        ` },
+        `,
+      },
       `(lambda args #t)`,
     ),
     never: symbol.define`never: SRFI-235 — ignore args, return #f`(
@@ -80,7 +83,8 @@ export default EnvCapability.define("scheme/srfi-235", {
         output: [z.boolean],
         type: dedent`
           (...args: unknown[]) => boolean
-        ` },
+        `,
+      },
       `(lambda args #f)`,
     ),
 
@@ -107,7 +111,8 @@ export default EnvCapability.define("scheme/srfi-235", {
             <A, B, C, R>(fn: (a: A, b: B, c: C) => R): (a: A) => (b: B) => (c: C) => R;
             <R>(fn: (...args: unknown[]) => R, ...args: unknown[]): R | ((...more: unknown[]) => unknown);
           }
-        ` },
+        `,
+      },
       `(lambda (fn . args)
          (if (>= (length args) (procedure-min-arity fn))
              (apply fn args)
@@ -126,9 +131,12 @@ export default EnvCapability.define("scheme/srfi-235", {
           {
             (fn: (...args: unknown[]) => unknown): number;
           }
-        ` },
+        `,
+        },
         function (this: CallCtx, fn: unknown): AExact {
           const min = is_callable_value(fn) ? fn.arity.min : (fn as (...args: unknown[]) => unknown).length;
           return new AExact(min);
         },
-      ) }) });
+      ),
+  }),
+});

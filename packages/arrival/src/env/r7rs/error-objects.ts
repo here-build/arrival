@@ -55,7 +55,8 @@ export const wrappedOps = {
 
   "file-error?"(obj: unknown): ABool {
     return schemeBool(obj instanceof R7RSFileError);
-  } };
+  },
+};
 
 /** DELIBERATELY dumb roster: one literal `symbol.native` declaration per verb, no
  *  filter/Set indirection — this object IS the complete roster, read top-to-bottom.
@@ -83,4 +84,6 @@ export default EnvCapability.define("scheme/exceptions", {
     "file-error?": symbol.native`file-error?: #t iff obj is a file error`(
       { input: [z.schemeValue], output: [z.boolean] },
       wrappedOps["file-error?"],
-    ) }) });
+    ),
+  }),
+});

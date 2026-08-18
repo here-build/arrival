@@ -26,10 +26,7 @@ export function pathsOverlap(a: ResourcePath, b: ResourcePath): boolean {
 }
 
 /** Any-pair multi-set overlap (door fuel). */
-export function anyPathOverlap(
-  priorEffects: readonly ResourcePath[],
-  thisQueries: readonly ResourcePath[],
-): boolean {
+export function anyPathOverlap(priorEffects: readonly ResourcePath[], thisQueries: readonly ResourcePath[]): boolean {
   return findOverlappingPair(priorEffects, thisQueries) !== undefined;
 }
 

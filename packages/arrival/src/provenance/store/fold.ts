@@ -30,7 +30,8 @@ const EMPTY_FOLD: RegionFoldState = {
   unsettledCloses: 0,
   pending: 0,
   hostSchedules: [],
-  lastSeq: 0 };
+  lastSeq: 0,
+};
 
 export function foldRegionStream(records: readonly ProvenanceRecord[]): RegionFoldState {
   if (records.length === 0) return EMPTY_FOLD;

@@ -30,7 +30,13 @@ import { type RunContext } from "../../run/RunContext.js";
 import { type CallCtx } from "../../run/CallCtx.js";
 import { Macro } from "../../eval/Macro.js";
 import { ZodType, ZodUnion } from "zod";
-import { CacheClassShapeError, ContractSealError, ContractSlotKindError, KeywordPairingError, ProvenanceRoleShapeError } from "../../errors.js";
+import {
+  CacheClassShapeError,
+  ContractSealError,
+  ContractSlotKindError,
+  KeywordPairingError,
+  ProvenanceRoleShapeError,
+} from "../../errors.js";
 // TYPE-ONLY (erased — no runtime edge into capability.ts): Activation for dynamic metadata.
 import type { Activation } from "../capability.js";
 // TYPE-ONLY, one-directional (`common/symbols` → `emit`): compiler rule surface a Contract may carry.
@@ -141,7 +147,11 @@ export type ProvenanceRole = "pipe" | "fan" | "source" | "sink" | "transparent" 
 export type CacheClass = "view" | "pure";
 
 /** Resource-path producer — sole home is run/resource-paths.ts; re-exported for CrossingContract. */
-import { ResourcePathRoleConflictError, ResourcePathShapeError, type ResourcePathFn } from "../../run/resource-paths.js";
+import {
+  ResourcePathRoleConflictError,
+  ResourcePathShapeError,
+  type ResourcePathFn,
+} from "../../run/resource-paths.js";
 export type { ResourcePathFn };
 
 /** Per-z.lambda-arm dual of `ProvenanceRole` (host role). Shape extracts where it decides;
@@ -270,15 +280,13 @@ export type CrossingContract<I extends VectorSpec, O extends VectorSpec, Rest ex
 } & // sink ∧ queries ban (ruling 2026-08-13): under gather a sink's impl is SKIPPED — a declared
   // Q would journal a read for a body that never ran. sink+effects stays legal (a sink IS an
   // effect). Runtime twin: ResourcePathRoleConflictError at bake.
-  (
-    | { readonly provenance: "sink"; readonly queries?: never }
+  (| { readonly provenance: "sink"; readonly queries?: never }
     | { readonly provenance?: Exclude<ProvenanceRole, "sink"> }
   ) &
   // effects-only-return ban (ruling 2026-08-13): the return of an effectful verb is licensed
   // by its Q half — upsert-with-return is the hybrid shape. Effects-only must be void-family.
   // Runtime twin: ResourcePathRoleConflictError("effects-only-return") at bake.
-  (
-    | { readonly effects?: undefined }
+  (| { readonly effects?: undefined }
     | { readonly queries: ResourcePathFn }
     | { readonly output: readonly (typeof z.undefinedResult)[] }
   ) &

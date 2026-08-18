@@ -15,7 +15,8 @@ import type {
   MintRecord,
   MuxDecisionRecord,
   TrackCloseRecord,
-  TrackOpenRecord } from "./records.js";
+  TrackOpenRecord,
+} from "./records.js";
 import type { Payload, PayloadStore, ProvenanceStore } from "./interfaces.js";
 
 // Flag — default OFF. Separate from eager-oracle (`isEagerProvenanceOracleEnabled`).

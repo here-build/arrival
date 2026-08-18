@@ -39,7 +39,8 @@ const entryCaches = new WeakMap<AJSObject, Map<string, SchemeValue | Promise<Sch
  *  SchemeValue key (keyword symbol, boxed string) unwraps via valueOf with the `:`
  *  accessor sigil stripped. Shared by AJSObject and AJSArray member terms. */
 export function foldMemberName(key: SchemeValue | string): string {
-  let name = typeof key === "string" ? key : String((key as { valueOf?: () => unknown } | null | undefined)?.valueOf?.() ?? key);
+  let name =
+    typeof key === "string" ? key : String((key as { valueOf?: () => unknown } | null | undefined)?.valueOf?.() ?? key);
   if (name.startsWith(":")) name = name.slice(1);
   return name;
 }

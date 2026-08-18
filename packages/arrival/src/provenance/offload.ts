@@ -235,7 +235,8 @@ export class SameProcessExecutor implements DrillInExecutor {
       value,
       evidenceTier: "replayed",
       epoch: this.semanticsEpoch,
-      trust: matches ? "matched" : "verified" };
+      trust: matches ? "matched" : "verified",
+    };
   }
 
   /** γ via replayGraphEgress; unknown hash → ReplayScopeError (never silent). */
@@ -262,7 +263,8 @@ export class SameProcessExecutor implements DrillInExecutor {
       frozen,
       slots,
       basePacks: this.basePacks,
-      config: this.config });
+      config: this.config,
+    });
     return replayed.value;
   }
 }

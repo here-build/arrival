@@ -27,7 +27,8 @@ export function createNoteSink(): NoteSink {
       const out = lines.slice();
       lines.length = 0;
       return out;
-    } };
+    },
+  };
 }
 
 /** One `(display …)` occurrence: the ORIGINAL source of the call, and the value it saw. */
@@ -51,5 +52,6 @@ export function createDisplaySink(): DisplaySink {
       const out = records.slice();
       records.length = 0;
       return out;
-    } };
+    },
+  };
 }

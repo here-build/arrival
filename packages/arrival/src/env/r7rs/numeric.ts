@@ -45,7 +45,8 @@ import {
   nilOrderCompare,
   mintVerdict,
   isEagerAccumulationActive,
-  type AOrd } from "../../values/op-helpers.js";
+  type AOrd,
+} from "../../values/op-helpers.js";
 import { checkedMul, mintExact } from "../../values/mint-numeric.js";
 import { type } from "../../membrane/typecheck.js";
 import { tf } from "../../values/tagless-final.js";
@@ -420,21 +421,11 @@ function schemeExpt(base: ANumeric, power: ANumeric): ANumeric {
   if (base instanceof AExact && power instanceof AExact && power.denom === 1) {
     const n = power.num;
     if (n >= 0) {
-      return mintExact(
-        checkedPow(base.num, n, "expt"),
-        checkedPow(base.denom, n, "expt"),
-        undefined,
-        "expt",
-      );
+      return mintExact(checkedPow(base.num, n, "expt"), checkedPow(base.denom, n, "expt"), undefined, "expt");
     }
     invariant(base.num !== 0, "expt: division by zero (0 raised to a negative power)");
     const m = -n;
-    return mintExact(
-      checkedPow(base.denom, m, "expt"),
-      checkedPow(base.num, m, "expt"),
-      undefined,
-      "expt",
-    );
+    return mintExact(checkedPow(base.denom, m, "expt"), checkedPow(base.num, m, "expt"), undefined, "expt");
   }
   return new AInexact(Math.pow(toReal(base), toReal(power)));
 }
@@ -771,12 +762,14 @@ const LOOSE_NUM_PAIR = {
   "<": (a, b) => flLteNum(a, b) && !flLteNum(b, a),
   ">": (a, b) => flLteNum(b, a) && !flLteNum(a, b),
   "<=": (a, b) => flLteNum(a, b),
-  ">=": (a, b) => flLteNum(b, a) };
+  ">=": (a, b) => flLteNum(b, a),
+};
 const ORD_FROM_LE = {
   "<": (ab, ba) => ab && !ba,
   ">": (ab, ba) => ba && !ab,
   "<=": (ab) => ab,
-  ">=": (_ab, ba) => ba };
+  ">=": (_ab, ba) => ba,
+};
 const describeLoose = (v) => (v instanceof AValue ? v.kind : v == null ? String(v) : typeof v);
 function loosePairOrder(sym, a, b) {
   const nilCmp = nilOrderCompare(a, b);
@@ -935,14 +928,16 @@ const addSpec: NumSpec = {
   inRest: z.schemeNumber,
   out: z.schemeNumber,
   fn: addFn,
-  zeroArgIdentity: (ctx) => new AExact(0) };
+  zeroArgIdentity: (ctx) => new AExact(0),
+};
 const subSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: subFn };
 const mulSpec: NumSpec = {
   in: [],
   inRest: z.schemeNumber,
   out: z.schemeNumber,
   fn: mulFn,
-  zeroArgIdentity: (ctx) => new AExact(1) };
+  zeroArgIdentity: (ctx) => new AExact(1),
+};
 const divSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: divFn };
 // `quotient` uses `z.schemeNumber` in/out, NOT `z.bigint`: it shares the same
 // box-native `toIntegerPair` door every other integer-division op uses (bypasses the
@@ -955,22 +950,26 @@ const floorRemainderSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out:
 const truncateQuotientSpec: NumSpec = {
   in: [z.schemeNumber, z.schemeNumber],
   out: z.schemeNumber,
-  fn: truncateQuotientFn };
+  fn: truncateQuotientFn,
+};
 const truncateRemainderSpec: NumSpec = {
   in: [z.schemeNumber, z.schemeNumber],
   out: z.schemeNumber,
-  fn: truncateRemainderFn };
+  fn: truncateRemainderFn,
+};
 const numeratorSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: numeratorFn };
 const denominatorSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: denominatorFn };
 const squareSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: squareFn };
 const makeRectangularSpec: NumSpec = {
   in: [z.looseNumber, z.looseNumber],
   out: z.schemeNumber,
-  fn: (): ANumeric => complexDoor() };
+  fn: (): ANumeric => complexDoor(),
+};
 const makePolarSpec: NumSpec = {
   in: [z.looseNumber, z.looseNumber],
   out: z.schemeNumber,
-  fn: (): ANumeric => complexDoor() };
+  fn: (): ANumeric => complexDoor(),
+};
 const realPartSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() };
 const imagPartSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() };
 const magnitudeSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() };
@@ -988,7 +987,8 @@ const gcdSpec: NumSpec = {
   inRest: z.schemeNumber,
   out: z.schemeNumber,
   fn: gcdFn,
-  zeroArgIdentity: (ctx) => new AExact(0) };
+  zeroArgIdentity: (ctx) => new AExact(0),
+};
 const maxSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: maxFn };
 const minSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: minFn };
 const zeroSpec: NumSpec = { in: [z.schemeNumber], out: z.boolean, fn: isZeroFn };
@@ -1025,7 +1025,8 @@ const lcmSpec: NumSpec = {
   inRest: z.schemeNumber,
   out: z.schemeNumber,
   fn: lcmFn,
-  zeroArgIdentity: (ctx) => new AExact(1) };
+  zeroArgIdentity: (ctx) => new AExact(1),
+};
 
 // ── Bespoke contracts — ops whose impl does NOT come from `nativeNumericOp`/`NumSpec`
 // (own coercion + bespoke `marshalCall` wrapper, or no NumSpec), so their Contract is
@@ -1045,7 +1046,8 @@ const NUMBER_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
             (x: unknown): x is number;
             <T>(x: T): x is Extract<T, number>;
           }
-        ` };
+        `,
+};
 const EXACT_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeValue],
   output: [z.boolean],
@@ -1054,7 +1056,8 @@ const EXACT_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
             (x: unknown): x is number;
             <T>(x: T): x is Extract<T, number>;
           }
-        ` };
+        `,
+};
 const INEXACT_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeValue],
   output: [z.boolean],
@@ -1063,20 +1066,24 @@ const INEXACT_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
             (x: unknown): x is number;
             <T>(x: T): x is Extract<T, number>;
           }
-        ` };
+        `,
+};
 
 const QUOTIENT_REMAINDER_PRODUCT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber, z.schemeNumber],
-  output: [z.pair] };
+  output: [z.pair],
+};
 
 /** exact-integer-sqrt → (s . r); one non-neg exact integer input. */
 const EXACT_ISQRT_PRODUCT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber],
-  output: [z.pair] };
+  output: [z.pair],
+};
 
 const ONE_ARG_NUM_OUTPUT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber],
-  output: [z.schemeNumber] };
+  output: [z.schemeNumber],
+};
 
 /** `>>`/`<<` — `(a: unknown, b: unknown) => ANumeric`. `shiftRightFn`/`shiftLeftFn`
  *  `coerceNumeric` both operands before `marshalCall(arithmeticShiftSpec, …)` (which
@@ -1084,21 +1091,24 @@ const ONE_ARG_NUM_OUTPUT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = 
  *  declared domain; integer narrowing is `arithmeticShiftSpec`'s own runtime check. */
 const TWO_ARG_NUM_OUTPUT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber, z.schemeNumber],
-  output: [z.schemeNumber] };
+  output: [z.schemeNumber],
+};
 
 /** `inexact`/`exact->inexact` — `(z: unknown) => AInexact` (narrower than the generic
  *  scheme-number union, matching `inexactFn`'s declared return). Input `z.schemeNumber`
  *  (`inexactFn` `coerceNumeric`s first). */
 const INEXACT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber],
-  output: [z.inexact] };
+  output: [z.inexact],
+};
 
 /** `exact`/`inexact->exact` — `(z: unknown) => AExact` (narrower than the generic
  *  scheme-number union, matching `exactFn`'s declared return). Input `z.schemeNumber`
  *  (`exactFn` `coerceNumeric`s first). */
 const EXACT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber],
-  output: [z.exact] };
+  output: [z.exact],
+};
 
 /** `number->string` — `(z: unknown, radix?: unknown) => AString` (boxed, carrying the
  *  union of its operands' provenance — RULINGS.md R1: `exec`'s SIMPLE tier calls `toJS`
@@ -1108,7 +1118,8 @@ const EXACT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
  *  `z`/`radix` are `z.schemeNumber` — `numberToStringFn` `coerceNumeric`s each. */
 const NUMBER_TO_STRING_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber, z.schemeNumber.optional()],
-  output: [z.string] };
+  output: [z.string],
+};
 
 // ════════════════════════════════════════════════════════════════════════════
 // Contract.emit — + / - / * / / quotient / modulo / = / comparisons / zero?
@@ -1130,10 +1141,12 @@ const foldBin = (op: BinOp, args: readonly R[]): R => args.reduce((acc, a) => Bi
 
 const plusEmitRule: EmitRule<R> = {
   // (+) → 0 (the additive identity); (+ x) → x itself — no operator node emitted.
-  call: (args) => (args.length === 0 ? Lit(0) : foldBin("+", args)) };
+  call: (args) => (args.length === 0 ? Lit(0) : foldBin("+", args)),
+};
 
 const timesEmitRule: EmitRule<R> = {
-  call: (args) => (args.length === 0 ? Lit(1) : foldBin("*", args)) };
+  call: (args) => (args.length === 0 ? Lit(1) : foldBin("*", args)),
+};
 
 const minusEmitRule: EmitRule<R> = {
   // R7RS `-` wants ≥ 1 argument; unary is negation.
@@ -1142,7 +1155,8 @@ const minusEmitRule: EmitRule<R> = {
       ? ctx.door("`-` wants at least 1 argument")
       : args.length === 1
         ? Un("-", args[0]!)
-        : foldBin("-", args) };
+        : foldBin("-", args),
+};
 
 const divideEmitRule: EmitRule<R> = {
   // `/` is plain JS division (§7 — the interpreter's exact-rational richness is
@@ -1152,7 +1166,8 @@ const divideEmitRule: EmitRule<R> = {
       ? ctx.door("`/` wants at least 1 argument")
       : args.length === 1
         ? Bin("/", Lit(1), args[0]!)
-        : foldBin("/", args) };
+        : foldBin("/", args),
+};
 
 const quotientEmitRule: EmitRule<R> = {
   call: (args, ctx) => {
@@ -1160,7 +1175,8 @@ const quotientEmitRule: EmitRule<R> = {
     // Global Math via minted Binding — walker's frame pre-seeds Math/Error/Promise
     // so a user binding named Math disambiguates instead of shadowing.
     return Method(Ref(Binding("Math")), "trunc", [Bin("/", a!, b!)]);
-  } };
+  },
+};
 
 const moduloEmitRule: EmitRule<R> = {
   call: (args, ctx) => {
@@ -1168,7 +1184,8 @@ const moduloEmitRule: EmitRule<R> = {
     // JS `%` is a REMAINDER (sign-of-dividend); `((a % n) + n) % n` is the one
     // correct sign-of-divisor modulo algorithm over it (Appendix B).
     return Bin("%", Bin("+", Bin("%", a!, n!), n!), n!);
-  } };
+  },
+};
 
 const numEqEmitRule: EmitRule<R> = {
   call: (args) => {
@@ -1183,7 +1200,8 @@ const numEqEmitRule: EmitRule<R> = {
     let chain: R = Bin("===", args[0]!, args[1]!);
     for (let i = 2; i < args.length; i++) chain = Bin("&&", chain, Bin("===", args[i - 1]!, args[i]!));
     return chain;
-  } };
+  },
+};
 
 // ── §7 fact-gated: < <= > >= — Law A, argFacts-gated (unlike =/+/-/*//) ──────────────
 // `=` is unconditional: looseCompare("=", numEqOp) has no FL-Ord fallback; nil is
@@ -1204,7 +1222,8 @@ function compareEmitRule(sym: "<" | ">" | "<=" | ">="): EmitRule<R> {
       let chain: R = Bin(sym, args[0]!, args[1]!);
       for (let i = 2; i < args.length; i++) chain = Bin("&&", chain, Bin(sym, args[i - 1]!, args[i]!));
       return chain;
-    } };
+    },
+  };
 }
 
 const ltEmitRule = compareEmitRule("<");
@@ -1219,7 +1238,8 @@ const zeroEmitRule: EmitRule<R> = {
   call: (args, ctx) => {
     const [n] = exactly(ctx, "zero?", args, 1);
     return ctx.argFacts[0]?.numeric === true ? Bin("===", n!, Lit(0)) : Call(ctx.runtime("zero?"), [n!]);
-  } };
+  },
+};
 
 export default EnvCapability.define("scheme/numeric", {
   // `z` stays a module import here: this pack builds its `NumSpec` contract table and
@@ -1496,4 +1516,6 @@ export default EnvCapability.define("scheme/numeric", {
     "number->string": symbol.native`number->string: format a number in a radix`(
       NUMBER_TO_STRING_CONTRACT,
       numberToStringFn as (...args: unknown[]) => unknown,
-    ) }) });
+    ),
+  }),
+});

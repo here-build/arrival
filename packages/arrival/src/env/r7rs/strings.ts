@@ -26,7 +26,8 @@ import {
   schemeBool as bool,
   stringValue,
   toIndex,
-  withInputProvenance } from "../../values/op-helpers.js";
+  withInputProvenance,
+} from "../../values/op-helpers.js";
 import { collapseProvenance, taintString } from "../../provenance/provenance-collapse.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
@@ -44,7 +45,8 @@ import {
   int_bare_re,
   int_re,
   rational_bare_re,
-  rational_re } from "../../reader/lexical-grammar.js";
+  rational_re,
+} from "../../reader/lexical-grammar.js";
 import { parse_complex, parse_float, parse_integer, parse_rational } from "../../reader/parsing.js";
 import type { AListAlike, SchemeValue } from "../../values/types.js";
 
@@ -215,7 +217,8 @@ export default EnvCapability.define("scheme/strings", {
     "string->list": symbol.native`string->list: list of the string's characters`(
       {
         input: [z.string, z.schemeNumber.optional(), z.schemeNumber.optional()],
-        output: [z.union([z.pair, z.nil])] },
+        output: [z.union([z.pair, z.nil])],
+      },
       function (this: CallCtx, str, start, end) {
         const chars = [...stringValue(str)];
         const startIdx = start === undefined ? 0 : toIndex(start);
@@ -303,7 +306,8 @@ export default EnvCapability.define("scheme/strings", {
         // callbackRoles DECLARED: the host is role `pipe` (string-map was never a
         // declared fan), so the fan default can't fire and shape underdetermines.
         // proc's return BECOMES the output character — `element-transformer`.
-        callbackRoles: ["element-transformer"] },
+        callbackRoles: ["element-transformer"],
+      },
       function (this: CallCtx, proc: unknown, ...strings: AString[]) {
         invariant(strings.length > 0, "string-map: expected at least one string");
         const strs = strings.map(stringValue);
@@ -347,7 +351,8 @@ export default EnvCapability.define("scheme/strings", {
             (f: (c: string) => unknown, s: string): void;
             (f: (...chars: string[]) => unknown, ...strings: string[]): void;
           }
-        ` },
+        `,
+      },
       function (this: CallCtx, proc: unknown, ...strings: AString[]): AVoid | Promise<AVoid> {
         invariant(strings.length > 0, "string-for-each: expected at least one string");
         const strs = strings.map(stringValue);
@@ -418,4 +423,6 @@ export default EnvCapability.define("scheme/strings", {
         }
         return bool(false);
       },
-    ) }) });
+    ),
+  }),
+});

@@ -288,9 +288,7 @@ export default EnvCapability.define("scheme/polyglot", {
           type: "(separator: string, list: List<string>) => string",
         },
         function (this: CallCtx, separator: SchemeValue, list: SchemeValue): AString {
-          const joined = to_array("join")(list)
-            .map(stringValue)
-            .join(stringValue(separator));
+          const joined = to_array("join")(list).map(stringValue).join(stringValue(separator));
           return taintString(joined, collapseProvenance(separator, list));
         },
       ),
@@ -318,7 +316,8 @@ export default EnvCapability.define("scheme/polyglot", {
             <A extends unknown[], B, C, D, E, R>(f: (e: E) => R, g: (d: D) => E, h: (c: C) => D, i: (b: B) => C, j: (...args: A) => B): (...args: A) => R;
             <A extends unknown[], B, C, D, E, F, R>(f: (f: F) => R, g: (e: E) => F, h: (d: D) => E, i: (c: C) => D, j: (b: B) => C, k: (...args: A) => B): (...args: A) => R;
           }
-        ` },
+        `,
+        },
         `(lambda fns
          (lambda args
            (let ((rfns (reverse fns)))
@@ -343,7 +342,8 @@ export default EnvCapability.define("scheme/polyglot", {
             <A extends unknown[], B, C, D, E, R>(f: (...args: A) => B, g: (b: B) => C, h: (c: C) => D, i: (d: D) => E, j: (e: E) => R): (...args: A) => R;
             <A extends unknown[], B, C, D, E, F, R>(f: (...args: A) => B, g: (b: B) => C, h: (c: C) => D, i: (d: D) => E, j: (e: E) => F, k: (f: F) => R): (...args: A) => R;
           }
-        ` },
+        `,
+        },
         `(lambda fns
          (lambda args
            (if (null? fns)
@@ -372,5 +372,7 @@ export default EnvCapability.define("scheme/polyglot", {
          (if (or (null? ks) (null? vs))
              '()
              (cons (car ks) (cons (car vs) (%interleave (cdr ks) (cdr vs))))))`,
-        ) };
-  } });
+        ),
+    };
+  },
+});

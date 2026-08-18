@@ -233,4 +233,6 @@ export default EnvCapability.define("scheme/srfi-28", {
           // Collapsing op: re-stamp the DEEP union of the fmt string + every arg's lineage.
           return taintString(out, collapseProvenance(...provInputs));
         },
-      ) }) });
+      ),
+  }),
+});

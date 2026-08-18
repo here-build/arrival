@@ -172,4 +172,6 @@ export default EnvCapability.define("scheme/srfi-189", {
          (cond ((left? e) (right (car (cdr e))))
                ((right? e) (left (car (cdr e))))
                (else (error "either-swap: not an Either"))))`,
-    ) }) });
+    ),
+  }),
+});

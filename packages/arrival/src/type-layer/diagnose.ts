@@ -85,9 +85,10 @@ export function createDiagnoseLens(harvested: HarvestedPrelude): DiagnoseLens {
         return { unit: { programStartOffset, statementSpans: [] }, diagnostics: [] };
       }
 
-      const statementSpans = statements.map(
-        (s): readonly [number, number] => [s.schemeSpan[0] + programStartOffset, s.schemeSpan[1] + programStartOffset],
-      );
+      const statementSpans = statements.map((s): readonly [number, number] => [
+        s.schemeSpan[0] + programStartOffset,
+        s.schemeSpan[1] + programStartOffset,
+      ]);
       const unit: DiagnoseUnit = { programStartOffset, statementSpans };
 
       const probe = [preludeText, contextTs, programTs].join("\n");
@@ -117,7 +118,8 @@ export function createDiagnoseLens(harvested: HarvestedPrelude): DiagnoseLens {
         diagnostics.push({ code: d.code, span, tsMessage, ...extractPayload(checker, sourceFile, d) });
       }
       return { unit, diagnostics };
-    } };
+    },
+  };
 }
 
 /** Structured payload per code. Every extraction is defensive: an un-locatable node

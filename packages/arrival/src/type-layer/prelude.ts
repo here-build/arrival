@@ -53,11 +53,11 @@ export function assemblePreludeFromSignatures(
     if (isTsIdentifier(name)) identDecls.push(`declare const ${name}: ${sig};`);
     else operatorDecls.push(`  ${escapeName(name)}: ${sig};`);
   }
-  const operatorNamespace =
-    operatorDecls.length > 0 ? `declare const _: {\n${operatorDecls.join("\n")}\n};\n` : "";
+  const operatorNamespace = operatorDecls.length > 0 ? `declare const _: {\n${operatorDecls.join("\n")}\n};\n` : "";
   return {
     prelude: [carrierVocabulary(), "", ...identDecls, "", operatorNamespace].join("\n"),
-    members };
+    members,
+  };
 }
 
 /**

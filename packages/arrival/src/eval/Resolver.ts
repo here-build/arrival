@@ -80,7 +80,8 @@ function cxrUnfold(name: string): ANativeProcedure | undefined {
       // Walk result is the receivers' own car/cdr algebra output — scheme values
       // by construction; typed unknown by the spine-walk convention.
       return v as SchemeValue;
-    } });
+    },
+  });
   cxrCache.set(name, proc);
   return proc;
 }
@@ -97,10 +98,7 @@ function cxrUnfold(name: string): ANativeProcedure | undefined {
  * classification). A dotted identifier is not special-cased here, so it resolves
  * as an ordinary (unbound) symbol and hits the unbound-variable door.
  */
-function resolveSynth(
-  name: string | symbol,
-  vocabulary: () => Iterable<string | symbol>,
-): AmbientValue | undefined {
+function resolveSynth(name: string | symbol, vocabulary: () => Iterable<string | symbol>): AmbientValue | undefined {
   if (typeof name === "string") {
     const cxr = cxrUnfold(name);
     if (cxr !== undefined) return cxr;

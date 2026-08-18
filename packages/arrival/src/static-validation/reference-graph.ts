@@ -115,7 +115,8 @@ export function buildReferenceGraph(
           door: entry.door,
           owner: entry.door.cause?.owner,
           needs: [],
-          references: [] };
+          references: [],
+        };
         doors.set(occ.name, node);
         for (const need of entry.door.cause?.needs ?? []) {
           // `configuration` is the only need kind with a producer.

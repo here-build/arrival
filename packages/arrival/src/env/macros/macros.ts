@@ -119,7 +119,8 @@ export default EnvCapability.define("scheme/macros", {
                 useResolver,
                 defResolver,
                 capabilities: defResolver.capabilities,
-                ctx: runCtx });
+                ctx: runCtx,
+              });
               if (bindings) {
                 const names = []; // transform_syntax appends the renamed template names
                 const new_expr = transform_syntax({
@@ -131,7 +132,8 @@ export default EnvCapability.define("scheme/macros", {
                   scope: defChild,
                   names,
                   ellipsis,
-                  ctx: runCtx });
+                  ctx: runCtx,
+                });
                 // deferred: a template that expands to nothing (falsy new_expr) is silently
                 // skipped here, keeping the prior expr. R7RS does not mandate an error for an
                 // empty expansion; revisit if a real macro surfaces a confusing silent skip.
@@ -160,4 +162,6 @@ export default EnvCapability.define("scheme/macros", {
       );
       syntax.__code__ = macro;
       return syntax;
-    }) }) });
+    }),
+  }),
+});

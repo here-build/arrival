@@ -115,7 +115,10 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
   // Return types MIRROR AVector's concrete returns (honest + precise, never abstract
   // AValue). map is box-preserving ("one algebra, every carrier") — returns a FRESH
   // AVector, same as AVector's own map.
-  ["arrival/tagless-final/map"](fn: Parameters<AVector["arrival/tagless-final/map"]>[0], runCtx: RunContext): AVector | Promise<AVector> {
+  ["arrival/tagless-final/map"](
+    fn: Parameters<AVector["arrival/tagless-final/map"]>[0],
+    runCtx: RunContext,
+  ): AVector | Promise<AVector> {
     return this.vec()[tf("map")](fn, runCtx);
   }
 
@@ -174,7 +177,8 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
     strictGate(runCtx, {
       op: "car",
       rule: "R7RS `car` requires a pair; a vector is not a pair",
-      alternative: "use `(vector-ref v 0)` for the first element, or `(vector->list v)`" });
+      alternative: "use `(vector-ref v 0)` for the first element, or `(vector->list v)`",
+    });
     this.freezeSource();
     return this.source.length > 0 ? this.elementAt(0) : nil;
   }
@@ -183,7 +187,8 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
     strictGate(runCtx, {
       op: "cdr",
       rule: "R7RS `cdr` requires a pair; a vector is not a pair",
-      alternative: "use vector slicing or `(vector->list v)`" });
+      alternative: "use vector slicing or `(vector->list v)`",
+    });
     this.freezeSource();
     return AJSArrayList.at(this, 1);
   }

@@ -15,7 +15,13 @@ export { type AKind, AValue } from "../values/primitives/AValue.js";
 
 // Booleans — both spellings (A* aliases for arrival-chain-style consumers; see AValue.ts
 // for the no-subtype-imports reasoning).
-export { ABool, schemeFalse as AFalse, schemeFalse, schemeTrue as ATrue, schemeTrue } from "../values/primitives/ABool.js";
+export {
+  ABool,
+  schemeFalse as AFalse,
+  schemeFalse,
+  schemeTrue as ATrue,
+  schemeTrue,
+} from "../values/primitives/ABool.js";
 export { ACharacter, characters } from "../values/primitives/ACharacter.js";
 export { nil, ANil } from "../values/primitives/ANil.js";
 export { theVoid, AVoid } from "../values/primitives/AVoid.js";

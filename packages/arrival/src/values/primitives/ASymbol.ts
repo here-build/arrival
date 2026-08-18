@@ -44,8 +44,7 @@ function internTableFor(ctx: RunContext): Map<string, ASymbol> {
 function isKeywordName(name: string): boolean {
   return (
     typeof name === "string" &&
-    ((name.length > 1 && name.startsWith(":") && !name.startsWith("::")) ||
-      (name.length > 2 && name.startsWith("#:")))
+    ((name.length > 1 && name.startsWith(":") && !name.startsWith("::")) || (name.length > 2 && name.startsWith("#:")))
   );
 }
 

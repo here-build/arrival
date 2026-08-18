@@ -138,5 +138,7 @@ export const schemaCapability = EnvCapability.define("arrival/schema", {
         symbol.define`s/field/enum: (s/field name (s/enum ...)) / (s/field name description (s/enum ...)) shortcut`(
           { input: z.array(z.schemeValue), output: [fieldShape] },
           `(lambda args (apply s/field/_composite args))`,
-        ) };
-  } });
+        ),
+    };
+  },
+});

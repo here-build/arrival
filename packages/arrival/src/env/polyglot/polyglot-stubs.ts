@@ -66,4 +66,6 @@ export default EnvCapability.define("scheme/polyglot-stubs", {
     "make-hasheq": symbol.notImplemented`make-hasheq: ${HASH_LIBRARY_REASON}`,
     "hash-ref": symbol.notImplemented`hash-ref: ${HASH_LIBRARY_REASON}`,
     "for/list": symbol.notImplemented`for/list: for/list is not implemented — Racket's iteration-comprehension macro (binding clauses like ([x lst]) over a body) has no direct equivalent here; use (map (lambda (x) body) lst) instead`,
-    "for/fold": symbol.notImplemented`for/fold: for/fold is not implemented — Racket's accumulating-iteration macro has no direct equivalent here; use (reduce (lambda (x acc) body) initial lst) instead (see env/polyglot-clojure.ts's frequencies/group-by for worked examples)` }) });
+    "for/fold": symbol.notImplemented`for/fold: for/fold is not implemented — Racket's accumulating-iteration macro has no direct equivalent here; use (reduce (lambda (x acc) body) initial lst) instead (see env/polyglot-clojure.ts's frequencies/group-by for worked examples)`,
+  }),
+});

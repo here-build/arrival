@@ -133,10 +133,7 @@ function collectProgramDefinitions(forms: readonly SchemeValue[]): {
  * throws on program content; ALWAYS returns every diagnostic the graph queries yield,
  * ordered by first reference site.
  */
-export function validateProgram(
-  forms: readonly SchemeValue[],
-  vocabulary: ProgramVocabulary,
-): readonly Diagnostic[] {
+export function validateProgram(forms: readonly SchemeValue[], vocabulary: ProgramVocabulary): readonly Diagnostic[] {
   const defs = collectProgramDefinitions(forms);
 
   // Sweep 2 — the site-collecting reference walk, per top-level form, with the ternary
@@ -147,9 +144,7 @@ export function validateProgram(
     const entry = vocabulary.lookupStatic(name);
     return entry?.kind === "macro" ? entry.macroAttribute : undefined;
   };
-  const occurrences = forms.flatMap((form) =>
-    collectReferences(form, { initialBound: defs.values, macroPolicyOf }),
-  );
+  const occurrences = forms.flatMap((form) => collectReferences(form, { initialBound: defs.values, macroPolicyOf }));
 
   const resolve = (name: string): VocabularyEntry | { readonly kind: "program" } | undefined =>
     defs.values.has(name) || defs.macros.has(name) ? { kind: "program" } : vocabulary.lookupStatic(name);
@@ -183,7 +178,9 @@ export function validateProgram(
     const impure = vocabulary.hasImpureResolver;
     const message =
       `Unbound symbol \`${node.name}\`${hint} Referenced at ${siteList(sites)}` +
-      (impure ? " (a dynamic resolver in this assembly may still answer it at runtime)." : " — this program would crash there.");
+      (impure
+        ? " (a dynamic resolver in this assembly may still answer it at runtime)."
+        : " — this program would crash there.");
     const publicMessage =
       `symbol ${node.name} does not exist - look at list of available functions at tool description` +
       (suggestions.length === 0 ? "" : ` (did you mean ${suggestions.map((s) => `\`${s}\``).join(" or ")}?)`);
@@ -195,7 +192,9 @@ export function validateProgram(
         sites,
         message,
         publicMessage,
-        ...(suggestions.length > 0 ? { suggestions } : {}) } });
+        ...(suggestions.length > 0 ? { suggestions } : {}),
+      },
+    });
   }
 
   // Bucket c — `missing-configuration`: group ReferenceNodes by the MissingConfigNode
@@ -208,7 +207,8 @@ export function validateProgram(
     for (const d of referencedDoors) doorsExplainedByConfig.add(d);
     diagnostics.push({
       firstOrder: Math.min(...referencedDoors.map((d) => d.references[0].order)),
-      diagnostic: missingConfigDiagnostic(cfg, referencedDoors) });
+      diagnostic: missingConfigDiagnostic(cfg, referencedDoors),
+    });
   }
 
   // Bucket b — `bound-to-door`: a referenced door WITHOUT a config cure (authored
@@ -231,7 +231,9 @@ export function validateProgram(
         sites,
         message,
         publicMessage,
-        ...(door.door.cause !== undefined ? { cause: door.door.cause } : {}) } });
+        ...(door.door.cause !== undefined ? { cause: door.door.cause } : {}),
+      },
+    });
   }
 
   return diagnostics.toSorted((a, b) => a.firstOrder - b.firstOrder).map((d) => d.diagnostic);
@@ -272,5 +274,6 @@ function missingConfigDiagnostic(cfg: MissingConfigNode, referencedDoors: readon
     sites,
     message,
     publicMessage,
-    ...(cause !== undefined ? { cause } : {}) };
+    ...(cause !== undefined ? { cause } : {}),
+  };
 }

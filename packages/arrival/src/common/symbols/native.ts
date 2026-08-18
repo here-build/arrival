@@ -8,7 +8,17 @@ import { buildSlotAdopter } from "../../membrane/adopt-spine.js";
 import { ANativeProcedure, type NativeSymbolDef } from "../../values/primitives/ANativeProcedure.js";
 import { type SchemeValue } from "../../values/types.js";
 import { type CallCtx } from "../../run/CallCtx.js";
-import { assertContractAxes, type ContourContract, normalizeInputVector, normalizeVector, parseNameDoc, type Impl, type MetadataRecord, type RestSpec, type VectorSpec } from "./_bake.js";
+import {
+  assertContractAxes,
+  type ContourContract,
+  normalizeInputVector,
+  normalizeVector,
+  parseNameDoc,
+  type Impl,
+  type MetadataRecord,
+  type RestSpec,
+  type VectorSpec,
+} from "./_bake.js";
 import { assertNoResourcePathProducers } from "../../run/resource-paths.js";
 
 /** Native host fn over scheme values. Slot bans on ContourContract (`_bake.ts` §1.7). */
@@ -61,10 +71,12 @@ export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
         emit: contract.emit,
         narrows: contract.narrows,
         refPolicy: contract.refPolicy,
-        metadata: opts.metadata } satisfies NativeSymbolDef,
+        metadata: opts.metadata,
+      } satisfies NativeSymbolDef,
       impl: (args, callCtx) => hostImpl.apply(callCtx, args) as SchemeValue,
       provenanceRole: provenance,
       cacheClass,
-      callbackRoles });
+      callbackRoles,
+    });
   };
 }

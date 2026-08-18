@@ -55,7 +55,8 @@ export default EnvCapability.define("scheme/srfi-95", {
         // (spec §5's `(left-ordinal, right-ordinal, verdict)` record cites exactly this
         // comparator's verdicts). Roles align with LAMBDA arms: less? is arm 0 despite
         // input position 1.
-        callbackRoles: ["control"] },
+        callbackRoles: ["control"],
+      },
       (args, runCtx) => {
         const [seq, comparator] = args;
         const m = resolveMethod(seq, tf("sort"));
@@ -72,4 +73,6 @@ export default EnvCapability.define("scheme/srfi-95", {
         // protocol specifically), so this states that documented invariant, not a blind widening.
         return m.call(seq, comparator, runCtx) as MaybePromise<SchemeValue>;
       },
-    ) }) });
+    ),
+  }),
+});

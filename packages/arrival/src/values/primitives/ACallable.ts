@@ -122,7 +122,8 @@ export function hostFnToCallable(
         return result instanceof Promise
           ? result.then((r) => marshal!.jsToScheme(callCtx.runCtx, r) as SchemeValue)
           : (marshal!.jsToScheme(callCtx.runCtx, result) as SchemeValue);
-      } },
+      },
+    },
     provenance,
   );
   byFn.set(fn, proc);

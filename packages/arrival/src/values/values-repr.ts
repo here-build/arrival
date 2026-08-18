@@ -36,7 +36,8 @@ export function hidden_prop(obj: SchemeValue, name: string, value: unknown): voi
     get: () => value,
     set: () => {},
     configurable: false,
-    enumerable: false });
+    enumerable: false,
+  });
 }
 
 /** Gensym JS symbols are recognized by the `#:` name prefix — the marker
@@ -160,9 +161,7 @@ export function patch_value(value: unknown, ctx: RunContext = CONSTANT_CTX): Sch
 // sibling, raw `true`/`false` are pre-L1 booleans) — none of which are
 // SchemeValue members.
 // ----------------------------------------------------------------------
-export function is_atom(
-  obj: unknown,
-): obj is ASymbol | AString | ANil | ACharacter | AExact | AInexact | ABool {
+export function is_atom(obj: unknown): obj is ASymbol | AString | ANil | ACharacter | AExact | AInexact | ABool {
   return (
     obj instanceof ASymbol ||
     obj instanceof AString ||

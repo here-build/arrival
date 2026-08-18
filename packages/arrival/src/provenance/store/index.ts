@@ -13,7 +13,8 @@ export type {
   ProvenanceRecord,
   RecordKind,
   TrackCloseRecord,
-  TrackOpenRecord } from "./records.js";
+  TrackOpenRecord,
+} from "./records.js";
 export type { RecordId } from "./ids.js";
 export type { OrdinalPath } from "./ids.js";
 export type { RegionFoldState } from "./fold.js";

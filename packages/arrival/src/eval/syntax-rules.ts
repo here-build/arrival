@@ -198,8 +198,10 @@ export function extract_patterns(
   const bindings: MatchBindings = {
     "...": {
       symbols: {},
-      lists: [] },
-    symbols: {} };
+      lists: [],
+    },
+    symbols: {},
+  };
   const { useResolver, defResolver, capabilities, ctx } = scope;
   // `pattern_names` distinguishes multiple matches of `((x ...) ...)` against `((1 2 3) (1 2 3))`:
   // each `x` added to the list marks it as this repetition's binding, not a duplicated ellipsis symbol.
@@ -580,7 +582,8 @@ export function transform_syntax({
   symbols,
   names,
   ellipsis: ellipsis_symbol,
-  ctx }: TransformOptions) {
+  ctx,
+}: TransformOptions) {
   // `scope` is the def-time syntax-child RESOLVER (`defResolver.child("syntax")`); the
   // engine consults its refFrame/lookupSettled/define instead of raw env .ref/.get/.set.
   const gensyms: Record<string | symbol, ASymbol> = {};
@@ -642,7 +645,8 @@ export function transform_syntax({
       // Record the rename so restore_data_gensyms can un-rename free output symbols post-eval.
       names.push({
         name,
-        gensym: gensym_name });
+        gensym: gensym_name,
+      });
       gensyms[name] = gensym_name;
       // `name` is checked for string because it can be a gensym symbol from nested syntax-rules.
       if (typeof name === "string" && /\./.test(name)) {
@@ -713,7 +717,14 @@ export function transform_syntax({
               // Discriminating on `car` keeps a pair from ever reaching `.concat` (which APair
               // lacks → throw).
               if (!(rest_expr instanceof ANil) && item.car instanceof APair) {
-                return carrySpanSpine(concatPairLoose(ctx, item.car, transform_ellipsis_expr(rest_expr, bindings, state, next) as SchemeValue), expr);
+                return carrySpanSpine(
+                  concatPairLoose(
+                    ctx,
+                    item.car,
+                    transform_ellipsis_expr(rest_expr, bindings, state, next) as SchemeValue,
+                  ),
+                  expr,
+                );
               }
               return item.car;
             } else if (item.car instanceof APair) {
@@ -827,7 +838,10 @@ export function transform_syntax({
               // on empty ellipsis
               if (car !== undefined) {
                 if (is_spread) {
-                  result = result instanceof ANil ? (car as SchemeValue) : carrySpanSpine(concatPairLoose(ctx, result, car as SchemeValue), expr);
+                  result =
+                    result instanceof ANil
+                      ? (car as SchemeValue)
+                      : carrySpanSpine(concatPairLoose(ctx, result, car as SchemeValue), expr);
                 } else {
                   result = carrySpan(consCell(ctx, car as SchemeValue, result), expr);
                 }
@@ -852,7 +866,8 @@ export function transform_syntax({
             return result;
           } else {
             const car = transform_ellipsis_expr(first, symbols, {
-              nested: true });
+              nested: true,
+            });
             if (car) {
               return carrySpan(consCell(ctx, car, nil), expr);
             }
@@ -893,7 +908,8 @@ export function transform_syntax({
             if (is_null) {
               return node;
             }
-            result = result instanceof ANil ? node : carrySpanSpine(concatPairLoose(ctx, result as SchemeValue, node), expr);
+            result =
+              result instanceof ANil ? node : carrySpanSpine(concatPairLoose(ctx, result as SchemeValue, node), expr);
           }
           return result;
         }

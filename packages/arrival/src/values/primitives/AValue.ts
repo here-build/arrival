@@ -153,10 +153,7 @@ export abstract class AValue {
   /** Functor — map over elements. `runCtx` REQUIRED. Callback is ACallable. */
   ["arrival/tagless-final/map"]?(fn: unknown, runCtx: RunContext): SchemeValue | Promise<SchemeValue>;
   /** Filterable — ACallable pred or host RegExp sugar. `runCtx` required. */
-  ["arrival/tagless-final/filter"]?(
-    pred: unknown,
-    runCtx: RunContext,
-  ): SchemeValue | Promise<SchemeValue>;
+  ["arrival/tagless-final/filter"]?(pred: unknown, runCtx: RunContext): SchemeValue | Promise<SchemeValue>;
   /** Foldable left-fold — scheme convention `fn(element, acc)`. Callback is ACallable. */
   ["arrival/tagless-final/reduce"]?<Acc>(fn: unknown, initial: Acc, runCtx: RunContext): Acc | Promise<Acc>;
   /** Ordering — sorted sequence (container-preserving); default is elements' own `lte`. */

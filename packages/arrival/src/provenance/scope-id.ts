@@ -29,7 +29,9 @@ export function scopeId(node: unknown): string {
   if (node && typeof node === "object") {
     for (const s of Object.getOwnPropertySymbols(node)) {
       if (s.description === "__location__") {
-        const loc = (node as Record<symbol, unknown>)[s] as { line?: number; col?: number; source?: string } | undefined;
+        const loc = (node as Record<symbol, unknown>)[s] as
+          | { line?: number; col?: number; source?: string }
+          | undefined;
         if (loc && typeof loc.line === "number") {
           const at = typeof loc.source === "string" && loc.source !== "" ? `${loc.source}:` : "";
           return `${head}@${at}${loc.line}:${loc.col ?? 0}`;

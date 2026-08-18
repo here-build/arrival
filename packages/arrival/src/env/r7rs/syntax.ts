@@ -55,4 +55,6 @@ export default EnvCapability.define("scheme/r7rs/syntax", {
     "cond-expand": symbol.notImplemented`cond-expand: ${COND_EXPAND}`,
     "define-library": symbol.notImplemented`define-library: ${LIBRARY}`,
     import: symbol.notImplemented`import: ${LIBRARY}`,
-    "syntax-error": symbol.notImplemented`syntax-error: ${SYNTAX_ERROR}` }) });
+    "syntax-error": symbol.notImplemented`syntax-error: ${SYNTAX_ERROR}`,
+  }),
+});

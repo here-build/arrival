@@ -29,11 +29,7 @@ import { hostFnToCallable, originalCallableOf } from "../values/primitives/ACall
  * before re-crossing. Codecs that speak bigint (`z.bigint`) encode to AExact BEFORE
  * the membrane and never reach here.
  */
-export function fromJs(
-  ctx: RunContext,
-  v: unknown,
-  provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
-): AValue {
+export function fromJs(ctx: RunContext, v: unknown, provenance: ReadonlySet<number> = EMPTY_PROVENANCE): AValue {
   // Same-instance fast path. Re-stamp only when a distinct non-empty provenance is supplied.
   if (v instanceof AValue) {
     if (provenance === EMPTY_PROVENANCE || provenance === v.provenance) return v;

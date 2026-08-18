@@ -31,4 +31,6 @@ export default EnvCapability.define("scheme/r7rs/control", {
     "promise?": symbol.notImplemented`promise?: delayed evaluation is omitted from arrival by design — with delay/force/make-promise/delay-force all doored (§4.2.5), no promise value can exist to test; there is nothing for this predicate to recognize`,
 
     // §4.2.9 case-lambda — multi-arity clause dispatch not yet built; same surface as lambda.
-    "case-lambda": symbol.notImplemented`case-lambda: multi-arity lambda clauses are not yet implemented — express arity dispatch with lambda + guards (cond/case on argument shape, or one procedure per arity) instead` }) });
+    "case-lambda": symbol.notImplemented`case-lambda: multi-arity lambda clauses are not yet implemented — express arity dispatch with lambda + guards (cond/case on argument shape, or one procedure per arity) instead`,
+  }),
+});

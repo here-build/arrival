@@ -88,7 +88,12 @@ export type LineageNode =
   | { readonly kind: "transparent"; readonly op: string; readonly child: LineageNode }
   // Binder. `cycles: true` = named-let / do / declared loop. Children = flat barrier
   // (bindings+body); deferred: real backedge topology / per-iteration attribution.
-  | { readonly kind: "binder"; readonly op: string; readonly cycles: boolean; readonly children: readonly LineageNode[] };
+  | {
+      readonly kind: "binder";
+      readonly op: string;
+      readonly cycles: boolean;
+      readonly children: readonly LineageNode[];
+    };
 
 /** Declared-role vocabulary, local union (not imported from `_bake.ts`) so this
  *  module stays value-guards+primitives only. Must stay lock-step with
@@ -351,7 +356,8 @@ function classifyWith(ast: unknown, c: Classifier, subst: Subst): LineageNode {
       introduces: c.roleOf(fanOp) === "source",
       lengthPreserving,
       source: classifyWith(args[1], c, subst),
-      ...(template !== undefined ? { template } : {}) };
+      ...(template !== undefined ? { template } : {}),
+    };
   }
 
   if (role === "sink") {
@@ -360,7 +366,10 @@ function classifyWith(ast: unknown, c: Classifier, subst: Subst): LineageNode {
   }
 
   if (role === "transparent") {
-    const combined = combine(op, args.map((a) => classifyWith(a, c, subst)));
+    const combined = combine(
+      op,
+      args.map((a) => classifyWith(a, c, subst)),
+    );
     return isProvBearing(combined) ? { kind: "transparent", op, child: combined } : combined;
   }
 

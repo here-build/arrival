@@ -49,12 +49,7 @@
 
 import { exec, type ExecOptions } from "../eval/generator-exec.js";
 import { MemoryRunCache, type RunCache } from "../run/run-cache.js";
-import {
-  MemoryResourcePathLog,
-  pathsOverlap,
-  type ResourcePath,
-  type ResourcePathLog,
-} from "../run/resource-paths.js";
+import { MemoryResourcePathLog, pathsOverlap, type ResourcePath, type ResourcePathLog } from "../run/resource-paths.js";
 import { paramAtomKey, type PathAtomBus } from "../run/path-atom-bus.js";
 
 // ── Public types ─────────────────────────────────────────────────────────────
@@ -514,9 +509,7 @@ class ReactionEnvelopeImpl implements ReactionEnvelope {
     if (this.optInParams.length > 0) {
       const baseConfig = (rest.config ?? {}) as Record<string, unknown>;
       const baseParams =
-        baseConfig.params !== undefined &&
-        typeof baseConfig.params === "object" &&
-        baseConfig.params !== null
+        baseConfig.params !== undefined && typeof baseConfig.params === "object" && baseConfig.params !== null
           ? { ...(baseConfig.params as Record<string, unknown>) }
           : {};
       for (const name of this.optInParams) {

@@ -14,5 +14,6 @@ import type { Classifier, DeclaredRole } from "./lineage.js";
 export function classifierFromEnv(env: AmbientRuntime): Classifier {
   return {
     roleOf: (op) =>
-      (env.get(op, { throwError: false }) as { provenanceRole?: DeclaredRole } | undefined)?.provenanceRole };
+      (env.get(op, { throwError: false }) as { provenanceRole?: DeclaredRole } | undefined)?.provenanceRole,
+  };
 }

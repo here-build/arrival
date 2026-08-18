@@ -176,7 +176,8 @@ const DATA_PARSERS: Record<string, (text: string) => unknown> = {
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.length > 0 && !line.startsWith("//"))
-      .map((line) => parseJsonc(line)) };
+      .map((line) => parseJsonc(line)),
+};
 
 /** Project a parsed value onto its JSON shape (Dates → ISO strings, drops undefined) so a required
  *  data file enters the program as plain JSON-shaped data. NOT a deep clone — `structuredClone`
@@ -230,7 +231,11 @@ export function dataToScheme(v: unknown): SchemeVal {
     for (let i = v.length - 1; i >= 0; i--) tail = new APair(dataToScheme(v[i]), tail);
     return tail;
   }
-  if (v !== null && typeof v === "object" && (Object.getPrototypeOf(v) === Object.prototype || Object.getPrototypeOf(v) === null)) {
+  if (
+    v !== null &&
+    typeof v === "object" &&
+    (Object.getPrototypeOf(v) === Object.prototype || Object.getPrototypeOf(v) === null)
+  ) {
     const pairs: Array<readonly [ASymbol, SchemeValue]> = [];
     for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
       pairs.push([new ASymbol(k), dataToScheme(val) as SchemeValue]);
@@ -319,14 +324,16 @@ export function defaultResolvers(): Map<string, ExtensionHandler> {
     {
       resolve: (contents) => ({
         kind: "value",
-        value: normalizeToJson(DATA_PARSERS[ext]!(contentsToText(contents))) }),
+        value: normalizeToJson(DATA_PARSERS[ext]!(contentsToText(contents))),
+      }),
       type: (source) => {
         try {
           return valueToTsType(normalizeToJson(DATA_PARSERS[ext]!(source)));
         } catch {
           return null; // unparseable mid-edit — no shape, lens falls back to unknown
         }
-      } },
+      },
+    },
   ]);
   return new Map<string, ExtensionHandler>([
     // Pass the module path as `source` so a throw inside this file reads as
@@ -379,7 +386,8 @@ export function loaderFromResolver(resolver: RequireResolver): Loader {
   return {
     resolve: (specifier, fromDir) => joinPath(fromDir, specifier),
     read: (path) => resolver(path),
-    resolvers: defaultResolvers() };
+    resolvers: defaultResolvers(),
+  };
 }
 
 /** The minimal read surface {@link makeFsLoader} needs. node:fs's `fs.promises`
@@ -407,6 +415,6 @@ export function makeFsLoader(fs: FsReadLike): Loader {
   return {
     resolve: (specifier, fromDir) => joinPath(fromDir, specifier),
     read: (path) => fs.readFile(path),
-    resolvers: defaultResolvers() };
+    resolvers: defaultResolvers(),
+  };
 }
-

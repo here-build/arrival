@@ -279,7 +279,8 @@ function buildDefineProcedure(
         }
         return result as SchemeValue;
       })();
-    } });
+    },
+  });
 }
 
 /** Wind evaluated `(lambda (formals expr . body) …)` into a Macro fexpr transformer.
@@ -358,7 +359,8 @@ export async function bindCapabilityDefines(args: BindCapabilityDefinesArgs): Pr
   const defineEntries = entries.filter((e): e is readonly [string, DefineSymbolDef] => e[1].kind === "define");
   const classifier: Classifier = {
     roleOf: (op) =>
-      (env.get(op, { throwError: false }) as { provenanceRole?: DeclaredRole } | undefined)?.provenanceRole };
+      (env.get(op, { throwError: false }) as { provenanceRole?: DeclaredRole } | undefined)?.provenanceRole,
+  };
   const syntheticForms = defineEntries.map(([verb, def]) => synthesizeDefine(verb, parsedByDef.get(def)!));
   const membership = classifyProgramPrelude(syntheticForms, classifier);
   const derivedRoleByVerb = new Map<string, ProvenanceRole>();

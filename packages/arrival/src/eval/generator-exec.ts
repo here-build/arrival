@@ -5,7 +5,13 @@
  * `run()`.
  */
 
-import { AmbientRuntime, mintPlainFrame, mintResolvingFrame, isAmbientRuntime, bindValue } from "../env/AmbientRuntime.js";
+import {
+  AmbientRuntime,
+  mintPlainFrame,
+  mintResolvingFrame,
+  isAmbientRuntime,
+  bindValue,
+} from "../env/AmbientRuntime.js";
 import { buildVocabulary, type Vocabulary } from "../env/vocabulary.js";
 import { assembleRun, preludeDefinesOf, vocabularyOf } from "../env/assemble-run.js";
 import { BASE_ROSTER } from "../env/base-roster.js";
@@ -73,7 +79,8 @@ export async function execInFrame(source: string, frame: AmbientRuntime, runCtx?
 // Build-time evalScheme — injected into buildVocabulary's Pass-2 define bake.
 // Shared across every run of a given tuple; no runCtx to carry.
 const capabilityEvalScheme: EvalSchemeInto = (env, source) => {
-  if (!isAmbientRuntime(env)) throw new AmbientShapeError("capability define-bake", "expected a concrete AmbientRuntime");
+  if (!isAmbientRuntime(env))
+    throw new AmbientShapeError("capability define-bake", "expected a concrete AmbientRuntime");
   return execInFrame(source, env);
 };
 
@@ -350,7 +357,8 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     notes,
     display,
     strict,
-    staticValidation } = options;
+    staticValidation,
+  } = options;
 
   const program = passedProgram ?? (await parseProgram(code, { strict }));
 
@@ -394,7 +402,8 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     strictCQSstrings,
     resourcePaths,
     notes,
-    display });
+    display,
+  });
   // Atoms live per run context: an owned run starting on this bus supersedes the
   // previous owned run's cells (P-RX-ATOM-SUPERSEDE). Reused runCtx never notes.
   if (runCtxOwned && runCtx.pathAtoms !== undefined) noteReactiveAtomsRun(runCtx.pathAtoms, runCtx);
@@ -420,7 +429,8 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
             nodeFilter,
             signal,
             strict: strict ?? false,
-            runCtx }),
+            runCtx,
+          }),
           { signal, budgetMs: remaining },
         );
       try {
@@ -566,7 +576,8 @@ export async function execExpr(
     pathAtoms,
     strictCQSstrings,
     resourcePaths,
-    runCtx: passedRunCtx }: ExecOptions = {},
+    runCtx: passedRunCtx,
+  }: ExecOptions = {},
 ): Promise<SchemeValue> {
   const runCtxOwned = passedRunCtx === undefined;
   // STANDALONE DEFAULT — degenerate BASE_ROSTER tuple. A passed-resolver caller
@@ -585,7 +596,8 @@ export async function execExpr(
       reads,
       pathAtoms,
       strictCQSstrings,
-      resourcePaths }));
+      resourcePaths,
+    }));
   if (runCtxOwned && runCtx.pathAtoms !== undefined) noteReactiveAtomsRun(runCtx.pathAtoms, runCtx);
   let runResolver = resolver;
   if (runResolver === undefined) {
@@ -606,7 +618,8 @@ export async function execExpr(
           tap,
           nodeFilter,
           signal: runSignal,
-          runCtx }),
+          runCtx,
+        }),
         { signal: runSignal, budgetMs },
       ),
     );
@@ -658,7 +671,10 @@ export function ensureInferenceEnvPopulated(): Promise<void> {
  * builtins (glass Resolver(env) composition); scope/runCtx reuse are honored
  * exactly like the vocabulary path's execState.
  */
-export async function execStateOverFrame(code: string | SchemeValue, options: ExecOptionsOverFrame): Promise<ExecState> {
+export async function execStateOverFrame(
+  code: string | SchemeValue,
+  options: ExecOptionsOverFrame,
+): Promise<ExecState> {
   const {
     env,
     scope,
@@ -677,7 +693,8 @@ export async function execStateOverFrame(code: string | SchemeValue, options: Ex
     resourcePaths,
     notes,
     display,
-    strict } = options;
+    strict,
+  } = options;
   if (!isAmbientRuntime(env)) throw new AmbientShapeError("execStateOverFrame", "expected a concrete AmbientRuntime");
   await ensureInferenceEnvPopulated();
 
@@ -717,7 +734,8 @@ export async function execStateOverFrame(code: string | SchemeValue, options: Ex
             nodeFilter,
             signal,
             strict: strict ?? false,
-            runCtx }),
+            runCtx,
+          }),
           { signal, budgetMs: remaining },
         );
       try {
@@ -745,7 +763,10 @@ export async function execStateOverFrame(code: string | SchemeValue, options: Ex
 
 /** SIMPLE tier over a caller-held live frame. Delegates to
  *  {@link execStateOverFrame} and unwraps through {@link toJS}. */
-export async function execOverFrame(code: string | SchemeValue, options: ExecOptionsOverFrame): Promise<readonly unknown[]> {
+export async function execOverFrame(
+  code: string | SchemeValue,
+  options: ExecOptionsOverFrame,
+): Promise<readonly unknown[]> {
   const state = await execStateOverFrame(code, options);
   return state.values.map((v) => toJS(v));
 }
@@ -781,10 +802,10 @@ export async function execExprOverFrame(
   const runSignal = runCtx.signal;
   try {
     const value = expectValue(
-      await run(
-        evaluate(expr, { resolver: runResolver, tap, nodeFilter, signal: runSignal, runCtx }),
-        { signal: runSignal, budgetMs },
-      ),
+      await run(evaluate(expr, { resolver: runResolver, tap, nodeFilter, signal: runSignal, runCtx }), {
+        signal: runSignal,
+        budgetMs,
+      }),
     );
     // RX-UNIT: `require`'s module-eval loop threads the REQUIRING run's live runCtx
     // through here, so an unowned runCtx means this call is a form inside someone

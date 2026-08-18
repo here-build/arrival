@@ -55,5 +55,7 @@ export default EnvCapability.define("scheme/polyglot-lisp", {
       "remove-if-not": symbol.define`remove-if-not: Common Lisp — keep the elements satisfying pred (a filter alias)`(
         { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
         `(lambda (pred lst) (filter pred lst))`,
-      ) };
-  } });
+      ),
+    };
+  },
+});

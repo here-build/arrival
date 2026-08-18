@@ -30,7 +30,8 @@ export default EnvCapability.define("scheme/chars", {
             (x: unknown): x is string;
             <T>(x: T): x is Extract<T, string>;
           }
-        ` }),
+        `,
+    }),
 
     "char=?": symbol.native`char=?: typed equivalence over characters`(
       { input: [], inputRest: z.char, output: [z.boolean] },
@@ -250,4 +251,6 @@ export default EnvCapability.define("scheme/chars", {
         );
         return new ACharacter(String.fromCodePoint(code));
       },
-    ) }) });
+    ),
+  }),
+});

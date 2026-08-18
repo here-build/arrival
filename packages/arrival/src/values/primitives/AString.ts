@@ -64,7 +64,8 @@ export class AString extends AValue {
       // Non-configurable + non-writable — frozen string literals are immutable per R7RS §6.7.
       configurable: false,
       writable: false,
-      enumerable: true });
+      enumerable: true,
+    });
   }
 
   get(n: NumberLike): string {

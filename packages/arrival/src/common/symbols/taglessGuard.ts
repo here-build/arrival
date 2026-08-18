@@ -37,7 +37,9 @@ export function taglessGuard(tpl: TemplateStringsArray, ...sub: unknown[]): ANat
       in: z.array(z.schemeValue),
       out: z.schemeValue,
       run,
-      provenance: "pipe" } satisfies TaglessGuardSymbolDef,
+      provenance: "pipe",
+    } satisfies TaglessGuardSymbolDef,
     impl: (args, callCtx) => run.apply(callCtx, args) as Promise<SchemeValue>,
-    provenanceRole: "pipe" });
+    provenanceRole: "pipe",
+  });
 }

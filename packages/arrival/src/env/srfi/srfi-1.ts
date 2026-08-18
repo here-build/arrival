@@ -148,7 +148,8 @@ const DOORS = {
   "lset-intersection": LSET,
   "lset-difference": LSET,
   "lset-xor": LSET,
-  "lset-diff+intersection": `${LSET}; multi-return product would be (list diff intersection) if ever shipped` } as const satisfies Record<string, string>;
+  "lset-diff+intersection": `${LSET}; multi-return product would be (list diff intersection) if ever shipped`,
+} as const satisfies Record<string, string>;
 
 // reduce — SRFI-1's higher-order list fold, a pure `symbol.tagless` dispatcher: no impl,
 // forwards to the receiver's own `arrival/tagless-final/reduce` term (APair/AVector left-fold;
@@ -222,7 +223,8 @@ const filterEmitRule: EmitRule<R> = {
     }
     const x = freshBinding(ctx, "x");
     return Method(xs!, "filter", [Arrow([x], Bin("!==", Call(pred!, [Ref(x)]), Lit(false)))]);
-  } };
+  },
+};
 
 export default EnvCapability.define("scheme/srfi-1", {
   // See the file header: the complete cross-capability free-name set of the define
@@ -280,7 +282,8 @@ export default EnvCapability.define("scheme/srfi-1", {
             <T>(p: (x: T) => unknown, xs: readonly T[]): readonly T[];
           }
         `,
-            emit: filterEmitRule },
+            emit: filterEmitRule,
+          },
           (args, runCtx) => {
             const [pred, seq] = args;
             const m = resolveMethod(seq, tf("filter"));
@@ -307,13 +310,17 @@ export default EnvCapability.define("scheme/srfi-1", {
       // def is contract-less (shapeless `z.array(z.schemeValue)` in), so declaration is the ONLY
       // channel — `withCallbackRoles`, not a Contract field.
       reduce: withCallbackRoles(
-        withContractFields(symbol.tagless`reduce: left fold in scheme convention fn(element, acc); ridentity if empty`, {
-          type: dedent`
+        withContractFields(
+          symbol.tagless`reduce: left fold in scheme convention fn(element, acc); ridentity if empty`,
+          {
+            type: dedent`
           {
             <T, A>(f: (element: T, acc: A) => A, ridentity: A, xs: List<T>): A;
             <T, A>(f: (element: T, acc: A) => A, ridentity: A, xs: readonly T[]): A;
           }
-        ` }),
+        `,
+          },
+        ),
         ["accumulator"],
       ),
       // fold — SRFI-1's bare LEFT fold is deliberately NOT bound under this name: `reduce`
@@ -337,7 +344,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           // callbackRoles DECLARED: the host is a pipe (not fan) with value egress, so
           // shape underdetermines the pred's role. It is `control` — a boolean-returning
           // selector deciding WHICH element egresses (the merged selector+decision role).
-          callbackRoles: ["control"] },
+          callbackRoles: ["control"],
+        },
         // Thin dispatch-bound wrapper: supplies the recursive findImpl with the live
         // `this.runCtx` (findImpl itself recurses via a plain call, so it cannot recover
         // ctx off `this`). `arg` is `z.lambda` → ACallable.
@@ -368,7 +376,8 @@ export default EnvCapability.define("scheme/srfi-1", {
             <T>(p: (x: T) => unknown, xs: List<T>): List<T>;
             <T>(p: (x: T) => unknown, xs: readonly T[]): readonly T[];
           }
-        ` },
+        `,
+          },
         ),
         ["control"],
       ),
@@ -383,7 +392,8 @@ export default EnvCapability.define("scheme/srfi-1", {
             <T>(p: (x: T) => unknown, xs: List<T>): List<T>;
             <T>(p: (x: T) => unknown, xs: readonly T[]): readonly T[];
           }
-        ` },
+        `,
+          },
         ),
         ["control"],
       ),
@@ -412,7 +422,8 @@ export default EnvCapability.define("scheme/srfi-1", {
             <T>(xs: List<T>, n: number): List<T>;
             <T>(xs: readonly T[], n: number): readonly T[];
           }
-        ` },
+        `,
+        },
         (args, runCtx) => {
           const [xs, n] = args;
           const m = resolveMethod(xs, tf("take"));
@@ -443,7 +454,8 @@ export default EnvCapability.define("scheme/srfi-1", {
             <T>(xs: List<T>, n: number): List<T>;
             <T>(xs: readonly T[], n: number): readonly T[];
           }
-        ` },
+        `,
+        },
         (args, runCtx) => {
           const [xs, n] = args;
           const m = resolveMethod(xs, tf("drop"));
@@ -468,7 +480,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             <T>(p: (x: T) => unknown, xs: List<T>): [List<T>, List<T>];
           }
-        ` },
+        `,
+        },
         `(lambda (pred xs)
          (let loop ((xs xs) (acc '()))
            (if (and (pair? xs) (pred (car xs)))
@@ -484,7 +497,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             <T>(p: (x: T) => unknown, xs: List<T>): [List<T>, List<T>];
           }
-        ` },
+        `,
+        },
         `(lambda (pred xs)
          (let loop ((xs xs) (acc '()))
            (if (and (pair? xs) (not (pred (car xs))))
@@ -500,7 +514,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             <T>(p: (x: T) => unknown, xs: List<T>): [List<T>, List<T>];
           }
-        ` },
+        `,
+        },
         `(lambda (pred xs)
          (let loop ((xs xs) (yes '()) (no '()))
            (cond ((null? xs) (list (reverse yes) (reverse no)))
@@ -517,7 +532,8 @@ export default EnvCapability.define("scheme/srfi-1", {
             <T, S extends T>(p: (x: T) => x is S, xs: List<T>): List<S> | false;
             <T>(p: (x: T) => unknown, xs: List<T>): List<T> | false;
           }
-        ` },
+        `,
+        },
         `(lambda (pred xs)
          (let loop ((xs xs))
            (cond ((null? xs) #f)
@@ -536,7 +552,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             <T>(xs: List<T>): Tuple<T, List<T> | T>;
           }
-        ` },
+        `,
+        },
         `(lambda (xs)
          (let loop ((xs xs))
            (if (pair? (cdr xs)) (loop (cdr xs)) xs)))`,
@@ -550,7 +567,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             <T>(xs: List<T>): T;
           }
-        ` },
+        `,
+        },
         `(lambda (xs) (car (last-pair xs)))`,
       ),
 
@@ -595,7 +613,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             <T>(xs: List<T>): T;
           }
-        ` },
+        `,
+        },
         `(lambda (xs) (%list-nth xs 0 "first: list has no elements"))`,
       ),
       second: symbol.define`second: the 2nd element of a proper list (errors if too short)`(
@@ -606,7 +625,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             <T>(xs: List<T>): T;
           }
-        ` },
+        `,
+        },
         `(lambda (xs) (%list-nth xs 1 "second: list has fewer than 2 elements"))`,
       ),
       third: symbol.define`third: the 3rd element of a proper list (errors if too short)`(
@@ -617,7 +637,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             <T>(xs: List<T>): T;
           }
-        ` },
+        `,
+        },
         `(lambda (xs) (%list-nth xs 2 "third: list has fewer than 3 elements"))`,
       ),
       fourth: symbol.define`fourth: the 4th element of a proper list (errors if too short)`(
@@ -628,7 +649,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             <T>(xs: List<T>): T;
           }
-        ` },
+        `,
+        },
         `(lambda (xs) (%list-nth xs 3 "fourth: list has fewer than 4 elements"))`,
       ),
       fifth: symbol.define`fifth: the 5th element of a proper list (errors if too short)`(
@@ -639,7 +661,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             <T>(xs: List<T>): T;
           }
-        ` },
+        `,
+        },
         `(lambda (xs) (%list-nth xs 4 "fifth: list has fewer than 5 elements"))`,
       ),
       sixth: symbol.define`sixth: the 6th element of a proper list (errors if too short)`(
@@ -650,7 +673,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             <T>(xs: List<T>): T;
           }
-        ` },
+        `,
+        },
         `(lambda (xs) (%list-nth xs 5 "sixth: list has fewer than 6 elements"))`,
       ),
       seventh: symbol.define`seventh: the 7th element of a proper list (errors if too short)`(
@@ -661,7 +685,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             <T>(xs: List<T>): T;
           }
-        ` },
+        `,
+        },
         `(lambda (xs) (%list-nth xs 6 "seventh: list has fewer than 7 elements"))`,
       ),
       eighth: symbol.define`eighth: the 8th element of a proper list (errors if too short)`(
@@ -672,7 +697,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             <T>(xs: List<T>): T;
           }
-        ` },
+        `,
+        },
         `(lambda (xs) (%list-nth xs 7 "eighth: list has fewer than 8 elements"))`,
       ),
       ninth: symbol.define`ninth: the 9th element of a proper list (errors if too short)`(
@@ -683,7 +709,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             <T>(xs: List<T>): T;
           }
-        ` },
+        `,
+        },
         `(lambda (xs) (%list-nth xs 8 "ninth: list has fewer than 9 elements"))`,
       ),
       tenth: symbol.define`tenth: the 10th element of a proper list (errors if too short)`(
@@ -694,7 +721,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             <T>(xs: List<T>): T;
           }
-        ` },
+        `,
+        },
         `(lambda (xs) (%list-nth xs 9 "tenth: list has fewer than 10 elements"))`,
       ),
 
@@ -706,7 +734,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             <B>(n: number, f: (i: number) => B): List<B>;
           }
-        ` },
+        `,
+        },
         `(lambda (n f)
          (let loop ((i (- n 1)) (acc '()))
            (if (< i 0) acc (loop (- i 1) (cons (f i) acc)))))`,
@@ -720,7 +749,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             <T, A>(f: (x: T, acc: A) => A, knil: A, xs: List<T>): A;
           }
-        ` },
+        `,
+        },
         `(lambda (f knil xs)
          (let loop ((xs xs))
            (if (null? xs) knil (f (car xs) (loop (cdr xs))))))`,
@@ -735,7 +765,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             <T, A>(f: (x: T, acc: A) => A, knil: A, xs: List<T>): A;
           }
-        ` },
+        `,
+        },
         `(lambda (f ridentity xs)
          (if (null? xs)
              ridentity
@@ -755,7 +786,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             <T>(lists: List<List<T>>): List<T>;
           }
-        ` },
+        `,
+        },
         `(lambda (lists) (apply append lists))`,
       ),
 
@@ -769,7 +801,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             <T, U>(rev: List<T>, tail: U): List<T> | U;
           }
-        ` },
+        `,
+        },
         `(lambda (rev tail)
          (let loop ((rev rev) (tail tail))
            (if (null? rev) tail (loop (cdr rev) (cons (car rev) tail)))))`,
@@ -783,7 +816,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             <T>(x: T, xs: List<T>): List<T>;
           }
-        ` },
+        `,
+        },
         `(lambda (x xs)
          (let loop ((xs xs) (acc '()))
            (cond ((null? xs) (reverse acc))
@@ -809,7 +843,8 @@ export default EnvCapability.define("scheme/srfi-1", {
             <T, S extends T>(p: (x: T) => x is S, xs: readonly T[]): readonly S[];
             <T>(p: (x: T) => unknown, xs: readonly T[]): readonly T[];
           }
-        ` },
+        `,
+          },
           `(lambda (pred xs)
          (filter (lambda (x) (not (pred x))) xs))`,
         ),
@@ -835,7 +870,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             <T>(xs: List<T> | unknown): T | false;
           }
-        ` },
+        `,
+          },
           `(lambda (xs) (if (pair? xs) (car xs) #f))`,
         ),
       "first-or":
@@ -847,7 +883,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             <T, D>(xs: List<T> | unknown, default: D): T | D;
           }
-        ` },
+        `,
+          },
           `(lambda (xs default) (if (pair? xs) (car xs) default))`,
         ),
 
@@ -861,7 +898,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             (xs: List<unknown>): number | false;
           }
-        ` },
+        `,
+        },
         `(lambda (xs)
          (let loop ((slow xs) (fast xs) (n 0))
            (cond ((null? fast) n)
@@ -887,7 +925,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             (count: number, start?: number, step?: number): List<number>;
           }
-        ` },
+        `,
+        },
         `(lambda (count . rest)
          (let ((start (if (null? rest) 0 (car rest)))
                (step (if (or (null? rest) (null? (cdr rest))) 1 (cadr rest))))
@@ -906,7 +945,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             (stop: number): List<number>;
           }
-        ` },
+        `,
+        },
         `(lambda (stop) (iota stop))`,
       ),
 
@@ -931,7 +971,8 @@ export default EnvCapability.define("scheme/srfi-1", {
             <T, B>(f: (x: T) => B | false | null, xs: List<T>): List<Exclude<B, false | null>>;
             <A, B, R>(f: (a: A, b: B) => R | false | null, as: List<A>, bs: List<B>): List<Exclude<R, false | null>>;
           }
-        ` },
+        `,
+        },
         `(lambda (fn . lists)
          (filter (lambda (x) x) (apply map fn lists)))`,
       ),
@@ -948,7 +989,8 @@ export default EnvCapability.define("scheme/srfi-1", {
             <T>(p: (x: T) => unknown, xs: List<T>): number;
             <A, B>(p: (a: A, b: B) => unknown, as: List<A>, bs: List<B>): number;
           }
-        ` },
+        `,
+        },
         `(lambda (pred . lists)
          (length (filter (lambda (b) b) (apply map pred lists))))`,
       ),
@@ -964,7 +1006,8 @@ export default EnvCapability.define("scheme/srfi-1", {
             <T, B>(f: (x: T) => List<B>, xs: List<T>): List<B>;
             <A, B, R>(f: (a: A, b: B) => List<R>, as: List<A>, bs: List<B>): List<R>;
           }
-        ` },
+        `,
+        },
         `(lambda (fn . lists)
          (apply append (apply map fn lists)))`,
       ),
@@ -1010,7 +1053,8 @@ export default EnvCapability.define("scheme/srfi-1", {
             <A, B>(p: (a: A, b: B) => unknown, as: List<A>, bs: List<B>): boolean;
             <A, B, C>(p: (a: A, b: B, c: C) => unknown, as: List<A>, bs: List<B>, cs: List<C>): boolean;
           }
-        ` },
+        `,
+          },
           `(lambda (fn . lists)
          (%some fn lists))`,
         ),
@@ -1042,7 +1086,8 @@ export default EnvCapability.define("scheme/srfi-1", {
             <A, B, R>(p: (a: A, b: B) => R, as: List<A>, bs: List<B>): R | false;
             <A, B, C, R>(p: (a: A, b: B, c: C) => R, as: List<A>, bs: List<B>, cs: List<C>): R | false;
           }
-        ` },
+        `,
+        },
         `(lambda (fn . lists)
          (%any fn lists))`,
       ),
@@ -1071,7 +1116,8 @@ export default EnvCapability.define("scheme/srfi-1", {
             <A, B>(p: (a: A, b: B) => unknown, as: List<A>, bs: List<B>): boolean;
             <A, B, C>(p: (a: A, b: B, c: C) => unknown, as: List<A>, bs: List<B>, cs: List<C>): boolean;
           }
-        ` },
+        `,
+          },
           `(lambda (fn . lists)
          (%every fn lists))`,
         ),
@@ -1105,7 +1151,8 @@ export default EnvCapability.define("scheme/srfi-1", {
             <A, B, R>(p: (a: A, b: B) => R, as: List<A>, bs: List<B>): R | boolean;
             <A, B, C, R>(p: (a: A, b: B, c: C) => R, as: List<A>, bs: List<B>, cs: List<C>): R | boolean;
           }
-        ` },
+        `,
+          },
           `(lambda (fn . lists)
          (%every-value fn lists))`,
         ),
@@ -1126,7 +1173,8 @@ export default EnvCapability.define("scheme/srfi-1", {
             <A, B>(as: List<A>, bs: List<B>): List<[A, B]>;
             <A, B, C>(as: List<A>, bs: List<B>, cs: List<C>): List<[A, B, C]>;
           }
-        ` },
+        `,
+        },
         `(lambda lists
          (let loop ((ls lists))
            (if (or (null? ls) (some null? ls))
@@ -1144,7 +1192,8 @@ export default EnvCapability.define("scheme/srfi-1", {
             <T>(p: (x: T) => unknown, xs: List<T>): number | false;
             <A, B>(p: (a: A, b: B) => unknown, as: List<A>, bs: List<B>): number | false;
           }
-        ` },
+        `,
+        },
         `(lambda (pred . lists)
          (let loop ((i 0) (ls lists))
            (if (some null? ls) #f
@@ -1162,7 +1211,8 @@ export default EnvCapability.define("scheme/srfi-1", {
           {
             <S, T>(f: (state: S) => [T, S] | false | null, init: S): List<T>;
           }
-        ` },
+        `,
+        },
         `(lambda (fn init)
          (let iter ((pair (fn init)) (result '()))
            (if (not pair)
@@ -1171,5 +1221,7 @@ export default EnvCapability.define("scheme/srfi-1", {
       ),
 
       // Official SRFI-1 names not live above — purity / subset doors (see DOORS).
-      ...DOOR_SYMBOLS };
-  } });
+      ...DOOR_SYMBOLS,
+    };
+  },
+});

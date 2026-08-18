@@ -35,4 +35,18 @@ export { default as srfi235 } from "./srfi-235.js";
 export { default as srfiStubs } from "./srfi-stubs.js";
 
 /** The whole SRFI set — assemble all, or `.filter()` a capability-scoped subset. */
-export const allSrfi = [srfi1, srfi2, srfi8, srfi13, srfi26, srfi28, srfi43, srfi95, srfi128, srfi151, srfi189, srfi235, srfiStubs] as const;
+export const allSrfi = [
+  srfi1,
+  srfi2,
+  srfi8,
+  srfi13,
+  srfi26,
+  srfi28,
+  srfi43,
+  srfi95,
+  srfi128,
+  srfi151,
+  srfi189,
+  srfi235,
+  srfiStubs,
+] as const;

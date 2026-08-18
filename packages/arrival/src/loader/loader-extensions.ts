@@ -99,7 +99,10 @@ export function makeRegisterExtensionMacro(resolveRegistry: (runCtx: RunContext)
       const suffixForm = rest.car;
       invariant(rest.cdr instanceof APair, "require/register-extension: missing resolver-name");
       const nameForm = rest.cdr.car;
-      invariant(rest.cdr.cdr instanceof ANil || rest.cdr.cdr == null, "require/register-extension: expected exactly 2 args");
+      invariant(
+        rest.cdr.cdr instanceof ANil || rest.cdr.cdr == null,
+        "require/register-extension: expected exactly 2 args",
+      );
       registerExtensionIn(resolveRegistry(ctx.runCtx), suffixForm, nameForm);
       return nil;
     },

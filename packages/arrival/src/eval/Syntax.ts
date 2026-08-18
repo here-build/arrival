@@ -36,11 +36,13 @@ export class Syntax {
       Object.defineProperty(this, "_syntax", {
         value: syntax,
         configurable: true,
-        enumerable: false });
+        enumerable: false,
+      });
       Object.defineProperty(syntax, "_param", {
         value: true,
         configurable: true,
-        enumerable: false });
+        enumerable: false,
+      });
     }
   };
 
@@ -76,8 +78,14 @@ export class Syntax {
       macro_expand: true,
       runCtx,
       resolver,
-      defResolver: this.__resolver__ };
-    return this.__fn__.call(env as AmbientRuntime, code as SchemeValue, args, this.__name__ || "syntax") as MacroExpansion;
+      defResolver: this.__resolver__,
+    };
+    return this.__fn__.call(
+      env as AmbientRuntime,
+      code as SchemeValue,
+      args,
+      this.__name__ || "syntax",
+    ) as MacroExpansion;
   }
 
   // RAW-ARG dispatch term. Matches against the FULL form (`code` — keyword

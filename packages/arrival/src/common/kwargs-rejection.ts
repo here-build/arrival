@@ -74,9 +74,7 @@ type ProblemLine = string;
 /** The declared-type word for a field: a scheme-face codec answers its registry name
  *  ("number", "string", "dict", …); a plain zod schema answers its `def.type`. */
 function declaredTypeOf(fieldSchema: unknown): string {
-  return (
-    z.lookupName(fieldSchema) ?? (fieldSchema as { def?: { type?: string } })?.def?.type ?? "the declared type"
-  );
+  return z.lookupName(fieldSchema) ?? (fieldSchema as { def?: { type?: string } })?.def?.type ?? "the declared type";
 }
 
 function issueLines(
@@ -160,8 +158,7 @@ function schemaFaceProblems(shape: ZodRawShape, sent: Record<string, unknown>): 
     const sentVal = sent[key];
     if (!(sentVal instanceof AValue)) continue;
     if (z.lookupName(fieldSchema) !== undefined) continue;
-    const declared =
-      (fieldSchema as { def?: { type?: string } }).def?.type ?? "the declared shape";
+    const declared = (fieldSchema as { def?: { type?: string } }).def?.type ?? "the declared shape";
     problems.push(`  :${key} — expected ${declared}, got ${kindOf(sentVal)}: ${previewOf(faceOf(sentVal))}`);
   }
   return problems;
@@ -249,11 +246,7 @@ function tryDropFarUnknownKeys(
  * (unknown keys reject — never silently strip) + the scheme-face guard + the §2.5
  * humanizer + far-unknown-key tolerance. Non-Zod decode errors propagate untouched.
  */
-export function decodeKwargsStrict(
-  qualifiedName: string,
-  shape: ZodRawShape,
-  sent: Record<string, unknown>,
-): unknown {
+export function decodeKwargsStrict(qualifiedName: string, shape: ZodRawShape, sent: Record<string, unknown>): unknown {
   const faceProblems = schemaFaceProblems(shape, sent);
   if (faceProblems.length > 0) {
     throw new KwargsRejectionError(qualifiedName, faceProblems);

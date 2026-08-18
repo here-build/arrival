@@ -12,7 +12,8 @@ import type {
   ProvenanceRole,
   SequenceSymbolDef,
   TaglessGuardSymbolDef,
-  TaglessSymbolDef } from "../../common/symbols/_bake.js";
+  TaglessSymbolDef,
+} from "../../common/symbols/_bake.js";
 import type { EmitRule, RefPolicy } from "../../emit/emit-rule.js";
 import type { ZodTypeAny } from "zod";
 
@@ -77,9 +78,7 @@ let hostProjectionOf: (self: ANativeProcedure, exit?: MembraneExit) => unknown =
   throw new Error("ANativeProcedure: host projection not linked (ACallable.ts not loaded)");
 };
 /** ACallable.ts module-init only. */
-export function _linkNativeHostProjection(
-  fn: (self: ANativeProcedure, exit?: MembraneExit) => unknown,
-): void {
+export function _linkNativeHostProjection(fn: (self: ANativeProcedure, exit?: MembraneExit) => unknown): void {
   hostProjectionOf = fn;
 }
 
@@ -129,7 +128,8 @@ export class ANativeProcedure extends AValue {
       impl: this.#impl,
       provenanceRole: this.provenanceRole,
       cacheClass: this.cacheClass,
-      callbackRoles: callbackRoles ?? this.callbackRoles });
+      callbackRoles: callbackRoles ?? this.callbackRoles,
+    });
   }
 
   ["arrival/toJS"](exit?: MembraneExit): unknown {

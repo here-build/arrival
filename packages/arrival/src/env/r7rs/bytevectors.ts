@@ -35,7 +35,8 @@ export default EnvCapability.define("scheme/bytevectors", {
             (x: unknown): x is Uint8Array;
             <T>(x: T): x is Extract<T, Uint8Array>;
           }
-        ` },
+        `,
+      },
       function (this: CallCtx, obj) {
         // Polymorphic by design: scheme producers mint SchemeBytevector, but raw
         // binary legitimately flows from FFI through the membrane unboxed (it
@@ -160,4 +161,6 @@ export default EnvCapability.define("scheme/bytevectors", {
           ),
         );
       },
-    ) }) });
+    ),
+  }),
+});

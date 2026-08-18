@@ -22,7 +22,8 @@ function stampValueContract(boxed: unknown, def: ValueSymbolDef): void {
       value: def,
       writable: false,
       enumerable: false,
-      configurable: false });
+      configurable: false,
+    });
     return;
   }
   const existingName = (existing as { name?: unknown }).name;

@@ -187,10 +187,7 @@ export class ResourcePathConflictError extends ArrivalError {
     /** True when the doored penetration itself also declares effects (hybrid verb). */
     public readonly hybrid: boolean = false,
   ) {
-    const priorQPart =
-      priorQuery !== undefined
-        ? ` after prior query ${serializeResourcePath(priorQuery)}`
-        : "";
+    const priorQPart = priorQuery !== undefined ? ` after prior query ${serializeResourcePath(priorQuery)}` : "";
     // A hybrid's Q≺E record makes any repeat on the same domain self-door — the
     // generic "hold prior results" advice misreads an upsert's intent, so teach
     // the hybrid rule explicitly (N-HYBRID-TWICE).
@@ -285,11 +282,11 @@ export class ResourcePathRoleConflictError extends ArrivalError {
     super(
       kind === "sink-queries"
         ? `${op}: a sink cannot declare queries — under gather a sink's impl is skipped, so its Q ` +
-          `would journal a read and arm a live subscription for a body that never ran; drop queries, ` +
-          `or drop provenance: "sink" if this verb genuinely reads`
+            `would journal a read and arm a live subscription for a body that never ran; drop queries, ` +
+            `or drop provenance: "sink" if this verb genuinely reads`
         : `${op}: an effects-only contract cannot carry a real return — the return of an effectful ` +
-          `verb is licensed by its query half (upsert-with-return is the hybrid shape); declare the ` +
-          `query path this return reads, or make the output void`,
+            `verb is licensed by its query half (upsert-with-return is the hybrid shape); declare the ` +
+            `query path this return reads, or make the output void`,
     );
   }
 }
@@ -308,11 +305,7 @@ export class ResourcePathProducerError extends ArrivalError {
     public readonly reason: string,
     cause?: unknown,
   ) {
-    super(
-      `${verbName}: ${axis} path producer ${reason}`,
-      [],
-      cause instanceof Error ? cause : undefined,
-    );
+    super(`${verbName}: ${axis} path producer ${reason}`, [], cause instanceof Error ? cause : undefined);
   }
 }
 
@@ -332,8 +325,7 @@ function producePaths(
   try {
     raw = fn(...decodedArgs);
   } catch (cause) {
-    const detail =
-      cause instanceof Error ? `threw: ${cause.message}` : `threw: ${String(cause)}`;
+    const detail = cause instanceof Error ? `threw: ${cause.message}` : `threw: ${String(cause)}`;
     throw new ResourcePathProducerError(verbName, axis, detail, cause);
   }
   if (!Array.isArray(raw)) {
@@ -397,12 +389,8 @@ export function applyResourcePathCqs(opts: {
   strictCQSstrings?: boolean;
 }): { queries: readonly ResourcePath[]; effects: readonly ResourcePath[] } {
   const strict = opts.strictCQSstrings === true;
-  const Q = opts.queries
-    ? producePaths(opts.verbName, "queries", opts.queries, opts.decodedArgs, strict)
-    : [];
-  const E = opts.effects
-    ? producePaths(opts.verbName, "effects", opts.effects, opts.decodedArgs, strict)
-    : [];
+  const Q = opts.queries ? producePaths(opts.verbName, "queries", opts.queries, opts.decodedArgs, strict) : [];
+  const E = opts.effects ? producePaths(opts.verbName, "effects", opts.effects, opts.decodedArgs, strict) : [];
   const log = opts.log;
   if (log === undefined) {
     return { queries: Q, effects: E };

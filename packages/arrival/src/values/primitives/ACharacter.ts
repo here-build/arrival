@@ -49,7 +49,8 @@ const characters: Record<string, string> = {
   us: "\u001F",
   si: "\u000F",
   esc: "\u001B",
-  del: "\u007F" };
+  del: "\u007F",
+};
 
 export { characters };
 
@@ -141,10 +142,7 @@ export class ACharacter extends AValue {
   }
 
   ["arrival/tagless-final/lte"](other: unknown): boolean {
-    return (
-      other instanceof ACharacter &&
-      (this.__char__.codePointAt(0) ?? 0) <= (other.__char__.codePointAt(0) ?? 0)
-    );
+    return other instanceof ACharacter && (this.__char__.codePointAt(0) ?? 0) <= (other.__char__.codePointAt(0) ?? 0);
   }
 
   // Type predicate — `(char? x)` (a `symbol.taglessGuard`) asks the receiver instead of the

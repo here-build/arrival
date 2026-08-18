@@ -61,6 +61,7 @@ export function validateAgainstResolution(
   const vocabulary = vocabularyFromChain(chain, {
     scopeNames: scopeEnv?.allBoundNames(),
     scopeLookup: scopeEnv === undefined ? undefined : (name) => scopeEnv.get(name, { throwError: false }),
-    degraded });
+    degraded,
+  });
   return validateProgram(program.forms, vocabulary);
 }

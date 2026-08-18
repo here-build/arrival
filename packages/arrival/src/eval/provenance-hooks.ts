@@ -107,7 +107,8 @@ export function notePotentialRosettaExit(inv: Invocation, result: SchemeValue | 
   const id = {
     templateHash: coordinate.templateHash,
     ordinalPath: coordinate.ordinalPath,
-    regionEpoch: coordinate.regionEpoch };
+    regionEpoch: coordinate.regionEpoch,
+  };
 
   const settle = (value: SchemeValue): void => {
     // Read AFTER settlement — rosetta mint flips this flag synchronously before
@@ -122,7 +123,8 @@ export function notePotentialRosettaExit(inv: Invocation, result: SchemeValue | 
       regionId: sink.regionId,
       id,
       value: peeled,
-      stampIds }).catch(() => {});
+      stampIds,
+    }).catch(() => {});
   };
 
   if (is_promise(result)) {

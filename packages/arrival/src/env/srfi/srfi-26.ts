@@ -50,4 +50,6 @@ export default EnvCapability.define("scheme/srfi-26", {
               (loop (cdr items) params call binds (gensym)))
              (else (let ((t (gensym))) (loop (cdr items) params (cons t call) (cons (list t (car items)) binds) restp))))))`,
       { macroAttribute: "opaque" },
-    ) }) });
+    ),
+  }),
+});

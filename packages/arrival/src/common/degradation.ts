@@ -82,7 +82,9 @@ export function buildDegradationInfo(owner: string): DegradationInfo {
       kind: "door",
       name,
       reason,
-      cause: { owner, needs: needs.map((key) => ({ kind: "configuration" as const, key })) } }) };
+      cause: { owner, needs: needs.map((key) => ({ kind: "configuration" as const, key })) },
+    }),
+  };
 }
 
 /** Scan a capability's own (already-computed) `symbolsRec` for degradation-minted doors —

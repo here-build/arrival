@@ -56,7 +56,8 @@ export async function hermeticApply(opts: HermeticApplyOptions): Promise<unknown
       capabilities: base.capabilities,
       config: base.config,
       scope: base.scope,
-      runCtx: base.runCtx });
+      runCtx: base.runCtx,
+    });
     return egress;
   });
 }
@@ -94,7 +95,8 @@ export async function applyWireInEnv(
     capabilities: base.capabilities,
     config: base.config,
     scope: wireScope,
-    runCtx: base.runCtx });
+    runCtx: base.runCtx,
+  });
   const boxed = state.values.at(-1);
   invariant(boxed !== undefined, "applyWireInEnv: a wire application evaluates exactly one form — exec returned none");
   return boxed;

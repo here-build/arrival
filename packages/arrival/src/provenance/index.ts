@@ -24,7 +24,8 @@ export {
   defineNameOf,
   lastTopLevelForm,
   resolveReadIds,
-  type Slice } from "./slice.js";
+  type Slice,
+} from "./slice.js";
 export {
   type DefineTemplate,
   type EmittedWire,
@@ -35,7 +36,8 @@ export {
   type WireSlot,
   type WireframeGraph,
   type WireframeNode,
-  type WireframeProgram } from "./wireframe/types.js";
+  type WireframeProgram,
+} from "./wireframe/types.js";
 export { buildWireframe, type WireframeBuildOptions } from "./wireframe/builder.js";
 export { hermeticApply, type HermeticApplyOptions } from "./gamma.js";
 

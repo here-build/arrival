@@ -18,7 +18,8 @@ export type {
   OracleSession,
   OracleState,
   TokenClass,
-  TypeTag } from "./contract.js";
+  TypeTag,
+} from "./contract.js";
 
 export { scan, structuralScanner, makeSigmaScanner, validNextClasses } from "./scanner.js";
 export { computeValidSymbols, scanScope } from "./sigma.js";

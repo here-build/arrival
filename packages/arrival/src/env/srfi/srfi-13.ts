@@ -29,7 +29,8 @@ import {
   schemeBool,
   stringValue,
   toIndex,
-  withInputProvenance } from "../../values/op-helpers.js";
+  withInputProvenance,
+} from "../../values/op-helpers.js";
 import { type ABool } from "../../values/primitives/ABool.js";
 import { collapseProvenance, taintString } from "../../provenance/provenance-collapse.js";
 import { AString } from "../../values/primitives/AString.js";
@@ -131,7 +132,8 @@ const DOORS = {
   "string-filter":
     "build compositionally: (list->string (filter pred (string->list s))) using filter (SRFI-1), string->list and list->string (R7RS)",
   "string-delete":
-    "build compositionally: (list->string (remove pred (string->list s))) using remove (SRFI-1), string->list and list->string (R7RS)" } as const satisfies Record<string, string>;
+    "build compositionally: (list->string (remove pred (string->list s))) using remove (SRFI-1), string->list and list->string (R7RS)",
+} as const satisfies Record<string, string>;
 
 // ── criterion machinery ──────────────────────────────────────────────────────
 // SRFI-13 criteria: we honestly support a CHAR (equality) or a ONE-ARG PREDICATE
@@ -250,7 +252,8 @@ export default EnvCapability.define("scheme/srfi-13", {
           {
             (s: string, criterion: string | ((c: string) => unknown)): number | false;
           }
-        ` },
+        `,
+        },
         function (this: CallCtx, str: unknown, criterion: unknown): AExact | ABool | Promise<AExact | ABool> {
           const chars = [...stringValue(str)];
           const runCtx = this.runCtx;
@@ -270,7 +273,8 @@ export default EnvCapability.define("scheme/srfi-13", {
           {
             (s: string, criterion: string | ((c: string) => unknown)): number;
           }
-        ` },
+        `,
+        },
         function (this: CallCtx, str: unknown, criterion: unknown): AExact | Promise<AExact> {
           const chars = [...stringValue(str)];
           const runCtx = this.runCtx;
@@ -290,7 +294,8 @@ export default EnvCapability.define("scheme/srfi-13", {
           {
             (s: string, n: number): string;
           }
-        ` },
+        `,
+        },
         sliceImpl("string-take", (chars, k) => chars.slice(0, k)),
       ),
 
@@ -303,7 +308,8 @@ export default EnvCapability.define("scheme/srfi-13", {
           {
             (s: string, n: number): string;
           }
-        ` },
+        `,
+        },
         sliceImpl("string-drop", (chars, k) => chars.slice(k)),
       ),
 
@@ -316,7 +322,8 @@ export default EnvCapability.define("scheme/srfi-13", {
           {
             (s: string, n: number): string;
           }
-        ` },
+        `,
+        },
         sliceImpl("string-take-right", (chars, k) => chars.slice(chars.length - k)),
       ),
 
@@ -329,7 +336,8 @@ export default EnvCapability.define("scheme/srfi-13", {
           {
             (s: string, n: number): string;
           }
-        ` },
+        `,
+        },
         sliceImpl("string-drop-right", (chars, k) => chars.slice(0, chars.length - k)),
       ),
 
@@ -422,7 +430,8 @@ export default EnvCapability.define("scheme/srfi-13", {
           // and the output union images to the redundant `string | string`. Author-assert what the
           // impl proves by eye: it `to_array`s the input and typechecks each element is a string, and
           // folds to one string. `List<string>` (carriers.ts vocabulary) is the honest, informative image.
-          type: "(list: List<string>, delimiter?: string) => string" },
+          type: "(list: List<string>, delimiter?: string) => string",
+        },
         function (this: CallCtx, list, delimiter) {
           const parts = to_array("string-join")(list);
           const sep = delimiter === undefined ? " " : stringValue(delimiter);
@@ -443,7 +452,8 @@ export default EnvCapability.define("scheme/srfi-13", {
           // returns a proper list of token strings. Author-assert `List<string>`. criterion stays
           // `unknown` (a char OR a one-arg predicate — a char's `string` image would misread as "a
           // whole string"; the docstring teaches the domain), matching the sibling trim/index ops.
-          type: "(str: string, criterion?: unknown) => List<string>" },
+          type: "(str: string, criterion?: unknown) => List<string>",
+        },
         function (this: CallCtx, str: unknown, criterion?: unknown): AListAlike | Promise<AListAlike> {
           const chars = [...stringValue(str)];
           const runCtx = this.runCtx;
@@ -491,7 +501,8 @@ export default EnvCapability.define("scheme/srfi-13", {
           // list of strings (`List<string>`). The `string | char` delimiter images to the redundant
           // `string | string` (string and schemeChar both print `string`); the honest image is a
           // single `string` delimiter. Both recovered by the author assertion.
-          type: "(str: string, delimiter: string) => List<string>" },
+          type: "(str: string, delimiter: string) => List<string>",
+        },
         function (this: CallCtx, str, delimiter) {
           const s = stringValue(str);
           // SRFI-152 refinement over plain JS `.split`: an empty subject is NO fields.
@@ -517,4 +528,6 @@ export default EnvCapability.define("scheme/srfi-13", {
     // string-filter lives here so the pack owns the full index.
     ...Object.fromEntries(
       Object.entries(DOORS).map(([name, reason]) => [name, symbol.notImplemented`${name}: ${reason}`]),
-    ) }) });
+    ),
+  }),
+});

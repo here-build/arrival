@@ -15,11 +15,7 @@
  */
 
 import type { AtomProxy, ProxyAtom } from "./atom-proxy.js";
-import {
-  pathsOverlap,
-  serializeResourcePath,
-  type ResourcePath,
-} from "./path-algebra.js";
+import { pathsOverlap, serializeResourcePath, type ResourcePath } from "./path-algebra.js";
 
 // ── Key algebra (X0) ─────────────────────────────────────────────────────────
 
@@ -47,10 +43,7 @@ export function keysArePrefixRelated(a: string, b: string): boolean {
  * Notify predicate over path tuples — same segment-wise prefix relation as the CQS door.
  * Sound and complete vs {@link pathsOverlap} (F-RX3).
  */
-export function wouldNotify(
-  write: ResourcePath,
-  subscriptions: readonly ResourcePath[],
-): boolean {
+export function wouldNotify(write: ResourcePath, subscriptions: readonly ResourcePath[]): boolean {
   for (const q of subscriptions) {
     if (pathsOverlap(write, q)) return true;
   }

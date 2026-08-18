@@ -56,7 +56,8 @@ export default EnvCapability.define("scheme/core", {
       {
         input: [z.symbol.optional()],
         output: [z.symbol],
-        type: "(name?: string) => string" },
+        type: "(name?: string) => string",
+      },
       gensym,
     ),
 
@@ -70,4 +71,6 @@ export default EnvCapability.define("scheme/core", {
     NaN: symbol.define`NaN: the canonical scheme not-a-number constant (+nan.0), a non-finite inexact real`(
       z.looseNumber,
       `+nan.0`,
-    ) }) });
+    ),
+  }),
+});

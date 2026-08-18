@@ -16,5 +16,6 @@ export function macro(strings: TemplateStringsArray) {
     kind: "macro",
     name,
     macro: new Macro(name, fn),
-    preludeOnly: opts?.preludeOnly });
+    preludeOnly: opts?.preludeOnly,
+  });
 }

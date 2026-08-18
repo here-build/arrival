@@ -1427,7 +1427,8 @@ const fold_case_mapping = {
   "125214": 125_248,
   "125215": 125_249,
   "125216": 125_250,
-  "125217": 125_251 };
+  "125217": 125_251,
+};
 
 /** Case-fold a string per the table above; iterates by codepoint so astral chars fold correctly. */
 export function foldcase_string(string) {

@@ -31,4 +31,6 @@ export default EnvCapability.define("scheme/r7rs/eval", {
     environment: symbol.notImplemented`environment: ${REIFY}`,
     "null-environment": symbol.notImplemented`null-environment: ${REIFY}`,
     "scheme-report-environment": symbol.notImplemented`scheme-report-environment: ${REIFY}`,
-    "interaction-environment": symbol.notImplemented`interaction-environment: ${REIFY}` }) });
+    "interaction-environment": symbol.notImplemented`interaction-environment: ${REIFY}`,
+  }),
+});

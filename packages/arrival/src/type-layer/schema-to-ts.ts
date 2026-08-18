@@ -189,7 +189,8 @@ function harvestNode(schema: z.ZodTypeAny): import("typescript").TypeNode {
     auxiliaryTypeStore: createAuxiliaryTypeStore(),
     overrideFunction: instanceofOverride,
     io: "output",
-    unrepresentable: "throw" });
+    unrepresentable: "throw",
+  });
   return node as import("typescript").TypeNode;
 }
 

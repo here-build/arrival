@@ -67,7 +67,8 @@ const notEmitRule: EmitRule<R> = {
     return ctx.config.register === "read" || ctx.argFacts[0]?.boolean === true
       ? Un("!", c!)
       : Bin("===", c!, Lit(false));
-  } };
+  },
+};
 
 // ─── null? / pair? — fact-gated .length, Law-N self-witnessed ──────────────────────
 // TOTAL over ANY value — bare `.length` is wrong-code: `(null? "")` would be true
@@ -80,13 +81,15 @@ const nullQEmitRule: EmitRule<R> = {
   call: (args, ctx) => {
     const [xs] = exactly(ctx, "null?", args, 1);
     return provesArray(ctx.argFacts[0]) ? Bin("===", Member(xs!, "length"), Lit(0)) : Call(ctx.runtime("null?"), [xs!]);
-  } };
+  },
+};
 
 const pairQEmitRule: EmitRule<R> = {
   call: (args, ctx) => {
     const [xs] = exactly(ctx, "pair?", args, 1);
     return provesArray(ctx.argFacts[0]) ? Bin(">", Member(xs!, "length"), Lit(0)) : Call(ctx.runtime("pair?"), [xs!]);
-  } };
+  },
+};
 
 // ── equal? — primitive-proven gate (Law A) ─────────────────────────────────────────
 // Deep structural equality, not ===. For compounds, === is reference identity and
@@ -107,7 +110,8 @@ const equalQEmitRule: EmitRule<R> = {
     return provesPrimitive(ctx.argFacts[0]) || provesPrimitive(ctx.argFacts[1])
       ? Bin("===", a!, b!)
       : Call(ctx.runtime("equal?"), [a!, b!]);
-  } };
+  },
+};
 
 export default EnvCapability.define("scheme/equality", {
   symbols: (symbol, z) => ({
@@ -172,7 +176,8 @@ export default EnvCapability.define("scheme/equality", {
             (x: unknown): x is (...args: unknown[]) => unknown;
             <T>(x: T): x is Extract<T, (...args: unknown[]) => unknown>;
           }
-        ` },
+        `,
+      },
       // Callable excluding macros — includes membrane SchemeJSFunction (typeof "object").
       function (this: CallCtx, obj) {
         return new ABool(is_callable(obj) && !is_macro(obj));
@@ -232,7 +237,8 @@ export default EnvCapability.define("scheme/equality", {
             (x: unknown): x is string;
             <T>(x: T): x is Extract<T, string>;
           }
-        ` },
+        `,
+      },
       function (this: CallCtx, obj) {
         return bool(obj instanceof AString);
       },
@@ -251,7 +257,8 @@ export default EnvCapability.define("scheme/equality", {
         `,
       emit: pairQEmitRule,
       narrows: { witness: "pair?" },
-      refPolicy: "eta" }),
+      refPolicy: "eta",
+    }),
 
     "null?": symbol.native`null?: empty-list test`(
       {
@@ -266,7 +273,8 @@ export default EnvCapability.define("scheme/equality", {
         // Law-N witness: runtime proves the narrowing.
         emit: nullQEmitRule,
         narrows: { witness: "null?" },
-        refPolicy: "eta" },
+        refPolicy: "eta",
+      },
       // ANil (and provenance clones). Raw JS null/undefined never arrive (membrane
       // boxes null→nil, undefined→theVoid).
       //
@@ -310,7 +318,8 @@ export default EnvCapability.define("scheme/equality", {
             (x: unknown): x is boolean;
             <T>(x: T): x is Extract<T, boolean>;
           }
-        ` },
+        `,
+      },
       // harvest `type:` is the dual boolean guard
       function (this: CallCtx, obj) {
         return bool(obj instanceof ABool);
@@ -324,7 +333,8 @@ export default EnvCapability.define("scheme/equality", {
             (x: unknown): x is string;
             <T>(x: T): x is Extract<T, string>;
           }
-        ` }),
+        `,
+    }),
 
     // `dict?` — Racket's dict predicate, the missing counterpart to our native `{…}` /
     // `(dict …)` open-key map (polyglot.ts). We ship the type but had no predicate for
@@ -345,7 +355,8 @@ export default EnvCapability.define("scheme/equality", {
             (x: unknown): x is Record<string, unknown>;
             <T>(x: T): x is Extract<T, Record<string, unknown>>;
           }
-        ` },
+        `,
+        },
         function (this: CallCtx, obj): ABool {
           return new ABool(obj instanceof AJSObject || obj instanceof ADict);
         },
@@ -360,7 +371,8 @@ export default EnvCapability.define("scheme/equality", {
             (x: unknown): x is List<unknown>;
             <T>(x: T): x is Extract<T, List<any>>;
           }
-        ` },
+        `,
+      },
       // A circular list is NOT a proper list (R7RS); detect runtime cycles too
       // (have_cycles below only catches reader #0= cycles).
       function (this: CallCtx, obj) {
@@ -381,4 +393,6 @@ export default EnvCapability.define("scheme/equality", {
           node = node.cdr;
         }
       },
-    ) }) });
+    ),
+  }),
+});

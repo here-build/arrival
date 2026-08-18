@@ -40,11 +40,29 @@ interface Base {
 }
 
 export type BinOp =
-  | "+" | "-" | "*" | "/" | "%" | "**"
-  | "===" | "!==" | "<" | "<=" | ">" | ">="
-  | "&&" | "||" | "??"
-  | "&" | "|" | "^" | "<<" | ">>" | ">>>"
-  | "in" | "instanceof";
+  | "+"
+  | "-"
+  | "*"
+  | "/"
+  | "%"
+  | "**"
+  | "==="
+  | "!=="
+  | "<"
+  | "<="
+  | ">"
+  | ">="
+  | "&&"
+  | "||"
+  | "??"
+  | "&"
+  | "|"
+  | "^"
+  | "<<"
+  | ">>"
+  | ">>>"
+  | "in"
+  | "instanceof";
 
 export type UnOp = "!" | "-" | "+" | "~" | "typeof" | "void";
 
@@ -117,12 +135,17 @@ export function Ref(binding: Binding): R {
  *  bare `Lit(0)` / `Lit(false)`. */
 export function Lit(value: string | number | bigint | boolean | null | undefined): R {
   const v: LitValue =
-    value === null ? { k: "null" }
-    : value === undefined ? { k: "undefined" }
-    : typeof value === "string" ? { k: "string", value }
-    : typeof value === "number" ? { k: "number", value }
-    : typeof value === "bigint" ? { k: "bigint", value }
-    : { k: "boolean", value };
+    value === null
+      ? { k: "null" }
+      : value === undefined
+        ? { k: "undefined" }
+        : typeof value === "string"
+          ? { k: "string", value }
+          : typeof value === "number"
+            ? { k: "number", value }
+            : typeof value === "bigint"
+              ? { k: "bigint", value }
+              : { k: "boolean", value };
   return { t: "Lit", value: v };
 }
 

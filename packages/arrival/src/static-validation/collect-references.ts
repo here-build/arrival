@@ -312,8 +312,7 @@ export function collectReferences(form: SchemeValue, opts: CollectReferencesOpti
                 const rest = clause.cdr;
                 if (!(rest instanceof APair)) continue;
                 const varSpec = rest.car; // (var)
-                const varName =
-                  varSpec instanceof APair && varSpec.car instanceof ASymbol ? nameOf(varSpec.car) : null;
+                const varName = varSpec instanceof APair && varSpec.car instanceof ASymbol ? nameOf(varSpec.car) : null;
                 const inner = varName === null ? bound : new Set([...bound, varName]);
                 walkBody(rest.cdr, inner, loc);
               } else if (marker === "finally") {

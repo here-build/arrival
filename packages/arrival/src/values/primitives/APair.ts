@@ -178,7 +178,8 @@ export function __tieKnot(pair: AListAlike, slot: "car" | "cdr", v: SchemeValue)
 // Local fold helpers for tagless-final/get — duplicated on purpose to avoid
 // APair → AJSObject → rosetta import cycle (APair already on rosetta's build path).
 function foldAlistKeyName(key: SchemeValue | string): string {
-  const raw = typeof key === "string" ? key : String((key as { valueOf?: () => unknown } | null | undefined)?.valueOf?.() ?? key);
+  const raw =
+    typeof key === "string" ? key : String((key as { valueOf?: () => unknown } | null | undefined)?.valueOf?.() ?? key);
   return raw.startsWith(":") ? raw.slice(1) : raw;
 }
 
@@ -235,7 +236,12 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
 
   // `quote` false ⟹ APair | ANil; `quote: true` also admits DATA-marked array pass-through.
   // Runtime `quote: boolean` arm stays wide (internal recursion).
-  static fromArray<T extends SchemeValue>(ctx: RunContext, array: readonly T[], deep?: boolean, quote?: false): AListAlike<T>;
+  static fromArray<T extends SchemeValue>(
+    ctx: RunContext,
+    array: readonly T[],
+    deep?: boolean,
+    quote?: false,
+  ): AListAlike<T>;
   static fromArray<T extends SchemeValue>(
     ctx: RunContext,
     array: readonly T[],
@@ -487,7 +493,8 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
       "array",
       {
         keys: () => spine.map((_, i) => String(i)),
-        read: (key) => spine[Number(key)] },
+        read: (key) => spine[Number(key)],
+      },
       exit ? { membrane: exit } : undefined,
     ) as unknown[];
   }
@@ -565,7 +572,10 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     const seen = new WeakSet<SchemeValue>();
     let node: SchemeValue = this;
     while (node instanceof APair) {
-      TypeError.invariant(!seen.has(node), "APair[Symbol.iterator]: list cycle detected — cannot iterate a cyclic list");
+      TypeError.invariant(
+        !seen.has(node),
+        "APair[Symbol.iterator]: list cycle detected — cannot iterate a cyclic list",
+      );
       seen.add(node);
       if (isEmptyPairSentinel(node)) return;
       yield node.car;
@@ -798,10 +808,7 @@ type AConcatPair<Car extends SchemeValue, Cdr extends AListAlike> =
 // Pure list append (Semigroup) — fresh spine of a's elements, then b. Iterative.
 // Improper a still contributes its phantom car. Fresh head stamped with union of both
 // operands' deep provenance (conservation; rebuild-drop fix, same as cdr).
-export function concatPair<Car extends SchemeValue, Cdr extends AListAlike>(
-  a: Car,
-  b: Cdr,
-): AConcatPair<Car, Cdr> {
+export function concatPair<Car extends SchemeValue, Cdr extends AListAlike>(a: Car, b: Cdr): AConcatPair<Car, Cdr> {
   const cars: SchemeValue[] = [];
   let node: unknown = a;
   while (node instanceof APair) {

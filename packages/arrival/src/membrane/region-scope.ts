@@ -41,12 +41,15 @@ import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
 import type { AValue } from "../values/primitives/AValue.js";
 import type { EgressMode, WrapperKey } from "../values/types.js";
 import { RegionEscapeError, RegionIncompleteError } from "../errors.js";
+import { emitHostSchedule, emitTrackClose, emitTrackOpen, isEmissionEnabled } from "../provenance/store/emit.js";
 import {
-  emitHostSchedule,
-  emitTrackClose,
-  emitTrackOpen,
-  isEmissionEnabled } from "../provenance/store/emit.js";
-import { appendOrdinal, type OrdinalPath, type RecordId, type RegionEpoch, type RegionId, type TemplateHash } from "../provenance/store/ids.js";
+  appendOrdinal,
+  type OrdinalPath,
+  type RecordId,
+  type RegionEpoch,
+  type RegionId,
+  type TemplateHash,
+} from "../provenance/store/ids.js";
 import type { ProvenanceStore } from "../provenance/store/interfaces.js";
 import type { HostScheduleTriple } from "../provenance/store/records.js";
 import { foldRegionStream, nextTrackOrdinal } from "../provenance/store/fold.js";
@@ -146,7 +149,8 @@ export const DETACHED_SCOPE: RegionScope = {
   trackCoordinate: undefined,
   trackSink: undefined,
   trackOrdinal: 0,
-  hostSchedule: [] };
+  hostSchedule: [],
+};
 
 /** Mint a fresh open scope for one symbol invocation. parentSignal from RunContext
  *  (undefined for CONSTANT_CTX) — derived via AbortSignal.any so this scope's listener
@@ -165,7 +169,8 @@ export function openRegionScope(opts: { runCtx: RunContext; dynSite: unknown }):
     trackCoordinate: _trackCoordinate,
     trackSink: _trackSink,
     trackOrdinal: 0,
-    hostSchedule: [] };
+    hostSchedule: [],
+  };
 }
 
 /**
@@ -207,7 +212,8 @@ export async function reconstructRegionScope(opts: {
     trackSink: sink,
     // Seeded past every ordinal this coordinate already used.
     trackOrdinal: nextTrackOrdinal(records, coordinate),
-    hostSchedule: [] };
+    hostSchedule: [],
+  };
 }
 
 /** Rule 1's door (errors-as-doors: names the mechanism, then the fix). */
@@ -325,7 +331,8 @@ function mintTrackId(scope: RegionScope, coordinate: TrackCoordinate): RecordId 
   return {
     templateHash: coordinate.templateHash,
     ordinalPath: appendOrdinal(coordinate.ordinalPath, scope.trackOrdinal++),
-    regionEpoch: coordinate.regionEpoch };
+    regionEpoch: coordinate.regionEpoch,
+  };
 }
 
 /** Fires at withRegionCall's pending++. No-ops unless emission on + coordinate/sink. */
@@ -377,7 +384,8 @@ function flushHostSchedule(scope: RegionScope): void {
   const id: RecordId = {
     templateHash: coordinate.templateHash,
     ordinalPath: coordinate.ordinalPath,
-    regionEpoch: coordinate.regionEpoch };
+    regionEpoch: coordinate.regionEpoch,
+  };
   void emitHostSchedule({ store: sink.store, regionId: sink.regionId, id, triples }).catch(() => {});
 }
 

@@ -18,7 +18,8 @@ import {
   int_re,
   parsable_contants,
   pre_num_parse_re,
-  rational_re } from "./lexical-grammar.js";
+  rational_re,
+} from "./lexical-grammar.js";
 import { ACharacter } from "../values/primitives/ACharacter.js";
 import type { SchemeValue } from "../values/types.js";
 
@@ -168,13 +169,7 @@ export function parse_integer(arg: string, radix = 10, loc?: SourceLocation): AE
   if (parse.inexact) {
     return new AInexact(Number.parseInt(parse.number!, r), EMPTY_PROVENANCE, loc);
   }
-  return mintExact(
-    toSafeExactComponent(parseBigInt(parse.number!, r), arg),
-    1,
-    undefined,
-    "parse integer",
-    loc,
-  );
+  return mintExact(toSafeExactComponent(parseBigInt(parse.number!, r), arg), 1, undefined, "parse integer", loc);
 }
 
 function parse_character(arg: string, loc?: SourceLocation): ACharacter {
@@ -294,7 +289,8 @@ const BAR_SYMBOL_MNEMONICS: Record<string, string> = {
   b: "\b",
   t: "\t",
   n: "\n",
-  r: "\r" };
+  r: "\r",
+};
 
 const BAR_SYMBOL_ESCAPE_RE = /\\(?:x([0-9a-fA-F]+);|([|\\abtnr])|[ \t]*\r?\n[ \t]*)/g;
 
@@ -348,7 +344,11 @@ function splitBarSegments(token: string): { text: string; quoted: boolean }[] {
     buf += char;
   }
   if (quoted) {
-    throw new ParseError(`Parse: unterminated |...| symbol literal in ${token}`, undefined, "E-SYMBOL-BAR-UNTERMINATED");
+    throw new ParseError(
+      `Parse: unterminated |...| symbol literal in ${token}`,
+      undefined,
+      "E-SYMBOL-BAR-UNTERMINATED",
+    );
   }
   segments.push({ text: buf, quoted: false });
   return segments;
@@ -382,7 +382,8 @@ const constants: Record<string, SchemeValue> = {
   "-inf.0": negInf,
   "+nan.0": nan,
   "-nan.0": nan,
-  ...parsable_contants };
+  ...parsable_contants,
+};
 
 // ── Token → value dispatch ──
 // Constants first, then string, then the `#`-prefixed family (char), then the numeric tower;

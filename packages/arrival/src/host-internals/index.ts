@@ -44,7 +44,8 @@ export {
   type ReadEvent,
   type ReadTracker,
   type ReadGuard,
-  type WriteSetResolver } from "../run/read-guard.js";
+  type WriteSetResolver,
+} from "../run/read-guard.js";
 
 // Resource-path CQS: domain-lane temporal zoning. Ordinary runs always carry a path
 // log; `exec(src, { resourcePaths, strictCQSstrings })` injects a spy / strict mode.
@@ -125,7 +126,8 @@ export {
   type EnvPack,
   type PackContext,
   type PreludeBindTarget,
-  type RuntimeAssembler } from "../common/kernel.js";
+  type RuntimeAssembler,
+} from "../common/kernel.js";
 
 // `bindValue` — binds a name into a live `AmbientRuntime` env, `fromJS`-boxing a raw JS
 // value unless it's already a SchemeValue (or one of the small documented carve-outs).

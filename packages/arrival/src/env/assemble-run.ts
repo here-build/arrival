@@ -132,7 +132,8 @@ export async function assembleRun(opts: AssembleRunOptions): Promise<RunContext>
     display: opts.display,
     capabilityConfigurations: vocabulary.configsByCapability,
     vocabulary: vocabulary.map,
-    degraded: vocabulary.degraded });
+    degraded: vocabulary.degraded,
+  });
   vocabularyByRunCtx.set(runCtx, vocabulary);
 
   // The run's prelude-define frame exists for EVERY owned mint (even a prelude-less

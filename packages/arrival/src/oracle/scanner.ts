@@ -37,7 +37,8 @@ import type {
   OracleSession,
   OracleState,
   TokenClass,
-  TypeTag } from "./contract.js";
+  TypeTag,
+} from "./contract.js";
 import { computeValidSymbols, type OracleEnvΣ } from "./sigma.js";
 
 const OPEN = new Set(["(", "[", "{"]);
@@ -168,8 +169,7 @@ export function scan(src: string): ScanResult {
       // A child form is data (quoted) if a quote prefix precedes it, OR its parent is already
       // quoted, OR its parent's head is `quote`/`quasiquote` (its operands are data).
       const quoted =
-        quotePrefix ||
-        (parent ? parent.quoted || (parent.head !== null && QUOTE_HEADS.has(parent.head)) : false);
+        quotePrefix || (parent ? parent.quoted || (parent.head !== null && QUOTE_HEADS.has(parent.head)) : false);
       depth++;
       stack.push({ elems: 0, open: c, head: null, quoted });
       continue;
@@ -199,7 +199,7 @@ export function scan(src: string): ScanResult {
 
   let position: CursorPosition;
   if (depth === 0) position = "top";
-  else position = (top && top.elems === 0) ? "operator" : "argument";
+  else position = top && top.elems === 0 ? "operator" : "argument";
 
   const { formKind, strict } = classifyForm(stack, position, cur);
 
@@ -213,7 +213,8 @@ export function scan(src: string): ScanResult {
     strict,
     closeable: depth === 0 && !inText,
     closeSuffix: depth > 0 ? ")".repeat(depth) : "",
-    overClosed: min < 0 };
+    overClosed: min < 0,
+  };
 }
 
 /** Derive the enclosing form's kind + strictness from the open-form stack. `curToken` is the
@@ -286,12 +287,12 @@ function makeState(s: ScanResult, prefix: string, env: OracleEnvΣ | null): Orac
     closeable: s.closeable,
     closeSuffix: s.closeSuffix,
     overClosed: s.overClosed,
-    validSymbols: (): ReadonlySet<string> | null =>
-      computeValidSymbols(prefix, s.position, s.formKind, env),
+    validSymbols: (): ReadonlySet<string> | null => computeValidSymbols(prefix, s.position, s.formKind, env),
     // T — not modelled (graceful per the contract).
     expectedType: (): TypeTag | null => null,
     produces: (_id: string, _type: TypeTag): boolean => true,
-    validClasses: (): Set<TokenClass> => new Set(classes) };
+    validClasses: (): Set<TokenClass> => new Set(classes),
+  };
 }
 
 /**
@@ -354,7 +355,8 @@ export const structuralScanner: OracleScanner = {
   },
   session(prefix?: string): OracleSession {
     return new StructuralSession(prefix ?? "");
-  } };
+  },
+};
 
 /**
  * Build a Σ-LIVE scanner backed by a discovery `env`. Identical to {@link structuralScanner} for
@@ -372,5 +374,6 @@ export function makeSigmaScanner(env: OracleEnvΣ): OracleScanner {
     },
     session(prefix?: string): OracleSession {
       return new StructuralSession(prefix ?? "", env);
-    } };
+    },
+  };
 }

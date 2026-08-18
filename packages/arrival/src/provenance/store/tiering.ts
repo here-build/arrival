@@ -71,7 +71,8 @@ export class PayloadTierMachine {
       value: payload.value,
       stampIds: payload.stampIds,
       retention: payload.retention ?? "standard",
-      stubbed: false });
+      stubbed: false,
+    });
   }
 
   /** Ring → PayloadStore.put; ring drops hash. Stubbed/missing → not resident. */
@@ -111,7 +112,8 @@ export class PayloadTierMachine {
         storageTier,
         value: slot.stubbed ? undefined : slot.value,
         stampIds: slot.stampIds,
-        retention: slot.retention };
+        retention: slot.retention,
+      };
     }
     const rec = await this.store.get(hash);
     return {
@@ -119,7 +121,8 @@ export class PayloadTierMachine {
       storageTier: rec.tier,
       value: rec.value,
       stampIds: rec.stampIds,
-      retention: rec.retention };
+      retention: rec.retention,
+    };
   }
 
   /** Async pre-pass for sync TierGate; unknown hashes absent (not fabricated). */
@@ -128,8 +131,7 @@ export class PayloadTierMachine {
     for (const hash of hashes) {
       try {
         out.set(hash, await this.read(hash));
-      } catch {
-      }
+      } catch {}
     }
     return out;
   }
@@ -154,5 +156,6 @@ export function tierGateFromSnapshot(
       const hash = keyToHash(key);
       const entry = hash === undefined ? undefined : snapshot.get(hash);
       return { "provenance/tier": "stub" as const, payloadHash: hash, stampIds: entry?.stampIds ?? [] };
-    } };
+    },
+  };
 }

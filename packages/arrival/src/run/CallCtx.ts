@@ -118,8 +118,10 @@ export function makeCallCtx(
     ...(owner !== undefined
       ? {
           configuration: runCtx.capabilityConfigurations?.get(owner.capability),
-          resources: owner.readsResources ? resolveCapabilityResources(runCtx, owner.capability) : undefined }
-      : {}) };
+          resources: owner.readsResources ? resolveCapabilityResources(runCtx, owner.capability) : undefined,
+        }
+      : {}),
+  };
 }
 
 /** Fetch (produce + cache on first touch) a capability's Resources bag for `runCtx`.
@@ -132,9 +134,9 @@ function resolveCapabilityResources(runCtx: RunContext, capability: object): unk
   if (store === undefined) return undefined;
   if (!store.has(capability)) {
     const configuration = runCtx.capabilityConfigurations?.get(capability);
-    const produced = (
-      capability as { ["arrival/get-resources"](runCtx: RunContext, configuration: unknown): unknown }
-    )["arrival/get-resources"](runCtx, configuration);
+    const produced = (capability as { ["arrival/get-resources"](runCtx: RunContext, configuration: unknown): unknown })[
+      "arrival/get-resources"
+    ](runCtx, configuration);
     store.set(capability, produced);
     if (produced instanceof Promise) void produced.then((resolved) => store.set(capability, resolved));
   }

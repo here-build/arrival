@@ -75,7 +75,8 @@ export const overridableCapability = EnvCapability.define("arrival/overridable",
         {
           input: [sz.dynamic, sz.dynamic, sz.dynamic],
           output: [sz.dynamic],
-          type: "(name: symbol, type: string|list, default: any): any" },
+          type: "(name: symbol, type: string|list, default: any): any",
+        },
         function (nameSym, typeTag, defaultVal) {
           const bindingName = (nameSym as ASymbol).literal();
           const jsTag = toJS(typeTag as SchemeValue);
@@ -105,4 +106,6 @@ export const overridableCapability = EnvCapability.define("arrival/overridable",
         `(lambda (name type default)
            \`(define ,name (overridable/resolve ',name ,type ,default)))`,
         { macroAttribute: "binder" },
-      ) }) });
+      ),
+  }),
+});

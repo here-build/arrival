@@ -74,7 +74,8 @@ const DOORS = {
   "current-second": SYSTEM,
   "current-jiffy": SYSTEM,
   "jiffies-per-second": SYSTEM,
-  features: SYSTEM } as const satisfies Record<string, string>;
+  features: SYSTEM,
+} as const satisfies Record<string, string>;
 
 export const HOST_DOOR_NAMES = Object.keys(DOORS) as (keyof typeof DOORS)[];
 
@@ -82,4 +83,5 @@ export default EnvCapability.define("scheme/r7rs/host", {
   symbols: (symbol) =>
     Object.fromEntries(
       Object.entries(DOORS).map(([name, reason]) => [name, symbol.notImplemented`${name}: ${reason}`]),
-    ) });
+    ),
+});

@@ -132,10 +132,7 @@ export interface PreludeMembership {
  * top-level forms are ignored (same scope as `extract-defines.ts` — this module
  * partitions DEFINES, not general forms).
  */
-export function classifyProgramPrelude(
-  forms: readonly SchemeValue[],
-  classifier: Classifier,
-): PreludeMembership {
+export function classifyProgramPrelude(forms: readonly SchemeValue[], classifier: Classifier): PreludeMembership {
   const refsOf = new Map<string, ReadonlySet<string>>();
   const bodyOf = new Map<string, unknown>();
   for (const form of forms) {

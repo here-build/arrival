@@ -50,17 +50,8 @@ export declare function cdr<T>(p: Tuple<unknown, T>): T;
 export declare function map<T, B>(f: (x: T) => B, xs: List<T>): List<B>;
 export declare function map<T, B>(f: (x: T) => B, xs: readonly T[]): readonly B[];
 export declare function map<A, B, R>(f: (a: A, b: B) => R, as: List<A>, bs: List<B>): List<R>;
-export declare function map<A, B, R>(
-  f: (a: A, b: B) => R,
-  as: readonly A[],
-  bs: readonly B[],
-): readonly R[];
-export declare function map<A, B, C, R>(
-  f: (a: A, b: B, c: C) => R,
-  as: List<A>,
-  bs: List<B>,
-  cs: List<C>,
-): List<R>;
+export declare function map<A, B, R>(f: (a: A, b: B) => R, as: readonly A[], bs: readonly B[]): readonly R[];
+export declare function map<A, B, C, R>(f: (a: A, b: B, c: C) => R, as: List<A>, bs: List<B>, cs: List<C>): List<R>;
 export declare function map<A, B, C, R>(
   f: (a: A, b: B, c: C) => R,
   as: readonly A[],
@@ -70,41 +61,41 @@ export declare function map<A, B, C, R>(
 export declare function filter<T>(p: (x: T) => unknown, xs: List<T>): List<T>;
 export declare function filter<T>(p: (x: T) => unknown, xs: readonly T[]): readonly T[];
 /** Scheme/runtime order: (element, acc) → acc — not JS Array.reduce (acc, element). */
-export declare function reduce<T, A>(
-  f: (x: T, acc: A) => A,
-  init: NoInfer<A>,
-  xs: List<T> | readonly T[],
-): A;
+export declare function reduce<T, A>(f: (x: T, acc: A) => A, init: NoInfer<A>, xs: List<T> | readonly T[]): A;
 export declare function length(xs: List<unknown> | readonly unknown[] | string): number;
 
 // ── the slot probes (the lens's narrowing queries) ────────────────────────────
 // `NonNullable<S>` strips the empty-list null AND optional null/undefined before classifying.
 
 /** `SlotKind` is four-way (`string` is distinct here). */
-export type SlotKind<S> =
-  [NonNullable<S>] extends [Cons<unknown>] ? "list"
-  : [NonNullable<S>] extends [readonly unknown[]] ? "vector"
-  : [NonNullable<S>] extends [string] ? "string"
-  : "scalar";
+export type SlotKind<S> = [NonNullable<S>] extends [Cons<unknown>]
+  ? "list"
+  : [NonNullable<S>] extends [readonly unknown[]]
+    ? "vector"
+    : [NonNullable<S>] extends [string]
+      ? "string"
+      : "scalar";
 
 export type ElemOf<S> =
-  NonNullable<S> extends Cons<infer E> ? E
-  : NonNullable<S> extends readonly (infer E)[] ? E
-  : never;
+  NonNullable<S> extends Cons<infer E> ? E : NonNullable<S> extends readonly (infer E)[] ? E : never;
 
 /** Does a value of type `S` admit a bare word as a string (free-form string slot)? */
-export type AcceptsBareWord<S> =
-  [NonNullable<S>] extends [readonly unknown[]] ? false
-  : [NonNullable<S>] extends [Cons<unknown>] ? false
-  : [string] extends [NonNullable<S>] ? true
-  : false;
+export type AcceptsBareWord<S> = [NonNullable<S>] extends [readonly unknown[]]
+  ? false
+  : [NonNullable<S>] extends [Cons<unknown>]
+    ? false
+    : [string] extends [NonNullable<S>]
+      ? true
+      : false;
 
 /** Is the slot string-typed (a string subtype — free-form or a closed string-literal enum), not an array? */
-export type IsStringTyped<S> =
-  [NonNullable<S>] extends [readonly unknown[]] ? false
-  : [NonNullable<S>] extends [Cons<unknown>] ? false
-  : [NonNullable<S>] extends [string] ? true
-  : false;
+export type IsStringTyped<S> = [NonNullable<S>] extends [readonly unknown[]]
+  ? false
+  : [NonNullable<S>] extends [Cons<unknown>]
+    ? false
+    : [NonNullable<S>] extends [string]
+      ? true
+      : false;
 
 // ── the `s` namespace — RESERVED-WORD special forms as calls on a property bag ────
 //
@@ -141,7 +132,8 @@ export declare const s: {
 // Operates on a RESOLVED return type — head-level admissibility before args (overload-
 // aware, call-site-contextual resolution of an in-progress `(head …)`) is deferred:
 // typing the actual call in context rather than this abstraction.
-export type CouldBeList<R> =
-  [unknown] extends [R] ? true
-  : [Extract<R, Cons<unknown> | null>] extends [never] ? false
-  : true;
+export type CouldBeList<R> = [unknown] extends [R]
+  ? true
+  : [Extract<R, Cons<unknown> | null>] extends [never]
+    ? false
+    : true;

@@ -17,7 +17,8 @@ import {
   AssembleCycleError,
   AssembleLinearizationError,
   AssemblePackError,
-  AssemblePackTimeoutError } from "../errors.js";
+  AssemblePackTimeoutError,
+} from "../errors.js";
 // Shared C3 (Python MRO) core — extracted so `env/vocabulary.ts`'s EnvCapability-DAG walk
 // reuses the SAME algorithm. This module keeps throwing its OWN error types via the hooks
 // `linearizeDag` calls back into.
@@ -107,7 +108,8 @@ function linearize<E>(roots: readonly EnvPack<E>[]): { order: string[]; byName: 
     },
     onInconsistent: (owner) => {
       throw new AssembleLinearizationError(owner);
-    } });
+    },
+  });
 }
 
 /** A live-env assembler for RUNTIME pack application — the `(require/extension :name)` path
@@ -145,7 +147,8 @@ export function createRuntimeAssembler<E>(env: E): RuntimeAssembler<E> {
       onDispose: (fn) => disposers.push(fn),
       order,
       preludeScope: preludeOpts.preludeScope,
-      preludeEvalScope: preludeOpts.preludeEvalScope };
+      preludeEvalScope: preludeOpts.preludeEvalScope,
+    };
     // The async IIFE turns a SYNCHRONOUS throw in apply() into a rejection so the catch handles it
     // uniformly (a bare `pack.apply(...)` would throw before withTimeout was even called).
     const p = (async () => withTimeout(pack.apply(env, ctx), packTimeoutMs(), name))().catch((error) => {
@@ -176,5 +179,6 @@ export function createRuntimeAssembler<E>(env: E): RuntimeAssembler<E> {
           /* best-effort teardown */
         }
       }
-    } };
+    },
+  };
 }

@@ -71,7 +71,8 @@ export async function hermeticEnv(
     capabilities: basePacks,
     config,
     evalScheme: replayEvalScheme,
-    evalPrelude: replayEvalPrelude });
+    evalPrelude: replayEvalPrelude,
+  });
   const scope = LexicalScope.fresh("provenance-hermetic-replay");
   // Prelude as ordinary top-level into persistent root (header: non-discarded bindings).
   if (prelude.length > 0) {

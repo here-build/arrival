@@ -48,7 +48,8 @@ export function port<H extends object>(value: H, close: () => PromiseLike<void> 
   return Object.assign(value, {
     [Symbol.asyncDispose]: async () => {
       await close();
-    } });
+    },
+  });
 }
 
 /** The per-resource factory: a `Ref` backed by single-flight, re-acquirable state.

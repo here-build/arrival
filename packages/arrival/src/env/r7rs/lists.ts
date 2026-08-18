@@ -75,7 +75,8 @@ import {
   Spread,
   type Binding,
   type BinOp,
-  type R } from "../../emit/residual-lite.js";
+  type R,
+} from "../../emit/residual-lite.js";
 
 // Default equal? path for member/assoc: call structuralEqual directly — a bare
 // JS function is refused by call_function. User-supplied compare stays ACallable.
@@ -269,7 +270,8 @@ const consEmitRule: EmitRule<R> = {
     if (provesArray(tail)) return ArrayLit([x!, Spread(xs!)]);
     if (provesScalar(tail)) return ArrayLit([x!, xs!]);
     return Call(ctx.runtime("cons"), [x!, xs!]);
-  } };
+  },
+};
 
 // ── map — arity bridge, always sync-shaped (Law W) ──────────────────────────────────
 // Single-list → Array.prototype.map; multi-list → index-zip arrow off lists[0].length.
@@ -286,7 +288,8 @@ const mapEmitRule: EmitRule<R> = {
     const idx = freshBinding(ctx, "i");
     const rest = lists.slice(1).map((l) => Index(l, Ref(idx)));
     return Method(lists[0]!, "map", [Arrow([el, idx], Call(f!, [Ref(el), ...rest]))]);
-  } };
+  },
+};
 
 // ── apply — fold / arity bridge ─────────────────────────────────────────────────────
 // `(apply + xs)` → reduce with identity, recognized STRUCTURALLY on the already-
@@ -295,7 +298,8 @@ const mapEmitRule: EmitRule<R> = {
 // Generic `(apply f a b xs)` → `f(a, b, ...xs)` (spread, not f.apply).
 const FOLD_OPS: Readonly<Record<string, { readonly op: BinOp; readonly identity: number }>> = {
   "+": { op: "+", identity: 0 },
-  "*": { op: "*", identity: 1 } };
+  "*": { op: "*", identity: 1 },
+};
 
 const applyEmitRule: EmitRule<R> = {
   call: (args, ctx) => {
@@ -311,7 +315,8 @@ const applyEmitRule: EmitRule<R> = {
       }
     }
     return Call(f, [...args.slice(1, -1), Spread(last)]);
-  } };
+  },
+};
 
 // ── length / list-ref — same provesArray gate as cons ───────────────────────────────
 // Proven → direct `.length` / `[k]`; unknown → runtime shim (wider carrier domain).
@@ -322,13 +327,15 @@ const lengthEmitRule: EmitRule<R> = {
   call: (args, ctx) => {
     const [xs] = exactly(ctx, "length", args, 1);
     return provesArray(ctx.argFacts[0]) ? Member(xs!, "length") : Call(ctx.runtime("length"), [xs!]);
-  } };
+  },
+};
 
 const listRefEmitRule: EmitRule<R> = {
   call: (args, ctx) => {
     const [xs, k] = exactly(ctx, "list-ref", args, 2);
     return provesArray(ctx.argFacts[0]) ? Index(xs!, k!) : Call(ctx.runtime("list-ref"), [xs!, k!]);
-  } };
+  },
+};
 
 export default EnvCapability.define("scheme/lists", {
   symbols: (symbol, z) => ({
@@ -350,7 +357,8 @@ export default EnvCapability.define("scheme/lists", {
             <A, B, C, R>(f: (a: A, b: B, c: C) => R, as: readonly A[], bs: readonly B[], cs: readonly C[]): readonly R[];
           }
         `,
-        emit: mapEmitRule },
+        emit: mapEmitRule,
+      },
       (args, runCtx) => {
         const [fn, ...lists] = args;
         if (lists.length === 1) {
@@ -383,7 +391,8 @@ export default EnvCapability.define("scheme/lists", {
             <A, B>(f: (a: A, b: B) => unknown, as: List<A>, bs: List<B>): void;
             <A, B, C>(f: (a: A, b: B, c: C) => unknown, as: List<A>, bs: List<B>, cs: List<C>): void;
           }
-        ` },
+        `,
+      },
       // `this: CallCtx` threads runCtx into mapImpl (not CONSTANT_CTX).
       function (this: CallCtx, fn, ...lists) {
         const ret = mapImpl(this.runCtx, fn, lists);
@@ -405,7 +414,8 @@ export default EnvCapability.define("scheme/lists", {
             <H, T>(h: H, t: T): Tuple<H, T>;
           }
         `,
-        emit: consEmitRule },
+        emit: consEmitRule,
+      },
       function (this: CallCtx, car, cdr) {
         return withInputProvenance([car, cdr], new APair(car as SchemeValue, cdr as SchemeValue));
       },
@@ -420,7 +430,8 @@ export default EnvCapability.define("scheme/lists", {
           {
             <T>(...xs: T[]): List<T>;
           }
-        ` },
+        `,
+      },
       function (this: CallCtx, ...args: SchemeValue[]): SchemeValue {
         const result = args.reduceRight((list, item) => new APair(item, list), nil);
         return withInputProvenance(args, result);
@@ -443,7 +454,8 @@ export default EnvCapability.define("scheme/lists", {
             (xs: List<unknown> | readonly unknown[] | string): number;
           }
         `,
-        emit: lengthEmitRule },
+        emit: lengthEmitRule,
+      },
       lengthImpl,
     ),
 
@@ -462,7 +474,8 @@ export default EnvCapability.define("scheme/lists", {
             <A, R>(proc: (...args: A[]) => R, ...argsThenList: [...A[], List<A>]): R;
           }
         `,
-        emit: applyEmitRule },
+        emit: applyEmitRule,
+      },
       // listToArray doors improper/atom final arg (no non-iterable spread crash).
       function (this: CallCtx, fn: unknown, ...rest: unknown[]) {
         invariant(rest.length > 0, "apply: requires an argument list as the final argument");
@@ -481,7 +494,8 @@ export default EnvCapability.define("scheme/lists", {
           {
             <T>(k: number, fill?: T): List<T>;
           }
-        ` },
+        `,
+      },
       function (this: CallCtx, k: unknown, fill?: unknown): AListAlike {
         const count = typeof k === "number" ? k : (k as { valueOf(): number }).valueOf();
         const value: SchemeValue = fill === undefined ? schemeFalse : (fill as SchemeValue);
@@ -503,7 +517,8 @@ export default EnvCapability.define("scheme/lists", {
           {
             <T>(xs: List<T>, k: number): List<T>;
           }
-        ` },
+        `,
+      },
       function (list, k) {
         const count = k.valueOf();
         let current: SchemeValue = list;
@@ -524,7 +539,8 @@ export default EnvCapability.define("scheme/lists", {
             <T>(xs: List<T>, k: number): T;
           }
         `,
-        emit: listRefEmitRule },
+        emit: listRefEmitRule,
+      },
       function (this: CallCtx, list, k) {
         const count = k.valueOf();
         let current: SchemeValue = list;
@@ -549,7 +565,8 @@ export default EnvCapability.define("scheme/lists", {
           {
             <T>(xs: List<T>): List<T>;
           }
-        ` },
+        `,
+      },
       function (this: CallCtx, list) {
         // instanceof ANil (not === nil): Nil clones from provenance stamping must
         // not fall through to the improper-list alias branch.
@@ -576,7 +593,8 @@ export default EnvCapability.define("scheme/lists", {
           {
             <T>(obj: T, list: List<T>): List<T> | false;
           }
-        ` },
+        `,
+      },
       function (this: CallCtx, obj, list) {
         let current: unknown = list;
         requireListArg("memq", list);
@@ -597,7 +615,8 @@ export default EnvCapability.define("scheme/lists", {
           {
             <T>(obj: T, list: List<T>): List<T> | false;
           }
-        ` },
+        `,
+      },
       function (this: CallCtx, obj, list) {
         let current: unknown = list;
         // isCircularList needs a Pair — ANil short-circuits.
@@ -619,7 +638,8 @@ export default EnvCapability.define("scheme/lists", {
           {
             <K, V>(obj: K, alist: List<[K, V]>): [K, V] | false;
           }
-        ` },
+        `,
+      },
       function (this: CallCtx, obj, alist) {
         let current: unknown = alist;
         TypeError.invariant(!(alist instanceof APair && isCircularList(alist)), "assq: circular list");
@@ -646,7 +666,8 @@ export default EnvCapability.define("scheme/lists", {
           {
             <K, V>(obj: K, alist: List<[K, V]>): [K, V] | false;
           }
-        ` },
+        `,
+      },
       function (this: CallCtx, obj, alist) {
         let current: unknown = alist;
         TypeError.invariant(!(alist instanceof APair && isCircularList(alist)), "assv: circular list");
@@ -673,7 +694,8 @@ export default EnvCapability.define("scheme/lists", {
           }
         `,
         // compare is `control` (equality selector decides which sublist egresses).
-        callbackRoles: ["control"] },
+        callbackRoles: ["control"],
+      },
       function (this: CallCtx, obj, list, compare?: SchemeValue) {
         let current: unknown = list;
         requireListArg("member", list);
@@ -682,7 +704,11 @@ export default EnvCapability.define("scheme/lists", {
           const hit =
             compare === undefined
               ? structuralEqual(obj, current.car)
-              : !is_false(call_function(compare as Parameters<typeof call_function>[0], [obj, current.car], { runCtx: this.runCtx }));
+              : !is_false(
+                  call_function(compare as Parameters<typeof call_function>[0], [obj, current.car], {
+                    runCtx: this.runCtx,
+                  }),
+                );
           if (hit) return current;
           current = current.cdr;
         }
@@ -701,7 +727,8 @@ export default EnvCapability.define("scheme/lists", {
             <K, V>(obj: K, alist: List<[K, V]>, compare: (a: K, b: K) => unknown): [K, V] | false;
           }
         `,
-        callbackRoles: ["control"] },
+        callbackRoles: ["control"],
+      },
       function (this: CallCtx, obj, alist, compare?: SchemeValue) {
         let current: unknown = alist;
         TypeError.invariant(!(alist instanceof APair && isCircularList(alist)), "assoc: circular list");
@@ -713,7 +740,11 @@ export default EnvCapability.define("scheme/lists", {
             const hit =
               compare === undefined
                 ? structuralEqual(obj, pair.car)
-                : !is_false(call_function(compare as Parameters<typeof call_function>[0], [obj, pair.car], { runCtx: this.runCtx }));
+                : !is_false(
+                    call_function(compare as Parameters<typeof call_function>[0], [obj, pair.car], {
+                      runCtx: this.runCtx,
+                    }),
+                  );
             if (hit) return pair;
           }
           current = current.cdr;
@@ -731,7 +762,8 @@ export default EnvCapability.define("scheme/lists", {
             <T>(...lists: List<T>[]): List<T>;
             <T, U>(...lists: [...List<T>[], U]): List<T> | U;
           }
-        ` },
+        `,
+      },
       function (this: CallCtx, ...items: SchemeValue[]): SchemeValue {
         // Fresh list: clone every segment, then splice clones (append! is doored).
         const is_list = isProperList;
@@ -774,7 +806,8 @@ export default EnvCapability.define("scheme/lists", {
           {
             <T>(xs: List<T>): List<T>;
           }
-        ` },
+        `,
+      },
       function (this: CallCtx, arg) {
         if (arg instanceof ANil) {
           return nil;
@@ -788,4 +821,5 @@ export default EnvCapability.define("scheme/lists", {
     ),
     // `nth` (index-first, array|pair) is Clojure — scheme/polyglot-clojure, not R7RS.
     // R7RS indexed access is `list-ref` (list first).
-  }) });
+  }),
+});

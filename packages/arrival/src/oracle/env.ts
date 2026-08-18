@@ -122,8 +122,7 @@ export function makeOracleEnv(env: AmbientRuntime): OracleEnvΣ {
 export function oracleEnvFromBindings(bindings: Record<string, unknown>): OracleEnvΣ {
   const boundSymbols = (): ReadonlySet<string> => new Set(Object.keys(bindings));
 
-  const isCallable = (id: string): boolean =>
-    Object.hasOwn(bindings, id) ? isCallableValue(bindings[id]) : false;
+  const isCallable = (id: string): boolean => (Object.hasOwn(bindings, id) ? isCallableValue(bindings[id]) : false);
 
   const signatureOf: OracleEnv["signatureOf"] = (_id: string) => null;
 

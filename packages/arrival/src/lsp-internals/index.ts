@@ -51,4 +51,5 @@ export type {
   OracleSession,
   OracleState,
   TokenClass,
-  TypeTag } from "../oracle/contract.js";
+  TypeTag,
+} from "../oracle/contract.js";

@@ -20,7 +20,8 @@ import {
   type DefineSymbolDef,
   type DefineSyntaxSymbolDef,
   type RestSpec,
-  type VectorSpec } from "./_bake.js";
+  type VectorSpec,
+} from "./_bake.js";
 import { assertNoResourcePathProducers } from "../../run/resource-paths.js";
 
 /** Two overloads: Contract → procedure (ContourContract, no CrossingOnly); bare ZodType →
@@ -49,11 +50,7 @@ export function define(tpl: TemplateStringsArray, ...sub: unknown[]): DefineFact
   ): DefineSymbolDef => {
     const isConstant = contract instanceof ZodType;
     if (!isConstant) {
-      assertNoResourcePathProducers(
-        name,
-        "define",
-        contract as { queries?: unknown; effects?: unknown },
-      );
+      assertNoResourcePathProducers(name, "define", contract as { queries?: unknown; effects?: unknown });
     }
     // Constants → 0-ary-procedure convention so harvest/arity never special-case structurally;
     // only `callable` tells the bind arm which runtime shape to build.
@@ -79,7 +76,8 @@ export function define(tpl: TemplateStringsArray, ...sub: unknown[]): DefineFact
       preludeOnly: procedureContract?.preludeOnly,
       validate: opts.validate !== false,
       // Extension bag — data only; dynamic fields resolve at read time.
-      metadata: opts.metadata };
+      metadata: opts.metadata,
+    };
   };
   return impl as DefineFactory;
 }
@@ -94,5 +92,6 @@ export function defineSyntax(tpl: TemplateStringsArray, ...sub: unknown[]) {
     doc,
     body,
     // "opaque" default — under-report, never guess: unaudited macro contributes nothing to FV buckets.
-    macroAttribute: opts.macroAttribute ?? "opaque" });
+    macroAttribute: opts.macroAttribute ?? "opaque",
+  });
 }

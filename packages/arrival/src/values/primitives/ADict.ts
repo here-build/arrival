@@ -206,7 +206,8 @@ export class ADict extends AValue {
           return exit
             ? entry.then((boxed) => exit.element(boxed))
             : entry.then((boxed) => (boxed instanceof AValue ? boxed["arrival/toJS"]() : boxed));
-        } },
+        },
+      },
       exit ? { membrane: exit } : undefined,
     ) as Record<string, unknown>;
   }

@@ -30,4 +30,6 @@ export default EnvCapability.define("scheme/srfi-2", {
                  (else
                   \`(if ,claw (and-let* ,rest ,@body) #f))))))`,
         { macroAttribute: "binder" },
-      ) }) });
+      ),
+  }),
+});

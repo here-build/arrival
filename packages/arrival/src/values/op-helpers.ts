@@ -178,7 +178,8 @@ export const ORD_REL: Record<"<" | ">" | "<=" | ">=", (a: AOrd, b: AOrd) => bool
   "<": (a, b) => !lte(b, a),
   ">": (a, b) => !lte(a, b),
   "<=": (a, b) => lte(a, b),
-  ">=": (a, b) => lte(b, a) };
+  ">=": (a, b) => lte(b, a),
+};
 export function deriveOrd(sym: "<" | ">" | "<=" | ">="): (...args: unknown[]) => ABool {
   const rel = ORD_REL[sym];
   return (...args: unknown[]): ABool => {

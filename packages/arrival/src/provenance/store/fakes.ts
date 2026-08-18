@@ -21,7 +21,8 @@ import type {
   RunStore,
   StoredTemplate,
   StreamHeader,
-  TemplateStore } from "./interfaces.js";
+  TemplateStore,
+} from "./interfaces.js";
 import type { AggregationRun, ProvenanceRecord } from "./records.js";
 import type { WireframeGraph } from "../wireframe/types.js";
 
@@ -251,7 +252,8 @@ export class PayloadStoreFake implements PayloadStore {
       value: payload.value,
       stampIds: payload.stampIds,
       retention: payload.retention ?? "standard",
-      scheduled: undefined });
+      scheduled: undefined,
+    });
   }
 
   async get(hash: PayloadHash): Promise<PayloadRecord> {
@@ -261,7 +263,8 @@ export class PayloadStoreFake implements PayloadStore {
       tier: slot.tier,
       value: slot.tier === "stub" ? undefined : slot.value,
       stampIds: slot.stampIds,
-      retention: slot.retention };
+      retention: slot.retention,
+    };
   }
 
   async settle(hash: PayloadHash, outcome: "settled" | "failed"): Promise<void> {

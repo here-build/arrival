@@ -76,7 +76,8 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
       "array",
       {
         keys: () => elements.map((_, i) => String(i)),
-        read: (key) => elements[Number(key)] },
+        read: (key) => elements[Number(key)],
+      },
       exit ? { membrane: exit } : undefined,
     ) as readonly unknown[];
   }
@@ -146,7 +147,8 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     strictGate(runCtx, {
       op: "car",
       rule: "R7RS `car` requires a pair; a vector is not a pair",
-      alternative: "use `(vector-ref v 0)` for the first element, or `(vector->list v)`" });
+      alternative: "use `(vector-ref v 0)` for the first element, or `(vector->list v)`",
+    });
     return this.__vector__.length > 0 ? this.__vector__[0] : nil;
   }
 
@@ -154,7 +156,8 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     strictGate(runCtx, {
       op: "cdr",
       rule: "R7RS `cdr` requires a pair; a vector is not a pair",
-      alternative: "use vector slicing or `(vector->list v)`" });
+      alternative: "use vector slicing or `(vector->list v)`",
+    });
     // Rest AS A VECTOR SLICE — not an AJSArrayList spine. Residual: a null?-terminated
     // walk over a VECTOR LITERAL will not terminate (exhausted slice is `#()`, null? is
     // ANil-only). Bites only genuine vector literals; strict mode doors it. Honest fix:
@@ -178,7 +181,8 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     strictGate(runCtx, {
       op: "map",
       rule: "R7RS `map` operates on lists; a vector is not a list",
-      alternative: "use `vector-map` for vectors" });
+      alternative: "use `vector-map` for vectors",
+    });
     chargeHeap(runCtx, this.__vector__.length);
     const results = this.__vector__.map((v) => applyCallback(fn, [v], makeCallCtx(runCtx)));
     if (results.some(is_promise)) {
@@ -195,7 +199,8 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     strictGate(runCtx, {
       op: "filter",
       rule: "`filter` (SRFI-1) operates on lists; a vector is not a list",
-      alternative: "filter the list form: (list->vector (filter pred (vector->list v)))" });
+      alternative: "filter the list form: (list->vector (filter pred (vector->list v)))",
+    });
     chargeHeap(runCtx, this.__vector__.length);
     const out: SchemeValue[] = [];
     if (arg instanceof RegExp) {
@@ -217,7 +222,8 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     strictGate(runCtx, {
       op: "reduce",
       rule: "`reduce` (SRFI-1) operates on lists; a vector is not a list",
-      alternative: "reduce the list form via (vector->list v)" });
+      alternative: "reduce the list form via (vector->list v)",
+    });
     chargeHeap(runCtx, this.__vector__.length);
     let acc = initial;
     for (const v of this.__vector__) acc = (await applyCallback(fn, [v, acc], makeCallCtx(runCtx))) as Acc;
@@ -226,10 +232,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
 
   // Structure-preserving sort — LENGTH-PRESERVING, PROXIED stamp (must agree with APair).
   // Comparator is ACallable when supplied.
-  ["arrival/tagless-final/sort"](
-    comparator: ACallable | undefined,
-    runCtx: RunContext,
-  ): AVector {
+  ["arrival/tagless-final/sort"](comparator: ACallable | undefined, runCtx: RunContext): AVector {
     chargeHeap(runCtx, this.__vector__.length);
     const out = [...this.__vector__];
     out.sort(deriveSortCompare(comparator, runCtx));
@@ -241,7 +244,8 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     strictGate(runCtx, {
       op: "take",
       rule: "`take` (SRFI-1) operates on lists; a vector is not a list",
-      alternative: "take the list form: (list->vector (take (vector->list v) n))" });
+      alternative: "take the list form: (list->vector (take (vector->list v) n))",
+    });
     const k = Math.max(0, Math.min(n, this.__vector__.length));
     chargeHeap(runCtx, k);
     const out = this.__vector__.slice(0, k);
@@ -252,7 +256,8 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     strictGate(runCtx, {
       op: "drop",
       rule: "`drop` (SRFI-1) operates on lists; a vector is not a list",
-      alternative: "drop the list form: (list->vector (drop (vector->list v) n))" });
+      alternative: "drop the list form: (list->vector (drop (vector->list v) n))",
+    });
     const k = Math.max(0, Math.min(n, this.__vector__.length));
     const out = this.__vector__.slice(k);
     chargeHeap(runCtx, out.length);
@@ -267,7 +272,8 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     strictGate(runCtx, {
       op: "take-while",
       rule: "`take-while` (SRFI-1) operates on lists; a vector is not a list",
-      alternative: "(list->vector (take-while pred (vector->list v)))" });
+      alternative: "(list->vector (take-while pred (vector->list v)))",
+    });
     const out: SchemeValue[] = [];
     for (const v of this.__vector__) {
       const verdict = await applyCallback(pred, [v], makeCallCtx(runCtx));
@@ -285,7 +291,8 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     strictGate(runCtx, {
       op: "drop-while",
       rule: "`drop-while` (SRFI-1) operates on lists; a vector is not a list",
-      alternative: "(list->vector (drop-while pred (vector->list v)))" });
+      alternative: "(list->vector (drop-while pred (vector->list v)))",
+    });
     let i = 0;
     for (; i < this.__vector__.length; i++) {
       const verdict = await applyCallback(pred, [this.__vector__[i]], makeCallCtx(runCtx));

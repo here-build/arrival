@@ -20,7 +20,8 @@ import {
   checkedSub,
   debugCrossCheckRational,
   isNumericDebugEnabled,
-  mintExact } from "../mint-numeric.js";
+  mintExact,
+} from "../mint-numeric.js";
 
 export class AExact extends AValue {
   readonly kind = "number" as const;

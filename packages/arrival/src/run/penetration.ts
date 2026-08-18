@@ -127,7 +127,8 @@ export async function penetrateThroughCache(
       decodedArgs,
       ...(reads === undefined ? {} : { enqueuedAtReadClock: reads.log.length }),
       ...(rawArgs === undefined ? {} : { rawArgs }),
-      ...(hasPathE ? { resourcePaths: pathEffects } : {}) });
+      ...(hasPathE ? { resourcePaths: pathEffects } : {}),
+    });
     return undefined;
   }
 
@@ -143,7 +144,8 @@ export async function penetrateThroughCache(
         fired: true,
         ...(reads === undefined ? {} : { enqueuedAtReadClock: reads.log.length }),
         ...(rawArgs === undefined ? {} : { rawArgs }),
-        resourcePaths: pathEffects });
+        resourcePaths: pathEffects,
+      });
     }
     return value;
   };

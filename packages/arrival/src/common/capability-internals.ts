@@ -29,9 +29,7 @@ export const isAliasDef = (m: SymbolDeclaration): m is AliasSymbolDef =>
  *  these three `kind` tags is unambiguous — none of the minted classes' own `.kind`
  *  (`"procedure"`/`"keyword"`/ordinary scheme-value kinds) collides with
  *  `"define"`/`"define-syntax"`/`"macro"`. */
-export const isDeclarativeDef = (
-  m: SymbolDeclaration,
-): m is MacroSymbolDef | DefineSymbolDef | DefineSyntaxSymbolDef =>
+export const isDeclarativeDef = (m: SymbolDeclaration): m is MacroSymbolDef | DefineSymbolDef | DefineSyntaxSymbolDef =>
   typeof m === "object" &&
   m !== null &&
   "kind" in m &&
@@ -123,14 +121,18 @@ export const mergeDegraded = (
   const seen = new Set(a.needs.map((need) => `${need.kind}:${need.key}`));
   return {
     capability: a.capability,
-    needs: [...a.needs, ...b.needs.filter((need) => !seen.has(`${need.kind}:${need.key}`))] };
+    needs: [...a.needs, ...b.needs.filter((need) => !seen.has(`${need.kind}:${need.key}`))],
+  };
 };
 
 /** Auto-derived door's teaching reason — same "provide X to enable it" register
  *  `degradation.ts`'s `.door(name, needs, reason)` callers write by hand, minted
  *  mechanically from the declaring verb's OWN `doc`. An any-of group renders as
  *  "`fs` or `loader`" with a "one of them" pronoun. */
-export const requiresConfigReason = (missing: readonly (string | readonly string[])[], doc: string | undefined): string => {
+export const requiresConfigReason = (
+  missing: readonly (string | readonly string[])[],
+  doc: string | undefined,
+): string => {
   const keysClause = missing
     .map((entry) => (typeof entry === "string" ? `\`${entry}\`` : entry.map((key) => `\`${key}\``).join(" or ")))
     .join(", ");

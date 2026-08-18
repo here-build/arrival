@@ -29,7 +29,15 @@ import { foldcase_string } from "./foldcase.js";
 import * as specials from "./specials.js";
 import { is_nil } from "../values/value-guards.js";
 import { is_pair } from "../values/value-guards.js";
-import { is_builtin, is_bytevector_literal, is_directive, is_literal, is_special, is_symbol_extension, is_vector_literal } from "./token-guards.js";
+import {
+  is_builtin,
+  is_bytevector_literal,
+  is_directive,
+  is_literal,
+  is_special,
+  is_symbol_extension,
+  is_vector_literal,
+} from "./token-guards.js";
 import { EOF, eof } from "../values/primitives/EOF.js";
 import { ParseError, type SourceLocation, Unterminated } from "../errors.js";
 import { Lexer } from "./Lexer.js";
@@ -94,12 +102,7 @@ export class Parser {
   // match its opener (strict pairing) — `(` pairs `)`, `{` pairs `}`.
   private readonly _state!: { parentheses: number; brackets: string[]; fold_case: boolean };
 
-  constructor({
-    meta = false,
-    formatter = defaultFormatter,
-    source,
-    strict = false,
-  }: ParserOptions = {}) {
+  constructor({ meta = false, formatter = defaultFormatter, source, strict = false }: ParserOptions = {}) {
     Object.defineProperty(this, "_formatter", {
       value: formatter,
       configurable: true,
@@ -318,7 +321,7 @@ export class Parser {
     }
     let chain: unknown = tail;
     for (let i = items.length - 1; i >= 0; i--) {
-      const loc = (i === 0 ? (openLoc ?? items[i].loc) : items[i].loc);
+      const loc = i === 0 ? (openLoc ?? items[i].loc) : items[i].loc;
       const cell = new APair(items[i].node as SchemeValue, chain as SchemeValue, EMPTY_PROVENANCE, loc);
       chain = cell;
     }
@@ -400,8 +403,7 @@ export class Parser {
     // `{:a foo :b}` (odd arity, key-shaped head — not infix); §INFIX has the full
     // "operand operator operand" vs "key value key" argument.
     const head = elements[0];
-    const headLooksLikeKey =
-      suffixKeyName(head) !== null || staticDictKey(head) !== null || isUnquoteForm(head);
+    const headLooksLikeKey = suffixKeyName(head) !== null || staticDictKey(head) !== null || isUnquoteForm(head);
     if (elements.length % 2 === 1 && elements.length >= 3 && elements[1] instanceof ASymbol && !headLooksLikeKey) {
       const op = String(elements[1]);
       throw new ParseError(

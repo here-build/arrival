@@ -93,7 +93,8 @@ export function typeErrorMessage(fn: unknown, got: string, expected: unknown, po
     } else {
       expected = new Intl.ListFormat("en", {
         style: "long",
-        type: "disjunction" }).format(expected);
+        type: "disjunction",
+      }).format(expected);
     }
   }
   return `Expecting ${expected} got ${got}${postfix}`;

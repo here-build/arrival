@@ -97,7 +97,8 @@ export class Lexer {
     Object.defineProperty(this, "__input__", {
       value: input.replaceAll("\r", ""),
       configurable: true,
-      enumerable: true });
+      enumerable: true,
+    });
     const internals: LexerInternals = {
       _i: 0,
       _whitespace: whitespace,
@@ -107,7 +108,8 @@ export class Lexer {
       _state: null,
       _next: null,
       _token: null,
-      _prev_char: "" };
+      _prev_char: "",
+    };
     for (const name of Object.keys(internals) as (keyof LexerInternals)[]) {
       Object.defineProperty(this, name, {
         configurable: false,
@@ -117,7 +119,8 @@ export class Lexer {
         },
         set(value: LexerInternals[typeof name]) {
           (internals[name] as LexerInternals[typeof name]) = value;
-        } });
+        },
+      });
     }
   }
 
@@ -257,7 +260,8 @@ export class Lexer {
         token: this._token,
         col: this._col,
         offset: this._i,
-        line };
+        line,
+      };
     }
     return this._token;
   }
@@ -270,7 +274,8 @@ export class Lexer {
       Object.defineProperty(this, "__token__", {
         value: this.token(true),
         configurable: true,
-        enumerable: true });
+        enumerable: true,
+      });
       return this.token(meta);
     }
     const found = this.next_token();
@@ -283,7 +288,8 @@ export class Lexer {
       Object.defineProperty(this, "__token__", {
         value: this.token(true),
         configurable: true,
-        enumerable: true });
+        enumerable: true,
+      });
       return this.token(meta);
     }
     return eof;

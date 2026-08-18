@@ -89,10 +89,7 @@ export class EvalError extends Error {
    *  readings. `code` routes, `hint` teaches. */
   hint?: string | string[];
 
-  constructor(
-    message: string,
-    options?: { location?: SourceLocation; code?: unknown; hint?: string | string[] },
-  ) {
+  constructor(message: string, options?: { location?: SourceLocation; code?: unknown; hint?: string | string[] }) {
     const loc = options?.location;
     super(loc ? `${message} at ${formatLocation(loc)}` : message);
     this.name = "EvalError";
@@ -342,11 +339,11 @@ export class ContractSlotKindError extends ArrivalError {
     super(
       kind === "rosetta"
         ? `${op}: z.${slotName} is not legal in a rosetta contract's ${side} — rosetta crosses the ` +
-          `membrane, so this slot needs a real codec, z.procedure (callables), or z.dynamic ` +
-          `(genuinely-runtime-shaped data)`
+            `membrane, so this slot needs a real codec, z.procedure (callables), or z.dynamic ` +
+            `(genuinely-runtime-shaped data)`
         : `${op}: z.${slotName} is not legal in a ${kind} contract's ${side} — this contour never ` +
-          `crosses the membrane, so z.schemeValue (the honest top type) or a real codec is always ` +
-          `the honest choice`,
+            `crosses the membrane, so z.schemeValue (the honest top type) or a real codec is always ` +
+            `the honest choice`,
     );
   }
 }
@@ -658,12 +655,12 @@ export class RawCrossingError extends ArrivalError {
     super(
       site === "storage"
         ? `\`${variable}\` resolved to a raw JS ${jsType} in ${where} — a writer bypassed the ` +
-          `storage membrane. AmbientRuntime storage is inside the membrane: values enter the interpreter ` +
-          `only as capabilities (EnvCapability symbols/resolvers) or overrides (exec's \`override\`), ` +
-          `each boxing at its own boundary (jsToScheme/fromJS). Fix the writer, not this read.`
+            `storage membrane. AmbientRuntime storage is inside the membrane: values enter the interpreter ` +
+            `only as capabilities (EnvCapability symbols/resolvers) or overrides (exec's \`override\`), ` +
+            `each boxing at its own boundary (jsToScheme/fromJS). Fix the writer, not this read.`
         : `resolver "${where}" answered \`${variable}\` with a raw JS ${jsType} — a resolver ` +
-          `boxes at its own boundary (jsToScheme under the read's ctx; a \`pure\` resolver mints ` +
-          `run-neutrally, since its hits are memoized across runs). Raw JS never enters resolution.`,
+            `boxes at its own boundary (jsToScheme under the read's ctx; a \`pure\` resolver mints ` +
+            `run-neutrally, since its hits are memoized across runs). Raw JS never enters resolution.`,
     );
   }
 }
@@ -748,8 +745,8 @@ export class NoLensError extends ArrivalError {
     super(
       kind === "unique-symbol"
         ? "jsToScheme: no lens for a unique JS symbol — it has no portable Scheme representation " +
-          "and no identity a Scheme program could reconstruct across a crossing. Register it " +
-          "(`Symbol.for(name)`) to cross as a `:keyword`, or pass a string/keyword directly instead."
+            "and no identity a Scheme program could reconstruct across a crossing. Register it " +
+            "(`Symbol.for(name)`) to cross as a `:keyword`, or pass a string/keyword directly instead."
         : kind === "bigint"
           ? "jsToScheme: no lens for a host bigint — arrival's exact numbers are safe-integer ratios, " +
             "not unbounded integers. Convert with Number/bigintToNumber in the safe range (or pass an " +
@@ -771,15 +768,13 @@ export class RedundantCrossingError extends ArrivalError {
   public readonly name = "RedundantCrossingError";
   readonly "arrival/error-category": ErrorClass = "other";
 
-  constructor(
-    public readonly direction: "fromJS" | "toJS",
-  ) {
+  constructor(public readonly direction: "fromJS" | "toJS") {
     super(
       direction === "fromJS"
         ? "fromJS: received an already-boxed scheme value — fromJS is the JS→Scheme membrane " +
-          "entry; an interpreter-minted value never crosses it. Use the value directly."
+            "entry; an interpreter-minted value never crosses it. Use the value directly."
         : "toJS: received a non-scheme value — toJS is the Scheme→JS membrane exit; a raw JS " +
-          "value is already JS. Pass it through directly.",
+            "value is already JS. Pass it through directly.",
     );
   }
 }
@@ -891,9 +886,9 @@ export class NotCallableError extends ArrivalError {
     super(
       kind === "quoted-string"
         ? `"${content}" is a string, not a function — a quoted name is data, it is never called. ` +
-          `Drop the quotes and call the symbol directly: (${content} …).`
+            `Drop the quotes and call the symbol directly: (${content} …).`
         : `Not callable: a ${typeName} sits in operator/call-head position, and a ${typeName} is not a function` +
-          ` — common cause: extra parentheses — ((f x)) calls f's RESULT, not f; write (f x).`,
+            ` — common cause: extra parentheses — ((f x)) calls f's RESULT, not f; write (f x).`,
     );
   }
 }
@@ -972,10 +967,10 @@ export class OutputContractError extends ArrivalError {
     super(
       got === "no-forms"
         ? `exec output contract: expected ${expected}, got NO forms at all — an empty program has no ` +
-          "last result to validate; drop the `output` option or run a real form"
+            "last result to validate; drop the `output` option or run a real form"
         : `exec output contract: expected ${expected}, got ${got} — ${issues} — the program's last form ` +
-          "must satisfy the declared `output` schema at the exit boundary (the outbound twin of " +
-          "define/overridable's validation)",
+            "must satisfy the declared `output` schema at the exit boundary (the outbound twin of " +
+            "define/overridable's validation)",
     );
   }
 }
@@ -996,9 +991,9 @@ export class KeywordPairingError extends ArrivalError {
     super(
       kind === "dangling-keyword"
         ? "kwargs call has a dangling keyword with no value — expected interleaved `:key value` " +
-          `pairs, got ${argCount} arg(s)`
+            `pairs, got ${argCount} arg(s)`
         : "inputRest requires `input` to be a fixed positional tuple (e.g. [z.string]) — a single " +
-          "schema `input` has no well-defined prefix length to split the rest at",
+            "schema `input` has no well-defined prefix length to split the rest at",
     );
   }
 }
@@ -1059,12 +1054,12 @@ export class AliasTargetError extends ArrivalError {
     super(
       kind === "missing-target"
         ? `capability "${capabilityName}": symbol.alias\`${targetName}\` (bound as "${aliasName}") has no ` +
-          `target — "${targetName}" is not declared in this capability's own \`symbols\` record. An ` +
-          `alias can only dissolve to a SIBLING symbol declared in the SAME capability; declare ` +
-          `"${targetName}" first, or fix the alias's target name.`
+            `target — "${targetName}" is not declared in this capability's own \`symbols\` record. An ` +
+            `alias can only dissolve to a SIBLING symbol declared in the SAME capability; declare ` +
+            `"${targetName}" first, or fix the alias's target name.`
         : `capability "${capabilityName}": symbol.alias\`${targetName}\` (bound as "${aliasName}") targets ` +
-          `another alias ("${targetName}") — alias chains are not supported; alias directly to the ` +
-          `real symbol.`,
+            `another alias ("${targetName}") — alias chains are not supported; alias directly to the ` +
+            `real symbol.`,
     );
   }
 }
@@ -1355,15 +1350,15 @@ export class TypeTagError extends ArrivalError {
     super(
       kind === "unrecognized-tag"
         ? `define/overridable ${bindingName}: unrecognized type tag ${expectedOrReason} — expected an s/* ` +
-          `expression: (s/string)/(s/number)/(s/integer)/(s/boolean), (s/enum value...), ` +
-          `(s/object (s/field ...)...) or (s/array tag) (see @inhuman.tools/arrival/capabilities/schema), optionally ` +
-          `wrapped in (s/optional ...)`
+            `expression: (s/string)/(s/number)/(s/integer)/(s/boolean), (s/enum value...), ` +
+            `(s/object (s/field ...)...) or (s/array tag) (see @inhuman.tools/arrival/capabilities/schema), optionally ` +
+            `wrapped in (s/optional ...)`
         : `define/overridable ${bindingName}: expected ${expectedOrReason}, got ${got} (from ${source}) — ` +
-          `${
-            source === "an environment override"
-              ? "the environment that supplied this value should validate at its own boundary too"
-              : "a default must satisfy its own declared type — that's the plain-define-plus-validation floor"
-          }`,
+            `${
+              source === "an environment override"
+                ? "the environment that supplied this value should validate at its own boundary too"
+                : "a default must satisfy its own declared type — that's the plain-define-plus-validation floor"
+            }`,
     );
   }
 }
@@ -1392,9 +1387,9 @@ export class CarrierMismatchError extends ArrivalError {
     super(
       alternative
         ? `${verb}: every argument but the last must be a proper list, got a ${carrier} — use ` +
-          `\`${alternative}\` to concatenate ${carrier}s`
+            `\`${alternative}\` to concatenate ${carrier}s`
         : `${verb}: every argument but the last must be a proper list, got a ${carrier} — ${verb} only ` +
-          `splices list spines, not this carrier`,
+            `splices list spines, not this carrier`,
     );
   }
 }
@@ -1426,11 +1421,7 @@ export function attachOffendingValue<E>(error: E, value: unknown): E {
 
 export function offendingValueOf(error: unknown): unknown | undefined {
   let node: unknown = error;
-  for (
-    let depth = 0;
-    depth < OFFENDING_VALUE_MAX_CAUSE_DEPTH && typeof node === "object" && node !== null;
-    depth++
-  ) {
+  for (let depth = 0; depth < OFFENDING_VALUE_MAX_CAUSE_DEPTH && typeof node === "object" && node !== null; depth++) {
     const value = (node as Record<symbol, unknown>)[OFFENDING_VALUE];
     if (value !== undefined) return value;
     node = (node as { cause?: unknown }).cause;

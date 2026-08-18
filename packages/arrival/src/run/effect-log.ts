@@ -87,7 +87,8 @@ export class MemoryEffectLog implements EffectLog {
       ...(entry.rawArgs === undefined ? {} : { rawArgs: entry.rawArgs }),
       ...(entry.resourcePaths === undefined || entry.resourcePaths.length === 0
         ? {}
-        : { resourcePaths: entry.resourcePaths.map((p) => Object.freeze([...p]) as ResourcePath) }) });
+        : { resourcePaths: entry.resourcePaths.map((p) => Object.freeze([...p]) as ResourcePath) }),
+    });
   }
 }
 

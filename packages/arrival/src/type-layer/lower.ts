@@ -46,8 +46,7 @@ const isWord = (n: Node | undefined): n is AtomNode => isAtom(n) && n.str !== tr
 /** The bare `#` lexeme — the parser splits `#(…)` into `#` + the following list. */
 const isVectorMark = (n: Node | undefined): boolean => isWord(n) && n.atom === "#";
 /** A `:keyword` atom (dict key / field-access head); `:` alone is not a keyword. */
-const isKeyword = (n: Node | undefined): n is AtomNode =>
-  isWord(n) && n.atom.startsWith(":") && n.atom.length > 1;
+const isKeyword = (n: Node | undefined): n is AtomNode => isWord(n) && n.atom.startsWith(":") && n.atom.length > 1;
 const keywordName = (n: AtomNode): string => n.atom.slice(1);
 
 const propKey = (k: string): string => (IDENT.test(k) ? k : JSON.stringify(k));

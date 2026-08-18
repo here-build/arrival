@@ -83,7 +83,8 @@ const headName = (node: APair<SchemeValue, SchemeValue> | undefined): string | u
 /** Stringify a rejection for the snapshot. An `Error` is its message; anything else its
  *  `String(…)`; nullish → undefined. A string is structured-clone-safe (the live `error:
  *  unknown` / `Error` would lose its prototype across `postMessage`). */
-const errText = (e: unknown): string | undefined => (e instanceof Error ? e.message : e == null ? undefined : String(e));
+const errText = (e: unknown): string | undefined =>
+  e instanceof Error ? e.message : e == null ? undefined : String(e);
 
 /** Shared empty set for invocations whose provenance the build never reads. */
 const NO_PROVENANCE: ReadonlySet<number> = new Set();
@@ -125,17 +126,19 @@ export function snapshotTrace(trace: EvalTrace): PlainTrace {
         // AValue (the wrapper `jsToScheme`'d it on the way back). `toJS` peels that
         // envelope to plain JS so the render shows the string, not
         // `{ provenance, kind, __string__ }`.
-        value: isPoint || isRoot || isBranchChild
-          ? inv.value === undefined
-            ? undefined
-            : toJS(inv.value as SchemeValue)
-          : undefined,
+        value:
+          isPoint || isRoot || isBranchChild
+            ? inv.value === undefined
+              ? undefined
+              : toJS(inv.value as SchemeValue)
+            : undefined,
         metadata: isPoint ? inv.metadata : undefined,
         state: inv.state,
         // Rejection detail + cache flag — points only (the leaves the render draws), gated
         // exactly like `value`/`metadata`. Both are clone-safe primitives (string/boolean).
         error: isPoint && inv.state === "rejected" ? errText(inv.error) : undefined,
-        cached: isPoint ? inv.cached : undefined };
+        cached: isPoint ? inv.cached : undefined,
+      };
       byId.set(inv.id, plain);
       invocations.push(plain);
     }

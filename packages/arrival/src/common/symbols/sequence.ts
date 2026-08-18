@@ -4,7 +4,17 @@
 import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
 import { type SchemeValue } from "../../values/types.js";
 import { CallCtx } from "../../run/CallCtx.js";
-import { assertContractAxes, type ContourContract, DecodedArgs, normalizeVector, parseNameDoc, type MetadataRecord, type SequenceImpl, type SequenceSymbolDef, type VectorSpec } from "./_bake.js";
+import {
+  assertContractAxes,
+  type ContourContract,
+  DecodedArgs,
+  normalizeVector,
+  parseNameDoc,
+  type MetadataRecord,
+  type SequenceImpl,
+  type SequenceSymbolDef,
+  type VectorSpec,
+} from "./_bake.js";
 import { assertNoResourcePathProducers } from "../../run/resource-paths.js";
 
 /** Ctx-aware host op. Slot bans on ContourContract (`_bake.ts` §1.7). */
@@ -48,10 +58,12 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
         emit: contract.emit,
         narrows: contract.narrows,
         refPolicy: contract.refPolicy,
-        metadata: opts.metadata } satisfies SequenceSymbolDef,
+        metadata: opts.metadata,
+      } satisfies SequenceSymbolDef,
       impl: (args, callCtx) => run.apply(callCtx, args) as Promise<SchemeValue>,
       provenanceRole: provenance,
       cacheClass,
-      callbackRoles });
+      callbackRoles,
+    });
   };
 }

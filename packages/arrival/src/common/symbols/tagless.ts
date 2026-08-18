@@ -49,7 +49,9 @@ export function tagless(tpl: TemplateStringsArray, ...sub: unknown[]): ANativePr
       in: z.array(z.schemeValue),
       out: z.schemeValue,
       run,
-      provenance: "pipe" } satisfies TaglessSymbolDef,
+      provenance: "pipe",
+    } satisfies TaglessSymbolDef,
     impl: (args, callCtx) => run.apply(callCtx, args) as Promise<SchemeValue>,
-    provenanceRole: "pipe" });
+    provenanceRole: "pipe",
+  });
 }

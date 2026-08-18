@@ -100,7 +100,8 @@ import {
   R7RSError,
   ResolvedNonValueError,
   SpecialFormShapeError,
-  type SourceLocation } from "../errors.js";
+  type SourceLocation,
+} from "../errors.js";
 import { is_false } from "../values/value-guards.js";
 import { is_callable, is_expandable, is_macro, is_promise } from "./guards.js";
 import { is_applyable, is_lambda } from "../values/value-guards.js";
@@ -111,7 +112,8 @@ import {
   currentDynamicCallSite,
   setDynamicCallSite,
   withDynamicCallSite,
-  type Invocation } from "./dynamic-call-site.js";
+  type Invocation,
+} from "./dynamic-call-site.js";
 // Retrospective-stream emission hook (flag-gated OFF by default) —
 // see provenance-hooks.ts for the port-site rationale.
 import { notePotentialRosettaExit } from "./provenance-hooks.js";
@@ -311,7 +313,8 @@ function wrapLambdaValue(lambda: ALambda, dynSite: Invocation | undefined): ALam
     arity: lambda.arity,
     scope: lambda.scope,
     runner: (values, callCtx, canBounce) =>
-      withDynamicCallSite(dynSite, () => lambda[tf("apply")](values, callCtx, canBounce)) });
+      withDynamicCallSite(dynSite, () => lambda[tf("apply")](values, callCtx, canBounce)),
+  });
   wrapped.__name__ = lambda.__name__;
   wrapped.__params__ = lambda.__params__;
   return wrapped;
@@ -714,7 +717,8 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
           onReject: composedReject,
           // Replacement is itself pass-through — a tail call from INSIDE the
           // new body continues to collapse correctly.
-          tail: true };
+          tail: true,
+        };
         stack.push(replacement.call);
         frameStack.push(replacement.frame);
         callStack.push(replacement);
@@ -960,15 +964,18 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
       const keyForm = processed[i];
       const name = foldSubstitutedDictKey(keyForm);
       if (seen.has(name)) {
-        throw new EvalError(`duplicate dict literal key :${name} after quasiquote substitution — each key may appear once`, {
-          code: "E-DICT-DUP-KEY" });
+        throw new EvalError(
+          `duplicate dict literal key :${name} after quasiquote substitution — each key may appear once`,
+          {
+            code: "E-DICT-DUP-KEY",
+          },
+        );
       }
       seen.add(name);
       // foldSubstitutedDictKey only accepts AString/ASymbol/plain-string (else throws
       // E-DICT-BAD-KEY above) — a bare string form is wrapped so the stored key is
       // always a real DictKey object, keeping whatever provenance it already has.
-      const key: DictKey =
-        keyForm instanceof ASymbol || keyForm instanceof AString ? keyForm : new AString(name);
+      const key: DictKey = keyForm instanceof ASymbol || keyForm instanceof AString ? keyForm : new AString(name);
       pairs.push([key, processed[i + 1]]);
     }
     return new ADict(pairs);
@@ -1031,9 +1038,7 @@ function* processQuasiquote(expr: SchemeValue, ctx: EvalContext, level: number):
     SpecialFormShapeError.invariant(level > 1, "unquote-splicing", "invalid context");
     SpecialFormShapeError.invariant(expr.cdr instanceof APair, "unquote-splicing", "missing argument");
     const processed = yield { call: processQuasiquote(expr.cdr.car, ctx, level - 1) };
-    return new APair(new ASymbol("unquote-splicing"),
-      new APair(processed, nil),
-    );
+    return new APair(new ASymbol("unquote-splicing"), new APair(processed, nil));
   }
 
   if (first instanceof ASymbol && symbol_name(first) === "quasiquote") {
@@ -1208,7 +1213,8 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       // Run axis (call-time). Everything else on ctx stays def-time.
       runCtx: callCtx.runCtx,
       strict: callCtx.runCtx.strict,
-      signal: callCtx.runCtx.signal };
+      signal: callCtx.runCtx.signal,
+    };
     if (canBounce) return makeBounce(evalBegin(body, bodyCtx));
     return run(evalBegin(body, bodyCtx), { signal: callCtx.runCtx.signal });
   };
@@ -1227,7 +1233,8 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     name: "lambda",
     arity: { min: params.length, max: hasRest ? null : params.length },
     scope: closureResolver,
-    runner });
+    runner,
+  });
   lambda.__params__ = params;
   return lambda;
 }
@@ -1280,7 +1287,8 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     // Forward signal so macro expansion is also budget-bounded. `signal` rides the
     // index signature on TransformerArgs (the evaluator threads it on the ctx bag).
     return run(evalBegin(body, { ...evalArgs, resolver: macroResolver }), {
-      signal: evalArgs.signal as AbortSignal | undefined });
+      signal: evalArgs.signal as AbortSignal | undefined,
+    });
   });
   bindValue(ctxResolver(ctx).env, name, macro);
 
@@ -1530,12 +1538,14 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
         // lexical `letResolver` stays def-time.
         runCtx: callCtx.runCtx,
         strict: callCtx.runCtx.strict,
-        signal: callCtx.runCtx.signal };
+        signal: callCtx.runCtx.signal,
+      };
       if (canBounce) {
         return makeBounce(evalBegin(body, bodyCtx));
       }
       return run(evalBegin(body, bodyCtx), {
-        signal: callCtx.runCtx.signal });
+        signal: callCtx.runCtx.signal,
+      });
     };
 
     // letrec shape (R7RS's own definition of named let: `(letrec ((name (lambda
@@ -1549,7 +1559,8 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       name: symbol_name(name),
       arity: { min: params.length, max: params.length },
       scope: letResolver,
-      runner });
+      runner,
+    });
     loopLambda.__name__ = symbol_name(name);
     loopLambda.__params__ = params.map((p) => symbol_name(p));
 
@@ -1891,7 +1902,8 @@ function* evalCond(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
           return yield {
             call: applyArrowProc(proc, testResult, ctx),
             tail: ctx.tail === true,
-            onResolve: controlFlowResolve(testResult) };
+            onResolve: controlFlowResolve(testResult),
+          };
         }
       }
 
@@ -1938,7 +1950,8 @@ function* evalCase(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
         return yield {
           call: applyArrowProc(arrowProc, key, ctx),
           tail: ctx.tail === true,
-          onResolve: controlFlowResolve(key) };
+          onResolve: controlFlowResolve(key),
+        };
       }
       return yield { call: evalBegin(exprs, ctx), tail: ctx.tail === true };
     }
@@ -1970,7 +1983,8 @@ function* evalCase(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
         return yield {
           call: applyArrowProc(arrowProc, key, ctx),
           tail: ctx.tail === true,
-          onResolve: controlFlowResolve(key) };
+          onResolve: controlFlowResolve(key),
+        };
       }
       // Per spec §5.3 the case key plays the predicate role — its lineage picked this
       // arm; provenance rides as onResolve (preamble CONTROL-FLOW PROVENANCE).
@@ -2217,7 +2231,11 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     clauseNode = clauseNode.cdr;
   }
 
-  SpecialFormShapeError.invariant(catchClause !== null || finallyClause !== null, "try", "requires catch or finally clause");
+  SpecialFormShapeError.invariant(
+    catchClause !== null || finallyClause !== null,
+    "try",
+    "requires catch or finally clause",
+  );
 
   // Each clause runs in its OWN fresh `run()` (nested trampoline) so the outer
   // try/catch can intercept thrown errors. `tail` is stripped so body/handlers sit
@@ -2286,7 +2304,8 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
         // Forward signal: a catch handler running an unbounded computation
         // (e.g. a recovery loop) must respect the same budget.
         result = await run(evalBegin(handlers, { ...ctx, resolver: catchResolver, tail: false }), {
-          signal: ctx.signal });
+          signal: ctx.signal,
+        });
         caughtError = null;
       } catch (error) {
         caughtError = error instanceof Error ? error : new Error(String(error));
@@ -2339,8 +2358,12 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 function foldSubstitutedDictKey(v: SchemeValue): string {
   if (v instanceof AString || v instanceof ASymbol) return foldKeyName(v);
   if (typeof v === "string") return v;
-  throw new EvalError(`dict literal key substituted a non-string value (${String(v)}) — keys must be :keywords or "strings"`, {
-    code: "E-DICT-BAD-KEY" });
+  throw new EvalError(
+    `dict literal key substituted a non-string value (${String(v)}) — keys must be :keywords or "strings"`,
+    {
+      code: "E-DICT-BAD-KEY",
+    },
+  );
 }
 
 // ============================================================================
@@ -2451,7 +2474,8 @@ export function* evaluate(
       onReject: (error) => {
         tap.exit(inv, { error });
         return undefined;
-      } };
+      },
+    };
   }
 
   return yield* evaluatePair(code, ctx);
@@ -2513,7 +2537,8 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
   const frame: StackFrame = {
     code,
     env_name: String(ctxResolver(ctx).env.__name__),
-    procedure: first instanceof ASymbol ? symbol_name(first) : undefined };
+    procedure: first instanceof ASymbol ? symbol_name(first) : undefined,
+  };
 
   // Head and args evaluate NON-tail; only the final fn.apply is tail (preamble TAIL
   // PROPAGATION). The parent's tail flag passes into the special handler, which threads
@@ -2533,7 +2558,8 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
   // the resolved AKernelKeyword. `symbol_name` stays only the fallback key (shadowing).
   if (first instanceof ASymbol) {
     const resolved = ctxResolver(ctx).lookup(first.__name__, ctx.runCtx);
-    const handler = resolved instanceof AKernelKeyword ? SPECIAL_FORMS[resolved.name] : SPECIAL_FORMS[symbol_name(first)];
+    const handler =
+      resolved instanceof AKernelKeyword ? SPECIAL_FORMS[resolved.name] : SPECIAL_FORMS[symbol_name(first)];
     if (handler) {
       // Pass-through dispatch — the special form's result IS this Pair's result; tail so a
       // tail call from its terminal expression collapses this frame too.
@@ -2588,7 +2614,8 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
       env: useResolver.env,
       // Use-site resolver; hygiene consults the def-time Resolver a Syntax captures.
       resolver: useResolver,
-      runCtx: ctx.runCtx };
+      runCtx: ctx.runCtx,
+    };
 
     // TF_EXPAND reconciles both transformer shapes into `{ expr, scope? }`:
     // Syntax supplies hygiene scope (matches FULL code); define-macro fexpr omits

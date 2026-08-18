@@ -144,13 +144,15 @@ function membraneSlot(cache: WeakMap<AValue, Map<EgressMode, object>>, box: AVal
         cache.set(box, byMode);
       }
       byMode.set(mode, proxy);
-    } };
+    },
+  };
 }
 
 function boxSlot(cache: WeakMap<AValue, object>, box: AValue): ProxySlot {
   return {
     get: () => cache.get(box),
-    set: (proxy) => cache.set(box, proxy) };
+    set: (proxy) => cache.set(box, proxy),
+  };
 }
 
 function gatedSlot(gate: TierGate, box: AValue): ProxySlot {
@@ -198,9 +200,7 @@ export function egressContainerProxy(
     if (typeof key !== "string" || !nameSet.has(key)) return;
     if (Object.prototype.hasOwnProperty.call(target, key)) return;
     target[key] =
-      gate === undefined || gate.allows(key)
-        ? materializeElement(reader.read(key), membrane)
-        : gate.stubbedValue(key);
+      gate === undefined || gate.allows(key) ? materializeElement(reader.read(key), membrane) : gate.stubbedValue(key);
   };
 
   const proxy = new Proxy(target, {
@@ -233,7 +233,8 @@ export function egressContainerProxy(
     },
     setPrototypeOf() {
       writeDoor("mutate", undefined);
-    } });
+    },
+  });
 
   // Register BEFORE returning — traps only fire on reads after return, so a cyclic
   // reach-back during later materialization finds this slot already occupied.

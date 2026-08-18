@@ -50,7 +50,8 @@ import type {
   WireFrameEntry,
   WireframeGraph,
   WireframeNode,
-  WireframeProgram } from "./types.js";
+  WireframeProgram,
+} from "./types.js";
 
 /** Structural-fact surface ops → one term `length` (not per-spelling tags). */
 const FACT_VERBS: ReadonlySet<string> = new Set(["length", "vector-length", "string-length"]);
@@ -181,7 +182,8 @@ class GraphBuilder {
       cuts: this.cuts,
       preludeNames: this.bctx.preludeNames,
       materialNames: this.bctx.materialNames,
-      isBaseName: this.bctx.isBaseName });
+      isBaseName: this.bctx.isBaseName,
+    });
     const fact = this.factTagOf(expr, env);
     this.wires.push({ ...emitted, consumer, ...(fact !== undefined ? { fact } : {}) });
   }
@@ -385,7 +387,11 @@ class GraphBuilder {
   }
 
   /** Let-family transparent to designation; named let → binder with interior. */
-  private walkLet(expr: APair<SchemeValue, SchemeValue>, kind: "let" | "let*" | "letrec" | "letrec*", env: WalkEnv): void {
+  private walkLet(
+    expr: APair<SchemeValue, SchemeValue>,
+    kind: "let" | "let*" | "letrec" | "letrec*",
+    env: WalkEnv,
+  ): void {
     const rest = expr.cdr;
     if (!(rest instanceof APair)) return;
     if (rest.car instanceof ASymbol) {
@@ -491,7 +497,8 @@ class GraphBuilder {
       ...(template !== undefined ? { template } : {}),
       ...(elementParams !== undefined ? { elementParams } : {}),
       ...(fnOp !== undefined ? { fnOp } : {}),
-      ...(roles !== undefined ? { callbackRoles: roles } : {}) });
+      ...(roles !== undefined ? { callbackRoles: roles } : {}),
+    });
     args.slice(1).forEach((a, i) => this.emitWire(a, { node: id, slot: i === 0 ? "source" : `source${i}` }, env));
     return id;
   }
@@ -525,7 +532,8 @@ class GraphBuilder {
       span: scopeId(expr),
       cycles: true,
       params,
-      interior: interior.finish() });
+      interior: interior.finish(),
+    });
     entries.forEach((e, i) => this.emitWire(e.rhs, { node: id, slot: `arg${i}` }, env));
     return id;
   }
@@ -562,7 +570,8 @@ class GraphBuilder {
       interior.cuts.set(recurSentinel, recurId);
       const resultFrame: WireFrame = {
         kind: "let",
-        entries: bindings.map((b): WireFrameEntry => ({ name: b.name, rhs: recurSentinel })) };
+        entries: bindings.map((b): WireFrameEntry => ({ name: b.name, rhs: recurSentinel })),
+      };
       const resultEnv: WalkEnv = { subst: intSubst, frames: [resultFrame] };
       for (const dropped of clause.resultForms.slice(0, -1)) interior.walkDropped(dropped, resultEnv);
       interior.emitEgress(clause.resultForms[clause.resultForms.length - 1], resultEnv);
@@ -574,7 +583,8 @@ class GraphBuilder {
       span: scopeId(expr),
       cycles: true,
       params,
-      interior: interior.finish() });
+      interior: interior.finish(),
+    });
     bindings.forEach((b, i) => this.emitWire(b.init, { node: id, slot: `arg${i}` }, env));
     return id;
   }
@@ -610,11 +620,13 @@ export function buildWireframe(forms: readonly SchemeValue[], opts: WireframeBui
   const bctx: BuildCtx = {
     classifier: opts.classifier,
     reachClassifier: {
-      roleOf: (op) => (membership.wireframe.has(op) ? "opaque" : opts.classifier.roleOf(op)) },
+      roleOf: (op) => (membership.wireframe.has(op) ? "opaque" : opts.classifier.roleOf(op)),
+    },
     preludeNames: membership.pure,
     materialNames: membership.wireframe,
     isBaseName: opts.isBaseName,
-    ...(opts.callbackRolesOf !== undefined ? { callbackRolesOf: opts.callbackRolesOf } : {}) };
+    ...(opts.callbackRolesOf !== undefined ? { callbackRolesOf: opts.callbackRolesOf } : {}),
+  };
 
   const templates = new Map<string, DefineTemplate>();
   for (const form of forms) {
@@ -641,5 +653,6 @@ export function buildWireframe(forms: readonly SchemeValue[], opts: WireframeBui
     prelude: { names: membership.pure, source: preludeSource },
     membership,
     templates,
-    main: main.finish() };
+    main: main.finish(),
+  };
 }

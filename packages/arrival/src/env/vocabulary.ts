@@ -40,14 +40,12 @@ import {
   requiresConfigNeeds,
   requiresConfigReason,
   collectRequiresConfigDegraded,
-  mergeDegraded } from "../common/capability-internals.js";
+  mergeDegraded,
+} from "../common/capability-internals.js";
 import { buildDegradationInfo, collectDegraded, type DegradedCapability } from "../common/degradation.js";
 import { bindCapabilityDefines } from "../common/symbols/define-bake.js";
 import type { AEntity } from "../symbol/index.js";
-import type {
-  DefineSymbolDef,
-  DefineSyntaxSymbolDef,
-  RosettaSymbolDef } from "../common/symbols/_bake.js";
+import type { DefineSymbolDef, DefineSyntaxSymbolDef, RosettaSymbolDef } from "../common/symbols/_bake.js";
 import type { AliasSymbolDef } from "../common/symbols/alias.js";
 import type { PreludeBindTarget } from "../common/kernel.js";
 import { linearizeDag } from "../common/dag-linearize.js";
@@ -62,7 +60,8 @@ import {
   AssembleCycleError,
   AssembleLinearizationError,
   SymbolKeyMismatchError,
-  VocabularyCapabilityConflictError } from "../errors.js";
+  VocabularyCapabilityConflictError,
+} from "../errors.js";
 import { bindValue, mintResolvingFrame, type AmbientValue, type ResolvingAmbient } from "./AmbientRuntime.js";
 
 /** One symbol vocabulary, built ONCE per (capability-set, config) tuple — see module
@@ -141,7 +140,8 @@ function makeBindTarget(
       const target = "preludeOnly" in def && def.preludeOnly ? preludeOnlyMap : mainMap;
       target.set(name, stored);
       return stored;
-    } });
+    },
+  });
 }
 
 /** Bind into main map + bakeEnv — kinds that skip `bindTarget` (kernel keywords, value tail). */
@@ -209,7 +209,11 @@ async function processCapability(
           bind(contract).set(
             name,
             new DoorProcedure(
-              degradation.door(name, requiresConfigNeeds(missingNative), requiresConfigReason(missingNative, contract.doc)),
+              degradation.door(
+                name,
+                requiresConfigNeeds(missingNative),
+                requiresConfigReason(missingNative, contract.doc),
+              ),
             ),
           );
           continue;
@@ -231,7 +235,11 @@ async function processCapability(
         bind(contract).set(
           name,
           new DoorProcedure(
-            degradation.door(name, requiresConfigNeeds(missingRosetta), requiresConfigReason(missingRosetta, contract.doc)),
+            degradation.door(
+              name,
+              requiresConfigNeeds(missingRosetta),
+              requiresConfigReason(missingRosetta, contract.doc),
+            ),
           ),
         );
         continue;
@@ -244,7 +252,10 @@ async function processCapability(
     if (def instanceof DoorProcedure) {
       if (!viaAlias && def.door.name !== name) throw new SymbolKeyMismatchError(capabilityName, name, def.door.name);
       if (def.door.cause === undefined) {
-        (def.door as { cause?: { owner: string; needs: readonly never[] } }).cause = { owner: capabilityName, needs: [] };
+        (def.door as { cause?: { owner: string; needs: readonly never[] } }).cause = {
+          owner: capabilityName,
+          needs: [],
+        };
       }
       bind(def.door).set(name, def);
       continue;
@@ -279,7 +290,8 @@ async function processCapability(
       env: bakeEnv,
       scope: bakeEnv,
       bindTarget: bind,
-      evalScheme });
+      evalScheme,
+    });
   }
 
   const degraded = mergeDegraded(
@@ -307,7 +319,8 @@ export async function buildVocabulary(
     },
     onInconsistent: (owner) => {
       throw new AssembleLinearizationError(owner);
-    } });
+    },
+  });
 
   const sortedClosure = [...closureByName.values()].sort(byName);
   return memoized(sortedClosure, config, () => buildFresh(order, closureByName, config, evalScheme));
@@ -330,7 +343,14 @@ async function buildFresh(
   // Deps-first (self overwrites dep); each capability fully (Pass 1 + 2) before next.
   for (const name of [...order].reverse()) {
     const cap = byNameMap.get(name)!;
-    const { configuration, degraded } = await processCapability(cap, config, mainMap, preludeOnlyMap, bakeEnv, evalScheme);
+    const { configuration, degraded } = await processCapability(
+      cap,
+      config,
+      mainMap,
+      preludeOnlyMap,
+      bakeEnv,
+      evalScheme,
+    );
     configsByCapability.set(cap, configuration);
     degradedByName.set(name, degraded);
     if (cap.spec.prelude !== undefined) preludes.push({ capability: cap, text: cap.spec.prelude });
@@ -348,5 +368,6 @@ async function buildFresh(
     preludeOnly: preludeOnlyMap,
     degraded,
     preludes,
-    configsByCapability });
+    configsByCapability,
+  });
 }

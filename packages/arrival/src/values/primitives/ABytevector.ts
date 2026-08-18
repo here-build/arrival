@@ -16,13 +16,7 @@ import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { withInputProvenance } from "../op-helpers.js";
 import type { SourceLocation } from "../../errors.js";
 
-
-type BytevectorSource =
-  | Uint8Array
-  | ArrayBuffer
-  | DataView
-  | ABytevector
-  | readonly number[];
+type BytevectorSource = Uint8Array | ArrayBuffer | DataView | ABytevector | readonly number[];
 
 function toUint8(source: BytevectorSource): Uint8Array {
   switch (true) {
@@ -48,11 +42,7 @@ export class ABytevector extends AValue {
 
   readonly __bytevector__: Uint8Array;
 
-  constructor(
-    source: BytevectorSource,
-    provenance: ReadonlySet<number> = EMPTY_PROVENANCE,
-    location?: SourceLocation,
-  ) {
+  constructor(source: BytevectorSource, provenance: ReadonlySet<number> = EMPTY_PROVENANCE, location?: SourceLocation) {
     super(provenance, location);
     this.__bytevector__ = toUint8(source);
   }
