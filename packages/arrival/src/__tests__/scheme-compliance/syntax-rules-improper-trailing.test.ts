@@ -7,8 +7,9 @@
 //
 // `(x ... . b)` binds the remainder: proper → b=(), improper → the dotted cdr.
 //
-// Still open:
-//   - quoted `'(... (x ...))` — silent unsubstituted `(x ...)`.
+// Quoted `(... <template>)` instantiates `<template>` with ellipses as ordinary
+// identifiers; pattern variables still substitute (`x` → 100). Quote is just a
+// symbol in the output.
 import { describe, expect, it } from "vitest";
 import { freshEnv } from "../_fresh-env.js";
 import { execStateOverFrame as execState, parse } from "../../eval/generator-exec.js";
@@ -21,15 +22,6 @@ const env = await freshEnv();
 async function run(form: string): Promise<unknown> {
   const { values: r } = await execState(form, { env });
   return r[0];
-}
-
-async function boom(form: string): Promise<string> {
-  try {
-    const out = await run(form);
-    return `RESOLVED:${String(out)}`;
-  } catch (e) {
-    return e instanceof Error ? e.message : String(e);
-  }
 }
 
 const improperRemainder = `(let-syntax ((m (syntax-rules () ((_ x ... a . b) (cons (list x ...) (cons a b)))))) (m 1 2 3 4 . 5))`;
@@ -78,23 +70,15 @@ describe("syntax-rules trailing-handler hole (improper remainder)", () => {
   });
 });
 
-describe("syntax-rules ellipsis-escape hole (quoted (... <template>))", () => {
-  it.fails("1-arg '(... (x ...)) should produce (100 ...)", async () => {
+describe("syntax-rules ellipsis-escape (quoted (... <template>))", () => {
+  it("1-arg '(... (x ...)) produces (100 ...)", async () => {
     const out = await run(escape1);
     expect(String(out)).toBe("(100 ...)");
   });
 
-  it.fails("2-arg '(... (... x y)) should produce (... 100 200)", async () => {
+  it("2-arg '(... (... x y)) produces (... 100 200)", async () => {
     const out = await run(escape2);
     expect(String(out)).toBe("(... 100 200)");
-  });
-
-  it("1-arg does not crash — silent wrong value (x ...)", async () => {
-    expect(await boom(escape1)).toBe("RESOLVED:(x ...)");
-  });
-
-  it("2-arg does not crash — silent wrong value (... x y)", async () => {
-    expect(await boom(escape2)).toBe("RESOLVED:(... x y)");
   });
 });
 
@@ -120,6 +104,12 @@ const DOTTED_TAIL_PATTERN = "(_ x ... a . b)";
 const DOTTED_TAIL_TEMPLATE = "(cons (list x ...) (cons a b))";
 const ELLIPSIS_DOTTED_PATTERN = "(_ x ... . b)";
 const ELLIPSIS_DOTTED_TEMPLATE = "(cons (list x ...) b)";
+const ESCAPE_1_PATTERN = "(_ x)";
+const ESCAPE_1_TEMPLATE = "'(... (x ...))";
+const ESCAPE_2_PATTERN = "(_ x y)";
+const ESCAPE_2_TEMPLATE = "'(... (... x y))";
+const ESCAPE_0_PATTERN = "(_)";
+const ESCAPE_0_TEMPLATE = "'(... ...)";
 
 type ExpansionProbe = { bindings: false } | { bindings: true; expansion: string };
 
@@ -211,6 +201,32 @@ describe("syntax-rules (x ... . b) expansion probe (form after restore_data_gens
     expect(probe.bindings).toBe(true);
     if (probe.bindings) {
       expect(probe.expansion).toBe("(#:cons (#:list 1 2 3 4) 5)");
+    }
+  });
+});
+
+describe("syntax-rules ellipsis-escape expansion probe (form after restore_data_gensyms, no eval)", () => {
+  it("zero-arg '(... ...) transcribes to (#:quote ...)", async () => {
+    const probe = await probeExpansion(ESCAPE_0_PATTERN, ESCAPE_0_TEMPLATE, "(m)");
+    expect(probe.bindings).toBe(true);
+    if (probe.bindings) {
+      expect(probe.expansion).toBe("(#:quote ...)");
+    }
+  });
+
+  it("1-arg '(... (x ...)) vs (m 100) transcribes to (#:quote (100 ...))", async () => {
+    const probe = await probeExpansion(ESCAPE_1_PATTERN, ESCAPE_1_TEMPLATE, "(m 100)");
+    expect(probe.bindings).toBe(true);
+    if (probe.bindings) {
+      expect(probe.expansion).toBe("(#:quote (100 ...))");
+    }
+  });
+
+  it("2-arg '(... (... x y)) vs (m 100 200) transcribes to (#:quote (... 100 200))", async () => {
+    const probe = await probeExpansion(ESCAPE_2_PATTERN, ESCAPE_2_TEMPLATE, "(m 100 200)");
+    expect(probe.bindings).toBe(true);
+    if (probe.bindings) {
+      expect(probe.expansion).toBe("(#:quote (... 100 200))");
     }
   });
 });

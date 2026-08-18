@@ -797,11 +797,17 @@ export function transform_syntax({
       const cdrPair = expr.cdr instanceof APair ? expr.cdr : undefined;
       const second = cdrPair?.car;
       const rest_second = cdrPair?.cdr;
-      // Escape ellipsis (R7RS `(... <template>)`, e.g. `(... ...)`): `first.cdr` must itself be a
-      // pair carrying <template> in its car. Guard before reading `.car` — a bare `(...)` leaves
-      // `first.cdr` as nil, whose `.car` is undefined.
+      // Escape ellipsis (R7RS `(... <template>)`, e.g. `(... ...)`): `first` is the pair
+      // `(... t)`, so `first.cdr` must itself be a pair carrying <template> in its car. A
+      // bare `(...)` leaves `first.cdr` as nil, whose `.car` is undefined. Instantiate
+      // `<template>` with ellipses disabled: pattern variables still substitute; `...`
+      // is an ordinary identifier. Quote is just a symbol in the output — it does not
+      // suppress that walk.
       if (!disabled && first instanceof APair && ASymbol.is(first.car, ellipsis_symbol) && first.cdr instanceof APair) {
-        return carrySpan(consCell(ctx, first.cdr.car, expr instanceof APair ? traverse(expr.cdr) : nil), expr);
+        return carrySpan(
+          consCell(ctx, traverse(first.cdr.car, { disabled: true }), expr instanceof APair ? traverse(expr.cdr) : nil),
+          expr,
+        );
       }
       if (second && ASymbol.is(second, ellipsis_symbol) && !disabled) {
         const symbols = bindings["..."].symbols;

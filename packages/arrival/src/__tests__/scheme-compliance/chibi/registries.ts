@@ -496,17 +496,6 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
     match: { kind: "form", exact: "(test 100 (ff 10))" },
     reason: "Nested define-syntax (ffoo → ff) — inner macro unbound — pre-L1 macro engine gap",
     gate: "pre-L1 macro engine (nested define-syntax)" },
-  // NOTE: narrowed from the original symbols:["elli-esc-1"] (3 matches) — the zero-arg
-  // call `(elli-esc-1)` @472 now passes (verified directly via exec: returns '... as
-  // expected). The 1-arg/2-arg calls below remain genuinely broken.
-  {
-    match: { kind: "form", exact: normalizeText(`(test '(100 ...) (elli-esc-1 100))`) },
-    reason: "Ellipsis-escape (... ...) in the syntax-rules template — pre-L1 macro engine gap",
-    gate: "pre-L1 macro engine (ellipsis handling)" },
-  {
-    match: { kind: "form", exact: normalizeText(`(test '(... 100 200) (elli-esc-1 100 200))`) },
-    reason: "Ellipsis-escape (... ...) in the syntax-rules template — pre-L1 macro engine gap",
-    gate: "pre-L1 macro engine (ellipsis handling)" },
   {
     match: { kind: "symbols", anyOf: ["elli-lit-1"] },
     reason: "Ellipsis used as a literal in the template — pre-L1 macro engine gap",
