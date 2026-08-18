@@ -9,7 +9,6 @@
  * (no import cycle into carrier modules).
  */
 import { AValue } from "../values/primitives/AValue.js";
-import { is_pair } from "../values/value-guards.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { APair } from "../values/primitives/APair.js";
 

@@ -21,8 +21,7 @@
 
 import { ExtensionSuffixConflictError } from "../errors.js";
 import { Macro, type TransformerArgs } from "../eval/Macro.js";
-import { ANil } from "../values/primitives/ANil.js";
-import { nil } from "../values/primitives/ANil.js";
+import { ANil, nil } from "../values/primitives/ANil.js";
 import { APair } from "../values/primitives/APair.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";

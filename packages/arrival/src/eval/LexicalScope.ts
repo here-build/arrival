@@ -1,5 +1,10 @@
-import { AmbientRuntime, mintFrame, mintResolvingFrame, ResolvingAmbient } from "../env/AmbientRuntime.js";
-import type { AmbientValue } from "../env/AmbientRuntime.js";
+import {
+  AmbientRuntime,
+  mintFrame,
+  mintResolvingFrame,
+  ResolvingAmbient,
+  type AmbientValue,
+} from "../env/AmbientRuntime.js";
 import type { RunContext } from "../run/RunContext.js";
 import { INTEROP_BOUNDARY } from "../membrane/interop-access.js";
 

@@ -11,9 +11,7 @@
  * real-part/imag-part/magnitude/angle are DOORED via complexDoor. complex? is an
  * honest stub — always #f; no complex value exists to answer #t.
  */
-import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
 import invariant from "tiny-invariant";
-import { AValue, EMPTY_PROVENANCE } from "./primitives/AValue.js";
 import { AExact } from "./primitives/AExact.js";
 import { AInexact } from "./primitives/AInexact.js";
 import { ComplexNumberError, ParseError } from "../errors.js";

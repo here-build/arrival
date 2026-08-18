@@ -25,8 +25,7 @@
 //        output z.tuple([R]) → "R"; z.tuple([A,B]) → "[A, B]"; z.array(T) → "T[]"
 //        rosetta is implicitly ASYNC (bake awaits) → Promise<…>; native is sync.
 
-import { zodToTs, printNode, createAuxiliaryTypeStore } from "zod-to-ts";
-import type { OptionalTypeOverrideFunction } from "zod-to-ts";
+import { zodToTs, printNode, createAuxiliaryTypeStore, type OptionalTypeOverrideFunction } from "zod-to-ts";
 import * as z from "../common/scheme-zod/index.js";
 import { tagToJsonSchema } from "../common/schema-tag.js";
 import type { AEntity } from "../symbol/index.js";

@@ -60,7 +60,7 @@ export class AInexact extends AValue {
     return Number.isFinite(this.real);
   }
 
-  private static floatToRational(x: number, tolerance: number = 1e-10): AExact {
+  private static floatToRational(x: number, _tolerance: number = 1e-10): AExact {
     if (Number.isInteger(x)) {
       return mintExact(x, 1, undefined, "inexact->exact");
     }

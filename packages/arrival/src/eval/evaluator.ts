@@ -102,9 +102,8 @@ import {
   SpecialFormShapeError,
   type SourceLocation,
 } from "../errors.js";
-import { is_false } from "../values/value-guards.js";
+import { is_applyable, is_false, is_lambda } from "../values/value-guards.js";
 import { is_callable, is_expandable, is_macro, is_promise } from "./guards.js";
-import { is_applyable, is_lambda } from "../values/value-guards.js";
 import { ALambda, type CallResult } from "../values/primitives/ACallable.js";
 import { makeCallCtx, type CallCtx } from "../run/CallCtx.js";
 import type { InvocationLike } from "../membrane/rosetta.js";

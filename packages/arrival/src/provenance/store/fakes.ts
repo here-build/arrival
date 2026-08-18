@@ -9,8 +9,16 @@
  * settlement is modeled with an injected virtual clock (`PayloadStoreFake.step`) —
  * a test controls exactly when simulated time advances, never a race.
  */
-import { ordinalPathKey, recordIdKey, type PayloadHash, type RegionId, type RegionSeq } from "./ids.js";
-import type { OrdinalPath, SiteHash, TemplateHash } from "./ids.js";
+import {
+  ordinalPathKey,
+  recordIdKey,
+  type PayloadHash,
+  type RegionId,
+  type RegionSeq,
+  type OrdinalPath,
+  type SiteHash,
+  type TemplateHash,
+} from "./ids.js";
 import type {
   Payload,
   PayloadRecord,

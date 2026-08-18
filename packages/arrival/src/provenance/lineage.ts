@@ -33,7 +33,6 @@
  * An adjoint-table reinterpretation waits on per-op adjoint rules; `walk()` is
  * already the backward pass.
  */
-import { is_pair } from "../values/value-guards.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { APair } from "../values/primitives/APair.js";
 import { AValue } from "../values/primitives/AValue.js";

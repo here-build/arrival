@@ -71,7 +71,6 @@ import { schemeFalse } from "../../values/primitives/ABool.js";
 import { maybeThen } from "../../utils/promises.js";
 import { applyCallback, type ACallable } from "../../values/primitives/ACallable.js";
 import { type RunContext } from "../../run/RunContext.js";
-import { AJSArray } from "../../membrane/AJSArray.js";
 import { tf } from "../../values/tagless-final.js";
 import type { AListAlike, SchemeValue } from "../../values/types.js";
 import equality from "../r7rs/equality.js";

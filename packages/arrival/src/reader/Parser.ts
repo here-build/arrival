@@ -27,8 +27,6 @@
 import { DatumReference } from "./DatumReference.js";
 import { foldcase_string } from "./foldcase.js";
 import * as specials from "./specials.js";
-import { is_nil } from "../values/value-guards.js";
-import { is_pair } from "../values/value-guards.js";
 import {
   is_builtin,
   is_bytevector_literal,
@@ -52,9 +50,8 @@ import { APair, __tieKnot } from "../values/primitives/APair.js";
 import { EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
 import { isUnquoteForm, suffixKeyName } from "./dict-grammar.js";
 import { ADict, staticDictKey } from "../values/primitives/ADict.js";
-import type { AList, AListAlike, SchemeValue } from "../values/types.js";
-import { ANil } from "../values/primitives/ANil.js";
-import { nil } from "../values/primitives/ANil.js";
+import type { AListAlike, SchemeValue } from "../values/types.js";
+import { ANil, nil } from "../values/primitives/ANil.js";
 import invariant from "tiny-invariant";
 
 // Nesting-depth cap: rejects deep input at PARSE time before it overflows the

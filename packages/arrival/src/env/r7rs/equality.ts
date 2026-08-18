@@ -27,7 +27,7 @@ import dedent from "dedent";
 import { withContractFields, type CallCtx } from "../../symbol/index.js";
 import { ABool, schemeFalse, schemeTrue } from "../../values/primitives/ABool.js";
 import { AJSObject } from "../../membrane/AJSObject.js";
-import { ADict, isDictShaped } from "../../values/primitives/ADict.js";
+import { ADict } from "../../values/primitives/ADict.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { eq, eqv, structuralEqual } from "../../values/structural-equal.js";
 import { EnvCapability } from "../../common/capability.js";

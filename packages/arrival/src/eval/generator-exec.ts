@@ -32,10 +32,9 @@ import { disposeRunContext } from "../run/run-lifecycle.js";
 import type { DisplaySink, NoteSink } from "../run/note-sink.js";
 import type { RunCache } from "../run/run-cache.js";
 import type { EffectLog } from "../run/effect-log.js";
-import type { ReadGuard } from "../run/read-guard.js";
+import { checkReadWriteGuard, type ReadGuard } from "../run/read-guard.js";
 import type { PathAtomBus } from "../run/path-atom-bus.js";
 import type { ResourcePathLog } from "../run/resource-paths.js";
-import { checkReadWriteGuard } from "../run/read-guard.js";
 import { noteReactiveAtomsRun, retireReactiveAtomsRun } from "../run/reactive-atoms.js";
 // TYPE-ONLY (erased — no runtime scheme-zod edge): exec exit contract's schema type.
 import type { output as ZodOutputOf, ZodType } from "../common/scheme-zod/index.js";

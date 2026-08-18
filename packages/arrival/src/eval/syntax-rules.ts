@@ -42,12 +42,11 @@ import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { Macro } from "./Macro.js";
 import { APair, __tieKnot } from "../values/primitives/APair.js";
-import { Syntax } from "./Syntax.js";
 import { eqv } from "../values/structural-equal.js";
 import { AListAlike, type SchemeValue } from "../values/types.js";
 import { ANil, nil } from "../values/primitives/ANil.js";
 import { type } from "../membrane/typecheck.js";
-import { gensym, hidden_prop, is_atom, is_gensym, quote } from "../values/values-repr.js";
+import { gensym, hidden_prop, is_atom, is_gensym } from "../values/values-repr.js";
 
 // The type()-vs-kind fold for same_atom's discriminator: `a` is always a boxed AValue
 // atom here (the `is_atom` guard at the call site restricts it), but `b` (the code

@@ -261,7 +261,7 @@ export function deriveSortCompare(
  * (no env, no clock, no counters) — it is run-neutral, so CONSTANT_CTX and a
  * threaded live ctx are indistinguishable at this call.
  */
-export function coerceNumeric(value: unknown, ctx: RunContext = CONSTANT_CTX): ANumeric {
+export function coerceNumeric(value: unknown, _ctx: RunContext = CONSTANT_CTX): ANumeric {
   switch (true) {
     case value instanceof AExact:
     case value instanceof AInexact:

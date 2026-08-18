@@ -28,7 +28,7 @@ import type { RunContext } from "../../run/RunContext.js";
 import { makeCallCtx, type CallCtx } from "../../run/CallCtx.js";
 import { PurityError } from "../../errors.js";
 // TYPE-ONLY: erased at compile — a real value import would close the scheme-zod cycle.
-import type { CacheClass, CallbackRoles, DoorSymbolDef, ProvenanceRole } from "../../common/symbols/_bake.js";
+import type { DoorSymbolDef } from "../../common/symbols/_bake.js";
 import type { InvocationLike } from "../../membrane/rosetta.js";
 // Region discipline sits BELOW this file — safe runtime edge, no cycle.
 import { currentRegionScope, DETACHED_SCOPE, withRegionCall, withRegionScope } from "../../membrane/region-scope.js";

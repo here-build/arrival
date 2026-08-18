@@ -15,8 +15,6 @@ import { AInexact } from "./primitives/AInexact.js";
 import { DATA } from "../well-known-symbols.js";
 import { ACharacter } from "./primitives/ACharacter.js";
 import type { SchemeValue } from "./types.js";
-import { is_nil } from "../values/value-guards.js";
-import { is_pair } from "./value-guards.js";
 import { ABool } from "./primitives/ABool.js";
 import { ANil } from "./primitives/ANil.js";
 import { APair } from "./primitives/APair.js";
@@ -125,7 +123,7 @@ function isPendingDatum(value: SchemeValue | PromiseLike<SchemeValue>): value is
 // objects/arrays box at the membrane. AmbientRuntime.get doors on raw storage
 // scalars — does not call this. Callers: reader/parse, pending-entry, public barrel.
 // `ctx` = mint identity claim; CONSTANT_CTX when no live run.
-export function box(object: unknown, ctx: RunContext = CONSTANT_CTX): SchemeValue {
+export function box(object: unknown, _ctx: RunContext = CONSTANT_CTX): SchemeValue {
   switch (typeof object) {
     case "string":
       return new AString(object);

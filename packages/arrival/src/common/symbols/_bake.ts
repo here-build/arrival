@@ -24,8 +24,7 @@
 // Non-codec schemas: faces coincide (`input ≡ output`).
 
 import * as z from "../scheme-zod/index.js";
-import { type ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
-import type { NativeSymbolDef } from "../../values/primitives/ANativeProcedure.js";
+import { type ANativeProcedure, type NativeSymbolDef } from "../../values/primitives/ANativeProcedure.js";
 import { type RunContext } from "../../run/RunContext.js";
 import { type CallCtx } from "../../run/CallCtx.js";
 import { Macro } from "../../eval/Macro.js";

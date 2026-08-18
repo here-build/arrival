@@ -80,19 +80,14 @@ export interface Activation<C extends ZodMap, R extends Record<string, Resource<
  *  `AliasSymbolDef` (`symbol.alias`) never binds directly (resolve in the apply loop) — it
  *  stands in for a sibling entry's already-baked value.
  *
- *  `Exclude<AmbientValue, Fn>`, not bare `AmbientValue` — no bare `{ fn }`. ACallable
- *  is a class instance (not `typeof "function"`), so it stays admitted. Matches
- *  `capability.test-d.ts`. */
+ *  `AmbientValue` admits ACallable (a class instance, not `typeof "function"`) and
+ *  excludes a bare `{ fn }` host function. Matches `capability.test-d.ts`. */
 export type SymbolDeclaration =
   | AmbientValue
   | MacroSymbolDef
   | DefineSymbolDef
   | DefineSyntaxSymbolDef
   | AliasSymbolDef;
-
-/** Bare-function shape excluded from direct capability authoring — name only for the
- *  `Exclude<AmbientValue, Fn>` pin on `SymbolDeclaration`. */
-type Fn = (...args: any[]) => unknown;
 
 // Bind-loop helpers (`isAliasDef`, `contractOf`, `missingRequiresConfig`, …) live in
 // `./capability-internals.js` — sibling contract with `env/vocabulary.ts`, not authoring surface.

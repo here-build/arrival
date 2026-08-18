@@ -19,7 +19,7 @@ import { promise_all } from "../../utils/promises.js";
 import { AValue, EMPTY_PROVENANCE, mergeProvenance } from "./AValue.js";
 import { egressContainerProxy } from "../../membrane/egress-proxy.js";
 import { ANil, nil } from "./ANil.js";
-import { strictGate } from "../../errors.js";
+import { strictGate, type SourceLocation } from "../../errors.js";
 import { printValue } from "../print.js";
 import { type SeenMap, structuralEqual } from "../structural-equal.js";
 import type { MembraneExit, SchemeValue } from "../types.js";
@@ -29,7 +29,6 @@ import { deriveSortCompare, withInputProvenance } from "../op-helpers.js";
 import { reStampChild } from "./deep-restamp.js";
 import { APair } from "./APair.js";
 import { ASymbol } from "./ASymbol.js";
-import type { SourceLocation } from "../../errors.js";
 
 /** Code-position lowering cache for `[…]` literal nodes — `(vector …)` built once per node. */
 const LOWERED_LITERAL = new WeakMap<AVector, APair<SchemeValue, SchemeValue>>();

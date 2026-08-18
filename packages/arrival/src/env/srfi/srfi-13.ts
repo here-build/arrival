@@ -42,7 +42,7 @@ import { is_false } from "../../values/value-guards.js";
 import { is_promise } from "../../eval/guards.js";
 import { promise_all } from "../../utils/promises.js";
 import { to_array } from "../pack-helpers.js";
-import type { AList, AListAlike, SchemeValue } from "../../values/types.js";
+import type { AListAlike } from "../../values/types.js";
 
 // ── implement-or-door inventory (official SRFI-13 names not live in this pack) ─
 // R7RS peers (scheme/strings) cover string?/make-string/string/length/ref/append/

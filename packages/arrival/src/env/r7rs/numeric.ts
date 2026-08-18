@@ -928,7 +928,7 @@ const addSpec: NumSpec = {
   inRest: z.schemeNumber,
   out: z.schemeNumber,
   fn: addFn,
-  zeroArgIdentity: (ctx) => new AExact(0),
+  zeroArgIdentity: (_ctx) => new AExact(0),
 };
 const subSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: subFn };
 const mulSpec: NumSpec = {
@@ -936,7 +936,7 @@ const mulSpec: NumSpec = {
   inRest: z.schemeNumber,
   out: z.schemeNumber,
   fn: mulFn,
-  zeroArgIdentity: (ctx) => new AExact(1),
+  zeroArgIdentity: (_ctx) => new AExact(1),
 };
 const divSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: divFn };
 // `quotient` uses `z.schemeNumber` in/out, NOT `z.bigint`: it shares the same
@@ -987,7 +987,7 @@ const gcdSpec: NumSpec = {
   inRest: z.schemeNumber,
   out: z.schemeNumber,
   fn: gcdFn,
-  zeroArgIdentity: (ctx) => new AExact(0),
+  zeroArgIdentity: (_ctx) => new AExact(0),
 };
 const maxSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: maxFn };
 const minSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: minFn };
@@ -1025,7 +1025,7 @@ const lcmSpec: NumSpec = {
   inRest: z.schemeNumber,
   out: z.schemeNumber,
   fn: lcmFn,
-  zeroArgIdentity: (ctx) => new AExact(1),
+  zeroArgIdentity: (_ctx) => new AExact(1),
 };
 
 // ── Bespoke contracts — ops whose impl does NOT come from `nativeNumericOp`/`NumSpec`
