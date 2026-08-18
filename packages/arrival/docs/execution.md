@@ -43,13 +43,16 @@ Four homes, by lifetime:
   from the THREADED context, not from the constant `nil`, so a constant carries nothing
   run-specific.
 - **Dynamic-extent holders** — state varying by CALL DEPTH within one run: the
-  exception-handler stack, the current call-site, the current region scope (membrane.md
-  §REGION), `globalThis.__arrivalRunResolver` (`eval/evaluator.ts`), and the provenance
-  emission pair `_coordinate`/`_sink` (`eval/provenance-hooks.ts`). Five holders total — the
-  extent guarantee each of the last two carries is stated at its own definition site, cited
-  just below. These cannot ride a constant-per-run handle and stay the holder family (the
-  `dynamic-call-site.ts` module-holder idiom, save/restore around the owning call, safe under
-  single-threaded JS).
+  exception-handler stack, the current call-site (`eval/dynamic-call-site.ts`), the current
+  region scope (membrane.md §REGION), and the provenance emission pair `_coordinate`/`_sink`
+  (`eval/provenance-hooks.ts`). Four holders total — the extent guarantee the last one
+  carries is stated at its own definition site, cited just below. These cannot ride a
+  constant-per-run handle and stay the holder family (the `dynamic-call-site.ts`
+  module-holder idiom, save/restore around the owning call, safe under single-threaded JS).
+  Each holder is module-local; a second evaluation of its file in the same isolate throws
+  `DuplicateModuleLoadError` (`src/single-load.ts`) instead of silently splitting or
+  merging onto `globalThis`. The composed resolver is **not** a holder: it rides
+  `CallCtx.resolver` (§CALLCTX).
 - **Keyed residency** — a module-housed `WeakMap`/`WeakSet` keyed by a run-scoped object
   (typically `RunContext` itself); lifetime = the KEY's, not the module's. Used when a leaf
   must hold run-associated state without importing the owning layer (a `WeakMap<RunContext,
@@ -68,13 +71,10 @@ The test for where a fact belongs: does it vary between concurrent runs (→ Run
 (→ global singleton), within one run by depth (→ holder), or does a leaf need it without an
 import edge to the owning layer (→ keyed residency)?
 
-**The two extent guarantees, stated where the holders live (audit S1):**
-`globalThis.__arrivalRunResolver`'s save/restore wraps a possibly-async apply
-(`eval/evaluator.ts`, the generic apply site) — its own comment states the guarantee is
-sync-only and names why an async consumer is not a live hazard today. `_coordinate`/`_sink`
-(`eval/provenance-hooks.ts`) are per-isolate, not per-run — their own comment states the
-"at most one recording run per isolate" guarantee and names keyed-by-runCtx as the upgrade
-path if that ever stops holding.
+**The extent guarantee, stated where the holder lives (audit S1):**
+`_coordinate`/`_sink` (`eval/provenance-hooks.ts`) are per-isolate, not per-run — their own
+comment states the "at most one recording run per isolate" guarantee and names
+keyed-by-runCtx as the upgrade path if that ever stops holding.
 
 *Enforcement sites: `run/RunContext.ts`, `heap-budget.ts`, `eval/generator-exec.ts`.*
 
@@ -163,9 +163,19 @@ and no `(display …)` a model authored. The drop is correct, but it is currentl
 ## 4. CALLCTX — the fused dispatch `this`
 
 **`CallCtx` is the ONE `this` every callable body sees**, fusing the dispatch-level receiver
-(`runCtx`) with the per-call-site provenance carrier (`invocation`) and the opt-in per-arg deep
-provenance vector (`argProvenance`). Flat, not nested — every field is a cheap carrier, nothing
-to defer.
+(`runCtx`) with the per-call-site provenance carrier (`invocation`), the opt-in per-arg deep
+provenance vector (`argProvenance`), and the apply's composed `resolver`. Flat, not nested —
+every field is a cheap carrier, nothing to defer.
+
+**`resolver` is the composed name-resolution + frame object of the apply that minted this
+`CallCtx`.** It is call-varying (a new lexical frame is a new `Resolver.child`), so it cannot
+live on `RunContext`. Evaluator dispatch (`evaluatePair`, `applyArrowProc`) passes
+`ctx.resolver` into `makeCallCtx`. HOF / host-projection / `testCallCtx()` sites omit it.
+`(require …)` and `require/extension` read it off `this` via `runResolverOf` — a missing field
+is `RunResolverUnreachableError` (the verb was invoked outside evaluator dispatch). A
+required module's forms must evaluate through this same composition: under the cut the
+lexical frame is null-rooted and builtins live on the capability base; an env-only rebuild
+loses `string-append`.
 
 **`runCtx` is NEVER optional.** `makeCallCtx` takes it as a required argument with no default.
 A `= CONSTANT_CTX` default would be a LATENT HAZARD — the easiest landing spot for the next

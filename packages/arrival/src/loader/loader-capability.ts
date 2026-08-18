@@ -52,7 +52,6 @@ import {
   type RunEnv,
   runEnvOf,
   runResolverOf,
-  withPublishedRunResolver,
   type SchemeVal,
 } from "./loader.js";
 
@@ -247,10 +246,8 @@ export const arrivalLoaderCapability = EnvCapability.define("arrival/loader", {
               if (is_applyable(registered)) {
                 // Scheme verb: contents boxed, return IS the module value (yaml/toml rosetta
                 // encode the parse; handlebars native returns the pretreat lambda).
-                const boxed =
-                  typeof contents === "string" ? new AString(contents) : new ABytevector(contents);
-                // require already awaited; re-publish the resolver captured before that.
-                return withPublishedRunResolver(resolver, () => applyCallback(registered, [boxed], this));
+                const boxed = typeof contents === "string" ? new AString(contents) : new ABytevector(contents);
+                return applyCallback(registered, [boxed], this);
               }
               const handler = pickHandler(path, loader.resolvers);
               RequireResolverError.invariant(handler !== undefined, "no-resolver", path);

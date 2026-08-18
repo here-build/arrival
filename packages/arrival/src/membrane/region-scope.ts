@@ -10,10 +10,12 @@
  * AMBIENT HOLDER: `z.procedure`'s `decode` is a plain zod-codec transform with no side
  * channel for "which invocation is this reverse crossing of". Both `toJS` and the
  * codec read the SAME ambient current region scope — same module-holder pattern as
- * `eval/dynamic-call-site.ts` and evaluator's run-env holder. Single-threaded JS makes
- * a module holder safe; save/restore (`withRegionScope`) handles nesting. The wrapper
- * CLOSES OVER whatever scope is ambient at mint — never re-reads the holder later, so a
- * late call still sees the SAME (by then closed) scope.
+ * `eval/dynamic-call-site.ts`. Single-threaded JS makes a module holder safe;
+ * save/restore (`withRegionScope`) handles nesting. The wrapper CLOSES OVER whatever
+ * scope is ambient at mint — never re-reads the holder later, so a late call still
+ * sees the SAME (by then closed) scope. A second evaluation of this file in the same
+ * isolate would split the holder (discipline degrades to DETACHED_SCOPE); that is a
+ * bundler bug, detected at load.
  *
  * Minting/opening a scope is the crossing seam's job (baked `symbol.rosetta` run,
  * scheme-zod `z.procedure`). This module owns the token shape, ambient holder, and doors.
@@ -37,6 +39,7 @@
  * missing piece is op-helpers routing through withRegionCall.
  */
 
+import { assertSingleLoad } from "../single-load.js";
 import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
 import type { AValue } from "../values/primitives/AValue.js";
 import type { EgressMode, WrapperKey } from "../values/types.js";
@@ -421,31 +424,28 @@ function raceRegionAbort<T>(value: PromiseLike<T>, signal: AbortSignal): Promise
 // ── Ambient current region scope ──
 // Ambient rather than RosettaOptions: z.procedure's codec has no parameter for it.
 // Single-threaded JS + save/restore around the owning call (same as evaluator's
-// _dynamicCallSite).
-declare global {
-  // eslint-disable-next-line no-var
-  var __arrivalRegionScope: RegionScope | undefined;
-}
-// PROCESS-GLOBAL (see evaluator __arrivalRunResolver): a bundler can load this module
-// twice, splitting the ambient so a reverse wrapper under one copy's scope reads
-// undefined from the other — discipline silently degrades to DETACHED_SCOPE.
-// Pinning on globalThis keeps one holder.
+// dynamic-call-site). A second evaluation of this file splits the holder — detected
+// at load (`assertSingleLoad`), not merged onto globalThis.
+
+assertSingleLoad("membrane/region-scope");
+
+let current: RegionScope | undefined;
 
 /** Scope a reverse wrapper should close over if minted RIGHT NOW — undefined outside
  *  any tracked crossing. Treat undefined as "no region discipline" (always-open
  *  passthrough), never as an error. */
 export function currentRegionScope(): RegionScope | undefined {
-  return globalThis.__arrivalRegionScope;
+  return current;
 }
 
 /** Install scope as ambient for the duration of fn (sync only — real callers mint
  *  wrappers synchronously; crossing's async work is outside this window). */
 export function withRegionScope<T>(scope: RegionScope, fn: () => T): T {
-  const saved = globalThis.__arrivalRegionScope;
-  globalThis.__arrivalRegionScope = scope;
+  const saved = current;
+  current = scope;
   try {
     return fn();
   } finally {
-    globalThis.__arrivalRegionScope = saved;
+    current = saved;
   }
 }

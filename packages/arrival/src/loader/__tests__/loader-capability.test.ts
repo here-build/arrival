@@ -179,7 +179,7 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
 
   describe("a required .scm module composes with base builtins", () => {
     // A required module's forms must resolve through the run's COMPOSED resolver
-    // (`currentRunResolver()` → `execExpr({ resolver })`), not a bare frame rebuild —
+    // (`this.resolver` → `execExpr({ resolver })`), not a bare frame rebuild —
     // else module code can't see base builtins (`string-append` unbound).
     it("a required .scm module sees base builtins (string-append) and spills its defines", async () => {
       const table: Record<string, string> = {

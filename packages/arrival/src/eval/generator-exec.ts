@@ -137,8 +137,8 @@ export interface ExecOptions {
    * exec/execState ignore it. Evaluate through an EXISTING composed Resolver
    * instead of building one from the default base. THE seam `(require …)` uses:
    * a required module's forms must resolve through the SAME scope+capability
-   * composition as the requiring program. Obtained via
-   * `currentRunResolver()` at the require apply boundary.
+   * composition as the requiring program. Obtained via `this.resolver` at the
+   * require apply (`runResolverOf`).
    */
   resolver?: Resolver;
   tap?: EvalTap;

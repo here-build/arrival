@@ -47,7 +47,6 @@ export const arrivalHandlebarsCapability = EnvCapability.define("arrival/handleb
       symbol.native`ext/handlebars/resolve: pretreat .hbs to a scheme lambda`(
         { input: [z.union([z.string, z.bytevector])], output: [z.schemeValue] },
         async function (contents) {
-          // Capture before the first await — `__arrivalRunResolver` is sync-only.
           const resolver = runResolverOf(this, "ext/handlebars/resolve");
           const [form] = await parse(hbsContentsToSchemeSource(contentsToText(contents)));
           return execExpr(form, { resolver, runCtx: this.runCtx });

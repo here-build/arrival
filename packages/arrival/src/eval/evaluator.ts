@@ -70,9 +70,9 @@
  * `ctx.runCtx` (RunContext, minted by exec) carries run-CONSTANT state — strict
  * mode, heap meter — threaded as data through every `{ ...ctx }` spread.
  * `ctx.resolver` is the sole binding/resolution + frame channel (there is no
- * `ctx.env`; the frame env is `resolver.env`). `globalThis.__arrivalRunResolver`
- * is the apply-time back-channel for readers that can't take a ctx (the rosetta
- * membrane's env reader; `require`'s module-eval resolver) — see its own doc.
+ * `ctx.env`; the frame env is `resolver.env`). Evaluator apply copies that
+ * resolver onto `CallCtx.resolver` so a native verb (`require`) reads it off
+ * `this` — it does not ride a process-global holder.
  *
  * Purity omissions: `set!`, `delay`/`force`, `parameterize` are NOT special forms
  * — removed from the table so env lookup reaches their educational door in the
@@ -252,36 +252,6 @@ interface RunOptions {
 // with the DYNAMIC parent (the call site), not the LEXICAL one captured at creation.
 // Without it, a native JS HOF iterating a user lambda severs the parent chain at the
 // HOF boundary — DNF path reconstruction needs the call-site parent.
-
-/**
- * Run-scoped CURRENT RESOLVER, set to `ctxResolver(ctx)` at the apply boundary
- * alongside the dynamic call site (saved + restored in the surrounding finally).
- * Reader: `(require …)`'s module-eval seam (`currentRunResolver()`), which needs
- * the WHOLE composed resolver — under the cut, builtins live on the capability
- * base, not the lexical frame's `__parent__` chain. runCtx cannot supply it —
- * it carries run-CONSTANT data, not a resolver.
- *
- * Module-level because the reader is a variadic / HOF builtin whose arity a
- * trailing `ctx` would corrupt. Single-threaded JS makes the holder safe;
- * nesting is save/restore.
- */
-declare global {
-  // eslint-disable-next-line no-var
-  var __arrivalRunResolver: Resolver | undefined;
-}
-// PROCESS-GLOBAL, not module-local: a bundler can load evaluator.ts twice (Vite
-// serves raw via /@fs AND prebundles a second copy; esbuild/wrangler can dup across
-// subpaths). exec publishes into one copy while require's currentRunResolver reads
-// the other → "no run resolver reachable". globalThis shares one holder.
-// Single-threaded JS keeps save/restore nesting safe.
-
-/**
- * Run's current COMPOSED resolver at apply time. Needed by `(require …)`:
- * a required module's forms must evaluate through the SAME scope+capability
- * composition. Under the cut the lexical frame is null-rooted and builtins live
- * on the capability base — an env-only back-channel loses that half.
- */
-export const currentRunResolver = (): Resolver | undefined => globalThis.__arrivalRunResolver;
 
 /**
  * Re-install the dynamic call site on every invocation of a lambda VALUE passed
@@ -1783,7 +1753,7 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
   // plain WeakMap miss (no-op) for every callable with no activation (lambdas, resource-less
   // capabilities' procs, …).
   const dynSite = ctx.currentInvocation;
-  const callCtx = makeCallCtx(ctx.runCtx, dynSite as InvocationLike | undefined, undefined, proc);
+  const callCtx = makeCallCtx(ctx.runCtx, dynSite as InvocationLike | undefined, undefined, proc, ctx.resolver);
 
   // A callable VALUE dispatches through its apply term. An ALambda in tail position
   // hands back a Bounce so a self-recursive `=>` collapses (TCO); an ANativeProcedure/
@@ -2675,23 +2645,10 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
     // resolved value (docs/execution.md §CALLCTX) so makeCallCtx enriches callCtx
     // with that capability's configuration/resources when one was associated at
     // bind time — WeakMap miss (no-op) for every callable with no activation.
-    const callCtx = makeCallCtx(ctx.runCtx, dynSite as InvocationLike | undefined, undefined, fn);
+    const callCtx = makeCallCtx(ctx.runCtx, dynSite as InvocationLike | undefined, undefined, fn, ctx.resolver);
     const __savedDynamicCallSite = currentDynamicCallSite();
     setDynamicCallSite(dynSite);
     const canBounce = is_lambda(fn);
-    const __savedRunResolver = globalThis.__arrivalRunResolver;
-    // Publish the composed resolver as the rosetta membrane's env back-channel
-    // (require uses currentRunResolver). Meter/strict travel on ctx.runCtx, not
-    // this holder.
-    // EXTENT (docs/execution.md §HERMETIC, audit S1): save/restore below is SYNC-ONLY —
-    // it wraps this apply term, not any `await` inside the callee. A consumer reading
-    // `currentRunResolver()` from past an `await` in an async impl would see whichever
-    // resolver is ambient at resume time, not necessarily this one. No such consumer
-    // exists today (verified 2026-08-13: `currentRunResolver` readers are the rosetta
-    // membrane's env back-channel and `require`'s module-eval resolver, both synchronous
-    // reads taken before their own first await) — keep it that way, or key this holder
-    // by run instead of by isolate.
-    globalThis.__arrivalRunResolver = ctxResolver(ctx);
     const wrappedArgs = wrapLambdaArgs(args, dynSite);
     let result: SchemeValue;
     try {
@@ -2702,7 +2659,6 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
       result = fn[tf("apply")](wrappedArgs, callCtx, canBounce) as SchemeValue;
     } finally {
       setDynamicCallSite(__savedDynamicCallSite);
-      globalThis.__arrivalRunResolver = __savedRunResolver;
     }
 
     // Bounce result — the callee handed back its body generator (preamble BOUNCE

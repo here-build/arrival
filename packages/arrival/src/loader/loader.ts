@@ -5,12 +5,12 @@
  *
  * The require VERB (single-flight cache, cycle detection, eval loop) is declared by
  * `arrivalLoaderCapability` as symbol.native — state lives on that capability's
- * per-RunContext resources bag. `runResolverOf`/`runEnvOf` are the shared back-channel
- * readers both require and require/extension need.
+ * per-RunContext resources bag. `runResolverOf`/`runEnvOf` read the composed
+ * resolver off `this: CallCtx` (evaluator dispatch puts it there).
  */
-import { currentRunResolver } from "../eval/evaluator.js";
 import { execExpr, parse } from "../eval/generator-exec.js";
 import type { Resolver } from "../eval/Resolver.js";
+import type { CallCtx } from "../run/CallCtx.js";
 import { jsToScheme } from "../membrane/rosetta.js";
 import { ABytevector } from "../values/primitives/ABytevector.js";
 import { ADict } from "../values/primitives/ADict.js";
@@ -37,30 +37,16 @@ export type RunEnv = SchemeEnv;
 export type SchemeVal = Awaited<ReturnType<typeof execExpr>>;
 
 /** The run's COMPOSED resolver (scope + capability base) — teaching error when absent.
- *  require is a membrane penetration; reaches resolution context via evaluator back-channel
- *  `currentRunResolver()` (apply term threads only runCtx — resolver cannot ride it).
+ *  require is a membrane penetration; it reads `this.resolver`, which evaluator
+ *  dispatch copies from `EvalContext.resolver` onto the CallCtx.
  *
  *  WHY resolver not just env: lexical frame is null-rooted; stdlib lives on capability base.
  *  Evaluating forms against env alone loses builtins. Through THIS resolver, defines still
- *  spill into `resolver.env` and builtins resolve as for the requiring program.
- *
- *  `ctx` accepted (ignored) for `this: CallCtx` convention — CallCtx carries no resolver. */
-export function runResolverOf(ctx: unknown, verb: string): Resolver {
-  void ctx;
-  const resolver = currentRunResolver();
+ *  spill into `resolver.env` and builtins resolve as for the requiring program. */
+export function runResolverOf(ctx: CallCtx, verb: string): Resolver {
+  const resolver = ctx.resolver;
   RunResolverUnreachableError.invariant(resolver !== undefined, verb);
   return resolver;
-}
-
-/** Re-publish a captured resolver across an `await` (the isolate holder is sync-only). */
-export async function withPublishedRunResolver<T>(resolver: Resolver, fn: () => T | Promise<T>): Promise<T> {
-  const prev = currentRunResolver();
-  globalThis.__arrivalRunResolver = resolver;
-  try {
-    return await fn();
-  } finally {
-    globalThis.__arrivalRunResolver = prev;
-  }
 }
 
 /** The run env these verbs spill module `define`s into — the composed resolver's lexical
@@ -68,7 +54,7 @@ export async function withPublishedRunResolver<T>(resolver: Resolver, fn: () => 
  *  (`require/extension`'s assembler binding, the prelude-scope mint). The through-`unknown`
  *  widen is safe: the frame is a concrete `AmbientRuntime` satisfying `SchemeEnv`, and every
  *  use here is on the shared surface. */
-export function runEnvOf(ctx: unknown, verb: string): RunEnv {
+export function runEnvOf(ctx: CallCtx, verb: string): RunEnv {
   return runResolverOf(ctx, verb).env as unknown as RunEnv;
 }
 

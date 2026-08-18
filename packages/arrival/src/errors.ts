@@ -1120,8 +1120,8 @@ export class AmbientShapeError extends ArrivalError {
 // penetration); each of these names a distinct way it refuses.
 // -------------------------------------------------------------------------
 
-/** A require verb (`require`/`require/extension`/…) ran outside the evaluator,
- *  so no run resolver was published for it to read (`loader/loader.ts`'s
+/** A require verb (`require`/`require/extension`/…) ran outside evaluator
+ *  dispatch, so `this.resolver` is missing (`loader/loader.ts`'s
  *  `runResolverOf`). Direct JS calls must go through `exec`/`execExpr`. */
 export class RunResolverUnreachableError extends ArrivalError {
   public readonly name = "RunResolverUnreachableError";
@@ -1129,8 +1129,8 @@ export class RunResolverUnreachableError extends ArrivalError {
 
   constructor(public readonly verb: string) {
     super(
-      `${verb}: no run resolver reachable — the verb was called outside the evaluator ` +
-        `(direct JS calls must go through exec/execExpr so the run resolver is published).`,
+      `${verb}: no run resolver on this CallCtx — the verb was called outside evaluator ` +
+        `dispatch (direct JS calls must go through exec/execExpr so makeCallCtx receives the composed resolver).`,
     );
   }
 }

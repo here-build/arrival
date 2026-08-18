@@ -6,6 +6,8 @@
 
 import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { type InvocationLike } from "../membrane/rosetta.js";
+// TYPE-ONLY: Resolver lives in eval/, above this leaf. Runtime stays run → (nothing in eval).
+import type { Resolver } from "../eval/Resolver.js";
 
 /**
  * The ONE `this` every callable body sees (docs/execution.md §CALLCTX) — dispatch-level
@@ -14,6 +16,12 @@ import { type InvocationLike } from "../membrane/rosetta.js";
  *
  * `invocation` is call-varying (unlike run-constant `runCtx`) — never lives on RunContext.
  * `argProvenance` aligns to scheme args; absent when the dispatch path doesn't request it.
+ *
+ * `resolver` is the composed name-resolution + frame object of the apply that minted this
+ * CallCtx. Call-varying (a new lexical frame is a new `Resolver.child`), so it cannot live
+ * on RunContext. Evaluator dispatch passes it; HOF / host-projection / `testCallCtx()`
+ * sites omit it. `(require …)` reads it off `this` — a missing field is
+ * `RunResolverUnreachableError`.
  *
  * `configuration`/`resources` (docs/execution.md §CALLCTX): the same per-env Activation a
  * builder-form `symbols` closes over is reachable off `this` at real dispatch — a PARALLEL
@@ -26,6 +34,7 @@ export interface CallCtx {
   readonly runCtx: RunContext;
   readonly invocation: { currentInvocation: InvocationLike | undefined };
   readonly argProvenance?: readonly ReadonlySet<number>[];
+  readonly resolver?: Resolver;
   readonly configuration?: unknown;
   readonly resources?: unknown;
 }
@@ -90,12 +99,16 @@ export function symbolsOwnedBy(runCtx: RunContext, capability: object): Readonly
  *   - `configuration` — `runCtx.capabilityConfigurations?.get(owner)` (filled once at mint)
  *   - `resources` — lazy get-or-produce via `resolveCapabilityResources`
  *
- * Other call sites (HOF seams, membrane) omit `resolvedValue` and pay only the undefined check. */
+ * Other call sites (HOF seams, membrane) omit `resolvedValue` and pay only the undefined check.
+ *
+ * `resolver` (optional): the apply's composed Resolver. Passed ONLY by evaluator
+ * dispatch (`evaluatePair`, `applyArrowProc`), which already holds `ctx.resolver`. */
 export function makeCallCtx(
   runCtx: RunContext,
   currentInvocation?: InvocationLike,
   argProvenance?: readonly ReadonlySet<number>[],
   resolvedValue?: unknown,
+  resolver?: Resolver,
 ): CallCtx {
   const owner =
     typeof resolvedValue === "object" && resolvedValue !== null ? capabilityByValue.get(resolvedValue) : undefined;
@@ -103,6 +116,7 @@ export function makeCallCtx(
     runCtx,
     invocation: { currentInvocation },
     argProvenance,
+    ...(resolver === undefined ? {} : { resolver }),
     // eslint-disable-next-line unicorn/no-negated-condition -- include configuration/resources only when the value has an owner
     ...(owner !== undefined
       ? {
@@ -155,8 +169,15 @@ export function testCallCtx(overrides?: {
   runCtx?: RunContext;
   currentInvocation?: InvocationLike;
   argProvenance?: readonly ReadonlySet<number>[];
+  resolver?: Resolver;
 }): CallCtx {
-  return makeCallCtx(overrides?.runCtx ?? CONSTANT_CTX, overrides?.currentInvocation, overrides?.argProvenance);
+  return makeCallCtx(
+    overrides?.runCtx ?? CONSTANT_CTX,
+    overrides?.currentInvocation,
+    overrides?.argProvenance,
+    undefined,
+    overrides?.resolver,
+  );
 }
 
 // Null-`this` is uninhabited: `this: CallCtx` on wrappers makes unbound call a compile

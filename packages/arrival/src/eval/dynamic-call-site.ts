@@ -13,33 +13,34 @@
  * Single-threaded JS makes a module-level holder safe; save/restore around each
  * apply handles nesting — see evaluator.ts `wrapLambdaArgs`/`wrapLambdaValue`
  * and evaluatePair's direct-dispatch sites.
+ *
+ * A second evaluation of this file in the same isolate would split the holder
+ * (reverse re-entry would nest under the wrong invocation). That is a bundler
+ * bug — detected at load, not papered over by pinning the holder on globalThis.
  */
+
+import { assertSingleLoad } from "../single-load.js";
+
+assertSingleLoad("eval/dynamic-call-site");
 
 /** Opaque tag for one dynamic evaluation of an AST node. The tap implementation
  *  (`provenance/trace.ts` Invocation) owns the real shape; this leaf and
  *  evaluator.ts only thread it as an opaque parent pointer. */
 export type Invocation = unknown;
 
-declare global {
-  // eslint-disable-next-line no-var
-  var __arrivalDynamicCallSite: Invocation | undefined;
-}
-// PROCESS-GLOBAL (see evaluator.ts `__arrivalRunResolver`): a bundler can load
-// this module twice, splitting the ambient so reverse re-entry nests under the
-// wrong invocation. globalThis keeps one holder; single-threaded save/restore
-// keeps nesting safe.
+let current: Invocation | undefined;
 
 /** Read the current holder — the ALambda runner's prologue falls back to
  *  `ctx.currentInvocation` when unset (see evalLambda). */
 export function currentDynamicCallSite(): Invocation | undefined {
-  return globalThis.__arrivalDynamicCallSite;
+  return current;
 }
 
 /** Raw write — for direct-dispatch sites (evaluatePair, applyArrowProc) that
  *  register a genuine NEW call site. Those sites save/restore by hand (no
  *  "prefer deeper candidate" comparison — the call IS the site). */
 export function setDynamicCallSite(site: Invocation | undefined): void {
-  globalThis.__arrivalDynamicCallSite = site;
+  current = site;
 }
 
 export function isStrictDescendant(a: Invocation | undefined, b: Invocation | undefined): boolean {
@@ -58,11 +59,11 @@ export function isStrictDescendant(a: Invocation | undefined, b: Invocation | un
  * evaluator.ts wrapLambdaArgs).
  */
 export function withDynamicCallSite<T>(dynSite: Invocation | undefined, fn: () => T): T {
-  const saved = globalThis.__arrivalDynamicCallSite;
-  globalThis.__arrivalDynamicCallSite = isStrictDescendant(saved, dynSite) ? saved : dynSite;
+  const saved = current;
+  current = isStrictDescendant(saved, dynSite) ? saved : dynSite;
   try {
     return fn();
   } finally {
-    globalThis.__arrivalDynamicCallSite = saved;
+    current = saved;
   }
 }

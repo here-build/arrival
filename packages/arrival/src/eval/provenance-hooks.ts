@@ -15,6 +15,7 @@
  * `.then`/`.catch` (or runs sync off to the side) so a slow/failed emission
  * never perturbs the real call's timing, identity, or outcome.
  */
+import { assertSingleLoad } from "../single-load.js";
 import type { Invocation } from "./dynamic-call-site.js";
 import { is_promise } from "./guards.js";
 import { emitMint, isEmissionEnabled } from "../provenance/store/emit.js";
@@ -50,6 +51,11 @@ export interface EmissionSink {
 // the parent's pair on exit); it does not make CONCURRENT recording safe. If that
 // stops being a real constraint, the upgrade path is keying this pair by `RunContext`
 // identity instead of holding it ambient.
+//
+// Module-local (not globalThis). A second evaluation of this file would split the
+// pair — detected at load.
+assertSingleLoad("eval/provenance-hooks");
+
 let _coordinate: RecordCoordinate | undefined;
 let _sink: EmissionSink | undefined;
 

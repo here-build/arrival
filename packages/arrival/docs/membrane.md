@@ -484,10 +484,10 @@ against a fake frame — the `DETACHED_SCOPE` degradation exists precisely for t
 **Why an ambient holder.** `z.procedure`'s decode is a plain zod-codec transform with
 no side channel for "which invocation is this a reverse crossing of." Rather than invent
 two plumbing conventions, both the codec path and `schemeToJs` read the SAME
-process-global "current region scope" — the module-holder idiom `dynamic-call-site.ts`
-already uses, safe under single-threaded JS with save/restore around the owning call. It
-is process-global (pinned on `globalThis`) so a double-loaded bundle copy cannot split
-the holder and silently degrade discipline to `DETACHED_SCOPE`.
+module-local "current region scope" — the module-holder idiom `dynamic-call-site.ts`
+already uses, safe under single-threaded JS with save/restore around the owning call. A
+second evaluation of `membrane/region-scope.ts` in the same isolate throws
+`DuplicateModuleLoadError` rather than silently degrading discipline to `DETACHED_SCOPE`.
 
 **Wrapper identity = (callable, scope, FAMILY).** The same callable exported twice
 through the same scope under the same family gets back the same host function
