@@ -441,14 +441,17 @@ export function extract_patterns(
       const patternCar = pattern.car;
       const patternCdr = pattern.cdr;
       if (trailing && patternCar instanceof ASymbol && patternCdr instanceof ASymbol) {
-        // handle (x ... y . z)
-        if (!(code.cdr instanceof ANil)) {
+        // (y . z) tail of (x ... y . z). A proper singleton (y) binds z to ();
+        // a dotted remainder (y . w) binds z to w. A longer rest (cdr is a
+        // pair) is not this tail — the empty-ellipsis arm on `(_ x ... y . z)`
+        // would otherwise steal the match from the ellipsis-trim path.
+        if (code.cdr instanceof APair) {
           return false;
         }
         const car = patternCar.valueOf();
         const cdr = patternCdr.valueOf();
         bindings.symbols[car] = code.car;
-        bindings.symbols[cdr] = nil;
+        bindings.symbols[cdr] = code.cdr;
         return true;
       }
       if (

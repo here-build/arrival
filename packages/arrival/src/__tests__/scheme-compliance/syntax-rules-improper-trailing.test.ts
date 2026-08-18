@@ -1,9 +1,11 @@
-// Reproduction of the dotted-tail / ellipsis-escape holes. Matcher source is
-// unchanged — a one-line "stop hard-failing improper remainder" turns the door
-// into `Not callable: a number` (the expander then emits a numeric call-head).
+// Reproduction of the dotted-tail / ellipsis-escape holes.
+//
+// `(x ... a . b)` vs a proper list (LIPS) and vs an improper remainder
+// (`(1 2 3 4 . 5)`, empty-ellipsis `(1 . 2)`) both match. The `(y . z)` tail
+// accepts a proper singleton and a dotted pair; a longer rest (cdr is a pair)
+// still misses so the empty-ellipsis arm cannot steal the LIPS trim path.
 //
 // Still open:
-//   - `(x ... a . b)` vs improper input — door (`no matching syntax`).
 //   - `(x ... . b)` — match succeeds, eval dies (#:b unbound / number in call-head).
 //   - quoted `'(... (x ...))` — silent unsubstituted `(x ...)`.
 import { describe, expect, it } from "vitest";
@@ -55,14 +57,9 @@ describe("syntax-rules trailing / ellipsis — controls (must stay green)", () =
 });
 
 describe("syntax-rules trailing-handler hole (improper remainder)", () => {
-  it.fails("R7RS: (x ... a . b) vs (1 2 3 4 . 5) binds a=4, b=5 → ((1 2 3) 4 . 5)", async () => {
+  it("R7RS: (x ... a . b) vs (1 2 3 4 . 5) binds a=4, b=5 → ((1 2 3) 4 . 5)", async () => {
     const out = await run(improperRemainder);
     expect(String(out)).toBe("((1 2 3) 4 . 5)");
-  });
-
-  it("doors — no matching syntax — does not throw an invariant", async () => {
-    const msg = await boom(improperRemainder);
-    expect(msg).toMatch(/syntax-rules: no matching syntax in macro \(m 1 2 3 4 \. 5\)/);
   });
 
   it("empty ellipsis + exact tail already works: (x ... a b) vs (1 2)", async () => {
@@ -72,11 +69,11 @@ describe("syntax-rules trailing-handler hole (improper remainder)", () => {
     expect(String(out)).toBe("(() 1 2)");
   });
 
-  it("empty ellipsis + dotted tail (1 . 2) still doors", async () => {
-    const msg = await boom(
+  it("empty ellipsis + dotted tail (x ... a . b) vs (1 . 2) → (() 1 . 2)", async () => {
+    const out = await run(
       `(let-syntax ((m (syntax-rules () ((_ x ... a . b) (cons (list x ...) (cons a b)))))) (m 1 . 2))`,
     );
-    expect(msg).toMatch(/syntax-rules: no matching syntax in macro \(m 1 \. 2\)/);
+    expect(String(out)).toBe("(() 1 . 2)");
   });
 });
 
@@ -120,7 +117,6 @@ describe("syntax-rules (x ... . b) arm — match succeeds, then eval dies", () =
 });
 
 // Probe stops after restore_data_gensyms: the transcribed form is not evaluated as Scheme.
-// Door case records extract_patterns returning no bindings; the matcher is not forced.
 const DOTTED_TAIL_PATTERN = "(_ x ... a . b)";
 const DOTTED_TAIL_TEMPLATE = "(cons (list x ...) (cons a b))";
 
@@ -167,8 +163,19 @@ describe("syntax-rules dotted-tail expansion probe (form after restore_data_gens
     }
   });
 
-  it("door / red: (m 1 2 3 4 . 5) has no bindings (extract_patterns miss)", async () => {
+  it("improper remainder: (m 1 2 3 4 . 5) transcribes to (#:cons (#:list 1 2 3) (#:cons 4 5))", async () => {
     const probe = await probeDottedTailExpansion("(m 1 2 3 4 . 5)");
-    expect(probe).toEqual({ bindings: false });
+    expect(probe.bindings).toBe(true);
+    if (probe.bindings) {
+      expect(probe.expansion).toBe("(#:cons (#:list 1 2 3) (#:cons 4 5))");
+    }
+  });
+
+  it("empty ellipsis + dotted tail: (m 1 . 2) transcribes to (#:cons (#:list) (#:cons 1 2))", async () => {
+    const probe = await probeDottedTailExpansion("(m 1 . 2)");
+    expect(probe.bindings).toBe(true);
+    if (probe.bindings) {
+      expect(probe.expansion).toBe("(#:cons (#:list) (#:cons 1 2))");
+    }
   });
 });
