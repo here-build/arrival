@@ -18,10 +18,11 @@
  * D4 — fan/binder/transparent/opaque → `ReplayScopeError` with route, never a wrong value.
  */
 import { execState } from "../eval/generator-exec.js";
-import { bindRosetta, type AmbientValue } from "../env/AmbientRuntime.js";
+import { bindValue, type AmbientValue } from "../env/AmbientRuntime.js";
 import { BASE_ROSTER } from "../env/base-roster.js";
 import { collapseProvenance } from "./provenance-collapse.js";
-import { AValue } from "../values/primitives/AValue.js";
+import { AValue, EMPTY_PROVENANCE, pointProvenance } from "../values/primitives/AValue.js";
+import { ARosettaProcedure } from "../values/primitives/ARosettaProcedure.js";
 import { toJS } from "../membrane/membrane.js";
 import { jsToScheme } from "../membrane/rosetta.js";
 import { CONSTANT_CTX } from "../run/RunContext.js";
@@ -274,18 +275,36 @@ export async function replayProgramWithPlayback(opts: PlaybackReplayOptions): Pr
     const playbackScope = base.scope.child("provenance-playback");
     for (const [op, payloads] of playback) {
       const queue = [...payloads];
-      bindRosetta(playbackScope.env, op, {
-        fn: () => {
-          const next = queue.shift();
-          if (next === undefined) {
-            throw new ReplayScopeError(
-              "source",
-              op,
-              `playback queue for "${op}" underflowed — the replay demanded more penetrations than the record run crossed; the stream is incomplete or the program diverged (never answered live)`,
-            );
-          }
-          return boxPayload(next);
-        } });
+      // ARosettaProcedure — bindValue doors a bare host fn. Fresh source point per
+      // fire (same mint as a live source crossing); recorded stamps ride in boxPayload.
+      bindValue(
+        playbackScope.env,
+        op,
+        new ARosettaProcedure({
+          name: op,
+          arity: { min: 0, max: null },
+          contract: undefined,
+          hostApply: (_schemeArgs, callCtx) => {
+            const next = queue.shift();
+            if (next === undefined) {
+              throw new ReplayScopeError(
+                "source",
+                op,
+                `playback queue for "${op}" underflowed — the replay demanded more penetrations than the record run crossed; the stream is incomplete or the program diverged (never answered live)`,
+              );
+            }
+            const { runCtx, invocation } = callCtx;
+            const inv = invocation.currentInvocation;
+            let resultProvenance = EMPTY_PROVENANCE;
+            if (inv && typeof inv.id === "number") {
+              if (typeof inv.markProvenancePoint === "function") inv.markProvenancePoint();
+              else inv.isProvenancePoint = true;
+              resultProvenance = pointProvenance(inv.id);
+            }
+            return jsToScheme(runCtx, boxPayload(next), undefined, resultProvenance);
+          },
+        }),
+      );
     }
     const state = await execState(source, {
       capabilities: base.capabilities,

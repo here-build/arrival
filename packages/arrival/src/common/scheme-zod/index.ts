@@ -157,11 +157,10 @@ export function lookupName(schema: unknown): string | undefined {
   return core ? NAMES.get(core) : undefined;
 }
 
-/** Raw `_zod.def` reach-in (E2 consolidation, hermeticity audit 2026-08-13) — the sole
- *  sanctioned doorway for structural def introspection (tuple `items`, array `element`,
- *  object `shape`, tuple `rest`, …). Reads the schema's OWN def — no registry walk, unlike
- *  `resolveCore`. Loosely typed on purpose: callers narrow to the shape they need. Same
- *  drift pin as `resolveCore` above: zod 4.3.6. */
+/** Sole sanctioned `_zod.def` doorway for structural def introspection (tuple `items`,
+ *  array `element`, object `shape`, tuple `rest`, …). Reads the schema's OWN def — no
+ *  registry walk, unlike `resolveCore`. Loosely typed on purpose: callers narrow to the
+ *  shape they need. Same drift pin as `resolveCore` above: zod 4.3.6. */
 export function defOf(schema: unknown): Record<string, unknown> | undefined {
   return (schema as { _zod?: { def?: Record<string, unknown> } } | undefined)?._zod?.def;
 }
@@ -184,7 +183,6 @@ function isSchemeValue(x: unknown): x is SchemeValue {
   return x instanceof AValue || typeof x === "function";
 }
 
-// ContourOnly / CrossingOnly — see preamble brands.
 declare const CONTOUR_ONLY: unique symbol;
 declare const CROSSING_ONLY: unique symbol;
 
@@ -645,40 +643,50 @@ export function vector<E extends z.ZodTypeAny = typeof schemeValue>(element: E =
 
 // ── dict / box ─────────────────────────────────────────────────────────────
 
+const dictContainer = z.union([
+  z.instanceof(ADict),
+  z.instanceof(AJSObject).refine((o): o is AJSObject => isDictShaped(o.source)),
+]);
+
 /**
  * Native k/v map. Keyed `dict({a: integer()})` → per-key codec (struct); bare
  * `dict()` → open `Record<string, SchemeValue>` (values stay scheme-boxed).
  * For an open record with *typed* values, use {@link dictRecord}.
+ *
+ * Two overloads (same split as {@link list}): a runtime `keys.length ? object : record`
+ * ternary does not narrow — TS would union the open-record face onto every shaped
+ * dict (`Record<string, SchemeValue> | { a: string }`).
  */
-export function dict<S extends Record<string, z.ZodTypeAny>>(shape: S = {} as S) {
-  const keys = Object.keys(shape);
+export function dict(): z.ZodCodec<typeof dictContainer, z.ZodRecord<z.ZodString, typeof schemeValue>>;
+export function dict<S extends Record<string, z.ZodTypeAny>>(
+  shape: S,
+): z.ZodCodec<typeof dictContainer, z.ZodObject<{ -readonly [P in keyof S]: S[P] }>>;
+export function dict<S extends Record<string, z.ZodTypeAny>>(shape?: S) {
+  const keys = shape === undefined ? [] : Object.keys(shape);
+  const out = shape === undefined ? z.record(z.string(), schemeValue) : z.object(shape);
   return named(
     "dict",
-    z.codec(
-      // Union, not bare ADict: dict-shaped AJSObject (tool result, no prior
-      // Scheme lineage) must decode too — same `isDictShaped` as `dict?`/print.
-      // Encode builds ADict from pairs (never AJSObject re-box path).
-      z.union([z.instanceof(ADict), z.instanceof(AJSObject).refine((o) => isDictShaped(o.source))]),
-      keys.length ? z.object(shape) : z.record(z.string(), schemeValue),
-      {
-        // Transform crosses ONLY the container boundary. Out-schema owns
-        // per-field marshaling (`list`/`vector` same). Decoding fields here
-        // would DOUBLE-decode. `as never`: record shape is generic.
-        decode: (d) => {
-          const src = d as ADict | AJSObject;
-          // Shallow BOXED record — not `arrival/toJS` (that egresses an R9
-          // lazy proxy with values already unwrapped — membrane exit, not
-          // the inside-sandbox record this out-schema expects).
-          const names = keys.length ? keys : src.keys();
-          // Heap-metering INERT (restoration is workboard D1).
-          return Object.fromEntries(names.map((k) => [k, src.get(k)])) as never;
-        },
-        encode: (rec: Record<string, unknown>) => {
-          const entries = Object.entries(rec);
-          // Heap-metering INERT (restoration is workboard D1).
-          return new ADict(entries.map(([k, v]) => [new ASymbol(k), v as SchemeValue] as [DictKey, SchemeValue]));
-        } },
-    ),
+    z.codec(dictContainer, out, {
+      // Transform crosses ONLY the container boundary. Out-schema owns
+      // per-field marshaling (`list`/`vector` same). Decoding fields here
+      // would DOUBLE-decode. `as never`: record shape is generic.
+      decode: (d) => {
+        const src = d as ADict | AJSObject;
+        // Shallow BOXED record — not `arrival/toJS` (that egresses an R9
+        // lazy proxy with values already unwrapped — membrane exit, not
+        // the inside-sandbox record this out-schema expects).
+        // Shaped: only keys the source HAS. ADict.get/AJSObject.get return
+        // nil for a miss; z.string.optional() then sees ANil, not absence.
+        const names = shape === undefined ? src.keys() : keys.filter((k) => src.has(k));
+        // Heap-metering INERT (restoration is workboard D1).
+        return Object.fromEntries(names.map((k) => [k, src.get(k)])) as never;
+      },
+      encode: (rec: Record<string, unknown>) => {
+        const entries = Object.entries(rec);
+        // Heap-metering INERT (restoration is workboard D1).
+        return new ADict(entries.map(([k, v]) => [new ASymbol(k), v as SchemeValue] as [DictKey, SchemeValue]));
+      },
+    }),
   );
 }
 

@@ -33,8 +33,9 @@ import { bindValue, AmbientRuntime, type AmbientValue, mintFrame, isAmbientRunti
 import { ensurePreludeDefineFrame } from "../env/assemble-run.js";
 import {
   lookupExtensionResolverIn,
-  makeRegisterExtensionMacro,
-  type ExtensionResolverRegistry } from "./loader-extensions.js";
+  registerExtensionTransformer,
+  type ExtensionResolverRegistry,
+} from "./loader-extensions.js";
 import type { RunContext } from "../run/RunContext.js";
 import { getCapabilityResources } from "../run/CallCtx.js";
 import {
@@ -48,7 +49,8 @@ import {
   type RunEnv,
   runEnvOf,
   runResolverOf,
-  type SchemeVal } from "./loader.js";
+  type SchemeVal,
+} from "./loader.js";
 
 /** Resolve a `(require/extension :name)` argument to the bare extension name. A keyword
  *  (`:sql`) is a self-evaluating symbol (arrival's keyword-tagless-apply.md) that stringifies
@@ -59,11 +61,9 @@ function extensionName(arg: unknown): string {
   return String(arg).replace(/^:/, "");
 }
 
-/** A read-capable fs is any object exposing `readFile(path)`. */
 const isFsReadLike = (v: unknown): v is FsReadLike =>
   v !== null && typeof v === "object" && typeof (v as FsReadLike).readFile === "function";
 
-/** A `Loader` is `{ resolve(), read(), resolvers: Map }`. */
 const isLoader = (v: unknown): v is Loader =>
   v !== null &&
   typeof v === "object" &&
@@ -135,7 +135,6 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
     /** COMPAT: a pre-built `Loader` (WINS over `fs`) — the seam for a caller that injects CUSTOM
      *  resolvers into the table (arrival-chain's `.yaml`/`.toml` handlers). */
     loader: z.custom<Loader>(isLoader, "loader must have resolve()/read()/resolvers:Map").optional(),
-    /** Tap for `require`d module internals (the host's trace). */
     tap: z
       .custom<EvalTap>(
         (v: unknown): v is EvalTap => v !== null && typeof v === "object" && typeof (v as EvalTap).enter === "function",
@@ -151,7 +150,8 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
      *  as `require`'s own fs/loader door). */
     extensionRegistry: z
       .custom<ReadonlyMap<string, EnvPack<RunEnv>>>((v) => v instanceof Map, "extensionRegistry must be a Map")
-      .optional() },
+      .optional(),
+  },
   /** One bag per RunContext (docs/execution.md §HERMETIC): session, config-derived loader,
    *  lazy per-env assembler — dispose tears runtime-applied extensions out. */
   resources: (config): LoaderRunResources => {
@@ -163,7 +163,8 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
         inflight: new Map(),
         evaluating: new Set(),
         loadingStack: [],
-        dirStack: [(config as { dirname?: string }).dirname ?? ""] },
+        dirStack: [(config as { dirname?: string }).dirname ?? ""],
+      },
       loader: loader ?? (fs ? makeFsLoader(fs) : undefined),
       extensionResolvers: new Map(),
       getOrCreateAssembler(env: RunEnv): RuntimeAssembler<RunEnv> {
@@ -175,180 +176,186 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
       },
       async [Symbol.asyncDispose](): Promise<void> {
         await assembler?.dispose();
-      } };
+      },
+    };
   },
   // Flipped form: symbol record STATIC — every verb always enumerated; config-gating via
   // requiresConfig; impls read this.configuration/this.resources at dispatch.
-  symbols: (symbol) => ({
+  symbols: (symbol) => {
     // Assembly-time-only MACRO (§LOADER / §PRELUDE): unevaluated resolver name.
     // loaderRegistryOf referenced before const finishes — safe (lazy, post-load expansion).
-    "require/register-extension": {
-      kind: "macro" as const,
-      name: "require/register-extension",
-      macro: makeRegisterExtensionMacro(loaderRegistryOf),
-      preludeOnly: true },
+    const registerExtension = symbol.macro`require/register-extension`(registerExtensionTransformer(loaderRegistryOf), {
+      preludeOnly: true,
+    });
+    return {
+      "require/register-extension": registerExtension,
 
-    require:
-      symbol.native`require: loads a module by specifier and returns its value or spills its defines into the environment`(
-        {
-          input: [z.schemeValue],
-          output: [z.schemeValue],
-          // ANY-OF: callable with either fs or loader; both absent ⇒ DoorProcedure naming the pair.
-          requiresConfig: [["fs", "loader"]] },
-        // RAW-BOUND native, never rosetta-wrapped (§LOADER): no provenance mint on the return
-        // (callable data born when the proc is INVOKED); no return marshal (eval-module scheme
-        // lambda survives where jsToScheme would void it).
-        //
-        // Within a `.scm`, forms execExpr in order (R5RS load — define-macro before next expand).
-        // Requires are NOT globally sequential — `(map …)` parallelizes, so same path can be
-        // required concurrently; inflight cache shares one load (a flat Set would misread
-        // siblings as a cycle). Cycles THROW (R7RS; spill model has no partial exports) —
-        // only `.scm` load can require during its own eval; value/eval modules are leaves.
-        async function (...args: unknown[]): Promise<SchemeVal> {
-          const resources = this.resources as LoaderRunResources | undefined;
-          invariant(
-            resources !== undefined,
-            "require: no run resources — dispatched outside a resource-armed RunContext.",
-          );
-          const { session, loader } = resources;
-          // requiresConfig already gated both-absent at bind.
-          invariant(
-            loader !== undefined,
-            "require: no loader derivable — the fs/loader door should have bound instead.",
-          );
-          const { tap } = this.configuration as { tap?: EvalTap };
-          // Composed resolver (runResolverOf): module forms + registered-resolver lookup.
-          const resolver = runResolverOf(this, "require");
-          const { inflight, evaluating, loadingStack, dirStack } = session;
-          const specifierArg = args[0];
-          const path = await loader.resolve(String(specifierArg), dirStack.at(-1)!);
+      require:
+        symbol.native`require: loads a module by specifier and returns its value or spills its defines into the environment`(
+          {
+            input: [z.schemeValue],
+            output: [z.schemeValue],
+            // ANY-OF: callable with either fs or loader; both absent ⇒ DoorProcedure naming the pair.
+            requiresConfig: [["fs", "loader"]],
+          },
+          // RAW-BOUND native, never rosetta-wrapped (§LOADER): no provenance mint on the return
+          // (callable data born when the proc is INVOKED); no return marshal (eval-module scheme
+          // lambda survives where jsToScheme would void it).
+          //
+          // Within a `.scm`, forms execExpr in order (R5RS load — define-macro before next expand).
+          // Requires are NOT globally sequential — `(map …)` parallelizes, so same path can be
+          // required concurrently; inflight cache shares one load (a flat Set would misread
+          // siblings as a cycle). Cycles THROW (R7RS; spill model has no partial exports) —
+          // only `.scm` load can require during its own eval; value/eval modules are leaves.
+          async function (...args: unknown[]): Promise<SchemeVal> {
+            const resources = this.resources as LoaderRunResources | undefined;
+            invariant(
+              resources !== undefined,
+              "require: no run resources — dispatched outside a resource-armed RunContext.",
+            );
+            const { session, loader } = resources;
+            // requiresConfig already gated both-absent at bind.
+            invariant(
+              loader !== undefined,
+              "require: no loader derivable — the fs/loader door should have bound instead.",
+            );
+            const { tap } = this.configuration as { tap?: EvalTap };
+            const resolver = runResolverOf(this, "require");
+            const { inflight, evaluating, loadingStack, dirStack } = session;
+            const specifierArg = args[0];
+            const path = await loader.resolve(String(specifierArg), dirStack.at(-1)!);
 
-          const pending = inflight.get(path);
-          if (pending) {
-            // Own ancestor → real cycle. Else settled hit or concurrent sibling — share.
-            RequireCycleError.invariant(!evaluating.has(path), [...loadingStack, path]);
-            return (await pending).value;
-          }
-
-          const load = (async (): Promise<{ value: SchemeVal }> => {
-            const contents = await loader.read(path);
-            // Capability-registered suffix wins over builtin table. Registry stores NAME —
-            // late-bound against THIS env (resource-armed resolver sees THIS env's resource).
-            // Registered but unbound verb ⇒ fall through to builtin; missing handler IS the
-            // scoping guarantee (must root the capability).
-            const resolverName = lookupExtensionResolverIn(loaderRegistryOf(this.runCtx), path);
-            const registered = resolverName === undefined ? undefined : resolver.lookup(resolverName);
-            let result: ResolverResult;
-            if (is_applyable(registered)) {
-              // Thread full CallCtx, not just runCtx. Bridge through unknown: registry contract
-              // is ResolverResult; applyCallback's CallResult can't express that.
-              result = (await applyCallback(registered, [contents, { path }], this)) as unknown as ResolverResult;
-            } else {
-              const handler = pickHandler(path, loader.resolvers);
-              RequireResolverError.invariant(handler !== undefined, "no-resolver", path);
-              result = await handler.resolve(contents, { path });
+            const pending = inflight.get(path);
+            if (pending) {
+              // Own ancestor → real cycle. Else settled hit or concurrent sibling — share.
+              RequireCycleError.invariant(!evaluating.has(path), [...loadingStack, path]);
+              return (await pending).value;
             }
 
-            let value: SchemeVal = theVoid;
-            if (result.kind === "value") {
-              // dataToScheme: arrays→lists, objects→member-readable. DATA only — JS function
-              // would void (CALLABLE RULE, loader.ts); callables use kind:"eval" + scheme lambda.
-              value = dataToScheme(result.value);
-            } else {
-              // load/eval: forms into run env; only load enters cycle domain.
-              const isLoad = result.kind === "load";
-              dirStack.push(dirOf(path));
-              if (isLoad) {
-                evaluating.add(path);
-                loadingStack.push(path);
+            const load = (async (): Promise<{ value: SchemeVal }> => {
+              const contents = await loader.read(path);
+              // Capability-registered suffix wins over builtin table. Registry stores NAME —
+              // late-bound against THIS env (resource-armed resolver sees THIS env's resource).
+              // Registered but unbound verb ⇒ fall through to builtin; missing handler IS the
+              // scoping guarantee (must root the capability).
+              const resolverName = lookupExtensionResolverIn(loaderRegistryOf(this.runCtx), path);
+              const registered = resolverName === undefined ? undefined : resolver.lookup(resolverName);
+              let result: ResolverResult;
+              if (is_applyable(registered)) {
+                // Thread full CallCtx, not just runCtx. Bridge through unknown: registry contract
+                // is ResolverResult; applyCallback's CallResult can't express that.
+                result = (await applyCallback(registered, [contents, { path }], this)) as unknown as ResolverResult;
+              } else {
+                const handler = pickHandler(path, loader.resolvers);
+                RequireResolverError.invariant(handler !== undefined, "no-resolver", path);
+                result = await handler.resolve(contents, { path });
               }
-              try {
-                // Composed resolver keeps capability base (null-rooted lexical alone loses stdlib).
-                // Thread this.runCtx so nested require shares vocabulary/meter/extension registry.
-                for (const form of result.forms) value = await execExpr(form, { resolver, tap, runCtx: this.runCtx });
-              } finally {
+
+              let value: SchemeVal = theVoid;
+              if (result.kind === "value") {
+                // dataToScheme: arrays→lists, objects→member-readable. DATA only — JS function
+                // would void (CALLABLE RULE, loader.ts); callables use kind:"eval" + scheme lambda.
+                value = dataToScheme(result.value);
+              } else {
+                // load/eval: forms into run env; only load enters cycle domain.
+                const isLoad = result.kind === "load";
+                dirStack.push(dirOf(path));
                 if (isLoad) {
-                  loadingStack.pop();
-                  evaluating.delete(path);
+                  evaluating.add(path);
+                  loadingStack.push(path);
                 }
-                dirStack.pop();
+                try {
+                  // Composed resolver keeps capability base (null-rooted lexical alone loses stdlib).
+                  // Thread this.runCtx so nested require shares vocabulary/meter/extension registry.
+                  for (const form of result.forms) value = await execExpr(form, { resolver, tap, runCtx: this.runCtx });
+                } finally {
+                  if (isLoad) {
+                    loadingStack.pop();
+                    evaluating.delete(path);
+                  }
+                  dirStack.pop();
+                }
+                // load returns void singleton, not raw JS undefined.
+                if (isLoad) value = theVoid;
               }
-              // load returns void singleton, not raw JS undefined.
-              if (isLoad) value = theVoid;
-            }
-            return { value };
-          })();
+              return { value };
+            })();
 
-          inflight.set(path, load);
-          try {
-            return (await load).value;
-          } catch (error) {
-            // Don't poison cache — drop so path can retry. Annotate requireChain (deepest
-            // wins). Best-effort if frozen.
-            inflight.delete(path);
-            if (error !== null && typeof error === "object" && !("requireChain" in error)) {
-              try {
-                (error as { requireChain?: string[] }).requireChain = [...loadingStack, path];
-              } catch {
-                /* frozen/sealed error — annotation is best-effort */
+            inflight.set(path, load);
+            try {
+              return (await load).value;
+            } catch (error) {
+              // Don't poison cache — drop so path can retry. Annotate requireChain (deepest
+              // wins). Best-effort if frozen.
+              inflight.delete(path);
+              if (error !== null && typeof error === "object" && !("requireChain" in error)) {
+                try {
+                  (error as { requireChain?: string[] }).requireChain = [...loadingStack, path];
+                } catch {
+                  /* frozen/sealed error — annotation is best-effort */
+                }
               }
+              throw error;
             }
-            throw error;
-          }
-        },
-      ),
+          },
+        ),
 
-    "require/extension":
-      symbol.native`require/extension: applies a host-registered extension pack (by :name) to the current env`(
-        {
-          input: [z.schemeValue],
-          output: [z.schemeValue],
-          // Absent registry ⇒ door naming extensionRegistry (same posture as require's fs/loader).
-          requiresConfig: ["extensionRegistry"] },
-        // RAW-BOUND (§LOADER). Applies pack via per-env RuntimeAssembler; returns void.
-        // Mid-run scope shape (ruling 2026-08-13, audit B4): SEED child C' of the live
-        // env carries register-extension + any preludeOnly binds (discarded — never
-        // main-phase-resolvable); the pack's prelude TEXT evaluates against a child D'
-        // of C', and D's OWN defines are copied into the run's persistent
-        // prelude-define frame after apply — an extension's prelude defines ARE
-        // main-phase bindings ("invocation survives, reference does not"; §PRELUDE).
-        async function (...args: unknown[]): Promise<SchemeVal> {
-          const resources = this.resources as LoaderRunResources | undefined;
-          invariant(
-            resources !== undefined,
-            "require/extension: no run resources — dispatched outside a resource-armed RunContext.",
-          );
-          const { extensionRegistry } = this.configuration as {
-            extensionRegistry?: ReadonlyMap<string, EnvPack<RunEnv>>;
-          };
-          invariant(
-            extensionRegistry !== undefined,
-            "require/extension: no extensionRegistry — the config door should have bound instead.",
-          );
-          const env = runEnvOf(this, "require/extension");
-          const name = extensionName(args[0]);
-          const pack = extensionRegistry.get(name);
-          RequireResolverError.invariant(pack !== undefined, "no-extension", name, [...extensionRegistry.keys()]);
-          const assembler = resources.getOrCreateAssembler(env);
-          // Discarded child, hand-bound (SchemeEnv has no write member) — mintFrame + bindValue.
-          invariant(
-            isAmbientRuntime(env),
-            "require/extension: the run env is not an arrival AmbientRuntime — a mid-run prelude scope must be minted off a real frame to receive bindings.",
-          );
-          const preludeScope = mintFrame(env, `prelude/${name}`);
-          bindValue(preludeScope, "require/register-extension", makeRegisterExtensionMacro(loaderRegistryOf));
-          // The eval child: pack prelude defines land HERE, apart from the seed binds.
-          const preludeEvalScope = mintFrame(preludeScope, `prelude/${name}/defines`);
-          await assembler.require(pack, {
-            preludeScope: { set: (n, v) => bindValue(preludeScope, n, v as AmbientValue) },
-            // through-unknown widen: assembler typed over structural RunEnv; frame is concrete.
-            preludeEvalScope: preludeEvalScope as RunEnv & AmbientRuntime });
-          // Persist the pack's prelude defines into this run's define frame (own-record
-          // read, sanctioned: list() is own names; values entered through bindValue).
-          const defines = ensurePreludeDefineFrame(this.runCtx);
-          for (const defineName of preludeEvalScope.list()) {
-            bindValue(defines, defineName, preludeEvalScope.__env__[defineName]!);
-          }
-          return theVoid;
-        },
-      ) }) });
+      "require/extension":
+        symbol.native`require/extension: applies a host-registered extension pack (by :name) to the current env`(
+          {
+            input: [z.schemeValue],
+            output: [z.schemeValue],
+            // Absent registry ⇒ door naming extensionRegistry (same posture as require's fs/loader).
+            requiresConfig: ["extensionRegistry"],
+          },
+          // RAW-BOUND (§LOADER). Applies pack via per-env RuntimeAssembler; returns void.
+          // Mid-run scope shape (ruling 2026-08-13, audit B4): SEED child C' of the live
+          // env carries register-extension + any preludeOnly binds (discarded — never
+          // main-phase-resolvable); the pack's prelude TEXT evaluates against a child D'
+          // of C', and D's OWN defines are copied into the run's persistent
+          // prelude-define frame after apply — an extension's prelude defines ARE
+          // main-phase bindings ("invocation survives, reference does not"; §PRELUDE).
+          async function (...args: unknown[]): Promise<SchemeVal> {
+            const resources = this.resources as LoaderRunResources | undefined;
+            invariant(
+              resources !== undefined,
+              "require/extension: no run resources — dispatched outside a resource-armed RunContext.",
+            );
+            const { extensionRegistry } = this.configuration as {
+              extensionRegistry?: ReadonlyMap<string, EnvPack<RunEnv>>;
+            };
+            invariant(
+              extensionRegistry !== undefined,
+              "require/extension: no extensionRegistry — the config door should have bound instead.",
+            );
+            const env = runEnvOf(this, "require/extension");
+            const name = extensionName(args[0]);
+            const pack = extensionRegistry.get(name);
+            RequireResolverError.invariant(pack !== undefined, "no-extension", name, [...extensionRegistry.keys()]);
+            const assembler = resources.getOrCreateAssembler(env);
+            // Discarded child, hand-bound (SchemeEnv has no write member) — mintFrame + bindValue.
+            invariant(
+              isAmbientRuntime(env),
+              "require/extension: the run env is not an arrival AmbientRuntime — a mid-run prelude scope must be minted off a real frame to receive bindings.",
+            );
+            const preludeScope = mintFrame(env, `prelude/${name}`);
+            bindValue(preludeScope, "require/register-extension", registerExtension.macro);
+            // The eval child: pack prelude defines land HERE, apart from the seed binds.
+            const preludeEvalScope = mintFrame(preludeScope, `prelude/${name}/defines`);
+            await assembler.require(pack, {
+              preludeScope: { set: (n, v) => bindValue(preludeScope, n, v as AmbientValue) },
+              // through-unknown widen: assembler typed over structural RunEnv; frame is concrete.
+              preludeEvalScope: preludeEvalScope as RunEnv & AmbientRuntime,
+            });
+            // Persist the pack's prelude defines into this run's define frame (own-record
+            // read, sanctioned: list() is own names; values entered through bindValue).
+            const defines = ensurePreludeDefineFrame(this.runCtx);
+            for (const defineName of preludeEvalScope.list()) {
+              bindValue(defines, defineName, preludeEvalScope.__env__[defineName]!);
+            }
+            return theVoid;
+          },
+        ),
+    };
+  },
+});

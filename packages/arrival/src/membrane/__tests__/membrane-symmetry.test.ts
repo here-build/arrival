@@ -17,11 +17,7 @@
  * scheme→js, result crosses js→scheme), a unique symbol and a host bigint door
  * (`NoLensError`), and Symbol.for('x') → the keyword `:x`. The sandbox never holds a
  * raw JS value — the deliberate, host-agnostic narrowing of JS interop. These tests
- * pin that. Remaining notes:
- *  - membrane `isSchemeValue` lists AValue subtypes by explicit
- *    `instanceof` checks. Any AValue subtype that isn't listed will mis-route.
- *    Nil is technically listed by `=== nil`, but clones miss (see
- *    clone-identity.test.ts for the meta-bug).
+ * pin that.
  *
  * Tests intended to pass are GREEN; documented divergences are it.fails.
  */
@@ -222,9 +218,6 @@ describe("jsToScheme → toJS round-trip", () => {
 // =========================================================================
 
 describe("isSchemeValue completeness — every native AValue subtype is recognised", () => {
-  // Membrane's isSchemeValue (membrane.ts:70-99) is a long `instanceof`
-  // chain. Each test asserts the chain has a branch for the subtype.
-
   // INVARIANT: every native AValue subtype (String/Symbol/Character/Exact/Inexact/Bool/Pair/nil/JSObject) is recognized as a scheme value
   it("SchemeString → true", () => {
     expect(isSchemeValue(new AString("x"))).toBe(true);

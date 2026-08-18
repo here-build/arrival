@@ -14,10 +14,10 @@
  *
  * VALUE-IMPORTS `env/AmbientRuntime.ts` (hermeticity audit D4, `docs/strata.md` §2's
  * `membrane → env` edge): `AmbientRuntime`/`isAmbientRuntime` join `BoxedSchemeValue`
- * and `isSchemeValue`'s recognition switch because an env is a CONTROL form the
- * membrane must recognize as "already scheme, don't re-wrap" (a host function can bind
- * INTO an env, so the env itself crosses this boundary) — see `BoxedSchemeValue`'s own
- * doc comment below for the full closed-union rationale.
+ * and `isSchemeValue` because an env is a CONTROL form the membrane must recognize
+ * as "already scheme, don't re-wrap" (a host function can bind INTO an env, so the
+ * env itself crosses this boundary) — see `BoxedSchemeValue`'s own doc comment
+ * below for the full closed-union rationale.
  */
 
 import { CONSTANT_CTX } from "../run/RunContext.js";
@@ -100,40 +100,23 @@ export type BoxedSchemeValue =
 type FromJSResult = BoxedSchemeValue | Uint8Array | ArrayBuffer | DataView | Promise<unknown>;
 
 /**
- * Already a Scheme value? Prevents double-wrapping.
- * `instanceof ANil`, not `=== nil`: nil.withProvenance mints fresh Nil clones, so
- * reference-equality would miss provenance-bearing list terminators.
+ * Already-scheme door: refuse a second wrap.
+ * `instanceof AValue`, not `=== nil` — `nil.withProvenance` mints fresh Nil clones;
+ * reference-equality would miss provenance-bearing list terminators. RULINGS.md R3.
  */
 export function isSchemeValue(value: unknown): value is BoxedSchemeValue {
-  switch (true) {
-    // Recognition is `instanceof AValue` (RULINGS.md) — structural, not enumerative:
-    // a new AValue subclass is recognized free (no hand-maintained case-list gap).
-    case value instanceof AValue:
-
-    // Non-AValue control forms that legitimately cross as "already scheme"
-    // (BoxedSchemeValue is a SchemeValue superset for these — see type doc).
-    case value instanceof Macro:
-    case value instanceof Syntax:
-    case value instanceof LambdaContext:
-    case isAmbientRuntime(value):
-      return true;
-
-    default:
-      return false;
-  }
+  if (value instanceof AValue) return true;
+  return value instanceof Macro || value instanceof Syntax || value instanceof LambdaContext || isAmbientRuntime(value);
 }
 
 /** Bytevector-like binary — pass through unwrapped; polymorphic bytevector ops accept them. */
 export function isBytevectorLike(value: unknown): value is Uint8Array | ArrayBuffer | DataView {
-  switch (true) {
-    case value instanceof Uint8Array:
-    case value instanceof ArrayBuffer:
-    case value instanceof DataView:
-    case typeof Buffer !== "undefined" && value instanceof Buffer:
-      return true;
-    default:
-      return false;
-  }
+  return (
+    value instanceof Uint8Array ||
+    value instanceof ArrayBuffer ||
+    value instanceof DataView ||
+    (typeof Buffer !== "undefined" && value instanceof Buffer)
+  );
 }
 
 /**

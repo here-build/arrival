@@ -1,14 +1,12 @@
 /**
  * Scheme↔JS membrane: `toJS` / `jsToScheme` marshal at the FFI boundary and
  * round-trip to identity both ways on values each side owns
- * (`toJS∘jsToScheme = id`, `jsToScheme∘toJS = id`).
- *
- * `createRosettaWrapper` mints an `ARosettaProcedure` for a host fn — sole live
- * producer is `provenance/replay.ts`'s playback-frame registration via
- * `AmbientRuntime`'s `bindRosetta`. Full crossing map: `docs/membrane.md`.
+ * (`toJS∘jsToScheme = id`, `jsToScheme∘toJS = id`). Full crossing map:
+ * `docs/membrane.md`. Host-fn → callable mint is `hostFnToCallable`; playback
+ * frames mint `ARosettaProcedure` at the bind site in `provenance/replay.ts`.
  */
 
-import { AValue, EMPTY_PROVENANCE, mergeProvenance, pointProvenance, unionProvenance } from "../values/primitives/AValue.js";
+import { AValue, EMPTY_PROVENANCE, mergeProvenance } from "../values/primitives/AValue.js";
 import { fromJs } from "./boxing.js";
 import { type RunContext } from "../run/RunContext.js";
 import { AJSArray } from "./AJSArray.js";
@@ -17,18 +15,17 @@ import { ANil, nil } from "../values/primitives/ANil.js";
 import { theVoid } from "../values/primitives/AVoid.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { EOF } from "../values/primitives/EOF.js";
+
 import { AOpaqueHandle } from "../values/primitives/AOpaqueHandle.js";
 import { isMarkedInteropPrivate } from "./interop-access.js";
 import { R7RSError, UnrecognizedCrossingError, AsyncCrossingError, NoLensError, RedundantCrossingError } from "../errors.js";
 import { is_promise } from "../eval/guards.js";
 import { _installCallableMarshal, hostFnToCallable, originalCallableOf, type ACallable } from "../values/primitives/ACallable.js";
-import { ARosettaProcedure } from "../values/primitives/ARosettaProcedure.js";
 
 import { type AUnwrap, type AWrap, type EgressMode, type SchemeValue } from "../values/types.js";
 import invariant from "tiny-invariant";
-import { closeRegionScope, currentRegionScope, DETACHED_SCOPE, openRegionScope, withRegionScope } from "./region-scope.js";
+import { currentRegionScope, DETACHED_SCOPE, withRegionScope } from "./region-scope.js";
 import { originalBoxOf } from "./egress-proxy.js";
-import { makeCallCtx, type CallCtx } from "../run/CallCtx.js";
 import { tf } from "../values/tagless-final.js";
 
 export interface RosettaOptions {
@@ -47,8 +44,8 @@ export interface RosettaOptions {
 /**
  * Membrane-crossing cache mode for `options`. Every live crossing resolves to the
  * single non-bare mode `"mem"`; `returnEither`/`argProvenance` are wrapper-call-only
- * (read inside createRosettaWrapper packaging, never by egressUnknown / inbound
- * jsToScheme). Keys both (box, mode, scope) container slots (egress-proxy) and
+ * (never read by egressUnknown / inbound jsToScheme). Keys both (box, mode, scope)
+ * container slots (egress-proxy) and
  * (callable, mode, scope) wrapper slots. Kept as a function so a projection-affecting
  * option still has one classification site — see `_modeKeyExhaustive`.
  */
@@ -61,14 +58,6 @@ export function modeKeyOf(_options: RosettaOptions): EgressMode {
 type _ModeKeyHandles = Exclude<keyof RosettaOptions, "returnEither" | "argProvenance"> extends never ? true : never;
 const _modeKeyExhaustive: _ModeKeyHandles = true;
 void _modeKeyExhaustive;
-
-type Fn = (...args: any[]) => any;
-
-/** Host body shape for {@link createRosettaWrapper}. Live producer passes only `fn`
- *  (default RosettaOptions; no type-lens fragment; always mints a fresh provenance point). */
-export interface RosettaFunction {
-  fn: Fn;
-}
 
 /**
  * Duck-typed EvalContext.currentInvocation — avoids circular import to
@@ -157,7 +146,6 @@ export function errorToHost(value: R7RSError, exitEl: (el: unknown) => unknown):
  * FFI allow-list, P5 door.
  */
 function egressUnknown(value: unknown, options: RosettaOptions): unknown {
-  // null/undefined echo unchanged.
   if (value == null) return value;
 
   // Every boxed shape — including a callable — through `egressAValue` (shared with
@@ -224,7 +212,6 @@ function egressUnknown(value: unknown, options: RosettaOptions): unknown {
   if (typeof value === "bigint") {
     throw new NoLensError("bigint");
   }
-  // Bare scalar — already JS.
   return value;
 }
 
@@ -547,64 +534,6 @@ export function bigintToNumber(value: bigint): number {
   }
   return Number(value);
 }
-
-/**
- * Mint an `ARosettaProcedure` for a host-side rosetta body. Env storage is a first-class
- * callable value, never a bare async fn. Spine: region open → toJS → host fn →
- * close → mint provenance → jsToScheme. Sole live producer: replay.ts playback-frame
- * registration (untyped payload answers; no contract/codec layer).
- */
-export const createRosettaWrapper = ({ fn }: RosettaFunction): ARosettaProcedure => {
-  return new ARosettaProcedure({
-    name: fn.name || "rosetta",
-    // Unknown arity by construction — mirrors hostFnToCallable / z.procedure.
-    arity: { min: 0, max: null },
-    contract: undefined,
-    strategy: undefined,
-    hostApply: async (schemeArgs, callCtx) => {
-      // Collect provenance from AValue inputs before toJS strips identity.
-      // `Extract<SchemeValue, AValue>`: non-AValue SchemeValue members fail reverse
-      // assignability for the TS filter predicate.
-      const inputAValues = schemeArgs.filter((a): a is Extract<SchemeValue, AValue> => a instanceof AValue);
-      const inputProvenance = unionProvenance(inputAValues);
-
-      // callCtx is the dispatch-built CallCtx — threaded WHOLE, never reconstructed.
-      const { runCtx, invocation } = callCtx;
-      const inv = invocation.currentInvocation;
-      // Region discipline: this ONE call (here → fn.apply settling) is the "symbol
-      // invocation" any scheme callable among schemeArgs region-binds to. Open before
-      // marshaling (callable wrappers mint during toJS, read ambient scope);
-      // close when fn settles (throws if a reverse call is still pending).
-      const scope = openRegionScope({ runCtx, dynSite: inv });
-      try {
-        let rawResult: unknown;
-        try {
-          rawResult = await fn.apply(
-            makeCallCtx(runCtx, inv, undefined),
-            withRegionScope(scope, () => schemeArgs.map((arg) => toJS(arg))),
-          );
-        } finally {
-          closeRegionScope(scope);
-        }
-
-        // Output provenance before jsToScheme so deep-stamp reaches every constructed
-        // AValue in one pass — mint overrides inputs. No invocation (direct JS tests):
-        // fall back to input provenance. Playback ops always mint a fresh provenance point.
-        let resultProvenance = inputProvenance;
-        if (inv && typeof inv.id === "number") {
-          // MobX: flip via action for strict-mode. Plain POJO: set directly.
-          if (typeof inv.markProvenancePoint === "function") inv.markProvenancePoint();
-          else inv.isProvenancePoint = true;
-          resultProvenance = pointProvenance(inv.id);
-        }
-
-        return jsToScheme(runCtx, rawResult, undefined, resultProvenance);
-      } catch (error) {
-        console.error("Rosetta function error:", error);
-        throw error;
-      }
-    } });
-};
 
 // Callable-toJS marshal install (module init): ACallable's arrival/toJS builds its
 // reverse-membrane wrapper through these crossings but cannot import this module

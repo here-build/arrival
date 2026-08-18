@@ -45,10 +45,9 @@ import { AValue } from "../values/primitives/AValue.js";
  * }
  * ```
  *
- * Module-local (NOT Symbol.for): a registry-global symbol is forgeable from the
- * sandbox via Symbol.for, letting hostile code stamp or strip boundary markers.
+ * Boundary mark must not be sandbox-forgeable.
  */
-export const INTEROP_BOUNDARY = Symbol("scheme:interop-boundary");
+export const INTEROP_BOUNDARY = Symbol.for("scheme:interop-boundary");
 
 /**
  * Built-in prototypes that are ALWAYS interop boundaries — standard JS built-ins
@@ -72,7 +71,6 @@ const BUILTIN_BOUNDARY_PROTOTYPES: Set<object | null> = new Set([
   FinalizationRegistry.prototype,
   Promise.prototype,
   Error.prototype,
-  // TypedArrays
   Int8Array.prototype,
   Uint8Array.prototype,
   Uint8ClampedArray.prototype,
@@ -220,7 +218,6 @@ export function isInteropBoundary(proto: object | null): boolean {
  *  properties through it. */
 export function markInteropBoundary(target: object | Function): void {
   (target as unknown as Record<symbol, unknown>)[INTEROP_BOUNDARY] = true;
-  // Invalidate cache — classes: clear prototype; plain objects: clear the object.
   if (typeof target === "function" && target.prototype) {
     boundaryCache.delete(target.prototype);
   } else {
@@ -262,7 +259,6 @@ export function markInteropPrivate<T extends Function>(target: T, _context?: unk
   return target;
 }
 
-/** The `arrival` namespace surface for the decorator ergonomic — `@arrival.private`. */
 export const arrival = { private: markInteropPrivate };
 
 /**
@@ -313,7 +309,6 @@ export const NOT_FOUND = Symbol("scheme:not-found");
 
 type AccessResult<T> = T | typeof NOT_FOUND;
 
-/** Unconditionally blocked property name? */
 function isBlockedPropertyName(key: string | symbol): boolean {
   if (typeof key === "symbol") return BLOCKED_WELL_KNOWN_SYMBOLS.has(key);
   return BLOCKED_PROPERTY_NAMES.has(key);
@@ -347,7 +342,6 @@ export function accessMember(data: unknown, key: string | symbol): AccessResult<
   // Box primitives to check properties.
   const obj = Object(data);
 
-  // Fast path: own property.
   if (Object.prototype.hasOwnProperty.call(obj, keyStr)) {
     return Reflect.get(obj, keyStr);
   }
@@ -356,7 +350,6 @@ export function accessMember(data: unknown, key: string | symbol): AccessResult<
     return NOT_FOUND;
   }
 
-  // Property is inherited — trace the prototype chain.
   let proto = Reflect.getPrototypeOf(obj);
 
   while (proto !== null) {

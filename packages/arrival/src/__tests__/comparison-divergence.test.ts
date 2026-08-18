@@ -24,7 +24,7 @@ import { is_false } from "../values/value-guards.js";
 
 const run = (code: string, strict: boolean) =>
   exec(code, { env: mintFrame(inferenceEnv, "cmp-divergence"), strict });
-const truthy = async (code: string, strict: boolean): Promise<boolean> => {
+const truthy = async (code: string, strict: boolean): Promise<boolean> =>
   !is_false((await run(code, strict))[0]);
 
 describe("numeric core — identical in both modes (no divergence)", () => {

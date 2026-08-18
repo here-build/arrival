@@ -43,7 +43,7 @@ describe("registerExtensionIn / lookupExtensionResolverIn", () => {
   });
 });
 
-// The `(require/register-extension)` verb itself (the baked `symbol.native` def, bound at both
+// The `(require/register-extension)` verb itself (the baked `symbol.macro` def, bound at both
 // its bootstrap and mid-run sites) is no longer unit-tested against a hand-rolled host here — it
 // has no imperative host-fn bind helper left to drive in isolation; both real bind
 // sites live in `loader-capability.ts` and are exercised end-to-end by

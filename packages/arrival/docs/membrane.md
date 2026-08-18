@@ -191,7 +191,7 @@ and lazy (a borrowed array's whole contract is that `.length` and `schemeToJs` n
 touch elements, so an eager scan would pay the cost the class exists to avoid), and
 unconditional — there is no per-run opt-out. The contract has one home here; its code
 sites are pointers: `AJSArray.freezeSource`, `AJSObject.freezeSource`, and
-`createRosettaWrapper`'s `pure` comment.
+the baked `symbol.rosetta` provenance-role gate (`provenance === "pipe"`).
 
 **Enforcement sites:** `membrane/boxing.ts`, `membrane/rosetta.ts`,
 `membrane/AJSArray.ts`, `membrane/AJSObject.ts`.
@@ -580,13 +580,14 @@ never a JS→scheme crossing, only a re-stamp of something already inside the al
 ## SPINES — two families, one crossing skeleton
 
 **There are two rosetta spines and one crossing skeleton
-(`schemeToJs → fn → jsToScheme`).** The generic `createRosettaWrapper`
-(`membrane/rosetta.ts`) uses the generic conversions directly; the codec-driven baked
+(`schemeToJs → fn → jsToScheme`).** The inbound host-fn lens (`hostFnToCallable`
+in `ACallable.ts`) uses the generic conversions directly; the codec-driven baked
 `run` (`common/symbols/rosetta.ts`) substitutes the contract's per-argument codecs for
 those generic conversions and lets zod do the gated validation. Both collect input
 provenance before the crossing strips `AValue` identity, both mint-or-forward the same
 way at the end, both open the region scope only when the contract can hand the impl a
-live callable.
+live callable. Replay playback (`provenance/replay.ts`) mints an `ARosettaProcedure`
+at the bind site with the same `jsToScheme` restamp.
 
 The two families share **one** wrapper cache (§REGION) and **one** boxing idiom. The
 single-boxing-idiom law: the baked `run` re-stamps its encoded output with

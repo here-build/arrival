@@ -29,7 +29,6 @@ import type { AJSArray } from "../../membrane/AJSArray.js";
 import type { AListAlike, SchemeValue } from "../../values/types.js";
 import { type DecodedArgs, type SpecInfer } from "../symbols/_bake.js";
 
-// Helpers mirroring the Face logic used for contracts.
 type SchemeFace<S extends z.ZodTypeAny> = z.input<S>;
 type JSFace<S extends z.ZodTypeAny> = z.output<S>;
 
@@ -39,15 +38,12 @@ describe("scheme-zod collection faces (interpreter vs JS)", () => {
   test("z.list(E) — homogeneous", () => {
     const charList = z.list(z.char);
 
-    // Scheme (native) face: the interpreter container (APair is generic in the model)
     type S = SchemeFace<typeof charList>;
     expectTypeOf<S>().toExtend<AListAlike>();
 
-    // JS (rosetta) face: array of the element's JS image
     type J = JSFace<typeof charList>;
     expectTypeOf<J>().toExtend<string[]>();
 
-    // Via the contract helpers (what actual symbol.native defs see — the SCHEME face)
     expectTypeOf<DecodedArgs<[typeof charList], "scheme">>().toExtend<[AListAlike]>();
     expectTypeOf<SpecInfer<typeof charList>>().toExtend<string[]>();
   });
@@ -58,10 +54,9 @@ describe("scheme-zod collection faces (interpreter vs JS)", () => {
     const consShape = z.cons(z.char, z.union([z.nil, z.boolean]));
 
     type S = SchemeFace<typeof consShape>;
-    expectTypeOf<S>().toExtend<AListAlike>(); // the container
+    expectTypeOf<S>().toExtend<AListAlike>();
 
     type J = JSFace<typeof consShape>;
-    // tuple of the two JS faces
     expectTypeOf<J>().toExtend<[string, null | boolean]>();
   });
 
@@ -72,7 +67,6 @@ describe("scheme-zod collection faces (interpreter vs JS)", () => {
     const boolVec = z.vector(z.boolean);
     type VS = SchemeFace<typeof boolVec>;
     type VJ = JSFace<typeof boolVec>;
-    // vector container on scheme side (the union type in practice)
     expectTypeOf<VS>().toExtend<AVector | AJSArray>();
     expectTypeOf<VJ>().toEqualTypeOf<boolean[]>();
 
@@ -99,7 +93,6 @@ describe("scheme-zod collection faces (interpreter vs JS)", () => {
   });
 
   test("using with real contract shapes (mirrors env/r7rs usage)", () => {
-    // A typical "list input, vector output" shape
     const listInVecOut = {
       input: [z.list(z.schemeValue)],
       output: [z.vector(z.schemeValue)] } as const;
@@ -123,5 +116,20 @@ describe("scheme-zod collection faces (interpreter vs JS)", () => {
 
     type J = JSFace<typeof anyL>;
     expectTypeOf<J>().toExtend<SchemeValue[]>();
+  });
+});
+
+describe("scheme-zod z.dict faces (shaped vs open)", () => {
+  test("z.dict({ title }) JS face is the shaped object, not an open-record union", () => {
+    const shaped = z.dict({ title: z.string });
+    type J = JSFace<typeof shaped>;
+    expectTypeOf<J>().toEqualTypeOf<{ title: string }>();
+    expectTypeOf<DecodedArgs<[typeof shaped]>>().toEqualTypeOf<[{ title: string }]>();
+  });
+
+  test("z.dict() JS face is Record<string, SchemeValue>", () => {
+    const open = z.dict();
+    type J = JSFace<typeof open>;
+    expectTypeOf<J>().toExtend<Record<string, SchemeValue>>();
   });
 });

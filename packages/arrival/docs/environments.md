@@ -256,7 +256,7 @@ has its own document. This section states only the seam a baked verb crosses; §
 
 **The codec IS the crossing, stated once to end the double-framing.** There is one crossing
 spine described from two sides: the `symbol.rosetta` bake wrapper (`common/symbols/rosetta.ts`)
-and `createRosettaWrapper` (`membrane/rosetta.ts`) share `schemeToJs → fn →
+and the inbound host-fn lens (`hostFnToCallable`) share `schemeToJs → fn →
 jsToScheme`, with the contract codecs standing in for the generic conversions. A rosetta
 verb's `run` decodes the scheme args to JS (the input codecs), calls the ctx-free impl,
 awaits, encodes the return (the output codecs), then deep-stamps provenance. A *callable*

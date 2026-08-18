@@ -14,13 +14,13 @@
 //     program cannot teach the loader a new file type mid-run.
 //
 // ONE registry per run: THIS run's `LoaderRunResources.extensionResolvers` (fresh empty
-// Map per RunContext, populated only from a prelude). `makeRegisterExtensionMacro`'s
-// caller resolves which bag via `resolveRegistry(ctx.runCtx)`.
+// Map per RunContext, populated only from a prelude). `registerExtensionTransformer`
+// closes over `resolveRegistry(ctx.runCtx)` to pick the bag.
 // Shared primitives (`registerExtensionIn` / `lookupExtensionResolverIn`) keep the
 // conflict door and longest-suffix match in one place.
 
 import { ExtensionSuffixConflictError } from "../errors.js";
-import { Macro, type TransformerArgs } from "../eval/Macro.js";
+import { type MacroTransformer, type TransformerArgs } from "../eval/Macro.js";
 import { ANil, nil } from "../values/primitives/ANil.js";
 import { APair } from "../values/primitives/APair.js";
 import { AString } from "../values/primitives/AString.js";
@@ -85,26 +85,25 @@ export function lookupExtensionResolverIn(registry: ExtensionResolverRegistry, p
 }
 
 /**
- * MACRO body of `require/register-extension`. Args are UNEVALUATED forms:
+ * Transformer for `require/register-extension`. Args are UNEVALUATED forms:
  *   (require/register-extension ".prompt" ext/prompt/resolve)
  * Side-effects `resolveRegistry(ctx.runCtx)`; expands to nil.
  * `ctx.runCtx` rides MacroInvokeContext (evaluator threads it) — never through makeCallCtx.
+ * Bound via `symbol.macro` (and reused as the mid-run seed) in loader-capability.ts.
  */
-export function makeRegisterExtensionMacro(resolveRegistry: (runCtx: RunContext) => ExtensionResolverRegistry): Macro {
-  return new Macro(
-    "require/register-extension",
-    function (this: unknown, rest: SchemeValue, ctx: TransformerArgs): SchemeValue {
-      invariant(rest instanceof APair, "require/register-extension: expected (suffix resolver-name)");
-      const suffixForm = rest.car;
-      invariant(rest.cdr instanceof APair, "require/register-extension: missing resolver-name");
-      const nameForm = rest.cdr.car;
-      invariant(
-        rest.cdr.cdr instanceof ANil || rest.cdr.cdr == null,
-        "require/register-extension: expected exactly 2 args",
-      );
-      registerExtensionIn(resolveRegistry(ctx.runCtx), suffixForm, nameForm);
-      return nil;
-    },
-    "registers a file extension resolver used by require (assembly time only; unevaluated resolver name; per-run)",
-  );
+export function registerExtensionTransformer(
+  resolveRegistry: (runCtx: RunContext) => ExtensionResolverRegistry,
+): MacroTransformer {
+  return function (rest: SchemeValue, ctx: TransformerArgs): SchemeValue {
+    invariant(rest instanceof APair, "require/register-extension: expected (suffix resolver-name)");
+    const suffixForm = rest.car;
+    invariant(rest.cdr instanceof APair, "require/register-extension: missing resolver-name");
+    const nameForm = rest.cdr.car;
+    invariant(
+      rest.cdr.cdr instanceof ANil || rest.cdr.cdr == null,
+      "require/register-extension: expected exactly 2 args",
+    );
+    registerExtensionIn(resolveRegistry(ctx.runCtx), suffixForm, nameForm);
+    return nil;
+  };
 }

@@ -70,7 +70,7 @@ reproduced here — the point is that every pair below is checked, not narrated)
   closing the cycle through `common/scheme-zod` would TDZ a `z.instanceof` capture). The
   member still belongs in the knot: it is pulled in by `common/symbols ⇄ common/scheme-zod`
   (both directions, both packages under `common/`) plus `common/scheme-zod → membrane/values`.
-- `env → membrane`: `env/AmbientRuntime.ts` — `import { createRosettaWrapper, type RosettaFunction } from "../membrane/rosetta.js"`
+- `env → membrane`: `env/AmbientRuntime.ts` — `import { fromJS } from "../membrane/membrane.js"`
 - `membrane → env`: `membrane/membrane.ts` — `import { AmbientRuntime, isAmbientRuntime } from "../env/AmbientRuntime.js"` (see D4 below for *why*)
 - `env → provenance`: `env/srfi/srfi-28.ts` (and `srfi-13.ts`, `polyglot/polyglot.ts`) — `import { collapseProvenance, taintString } from "../../provenance/provenance-collapse.js"`
 - `provenance → env`: `provenance/gamma.ts` — `import { bindValue } from "../env/AmbientRuntime.js"`

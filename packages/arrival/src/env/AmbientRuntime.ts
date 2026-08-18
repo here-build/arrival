@@ -3,7 +3,6 @@ import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import type { Macro } from "../eval/Macro.js";
 import type { SchemeValue } from "../values/types.js";
-import { createRosettaWrapper, type RosettaFunction } from "../membrane/rosetta.js";
 import type { Syntax } from "../eval/Syntax.js";
 import invariant from "tiny-invariant";
 import { fromJS, isSchemeValue } from "../membrane/membrane.js";
@@ -14,7 +13,6 @@ import { unboundVariableError } from "../unbound-variable.js";
 import { RawCrossingError } from "../errors.js";
 import { INTEROP_BOUNDARY } from "../membrane/interop-access.js";
 
-/** A name usable to look up values in an environment: string, symbol, ASymbol, or AString. */
 export type BindingName = string | symbol | ASymbol | AString;
 
 /** Anything storable in an environment: SchemeValues plus runtime types (Macro, Syntax, etc).
@@ -22,7 +20,6 @@ export type BindingName = string | symbol | ASymbol | AString;
  *  SchemeValue. EOF is a reader-internal sentinel, not a binding. */
 export type AmbientValue = SchemeValue | Macro | Syntax | AmbientRuntime | RegExp;
 
-/** Own string keys + own symbols of a binding record — what list() enumerates. */
 function ownProps(obj: object): (string | symbol)[] {
   return [...(Object.keys(obj) as (string | symbol)[]), ...Object.getOwnPropertySymbols(obj)];
 }
@@ -207,11 +204,11 @@ export function assertResolvedBinding(value: unknown, name: string | symbol, res
  *     prelude-defines binds, `eval/generator-exec.ts`'s chain-frame / inference-env binds.
  *   • replay / γ ingress — `provenance/hermetic-env.ts` and `provenance/gamma.ts` bind
  *     recorded ingress into a fresh hermetic scope under region discipline (the env ⇄
- *     provenance charter, `docs/strata.md` §5).
+ *     provenance charter, `docs/strata.md` §5); `provenance/replay.ts` playback-frame
+ *     op registration binds an already-minted ARosettaProcedure.
  *   • mid-run prelude overlay — `loader/loader-capability.ts`'s `require`/`extension`
  *     surface binds a discarded child prelude scope (R12: invocation survives, reference
  *     does not).
- *   • {@link bindRosetta} (replay playback frame).
  *
  * CARVE-OUTS:
  *   • `Error` — catch-frame bind of a raised condition (R7RSError extends host `Error`,
@@ -220,7 +217,7 @@ export function assertResolvedBinding(value: unknown, name: string | symbol, res
  *     is pre-run; run-neutral mint is correct)
  *
  * Bare host functions are DOORED. Env-resident callables are ACallable values.
- * `bindRosetta` mints ARosettaProcedure before this door.
+ * Replay playback mints ARosettaProcedure before this door.
  *
  * SANCTIONED RAW `__env__` READERS outside this class (audit S2c — the `.get()` door
  * above throws `RawCrossingError` on a raw JS scalar; these three bypass it on purpose):
@@ -239,7 +236,7 @@ export function bindValue(env: AmbientRuntime, name: BindingName, value: Ambient
 
   if (typeof value === "function") {
     throw new TypeError(
-      `bindValue: bare host function refused for "${String(name instanceof ASymbol ? name.__name__ : name instanceof AString ? name.valueOf() : name)}" — mint an ANativeProcedure / ARosettaProcedure (createRosettaWrapper / hostFnToCallable) instead`,
+      `bindValue: bare host function refused for "${String(name instanceof ASymbol ? name.__name__ : name instanceof AString ? name.valueOf() : name)}" — mint an ANativeProcedure / ARosettaProcedure (hostFnToCallable) instead`,
     );
   }
 
@@ -358,14 +355,6 @@ export function mintFrame(
   return parent instanceof ResolvingAmbient
     ? mintResolvingFrame(name, bindings, parent)
     : mintPlainFrame(name, bindings, parent);
-}
-
-/**
- * Mint ARosettaProcedure and store it — sole producer is `replay.ts` playback-frame op
- * registration. Module-internal; not part of `SchemeEnv`. No bare-fn env resident.
- */
-export function bindRosetta(env: AmbientRuntime, name: string, config: RosettaFunction): void {
-  bindValue(env, name, createRosettaWrapper(config));
 }
 
 /**

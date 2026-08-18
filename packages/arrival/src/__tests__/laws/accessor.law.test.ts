@@ -60,7 +60,7 @@ describe("keyword-as-getter composes: it's ordinary callable data, so HOFs take 
     ];
     const env = mintFrame(inferenceEnv, "keyword-accessor-map", {
       users: jsToScheme(CONSTANT_CTX, users) });
-    expect(toJS(await execOne(`(map :name users)`, env))).toEqual(["Alice", "Bob", "Charlie"]);
+    expect(await execOne(`(map :name users)`, env)).toEqual(["Alice", "Bob", "Charlie"]);
   });
 
   it("(filter :active items) — the getter doubles as a predicate", async () => {
@@ -71,7 +71,7 @@ describe("keyword-as-getter composes: it's ordinary callable data, so HOFs take 
     ];
     const env = mintFrame(inferenceEnv, "keyword-accessor-filter", {
       items: jsToScheme(CONSTANT_CTX, items) });
-    const filtered = toJS(await execOne(`(filter :active items)`, env));
+    const filtered = await execOne(`(filter :active items)`, env);
     expect(filtered).toHaveLength(2);
     expect(filtered[0].name).toBe("Item 1");
     expect(filtered[1].name).toBe("Item 3");
