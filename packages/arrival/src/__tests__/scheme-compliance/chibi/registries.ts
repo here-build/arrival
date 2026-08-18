@@ -229,11 +229,11 @@ export const EXCLUDED: readonly Exclusion[] = [
   // r7rs-tests.scm:675-686) use corpus-chosen names not enumerable as a general rule — expected
   // to surface as genuine red, a follow-up triage item, not a harness gap.
   {
-    match: { kind: "symbols", anyOf: ["make-rectangular", "make-polar", "real-part", "imag-part", "magnitude", "angle"] },
+    match: { kind: "symbols", anyOf: ["make-rectangular", "make-polar", "real-part", "imag-part", "magnitude", "angle", "complex?"] },
     feature: "complex tower (R7RS §6.2.3 omitted)",
     note: "the complex LITERAL case doors at read time (an `unreadable` manifest step, handled "
-      + "separately in the spec) — this rule covers the ACCESSOR/constructor calls, which parse "
-      + "fine and door only at eval" },
+      + "separately in the spec) — this rule covers the ACCESSOR/constructor calls (door at eval) "
+      + "and complex? (honest always-#f stub; R7RS expects #t for reals)" },
   {
     match: {
       kind: "symbols",

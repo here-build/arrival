@@ -8,8 +8,8 @@
  *
  * COMPLEX SUBSETTING (R7RS §6.2.3 permits omitting complex): reals-only, no imaginary
  * axis. sqrt of a negative, make-rectangular/make-polar, "3+4i" literals, and
- * real-part/imag-part/magnitude/angle are DOORED via complexDoor. complex? still
- * answers #t for every real (real ⊂ complex — predicate stays total).
+ * real-part/imag-part/magnitude/angle are DOORED via complexDoor. complex? is an
+ * honest stub — always #f; no complex value exists to answer #t.
  */
 import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
 import invariant from "tiny-invariant";
@@ -163,10 +163,7 @@ export function parseNumber(str: string): ANumeric {
   return exact;
 }
 
-/**
- * Non-zero imaginary part? Reals-only, so always #f.
- * NOT `complex?` — that routes through `isComplex` getters (#t for every real).
- */
+/** Honest stub — complex tower omitted (R7RS §6.2.3). Always #f. */
 export function isComplex(_n: unknown): boolean {
   return false;
 }

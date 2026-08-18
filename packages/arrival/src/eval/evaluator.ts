@@ -330,11 +330,6 @@ function is_data_marked(o: unknown): o is DataMarked {
   return (o as Record<symbol, unknown>)[DATA] === true;
 }
 
-/** Nameable callable — ALambda whose mutable `__name__` the define-naming step stamps. */
-function is_lambda_function(o: unknown): o is ALambda {
-  return o instanceof ALambda;
-}
-
 export type EvalGenerator = Generator<unknown, SchemeValue, SchemeValue>;
 
 /**
@@ -1138,7 +1133,7 @@ function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
     const value = yield { call: evalLambda(new APair(args, valueRest), ctx) };
 
-    if (is_lambda_function(value)) {
+    if (is_lambda(value)) {
       value.__name__ = symbol_name(name);
     }
 
@@ -1156,7 +1151,7 @@ function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     value = yield value;
   }
 
-  if (is_lambda_function(value) && !value.__name__) {
+  if (is_lambda(value) && !value.__name__) {
     value.__name__ = symbol_name(first);
   }
 

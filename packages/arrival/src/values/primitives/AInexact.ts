@@ -3,7 +3,7 @@
 // AInexact↔AExact and AInexact↔numbers.ts edges are benign runtime cycles (method-body only).
 import invariant from "tiny-invariant";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import { complexDoor, schemeCompare } from "../numbers.js";
+import { complexDoor, isComplex, schemeCompare } from "../numbers.js";
 import { AExact } from "./AExact.js";
 import { mintExact } from "../mint-numeric.js";
 import type { SourceLocation } from "../../errors.js";
@@ -33,7 +33,7 @@ export class AInexact extends AValue {
   }
 
   get isComplex(): boolean {
-    return true; // real ⊂ complex; predicate stays total
+    return isComplex(this);
   }
 
   get isExact(): boolean {

@@ -567,7 +567,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     while (node instanceof APair) {
       TypeError.invariant(!seen.has(node), "APair[Symbol.iterator]: list cycle detected — cannot iterate a cyclic list");
       seen.add(node);
-      if (node.car === undefined && node.cdr instanceof ANil) return; // empty-pair sentinel
+      if (isEmptyPairSentinel(node)) return;
       yield node.car;
       node = node.cdr;
     }
@@ -585,7 +585,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     const elements: unknown[] = [];
     let node: unknown = this;
     while (node instanceof APair) {
-      if (node.car === undefined && node.cdr instanceof ANil) break; // empty-pair sentinel
+      if (isEmptyPairSentinel(node)) break;
       elements.push(node.car);
       node = node.cdr;
     }
@@ -605,7 +605,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     const elements: SchemeValue[] = [];
     let node: unknown = this;
     while (node instanceof APair) {
-      if (node.car === undefined && node.cdr instanceof ANil) break; // empty-pair sentinel
+      if (isEmptyPairSentinel(node)) break;
       elements.push(node.car);
       node = node.cdr;
     }
@@ -635,7 +635,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     let node: unknown = this;
     while (node instanceof APair) {
       const p = node;
-      if (p.car === undefined && p.cdr instanceof ANil) break; // empty-pair sentinel
+      if (isEmptyPairSentinel(p)) break;
       acc = (await applyCallback(fn, [p.car, acc], makeCallCtx(runCtx))) as Acc;
       node = p.cdr;
     }
@@ -650,7 +650,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     let node: unknown = this;
     while (node instanceof APair) {
       const p = node;
-      if (p.car === undefined && p.cdr instanceof ANil) break; // empty-pair sentinel
+      if (isEmptyPairSentinel(p)) break;
       out.push(p.car);
       node = p.cdr;
     }
@@ -665,7 +665,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     let node: unknown = this;
     let k = n;
     while (k > 0 && node instanceof APair) {
-      if (node.car === undefined && node.cdr instanceof ANil) break; // empty-pair sentinel
+      if (isEmptyPairSentinel(node)) break;
       out.push(node.car);
       node = node.cdr;
       k--;
@@ -679,7 +679,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     let node: SchemeValue = this;
     let k = n;
     while (k > 0 && node instanceof APair) {
-      if (node.car === undefined && node.cdr instanceof ANil) return node.cdr; // empty-pair sentinel
+      if (isEmptyPairSentinel(node)) return node.cdr;
       node = node.cdr as SchemeValue;
       k--;
     }
@@ -694,7 +694,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     const out: SchemeValue[] = [];
     let node: unknown = this;
     while (node instanceof APair) {
-      if (node.car === undefined && node.cdr instanceof ANil) break; // empty-pair sentinel
+      if (isEmptyPairSentinel(node)) break;
       const verdict = await applyCallback(pred, [node.car], makeCallCtx(runCtx));
       if (is_false(verdict)) break; // R7RS: only #f is false
       out.push(node.car);
@@ -711,7 +711,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   ): Promise<SchemeValue> {
     let node: SchemeValue = this;
     while (node instanceof APair) {
-      if (node.car === undefined && node.cdr instanceof ANil) return node.cdr; // empty-pair sentinel
+      if (isEmptyPairSentinel(node)) return node.cdr;
       const verdict = await applyCallback(pred, [node.car], makeCallCtx(runCtx));
       if (is_false(verdict)) return node; // R7RS: only #f is false
       node = node.cdr as SchemeValue;
@@ -726,7 +726,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     let count = 0;
     let node: SchemeValue = this;
     while (node instanceof APair) {
-      if (node.car === undefined && node.cdr instanceof ANil) break; // empty-pair sentinel
+      if (isEmptyPairSentinel(node)) break;
       count++;
       node = node.cdr;
     }
@@ -819,12 +819,17 @@ export function concatPair<Car extends SchemeValue, Cdr extends AListAlike>(
   return result as AConcatPair<Car, Cdr>;
 }
 
+/** Empty-pair sentinel: `car === undefined && cdr is nil`. A nil car is a legitimate element. */
+function isEmptyPairSentinel(node: { readonly car: unknown; readonly cdr: unknown }): boolean {
+  return node.car === undefined && node.cdr instanceof ANil;
+}
+
 /** Element count of a pair's cdr-spine — heap-charge basis. No provenance (unlike length). */
 function countPairElements(head: APair<any, any> | ANil): number {
   let n = 0;
   let node: unknown = head;
   while (node instanceof APair) {
-    if (node.car === undefined && node.cdr instanceof ANil) break; // empty-pair sentinel
+    if (isEmptyPairSentinel(node)) break;
     n++;
     node = node.cdr;
   }

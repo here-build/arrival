@@ -48,7 +48,7 @@ function pendingFor(cache: RunCache): Map<string, Promise<unknown>> {
 async function sharedFire(
   cache: RunCache,
   key: string,
-  persist: boolean, // true = view (write the settled value), false = pure (never stored)
+  writeSettledValue: boolean,
   fire: () => Promise<unknown>,
 ): Promise<unknown> {
   const pending = pendingFor(cache);
@@ -58,7 +58,7 @@ async function sharedFire(
   pending.set(key, p);
   try {
     const value = await p;
-    if (persist) await cache.set(key, { kind: "value", value });
+    if (writeSettledValue) await cache.set(key, { kind: "value", value });
     return value;
   } finally {
     pending.delete(key);

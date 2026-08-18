@@ -112,8 +112,7 @@ function isLambdaForm(body: unknown): boolean {
   return body instanceof APair && body.car instanceof ASymbol && body.car.__name__ === "lambda";
 }
 
-/** Macro-call argument chain as unevaluated forms (fexpr-style). */
-function formsOf(code: unknown): SchemeValue[] {
+function unevaluatedMacroArgForms(code: unknown): SchemeValue[] {
   const out: SchemeValue[] = [];
   let cur: unknown = code;
   while (cur instanceof APair) {
@@ -291,7 +290,7 @@ function buildMacro(verb: string, def: DefineSyntaxSymbolDef, closureValue: unkn
   const macro = new Macro(
     verb,
     function (this: unknown, code: unknown, evalArgs: TransformerArgs): Promise<SchemeValue> {
-      const argForms = formsOf(code);
+      const argForms = unevaluatedMacroArgForms(code);
       // evalArgs.runCtx is required — is_macro dispatch always threads live EvalContext.runCtx.
       return Promise.resolve(call_function(closure, argForms, { runCtx: evalArgs.runCtx })) as Promise<SchemeValue>;
     },

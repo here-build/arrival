@@ -36,7 +36,7 @@ import { AInexact } from "../../values/primitives/AInexact.js";
 import { AString } from "../../values/primitives/AString.js";
 import { APair } from "../../values/primitives/APair.js";
 import type { SchemeValue } from "../../values/types.js";
-import { type ANumeric, exactISqrt, complexDoor, schemeCompare, toReal } from "../../values/numbers.js";
+import { type ANumeric, exactISqrt, complexDoor, isComplex, schemeCompare, toReal } from "../../values/numbers.js";
 import {
   coerceNumeric,
   isSchemeNumber,
@@ -1367,10 +1367,10 @@ export default EnvCapability.define("scheme/numeric", {
     "even?": symbol.native`even?: #t iff n is even`(contractFromSpec(evenSpec), nativeNumericOp("even?", evenSpec)),
 
     // ── R7RS tower-type predicates (total — a non-number is #f, not an error) ─────
-    // type: guards — complex/real/rational/integer all live in the number tower image.
-    "complex?": symbol.native`complex?: #t for any number`(
+    // type: guards — real/rational/integer live in the number tower image; complex? is the omitted-tower stub.
+    "complex?": symbol.native`complex?: always #f (complex tower omitted)`(
       NUMBER_GUARD,
-      nativeTypePredicate("complex?", (n) => n.isComplex),
+      nativeTypePredicate("complex?", isComplex),
     ),
     "real?": symbol.native`real?: #t for any number (reals-only tower)`(
       NUMBER_GUARD,

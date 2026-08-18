@@ -464,7 +464,8 @@ function classifyLet(rest: unknown, c: Classifier, subst: Subst, sequential: boo
 
   // Build the substitution: leaf-slot ← classify(RHS). `let` classifies every
   // RHS in the OUTER subst (parallel); `let*`/`letrec` extend as they go.
-  const extended = new Map(subst);
+  const sequentialSubst = new Map(subst);
+  const parallelOuterSubst = subst;
   let bindNode: unknown = bindings;
   while (bindNode instanceof APair) {
     const binding = bindNode.car;
@@ -472,12 +473,12 @@ function classifyLet(rest: unknown, c: Classifier, subst: Subst, sequential: boo
     if (!(binding instanceof APair) || !(binding.car instanceof ASymbol)) continue;
     const name = opName(binding.car);
     const rhsExpr = binding.cdr instanceof APair ? binding.cdr.car : undefined;
-    const rhsSubst = sequential ? extended : subst; // let* sees prior bindings; let does not
+    const rhsSubst = sequential ? sequentialSubst : parallelOuterSubst;
     const rhsNode = rhsExpr === undefined ? ({ kind: "literal" } as LineageNode) : classifyWith(rhsExpr, c, rhsSubst);
-    extended.set(name, rhsNode);
+    sequentialSubst.set(name, rhsNode);
   }
 
-  return classifyBegin(body, c, extended);
+  return classifyBegin(body, c, sequentialSubst);
 }
 
 function letBindingValues(bindings: unknown): unknown[] {

@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
+import { isComplex } from "../../numbers.js";
 import { AExact } from "../AExact.js";
 import { AInexact } from "../AInexact.js";
+
+describe("isComplex", () => {
+  it("is the omitted-tower stub — always #f", () => {
+    expect(isComplex(new AExact(3))).toBe(false);
+    expect(isComplex(new AInexact(3.14))).toBe(false);
+    expect(isComplex(undefined)).toBe(false);
+  });
+});
 
 describe("ExactNumber", () => {
   it("creates integers", () => {
@@ -46,7 +55,7 @@ describe("ExactNumber", () => {
     expect(n.isInteger).toBe(false);
     expect(n.isRational).toBe(true);
     expect(n.isReal).toBe(true);
-    expect(n.isComplex).toBe(true);
+    expect(n.isComplex).toBe(false);
   });
 
   it("rounds to even on ties", () => {
@@ -72,7 +81,7 @@ describe("InexactNumber", () => {
     expect(real.isInteger).toBe(true);
     expect(real.isRational).toBe(true); // R7RS: finite reals are rational
     expect(real.isReal).toBe(true);
-    expect(real.isComplex).toBe(true); // real ⊂ complex — predicate stays total
+    expect(real.isComplex).toBe(false);
   });
 
   it("rounds to even on ties", () => {
