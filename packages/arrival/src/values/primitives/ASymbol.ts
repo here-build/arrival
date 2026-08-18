@@ -78,7 +78,6 @@ export class ASymbol extends AValue {
     intern: symbol | true = true,
   ) {
     super(provenance);
-    // Unwrap SchemeStringLike to plain string; a raw ES6 symbol (gensym carrier) passes through.
     const unwrapped: string | symbol = isSchemeString(name) ? name.valueOf() : name;
 
     // A keyword redirects to AKeywordSymbol — a real subclass with a statically-declared
@@ -96,7 +95,6 @@ export class ASymbol extends AValue {
       // Intern under CONSTANT_CTX (see internTables). deferred: ambient run ctx.
       const table = internTableFor(CONSTANT_CTX);
       const hit = table.get(unwrapped);
-      // Flyweight HIT: return the canonical shared instance — no allocation.
       if (hit !== undefined) {
         return hit;
       }
@@ -196,7 +194,6 @@ export class ASymbol extends AValue {
     return isString(this.__name__) ? this.__name__ : symbol_to_string(this.__name__ as symbol);
   }
 
-  /** See UNINTERNED sentinel doc. */
   withProvenance(p: ReadonlySet<number>): ASymbol {
     return new ASymbol(this.__name__, p, UNINTERNED);
   }

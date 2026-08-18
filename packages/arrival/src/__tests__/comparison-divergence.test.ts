@@ -24,8 +24,7 @@ import { is_false } from "../values/value-guards.js";
 
 const run = (code: string, strict: boolean) =>
   exec(code, { env: mintFrame(inferenceEnv, "cmp-divergence"), strict });
-// The scheme-truthiness of the first returned value (a comparison verdict).
-const truthy = async (code: string, strict: boolean): Promise<boolean> =>
+const truthy = async (code: string, strict: boolean): Promise<boolean> => {
   !is_false((await run(code, strict))[0]);
 
 describe("numeric core — identical in both modes (no divergence)", () => {
@@ -34,8 +33,8 @@ describe("numeric core — identical in both modes (no divergence)", () => {
     expect(await truthy("(< 10 2)", strict)).toBe(false);
     expect(await truthy("(= 1 1.0)", strict)).toBe(true); // exact/inexact tower
     expect(await truthy("(<= 3 3)", strict)).toBe(true);
-    expect(await truthy("(> 5 4 3 2 1)", strict)).toBe(true); // n-ary chain
-    expect(await truthy("(< 1 2 2 3)", strict)).toBe(false); // 2 < 2 is #f
+    expect(await truthy("(> 5 4 3 2 1)", strict)).toBe(true);
+    expect(await truthy("(< 1 2 2 3)", strict)).toBe(false);
   });
 });
 
@@ -50,11 +49,11 @@ describe("LOOSE: universal ordering (the friendly superset over R7RS-typed compa
 
 describe("LOOSE: nil-as-bottom (F2) — nil is the floor of the order", () => {
   it("orderings treat nil as less than every non-nil value", async () => {
-    expect(await truthy("(< (quote ()) 5)", false)).toBe(true); // nil < 5
-    expect(await truthy("(< 5 (quote ()))", false)).toBe(false); // 5 < nil is #f
-    expect(await truthy('(< (quote ()) "a")', false)).toBe(true); // nil < a string too
-    expect(await truthy("(<= (quote ()) (quote ()))", false)).toBe(true); // bottom <= bottom
-    expect(await truthy("(< (quote ()) (quote ()))", false)).toBe(false); // not strictly <
+    expect(await truthy("(< (quote ()) 5)", false)).toBe(true);
+    expect(await truthy("(< 5 (quote ()))", false)).toBe(false);
+    expect(await truthy('(< (quote ()) "a")', false)).toBe(true);
+    expect(await truthy("(<= (quote ()) (quote ()))", false)).toBe(true);
+    expect(await truthy("(< (quote ()) (quote ()))", false)).toBe(false);
   });
   it("= is nil-punning: nil = nil is #t, nil = anything-else is #f", async () => {
     expect(await truthy("(= (quote ()) (quote ()))", false)).toBe(true);

@@ -81,7 +81,7 @@ function editDistanceAtMost(a: string, b: string, max: number): number {
       cur.push(v);
       if (v < rowMin) rowMin = v;
     }
-    if (rowMin > max) return max + 1; // whole row already past the cap
+    if (rowMin > max) return max + 1;
     prev = cur;
   }
   return prev[n];

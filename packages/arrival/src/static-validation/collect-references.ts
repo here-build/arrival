@@ -166,7 +166,7 @@ export function collectReferences(form: SchemeValue, opts: CollectReferencesOpti
       if (!bound.has(name) && !initial.has(name)) emit(name, span);
       return;
     }
-    if (!(n instanceof APair)) return; // literals / vectors / strings — datum
+    if (!(n instanceof APair)) return;
     if (seen.has(n)) return;
     seen.add(n);
     const loc = n.location ?? span;
@@ -180,7 +180,7 @@ export function collectReferences(form: SchemeValue, opts: CollectReferencesOpti
       if (form_ !== null && !bound.has(form_)) {
         switch (form_) {
           case "quote":
-            return; // pure datum
+            return;
           case "quasiquote": {
             const arg = n.cdr instanceof APair ? n.cdr.car : undefined;
             walkQuasi(arg, 1, bound, loc);
@@ -336,7 +336,7 @@ export function collectReferences(form: SchemeValue, opts: CollectReferencesOpti
           }
           case "case": {
             const parts = chainOf(n.cdr);
-            if (parts.length > 0) walk(parts[0], bound, loc); // the key expression
+            if (parts.length > 0) walk(parts[0], bound, loc);
             for (const clause of parts.slice(1)) {
               if (!(clause instanceof APair)) continue;
               // clause.car is a datum list (or `else`) — data, skipped.

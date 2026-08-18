@@ -22,7 +22,6 @@ export interface TypeFacts {
   nonEmptyList?: true;
   /** Tuple fixed-prefix depth — `caddr` needs ≥ 3; powers Law-U lens warnings. */
   lengthAtLeast?: number;
-  /** Array-like (readonly T[] / tuple). */
   list?: true;
   /** Array-backed pair (pairs are not a separate primitive); adds non-emptiness. */
   pair?: true;

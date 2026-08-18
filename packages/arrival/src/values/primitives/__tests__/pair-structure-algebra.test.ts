@@ -69,7 +69,6 @@ describe("Pair — Semigroup (list-append)", () => {
     const b = APair.fromArray(CONSTANT_CTX, [new AExact(3), new AExact(4)], false) as APair<any, any>;
     const r = (a)[tf("concat")](b);
     expect((r as APair<any, any>).to_array().map((v) => (v as AExact).valueOf())).toEqual([1, 2, 3, 4]);
-    // purity: a and b unchanged
     expect((a as APair<any, any>).to_array().map((v) => (v as AExact).valueOf())).toEqual([1, 2]);
     expect((b as APair<any, any>).to_array().map((v) => (v as AExact).valueOf())).toEqual([3, 4]);
   });

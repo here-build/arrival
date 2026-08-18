@@ -55,11 +55,9 @@ describe("contract seal (audit B3)", () => {
     const base = symbol.tagless`seal-p: doc`;
     const stamped = withCallbackRoles(withContractFields(base, { type: "(x: T) => T" }), ["accumulator"]);
 
-    // base untouched — its contract stays as minted
     expect((base.contract as { type?: string }).type).toBeUndefined();
     expect(base.callbackRoles).toBeUndefined();
 
-    // stamped carries the declaration on instance AND contract, still frozen
     expect((stamped.contract as { type?: string }).type).toBe("(x: T) => T");
     expect(stamped.callbackRoles).toEqual(["accumulator"]);
     expect((stamped.contract as { callbackRoles?: readonly string[] }).callbackRoles).toEqual(["accumulator"]);

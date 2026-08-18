@@ -24,8 +24,7 @@ import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
 import { bindValue, mintFrame } from "../../env/AmbientRuntime.js";
 
-// Q20b: this file's local helpers (`eagerProvSize` et al.) call execState
-// directly — force the oracle ON for the file's lifetime.
+// this helper/execState needs the eager oracle ON
 requireEagerOracle();
 
 const C: Classifier = {
@@ -78,26 +77,16 @@ describe("lineage checkpoint — runtime stamping derives the SAME cone (correct
     const skel = classify(ast, C);
     const bindings = { a: provOf(env.get("a")), b: provOf(env.get("b")), c: provOf(env.get("c")) };
 
-    expect(eager).toEqual([100, 101, 102]); // the eager baseline
-    expect(fullCone(skel, bindings)).toEqual(eager); // lineage derives it structurally, no loss
+    expect(eager).toEqual([100, 101, 102]);
+    expect(fullCone(skel, bindings)).toEqual(eager);
   });
 });
 
 describe("lineage checkpoint — the static skeleton is constant in N (eager retained set is O(N) for a MINTED container)", () => {
-  // HONEST SCOPE (audit C1), UPDATED post-C4 (docs/RULINGS.md R2 —
-  // the R2 container structural-facts batch): `length` no longer deep-unions every element it
-  // touched — it reads the CONTAINER's own flat grouping-fact stamp. For a MINTED
-  // container (built via the real `list` verb, env/r7rs/lists.ts), that stamp is
-  // STILL the union of all N args' own provenance (the naive R2 strategy: named
-  // fields, not a symbolic fact-wire yet) — so the eager retained set is still
-  // genuinely O(N) here, same shape as before, just for a different mechanistic
-  // reason (the container's own stamp, not a deep element walk). This remains the
-  // real "pain" motivating the wireframe (Track C3): the naive MINTED stamp still
-  // materializes O(N) ids; only the wireframe's symbolic fact-wire makes it O(1)
-  // for the general case. The UNMINTED case (a bare fan over a plain
-  // `APair.fromArray` source, no Rosetta-IN crossing) is the one C4 already makes
-  // O(1) today — that's the next describe block below, the it.todo this checkpoint
-  // used to leave open.
+  // `length` reads the CONTAINER's own flat grouping-fact stamp. For a MINTED
+  // container (`list`), that stamp is the union of all N args' own provenance —
+  // the eager retained set is genuinely O(N). Only a symbolic fact-wire makes
+  // the general case O(1). The unminted fan-over-source case below is already O(1).
   async function eagerProvSize(n: number): Promise<number> {
     const env = mintFrame(inferenceEnv, `lin-scale-${n}`);
     const names: string[] = [];
@@ -114,26 +103,19 @@ describe("lineage checkpoint — the static skeleton is constant in N (eager ret
 
   it("eager retained provenance scales O(N) with a MINTED collection's size — the remaining pain", async () => {
     expect(await eagerProvSize(3)).toBe(3);
-    expect(await eagerProvSize(50)).toBe(50); // a count over a MINTED N-element list retains N ids
+    expect(await eagerProvSize(50)).toBe(50);
   });
 
   it("the static lineage skeleton node-count is CONSTANT — independent of N", async () => {
     const [ast] = await parse(`(length (map f xs))`);
     const nodes = countNodes(classify(ast, C)); // Pipe(length) -> Fan(f) -> Leaf(xs)
-    expect(nodes).toBeLessThanOrEqual(4); // O(AST), constant in N (NOT a total-memory claim — see scope note)
+    expect(nodes).toBeLessThanOrEqual(4);
   });
 });
 
 describe("lineage checkpoint — C4 ALREADY achieves O(1) for the UNMINTED fan-over-source case", () => {
-  // FLIPPED from `it.todo` (was: "like-for-like: a minimal count-cone over an N-element fan
-  // source stays O(1) — needs the collection-grouping vs element provenance split"). C4's
-  // interim fix (RULINGS.md R2) delivers exactly this split for the case that matters most
-  // cheaply: a bare source with NO container-level grouping fact minted (no Rosetta-IN
-  // crossing for the LIST ITSELF — only its elements are individually stamped). `length`
-  // over a length-preserving `map` fan now reads the container's own (empty) stamp — O(1),
-  // independent of N — instead of deep-unioning N element ids. The MINTED case above still
-  // needs the wireframe's symbolic fact-wire for the like-for-like win; this is the naive
-  // strategy's own free win.
+  // unminted fan: `length` over length-preserving `map` reads the container's own
+  // (empty) stamp — O(1), not a deep union of N element ids
   async function unmintedFanProvSize(n: number): Promise<number> {
     const env = mintFrame(inferenceEnv, `lin-scale-unminted-${n}`);
     const xs = APair.fromArray(
@@ -148,6 +130,6 @@ describe("lineage checkpoint — C4 ALREADY achieves O(1) for the UNMINTED fan-o
 
   it("eager retained provenance stays O(1) — ZERO — over an unminted fan source, independent of N", async () => {
     expect(await unmintedFanProvSize(3)).toBe(0);
-    expect(await unmintedFanProvSize(50)).toBe(0); // still 0 at N=50 — no growth with size
+    expect(await unmintedFanProvSize(50)).toBe(0);
   });
 });

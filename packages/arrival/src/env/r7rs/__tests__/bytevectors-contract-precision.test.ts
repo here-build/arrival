@@ -33,8 +33,6 @@ const exact = (n: number): AExact => new AExact(n);
 const bv = (bytes: number[]): ABytevector => new ABytevector(Uint8Array.from(bytes));
 
 describe("scheme/bytevectors Contract precision — the real exported ops reject wrongly-typed args (were z.array(z.unknown()), now precise)", () => {
-  // INVARIANT: bytevector requires every argument to be a scheme number, rejecting
-  // non-number/raw-JS-number args; 0-arg call stays legal
   it("bytevector: every arg must be a scheme number — a raw JS number or a non-number used to slip through the old z.array(z.unknown())", () => {
     const def = nativeDef("bytevector");
     expect(def.in.safeParse([exact(1), exact(2), exact(255)]).success).toBe(true);
@@ -43,8 +41,6 @@ describe("scheme/bytevectors Contract precision — the real exported ops reject
     expect(def.in.safeParse([1, 2]).success).toBe(false); // raw JS numbers, not boxed AExact/AInexact
   });
 
-  // INVARIANT: bytevector-append requires every argument to be a real ABytevector
-  // instance, rejecting raw Uint8Array; 0-arg call stays legal
   it("bytevector-append: every arg must be a bytevector (z.sbytevector) — a non-bytevector used to slip through the old z.array(z.unknown())", () => {
     const def = nativeDef("bytevector-append");
     expect(def.in.safeParse([bv([1, 2]), bv([3])]).success).toBe(true);
@@ -58,13 +54,9 @@ describe("scheme/bytevectors Contract precision — the real exported ops reject
     expect(def.in.safeParse([Uint8Array.from([1, 2, 3])]).success).toBe(false);
   });
 
-  // REBASELINE: the uniform-scheme-zod-vocabulary migration retired z.unknown() from this env
-  // layer entirely — scheme-zod.ts v2 doesn't re-export it (see srfi-95.ts's own note: "z.schemeValue
-  // is the typed replacement for z.unknown() at exactly this kind of native scheme-value slot").
-  // bytevector?'s classifier is now z.schemeValue (isSchemeValue: instanceof AValue or a function),
-  // not genuinely host-blind — the impl still happily classifies a raw Uint8Array at RUNTIME
-  // (native ops never validate), but the schema itself now honestly narrows to "any boxed
-  // scheme value," matching every other slot this migration touched.
+  // bytevector?'s classifier is z.schemeValue (boxed scheme value), not host-blind.
+  // The impl still classifies a raw Uint8Array at runtime (native ops never validate);
+  // the harvest schema narrows to boxed scheme values.
   it("bytevector?'s classifier is z.schemeValue — a raw non-scheme value is genuinely rejected by the schema (though the impl's own instanceof checks still classify raw binary fine at runtime)", () => {
     const def = nativeDef("bytevector?");
     expect(def.in.safeParse([bv([1])]).success).toBe(true);
@@ -72,8 +64,6 @@ describe("scheme/bytevectors Contract precision — the real exported ops reject
     expect(def.in.safeParse([Uint8Array.from([1])]).success).toBe(false);
   });
 
-  // INVARIANT: every native op in the bytevectors pack has migrated off the fully-degraded
-  // contract shape — no stragglers
   it("EVERY bytevectors native op's Contract is precise — no straggler with BOTH sides still fully unconstrained", () => {
     // Mirrors numeric-contract-precision.test.ts's blanket sweep: the OLD bug was a degraded
     // `z.array(z.unknown())` input with an otherwise-precise output — checking BOTH sides matters
@@ -92,8 +82,6 @@ describe("scheme/bytevectors Contract precision — the real exported ops reject
     expect(stragglers).toEqual([]);
   });
 
-  // INVARIANT: utf8->string / string->utf8 remain precise on their own domains as
-  // unaffected siblings
   it("utf8->string / string->utf8: unaffected siblings stay precise (regression guard, not part of this fix)", () => {
     const toStr = nativeDef("utf8->string");
     expect(toStr.in.safeParse([bv([104, 105])]).success).toBe(true);
@@ -104,9 +92,6 @@ describe("scheme/bytevectors Contract precision — the real exported ops reject
     expect(toUtf8.in.safeParse(["raw-js-string"]).success).toBe(false);
   });
 
-  // INVARIANT: the bytevectors pack exports exactly 12 symbols (deliberate drift alarm —
-  // forces a reviewer to touch this test when a symbol is added/removed). 9 natives +
-  // 3 purity doors (bytevector-u8-set! / bytevector-copy! / bytevector-fill!).
   it("sanity: the pack exports exactly 12 symbols (the scope this fix must cover)", () => {
     expect(Object.keys(symbols)).toHaveLength(12);
   });

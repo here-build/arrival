@@ -77,8 +77,7 @@ describe("LAW — callable arrival/toJS is the reverse membrane", () => {
     expect(door).toBeInstanceOf(DoorProcedure);
     const fn = door["arrival/toJS"]() as (...args: unknown[]) => unknown;
     expect(typeof fn).toBe("function");
-    // Region-disciplined now: the host fn always resolves through withRegionCall, so the
-    // door's teaching throw surfaces as a rejection, not a synchronous throw.
+    // The door's teaching throw surfaces as a Promise rejection, not a synchronous throw.
     await expect(fn()).rejects.toThrow(PurityError);
   });
 

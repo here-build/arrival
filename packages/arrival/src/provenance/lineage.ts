@@ -62,7 +62,7 @@ export type PathStep =
 /** Static lineage skeleton. Runtime fills leaf/source slots with stamp sets. */
 export type LineageNode =
   | { readonly kind: "literal" } // self-evaluating / lambda — never carries provenance
-  | { readonly kind: "leaf"; readonly slot: string } // variable ref
+  | { readonly kind: "leaf"; readonly slot: string }
   | { readonly kind: "source"; readonly op: string } // Rosetta-in mint
   | { readonly kind: "pipe"; readonly op: string; readonly child: LineageNode } // ≤1 prov input
   | { readonly kind: "merge"; readonly op: string; readonly children: readonly LineageNode[] } // ≥2 fan-in
@@ -136,10 +136,8 @@ export const CLASSIFIED_SPECIAL_FORMS: ReadonlySet<string> = new Set([
   "do",
 ]);
 
-/** Surface-form heads dispatched by SPECIAL_FORMS, recognised by name. */
 const isSym = (x: unknown, name: string): boolean => x instanceof ASymbol && opName(x) === name;
 
-/** A datum that is neither a variable (SchemeSymbol) nor an application (Pair). */
 function isLiteral(x: unknown): boolean {
   return !(x instanceof ASymbol) && !(x instanceof APair);
 }
@@ -200,10 +198,8 @@ function memberRead(head: unknown, args: unknown[]): { step: PathStep; argExpr: 
     return null; // computed key (`(@ x k)`) — not a static field
   }
 
-  // (car x) — the head of a pair.
   if (name === "car" && args.length >= 1) return { step: { car: true }, argExpr: args[0] };
 
-  // (vector-ref x i) / (list-ref x i) — a positional index, i a LITERAL integer.
   if ((name === "vector-ref" || name === "list-ref") && args.length >= 2) {
     const i = literalIndex(args[1]);
     if (i !== null) return { step: { index: i }, argExpr: args[0] };
@@ -282,7 +278,6 @@ function classifyWith(ast: unknown, c: Classifier, subst: Subst): LineageNode {
 
   const head = (ast as APair<any, any>).car;
 
-  // Special forms (surface Pairs from SPECIAL_FORMS).
   if (head instanceof ASymbol) {
     const form = opName(head);
     const rest = (ast as APair<any, any>).cdr;
@@ -349,7 +344,6 @@ function classifyWith(ast: unknown, c: Classifier, subst: Subst): LineageNode {
     const fn = args[0];
     const fanOp = opName(fn);
     const lengthPreserving = op === "map" || op === "vector-map";
-    // Fan×lens: lambda body → template under fan; bare symbol → no template.
     const template = classifyFanTemplate(fn, c, subst);
     return {
       kind: "fan",
@@ -388,7 +382,6 @@ function classifyWith(ast: unknown, c: Classifier, subst: Subst): LineageNode {
   );
 }
 
-/** `(if test then else?)` → mux(selector=test, arms=[then, else?]). */
 function classifyIf(rest: unknown, c: Classifier, subst: Subst): LineageNode {
   if (!(rest instanceof APair)) return { kind: "literal" };
   const test = rest.car;
@@ -440,7 +433,7 @@ function classifyCond(rest: unknown, c: Classifier, subst: Subst): LineageNode {
         procRest instanceof APair ? classifyWith(procRest.car, c, subst) : ({ kind: "literal" } as LineageNode);
       arms.push(combine("=>", [procNode, testNode]));
     } else if (body instanceof APair) {
-      arms.push(classifyBegin(body, c, subst)); // normal clause body
+      arms.push(classifyBegin(body, c, subst));
     } else {
       arms.push(testNode); // `(test)` with no body returns the test value itself
     }
@@ -487,7 +480,6 @@ function classifyLet(rest: unknown, c: Classifier, subst: Subst, sequential: boo
   return classifyBegin(body, c, extended);
 }
 
-/** Pull the RHS expressions out of a `let` binding list (named-let helper). */
 function letBindingValues(bindings: unknown): unknown[] {
   const out: unknown[] = [];
   let n: unknown = bindings;
@@ -511,7 +503,6 @@ function classifyDo(rest: unknown, c: Classifier, subst: Subst): LineageNode {
   if (!(rest instanceof APair)) return { kind: "literal" };
   const children: LineageNode[] = [];
 
-  // ((var init step?) …) — classify every init/step expression present.
   let bindNode: unknown = rest.car;
   while (bindNode instanceof APair) {
     const binding = bindNode.car;
@@ -616,7 +607,6 @@ function walk(n: LineageNode, b: Bindings, out: Set<number>, opts: { countOnly?:
   }
 }
 
-/** Teleological "provenance everything": every source the value derives from. */
 export function fullCone(n: LineageNode, b: Bindings): number[] {
   const out = new Set<number>();
   walk(n, b, out, {});
@@ -637,7 +627,6 @@ export function provOf(v: unknown): number[] {
   return v instanceof AValue ? [...v.provenance].sort((a, b) => a - b) : [];
 }
 
-/** Two `PathStep`s address the same member. */
 export function sameStep(a: PathStep, z: PathStep): boolean {
   if ("field" in a) return "field" in z && a.field === z.field;
   if ("car" in a) return "car" in z;
@@ -659,7 +648,7 @@ export function fieldCone(n: LineageNode, b: Bindings, step: PathStep): number[]
  *  (forwards). Index stays on `.step` for fan axis; never a fields key. */
 export function stepKey(step: PathStep): string | null {
   if ("field" in step) return step.field;
-  return null; // positional (car / index) — forwarded, no plucked key
+  return null;
 }
 
 /**

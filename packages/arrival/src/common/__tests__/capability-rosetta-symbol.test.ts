@@ -9,8 +9,8 @@
 //      evaluator appends ctx; given a ctx.currentInvocation the wrapper MARKS the point and stamps
 //      the output with `pointProvenance(inv.id)` — the same source-mint behavior as `symbol.rosetta`.
 //
-// The mint is driven here by a SYNTHETIC ctx (a POJO invocation), exactly the direct-JS shape the
-// real createRosettaWrapper tests use — no full evaluator needed to prove the wiring.
+// The mint is driven here by a SYNTHETIC ctx (a POJO invocation), exactly the
+// direct-JS shape the host-fn lens tests use — no full evaluator needed to prove the wiring.
 
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX, RunContext } from "../../run/RunContext.js";
@@ -64,7 +64,7 @@ async function wireRosetta(def: ARosettaProcedure): Promise<ARosettaProcedure> {
     symbols: (symbol) => ({ [name]: def, verb: symbol.alias`${name}` }) });
   const { env, verbs } = recordingEnv();
   await applyCapability(env, [cap]);
-  expect(verbs.verb).toBeInstanceOf(ARosettaProcedure); // the binder-cut bind shape itself
+  expect(verbs.verb).toBeInstanceOf(ARosettaProcedure);
   return verbs.verb;
 }
 
@@ -85,8 +85,6 @@ function invoke(
 }
 
 describe("the rosetta SymbolDef arm — bound via the vocabulary build", () => {
-  // INVARIANT: lower().apply() decodes scheme args, runs impl, and encodes the result back to scheme
-  // through the bound verb.
   it("decodes scheme→JS, runs impl, encodes JS→scheme through the bound verb", async () => {
     const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => s.length);
     const verb = await wireRosetta(def);
@@ -96,7 +94,6 @@ describe("the rosetta SymbolDef arm — bound via the vocabulary build", () => {
     expect((out as AInexact).real).toBe(5);
   });
 
-  // INVARIANT: an invalid arg is rejected via the input codec (errors-as-doors) before impl runs.
   it("rejects a bad arg via the input codec (errors-as-doors) through the bound verb", async () => {
     const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => s.length);
     const verb = await wireRosetta(def);
@@ -104,8 +101,6 @@ describe("the rosetta SymbolDef arm — bound via the vocabulary build", () => {
     await expect(invoke(verb, undefined, new AExact(3))).rejects.toThrow();
   });
 
-  // INVARIANT: a bound rosetta verb mints provenance off ctx.currentInvocation, marking the point and
-  // stamping the output.
   it("MINTS provenance off ctx.currentInvocation — marks the point + stamps the output", async () => {
     const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => s.length);
     const verb = await wireRosetta(def);
@@ -115,17 +110,14 @@ describe("the rosetta SymbolDef arm — bound via the vocabulary build", () => {
 
     expect(out).toBeInstanceOf(AInexact);
     expect(out.real).toBe(5);
-    // THE MINT: the output carries pointProvenance(42), and the invocation was marked a point.
     expect([...out.provenance]).toEqual([42]);
     expect(marked()).toBe(true);
     expect(invocation.isProvenancePoint).toBe(true);
   });
 
-  // INVARIANT: a rosetta returning a structured (list) output deep-stamps every reachable element with
-  // the minted origin.
   it("DEEP-STAMPS a structured (list) output — every element carries the minted origin", async () => {
     // A rosetta returning a JS array → a scheme list (Pair-chain). The mint must reach every
-    // element (spec §5.3: element-only lineage), exactly like createRosettaWrapper's jsToScheme stamp.
+    // element (spec §5.3: element-only lineage), exactly like jsToScheme's deep stamp.
     const def = symbol.rosetta`split: chars of a string`({ input: [z.string], output: [z.array(z.string)] }, (s) => [
       ...s,
     ]);
@@ -133,7 +125,6 @@ describe("the rosetta SymbolDef arm — bound via the vocabulary build", () => {
 
     const { invocation } = invocationWithId(7);
     const out = (await invoke(verb, { currentInvocation: invocation }, new AString("ab"))) as AValue;
-    // Walk the spine: every reachable AValue must carry {7}.
     const seen: number[][] = [];
     const walk = (v: unknown): void => {
       if (v instanceof AValue) {
@@ -146,12 +137,10 @@ describe("the rosetta SymbolDef arm — bound via the vocabulary build", () => {
       }
     };
     walk(out);
-    // At least the spine + leaves were visited, and every visited AValue carries the minted point.
     expect(seen.length).toBeGreaterThan(0);
     for (const p of seen) expect(p).toEqual([7]);
   });
 
-  // INVARIANT: without a ctx invocation, the result forwards the input's provenance rather than minting a new one.
   it("WITHOUT a ctx invocation, forwards the inputs' provenance (mint is ctx-gated, not unconditional)", async () => {
     const def = symbol.rosetta`echo: identity string`({ input: [z.string], output: [z.string] }, (s) => s);
     const verb = await wireRosetta(def);
@@ -160,18 +149,15 @@ describe("the rosetta SymbolDef arm — bound via the vocabulary build", () => {
     const tagged = new AString("x", new Set([99]));
     const out = (await invoke(verb, undefined, tagged)) as AString;
     expect(out["arrival/toJS"]()).toBe("x");
-    expect([...out.provenance]).toEqual([99]); // forwarded, not minted
+    expect([...out.provenance]).toEqual([99]);
   });
 
-  // INVARIANT: a `function` impl (not an arrow) reads run-state (abort signal) off `this.runCtx` via the
-  // CallCtx binding (pins implementation, not behavior).
   it("invocation-`this`: a `function` impl reads run-state off `this.runCtx` (signal / aborted)", async () => {
     // A ctx-coupled verb declares a `function` impl (NOT an arrow) and reads the run's abort
     // state off the flat `CallCtx` `this`. The wrapper forwards that `this` as-is.
     const def = symbol.rosetta`probe: report the run's abort state`(
       { input: [z.string], output: [z.string] },
       function (this: CallCtx, s: string) {
-        // `this.runCtx.signal` is the run's signal; `.aborted` is its own `.aborted` (false here).
         const tag = this.runCtx.signal ? (this.runCtx.signal.aborted ? "aborted" : "live") : "no-signal";
         return `${s}:${tag}`;
       },
@@ -182,7 +168,7 @@ describe("the rosetta SymbolDef arm — bound via the vocabulary build", () => {
     const ac = new AbortController();
     const runCtx = new RunContext({ signal: ac.signal });
     const out = (await invoke(verb, { runCtx }, new AString("x"))) as AString;
-    expect(out["arrival/toJS"]()).toBe("x:live"); // signal present, not aborted
+    expect(out["arrival/toJS"]()).toBe("x:live");
 
     // After abort, the SAME signal reference reads as aborted (read on access).
     ac.abort();
@@ -190,8 +176,6 @@ describe("the rosetta SymbolDef arm — bound via the vocabulary build", () => {
     expect(out2["arrival/toJS"]()).toBe("y:aborted");
   });
 
-  // INVARIANT: a pure arrow impl ignores `this` entirely; behavior is byte-identical with or without a
-  // ctx/runCtx (pins implementation, not behavior).
   it("invocation-`this`: a pure ARROW impl is unaffected — `this` is ignored, run behavior byte-identical", async () => {
     // The 50+ pure verbs are arrows: they ignore `this` entirely, so `impl.call(this, …)` is
     // exactly `impl(…)`. Proven both WITH a runCtx (signal present) and direct-JS (no ctx).
@@ -213,8 +197,6 @@ describe("the rosetta SymbolDef arm — bound via the vocabulary build", () => {
     expect(withCtx.real).toBe(5);
   });
 
-  // INVARIANT: `pure: true` forwards input provenance even with a ctx invocation — a transform never
-  // mints, only a source does.
   it("pure: true FORWARDS input provenance even WITH a ctx invocation (transform, not source — never mints)", async () => {
     // The contrast to the mint test above: SAME ctx.currentInvocation(42) + SAME tagged input {99},
     // but `pure: true` makes it a TRANSFORM — the output carries the FORWARDED input union {99},
@@ -230,8 +212,8 @@ describe("the rosetta SymbolDef arm — bound via the vocabulary build", () => {
     const tagged = new AString("x", new Set([99]));
     const out = (await invoke(verb, { currentInvocation: invocation }, tagged)) as AString;
     expect(out["arrival/toJS"]()).toBe("x");
-    expect([...out.provenance]).toEqual([99]); // FORWARDED (pure), not minted(42)
-    expect(marked()).toBe(false); // a pure rosetta never marks the invocation a point
+    expect([...out.provenance]).toEqual([99]);
+    expect(marked()).toBe(false);
     expect(invocation.isProvenancePoint).toBe(false);
   });
 });

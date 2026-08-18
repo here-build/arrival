@@ -1,12 +1,8 @@
 // The file-type resolver registry behind (require/register-extension): by-name mapping,
-// longest-suffix match, idempotent register / conflict-throw. STAGE C CUT 3b
-// (docs/plans/stage-c-corpse-deletion.md) retired the process-global convenience wrappers
-// (`registerExtension`/`lookupExtensionResolver`/`process-global extension registry`/
-// `__resetExtensionRegistryForTest`) along with the ambient path they bridged for — every run's
-// registry is now its OWN per-`RunContext` `Map` (`LoaderRunResources.extensionResolvers`,
-// loader-capability.ts). This file re-pins the SAME primitives (`registerExtensionIn`/
-// `lookupExtensionResolverIn`) directly against a fresh `Map` per test — no reset step needed,
-// since there is no shared table left to reset.
+// longest-suffix match, idempotent register / conflict-throw. Every run's registry is
+// its own per-`RunContext` `Map` (`LoaderRunResources.extensionResolvers`). This file
+// re-pins `registerExtensionIn` / `lookupExtensionResolverIn` against a fresh `Map`
+// per test — no shared table to reset.
 import { describe, expect, it, beforeEach } from "vitest";
 
 import { lookupExtensionResolverIn, registerExtensionIn, type ExtensionResolverRegistry } from "../loader-extensions.js";

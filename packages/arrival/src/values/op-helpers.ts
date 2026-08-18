@@ -66,9 +66,8 @@ export function isEagerAccumulationActive(): boolean {
 
 // Allocation cap — DoS defense for size-parameterized constructors
 // Default 2^24: worst case (~32MB UTF-16 / one 16M-slot array) is recoverable.
-const allocationLimit = 1 << 24; // 16,777,216
+const allocationLimit = 1 << 24;
 
-/** Throw when len exceeds cap or is not a usable count. O(1), pre-allocation. */
 export function assertAllocatable(len: number, fnName: string): void {
   invariant(Number.isFinite(len) && len >= 0, `${fnName}: length must be a non-negative integer, got ${len}`);
   invariant(len <= allocationLimit, `${fnName}: requested length ${len} exceeds allocation limit ${allocationLimit}`);
@@ -138,10 +137,6 @@ export function asVector(obj: unknown, fnName: string): SchemeValue[] {
   throw attachOffendingValue(new TypeError(`${fnName}: expected vector`), obj);
 }
 
-/**
- * Coerce bytevector-like value to Uint8Array view.
- * Accepts Uint8Array / ArrayBuffer / DataView / Node Buffer.
- */
 export function asBytevector(obj: unknown, fnName: string): Uint8Array {
   switch (true) {
     case obj instanceof ABytevector:
@@ -179,13 +174,11 @@ export function nilOrderCompare(a: unknown, b: unknown): -1 | 0 | 1 | undefined 
   if (!aN && !bN) return undefined;
   return aN && bN ? 0 : aN ? -1 : 1;
 }
-/** Four total-order relations, all derived from the single `lte`. */
 export const ORD_REL: Record<"<" | ">" | "<=" | ">=", (a: AOrd, b: AOrd) => boolean> = {
   "<": (a, b) => !lte(b, a),
   ">": (a, b) => !lte(a, b),
   "<=": (a, b) => lte(a, b),
   ">=": (a, b) => lte(b, a) };
-/** n-ary ordered comparison from operands' `arrival/tagless-final/lte`. */
 export function deriveOrd(sym: "<" | ">" | "<=" | ">="): (...args: unknown[]) => ABool {
   const rel = ORD_REL[sym];
   return (...args: unknown[]): ABool => {

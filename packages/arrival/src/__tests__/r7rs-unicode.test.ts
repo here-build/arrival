@@ -1,26 +1,13 @@
 /**
- * R7RS Unicode conformance — bug ledger.
+ * R7RS Unicode conformance.
  *
- * Why this file exists
- * --------------------
  * JavaScript strings are UTF-16 code units; R7RS characters and strings are
  * Unicode code points. The two disagree on every non-BMP character (anything
- * ≥ U+10000 — emoji, ancient scripts, mathematical letters, etc.). Several
- * char/string primitives in `bridge.ts` use UTF-16-grade APIs (`charCodeAt`,
- * `fromCharCode`) where code-point APIs (`codePointAt`, `fromCodePoint`) are
- * required.
+ * ≥ U+10000). Char/string primitives must use code-point APIs
+ * (`codePointAt`, `fromCodePoint`), not UTF-16-grade (`charCodeAt`, `fromCharCode`).
  *
- * The other family of bugs is in the `SchemeCharacter.__rev_names__` mapping
- * (`types.ts:149-155`) — for the reverse lookup (codepoint → preferred name),
- * the iteration order over `Object.keys(characters)` decides the winner when
- * two names share a codepoint. `alarm` and `bel` both map to U+0007; the
- * builder iterates "alarm" first then "bel" later, overwriting — so the
- * codepoint resolves to `bel`. R7RS § 6.6 lists `alarm` as the canonical
- * name; `bel` is only the SRFI-175 alias.
- *
- * Style — each `it.fails` describes EXPECTED R7RS behavior with the bug
- * source file:line. `it.fails` = "this should fail today; turning green
- * means the bug is fixed (or it regressed)".
+ * `alarm` and `bel` both map to U+0007; R7RS § 6.6 lists `alarm` as the
+ * canonical name (`bel` is the SRFI-175 alias). Reverse lookup prefers `alarm`.
  */
 
 import { describe, expect, it } from "vitest";
@@ -29,12 +16,7 @@ import { freshEnv } from "./_fresh-env.js";
 
 const env = await freshEnv();
 
-/** Coerce a Scheme numeric result to a JS number (handles SchemeExact). */
-// INVERTED (RULINGS.md R1): exec's
-// uniform plain-JS exit landed — `evalScheme` below always returns a plain
-// number/bigint now. Collapsed to that one asserted shape (was: tolerate
-// boxed-with-valueOf AND raw simultaneously — the "accepts boxed or raw" contract
-// P4 forbids).
+/** evalScheme returns a plain number. */
 const num = (r: unknown): number => {
   if (typeof r === "number") return r;
   if (typeof r === "bigint") return Number(r);
@@ -71,13 +53,6 @@ describe("r7rs unicode — passing invariants (regression guards)", () => {
   });
 });
 
-// [STALE-LABEL] (2026-07-08 invariant-verdict sweep, [P15]):
-// this describe title + the per-test
-// "Predicted failure value" comments claimed `it.fails` semantics, but every test here is
-// a plain `it(...)` — ran the suite, all pass today, so the bugs these describe are
-// already FIXED. Relabeled to match r7rs-numbers.test.ts's own honest "FIXED at ..."
-// convention instead of stale "known bug" framing that could mislead a reader into
-// thinking there's a live tracked regression.
 describe("r7rs unicode — Unicode/codepoint fixes (regression guards)", () => {
   it(
     "char->integer on a non-BMP character returns the full code point",

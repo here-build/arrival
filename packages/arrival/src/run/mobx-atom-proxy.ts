@@ -11,7 +11,6 @@
 import { createAtom } from "mobx";
 import type { AtomProxy } from "./atom-proxy.js";
 
-/** Build an {@link AtomProxy} over MobX `createAtom`. */
 export function createMobxAtomProxy(): AtomProxy {
   return {
     atom(key: string) {

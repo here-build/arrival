@@ -21,7 +21,6 @@ import { applyCapability } from "./_fresh-env.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
 import { bindValue, mintFrame } from "../env/AmbientRuntime.js";
 
-// Helper to execute and get first result
 async function execOne(expr: string, env = inferenceEnv): Promise<any> {
   const results = await exec(expr, { env });
   return results[0];
@@ -30,7 +29,6 @@ async function execOne(expr: string, env = inferenceEnv): Promise<any> {
 describe("Escaped Symbol Resolution", () => {
   describe("Basic escaped symbols", () => {
     it("should handle numeric symbols like |24|", async () => {
-      // Define a variable with numeric name
       const result = await execOne(`
         (begin
           (define |24| "twenty-four")

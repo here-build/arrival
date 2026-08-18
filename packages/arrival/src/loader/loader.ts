@@ -257,18 +257,16 @@ export function dataToScheme(v: unknown): SchemeVal {
 const TS_TYPE_MAX_DEPTH = 8;
 const TS_TYPE_MAX_KEYS = 200;
 
-/** Union the distinct element types of an array (order-preserving, deduped). */
 function unionElementTypes(items: readonly unknown[], depth: number): string {
   const seen = new Set<string>();
   for (const item of items) {
     seen.add(valueToTsType(item, depth + 1));
     if (seen.size > 24) return "unknown"; // too many distinct shapes — give up cleanly
   }
-  if (seen.size === 0) return "unknown"; // empty array — element type unknown
+  if (seen.size === 0) return "unknown";
   return [...seen].join(" | ");
 }
 
-/** Project a parsed (JSON-shaped) value onto its lens TS type string. */
 export function valueToTsType(value: unknown, depth = 0): string {
   if (depth > TS_TYPE_MAX_DEPTH) return "unknown";
   if (value === null) return "null";
@@ -377,7 +375,6 @@ export function resolveRequireType(loader: Loader, path: string, source: string)
   }
 }
 
-/** Wrap a simple `path → source` resolver (CLI `--file` mode) as a Loader. */
 export function loaderFromResolver(resolver: RequireResolver): Loader {
   return {
     resolve: (specifier, fromDir) => joinPath(fromDir, specifier),

@@ -34,9 +34,6 @@ import { ARosettaProcedure } from "../../values/primitives/ARosettaProcedure.js"
 import { AKernelKeyword } from "../../values/AKernelKeyword.js";
 
 describe("SymbolDeclaration — the raw authoring-time union, post Stage-A2 mint", () => {
-  // INVARIANT: every symbol.* factory that now mints an A-value directly is assignable to
-  // SymbolDeclaration — the whole point of Stage A2 is that these classes ARE what a
-  // `symbols` record entry holds, not a `{kind:"native", …}` record describing one.
   test("the minted A-value classes (native/sequence/tagless/tagless-guard/rosetta/door/keyword) are assignable", () => {
     expectTypeOf<ANativeProcedure>().toExtend<SymbolDeclaration>();
     expectTypeOf<ARosettaProcedure>().toExtend<SymbolDeclaration>();
@@ -44,30 +41,20 @@ describe("SymbolDeclaration — the raw authoring-time union, post Stage-A2 mint
     expectTypeOf<AKernelKeyword>().toExtend<SymbolDeclaration>();
   });
 
-  // INVARIANT: the three SURVIVING declarative record kinds — symbol.define / defineSyntax
-  // (the two-phase carve-out) and symbol.macro (already hands over a real Macro) — stay
-  // assignable, unaffected by Stage A2.
   test("define / defineSyntax / macro stay assignable (the surviving declarative record kinds)", () => {
     expectTypeOf<DefineSymbolDef>().toExtend<SymbolDeclaration>();
     expectTypeOf<DefineSyntaxSymbolDef>().toExtend<SymbolDeclaration>();
     expectTypeOf<MacroSymbolDef>().toExtend<SymbolDeclaration>();
   });
 
-  // INVARIANT (Stage A2 pin): a raw CONTRACT shape (what `native()` used to return directly)
-  // is NOT itself assignable anymore — it only ever rides `.contract` on a minted
-  // ANativeProcedure now, never traveling loose in a `symbols` record.
   test("a bare NativeSymbolDef contract shape is NOT assignable (rides `.contract` on the minted value instead)", () => {
     expectTypeOf<NativeSymbolDef>().not.toExtend<SymbolDeclaration>();
   });
 
-  // INVARIANT (retirement pin): an untagged `{ value }` object is NOT assignable — data
-  // constants go through `symbol.value` (mints a boxed `AmbientValue` leaf) instead.
   test("a bare value-binding object is NOT assignable to SymbolDeclaration (retired arm)", () => {
     expectTypeOf<{ value: unknown }>().not.toExtend<SymbolDeclaration>();
   });
 
-  // INVARIANT (retirement pin): a bare function is NOT assignable — callables author as
-  // baked symbol.* defs, or as the explicit forbidden `{ fn }` record while MCP still rides it.
   test("a bare function is NOT assignable to SymbolDeclaration (retired arm)", () => {
     expectTypeOf<(...args: unknown[]) => unknown>().not.toExtend<SymbolDeclaration>();
   });

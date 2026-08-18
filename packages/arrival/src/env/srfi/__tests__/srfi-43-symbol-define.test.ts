@@ -105,14 +105,10 @@ describe("scheme/srfi-43 — behavior equivalence (semantic-equivalence gate, §
   });
 });
 
-// STAGE C CUT 4 (docs/plans/stage-c-corpse-deletion.md): the "standalone .apply(), deps
-// unwalked" mechanism this block used to isolate the runtime-luck-vs-declared-edge distinction
-// is RETIRED along with `lower()`/`assembleEnv` — `buildVocabulary` (the sole surviving bake
-// path) ALWAYS walks a capability's OWN declared `deps`, so the distinction is moot (there is
-// no unwalked state to observe runtime luck against anymore). The PRODUCT law that survives —
-// srfi-43's declared deps (`equality`/`numeric`/`vectors`) genuinely resolve its ops — is
-// pinned via the sanctioned path, alongside the bake-time FV law (below), which is the row
-// that actually PROVES the edge is declared rather than runtime-lucky.
+// `buildVocabulary` always walks a capability's own declared `deps`. srfi-43's
+// declared deps (`equality`/`numeric`/`vectors`) resolve its ops via the
+// sanctioned path; the bake-time FV law below is the row that proves the edge
+// is declared rather than runtime-lucky.
 describe("scheme/srfi-43 — the dep edge is real (§2.1's undeclared-dep bug class, now a declared edge)", () => {
   it("srfi-43 ALONE (exec({capabilities})): every op resolves through its declared deps", async () => {
     const [count] = await exec("(vector-count even? #(1 2 3 4))", { capabilities: [srfi43] });

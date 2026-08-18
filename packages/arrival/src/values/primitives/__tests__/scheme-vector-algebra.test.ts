@@ -52,9 +52,7 @@ const arb = fc
 
 const equalClone = (v: AVector) => new AVector(v.__vector__.slice());
 
-// INVARIANT: reflexivity, reflexivity-across-clone, symmetry, transitivity of vector equality.
 setoidLaws("SchemeVector", { arb, equalClone });
-// INVARIANT: vector concat is associative.
 semigroupLaws("SchemeVector", arb);
 // INVARIANT: map identity and composition hold under the boxed (materialized-access)
 // equality (pins implementation, not behavior — boxedEq compares __vector__ directly).

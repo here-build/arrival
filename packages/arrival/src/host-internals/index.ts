@@ -70,7 +70,6 @@ export {
   type InterveningDoorWitness,
 } from "../run/resource-paths.js";
 
-// Phase 5 R1 — path-keyed atom bus (observe at Q≠[]; stage E for run-commit invalidate).
 // MobX sits behind AtomProxy; product law never asserts MobX API.
 export type { AtomProxy, ProxyAtom } from "../run/atom-proxy.js";
 export {
@@ -91,8 +90,7 @@ export {
 // dependency. Reach it by its own subpath instead:
 //   import { createMobxAtomProxy } from "@inhuman.tools/arrival/mobx-atom-proxy";
 
-// Phase 5 R6–R7 — in-symbol atoms (mint after CQS; per-RunContext liveness:
-// abandon retires, an owned run on the same bus supersedes its predecessor).
+// Abandon retires; an owned run on the same bus supersedes its predecessor.
 export {
   ReactiveAtomMembershipError,
   mintReactiveAtoms,
@@ -103,8 +101,7 @@ export {
   type MintReactiveAtomsOpts,
 } from "../run/reactive-atoms.js";
 
-// Phase 5 R2–R3 — host reaction envelope (re-invoke = new top-level exec; self-suppress;
-// settle with OQ-CYCLE-POLICY at-most-once-per-unit). Not a public FRP surface.
+// Re-invoke is a new exec; self-suppress; at-most-once-per-unit; not a public FRP surface.
 export {
   createReactionHub,
   type ReactionHub,

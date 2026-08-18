@@ -24,9 +24,7 @@ import type { ANil } from "../values/primitives/ANil.js";
 import type { ACallable } from "../values/primitives/ACallable.js";
 import type { AList, AListAlike, SchemeValue } from "../values/types.js";
 
-/** Scheme-face of `z.pair` after the codec rework — APair of scheme elements. */
 type PairScheme = APair<SchemeValue, SchemeValue>;
-/** `z.union([z.pair, z.nil])` scheme face. */
 type ListOrNilScheme = PairScheme | ANil;
 
 describe("SpecInfer — the shared VectorSpec → z.output traversal DecodedArgs/DecodedReturn build on", () => {
@@ -180,10 +178,6 @@ describe("symbol contract — 2026-07-05 audit: for-each / string-map / string-f
   const forEachHead = z.lambda;
   const listRest = z.union([z.pair, z.nil]);
 
-  // OLD for-each shape row DELETED (2026-07-09 suite consolidation, [P16]):
-  // decoded a retired synthetic schema,
-  // documentation-as-test with no reachable production path. NEW-side row (below) is
-  // the load-bearing proof.
   test("NEW for-each shape: [callable, ...list[]] — a Pair|Nil rest, not a flat array", () => {
     // Mirrors for-each's real migrated contract: { input: [z.custom<...>()], inputRest: z.union([z.pair, z.nil]), output: [z.undefinedResult] }.
     // Both members of the rest union are real codecs now: nil's JS face is null (not ANil),
@@ -201,8 +195,6 @@ describe("symbol contract — 2026-07-05 audit: for-each / string-map / string-f
 
   const stringHOFHead = z.lambda;
 
-  // OLD string-map/string-for-each shape row DELETED (same sweep/rationale as the
-  // for-each OLD row above).
   test("NEW string-map/string-for-each shape: [callable, ...string[]], not flat unknown[]", () => {
     // Default (js) face of z.string is bare `string`; z.lambda → ACallable (W8).
     // (Scheme-face rest would be AString[] — native contour; these HOFs use the js face
@@ -214,7 +206,6 @@ describe("symbol contract — 2026-07-05 audit: for-each / string-map / string-f
 });
 
 describe("symbol contract — 2026-07-05 audit: filter's contract narrows to a fixed 2-tuple", () => {
-  // OLD filter shape row DELETED (same sweep/rationale).
   test("NEW shape: a bare 2-element array literal decodes to a FIXED [pred, seq] tuple", () => {
     // Mirrors filter's real migrated contract: { input: [z.lambda, z.schemeValue], ... }.
     const predSchema = z.lambda;
@@ -230,7 +221,6 @@ describe("symbol contract — 2026-07-05 audit: find's predicate + return precis
   // slots are the predicate (arg1) and the return.
   const listOrNil = z.union([z.pair, z.nil]);
 
-  // OLD predicate-slot shape row DELETED (same sweep/rationale).
   test("NEW shape: predicate slot is a callable schema — the established z.lambda convention (filter/vector-map/vector-for-each/curry/member's compare)", () => {
     // Default (js) face of the union: pair→tuple, nil→null. z.lambda → ACallable.
     expectTypeOf<DecodedArgs<[typeof z.lambda, typeof listOrNil]>>().toEqualTypeOf<
@@ -238,7 +228,6 @@ describe("symbol contract — 2026-07-05 audit: find's predicate + return precis
     >();
   });
 
-  // OLD output-shape row DELETED (same sweep/rationale).
   test("NEW output z.schemeValue collapses to SchemeValue — mirrors vectors.ts's vector-ref/vector->list z.unknown()→z.schemeValue fix (vectors.test-d.ts)", () => {
     expectTypeOf<DecodedReturn<[typeof z.schemeValue]>>().toEqualTypeOf<SchemeValue>();
   });
@@ -265,7 +254,6 @@ describe("symbol contract — 2026-07-05 audit: typecheck's contract narrows to 
   const s3 = z.custom<{ valueOf(): unknown } | Function>();
   const s4 = z.custom<number | null>().optional();
 
-  // OLD typecheck shape row DELETED (same sweep/rationale).
   test("NEW shape: a plain 4-element array — the 4th slot's VALUE admits undefined, but there are EXACTLY 4 positions", () => {
     // Mirrors typecheck's real migrated contract exactly (2nd slot z.schemeValue per the audit's other fix).
     expectTypeOf<DecodedArgs<[typeof s1, typeof z.schemeValue, typeof s3, typeof s4]>>().toEqualTypeOf<
@@ -308,8 +296,6 @@ describe("symbol contract — 2026-07-05 audit: negative proofs", () => {
     }
     expectTypeOf<true>().toEqualTypeOf<true>();
   });
-  // typecheck's 5th-argument negative proof lives in the dedicated describe block above
-  // (it needs `s1`/`s3`/`s4` in scope), rather than being duplicated here.
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -332,7 +318,6 @@ describe("symbol contract — 2026-07-05 audit: negative proofs", () => {
 describe("symbol contract — 2026-07-05 audit: curry's contract narrows the leading-args tail to SchemeValue (srfi-235.ts)", () => {
   const curryHead = z.lambda;
 
-  // OLD curry shape row DELETED (same sweep/rationale).
   test("NEW curry shape: input=[head], inputRest=z.schemeValue — leading args decode as SchemeValue, not unknown", () => {
     // Mirrors curry's real migrated contract: { input: [z.lambda], inputRest: z.schemeValue, ... }.
     expectTypeOf<DecodedArgsWithRest<[typeof curryHead], typeof z.schemeValue>>().toEqualTypeOf<

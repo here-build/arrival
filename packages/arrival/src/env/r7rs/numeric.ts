@@ -130,9 +130,7 @@ function marshalCall(name: string, spec: NumSpec, args: unknown[], runCtx?: RunC
   return encodeResult(out, jsResult);
 }
 
-/** Build the `(...args) => unknown` builtin for one numeric op. See file header for the three concerns. */
 function nativeNumericOp(name: string, spec: NumSpec): (this: CallCtx, ...args: unknown[]) => unknown {
-  // provenance + coerce-with-naming + marshalled call.
   const applyNumeric = (callArgs: unknown[], runCtx: RunContext): unknown => {
     // Gated on the SAME effective switch `withInputProvenance` uses
     // (`isEagerAccumulationActive` — ambient flag OR silent-region γ, op-helpers.ts's
@@ -805,15 +803,8 @@ function looseOrderChain(sym, args) {
   return mintVerdict(args, verdict);
 }
 function looseCompare(sym, core: (this: CallCtx, ...a: unknown[]) => unknown) {
-  // strict is run-CONSTANT but can't ride the operands — an all-constant compare
-  // carries only CONSTANT_CTX operands. Rides the run's ctx (reconstructed onto
-  // `this.runCtx` by the native-value adapter, capability.ts, at every invocation
-  // path). Replaces the retired ambient `isStrict()` holder.
-  //
-  // `core.call(this, …)` (not a bare `core(...)`) — `core` is `wrapOrd(ltOp/gtOp/…)`,
-  // itself `this.runCtx`-dependent (nativeNumericOp's fn reads `this.runCtx`); a bare
-  // call would drop `this` down the composition chain and crash on `this.runCtx` of
-  // undefined.
+  // strict rides `this.runCtx` (cannot ride CONSTANT_CTX operands). `core.call(this, …)`
+  // required — a bare `core(...)` leaves `this.runCtx` undefined.
   const fn = function (this: CallCtx, ...args) {
     if (this.runCtx.strict === true) {
       if (!args.every(isNumberOperand))
@@ -836,12 +827,7 @@ function looseCompare(sym, core: (this: CallCtx, ...a: unknown[]) => unknown) {
 // `nativeNumericOp`.
 // ════════════════════════════════════════════════════════════════════════════
 
-// `function(this: CallCtx, …)` (not an arrow) on every helper below — bound directly
-// as a symbol.native impl, dispatch delivers the live ctx via `this` (capability.ts's
-// `hostImpl.apply(makeCallCtx(runCtx), args)`). Threaded into `coerceNumeric`'s ctx
-// param, completing op-helpers.ts's own confessed THREADING GAP (its doc comment:
-// "every current caller… lives in the env/r7rs cluster… does not yet pass one" —
-// that cluster is this file).
+// Native impls must be `function` (not arrows) and pass `this.runCtx` into `coerceNumeric`.
 // (q . r) product — multi-return is doored on binding. `floorQuotientFn`/
 // `floorRemainderFn` accept EITHER ANumeric kind via `toIntegerPair`, so no
 // pre-conversion to AExact is needed — the callee re-derives via `toInteger`.
@@ -1079,7 +1065,6 @@ const INEXACT_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
           }
         ` };
 
-/** floor/ truncate/ → (q . r); input schemeNumber. */
 const QUOTIENT_REMAINDER_PRODUCT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber, z.schemeNumber],
   output: [z.pair] };
@@ -1089,7 +1074,6 @@ const EXACT_ISQRT_PRODUCT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> =
   input: [z.schemeNumber],
   output: [z.pair] };
 
-/** `1+`/`1-` — `(n: unknown) => ANumeric`. Input `z.schemeNumber`. */
 const ONE_ARG_NUM_OUTPUT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber],
   output: [z.schemeNumber] };

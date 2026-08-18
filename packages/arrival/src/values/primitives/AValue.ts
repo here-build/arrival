@@ -73,7 +73,6 @@ export abstract class AValue {
     }
   }
 
-  /** Public reader for the immutable source span. */
   get location(): SourceLocation | undefined {
     return this[LOCATION];
   }
@@ -145,7 +144,6 @@ export abstract class AValue {
    * call starts a fresh walk; leaf Setoids ignore it.
    */
   abstract ["arrival/tagless-final/equals"](other: unknown, seen?: SeenMap): boolean;
-  /** Order — the ≤ of an Ord type (numbers, strings, chars, symbols, bytevectors). */
   ["arrival/tagless-final/lte"]?(other: unknown): boolean;
   /** Code-position lowering — reader-minted literal with Clojure-style element-eval
    *  answers the `(vector …)` / `(dict …)` application ONCE (cached); null otherwise. */
@@ -188,21 +186,14 @@ export abstract class AValue {
   /** Keyed member read — `:key` accessor and membrane `readMember` face. Absence IS
    *  the semantics: no term ⇒ no members (face answers nil). */
   ["arrival/tagless-final/get"]?(key: SchemeValue | string, runCtx?: RunContext): SchemeValue | Promise<SchemeValue>;
-  /** Member existence — `@?`'s term. */
   ["arrival/tagless-final/has"]?(key: SchemeValue | string): boolean;
-  /** Own member names — `@keys`' term. */
   ["arrival/tagless-final/keys"]?(): string[];
-  /** Projection — head of a pair-shaped term. */
   ["arrival/tagless-final/car"]?(runCtx?: RunContext): SchemeValue;
-  /** Projection — tail. */
   ["arrival/tagless-final/cdr"]?(runCtx?: RunContext): SchemeValue;
-  /** Indexed read — element at k (vector-shaped terms). */
   ["arrival/tagless-final/vector-ref"]?(k: number): SchemeValue | Promise<SchemeValue>;
   /** Semigroup — `this ⋄ other`: container-preserving PURE append. */
   ["arrival/tagless-final/concat"]?(other: unknown): SchemeValue;
-  /** Traversable — effectful traversal; `of` lifts into the applicative. */
   ["arrival/tagless-final/traverse"]?(of: (x: unknown) => unknown, f: (x: unknown) => unknown): unknown;
-  /** Apply (Applicative) — accumulate through an applicative carrier. */
   ["arrival/tagless-final/ap"]?(other: unknown): unknown;
   // Type-predicate GUARDS: receiver answers its own kind; lacking the method answers #f.
   ["arrival/tagless-final/vector?"]?(): boolean;

@@ -22,7 +22,7 @@ export function taglessGuard(tpl: TemplateStringsArray, ...sub: unknown[]): ANat
     const receiver = schemeArgs[schemeArgs.length - 1];
     const leading = schemeArgs.slice(0, -1);
     const fn = resolveMethod(receiver, tf(name as TaglessOp));
-    if (fn === undefined) return mintVerdict([receiver], false); // graceful #f
+    if (fn === undefined) return mintVerdict([receiver], false);
     const verdict = await fn.call(receiver, ...leading, runCtx);
     return mintVerdict([receiver, ...leading], typeof verdict === "boolean" ? verdict : Boolean(verdict));
   };

@@ -75,9 +75,7 @@ interface ScopeFrame {
   elems: number;
 }
 
-/** The accumulated lexical scope at the cursor. */
 export interface ScopeState {
-  /** Every name in lexical scope at the cursor. */
   inScope: ReadonlySet<string>;
 }
 
@@ -117,7 +115,6 @@ export function scanScope(src: string): ScopeState {
       const isBindingFrame = top.kind === "lambda-list" || top.kind === "define-sig" || top.kind === "let-pair";
       if (top.elems === 0 && !isBindingFrame) {
         top.head = cur;
-        // Reclassify a head frame the instant its head is known.
         if (LAMBDA_HEADS.has(cur)) top.kind = "lambda-form";
         else if (cur === "let" || cur === "let*" || cur === "letrec" || cur === "letrec*") top.kind = "let-form";
         else if (cur === "define") top.kind = "define-form";
@@ -141,7 +138,6 @@ export function scanScope(src: string): ScopeState {
     return undefined;
   };
 
-  /** Record `atom` as a binder if `frame`'s role puts a binder at this slot. */
   const bindAtom = (frame: ScopeFrame, atom: string) => {
     switch (frame.kind) {
       case "lambda-list": {
@@ -177,7 +173,6 @@ export function scanScope(src: string): ScopeState {
     }
   };
 
-  /** The role a freshly-opened child takes from its parent's role + position. */
   const childRole = (parent: ScopeFrame | undefined): FrameKind => {
     if (!parent) return "plain";
     // `(lambda (a b) …)` — first operand list = the parameter list.
@@ -297,7 +292,6 @@ export function computeValidSymbols(
     for (const id of bound) if (env.isCallable(id)) out.add(id);
     for (const id of scope) out.add(id);
   } else {
-    // Argument ⇒ any bound symbol.
     for (const id of bound) out.add(id);
     for (const id of scope) out.add(id);
   }

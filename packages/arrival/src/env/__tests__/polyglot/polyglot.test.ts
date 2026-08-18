@@ -26,9 +26,6 @@ async function exec(code: string, options: ExecOptionsOverFrame) {
 }
 
 describe("@inhuman.tools/arrival/polyglot (shared core)", () => {
-  // INVARIANT: the polyglot capability installs @/@?/@keys/dict and compose/pipe/flow, and
-  // they thread correctly (the -> / ~> threading-macro half of this invariant moved to the
-  // per-dialect test files in the 2026-07-10 dialect split — no longer exercised here)
   it("installs @/@?/@keys/dict and compose/pipe run correctly standalone", async () => {
     const env = mintFrame(sandboxedEnv, "polyglot-core-test");
     await applyCapability(env, [polyglot]);
@@ -50,15 +47,10 @@ describe("@inhuman.tools/arrival/polyglot (shared core)", () => {
     expect(await num('(@ (dict :a 1) (vector-ref (@keys (dict :a 1)) 0))')).toBe(1);
   });
 
-  // INVARIANT (partial — retired the "-> macro in prelude" half of the original claim: the
-  // W4/H3 migration dropped the text-blob prelude entirely for individually-declared
-  // symbol.define/symbol.native entries): polyglot exports a well-formed SchemePackSpec
-  // named "scheme/polyglot" (pins implementation, not behavior)
   it("exports a well-formed SchemePackSpec — the shrunk core, post-split", () => {
     expect(polyglot.name).toBe("scheme/polyglot");
     expect(polyglot.spec.prelude).toBeUndefined();
-    // W4/H3 migration baseline: no text-blob prelude, individually-declared
-    // symbol.define/symbol.native entries only.
+    // No text-blob prelude — individually-declared symbol.define/symbol.native entries only.
     const symbols = polyglot.spec.symbols as Record<string, { kind?: string; callable?: boolean }>;
     expect(symbols["compose"]?.kind).toBe("define");
     expect(symbols["compose"]?.callable).toBe(true);

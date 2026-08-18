@@ -51,7 +51,7 @@ export function closureWalk<N extends DagNode<N>>(
   const visit = (node: N): void => {
     const seen = byName.get(node.name);
     if (seen !== undefined) hooks.onRevisit?.(seen, node);
-    if (color.get(node.name) === BLACK) return; // already fully visited
+    if (color.get(node.name) === BLACK) return;
     if (color.get(node.name) === GRAY) {
       const from = stack.indexOf(node.name);
       hooks.onCycle([...stack.slice(from), node.name]);

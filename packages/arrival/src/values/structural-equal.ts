@@ -77,7 +77,6 @@ export function structuralEqual(a: unknown, b: unknown, seen: SeenMap = new Map(
   const bStr = bo.__string__ as unknown;
   if (aStr != null && bStr != null) return aStr === bStr;
 
-  // Both must be objects to recurse; otherwise they're unequal primitives.
   if (typeof a !== "object" || typeof b !== "object") return false;
 
   // Arrays (incl. AJSArray sources are raw arrays by this point).
@@ -93,7 +92,6 @@ export function structuralEqual(a: unknown, b: unknown, seen: SeenMap = new Map(
     return true;
   }
 
-  // Plain objects: same own-enumerable key set, structurally-equal values.
   const aKeys = Object.keys(a);
   const bKeys = Object.keys(b);
   if (aKeys.length !== bKeys.length) return false;

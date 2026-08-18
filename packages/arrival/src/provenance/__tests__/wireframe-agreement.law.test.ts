@@ -6,13 +6,13 @@
  * Three law families share this file because all three are properties OF THE
  * BUILDER'S OUTPUT (the wireframe graph), not of the retrospective stream:
  *
- *   - wire-locality  — an ASSEMBLY-TIME check on every emitted wire (FLIPPED at Q8a:
- *     `provenance/uneval.ts`'s `unevalWire` enforces FV(body) ⊆ params ∪ prelude ∪
+ *   - wire-locality  — an ASSEMBLY-TIME check on every emitted wire
+ *     (`provenance/uneval.ts`'s `unevalWire` enforces FV(body) ⊆ params ∪ prelude ∪
  *     hermetic-base AT EMISSION — the `WireLocalityError` door).
  *   - W1 agreement   — the wireframe's cone vs the eager oracle's, SCOPED per the m3
- *     precision trade (flips at Q9 — the oracle harness; NOT this landing's).
- *   - I5 ext. collapse — a region is ONE node from G (FLIPPED at Q8a: a fan's
- *     callback body is the region's PRIVATE `template` interior).
+ *     precision trade.
+ *   - I5 ext. collapse — a region is ONE node from G (a fan's callback body is the
+ *     region's PRIVATE `template` interior).
  *
  * Q7 (LANDED) keeps its own describe block below — the PRECURSOR half of
  * wire-locality's by-name row, asserted one layer down (partition + hermetic
@@ -63,7 +63,6 @@ beforeAll(async () => {
 });
 
 describe("wire-locality (§1 CHOSEN: a wire is a closed arrival lambda) — FLIPPED at Q8a", () => {
-  // @ledger: Q8a — FLIPPED (unevalWire's emission check + WireLocalityError door)
   it(
     "FV(wire body) ⊆ params ∪ prelude-names — checked AT EMISSION by `uneval`'s lambda-" +
       "lifting; declared-vs-actual consumption drift is unrepresentable by construction",
@@ -93,7 +92,6 @@ describe("wire-locality (§1 CHOSEN: a wire is a closed arrival lambda) — FLIP
     },
   );
 
-  // @ledger: Q8a — FLIPPED (γ-applies against the Q7 hermetic env)
   it(
     "a wire body calling a pure prelude helper references it BY NAME — a captured " +
       "reference that resolves to a prelude or native name is NEVER carried as a " +
@@ -118,7 +116,6 @@ describe("wire-locality (§1 CHOSEN: a wire is a closed arrival lambda) — FLIP
     },
   );
 
-  // @ledger: Q8a — FLIPPED (wires are serialized source; Pairs-with-spans on re-read)
   it(
     "a JS closure is never a wire carrier — wires serialize as Pairs-with-spans (the " +
       "reader AST) under the tagless algebra, never as an ambient-referencing JS " +
@@ -151,13 +148,6 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
     return buildWireframe(forms, { classifier: corpusClassifier, isBaseName: corpusIsBaseName });
   }
 
-  // @ledger: Q9 — FLIPPED. Corpus-driven: every hand-curated row in `w1-corpus.ts`
-  // whose `precision` is "exact" (interior sources, nested regions, structured
-  // multi-field egress, field-access chains that stay single-source, prelude
-  // helpers, port-coupled mux with pure/repeated-source arms, deep mux nesting
-  // where every reachable arm agrees, and loop programs whose source fires on
-  // every iteration unconditionally) — eager-oracle cone === wireframe cone,
-  // EXACT, over BOTH the numeric-id (deep-collapsed) AND the op-name projection.
   describe.each(W1_CORPUS.filter((e) => e.precision === "exact"))("exact: $klass / $name", (entry) => {
     it(`${entry.code}`, async () => {
       const registry = new SourceRegistry();
@@ -168,10 +158,7 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
     });
   });
 
-  // @ledger: Q9 — FLIPPED. The pure-mux rows: wireframe cone is a PROPER superset
-  // of eager's (the untaken arm's source is present in wireframe, absent from
-  // eager) — asserted as the ABSTRACT both-arms cone, never "fixed" by shrinking
-  // it to match eager (that IS the m3 trade). Exact arm attribution is Q16's.
+  // wireframe cone is a proper superset (untaken arm); do not shrink it to match eager
   describe.each(W1_CORPUS.filter((e) => e.precision === "abstract"))("abstract both-arms: $klass / $name", (entry) => {
     it(`${entry.code}`, async () => {
       const registry = new SourceRegistry();
@@ -188,12 +175,6 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
     });
   });
 
-  // @ledger: Q9 — FLIPPED (generative extension). A random left-fold of pipe/merge/
-  // let-transparency over 2-4 sources, mux-free and fan-free by construction —
-  // extends the hand-curated "non-mux segments" rows with fast-check-driven
-  // coverage of the SAME exact-equality claim (fast-check owns the seed/shrink;
-  // `genLinearProgram` is the deterministic renderer, mirroring
-  // conservation.law.test.ts's own mulberry32 pattern).
   it("property: random non-mux source pipe/merge programs agree exactly, over 30 generated programs", async () => {
     await fc.assert(
       fc.asyncProperty(fc.integer({ min: 0, max: 2 ** 31 - 1 }), async (seed) => {
@@ -210,9 +191,6 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
     );
   });
 
-  // @ledger: Q9 — FLIPPED. A pure-selector mux collapses INTO its wire — no `mux`
-  // kind node is ever minted for it, and it therefore carries no decision record of
-  // its own; only PORT-COUPLED muxes reach the retrospective stream (§1 CHOSEN, A2).
   it("a pure-selector mux collapses INTO its wire and carries no decision record of its own — only port-coupled muxes reach the retrospective stream (§1 CHOSEN, A2)", async () => {
     const program = await wfCorpus(`(if #t (src-a) (src-b))`);
     expect(program.main.nodes.some((n) => n.kind === "mux")).toBe(false);
@@ -351,13 +329,9 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
     // invisible to the prospective cone, even though it demonstrably flows into
     // the eager result.
     //
-    // FLIPPED: `buildDoBinder` now walks `result…` under an EXTRA synthetic `let`
-    // frame that rebinds every loop variable to a shared cut sentinel pointed
-    // straight at the `recur` node's id (builder.ts's `buildDoBinder`) — mirroring
-    // `unevalWire`'s own let-frame rewrap, so the egress wire reads
-    // `(let ((i inN) (acc inN)) acc)` with `inN` a NODE paramRef into `recur`,
-    // putting everything the step expressions reach back in the result's cone.
-    // @ledger: do-loop result clause unreachable from recur node — FLIPPED
+    // `buildDoBinder` walks `result…` under an extra synthetic `let` that rebinds
+    // every loop variable to a cut sentinel at the `recur` node, so the egress
+    // wire carries a NODE paramRef into `recur`.
     it("(do ((i 0 (+ i 1)) (acc 0 (+ acc (fetch-item i)))) ((> i 3) acc)): wireframe cone equals eager's {fetch-item} — the result clause now wires back through the recur node", async () => {
       const code = `(do ((i 0 (+ i 1)) (acc 0 (+ acc (fetch-item i)))) ((> i 3) acc))`;
       const registry = new SourceRegistry();
@@ -426,12 +400,8 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // ORACLE FLAG — the READ seam (op-helpers.ts's `isEagerProvenanceOracleEnabled`/
-  // `setEagerProvenanceOracleEnabled`). Q9's territory was the READ only; the WRITE
-  // (consulting this flag inside `withInputProvenance`/`mintVerdict` to compile
-  // stamp accumulation out of production) landed at Q20a/Q20b. Q20b FLIPPED the
-  // production default to OFF — this suite's agreement corpus above still runs the
-  // eager oracle, but now via `w1-harness.ts`'s `runEagerCone` FORCING it on
+  // ORACLE FLAG — production default is OFF. This suite's agreement corpus still
+  // runs the eager oracle via `w1-harness.ts`'s `runEagerCone` forcing it on
   // per-call (save/restore around its own `execState`), not via an ambient default.
   // ═══════════════════════════════════════════════════════════════════════════
   describe("oracle flag — the Q20 read seam", () => {
@@ -459,7 +429,6 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
 });
 
 describe("I5 — exterior collapse (§3: a region is ONE node from G) — FLIPPED at Q8a", () => {
-  // @ledger: Q8a — FLIPPED (fan template = the region's private interior)
   it(
     "a region collapses to exactly ONE wireframe node from G, regardless of how many " +
       "interior cones its body computes — structured egress (one value, several " +
@@ -482,8 +451,7 @@ describe("I5 — exterior collapse (§3: a region is ONE node from G) — FLIPPE
     },
   );
 
-  // @ledger: Q8a — FLIPPED (structural: no region field-port kind exists; the
-  // projection stays wire material; the template interior is the replay answer)
+  // no region field-port kind exists; the projection stays wire material
   it(
     "field-demand at a region boundary answers by REPLAY, not by records — region " +
       "field-ports are DEFERRED until a workload demands them (§3 I5 LIMIT)",
@@ -504,7 +472,6 @@ describe("I5 — exterior collapse (§3: a region is ONE node from G) — FLIPPE
 });
 
 describe("Q7 — program prelude: a pure helper stays a REFERENCE, the positive direction (docs/PROVENANCE.md §1 program prelude CHOSEN)", () => {
-  // @ledger: Q7 — LANDED
   it(
     "a pure helper referenced by name from another define stays a REFERENCE: the " +
       "partition keeps BOTH prelude-side (neither is wireframe material), and the " +

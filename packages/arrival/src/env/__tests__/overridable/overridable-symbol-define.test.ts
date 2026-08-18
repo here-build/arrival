@@ -44,12 +44,12 @@ import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 const capabilities = [overridableCapability];
 
 // Local evalScheme, mirroring `_fresh-env.ts`'s own — used only by the standalone
-// lower()/apply() rows below (the FV-law regression pin), never by the exec() rows. The
-// internal bake seam (Stage C Cut 3b), never the public exec surface.
+// bake rows below (the FV-law regression pin), never by the exec() rows. The
+// internal bake seam, never the public exec surface.
 const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
 
-// `spec.symbols` IS the record (the builder-form arm is retired; a define-form spec carries
-// the eagerly-evaluated literal), so reading it needs no activation.
+// `spec.symbols` IS the record (a define-form spec carries the eagerly-evaluated
+// literal), so reading it needs no activation.
 function resolveSymbols(): Record<string, SymbolDeclaration> {
   return overridableCapability.spec.symbols ?? {};
 }
@@ -65,8 +65,8 @@ describe("arrival/overridable — structural: no prelude field, define-syntax ki
   });
 
   it("`overridable/resolve` stays a `rosetta` entry with its `in`/`out` contract intact (never migrated)", () => {
-    // Stage A2: `overridable/resolve` mints an ARosettaProcedure directly now — its
-    // CONTRACT (still `kind: "rosetta"`, still carrying `in`/`out`) rides `.contract`.
+    // `overridable/resolve` mints an ARosettaProcedure directly — its contract
+    // (still `kind: "rosetta"`, still carrying `in`/`out`) rides `.contract`.
     const def = contractOf(resolveSymbols()["overridable/resolve"]) as (AEntity & { in?: unknown; out?: unknown }) | undefined;
     expect(def).toBeDefined();
     expect(def!.kind).toBe("rosetta");
@@ -136,24 +136,13 @@ describe("arrival/overridable — a teaching-door message survives the migration
 });
 
 describe("arrival/overridable — the §3.4 macro firewall: `name`'s formal position never false-positives", () => {
-  // Stage C Cut 2 (docs/plans/stage-c-corpse-deletion.md): the vocabulary path's default scope
-  // is now a FRESH, per-call root (`LexicalScope.fresh()`, no cross-call leakage — see
-  // `execStateViaVocabulary`'s own doc) — a bare `exec(code)` no longer shares top-level defines
-  // with an EARLIER, unrelated `exec` call in the same process. This test's original single-call
-  // shape (`(define/overridable city …) city` validated as ONE two-form program under
-  // `staticValidation: "on"`) only ever passed because an EARLIER test in this same file (ROW 3,
-  // above) had ALREADY bound `city` into the pre-Cut-2 realm-cached scope every no-`scope` call
-  // shared — an accident of the retired cross-call sharing, not the documented firewall this
-  // test names. `collectProgramDefinitions`'s Sweep 1 (static-validation/validate-program.ts)
-  // only recognizes literal `define`/`define-macro`/`define-syntax` heads as program-level
-  // definitions — a capability-declared `"binder"`-attributed macro like `define/overridable`
-  // is NOT one of them, so a bare top-level reference to its introduced name, validated in the
-  // SAME parse pass as the defining call, genuinely does not resolve (Sweep 1 has no way to know
-  // `city` is coming). The FIX, using the sanctioned continuity channel (`ExecOptions.scope`,
-  // not accidental realm sharing): define first (no static validation — an ordinary run),
-  // THEN validate a second, later reference against the SAME scope, where `city` is an ordinary
-  // already-bound SCOPE name (`vocabularyFromChain`'s `scopeNames`/`scopeLookup` — scope wins
-  // over the chain), not a same-parse-pass forward reference Sweep 1 would need to predict.
+  // The vocabulary path's default scope is a FRESH, per-call root (`LexicalScope.fresh()`,
+  // no cross-call leakage). Sweep 1 only recognizes literal `define`/`define-macro`/
+  // `define-syntax` heads as program-level definitions — a `"binder"`-attributed macro
+  // like `define/overridable` is not one of them, so a same-parse-pass reference to the
+  // name it introduces does not resolve. Use `ExecOptions.scope`: define first (ordinary
+  // run), then validate a later reference against the SAME scope, where `city` is an
+  // already-bound scope name.
   it('`define/overridable`\'s binding NAME validates clean under staticValidation: "on" (the false positive the ternary closes)', async () => {
     const scope = LexicalScope.fresh();
     await exec(`(define/overridable city (s/string) "Berlin")`, { capabilities, config: { params: {} }, scope });

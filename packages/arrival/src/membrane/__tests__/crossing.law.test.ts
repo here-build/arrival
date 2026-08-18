@@ -311,7 +311,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         expect(entered).toBeInstanceOf(AJSArray);
         expect((entered as AJSArray).source).toBe(arr);
         expect((entered as AJSArray).kind).toBe("vector");
-        expect(fromJS(arr)).toBe(entered); // identity cache
+        expect(fromJS(arr)).toBe(entered);
       });
       it(exitTitle, () => {
         const arr = [1, 2, 3];
@@ -339,7 +339,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         const entered = fromJS(obj);
         expect(entered).toBeInstanceOf(AJSObject);
         expect((entered as AJSObject).source).toBe(obj);
-        expect(fromJS(obj)).toBe(entered); // identity cache
+        expect(fromJS(obj)).toBe(entered);
       });
       it(exitTitle, () => {
         const obj = { a: 1 };
@@ -358,8 +358,8 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         const original: Record<string | symbol, unknown> = { visible: 1 };
         original[SECRET] = [4, 5, 6];
         const roundTripped = exitJS(fromJS(original)) as Record<string | symbol, unknown>;
-        expect(roundTripped.visible).toBe(1); // string key unchanged
-        expect(roundTripped[SECRET]).toEqual([4, 5, 6]); // symbol key survives
+        expect(roundTripped.visible).toBe(1);
+        expect(roundTripped[SECRET]).toEqual([4, 5, 6]);
       });
       it(provenanceTitle, () => {
         const stamped = jsToScheme(CONSTANT_CTX, { name: "claude" }, {}, PROV);
@@ -726,7 +726,6 @@ describe("R9 lazy egress laws — containers exit as ref-tracking proxies (RULIN
     expect(() => {
       delete obj.a;
     }).toThrow(/mutations are banned/);
-    // nothing crossed the boundary
     expect((toJS(vec) as unknown[])[0]).toBe(1);
     expect((toJS(dict) as Record<string, unknown>).a).toBe(1);
   });
@@ -881,7 +880,7 @@ describe.each(VIOLATIONS.map((v) => [v.name, v] as const))("forbidden crossing: 
         const source: { a: number } = { a: 1 };
         const obj = new AJSObject(source);
         expect(() => obj.set("a", new AExact(42))).toThrow(v.door);
-        expect(source.a).toBe(1); // nothing crossed the boundary
+        expect(source.a).toBe(1);
       });
       break;
     }
@@ -940,14 +939,6 @@ describe("forgery guard: a borrowed object's own arrival/*-named key is DATA, ne
   });
 });
 
-// "egress of deferred carriers" (the force-on-egress contract for a live AHalfBaked
-// crossing exec's boundary) retired: AHalfBaked itself dissolved — VERDICT KILL, zero
-// production reachability, superseded by R2/C3 struct-fact wires. See
-// docs/design-history/halfbaked-existence-review.md. The three `it.fails` rows this
-// block carried ("live AHalfBaked escapes exec under speculate", ledger GAPS) are gone
-// because the gap became UNREACHABLE, not fixed — no carrier can exist anymore, so
-// there is nothing left for force-on-egress to force. See docs/RULINGS.md R4 (VERDICT KILL).
-
 // ── Egress membrane exit laws (docs/design-history/arrival-egress-membrane-exit.md) ──
 // ONE crossing protocol `arrival/toJS(exit?)`, keyed on `exit`: no exit = SERIALIZATION
 // (callables stringify — a law, not an accident), exit present = MEMBRANE crossing
@@ -992,13 +983,6 @@ describe("egress membrane exit — the two modes and their identity laws", () =>
     // Region-disciplined (ACallable.ts's hostProjectionOf): always resolves via withRegionCall.
     await expect((bare.inner.f as () => Promise<unknown>)()).resolves.toBe(7);
   });
-
-  // "nested forceBigInt: options reach container elements (the sibling defect, fixed)"
-  // RETIRED: `forceBigInt` is deleted (docs/design-history/arrival-one-number-rework.md
-  // §2.3 — bigint is an opaque host value, not a numeric-projection choice; the scout
-  // found no production setter, so this is a pure simplification). There is no longer
-  // an option whose value should reach nested container elements differently, so
-  // there is nothing left for this regression test to guard.
 
   it("mode isolation: bare vs mem are distinct, stable slots (the forceBigInt mem:0/mem:1 split retired — one membrane mode now)", () => {
     const d = dictOf([["n", new AExact(1)]]);

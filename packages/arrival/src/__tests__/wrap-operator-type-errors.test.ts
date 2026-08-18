@@ -26,8 +26,6 @@ describe("wrapOperator: type-error provenance (audit #42)", () => {
     }
     expect(caught).toBeInstanceOf(TypeError);
     expect(caught!.message).toMatch(/cannot apply \*/i);
-    // Arg type names: the integer literal `0` projects to "number",
-    // the string literal `""` projects to "string".
     expect(caught!.message).toContain("number");
     expect(caught!.message).toContain("string");
     // Original coerceNumeric invariant remains reachable via cause.

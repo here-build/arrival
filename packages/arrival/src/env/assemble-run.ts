@@ -47,7 +47,6 @@ import { bindValue, mintResolvingFrame, type ResolvingAmbient } from "./AmbientR
 import invariant from "tiny-invariant";
 
 export interface AssembleRunOptions {
-  /** Capability set this run is armed with. */
   readonly capabilities: readonly EnvCapability[];
   /** ONE shared config bag — reference-identity dedup across root + dep appearances
    *  (see `ExecOptions.config`, generator-exec.ts). */
@@ -66,7 +65,6 @@ export interface AssembleRunOptions {
   readonly reads?: ReadGuard;
   /** Phase 5 path-atom bus (observe Q / stage E). See ExecOptions.pathAtoms. */
   readonly pathAtoms?: PathAtomBus;
-  /** Opt-in CQS path-segment string assert (default false). See ExecOptions.strictCQSstrings. */
   readonly strictCQSstrings?: boolean;
   /** Override CQS prior-effect log (harness spy). Default: fresh MemoryResourcePathLog. */
   readonly resourcePaths?: ResourcePathLog;
@@ -87,33 +85,17 @@ export interface AssembleRunOptions {
  *  family) — a reusing caller falls back to assembling from its tuple. */
 const vocabularyByRunCtx = new WeakMap<RunContext, Vocabulary>();
 
-/** The vocabulary `runCtx` was spawned against; `undefined` if it was not spawned here. */
 export function vocabularyOf(runCtx: RunContext): Vocabulary | undefined {
   return vocabularyByRunCtx.get(runCtx);
 }
 
-/**
- * THE PER-RUN PRELUDE-DEFINE FRAME (ruling 2026-08-13, audit B4): a prelude
- * `(define …)` PERSISTS into the main phase — it lands here, a null-rooted frame the
- * exec entry roots the user's fresh lexical scope at (session → THIS → vocabulary
- * chain). preludeOnly SEED bindings never enter it, so a preludeOnly NAME stays
- * unresolvable from main-phase code while a prelude-defined closure still reaches it
- * by lexical capture — "invocation survives, reference does not." Mid-run
- * `(require/extension …)` appends an extension pack's prelude defines to the SAME
- * frame (loader-capability.ts), which the live session-scope walk sees immediately.
- *
- * Same keyed-residency shape as `vocabularyByRunCtx` above: run-associated state in
- * an opaque side-table because the run leaf must not import the env layer; lifetime
- * = the RunContext's.
- */
+/** preludeOnly dies with the seed; `(define …)` persists; invocation survives, reference does not. */
 const preludeDefinesByRunCtx = new WeakMap<RunContext, ResolvingAmbient>();
 
-/** The run's prelude-define frame; `undefined` for a RunContext not minted here. */
 export function preludeDefinesOf(runCtx: RunContext): ResolvingAmbient | undefined {
   return preludeDefinesByRunCtx.get(runCtx);
 }
 
-/** Obtain-or-mint the run's prelude-define frame (mid-run require path). */
 export function ensurePreludeDefineFrame(runCtx: RunContext): ResolvingAmbient {
   let frame = preludeDefinesByRunCtx.get(runCtx);
   if (frame === undefined) {
@@ -151,7 +133,6 @@ export async function assembleRun(opts: AssembleRunOptions): Promise<RunContext>
     capabilityConfigurations: vocabulary.configsByCapability,
     vocabulary: vocabulary.map,
     degraded: vocabulary.degraded });
-  // The run owns what it was spawned against — see `vocabularyByRunCtx`.
   vocabularyByRunCtx.set(runCtx, vocabulary);
 
   // The run's prelude-define frame exists for EVERY owned mint (even a prelude-less

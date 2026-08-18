@@ -58,7 +58,6 @@ describe("string-null? — emptiness predicate", () => {
 });
 
 describe("string-prefix? / string-suffix? — SRFI-13 affix-first argument order", () => {
-  // Prefix/suffix predicates match correctly; an empty prefix/suffix always matches.
   it.each([
     { name: "matching prefix", input: '(string-prefix? "foo" "foobar")', value: true },
     { name: "non-matching prefix", input: '(string-prefix? "bar" "foobar")', value: false },
@@ -134,7 +133,6 @@ describe("string-take / string-drop and the -right twins", () => {
 });
 
 describe("string-trim family — SRFI-13 left/right/both; char/predicate criteria", () => {
-  // Official: string-trim = left only; string-trim-both = both ends.
   it.each([
     { name: "default: string-trim (left only)", input: '(string-trim "  hi  ")', value: "hi  " },
     { name: "default: string-trim-both", input: '(string-trim-both "  hi  ")', value: "hi" },
@@ -187,7 +185,6 @@ describe("string-pad / string-pad-right — to EXACTLY len (SRFI-13 truncation)"
 });
 
 describe("string-reverse", () => {
-  // Reverses the string; the empty string stays empty.
   it.each([
     { name: "reverses a string", input: '(string-reverse "abc")', value: "cba" },
     { name: "empty string stays empty", input: '(string-reverse "")', value: "" },

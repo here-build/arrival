@@ -76,7 +76,7 @@ const packTimeoutMs = (): number => Number(process.env.ASSEMBLE_PACK_TIMEOUT_MS)
  *  for plain data. Functions are never structurally equal — only the same reference dedups. */
 function configEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
-  if (typeof a === "function" || typeof b === "function") return false; // identity-only
+  if (typeof a === "function" || typeof b === "function") return false;
   if (a === null || b === null || typeof a !== "object" || typeof b !== "object") return false;
   const ka = Object.keys(a as object);
   const kb = Object.keys(b as object);

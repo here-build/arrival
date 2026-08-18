@@ -36,7 +36,6 @@ function idAt(ordinal: number): RecordId {
 }
 
 describe("Q12 aggregation (docs/PROVENANCE.md §5 A6, round-3 m4)", () => {
-  // @ledger: Q12
   it(
     "pure loop = O(1)+count observed: a stable-wiring loop of n iterations lands ONE " +
       "run record + a count through the write-side hook, not n records — true for n=3 " +
@@ -54,14 +53,13 @@ describe("Q12 aggregation (docs/PROVENANCE.md §5 A6, round-3 m4)", () => {
 
         const baseStream = await base.readStream(REGION);
         const landedRuns = await runs.readRuns(REGION);
-        expect(baseStream).toHaveLength(0); // O(1): zero raw records, regardless of n
-        expect(landedRuns).toHaveLength(1); // O(1): exactly one run record
-        expect(landedRuns[0].count).toBe(n); // +count: the run carries the full count
+        expect(baseStream).toHaveLength(0);
+        expect(landedRuns).toHaveLength(1);
+        expect(landedRuns[0].count).toBe(n);
       }
     },
   );
 
-  // @ledger: Q12
   it(
     "losslessness — fold∘unfold = id on reads: the set of (kind, ordinalPath) an " +
       "AggregationRun's unfold answers with is EXACTLY the set its source records " +
@@ -82,14 +80,13 @@ describe("Q12 aggregation (docs/PROVENANCE.md §5 A6, round-3 m4)", () => {
         const expanded = unfoldRun(runs[0]);
         const sourceOrdinals = source.map((r) => r.id.ordinalPath.at(-1)).toSorted((a, b) => (a ?? 0) - (b ?? 0));
         const expandedOrdinals = expanded.map((f) => f.id.ordinalPath.at(-1)).toSorted((a, b) => (a ?? 0) - (b ?? 0));
-        expect(expandedOrdinals).toEqual(sourceOrdinals); // same READ (membership set), seq dropped by design
-        expect(expanded).toHaveLength(source.length); // same count-read too
+        expect(expandedOrdinals).toEqual(sourceOrdinals); // seq dropped by design
+        expect(expanded).toHaveLength(source.length);
         for (const fact of expanded) expect(fact.kind).toBe(kind);
       }
     },
   );
 
-  // @ledger: Q12
   it(
     "the never-list — mint, mux-decision, host-schedule — is IMPOSSIBLE to fold: " +
       "assertAggregatable's runtime door throws NeverAggregatable for all three, and " +

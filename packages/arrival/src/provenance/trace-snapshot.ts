@@ -1,75 +1,15 @@
 /**
  * Plain (non-observable) mirror of an EvalTrace, for the flow-graph build.
  *
- * The trace's objects are PLAIN now (`Invocation`/`NodeRecord` were de-MobXed —
- * see the note atop trace.ts; the one reactive signal left is the monotonic
- * `entries` counter, observable only on arrival-provenance's `ObservableEvalTrace`
- * subclass). `snapshotTrace` remains the boundary between the live, still-mutating
- * trace and the graph build (`traceToStatechart` / `traceToForest`, a heavy
- * O(n²)-ish traversal): one linear pass copies the fields the build needs into
- * plain objects/Sets, so a live-fill renderer re-runs the snapshot on an `entries`
- * tick and the expensive build downstream reads only immutable-for-its-lifetime
- * structures. (Historically the whole trace was observable and every build read
- * paid proxy + tracking overhead — `ObservableSet` iteration alone ~22% of a large
- * render — which is why this boundary exists.) Reactivity at the edge,
- * computation in the core.
+ * `snapshotTrace` is the boundary between the live, still-mutating trace and the
+ * graph build (`traceToStatechart` / `traceToForest`): one linear pass copies the
+ * fields the build needs into plain objects/Sets so the expensive build reads only
+ * immutable-for-its-lifetime structures.
  *
  * ── structured-clone contract (the worker boundary) ─────────────────────────
- * The snapshot is plain (de-MobX'd) but it is NOT yet a *pure* structured-clone
- * payload, and the difference is exactly ONE field — `PlainInv.node`. The plan to
- * move `traceToRegions`/`planNesting` into the ELK worker (DAG node A2) will
- * `postMessage` a snapshot across the worker boundary; structured-clone is the
- * transport, so this file's job (DAG node A1) is to pin down precisely what
- * survives that round-trip and what does not.
- *
- * SURVIVES `structuredClone` (verified — see `arrival-chain`'s
- * `src/__tests__/trace-snapshot-clone.test.ts`):
- *   - `id` / `state` — number / string primitives.
- *   - `scope` — the pre-derived `scopeId(node)` string (`head@line:col`). This is the
- *     clone-safe twin of `node`: it captures the symbol-keyed `__location__` (which
- *     a clone strips) into a plain string while the live Pair is in hand.
- *   - `provenance` — a plain `Set<number>` (Sets are clone-safe).
- *   - `value` / `metadata` — already peeled to plain JS by `toJS` (`value`) or
- *     built as a POJO `{ kind, path, model, inputs, … }` (`metadata`); the values a
- *     `.prompt` card reads are strings / numbers / plain objects / Sets.
- *   - `parent` / `children` — object references; the DAG/back-edges are rebuilt
- *     faithfully by structured-clone (it de-dups shared refs and tolerates cycles).
- *   - `PlainTrace.invocations` array — clone-safe.
- *   - **Invocation ids round-trip intact** — the load-bearing requirement: a later
- *     node binds per-cell values back to worker-produced regions BY `id`, so the
- *     ids MUST survive the boundary. They do (plain numbers).
- *
- * Does NOT survive — `PlainInv.node` (a live arrival-scheme `Pair`):
- *   structured-clone deep-copies a `Pair` into a *plain* `Object` — it drops the
- *   prototype (so `is_pair()` / `instanceof Pair` go false downstream), it does NOT
- *   preserve cross-node `===` identity against any Pair the consumer holds OUTSIDE
- *   the snapshot (a cloned node is a brand-new object), and — the silent killer —
- *   it STRIPS symbol-keyed properties, so `__location__` vanishes and `scopeId`
- *   degrades from `head@line:col` to bare `head` (scope discrimination, loop-body
- *   keying and branch-scope liveness all collapse). The current main-thread
- *   consumers (`traceToRegions`, `statechart`, `region-boundaries`, `trace-to-chain`,
- *   `trace-to-forest`) read `node` by Pair identity, `node.car`, deep `car/cdr`
- *   spine-walks AND `__location__` — all of which the live ref provides for free.
- *
- * ── remaining work before `node` drops from the payload ─────────────────────
- * The first piece of the projection now EXISTS: `scope` (`scopeId(node)`,
- * pre-derived above) is the clone-safe carrier of the symbol-keyed `__location__`
- * — the silent killer is defused. What the live `Pair` on `node` still uniquely
- * provides, and what a worker-boundary migration still needs handling for:
- *   - cross-node `===` identity (loop-body keying, `a.node === b.node`) — these
- *     read-sites need rewriting to `a.scope === b.scope` (equal Pairs ⇒ equal
- *     scope strings);
- *   - `car`/`cdr` spine-walks (`listOf`/`asPair`) — these survive the clone as
- *     plain fields (prototype lost, but the duck-typed `"car" in v` checks still
- *     hold), so no projection is needed beyond not relying on
- *     `is_pair()`/`instanceof`;
- *   - the second live-trace read inside `traceToRegions` (the
- *     `liveById`/`valueById` decision-operand substitution) reads `trace.records`
- *     AFTER the snapshot — those values need absorbing into the snapshot rather
- *     than re-reading the live map.
- * Once `traceToRegions` reads `scope` (not `scopeId(node)`) and the above are
- * handled, `node` itself can be dropped from the posted payload. The read-site
- * rewrite co-designs with `trace-to-regions.ts`.
+ * `PlainInv.node` is not structured-clone-safe: a clone strips symbol-keyed
+ * `__location__`, so `scopeId` degrades from `head@line:col` to bare `head`.
+ * Pre-derive `scope` (`scopeId(node)`) while the live Pair is in hand.
  */
 import { toJS } from "../membrane/membrane.js";
 import type { APair } from "../values/primitives/APair.js";
@@ -114,7 +54,6 @@ export interface PlainInv {
   /** Node metadata, bound by the rosetta fn at call time — points only (`undefined`
    *  otherwise). e.g. a `.prompt` node's `{ kind, path, model, inputs }`. */
   metadata: unknown;
-  /** running | resolved | rejected — the render's pending/result/error state. */
   state: InvocationState;
   /** Rejection detail — `Invocation.error` stringified at snapshot time (clone-safe).
    *  Points only, `rejected` only; `undefined` otherwise. The render labels the failed
@@ -127,7 +66,6 @@ export interface PlainInv {
 }
 
 export interface PlainTrace {
-  /** Every invocation, in records order. */
   invocations: PlainInv[];
 }
 
@@ -153,7 +91,6 @@ const NO_PROVENANCE: ReadonlySet<number> = new Set();
 export function snapshotTrace(trace: EvalTrace): PlainTrace {
   const byId = new Map<number, PlainInv>();
   const invocations: PlainInv[] = [];
-  // Pass 1: copy each invocation's scalar fields and its provenance Set.
   for (const rec of trace.records.values()) {
     for (const inv of rec.bindings) {
       const isPoint = inv.isProvenancePoint;

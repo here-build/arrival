@@ -63,7 +63,6 @@ export type SpecInfer<S extends VectorSpec, F extends Face = "js"> = S extends r
     ? ProjectFace<S, F>
     : never;
 
-/** Decoded arg types for the impl (default face = JS / codec output). */
 export type DecodedArgs<S extends VectorSpec, F extends Face = "js"> =
   SpecInfer<S, F> extends readonly unknown[] ? SpecInfer<S, F> : [SpecInfer<S, F>];
 
@@ -83,7 +82,6 @@ type SpecInferReturn<S extends VectorSpec, F extends Face> = S extends readonly 
     ? ProjectReturnFace<S, F>
     : never;
 
-/** Decoded return: single value when output is a 1-tuple, else values-vector. */
 export type DecodedReturn<O extends VectorSpec, F extends Face = "js"> = O extends readonly [z.ZodTypeAny]
   ? SpecInferReturn<O, F>[0]
   : SpecInferReturn<O, F>;
@@ -159,7 +157,6 @@ export type CallbackRole = "element-transformer" | "control" | "effect" | "accum
  *  `undefined` = underdetermined-and-undeclared — honest hole, never a guessed default. */
 export type CallbackRoles = readonly (CallbackRole | undefined)[];
 
-/** A symbol's input/output contract. */
 export interface Contract<I extends VectorSpec, O extends VectorSpec, Rest extends RestSpec = undefined> {
   input: I;
   /** Variadic tail after fixed leading `input` positions. Only with fixed-tuple `input` —
@@ -232,10 +229,8 @@ export interface ContractKindMismatch<Msg extends string> {
   readonly "arrival/contract-kind-mismatch": Msg;
 }
 
-/** T must not carry ContourOnly (`z.schemeValue`). Brand → `never`. */
 export type NoContourBrand<T> = HasBrand<T, z.ContourOnly<unknown>> extends true ? never : T;
 
-/** T must not carry CrossingOnly (`z.dynamic` / `z.instance`). Brand → `never`. */
 export type NoCrossingBrand<T> = HasBrand<T, z.CrossingOnly<unknown>> extends true ? never : T;
 
 type ContourMsgIn =
@@ -332,8 +327,6 @@ export type ContourResult<I extends VectorSpec, O extends VectorSpec, Rest exten
 // CallCtx / makeCallCtx: import from run/CallCtx.ts — importing here would cycle
 // (ACallable → scheme-zod → _bake) and can leave z.instanceof class captures undefined.
 
-/** Impl a contract demands: decoded args in, decoded return (or promise) out.
- *  `F`: `"js"` (default, rosetta) or `"scheme"` (native contour). */
 export type Impl<
   I extends VectorSpec,
   O extends VectorSpec,
@@ -367,18 +360,12 @@ export interface RosettaSymbolDef<
   /** Resolved cache class. Run-cache gates on this (docs/execution.md §CHOKEPOINT). Absent = regenerateable. */
   readonly cacheClass?: CacheClass;
   readonly callbackRoles?: CallbackRoles;
-  /** See `CrossingContract.queries` (rosetta-only path producers). */
   readonly queries?: ResourcePathFn;
-  /** See `CrossingContract.effects` (rosetta-only path producers). */
   readonly effects?: ResourcePathFn;
-  /** See `Contract.type`. */
   readonly type?: string;
-  /** See `Contract.preludeOnly`. */
   readonly preludeOnly?: boolean;
-  /** See `Contract.requiresConfig`. */
   readonly requiresConfig?: readonly (string | readonly string[])[];
   readonly emit?: EmitRule;
-  /** See `Contract.narrows`. */
   readonly narrows?: { readonly witness: string };
   readonly refPolicy?: RefPolicy;
   /** Extension bag — generic `M` so higher layers type their own bag. */
@@ -437,7 +424,6 @@ export interface SequenceSymbolDef {
   readonly in: z.ZodTypeAny;
   readonly out: z.ZodTypeAny;
   readonly run: (this: CallCtx, ...schemeArgs: unknown[]) => Promise<unknown>;
-  /** See `Contract.type`. */
   readonly type?: string;
   /** Resolved role (`contract.provenance ?? "pipe"`). */
   readonly provenance: ProvenanceRole;
@@ -519,9 +505,7 @@ export interface DefineSymbolDef {
   readonly provenance: ProvenanceRole;
   /** Authored role for drift check (procedure only). Never the resolved `provenance`. */
   readonly declaredProvenance?: ProvenanceRole;
-  /** See `Contract.type`. */
   readonly type?: string;
-  /** See `Contract.preludeOnly`. */
   readonly preludeOnly?: boolean;
   /** Per-call zod validation (default true) — same cost valve as rosetta. */
   readonly validate: boolean;
@@ -939,7 +923,6 @@ export function assertContractAxes(
     assertSlotKinds(name, kind, inSchema, outSchema);
     return callbackRoles;
   }
-  // native | sequence
   assertSlotKinds(name, kind, inSchema, outSchema);
   assertProvenanceRoleShape(name, provenance, inSchema, outSchema);
   assertCacheClassShape(name, opts.cacheClass, inSchema, outSchema);
@@ -1031,11 +1014,9 @@ export type SequenceImpl<I extends VectorSpec, O extends VectorSpec> = (
   runCtx: RunContext,
 ) => MaybePromise<DecodedReturn<O, "scheme">>;
 
-/** Per-invocation knobs. */
 export interface BakeRuntimeOpts {
   /** Zod validation on decoded args + encoded output. Default true. */
   validate?: boolean;
-  /** Extension bag — see `MetadataField` / `./metadata.js`. */
   metadata?: MetadataRecord;
 }
 

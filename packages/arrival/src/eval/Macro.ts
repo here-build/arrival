@@ -45,9 +45,7 @@ export interface MacroInvokeContext {
  *  through destructuring — `MacroInvokeContext`'s `[key: string]: unknown` index
  *  signature would otherwise widen every field to `unknown` under `Omit`. */
 export interface TransformerArgs {
-  /** Per-run context — see {@link MacroInvokeContext.runCtx}. */
   runCtx: RunContext;
-  /** Use-site resolver — see {@link MacroInvokeContext.resolver}. */
   resolver?: Resolver;
   [key: string]: unknown;
 }

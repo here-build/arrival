@@ -129,7 +129,6 @@ export default EnvCapability.define("scheme/srfi-28", {
           } else if (head === undefined) {
             throw new FormatError("format: expected a format string (SRFI-28: (format fmt arg ...))", []);
           } else {
-            // #t, a port, or any other non-string, non-#f first argument.
             throw new FormatError(`format: ${DEST_REASON}`, []);
           }
 
@@ -186,7 +185,7 @@ export default EnvCapability.define("scheme/srfi-28", {
                 rendered = " ".repeat(width - rendered.length) + rendered;
               }
               out += rendered;
-              i += directiveText.length; // advance past the consumed digits/comma/letter
+              i += directiveText.length;
               continue;
             }
 

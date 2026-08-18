@@ -17,9 +17,8 @@ import { createQueryLens } from "../query.js";
 //   sum_readings  (a: number[])                 => Promise<number>   — vector slot; number return
 //   set_timer     (a: number)                   => Promise<void>     — scalar slot; void return
 //   make_route    ()                            => Promise<List<unknown>>  — a list-RETURNING head
-// REBASELINE (fe2c848ee7, 2026-07-08): z.pair is now cons(value, value) — a dotted-pair codec
-// (prints Pair<Car,Cdr>), not list-shaped — z.union([z.pair, z.nil]) no longer means "a proper
-// list." z.list() is the actual proper-list constructor (prints List<unknown>).
+// `z.pair` is cons(value, value) — a dotted-pair codec, not list-shaped — `z.union([z.pair,
+// z.nil])` is not "a proper list." z.list() is the actual proper-list constructor (prints List<unknown>).
 const getRoute = symbol.rosetta`get-route: route between stops`(
   { input: [z.list(), z.string], output: [z.string] },
   () => "",
@@ -131,22 +130,17 @@ describe("kwargs / object-value slots narrow to the property type", () => {
   );
   const kw = createQueryLens(assembleHarvestedPrelude([["create_user", userTool], ["sum_readings", sumReadings]]));
 
-  // INVARIANT: a string-valued kwarg's slot resolves to that property's scalar string type, not
-  // the whole object type.
   it("a string-valued kwarg: element-domain is free-form string; the value slot is scalar", () => {
     const [scheme, offset] = at("(create_user :name |)");
     expect(kw.getSlotElementType(scheme, offset)).toEqual({ isStringy: true, enum: null });
     expect(kw.getSlotArrayKind(scheme, offset)).toBe("scalar");
   });
 
-  // INVARIANT: an enum-valued kwarg's slot narrows to its declared enum members.
   it("an enum-valued kwarg narrows to its members", () => {
     const [scheme, offset] = at("(create_user :mode |)");
     expect(kw.getSlotElementType(scheme, offset)).toEqual({ isStringy: null, enum: ["fast", "scenic"] });
   });
 
-  // INVARIANT: at a string-valued kwarg slot, a number-returning candidate is dropped while an
-  // unresolved local is kept (drops-only).
   it("drops-only: a number-returner is dropped at a string-valued kwarg; the unresolved local kept", () => {
     const [scheme, offset] = at("(create_user :name |)");
     expect(kw.getTypeValidCandidates(scheme, offset, ["sum_readings", "my_local"])).toEqual(["my_local"]);

@@ -22,8 +22,7 @@ import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
 import { bindValue, mintFrame } from "../../env/AmbientRuntime.js";
 
-// Q20b: the string-collapse assertions below (join/string-append via real exec) need
-// the eager oracle forced ON for this file's lifetime.
+// this helper/execState needs the eager oracle ON
 requireEagerOracle();
 
 const stamped = (s: string, ...points: number[]) => new AString(s, new Set(points));

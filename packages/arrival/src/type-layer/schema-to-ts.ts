@@ -272,7 +272,6 @@ function paramList(input: z.ZodTypeAny): string {
     if (def.rest != null) params.push(`...${items.length === 0 ? "args" : "rest"}: ${printType(def.rest)}[]`);
     return `(${params.join(", ")})`;
   }
-  // array-ish (z.array) input → variadic rest of the element type.
   if (def.type === "array" && def.element != null) {
     return `(...args: ${printType(def.element)}[])`;
   }
@@ -294,7 +293,6 @@ function returnType(output: z.ZodTypeAny): string {
     // n-tuple (or variadic tuple) = the multiple-values vector.
     return printType(output);
   }
-  // array-ish output (z.array) prints as "T[]" directly.
   return printType(output);
 }
 

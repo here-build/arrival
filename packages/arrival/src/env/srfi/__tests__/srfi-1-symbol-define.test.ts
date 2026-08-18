@@ -155,7 +155,7 @@ describe("scheme/srfi-1 — behavior equivalence (§4.2 gate), weighted toward t
     const [everyEmpty] = await execOverFrame("(every odd? '())", { env });
     expect(anyEmpty).toBe(false);
     expect(everyEmpty).toBe(true);
-    // R7RS truthiness (only #f is false — arrival's own fix, commits c16dfd2ef7):
+    // R7RS truthiness (only #f is false):
     // a '()-returning predicate is a TRUTHY match, so any returns '() itself — the
     // `(if r r (loop ...))` bind-the-result idiom must not collapse it to #t.
     expect(await printed(env, "(any (lambda (x) '()) '(1))")).toBe("()");
@@ -238,18 +238,12 @@ describe("scheme/srfi-1 — two-list products (single value; multi-return is doo
   });
 });
 
-// STAGE C CUT 4 (docs/plans/stage-c-corpse-deletion.md): the "standalone .apply(), bypassing
-// assembleEnv's C3 dep-walk" mechanism this block used to prove a BASE_PACKS-only name
-// genuinely fails unbound is RETIRED along with `lower()`/`assembleEnv` — `buildVocabulary`
-// (the sole surviving bake path) ALWAYS walks a capability's OWN declared `deps`, so there is
-// no unwalked state left to construct. The PRODUCT law that survives — srfi-1's declared deps
-// (`exceptions`/`lists`) genuinely resolve `partition`/`second` — is pinned via
-// `envFromCapabilities` (a STANDALONE `buildVocabulary([srfi1], ...)`, bound onto a fresh frame,
-// mirroring the retired `assembleEnv`'s own no-ambient-fold posture) rather than `exec`/
-// `execState`: srfi-1 is ALSO a `BASE_PACKS` member, so `exec`'s own `{...capabilities,
-// ...BASE_ROSTER}` fold would assert a SECOND, conflicting root-list precedence for it
-// (`AssembleLinearizationError` — the same "co-rooting a BASE_ROSTER member" hazard
-// `env/base-roster.ts`'s own header documents for `NATIVE_PACKS`).
+// `buildVocabulary` always walks a capability's own declared `deps`. Pin srfi-1's
+// declared deps (`exceptions`/`lists`) via `envFromCapabilities` (standalone
+// `buildVocabulary([srfi1])` on a fresh frame), not `exec`/`execState`: srfi-1 is
+// also a `BASE_PACKS` member, so `exec`'s `{...capabilities, ...BASE_ROSTER}` fold
+// would assert a second, conflicting root-list precedence (`AssembleLinearizationError`
+// — same "co-rooting a BASE_ROSTER member" hazard `env/base-roster.ts` documents).
 describe("scheme/srfi-1 — the dep edges are real (§2.1's undeclared-dep bug class, now declared)", () => {
   it("srfi-1 ALONE (standalone buildVocabulary): partition/second resolve through its declared deps", async () => {
     const env = await envFromCapabilities([srfi1]);
@@ -327,8 +321,8 @@ describe("scheme/srfi-1 — implement-or-door + the any?/every?/some split (2026
   });
 
   it("linear-update and pure-unshipped names are doors, not silent absences", () => {
-    // Stage A2: each entry is now a minted A-value — `harvestContracts` pulls the AEntity
-    // CONTRACT (still carrying `.kind`) off each one.
+    // Each entry is a minted A-value — `harvestContracts` pulls the AEntity contract
+    // (still carrying `.kind`) off each one.
     const symbols = harvestContracts(srfi1.spec.symbols);
     for (const name of ["take!", "filter!", "reverse!", "xcons", "lset-union", "car+cdr", "split-at"] as const) {
       expect(symbols[name]?.kind, name).toBe("door");

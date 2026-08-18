@@ -1,8 +1,4 @@
-// Caveat-sweep finding (2026-06-11, confirmed env-independent): inexact arithmetic
-// over REAL operands ran the COMPLEX formula, so inf/0 in a cross-term (inf*0,
-// 0/0) produced a spurious NaN imaginary part, and the complex toString branch
-// (numbers.ts:407-413) is NaN/Infinity-blind → prints garbage "NaNNaNi" instead
-// of the R7RS +inf.0 / -inf.0 / +nan.0.
+// Inexact real div/mul prints R7RS +inf.0 / -inf.0 / +nan.0 (not "NaNNaNi").
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { AInexact } from "../AInexact.js";
@@ -24,9 +20,5 @@ describe("SchemeInexact real div/mul by zero — R7RS infinities (was 'NaNNaNi')
   ])("$name", ({ a, b, op, expected }) => {
     expect(inx(a)[op](inx(b)).toString()).toBe(expected);
   });
-
-  // (Complex toString tests removed — arrival is reals-only, no imaginary axis.)
-  // The original "must also survive a GENUINE complex with a
-  // NaN/Infinity component (not collapse to "NaN...").
 
 });

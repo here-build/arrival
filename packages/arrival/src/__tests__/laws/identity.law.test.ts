@@ -179,9 +179,3 @@ describe("APair.ts tagless-final map/filter/reduce/traverse — `=== nil` identi
     expect(ofCalls[0] instanceof ANil).toBe(true);
   });
 });
-
-// (The membrane.ts readMember/hasMember `=== nil` face tests were removed with
-//  the faces themselves — the lazy membrane-accessor rework, 2026-07-09. The
-//  nil-clone-as-KEY guard survives in env/polyglot/polyglot.ts's normalizeMemberKey
-//  (`rawKey instanceof ANil → null`), exercised at the surface by dict.test /
-//  polyglot suites through the @/@? verbs.)

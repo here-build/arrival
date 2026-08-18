@@ -19,8 +19,6 @@ import type { AValue } from "./primitives/AValue.js";
 const TAGLESS_PREFIX = "arrival/tagless-final/";
 type TaglessPrefix = typeof TAGLESS_PREFIX;
 
-/** Strip the tagless prefix off a key: `"arrival/tagless-final/map"` → `"map"`, else `never`
- *  (non-tagless string keys and every symbol key fall away). */
 type StripTaglessPrefix<K> = K extends `${TaglessPrefix}${infer Op}` ? Op : never;
 
 /** The declared op names — the type-wired range of `symbol.tagless` keys, DERIVED from AValue's

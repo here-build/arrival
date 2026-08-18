@@ -29,7 +29,6 @@ export type JsonSchema = Record<string, unknown>;
  */
 const OPTIONAL_SUFFIX = "/optional";
 
-/** True if this tag's head carries the `/optional` compositor suffix. */
 export function isOptionalTag(tag: unknown): boolean {
   if (typeof tag === "string") return tag.endsWith(OPTIONAL_SUFFIX);
   if (Array.isArray(tag) && tag.length > 0 && typeof tag[0] === "string") return tag[0].endsWith(OPTIONAL_SUFFIX);
@@ -93,7 +92,6 @@ export function tagToJsonSchema(tag: unknown): JsonSchema {
   }
 }
 
-/** JSON Schema `type` for an enum's literal values, or undefined when mixed. */
 function enumValuesType(values: readonly unknown[]): "string" | "number" | "integer" | undefined {
   if (values.length > 0 && values.every((v) => typeof v === "string")) return "string";
   if (values.length > 0 && values.every((v) => typeof v === "number")) {

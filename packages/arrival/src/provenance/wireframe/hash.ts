@@ -82,7 +82,6 @@ function canonicalNode(node: WireframeNode): string {
   }
 }
 
-/** Content hash of a graph (see file header). */
 export function hashGraph(graph: WireframeGraph): TemplateHash {
   const nodesCanon = graph.nodes.map(canonicalNode).join("|");
   const wiresCanon = graph.wires.map(canonicalWire).join("|");
@@ -90,7 +89,6 @@ export function hashGraph(graph: WireframeGraph): TemplateHash {
   return fnv1a("template-v0", canonical);
 }
 
-/** templateHash + instantiation site (plane identity). */
 export function siteHash(templateHash: TemplateHash, site: string): SiteHash {
   return fnv1a("site-v0", `${templateHash}::${site}`);
 }

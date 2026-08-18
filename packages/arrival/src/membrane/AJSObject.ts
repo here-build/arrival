@@ -63,7 +63,6 @@ export class AJSObject extends AValue {
     super(provenance);
   }
 
-  /** Unwrap to original JS object (TO_JS protocol). */
   ["arrival/toJS"](): Record<string, unknown> {
     return this.source as Record<string, unknown>;
   }

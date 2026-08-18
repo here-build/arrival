@@ -35,8 +35,6 @@ import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
 
 describe("EnvCapability — config validation (the vocabulary-build path)", () => {
-  // INVARIANT: config is validated through zod at vocabulary-build time, throwing (now:
-  // rejecting — `buildVocabulary` is async) on a bad enum value.
   it("validates config through zod when the vocabulary builds — bad enum rejects", async () => {
     const cap = EnvCapability.define("test/config-validation", {
       configuration: { context: z.enum(["browser", "node", "bun"]), retries: z.number().default(3) },
@@ -44,8 +42,6 @@ describe("EnvCapability — config validation (the vocabulary-build path)", () =
     await expect(buildVocabulary([cap], { context: "deno" }, evalScheme)).rejects.toThrow();
   });
 
-  // INVARIANT: a satisfied config bakes cleanly and the validated shape (defaults included)
-  // reaches `Vocabulary.configsByCapability`.
   it("a satisfied config bakes cleanly; defaults are applied", async () => {
     const cap = EnvCapability.define("test/config-defaults", {
       configuration: { context: z.enum(["browser", "node", "bun"]), retries: z.number().default(3) },

@@ -48,7 +48,6 @@ export class CompiledResolutionChain {
   }
 }
 
-/** Canonical name form for the content address: strings as-is, symbols marked. */
 function canonicalName(key: string | symbol): string {
   return typeof key === "string" ? key : `#sym:${String(key.description ?? "")}`;
 }

@@ -36,12 +36,8 @@ describe("SRFI-1 — list library", () => {
 });
 
 describe("SRFI-43 — vector library (pure)", () => {
-  // R8 mint (RULINGS.md R8, landed): arrival predicate
-  // builtins (=, eq?, pair?, null?, …) used to leak a raw JS boolean when no
-  // provenance rode the operands (stringifying "true"/"false") — the empty-
-  // provenance fast path op-helpers.mintVerdict replaces. Every boolean verdict
-  // now boxes uniformly, so these SRFI predicates print "#t"/"#f" like the
-  // SRFI-128 chain procs below always did.
+  // Empty-provenance predicate verdicts box uniformly (`mintVerdict`), so these
+  // SRFI predicates print "#t"/"#f" — a raw JS boolean would stringify "true"/"false".
   it.each([
     { name: "vector-fold", input: "(vector-fold + 0 #(1 2 3 4))", expected: "10" },
     { name: "vector-fold-right", input: "(vector-fold-right + 0 #(1 2 3 4))", expected: "10" },

@@ -32,7 +32,6 @@ const EMPTY_FOLD: RegionFoldState = {
   hostSchedules: [],
   lastSeq: 0 };
 
-/** Pure fold of an entire region stream (sorted by seq). */
 export function foldRegionStream(records: readonly ProvenanceRecord[]): RegionFoldState {
   if (records.length === 0) return EMPTY_FOLD;
   let started = 0;

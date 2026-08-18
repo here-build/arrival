@@ -28,28 +28,20 @@ function def(name: string): AEntity {
 }
 
 describe("scheme/srfi-13 Contract harvest precision — author-asserted `type:` recovers the List-of-string domain z.schemeValue erases", () => {
-  // INVARIANT: string-join's harvested signature is (list: List<string>, delimiter?: string)
-  // => string via override (pins implementation, not behavior)
   it("string-join: List<string> input (was z.schemeValue → unknown) + string output (was the redundant string | string)", () => {
     expect(signatureOf(def("string-join"))).toBe("(list: List<string>, delimiter?: string) => string");
   });
 
-  // INVARIANT: string-tokenize's harvested signature returns List<string> via override
-  // (pins implementation, not behavior)
   it("string-tokenize: List<string> output (was z.schemeValue → unknown — it returns a proper list of token strings)", () => {
     expect(signatureOf(def("string-tokenize"))).toBe("(str: string, criterion?: unknown) => List<string>");
   });
 
-  // INVARIANT: string-split's harvested signature returns List<string> via override
-  // (pins implementation, not behavior)
   it("string-split: List<string> output (was z.schemeValue → unknown) + string delimiter (was the redundant string | string)", () => {
     expect(signatureOf(def("string-split"))).toBe("(str: string, delimiter: string) => List<string>");
   });
 });
 
 describe("scheme/srfi-13 Contract harvest precision — already-precise ops stay zod-derived (regression guard: no redundant override)", () => {
-  // INVARIANT: string-null?/string-prefix?/string-reverse keep their exact zod-computed
-  // signatures with no redundant override (pins implementation, not behavior)
   it("string-null? / string-prefix? / string-reverse keep their exact zod-computed signatures", () => {
     // A precise scalar-in/scalar-out op needs NO override — adding one would be a duplicate source of
     // truth (the very drift risk this pass avoids). These read straight off the zod schema.
@@ -58,16 +50,11 @@ describe("scheme/srfi-13 Contract harvest precision — already-precise ops stay
     expect(signatureOf(def("string-reverse"))).toBe("(a: string) => string");
   });
 
-  // RE-PINNED (one-number rework, RATIO — docs/design-history/arrival-one-number-rework.md
-  // §2.3): `z.exact`/`z.schemeNumber` now decode/encode plain `number`, not `bigint | number` —
-  // every "bigint" in these three signatures dropped. Separately (unrelated to the rework,
-  // discovered while re-verifying): `string-take`/`string-index`/`string-count` now carry a
-  // `type:` author override in srfi-13.ts (a `dedent` interface-call-signature block, not the
-  // plain `(a: T, b: U) => V` arrow form) — verified directly via `signatureOf`. `string-take`
-  // moved OFF the "no override needed" bucket into the same override-bearing bucket as
-  // string-join/tokenize/split above; `string-index`/`string-count` keep the same criterion
-  // rationale (a char OR a one-arg predicate — `unknown` misreads a bare `string`), now spelled
-  // through the override's own prose rather than the bare zod-derived form.
+  // `z.exact`/`z.schemeNumber` decode/encode plain `number`, not `bigint | number`.
+  // `string-take`/`string-index`/`string-count` carry a `type:` author override
+  // (a `dedent` interface-call-signature block, not a bare arrow). `string-index`/
+  // `string-count` spell criterion as a char OR a one-arg predicate — `unknown`
+  // would misread a bare `string`.
   it("string-take / string-index / string-count carry a `type:` override (dedent interface block, not a bare arrow signature)", () => {
     expect(signatureOf(def("string-take"))).toBe("{\n  (s: string, n: number): string;\n}");
     // string-index / string-count keep `criterion` spelled as "a char or one-arg predicate" in

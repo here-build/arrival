@@ -82,11 +82,11 @@ describe("Stage 2 — per-RunContext capability resources", () => {
       const sessionRunCtx = new RunContext({});
       await execOverFrame("(spy/touch)", { env, runCtx: sessionRunCtx }); // pass 1
       await execOverFrame("(spy/touch)", { env, runCtx: sessionRunCtx }); // pass 2 — REPL continuity
-      expect(counts.acquired).toBe(1); // single-flight across passes of ONE RunContext
+      expect(counts.acquired).toBe(1);
 
       const otherRunCtx = new RunContext({});
-      await execOverFrame("(spy/touch)", { env, runCtx: otherRunCtx }); // a DIFFERENT session
-      expect(counts.acquired).toBe(2); // per-run isolation — a fresh spawn, not a shared one
+      await execOverFrame("(spy/touch)", { env, runCtx: otherRunCtx });
+      expect(counts.acquired).toBe(2);
 
       await disposeRunContext(sessionRunCtx);
       await disposeRunContext(otherRunCtx);
@@ -164,7 +164,7 @@ describe("Stage 2 — per-RunContext capability resources", () => {
       await disposeRunContext(runCtx);
       expect(counts.disposed).toBe(1);
       await disposeRunContext(runCtx);
-      expect(counts.disposed).toBe(1); // idempotent
+      expect(counts.disposed).toBe(1);
     });
 
     it("(b) the cache PERSISTS across passes sharing a RunContext; a different RunContext starts EMPTY", async () => {
@@ -175,12 +175,12 @@ describe("Stage 2 — per-RunContext capability resources", () => {
       const sessionRunCtx = new RunContext({});
       await execOverFrame('(cache/put "k1" "v1")', { env, runCtx: sessionRunCtx }); // pass 1: write
       const [stillThere] = await execOverFrame('(cache/get "k1")', { env, runCtx: sessionRunCtx }); // pass 2: read, no write
-      expect(stillThere).toBe("v1"); // the SAME Map survived across passes of ONE RunContext
-      expect(counts.spawned).toBe(1); // one bag for the whole session
+      expect(stillThere).toBe("v1");
+      expect(counts.spawned).toBe(1);
 
       const otherRunCtx = new RunContext({});
       const [fresh] = await execOverFrame('(cache/get "k1")', { env, runCtx: otherRunCtx });
-      expect(fresh).toBe("MISS"); // a DIFFERENT Map — nothing carried over
+      expect(fresh).toBe("MISS");
       expect(counts.spawned).toBe(2);
 
       await disposeRunContext(sessionRunCtx);

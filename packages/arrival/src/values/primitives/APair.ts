@@ -92,7 +92,6 @@ function is_cycle(pair: unknown): boolean {
   return is_cycle(pair.car) || is_cycle(pair.cdr);
 }
 
-// ----------------------------------------------------------------------
 function mark_cycles(pair: APair<any, any>): void {
   const seen_pairs: AListAlike[] = [];
   const cycles: AListAlike[] = [];
@@ -221,7 +220,6 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     this._cdr = cdr;
   }
 
-  // Static methods
   static match(obj: unknown, item: string | RegExp | ASymbol): boolean {
     if (obj instanceof ASymbol) {
       return ASymbol.is(obj, item);
@@ -304,7 +302,6 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     );
   }
 
-  // Monoid — empty list is identity for list-concat.
   static ["arrival/tagless-final/empty"](): ANil {
     return nil;
   }
@@ -314,7 +311,6 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     return new APair(value, nil);
   }
 
-  // Instance methods
   flatten(): AListAlike | unknown[] {
     return APair.fromArray(CONSTANT_CTX, this.to_array().flat(Infinity));
   }

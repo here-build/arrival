@@ -54,7 +54,6 @@ import { ACharacter } from "../../values/primitives/ACharacter.js";
 
 describe("AValue.fromJs — boxer dispatch produces the expected subtype per typeof tag", () => {
   // Boxer registry resolution: typeof string → "string" boxer (SchemeString.ts:139)
-  // INVARIANT: string → SchemeString via boxer dispatch
   it("string → SchemeString", () => {
     const result = fromJs(CONSTANT_CTX, "hello");
     expect(result).toBeInstanceOf(AString);
@@ -63,7 +62,6 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
 
   // typeof 42 === "number" — registered in operators/index.ts (via the
   // numbers module). Safe integer path → SchemeExact with bigint num.
-  // INVARIANT: a safe-integer number → SchemeExact
   it("number (safe integer) → SchemeExact", () => {
     const result = fromJs(CONSTANT_CTX, 42);
     expect(result).toBeInstanceOf(AExact);
@@ -71,7 +69,6 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
   });
 
   // Non-integer float → SchemeInexact (real part).
-  // INVARIANT: a float number → SchemeInexact
   it("number (float) → SchemeInexact", () => {
     const result = fromJs(CONSTANT_CTX, 3.14);
     expect(result).toBeInstanceOf(AInexact);
@@ -79,20 +76,17 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
   });
 
   // typeof 1n === "bigint" → NoLensError door (same spirit as unique-symbol).
-  // INVARIANT: host bigint never boxes and never passthroughs — convert first.
   it("bigint → door (NoLensError; never boxed; not a scheme number)", () => {
     expect(() => fromJs(CONSTANT_CTX, 123n)).toThrow(/no lens for a host bigint/);
   });
 
   // SchemeBool.ts:32-34 — empty-provenance fast path REUSES the schemeTrue/schemeFalse
   // singletons. Non-empty provenance mints a fresh SchemeBool.
-  // INVARIANT: boolean with empty provenance reuses the schemeTrue/schemeFalse singletons (pins implementation, not behavior)
   it("boolean (empty provenance) → singleton SchemeBool", () => {
     expect(fromJs(CONSTANT_CTX, true)).toBe(schemeTrue);
     expect(fromJs(CONSTANT_CTX, false)).toBe(schemeFalse);
   });
 
-  // INVARIANT: boolean with non-empty provenance mints a fresh ABool carrying that provenance
   it("boolean (non-empty provenance) → fresh SchemeBool with provenance", () => {
     const prov = new Set<number>([99]);
     const result = fromJs(CONSTANT_CTX, true, prov);
@@ -106,14 +100,12 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
   // concept-split): null → nil (empty list); undefined → void (unspecified).
   // Empty provenance still returns a fresh instance (withProvenance always
   // allocates) — the clone-leak shape.
-  // INVARIANT: null → ANil instance
   it("null → Nil instance", () => {
     const result = fromJs(CONSTANT_CTX, null);
     expect(result).toBeInstanceOf(ANil);
     expect(result instanceof ANil).toBe(true);
   });
 
-  // INVARIANT: undefined → AVoid instance
   it("undefined → Void instance", () => {
     const result = fromJs(CONSTANT_CTX, undefined);
     expect(result).toBeInstanceOf(AVoid);
@@ -121,7 +113,6 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
 
   // the "object" boxer. A JS array IS an R7RS vector → a borrowed AJSArray (no more list
   // coercion); a plain object wraps as SchemeJSObject.
-  // INVARIANT: array → borrowed AJSArray vector, boxing lazily on access (pins implementation, not behavior)
   it("array → borrowed AJSArray vector (boxes lazily on access)", () => {
     const result = fromJs(CONSTANT_CTX, [1, 2, 3]);
     expect(result).toBeInstanceOf(AJSArray);
@@ -129,7 +120,6 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
     expect((result as unknown as { __vector__: AExact[] }).__vector__[0].num).toBe(1);
   });
 
-  // INVARIANT: plain object → AJSObject wrapper preserving source
   it("plain object → SchemeJSObject wrapper", () => {
     const obj = { foo: 1 };
     const result = fromJs(CONSTANT_CTX, obj);
@@ -144,44 +134,22 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
     expect(fromJs(CONSTANT_CTX, () => 42)).toBeInstanceOf(ARosettaProcedure);
   });
 
-  // ── THE LAMBDA-BRAND DISTINCTION (the require return-marshal leak) ────────────
-  // A Scheme lambda used to be represented internally as a JS function carrying the
-  // well-known LAMBDA brand (`Symbol.for("arrival/lambda")`, set by the evaluator on every
-  // closure). It was ALREADY a scheme value, not host data crossing the boundary, so
-  // `jsToScheme` had to pass it through BY IDENTITY — without that, a `require`d file
-  // resolving as `{ kind: "eval", forms }` to a scheme lambda (the `.hbs`/`.prompt`
-  // CALLABLE RULE shape) got VOIDED on its way back out through `require`'s own rosetta
-  // return-marshal (the "require-returns-lambda voids" bug).
-  //
-  // [RETIRED 2026-07-09, reverse-membrane-for-callables.md §3 step 1] Every scheme lambda
-  // — including named-let's loop binding, the LAMBDA brand's last live producer per the B4
-  // audit — is a real `ALambda` value now (evaluator.ts's `evalLet`/`evalLambda`). The
-  // LAMBDA brand had zero producers left and was deleted (well-known-symbols.ts, plus its
-  // membrane.ts `isSchemeValue`/rosetta.ts `jsToScheme`/print.ts `functionRepr` readers).
-  // The identity-pass-through law still holds — it's now unconditional on `instanceof
-  // AValue` (jsToScheme's very first case), not a brand check — pinned below against a real
-  // `ALambda`. The membrane's OTHER law CHANGED (2026-07-24 ruling): an unbranded bare host
-  // function is now a genuine reverse-membrane lens, not a void (also pinned below).
-  // INVARIANT: a real scheme lambda (ALambda) passes through jsToScheme by identity (already a scheme value)
-  // — historically pinned to the now-deleted LAMBDA brand; the law survives, the mechanism doesn't (pins implementation, not behavior)
+  // A real ALambda passes through jsToScheme by identity — already a scheme value.
   it("a real ALambda passes through jsToScheme by identity (it IS a scheme value)", () => {
     const lam = new ALambda({ name: "test-lambda", arity: { min: 0, max: 0 }, scope: undefined, runner: () => theVoid });
     expect(jsToScheme(CONSTANT_CTX, lam)).toBe(lam);
   });
 
-  // INVARIANT: an unbranded (borrowed host) function crosses in as a callable now
   it("a bare host function crosses jsToScheme as a callable (reverse-membrane lens)", () => {
     expect(jsToScheme(CONSTANT_CTX, () => 42)).toBeInstanceOf(ARosettaProcedure);
   });
 
   // AValue input is returned as-is on the empty-provenance fast path.
-  // INVARIANT: AValue input with empty provenance is returned by identity (fast path)
   it("AValue input (empty provenance) is returned by identity", () => {
     const orig = new AString("x");
     expect(fromJs(CONSTANT_CTX, orig)).toBe(orig);
   });
 
-  // INVARIANT: AValue input with non-empty provenance is cloned via withProvenance, carrying the new provenance (pins implementation, not behavior)
   it("AValue input (with non-empty provenance) is cloned via withProvenance", () => {
     const orig = new AString("x");
     const prov = new Set<number>([7]);
@@ -197,45 +165,31 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
 // =========================================================================
 
 describe("jsToScheme → toJS round-trip", () => {
-  // Option C (2026-05-28): jsToScheme deep-stamps every constructed AValue —
-  // primitives now route through `AValue.fromJs` (boxer registry) so a JS
-  // string in produces a `SchemeString` carrying the supplied provenance.
-  // Closes the shape divergence the membrane symmetry audit flagged.
-  // INVARIANT: a string is boxed into AString by jsToScheme
+  // A JS string boxes to AString on the way in.
   it("string is wrapped through jsToScheme into SchemeString", () => {
     const lipsified = jsToScheme(CONSTANT_CTX, "hello");
     expect(lipsified).toBeInstanceOf(AString);
   });
 
-  // String pass-through round trips by accident — raw in, raw out.
-  // This IS expected behavior today and is the green guard for the
-  // primitive-passthrough contract.
-  // INVARIANT: string round-trips by passthrough (raw in, raw out)
+  // Then unwraps back to a raw JS string on the way out.
   it("string round-trips by passthrough (raw → raw)", () => {
     expect(toJS(jsToScheme(CONSTANT_CTX, "hello"))).toBe("hello");
   });
 
-  // INVARIANT: number round-trips by passthrough
   it("number round-trips by passthrough", () => {
     expect(toJS(jsToScheme(CONSTANT_CTX, 42))).toBe(42);
   });
 
-  // INVARIANT: boolean round-trips by passthrough
   it("boolean round-trips by passthrough", () => {
     expect(toJS(jsToScheme(CONSTANT_CTX, true))).toBe(true);
   });
 
-  // Arrays are properly cons'd to Pair, then toJS walks the spine
-  // back into an array. The element-level cons'ing also wraps the leaves
-  // through jsToScheme (so primitives stay primitives), and toJS
-  // recurses through the Pair spine.
-  // INVARIANT: array round-trips through a Pair chain
+  // Arrays enter as borrowed AJSArray vectors; toJS unwraps back to a JS array.
   it("array round-trips through a Pair chain", () => {
     const result = toJS(jsToScheme(CONSTANT_CTX, [1, 2, 3]));
     expect(result).toEqual([1, 2, 3]);
   });
 
-  // INVARIANT: nested array round-trips
   it("nested array round-trips", () => {
     const result = toJS(jsToScheme(CONSTANT_CTX, [[1, 2], [3, 4]]));
     expect(result).toEqual([[1, 2], [3, 4]]);
@@ -243,13 +197,11 @@ describe("jsToScheme → toJS round-trip", () => {
 
   // Plain objects are recursed: jsToScheme builds { k: jsToScheme(CONSTANT_CTX, v) }, toJS
   // mirrors via Object.entries → toJS(value). Round-trip is correct.
-  // INVARIANT: plain object round-trips
   it("plain object round-trips", () => {
     const result = toJS(jsToScheme(CONSTANT_CTX, { a: 1, b: "two" }));
     expect(result).toEqual({ a: 1, b: "two" });
   });
 
-  // INVARIANT: nested object round-trips
   it("nested object round-trips", () => {
     const result = toJS(jsToScheme(CONSTANT_CTX, { outer: { inner: 42 } }));
     expect(result).toEqual({ outer: { inner: 42 } });
@@ -346,21 +298,17 @@ describe("isSchemeValue completeness — every native AValue subtype is recognis
 // =========================================================================
 
 describe("membrane fromJS / toJS — round-trip + wrapper-cache identity", () => {
-  // INVARIANT: a string primitive round-trips through fromJS/toJS
   it("primitive round-trips: string", () => {
     // @ts-expect-error fromJS returns `FromJSResult` (wider than `SchemeValue`); toJS expects
     // SchemeValue. The runtime value IS a SchemeValue — the mismatch is in the declared union.
     expect(toJS(fromJS("hello"))).toBe("hello");
   });
 
-  // INVARIANT: a number primitive round-trips through fromJS/toJS
   it("primitive round-trips: number", () => {
     // @ts-expect-error fromJS returns `FromJSResult` (wider than `SchemeValue`); see above.
     expect(toJS(fromJS(42))).toBe(42);
   });
 
-  // INVARIANT: host bigint DOORS inbound (NoLensError kind `"bigint"`) and is
-  // not a SchemeValue — outbound toJS refuses the raw host scalar.
   it("bigint DOORS at the membrane (never boxed; never raw passthrough)", () => {
     expect(() => fromJS(10n)).toThrow(/no lens for a host bigint/);
     expect(() => toJS(10n as never)).toThrow(/toJS: received a non-scheme value/);
@@ -374,7 +322,6 @@ describe("membrane fromJS / toJS — round-trip + wrapper-cache identity", () =>
     expect(toJS(fromJS(null))).toEqual([]);
   });
 
-  // INVARIANT: an object round-trips through AJSObject preserving the exact source reference
   it("object round-trips through SchemeJSObject (same source reference)", () => {
     const obj = { a: 1 };
     const wrapped = fromJS(obj);
@@ -383,12 +330,10 @@ describe("membrane fromJS / toJS — round-trip + wrapper-cache identity", () =>
     expect(toJS(wrapped)).toBe(obj);
   });
 
-  // INVARIANT: a borrowed function crosses the membrane as a callable (reverse-membrane lens)
   it("a borrowed function crosses IN as a callable (ARosettaProcedure, reverse-membrane lens)", () => {
     expect(fromJS(() => 42)).toBeInstanceOf(ARosettaProcedure);
   });
 
-  // INVARIANT: the wrapper cache returns the same wrapper instance for the same JS object
   it("wrapper cache: same JS object → same wrapper instance", () => {
     const obj = { x: 1 };
     const a = fromJS(obj);

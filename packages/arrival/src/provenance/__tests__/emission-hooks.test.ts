@@ -37,7 +37,7 @@ afterEach(() => {
 });
 
 /** One rosetta source, mirroring `w1-harness.ts`'s `SourceRegistry.register("num")`
- *  shape (a fresh env, a plain synchronous numeric return — `createRosettaWrapper`
+ *  shape (a fresh env, a plain synchronous numeric return — baked `symbol.rosetta`
  *  wraps it into the async `mintsPoint` path regardless of the impl's own sync body).
  *  Test-local `EnvCapability`; a plain `z.number` output, same as
  *  `silent-region.test.ts`'s sibling. */
@@ -75,7 +75,7 @@ describe("the real port site: a rosetta crossing through evaluator.ts's generic 
   });
 
   it("flag OFF: the same program produces the SAME result, and NOTHING lands in the store — byte-identical, sunset", async () => {
-    setEmissionEnabled(false); // the default; explicit for clarity
+    setEmissionEnabled(false);
     const store = new ProvenanceStoreFake();
     const payloads = new PayloadStoreFake();
     const sink: EmissionSink = { store, payloads, regionId: REGION };
@@ -84,7 +84,7 @@ describe("the real port site: a rosetta crossing through evaluator.ts's generic 
     await registerSource(env);
 
     const result = await withRecordCoordinateAsync(COORD, sink, () => execState("(fetch-item)", { env, tap: trace }));
-    expect(toJS(result.values[0])).toBe(42); // identical program output to the ON case above
+    expect(toJS(result.values[0])).toBe(42);
 
     await Promise.resolve();
     await Promise.resolve();

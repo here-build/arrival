@@ -62,7 +62,6 @@ export interface MissingConfigNode {
 }
 
 export interface ReferenceGraph {
-  /** Every reference, program order. */
   readonly references: readonly ReferenceNode[];
   readonly bindings: ReadonlyMap<string, BindingNode>;
   readonly doors: ReadonlyMap<string, DoorNode>;

@@ -33,8 +33,6 @@ const realEvalScheme: EvalSchemeInto = (env, src) => {
 };
 
 describe("buildVocabulary — C3 precedence", () => {
-  // INVARIANT: a name declared by both a dep and its dependent resolves to the DEPENDENT's
-  // (self-overwrites-dep) value; the dep's OWN unique names still make it into the map.
   it("self overwrites dep on a shared name; a dep's own unique name survives", async () => {
     const dep = EnvCapability.define("test/vocab-c3-dep", {
       symbols: (symbol) => ({
@@ -79,7 +77,6 @@ describe("buildVocabulary — requiresConfig doors + degraded surfacing", () => 
     expect(vocab.degraded).toEqual([{ capability: "test/vocab-door-missing", needs: [{ kind: "configuration", key: "fs" }] }]);
   });
 
-  // INVARIANT: a SATISFIED config binds the real verb, not a door — nothing degraded.
   it("a satisfied config binds the real verb; nothing degraded", async () => {
     const cap = fixtureCapability("test/vocab-door-satisfied");
     const vocab = await buildVocabulary([cap], { fs: { readFile: async () => "" } }, noopEvalScheme);
@@ -89,7 +86,6 @@ describe("buildVocabulary — requiresConfig doors + degraded surfacing", () => 
 });
 
 describe("buildVocabulary — preludeOnly separation", () => {
-  // INVARIANT: a preludeOnly symbol lands in `preludeOnly`, NOT `map`.
   it("routes a preludeOnly rosetta onto `preludeOnly`, not `map`", async () => {
     const cap = EnvCapability.define("test/vocab-prelude-only", {
       symbols: (symbol, z) => ({
@@ -119,7 +115,6 @@ describe("buildVocabulary — key===name violation", () => {
 });
 
 describe("buildVocabulary — define bake products", () => {
-  // INVARIANT: a `symbol.define` bakes into a real bound procedure in the map (Pass 2).
   it("bakes a symbol.define into a bound ANativeProcedure carrying its own contract", async () => {
     const cap = EnvCapability.define("test/vocab-define-bake", {
       // `(lambda (x) x)` — its only "free" reference is `x`, bound by the lambda's own
@@ -135,8 +130,6 @@ describe("buildVocabulary — define bake products", () => {
 });
 
 describe("buildVocabulary — memo identity", () => {
-  // INVARIANT: the SAME (capability-set, config) tuple returns the literal SAME Vocabulary
-  // object — built once, shared thereafter.
   it("same tuple → same Vocabulary object (reference identity)", async () => {
     const cap = EnvCapability.define("test/vocab-memo-same", { symbols: () => ({}) });
     const v1 = await buildVocabulary([cap], undefined, noopEvalScheme);
@@ -175,16 +168,10 @@ describe("buildVocabulary — the diamond-DAG single-execution law (prelude coll
   });
 });
 
-// The former "buildVocabulary — forbidden `{ fn }` capabilities refuse" runtime test is GONE
-// (Phase B RETROACTIVE, docs/plans/stage-c-corpse-deletion.md §"bans live at the TYPE level"):
-// `isSymbolSpec` and the bare-fn refusal error (both deleted) (the runtime refusal it exercised) are
-// deleted — compat theater for a shape `SymbolDeclaration`'s own type already rejects. The law
-// now lives as a type-level pin: `common/__tests__/capability.test-d.ts`'s "an explicit { fn }
-// record is NOT assignable to SymbolDeclaration" test.
+// `{ fn }` capabilities are rejected at the type level (`SymbolDeclaration`); the pin
+// lives in `common/__tests__/capability.test-d.ts`.
 
 describe("assembleRun", () => {
-  // INVARIANT: the minted RunContext carries the vocabulary + degraded surface + a
-  // capabilityConfigurations table matching the tuple's own validated config.
   it("attaches vocabulary/degraded and builds a correct capabilityConfigurations table", async () => {
     const cap = EnvCapability.define("test/vocab-assemble-run", {
       configuration: { greeting: z.string() },

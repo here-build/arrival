@@ -19,7 +19,6 @@ export class ANil extends AValue {
     super(provenance);
   }
 
-  // Monoid empty — the identity is Nil itself (the canonical singleton).
   static ["arrival/tagless-final/empty"](): ANil {
     return nil;
   }
@@ -116,8 +115,6 @@ export class ANil extends AValue {
     return nil;
   }
 
-  // take/drop of nothing is nothing; the while-splits of nothing are nothing — identity cases
-  // ON the term, mirroring map/filter above.
   ["arrival/tagless-final/take"](_n: unknown): ANil {
     return nil;
   }

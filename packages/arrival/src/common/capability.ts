@@ -94,7 +94,6 @@ export type SymbolsSpec<_C extends ZodMap, _R extends Record<string, Resource<un
   SymbolDeclaration
 >;
 
-/** Capability authoring shape — `EnvCapability.spec` is typed against this. */
 export interface CapabilitySpec<C extends ZodMap, R extends Record<string, Resource<unknown>>> {
   /** zod schemas for per-env config; values supplied + validated when consumed
    *  (`env/vocabulary.ts`'s `buildVocabulary`). */

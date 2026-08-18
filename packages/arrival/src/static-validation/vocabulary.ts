@@ -39,7 +39,6 @@ export type VocabularyEntry =
   | { readonly kind: "macro"; readonly macroAttribute: MacroWalkAttribute } // firewall ternary
   | { readonly kind: "door"; readonly door: DoorSymbolDef }; // carries DoorCause when minted/stamped
 
-/** The vocabulary interface the graph builder consumes. */
 export interface ProgramVocabulary {
   /** Enumerable bindings (resolver-synthesized names deliberately absent — probed,
    *  not enumerated). The suggestion candidate pool, pre-soundness-filter. */
@@ -57,7 +56,6 @@ export interface ProgramVocabulary {
  *  kernel-structural fact, re-stated per the local-copy convention). */
 const CXR_RE = /^c[ad]+r$/;
 
-/** Classify a resolved binding VALUE into its static vocabulary entry. */
 function classifyBoundValue(value: unknown): VocabularyEntry {
   if (value instanceof DoorProcedure) return { kind: "door", door: value.door };
   if (value instanceof AKernelKeyword) return { kind: "keyword" };

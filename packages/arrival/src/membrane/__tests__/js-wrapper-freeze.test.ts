@@ -20,7 +20,7 @@ describe("borrowed-source freeze (rosetta-return prevention)", () => {
   it("AJSObject freezes its source the first time Scheme reads a member", () => {
     const source = { x: 1 };
     const wrapped = new AJSObject(source);
-    expect(Object.isFrozen(source)).toBe(false); // borrowed, not yet read
+    expect(Object.isFrozen(source)).toBe(false);
     wrapped.has("x"); // any read entry point arms the freeze
     expect(Object.isFrozen(source)).toBe(true);
   });

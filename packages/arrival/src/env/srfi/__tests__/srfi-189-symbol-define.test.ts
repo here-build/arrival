@@ -206,13 +206,9 @@ describe("scheme/srfi-189 — Either accessors/combinators", () => {
   });
 });
 
-// STAGE C CUT 4 (docs/plans/stage-c-corpse-deletion.md): the "standalone .apply(), bypassing
-// assembleEnv's C3 dep-walk" mechanism this block used to contrast against the real
-// orchestration path is RETIRED along with `lower()`/`assembleEnv` — `buildVocabulary` (the
-// sole surviving bake path) ALWAYS walks a capability's OWN declared `deps`, so there is no
-// "standalone, deps unwalked, list/error genuinely unbound" state left to construct. The
-// PRODUCT law that survives — srfi-189's declared deps (`lists`/`exceptions`) genuinely
-// resolve `list`-/`error`-needing ops, pinned via the sanctioned path.
+// `buildVocabulary` always walks a capability's own declared `deps`. srfi-189's
+// declared deps (`lists`/`exceptions`) resolve `list`-/`error`-needing ops via
+// the sanctioned path.
 describe("scheme/srfi-189 — the dep edge is real (§2.1's undeclared-dep bug class, now a declared edge)", () => {
   it("srfi-189 ALONE (exec({capabilities})): list-/error-needing ops resolve through its declared deps", async () => {
     const [justResult] = await exec("(maybe-ref (just 42))", { capabilities: [srfi189] });
@@ -275,7 +271,7 @@ describe("scheme/srfi-189 — faithfulness: `error`'s handler-stack integration 
   it("either-swap's non-Either error path is likewise a real raise, catchable by guard", async () => {
     const env = await freshEnv();
     const [caught] = await execOverFrame(`(guard (exn (#t 'caught)) (either-swap 42))`, { env });
-    expect(String(caught)).toBe("caught"); // symbol egress = plain interned name (⚖️ 2026-07-14, constitution §2.1)
+    expect(String(caught)).toBe("caught"); // symbol egress = plain interned name
   });
 });
 

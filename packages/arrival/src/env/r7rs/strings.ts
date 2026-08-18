@@ -102,7 +102,6 @@ export default EnvCapability.define("scheme/strings", {
     "string-set!": symbol.notImplemented`string-set!: every value is frozen by design — mutating it after construction would falsify the provenance lineage it carries; construct a new value instead (string-append / substring / a fresh string)`,
     "string-fill!": symbol.notImplemented`string-fill!: every value is frozen by design — mutating it after construction would falsify the provenance lineage it carries; construct a new value instead (make-string with the fill)`,
 
-    // String comparison
     "string=?": symbol.native`string=?: typed equivalence over strings`(
       { input: [], inputRest: z.string, output: [z.boolean] },
       function (this: CallCtx, ...strs) {
@@ -134,7 +133,6 @@ export default EnvCapability.define("scheme/strings", {
       deriveOrd(">="),
     ),
 
-    // Case-insensitive string comparison
     "string-ci=?": symbol.native`string-ci=?: case-insensitive string equivalence`(
       { input: [], inputRest: z.string, output: [z.boolean] },
       function (this: CallCtx, ...strs) {
@@ -393,8 +391,6 @@ export default EnvCapability.define("scheme/strings", {
     "string->number": symbol.native`string->number: parse the string as a number, or #f (R7RS)`(
       { input: [z.string, z.number.optional()], output: [z.union([z.number, z.boolean])] },
       function (this: CallCtx, arg, radix) {
-        // `arg` is an AString, `radix` an AExact/AInexact (or absent → base 10) — unwrap
-        // to the JS string + number the regex tests and parse_* helpers consume.
         const str = stringValue(arg);
         const base = radix === undefined ? 10 : Number(coerceNumeric(radix).valueOf());
         try {

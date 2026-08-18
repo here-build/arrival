@@ -1,17 +1,15 @@
-// loader-extension-registry-vocabulary.test.ts — Stage B4 (docs archaeology:
-// stage-b-runcontext-absorbs-assembly.md): the file-suffix → resolver-verb-name registry as a
-// per-run LOADER RESOURCE on the vocabulary path (`exec`'s default for `{capabilities}` runs
-// since Stage B3). Companion to `loader-capability.test.ts` (the ambient-path proof —
-// `assembleEnv` directly, byte-unchanged by this stage) and `env/__tests__/assemble-run.test.ts`
-// (the GENERAL per-run-prelude laws) — this file is the REGISTRY-SPECIFIC proof:
+// loader-extension-registry-vocabulary.test.ts — the file-suffix → resolver-verb-name
+// registry as a per-run LOADER RESOURCE on the vocabulary path (`exec`'s default for
+// `{capabilities}` runs). Companion to `loader-capability.test.ts` and
+// `env/__tests__/assemble-run.test.ts` (the GENERAL per-run-prelude laws) — this file
+// is the REGISTRY-SPECIFIC proof:
 //   - registration via prelude resolves a real `(require "x.ext")` end-to-end;
-//   - PER-RUN ISOLATION: a fresh RunContext of the same tuple gets a FRESH, empty registry
-//     (never the OLD process-global leak — a run that never roots the registering capability
-//     cannot see its suffix at all);
-//   - the diamond-DAG single-registration law (loader shared by two dependents ⇒ ONE registry,
-//     no spurious conflict);
-//   - the re-registration door (`ExtensionSuffixConflictError`) as its own regression detector —
-//     the hazards ledger's explicit "cannot register .yaml twice" requirement.
+//   - PER-RUN ISOLATION: a fresh RunContext of the same tuple gets a FRESH, empty
+//     registry (a run that never roots the registering capability cannot see its suffix);
+//   - the diamond-DAG single-registration law (loader shared by two dependents ⇒ ONE
+//     registry, no spurious conflict);
+//   - the re-registration door (`ExtensionSuffixConflictError`) as its own regression
+//     detector — "cannot register .yaml twice".
 
 import { describe, expect, it } from "vitest";
 

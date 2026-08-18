@@ -48,10 +48,8 @@ describe("Capabilities (3b.3 — assembled base sentinel)", () => {
     expect(base.has("leaf-builtin")).toBe(true);
     expect(caps.refFrame("leaf-builtin")).toBe(caps.globalRoot);
 
-    // …as does a name owned on the chain ROOT:
     expect(caps.refFrame("root-builtin")).toBe(caps.globalRoot);
 
-    // An unbound name has no base claim.
     expect(caps.refFrame("definitely-not-a-builtin-xyz-123")).toBeUndefined();
   });
 });

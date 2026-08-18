@@ -90,7 +90,6 @@ export interface ProvenanceStore {
    *  the durable region state," never a derived cache. */
   readStream(regionId: RegionId): Promise<readonly ProvenanceRecord[]>;
 
-  /** Read the region's stream header (`undefined` before it has been written). */
   getHeader(regionId: RegionId): Promise<StreamHeader | undefined>;
 
   /** Write the region's stream header — called once, at region-open. */

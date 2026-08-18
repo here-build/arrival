@@ -87,20 +87,12 @@ describe("scheme/polyglot-clojure & scheme/polyglot-racket — the FIRST product
   });
 });
 
-// STAGE C CUT 4 (docs/plans/stage-c-corpse-deletion.md): the "standalone .apply(), bypassing
-// assembleEnv's C3 dep-walk" mechanism that used to prove these cross-capability edges are
-// REAL (not runtime luck) is RETIRED along with `lower()`/`assembleEnv` — `buildVocabulary`
-// (the sole surviving bake path) ALWAYS walks a capability's OWN declared `deps`, deep, so
-// there is no "standalone, deps unwalked" state left to construct at all. The PRODUCT law that
-// survives — a lone dialect pack's declared deps genuinely resolve its cross-capability
-// references — is pinned via `envFromCapabilities` (a STANDALONE `buildVocabulary([pack], ...)`,
-// bound onto a fresh frame — mirroring the retired `assembleEnv`'s own no-ambient-fold posture),
-// one row per pack, in place of the old three-tier (standalone-fails / manually-sequenced-luck /
-// assembleEnv-ok) contrast. NOT `exec`/`execState({capabilities:[pack]})`: every pack here is
-// ALSO a `BASE_PACKS` member, so `exec`'s own `{...capabilities, ...BASE_ROSTER}` fold asserts a
-// SECOND, conflicting root-list precedence for it (`AssembleLinearizationError` — the same
-// "co-rooting a BASE_ROSTER member" hazard `env/base-roster.ts`'s own header documents for
-// `NATIVE_PACKS`).
+// `buildVocabulary` always walks a capability's own declared `deps`. Pin a lone
+// dialect pack's deps via `envFromCapabilities` (standalone `buildVocabulary([pack])`
+// on a fresh frame), not `exec`/`execState`: every pack here is also a `BASE_PACKS`
+// member, so `exec`'s `{...capabilities, ...BASE_ROSTER}` fold would assert a second,
+// conflicting root-list precedence (`AssembleLinearizationError` — same "co-rooting
+// a BASE_ROSTER member" hazard `env/base-roster.ts` documents).
 describe("scheme/polyglot family — deps are real edges (§2.1 luck-into-structure), pinned via the sanctioned path", () => {
   it("scheme/polyglot-clojure ALONE: comp resolves compose (core, cross-capability) and frequencies reaches srfi-1's reduce", async () => {
     const env = await envFromCapabilities([polyglotClojure]);
@@ -160,13 +152,9 @@ describe("scheme/polyglot family — contract ENFORCEMENT fires at the call boun
 });
 
 describe("scheme/polyglot family — the §2.1 bake FV law passes AS MIGRATED, per pack", () => {
-  // scheme/polyglot-clojure is EXCLUDED from this table on purpose: its `comp`
-  // constant eagerly evaluates `compose` (core, a DIFFERENT capability) at apply
-  // time, so a bare standalone `.apply()` genuinely throws Unbound-variable
-  // unless core is applied first — see the dedicated pair of tests in the
-  // "deps are real edges" describe block above, which prove the SAME bake-FV-is-
-  // static-not-runtime property for clojure once that one eager cross-capability
-  // need is satisfied.
+  // scheme/polyglot-clojure's `comp` constant eagerly evaluates `compose` (core,
+  // a different capability) at bake time, so a standalone bake throws unbound
+  // unless core is walked first — see the "deps are real edges" rows above.
   it.each([
     ["scheme/polyglot (core)", polyglot],
     ["scheme/polyglot-lisp", polyglotLisp],

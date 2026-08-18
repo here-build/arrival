@@ -41,8 +41,6 @@ export function isSettleChain(v: unknown): v is Promise<SchemeValue> {
   return v instanceof Promise && chains.has(v);
 }
 
-/** Settle a maybe-pending entry: sync value → boxed now; pending → one settle chain
- *  (see the file header for the caching contract the caller upholds). */
 export function settleEntry(
   raw: unknown,
   box: (settled: unknown) => SchemeValue,

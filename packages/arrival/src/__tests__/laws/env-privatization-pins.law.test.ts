@@ -164,7 +164,8 @@ describe("write-into-scope + override VALUE-INJECTION parity", () => {
 
 describe("V6 pin — no public host-fn registration method on AmbientRuntime / SchemeEnv", () => {
   // Public defineRosetta is gone on the class and the SchemeEnv contract (compile error
-  // everywhere). Surviving wiring is module-internal bindRosetta only — never barrel-exported.
+  // everywhere). Playback-frame registration binds an ARosettaProcedure through
+  // bindValue — never a public defineRosetta / barrel export.
   it("AmbientRuntime.prototype.defineRosetta no longer exists", () => {
     expect("defineRosetta" in AmbientRuntime.prototype).toBe(false);
   });

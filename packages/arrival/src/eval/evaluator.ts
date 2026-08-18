@@ -143,7 +143,6 @@ export interface StackFrame {
   code: SchemeValue;
   env_name?: string;
   procedure?: string;
-  /** Source location if available from parsed code */
   location?: SourceLocation;
 }
 
@@ -181,7 +180,6 @@ export interface EvalTap {
   onSymbolResolved?(invocation: Invocation | null, symbol: ASymbol, value: SchemeValue): void;
 }
 
-/** Evaluation context passed through the evaluator */
 export interface EvalContext {
   /**
    * Name-resolution + scope-construction facade — the SINGLE binding/resolution
@@ -191,7 +189,6 @@ export interface EvalContext {
    * caller could hand a bare EvalContext; the evaluator's own frame sites always set it.
    */
   resolver?: Resolver;
-  /** Optional tap for tracing evaluation enter/exit per parsed Pair. */
   tap?: EvalTap;
   /**
    * Optional filter — returning false skips tap firing (atoms and
@@ -232,7 +229,6 @@ export interface EvalContext {
   runCtx: RunContext;
 }
 
-/** Options for the trampoline runner (`run`). */
 interface RunOptions {
   /**
    * Execution-budget signal; see EvalContext.signal. Threaded as a runner
@@ -339,7 +335,6 @@ function is_lambda_function(o: unknown): o is ALambda {
   return o instanceof ALambda;
 }
 
-/** The evaluator generator type - third param is what yield returns */
 export type EvalGenerator = Generator<unknown, SchemeValue, SchemeValue>;
 
 /**
@@ -355,10 +350,8 @@ export type EvalGenerator = Generator<unknown, SchemeValue, SchemeValue>;
 /** Yield marker: "need to check time" vs "await this promise" */
 const TICK = Symbol("tick");
 
-/** Marker for sub-generator calls (flat trampoline) */
 interface Call {
   call: Generator<unknown, unknown, unknown>;
-  /** Optional stack frame for error reporting */
   frame?: StackFrame;
   /**
    * Fired when the sub-generator returns normally. Returning a value
@@ -410,7 +403,6 @@ function is_call(o: unknown): o is Call {
 interface TailCall {
   tailCall: {
     generator: Generator<unknown, unknown, unknown>;
-    /** Frame attributed to the call site that initiated the tail dispatch. */
     frame?: StackFrame;
   };
 }
@@ -435,7 +427,6 @@ function is_bounce(o: unknown): o is Bounce {
   return o !== null && typeof o === "object" && (o as { __bounce?: unknown }).__bounce === true;
 }
 
-/** Wrap a lambda body generator as a Bounce token (evalLambda / named-let runners). */
 function makeBounce(generator: Generator<unknown, unknown, unknown>): Bounce {
   return { __bounce: true, generator };
 }
@@ -588,7 +579,6 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
     throw new BudgetExceededError(`execution budget exceeded (${budgetMs}ms)`, []);
   }
 
-  // Explicit generator stack — the key to flat trampolining
   const stack: Generator<unknown, unknown, unknown>[] = [generator];
   // Parallel stack frames for error reporting
   const frameStack: (StackFrame | undefined)[] = [undefined];
@@ -598,7 +588,6 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
   let iterations = 0;
   let valueToSend: unknown = undefined;
 
-  // Fire onReject up the call stack, then wrap into ArrivalError.
   const failAndWrap = (error: unknown): never => {
     // Snapshot frames BEFORE popping so ArrivalError carries the trace.
     const frames = frameStack.filter((f): f is StackFrame => f !== undefined);
@@ -645,7 +634,7 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
         result = current.next(valueToSend);
       } catch (error) {
         failAndWrap(error);
-        return undefined as never; // unreachable
+        return undefined as never;
       }
 
       valueToSend = undefined; // Reset after use
@@ -672,7 +661,6 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
 
       const value = result.value;
 
-      // Sub-generator call (flat trampoline)
       if (is_call(value)) {
         stack.push(value.call);
         frameStack.push(value.frame);
@@ -699,7 +687,6 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
           if (c?.onResolve) resolvers.push(c.onResolve);
           if (c?.onReject) rejecters.push(c.onReject);
         }
-        // Then consecutive pass-through (tail) slots until a consumer or the root.
         while (callStack.length > 0 && callStack.at(-1)?.tail === true) {
           const c = callStack.pop();
           stack.pop();
@@ -747,7 +734,7 @@ async function run<T>(generator: Generator<unknown, T, unknown>, options: RunOpt
           valueToSend = signal === undefined ? await value : await raceAbort(value, signal);
         } catch (error) {
           failAndWrap(error);
-          return undefined as never; // unreachable
+          return undefined as never;
         }
         lastYield = performance.now();
         iterations = 0;
@@ -897,7 +884,7 @@ function* evalIf(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     if (elseExpr !== undefined) {
       return yield { call: evaluate(elseExpr, ctx), tail: inTail, onResolve };
     }
-    return theVoid; // no else branch
+    return theVoid;
   } else {
     return yield { call: evaluate(thenExpr, ctx), tail: inTail, onResolve };
   }
@@ -931,16 +918,11 @@ function* evalBegin(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   return result;
 }
 
-/** `(quote datum)` — return the datum unevaluated. */
 function* evalQuote(rest: SchemeValue, _ctx: EvalContext): EvalGenerator {
   SpecialFormShapeError.invariant(rest instanceof APair, "quote", "missing argument");
   return rest.car;
 }
 
-/**
- * Handle 'quasiquote' special form: (quasiquote datum)
- * Supports unquote and unquote-splicing
- */
 function* evalQuasiquote(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   SpecialFormShapeError.invariant(rest instanceof APair, "quasiquote", "missing argument");
   // Strip tail: unquoted sub-expressions are operands to implicit list
@@ -1148,7 +1130,6 @@ function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   const first = rest.car;
   const valueRest = rest.cdr;
 
-  // Function definition shorthand: (define (f x) body) -> (define f (lambda (x) body))
   if (first instanceof APair) {
     const name = first.car;
     const args = first.cdr;
@@ -1165,7 +1146,6 @@ function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     return theVoid;
   }
 
-  // Simple definition: (define name value)
   SpecialFormShapeError.invariant(first instanceof ASymbol, "define", "expected symbol");
   SpecialFormShapeError.invariant(valueRest instanceof APair, "define", "missing value");
 
@@ -1176,7 +1156,6 @@ function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     value = yield value;
   }
 
-  // Set name on functions for debugging
   if (is_lambda_function(value) && !value.__name__) {
     value.__name__ = symbol_name(first);
   }
@@ -1498,7 +1477,6 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   let body: SchemeValue;
   let name: ASymbol | null = null;
 
-  // Check for named let: (let name ((var val) ...) body...)
   if (rest.car instanceof ASymbol) {
     name = rest.car;
     const afterName = rest.cdr;
@@ -1519,7 +1497,6 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
   const letResolver = ctxResolver(ctx).child("let", "let");
 
-  // For named let, we need to create a recursive function
   if (name) {
     const params: ASymbol[] = [];
     let bindNode: SchemeValue = normalizedBindings;
@@ -1672,7 +1649,6 @@ function* evalLetrec(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
   const letrecResolver = ctxResolver(ctx).child("letrec", "letrec");
 
-  // First pass: bind all names to unassigned.
   const bindingList: Array<{ name: ASymbol; expr: SchemeValue }> = [];
   let bindNode: SchemeValue = normalizedBindings;
   while (bindNode instanceof APair) {
@@ -1880,9 +1856,6 @@ function caseDatumListVectorError(datums: AVector): Error {
   );
 }
 
-/**
- * Handle 'cond' special form: (cond (test expr...) ... (else expr...)?)
- */
 function* evalCond(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   let node: SchemeValue = rest;
   const nonTailCtx: EvalContext = ctx.tail ? { ...ctx, tail: false } : ctx;
@@ -1938,10 +1911,9 @@ function* evalCond(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     node = node.cdr;
   }
 
-  return theVoid; // no clause matched
+  return theVoid;
 }
 
-/** `(case key ((datum…) expr…) … (else expr…)?)`. */
 function* evalCase(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   SpecialFormShapeError.invariant(rest instanceof APair, "case", "missing key");
 
@@ -2083,9 +2055,6 @@ function* evalUnless(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   return theVoid;
 }
 
-/**
- * Handle 'do' special form: (do ((var init step) ...) (test result...) body...)
- */
 function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   SpecialFormShapeError.invariant(rest instanceof APair, "do", "missing bindings");
 
@@ -2323,7 +2292,7 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
         // (e.g. a recovery loop) must respect the same budget.
         result = await run(evalBegin(handlers, { ...ctx, resolver: catchResolver, tail: false }), {
           signal: ctx.signal });
-        caughtError = null; // handled
+        caughtError = null;
       } catch (error) {
         caughtError = error instanceof Error ? error : new Error(String(error));
       }
@@ -2462,7 +2431,7 @@ export function* evaluate(
   }
 
   if (!(code instanceof APair)) {
-    return code; // atoms self-evaluate
+    return code;
   }
 
   // Tap: fire enter/exit for parsed Pairs (those carrying a `.location`); atoms and

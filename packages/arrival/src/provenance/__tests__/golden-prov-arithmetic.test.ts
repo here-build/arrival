@@ -1,34 +1,18 @@
 /**
  * GOLDEN CAPTURE (gate G2 oracle) — arithmetic + core-stdlib provenance.
  *
- * Wave R / RED-SPEC for the static-lineage migration
- * (docs/working-proposals/confluent-dataflow-graph-ir-2026-06-17.md §5). The
- * `--ir-lineage` flag does NOT exist yet, so the CURRENT eager engine — flat
- * `ReadonlySet<number>` accumulated per-op via `withInputProvenance`, materialized
- * by `EvalTrace.computeProvenance` — IS the golden oracle. Every snapshot below is
- * captured from that eager path with `-u`. When the static lineage tree
- * (provenance/lineage.ts: classify → leaf/source/pipe/merge/fan/opaque) is wired
- * behind the flag, gate G2 requires `provenance(static, flag-on) ==
- * provenance(eager, flag-off)` on these same programs — flag-off must stay
- * byte-identical to what is frozen here.
+ * The `--ir-lineage` flag does NOT exist yet, so the CURRENT eager engine — flat
+ * `ReadonlySet<number>` accumulated per-op via `withInputProvenance` — IS the
+ * golden oracle. When the static lineage tree is wired behind the flag, gate G2
+ * requires `provenance(static, flag-on) == provenance(eager, flag-off)` on these
+ * same programs — flag-off must stay byte-identical to what is frozen here.
  *
- * Scope of THIS file (the unit): pure ops over literals (mint nothing), pure ops
- * over one source (propagate), arithmetic merges of ≥2 sources (union), the
- * string collapse path (string-append / join), and the list element-vs-container
- * projections (car/cdr/cons). A handful of DOCUMENTED-ASYMMETRY captures
- * (string-length drops) are included because they are load-bearing for
- * byte-equivalence — the static path must reproduce the eager engine's current
- * behavior here, warts and all, or G2 fails. The cdr-of-list-spine and
- * append-rebuild asymmetries this file used to pin here were REPAIRED
- * (docs/RULINGS.md R2, conservation.law.test.ts's §2 rows) — cdr's
- * projected sub-spine and append's rebuilt head now carry the deep-collapsed
- * union of their elements instead of dropping to empty; see the fixed goldens
- * below, no longer under "documented asymmetries".
- *
- * Shared provenance helpers (sStr, sNum, run) are imported from the test-helper
- * module so there is ONE definition of each across the whole suite (run wraps the
- * canonical provOf from the production shadow module). Only the file-SPECIFIC
- * fixtures (strs/nums) stay local.
+ * Scope: pure ops over literals (mint nothing), pure ops over one source
+ * (propagate), arithmetic merges of ≥2 sources (union), the string collapse
+ * path, and the list element-vs-container projections (car/cdr/cons).
+ * string-length drops are load-bearing for byte-equivalence. cdr's projected
+ * sub-spine and append's rebuilt head carry the deep-collapsed union of their
+ * elements (P10).
  */
 import { describe, it, expect } from "vitest";
 import { sStr, sNum, run } from "../../__tests__/_lineage-test-helpers.js";

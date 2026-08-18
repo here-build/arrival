@@ -72,7 +72,7 @@ export function _installRosettaMembraneApply(fn: RosettaMembraneApply): void {
 
 /**
  * Host-JS MEMBRANE primitive. Apply is the spine for baked verbs (`#membrane`); host-fn
- * lens / createRosettaWrapper minters use `#hostApply`.
+ * lens / hostFnToCallable / replay playback minters use `#hostApply`.
  */
 export class ARosettaProcedure extends AValue {
   readonly kind = "procedure" as const;
@@ -122,7 +122,7 @@ export class ARosettaProcedure extends AValue {
     super(provenance);
     this.name = opts.name;
     this.arity = opts.arity;
-    // Frozen at instantiation (ruling 2026-08-13) — same seal as ANativeProcedure's.
+    // Freeze at construct — same seal as native.
     this.contract =
       typeof opts.contract === "object" && opts.contract !== null ? Object.freeze(opts.contract) : opts.contract;
     this.strategy = opts.strategy;

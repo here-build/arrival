@@ -10,5 +10,4 @@ import { setoidLaws } from "./algebra-laws.js";
 const arb = fc.boolean().map((b) => new ABool(b));
 const equalClone = (b: ABool) => new ABool(b.value);
 
-// INVARIANT: reflexivity, reflexivity-across-clone, symmetry, transitivity of boolean equality.
 setoidLaws("SchemeBool", { arb, equalClone });

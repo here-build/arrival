@@ -47,7 +47,6 @@ export class AExact extends AValue {
       Number.isSafeInteger(denom),
       `AExact: denom ${denom} is not a safe integer — the caller must check via checkedMul/checkedAdd/checkedSub (or mintExact) before constructing`,
     );
-    // Normalize: keep denom positive, reduce to lowest terms.
     if (denom < 0) {
       num = -num;
       denom = -denom;

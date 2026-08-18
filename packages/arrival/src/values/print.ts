@@ -13,7 +13,6 @@ function isPrintable(v: unknown): v is Printable {
   return v != null && typeof (v as Record<string, unknown>)["arrival/print"] === "function";
 }
 
-/** Render any value to its Scheme repr. AValue via `["arrival/print"]()`; else `printForeign`. */
 export function printValue(value: unknown): string {
   if (isPrintable(value)) return value["arrival/print"]();
   return printForeign(value);

@@ -4,7 +4,6 @@
  * identity without import cycles.
  */
 
-/** Head symbol `__name__`, or `"?"` if absent. */
 export function headOf(node: unknown): string {
   const car = (node as { car?: { __name__?: unknown } } | null)?.car;
   const name = (car as { __name__?: unknown } | undefined)?.__name__;

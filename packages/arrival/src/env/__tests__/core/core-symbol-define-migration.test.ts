@@ -56,11 +56,11 @@ describe("scheme/core — the §2.1 bake FV locality law", () => {
 
   it("(regression pin) the live-catch shape — a scheme body calling pair?/not with NO declared deps — throws DefineLocalityError", async () => {
     const env = await freshEnv();
-    // Deliberately NO `deps` field — the exact shape `core.ts` had before the W4
-    // migration (a bare `symbols` record with no dep declaration; `pair?`/`not`
-    // resolved purely via the two-phase bootstrap's runtime guarantee, invisible to
-    // the static FV law). The `single` symbol itself is deleted from scheme/core;
-    // this pin keeps the LAW covered with a local reproduction.
+    // Deliberately NO `deps` field — the exact shape `core.ts` had: a bare `symbols`
+    // record with no dep declaration; `pair?`/`not` resolved via the two-phase
+    // bootstrap's runtime guarantee, invisible to the static FV law. The `single`
+    // symbol itself is deleted from scheme/core; this pin keeps the LAW covered
+    // with a local reproduction.
     const undeclaredCap = EnvCapability.define("test/core-pre-fix-repro", {
       symbols: (symbol, z) => ({
         "bad-single":

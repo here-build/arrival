@@ -20,19 +20,18 @@ import type { AmbientValue } from "../env/AmbientRuntime.js";
 import type { RunContext } from "../run/RunContext.js";
 
 /** A rosetta (host-fn) contribution config. Defined here, not imported, so this package
- *  needn't depend on the runtime. Wiring that consumes it is `bindRosetta`
- *  (AmbientRuntime.ts). */
+ *  needn't depend on the runtime. */
 export interface RosettaSpec {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- variadic host fn, matches RosettaFunction
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- variadic host fn
   fn: (...args: any[]) => unknown;
   /** Optional ambient `.d.ts` member-body type fragment, harvested by the type-lens. */
   type?: string;
   /** Rosetta options (e.g. `{ argProvenance: true }`) — passed through verbatim. */
   options?: unknown;
   /** PURE (provenance-PROPAGATING) rosetta — forwards its inputs' provenance instead of
-   *  minting a fresh source point (mirrors `RosettaFunction.pure`; `mintsPoint = pure !== true`).
-   *  Absent ⇒ source/mint (the conservative default). Carried here so a cross-package pack
-   *  declaring a pure verb (`(approve …)`, `(expose …)`) types against this surface. */
+   *  minting a fresh source point (`mintsPoint = pure !== true`). Absent ⇒ source/mint
+   *  (the conservative default). Carried here so a cross-package pack declaring a
+   *  pure verb (`(approve …)`, `(expose …)`) types against this surface. */
   pure?: boolean;
 }
 

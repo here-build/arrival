@@ -38,7 +38,7 @@ export function tagless(tpl: TemplateStringsArray, ...sub: unknown[]): ANativePr
     }
     return await fn.call(receiver, ...leading, runCtx);
   };
-  // No Contract param — always "pipe". withCallbackRoles stamps acc-chain in place.
+  // No Contract param, provenance always pipe; acc-chain via withCallbackRoles.
   return new ANativeProcedure({
     name,
     arity: { min: 0, max: null },

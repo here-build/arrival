@@ -104,7 +104,6 @@ export function parseDoBindings(bindingList: unknown): DoBinding[] {
   return out;
 }
 
-/** `do`'s `(test result…)` clause. */
 export interface DoClause {
   readonly test: unknown;
   readonly resultForms: readonly unknown[];
@@ -119,15 +118,9 @@ export function parseDoClause(clause: unknown): DoClause {
   return { test: clause.car, resultForms: chainOf(clause.cdr) };
 }
 
-/** Every node index reachable BACKWARD from `from`, within ONE `WireframeGraph` —
- *  follow a node's INGRESS wires (the wires whose `consumer.node` is the node
- *  being expanded) to whatever OTHER node indices they reference (`paramRefs`
- *  entries of kind `"node"`), recursively — see this file's header for why a
- *  `WireframeGraph` cannot borrow `../lineage.js`'s free acyclicity
- *  argument: this walk carries its own visited-set and earns termination
- *  directly, over any input shape (including a genuinely cyclic one — an
- *  unguarded version of this exact walk would not return on a graph where two
- *  nodes' wires reference each other). */
+/** Every node index reachable backward from `from` within one `WireframeGraph`.
+ *  Follows ingress wires (`consumer.node` → `paramRefs` of kind `"node"`).
+ *  Carries its own visited-set: the graph is index-addressed and may cycle. */
 export function reachableNodes(graph: WireframeGraph, from: number): ReadonlySet<number> {
   return reachableNodesForDemand(graph, from, "value");
 }
@@ -137,29 +130,8 @@ export function reachableNodes(graph: WireframeGraph, from: number): ReadonlySet
  *  file's header, item 3, and `builder.ts`'s `factTagOf`). */
 export type DemandGrade = "value" | "count";
 
-/** `reachableNodes`, GRADED by demand. Same visited-set discipline — a
- *  `WireframeGraph` earns no acyclicity proof for free regardless of grade, so
- *  termination is carried explicitly here exactly as in the ungraded walk.
- *
- * Under `"count"`, a wire is followed iff EITHER:
- *   - it carries the builder's `fact` tag (the length-verb read itself), or
- *   - its consumer is a `fan` node's OWN `source`/`sourceN` slot — the STRUCTURAL
- *     PRODUCER (../lineage.js's retrospective mirror: `walk()`'s fan arm calls
- *     `walk(n.source, …)` UNCONDITIONALLY, count or not — the container-fact
- *     discipline says a fan's length is either PROXIED (map/sort: the container's
- *     OWN fact, unchanged) or PROVENANCED (filter/concat: freshly minted as a union
- *     THAT STILL INCLUDES the container's own stamp — `values/primitives/APair.ts`'s
- *     filter comment: "union of (a) the INPUT container's own top-level … stamp") —
- *     either way the container's producer always contributes, so this wire is never
- *     an "element" wire even though `factTagOf` never tags it (its consumer is the
- *     fan node, not a length-verb)).
- * Every OTHER untagged wire is skipped BEFORE its paramRefs are even inspected — it
- * contributes no node, transitively, to the count-demand cone: a count-demand cone
- * touches ZERO element wires. A fan's per-element TRANSFORM contributes no separate
- * wire in this graph to prune in the first place (I5: the callback body is a
- * PRIVATE interior, never spliced into the enclosing graph) — so, unlike the
- * retrospective walk, there is no second half of the fan arm to special-case
- * here. */
+/** `reachableNodes`, graded by demand. Same visited-set discipline as the ungraded walk.
+ *  `"count"` follows `fact` tags plus a fan's `source*` wire; other untagged wires prune wholesale. */
 export function reachableNodesForDemand(graph: WireframeGraph, from: number, demand: DemandGrade): ReadonlySet<number> {
   const visited = new Set<number>();
   const stack: number[] = [from];
@@ -172,7 +144,7 @@ export function reachableNodesForDemand(graph: WireframeGraph, from: number, dem
     for (const w of graph.wires) {
       if (w.consumer.node !== idx) continue;
       const isStructuralProducer = isFanNode && w.consumer.slot.startsWith("source");
-      if (demand === "count" && w.fact === undefined && !isStructuralProducer) continue; // element wire — pruned
+      if (demand === "count" && w.fact === undefined && !isStructuralProducer) continue;
       for (const ref of w.paramRefs) {
         if (ref.kind === "node" && !visited.has(ref.node)) stack.push(ref.node);
       }

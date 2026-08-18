@@ -27,7 +27,6 @@ import { parseSexprs, type Node } from "@inhuman.tools/arrival-sugarcoat";
 
 import { escapeName, isTsIdentifier } from "./name-escape.js";
 
-/** A dict / object-property key prints bare when identifier-safe, else quoted. */
 const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 /** A plain decimal/integer numeric literal (also covers a leading sign + exponent). */
 const NUMBER = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/;
@@ -51,7 +50,6 @@ const isKeyword = (n: Node | undefined): n is AtomNode =>
   isWord(n) && n.atom.startsWith(":") && n.atom.length > 1;
 const keywordName = (n: AtomNode): string => n.atom.slice(1);
 
-/** An object-property / dict key prints bare when identifier-safe, else quoted. */
 const propKey = (k: string): string => (IDENT.test(k) ? k : JSON.stringify(k));
 
 /** One top-level statement's coordinate map: the TS byte-range it occupies in the joined
@@ -97,7 +95,7 @@ function emitTopLevel(nodes: Node[]): { ts: string; schemeSpan: readonly [number
     const next = nodes[i + 1];
     if (isVectorMark(node) && isList(next)) {
       out.push({ ts: emitVector(next), schemeSpan: [nodeStart(node), nodeEnd(next)] });
-      i++; // consume the fused list node
+      i++;
       continue;
     }
     const span: readonly [number, number] = [nodeStart(node), nodeEnd(node)];
@@ -164,7 +162,6 @@ function nodeStart(node: Node): number {
   return 0;
 }
 
-/** A node's source end (mirror of `nodeStart`, scanning children last-first). */
 function nodeEnd(node: Node): number {
   if (node.span !== undefined) return node.span[1];
   if ("list" in node) {
@@ -186,7 +183,7 @@ function emitSeq(nodes: Node[]): string[] {
     const next = nodes[i + 1];
     if (isVectorMark(nodes[i]) && isList(next)) {
       out.push(emitVector(next));
-      i++; // consume the fused list node
+      i++;
       continue;
     }
     out.push(emitNode(nodes[i]));
@@ -212,7 +209,7 @@ function emitCallArgs(items: Node[]): string {
     const node = items[i];
     if (isKeyword(node)) {
       kwargs = true;
-      const key = propKey(keywordName(node)); // `:name` → the object key `name` (quoted if non-ident)
+      const key = propKey(keywordName(node));
       if (items[i + 1] === undefined) {
         props.push(`${key}: undefined`); // a bare keyword (mid-edit) → undefined; the property type bites
         continue;
@@ -244,13 +241,13 @@ function emitNode(node: Node): string {
 }
 
 function emitAtom(node: AtomNode): string {
-  if (node.str === true) return JSON.stringify(node.atom); // string literal → TS string
+  if (node.str === true) return JSON.stringify(node.atom);
   const t = node.atom;
   if (t === "#t" || t === "#true") return "true";
   if (t === "#f" || t === "#false") return "false";
   if (NUMBER.test(t)) return t;
   const rat = RATIONAL.exec(t);
-  if (rat !== null) return `${rat[1]} / ${rat[2]}`; // rational → number-typed division
+  if (rat !== null) return `${rat[1]} / ${rat[2]}`;
   if (isTsIdentifier(t)) return t; // value-position symbol → the declared const / carrier global
   return `_.${escapeName(t)}`; // operator/symbol value → prelude `_` namespace member (escaped, dotted)
 }
@@ -266,7 +263,6 @@ function emitList(node: ListNode): string {
     return `${obj}[${JSON.stringify(keywordName(head))}]`;
   }
 
-  // Special forms, dispatched on a word head.
   if (isWord(head)) {
     switch (head.atom) {
       case "quote":
@@ -324,8 +320,6 @@ function emitQuote(datum: Node | undefined): string {
   return datum === undefined ? "list()" : emitQuotedDatum(datum);
 }
 
-/** One datum in QUOTED context: a nested list recurses (never applies), an atom keeps its
- *  plain value image (symbol → identifier). */
 function emitQuotedDatum(datum: Node): string {
   return isList(datum) ? emitQuoteLikeList(datum.list, emitQuotedDatum) : emitNode(datum);
 }
@@ -374,7 +368,7 @@ function emitQuoteLikeList(items: Node[], emitElem: (n: Node) => string): string
     parts.push(emitElem(node));
   }
   if (!dotSeen) return `list(${parts.join(", ")})`;
-  let acc = parts[parts.length - 1]!; // the tail
+  let acc = parts[parts.length - 1]!;
   for (let i = parts.length - 2; i >= 0; i--) acc = `cons(${parts[i]}, ${acc})`;
   return acc;
 }
@@ -400,7 +394,6 @@ function lambdaParams(formals: Node | undefined): string {
   return names.join(", ");
 }
 
-/** `(dict :name "a" :age 30)` → `{ name: "a", age: 30 }`. Keys are keyword names. */
 function emitDict(items: Node[]): string {
   const pairs: string[] = [];
   for (let i = 1; i < items.length; i += 2) {
@@ -414,7 +407,6 @@ function emitDict(items: Node[]): string {
 
 // ── s.* combinators — the reserved-word forms (carriers.ts's `s` namespace) ────────────
 
-/** `(if c a b)` → `s.if(c, a, b)`; `(if c a)` (no else) → `s.if(c, a)`. */
 function emitIf(items: Node[]): string {
   const c = items[1] === undefined ? "undefined" : emitNode(items[1]);
   const a = items[2] === undefined ? "undefined" : emitNode(items[2]);
@@ -461,7 +453,6 @@ function emitLet(items: Node[]): string {
   return emitLetBindings(second, items.slice(2));
 }
 
-/** Named let: `(let loop ((i 0)) body…)` → `s.namedLet(0, (loop, i) => body)`. */
 function emitNamedLet(loopName: string, bindingsNode: Node | undefined, body: Node[]): string {
   const { names, values } = readBindings(bindingsNode);
   const lambda = `(${[loopName, ...names].join(", ")}) => ${letBodyTs(body)}`;
@@ -478,7 +469,7 @@ function emitLetStar(bindingsNode: Node | undefined, body: Node[]): string {
 function emitLetStarFrom(bindings: Node[], i: number, body: Node[]): string {
   if (i >= bindings.length) return letBodyTs(body);
   const b = bindings[i];
-  if (!isList(b)) return emitLetStarFrom(bindings, i + 1, body); // skip a malformed binding
+  if (!isList(b)) return emitLetStarFrom(bindings, i + 1, body);
   const nameNode = b.list[0];
   const name = isWord(nameNode) ? nameNode.atom : "_";
   const value = b.list[1] === undefined ? "undefined" : emitNode(b.list[1]);

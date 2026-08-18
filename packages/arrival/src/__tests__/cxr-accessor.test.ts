@@ -27,10 +27,6 @@ const evalIn =
 // element index k ≡ (car (cdr^k x)) ≡ "ca" + "d"×k + "r"
 const cxrForIndex = (k: number): string => `ca${"d".repeat(k)}r`;
 
-// accessor expr → expected element, folded from four same-shape it/expect blocks (base case,
-// regression, deep-linear, mixed combos) into one table. All expecteds are compared with toEqual
-// (a superset of toBe for the primitives/arrays here, so this preserves the original toBe/toEqual
-// split exactly).
 const CXR_CASES = [
   // car/cdr — the 1-step base case — resolve via the kernel unfold
   { name: "car", expr: "(car '(10 20 30))", expected: 10 },

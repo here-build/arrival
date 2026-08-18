@@ -116,7 +116,6 @@ describe("Pair.toJS — one-way array conversion", () => {
   });
 
   it("converts a nested list element to a nested array", () => {
-    // ((1 2) 3) → [[1, 2], 3]
     const p = APair.fromArray(CONSTANT_CTX, [list(1, 2), num(3)], false) as APair<any, any>;
     expect(p["arrival/toJS"]()).toEqual([[1, 2], 3]);
   });

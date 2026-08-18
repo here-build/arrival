@@ -41,8 +41,6 @@ function lowerTag(jsTag: unknown, bindingName: string): z.ZodType {
   }
 }
 
-/** A short human phrase for a (lowered) type tag, for the error's "expected …" clause: the
- *  `/optional`-stripped bare string, an enum's value list, else a plain JSON-stringify. */
 function describeTag(jsTag: unknown): string {
   const stripped = stripOptionalSuffix(jsTag);
   if (typeof stripped === "string") return stripped;
@@ -50,7 +48,6 @@ function describeTag(jsTag: unknown): string {
   return JSON.stringify(stripped);
 }
 
-/** A short, safe rendering of an arrived value for the error message's "got …" clause. */
 function describeValue(value: unknown): string {
   try {
     return JSON.stringify(value);

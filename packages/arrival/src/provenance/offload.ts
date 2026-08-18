@@ -142,7 +142,6 @@ interface SameProcessExecutorOptions {
   readonly sampleSize?: number;
 }
 
-/** Index every reachable graph by hashGraph (main, templates, fan/binder interiors). */
 function indexProgramGraphs(program: WireframeProgram): ReadonlyMap<TemplateHash, WireframeGraph> {
   const index = new Map<TemplateHash, WireframeGraph>();
   const visit = (graph: WireframeGraph): void => {

@@ -34,7 +34,6 @@ import type { AListAlike, SchemeValue } from "../values/types.js";
 
 export type InvocationState = "running" | "resolved" | "rejected";
 
-/** Head symbol name (`filter`, `map`, `:verdict`, …) or null. */
 function headNameOf(node: APair<SchemeValue, SchemeValue>): string | null {
   const head = (node as { car: unknown }).car;
   if (head === null || typeof head !== "object" || !("__name__" in head)) return null;
@@ -130,7 +129,6 @@ export class Invocation {
     this.metadata = meta;
   }
 
-  /** Walk dynamic call chain back to program-root invocation. */
   ancestors(): Invocation[] {
     const out: Invocation[] = [];
     let cur: Invocation | null = this;

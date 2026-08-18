@@ -36,5 +36,4 @@ export { default as control } from "./control.js";
 export { default as host } from "./host.js";
 export { default as r7rsEval } from "./eval.js";
 
-/** The whole R7RS derived-syntax set — assemble all, or `.filter()` a subset. */
 export const allR7rs = [syntax, binding, exceptions, lists, control, host, r7rsEval] as const;

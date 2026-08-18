@@ -146,9 +146,7 @@ export async function runEagerCone(
 ): Promise<Set<string>> {
   const env = mintFrame(baseEnv, `w1-agreement-${Math.random().toString(36).slice(2)}`);
   for (const [op, shape] of Object.entries(sources)) await registry.register(env, op, shape);
-  // Q20b: production default is OFF — the EAGER ORACLE side of the W1 agreement needs
-  // REAL accumulation to produce a cone at all. Force ON for exactly this run,
-  // save/restoring the ambient value (never a hardcoded default).
+  // this helper/execState needs the eager oracle ON
   const savedOracle = isEagerProvenanceOracleEnabled();
   setEagerProvenanceOracleEnabled(true);
   let values: readonly SchemeValue[];

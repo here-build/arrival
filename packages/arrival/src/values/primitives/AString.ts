@@ -110,7 +110,6 @@ export class AString extends AValue {
     return withInputProvenance([this], [...this.__string__].length);
   }
 
-  // Semigroup — string append.
   ["arrival/tagless-final/concat"](other: AString): AString {
     return new AString(this.__string__ + other.valueOf());
   }
@@ -147,7 +146,6 @@ export class AString extends AValue {
     return new AString(this.__string__, p, this.location);
   }
 }
-// Dynamically wrap all String.prototype methods
 {
   const ignore = new Set(["length", "constructor"]);
   const _keys = Object.getOwnPropertyNames(String.prototype).filter((name) => {

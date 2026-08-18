@@ -20,9 +20,7 @@ const arb = fc
 
 const equalClone = (s: AString) => new AString(s.valueOf());
 
-// INVARIANT: reflexivity/symmetry/transitivity of string equality, incl. distinct-heap clones.
 setoidLaws("SchemeString", { arb, equalClone });
-// INVARIANT: reflexivity/totality/antisymmetry/transitivity of lexicographic string ordering.
 ordLaws("SchemeString", arb);
 
 describe("SchemeString Setoid/Ord — totality boundaries", () => {
@@ -36,9 +34,9 @@ describe("SchemeString Setoid/Ord — totality boundaries", () => {
     const a = new AString("a");
     // equals: a boxed string equals the SAME value UNBOXED (a plain JS string) — the representation-
     // blindness that fixes dedup over chain-boxed strings (sift/closure.scm). Content still discriminates.
-    expect(a[tf("equals")]("a")).toBe(true); // plain string, equal content → equal (was false)
-    expect(a[tf("equals")]("b")).toBe(false); // plain string, different content → not equal
-    expect(a[tf("equals")](42)).toBe(false); // non-string → not equal (total)
+    expect(a[tf("equals")]("a")).toBe(true);
+    expect(a[tf("equals")]("b")).toBe(false);
+    expect(a[tf("equals")](42)).toBe(false);
     // lte (Ord) is unchanged: still type-strict. Cross-representation ORDERING is a separate question
     // from the equality bug; left strict deliberately.
     expect(a[tf("lte")]("a")).toBe(false);

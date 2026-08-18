@@ -88,7 +88,6 @@ export class ADict extends AValue {
    *  inert as lazy pending cells; settlement memoizes in place, never a semantic mutation. */
   private readonly byKey: Map<DictKey, SchemeValue | Promise<SchemeValue>>;
 
-  /** Fold-name → canonical key object — fast path for string-keyed readers. */
   private readonly indexByName: Readonly<Record<string, DictKey>>;
 
   /** `pairs` must already carry unique fold-names — duplicate resolution is the producer's policy. */

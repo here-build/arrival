@@ -22,7 +22,7 @@
  * Why a stamped return value is the faithful stand-in: a registered rosetta defaults
  * to a Rosetta-IN SOURCE (rosetta.ts `pure` doc) — its result mints a fresh leaf. The
  * real membrane mints a provenance POINT (`{ inv.id }`) via `ctx.currentInvocation`
- * when called through the trace tap (rosetta.ts createRosettaWrapper); a direct
+ * when called through the trace tap (baked `symbol.rosetta` / host-fn lens); a direct
  * `exec` has no invocation, so the wrapper falls back to the inputs' provenance
  * (EMPTY for a literal arg). Returning a STAMPED AValue makes the same "fresh single
  * id at the boundary" observable deterministically: a single-id mint, propagated by

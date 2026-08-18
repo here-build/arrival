@@ -110,7 +110,6 @@ describe("law (a) — parsed leaf/container literals carry their source span on 
     const src = '{:a 1 b: 2 "c" 3}';
     const [dict] = await parse(src);
     const forms = (dict as ADict & { literalForms: readonly SchemeValue[] }).literalForms;
-    // "c" — string key leaf carries its exact span.
     expectParsedAt(forms[4] as AString, src, '"c"');
     // b: — the flip canonicalizes to the keyword twin: the interned symbol `:b`,
     // which — like every symbol — carries no location and stays reference-shared
@@ -143,8 +142,7 @@ describe("law (b) — every spine cell / re-stamped cell of a parsed list is loc
   it("the quote-family INNER cell is now located too (closes the old ctx-mirror gap)", async () => {
     const [form] = await parse("'x");
     const inner = (form as APair<any, any>).cdr as APair<any, any>;
-    // Under the retired ctx-mirror design this was `toBeUndefined()` — the inner
-    // cell rode the ctx channel alone. There is one channel now, so it is located.
+    // Quote-family INNER cell (`'x`'s `(x . ())`) is located.
     expect(inner.location).toBeDefined();
     expect(inner.location?.offset).toBe(0);
   });

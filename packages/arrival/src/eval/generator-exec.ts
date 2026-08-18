@@ -137,7 +137,6 @@ export interface ExecOptions {
    * `currentRunResolver()` at the require apply boundary.
    */
   resolver?: Resolver;
-  /** Tap for tracing per-form evaluation enter/exit. See EvalTap. */
   tap?: EvalTap;
   /** Predicate to suppress tap firing for specific nodes (atoms always skipped).
    *  Piped to EvalContext.nodeFilter (evaluator.ts) — domain is full AListAlike. */
@@ -186,10 +185,9 @@ export interface ExecOptions {
    */
   reads?: ReadGuard;
   /**
-   * PATH-KEYED ATOM BUS (run/path-atom-bus.ts, Phase 5 R1). When set, rides onto
-   * RunContext.pathAtoms: live Q≠[] penetrations observe; successful non-sink E≠[]
-   * stage for commit at successful run end. Unset ⇒ no reactivity arming. Replay
-   * stays silent at the penetration site (not by short-circuiting CQS).
+   * Path-keyed atom bus (run/path-atom-bus.ts). Live Q≠[] penetrations observe;
+   * successful non-sink E≠[] stage for commit at successful run end. Replay stays
+   * silent at the penetration (not by short-circuiting CQS). Unset ⇒ no reactivity.
    */
   pathAtoms?: PathAtomBus;
   /**
@@ -253,7 +251,6 @@ export interface ExecState {
    * wraps the run's lexicalRoot so a follow-up execState continues the session.
    */
   readonly scope: LexicalScope;
-  /** Per-run hermetic handle (strict / heap meter / signal). */
   readonly runCtx: RunContext;
 }
 
@@ -293,12 +290,10 @@ function sealedVocabularyChain(vocabulary: Vocabulary): {
 }
 
 /**
- * Fresh per-call lexical scope ROOTED at the run's prelude-define frame (ruling
- * 2026-08-13, audit B4): session frame → prelude defines → (capabilities half).
- * A prelude `(define …)` is thereby a main-phase binding — resolvable, shadowable
- * by user defines, live for mid-run require/extension appends — while preludeOnly
- * SEED bindings (held by the discarded seed frame, never here) stay unresolvable.
- * A run minted outside assembleRun has no define frame — plain fresh root.
+ * Fresh per-call lexical scope rooted at the run's prelude-define frame:
+ * session → prelude defines → capabilities. Prelude `(define …)` is a main-phase
+ * binding; preludeOnly seeds stay unresolvable. A run minted outside assembleRun
+ * has no define frame — plain fresh root.
  */
 function runRootedScope(runCtx: RunContext): LexicalScope {
   const defines = preludeDefinesOf(runCtx);
@@ -404,11 +399,8 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
   // previous owned run's cells (P-RX-ATOM-SUPERSEDE). Reused runCtx never notes.
   if (runCtxOwned && runCtx.pathAtoms !== undefined) noteReactiveAtomsRun(runCtx.pathAtoms, runCtx);
 
-  // ISOLATION — fresh scope per call unless the caller opts into continuity. The fresh
-  // scope roots at the run's prelude-define frame (ruling 2026-08-13, audit B4):
-  // session → prelude defines → vocabulary chain, so a prelude-defined name is a
-  // main-phase binding (and a mid-run require/extension's defines appear live) while
-  // preludeOnly seeds stay out of every walk.
+  // Fresh scope per call unless the caller opts into continuity. Fresh root is
+  // prelude-define-framed; seeds stay out of the walk.
   const lexicalScope = scope ?? runRootedScope(runCtx);
   const runResolver = new Resolver(lexicalScope.env, new Capabilities(chainFrame, chain));
 

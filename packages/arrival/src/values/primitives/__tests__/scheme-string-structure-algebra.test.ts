@@ -23,12 +23,9 @@ const arb = fc
 // Semigroup (string-append) — associativity. Functor — identity + composition
 // over ASCII char transforms (uppercase/swap) to keep it code-point-clean.
 // ----------------------------------------------------------------------
-// INVARIANT: string-append concat is associative: (a⋄b)⋄c ≡ a⋄(b⋄c).
 semigroupLaws("SchemeString", arb);
 
 // Functor laws map per-character; use case-flip transforms (string→string).
-// INVARIANT: char-map identity: map(id) ≡ id.
-// INVARIANT: char-map composition: map(f∘g) ≡ map(f)∘map(g).
 functorLaws<AString, string>("SchemeString", {
   arb,
   f: (c) => c.toUpperCase(),
@@ -36,7 +33,6 @@ functorLaws<AString, string>("SchemeString", {
 
 // ----------------------------------------------------------------------
 // Monoid — "" is the identity for append.
-// INVARIANT: left identity: ""⋄a ≡ a. right identity: a⋄"" ≡ a.
 // ----------------------------------------------------------------------
 monoidLaws("SchemeString", arb, () => new AString(""));
 

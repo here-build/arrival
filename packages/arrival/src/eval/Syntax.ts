@@ -75,7 +75,6 @@ export class Syntax {
       env,
       macro_expand: true,
       runCtx,
-      // Use-site resolver + the def-time one captured on this Syntax.
       resolver,
       defResolver: this.__resolver__ };
     return this.__fn__.call(env as AmbientRuntime, code as SchemeValue, args, this.__name__ || "syntax") as MacroExpansion;

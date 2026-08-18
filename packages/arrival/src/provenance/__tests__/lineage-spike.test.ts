@@ -30,7 +30,7 @@ async function skeleton(src: string): Promise<LineageNode> {
 describe("lineage spike — static skeleton + pipe/merge/fan from the parsed AST", () => {
   it("(* val1 (+ 1 val2)) → Merge(*) over Leaf(val1) and Pipe(+) → Leaf(val2)", async () => {
     const n = await skeleton(`(* val1 (+ 1 val2))`);
-    expect(n.kind).toBe("merge"); // two provenance-bearing operands
+    expect(n.kind).toBe("merge");
     if (n.kind !== "merge") return;
     expect(n.op).toBe("*");
     expect(n.children[0]).toEqual({ kind: "leaf", slot: "val1" });
@@ -92,16 +92,16 @@ describe("lineage spike — count-cone prunes a MAP fan but NOT a FILTER fan (§
     const n = await skeleton(`(map infer xs)`);
     expect(n.kind).toBe("fan");
     if (n.kind !== "fan") return;
-    expect(n.lengthPreserving).toBe(true); // map preserves length
+    expect(n.lengthPreserving).toBe(true);
     expect(fullCone(n, { xs: [10], infer: [20] })).toEqual([10, 20]);
-    expect(countCone(n, { xs: [10], infer: [20] })).toEqual([10]); // mint pruned
+    expect(countCone(n, { xs: [10], infer: [20] })).toEqual([10]);
   });
 
   it("(filter infer xs): count does NOT prune — the predicate's mint stays in the count cone", async () => {
     const n = await skeleton(`(filter infer xs)`);
     expect(n.kind).toBe("fan");
     if (n.kind !== "fan") return;
-    expect(n.lengthPreserving).toBe(false); // filter changes length
+    expect(n.lengthPreserving).toBe(false);
     // A filter's output cardinality depends on what the predicate decided per
     // element — so the count cone is the SAME as the full cone (no prune).
     expect(fullCone(n, { xs: [10], infer: [20] })).toEqual([10, 20]);
@@ -179,7 +179,7 @@ describe("lineage spike — `let` family is TRANSPARENT (body == inlined form)",
   it("(let ((foo (+ 1 v2))) (* v1 foo)) classifies IDENTICALLY to the inlined (* v1 (+ 1 v2))", async () => {
     const letform = await skeleton(`(let ((foo (+ 1 v2))) (* v1 foo))`);
     const inlined = await skeleton(`(* v1 (+ 1 v2))`);
-    expect(letform).toEqual(inlined); // structural identity — the binding is pure substitution
+    expect(letform).toEqual(inlined);
     const b = { v1: [100], v2: [200] };
     expect(fullCone(letform, b)).toEqual(fullCone(inlined, b));
   });
@@ -206,7 +206,7 @@ describe("lineage spike — begin / and / or / lambda", () => {
 
   it("(and x y z) is a selector-free value-select — cone = union of operands, NO predicate-taint", async () => {
     const n = await skeleton(`(and x y z)`);
-    expect(n.kind).toBe("merge"); // ≥2 prov-bearing operands
+    expect(n.kind).toBe("merge");
     expect(fullCone(n, { x: [1], y: [2], z: [3] })).toEqual([1, 2, 3]);
   });
 
@@ -257,7 +257,7 @@ describe("lineage spike — quote / when / unless / letrec(*) classify correctly
   it("(letrec ((a v1)) (* a v2)) is TRANSPARENT like let* — classifies as the inlined merge", async () => {
     const n = await skeleton(`(letrec ((a v1)) (* a v2))`);
     const inlined = await skeleton(`(* v1 v2)`);
-    expect(n).toEqual(inlined); // structural identity — the binding is pure substitution
+    expect(n).toEqual(inlined);
     expect(fullCone(n, { v1: [100], v2: [200] })).toEqual([100, 200]);
   });
 

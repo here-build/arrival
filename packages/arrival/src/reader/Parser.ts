@@ -120,7 +120,6 @@ export class Parser {
       configurable: true,
       enumerable: false,
     });
-    // datum labels
     Object.defineProperty(this, "_refs", {
       value: [],
       configurable: true,
@@ -337,9 +336,7 @@ export class Parser {
    */
   private async read_literal_elements(closeToken: string, isMap: boolean, what: string): Promise<SchemeValue[]> {
     const elements: SchemeValue[] = [];
-    // Has the current boundary already consumed its one separator comma?
     let separatorConsumed = false;
-    // Maps: has the current odd boundary already absorbed its one JSON `:` token?
     let colonConsumed = false;
     while (true) {
       const token = await this.peek();
@@ -488,7 +485,6 @@ export class Parser {
     if (this._refs.length > 0 && !(object instanceof EOF)) {
       const resolved = await this._resolve_object(object);
       if (resolved instanceof APair) {
-        // mark cycles on parser level
         resolved.mark_cycles();
       }
       return resolved;
@@ -586,9 +582,7 @@ export class Parser {
           loc,
         );
       }
-      // A parser extension is a symbol that expands at read time, in one of two
-      // ways: a FUNCTION extension is applied FEXPR-style (result returned as-is);
-      // a MACRO extension is evaluated in place and its result quoted (see below).
+      // Only builtin prefixes expand here; no parse-time user macros.
       const special = specials.get(token);
       const builtin = is_builtin(token);
       this.skip();

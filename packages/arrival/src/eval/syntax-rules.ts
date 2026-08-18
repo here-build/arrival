@@ -70,11 +70,9 @@ function same_atom(a, b) {
   if (a instanceof RegExp) {
     return a.source === b.source;
   }
-  // Strings (raw or boxed) compare by value.
   if (a instanceof AString) {
     return b instanceof AString && a.valueOf() === b.valueOf();
   }
-  // Numbers / chars / booleans / nil: atom-grade (eqv?) equality, from the value kernel.
   return eqv(a, b);
 }
 
@@ -183,7 +181,6 @@ interface MatchBindings {
   symbols: BindingCell;
 }
 
-// Per-recursion matcher state threaded through `traverse`.
 interface MatchState {
   ellipsis?: boolean;
   trailing?: boolean;
@@ -200,7 +197,7 @@ export function extract_patterns(
 ) {
   const bindings: MatchBindings = {
     "...": {
-      symbols: {}, // symbols ellipsis (x ...)
+      symbols: {},
       lists: [] },
     symbols: {} };
   const { useResolver, defResolver, capabilities, ctx } = scope;
@@ -609,7 +606,7 @@ export function transform_syntax({
               bindings.symbols[first] as SchemeValue, // plain cell — never an array/null (ellipsis-only)
               ...parts.slice(1).map((x) => new AString(x)),
             ],
-            true, // deep
+            true,
           );
         }
       }
@@ -800,7 +797,7 @@ export function transform_syntax({
         const is_spread =
           first instanceof ASymbol && rest_second instanceof APair && ASymbol.is(rest_second.car, ellipsis_symbol);
         if (first instanceof APair || is_spread) {
-          // Free ellipsis on pairs `((???) ...)`. known wart: nested repetition here is unverified.
+          // Free ellipsis on pairs `((???) ...)`. Nested pair-ellipsis repetition is unverified.
           if (bindings["..."].lists[0] instanceof ANil) {
             if (!is_spread) {
               return traverse(rest_second as SchemeValue, { disabled });

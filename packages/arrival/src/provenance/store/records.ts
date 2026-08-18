@@ -96,8 +96,6 @@ export interface HostScheduleRecord extends RecordBase<"host-schedule"> {
   readonly triples: readonly HostScheduleTriple[];
 }
 
-/** The retrospective stream's element type — a discriminated union over `kind` so a
- *  `switch` narrows exhaustively (see `assertNeverRecord` below). */
 export type ProvenanceRecord =
   | MintRecord
   | MuxDecisionRecord

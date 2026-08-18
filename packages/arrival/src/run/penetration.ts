@@ -159,7 +159,7 @@ export async function penetrateThroughCache(
     }
     if (cache.mode === "replay") {
       const entry = await cache.get(key);
-      if (entry?.kind === "effect") return undefined; // tombstone hit → skip
+      if (entry?.kind === "effect") return undefined;
     }
     const result = await fireWithPathELog(); // record always fires; replay miss = new intent
     await cache.set(key, { kind: "effect" });

@@ -137,14 +137,12 @@ function refAnalyze(src: string): RefState {
 }
 // --- end canonical reference ---------------------------------------------------------------------
 
-/** All prefixes of `s`, from empty through the whole string. */
 function prefixesOf(s: string): string[] {
   const out: string[] = [];
   for (let i = 0; i <= s.length; i++) out.push(s.slice(0, i));
   return out;
 }
 
-/** The corpus entries (one partial/whole program per non-blank, non-`;` line). */
 function loadCorpus(): string[] {
   const here = dirname(fileURLToPath(import.meta.url));
   const text = readFileSync(join(here, "fixtures", "scout-corpus.scm"), "utf8");
@@ -156,16 +154,12 @@ function loadCorpus(): string[] {
 
 const CORPUS = loadCorpus();
 
-// INVARIANT: the scout corpus fixture is non-trivial (more than 20 entries).
 describe("oracle Layer-S — corpus loaded", () => {
   it("has a non-trivial corpus", () => {
     expect(CORPUS.length).toBeGreaterThan(20);
   });
 });
 
-// INVARIANT: arrival's structural scanner agrees with the canonical S-only reference
-// reader on depth/inString/inComment/midToken/position/closeable/closeSuffix/overClosed,
-// for every prefix of every corpus entry.
 describe("oracle Layer-S — agrees with the canonical reference on every prefix", () => {
   it.each(CORPUS)("agrees on all prefixes of %j", (entry) => {
     for (const prefix of prefixesOf(entry)) {
@@ -184,8 +178,6 @@ describe("oracle Layer-S — agrees with the canonical reference on every prefix
   });
 });
 
-// INVARIANT: feasible() equals ¬overClosed per the reference reader, for every prefix
-// of every corpus entry.
 describe("oracle Layer-S — feasible() matches structural feasibility (no over-close)", () => {
   it.each(CORPUS)("feasible matches reference on all prefixes of %j", (entry) => {
     for (const prefix of prefixesOf(entry)) {
@@ -196,8 +188,6 @@ describe("oracle Layer-S — feasible() matches structural feasibility (no over-
 });
 
 describe("oracle Layer-S — analyze() exposes the full contract surface with graceful Σ/T", () => {
-  // INVARIANT: with no env injected, every prefix's validSymbols()/expectedType() are
-  // null and produces() reports true (graceful Σ/T degradation).
   it.each(CORPUS)("Σ/T degrade gracefully on every prefix of %j (validSymbols=null, expectedType=null, produces=true)", (entry) => {
     for (const prefix of prefixesOf(entry)) {
       const st = structuralScanner.analyze(prefix);
@@ -224,8 +214,6 @@ describe("oracle Layer-S — analyze() exposes the full contract surface with gr
     expect(scan(repaired).depth, `depth after repair of ${JSON.stringify(entry)}`).toBe(0);
   });
 
-  // INVARIANT: validClasses() includes "end" iff closeable, and includes "close" iff
-  // depth > 0 (outside string/comment).
   it.each(CORPUS)("validClasses gates `end`/`close` correctly on every prefix of %j", (entry) => {
     for (const prefix of prefixesOf(entry)) {
       const st = structuralScanner.analyze(prefix);
@@ -238,13 +226,8 @@ describe("oracle Layer-S — analyze() exposes the full contract surface with gr
   });
 });
 
-// INVARIANT: a char-by-char driven session's live state equals
-// structuralScanner.analyze(prefix) at every step, for every prefix of every corpus
-// entry. INVARIANT: Layer S never eagerly evaluates — session.lastClosed stays null
-// and session.failed stays false throughout.
 describe("oracle Layer-S — resumable session agrees with from-scratch analyze (the §A1 property)", () => {
   it.each(CORPUS)("session === analyze on every prefix of %j", (entry) => {
-    // Drive a single session char-by-char; at each step its state must equal analyze(prefix).
     const session = structuralScanner.session!();
     for (let i = 0; i < entry.length; i++) {
       session.advance(entry[i]!);
@@ -262,19 +245,15 @@ describe("oracle Layer-S — resumable session agrees with from-scratch analyze 
       expect(live.closeable, `closeable @ ${ctx}`).toBe(fromScratch.closeable);
       expect(live.closeSuffix, `closeSuffix @ ${ctx}`).toBe(fromScratch.closeSuffix);
       expect(live.overClosed, `overClosed @ ${ctx}`).toBe(fromScratch.overClosed);
-      // Layer S is structural-only: no eager evaluation.
       expect(session.lastClosed).toBeNull();
       expect(session.failed).toBe(false);
     }
   });
 
-  // INVARIANT: clone() branches share no mutable state — advancing a branch leaves the
-  // base session's state untouched.
   it("clone() branches with no shared mutable state", () => {
     const base = structuralScanner.session!("(filter signable");
     const branch = base.clone();
     branch.advance(" flows)");
-    // The branch closed its forms; the base is untouched and still open.
     expect(branch.state.closeable).toBe(true);
     expect(base.state.closeable).toBe(false);
     expect(base.state.depth).toBe(1);
@@ -282,20 +261,11 @@ describe("oracle Layer-S — resumable session agrees with from-scratch analyze 
 });
 
 describe("oracle Layer-S — char-vs-token gap (the load-bearing subtlety)", () => {
-  // INVARIANT: a mid-token prefix like "(net" is feasible, and remains feasible after
-  // appending a plausible token completion. INVARIANT: a mid-token prefix is not
-  // closeable, is classified midToken with position "operator", and validClasses()
-  // excludes "end".
   it("feasible(acceptedPrefix + candidateTokenString) on a mid-symbol prefix like '(net'", () => {
-    // "(net" is mid-token (an atom being typed). A constrained decoder asks: is the candidate token
-    // string a possible continuation? Structurally, completing the symbol and the form is possible.
     expect(structuralScanner.feasible("(net")).toBe(true);
-    // Appending the rest of a plausible token keeps it possible.
     expect(structuralScanner.feasible("(net" + "work")).toBe(true);
-    // Completing the form is possible (and closeable).
     expect(structuralScanner.feasible("(network)")).toBe(true);
     expect(structuralScanner.analyze("(network)").closeable).toBe(true);
-    // The mid-symbol prefix is NOT closeable (an open form, a half-typed atom).
     const mid = structuralScanner.analyze("(net");
     expect(mid.midToken).toBe(true);
     expect(mid.position).toBe("operator"); // the head of the form is being typed
@@ -303,8 +273,6 @@ describe("oracle Layer-S — char-vs-token gap (the load-bearing subtlety)", () 
     expect(mid.validClasses().has("end")).toBe(false);
   });
 
-  // INVARIANT: an over-close (e.g. ")", "(a))") is the one structurally-infeasible
-  // case; a balanced close ("(a)") is feasible.
   it("an over-close is infeasible (the one structurally-rejected case)", () => {
     expect(structuralScanner.feasible(")")).toBe(false);
     expect(structuralScanner.feasible("(a))")).toBe(false);
@@ -313,43 +281,36 @@ describe("oracle Layer-S — char-vs-token gap (the load-bearing subtlety)", () 
 });
 
 describe("oracle Layer-S — formKind / strict (arrival-only contract additions)", () => {
-  // INVARIANT: top level is formKind "top" and strict true.
   it("top level is top + strict", () => {
     const st = structuralScanner.analyze("");
     expect(st.formKind).toBe("top");
     expect(st.strict).toBe(true);
   });
 
-  // INVARIANT: a quoted form (both `'(...` and `(quote ...` shapes) is formKind
-  // "quote" and strict false.
   it("a quoted form is quote + lazy (Σ/T off)", () => {
     const st = structuralScanner.analyze("'(a ");
     expect(st.formKind).toBe("quote");
     expect(st.strict).toBe(false);
   });
 
-  // INVARIANT: (same as above — the `(quote ...)` shape) formKind "quote", strict false.
   it("a (quote …) form is quote + lazy", () => {
     const st = structuralScanner.analyze("(quote (a ");
     expect(st.formKind).toBe("quote");
     expect(st.strict).toBe(false);
   });
 
-  // INVARIANT: an if-branch is formKind "lazy-arm" and non-strict
   it("an if branch is a lazy-arm", () => {
     const st = structuralScanner.analyze("(if cond ");
     expect(st.formKind).toBe("lazy-arm");
     expect(st.strict).toBe(false);
   });
 
-  // INVARIANT: an ordinary application argument is strict
   it("an ordinary application argument is strict", () => {
     const st = structuralScanner.analyze("(+ 1 ");
     expect(st.formKind).toBe("application");
     expect(st.strict).toBe(true);
   });
 
-  // INVARIANT: the operator slot of an application is position "operator" with formKind "application"
   it("the operator slot of an application is strict application", () => {
     const st = structuralScanner.analyze("(");
     expect(st.position).toBe("operator");
@@ -387,7 +348,6 @@ function sigmaEnv(): AmbientRuntime {
 }
 
 describe("oracle Layer-Σ — graceful degradation when no env is injected", () => {
-  // INVARIANT: with no env injected, validSymbols() stays null on every shape, identical to the Layer-S scanner
   it.each(["", "(", "(car ", "(let ((x 1)) (+ x ", "'(a "])(
     "makeOracle() (no env) keeps Σ null on shape %j — identical to the Layer-S scanner",
     (prefix) => {
@@ -398,7 +358,6 @@ describe("oracle Layer-Σ — graceful degradation when no env is injected", () 
 });
 
 describe("oracle Layer-Σ — env-backed validSymbols (live when an env is given)", () => {
-  // INVARIANT: at operator position, an env-bound callable is valid and a non-callable bound name is excluded
   it("an env-bound builtin (car) appears at OPERATOR position; a non-callable (flows) does not", () => {
     const oracle = makeOracle(sigmaEnv());
     const st = oracle.analyze("(");
@@ -410,7 +369,6 @@ describe("oracle Layer-Σ — env-backed validSymbols (live when an env is given
     expect(valid!.has("flows")).toBe(false); // non-callable ⇒ illegal operator head
   });
 
-  // INVARIANT: at argument position, any bound symbol (callable or not) is valid
   it("at ARGUMENT position any bound symbol is valid (callable or not)", () => {
     const oracle = makeOracle(sigmaEnv());
     const valid = oracle.analyze("(car ").validSymbols();
@@ -419,15 +377,12 @@ describe("oracle Layer-Σ — env-backed validSymbols (live when an env is given
     expect(valid!.has("car")).toBe(true);
   });
 
-  // INVARIANT: a never-bound name is never in the valid set at either position.
   it("a NEVER-bound name is never in the valid set (operator or argument)", () => {
     const oracle = makeOracle(sigmaEnv());
     expect(oracle.analyze("(").validSymbols()!.has("nonesuch")).toBe(false);
     expect(oracle.analyze("(car ").validSymbols()!.has("nonesuch")).toBe(false);
   });
 
-  // INVARIANT: makeOracleEnv enumerates the full parent chain and resolves
-  // nearest-binding callability for inherited and own-frame names.
   it("makeOracleEnv enumerates the parent chain and resolves nearest-binding callability", () => {
     const root = mintPlainFrame("root", { car: ((x: unknown) => x) as unknown as AmbientValue }, null);
     const child = mintFrame(root, "child", { y: 7 as unknown as AmbientValue });
@@ -440,7 +395,6 @@ describe("oracle Layer-Σ — env-backed validSymbols (live when an env is given
 });
 
 describe("oracle Layer-Σ — lexical scope: a let-bound name is in scope inside BODY, absent outside", () => {
-  // INVARIANT: a let-bound name is in validSymbols() inside its body.
   it("in (let ((x …)) BODY), x ∈ validSymbols() inside BODY", () => {
     const oracle = makeOracle(sigmaEnv());
     const inBody = oracle.analyze("(let ((x 1)) (+ x ").validSymbols();
@@ -448,7 +402,6 @@ describe("oracle Layer-Σ — lexical scope: a let-bound name is in scope inside
     expect(inBody!.has("x")).toBe(true);
   });
 
-  // INVARIANT: a let-bound name drops out of validSymbols() once its form has closed.
   it("x ∉ validSymbols() once the let form has CLOSED (outside its body)", () => {
     const oracle = makeOracle(sigmaEnv());
     const outside = oracle.analyze("(let ((x 1)) (+ x)) (+ ").validSymbols();
@@ -456,15 +409,12 @@ describe("oracle Layer-Σ — lexical scope: a let-bound name is in scope inside
     expect(outside!.has("x")).toBe(false);
   });
 
-  // INVARIANT: a lambda parameter is in scope inside the lambda body.
   it("a lambda parameter is in scope inside the lambda body", () => {
     const oracle = makeOracle(sigmaEnv());
     const st = oracle.analyze("(lambda (y) (+ y ").validSymbols();
     expect(st!.has("y")).toBe(true);
   });
 
-  // INVARIANT: a curried define binds both the function name and its parameters
-  // inside the body.
   it("a curried define binds the function name AND its parameters in the body", () => {
     const oracle = makeOracle(sigmaEnv());
     const st = oracle.analyze("(define (f a b) (+ a ").validSymbols();
@@ -473,23 +423,18 @@ describe("oracle Layer-Σ — lexical scope: a let-bound name is in scope inside
     expect(st!.has("b")).toBe(true);
   });
 
-  // INVARIANT: a top-level define is visible to subsequent sibling forms.
   it("a top-level (define name …) is visible to following sibling forms", () => {
     const oracle = makeOracle(sigmaEnv());
     const st = oracle.analyze("(define foo 1) (+ foo ").validSymbols();
     expect(st!.has("foo")).toBe(true);
   });
 
-  // INVARIANT: inside a quote, Σ is disabled entirely (validSymbols() null) since
-  // quoted data may name any symbol.
   it("inside a quote, Σ is disabled (quoted data may name any symbol)", () => {
     const oracle = makeOracle(sigmaEnv());
     expect(oracle.analyze("'(a ").validSymbols()).toBeNull();
     expect(oracle.analyze("(quote (a ").validSymbols()).toBeNull();
   });
 
-  // INVARIANT: at top level, Σ is null — a free-standing datum head is unconstrained
-  // by the bound set.
   it("at TOP level Σ is null (a free-standing datum head is unconstrained by the bound set)", () => {
     const oracle = makeOracle(sigmaEnv());
     expect(oracle.analyze("").validSymbols()).toBeNull();

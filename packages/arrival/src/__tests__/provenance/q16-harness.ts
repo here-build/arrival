@@ -228,9 +228,7 @@ export async function recordRun(
   const env = mintFrame(baseEnv, `q16-record-${regionId}`);
   for (const [op, shape] of Object.entries(sources)) await registry.register(env, op, shape);
 
-  // Q20b: production default is OFF — this run's `eagerCone` (the recorded-run's
-  // ground truth the replay laws compare γ against) needs REAL accumulation, same as
-  // w1-harness.ts's runEagerCone. Force ON for exactly the run's extent.
+  // this helper/execState needs the eager oracle ON
   const savedOracle = isEagerProvenanceOracleEnabled();
   setEagerProvenanceOracleEnabled(true);
   setEmissionEnabled(true);

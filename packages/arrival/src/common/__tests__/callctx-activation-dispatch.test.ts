@@ -62,9 +62,7 @@ const shoutResource: Resource<Shout> = {
   } };
 
 // A BAKED rosetta verb (the target authoring form — no `ThisType`/builder closure anywhere):
-// its impl reads `this.configuration`/`this.resources` off the flat `CallCtx` itself. Before
-// Stage 1b this was DEAD on a baked def (the hazards ledger's "baked rosetta `this` is
-// CallCtx, not the activation" rule) — Stage 1b makes it live, additively.
+// its impl reads `this.configuration`/`this.resources` off the flat `CallCtx` itself.
 const greeter = new EnvCapability("test/greeter-activation", {
   configuration: { tag: z.string() },
   resources: { shout: shoutResource },
@@ -83,25 +81,12 @@ const greeter = new EnvCapability("test/greeter-activation", {
     ) } });
 
 describe("CallCtx activation dispatch (Stage 1b)", () => {
-  // INVARIANT: a real evaluator dispatch (a scheme call, not a synthetic direct-apply)
-  // enriches the CallCtx it builds with the resolved verb's own capability configuration
-  // (sourced off the RUN'S `capabilityConfigurations` table, filled at `instantiate()` from
-  // the ambient this exec assembled), so a baked impl reads `this.configuration.<key>` — the
-  // NEW this-channel, not the historical outer-closure/builder form.
   it("threads a capability's `configuration` onto `this` at real evaluator dispatch", async () => {
     const [out] = await exec('(greet "yo")', { capabilities: [greeter], config: { tag: "hi" } });
     expect(out).toBe("hi:YO");
   });
 
-  // INVARIANT (STAGE 2, docs/execution.md §HERMETIC): `this.resources.<key>.live` is populated
-  // from a cell keyed by RunContext, not by ambient/env — reused (single-flight, no re-spawn)
-  // across passes that SHARE a RunContext (a REPL's one session), fresh for a DIFFERENT one. Two
-  // bare `exec()` calls with no runCtx passthrough each mint (and dispose) their OWN RunContext,
-  // so they get their OWN spawn — see the sibling `it` below for that per-run-isolation half.
-  // Sharing a RunContext across passes means minting it OUTSIDE any exec call — `assembleRun`
-  // directly (env/assemble-run.ts), the SAME entry `execState` itself calls, armed with the SAME
-  // `evalScheme`/`evalPrelude` bake seam (`execInFrame`) — then threading it through
-  // `ExecOptions.runCtx` on every pass, which opts each call OUT of owning/disposing it.
+  // Resource cells are RunContext-keyed, not ambient/env.
   it("threads a capability's `resources` onto `this` — same cell, same spawn-once lifecycle ACROSS PASSES SHARING ONE RunContext", async () => {
     shoutSpawns = 0;
     // `exec`'s own internal fold is `[...capabilities, ...BASE_ROSTER]` (env/base-roster.ts) —
@@ -121,22 +106,19 @@ describe("CallCtx activation dispatch (Stage 1b)", () => {
       const [second] = await exec('(greet "b")', { capabilities: [greeter], config, runCtx });
       expect(first).toBe("ok:A");
       expect(second).toBe("ok:B");
-      expect(shoutSpawns).toBe(1); // single-flight — dispatch reads the SAME cell, no re-spawn
+      expect(shoutSpawns).toBe(1);
     } finally {
       await disposeRunContext(runCtx);
     }
   });
 
-  // INVARIANT (STAGE 2): the per-run isolation half — no shared RunContext means no shared
-  // resource. Each bare `exec()` call here mints (and disposes) its own RunContext, so the
-  // capability's `shout` resource spawns independently for each.
   it("gives a FRESH resource per RunContext when passes don't share one", async () => {
     shoutSpawns = 0;
     const [first] = await exec('(greet "a")', { capabilities: [greeter], config: { tag: "solo" } });
     const [second] = await exec('(greet "b")', { capabilities: [greeter], config: { tag: "solo" } });
     expect(first).toBe("solo:A");
     expect(second).toBe("solo:B");
-    expect(shoutSpawns).toBe(2); // two independent RunContexts ⇒ two independent spawns
+    expect(shoutSpawns).toBe(2);
   });
 
   // INVARIANT: additive — a callable with NO associated activation dispatches exactly as

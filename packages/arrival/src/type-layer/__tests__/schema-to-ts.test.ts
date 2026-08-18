@@ -9,18 +9,16 @@ import { symbol, withContractFields } from "../../symbol/index.js";
 import { contractOf } from "../../common/capability-internals.js";
 import { printType, signatureOf, sTagToTsType } from "../schema-to-ts.js";
 
-/** Test-only cast — `signatureOf` reads an `AEntity` CONTRACT; Stage A2's factories mint
- *  the runtime A-value directly, so pull the contract off it via the shared read-side
- *  seam (`common/capability.ts`'s `contractOf`) before handing it to the printer. */
+/** Test-only cast — `signatureOf` reads an `AEntity` CONTRACT; pull it via `contractOf` before handing it to the printer. */
 function sig(def: Parameters<typeof contractOf>[0]): string {
   return signatureOf(contractOf(def)!);
 }
 
 describe("printType — native identity primitives (scheme primitive → plain-TS image)", () => {
-  // REBASELINE (fe2c848ee7, 2026-07-08): `z.pair` is now `cons(schemeValue, schemeValue)` — a
-  // real codec named "cons", not a bare-instanceof "pair" — so it prints via the named-generic
-  // pre-check as `Tuple<SchemeValue, SchemeValue>`, same as any other `cons(A, B)`; `z.union([z.pair,
-  // z.nil])` composes structurally member-by-member (no more "pair"→List-style name override).
+  // `z.pair` is `cons(schemeValue, schemeValue)` — a real codec named "cons", not a
+  // bare-instanceof "pair" — so it prints via the named-generic pre-check as
+  // `Tuple<SchemeValue, SchemeValue>`, same as any other `cons(A, B)`; `z.union([z.pair,
+  // z.nil])` composes structurally member-by-member (no "pair"→List-style name override).
   // The numeric tower: exact and inexact both print "number" via the name-keyed image, not
   // the raw union — z.bigint is retired (exact is a safe-integer ratio of `number`s per
   // docs/design-history/arrival-one-number-rework.md §2.3). schemeNumber has no name-image of
@@ -114,8 +112,7 @@ describe("printType — rosetta codecs (decoded JS side, io:output)", () => {
 });
 
 describe("printType — compounds", () => {
-  // REBASELINE (fe2c848ee7): see the native-identity describe's top note on
-  // z.pair → Tuple<SchemeValue, SchemeValue>.
+  // `z.pair` prints `Tuple<SchemeValue, SchemeValue>` — see the native-identity describe.
   it.each([
     {
       name: "z.object as a single-line member list (no dangling semicolon)",
@@ -168,7 +165,6 @@ describe("sTagToTsType — the s/* schema-DSL tag → TS type-string bridge", ()
     expect(sTagToTsType(tag)).toBe(expected);
   });
 
-  // INVARIANT: a malformed/unrepresentable tag degrades to "unknown" rather than throwing.
   it("a malformed/unrepresentable tag degrades to unknown, never throws", () => {
     expect(sTagToTsType(["object", ["bad"]])).toBe("unknown");
     expect(sTagToTsType(null)).not.toBeUndefined();
@@ -176,9 +172,6 @@ describe("sTagToTsType — the s/* schema-DSL tag → TS type-string bridge", ()
 });
 
 describe("signatureOf — the args-vector → function-signature composer", () => {
-  // INVARIANT: an author-asserted `type` override on the contract takes precedence over the
-  // zod-schema-derived signature (decoupled from the runtime membrane) (pins implementation,
-  // not behavior).
   it("honors an author-asserted `type` override on the contract — the zod schema stays the MEMBRANE description (runtime decode/validate), `type` is a separate, decoupled TYPE-LEVEL narrowing for the harvest (mirrors author `type` override/RosettaFunction.type)", () => {
     const def = symbol.native`typed-override: proof`(
       { input: [z.schemeValue], output: [z.schemeValue], type: "(ip: SchemeIP) => SchemeIP" },
@@ -187,7 +180,6 @@ describe("signatureOf — the args-vector → function-signature composer", () =
     expect(sig(def)).toBe("(ip: SchemeIP) => SchemeIP");
   });
 
-  // INVARIANT: `?` type predicates harvest as dual type-guards (unknown arm + Extract arm).
   it("honors a dual type-guard `type` on a native type predicate", () => {
     const dual =
       "{ (x: unknown): x is string; <T>(x: T): x is Extract<T, string>; }";
@@ -205,7 +197,6 @@ describe("signatureOf — the args-vector → function-signature composer", () =
     expect(sig(def)).toBe(dual);
   });
 
-  // INVARIANT: a native def composes as scheme-value args with a synchronous (non-Promise) return.
   it("composes a native def: scheme-value args, sync return, single-value output", () => {
     const def = symbol.native`cons: build a pair`(
       { input: [z.pair, z.pair], output: [z.pair] },
@@ -216,7 +207,6 @@ describe("signatureOf — the args-vector → function-signature composer", () =
     );
   });
 
-  // INVARIANT: a rosetta def composes as decoded-JS args with an async (Promise-wrapped) return.
   it("composes a rosetta def: decoded JS args, async (Promise) return", () => {
     const def = symbol.rosetta`pad: left-pad a string to a width`(
       { input: [z.string, z.number], output: [z.string] },
@@ -225,7 +215,6 @@ describe("signatureOf — the args-vector → function-signature composer", () =
     expect(sig(def)).toBe("(a: string, b: number) => Promise<string>");
   });
 
-  // INVARIANT: a multi-value rosetta output composes as a tuple inside Promise.
   it("composes a multiple-values rosetta output as a tuple inside Promise", () => {
     const def = symbol.rosetta`divmod: quotient and remainder`(
       { input: [z.number], output: [z.number, z.number] },
@@ -234,7 +223,6 @@ describe("signatureOf — the args-vector → function-signature composer", () =
     expect(sig(def)).toBe("(a: number) => Promise<[number, number]>");
   });
 
-  // INVARIANT: a multi-value native output composes as a bare (sync) tuple.
   it("composes a multiple-values NATIVE output as a bare tuple (sync)", () => {
     const def = symbol.native`split: car and cdr`(
       { input: [z.pair], output: [z.pair, z.pair] },
@@ -245,7 +233,6 @@ describe("signatureOf — the args-vector → function-signature composer", () =
     );
   });
 
-  // INVARIANT: a variadic z.array input composes as a rest parameter.
   it("composes a variadic (z.array) input as a rest parameter", () => {
     const def = symbol.rosetta`sum: add all numbers`(
       { input: z.array(z.number), output: [z.number] },
@@ -254,7 +241,6 @@ describe("signatureOf — the args-vector → function-signature composer", () =
     expect(sig(def)).toBe("(...args: number[]) => Promise<number>");
   });
 
-  // INVARIANT: a 0-arg contract composes as "()".
   it("composes a 0-arg contract as '()'", () => {
     const def = symbol.rosetta`now: current epoch millis`(
       { input: [], output: [z.number] },
@@ -263,7 +249,6 @@ describe("signatureOf — the args-vector → function-signature composer", () =
     expect(sig(def)).toBe("() => Promise<number>");
   });
 
-  // INVARIANT: a notImplemented/door def renders its signature as "never" (not callable).
   it("renders an omitted-verb door as 'never' (not callable)", () => {
     const def = symbol.notImplemented`eval: arbitrary evaluation is a door`;
     expect(sig(def)).toBe("never");

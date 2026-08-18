@@ -22,7 +22,6 @@ import type { LexicalScope } from "./LexicalScope.js";
 export interface ParsedProgram {
   /** Location-bearing top-level forms (APair LOCATION spans survive). */
   readonly forms: readonly SchemeValue[];
-  /** Original text, when parsed from a string. */
   readonly source?: string;
   /** Which READER mode produced it — identity fact of the program, stamped at
    *  parse. (RUN-time strict mode stays ExecOptions.strict → runCtx.) */

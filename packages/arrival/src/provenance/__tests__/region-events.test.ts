@@ -133,14 +133,14 @@ describe("track-open/track-close: real B3 counters through withRegionCall", () =
   });
 
   it("flag OFF: the SAME calls produce the SAME results, and NOTHING lands in the store — byte-identical, sunset", async () => {
-    setEmissionEnabled(false); // the default; explicit for clarity
+    setEmissionEnabled(false);
     const store = new ProvenanceStoreFake();
     const sink: TrackEmissionSink = { store, regionId: REGION };
 
     const scope = withTrackCoordinate(COORD, sink, () => openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined }));
     const wrapper = withRegionScope(scope, () => toJS(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
 
-    expect(await wrapper(41)).toBe(41); // identical program behavior to the ON case above
+    expect(await wrapper(41)).toBe(41);
     closeRegionScope(scope);
 
     await Promise.resolve();

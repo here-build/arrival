@@ -60,7 +60,6 @@ export default EnvCapability.define("scheme/chars", {
       deriveOrd(">="),
     ),
 
-    // Case-insensitive comparisons
     "char-ci=?": symbol.native`char-ci=?: case-insensitive character equivalence`(
       { input: [], inputRest: z.char, output: [z.boolean] },
       function (this: CallCtx, ...chars) {
@@ -110,7 +109,6 @@ export default EnvCapability.define("scheme/chars", {
       },
     ),
 
-    // Character classification
     // R7RS § 6.6: each predicate returns #t iff the character's Unicode general
     // category falls in the expected set. A round-trip-case heuristic
     // (`lower !== upper`) misses every category-Lo script (CJK, Hangul, Hebrew,
@@ -121,7 +119,6 @@ export default EnvCapability.define("scheme/chars", {
       { input: [z.char], output: [z.boolean] },
       function (this: CallCtx, char) {
         const cp = charValue(char).codePointAt(0)!;
-        // Letter categories: Lu (upper), Ll (lower), Lt (title), Lm (modifier), Lo (other).
         switch (unicodeProperties.getCategory(cp)) {
           case "Lu":
           case "Ll":
@@ -193,7 +190,6 @@ export default EnvCapability.define("scheme/chars", {
       },
     ),
 
-    // Case conversion
     "char-upcase": symbol.native`char-upcase: uppercase form of the character`(
       { input: [z.char], output: [z.char] },
       function (this: CallCtx, char) {

@@ -80,14 +80,13 @@ export declare function length(xs: List<unknown> | readonly unknown[] | string):
 // ── the slot probes (the lens's narrowing queries) ────────────────────────────
 // `NonNullable<S>` strips the empty-list null AND optional null/undefined before classifying.
 
-/** 3-way slot verdict: list / vector / string / scalar. */
+/** `SlotKind` is four-way (`string` is distinct here). */
 export type SlotKind<S> =
   [NonNullable<S>] extends [Cons<unknown>] ? "list"
   : [NonNullable<S>] extends [readonly unknown[]] ? "vector"
   : [NonNullable<S>] extends [string] ? "string"
   : "scalar";
 
-/** Element type inside a list or vector slot. */
 export type ElemOf<S> =
   NonNullable<S> extends Cons<infer E> ? E
   : NonNullable<S> extends readonly (infer E)[] ? E

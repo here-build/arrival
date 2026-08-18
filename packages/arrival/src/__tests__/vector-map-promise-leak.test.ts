@@ -1,12 +1,5 @@
-// Caveat-sweep finding (2026-06-11), section B #2: vector-map / vector-for-each /
-// string-map / string-for-each push `proc(...)` straight into the result without
-// the is_promise/promise_all handling that the list `map` (stdlib.ts) has. When
-// `proc` is an async membrane callback (returns a JS Promise — the common case in
-// arrival, where procs hit async rosetta/FFI boundaries), the result holds
-// unresolved Promises that stringify to "[object Promise]" and carry NO
-// provenance (defeating boxing goal-b). The fix mirrors list map: collect, and if
-// any result is a promise, return promise_all(...).then(...) so the trampoline
-// awaits settled values.
+// vector-map / vector-for-each / string-map / string-for-each must settle
+// async procs — a raw Promise in the result is a leak.
 import { describe, expect, it } from "vitest";
 import { freshEnv } from "./_fresh-env.js";
 import { execStateOverFrame as execState } from "../eval/generator-exec.js";
@@ -53,7 +46,6 @@ describe("vector/string map+for-each await async procs (no raw Promise leak)", (
   });
 
   it("string-map with an async proc yields settled chars, not [object Promise]", async () => {
-    // identity-ish async proc over chars
     bindValue(
       env,
       "async-char",

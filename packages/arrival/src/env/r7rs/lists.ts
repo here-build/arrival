@@ -184,13 +184,9 @@ function multiListMap(
   return APair.fromArray(CONSTANT_CTX, results);
 }
 
-// Zip-map used by `for-each` (result discarded). Kept separate from multiListMap:
-// mapImpl's per-arg isProperList raises "map: argument N is not a list"; multiListMap
-// lets listToArray raise its own circular-list error.
-// deferred: unify the two under behavior-preserving cleanup.
-//
-// `runCtx` is required — for-each threads `this.runCtx` so callbacks see the run's
-// real signal/heap-meter/strict, never CONSTANT_CTX.
+// mapImpl vs multiListMap differ on improper-list error text: mapImpl's per-arg
+// isProperList raises "map: argument N is not a list"; multiListMap lets listToArray
+// raise its own circular-list error. for-each must thread `this.runCtx`, never CONSTANT_CTX.
 function mapImpl(
   runCtx: RunContext,
   fn: SchemeValue,
@@ -368,7 +364,6 @@ export default EnvCapability.define("scheme/lists", {
               seq,
             );
           }
-          // resolveMethod returns unknown; protocol is SchemeValue | Promise<SchemeValue>.
           return m.call(seq, fn, runCtx) as MaybePromise<SchemeValue>;
         }
         return multiListMap(fn, lists as readonly AListAlike[], runCtx);
@@ -411,7 +406,6 @@ export default EnvCapability.define("scheme/lists", {
           }
         `,
         emit: consEmitRule },
-      // Constructor: union both inputs' provenance over the produced cell.
       function (this: CallCtx, car, cdr) {
         return withInputProvenance([car, cdr], new APair(car as SchemeValue, cdr as SchemeValue));
       },

@@ -91,7 +91,6 @@ export type { SymbolDeclaration } from "./common/capability.js";
 export * as z from "./common/scheme-zod/index.js";
 
 // ── PROVENANCE AS DATA ───────────────────────────────────────────────────────────────────────
-// `EvalTap` — tap subscription a host arms to observe a run's readings as they produce.
 export { type EvalTap } from "./eval/evaluator.js";
 // Deep provenance of a value — the union of `.provenance` over every reachable `AValue`
 // (pair spine, vector, JS array elements). Containers are provenance-transparent, so this

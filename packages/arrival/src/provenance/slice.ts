@@ -172,11 +172,9 @@ export interface Slice {
   points: number[];
   /** `scopeId` of each kept form (stable source-location keys, for UI highlighting). */
   scopeIds: string[];
-  /** The kept top-level form nodes, in order. */
   formNodes: unknown[];
 }
 
-/** The defined name of `(define name …)` / `(define (name …) …)`, else null. */
 export function defineNameOf(form: unknown): string | null {
   if (!isPair(form) || !isSymbol(form.car) || symName(form.car) !== "define") return null;
   if (!isPair(form.cdr)) return null;
@@ -204,7 +202,6 @@ export function referencedSymbols(form: unknown): Set<string> {
       return;
     }
     if (kindOf(n) === "vector") for (const el of (n as { __vector__: unknown[] }).__vector__) walk(el);
-    // strings / chars / numbers / nil reference nothing.
   };
   walk(form);
   return out;
@@ -308,7 +305,6 @@ export function buildSlice(trace: EvalTrace, outputNode: unknown): Slice {
     if (kept.has(root) || root === outputNode) points.push(inv.id);
   }
 
-  // Order by enter id (source order) and re-serialize.
   const ordered = [...kept].sort((a, b) => (formId.get(a) ?? 0) - (formId.get(b) ?? 0));
   const program = ordered.map((n) => writeForm(n)).join("\n");
   // Structural backstop: writeForm throws on a non-serializable datum, but assert no object slipped

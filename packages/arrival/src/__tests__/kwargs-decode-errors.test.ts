@@ -29,7 +29,6 @@ function pluck(key: string): unknown {
 }
 
 
-/** Invoke a baked rosetta procedure via its apply term (the sole membrane spine). */
 function fire(proc: { ["arrival/tagless-final/apply"](args: any[], callCtx: any): any }, callCtx: any, ...args: any[]) {
   return proc["arrival/tagless-final/apply"](args, callCtx);
 }
@@ -79,7 +78,6 @@ describe("kwargs decode rejection — humanized frozen shape (docs/args-error-re
           testCallCtx(),
           pluck("query"),
           new AString("King Saud University"),
-          // Typo: "pagesize" (lowercase s) — the declared field is "pageSize".
           pluck("pagesize"),
           new AString("50"),
         ),
@@ -102,7 +100,6 @@ describe("kwargs decode rejection — humanized frozen shape (docs/args-error-re
       );
       let caught: unknown;
       try {
-        // Zero args — both required kwargs missing.
         await fire(def, testCallCtx());
       } catch (e) {
         caught = e;

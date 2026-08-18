@@ -74,7 +74,6 @@ export default EnvCapability.define("scheme/polyglot-racket", {
     // ═══════════════════════════════════════════════════════════════════════════
     // RACKET — dict accessor family (Racket's dict library) — grain-completion
     // ═══════════════════════════════════════════════════════════════════════════
-    // %dict-guard — internal: the dict? guard shared by the whole family below.
     "%dict-guard":
       symbol.define`%dict-guard: the dict? teaching guard shared by the dict-* family — returns d when dict-shaped, else throws the fact+why+action door (private helper)`(
         { input: [z.string, z.schemeValue], output: [z.dict()] },
@@ -129,7 +128,6 @@ export default EnvCapability.define("scheme/polyglot-racket", {
          (%dict-guard "dict-keys" d)
          (vector->list (@keys d)))`,
       ),
-    // dict-values — Racket: the value at each of d's keys, in dict-keys order.
     "dict-values": symbol.define`dict-values: Racket — the value at each of d's keys, in dict-keys order`(
       { input: [z.schemeValue], output: [z.list()] },
       `(lambda (d)
@@ -144,8 +142,6 @@ export default EnvCapability.define("scheme/polyglot-racket", {
          (%dict-guard "dict-count" d)
          (length (dict-keys d)))`,
     ),
-    // dict->alist — d's entries as an alist of (key . value) pairs, in dict-keys
-    // order. The inverse of alist->dict.
     "dict->alist":
       symbol.define`dict->alist: d's entries as an alist of (key . value) pairs, in dict-keys order — the inverse of alist->dict`(
         { input: [z.schemeValue], output: [z.list(z.pair)] },

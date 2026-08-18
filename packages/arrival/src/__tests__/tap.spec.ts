@@ -64,7 +64,6 @@ describe("evaluation tap", () => {
     const { events, tap } = recorder();
     await exec("(+ 1 2)", { tap });
 
-    // One application: just the (+ 1 2) form. Atoms 1, 2 and the symbol + don't fire.
     expect(enters(events)).toHaveLength(1);
     expect(exits(events)).toHaveLength(1);
 
@@ -78,7 +77,6 @@ describe("evaluation tap", () => {
     const { events, tap } = recorder();
     await exec("(+ (* 2 3) (* 4 5))", { tap });
 
-    // Three application Pairs: outer +, left *, right *.
     expect(enters(events)).toHaveLength(3);
     expect(exits(events)).toHaveLength(3);
 
@@ -96,7 +94,6 @@ describe("evaluation tap", () => {
     const { events, tap } = recorder();
     await exec("(+ (* 2 3) (* 4 5))", { tap });
     const [, eLeft, eRight] = enters(events);
-    // The right sibling's parent is the outer +, not the (resolved) left *.
     expect(eRight.inv.parent).toBe(eLeft.inv.parent);
     expect(eRight.inv.parent).not.toBe(eLeft.inv);
   });
@@ -105,14 +102,12 @@ describe("evaluation tap", () => {
     const { events, tap } = recorder();
     await exec("(map (lambda (x) (* x x)) '(1 2 3))", { tap });
 
-    // Group invocations by node identity.
     const byNode = new Map<APair<any, any>, TestInv[]>();
     for (const e of enters(events)) {
       const arr = byNode.get(e.inv.node) ?? [];
       arr.push(e.inv);
       byNode.set(e.inv.node, arr);
     }
-    // The (* x x) Pair should appear three times with the same node identity.
     const buckets = [...byNode.values()].map((b) => b.length).sort();
     expect(buckets).toContain(3); // (* x x) entered three times
   });
@@ -128,7 +123,6 @@ describe("evaluation tap", () => {
   it("exit fires with {error} when a form throws", async () => {
     const { events, tap } = recorder();
     await expect(exec("(undefined-symbol-xyz)", { tap })).rejects.toThrow();
-    // We entered the application form, then exited with an error.
     expect(enters(events).length).toBeGreaterThanOrEqual(1);
     expect(exits(events).length).toBe(enters(events).length);
     const last = exits(events).at(-1)!;
@@ -172,7 +166,7 @@ describe("evaluation tap", () => {
   it("quote: the (quote …) form is traced once; the quoted data is not", async () => {
     const { events, tap } = recorder();
     await exec("(quote (a b c))", { tap });
-    expect(enters(events)).toHaveLength(1); // just (quote (a b c))
+    expect(enters(events)).toHaveLength(1);
     expect(exits(events)).toHaveLength(1);
   });
 

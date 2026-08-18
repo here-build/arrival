@@ -90,12 +90,9 @@ describe("scheme/srfi-235 — combinator behavior equivalence (semantic-equivale
   });
 });
 
-// STAGE C CUT 4 (docs/plans/stage-c-corpse-deletion.md): the "standalone .apply(), deps
-// unwalked" mechanism this block used to prove these names are genuine runtime dependencies is
-// RETIRED along with `lower()`/`assembleEnv` — `buildVocabulary` (the sole surviving bake path)
-// ALWAYS walks a capability's OWN declared `deps`. The bake-time FV law (below) is what
-// actually proves the edges are declared, not runtime luck; here we pin the PRODUCT behavior —
-// complement/curry resolve through srfi-235's declared deps — via the sanctioned path.
+// `buildVocabulary` always walks a capability's own declared `deps`. The bake-time
+// FV law below proves the edges are declared, not runtime luck; here we pin that
+// complement/curry resolve through srfi-235's declared deps.
 describe("scheme/srfi-235 — the dep edge is real (§2.1's undeclared-dep bug, now a declared edge)", () => {
   it("srfi-235 ALONE (exec({capabilities})): complement/curry resolve through its declared deps", async () => {
     const [complementResult] = await exec("((complement not) #t)", { capabilities: [srfi235] });

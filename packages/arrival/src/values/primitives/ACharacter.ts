@@ -54,7 +54,6 @@ const characters: Record<string, string> = {
 export { characters };
 
 export class ACharacter extends AValue {
-  // Named character mappings
   static readonly __names__: Record<string, string> = characters;
   static readonly __rev_names__: Record<string, string> = (() => {
     const rev: Record<string, string> = {};
@@ -86,7 +85,6 @@ export class ACharacter extends AValue {
     let name: string | undefined;
 
     if ([...charValue].length > 1) {
-      // this is a named character
       charValue = charValue.toLowerCase();
       // this should never happen - parser doesn't allow undefined named characters
       invariant(ACharacter.__names__[charValue], "Internal: Unknown named character");
@@ -142,7 +140,6 @@ export class ACharacter extends AValue {
     return other instanceof ACharacter && this.__char__ === other.__char__;
   }
 
-  // Ord (extends Setoid) — ordered by code point.
   ["arrival/tagless-final/lte"](other: unknown): boolean {
     return (
       other instanceof ACharacter &&

@@ -87,7 +87,7 @@ beforeAll(async () => {
 });
 
 afterEach(() => {
-  setEmissionEnabled(false); // module-global flag; recordRun restores, belt+braces (replay.law.test.ts's own idiom)
+  setEmissionEnabled(false); // module-global flag; recordRun restores
 });
 
 describe("§4 C5 — self-contained request/response wire format", () => {
@@ -103,8 +103,6 @@ describe("§4 C5 — self-contained request/response wire format", () => {
     expect(cloned).toEqual(request);
   });
 
-  // @ledger: Q18. The response is equally plain — value/evidenceTier/epoch/trust,
-  // nothing else, all JSON-able.
   it("a DrillInResponse is plain JSON-able data — no boxed SchemeValue leaks out", async () => {
     const { program, templateHash, ingress, run } = await buildFixture();
     const executor = new SameProcessExecutor({ program, semanticsEpoch: EPOCH_A });
@@ -115,7 +113,6 @@ describe("§4 C5 — self-contained request/response wire format", () => {
 });
 
 describe("§4 C6 first disjunct — epoch-mismatch refusal (task item 2)", () => {
-  // @ledger: Q18. Matching epoch: no refusal, ordinary γ, `trust: "matched"`.
   it("a MATCHING stream epoch answers normally — no refusal, no verification attempted", async () => {
     const { program, templateHash, ingress, run } = await buildFixture();
     const executor = new SameProcessExecutor({ program, semanticsEpoch: EPOCH_A });
@@ -145,9 +142,6 @@ describe("§4 C6 first disjunct — epoch-mismatch refusal (task item 2)", () =>
     }
   });
 
-  // @ledger: Q18. §4 C6 EXCLUDED: "silent cross-version replay" — a mismatch NEVER
-  // silently answers, even when a verificationPool is attached, if the executor's own
-  // deployment policy disallows the second disjunct entirely.
   it("an executor with allowSampledVerification:false refuses even WITH a (valid) pool attached", async () => {
     const { program, templateHash, ingress, run } = await buildFixture();
     const executor = new SameProcessExecutor({ program, semanticsEpoch: EPOCH_A, allowSampledVerification: false });
@@ -169,9 +163,6 @@ describe("§4 C6 first disjunct — epoch-mismatch refusal (task item 2)", () =>
 });
 
 describe("§4 C6 second disjunct — sampled wire-γ verification (task item 3)", () => {
-  // @ledger: Q18. AGREE path: every sampled candidate γ's to its recorded egress under
-  // this executor's OWN (current) semantics — the stream is trusted, `trust:
-  // "verified"`, and the demanded value still computes correctly.
   it("AGREE path: a verificationPool whose candidates all agree trusts the answer (trust: verified)", async () => {
     const { program, templateHash, ingress, run } = await buildFixture();
     const executor = new SameProcessExecutor({ program, semanticsEpoch: EPOCH_A });
@@ -188,10 +179,6 @@ describe("§4 C6 second disjunct — sampled wire-γ verification (task item 3)"
     expect(response.epoch).toBe(EPOCH_A); // the epoch it was ACTUALLY computed under — the executor's own
   });
 
-  // @ledger: Q18. Epoch upgrade PERSISTS for the stream: a later request against the
-  // SAME regionId/streamEpoch pair need not re-supply the pool — the trust cache
-  // (task item 3: "epoch upgraded for this stream") makes the second call succeed
-  // with an EMPTY (absent) verificationPool.
   it("epoch upgrade persists for the stream — a later request skips re-verification with no pool attached", async () => {
     const { program, templateHash, ingress, run } = await buildFixture();
     const executor = new SameProcessExecutor({ program, semanticsEpoch: EPOCH_A });
@@ -208,10 +195,7 @@ describe("§4 C6 second disjunct — sampled wire-γ verification (task item 3)"
     expect(second.value).toEqual(run.egress);
   });
 
-  // @ledger: Q18. DISAGREE path: any sampled candidate disagreeing refuses — "silently
-  // trusting a partially-diverged interpreter" is exactly what C6 excludes. The pool
-  // is deliberately size-1 so the single (wrong) candidate is ALWAYS sampled,
-  // regardless of the deterministic seed — no flakiness from sampling missing it.
+  // pool size-1 so the wrong candidate is always sampled
   it("DISAGREE path: a verificationPool candidate with a WRONG recorded egress refuses (never trusts)", async () => {
     const { program, templateHash, ingress, run } = await buildFixture();
     const executor = new SameProcessExecutor({ program, semanticsEpoch: EPOCH_A });
@@ -245,9 +229,6 @@ describe("§4 C6 second disjunct — sampled wire-γ verification (task item 3)"
     }
   });
 
-  // @ledger: Q18. A mismatch with an EMPTY verificationPool array is treated exactly
-  // like "no pool at all" — an empty pool offers nothing to sample, so it is not
-  // silently treated as vacuous agreement.
   it("an EMPTY verificationPool array refuses exactly like an absent one (never vacuous trust)", async () => {
     const { program, templateHash, ingress, run } = await buildFixture();
     const executor = new SameProcessExecutor({ program, semanticsEpoch: EPOCH_A });
@@ -268,25 +249,19 @@ describe("§4 C6 second disjunct — sampled wire-γ verification (task item 3)"
 });
 
 describe("sampling determinism (task item 3: seeded by stream id, no Math.random)", () => {
-  // @ledger: Q18. Same (seed, poolSize, sampleSize) always samples the SAME indices —
-  // pinned exact values (a regression anchor, not merely "equal to itself").
+  // pinned exact values, not merely equal to itself
   it("sampledIndices is deterministic and pinned for fixed inputs", () => {
     expect(sampledIndices("q16-offload-region-A", 20, 3)).toEqual([0, 13, 16]);
     expect(sampledIndices("q16-offload-region-A", 20, 3)).toEqual([0, 13, 16]); // repeat: identical
     expect(sampledIndices("q16-offload-region-B", 20, 3)).toEqual([11, 12, 18]); // different seed: different sample
   });
 
-  // @ledger: Q18. Edge cases: empty pool, zero sample size, sample size exceeding pool
-  // size (clamped to the whole pool, sorted).
   it("sampledIndices handles empty pool / zero sample size / oversized sample size", () => {
     expect(sampledIndices("seed", 0, 3)).toEqual([]);
     expect(sampledIndices("seed", 5, 0)).toEqual([]);
     expect(sampledIndices("seed", 3, 10)).toEqual([0, 1, 2]);
   });
 
-  // @ledger: Q18. NEVER touches `Math.random` — the task brief's own requirement
-  // ("unavailable by design in some contexts"). Proven structurally: monkeypatch
-  // `Math.random` to throw, and sampling still succeeds.
   it("never calls Math.random — sampling still works with Math.random poisoned to throw", () => {
     const original = Math.random;
     Math.random = () => {
@@ -299,8 +274,7 @@ describe("sampling determinism (task item 3: seeded by stream id, no Math.random
     }
   });
 
-  // @ledger: Q18. Indices are always distinct and within range — a real Fisher–Yates
-  // sample, never a naive modulo that could repeat a position.
+  // a real Fisher–Yates sample, never a naive modulo that could repeat
   it("property: sampled indices are always distinct and in [0, poolSize)", () => {
     for (let seedNum = 0; seedNum < 25; seedNum++) {
       const poolSize = 1 + (seedNum % 15);
@@ -317,9 +291,6 @@ describe("sampling determinism (task item 3: seeded by stream id, no Math.random
 });
 
 describe("unresolvable template-hash — a foreign/stale hash is a teaching door, never a silent answer", () => {
-  // @ledger: Q18. A templateHash this executor's program doesn't contain (a foreign
-  // program version, or a corrupted request) refuses via the SAME `ReplayScopeError`
-  // teaching door the per-wire replay driver already uses — never a fabricated value.
   it("a templateHash absent from this executor's program refuses (ReplayScopeError)", async () => {
     const { program, ingress, run } = await buildFixture();
     const executor = new SameProcessExecutor({ program, semanticsEpoch: EPOCH_A });

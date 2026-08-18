@@ -1,29 +1,11 @@
 /**
- * R7RS identity-predicate conformance — bug ledger.
+ * R7RS identity-predicate conformance.
  *
- * Why this file exists
- * --------------------
  * R7RS § 6.1 defines a three-level hierarchy: `eq?` (pointer-grade), `eqv?`
  * (atom-grade, including same-numeric-value with same-exactness), and `equal?`
  * (structural, recurses into pairs/vectors/strings). The three are NOT
  * interchangeable — collapsing them breaks `memq`/`assv`/`hash-table-ref/eqv`/
  * `case` dispatch.
- *
- * Our current `eq?` and `eqv?` are both aliased to a single `equal` helper at
- * `the dissolved husk (then line 3634)-3635`. That helper takes a partial-deep stance:
- *   - For Pair / Array / unknown objects it falls through to `else x === y`
- *     (the dissolved husk (then line 674)) — happens to match the R7RS pointer-grade answer.
- *   - For strings (the dissolved husk (then line 670)-672) it value-compares via `valueOf()` — wrong:
- *     two distinct heap SchemeString instances compare equal, collapsing
- *     eq?/eqv? into a string-equal? shape.
- *
- * The string path is the load-bearing identity bug. Symbol interning and the
- * accidental-correct Pair/Array path are guarded as passing invariants so any
- * future patch that "unifies" `equal` won't silently regress the right answers.
- *
- * Style — each `it.fails` describes EXPECTED R7RS behavior. `it.fails` is
- * vitest 4's "this should fail; passing = regression" — perfect for bug
- * ledgers (when the bug gets fixed, removing `.fails` flips the test green).
  */
 
 import { describe, expect, it } from "vitest";
@@ -32,12 +14,7 @@ import { freshEnv } from "./_fresh-env.js";
 
 const env = await freshEnv();
 
-/** Coerce a Scheme result to a JS primitive — handles SchemeBool wrapper and raw JS booleans. */
-// INVERTED (RULINGS.md R1): exec's
-// uniform plain-JS exit landed — `evalScheme` below always returns a plain boolean
-// now. Collapsed to that one asserted shape (was: tolerate boolean-as-raw AND
-// boxed-with-.value/valueOf simultaneously — the "accepts boxed or raw" contract P4
-// forbids).
+/** evalScheme returns a plain boolean. */
 const truthy = (r: unknown): boolean => {
   if (typeof r === "boolean") return r;
   return Boolean(r);
@@ -83,11 +60,6 @@ describe("r7rs identity — passing invariants (regression guards)", () => {
   });
 });
 
-// [STALE-LABEL] (2026-07-08 invariant-verdict sweep, [P15]):
-// this describe title + the per-test
-// "Predicted failure value" comments claimed `it.fails` semantics, but every test here is
-// a plain `it(...)`. Ran the suite — all pass today, so the described bugs are already
-// FIXED. Relabeled to match r7rs-numbers.test.ts's own honest "FIXED at ..." convention.
 describe("r7rs identity — eq?/eqv? string-identity fixes (regression guards)", () => {
   it(
     "eq? on two distinct string-copy results is #f (R7RS § 6.1)",
@@ -105,9 +77,6 @@ describe("r7rs identity — eq?/eqv? string-identity fixes (regression guards)",
   it(
     "eqv? on two distinct string-copy results is #f (R7RS § 6.1)",
     async () => {
-      // FIXED (same root cause as above: eq?/eqv? no longer alias a value-comparing-via-
-      // valueOf helper). R7RS § 6.1 leaves eqv? on string literals unspecified, but the
-      // same-instance-vs-fresh-instance distinction is now respected.
       const r = await evalScheme(`(eqv? (string-copy "abc") (string-copy "abc"))`);
       expect(truthy(r)).toBe(false);
     },
@@ -116,9 +85,6 @@ describe("r7rs identity — eq?/eqv? string-identity fixes (regression guards)",
   it(
     "eqv? on two distinct make-string results is #f (R7RS § 6.1)",
     async () => {
-      // FIXED (same fix, exercised through a different constructor). Every
-      // `make-string` call mints a fresh SchemeString; eqv? on two distinct heap
-      // instances now correctly answers #f under atom-grade semantics.
       const r = await evalScheme(`(eqv? (make-string 1 #\\a) (make-string 1 #\\a))`);
       expect(truthy(r)).toBe(false);
     },

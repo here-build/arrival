@@ -83,15 +83,12 @@ const COMPARISON_OPS = [
 ] as const;
 
 describe("scheme/strings Contract precision — 2026-07-05 audit: 8 fixes on the REAL exported ops", () => {
-  // INVARIANT: string accepts real ACharacter elements, rejecting raw JS strings
   it("string: accepts real characters, rejects raw JS strings as elements (was z.array(z.unknown()))", () => {
     const def = nativeDef("string");
     expect(def.in.safeParse([ch("a"), ch("b")]).success).toBe(true);
     expect(def.in.safeParse(["a", "b"]).success).toBe(false);
   });
 
-  // INVARIANT: every one of the 10 string comparison ops accepts real-AString arrays of any
-  // arity and rejects a same-length raw-string array
   it("every comparison op: real strings of any arity parse, a same-length raw-string array no longer does", () => {
     for (const name of COMPARISON_OPS) {
       const def = nativeDef(name);
@@ -102,14 +99,12 @@ describe("scheme/strings Contract precision — 2026-07-05 audit: 8 fixes on the
     }
   });
 
-  // INVARIANT: string-append accepts real AString elements, rejecting raw JS strings
   it("string-append: accepts real strings, rejects raw JS strings as elements (was z.array(z.unknown()))", () => {
     const def = nativeDef("string-append");
     expect(def.in.safeParse([str("a"), str("b")]).success).toBe(true);
     expect(def.in.safeParse(["a", "b"]).success).toBe(false);
   });
 
-  // INVARIANT: string->list's output must be a proper list, rejecting a raw string
   it("string->list: output must be a proper list (Pair|Nil) — a raw string no longer satisfies it (was [z.unknown()])", () => {
     const def = nativeDef("string->list");
     expect(def.out.safeParse([properList()]).success).toBe(true);
@@ -117,7 +112,6 @@ describe("scheme/strings Contract precision — 2026-07-05 audit: 8 fixes on the
     expect(def.out.safeParse(["not-a-list"]).success).toBe(false);
   });
 
-  // INVARIANT: list->string's input must be a proper list, rejecting a raw string
   it("list->string: input must be a proper list (Pair|Nil) — a raw string no longer satisfies it (was [z.unknown()])", () => {
     const def = nativeDef("list->string");
     expect(def.in.safeParse([properList()]).success).toBe(true);
@@ -129,8 +123,6 @@ describe("scheme/strings Contract precision — 2026-07-05 audit: 8 fixes on the
 
   // NOTE: no symbol named `split` is bound in this pack. `string-split` lives in scheme/srfi-13.
 
-  // INVARIANT: no native op in the strings pack accepts an arbitrary-shape raw-JS-garbage
-  // array — no stragglers
   it("blanket sweep: no native op in the pack accepts an arbitrary-shape raw-JS-garbage array on .in (mirrors numeric-/chars-contract-precision.test.ts)", () => {
     const garbage = ["not-a-value", 123, null, {}];
     const stragglers: string[] = [];
@@ -141,15 +133,10 @@ describe("scheme/strings Contract precision — 2026-07-05 audit: 8 fixes on the
     expect(stragglers).toEqual([]);
   });
 
-  // INVARIANT: the strings pack exports exactly 28 symbols (deliberate drift alarm —
-  // forces a reviewer to touch this test when a symbol is added/removed).
-  // Dropped from 32: concat, join, string-contains, string-contains? (relocated/deleted).
   it("sanity: the pack exports exactly 28 symbols — the scope this fix must cover", () => {
     expect(Object.keys(symbols)).toHaveLength(28);
   });
 
-  // INVARIANT: string-map/string-for-each's earlier inputRest fix remains intact —
-  // regression pin
   it("regression pin: string-map/string-for-each's earlier inputRest fix is untouched by this round", () => {
     const mapDef = nativeDef("string-map");
     expect(mapDef.in.safeParse([probeFn, str("abc")]).success).toBe(true);
@@ -169,8 +156,6 @@ describe("scheme/strings Contract.type overrides — the harvest signature for t
   // from z.schemeString), and the string / void return. `Contract.type` restores the real shape
   // (same convention as the sibling srfi curry/find overrides: callable → `(...args: unknown[]) =>
   // unknown`, a void HOF return → bare `void` as in env/core/core.ts's own hand-written type).
-  // INVARIANT: string-map's harvested signature is proc-first over a string rest,
-  // returning string (pins implementation, not behavior)
   it("string-map: proc-first over a string rest → string", () => {
     expect(norm(signatureOf(nativeDef("string-map")))).toBe(
       norm(dedent`
@@ -181,8 +166,6 @@ describe("scheme/strings Contract.type overrides — the harvest signature for t
       `),
     );
   });
-  // INVARIANT: string-for-each's harvested signature is proc-first over a string rest,
-  // returning void (pins implementation, not behavior)
   it("string-for-each: proc-first over a string rest, for effect → void", () => {
     expect(norm(signatureOf(nativeDef("string-for-each")))).toBe(
       norm(dedent`

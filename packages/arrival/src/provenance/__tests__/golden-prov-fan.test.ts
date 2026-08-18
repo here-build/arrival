@@ -2,48 +2,28 @@ import { CONSTANT_CTX } from "../../run/RunContext.js";
 /**
  * GOLDEN CAPTURE (gate G2 oracle) — FAN-OUT provenance: map / filter / length.
  *
- * Wave R / RED-SPEC for the static-lineage migration
- * (the confluent dataflow-graph IR design (2026-06-17) §5, build-step
- * "wire the classifier into the runtime"). The `--ir-lineage` flag does NOT exist
- * yet, so the CURRENT eager engine IS the golden oracle: we run real programs and
- * snapshot the provenance they produce TODAY. When the static path lands, gate G2
- * requires `provenance(static, flag-on) == provenance(eager, flag-off)` — these
- * snapshots are the flag-off half it must reproduce byte-for-byte.
+ * The `--ir-lineage` flag does NOT exist yet, so the CURRENT eager engine IS the
+ * golden oracle: we run real programs and snapshot the provenance they produce.
+ * When the static path lands, gate G2 requires
+ * `provenance(static, flag-on) == provenance(eager, flag-off)` — these snapshots
+ * are the flag-off half it must reproduce byte-for-byte.
  *
- * The unit under capture is the FAN: `map` / `filter` and the cardinality
- * observation `length` over them. Two facts the spike (lineage-spike.test.ts) only
- * MODELS but never measured against the live builtins, pinned here as observed
- * reality over Pair-backed sources:
- *
- *   (length (map id xs))    — FIXED (C4 interim fix, RULINGS.md R2): the count no
- *                             longer over-attributes to EVERY element id — a
- *                             pure-map length depends only on the GROUPING fact
+ *   (length (map id xs))    — a pure-map length depends only on the GROUPING fact
  *                             (the cardinality), not on what each element became.
  *                             `length` reads the container's own flat stamp; `map`
  *                             (length-preserving) PROXIES that stamp through
- *                             unchanged. This WAS the A13 over-attribution, pinned
- *                             `it.fails` (2026-07-08 mechanical sweep) — now green
- *                             [GATE: G2 closed].
- *   (length (filter p xs))  — TODAY runs the predicate `p`; the surviving elements'
- *                             provenance flows into the count. A filter is
- *                             length-CHANGING, so its own container stamp is
+ *                             unchanged [GATE: G2].
+ *   (length (filter p xs))  — filter RUNS the predicate `p`; the surviving
+ *                             elements' provenance flows into the count. A filter
+ *                             is length-CHANGING, so its own container stamp is
  *                             PROVENANCED fresh from the union of the input
- *                             container's stamp + the survivors' own provenance
- *                             (the naive-but-explicit realization of "the static
- *                             target keeps the predicate's cone") — unlike the
- *                             pure-map fan, which the static path (and the naive
- *                             PROXY today) prunes.
+ *                             container's stamp + the survivors' own provenance.
  *
  * The `it.todo` block pins the static G2 target the eager golden must converge to:
  *   - pure-map length cone  == grouping-fact-only (the source cardinality id), NOT
  *     every element id (the spike's countCone prunes the length-preserving fan).
  *   - filter length cone    INCLUDES the predicate's cone (filter is the
  *     length-changing fan countCone does NOT prune).
- *
- * Shared provenance helpers (provOf, sStr, runRaw) are imported — provOf from the
- * canonical production shadow module, the rest from the test-helper module — so
- * there is ONE definition of each across the suite. The file-SPECIFIC `value`
- * (unwrap-to-JS) and `triple` (Pair fixture) wrappers stay local.
  */
 import { describe, it, expect } from "vitest";
 import { APair } from "../../values/primitives/APair.js";
@@ -71,16 +51,9 @@ const triple = () => APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 10
 // ============================================================================
 
 describe("GOLDEN (G2 oracle) — pure-map length over a Pair source: the A13 leak is CLOSED", () => {
-  // FIXED (C4 interim fix, docs/RULINGS.md R2 + execution-plan-wireframe.md
-  // §7, the R2 container structural-facts batch): `length` now reads the CONTAINER's own
-  // flat grouping/length-fact stamp instead of deep-unioning every element it touched
-  // (values/primitives/APair.ts, AVector.ts, AJSArray.ts's `arrival/tagless-final/length`).
-  // `map` is length-PRESERVING so it PROXIES the container's own stamp through unchanged
-  // (values/op-helpers.ts's `withInputProvenance`) — this fixture mints no container-level
-  // "grouping" id at all (a plain APair.fromArray list, no Rosetta-IN crossing for the list
-  // itself), so the correct cone is EMPTY. Was `it.fails` (@ledger: A13 count-cone
-  // over-attribution, provenance/conservation.law.test.ts's "known violations" §2) — now
-  // flipped GREEN alongside that row.
+  // `length` reads the CONTAINER's own flat grouping/length-fact stamp; `map`
+  // PROXIES that stamp through unchanged. This fixture mints no container-level
+  // grouping id, so the cone is EMPTY.
   it("(length (map id xs)): the count's cone is the MINIMAL grouping fact (empty), not every element id — the A13 leak is closed [GATE: G2]", async () => {
     expect({
       value: await value(`(length (map (lambda (e) e) xs))`, { xs: triple() }),
@@ -119,11 +92,8 @@ describe("GOLDEN (G2 oracle) — filter RUNS the predicate; the count carries th
   });
 
   it("(filter pred xs): the filtered LIST HEAD's own provenance now CARRIES the survivors' ids (C2/R2 fix)", async () => {
-    // FIXED (C2, RULINGS.md R2): unlike the map fan (whose head stays [] — map only PROXIES
-    // whatever container stamp it was handed, and this fixture mints none), filter is
-    // LENGTH-CHANGING — its own head is PROVENANCED fresh from union(input container's own
-    // stamp [empty here], survivors' own ids). `length` no longer needs to fold the
-    // elements itself; it reads exactly this head stamp (C4).
+    // Filter is LENGTH-CHANGING: its head is PROVENANCED fresh from union(input
+    // container stamp [empty here], survivors' own ids). `length` reads that head stamp.
     expect(await prov(`(filter (lambda (e) (not (string=? e "b"))) xs)`, { xs: triple() })).toMatchInlineSnapshot(`
       [
         100,

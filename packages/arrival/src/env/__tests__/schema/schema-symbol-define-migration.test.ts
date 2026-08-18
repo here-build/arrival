@@ -44,11 +44,11 @@ import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 const capabilities = [schemaCapability];
 
 // Local evalScheme, mirroring `_fresh-env.ts`'s own — used only by the standalone
-// lower()/apply() rows below (the FV-law regression pin), never by the exec() rows. The
-// internal bake seam (Stage C Cut 3b), never the public exec surface.
+// bake rows below (the FV-law regression pin), never by the exec() rows. The
+// internal bake seam, never the public exec surface.
 const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
 
-// `spec.symbols` IS the record (the builder-form arm is retired).
+// `spec.symbols` IS the record.
 function resolveSymbols(): Record<string, SymbolDeclaration> {
   return schemaCapability.spec.symbols ?? {};
 }
@@ -113,12 +113,8 @@ describe("arrival/schema — the §2.1 bake FV law passes standalone (deps edge 
     }
   });
 
-  // NOT tested here: actually CALLING s/object against this bare-`apply()`'d env. A direct
-  // `.lower().apply(env)` (above) binds this capability's OWN symbols but does not recursively
-  // apply `deps` onto `env` — only `assembleEnv`'s C3 walk (the path `exec({ capabilities })`
-  // takes, exercised throughout the wire-format block below) does that. Same scope boundary
-  // srfi-26/srfi-235's own FV-law regression pins observe — this describe block's job is the
-  // STATIC bake law, not a second copy of the functional suite.
+  // Not tested here: calling s/object against a standalone bake env. This describe's
+  // job is the STATIC bake law, not a second copy of the functional suite.
 });
 
 describe("arrival/schema — wire-format byte-equivalence (the load-bearing invariant)", () => {

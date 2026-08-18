@@ -205,19 +205,12 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
     return other instanceof AJSArray && other.source === this.source;
   }
 
-  // Element-count off source (no materialize). Reads the CONTAINER's own flat
-  // grouping/length-fact stamp (withInputProvenance([this], count)), never the
-  // elements' union — matches APair/AVector length (one algebra every carrier)
-  // (RULINGS.md R2). Borrowed array's top-level provenance is empty by construction
-  // today (grouping-fact mint for AJSArray/ADict is a separate gap —
-  // term-carrier.law equalsContainerHasNoGroupingFact), so this reads as empty-
-  // provenance boxed AExact until that lands.
+  // Length stamps the container grouping-fact, never the elements' union (R2).
   ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
     this.freezeSource();
     return withInputProvenance([this], this.source.length);
   }
 
-  // Vector type-predicate — borrowed JS array answers (vector? x) #t.
   ["arrival/tagless-final/vector?"](): boolean {
     return true;
   }

@@ -34,7 +34,6 @@ function contractOf<T>(v: { contract: unknown }): T {
   return v.contract as T;
 }
 
-/** Invoke a baked rosetta procedure via its apply term (the sole membrane spine). */
 function fire(proc: { ["arrival/tagless-final/apply"](args: any[], callCtx: any): any }, callCtx: any, ...args: any[]) {
   return proc["arrival/tagless-final/apply"](args, callCtx);
 }
@@ -109,7 +108,6 @@ describe("symbol.rosetta — JS-land, codec decode/encode", () => {
       { input: [z.string], output: [z.number] },
       (s) => s.length,
     );
-    // A SchemeExact is not a SchemeString → the z.string codec's instanceof guard doors.
     await expect(fire(def, testCallCtx(), new AExact(3))).rejects.toThrow();
   });
 
@@ -238,7 +236,6 @@ describe("the number codec FAMILY — exactness + range + JS-type declared by th
     it("round-trips a SMALL bigint → scheme → bigint (safe-int only)", async () => {
       const def = symbol.rosetta`bid: bigint identity`({ input: [z.bigint], output: [z.bigint] }, (n) => n);
       const out = (await fire(def, testCallCtx(), new AExact(7))) as AExact;
-      // re-decode the encoded scheme value through the same codec
       const back = z.decode(z.bigint, out);
       expect(back).toBe(7n);
     });
@@ -309,7 +306,7 @@ describe("type inference (compile-time)", () => {
   it("a wrong-typed native impl is a compile error", () => {
     symbol.native`bad-native: wrong impl`(
       { input: [z.pair], output: [z.pair] },
-      // @ts-expect-error — impl receives a Pair (identity), not a string
+      // @ts-expect-error
       (p: string) => new APair(p, nil),
     );
     expect(true).toBe(true);

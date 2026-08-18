@@ -41,7 +41,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
   let env: ResolvingAmbient;
 
   beforeEach(() => {
-    // Create a minimal environment with basic operations
     // Note: SchemeExact has num/denom (for rationals), not value
     // RE-PINNED (one-number rework, RATIO — docs/design-history/arrival-one-number-rework.md
     // §2.1): AExact's payload is a safe-int `number` now, not `bigint` — this hand-rolled test
@@ -112,7 +111,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
   });
 
   describe("run() trampoline", () => {
-    // INVARIANT: run() drives a bare generator to completion and returns its final return value
     it("should run a simple generator to completion", async () => {
       function* simple() {
         yield 1;
@@ -123,7 +121,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
       expect(result).toBe(3);
     });
 
-    // INVARIANT: run() awaits a yielded Promise and resumes with its resolved value
     it("should await yielded promises", async () => {
       function* withPromise() {
         const a = yield Promise.resolve(10);
@@ -134,7 +131,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
       expect(result).toBe(30);
     });
 
-    // INVARIANT: run() rejects when a yielded promise rejects, propagating the error
     it("should handle errors from promises", async () => {
       function* withError() {
         yield Promise.reject(new Error("test error"));
@@ -145,7 +141,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
   });
 
   describe("evaluate()", () => {
-    // INVARIANT: self-evaluating atoms (exact number, string, nil) evaluate to themselves
     it("should evaluate atoms to themselves", async () => {
       expect(await execExprOverFrame(new AExact(42), { env })).toEqual(new AExact(42));
       const hello = new AString("hello");
@@ -153,7 +148,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
       expect(await execExprOverFrame(nil, { env })).toBe(nil);
     });
 
-    // INVARIANT: symbol evaluation looks up the value bound in the environment
     it("should look up symbols in environment", async () => {
       bindValue(env, "x", new AExact(10));
       bindValue(env, "y", new AExact(20));
@@ -161,17 +155,13 @@ describe("Generator Evaluator with Real Scheme Types", () => {
       expect(await execExprOverFrame(new ASymbol("y"), { env })).toEqual(new AExact(20));
     });
 
-    // INVARIANT: a function-call form evaluates operator and operands, then applies
     it("should evaluate simple function calls", async () => {
-      // (+ 1 2 3)
       const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new AExact(1), new AExact(2), new AExact(3)], false);
       const result = await execExprOverFrame(code, { env });
       expect(result).toEqual(new AExact(6));
     });
 
-    // INVARIANT: nested function calls evaluate inside-out
     it("should evaluate nested function calls", async () => {
-      // (+ (* 2 3) (* 4 5))
       const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), APair.fromArray(CONSTANT_CTX, [new ASymbol("*"), new AExact(2), new AExact(3)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol("*"), new AExact(4), new AExact(5)], false)], false);
       const result = await execExprOverFrame(code, { env });
       expect(result).toEqual(new AExact(26)); // 6 + 20
@@ -202,7 +192,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
 
   describe("special forms", () => {
     describe("quote", () => {
-      // INVARIANT: (quote x) returns its argument unevaluated, structure intact
       it("should return its argument unevaluated", async () => {
         // (quote (1 2 3))
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("quote"), APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2), new AExact(3)], false)], false);
@@ -211,7 +200,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
         expect((result.cdr as APair<any, any>).car).toEqual(new AExact(2));
       });
 
-      // INVARIANT: (quote symbol) returns the symbol itself, not its bound value
       it("should quote a symbol", async () => {
         // (quote x)
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("quote"), new ASymbol("x")], false);
@@ -221,7 +209,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
     });
 
     describe("quasiquote", () => {
-      // INVARIANT: a quasiquoted list with no unquotes returns unevaluated, like quote
       it("should return simple list unevaluated", async () => {
         // `(1 2 3)
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("quasiquote"), APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2), new AExact(3)], false)], false);
@@ -229,7 +216,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
         expect(result.car).toEqual(new AExact(1));
       });
 
-      // INVARIANT: (unquote expr) inside quasiquote evaluates expr and splices the value in place
       it("should evaluate unquoted expressions", async () => {
         // `(1 ,(+ 1 1) 3)
         bindValue(env, "x", new AExact(10));
@@ -240,8 +226,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
         expect(((result.cdr as APair<any, any>).cdr as APair<any, any>).car).toEqual(new AExact(3));
       });
 
-      // INVARIANT: (unquote-splicing expr) evaluates expr to a list and splices its
-      // elements into the surrounding list
       it("should handle unquote-splicing", async () => {
         // `(1 ,@(list 2 3) 4)
         const code = APair.fromArray(CONSTANT_CTX, [
@@ -255,28 +239,17 @@ describe("Generator Evaluator with Real Scheme Types", () => {
     });
 
     describe("if", () => {
-      // [P15 redundancy] DELETED (2026-07-08 invariant-verdict sweep):
-      // "then branch when true" /
-      // "else branch when false" point-duplicated generator-exec.spec.ts's own
-      // "should handle if expressions" (which asserts both branches already). Kept the
-      // if-without-else, nil-truthy, and nested-if cases below (evaluator-only content).
-      // INVARIANT: if treats '() (nil) as truthy — only #f is false
       it("should evaluate then branch when condition is nil (Scheme: only #f is false)", async () => {
-        // (if () 1 2) - in R7RS Scheme, only #f is false, () is truthy
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("if"), nil, new AExact(1), new AExact(2)], false);
         expect(await execExprOverFrame(code, { env })).toEqual(new AExact(1));
       });
 
-      // INVARIANT: if with no else-branch returns the unspecified/void value when the test is false
       it("should return undefined when no else branch and condition is false", async () => {
-        // (if #f 1)
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("if"), schemeFalse, new AExact(1)], false);
         expect(await execExprOverFrame(code, { env })).toBe(theVoid);
       });
 
-      // INVARIANT: nested if expressions select the correct branch at each level
       it("should evaluate nested if expressions", async () => {
-        // (if (< 1 2) (if (> 3 2) 100 200) 300)
         const code = APair.fromArray(CONSTANT_CTX, [
           new ASymbol("if"),
           APair.fromArray(CONSTANT_CTX, [new ASymbol("<"), new AExact(1), new AExact(2)], false),
@@ -288,18 +261,12 @@ describe("Generator Evaluator with Real Scheme Types", () => {
     });
 
     describe("begin", () => {
-      // [P15 redundancy] DELETED (same sweep/rationale as if above): "expressions in
-      // order, return last value" point-duplicated generator-exec.spec.ts's own
-      // "should handle begin" test. Kept empty-begin (evaluator-only) and side-effects
-      // (verifies execution ORDER/count, not just the return value — distinct point).
-      // INVARIANT: an empty begin returns the unspecified/void value
       it("should return undefined for empty begin", async () => {
         // (begin)
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("begin")], false);
         expect(await execExprOverFrame(code, { env })).toBe(theVoid);
       });
 
-      // INVARIANT: begin executes every expression for its side effects, in sequence
       it("should execute side effects", async () => {
         let sideEffect = 0;
         bindValue(
@@ -324,8 +291,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
     });
 
     describe("define", () => {
-      // INVARIANT: (define x v) evaluates v and binds it in the environment (pins
-      // implementation, not behavior)
       it("should define a simple variable", async () => {
         // (define x 42)
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("define"), new ASymbol("x"), new AExact(42)], false);
@@ -333,8 +298,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
         expect(env._lookupWithResolvers("x")).toEqual(new AExact(42));
       });
 
-      // INVARIANT: define evaluates the value expression before binding (not the literal
-      // form) (pins implementation, not behavior)
       it("should evaluate the value expression", async () => {
         // (define x (+ 1 2))
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("define"), new ASymbol("x"), APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new AExact(1), new AExact(2)], false)], false);
@@ -342,8 +305,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
         expect(env._lookupWithResolvers("x")).toEqual(new AExact(3));
       });
 
-      // INVARIANT: (define (f args) body) shorthand defines f as a callable ALambda
-      // carrying that name
       it("should define a function with shorthand syntax", async () => {
         // (define (add a b) (+ a b))
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("define"), APair.fromArray(CONSTANT_CTX, [new ASymbol("add"), new ASymbol("a"), new ASymbol("b")], false), APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new ASymbol("a"), new ASymbol("b")], false)], false);
@@ -359,12 +320,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
     // (r7rs/binding); arrival is pure dataflow, so there is no rebind form to test.
 
     describe("lambda", () => {
-      // [P15 redundancy] DELETED (same sweep/rationale as if/begin above): "create a
-      // callable function" / "execute with arguments" point-duplicated generator-exec.spec.ts's
-      // own "should evaluate lambdas" (basic `((lambda (x) ...) ...)` call). Kept
-      // closures and rest-params below (evaluator-only content, not covered by the
-      // single generator-exec lambda test).
-      // INVARIANT: a lambda closes over its defining environment
       it("should capture closure environment", async () => {
         // (define a 10)
         // ((lambda (x) (+ a x)) 5)
@@ -374,8 +329,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
         expect(result).toEqual(new AExact(15));
       });
 
-      // INVARIANT: a symbol (non-list) parameter spec binds all arguments as a
-      // rest-parameter list
       it("should handle rest parameters", async () => {
         // ((lambda args args) 1 2 3)
         const code = APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol("lambda"), new ASymbol("args"), new ASymbol("args")], false), new AExact(1), new AExact(2), new AExact(3)], false);
@@ -385,14 +338,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
     });
 
     describe("let", () => {
-      // [P15 redundancy] DELETED (same sweep/rationale as if/begin/lambda above):
-      // "bind variables in body" point-duplicated generator-exec.spec.ts's own
-      // "should handle let bindings"; "named let for loops" point-duplicated
-      // generator-exec.spec.ts's dedicated "execExprOverFrame() - named let" describe (same
-      // factorial-via-accumulator pattern). Kept parallel-binding-semantics (a
-      // distinct scoping/shadowing invariant not covered by either).
-      // INVARIANT: let uses parallel binding semantics — an init expression cannot
-      // see sibling bindings
       it("should use parallel binding semantics", async () => {
         // (let ((x 1) (y x)) y) - should fail because x isn't bound yet
         bindValue(env, "x", new AExact(100));
@@ -402,21 +347,13 @@ describe("Generator Evaluator with Real Scheme Types", () => {
       });
     });
 
-    // [P15 redundancy] let*'s sole test ("bind variables sequentially") and letrec's sole
-    // test ("allow recursive bindings") DELETED (same sweep/rationale as above) — both
-    // point-duplicated generator-exec.spec.ts's own "should handle let* bindings" /
-    // "should handle letrec for recursion" (both compute a small factorial). The
-    // describe blocks are removed with them (zero surviving evaluator-only content).
-
     describe("and", () => {
-      // INVARIANT: (and) with no operands returns #t
       it("should return true for empty and", async () => {
         // (and) ⇒ #t (R7RS §6.3): the boxed schemeTrue singleton IS the Scheme #t.
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("and")], false);
         expect(await execExprOverFrame(code, { env })).toBe(schemeTrue);
       });
 
-      // INVARIANT: and short-circuits on the first #f without evaluating the rest
       it("should short-circuit on false", async () => {
         let called = false;
         bindValue(
@@ -437,7 +374,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
         expect(called).toBe(false);
       });
 
-      // INVARIANT: and returns the value of its last operand when all are true
       it("should return last value if all true", async () => {
         // (and 1 2 3)
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("and"), new AExact(1), new AExact(2), new AExact(3)], false);
@@ -446,14 +382,12 @@ describe("Generator Evaluator with Real Scheme Types", () => {
     });
 
     describe("or", () => {
-      // INVARIANT: (or) with no operands returns #f
       it("should return false for empty or", async () => {
         // (or) ⇒ #f (R7RS §6.3): the boxed schemeFalse singleton IS the Scheme #f.
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("or")], false);
         expect(await execExprOverFrame(code, { env })).toBe(schemeFalse);
       });
 
-      // INVARIANT: or short-circuits on the first truthy value without evaluating the rest
       it("should short-circuit on true", async () => {
         let called = false;
         bindValue(
@@ -474,7 +408,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
         expect(called).toBe(false);
       });
 
-      // INVARIANT: or returns the value of its last operand when all are false (0 is truthy)
       it("should return last value if all false", async () => {
         // (or #f #f 0) - 0 is truthy in Scheme
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("or"), schemeFalse, schemeFalse, new AExact(0)], false);
@@ -483,13 +416,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
     });
 
     describe("cond", () => {
-      // [P15 redundancy] DELETED (same sweep/rationale as if/begin/lambda/let above):
-      // "evaluate matching clause" point-duplicated generator-exec.spec.ts's own
-      // "should handle cond" (also selects a truthy clause over a false one, falling
-      // through to else). Kept else-clause, no-expressions, and => (evaluator-only
-      // content — none of these edge cases are exercised by the single generator-exec
-      // cond test).
-      // INVARIANT: cond evaluates the else clause when no test matches
       it("should evaluate else clause when nothing matches", async () => {
         // (cond ((> 1 2) 'no) (else 'yes))
         const code = APair.fromArray(CONSTANT_CTX, [
@@ -501,14 +427,12 @@ describe("Generator Evaluator with Real Scheme Types", () => {
         expect(result.__name__).toBe("yes");
       });
 
-      // INVARIANT: a clause with only a test (no body) returns the test's value
       it("should return test value when no expressions", async () => {
         // (cond (5)) => 5
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("cond"), APair.fromArray(CONSTANT_CTX, [new AExact(5)], false)], false);
         expect(await execExprOverFrame(code, { env })).toEqual(new AExact(5));
       });
 
-      // INVARIANT: (test => proc) applies proc to the test's value when the test is truthy.
       // W8: hostFnToCallable mints ARosettaProcedure (scheme args → JS, result boxes back).
       it("should handle => syntax", async () => {
         // (cond ((+ 1 2) => double))
@@ -523,12 +447,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
     });
 
     describe("case", () => {
-      // [P15 redundancy] DELETED (same sweep/rationale as cond above): "match datum"
-      // point-duplicated generator-exec.spec.ts's own "should handle case" (matches
-      // datum 2 → 'two, identical shape). Kept "else when no match" (a distinct edge
-      // case — the generator-exec case test never exercises its own else branch, since
-      // its datum always matches a listed clause).
-      // INVARIANT: case falls back to else when no datum list matches
       it("should use else when no match", async () => {
         // (case 5 ((1) 'one) ((2) 'two) (else 'other))
         const code = APair.fromArray(CONSTANT_CTX, [
@@ -544,14 +462,12 @@ describe("Generator Evaluator with Real Scheme Types", () => {
     });
 
     describe("when", () => {
-      // INVARIANT: when executes its body and returns the last value when the test is true
       it("should execute body when test is true", async () => {
         // (when #t 1 2 3)
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("when"), schemeTrue, new AExact(1), new AExact(2), new AExact(3)], false);
         expect(await execExprOverFrame(code, { env })).toEqual(new AExact(3));
       });
 
-      // INVARIANT: when returns the unspecified/void value when the test is false
       it("should return undefined when test is false", async () => {
         // (when #f 1 2 3)
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("when"), schemeFalse, new AExact(1), new AExact(2), new AExact(3)], false);
@@ -560,14 +476,12 @@ describe("Generator Evaluator with Real Scheme Types", () => {
     });
 
     describe("unless", () => {
-      // INVARIANT: unless executes its body and returns the last value when the test is false
       it("should execute body when test is false", async () => {
         // (unless #f 1 2 3)
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("unless"), schemeFalse, new AExact(1), new AExact(2), new AExact(3)], false);
         expect(await execExprOverFrame(code, { env })).toEqual(new AExact(3));
       });
 
-      // INVARIANT: unless returns the unspecified/void value when the test is true
       it("should return undefined when test is true", async () => {
         // (unless #t 1 2 3)
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("unless"), schemeTrue, new AExact(1), new AExact(2), new AExact(3)], false);
@@ -576,8 +490,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
     });
 
     describe("do", () => {
-      // INVARIANT: do iterates, re-evaluating step expressions, until the test clause is
-      // true, then returns the result expression
       it("should iterate until test is true", async () => {
         // (do ((i 0 (+ i 1))) ((>= i 5) i))
         const code = APair.fromArray(CONSTANT_CTX, [
@@ -588,7 +500,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
         expect(await execExprOverFrame(code, { env })).toEqual(new AExact(5));
       });
 
-      // INVARIANT: do executes the command body once per iteration for its side effects
       it("should execute body on each iteration", async () => {
         let count = 0;
         bindValue(
@@ -616,8 +527,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
     });
 
     describe("define-macro", () => {
-      // INVARIANT: define-macro's quasiquote/unquote-splicing template rewrites the call
-      // site, and the rewritten form is then evaluated
       it("should define a simple macro", async () => {
         // (define-macro (my-when test . body) `(if ,test (begin ,@body)))
         // Then: (my-when #t 1 2 3)
@@ -641,21 +550,12 @@ describe("Generator Evaluator with Real Scheme Types", () => {
       });
     });
 
-    // NOTE: the former describe("raise/error") block was removed with audit Action 1
-    // (X1): `raise`/`error` are no longer evaluator special forms — they resolve to the
-    // R7RS bootstrap procedures (which walk *current-exception-handlers*). Those tests
-    // asserted the old R6RS `(error who message)` arity and string-coerced `raise`
-    // against a minimal env without bootstrap; correct R7RS exception coverage now lives
-    // in generator-exec.spec.ts against a bootstrap-loaded env.
-
     // delay/force — OMITTED by the purity invariant (delayed evaluation defers a
     // value's identity to force-time, severing construction-rooted provenance).
     // Removed from the special-form table; doored in core.ts. The full door
     // surface (delay/force/make-promise/delay-force) is pinned in
     // doors/purity.law.test.ts; here we just confirm the special form is gone.
     describe("delay/force — omitted by the purity invariant", () => {
-      // INVARIANT: delay is no longer a working special form — evaluating (delay …)
-      // throws rather than deferring
       it("(delay …) is no longer a working special form", async () => {
         // This raw env has no bootstrap loaded, so `delay` is unbound here (the
         // teaching door — "omitted from arrival by design" — is a bootstrap macro,
@@ -668,8 +568,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
   });
 
   describe("performance - deep recursion", () => {
-    // INVARIANT: a deeply right-nested (+ 1 (+ 1 … 0)) expression (10k levels) evaluates
-    // without stack overflow
     it("should handle deep recursion without stack overflow", async () => {
       // Create a deeply nested expression: (+ 1 (+ 1 (+ 1 ... (+ 1 0)...)))
       let code: APair<any, any> | typeof nil = APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new AExact(1), new AExact(0)], false);
@@ -683,8 +581,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
       expect(result).toEqual(new AExact(10001));
     });
 
-    // INVARIANT: a deeply nested if-expression chain (10k levels) evaluates without
-    // stack overflow
     it("should handle deeply nested if expressions", async () => {
       // Create deeply nested ifs: (if #t (if #t (if #t ... 42 ...)))
       let code: SchemeValue = new AExact(42);
@@ -715,7 +611,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
   });
 });
 
-// Type for Nil
 interface ANil {
   toString(): string;
 }

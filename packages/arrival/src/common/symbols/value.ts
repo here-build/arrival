@@ -15,7 +15,7 @@ type NonCallableAmbientValue = Exclude<AmbientValue, (...args: any[]) => any>;
  *  - Different name: throw — a value belongs to exactly one declaration.
  *  Primitive leaf (bigint) skips stamping — cannot carry a hidden property. */
 function stampValueContract(boxed: unknown, def: ValueSymbolDef): void {
-  if (typeof boxed !== "object" || boxed === null) return; // bigint gap
+  if (typeof boxed !== "object" || boxed === null) return;
   const existing = (boxed as { contract?: unknown }).contract;
   if (existing === undefined) {
     Object.defineProperty(boxed, "contract", {
@@ -33,7 +33,6 @@ function stampValueContract(boxed: unknown, def: ValueSymbolDef): void {
         `fresh value for "${def.name}" instead of reusing an already-declared one.`,
     );
   }
-  // Same name — idempotent re-declaration.
 }
 
 /** Raw value binding. Boxes at define time (fromJS / passthrough); stamps .contract.

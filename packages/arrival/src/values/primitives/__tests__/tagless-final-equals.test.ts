@@ -32,23 +32,9 @@ import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 // ─────────────────────────────────────────────────────────────────────────────
 // B2 — arrival/tagless-final/equals as a totalic, cycle-safe, tagless-final Setoid.
 //
-// The protocol moves per-type structural comparison ONTO the terms: AValue
-// declares an abstract ["arrival/tagless-final/equals"](other, seen?) so EVERY subtype
-// owns its equality; structuralEqual becomes a thin co-induction HARNESS that
-// records the (a, b) partner pair BEFORE descending (generically, not just for
-// Vector) and threads a shared seen map through the per-type comparisons so
-// mutually-cyclic structures terminate.
-//
-// RED-FIRST expectation BEFORE the impl:
-//   G1 — partial: Pair / membrane wrappers lack EQ.
-//   G2 — red: Pair has no EQ at all; the seen-threaded direct call is absent.
-//   G3 — GREEN-now (investigated): the fresh-seen stack-blow is LATENT, masked
-//        by structuralEqual's inline Vector block; G3 is the regression guard
-//        that the refactor's seen-threading keeps mutual cycles terminating. See
-//        the G3 describe-block comment.
-//   G4 — mostly green: structuralEqual already handles deep + cyclic Pairs and
-//        the inline Vector special-case.
-//   G5 — green: eq/eqv stay identity/scalar; this group is the landmine guard.
+// Every AValue subtype owns its equality; structuralEqual is a thin co-induction
+// harness that records the (a, b) partner pair BEFORE descending and threads a
+// shared seen map so mutually-cyclic structures terminate.
 // ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -98,10 +84,6 @@ function representativeValues(): { name: string; value: AValue }[] {
 // ─────────────────────────────────────────────────────────────────────────────
 // G1 — TOTALITY: every representative AValue defines arrival/tagless-final/equals.
 // ─────────────────────────────────────────────────────────────────────────────
-// INVARIANT: every representative AValue subtype exposes a callable `equals`
-// (pins implementation, not behavior — the subtype roster itself). NOTE: the
-// atlas's original roster included HalfBaked; HalfBaked is dissolved
-// (90272a0b99) and representativeValues() below no longer carries it.
 describe("G1 totality — every AValue subtype defines arrival/tagless-final/equals", () => {
   it.each(representativeValues())("$name has a callable arrival/tagless-final/equals", ({ value }) => {
     expect(typeof (value as unknown as Record<string, unknown>)[tf("equals")]).toBe("function");
@@ -165,8 +147,6 @@ describe("G2 Pair Setoid", () => {
     expect(pairEq(a, c)).toBe(true);
   });
 
-  // INVARIANT: an explicit `seen` map argument is honored by the Setoid call
-  // (pins implementation, not behavior).
   it("an explicit seen Map argument is honored", () => {
     const a = list(new AExact(1)) as APair<any, any>;
     const b = list(new AExact(1)) as APair<any, any>;
@@ -250,8 +230,6 @@ describe("G4 equal? regression — structuralEqual", () => {
     expect(structuralEqual(a, b)).toBe(true);
   });
 
-  // INVARIANT: Pair and Vector both route equality through their own Setoid
-  // method (pins implementation, not behavior).
   it("Pair & Vector now route through their own Setoid (sanity)", () => {
     // tagless-final/equals is declared directly on AValue subtypes — no cast needed.
     expect(typeof (new APair(new AExact(1), nil))[tf("equals")]).toBe("function");
@@ -317,18 +295,15 @@ describe("G6 equality-suite cleanup", () => {
     it("two DISTINCT-instance symbols of the same name → true", () => {
       const a = distinctSym("a");
       const b = distinctSym("a");
-      expect(a).not.toBe(b); // genuinely distinct heap instances
+      expect(a).not.toBe(b);
       expect(eqv(a, b)).toBe(true);
     });
     it("two Nil → true", () => {
       expect(eqv(nil, nil)).toBe(true);
-      // a provenance clone of nil is still eqv?
       expect(eqv(nil, nil.withProvenance(new Set([1])))).toBe(true);
     });
   });
 
-  // INVARIANT: eq()/eqv()'s scalar result equals the term's own Setoid
-  // result, across all scalar kinds (pins implementation, not behavior).
   describe("eq()/eqv() scalar result == the term's own Setoid", () => {
     const EQM = (x: AValue, y: unknown): boolean =>
       x[tf("equals")](y);

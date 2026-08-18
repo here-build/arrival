@@ -99,7 +99,7 @@ export function scan(src: string): ScanResult {
   let min = 0;
   let inString = false;
   let inComment = false;
-  let blockComment = 0; // #| |# nesting depth
+  let blockComment = 0;
   let esc = false;
   let midToken = false;
   // The token currently being accumulated (for head/quote classification at boundaries).
@@ -197,12 +197,10 @@ export function scan(src: string): ScanResult {
   const inText = inString || inComment || blockComment > 0;
   const top = stack[stack.length - 1];
 
-  // Position: top at depth 0; otherwise operator iff the current form has no complete element yet.
   let position: CursorPosition;
   if (depth === 0) position = "top";
   else position = (top && top.elems === 0) ? "operator" : "argument";
 
-  // FormKind / strict — derived structurally from the enclosing form (graceful, Layer-S best-effort).
   const { formKind, strict } = classifyForm(stack, position, cur);
 
   return {
@@ -259,7 +257,7 @@ function classifyForm(
 export function validNextClasses(s: ScanResult): Set<TokenClass> {
   if (s.inString || s.inComment) return new Set<TokenClass>(["atom"]); // inside text: keep typing it
   const out = new Set<TokenClass>(["open", "atom", "string"]);
-  if (s.depth > 0) out.add("close"); // an open form remains to close
+  if (s.depth > 0) out.add("close");
   if (s.closeable) out.add("end"); // EOS gate
   return out;
 }
@@ -288,7 +286,6 @@ function makeState(s: ScanResult, prefix: string, env: OracleEnvΣ | null): Orac
     closeable: s.closeable,
     closeSuffix: s.closeSuffix,
     overClosed: s.overClosed,
-    // Σ — live when an env is injected, null (graceful) otherwise.
     validSymbols: (): ReadonlySet<string> | null =>
       computeValidSymbols(prefix, s.position, s.formKind, env),
     // T — not modelled (graceful per the contract).

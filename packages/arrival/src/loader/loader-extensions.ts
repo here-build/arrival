@@ -50,7 +50,6 @@ function resolverNameOf(raw: unknown): string {
   return String(raw);
 }
 
-/** Suffix form → leading-dot string. */
 function suffixOf(raw: unknown): string {
   if (typeof raw === "string") return raw;
   if (raw instanceof AString) return String(raw.valueOf());
@@ -58,7 +57,6 @@ function suffixOf(raw: unknown): string {
   return String(raw);
 }
 
-/** Normalize to leading-dot form (`"hbs"` and `".hbs"` both → `".hbs"`). */
 function normalizeSuffix(ext: string): string {
   return ext.startsWith(".") ? ext : `.${ext}`;
 }

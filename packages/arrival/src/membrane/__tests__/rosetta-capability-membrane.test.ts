@@ -52,8 +52,6 @@ function invoke(verb: ARosettaProcedure, ...args: unknown[]): unknown {
 
 describe("Rosetta AmbientRuntime (capability-authored)", () => {
   describe("EnvCapability-bound rosetta verbs", () => {
-    // INVARIANT: a capability-bound rosetta verb extends the environment with a callable
-    // usable from scheme source.
     it("should extend environment with Rosetta functions", async () => {
       await applyCapability(inferenceEnv, [
         EnvCapability.define("test/double-all", {
@@ -74,7 +72,6 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
       expect(Array.from(result as Iterable<unknown>)).toEqual([2, 4, 6, 8, 10]);
     });
 
-    // INVARIANT: multiple capability-bound rosetta verbs can be chained/composed from scheme source
     it("should handle multiple Rosetta functions", async () => {
       await applyCapability(inferenceEnv, [
         EnvCapability.define("test/multi-rosetta", {

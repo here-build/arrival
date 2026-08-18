@@ -72,17 +72,14 @@ const fn = new ANativeProcedure({
   impl: () => theVoid });
 
 describe("scheme/lists Contract precision — genuinely REFINED schemas reject wrongly-shaped values (were z.unknown(), now zod-validated)", () => {
-  // INVARIANT: make-list's output must be a proper list (pair or nil); fill stays
-  // representation-blind, k must be a scheme number
   it("make-list: output is now z.union([z.pair, z.nil]) (a proper list) — a raw non-list value used to slip through the old z.unknown()", () => {
     const def = nativeDef("make-list");
     expect(def.out.safeParse([nil]).success).toBe(true);
-    // REBASELINE (fe2c848ee7, 2026-07-08): z.pair is now cons(value, value), a real codec that
-    // validates car/cdr recursively via z.schemeValue (isSchemeValue) — a raw JS `false` element (as
-    // this row originally used) no longer parses; boxed `schemeFalse` is the honest scheme value.
+    // z.pair is cons(value, value): validates car/cdr via z.schemeValue. Boxed
+    // `schemeFalse` is the honest scheme value; a raw JS `false` does not parse.
     expect(def.out.safeParse([properList(schemeFalse, schemeFalse)]).success).toBe(true);
-    expect(def.out.safeParse(["not-a-list"]).success).toBe(false); // was true before the fix
-    expect(def.out.safeParse([42]).success).toBe(false); // was true before the fix
+    expect(def.out.safeParse(["not-a-list"]).success).toBe(false);
+    expect(def.out.safeParse([42]).success).toBe(false);
     // fill (2nd input) stays permissive (z.schemeValue — genuinely "any scheme value", no
     // narrower domain makes sense for a fill value): still accepts anything.
     expect(def.in.safeParse([exact(3)]).success).toBe(true); // fill omitted (optional)
@@ -92,29 +89,20 @@ describe("scheme/lists Contract precision — genuinely REFINED schemas reject w
 
   // nth moved to scheme/polyglot-clojure (Clojure index-first); contract pins live there.
 
-  // INVERTED (docs/design-history/halfbaked-existence-review.md, VERDICT KILL): output was
-  // pinned z.schemeValue ONLY because a still-filling collection's Tier-2 speculation could hand back
-  // a live AHalfBaked carrier instead of a settled number — the carrier is gone, so the
-  // permissive schema was never really "genuinely representation-blind," it was a residue of a
-  // dead feature. Now a genuine zod refinement: a raw non-number no longer slips through.
   it("length: output narrows z.schemeValue → z.schemeNumber — the HalfBaked carrier return died with AHalfBaked itself, so length always returns a settled AExact/AInexact", () => {
     const def = nativeDef("length");
     expect(def.in.safeParse([properList(1, 2)]).success).toBe(true);
     expect(def.out.safeParse([exact(2)]).success).toBe(true);
-    expect(def.out.safeParse(["not-a-number"]).success).toBe(false); // was true before the fix (z.schemeValue)
-    expect(def.out.safeParse([{ garbage: true }]).success).toBe(false); // was true before the fix (z.schemeValue)
+    expect(def.out.safeParse(["not-a-number"]).success).toBe(false);
+    expect(def.out.safeParse([{ garbage: true }]).success).toBe(false);
   });
 });
 
 describe("scheme/lists Contract precision — STATIC-only fixes (documented, not runtime-provable — see lists.test-d.ts for the real proof)", () => {
-  // REBASELINE: z.schemeValue (isSchemeValue) DOES carry a real refinement — `instanceof AValue ||
-  // typeof === "function"` (common/scheme-zod.ts) — it is not z.unknown()'s alias. A raw JS
-  // string/number genuinely fails it; this row's original "still true" premise was never
-  // actually true under isSchemeValue (verified against v1's own union-of-boxed-types `value`
-  // too — see git history). What the fix DID change is the STATIC decoded type (unknown →
-  // SchemeValue); the runtime domain was always "any BOXED scheme value," not "any raw value."
-  // INVARIANT: cons's car/cdr accept any scheme value at runtime unchanged — the fix is
-  // static-only
+  // z.schemeValue (isSchemeValue) carries a real refinement — `instanceof AValue ||
+  // typeof === "function"` — it is not z.unknown()'s alias. A raw JS string/number
+  // fails it. The static decoded type is SchemeValue; the runtime domain is any
+  // boxed scheme value, not any raw value.
   it("cons: car/cdr accept any BOXED scheme value; a raw non-scheme value is genuinely rejected (z.schemeValue = isSchemeValue, a real refinement) — the fix is the STATIC decoded type (unknown → SchemeValue), not a runtime behavior change", () => {
     const def = nativeDef("cons");
     expect(def.in.safeParse([exact(1), exact(2)]).success).toBe(true);
@@ -122,8 +110,6 @@ describe("scheme/lists Contract precision — STATIC-only fixes (documented, not
     expect(def.out.safeParse([new APair(exact(1), nil)]).success).toBe(true);
   });
 
-  // INVARIANT: map's head gained a real callable (z.lambda) refinement creating a genuine
-  // arity floor, rest/output stay permissive
   it("map (sequence): rest/output are z.schemeValue-flavored (no refinement) — still permissive at runtime for the rest+output; the fix is the head/rest SPLIT + precise decoded types (see lists.test-d.ts). The HEAD did later gain a real z.lambda refinement (the uniform-vocabulary migration), so — unlike when this test was authored — it now DOES create a genuine arity floor.", () => {
     const def = sequenceDef("map");
     expect(def.in.safeParse([fn, properList(1, 2, 3)]).success).toBe(true);
@@ -133,8 +119,6 @@ describe("scheme/lists Contract precision — STATIC-only fixes (documented, not
     expect(def.in.safeParse([]).success).toBe(false);
   });
 
-  // INVARIANT: list-tail / list-ref's output stays representation-blind since a
-  // sublist/element can be any scheme value
   it("list-tail / list-ref: output is z.schemeValue (no refinement) — a sublist/element can legitimately be ANY scheme value (an improper-list tail, or a car that's a bare number), so z.schemeValue (not a pair|nil union) is the honest ceiling", () => {
     const tailDef = nativeDef("list-tail");
     expect(tailDef.out.safeParse([properList(1, 2)]).success).toBe(true);
@@ -144,28 +128,19 @@ describe("scheme/lists Contract precision — STATIC-only fixes (documented, not
     expect(refDef.out.safeParse([exact(42)]).success).toBe(true); // an element is any scheme value
   });
 
-  // INVARIANT: list-set! has been doored this session — no longer a native op at all
-  // (pins implementation, not behavior)
   it("list-set!: doored this session (mutation violates value provenance) — no longer a native def to probe", () => {
     expect(symbols["list-set!"].kind).toBe("door");
   });
 
-  // INVARIANT: list-copy's input/output were already fully precise before this audit
   it("list-copy: input/output already z.schemeValue both sides — confirmed already precise, no change needed (output can legitimately be a non-list improper tail)", () => {
     const def = nativeDef("list-copy");
     expect(def.in.safeParse([properList(1, 2)]).success).toBe(true);
     expect(def.out.safeParse([properList(1, 2)]).success).toBe(true);
   });
 
-  // REBASELINE: the uniform-scheme-zod-vocabulary migration retired z.unknown() from this env
-  // layer entirely (scheme-zod.ts v2 doesn't re-export it — see srfi-95.ts's own note: "z.schemeValue
-  // is the typed replacement for z.unknown() at exactly this kind of native scheme-value slot").
-  // memq/assq's obj is z.schemeValue (isSchemeValue: instanceof AValue or a function), not genuinely
-  // host-blind — eq?'s raw `===` compare still works fine at RUNTIME against an unboxed operand
-  // (native ops never validate), but the ZOD SCHEMA (a harvest-quality artifact) now honestly
-  // narrows to "any boxed scheme value," matching every other slot this migration touched.
-  // INVARIANT: memq/assq's search key stays deliberately representation-blind (eq?'s raw
-  // identity compare)
+  // memq/assq's obj is z.schemeValue (boxed scheme value), not host-blind.
+  // eq?'s raw `===` still works at runtime against an unboxed operand (native
+  // ops never validate); the harvest schema narrows to boxed scheme values.
   it("memq/assq: the search key (obj) is z.schemeValue — a raw non-scheme value is genuinely rejected by the schema (though eq?'s runtime `===` never actually checks it)", () => {
     expect(nativeDef("memq").in.safeParse([exact(1), properList(1, 2)]).success).toBe(true);
     expect(nativeDef("memq").in.safeParse(["anything-at-all", properList(1, 2)]).success).toBe(false);
@@ -173,17 +148,9 @@ describe("scheme/lists Contract precision — STATIC-only fixes (documented, not
     expect(nativeDef("assq").in.safeParse(["anything-at-all", properList(properList(1, 2))]).success).toBe(false);
   });
 
-  // Bare-value purge EXECUTED (RULINGS.md R1,
-  // op-helpers.ts withInputProvenance): `z.schemeValue`'s `isSchemeValue` predicate
-  // (common/scheme-zod.ts) was never actually the permissive z.unknown()-alike this row's
-  // prior form assumed — it is, and remains, `instanceof AValue || typeof === "function"`,
-  // so a raw JS `false`/`"anything"` was ALREADY structurally rejected by the z.schemeValue arm
-  // (verified directly: `def.out.safeParse([false])` and `(["anything"])` both fail). The
-  // union `[z.schemeValue, z.booleanFalse]` is a genuine strict door end to end: no arm admits an
-  // unboxed scalar. No throw needed at this boundary — zod's own `safeParse` rejection IS
-  // the strict door (P5); nothing here was "permissive" for a bare-value-purge fix to close.
-  // INVARIANT: memv/assq/assv/member/assoc's output models "match or the boxed #f
-  // sentinel", requiring a real boxed schemeFalse on the false arm
+  // `[z.schemeValue, z.booleanFalse]` admits no unboxed scalar: `isSchemeValue` is
+  // `instanceof AValue || typeof === "function"`, and z.booleanFalse requires a boxed
+  // ABool. zod `safeParse` rejection is the door.
   it("memv/assq/assv/member/assoc: output is z.union([z.schemeValue, z.booleanFalse]) — a genuine strict door: a real match (boxed) or the boxed #f sentinel, nothing raw admitted by either arm", () => {
     for (const name of ["memv", "assq", "assv", "member", "assoc"]) {
       const def = nativeDef(name);
@@ -197,8 +164,6 @@ describe("scheme/lists Contract precision — STATIC-only fixes (documented, not
     }
   });
 
-  // INVARIANT: memq's output is tighter than its siblings — genuinely rejects raw JS false
-  // and any non-pair value
   it("memq: output is z.union([z.pair, z.booleanFalse]) — tighter than its 5 siblings above (its success path always returns the live APair cell it matched on, never a bare value), so it genuinely rejects both a raw JS `false` and an arbitrary non-pair value", () => {
     const def = nativeDef("memq");
     expect(def.out.safeParse([properList(1, 2)]).success).toBe(true);
@@ -207,8 +172,6 @@ describe("scheme/lists Contract precision — STATIC-only fixes (documented, not
     expect(def.out.safeParse(["anything"]).success).toBe(false);
   });
 
-  // INVARIANT: member/assoc accept any scheme value for obj; compare's declared return
-  // type is unknown, not boolean. W8: compare is ACallable (z.lambda).
   it("member/assoc: obj accepts any scheme value (was z.unknown(), now z.schemeValue — static-only); compare predicate's return type is now `unknown` not `boolean` (matches the file's is_false-guarded actual usage, and srfi-1.ts filter's established convention)", () => {
     for (const name of ["member", "assoc"]) {
       const def = nativeDef(name);
@@ -219,15 +182,12 @@ describe("scheme/lists Contract precision — STATIC-only fixes (documented, not
 });
 
 describe("scheme/lists Contract precision — regression guard: unaffected/already-precise siblings stay untouched", () => {
-  // INVARIANT: list stays fully variadic over scheme values, unchanged
   it("list: already z.array(z.schemeValue)/[z.schemeValue] — untouched by this pass (already precise before this audit)", () => {
     const def = nativeDef("list");
     expect(def.in.safeParse([exact(1), exact(2), exact(3)]).success).toBe(true);
     expect(def.in.safeParse([]).success).toBe(true); // 0-arg list is legal
   });
 
-  // INVARIANT: append/reverse untouched — reverse genuinely rejects a raw JS array;
-  // append/list remain fully variadic
   it("append/reverse: untouched — already at their honest precision ceiling (append/list are legitimately fully-variadic-over-SchemeValue; reverse's own impl has NO array branch — pair|nil only)", () => {
     // NOTE: no bound scheme symbol named `clone` exists in this pack — `.clone()` is an
     // internal APair JS method, not an exported op (`list-copy`, tested separately above, is
@@ -240,8 +200,6 @@ describe("scheme/lists Contract precision — regression guard: unaffected/alrea
     expect(nativeDef("reverse").in.safeParse([properList(1, 2, 3)]).success).toBe(true);
   });
 
-  // INVARIANT: apply/for-each already migrated to inputRest; apply's head is now a real
-  // z.lambda creating a genuine arity floor
   it("apply / for-each: already migrated to inputRest this session — untouched, glanced at only as the migration's own reference examples", () => {
     const applyDef = nativeDef("apply");
     // apply's HEAD is now z.lambda (a real callable predicate, added by the uniform-vocabulary
@@ -255,20 +213,9 @@ describe("scheme/lists Contract precision — regression guard: unaffected/alrea
 });
 
 describe("scheme/lists Contract precision — blanket sweep: genuinely-variadic-and-still-unconstrained ops (regression guard)", () => {
-  // REBASELINE: this row's premise (z.schemeValue = "no zod refinement" — a contract built entirely
-  // from z.schemeValue slots creates no arity floor and accepts raw garbage) was never actually true
-  // of isSchemeValue (`instanceof AValue || typeof === "function"`, common/scheme-zod.ts) — a
-  // raw string/number/plain-object genuinely fails it, verified directly:
-  // `z.schemeValue.safeParse("anything")` is `false`. The uniform-vocabulary migration made this
-  // refinement load-bearing everywhere (srfi-95.ts's own note: "z.schemeValue is the typed
-  // replacement for z.unknown() at exactly this kind of native scheme-value slot") — so even
-  // `list`/`append` (genuinely variadic over ANY scheme value at the semantic level) now reject
-  // the random-JS-garbage probe below via z.schemeValue's own refinement. The empty stragglers list is
-  // the honest acceptance bar now (mirrors numeric-contract-precision.test.ts's own bar) — no op
-  // in this pack is BOTH-SIDES fully unconstrained against real zod validation anymore.
-  // INVARIANT: every native/sequence op in the lists pack is precise except the two
-  // deliberately fully-polymorphic constructors (list, append) (pins implementation, not
-  // behavior)
+  // z.schemeValue is a real refinement (`instanceof AValue || typeof === "function"`),
+  // not a permissive no-op — even `list`/`append` reject raw JS garbage. Empty
+  // stragglers is the honest bar: no op is both-sides unconstrained.
   it("EVERY native/sequence op's Contract is precise — no straggler with BOTH sides still fully unconstrained against raw JS garbage (z.schemeValue's isSchemeValue refinement is real, not a permissive no-op)", () => {
     const stragglers: string[] = [];
     for (const [name, def] of Object.entries(symbols)) {
@@ -282,19 +229,10 @@ describe("scheme/lists Contract precision — blanket sweep: genuinely-variadic-
     expect(stragglers.sort()).toEqual([]);
   });
 
-  // INVARIANT: the lists pack exports exactly 22 symbols (deliberate drift alarm — forces
-  // a reviewer to touch this test when a symbol is added/removed). nth moved to polyglot-clojure.
   it("sanity: the pack exports exactly 22 symbols (the scope this review must cover)", () => {
     expect(Object.keys(symbols)).toHaveLength(22);
   });
 });
-
-// "is_pair-shadow swap byte-identical" spot-checks RETIRED (2026-07-09 suite
-// consolidation, G2): a helper-equivalence impl-pin bypassing the interpreter to
-// prove `is_pair`/`is_nil` behave identically to `instanceof APair`/`instanceof ANil` —
-// the block's own comment already named its replacement as "the untouched existing suite
-// (cyclic-list-ops.test.ts, clone-identity.test.ts, r7rs-identity.test.ts)", which covers
-// list-tail/list-ref/list-copy through the REAL interpreter, not a bypassed direct call.
 
 describe("scheme/lists Contract.type overrides — the harvest signature (signatureOf) for the ops whose z.custom callable arg is UNREPRESENTABLE to the printer (it throws `Schemas of type \"custom\" cannot be represented`, degrading the WHOLE signature to the catch-all `(...args: unknown[]) => unknown`)", () => {
   // These ops carry a z.custom<callable>() in their contract (map/for-each's fn head,
@@ -307,7 +245,6 @@ describe("scheme/lists Contract.type overrides — the harvest signature (signat
   // `unknown` — map dispatches to Pair/Nil/Vector terms, so narrowing to a List would be false,
   // exactly sort's own documented reasoning; a genuinely list-only receiver is `Cons<unknown> |
   // null`, the same image the file's own non-degraded list ops harvest as).
-  // INVARIANT: map harvests faithful List|vector dual generics (inline dedent type:)
   it("map (sequence): List|vector dual generics over element types (not R[]/unknown)", () => {
     expect(norm(signatureOf(sequenceDef("map")))).toBe(
       norm(dedent`
@@ -333,8 +270,6 @@ describe("scheme/lists Contract.type overrides — the harvest signature (signat
       `),
     );
   });
-  // INVARIANT: member's harvested signature is obj+list+optional compare returning the
-  // matched sublist or #f (pins implementation, not behavior)
   it("member: generic List search with optional compare", () => {
     expect(norm(signatureOf(nativeDef("member")))).toBe(
       norm(dedent`

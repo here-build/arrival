@@ -310,8 +310,8 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
   it("assoc(key, alist): the matched pair's key + value boxes both survive", async () => {
     const alist = new APair(new APair(el("k", 100), el("v", 101)), nil);
     const found = (await force(listOps.assoc(el("k", 200), alist))) as APair<any, any>;
-    expect(provOf(found.car)).toEqual([100]); // key box
-    expect(provOf(found.cdr)).toEqual([101]); // value box
+    expect(provOf(found.car)).toEqual([100]);
+    expect(provOf(found.cdr)).toEqual([101]);
   });
 
   // A SchemeVector (and a borrowed AJSArray) DOES answer car/cdr now — but as a TOLERANT-LOOSE
@@ -322,7 +322,6 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
     expect(provOf(mkVec()[tf("car")](CONSTANT_CTX))).toEqual([100]);
     expect(() => mkVec()[tf("car")](new RunContext({ strict: true }))).toThrow(PortabilityError);
   });
-  // RESOLVED (was CONTESTED): reduce delegates to the materialized vector, like map.
   it("reduce(AJSArray) folds the borrowed elements via a vector [RESOLVED]", async () => {
     expect(tf("reduce") in mkArr()).toBe(true);
     const n = await force(mkArr()[tf("reduce")](reduceContour((_e, acc: number) => acc + 1), 0, CONSTANT_CTX));
@@ -364,8 +363,6 @@ describe("vector? / vector-ref dispatch via the tagless protocol (no instanceof 
   it("vector-ref on a non-vector throws (the operation form — unlike vector?'s #f)", () => {
     expect(() => vectorSymbols["vector-ref"].impl!(mkPair(), 0)).toThrow(/not a vector/i);
   });
-  // INVARIANT: the vector op family works uniformly on a borrowed array via
-  // protocol dispatch (pins implementation, not behavior).
   it("the whole vector family works on a borrowed array via asVector's protocol dispatch", () => {
     // vector-length boxes its count now (AExact — the scheme face of z.number's output).
     expect(Number((vectorSymbols["vector-length"].impl!(mkArr()) as { valueOf(): unknown }).valueOf())).toBe(2);

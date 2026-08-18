@@ -35,12 +35,10 @@ import { ARosettaProcedure } from "../../values/primitives/ARosettaProcedure.js"
 
 describe("Wrapper Layer", () => {
   describe("isSchemeValue", () => {
-    // INVARIANT: nil is recognized as a scheme value
     it("recognizes nil", () => {
       expect(isSchemeValue(nil)).toBe(true);
     });
 
-    // INVARIANT: native AValue subtypes (AExact, AInexact, AString, ASymbol, APair) are recognized as scheme values
     it("recognizes native Scheme types", () => {
       expect(isSchemeValue(new AExact(42))).toBe(true);
       expect(isSchemeValue(new AInexact(3.14))).toBe(true);
@@ -49,12 +47,10 @@ describe("Wrapper Layer", () => {
       expect(isSchemeValue(new APair(new AExact(1), new AExact(2)))).toBe(true);
     });
 
-    // INVARIANT: wrapper types (AJSObject) are recognized as scheme values
     it("recognizes wrappers as Scheme values", () => {
       expect(isSchemeValue(new AJSObject({}))).toBe(true);
     });
 
-    // INVARIANT: JS primitives/objects/null/undefined are rejected as scheme values
     it("rejects JS primitives and objects", () => {
       expect(isSchemeValue(42)).toBe(false);
       expect(isSchemeValue("hello")).toBe(false);
@@ -88,7 +84,6 @@ describe("Wrapper Layer", () => {
   });
 
   describe("fromJS", () => {
-    // INVARIANT: null converts to nil; undefined converts to #void
     it("converts null to nil; undefined to #void (no portable representation)", () => {
       expect(fromJS(null)).toBe(nil);
       expect(fromJS(undefined)).toBe(theVoid);
@@ -113,7 +108,6 @@ describe("Wrapper Layer", () => {
       expect(() => fromJS(42n)).toThrow(/no lens for a host bigint/);
     });
 
-    // INVARIANT: fromJS refuses an already-boxed scheme value, throwing "already-boxed" (pins implementation, not behavior)
     it("refuses an already-boxed scheme value (strict one-way door)", () => {
       // fromJS is the JS→Scheme entry; an interpreter-minted value never crosses
       // it. The old pass-through masked which-side-am-I-on confusion in callers.
@@ -126,15 +120,13 @@ describe("Wrapper Layer", () => {
       expect(() => fromJS(pair)).toThrow(/already-boxed/);
     });
 
-    // INVARIANT: arrays are borrowed as AJSArray keeping source identity
     it("borrows arrays as a vector (AJSArray) keeping source identity", () => {
       const arr = [1, 2, 3];
       const wrapped = fromJS(arr);
       expect(wrapped).toBeInstanceOf(AJSArray);
-      expect((wrapped as AJSArray).source).toBe(arr); // borrow keeps the source by identity
+      expect((wrapped as AJSArray).source).toBe(arr);
     });
 
-    // INVARIANT: bytevector-like types pass through unchanged
     it("passes through bytevector-like types", () => {
       const u8 = new Uint8Array(10);
       expect(fromJS(u8)).toBe(u8);
@@ -143,13 +135,11 @@ describe("Wrapper Layer", () => {
       expect(fromJS(ab)).toBe(ab);
     });
 
-    // INVARIANT: Promises pass through unchanged
     it("passes through Promises", () => {
       const p = Promise.resolve(42);
       expect(fromJS(p)).toBe(p);
     });
 
-    // INVARIANT: a borrowed function crosses IN as a genuine scheme callable
     it("materializes a borrowed function to a callable (ARosettaProcedure, reverse-membrane lens)", () => {
       expect(fromJS(() => 42)).toBeInstanceOf(ARosettaProcedure);
     });
@@ -171,7 +161,6 @@ describe("Wrapper Layer", () => {
       }
     });
 
-    // INVARIANT: plain objects wrap into AJSObject preserving source identity
     it("wraps objects in SchemeJSObject", () => {
       const obj = { a: 1 };
       const wrapped = fromJS(obj);
@@ -179,7 +168,6 @@ describe("Wrapper Layer", () => {
       expect((wrapped as AJSObject).source).toBe(obj);
     });
 
-    // INVARIANT: fromJS caches identity — same input object returns the same wrapper instance
     it("returns same wrapper for same object (identity cache)", () => {
       const obj = { a: 1 };
       const wrapped1 = fromJS(obj);
@@ -187,8 +175,6 @@ describe("Wrapper Layer", () => {
       expect(wrapped1).toBe(wrapped2);
     });
 
-    // INVARIANT: fromJS refuses re-entry of an already-wrapped value — double-wrapping is impossible
-    // (pins implementation, not behavior)
     it("refuses re-entry of a wrapper — double-wrapping is impossible", () => {
       const obj = { a: 1 };
       const wrapped = fromJS(obj);
@@ -207,30 +193,25 @@ describe("Wrapper Layer", () => {
       expect(toJS(nil)).toEqual([]);
     });
 
-    // INVARIANT: AJSObject unwraps to its exact source object
     it("unwraps SchemeJSObject", () => {
       const obj = { a: 1 };
       const wrapped = new AJSObject(obj);
       expect(toJS(wrapped)).toBe(obj);
     });
 
-    // INVARIANT: AString converts to a JS string
     it("converts SchemeString to string", () => {
       expect(toJS(new AString("hello"))).toBe("hello");
     });
 
-    // INVARIANT: AExact (safe integer) converts to a JS number
     it("converts SchemeExact to number (safe integers)", () => {
       // SchemeExact.valueOf() returns number for safe integers
       expect(toJS(new AExact(42))).toBe(42);
     });
 
-    // INVARIANT: AInexact converts to a JS number
     it("converts SchemeInexact to number", () => {
       expect(toJS(new AInexact(3.14))).toBe(3.14);
     });
 
-    // INVARIANT: primitives (AExact/AString/ABool) pass through toJS with unchanged value
     it("passes through primitives", () => {
       expect(toJS(new AExact(42))).toBe(42);
       expect(toJS(new AString("hello"))).toBe("hello");
@@ -254,7 +235,6 @@ describe("Wrapper Layer", () => {
   });
 
   describe("SchemeJSObject", () => {
-    // INVARIANT: AJSObject exposes the "arrival/toJS" protocol key (pins implementation, not behavior)
     it("has the arrival/toJS protocol key", () => {
       const obj = new AJSObject({});
       expect("arrival/toJS" in obj).toBe(true);
@@ -284,12 +264,11 @@ describe("Wrapper Layer", () => {
       const source: any = { a: 1 };
       const obj = new AJSObject(source);
       expect(() => obj.set("a", new AExact(42))).toThrow(/writes are banned/);
-      expect(source.a).toBe(1); // nothing crossed the boundary
+      expect(source.a).toBe(1);
       expect(() => obj.delete("a")).toThrow(/mutations are banned/);
       expect(source.a).toBe(1);
     });
 
-    // INVARIANT: a function-valued field materializes to a genuine callable on read; getters are invoked and their result boxed
     it("materializes a function-valued field to a callable (ARosettaProcedure), allows getter reads", () => {
       const source = {
         data: 7,
@@ -300,19 +279,17 @@ describe("Wrapper Layer", () => {
           return "danger";
         } };
       const obj = new AJSObject(source);
-      expect((obj.get("data") as { valueOf(): unknown }).valueOf()).toBe(7); // data read (boxed)
-      expect((obj.get("computed") as { valueOf(): unknown }).valueOf()).toBe(99); // getter invoked → value
+      expect((obj.get("data") as { valueOf(): unknown }).valueOf()).toBe(7);
+      expect((obj.get("computed") as { valueOf(): unknown }).valueOf()).toBe(99);
       expect(obj.get("method")).toBeInstanceOf(ARosettaProcedure); // method → reverse-membrane lens, visible AND callable now
     });
 
-    // INVARIANT: .has() reflects own-property existence only
     it("checks property existence (own properties only)", () => {
       const obj = new AJSObject({ a: 1 });
       expect(obj.has("a")).toBe(true);
       expect(obj.has("b")).toBe(false);
     });
 
-    // INVARIANT: .has() blocks Object.prototype-inherited properties (toString/hasOwnProperty/constructor)
     it("blocks inherited properties from Object.prototype", () => {
       const obj = new AJSObject({ a: 1 });
       // These are inherited from Object.prototype - blocked by sandbox
@@ -321,7 +298,6 @@ describe("Wrapper Layer", () => {
       expect(obj.has("constructor")).toBe(false);
     });
 
-    // INVARIANT: .keys() returns own enumerable keys
     it("gets keys", () => {
       const obj = new AJSObject({ a: 1, b: 2 });
       expect(obj.keys()).toEqual(["a", "b"]);
@@ -335,7 +311,6 @@ describe("Wrapper Layer", () => {
   });
 
   describe("Identity Preservation (roundtrip)", () => {
-    // INVARIANT: object identity is preserved through the fromJS→toJS roundtrip
     it("preserves object identity through roundtrip", () => {
       const original = { a: 1 };
       const wrapped = fromJS(original);
@@ -352,7 +327,6 @@ describe("Wrapper Layer", () => {
       expect(fromJS(() => 42)).toBeInstanceOf(ARosettaProcedure);
     });
 
-    // INVARIANT: array identity is preserved through the borrow (.source + toJS roundtrip)
     it("preserves array identity through the borrow (.source + toJS round-trip)", () => {
       const original = [1, 2, 3];
       const wrapped = fromJS(original);
@@ -362,7 +336,6 @@ describe("Wrapper Layer", () => {
       expect(toJS(wrapped)).toBe(original); // toJS unwraps via the TO_JS protocol → the same array
     });
 
-    // INVARIANT: Uint8Array identity is preserved (pass-through)
     it("preserves Uint8Array identity (pass-through)", () => {
       const original = new Uint8Array([1, 2, 3]);
       const wrapped = fromJS(original);

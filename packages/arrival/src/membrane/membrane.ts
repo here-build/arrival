@@ -182,11 +182,8 @@ export function fromJS<T>(value: [T] extends [AValue] ? never : T): FromJSResult
     throw new NoLensError("unbranded-class", (value as object).constructor?.name ?? "<anonymous object>");
   }
 
-  // Leaves via jsToScheme: primitives box, null→nil, undefined→#void, function→callable
-  // (§CALLABLE-LENS), Symbol.for→:keyword; unique symbol and bigint door.
-  // Cast: jsToScheme's AWrap<T> is exactly this leaf case but TS can't thread that proof
-  // through the `[T] extends [AValue] ? never : T` conditional across the if-chain.
-  // FromJSResult is this boundary's named superset of AWrap leaf outputs.
+  // `as FromJSResult` exists because TS cannot thread `AWrap<T>` through the
+  // `[T] extends [AValue] ? never` if-chain.
   return jsToScheme(CONSTANT_CTX, value, {}, EMPTY_PROVENANCE) as FromJSResult;
 }
 

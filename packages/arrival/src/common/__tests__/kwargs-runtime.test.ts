@@ -45,7 +45,6 @@ function fire(proc: { ["arrival/tagless-final/apply"](args: any[], callCtx: any)
 }
 
 describe("z.kwargs runtime — UNIT (direct def.run, manually-built pluck pairs)", () => {
-  // INVARIANT: interleaved :key/value pairs decode into one constructed object argument.
   it("decodes interleaved :key/value pairs into ONE constructed object arg", async () => {
     const def = symbol.rosetta`greet: kwargs greeting`(
       { input: [], inputRest: { a: z.string, b: z.number.optional() }, output: [z.string] },
@@ -55,8 +54,6 @@ describe("z.kwargs runtime — UNIT (direct def.run, manually-built pluck pairs)
     expect((out as AString)["arrival/toJS"]()).toBe("Ada:5");
   });
 
-  // INVARIANT: keyword pair order at the call site is independent of the shape's declared field
-  // order.
   it("keyword ORDER is independent of the shape's declared order", async () => {
     const def = symbol.rosetta`greet: kwargs greeting`(
       { input: [], inputRest: { a: z.string, b: z.number.optional() }, output: [z.string] },
@@ -88,8 +85,6 @@ describe("z.kwargs runtime — INTEGRATION ((tool :k v …) through a real env +
     ]);
   });
 
-  // INVARIANT: a real scheme `(tool :a v :b v2)` call invokes the impl with the constructed
-  // {a,b} object.
   it("(tool :a v :b v2) invokes the impl with the constructed {a,b} object", async () => {
     // execState (COMPLEX tier): calls the `arrival/toJS` protocol method directly —
     // a boxed-state concern (RULINGS.md R1).
@@ -97,14 +92,11 @@ describe("z.kwargs runtime — INTEGRATION ((tool :k v …) through a real env +
     expect((out as AString)["arrival/toJS"]()).toBe("Ada:5");
   });
 
-  // INVARIANT: keyword order at the call site is independent of declared order, through real
-  // exec.
   it("keyword ORDER at the call site is independent of the shape's declared order", async () => {
     const [out] = (await execState(`(kw-greet :b 5 :a "Ada")`, { env })).values;
     expect((out as AString)["arrival/toJS"]()).toBe("Ada:5");
   });
 
-  // INVARIANT: an optional kwarg omitted leaves it undefined with no decode failure.
   it("an optional kwarg omitted leaves it undefined, no decode failure", async () => {
     const [out] = (await execState(`(kw-greet :a "Ada")`, { env })).values;
     expect((out as AString)["arrival/toJS"]()).toBe("Ada:undefined");
@@ -114,10 +106,8 @@ describe("z.kwargs runtime — INTEGRATION ((tool :k v …) through a real env +
     "a required kwarg missing DOORS cleanly — a per-FIELD validation error (path incl. :a), not the " +
       'pre-fix cryptic "expected object, received array" mismatch',
     async () => {
-      // Verified pre-fix (RED): the thrown ZodError's message was `"expected object, received array"`
-      // (the WHOLE args array failing the object schema, no field-level detail — decoding an array
-      // against an object schema). Post-fix the kwargs humanizer (common/kwargs-rejection.ts,
-      // args-error-reporting-v2.md §2.5) names the missing key in the frozen grammar.
+      // A missing required kwarg must name the field (kwargs humanizer,
+      // common/kwargs-rejection.ts, args-error-reporting-v2.md §2.5).
       await expect(exec(`(kw-greet)`, { env })).rejects.toThrow(/:a — missing \(required\)/);
     },
   );

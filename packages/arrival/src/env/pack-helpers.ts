@@ -13,14 +13,7 @@ import { APair, isCircularList } from "../values/primitives/APair.js";
 import { ANil } from "../values/primitives/ANil.js";
 import type { SchemeValue } from "../values/types.js";
 
-/** Proper-list → element array. Doors: circular and improper lists are errors,
- *  named per-op. NOT the same as `[...pair]` — the iterator FOLDS an improper
- *  tail in (toJS's one-way projection rule); this helper REJECTS it (the list-op
- *  domain).
- *
- *  Heap-metering is INERT: AValue carries no per-value ctx, so there is no
- *  operand run-context to charge off. Restoring metering requires threading the
- *  op's CallCtx/RunContext here (workboard D1) — the charge site is this loop. */
+/** Reject circular/improper lists (the iterator folds tails). Heap-metering is inert without CallCtx. */
 export function to_array(name: string): (list: SchemeValue) => SchemeValue[] {
   return function (list: SchemeValue): SchemeValue[] {
     if (list instanceof ANil) {

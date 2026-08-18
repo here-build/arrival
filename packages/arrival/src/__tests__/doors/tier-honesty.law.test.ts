@@ -1,20 +1,9 @@
 /**
- * LAW — tier honesty (docs/PROVENANCE.md §5 A1 "payload tiering", §7 law table —
- * Q5's stub-file mapping). FULLY GREEN at Q17: the
- * four rows below that were `it.todo` (@ledger: Q17) now compose Q14's payload
- * envelope (`store/tiering.ts`'s `recorded`/`stub` arms) with Q17's replay tiers
- * (`replay-memo.ts`'s `replayed`/`replayed-cached` arms) via `answerQuery` —
- * exactly the "Q17 SUPERSEDES a recorded answer with replayed/replayed-cached"
- * composition `store/tiering.ts`'s own header names.
+ * LAW — tier honesty (docs/PROVENANCE.md §5 A1 "payload tiering", §7 law table).
+ * Drill-in carries replayed | replayed-cached | recorded | stub.
  *
- * pure-mux derivation deliberately does NOT live here — Q5's stub-file
- * mapping (docs/PROVENANCE.md §7 law table) homes it in `provenance/replay.law.test.ts` (it flips at Q16, with
- * every other Q16-gated law row); this file houses tier-honesty ONLY, per that table.
- *
- * The `EvidenceTier` enum this whole law is ABOUT is ALREADY COMMITTED (Q10 —
- * `src/provenance/store/interfaces.ts`), so the anti-vacuity grounding test below is a
- * REAL, running, GREEN assertion (not `it.todo`) pinning that the four-tier vocabulary
- * this law checks against hasn't drifted.
+ * pure-mux derivation lives in `provenance/replay.law.test.ts`; this file
+ * houses tier-honesty only.
  */
 import { beforeAll, describe, expect, it } from "vitest";
 import { parse } from "../../eval/generator-exec.js";

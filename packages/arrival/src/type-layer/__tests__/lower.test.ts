@@ -172,11 +172,9 @@ describe("lower — top-level define lowers to a const statement", () => {
     expect(ts1(input)).toBe(expected);
   });
 
-  // INVARIANT: a defined helper's real arity mismatch is caught by tsc against its real
-  // parameter types (TS2554).
   it("integration: a defined helper's arity mismatch actually type-checks against real params", () => {
     const errors = compileErrors(`${lower("(define (add2 a b) a) (add2 1)").ts}\n`);
-    expect(errors.length).toBeGreaterThan(0); // TS2554 — too few arguments
+    expect(errors.length).toBeGreaterThan(0);
   });
 });
 
@@ -226,7 +224,6 @@ describe("lower — s.* combinators (TS reserved-word forms)", () => {
     expect(ts1(input)).toBe(expected);
   });
 
-  // INVARIANT: a lowered `if` type-checks and narrows correctly through the carrier `s` namespace.
   it("integration: (if ...) type-checks and narrows through the carrier `s` namespace", () => {
     const errors = compileErrors(`${carrierVocabularyText}\n${lower("(if #t 1 2)").ts}\n`);
     expect(errors).toEqual([]);
@@ -234,13 +231,11 @@ describe("lower — s.* combinators (TS reserved-word forms)", () => {
     expect(compileErrors(`${carrierVocabularyText}\n${narrowed}\n`)).toEqual([]);
   });
 
-  // INVARIANT: a lowered `let` type-checks and infers the bound variable's type correctly.
   it("integration: (let ((a 1)) a) type-checks and infers the bound type", () => {
     const errors = compileErrors(`${carrierVocabularyText}\nconst _x: number = ${lower("(let ((a 1)) a)").ts};\n`);
     expect(errors).toEqual([]);
   });
 
-  // INVARIANT: a lowered `cond` type-checks correctly.
   it("integration: (cond (#t 1) (else 2)) type-checks", () => {
     const errors = compileErrors(
       `${carrierVocabularyText}\nconst _x: number = ${lower("(cond (#t 1) (else 2))").ts};\n`,
@@ -251,9 +246,8 @@ describe("lower — s.* combinators (TS reserved-word forms)", () => {
 
 describe("lower — integration: lowered call ∩ harvested prelude", () => {
   // get-route takes a proper list (z.list() → List<unknown>) + a string; set-timer takes a
-  // number. REBASELINE (fe2c848ee7, 2026-07-08): z.pair is now cons(value, value) — a real
-  // dotted-pair codec (prints Pair<Car,Cdr>), not the list-shaped `Cons<unknown>` it used to
-  // alias — z.union([z.pair, z.nil]) no longer means "a proper list." z.list() is the actual
+  // number. `z.pair` is cons(value, value) — a dotted-pair codec, not a proper list.
+  // `z.union([z.pair, z.nil])` is not "a proper list." z.list() is the actual
   // proper-list constructor (prints List<unknown> via the named-generic pre-check).
   const getRoute = symbol.rosetta`get-route: route between stops`(
     { input: [z.list(), z.string], output: [z.string] },
@@ -296,13 +290,10 @@ describe("lower — integration: lowered call ∩ harvested prelude", () => {
 });
 
 describe("lower — per-statement span-map (additive)", () => {
-  // INVARIANT: lower() preserves the `{ ts }` emitted string verbatim.
   it("preserves `{ ts }` verbatim", () => {
     expect(lower("(set_timer 600)").ts).toBe("set_timer(600)");
   });
 
-  // INVARIANT: a single-statement program's tsRange slices the whole output and its
-  // schemeSpan covers the whole source form.
   it("single statement: one entry, tsRange slices the whole output, schemeSpan covers the form", () => {
     const { ts, statements } = lower("(set_timer 600)");
     expect(statements).toHaveLength(1);
@@ -310,8 +301,6 @@ describe("lower — per-statement span-map (additive)", () => {
     expect(statements[0]!.schemeSpan).toEqual([0, 15]);
   });
 
-  // INVARIANT: a multi-statement program's per-statement tsRange/schemeSpan each slice
-  // exactly their own fragment/source form.
   it("multi statement: each tsRange slices its lowered fragment; each schemeSpan slices its source form", () => {
     const scheme = "(set_timer 1) (set_timer 2)";
     const { ts, statements } = lower(scheme);
@@ -323,8 +312,6 @@ describe("lower — per-statement span-map (additive)", () => {
     }
   });
 
-  // INVARIANT: a `#(...)` vector literal fuses into one statement span covering the `#`
-  // mark plus the list.
   it("fuses `#(…)` into one statement covering the `#` mark + the list", () => {
     const { statements } = lower("#(1 2 3)");
     expect(statements).toHaveLength(1);

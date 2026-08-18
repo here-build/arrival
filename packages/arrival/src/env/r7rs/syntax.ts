@@ -27,7 +27,6 @@ const COND_EXPAND =
 const SYNTAX_ERROR =
   "syntax-error is not yet implemented — raise a static/teaching failure via error / raise at expansion or run time, or fail the capability bake, instead of a dedicated expand-time form";
 
-/** scheme/r7rs/syntax — R7RS macro-binding aliases + library/inclusion doors. */
 export default EnvCapability.define("scheme/r7rs/syntax", {
   symbols: (symbol) => ({
     "define-syntax":

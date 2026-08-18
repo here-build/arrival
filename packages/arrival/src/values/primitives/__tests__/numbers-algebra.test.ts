@@ -36,8 +36,7 @@ describe("number Setoid — exactness boundary (the (equal? 1 1.0) fix)", () => 
   });
 
   it("structuralEqual honors the exactness boundary (the bug)", () => {
-    // Before: structuralEqual collapsed via valueOf → #t. Now its FL/equals
-    // consult-hook catches the number instances first → correct #f.
+    // structuralEqual consults tagless equals first, so exact 1 ≠ inexact 1.0.
     expect(structuralEqual(new AExact(1), new AInexact(1))).toBe(false);
     expect(structuralEqual(new AExact(1), new AExact(1))).toBe(true);
     expect(structuralEqual(new AInexact(1), new AInexact(1))).toBe(true);

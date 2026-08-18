@@ -1,9 +1,4 @@
-// Caveat-sweep finding (2026-06-11): boxed vectors/bytevectors print garbage in
-// the repr path (the only user-facing stringify in the MCP bridge env) — and TWO
-// divergent garbage strings: "#<vector>" top-level (static __class__) vs
-// "#<SchemeVector>" (JS class name) nested in a Pair; bytevector → "#<bytevector>".
-// They must render as the R7RS external representation #(...) / #u8(...). repr of
-// a vector had ZERO test coverage before this.
+// Vectors print #(...) / #u8(...) — the R7RS external representation.
 import { describe, expect, it } from "vitest";
 import { freshEnv } from "./_fresh-env.js";
 import { execOverFrame as exec } from "../eval/generator-exec.js";

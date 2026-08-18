@@ -22,9 +22,7 @@ import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
 // In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
 import { bindValue, mintFrame } from "../../env/AmbientRuntime.js";
 
-// Q20b: this file's local `oneShot` helper calls execState directly (not through
-// _lineage-test-helpers.js's runRaw, which saves/restores its own call) — force
-// the oracle ON for the file's lifetime.
+// this helper/execState needs the eager oracle ON
 requireEagerOracle();
 
 // `seq` numbers the BESPOKE per-`it` envs below (each builds its own env to install
@@ -73,15 +71,6 @@ describe("ASSUMPTION — let is transparent (the graph is the object, not syntax
   });
 });
 
-// A13/A18b (the "(length (map identity xs)) over-attributes through map" duplicate green
-// pins) DELETED here (2026-07-09 suite consolidation):
-// both were verbatim duplicates of
-// golden-prov-fan.test.ts's own A13 leak, pinned green a second/third time in a
-// different file with no `it.fails`. The ONE surviving assertion of this invariant is
-// golden-prov-fan.test.ts's `it.fails` row (flipped in the same sweep) plus the canonical
-// `it.fails` row in provenance/conservation.law.test.ts's "known violations" §2
-// (@ledger: A13 count-cone over-attribution).
-
 // ── EAGER PIPELINE VALUES — the forcing ops produce the documented results ──
 // Laziness is now implicit; there is no `(lazy-seq …)` carrier to contrast against. These
 // pin the eager value of each map/filter/reduce pipeline directly. The reduce-direction
@@ -97,11 +86,11 @@ describe("CAPABILITY — eager map/filter/reduce pipelines yield the documented 
   const eval1 = async (chain: string): Promise<unknown> => jsVal(await runRaw(chain, { xs: nums() }));
 
   it("map → reduce: (reduce + 0 (map (* x 2) xs)) = 30", async () => {
-    expect(await eval1(`(reduce + 0 (map (lambda (x) (* x 2)) xs))`)).toBe(30); // 2+4+6+8+10
+    expect(await eval1(`(reduce + 0 (map (lambda (x) (* x 2)) xs))`)).toBe(30);
   });
 
   it("filter → length: (length (filter (> x 2) xs)) = 3", async () => {
-    expect(await eval1(`(length (filter (lambda (x) (> x 2)) xs))`)).toBe(3); // {3,4,5}
+    expect(await eval1(`(length (filter (lambda (x) (> x 2)) xs))`)).toBe(3);
   });
 
   it("map → filter → reduce: a full pipeline sums to 18", async () => {
@@ -241,13 +230,8 @@ describe("v0.1 FINALIZATION GATES (G1–G7)", () => {
       // is NOT carried onto the count today (the eager reality the static path
       // must match; G2 forbids "improving" it under the flag).
       vectorLength: await oneShot(`(vector-length xs)`),
-      // FIXED TWICE OVER: DR4 conservation repair (map no longer cross-out-strips to a raw
-      // AJSArray) AND the C4/A13 interim fix (RULINGS.md R2) — `length` now reads the
-      // CONTAINER's own flat grouping-fact stamp instead of deep-unioning every mapped
-      // element's box. `map` is length-preserving, so it PROXIES `xs`'s own stamp {7}
-      // through unchanged; `length` reads exactly that. This WAS the A13-shaped
-      // over-attribution conservation.law.test.ts's "A13 count-cone over-attribution" row
-      // pins for the Pair carrier [GATE: G2] — CLOSED for both carriers now.
+      // `length` reads the CONTAINER's own flat grouping-fact stamp; `map` PROXIES
+      // `xs`'s own stamp {7} through unchanged [GATE: G2].
       mapLengthCoerce: await oneShot(`(length (map (lambda (e) e) xs))`),
       // vector->list converts the carrier; the collection-level box does not
       // ride onto the resulting Pair today.

@@ -134,11 +134,7 @@ export function env_get(env: AmbientRuntime, sym: ASymbol, ctx?: RunContext): Am
   return resolveSynth(name, () => env.allBoundNames());
 }
 
-/**
- * Semantic role of a nested frame. Currently metadata only (every frame is a
- * mintFrame child identically) — future work may distinguish the lexical chain
- * from the capability base. Mirrors the debug-name passed to the frame mint.
- */
+/** Kind is debug-name metadata; every child is minted identically. */
 export type ScopeKind =
   | "lambda"
   | "macro"
@@ -152,7 +148,6 @@ export type ScopeKind =
   | "user";
 
 export class Resolver {
-  /** Lexical-binding chain (let/lambda/letrec/… frames). */
   readonly scope: LexicalScope;
   /** Capability base (builtins/preludes/polyglot resolvers) the scope falls through to. */
   readonly capabilities: Capabilities;

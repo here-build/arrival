@@ -82,7 +82,6 @@ export interface Vocabulary {
    *  DAG once). Collected here; executed once per run by `assembleRun` — that single
    *  pass IS the single-execution law. */
   readonly preludes: readonly { readonly capability: EnvCapability; readonly text: string }[];
-  /** Validated per-capability configuration → feeds `RunContext.capabilityConfigurations`. */
   readonly configsByCapability: ReadonlyMap<object, unknown>;
 }
 
@@ -177,7 +176,6 @@ async function processCapability(
   for (const [name, rawDef] of Object.entries(symbolsRec)) {
     ownNames.add(name);
 
-    // symbol.alias — substitute then fall through.
     let def: SymbolDeclaration = rawDef;
     const viaAlias = isAliasDef(rawDef);
     if (viaAlias) {

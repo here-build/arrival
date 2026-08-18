@@ -189,7 +189,7 @@ function defineHeadNameOf(form: unknown): string | null {
   return null;
 }
 
-/** symbols keys ∪ prelude define names. Async; memoized by caller. */
+/** Memoized by the caller, not here. */
 export async function computeCapabilityExports(spec: ExportableSpec): Promise<ReadonlySet<string>> {
   const names = new Set<string>();
   if (typeof spec.symbols !== "function") {
@@ -331,7 +331,6 @@ export async function bindCapabilityDefines(args: BindCapabilityDefinesArgs): Pr
   const parsedByDef = new Map<DefineSymbolDef | DefineSyntaxSymbolDef, SchemeValue>();
   for (const [, def] of entries) parsedByDef.set(def, await parseDefineBody(capabilityName, def));
 
-  // Allowlist: KEYWORD_SYNTAX ∪ ownNames ∪ exports(deps).
   const allowlist = new Set<string>(KEYWORD_SYNTAX_BASELINE);
   for (const n of ownNames) allowlist.add(n);
   for (const dep of transitiveDeps(deps)) for (const n of await dep.exports()) allowlist.add(n);

@@ -28,7 +28,6 @@ export default EnvCapability.define("scheme/core", {
   // gensym resolves at macro-EXPANSION time; the floor (assembled first) binds it where
   // every consumer reaches it.
   symbols: (symbol, z) => ({
-    // Kernel keywords — see the preamble for why every special form is keyworded.
     lambda: symbol.keyword`lambda: create an anonymous procedure`,
     define: symbol.keyword`define: bind a name in the current scope`,
     "define-macro": symbol.keyword`define-macro: define a fexpr-style unhygienic macro`,

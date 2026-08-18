@@ -10,7 +10,6 @@ import { theVoid } from "../values/primitives/AVoid.js";
 import { nil } from "../values/primitives/ANil.js";
 
 export const pre_num_parse_re = /((?:#[xodbie]){0,2})(.*)/i; // deferred: float complex forms not split here
-// functions generate regexes to match number rational, integer, complex, complex+rational
 function num_mnemicic_re(mnemonic) {
   return mnemonic ? `(?:#${mnemonic}(?:#[ie])?|#[ie]#${mnemonic})` : "(?:#[ie])?";
 }
@@ -33,11 +32,9 @@ const float_stre = String.raw`(?:[-+]?(?:[0-9]+(?:[eE][-+]?[0-9]+)|(?:\.[0-9]+|[
 export const complex_float_stre = `(?:#[ie])?(?:[+-]?(?:[0-9][0-9_]*/[0-9][0-9_]*|nan.0|inf.0|${float_stre}|[+-]?[0-9]+))?(?:${float_stre}|[+-](?:[0-9]+/[0-9]+|[0-9]+|nan.0|inf.0)?)i`;
 export const float_re = new RegExp(`^(#[ie])?${float_stre}$`, "i");
 export const glob = Symbol.for("*");
-// -------------------------------------------------------------------------
 const character_symbols = Object.keys(characters).join("|");
 const char_sre_re = `#\\\\(?:x[0-9a-f]+|${character_symbols}|[\\s\\S])`;
 export const char_re = new RegExp(`^${char_sre_re}$`, "i"); // regexes with full range but without mnemonics for string->number
-// Complex with (int) (float) (rational)
 function make_num_stre(fn) {
   const ranges = [
     ["o", "[0-7]"],

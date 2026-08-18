@@ -196,14 +196,8 @@ function noteForDroppedKey(key: string): string {
   return `:${key} is not a parameter of this tool — it was ignored.`;
 }
 
-/** Dropped-far-unknown-kwarg notes, keyed by the exact decoded object `decodeKwargsStrict`
- *  returns. THIS IS A DISCOVERY SEAM, not a wired channel: kwargs-rejection.ts sits below
- *  the observation/metadata layer (mcp-substrate's runner.ts / AttachmentSink) and must not
- *  depend upward on it. A caller holding the returned object (rosetta.ts's
- *  `[decodeKwargsStrict(...)]` call site, or a layer above it) drains via
- *  `drainDroppedKwargNotes(value)` and forwards the notes into the observation's metadata
- *  channel — until that wiring lands, notes are produced correctly but not yet surfaced to
- *  the model. Drains ONCE (delete-on-read) so a re-render never re-notes the same drop. */
+/** WeakMap is a downward discovery seam (drain-once, no upward dep),
+ *  keyed by the exact decoded object `decodeKwargsStrict` returns. */
 const droppedKwargNotes = new WeakMap<object, readonly string[]>();
 
 export function drainDroppedKwargNotes(value: unknown): readonly string[] | undefined {
@@ -253,8 +247,7 @@ function tryDropFarUnknownKeys(
 /**
  * The kwargs decode chokepoint (rosetta.ts's record-shaped `inputRest` path): STRICT
  * (unknown keys reject — never silently strip) + the scheme-face guard + the §2.5
- * humanizer + far-unknown-key tolerance. Throws a plain `Error` carrying the frozen
- * grammar; non-Zod errors from the decode propagate untouched.
+ * humanizer + far-unknown-key tolerance. Non-Zod decode errors propagate untouched.
  */
 export function decodeKwargsStrict(
   qualifiedName: string,

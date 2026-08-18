@@ -52,12 +52,10 @@ export function reStampChild(
     warnMembrane("a JS function");
     return theVoid;
   }
-  // Cycle / shared-substructure guard: a re-encountered node returns as-is.
   if (seen.has(child)) return child;
   seen.add(child);
   // Non-AValue orphans (Values / R7RSError): no provenance slot → identity.
   if (!(child instanceof AValue)) return child;
-  // Same-provenance fast path preserves identity.
   if (p === EMPTY_PROVENANCE || p === child.provenance) return child;
   // THE ADDITIVE LAW (docs/membrane.md §INBOUND): union the crossing's ids onto the child's own
   // origin, never substitute — erasing breaks `origin ⊇ dependencies` and uneval's slice soundness.

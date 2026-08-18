@@ -24,7 +24,6 @@ import {
 import { ReactiveAtomMembershipError } from "../reactive-atoms.js";
 import { atomKey, MemoryPathAtomBus } from "../path-atom-bus.js";
 
-// Flip when CallCtx.reactiveAtoms is minted after CQS (R6).
 const R6_WIRED = true;
 
 if (!R6_WIRED) {

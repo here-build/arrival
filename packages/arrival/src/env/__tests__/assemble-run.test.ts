@@ -115,10 +115,8 @@ describe("assembleRun — registration-conflict door as the execution-dedup dete
 });
 
 describe("assembleRun — prelude `(define …)` PERSISTS into the main phase (ruling 2026-08-13)", () => {
-  // FLIPPED LAW (audit B4): the discard contract this block used to pin was superseded —
-  // a prelude define is now a per-run main-phase binding (the require-extension surface).
-  // The full law family lives in prelude-persistence.law.test.ts; this row keeps the
-  // flip visible at the old pin's address.
+  // A prelude define is a per-run main-phase binding (the require-extension surface).
+  // The full law family lives in prelude-persistence.law.test.ts.
   it("a name a prelude `define`s IS bound from user code after assembly", async () => {
     const cap = EnvCapability.define("test/prelude-define-persists", {
       prelude: "(define leaked 42)",
@@ -198,9 +196,6 @@ describe("assembleRun — preludeOnly overlay: invisible from user code, visible
 });
 
 describe("assembleRun — per-run effect freshness", () => {
-  // INVARIANT: two `assembleRun` calls from the SAME (capabilities, config) tuple share the
-  // memoized Vocabulary but get INDEPENDENT prelude effects — a fresh resource bag each time,
-  // never accumulating across runs.
   it("two assembleRun calls from one tuple get independent resource state", async () => {
     const cap = EnvCapability.define("test/prelude-freshness", {
       resources: (): { count: number } => ({ count: 0 }),
@@ -225,15 +220,12 @@ describe("assembleRun — per-run effect freshness", () => {
 });
 
 describe("assembleRun — evalPrelude required iff the tuple's closure declares a prelude", () => {
-  // INVARIANT: a tuple with NO prelude never calls `evalPrelude` — omitting it is safe.
   it("omitting evalPrelude is safe when no capability in the closure declares a prelude", async () => {
     const cap = EnvCapability.define("test/prelude-none", { symbols: () => ({}) });
     const runCtx = await assembleRun({ capabilities: [cap], evalScheme: realEvalScheme });
     expect(runCtx.vocabulary).toBeDefined();
   });
 
-  // INVARIANT: a tuple WITH a prelude but no evalPrelude supplied throws a clear invariant,
-  // rather than silently skipping the pass.
   it("a tuple WITH a prelude but no evalPrelude supplied throws", async () => {
     const cap = EnvCapability.define("test/prelude-missing-evalPrelude", {
       prelude: "(define x 1)",

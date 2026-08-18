@@ -66,9 +66,6 @@ export class ProvenanceStoreFake implements ProvenanceStore {
     return s;
   }
 
-  /** Fault-injection knob ("write-failure on demand"): while armed, every
-   *  `append` throws `ProvenanceWriteFailure` instead of writing — models
-   *  "a failed write kills the request." */
   setWriteFailure(on: boolean): void {
     this.writeFailure = on;
   }
@@ -206,7 +203,6 @@ export class PayloadStoreFake implements PayloadStore {
   private settleDelayTicks = 0;
   private now = 0;
 
-  /** Fault-injection knob: while armed, every `put` throws `PayloadWriteFailure`. */
   setPutFailure(on: boolean): void {
     this.putFailure = on;
   }
@@ -294,8 +290,6 @@ export class PayloadStoreFake implements PayloadStore {
     slot.scheduled = undefined;
   }
 
-  /** Bulk fault-injection convenience over `evict` — the harness decision's "forced
-   *  eviction = drop all in-memory state" knob, at the payload-store grain. */
   async evictAll(): Promise<void> {
     for (const hash of this.payloads.keys()) await this.evict(hash);
   }

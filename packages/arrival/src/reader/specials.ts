@@ -17,7 +17,6 @@ export function type(name) {
   try {
     return get(name).type;
   } catch {
-    // Unknown prefix — not a registered reader macro.
     return null;
   }
 }

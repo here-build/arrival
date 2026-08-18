@@ -6,26 +6,10 @@
  * - Resolution order per module: bindings → resolvers → parent
  * - Resolvers can yield by returning undefined
  *
- * Note: These tests use _lookupWithResolvers directly to avoid
- * dependency on arrival runtime (which patch_value requires).
- *
- * [RETAG — deliberate internal-module unit suite, not a test-only-API artifact]
- * (2026-07-09 suite consolidation, [P16]): `_lookupWithResolvers` is real production
- * surface (`Resolver.ts`, `Capabilities.ts`, `LexicalScope.ts`, `common/capability.ts` all
- * call it — confirmed via grep), not a test-only hack. Checked the two candidate public-
- * altitude covers: `src/common/__tests__/capability.test.ts` explicitly does NOT exercise
- * resolver ordering (its own header comment: "registerResolver / list / allBoundNames are
- * not exercised by these tests"), and `capabilities-assembled.test.ts` only tests the
- * assembled-base sentinel, not resolver yield/chain-order semantics. No public-altitude
- * survivor exists, so this file stays — parallel to `parser.test.ts`'s honest framing of
- * bypassing `exec()` for a fast internal-module unit floor.
- *
- * ENV T1 (2026-07-09, the environment-resolution-chain design §T1): resolvers
- * relocated from every `AmbientRuntime` frame onto `ResolvingAmbient` only (the baked-root
- * specialization — see env-roots.ts). The rows below are UNCHANGED — same ordering contract,
- * same assertions — construction just targets `ResolvingAmbient` at the two/three layers
- * that register resolvers, matching production (`global_env`/`user_env` are the real
- * `ResolvingAmbient` instances these tests model).
+ * These tests call `_lookupWithResolvers` — production surface
+ * (`Resolver.ts`, `Capabilities.ts`, `LexicalScope.ts`, `common/capability.ts`).
+ * Resolvers live on `ResolvingAmbient` only; construction targets that type
+ * at the layers that register resolvers.
  */
 
 import { describe, expect, it } from "vitest";
@@ -38,14 +22,11 @@ import { nil } from "../values/primitives/ANil.js";
 // The boxed sentinel a resolver answers with (resolvers box at their own boundary now).
 const FOUND = new AExact(42);
 
-// Helper to lookup without patch_value dependency
 const lookup = (env: AmbientRuntime, name: string) => env._lookupWithResolvers(name);
 
 
 describe("AmbientRuntime Module Composition", () => {
   describe("Resolver Yielding", () => {
-    // INVARIANT: multiple registered resolvers are tried in registration order until one
-    // returns a defined value (pins implementation, not behavior)
     it("should try multiple resolvers in order until one returns a value", () => {
       const callOrder: string[] = [];
 
@@ -53,7 +34,7 @@ describe("AmbientRuntime Module Composition", () => {
         id: "resolver-1",
         resolve: (name) => {
           callOrder.push("resolver-1");
-          return undefined; // Yield
+          return undefined;
         } };
 
       const resolver2: ResolverSpec = {
@@ -89,9 +70,6 @@ describe("AmbientRuntime Module Composition", () => {
   });
 
   describe("_lookupWithResolvers", () => {
-    // INVARIANT: resolution order per environment is direct bindings → registered
-    // resolvers → parent environment, checked in that order at each level (pins
-    // implementation, not behavior)
     it("should implement correct per-module resolution order", () => {
       // Bindings AND resolver answers are boxed SchemeValues — the hermetic ruling's
       // resolver contract: a resolver boxes at its own boundary, so the walk hands the
@@ -108,19 +86,14 @@ describe("AmbientRuntime Module Composition", () => {
         id: "child-resolver",
         resolve: (name) => (name === "w" ? W : undefined) });
 
-      // Direct binding in child
       expect(child._lookupWithResolvers("z")).toEqual(new AExact(3));
 
-      // Resolver in child
       expect(child._lookupWithResolvers("w")).toBe(W);
 
-      // Direct binding in parent (after child resolver yields)
       expect(child._lookupWithResolvers("x")).toEqual(new AExact(1));
 
-      // Resolver in parent (after child resolver yields)
       expect(child._lookupWithResolvers("y")).toBe(Y);
 
-      // Not found anywhere
       expect(child._lookupWithResolvers("not-found")).toBe(undefined);
     });
   });

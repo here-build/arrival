@@ -1,8 +1,7 @@
-// Caveat-sweep finding (2026-06-11): every container-producing vector/bytevector
-// builtin DROPS input provenance — omitting the withInputProvenance call its
-// string/list sibling makes. Boxing's goal (b) is to give the container a place
-// to carry lineage; its own producers were throwing it away. utf8->string /
-// vector->string even returned RAW JS strings (provenance-blind escapees).
+// Every container-producing vector/bytevector builtin DROPS input provenance —
+// omitting the withInputProvenance call its string/list sibling makes.
+// utf8->string / vector->string even returned RAW JS strings (provenance-blind
+// escapees).
 import { describe, expect, it } from "vitest";
 import bytevectorsCap from "../../env/r7rs/bytevectors.js";
 import vectorsCap from "../../env/r7rs/vectors.js";
@@ -15,9 +14,7 @@ import { harvestContracts } from "../../__tests__/_symbols-harvest.js";
 import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
 import { testCallCtx } from "../../symbol/index.js";
 
-// Q20b: every assertion below calls a raw native op fn directly — still routes
-// through op-helpers.ts's withInputProvenance internally, so it needs the oracle
-// forced ON for this file's lifetime.
+// this helper/execState needs the eager oracle ON
 requireEagerOracle();
 
 // Source op fns FROM THE CAPABILITY's inlined `symbols` (the bare *_OPS map was

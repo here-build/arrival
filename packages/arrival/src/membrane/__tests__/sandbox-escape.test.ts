@@ -62,12 +62,7 @@ describe("CRITICAL: sandbox escape vectors", () => {
    * (i.e., the sandbox), NOT to global_env. Inside the sandbox, looking up
    * `+` should fail with Unbound — `+` isn't an exported sandbox binding.
    */
-  // [STALE-LABEL] (2026-07-08 invariant-verdict sweep, [P16]):
-  // the test name/header comment narrate an
-  // "eval defaults to sandbox env, not global" fallback POLICY — but `eval` was deleted
-  // outright (the host-language sweep), so there is no fallback decision left to make; the
-  // actual assertion is just "Unbound." Harmless, but the title pins a stale internal
-  // narrative rather than current behavior. Left as a regression guard that `eval` stays gone.
+  // `eval` is gone; lookup throws Unbound. Regression guard that it stays gone.
   it("eval defaults to sandbox env, NOT global, when no env arg", async () => {
     // `+` is NOT in inferenceEnv directly (sandbox uses scheme arithmetic).
     // eval no longer exists at all — the host-language sweep deleted it from
@@ -240,12 +235,7 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
    * Secure invariant: `make-string` with a length > some host-configured cap
    * must throw a cap-related error in O(1), not allocate.
    */
-  // REWRITE (2026-07-09 suite consolidation, [P5]
-  // "sandbox-escape weak doors"): was `caught === true` + timing only — never verified
-  // the thrown error IS the intended cap-policy door (vs. an engine RangeError). Verified
-  // the actual thrown message (`op-helpers.ts`'s `assertAllocatable`): "make-string:
-  // requested length 100000000 exceeds allocation limit 16777216" — teaches the op name,
-  // the requested count, and the cap (P5). Assert that shape, not just "it threw fast".
+  // Cap-policy door (`assertAllocatable`): message names the op, requested length, and cap — not an engine RangeError.
   it("(make-string 1e8 ...) errors fast with the cap-policy TAUGHT message, not an engine RangeError", async () => {
     const start = Date.now();
     let err: Error | undefined;
@@ -269,9 +259,7 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
    *
    * Secure invariant: same as make-string — host-configurable cap, error fast.
    */
-  // REWRITE (same sweep/rationale as make-string above): verified the actual thrown
-  // message — "make-vector: requested length 100000000 exceeds allocation limit
-  // 16777216" (same `assertAllocatable` policy shared with make-string).
+  // Same `assertAllocatable` door as make-string: message names op, requested length, and cap.
   it("(make-vector 1e8 ...) errors fast with the cap-policy TAUGHT message, not an engine RangeError", async () => {
     const start = Date.now();
     let err: Error | undefined;
@@ -347,12 +335,7 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
    * with a clear message ("input nesting depth exceeded N"), not a native
    * RangeError. The parser should track depth explicitly and bail.
    */
-  // REWRITE (same sweep/rationale as make-string/make-vector above): the old assertion
-  // only checked the message did NOT match /Maximum call stack/ — the comment even
-  // proposed the ideal (/nest|depth|too deep/i) but never asserted it, so it didn't
-  // verify the door "teaches" per P5. Verified the actual thrown message: "input nesting
-  // depth exceeded 2000 at 1:2000" — already teaches the depth cap and position. Assert
-  // that positive shape.
+  // Parse door names the nesting-depth cap and position, not a native stack overflow.
   it("deeply-nested input throws a graceful parse error naming the nesting-depth cap, not stack overflow", async () => {
     const deep = "(".repeat(10000) + "1" + ")".repeat(10000);
     let err: Error | undefined;
@@ -378,13 +361,7 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
    * throw a Scheme-level error. Cyclic structures should compare via
    * structural-equality-with-occurs-check, not JSON.stringify.
    */
-  // REWRITE (2026-07-08 invariant-verdict sweep, [P16]):
-  // the old assertion accepted EITHER
-  // outcome (returns-a-boolean OR throws-with-safe-message) — the "vacuous both-outcomes-
-  // pass" shape P16 forbids. Ran it: `equal?` on two independently-cyclic (self-referencing,
-  // not mutually-referencing) JS objects returns the boxed `#f` (an `ABool`, not a raw JS
-  // boolean, and never throws — no native "circular structure"/JSON error). Commit to that
-  // one behavior.
+  // Cyclic equal? returns boxed #f (ABool), never a native JSON circular-structure error.
   it("(equal? a b) on cyclic structures returns the boxed #f, never a native JSON error", async () => {
     const a: Record<string, unknown> = {};
     a.self = a;
@@ -455,10 +432,6 @@ describe("registry poisoning vectors", () => {
 // immutability — the mutator family is teaching-doored, a JS-side setter
 // bypassing that discipline had zero production callers). The symbol-intern
 // pollution half of S6 remains live below.
-//
-// DEAD (2026-07-08 invariant-verdict sweep, no longer testable — the API itself is gone):
-//   - accessSet rejects "__proto__"/"constructor"/"prototype" as blocked keys
-//   - accessSet installs an own data property without firing inherited/poisoned setters
 // ============================================================================
 
 describe("CRITICAL: write-side prototype pollution (S6)", () => {

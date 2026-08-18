@@ -26,26 +26,18 @@ import { CONSTANT_CTX } from "../run/RunContext.js";
 import { testCallCtx } from "../symbol/index.js";
 
 /** A SOURCE rosetta (default — not pure) returning a fixed JS value; its apply term
- *  called direct-JS (no evaluator ctx) exercises exactly the bake step-4 walk.
- *  REBASELINE v3 (world-flip door, ruling 2026-08-13): the v2 shape (`z.dynamic` output +
- *  "the impl boxes its own return via jsToScheme") is now an ILLEGAL MOVE — a rosetta
- *  impl's return is a JS-world value, and an AValue there doors (`WorldFlipError`,
- *  rosetta-world-flip.law.test.ts). The sanctioned shape is the original intent: return
- *  the RAW JS value and let the membrane box it — `z.dynamic` output still skips
- *  `z.encode`, and `jsToScheme` + `attestDeep` run at the membrane, which is exactly
- *  the stamp site this suite pins. */
+ *  called direct-JS (no evaluator ctx) exercises the bake step-4 walk.
+ *  The impl returns raw JS; the membrane boxes it and `attestDeep`s. An AValue
+ *  in the impl return is a WorldFlipError. */
 const source = (impl: () => unknown) =>
   symbol.rosetta`t: test source`({ input: [], output: [z.dynamic] }, () => impl());
 
 
-/** Invoke a baked rosetta procedure via its apply term (the sole membrane spine). */
 function fire(proc: { ["arrival/tagless-final/apply"](args: any[], callCtx: any): any }, callCtx: any, ...args: any[]) {
   return proc["arrival/tagless-final/apply"](args, callCtx);
 }
 
 describe("attestation registry (attest / isAttested / freshIfSingleton)", () => {
-  /** Exempt singletons (nil, void, interned symbols, #t/#f) are never marked attested;
-   *  attest() is also a no-op on non-AValue inputs (raw strings, undefined) — never throws. */
   it("refuses the exempt singletons: nil, #void, interned symbols, #t/#f flyweights", async () => {
     expect(isAttested(attest(nil))).toBe(false);
     expect(isAttested(attest(theVoid))).toBe(false);
@@ -55,14 +47,10 @@ describe("attestation registry (attest / isAttested / freshIfSingleton)", () => 
     const [kw] = (await execState("(quote some-symbol)")).values;
     expect(kw).toBeInstanceOf(ASymbol);
     expect(isAttested(attest(kw))).toBe(false);
-    // non-AValues are a no-op, never a throw
     expect(isAttested(attest("raw string"))).toBe(false);
     expect(isAttested(attest(undefined))).toBe(false);
   });
 
-  /** freshIfSingleton clones only the #t/#f flyweights; the clone can be attested
-   *  independently while the shared singleton itself never becomes attested. Non-singleton
-   *  values (e.g. numbers) pass through unchanged (same reference, not cloned). */
   it("freshIfSingleton clones ONLY the #t/#f flyweights; the clone attests, the singleton never does", async () => {
     const fresh = freshIfSingleton(schemeTrue);
     expect(fresh).not.toBe(schemeTrue);
@@ -99,7 +87,6 @@ describe("bakeRosetta return walk (stamp site 1)", () => {
 
     const a = out.get("a");
     expect(isAttested(a)).toBe(true);
-    // cache stability: the same (wrapper, key) pluck is the same box, attested twice over
     expect(out.get("a")).toBe(a);
     expect(isAttested(out.get("a"))).toBe(true);
 

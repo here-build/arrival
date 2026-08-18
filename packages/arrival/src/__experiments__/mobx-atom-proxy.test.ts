@@ -75,7 +75,7 @@ describe.skipIf(mobx === undefined)("MobX-backed AtomProxy satisfies the PathAto
     expect(wakes).toBe(1);
 
     await exec('(write "D" "id")', { capabilities: [cap], pathAtoms: bus });
-    expect(wakes).toBe(2); // run-commit invalidation woke the reaction
+    expect(wakes).toBe(2);
 
     // A sibling write must NOT wake it (segment-wise matching, same as the door).
     await exec('(write "D" "other")', { capabilities: [cap], pathAtoms: bus });
@@ -83,7 +83,7 @@ describe.skipIf(mobx === undefined)("MobX-backed AtomProxy satisfies the PathAto
 
     stop();
     await exec('(write "D" "id")', { capabilities: [cap], pathAtoms: bus });
-    expect(wakes).toBe(2); // disposed reaction stays asleep
+    expect(wakes).toBe(2);
 
     expect(atomKey(path)).toBe('"test"/"D"/"id"');
   });

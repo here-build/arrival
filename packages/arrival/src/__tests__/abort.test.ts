@@ -111,7 +111,6 @@ describe("AbortSignal execution budget", () => {
   it("runs to completion when signal never aborts", async () => {
     const ctrl = new AbortController();
     const [result] = await exec("(+ 1 2 3)", { signal: ctrl.signal });
-    // Sanity: passing a (non-aborting) signal does not break normal evaluation.
     expect(result).toBeDefined();
   });
 

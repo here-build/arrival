@@ -69,13 +69,7 @@ export function is_function(o: unknown): o is Function {
   return typeof o === "function";
 }
 
-/**
- * Native Promise or any thenable. Value-kernel leaf (hermeticity audit P3): six
- * value modules (op-helpers.ts, ADict.ts, pending-entry.ts, APair.ts, AVector.ts,
- * values-repr.ts) runtime-import this — it used to live in eval/guards.ts, the
- * only values→eval runtime entanglement (that module also drags in Macro/Syntax/
- * TF_EXPAND). eval/guards.ts re-exports it for compatibility.
- */
+/** Thenable test stays in the value kernel; eval/guards only re-exports. */
 export function is_promise(o: unknown): o is Promise<unknown> {
   if (o instanceof Promise) {
     return true;
@@ -87,7 +81,6 @@ export function is_promise(o: unknown): o is Promise<unknown> {
 export function is_lambda(o: unknown): o is ALambda {
   return o instanceof ALambda;
 }
-/** Any callable value — lambda, host-JS primitive, or door. */
 export function is_callable_value(o: unknown): o is ACallable {
   return (
     o instanceof ALambda ||

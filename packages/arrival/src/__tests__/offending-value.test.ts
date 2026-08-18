@@ -115,7 +115,6 @@ describe("OFFENDING_VALUE — collection-type-error metadata", () => {
     const returned = attachOffendingValue(err, "first");
     expect(returned).toBe(err);
     expect(offendingValueOf(err)).toBe("first");
-    // Re-attaching (idempotent — no throw, no duplicate-key error) overwrites cleanly.
     attachOffendingValue(err, "second");
     expect(offendingValueOf(err)).toBe("second");
   });

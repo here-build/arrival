@@ -49,24 +49,18 @@ function tupleItems(s: unknown): unknown[] {
 }
 
 describe("2026-07-06 audit — scheme/srfi-95: sort's element precision (real exported op)", () => {
-  // INVARIANT: sort's seq slot is wired to a custom (z.schemeValue) schema, not the old bare
-  // unknown (pins implementation, not behavior)
   it("seq (slot 0) is z.schemeValue (custom), not the old bare z.unknown()", () => {
     const def = contractDef(srfi95Pack, "sort");
     const tuple = tupleItems(def.in);
     expect(schemaKind(tuple[0])).toBe("custom");
   });
 
-  // INVARIANT: sort's optional comparator slot is wired to a callable custom schema, not
-  // the old bare unknown (pins implementation, not behavior)
   it("comparator (slot 1, optional) is a callable custom schema, not the old bare z.unknown()", () => {
     const def = contractDef(srfi95Pack, "sort");
     const tuple = tupleItems(def.in);
     expect(schemaKind(tuple[1])).toBe("custom");
   });
 
-  // INVARIANT: sort's output is wired to a custom (z.schemeValue) schema, not the old bare
-  // unknown (pins implementation, not behavior)
   it("output is z.schemeValue (custom), not the old bare z.unknown()", () => {
     const def = contractDef(srfi95Pack, "sort");
     // 1-tuple output normalizes the same way as input — z.tuple([z.schemeValue]).

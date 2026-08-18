@@ -75,7 +75,6 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 describe("W3 port completeness (docs/PROVENANCE.md §7 law table)", () => {
   const REGION = "w3-region";
 
-  // @ledger: Q11a — LANDED
   it(
     "every mint/decision/instantiation/ingress-binding record is emitted EXACTLY ONCE " +
       "PER RECORD ID — idempotent under request retry/re-emission (a repeated real " +
@@ -107,7 +106,6 @@ describe("W3 port completeness (docs/PROVENANCE.md §7 law table)", () => {
     },
   );
 
-  // @ledger: Q11a — LANDED
   it(
     "W3's exactly-once is exactly-once PER ID, not per write attempt — a CF request " +
       "retry that re-emits the identical record overwrites in place (§5 C2/D1's " +
@@ -146,7 +144,6 @@ describe("W3 port completeness (docs/PROVENANCE.md §7 law table)", () => {
 describe("region events + host-schedule (docs/PROVENANCE.md §5 A6 rows 5-6, D5)", () => {
   const REGION = "q11b-region";
 
-  // @ledger: Q11b — LANDED
   it(
     "a track-open/track-close pair is emitted EXACTLY ONCE PER RECORD ID under retry " +
       "— the SAME idempotent-upsert contract W3 asserts for mint/mux/fan/ingress, now " +
@@ -175,7 +172,6 @@ describe("region events + host-schedule (docs/PROVENANCE.md §5 A6 rows 5-6, D5)
     },
   );
 
-  // @ledger: Q11b — LANDED
   it(
     "a host-schedule record carries its FULL comparator sequence as ONE record — " +
       "\"the sequence IS the record\" (§5 A6 row 6), never aggregated, never split " +
@@ -209,7 +205,6 @@ describe("region events + host-schedule (docs/PROVENANCE.md §5 A6 rows 5-6, D5)
 describe("stream fold + monotonicity + fold-as-recovery (docs/PROVENANCE.md §5 C1, §7 stream fold)", () => {
   const REGION = "q13-fold-region";
 
-  // @ledger: Q13 — LANDED
   it(
     "fold(events) = final region state — the SAME fold that answers a post-hoc \"what " +
       "was this region's state\" query also RECONSTRUCTS region state on DO wake after " +
@@ -253,7 +248,6 @@ describe("stream fold + monotonicity + fold-as-recovery (docs/PROVENANCE.md §5 
     },
   );
 
-  // @ledger: Q13 — LANDED
   it(
     "completed ≤ started, monotone, over EVERY emission order — async settlement " +
       "reordering (the stream's total order is settlement order for async, §5 D4) " +
@@ -331,7 +325,6 @@ describe("stream fold + monotonicity + fold-as-recovery (docs/PROVENANCE.md §5 
     },
   );
 
-  // @ledger: Q13 — LANDED
   it(
     "forced mid-run eviction followed by a refold reconstructs the IDENTICAL region " +
       "state the in-memory cache held before eviction — exercised under fault injection " +
@@ -404,7 +397,6 @@ describe("stream fold + monotonicity + fold-as-recovery (docs/PROVENANCE.md §5 
     },
   );
 
-  // @ledger: Q13 — LANDED
   it(
     "the durable-write barrier: a failed durable write kills the request (never " +
       "silently drops), and the idempotent record id makes the retry's re-emission safe " +
@@ -426,7 +418,7 @@ describe("stream fold + monotonicity + fold-as-recovery (docs/PROVENANCE.md §5 
 
       store.setWriteFailure(false);
       await ring.flush(REGION); // the retry
-      await ring.flush(REGION); // a second retry, for good measure — idempotent upsert
+      await ring.flush(REGION); // idempotent upsert
       const stream = await store.readStream(REGION);
       expect(stream).toHaveLength(1); // exactly once, per id — never per write attempt
     },
@@ -434,7 +426,6 @@ describe("stream fold + monotonicity + fold-as-recovery (docs/PROVENANCE.md §5 
 });
 
 describe("I4 — completion, the async promise-pending door (§3 I4; its test home is Q13)", () => {
-  // @ledger: Q13 — LANDED
   it(
     "started = completed at region close — a region with any track still started-but-" +
       "not-completed throws the incomplete door at close time",
@@ -451,7 +442,6 @@ describe("I4 — completion, the async promise-pending door (§3 I4; its test ho
     },
   );
 
-  // @ledger: Q13 — LANDED
   it(
     "a promise egress keeps its track PENDING until settled — region close with an " +
       "unsettled promise egress throws the incomplete door (§4 CHOSEN panel C9 async " +

@@ -108,7 +108,6 @@ export class Lexer {
       _next: null,
       _token: null,
       _prev_char: "" };
-    // hide internals from introspection
     for (const name of Object.keys(internals) as (keyof LexerInternals)[]) {
       Object.defineProperty(this, name, {
         configurable: false,
@@ -336,7 +335,6 @@ export class Lexer {
           return true;
         }
       }
-      // skip leading spaces
       if (start && this._state === null && /\s/.test(char)) {
         if (this._whitespace) {
           if (/\s/.test(next_char)) {

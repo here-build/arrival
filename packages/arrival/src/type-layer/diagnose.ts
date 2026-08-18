@@ -85,7 +85,6 @@ export function createDiagnoseLens(harvested: HarvestedPrelude): DiagnoseLens {
         return { unit: { programStartOffset, statementSpans: [] }, diagnostics: [] };
       }
 
-      // Shift the current-program statement spans into lowered-unit scheme space.
       const statementSpans = statements.map(
         (s): readonly [number, number] => [s.schemeSpan[0] + programStartOffset, s.schemeSpan[1] + programStartOffset],
       );
@@ -216,7 +215,6 @@ function namesOf(checker: ts.TypeChecker, t: ts.Type): readonly string[] | undef
   return props.length > 0 ? props : undefined;
 }
 
-/** Climb to the object literal that a property node belongs to (its own, or its assignment's). */
 function enclosingObjectLiteral(node: ts.Node): ts.ObjectLiteralExpression | undefined {
   for (let p: ts.Node | undefined = node; p !== undefined; p = p.parent) {
     if (ts.isObjectLiteralExpression(p)) return p;
@@ -225,7 +223,6 @@ function enclosingObjectLiteral(node: ts.Node): ts.ObjectLiteralExpression | und
   return undefined;
 }
 
-/** The object expression of an enclosing property/element access (`obj.k` → `obj`). */
 function accessedObject(node: ts.Node): ts.Expression | undefined {
   for (let p: ts.Node | undefined = node; p !== undefined; p = p.parent) {
     if (ts.isPropertyAccessExpression(p) || ts.isElementAccessExpression(p)) return p.expression;

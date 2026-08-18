@@ -21,7 +21,6 @@ async function run(src: string): Promise<string> {
   return String(x?.toString?.() ?? x);
 }
 
-// a predicate that yields a genuine SchemeBool (not a raw JS boolean)
 const SB = "(lambda (x) (if (> x 1) #t #f))"; // #t for >1, #f otherwise
 const EVEN_SB = "(lambda (x) (if (even? x) #t #f))";
 
@@ -100,8 +99,7 @@ describe("boolean landmine — complement (bridge): async + boxed-bool", () => {
 });
 
 describe("boolean landmine — not / is_false honor SchemeBool", () => {
-  // Predicates BOX now (the Face split): `not` returns the schemeTrue/schemeFalse
-  // flyweights, printing the R7RS forms — exactly the flip this comment foresaw.
+  // `not`/`if` must honor boxed SchemeBool via is_false.
   it.each([
     { name: "not of a SchemeBool #f result: (even? 1)→#f, not #f → #t", src: `(not (${EVEN_SB} 1))`, expected: "#t" },
     { name: "not of a SchemeBool #t result", src: `(not (${EVEN_SB} 2))`, expected: "#f" },

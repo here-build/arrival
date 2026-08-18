@@ -1,12 +1,11 @@
 // loader-capability.test.ts — `arrivalLoaderCapability`: the module system as a declarative
 // EnvCapability. Proves the postures against the sanctioned `exec`/`execState({capabilities})`
 // path:
-//   1. door by absence (the Stage-6 `.define` posture — `Contract.requiresConfig`, D2): no
-//      `fs`/`loader` config ⇒ the vocabulary builds and `require` binds a cause-carrying
-//      DoorProcedure teaching "provide `fs` or `loader`" — the auto-derived door mints
-//      unconditionally (requiresConfig is read mode-independently), replacing the old
-//      unbound-variable withholding (same for `require/extension` without a registry, naming
-//      `extensionRegistry`). `require`'s gate is the DISJUNCTIVE requiresConfig form
+//   1. door by absence (`Contract.requiresConfig`): no `fs`/`loader` config ⇒ the vocabulary
+//      builds and `require` binds a cause-carrying DoorProcedure teaching "provide `fs` or
+//      `loader`" — the auto-derived door mints unconditionally (requiresConfig is read
+//      mode-independently). Same for `require/extension` without a registry, naming
+//      `extensionRegistry`. `require`'s gate is the DISJUNCTIVE requiresConfig form
 //      (`[["fs", "loader"]]` — any-of).
 //   2. an armed loader resolves data + spills `.scm` defines into the RUN env;
 //   3. `require/register-extension` is the capability's `preludeOnly` symbol: callable from a
@@ -14,14 +13,6 @@
 //      a plain unbound-variable error from user code.
 //   4. `Vocabulary.degraded` enumerates the missing keys (design doc
 //      symbol-define-static-program-validation.md §3.7).
-//
-// STAGE C CUT 4 (docs/plans/stage-c-corpse-deletion.md) retired `lower()`/`assembleEnv` — this
-// file's OWN hand-rolled `assembled()`/`assembledWithDegraded()` scaffold (a pre-armed `runCtx` +
-// manual `assembleEnv` call, built to work around the ambient path's own plumbing) went with it.
-// Every row below is now the SAME sanctioned `exec`/`execState({capabilities, config})` path the
-// retired "CUT mode" describe block already proved equivalent to production — there is no
-// second mode left to contrast it against, so that describe block's distinction collapses into
-// this file's only mode.
 
 import { describe, expect, it } from "vitest";
 
@@ -97,10 +88,9 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
   });
 
   it("require/register-extension: callable from a DEPENDENT capability's prelude via the per-run prelude pass; unbound from user code", async () => {
-    // An ext-style capability, exactly like ext/yaml: a `symbol.native` resolver verb (the
-    // `{ value }` raw-binding arm is retired — a resolver is an ordinary verb; the loader's
-    // `applyCallback` dispatches its apply term) + a prelude that registers the suffix by
-    // name. No overlay wiring anywhere — the per-run prelude pass supplies the scope.
+    // An ext-style capability: a `symbol.native` resolver verb (the loader's
+    // `applyCallback` dispatches its apply term) + a prelude that registers the suffix
+    // by name. The per-run prelude pass supplies the scope.
     const extCap = EnvCapability.define("test/ext-upper", {
       symbols: (symbol, z) => ({
         "test/upper-resolve": symbol.native`test/upper-resolve: uppercases module contents (ResolverResult value kind)`(
@@ -189,10 +179,9 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
   });
 
   describe("a required .scm module composes with base builtins", () => {
-    // THE REGRESSION (found by the CLI build, pre-Cut-4): under the self-hosted vocabulary path,
-    // a required module's forms must resolve through the run's COMPOSED resolver
-    // (`currentRunResolver()` → `execExpr({ resolver })`), not a bare frame rebuild — else module
-    // code can't see base builtins (`string-append` unbound).
+    // A required module's forms must resolve through the run's COMPOSED resolver
+    // (`currentRunResolver()` → `execExpr({ resolver })`), not a bare frame rebuild —
+    // else module code can't see base builtins (`string-append` unbound).
     it("a required .scm module sees base builtins (string-append) and spills its defines", async () => {
       const table: Record<string, string> = {
         "lib.scm": `(define (greet name) (string-append "hello " name))` };

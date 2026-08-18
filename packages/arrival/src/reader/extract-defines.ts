@@ -30,12 +30,10 @@ export interface SourceLocation {
   col: number;
   /** 0-indexed byte offset from start of source. */
   offset: number;
-  /** Optional source identifier (filename, module, etc.). */
   source?: string;
 }
 
 export interface DefineInfo {
-  /** Symbol name being defined. */
   name: string;
   /** `function` for `(define (f …) …)` or `(define f (lambda …))`; `constant` otherwise. */
   kind: "function" | "constant";
@@ -43,7 +41,6 @@ export interface DefineInfo {
   arity?: number;
   /** True when the parameter list ends with a rest arg (`. rest`). */
   variadic?: boolean;
-  /** Source location of the `(define …)` form. */
   location?: SourceLocation;
 }
 
@@ -97,7 +94,6 @@ export async function extractDefines(source: string): Promise<DefineInfo[]> {
     const location = locationOf(form);
 
     if (isPair(head) && isSymbol(head.car)) {
-      // (define (name args…) body…)
       const { count, variadic } = chainLength(head.cdr);
       out.push({ name: symName(head.car), kind: "function", arity: count, variadic, location });
       continue;
@@ -113,7 +109,6 @@ export async function extractDefines(source: string): Promise<DefineInfo[]> {
         isPair(rhs.cdr) &&
         (isPair(rhs.cdr.car) || isNil(rhs.cdr.car))
       ) {
-        // (define name (lambda (args…) body…))
         const { count, variadic } = chainLength(rhs.cdr.car);
         out.push({ name, kind: "function", arity: count, variadic, location });
       } else {

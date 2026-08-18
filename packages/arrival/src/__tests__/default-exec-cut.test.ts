@@ -35,8 +35,6 @@ import { toJS } from "../membrane/membrane.js";
 describe("default exec — Stage C Cut 2 isolation", () => {
   it("two SEPARATE bare exec calls do NOT share top-level defines (no cross-exec leakage)", async () => {
     await exec("(define cut-isolation-witness 41)");
-    // A second, unrelated bare exec — its own fresh scope, per `execStateViaVocabulary`'s
-    // ISOLATION law — never sees the first call's define.
     await expect(exec("cut-isolation-witness")).rejects.toThrow(/unbound/i);
   });
 

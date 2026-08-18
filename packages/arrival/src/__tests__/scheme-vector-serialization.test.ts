@@ -44,16 +44,12 @@ describe("boxed vector/bytevector — Scheme→JS serialization (toJS)", () => {
 });
 
 describe("boxed vector — provenance propagation (jsToScheme)", () => {
-  // INVARIANT: jsToScheme deep-stamps provenance onto both the container and each
-  // element (pins implementation, not behavior).
   it("deep-stamps element provenance, keeps it a vector", () => {
     const v = new AVector([ex(1), ex(2), ex(3)]);
     const prov = new Set<number>([42]);
     const stamped = jsToScheme(CONSTANT_CTX, v, {}, prov) as AVector;
     expect(stamped).toBeInstanceOf(AVector);
-    // Container carries provenance...
     expect([...stamped.provenance]).toEqual([42]);
-    // ...and each element (now a boxed AValue) carries it too.
     for (const el of stamped.__vector__) {
       expect(el).toBeInstanceOf(AValue);
       expect([...(el as AValue).provenance]).toEqual([42]);

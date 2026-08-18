@@ -18,7 +18,6 @@ import { scopeId } from "./scope-id.js";
 import { freeVars } from "./wireframe/free-vars.js";
 import type { EmittedWire, WireFrame, WireParam } from "./wireframe/types.js";
 
-/** What the wireframe builder hands `unevalWire` per wire. */
 export interface WireEmission {
   /** The wire body's surface form (reader Pairs; spans intact). */
   readonly expr: unknown;

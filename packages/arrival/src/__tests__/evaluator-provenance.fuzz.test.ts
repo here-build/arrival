@@ -83,8 +83,6 @@ describe("fuzz — evaluator crash safety", () => {
           await exec(program);
           return true;
         } catch (err) {
-          // Document any unexpected crash with the offending program — this is
-          // exactly the loud failure mode the harness exists for.
           if (!isExpectedRuntimeError(err)) {
             console.error(`fuzz crash: program=${program} err=${String(err)}`);
             return false;

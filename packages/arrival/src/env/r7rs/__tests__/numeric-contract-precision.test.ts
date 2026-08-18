@@ -49,7 +49,6 @@ const exact = (n: number): AExact => new AExact(n);
 const inexact = (n: number): AInexact => new AInexact(n);
 
 describe("numeric Contract precision — the real exported ops reject wrongly-typed args (were z.unknown(), now precise)", () => {
-  // INVARIANT: + accepts scheme numbers and rejects a non-number rest element, both in and out
   it("+ (pure-variadic SchemeNum): accepts scheme numbers, rejects a non-number rest element", () => {
     const def = nativeDef("+");
     expect(def.in.safeParse([exact(1), exact(2)]).success).toBe(true);
@@ -58,7 +57,6 @@ describe("numeric Contract precision — the real exported ops reject wrongly-ty
     expect(def.out.safeParse(["not a number"]).success).toBe(false);
   });
 
-  // INVARIANT: - rejects a wrongly-typed head or tail element
   it("- (fixed head + SchemeNum rest): rejects a wrongly-typed head or tail element", () => {
     const def = nativeDef("-");
     expect(def.in.safeParse([exact(1), exact(2), exact(3)]).success).toBe(true);
@@ -66,12 +64,8 @@ describe("numeric Contract precision — the real exported ops reject wrongly-ty
     expect(def.in.safeParse([exact(1), "nope"]).success).toBe(false);
   });
 
-  // RE-PINNED (one-number rework, RATIO — docs/design-history/arrival-one-number-rework.md
-  // §2.3): quotient's real contract flipped off `z.bigint` onto `z.schemeNumber` (numeric.ts:971
-  // — `quotientSpec`'s `out`), matching every other numeric op post-rework. The old "output is a
-  // genuine bigint codec" framing is gone: quotient's out-channel now encodes a plain safe-int
-  // JS `number`, same as `+`/`-`/`abs`/etc above.
-  // INVARIANT: quotient rejects a non-scheme-number arg; output encodes a plain number
+  // quotient's out-channel encodes a plain safe-int JS `number` (`z.schemeNumber`),
+  // same as `+`/`-`/`abs` — not a bigint codec.
   it("quotient (fixed Int,Int): rejects a non-scheme-number arg; output is z.schemeNumber (plain number), not bigint", () => {
     const def = nativeDef("quotient");
     expect(def.in.safeDecode([exact(7), exact(2)]).success).toBe(true);
@@ -80,21 +74,18 @@ describe("numeric Contract precision — the real exported ops reject wrongly-ty
     expect(def.out.safeEncode(["x"]).success).toBe(false); // not a number
   });
 
-  // INVARIANT: abs accepts exact or inexact scheme numbers and rejects a non-number
   it("abs (AnyNum in/out): accepts exact or inexact, rejects a non-number", () => {
     const def = nativeDef("abs");
     expect(def.in.safeDecode([exact(5)]).success).toBe(true);
     expect(def.in.safeDecode([inexact(5.5)]).success).toBe(true);
     expect(def.in.safeDecode(["x"]).success).toBe(false);
     expect(def.out.safeEncode([5]).success).toBe(true);
-    // RE-PINNED (§2.3): a raw JS bigint is no longer a scheme number at all (opaque host
-    // pass-through) — `z.schemeNumber`'s encode (exact | inexact, both `number`-typed) now
-    // rejects it outright. Was `expect(def.out.safeEncode([5n]).success).toBe(true)` pre-rework.
+    // A raw JS bigint is not a scheme number (opaque host pass-through).
+    // `z.schemeNumber` encode is exact | inexact, both `number`-typed.
     expect(def.out.safeEncode([5n]).success).toBe(false);
     expect(def.out.safeEncode(["x"]).success).toBe(false);
   });
 
-  // INVARIANT: zero?'s output schema models a real boolean, not unknown
   it("zero? (AnyNum in, Bool out): output schema now models a boolean, not unknown", () => {
     const def = nativeDef("zero?");
     expect(def.in.safeDecode([exact(0)]).success).toBe(true);
@@ -103,7 +94,6 @@ describe("numeric Contract precision — the real exported ops reject wrongly-ty
     expect(def.out.safeEncode(["not a bool"]).success).toBe(false);
   });
 
-  // INVARIANT: floor/ returns a single pair product (q . r), not multi-return Values
   it("floor/ (pair product): output is a pair of scheme numbers", () => {
     const def = nativeDef("floor/");
     const product = new APair(exact(1), exact(2));
@@ -119,8 +109,6 @@ describe("numeric Contract precision — the real exported ops reject wrongly-ty
     expect(def.out.safeParse([exact(1)]).success).toBe(false);
   });
 
-  // INVARIANT: inexact/exact's output pins the specific tower member (AInexact vs AExact),
-  // rejecting the other
   it("inexact / exact (narrower than the generic scheme-number union): output pins the specific tower member", () => {
     const inexactDef = nativeDef("inexact");
     expect(inexactDef.out.safeParse([inexact(1.5)]).success).toBe(true);
@@ -131,8 +119,6 @@ describe("numeric Contract precision — the real exported ops reject wrongly-ty
     expect(exactDef.out.safeParse([inexact(1.5)]).success).toBe(false); // AInexact is not AExact
   });
 
-  // INVARIANT: every numeric native op's contract has migrated off the degraded
-  // fully-unconstrained shape
   it("EVERY numeric native op's Contract has migrated off the degraded z.array(z.unknown())/[z.unknown()] shape", () => {
     // The blanket acceptance-criterion sweep. The OLD bug was BOTH sides degraded together
     // (`{ input: z.array(z.unknown()), output: [z.unknown()] }`) — so a genuine straggler is
@@ -159,9 +145,6 @@ describe("numeric Contract precision — the real exported ops reject wrongly-ty
 
   // JS-shaped aliases (** % == | & ~ >> <<) moved to scheme/sugarcoat — not on this pack.
 
-  // INVARIANT: the numeric pack exports exactly 76 symbols (deliberate drift alarm — forces
-  // a reviewer to touch this test when a symbol is added/removed). Dropped 8 sugarcoat
-  // aliases from the prior 84.
   it("sanity: the pack exports exactly 76 symbols (the scope this fix must cover)", () => {
     expect(Object.keys(symbols)).toHaveLength(76);
   });

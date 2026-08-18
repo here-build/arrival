@@ -37,7 +37,6 @@ import invariant from "tiny-invariant";
 import { ARosettaProcedure, _linkRosettaHostProjection } from "./ARosettaProcedure.js";
 import { ANativeProcedure, _linkNativeHostProjection } from "./ANativeProcedure.js";
 
-/** A callable's return: settled value, trampoline bounce, or promise. */
 export type CallResult = SchemeValue | SchemeBounceMarker | Promise<SchemeValue>;
 
 /** Arity bounds. `max: null` ⇒ variadic. Drives arity check and MCP/type-lens introspection. */
@@ -258,7 +257,6 @@ export class DoorProcedure extends AValue {
   ["arrival/tagless-final/equals"](other: unknown): boolean {
     return callableEquals(this, other);
   }
-  /** Fires UNCONDITIONALLY, before any argument is looked at. */
   ["arrival/tagless-final/apply"](): never {
     const owner = this.door.cause?.owner;
     const message = owner

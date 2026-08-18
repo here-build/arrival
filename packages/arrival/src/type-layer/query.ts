@@ -122,7 +122,7 @@ export function createQueryLens(harvested: HarvestedPrelude): QueryLens {
     extra: readonly string[],
   ): { checker: ts.TypeChecker; sourceFile: ts.SourceFile } | null {
     const role = roleAt(scheme, cursorOffset);
-    if (role.kind !== "argument") return null; // operator / top / unparseable → no T narrowing
+    if (role.kind !== "argument") return null;
     const probe = [
       preludeText,
       `type __E = ${slotTypeExpr(role)};`,
@@ -130,9 +130,9 @@ export function createQueryLens(harvested: HarvestedPrelude): QueryLens {
       ...extra,
     ].join("\n");
     const compiled = compile(probe);
-    if (compiled === null) return null; // compile host failure → uncertain
+    if (compiled === null) return null;
     const slot = typeAt(compiled.checker, compiled.sourceFile, "__slot");
-    if (slot === null || isUncertain(slot)) return null; // unresolved slot → superset-safe no-op
+    if (slot === null || isUncertain(slot)) return null;
     return compiled;
   }
 
@@ -141,7 +141,7 @@ export function createQueryLens(harvested: HarvestedPrelude): QueryLens {
       const cands = [...candidates];
       if (cands.length === 0) return cands;
       const role = roleAt(scheme, cursorOffset);
-      if (role.kind !== "argument") return cands; // operator / top / unparseable → no T narrowing
+      if (role.kind !== "argument") return cands;
 
       const probe = [
         preludeText,
@@ -195,7 +195,7 @@ export function createQueryLens(harvested: HarvestedPrelude): QueryLens {
         `type __Domain = [ElemOf<__E>] extends [never] ? NonNullable<__E> : ElemOf<__E>;`,
         `declare const __domain: __Domain;`,
       ]);
-      if (compiled === null) return UNRESOLVED_ELEMENT; // no slot / unresolved → both null
+      if (compiled === null) return UNRESOLVED_ELEMENT;
       const domain = typeAt(compiled.checker, compiled.sourceFile, "__domain");
       // An `unknown` element (a `List<unknown>` / `readonly unknown[]` slot) is uncertain → no proof.
       if (domain === null || isUncertain(domain)) return UNRESOLVED_ELEMENT;
@@ -208,13 +208,13 @@ export function createQueryLens(harvested: HarvestedPrelude): QueryLens {
 
     getSlotAcceptsBareWord(scheme, cursorOffset): boolean | null {
       const compiled = probeSlot(scheme, cursorOffset, [`declare const __bare: AcceptsBareWord<__E>;`]);
-      if (compiled === null) return null; // no slot / unresolved → null (superset-safe)
+      if (compiled === null) return null;
       return readBoolLiteral(compiled.checker, typeAt(compiled.checker, compiled.sourceFile, "__bare"));
     },
 
     getSlotIsStringTyped(scheme, cursorOffset): boolean | null {
       const compiled = probeSlot(scheme, cursorOffset, [`declare const __str: IsStringTyped<__E>;`]);
-      if (compiled === null) return null; // no slot / unresolved → null (superset-safe)
+      if (compiled === null) return null;
       return readBoolLiteral(compiled.checker, typeAt(compiled.checker, compiled.sourceFile, "__str"));
     } };
 }
@@ -257,7 +257,7 @@ function readBoolLiteral(checker: ts.TypeChecker, t: ts.Type | null): boolean | 
  *  KEEPS on uncertainty (`any`/`unknown`/`never`/`undefined`), so only a provably ill-typed
  *  candidate returns `false`. */
 function candidateFits(checker: ts.TypeChecker, candType: ts.Type, slot: ts.Type): boolean {
-  if (isUncertain(candType)) return true; // unresolved candidate (a local, an undeclared tool) → keep
+  if (isUncertain(candType)) return true;
   if (checker.isTypeAssignableTo(candType, slot)) return true; // its value goes straight in the slot
   for (const sig of checker.getSignaturesOfType(candType, ts.SignatureKind.Call)) {
     // A sub-call head: the awaited return value is what lands in the slot (rosetta tools are async,
@@ -320,7 +320,7 @@ function findRole(loweredTs: string): Role {
         }
         if (p.expression.getStart(sourceFile) <= start && end <= p.expression.end) return; // operator slot → none
       }
-      return; // top-level → none
+      return;
     }
     ts.forEachChild(node, visit);
   };

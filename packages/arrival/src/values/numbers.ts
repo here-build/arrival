@@ -121,7 +121,6 @@ export function parseNumber(str: string): ANumeric {
   if (str === "-inf.0") return new AInexact(-Infinity);
   if (str === "+nan.0" || str === "-nan.0") return new AInexact(Number.NaN);
 
-  // Complex literals DOORED — recognize shape, reject with teaching message.
   const complexMatch = str.match(/^([+-]?[\d.]+)?([+-][\d.]*)?i$/);
   if (complexMatch) {
     const imag = complexMatch[2] === undefined ? 1 : Number.parseFloat(complexMatch[2] || "+1");

@@ -54,7 +54,6 @@ function schemaAt(inSchema: unknown, argIndex: number): unknown {
   return argIndex < items.length ? items[argIndex] : def.rest;
 }
 
-/** Declared-type word for a positional slot. */
 function declaredTypeAt(inSchema: unknown, argIndex: number): string {
   const fieldSchema = schemaAt(inSchema, argIndex);
   if (fieldSchema === undefined) return "the declared type";

@@ -137,7 +137,6 @@ export function validateProgram(
   forms: readonly SchemeValue[],
   vocabulary: ProgramVocabulary,
 ): readonly Diagnostic[] {
-  // Sweep 1 — the program's own definition names (macro-aware).
   const defs = collectProgramDefinitions(forms);
 
   // Sweep 2 — the site-collecting reference walk, per top-level form, with the ternary
@@ -152,7 +151,6 @@ export function validateProgram(
     collectReferences(form, { initialBound: defs.values, macroPolicyOf }),
   );
 
-  // The graph — missing things as first-class nodes.
   const resolve = (name: string): VocabularyEntry | { readonly kind: "program" } | undefined =>
     defs.values.has(name) || defs.macros.has(name) ? { kind: "program" } : vocabulary.lookupStatic(name);
   const graph = buildReferenceGraph(occurrences, resolve);

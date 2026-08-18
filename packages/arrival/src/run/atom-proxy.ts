@@ -8,7 +8,6 @@
  * See docs/working-proposals/cqs-reactivity/01-unified-design.md §8.4 / STATUS #4.
  */
 
-/** One path-keyed reactive cell. `reportObserved` arms a dependency; `reportChanged` invalidates. */
 export interface ProxyAtom {
   reportObserved(): void;
   reportChanged(): void;

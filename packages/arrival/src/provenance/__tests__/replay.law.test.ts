@@ -1,7 +1,6 @@
 /**
  * LAW — wire-γ, replay-nondeterminism, pure-mux derivation, effect-track
  * replay-between-records (docs/PROVENANCE.md §4 "Regions and replay", §7 law table).
- * ALL FOUR FLIPPED at Q16.
  *
  * R1 FRAMING (§4 CHOSEN, quoted — not a separate §7 row, but the ruling every law below
  * depends on): "replay from frozen port payloads is stable. Replay NEVER re-invokes a
@@ -105,15 +104,11 @@ beforeAll(async () => {
 });
 
 afterEach(() => {
-  setEmissionEnabled(false); // module-global flag; recordRun restores, this is the belt+braces
+  setEmissionEnabled(false); // module-global flag; recordRun restores
 });
 
 describe("wire-γ (§4 CHOSEN: the frame is abstract interpretation, loop-free scope)", () => {
-  // @ledger: Q16 — FLIPPED. apply(wire, recorded ingress) = recorded egress, per wire,
-  // composed over the whole graph: sources bind their FROZEN mint payloads (never
-  // re-invoked — the hermetic env doesn't even contain them), every wire between
-  // designated nodes is γ'd (gamma.ts's applyWireInEnv), and the graph's egress must
-  // reproduce the record run's egress exactly. eval∘uneval = id on pure segments.
+  // apply(wire, recorded ingress) = recorded egress; sources bind frozen mint payloads and are never re-invoked
   describe.each(W1_CORPUS.filter((e) => PER_WIRE_CLASSES.has(e.klass)))(
     "loop-free adjunction: $klass / $name",
     (entry) => {
@@ -131,8 +126,6 @@ describe("wire-γ (§4 CHOSEN: the frame is abstract interpretation, loop-free s
     },
   );
 
-  // @ledger: Q16 — FLIPPED (generative extension, mirroring W1's own property row):
-  // random non-mux pipe/merge/let programs — the exact-equality claim, per wire.
   it("property: random non-mux source pipe/merge programs replay exactly, over 12 generated programs", async () => {
     await fc.assert(
       fc.asyncProperty(fc.integer({ min: 0, max: 2 ** 31 - 1 }), async (seed) => {
@@ -148,12 +141,7 @@ describe("wire-γ (§4 CHOSEN: the frame is abstract interpretation, loop-free s
     );
   });
 
-  // @ledger: Q16 — FLIPPED. Wire purity is by CONSTRUCTION (§1 collapse rule): no
-  // interior source/sink/port-coupled mux survives inside any wire body, so γ needed
-  // nothing beyond the wire's own closure — proven two ways: (1) no declared-role op
-  // is FREE in any emitted wire body (they were all cut to nodes); (2) the hermetic
-  // env the rows above replayed in binds NO source op at all — had a wire smuggled
-  // one, γ would have hit an unbound variable instead of reproducing the egress.
+  // the hermetic replay env binds no source op — a smuggled source would unbound rather than reproduce egress
   it("wire-γ subsumes segment losslessness — no interior source/sink/gensym/port-coupled mux inside a wire body", async () => {
     let wiresChecked = 0;
     for (const entry of W1_CORPUS.filter((e) => PER_WIRE_CLASSES.has(e.klass))) {
@@ -189,11 +177,6 @@ describe("wire-γ (§4 CHOSEN: the frame is abstract interpretation, loop-free s
     }
   });
 
-  // @ledger: Q16 — FLIPPED. Loops: the per-wire driver REFUSES the binder (teaching
-  // door — §1 EXCLUDED: "widening makes loop cones non-least"; wire-γ never claims
-  // the loop-carrying half), and exact reconstruction is ONE γ-STEP AWAY via
-  // aggregation count + quoted body: the recorded stream carries exactly count
-  // payloads, and whole-program playback of the quoted body reproduces the egress.
   it("loops: per-wire γ refuses (not claimed); aggregation count + quoted body reconstructs exactly, one γ-step away", async () => {
     const entry = W1_CORPUS.find((e) => e.klass === "loop-programs");
     expect(entry).toBeDefined();
@@ -215,10 +198,7 @@ describe("wire-γ (§4 CHOSEN: the frame is abstract interpretation, loop-free s
     expect(reconstructed.value).toEqual(run.egress);
   });
 
-  // @ledger: Q16 — FLIPPED. Fan/region rows (nested-regions class): a region is ONE
-  // node from G (I5) — its VALUE replays at region granularity (whole-program
-  // playback; per-element track γ is track-cone.law's subject), and the per-wire
-  // driver's fan door names the route instead of fabricating a value.
+  // the per-wire driver names the fan door instead of fabricating a value
   describe.each(W1_CORPUS.filter((e) => e.klass === "nested-regions"))(
     "regions replay at region granularity: $name",
     (entry) => {
@@ -272,9 +252,7 @@ describe("replay-nondeterminism (§4 R1 + §7: frozen-payload replay stable unde
     return env;
   }
 
-  // @ledger: Q16 — FLIPPED. Frozen payloads AUTHORITATIVE: γ reproduces the RECORDED
-  // egress, never the mutated world's answer — and the mutated world is provably
-  // DIFFERENT (the live control run diverges), so the stability is non-vacuous.
+  // the mutated world is provably different (live control run diverges), so frozen-payload stability is non-vacuous
   it("replay from frozen port payloads is stable under a deliberately mutated external world", async () => {
     const run = await recordRun(inferenceEnv, CODE, SOURCES);
 
@@ -301,10 +279,6 @@ describe("replay-nondeterminism (§4 R1 + §7: frozen-payload replay stable unde
     }
   });
 
-  // @ledger: Q16 — FLIPPED. The EXCLUSION is part of the law: a fresh live run under
-  // the mutated world is a DIFFERENT RUN, not a replay — its divergence from the
-  // recorded egress is expected and claimed by nothing. Only γ (frozen ingress)
-  // carries the stability claim.
   it("re-execution stability is NEVER claimed — a live re-fetch is a different run, only γ is stable (§4 EXCLUDED)", async () => {
     const run = await recordRun(inferenceEnv, CODE, SOURCES);
     const mutatedCalls = new Map<string, number>();
@@ -326,10 +300,7 @@ describe("replay-nondeterminism (§4 R1 + §7: frozen-payload replay stable unde
     expect(replayedB.value).toEqual(run.egress);
   });
 
-  // @ledger: Q16 — FLIPPED. GLASS envs (§4 V ruling): cached membrane behavior +
-  // whole-program re-run. The recorded answers are authoritative even where live
-  // glass would answer differently NOW; the re-run emits ZERO new records (silent
-  // region), and a divergent demand hits a teaching door, never a live re-fetch.
+  // a divergent GLASS demand hits a teaching door, never a live re-fetch
   it("GLASS: whole-program re-run with penetration playback — recorded answers authoritative, zero new records", async () => {
     const code = `(define (both) (cons (glass-read) (glass-read))) (both)`;
     const run = await recordRun(inferenceEnv, code, { "glass-read": "num" });
@@ -361,11 +332,7 @@ describe("pure-mux derivation (§1 A2 soundness + §7: γ rederives every collap
     (e) => e.precision === "abstract" && (e.klass === "pure-mux" || e.klass === "deep-mux-nesting"),
   );
 
-  // @ledger: Q16 — FLIPPED. For every pure-mux corpus row: γ over frozen ingress
-  // rederives the collapsed decision — the replayed egress equals the recorded one,
-  // and the arm ATTRIBUTION (which sources actually flowed) matches the eager
-  // oracle's recorded arm choice exactly. Recording the decision would have bought
-  // nothing replay cannot reconstruct: A2's soundness, proven.
+  // γ over frozen ingress rederives the collapsed mux decision; the taken-arm attribution matches the eager oracle
   describe.each(PURE_MUX_ROWS)("rederivation: $klass / $name", (entry) => {
     it(`${entry.code}`, async () => {
       const run = await recordRun(inferenceEnv, entry.code, entry.sources);
@@ -390,9 +357,6 @@ describe("pure-mux derivation (§1 A2 soundness + §7: γ rederives every collap
     });
   });
 
-  // @ledger: Q16 — FLIPPED. The precision the m3 trade deferred from Q9 lands here:
-  // W1's abstract both-arms cone is a PROPER superset; ONE γ-step refines it to the
-  // exact taken arm — replayedCone ⊊ abstractCone, replayedCone == eagerCone.
   describe.each(PURE_MUX_ROWS)("exact arm attribution, one γ-step past W1's abstract cone: $name", (entry) => {
     it(`${entry.code}`, async () => {
       const run = await recordRun(inferenceEnv, entry.code, entry.sources);
@@ -432,9 +396,6 @@ describe("effect-track replay-between-records (§4 CHOSEN, §7 sub-gate)", () =>
   const foldProgram = (xs: readonly number[]): string =>
     `(let loop ((xs (list ${xs.join(" ")})) (acc 0)) (if (null? xs) acc (loop (cdr xs) (+ acc (emit-step! (car xs))))))`;
 
-  // @ledger: Q16 (sub-gate) — FLIPPED. Pure stretches APPLIED (γ), recorded port
-  // events INTERLEAVED VERBATIM (seq order), and the mode is NEITHER extreme:
-  // events are not recomputed, stretches are not stored.
   it("an effect track replays in REPLAY-BETWEEN-RECORDS mode — pure stretches γ'd, port events verbatim", async () => {
     const xs = [10, 20, 30];
     const run = await recordRun(inferenceEnv, foldProgram(xs), { "emit-step!": "echo" });
@@ -487,9 +448,6 @@ describe("effect-track replay-between-records (§4 CHOSEN, §7 sub-gate)", () =>
     expect(liveCalls).toBe(0);
   });
 
-  // @ledger: Q16 (sub-gate) — FLIPPED. The completeness precondition composes
-  // fold.ts: a region with a pending (never-closed) track REFUSES replay-between-
-  // records — the incomplete door's post-hoc mirror (I4), a teaching door.
   it("an INCOMPLETE region refuses replay-between-records (fold-checked, I4's post-hoc mirror)", async () => {
     const run = await recordRun(inferenceEnv, foldProgram([1, 2]), { "emit-step!": "echo" });
     // Fabricate an eviction-shaped stream state: a track opened, never closed.
@@ -513,9 +471,6 @@ describe("effect-track replay-between-records (§4 CHOSEN, §7 sub-gate)", () =>
     ).rejects.toThrow(/pending track.*only replays COMPLETED regions/s);
   });
 
-  // @ledger: Q16 (sub-gate) — FLIPPED. Generator rows: seeded random accumulator
-  // chains (length AND values drawn per seed) — the replayed interleave is
-  // IDENTICAL to the recorded stream's order, event for event, stretch for stretch.
   it("property: generated effect-callback chains replay with the identical interleave the stream captured, over 8 seeds", async () => {
     await fc.assert(
       fc.asyncProperty(fc.integer({ min: 0, max: 2 ** 31 - 1 }), async (seed) => {

@@ -116,7 +116,6 @@ const LEAF = (slot: string): LineageNode => ({ kind: "leaf", slot });
 /** Empty interior for declared-loop role with no known recursive shape. */
 const EMPTY_GRAPH: WireframeGraph = { nodes: [], wires: [], egress: null };
 
-/** `(let ((a e)…) …)` binding entries as {name, rhs} pairs. */
 function letEntries(bindings: unknown): WireFrameEntry[] {
   const out: WireFrameEntry[] = [];
   let n: unknown = bindings;
@@ -130,7 +129,6 @@ function letEntries(bindings: unknown): WireFrameEntry[] {
   return out;
 }
 
-/** Elements of a proper pair chain. */
 function chainOf(n: unknown): unknown[] {
   const out: unknown[] = [];
   let cur: unknown = n;

@@ -29,8 +29,6 @@ import { exec, execState } from "../../eval/generator-exec.js";
 import { EnvCapability } from "../capability.js";
 
 describe("preludeOnly — the phase-gated per-run prelude pass (design §1.3, over the vocabulary path)", () => {
-  // INVARIANT: a preludeOnly verb is unbound at runtime, but a later capability's prelude can
-  // call it during the per-run prelude pass.
   it("a preludeOnly verb is UNBOUND at runtime, but a LATER capability's prelude that calls it during the prelude pass works", async () => {
     // Capability A contributes a preludeOnly rosetta. Capability B (deps on A) calls it from
     // its OWN prelude, recording the call as an observable side effect via a runtime-bound sink.
@@ -67,8 +65,6 @@ describe("preludeOnly — the phase-gated per-run prelude pass (design §1.3, ov
     );
   });
 
-  // INVARIANT (ruling 2026-08-13 — see this file's header): an ordinary prelude `(define …)`
-  // IS a main-phase binding of its run.
   it("an ordinary prelude `define` lands in the run's prelude-define frame — resolvable from user code", async () => {
     const cap = EnvCapability.define("test/overlay-define", {
       prelude: `(define overlay-defined-value 42)`,
@@ -121,10 +117,6 @@ describe("preludeOnly — the phase-gated per-run prelude pass (design §1.3, ov
     expect(cSeen).toEqual([7]);
   });
 
-  // INVARIANT (ruling 2026-08-13 — see this file's header): BOTH prelude-define bridges
-  // survive to runtime — the wrapper closure over the preludeOnly verb (V's blessed
-  // require-extension shape: "invocation survives") and the captured value — while the
-  // preludeOnly verb's own NAME stays a plain unbound variable ("reference does not").
   it("THE CONTRACT: a prelude-defined closure AND a captured value both survive; the preludeOnly name does not", async () => {
     const cap = EnvCapability.define("test/overlay-closure", {
       symbols: (symbol, z) => ({

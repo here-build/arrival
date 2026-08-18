@@ -15,7 +15,7 @@
  * CLOSES OVER whatever scope is ambient at mint — never re-reads the holder later, so a
  * late call still sees the SAME (by then closed) scope.
  *
- * Minting/opening a scope is the crossing seam's job (`rosetta.ts` createRosettaWrapper,
+ * Minting/opening a scope is the crossing seam's job (baked `symbol.rosetta` run,
  * scheme-zod `z.procedure`). This module owns the token shape, ambient holder, and doors.
  *
  * TRACK + HOST-SCHEDULE: counters (`pending`, `trackOrdinal`) are the track open/close

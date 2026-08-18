@@ -29,7 +29,6 @@ function carrierVocabulary(): string {
 }
 
 export interface HarvestedPrelude {
-  /** The ambient TS the lens prepends to the lowered program. */
   readonly prelude: string;
   /** The grant member names (the lowering's head roster). */
   readonly members: readonly string[];

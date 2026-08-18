@@ -1,51 +1,24 @@
 /**
  * LAW (staged) — V1/V2/V4 role-vocabulary rows (docs/PROVENANCE.md §2 "Declaration
- * vocabulary"; docs/PROVENANCE-PLAN.md Cluster V, Q5's stub-file mapping table).
+ * vocabulary"; docs/PROVENANCE-PLAN.md Cluster V).
  *
- * Q5 CREATES this file as pure `it.todo` staged spec — none of V1/V2/V4's machinery
- * exists yet. Every row below flips at the Q-node named in its `// @ledger:` comment;
- * Q2 lands the declared `provenance` role field CONCURRENTLY with this file landing,
- * so these rows are written against the SPEC's shape (docs/PROVENANCE.md §2), not
- * against any Q2-in-flight code — they go live in Q2/Q3's wake, never edited to match
- * an interim shape.
+ * V3 (opaque quarantine drift alarm) is DELIBERATELY NOT duplicated here — its
+ * counted-walk machinery lives in the sibling `opaque-quarantine.law.test.ts`.
  *
- * V3 (opaque quarantine drift alarm) is DELIBERATELY NOT duplicated here — its counted-
- * walk machinery already landed at Q1 and lives in the sibling
- * `laws/opaque-quarantine.law.test.ts` (`countOpaqueNodes`, `src/provenance/lineage.ts`),
- * whose own header explicitly reserves the option of Q5 folding it in rather than
- * duplicating it. This file takes the "don't duplicate" branch; V3's staged baseline
- * row (`@ledger: opaque quarantine baseline pinned pre-Q6`) stays exactly where it is.
+ * V1 — the declared `provenance` role field + its drift-alarm door.
+ * V2 — the classifier consumes declared roles ONLY (heuristics deleted).
+ * V2-Q4 — callback roles extracted from the contract (z.lambda position + return
+ *   shape), declaration override where shape underdetermines, the drift-door
+ *   extension, and the fold acc-chain marker.
+ * V4 — cone-traversal termination over cyclic `binder{cycles}` (loop) nodes.
+ * Q7 — program-prelude PURE-only membership: a fetch-wrapping helper, direct AND
+ *   transitive, is refused with a teaching door. The positive half lives in
+ *   `wireframe-agreement.law.test.ts`.
  *
- * V1 (Q2) — the declared `provenance` role field + its drift-alarm door.
- * V2 (Q3) — the classifier consumes declared roles ONLY (heuristics deleted).
- * V2-Q4 (Q4) — callback roles extracted from the contract (z.lambda position + return
- *   shape), declaration override where shape underdetermines, the drift-door extension,
- *   and the fold acc-chain marker.
- * V4 (Q8a′) — cone-traversal termination over cyclic `binder{cycles}` (loop) nodes.
- * Q7 (Q7) — program-prelude PURE-only membership: the REJECTED half of the plan's
- *   "BOTH directions" gate (a fetch-wrapping helper, direct AND transitive, refused
- *   membership with a teaching door). The positive half (a pure helper referenced by
- *   name stays prelude-side, resolved through the sealed chain) lives in the sibling
- *   `provenance/wireframe-agreement.law.test.ts` (closer to that file's assembler/
- *   chain-resolution concerns).
- *
- * Lineage note (test-invariant-atlas, membrane.md): this V1-V4 declarative role
- * vocabulary is the eventual successor of the older `rosetta-pure-marker.test.ts`
- * (deleted `af3014f1f6`, "rosettaPureOf dies write-only" — the per-env `pure` REGISTRY
- * that file exercised is confirmed dead, not merely superseded). Of that file's two
- * invariants:
- *   - DEAD: "removed pure: true marker round-trips into the pure
- *     registry; default (no flag) is absent from it" — the registry itself is gone;
- *     `RosettaSpec.pure` survives only as `createRosettaWrapper`'s runtime mint gate
- *     (`config.pure`), a different, narrower mechanism than a queryable registry.
- *   - SUPERSEDED (not a 1:1 port, but the same classification law, declaratively): "a
- *     pure rosetta fn classifies as a 'pipe' ...; a default rosetta fn classifies as a
- *     'source' ..." — the V1 "KIND DEFAULTS" case below asserts `symbol.rosetta`'s
- *     default `.provenance` is `"source"` (a rosetta fn mints a fresh provenance leaf
- *     by default), and the same `Contract.provenance` channel lets a rosetta def
- *     declare `"pipe"` explicitly when it genuinely propagates input provenance
- *     instead — the classification the old file derived from a boolean `pure` flag
- *     at runtime is now a first-class declared fact at bake time.
+ * The older per-env `pure` registry is gone: `RosettaSpec.pure` remains a type-level
+ * field, not a queryable registry; live mint/forward is `Contract.provenance` at bake
+ * time. A rosetta fn defaults to `"source"`; declare `"pipe"` when it genuinely
+ * propagates input provenance.
  */
 import { describe, it, expect } from "vitest";
 import { parse } from "../../eval/generator-exec.js";
@@ -98,7 +71,6 @@ function rolesOf(pack: { spec: { symbols?: unknown } }, name: string): CallbackR
 }
 
 describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol declaration)", () => {
-  // @ledger: Q2 — FLIPPED (Q21 audit F1)
   it(
     "every symbol declaration carries exactly one `provenance` role from " +
       "{pipe, fan, source, sink, transparent, loop, opaque} — pipe default for " +
@@ -195,8 +167,6 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
     },
   );
 
-  // @ledger: Q2 — RESIDUAL, left it.todo (Q21 audit F1: title asserts more than the
-  // machinery does — see the note below).
   it.todo(
     "the two ad-hoc booleans `fanout?`/`pure?` are GONE, not merely deprecated — " +
       'no declaration surface accepts them any more (§2 EXCLUDED: "degenerate two-word ' +
@@ -207,12 +177,12 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
     //
     // `fanout?` is fully gone — no live type anywhere carries that field.
     //
-    // `pure?` is NOT gone. `RosettaFunction.pure`/`RosettaSpec.pure` (src/membrane/rosetta.ts,
-    // src/common/scheme-env.ts) are still a LIVE, accepted declaration surface:
-    // `createRosettaWrapper` reads `config.pure` as the runtime mint gate
-    // (`mintsPoint = pure !== true`). (The static-side `rosettaPureOf` per-env
-    // registry it also used to feed is DELETED — write-only after Q2/Q3, see
-    // docs/working-proposals/rosetta-registry-dissolution.md.) `common/capability.ts`'s
+    // `pure?` is NOT gone. `RosettaSpec.pure` (src/common/scheme-env.ts) is still
+    // a LIVE type-level field on the cross-package spec. Live mint/forward is
+    // `Contract.provenance` at bake time (`mintsPoint` when not `"pipe"`).
+    // (The static-side `rosettaPureOf` per-env registry is DELETED — write-only
+    // after Q2/Q3, see docs/working-proposals/rosetta-registry-dissolution.md.)
+    // `common/capability.ts`'s
     // own `SymbolDeclaration` doc names this explicitly as a permanent (not
     // migration-remnant) arm: "Gone from `foundations/arrival/**` itself, but
     // load-bearing OUTSIDE it: McpEnvCapability's whole inline-annotation design …
@@ -230,7 +200,6 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
     // title makes — reported instead per the task's residual-finding instruction.
   );
 
-  // @ledger: Q2 — FLIPPED (Q21 audit F1)
   it(
     "declaration-completeness: every bound symbol that reaches the classifier has a " +
       "declared role — an undeclared symbol is a build-time error, never a silent " +
@@ -279,7 +248,6 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
     },
   );
 
-  // @ledger: Q2 — FLIPPED (Q21 audit F1)
   it(
     "drift-alarm door (assembly-time): a declared role inconsistent with its contract " +
       "shape (e.g. declared `pipe` but the z.lambda position/return shape implies `fan`) " +
@@ -349,7 +317,6 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
     },
   );
 
-  // @ledger: Q2 — FLIPPED (Q21 audit F1)
   it(
     "declaration kinds LOWER 1:1 to graph node kinds (one vocabulary, two layers): " +
       "`loop` → `binder{cycles}`; `sink`/`transparent` are declaration-layer facts " +
@@ -397,7 +364,6 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
 });
 
 describe("V2 — declaration-driven classifier (§2; PROVENANCE-PLAN.md Q3)", () => {
-  // @ledger: Q3 — LANDED
   it(
     "the classifier reads ONLY the declared `provenance` role — the `isRosettaIn` " +
       "heuristic and the `.fanout` duck-read off a bound function are DELETED, not " +
@@ -423,7 +389,6 @@ describe("V2 — declaration-driven classifier (§2; PROVENANCE-PLAN.md Q3)", ()
     },
   );
 
-  // @ledger: Q3 — LANDED
   it(
     "named-let and `do` loops classify as `loop` (lowering to `binder{cycles}`), " +
       "not `opaque` — this is the exact corpus row `laws/opaque-quarantine.law.test.ts` " +
@@ -450,8 +415,6 @@ describe("V2 — declaration-driven classifier (§2; PROVENANCE-PLAN.md Q3)", ()
     },
   );
 
-  // @ledger: Q4 — LANDED (the whole extraction family lives in the V2-Q4 describe below;
-  // this row keeps the original Q5 statement as the umbrella assertion)
   it(
     "callback roles are extracted from the contract (z.lambda position + return shape) " +
       "into element-transformer / control / effect / accumulator, with declaration " +
@@ -503,7 +466,6 @@ describe("V2 — declaration-driven classifier (§2; PROVENANCE-PLAN.md Q3)", ()
 });
 
 describe("V2-Q4 — callback-role drift door + acc chain + stamp path (§2/§3; PROVENANCE-PLAN.md Q4)", () => {
-  // @ledger: Q4 — LANDED
   it(
     "drift-door extension: a declaration CONTRADICTING decidable shape throws " +
       "ProvenanceRoleShapeError at bake (void-egress arms are DECIDED `effect`; a role " +
@@ -554,7 +516,6 @@ describe("V2-Q4 — callback-role drift door + acc chain + stamp path (§2/§3; 
     },
   );
 
-  // @ledger: Q4 — LANDED
   it(
     "fold declares the acc chain: srfi-1 `reduce` carries the DECLARED `accumulator` arm " +
       "(via `withCallbackRoles` — a tagless def's contract is shapeless by construction, " +
@@ -577,7 +538,6 @@ describe("V2-Q4 — callback-role drift door + acc chain + stamp path (§2/§3; 
     },
   );
 
-  // @ledger: Q4 — LANDED
   it(
     "the resolved CallbackRole[] rides the BOUND callable via the same stamp path as the " +
       "top-level role (capability.ts) — Q3/Q8a read `.callbackRoles` off `env.get(op)` as " +
@@ -610,7 +570,6 @@ describe("V2-Q4 — callback-role drift door + acc chain + stamp path (§2/§3; 
 });
 
 describe("V4 — cone-traversal termination over cyclic binder nodes (§1; PROVENANCE-PLAN.md Q8a′)", () => {
-  // @ledger: Q8a′ — LANDED
   it(
     "fullCone/countCone/fieldCone over a `binder{cycles: true}` node TERMINATES — a " +
       "cyclic loop-carried dependency never sends the walker into unbounded recursion " +
@@ -648,7 +607,6 @@ describe("V4 — cone-traversal termination over cyclic binder nodes (§1; PROVE
     },
   );
 
-  // @ledger: Q8a′ — LANDED
   it(
     "loop wireframing lands template referents BEFORE emission can key records against " +
       "them — a loop-heavy program never emits a record with no template (Q8a′ is a " +
@@ -670,7 +628,6 @@ describe("V4 — cone-traversal termination over cyclic binder nodes (§1; PROVE
 });
 
 describe("Q7 — program prelude: PURE-only membership, the REJECTED direction (§1 CHOSEN round 2 A3, narrowed round 3 M1; PROVENANCE-PLAN.md Q7)", () => {
-  // @ledger: Q7 — LANDED
   it(
     "a define wrapping a fetch-role (source) rosetta is refused prelude membership — " +
       "directly (its own body crosses the port) AND transitively (a caller that never " +

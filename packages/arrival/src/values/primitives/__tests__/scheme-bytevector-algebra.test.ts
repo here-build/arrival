@@ -21,11 +21,8 @@ const arb = fc
 
 const equalClone = (bv: ABytevector) => new ABytevector(bv.__bytevector__.slice());
 
-// INVARIANT: reflexivity/symmetry/transitivity of bytevector equality, incl. distinct-heap clones.
 setoidLaws("SchemeBytevector", { arb, equalClone });
-// INVARIANT: reflexivity/totality/antisymmetry/transitivity of lexicographic bytevector ordering.
 ordLaws("SchemeBytevector", arb);
-// INVARIANT: bytevector concat is associative.
 semigroupLaws("SchemeBytevector", arb);
 
 describe("SchemeBytevector Setoid/Ord/Semigroup — boundaries", () => {

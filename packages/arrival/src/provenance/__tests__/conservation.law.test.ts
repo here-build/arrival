@@ -4,33 +4,20 @@
  * The second interpreter's conservation law, stated once, property-based:
  * no derivation drops lineage; only declared doors shed; only edges mint.
  *
- * BODIES FILLED (docs/test-suite-architecture.md F2). Mechanism REUSED from the v1
- * suite, not reinvented: `sStr`/`sNum`/`run`/`runRaw` (`./_lineage-test-helpers.js`,
- * the same helpers golden-prov-arithmetic/golden-prov-infer import), `provOf`
- * (`../lineage-shadow.js`, the canonical flat/eager stamp reader), and
- * `collapseProvenance` (`../provenance-collapse.js`, the DEEP structural walk —
- * see collapse-provenance.test.ts). The rosetta-mint fixtures mirror
- * `capability-rosetta-symbol.test.ts`'s `wireRosetta`/`invoke`/`invocationWithId`
- * pattern (a synthetic ctx.currentInvocation, no live model needed).
+ * FLAT vs DEEP — `provOf` reads only a value's OWN `.provenance` Set (the
+ * container-level stamp); a container-rebuilding op can leave that OWN stamp
+ * empty while the ELEMENTS stay individually boxed and stamped. Conservation
+ * (P10) is a claim about the VALUE DATAFLOW, not about which object happens to
+ * carry the top-level Set, so the property below deep-collapses.
  *
- * FLAT vs DEEP — why the property below asserts DEEP, not flat: `provOf` reads
- * only a value's OWN `.provenance` Set (the container-level stamp); a
- * container-rebuilding op can in principle leave that OWN stamp empty while the
- * ELEMENTS underneath stay individually boxed and stamped. Conservation (P10) is
- * a claim about the VALUE DATAFLOW, not about which object happens to carry the
- * top-level Set, so the property below deep-collapses. The known-violation rows
- * further below are DIFFERENT: they assert the FLAT/element-box convention
- * several sibling ops already honor (`cons` unions onto the container;
- * `vector-filter`/`pair-map` preserve element boxes). append/cdr/vector-map were
- * genuine outliers from that convention — FIXED by the conservation repair (now
- * plain `it`, not `it.fails`: append's rebuilt head and cdr's projected sub-spine
- * are stamped with the deep-collapsed union of their elements, and AVector's map
- * is box-preserving). A13 was the last outlier [GATE: G2] — CLOSED by the C1/C2/C4
- * batch (docs/RULINGS.md R2): `length` now reads
- * the container's own flat grouping/length-fact stamp (never a deep element union),
- * and every container-rebuilding op threads that stamp explicitly per one of three
- * named verbs — PROXIED / PROVENANCED / MINTED (§3's container-box rows, below, and
- * `_tables/terms.ts`'s `containerBox` column).
+ * The known-violation rows assert the FLAT/element-box convention sibling ops
+ * already honor (`cons` unions onto the container; `vector-filter`/`pair-map`
+ * preserve element boxes). append's rebuilt head and cdr's projected sub-spine
+ * are stamped with the deep-collapsed union of their elements; AVector's map
+ * is box-preserving. `length` reads the container's own flat grouping/length-fact
+ * stamp (never a deep element union) [GATE: G2]. Every container-rebuilding op
+ * threads that stamp explicitly per one of three named verbs — PROXIED /
+ * PROVENANCED / MINTED.
  */
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -58,9 +45,7 @@ import type { SchemeValue } from "../../values/types.js";
 import { run, runRaw, sNum, sStr } from "../../__tests__/_lineage-test-helpers.js";
 import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
 
-// Q20b: the container-box rows below call carrier methods (map/sort/filter)
-// directly, not through runRaw/_lineage-test-helpers.js's own save/restore — force
-// the oracle ON for this file's lifetime.
+// this helper/execState needs the eager oracle ON
 requireEagerOracle();
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -371,52 +356,29 @@ describe("conservation — every input id survives to the output or the trace", 
 
   // §2 — THE KNOWN-VIOLATION ROWS (manifest B). Each cites its ledger row
   // (src/__tests__/ledger/index.law.test.ts) and asserts the CORRECT/target
-  // behavior. append/cdr/DR4 were FIXED by the conservation repair (flipped from
-  // `it.fails` to plain `it` — GAPS rows retired); A13 flipped GREEN at c27b2e8b62
-  // (C1/C2/C4 — length reads container facts). G2 gate CLOSED; ledger row retired.
+  // behavior. append/cdr/vector-map honor the FLAT/element-box convention;
+  // `length` reads container facts [GATE: G2].
   describe("known violations — real gaps, ledgered, flip on the conservation repair", () => {
     it("(append (list a) (list b)) — the rebuilt spine's OWN (flat) provenance is the union of both elements, matching cons' union-onto-container convention", async () => {
-      // FIXED (conservation repair): the rebuilt spine's head cell is now stamped with the
-      // deep-collapsed union of both operands' elements (P10), matching the FLAT convention
-      // `cons` already honors ("(cons a b) — the cons cell carries the UNION of both
-      // elements") instead of relying on a deep walk downstream.
       const r = await runRaw(`(append (list a) (list b))`, { a: sStr("a", 100), b: sStr("b", 200) });
       expect(provOf(r)).toEqual([100, 200]);
     });
 
     it("(cdr (list a b)) — the tail spine's OWN (flat) provenance carries b's id, not empty", async () => {
-      // FIXED (conservation repair): the projected tail sub-spine is now stamped with the
-      // deep-collapsed union of what it still reaches (P10) — cdr of a proper list carries
-      // its sub-spine's element ids at the FLAT level, matching cdr-of-cons' element
-      // projection instead of dropping to empty.
       const r = await runRaw(`(cdr (list a b))`, { a: sStr("a", 100), b: sStr("b", 200) });
       expect(provOf(r)).toEqual([200]);
     });
 
-    // FIXED (C4 interim fix, docs/RULINGS.md R2 + execution-plan-wireframe.md
-    // §7, the R2 container structural-facts batch). Was `@ledger: A13 count-cone
-    // over-attribution`, `it.fails`.
     it("(length (map id xs)) — the count's cone is the MINIMAL grouping fact (no per-element ids), not every element id [GATE: G2 — CLOSED]", async () => {
-      // FIXED: `length` (values/primitives/{APair,AVector,AJSArray}.ts) now reads the
-      // CONTAINER's own flat grouping/length-fact stamp instead of deep-unioning every
-      // element it touched — a pure-map length depends only on the collection's
-      // CARDINALITY (the grouping fact), not on what each element became. `map` is
-      // length-PRESERVING, so it PROXIES the container's own stamp through unchanged
-      // (op-helpers.ts's `withInputProvenance`). This fixture mints no container-level
-      // "grouping" id at all (a plain `APair.fromArray` list, no Rosetta-IN crossing for
-      // the list itself), so the correct cone here is EMPTY — asserting the absence of
-      // the leak, matching golden-prov-fan.test.ts's now-green sibling row.
+      // `length` reads the CONTAINER's own flat grouping/length-fact stamp; `map`
+      // PROXIES that stamp through unchanged. This fixture mints no container-level
+      // grouping id, so the cone is EMPTY.
       const xs = APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false);
       const r = await runRaw(`(length (map (lambda (e) e) xs))`, { xs });
       expect(provOf(r)).toEqual([]);
     });
 
     it("vector-map — mapped elements keep their ORIGINAL boxes, not fresh empty-provenance re-boxes (DR4)", async () => {
-      // FIXED (DR4): `(map id (vector a b))` used to cross out to the auto-wrapping
-      // AJSArray, re-boxing elements from the RAW (unprovenanced) source on access —
-      // `elemProvs` came back `[[], []]`. AVector's map is now box-preserving (mirrors
-      // pair-map and vector-filter — P8's "one algebra, every carrier"), rebuilding a
-      // fresh AVector holding the SAME element boxes.
       const r = await runRaw(`(map (lambda (e) e) (vector a b))`, { a: sStr("a", 100), b: sStr("b", 200) });
       const vec = (r as { __vector__?: unknown[] }).__vector__ ?? [];
       expect(vec.map((e) => provOf(e))).toEqual([[100], [200]]);

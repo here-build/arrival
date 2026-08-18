@@ -110,9 +110,7 @@ export class ANativeProcedure extends AValue {
     super();
     this.name = opts.name;
     this.arity = opts.arity;
-    // Frozen at instantiation (ruling 2026-08-13): the contract is the declaration of
-    // record — post-construction stamping made introspection lie. Declaration channels
-    // (`withContractFields`/`withCallbackRoles`) re-mint via _withDeclarationFields.
+    // Contract freezes at construct; remint via `_withDeclarationFields`.
     this.contract = opts.contract === undefined ? undefined : Object.freeze(opts.contract);
     this.provenanceRole = opts.provenanceRole;
     this.cacheClass = opts.cacheClass;

@@ -327,17 +327,12 @@ _installRosettaMembraneApply(async (proc, args, callCtx) => {
     const burstLog = callCtx.runCtx.effects;
     const runReads = callCtx.runCtx.reads;
     const pathAtoms = callCtx.runCtx.pathAtoms;
-    // Phase 5 R1: observe live Q≠[] after CQS check (doored Q never reaches here).
-    // Replay silent (RX-REPLAY) — gate here, never by short-circuiting applyResourcePathCqs.
+    // Observe live Q after CQS; replay-silent; never skip applyResourcePathCqs.
     const liveAtoms = pathAtoms !== undefined && runCache?.mode !== "replay";
     if (liveAtoms && producedQueries.length > 0) {
       pathAtoms.observe(producedQueries);
     }
-    // Phase 5 R6: mint per-penetration reactiveAtoms after CQS, closed over produced Q
-    // (+ E for teaching effects-only). Minted whenever path producers were declared —
-    // doored penetrations never reach here. Bus off / replay-silent ⇒ INERT mint
-    // (P-RX-ATOM-OFF-INERT): membership still teaches, report* deliver nowhere, so
-    // bridge impls run unchanged outside an envelope.
+    // Mint (inert if bus off / replay) so bridge impls stay unchanged; doored Q never reaches here.
     const pathProducersDeclared = pathQueryFn !== undefined || pathEffectFn !== undefined;
     const fire = async (): Promise<unknown> => {
       const implCtx: CallCtx = pathProducersDeclared

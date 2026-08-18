@@ -23,7 +23,6 @@ import type { PreludeMembership } from "../prelude.js";
  *  (a fan's fanned containers), `out` (the graph egress port). */
 export type WireSlot = string;
 
-/** The node input a wire delivers into. */
 export interface WireConsumer {
   readonly node: number;
   readonly slot: WireSlot;
@@ -69,7 +68,6 @@ export interface EmittedWire {
   readonly fact?: WireFact;
 }
 
-/** An emitted wire PLACED in a graph — it feeds exactly one node input. */
 export interface Wire extends EmittedWire {
   readonly consumer: WireConsumer;
 }

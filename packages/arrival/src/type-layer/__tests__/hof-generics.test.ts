@@ -10,9 +10,7 @@ import srfi1 from "../../env/srfi/srfi-1.js";
 import { harvestContracts } from "../../__tests__/_symbols-harvest.js";
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim();
-// Stage A2: pull the AEntity CONTRACT off each pack's minted `spec.symbols` entries —
-// the shared read-side seam (`harvestContracts`/`contractOf`), same as every other
-// harvest/contract-precision suite.
+// harvestContracts / contractOf pulls the AEntity CONTRACT off each pack's minted `spec.symbols` entries.
 const contractsOf = (pack: { spec: { symbols?: unknown } }) => harvestContracts(pack.spec.symbols);
 
 const MAP = dedent`

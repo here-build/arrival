@@ -100,11 +100,11 @@ describe("a reverse lambda is region-bound to its invocation", () => {
     const scopeA = openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined });
     const w1 = withRegionScope(scopeA, () => toJS(echo));
     const w2 = withRegionScope(scopeA, () => toJS(echo));
-    expect(w1).toBe(w2); // same callable, same scope → same wrapper
+    expect(w1).toBe(w2);
 
     const scopeB = openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined });
     const w3 = withRegionScope(scopeB, () => toJS(echo));
-    expect(w3).not.toBe(w1); // same callable, DIFFERENT scope → a fresh wrapper
+    expect(w3).not.toBe(w1);
   });
 
   it("each re-entry opens a child trace scope of the enclosing invocation — lineage nests, never attributes flat to the run root", async () => {
@@ -114,12 +114,7 @@ describe("a reverse lambda is region-bound to its invocation", () => {
 
     let before = 0;
     let result: unknown;
-    // MIGRATED (openRegionScope-gap Ruling A, 2026-07-11): `symbol.rosetta`'s baked `run`
-    // wrapper (common/symbols/rosetta.ts) now opens a region scope itself, gated on
-    // `contractMayCarryCallable` (_bake.ts) finding a `z.procedure`/`z.dynamic` input slot — so
-    // a `z.procedure()` arg's decode (scheme-zod.ts) closes over a REAL per-invocation scope
-    // instead of falling back to the shared, never-closing `DETACHED_SCOPE`. This capability
-    // verb declares exactly that slot, restoring the discipline this row exercises.
+    // A z.procedure() arg's decode must close over a live per-invocation scope, not DETACHED_SCOPE.
     const cap = EnvCapability.define("test/region-law-trace-nesting", {
       symbols: (symbol, z) => ({
         "region-law-capture": symbol.rosetta`region-law-capture: `(
@@ -226,7 +221,7 @@ describe("a reverse lambda is region-bound to its invocation", () => {
 
     await exec("(call-with-lambda (lambda () (sink! 1)))", { capabilities: [cap], effects });
 
-    expect(sinkFires).toBe(0); // deferred, NEVER fired inline through the re-entry
+    expect(sinkFires).toBe(0);
     // toMatchObject (not toEqual): the entry also carries `rawArgs` (§5), additive and not
     // pinned by this row (mirrors effect-log.law.test.ts's own convention).
     expect(effects.entries).toMatchObject([{ verbName: "sink!", decodedArgs: [1] }]);

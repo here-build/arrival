@@ -31,7 +31,6 @@ export class LexicalScope<E extends AmbientRuntime = AmbientRuntime> {
   // Outside AValue/ArrivalError families — own interop stamp.
   static [INTEROP_BOUNDARY] = true;
 
-  /** Memoized wrapper for `env` (see {@link wrappers}). */
   static for<E extends AmbientRuntime>(env: E): LexicalScope<E> {
     let w = wrappers.get(env);
     if (w === undefined) {
@@ -72,7 +71,6 @@ export class LexicalScope<E extends AmbientRuntime = AmbientRuntime> {
     return this.env.__name__ === MERGE_SCOPE ? "merge" : undefined;
   }
 
-  /** Parent as LexicalScope (memoized), or null at the root. ≡ `env.__parent__`. */
   get parent(): LexicalScope | null {
     return this.env.__parent__ ? LexicalScope.for(this.env.__parent__) : null;
   }
@@ -101,7 +99,6 @@ export class LexicalScope<E extends AmbientRuntime = AmbientRuntime> {
     return this.env._lookupWithResolvers(name, ctx);
   }
 
-  /** This frame's OWN symbol-keyed bindings as [symbol, value] pairs. */
   ownSymbolEntries(): [symbol, AmbientValue][] {
     const env = this.env.__env__;
     return Object.getOwnPropertySymbols(env).map((s) => [s, env[s]] as [symbol, AmbientValue]);
@@ -116,7 +113,6 @@ export class LexicalScope<E extends AmbientRuntime = AmbientRuntime> {
    * or capability assembly — never by a JS-side record.
    */
   child(name?: string | symbol): LexicalScope<E> {
-    // mintFrame is subtype-preserving over the two concrete frame classes.
     return LexicalScope.for(mintFrame(this.env, name) as E);
   }
 

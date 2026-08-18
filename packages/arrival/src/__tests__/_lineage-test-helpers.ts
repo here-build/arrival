@@ -1,25 +1,13 @@
 /**
  * Shared TEST-ONLY helpers for the static-lineage / provenance suites
- * (golden-prov-*, lineage-*, coercion-soundness). These were inlined byte-for-byte
- * across ~8 Wave-R files "so each new file stays collision-free under concurrent
- * authoring; the parent dedupes at integration" — this IS that dedupe.
+ * (golden-prov-*, lineage-*, coercion-soundness).
  *
- * SCOPE BOUNDARY. `provOf` is NOT here — it is exported canonically from the
- * PRODUCTION module `../provenance/lineage` (Stage C Cut 3b relocated it there from the
- * retired `lineage-shadow.ts`), so every test imports it from there to keep ONE definition. This file
- * holds only the test-fixture helpers that have no production home: the stamped-
- * value constructors (`sStr`/`sNum`) and the run-a-program-collect-provenance
- * drivers (`runRaw`/`run`). Test-SPECIFIC fixtures (strs/nums/triple/el/…) stay
- * local to their file.
+ * `provOf` is production — exported from `../provenance/lineage`. This file
+ * holds only the test-fixture helpers: stamped-value constructors (`sStr`/`sNum`)
+ * and the run-a-program-collect-provenance drivers (`runRaw`/`run`).
  *
- * `runRaw`/`run` own a single module-level `seq` so every inherited env name is
- * unique across the whole suite (the name is a debug label only — `inherit` does
- * not key behavior on it). An optional `setup` hook runs against the fresh env
- * BEFORE the bindings are set, which is the one degree of freedom golden-prov-infer /
- * lineage-grounding need to wire their deterministic fake-source `EnvCapability`
- * (`symbol.rosetta` verbs — `symbol.rosetta`, 2026-07-11).
- * `EnvSetup` is `void | Promise<void>` for exactly this: a capability's `.lower({})
- * .apply(env, …)` is async, unlike the older sync registration call.
+ * `runRaw` forces the eager provenance oracle ON for the run and save/restores
+ * the ambient value so nested or interleaved use is safe.
  */
 import * as z from "../common/scheme-zod/index.js";
 import { CONSTANT_CTX } from "../run/RunContext.js";
@@ -86,8 +74,6 @@ export async function runRaw(
   }
 }
 
-/** Run a program and return the sorted provenance of its result (`provOf ∘ runRaw`).
- *  `provOf` is the canonical one from the production shadow module — ONE definition. */
 export const run = async (
   src: string,
   binds: Record<string, unknown> = {},

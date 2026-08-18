@@ -21,14 +21,12 @@ import {
   AssemblePackError,
   AssemblePackTimeoutError } from "../../errors.js";
 
-// A stub env: records the order packs applied + the symbols they set.
 interface Stub {
   appliedOrder: string[];
   syms: Map<string, unknown>;
 }
 const stub = (): Stub => ({ appliedOrder: [], syms: new Map() });
 
-/** A pack that records its name into the env's applied-order on apply. */
 function pack(name: string, deps: EnvPack<Stub>[] = [], extra: Partial<EnvPack<Stub>> = {}): EnvPack<Stub> {
   return {
     name,
@@ -45,18 +43,15 @@ afterEach(() => {
 });
 
 describe("env-pack assembly core (P0), over createRuntimeAssembler", () => {
-  // INVARIANT: a linear dep chain a→b→c applies deps-first, each pack exactly once.
   it("linear chain a→b→c: applies deps-first; each once", async () => {
     const c = pack("c");
     const b = pack("b", [c]);
     const a = pack("a", [b]);
     const env = stub();
     await createRuntimeAssembler(env).require(a);
-    expect(env.appliedOrder).toEqual(["c", "b", "a"]); // applied least-precedence first
+    expect(env.appliedOrder).toEqual(["c", "b", "a"]);
   });
 
-  // INVARIANT: a diamond dep graph linearizes via classic C3 and applies the shared root exactly
-  // once.
   it("diamond d→{b,c}, b→a, c→a: C3 apply order == [a,c,b,d]; a applied once", async () => {
     const a = pack("a");
     const b = pack("b", [a]);
@@ -78,19 +73,17 @@ describe("env-pack assembly core (P0), over createRuntimeAssembler", () => {
     const ra = createRuntimeAssembler(env);
     await ra.require(x);
     await ra.require(y);
-    await ra.require(shared); // reached a 3rd way — already applied, single-flight no-op
+    await ra.require(shared);
     expect(env.appliedOrder.filter((n) => n === "shared")).toHaveLength(1);
   });
 
-  // INVARIANT: a cycle in deps throws AssembleCycleError with the path.
   it("cycle a→b→a throws AssembleCycleError with the path", async () => {
     const a: EnvPack<Stub> = { name: "a", apply: () => {} };
     const b: EnvPack<Stub> = { name: "b", deps: [a], apply: () => {} };
-    (a as { deps?: EnvPack<Stub>[] }).deps = [b]; // close the cycle
+    (a as { deps?: EnvPack<Stub>[] }).deps = [b];
     await expect(createRuntimeAssembler(stub()).require(a)).rejects.toBeInstanceOf(AssembleCycleError);
   });
 
-  // INVARIANT: two packs sharing a name with divergent config throw AssembleConfigConflictError.
   it("same-name divergent config throws AssembleConfigConflictError", async () => {
     const fnA = () => 1,
       fnB = () => 2;
@@ -100,7 +93,6 @@ describe("env-pack assembly core (P0), over createRuntimeAssembler", () => {
     await expect(createRuntimeAssembler(stub()).require(root)).rejects.toBeInstanceOf(AssembleConfigConflictError);
   });
 
-  // INVARIANT: two packs sharing a name with equal config dedup silently (no conflict).
   it("same-name EQUAL config dedups silently", async () => {
     const shared = () => 1;
     const mcp1 = pack("mcp", [], { config: shared });
@@ -111,8 +103,6 @@ describe("env-pack assembly core (P0), over createRuntimeAssembler", () => {
     expect(env.appliedOrder.filter((n) => n === "mcp")).toHaveLength(1);
   });
 
-  // INVARIANT: an async pack apply resolves before require() returns, its bindings visible
-  // after.
   it("async apply (await import-shaped): env has the symbol after require() resolves", async () => {
     const slow: EnvPack<Stub> = {
       name: "slow",
@@ -125,7 +115,6 @@ describe("env-pack assembly core (P0), over createRuntimeAssembler", () => {
     expect(env.syms.get("slow/fn")).toBe(42);
   });
 
-  // INVARIANT: onDispose callbacks run in LIFO order (reverse of apply order).
   it("onDispose runs LIFO (reverse of apply)", async () => {
     const log: string[] = [];
     const mk = (name: string, deps: EnvPack<Stub>[] = []): EnvPack<Stub> => ({
@@ -142,7 +131,6 @@ describe("env-pack assembly core (P0), over createRuntimeAssembler", () => {
     const ra = createRuntimeAssembler(stub());
     await ra.require(a);
     await ra.dispose();
-    // applied c,b,a → disposers pushed c,b,a → LIFO runs a,b,c
     expect(log).toEqual(["a", "b", "c"]);
   });
 
@@ -171,14 +159,11 @@ describe("env-pack assembly core (P0), over createRuntimeAssembler", () => {
       } };
     const ra = createRuntimeAssembler(stub());
     await expect(ra.require(boom)).rejects.toBeInstanceOf(AssemblePackError);
-    expect(disposed).toEqual([]); // not disposed automatically on failure
+    expect(disposed).toEqual([]);
     await ra.dispose();
-    expect(disposed).toEqual(["ok"]); // ok's apply already ran (registering onDispose) and is
-    // NOT undone by boom's failure — only torn down when the assembler itself disposes
+    expect(disposed).toEqual(["ok"]);
   });
 
-  // INVARIANT: an apply that never resolves trips AssemblePackTimeoutError under
-  // ASSEMBLE_PACK_TIMEOUT_MS (pins implementation, not behavior).
   it("apply timeout: a never-resolving apply trips AssemblePackTimeoutError", async () => {
     process.env.ASSEMBLE_PACK_TIMEOUT_MS = "40";
     const wedged: EnvPack<Stub> = { name: "wedged", apply: () => new Promise(() => {}) };
@@ -203,7 +188,6 @@ describe("env-pack assembly core (P0), over createRuntimeAssembler", () => {
 
   // ── createRuntimeAssembler-specific laws (P4: the `(require/extension)` live-apply path) ──
   describe("createRuntimeAssembler — live-env-specific laws", () => {
-    // INVARIANT: a second require() of the same pack is a no-op (applies once, idempotent).
     it("idempotent: a second require is a no-op (applies once)", async () => {
       const env = stub();
       const a = pack("a");
@@ -213,7 +197,6 @@ describe("env-pack assembly core (P0), over createRuntimeAssembler", () => {
       expect(env.appliedOrder.filter((n) => n === "a")).toHaveLength(1);
     });
 
-    // INVARIANT: two concurrent requires of the same pack apply exactly once (single-flight).
     it("single-flight: two CONCURRENT requires of the same pack apply once", async () => {
       const env = stub();
       let applies = 0;
@@ -225,11 +208,10 @@ describe("env-pack assembly core (P0), over createRuntimeAssembler", () => {
           e.appliedOrder.push("slow");
         } };
       const ra = createRuntimeAssembler(env);
-      await Promise.all([ra.require(slow), ra.require(slow)]); // race two arms
+      await Promise.all([ra.require(slow), ra.require(slow)]);
       expect(applies).toBe(1);
     });
 
-    // INVARIANT: a failed apply can be retried — re-require after failure applies successfully.
     it("a failed apply can be retried (FAILED → re-require applies)", async () => {
       const env = stub();
       let attempt = 0;
@@ -242,11 +224,10 @@ describe("env-pack assembly core (P0), over createRuntimeAssembler", () => {
         } };
       const ra = createRuntimeAssembler(env);
       await expect(ra.require(flaky)).rejects.toBeInstanceOf(AssemblePackError);
-      await ra.require(flaky); // retry succeeds
+      await ra.require(flaky);
       expect(env.appliedOrder).toEqual(["flaky"]);
     });
 
-    // INVARIANT: dispose() runs runtime-applied disposers in LIFO order.
     it("dispose runs runtime-applied disposers LIFO", async () => {
       const env = stub();
       const log: string[] = [];
@@ -257,9 +238,9 @@ describe("env-pack assembly core (P0), over createRuntimeAssembler", () => {
       const a = mk("a");
       const b = mk("b", [a]);
       const ra = createRuntimeAssembler(env);
-      await ra.require(b); // applies a then b → disposers pushed a,b
+      await ra.require(b);
       await ra.dispose();
-      expect(log).toEqual(["b", "a"]); // LIFO
+      expect(log).toEqual(["b", "a"]);
     });
   });
 
@@ -285,8 +266,6 @@ describe("env-pack assembly core (P0), over createRuntimeAssembler", () => {
       expect(env.appliedOrder).toEqual(["E", "C", "B", "A", "D", "K3", "K2", "K1", "Z"]);
     });
 
-    // INVARIANT: an inconsistent hierarchy Python's C3 rejects is also rejected here, via
-    // AssembleLinearizationError.
     it("an inconsistent hierarchy Python REJECTS, we reject too (AssembleLinearizationError)", async () => {
       // a wants [x,y]; b wants [y,x]; c(a,b) — no consistent linearization. Python raises TypeError.
       const x = pack("x"),

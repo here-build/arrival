@@ -9,11 +9,6 @@
  *                    fails right now. When the container is fixed, the assertion starts
  *                    passing → `it.fails` flips to a hard failure, prompting promotion
  *                    to `it()`. So this file doubles as the regression target.
- *
- * Empirical baseline (2026-06-16): strings/bools auto-unwrap to JS primitives (natural);
- * numbers coerce via valueOf but break JSON.stringify (BigInt / struct leak); Pair is
- * iterable but SchemeVector/SchemeBytevector are not; char stringifies to the Scheme
- * literal; toJS is the working escape hatch except for symbols.
  */
 import { describe, expect, it } from "vitest";
 import { exec } from "../../index.js";
@@ -22,7 +17,6 @@ import { ABool } from "../../values/primitives/ABool.js";
 const one = async (src: string): Promise<any> => (await exec(src))[0];
 
 describe("JS-interop: numbers", () => {
-  // INVARIANT: numeric scheme values coerce correctly in arithmetic via valueOf
   it("coerce in arithmetic via valueOf", async () => {
     const n = await one("(+ 1 2)");
     expect(n + 1).toBe(4);
@@ -46,7 +40,6 @@ describe("JS-interop: numbers", () => {
 });
 
 describe("JS-interop: strings & booleans (boxed scheme faces — the Face split)", () => {
-  // INVARIANT: strings come back as AString, and grafted String.prototype keeps concat/spread/JSON interop natural
   it("strings come back as AStrings (grafted String.prototype keeps interop natural)", async () => {
     const s = await one('(string-append "ab" "c")');
     // Boxed under the Face split (taintString always returns the AString scheme face —
@@ -83,17 +76,12 @@ describe("JS-interop: characters", () => {
 });
 
 describe("JS-interop: symbols", () => {
-  // REBASELINED (RULINGS.md R1): ASymbol's toJS is apostrophe-prefixed (its own
-  // deferred opaque-exit marker — still design-pending, unchanged by this
-  // migration) — ⚖️ 2026-07-14 symbol-egress ruling (constitution §2.1): the
-  // apostrophe marker died; a symbol's JS face IS the plain interned name.
+  // A symbol's JS face is the interned name.
   it("symbol coerces to its plain interned name in a template literal", async () => {
     const sym = await one("'foo");
     expect(`${sym}`).toBe("foo");
   });
 
-  // Promoted from it.fails ("BROKEN: returns the internal struct") by the same
-  // ruling — the plain-name egress unwraps exactly as this test always demanded.
   it("exec(symbol) unwraps to the plain name string", async () => {
     const sym = await one("'foo");
     expect(sym).toBe("foo");
@@ -101,7 +89,6 @@ describe("JS-interop: symbols", () => {
 });
 
 describe("JS-interop: lists (Pair)", () => {
-  // INVARIANT: a list is iterable from JS (spread/for-of/Array.from)
   it("a list is iterable from JS (spread / for-of / Array.from)", async () => {
     const lst = await one("(list 1 2 3)");
     expect(Array.from(lst)).toHaveLength(3);
@@ -118,7 +105,6 @@ describe("JS-interop: lists (Pair)", () => {
     expect(JSON.stringify(lst)).toBe("[1,2,3]");
   });
 
-  // INVARIANT: exec(list) is the working escape hatch to a plain JS array
   it("exec(list) is the working escape hatch", async () => {
     expect(await one("(list 1 2 3)")).toEqual([1, 2, 3]);
   });
@@ -136,14 +122,12 @@ describe("JS-interop: vectors", () => {
     expect([...vec].map(Number)).toEqual([1, 2, 3]);
   });
 
-  // INVARIANT: exec(vector) is the working escape hatch to a plain JS array
   it("exec(vector) is the working escape hatch", async () => {
     expect(await one("(vector 1 2 3)")).toEqual([1, 2, 3]);
   });
 });
 
 describe("JS-interop: bytevectors", () => {
-  // INVARIANT: a bytevector is iterable from JS, yielding raw bytes
   it("a bytevector is iterable from JS (spread / for-of / Array.from yield bytes)", async () => {
     const bv = await one("(bytevector 1 2 3)");
     expect([...bv]).toEqual([1, 2, 3]);
@@ -164,7 +148,6 @@ describe("JS-interop: dicts / objects", () => {
     expect(() => JSON.stringify(d)).not.toThrow();
   });
 
-  // INVARIANT: exec(dict) is the working escape hatch to a plain JS object
   it("exec(dict) is the working escape hatch", async () => {
     expect(await one("(dict :a 1 :b 2)")).toEqual({ a: 1, b: 2 });
   });

@@ -9,7 +9,7 @@ import { signatureOf } from "../../../type-layer/schema-to-ts.js";
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim();
 
-// `spec.symbols` IS the record (the builder-form arm is retired).
+// `spec.symbols` IS the record.
 const symbols = (polyglotClojure.spec.symbols ?? {}) as Record<string, AEntity>;
 
 function defineDef(name: string) {

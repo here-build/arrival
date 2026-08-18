@@ -7,7 +7,6 @@
 import { directives } from "./lexical-grammar.js";
 import * as specials from "./specials.js";
 
-// A registered reader-macro prefix (`'`, `` ` ``, `,`, `,@`, `#(`, `#u8(`).
 export function is_special(token: unknown): boolean {
   return typeof token === "string" && specials.names().includes(token);
 }
@@ -31,12 +30,10 @@ export function is_literal(special: unknown): boolean {
   return typeof special === "string" && specials.type(special) === specials.LITERAL;
 }
 
-// A reader macro of SYMBOL type (read-time symbol expansion).
 export function is_symbol_extension(special: unknown): boolean {
   return typeof special === "string" && specials.type(special) === specials.SYMBOL;
 }
 
-// A reader directive token (`#!fold-case` / `#!no-fold-case`).
 export function is_directive(token: unknown): boolean {
   return typeof token === "string" && directives.includes(token);
 }

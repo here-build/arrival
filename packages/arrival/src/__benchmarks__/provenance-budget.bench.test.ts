@@ -89,12 +89,12 @@ describe("C1 — reference workload completes with full provenance inside 128MB 
     const report = await runReferenceWorkload(h);
 
     expect(report.counts.rosettaCalls).toBe(30);
-    expect(report.counts.fanRawFacts).toBe(2 * (100 + 500 + 1000 + 5000 + 10000)); // Σ≈16.6k × 2 kinds
-    expect(report.counts.fanRuns).toBe(WORKLOAD_SHAPE.fanSizes.length * 2); // RLE: 5 fans × 2 kinds = 10 runs
+    expect(report.counts.fanRawFacts).toBe(2 * (100 + 500 + 1000 + 5000 + 10000));
+    expect(report.counts.fanRuns).toBe(WORKLOAD_SHAPE.fanSizes.length * 2);
     expect(report.counts.pureLoopRawFacts).toBe(2 * 10_000);
-    expect(report.counts.pureLoopRuns).toBe(2); // RLE: 2 pure loops = 2 runs
+    expect(report.counts.pureLoopRuns).toBe(2);
     expect(report.counts.agentLoopMints).toBe(10_000); // irreducible — never aggregates
-    expect(report.counts.nestedInnerRawFacts).toBe(10_000 * 10); // 10k×10
+    expect(report.counts.nestedInnerRawFacts).toBe(10_000 * 10);
     expect(report.counts.nestedRuns).toBe(10_000); // path-scoped: one run PER outer element
     expect(report.counts.muxDecisions).toBe(128); // A.2's pure-mux-collapse fix: bounded, not 10⁴–10⁵
   });
@@ -195,7 +195,7 @@ describe("C3 — drill-in answers carry an honest evidence tier (Q18's executor 
     expect(first.tier).toBe("replayed");
     expect(second.tier).toBe("replayed-cached");
     expect(second.value).toEqual(first.value);
-    expect(replayCalls).toBe(1); // the second answer never touched γ again
+    expect(replayCalls).toBe(1);
   });
 
   it("recorded: a mint's payload, still resident — γ refuses (R1: never re-invoke a source), Q14's tier arm answers", async () => {
@@ -240,8 +240,8 @@ describe("C3 — drill-in answers carry an honest evidence tier (Q18's executor 
       fallback: () => tierMachine.read(hash) });
 
     expect(answer.tier).toBe("stub");
-    expect(answer.value).toBeUndefined(); // value dropped
-    expect(answer.stampIds).toEqual([11]); // identity + stamps retained
+    expect(answer.value).toBeUndefined();
+    expect(answer.stampIds).toEqual([11]);
   });
 
   it("Q18's SameProcessExecutor: every offload answer self-reports evidenceTier 'replayed' — offload is always a LIVE γ, never a cache hit (Q17 memoizes IN FRONT of an executor, never inside the protocol)", async () => {
@@ -360,7 +360,7 @@ describe("break-order probe 3 — ring misconfiguration (undersized ring → bac
       expect(envelope.value).toBeDefined();
     }
     const stream = await h.base.readStream(h.regionId);
-    expect(stream).toHaveLength(N); // no record silently dropped either
+    expect(stream).toHaveLength(N);
   });
 });
 

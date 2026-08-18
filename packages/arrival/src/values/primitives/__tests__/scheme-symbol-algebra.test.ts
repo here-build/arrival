@@ -22,5 +22,4 @@ setoidLaws("SchemeSymbol", {
   arb: symbolArb,
   equalClone: (s) => new ASymbol(s.__name__) });
 
-// INVARIANT: reflexivity/totality/antisymmetry/transitivity of lexicographic symbol-name ordering.
 ordLaws("SchemeSymbol", symbolArb);

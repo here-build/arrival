@@ -25,12 +25,7 @@
  *   undeclared | fire                                 | fire — regenerateable default
  */
 
-// Compatibility re-export: penetrateThroughCache composes four channels
-// (cache/effects/reads/paths) and moved to its own file, penetration.ts
-// (hermeticity audit P2 — this file is named for one of the four channels
-// it used to also house the composition point for). Sole value caller is
-// the baked rosetta apply (common/symbols/rosetta.ts), which still imports
-// it from here; prefer importing from penetration.js directly in new code.
+// Compatibility re-export: rosetta still imports from here; new code should import `penetration.js`.
 export { penetrateThroughCache } from "./penetration.js";
 
 export type RunCacheEntry =

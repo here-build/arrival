@@ -10,7 +10,7 @@
 // GC-eligible.
 //
 // Holds ONLY TS-signature strings for the type-lens harvest. Currently never
-// populated (`bindRosetta` config is `{ fn }` only) — every env's map reads empty.
+// populated — no live writer fills the map; every env's map reads empty.
 // `rosettaTypesOf` remains the harvest surface.
 
 import type { AmbientRuntime } from "./AmbientRuntime.js";

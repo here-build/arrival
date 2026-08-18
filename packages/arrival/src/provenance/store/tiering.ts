@@ -129,7 +129,6 @@ export class PayloadTierMachine {
       try {
         out.set(hash, await this.read(hash));
       } catch {
-        // unknown — omit
       }
     }
     return out;

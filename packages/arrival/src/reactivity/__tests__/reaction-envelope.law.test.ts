@@ -330,7 +330,6 @@ describe("X2a re-invoke positives (5b)", () => {
     await hub.settle({ maxRounds: 8 });
     expect(u.subscriptionPaths).toEqual([["test", "D", "42"]]);
 
-    // write decoded id — wakes
     hub.unit({ code: '(write "D" "42")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2);
@@ -350,25 +349,8 @@ describe("X2a re-invoke positives (5b)", () => {
     const u = hub.unit({ code: '(read "D" "child")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
 
-    // parent write via read-parent's domain: effects on ["test","D"]
-    // use write on a synthetic parent — write path is ["test","D","x"] which is child of parent
-    // PREFIX-UP: subscribe child, write **parent**. Parent path = ["test","D"].
-    // Our write fixture is 3-seg; use a unit that effects the parent via a custom path.
-    // read-all observes parent ["test","D"]; for PREFIX-UP we need child sub + parent write.
-    // Stage parent write through hub.invalidate as harness? X2a says no harness for production of run2 —
-    // "second real top-level exec whose effects reach the shared host bus".
-    // So need an effect fixture on parent. read-parent only queries. Add write via bare bus path:
-    // Actually: write "D" "anything" is child of ["test","D"] — that's PREFIX-DOWN for a parent sub.
-    // PREFIX-UP: sub=["test","D","child"], write=["test","D"].
-    // Use hub.bus with a one-shot envelope that effects parent — we need a rosetta with effects: (d)=[["test",d]].
-    // Fail-impl has that but throws. write-x uses ["test","X"]. Let's use bare hub.invalidate only as
-    // RX-EXT for this path algebra case — suite X2a prefers real exec; I'll use a unit with effects
-    // on the parent by writing through a custom cap method. Simpler: use `hub.bus` stage+commit
-    // is not a real exec. Real path: extend with write-domain.
-
-    // Practical approach matching product: foreign unit writes overlapping parent by
-    // invalidating via a real effect on ["test","D"] — use fail-impl's domain shape via
-    // a successful write-domain. Inject via second cap in same fixture:
+    // PREFIX-UP: subscribe child ["test","D","child"], write parent ["test","D"].
+    // The 3-seg write fixture is PREFIX-DOWN; parent write uses `write-domain`.
     const parentCap = EnvCapability.define("test/rx-parent-write", {
       symbols: (symbol, z) => ({
         "write-domain": symbol.rosetta`write-domain: `(
@@ -433,13 +415,11 @@ describe("X2a re-invoke positives (5b)", () => {
     expect(cache1?.mode).toBe("record");
     expect(log1?.effectPaths.length).toBeGreaterThan(0);
 
-    // foreign write to D wakes u (it observed D)
     hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2);
     const cache2 = u.lastCache;
     const log2 = u.lastPathLog;
-    // all three RX-FRESH axes
     expect(cache2).not.toBe(cache1);
     expect(cache2?.mode).toBe("record");
     expect(log2).not.toBe(log1);
@@ -458,7 +438,6 @@ describe("X2a re-invoke positives (5b)", () => {
 
     store.set("D:id", "v2:from-foreign");
     hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
-    // write sets v2:D:id — check that
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2);
     expect(u.lastResult).toEqual(["v2:D:id"]);
@@ -512,7 +491,6 @@ describe("X2a re-invoke positives (5b)", () => {
     hub.unit({ code: '(write-a "1")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2);
-    // whole unit — all three fire again
     expect(spies["read-a"]).toBe(2);
     expect(spies["read-b"]).toBe(2);
     expect(spies["read-c"]).toBe(2);
@@ -567,18 +545,17 @@ describe("X2a re-invoke positives (5b)", () => {
     const before = u.runCount;
     hub.unit({ code: '(write "A" "id")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
-    expect(u.runCount).toBe(before); // write A → nothing
+    expect(u.runCount).toBe(before);
 
     hub.unit({ code: '(write "B" "id")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
-    expect(u.runCount).toBe(before + 1); // write B → exactly one
+    expect(u.runCount).toBe(before + 1);
     hub.disposeAll();
   });
 
   it("P-RX-DOOR-PERSISTS — failed re-run keeps last successful subs; later write re-invokes", async () => {
     // RX-SUBS: a run that doors keeps the last *successful* subscription set.
-    // Arm on A, then a re-invoke that doors mid-body (N-I4c Q→E→Q), then a further write to A still wakes.
-    // Bare write→read is LEGAL; door phase uses intervening E between overlapping Qs.
+    // Door phase is N-I4c Q→E→Q; bare E→Q is legal.
     const spies: SpyMap = {};
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
@@ -597,13 +574,12 @@ describe("X2a re-invoke positives (5b)", () => {
     phase = "door";
     hub.invalidate([["test", "A", "id"]]); // wake through the armed sub
     await expect(hub.settle({ maxRounds: 8 })).rejects.toThrow(ResourcePathConflictError);
-    // last successful subs retained — reactivity launders nothing
     expect(u.subscriptionPaths).toEqual([["test", "A", "id"]]);
 
     phase = "ok";
     hub.unit({ code: '(write "A" "id")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
-    expect(u.runCount).toBe(3); // arm + door-fail + success re-invoke
+    expect(u.runCount).toBe(3);
     hub.disposeAll();
   });
 });
@@ -620,9 +596,8 @@ describe("X2a re-invoke negatives (5b)", () => {
       capabilities: [cap],
     });
     await hub.settle({ maxRounds: 8 });
-    expect(u.runCount).toBe(1); // self-suppressed
+    expect(u.runCount).toBe(1);
 
-    // A-CTRL-X2: foreign write → run2
     hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2);
@@ -647,9 +622,7 @@ describe("X2a re-invoke negatives (5b)", () => {
     const spies: SpyMap = {};
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
-    // A: read X → write Y
     const a = hub.unit({ code: "(read-x) (write-y)", capabilities: [cap] });
-    // B: read Y → write X
     const b = hub.unit({ code: "(read-y) (write-x)", capabilities: [cap] });
 
     // RX-AUTO: both born dirty. settle1 round1: a runs (subs X; publish Y →
@@ -792,21 +765,18 @@ describe("X2a re-invoke negatives (5b)", () => {
     expect(u.subscriptionPaths).toEqual([["test", "D", "id"]]);
 
     boom = true;
-    // foreign write's initial run publishes → u wakes in round 2 and throws
     hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
     await expect(hub.settle({ maxRounds: 8 })).rejects.toThrow(/plain-impl-boom/);
-    // subs still {D}
     expect(u.subscriptionPaths).toEqual([["test", "D", "id"]]);
     boom = false;
-    // subsequent write to D re-invokes again
     hub.unit({ code: '(write "D" "id")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
-    expect(u.runCount).toBe(3); // initial + fail + success
+    expect(u.runCount).toBe(3);
     hub.disposeAll();
   });
 
   it("N-RX-PARTIAL-RUN-INVAL — write then door in same run does not wake subscribers", async () => {
-    // Restaged to N-I4c: bare E→Q no longer doors; Q→E→Q doors after write has staged.
+    // N-I4c: Q→E→Q doors after write has staged; bare E→Q is legal.
     const spies: SpyMap = {};
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
@@ -898,7 +868,7 @@ describe("X5 door interop (5b)", () => {
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
 
-    // Control: N-I4c intervening shape doors inside one run (bare E→Q is LEGAL now)
+    // Control: N-I4c Q→E→Q doors inside one run; bare E→Q is legal.
     await expect(
       exec('(read "D" "id") (write "D" "id") (read "D" "id")', {
         capabilities: [cap],
@@ -918,11 +888,10 @@ describe("X5 door interop (5b)", () => {
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(1);
     phase = "read";
-    // foreign write on T → re-invoke with fresh prior-E; read D is legal
     hub.unit({ code: '(write "T" "go")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2);
-    expect(u.lastPathLog?.effectPaths ?? []).toEqual([]); // read-only run2
+    expect(u.lastPathLog?.effectPaths ?? []).toEqual([]);
     hub.disposeAll();
   });
 
@@ -947,7 +916,7 @@ describe("X5 door interop (5b)", () => {
   it("P-RX-REPLAY-DOOR-LIVE — replay-mode still doors on illegal N-I4c shape", async () => {
     // Reactivity silence must NOT short-circuit CQS. Constructed with bare exec + replay
     // cache (not envelope — envelope always uses record). Door is pre-cache.
-    // Restaged: bare E→Q is LEGAL; N-I4c Q→E→Q is the true intervening door.
+    // Bare E→Q is legal; N-I4c Q→E→Q is the intervening door.
     const spies: SpyMap = {};
     const { cap } = makePathCap(spies);
     const replay = new MemoryRunCache("replay");
@@ -972,7 +941,6 @@ describe("X5 door interop (5b)", () => {
     hub.unit({ code: '(write "D" "child")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2);
-    // sibling does not
     const u2 = hub.unit({ code: '(read "D" "a")', capabilities: [cap] });
     await hub.settle({ maxRounds: 8 });
     hub.unit({ code: '(write "D" "b")', capabilities: [cap] });
@@ -1036,7 +1004,6 @@ describe("A-OPTIN param atoms (5c)", () => {
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(2);
     expect(spies.read).toBe(2);
-    // A-EPOCH / RX-FRESH on the param-driven re-invoke
     expect(u.lastCache).not.toBe(cache1);
     expect(u.lastCache?.mode).toBe("record");
     expect(u.lastPathLog).not.toBe(log1);
@@ -1061,7 +1028,7 @@ describe("A-OPTIN param atoms (5c)", () => {
     hub.setParam("filter", 1);
     await hub.settle({ maxRounds: 8 });
     expect(a.runCount).toBe(2);
-    expect(b.runCount).toBe(1); // different opt-in name — not armed
+    expect(b.runCount).toBe(1);
     hub.disposeAll();
   });
 
@@ -1079,7 +1046,7 @@ describe("A-OPTIN param atoms (5c)", () => {
     await hub.settle({ maxRounds: 8 }); // both initials; reads publish nothing
     hub.setParam("filter", "x");
     await hub.settle({ maxRounds: 8 });
-    expect(plain.runCount).toBe(1); // no opt-in
+    expect(plain.runCount).toBe(1);
     expect(opted.runCount).toBe(2); // A-CTRL: same fixture with opt-in does fire
     hub.disposeAll();
   });
@@ -1117,7 +1084,7 @@ describe("A-OPTIN param atoms (5c)", () => {
     hub.invalidate([["test", "D", "id"]]);
     await hub.settle({ maxRounds: 8 });
     expect(pathOnly.runCount).toBe(2);
-    expect(paramOnly.runCount).toBe(2); // path invalidate does not touch param-only
+    expect(paramOnly.runCount).toBe(2);
     hub.disposeAll();
   });
 
@@ -1136,8 +1103,7 @@ describe("A-OPTIN param atoms (5c)", () => {
     expect(u.runCount).toBe(2);
     // Param change left no E fuel on the path log
     expect(u.lastPathLog?.effectPaths ?? []).toEqual([]);
-    // Param never polluted prior-E across the boundary either — bare path E→Q is legal,
-    // and a true intervening door still fires from path fuel only (N-I4c).
+    // Param never polluted prior-E — bare path E→Q is legal; N-I4c Q→E→Q still doors from path fuel only.
     hub.unit({
       code: '(write "D" "id") (read "D" "id")',
       capabilities: [cap],
@@ -1147,7 +1113,7 @@ describe("A-OPTIN param atoms (5c)", () => {
       code: '(read "D" "id") (write "D" "id") (read "D" "id")',
       capabilities: [cap],
     });
-    // N-I4c doors within one run — path prior Q/E only. Param is not involved.
+    // N-I4c Q→E→Q doors within one run — path prior Q/E only. Param is not involved.
     await expect(hub.settle({ maxRounds: 8 })).rejects.toThrow(ResourcePathConflictError);
     // Param atom key must not appear as a resource path segment string that doors
     // — door fuel is path tuples only. Probe: param key is not a path atom key.
@@ -1168,7 +1134,6 @@ describe("X2b scheduling (5b′)", () => {
     expect(u.lastResult).toEqual(["v1:D:id"]);
 
     store.set("D:id", "final-v3");
-    // k=3 overlapping invalidates before any settle — dirty flag coalesces
     hub.invalidate([["test", "D", "id"]]);
     hub.invalidate([["test", "D", "id"]]);
     hub.invalidate([["test", "D", "id"]]);
@@ -1221,7 +1186,7 @@ describe("X2b scheduling (5b′)", () => {
     expect(u.dirty).toBe(true);
 
     await hub.settle({ maxRounds: 8 });
-    expect(u.runCount).toBe(2); // strictly one run2
+    expect(u.runCount).toBe(2);
     expect(u.lastResult).toEqual(["after-foreign"]);
     // spurious double-release must not spawn more runs
     gate.release();
@@ -1259,7 +1224,6 @@ describe("X2b scheduling (5b′)", () => {
     expect(u.subscriptionPaths).toEqual([]); // discarded, not installed
     const frozen = u.runCount;
 
-    // Further foreign write — no re-invoke (unregistered)
     hub.invalidate([["test", "D", "id"]]);
     await hub.settle({ maxRounds: 8 });
     expect(u.runCount).toBe(frozen);
@@ -1284,8 +1248,8 @@ describe("X2b scheduling (5b′)", () => {
     const { cap } = makePathCap(spies);
     const hub = createReactionHub();
     const u = hub.unit({ code: '(read "D" "id")', capabilities: [cap] });
-    expect(u.dirty).toBe(true); // born needing its initial run
-    expect("run" in u).toBe(false); // no manual trigger surface
+    expect(u.dirty).toBe(true);
+    expect("run" in u).toBe(false);
     await hub.settle({ maxRounds: 4 });
     expect(u.runCount).toBe(1);
     expect(u.lastResult).toEqual(["v1:D:id"]);
@@ -1309,7 +1273,7 @@ describe("X2b scheduling (5b′)", () => {
     const b = hub.unit({ code: '(read "D" "b")', capabilities: [cap] });
     const settleP = hub.settle({ maxRounds: 4 });
     await gate.entered;
-    b.dispose(); // disposed while queued in the running settle
+    b.dispose();
     gate.release();
     await expect(settleP).resolves.toBeUndefined();
     expect(a.runCount).toBe(1);
@@ -1479,7 +1443,7 @@ describe("F-RX property families (5b / 5b′)", () => {
           : '(read "D" "id") (write "D" "id") (read "D" "id")',
       capabilities: [cap],
     });
-    await hub.settle({ maxRounds: 8 }); // legal — no door
+    await hub.settle({ maxRounds: 8 });
     phase = "illegal";
     hub.invalidate([["test", "D", "id"]]);
     // run2's door depends on run2's sequence only (N-I4c doors even though run1 was legal)
@@ -1507,7 +1471,6 @@ describe("F-RX property families (5b / 5b′)", () => {
     domain = "B";
     hub.invalidate([["test", "A", "id"]]); // wake through the current sub (RX-AUTO)
     await hub.settle({ maxRounds: 8 });
-    // replacement — A gone, only B
     expect(u.subscriptionPaths).toEqual([["test", "B", "id"]]);
     expect(u.subscriptionPaths.some((p: ResourcePath) => p[1] === "A")).toBe(false);
     hub.disposeAll();

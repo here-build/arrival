@@ -56,9 +56,7 @@ describe("Escaped Symbol Resolution", () => {
 
   describe("Edge cases and resolution", () => {
     it("should handle empty escaped symbol", async () => {
-      // R7RS §7.1.1: `||` is the symbol whose name is the empty string — a real
-      // reader gap this used to crash on (`Reduce of empty array with no initial
-      // value`), now fixed in `parse_symbol`.
+      // R7RS §7.1.1: `||` is the symbol whose name is the empty string.
       const result = await execOne(`
         (begin
           (define || "empty")
@@ -78,9 +76,7 @@ describe("Escaped Symbol Resolution", () => {
     });
 
     it("should handle pipes inside escaped symbols", async () => {
-      // R7RS §7.1.1: `\|` inside `|...|` is a literal `|` in the symbol's name
-      // (a real reader gap — the old `parse_symbol` split on every bar and lost
-      // the escape, producing a mangled name — now fixed).
+      // R7RS §7.1.1: `\|` inside `|...|` is a literal `|` in the symbol's name.
       const result = await execOne(`
         (begin
           (define |foo\\|bar| "pipe inside")

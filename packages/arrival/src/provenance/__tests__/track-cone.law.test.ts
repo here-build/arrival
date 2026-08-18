@@ -6,10 +6,9 @@
  * Per the grounded-audit-corrected mapping, track-containment is TWO SEPARATE describe
  * blocks (not one law flipping at one gate) because its two arms genuinely flip at
  * different Q-nodes: the STAMP arm (checked against the eager oracle's stamp sets)
- * belongs to Q9's oracle infrastructure; the REPLAY arm (checked against γ's replayed
- * cone) FLIPPED at Q16, once replay itself existed (`provenance/replay.ts`,
- * `q16-harness.ts` — record a real run with emission ON, then γ each track against its
- * own frozen ingress).
+ * belongs to Q9's oracle infrastructure; the REPLAY arm is checked against γ's
+ * replayed cone (`provenance/replay.ts`, `q16-harness.ts` — record a real run with
+ * emission ON, then γ each track against its own frozen ingress).
  *
  * Q8c ADDENDUM: the R2 demand-monotonicity describe block below gained ONE live `it()`
  * (not `it.todo`) alongside its three untouched Q17-ledgered stubs — the MACHINERY
@@ -53,9 +52,7 @@ import { recordRun, replayedCone, type RecordedRun } from "../../__tests__/prove
 import { SourceRegistry } from "../../__tests__/provenance/w1-harness.js";
 import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
 
-// Q20b: the STAMP-arm rows below call execState directly (not through
-// q16-harness.ts's recordRun, which already saves/restores its own call) — force
-// the oracle ON for this file's lifetime so the untapped eager stamp is live.
+// this helper/execState needs the eager oracle ON
 requireEagerOracle();
 
 const ROLES: Record<string, DeclaredRole> = { "fetch-list": "source", "fetch-item": "source", "src-a": "source", "src-b": "source", "emit!": "sink", map: "fan", filter: "fan" };
@@ -102,12 +99,6 @@ afterEach(() => {
 });
 
 describe("track containment — STAMP arm (§3 I1 vs the eager oracle)", () => {
-  // @ledger: Q9 — FLIPPED, folded into Q17's gate (per this task's brief: the row
-  // named for Q9's oracle infrastructure was never itself exercised until Q17
-  // reused w1-harness.ts's `SourceRegistry` — the SAME eager-oracle idiom Q9's own
-  // agreement law drives — over MAP_CODE's per-element body directly. This is the
-  // STAMP arm: no replay, no wireframe graph, just the untapped eager execution
-  // `SourceRegistry` mints against, checked per track (per element `v`).
   const elements = [1, 2, 3];
   let tracks: { v: number; egress: SchemeValue; portStamp: number }[];
 
@@ -139,10 +130,6 @@ describe("track containment — STAMP arm (§3 I1 vs the eager oracle)", () => {
     },
   );
 
-  // INVARIANT: distinct crossings mint distinct ids — tracks stay pairwise-disjoint
-  // under the eager oracle too, mirroring the REPLAY arm's own separation shape. A
-  // cross-track invariant (comparing ALL tracks against each other) — inherently an
-  // aggregate over the whole row set, not itself a per-row case.
   it("distinct crossings mint distinct ids — tracks stay pairwise-disjoint under the eager oracle too", () => {
     const allStamps = tracks.map((t) => t.portStamp);
     expect(new Set(allStamps).size).toBe(allStamps.length);
@@ -150,11 +137,6 @@ describe("track containment — STAMP arm (§3 I1 vs the eager oracle)", () => {
 });
 
 describe("track containment — REPLAY arm (§3 I1 under γ)", () => {
-  // @ledger: Q16 — FLIPPED. I1 under replay: each element track γ's against its OWN
-  // frozen ingress; every interior value's cone (the track's recorded port payload,
-  // the pure arg wire) stays inside the track's replayed egress cone — and the
-  // egress cone contains NOTHING beyond the track's own ingress stamps (the two
-  // inclusions together are the confinement).
   let run: RecordedRun;
   let template: WireframeGraph;
 
@@ -195,10 +177,6 @@ describe("effect-track empty cone (§3 I1 corollary: = ∅ for effect tracks)", 
   // the finding is named here, not silently depended on.
   const EFFECT_CODE = `(begin (emit! (src-a)) (src-b))`;
 
-  // @ledger: Q16 — FLIPPED. For an EFFECT track (terminal, no egress), no interior
-  // stamp reaches G's value cone: the effect track's port payload (src-a's mint) and
-  // the effect crossing's own mint (emit!'s echo) are both absent from the replayed
-  // program egress — I1's "= ∅ for effect tracks", at replay level.
   it("for an EFFECT track, cone+(n) ∩ G = ∅ — no interior stamp reaches the replayed value cone", async () => {
     const run = await recordRun(inferenceEnv, EFFECT_CODE, { "src-a": "num", "emit!": "echo", "src-b": "num" });
     // the record run observed all three crossings (sink events are REAL observations
@@ -207,7 +185,7 @@ describe("effect-track empty cone (§3 I1 corollary: = ∅ for effect tracks)", 
 
     const program = await wf(EFFECT_CODE);
     const replayed = await replayGraphEgress({ program, frozen: run.frozen });
-    expect(replayed.value).toBe(run.egress); // = src-b's recorded value
+    expect(replayed.value).toBe(run.egress);
 
     const cone = replayedCone(replayed.boxed);
     const effectInteriorStamps = [...run.mints[0].payload.stampIds, ...run.mints[1].payload.stampIds];
@@ -219,10 +197,6 @@ describe("effect-track empty cone (§3 I1 corollary: = ∅ for effect tracks)", 
     expect([...cone]).toEqual([...run.mints[2].payload.stampIds]);
   });
 
-  // @ledger: Q16 — FLIPPED. Under-reporting forbidden: the FORWARD cone of a value
-  // captured by an effect track includes the region port — asserted prospectively
-  // (the wireframe wire feeding the sink consumes src-a's node: the forward edge
-  // exists in G) and retrospectively (the crossing left a real recorded event).
   it("the forward cone of a value CAPTURED by an effect track still includes the region port", async () => {
     const run = await recordRun(inferenceEnv, EFFECT_CODE, { "src-a": "num", "emit!": "echo", "src-b": "num" });
     const program = await wf(EFFECT_CODE);
@@ -250,11 +224,6 @@ describe("effect-track empty cone (§3 I1 corollary: = ∅ for effect tracks)", 
 });
 
 describe("track separation (§3 I3: no spontaneous inter-track edges)", () => {
-  // @ledger: Q16 — FLIPPED. Parallel tracks: replayed cones pairwise DISJOINT;
-  // mutating one track's frozen payload leaves every other track's replay identical
-  // (no channel exists for the mutation to travel); the ONE sanctioned inter-track
-  // edge — the accumulator chain egress(Tᵢ) → ingress(Tᵢ₊₁) — is exactly what
-  // replay-between-records drives, and nothing else carries state between tracks.
   it("zero spontaneous inter-track edges except the sanctioned accumulator chain", async () => {
     // parallel (element role): three tracks, pairwise-disjoint replayed cones
     const run = await recordRun(inferenceEnv, MAP_CODE, { "fetch-item": "num" });
@@ -307,11 +276,6 @@ describe("track separation (§3 I3: no spontaneous inter-track edges)", () => {
     }
   });
 
-  // @ledger: Q16 — FLIPPED. Order is a STRUCTURAL FACT of the host port, never a
-  // dataflow edge: an order-dependent selector host's comparator schedule lives in
-  // the host-schedule record ("the sequence IS the record", §5 D5) — reconstruction
-  // is replay-free (pure triple-reading, verdicts inlined), and the record's
-  // existence adds NO edge: the compared tracks' replays are unchanged by it.
   it("order rides the host-schedule record, never a fabricated inter-track edge (§3 I3 LIMIT)", async () => {
     // ONE host invocation's comparator schedule, accumulated on the region scope and
     // flushed as ONE record at close — region-scope.ts's real Q11b machinery.
@@ -362,9 +326,6 @@ describe("track separation (§3 I3: no spontaneous inter-track edges)", () => {
 });
 
 describe("R2 demand monotonicity (§6 demand lattice: value / count / field-k)", () => {
-  // @ledger: Q17 — FLIPPED. Generalizes Q8c's own machinery (`reachableNodesForDemand`)
-  // over a small corpus: every count-demand cone is a subset of its own value-demand
-  // cone, over the SAME (program, demand root) pair.
   const MONOTONICITY_CORPUS = [
     "(emit! (length (map f (fetch-list))) (car (filter g xs)))",
     "(length (map (lambda (v) (+ (fetch-item v) 1)) xs))",
@@ -385,13 +346,7 @@ describe("R2 demand monotonicity (§6 demand lattice: value / count / field-k)",
     },
   );
 
-  // @ledger: Q17 — FLIPPED. `field-k` has no SEPARATE demand grade at the wireframe
-  // layer (no consumer has asked for one there — §6 EXCLUDED: "further grades...
-  // until a consumer demands it"). The demand lattice's field-k arm is already
-  // landed at the RETROSPECTIVE layer (`provenance/lineage.ts`'s `fieldCone`/`fullCone`,
-  // pre-dating this provenance wave) — this row reuses THAT machinery rather than
-  // inventing a second field-demand walk, generalizing lineage-field.test.ts's own
-  // per-case assertions into the monotonicity LAW itself.
+  // field-k has no separate wireframe demand grade; this row uses lineage.ts fieldCone/fullCone
   const FIELD_CLASSIFIER: Classifier = { roleOf: () => undefined };
   const FIELD_CORPUS: ReadonlyArray<{ code: string; bindings: Bindings; step: PathStep; note: string }> = [
     { code: "(:foo x)", bindings: { x: [42] }, step: { field: "foo" }, note: "matched field" },
@@ -413,12 +368,7 @@ describe("R2 demand monotonicity (§6 demand lattice: value / count / field-k)",
     },
   );
 
-  // @ledger: Q17 — FLIPPED, over a SECOND corpus row broadening the assertion
-  // beyond the one example `wireframe-fact-wires.test.ts` already covers — here the
-  // ROLES are SWAPPED (`filter`, non-length-preserving, is the fact-tagged/INCLUDED
-  // branch; `map` is the untagged/EXCLUDED "element" branch), proving the
-  // structural-producer carve-out is symmetric in `lengthPreserving`, not an
-  // artifact of the one direction the machinery test happened to exercise.
+  // roles swapped vs fact-wires corpus: filter is fact-tagged/included, map is untagged/excluded — carve-out is symmetric in lengthPreserving
   it(
     "count-demand traverses fact wires ONLY — touches ZERO element wires (§6: " +
       "\"struct-fact wires answer count-demand without touching elements\"; the routing " +
@@ -437,9 +387,6 @@ describe("R2 demand monotonicity (§6 demand lattice: value / count / field-k)",
     },
   );
 
-  // @ledger: Q8c — the ROUTING MACHINERY (not the full LAW — see the file header
-  // addendum). Full corpus in wireframe-fact-wires.test.ts; this row is the gate text
-  // itself, asserted directly: "a count-demand cone touches ZERO element wires."
   it("Q8c machinery gate: a count-demand cone touches zero element wires", async () => {
     const forms = await parse("(emit! (length (map f (fetch-list))) (car (filter g xs)))");
     const p = buildWireframe(forms, { classifier: CLASSIFIER, isBaseName });

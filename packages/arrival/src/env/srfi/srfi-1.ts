@@ -178,7 +178,6 @@ function findImpl(arg: ACallable, list: AListAlike, runCtx: RunContext): SchemeV
     // as the miss sentinel the way it would in a nil-as-false dialect.
     return schemeFalse;
   }
-  // arg is a callable VALUE; runCtx threaded explicitly (plain recursion, not CallCtx dispatch).
   return maybeThen(applyCallback(arg, [list.car], makeCallCtx(runCtx)), function (value) {
     // R7RS truthiness: only #f is false — a '()-returning predicate IS a match
     // (matches some/every/if; nil is never treated as false here).
@@ -202,7 +201,6 @@ function findImpl(arg: ACallable, list: AListAlike, runCtx: RunContext): SchemeV
 // Clean run branch needs pred RETURN facts — TypeFacts has none today.
 // ════════════════════════════════════════════════════════════════════════════
 
-/** Fixed-arity refusal: wrong arity → `ctx.door`. */
 function exactly<T>(ctx: EmitCtx<R>, sym: string, args: readonly T[], n: number): readonly T[] {
   if (args.length !== n) ctx.door(`\`${sym}\` wants exactly ${n} argument${n === 1 ? "" : "s"}, got ${args.length}`);
   return args;
@@ -282,7 +280,6 @@ export default EnvCapability.define("scheme/srfi-1", {
             <T>(p: (x: T) => unknown, xs: readonly T[]): readonly T[];
           }
         `,
-            // Compiler-facing rule — see filterEmitRule's block above.
             emit: filterEmitRule },
           (args, runCtx) => {
             const [pred, seq] = args;
@@ -330,7 +327,7 @@ export default EnvCapability.define("scheme/srfi-1", {
         {
           input: [z.lambda, z.listAlike],
           output: [z.schemeValue],
-          // Dual generic + type-guard overload; miss → null (nil). Runtime still returns ANil.
+          // harvest `type:` images miss as `null` with type-guard overloads
           type: dedent`
           {
             <T, S extends T>(p: (x: T) => x is S, xs: List<T>): S | null;

@@ -125,7 +125,6 @@ export interface ReactionHub {
    * instance as pathAtoms.
    */
   readonly bus: PathAtomBus;
-  /** Register a live unit on this hub. */
   unit(spec: ReactionUnitSpec): ReactionEnvelope;
   /** Harness / foreign write: invalidate paths as if an external unit committed them. */
   invalidate(paths: readonly ResourcePath[]): void;
@@ -134,19 +133,14 @@ export interface ReactionHub {
    * `optInParams` mark dirty. Param keys never enter path prior-E (**N-RX-OPTIN-NOT-DOOR-FUEL**).
    */
   setParam(name: string, value: unknown): void;
-  /** Read a host-owned param atom value (undefined if never set). */
   getParam(name: string): unknown | undefined;
-  /** True when the hub holds a value for this param name. */
   hasParam(name: string): boolean;
-  /** Drain dirty flags across all units on this hub. */
   settle(opts: SettleOptions): Promise<void>;
-  /** Dispose every unit still registered. */
   disposeAll(): void;
 }
 
 // ── Hub ──────────────────────────────────────────────────────────────────────
 
-/** Create a shared reaction hub (one bus + multi-unit settle). */
 export function createReactionHub(): ReactionHub {
   return new ReactionHubImpl();
 }
@@ -365,7 +359,6 @@ class ReactionEnvelopeImpl implements ReactionEnvelope {
   private runObserved: ResourcePath[] = [];
   /** Effect paths staged during the in-flight run. */
   private staged: ResourcePath[] = [];
-  /** True while an exec for this unit is on the stack. */
   private running = false;
 
   constructor(hub: ReactionHubImpl, spec: ReactionUnitSpec) {
@@ -495,9 +488,7 @@ class ReactionEnvelopeImpl implements ReactionEnvelope {
     }
     this.running = true;
     this._runCount++;
-    // R7 supersede now rides exec itself: the new owned run notes itself on this
-    // envelope's bus (noteReactiveAtomsRun) and retires the prior run's cells —
-    // atoms live per run context (P-RX-ATOM-SUPERSEDE).
+    // Atoms live per run context (`P-RX-ATOM-SUPERSEDE`).
     // RX-FRESH: all three axes, every time.
     const cache = new MemoryRunCache("record");
     const pathLog = new MemoryResourcePathLog();

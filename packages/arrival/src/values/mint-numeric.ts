@@ -45,7 +45,6 @@ export class ExactOverflowError extends ArrivalError {
     /** The operation that overflowed, e.g. "exact +", "quotient" — omitted when the
      *  caller didn't thread one through; the message still teaches without it. */
     public readonly op: string | undefined,
-    /** The offending magnitude, stringified. */
     public readonly magnitude: string,
   ) {
     super(

@@ -42,8 +42,6 @@ export function setDynamicCallSite(site: Invocation | undefined): void {
   globalThis.__arrivalDynamicCallSite = site;
 }
 
-/** Is `a` a strict descendant of `b` in the invocation tree? Walks `a`'s parent
- *  chain looking for `b`. Used by {@link withDynamicCallSite}. */
 export function isStrictDescendant(a: Invocation | undefined, b: Invocation | undefined): boolean {
   if (!a || !b) return false;
   // Invocation is opaque here — the tap owns its shape; narrow structurally to walk parent.

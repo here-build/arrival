@@ -68,7 +68,6 @@ export interface OracleSession {
   advance(text: string): void;
   /** A detached copy at the current prefix — for masking candidate continuations (no effects). */
   clone(): OracleSession;
-  /** The verdict at the current cursor. */
   readonly state: OracleState;
   /** The real result of the strict form the last `advance` closed, or `null` (Layer S ⇒ null). */
   readonly lastClosed: EvalResult | null;

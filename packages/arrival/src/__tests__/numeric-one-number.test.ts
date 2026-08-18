@@ -1,27 +1,16 @@
-// One-Number Rework (RATIO, crash-on-overflow) — W0 RED-FIRST test file.
+// One-Number Rework (RATIO, crash-on-overflow).
 //
 // Pins docs/design-history/arrival-one-number-rework.md §0 (invariants) and
 // §2 (design) at the SCHEME surface. Every row named in the doc's §3 behavior-row list
-// becomes one assertion here (the §0.6 pinned-behaviors list is folded into the "box
-// identity" describe block below — same rows, same meaning).
+// becomes one assertion here.
 //
-// Harness: `run()` mirrors boolean-landmine-regression.test.ts's helper — execState
-// (COMPLEX tier) plus the boxed result's OWN `.toString()` — deliberately NOT `exec()`'s
-// plain-JS exit. Reason: `exec()` goes through `toJS`, and per the plan's own "egress
-// divides" law (§2.0), `toJS(1/3)` is the divided float `0.333…` for EITHER an exact
-// rational OR a genuinely inexact division — the JS face collapses exactly the
-// distinction this file exists to pin. Printing the BOX itself ("1/3" vs
-// "0.3333333333333333") is the one channel that keeps exactness visible (AExact and
-// AInexact already print differently: an integer-valued inexact gets a trailing ".0",
-// a rational exact prints "num/denom"). The one deliberate exception is the `toJS`-face
-// row itself, which exists to pin the membrane's divide-on-egress behavior — it uses
-// `exec()` on purpose.
-//
-// Rows commented "RED until the atom lands" are EXPECTED to fail on HEAD — this file
-// pins the doc's TARGET semantics before the representation atom lands, red-first.
-// Every other row is an ALREADY-TRUE
-// pin: a regression guard proving present behavior (which the num/denom bigint→number
-// port must not accidentally break) survives the rework.
+// Harness: `run()` uses execState (COMPLEX tier) plus the boxed result's OWN
+// `.toString()` — deliberately NOT `exec()`'s plain-JS exit. `exec()` goes through
+// `toJS`, and `toJS(1/3)` is the divided float for either an exact rational or a
+// genuinely inexact division — the JS face collapses the distinction this file
+// exists to pin. Printing the BOX itself ("1/3" vs "0.333…") keeps exactness
+// visible. The one exception is the `toJS`-face row, which pins the membrane's
+// divide-on-egress behavior and uses `exec()` on purpose.
 import { describe, expect, it } from "vitest";
 import { exec, execState } from "../eval/generator-exec.js";
 import { ParseError } from "../errors.js";
@@ -61,8 +50,7 @@ describe("overflow-throws — exact results whose components leave safe-integer 
   // arithmetic-overflow guarantee from the parser's literal gate.
   it.each([
     {
-      // RED until the atom lands: today AExact is bigint-backed (no magnitude ceiling),
-      // so this computes silently to a correct-but-unbounded exact bigint — no throw.
+      // Safe operands + unsafe result isolate op overflow from the parser's literal gate.
       name: "(+ 9007199254740991 1) rejects — exact addition overflowing 2^53 THROWS, never silently widens",
       input: "(+ 9007199254740991 1)" },
     {

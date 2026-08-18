@@ -67,11 +67,10 @@ function tokenFor(ch: string): string {
   return `u${ch.codePointAt(0)!.toString(16)}`; // total fallback for the long tail
 }
 
-/** Decode one token body back to its char (the inverse of `tokenFor`). */
 function charFor(token: string): string {
   const named = FROM_NAMED.get(token);
   if (named !== undefined) return named;
-  if (token.length === 1 && token >= "0" && token <= "9") return token; // bare-digit token
+  if (token.length === 1 && token >= "0" && token <= "9") return token;
   if (token.startsWith("u")) return String.fromCodePoint(parseInt(token.slice(1), 16));
   return token; // unreachable for well-formed escaped names; identity is the safe default
 }

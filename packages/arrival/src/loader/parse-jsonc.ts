@@ -47,18 +47,16 @@ function stripComments(text: string): string {
       continue;
     }
 
-    // Line comment
     if (c === "/" && text[i + 1] === "/") {
       i += 2;
       while (i < n && text[i] !== "\n" && text[i] !== "\r") i += 1;
       continue;
     }
 
-    // Block comment
     if (c === "/" && text[i + 1] === "*") {
       i += 2;
       while (i < n && !(text[i] === "*" && text[i + 1] === "/")) i += 1;
-      if (i < n) i += 2; // skip closing */
+      if (i < n) i += 2;
       out += " ";
       continue;
     }
@@ -101,7 +99,7 @@ function stripTrailingCommas(text: string): string {
       let j = i + 1;
       while (j < n && (text[j] === " " || text[j] === "\t" || text[j] === "\n" || text[j] === "\r")) j += 1;
       if (text[j] === "}" || text[j] === "]") {
-        i += 1; // skip the trailing comma
+        i += 1;
         continue;
       }
     }

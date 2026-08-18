@@ -12,7 +12,6 @@
 import type { Activation } from "../capability.js";
 import type { MetadataRecord } from "./_bake.js";
 
-/** One metadata read: resolved record + which keys resolved dynamically. */
 export interface ResolvedMetadata {
   readonly resolved: Record<string, unknown>;
   readonly dynamicKeys: readonly string[];

@@ -19,9 +19,7 @@
 
 import { is_promise } from "../values/value-guards.js";
 
-/** Promise.all over a result array; non-arrays pass through unchanged. The HOF
- *  result-collection seam (map/filter/for-each families): async callbacks' results
- *  are awaited ONCE, single level, when the whole collection is needed. */
+/** HOF result-collection awaits one level when the whole collection is needed. */
 export function promise_all(arg: unknown[]): Promise<unknown[]> | unknown[] {
   if (Array.isArray(arg)) {
     return Promise.all(arg);

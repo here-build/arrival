@@ -16,7 +16,6 @@ import type { SchemeValue } from "./values/types.js";
 // :: Source Location Tracking
 // -------------------------------------------------------------------------
 
-/** Source location for AST nodes and errors. */
 export interface SourceLocation {
   /** 1-indexed line number */
   line: number;
@@ -24,7 +23,6 @@ export interface SourceLocation {
   col: number;
   /** 0-indexed byte offset from start of source */
   offset: number;
-  /** Optional source identifier (filename, module, etc.) */
   source?: string;
 }
 
@@ -33,7 +31,6 @@ export function formatLocation(loc: SourceLocation): string {
   return `${source}${loc.line}:${loc.col}`;
 }
 
-/** Thrown for unterminated expressions (unclosed strings, parentheses, etc). */
 export class Unterminated extends Error {
   // Interop: instanceof Unterminated arm in interop-access.ts (non-ArrivalError roots get an arm).
 
@@ -130,7 +127,6 @@ export type ErrorClass =
 // StackFrame is TYPE-only — value terms throw without pulling the evaluator.
 // -------------------------------------------------------------------------
 
-/** SchemeValue's source location off `.location`, if any. */
 function readLocation(code: SchemeValue): SourceLocation | undefined {
   return "location" in code ? code.location : undefined;
 }
@@ -139,7 +135,6 @@ export abstract class ArrivalError extends Error {
   // Interop: nominal instanceof ArrivalError family rule in interop-access.ts.
   public readonly name: string = "ArrivalError";
 
-  /** Every concrete subclass names its own {@link ErrorClass}. */
   abstract readonly "arrival/error-category": ErrorClass;
 
   /** errors-as-doors: MyError.invariant(cond, ...facts) throws the RECEIVER.
@@ -260,7 +255,7 @@ export class PortabilityError extends ArrivalError {
   }
 }
 
-/** Throws PortabilityError in strict mode; no-op in loose. Reads `strict` structurally. */
+/** `runCtx` is read structurally so this leaf does not import a concrete run type. */
 export function strictGate(
   runCtx: { readonly strict: boolean } | undefined,
   divergence: { op: string; rule: string; alternative?: string },
@@ -287,9 +282,7 @@ export class ProvenanceRoleShapeError extends ArrivalError {
   constructor(
     /** The declaring symbol's name — routing/telemetry key. */
     public readonly op: string,
-    /** The declared role that contradicts the contract. */
     public readonly role: string,
-    /** The teaching explanation of WHY the contract's shape disproves the role. */
     public readonly rule: string,
   ) {
     super(`${op}: declared provenance role "${role}" contradicts its own contract — ${rule}`);
@@ -318,7 +311,6 @@ export class CacheClassShapeError extends ArrivalError {
     public readonly op: string,
     /** The declared cache class the contract's shape disproves (always `"view"` today). */
     public readonly cacheClass: string,
-    /** The teaching explanation of WHY the contract's shape disproves the class. */
     public readonly rule: string,
   ) {
     super(`${op}: declared cache class "${cacheClass}" contradicts its own contract — ${rule}`);
@@ -344,9 +336,7 @@ export class ContractSlotKindError extends ArrivalError {
     public readonly op: string,
     /** The factory kind whose wall the slot violates. */
     public readonly kind: "rosetta" | "native" | "sequence" | "define",
-    /** Which vector carries the illegal slot. */
     public readonly side: "input" | "output",
-    /** The registered codec name of the illegal slot. */
     public readonly slotName: string,
   ) {
     super(
@@ -380,9 +370,7 @@ export class ContractSealError extends ArrivalError {
   constructor(
     /** The symbol's name — routing/telemetry key. */
     public readonly op: string,
-    /** Which declaration channel refused. */
     public readonly channel: "withContractFields" | "withCallbackRoles",
-    /** The teaching explanation of what was refused and where it belongs. */
     public readonly rule: string,
   ) {
     super(`${op}: ${channel} refused — ${rule}`);
@@ -556,7 +544,6 @@ export class PreludeMembershipError extends ArrivalError {
   constructor(
     /** The define's name — routing/telemetry key. */
     public readonly define: string,
-    /** The teaching explanation of WHY it reaches a port (direct or transitive). */
     public readonly reason: string,
   ) {
     super(`"${define}" is not prelude-eligible — ${reason}`);
@@ -578,11 +565,9 @@ export class WireLocalityError extends ArrivalError {
   readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
-    /** The offending free variable name. */
     public readonly variable: string,
     /** `scopeId` of the wire body's surface form — where the wire was cut. */
     public readonly span: string,
-    /** The teaching explanation — why this name cannot ride the wire. */
     public readonly reason: string,
   ) {
     super(`wire-locality: free variable "${variable}" in the wire at ${span} — ${reason}`);
@@ -603,7 +588,6 @@ export class DefineLocalityError extends ArrivalError {
   readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
-    /** The offending free variable name. */
     public readonly variable: string,
     /** The declaring define's OWN name (bare, as authored). */
     public readonly define: string,
@@ -665,7 +649,6 @@ export class RawCrossingError extends ArrivalError {
   constructor(
     /** Which door caught it — storage read vs a fallback resolver's answer. */
     public readonly site: "storage" | "resolver",
-    /** The binding/lookup name involved. */
     public readonly variable: string,
     /** The raw JS `typeof` the value carried (never a boxed scheme value). */
     public readonly jsType: string,
@@ -718,7 +701,6 @@ export class WorldFlipError extends ArrivalError {
   readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
-    /** The rosetta verb whose impl flipped worlds. */
     public readonly op: string,
     /** The offending value's class name (e.g. "AString"). */
     public readonly typeName: string,
@@ -790,7 +772,6 @@ export class RedundantCrossingError extends ArrivalError {
   readonly "arrival/error-category": ErrorClass = "other";
 
   constructor(
-    /** Which membrane face refused the redundant crossing. */
     public readonly direction: "fromJS" | "toJS",
   ) {
     super(
@@ -868,7 +849,6 @@ export class UnboundVariableError extends ArrivalError {
   public readonly enriched: boolean;
 
   constructor(
-    /** The unbound name as written. */
     public readonly variable: string,
     /** Near vocabulary matches, best first (empty ⇒ the plain wall, no hint). */
     public readonly suggestions: readonly string[] = [],
@@ -1134,7 +1114,6 @@ export class AmbientShapeError extends ArrivalError {
     /** The call site's own name (`"exec"`, `"execExpr"`, `"prelude evalScheme"`,
      *  `capability "${name}"`, …). */
     public readonly site: string,
-    /** The rest of the teaching message. */
     public readonly detail: string,
   ) {
     super(`${site}: ${detail}`);
@@ -1428,7 +1407,6 @@ export class CarrierMismatchError extends ArrivalError {
 // through real exec paths; walk .cause).
 // -------------------------------------------------------------------------
 
-/** Symbol-keyed metadata key for attachOffendingValue / offendingValueOf. */
 export const OFFENDING_VALUE = Symbol("arrival/offending-value");
 
 /** Max cause-chain depth (failAndWrap adds at most one ArrivalError layer). */
@@ -1446,7 +1424,6 @@ export function attachOffendingValue<E>(error: E, value: unknown): E {
   return error;
 }
 
-/** Walk error + Error.cause chain (bounded) for OFFENDING_VALUE. */
 export function offendingValueOf(error: unknown): unknown | undefined {
   let node: unknown = error;
   for (

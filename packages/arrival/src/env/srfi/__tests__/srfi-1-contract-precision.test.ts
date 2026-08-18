@@ -42,8 +42,6 @@ const probeFn = new ANativeProcedure({
 const properList = new APair(new AExact(1), nil);
 
 describe("scheme/srfi-1 Contract harvest precision — author-asserted `type:` replaces the z.custom degrade path", () => {
-  // INVARIANT: find's harvested signature recovers arity, arg names, and the List<unknown>
-  // receiver via Contract.type override (pins implementation, not behavior)
   it("find: recovers arity + arg names + the List receiver the z.custom predicate arg collapsed to (...args: unknown[]) => unknown", () => {
     expect(signatureOf(def("find"))).toBe(`{
   <T, S extends T>(p: (x: T) => x is S, xs: List<T>): S | null;
@@ -51,8 +49,6 @@ describe("scheme/srfi-1 Contract harvest precision — author-asserted `type:` r
 }`);
   });
 
-  // INVARIANT: filter's author-asserted generic overload set (guard/non-guard ×
-  // List/array receivers) harvests verbatim (pins implementation, not behavior)
   it("filter: author-asserted generic overload set harvests verbatim (guard × receiver pairs)", () => {
     expect(signatureOf(def("filter"))).toBe(`{
   <T, S extends T>(p: (x: T) => x is S, xs: List<T>): List<S>;

@@ -74,8 +74,8 @@ function defineBodyOf(form: unknown): unknown {
   if (!isPair(cdr1)) return undefined;
   const head = cdr1.car;
   const tail = cdr1.cdr;
-  if (isPair(head) && isSymbol(head.car)) return lastOf(tail); // (define (name args…) body…)
-  if (isSymbol(head)) return isPair(tail) ? tail.car : undefined; // (define name value)
+  if (isPair(head) && isSymbol(head.car)) return lastOf(tail);
+  if (isSymbol(head)) return isPair(tail) ? tail.car : undefined;
   return undefined;
 }
 
@@ -114,7 +114,6 @@ export function reachesPort(n: LineageNode): boolean {
   }
 }
 
-/** The partitioned result of `classifyProgramPrelude`. */
 export interface PreludeMembership {
   /** Top-level define names classified PURE — transitively reach no port. Prelude-eligible. */
   readonly pure: ReadonlySet<string>;

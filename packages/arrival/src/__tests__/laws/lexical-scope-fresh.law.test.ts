@@ -23,11 +23,9 @@ describe("LexicalScope.fresh() — isolation between two fresh scopes", () => {
 
     await exec("(define secret 1)", { scope: scopeA });
 
-    // scopeA sees its own define.
     const [seenInA] = await exec("secret", { scope: scopeA });
     expect(seenInA).toBe(1);
 
-    // scopeB never saw it — unbound in a genuinely separate lexical root.
     await expect(exec("secret", { scope: scopeB })).rejects.toThrow();
   });
 

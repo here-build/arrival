@@ -27,7 +27,6 @@ import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
 
 describe("buildVocabulary — routing preludeOnly symbols onto Vocabulary.preludeOnly", () => {
-  // INVARIANT: a preludeOnly rosetta binds onto Vocabulary.preludeOnly, NOT onto Vocabulary.map.
   it("a preludeOnly rosetta binds onto Vocabulary.preludeOnly, NOT onto Vocabulary.map", async () => {
     const def = symbol.rosetta`prelude-only/verb: only visible while a prelude evaluates`(
       { input: [z.string], output: [z.string], preludeOnly: true },
@@ -36,13 +35,11 @@ describe("buildVocabulary — routing preludeOnly symbols onto Vocabulary.prelud
     const cap = EnvCapability.define("test/prelude-only", { symbols: () => ({ "prelude-only/verb": def }) });
     const vocabulary = await buildVocabulary([cap], undefined, evalScheme);
 
-    expect(vocabulary.map.has("prelude-only/verb")).toBe(false); // NOT on the runtime map
+    expect(vocabulary.map.has("prelude-only/verb")).toBe(false);
     const bound = vocabulary.preludeOnly.get("prelude-only/verb");
-    expect(bound).toBeInstanceOf(ARosettaProcedure); // IS on the preludeOnly map, same bind form (a real callable)
+    expect(bound).toBeInstanceOf(ARosettaProcedure);
   });
 
-  // INVARIANT: an ordinary (non-preludeOnly) rosetta binds onto Vocabulary.map, unaffected by
-  // preludeOnly wiring.
   it("an ORDINARY (non-preludeOnly) rosetta binds onto Vocabulary.map as before — no regression", async () => {
     const def = symbol.rosetta`ordinary/verb: a normal runtime verb`(
       { input: [z.string], output: [z.string] },
@@ -55,8 +52,6 @@ describe("buildVocabulary — routing preludeOnly symbols onto Vocabulary.prelud
     expect(vocabulary.preludeOnly.has("ordinary/verb")).toBe(false);
   });
 
-  // INVARIANT: a preludeOnly NATIVE symbol also routes onto Vocabulary.preludeOnly,
-  // kind-agnostic (native and rosetta share the routing rule).
   it("a preludeOnly NATIVE symbol also routes onto Vocabulary.preludeOnly (kind-agnostic)", async () => {
     const def = symbol.native`prelude-only/native-verb: native prelude-only op`(
       { input: [z.string], output: [z.string], preludeOnly: true },
@@ -67,8 +62,6 @@ describe("buildVocabulary — routing preludeOnly symbols onto Vocabulary.prelud
     const vocabulary = await buildVocabulary([cap], undefined, evalScheme);
 
     expect(vocabulary.map.has("prelude-only/native-verb")).toBe(false);
-    // A native binds as a first-class ANativeProcedure (callable-as-value) — still routed onto
-    // the preludeOnly map, the invariant this test pins.
     expect(vocabulary.preludeOnly.get("prelude-only/native-verb")).toBeInstanceOf(ANativeProcedure);
   });
 });

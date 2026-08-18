@@ -9,16 +9,10 @@ import { AInexact } from "../values/primitives/AInexact.js";
 import { APair } from "../values/primitives/APair.js";
 import { AListAlike, type SchemeValue } from "../values/types.js";
 
-/**
- * Create a Scheme list from JS values
- */
 export function list<T extends SchemeValue>(...items: T[]): AListAlike<T> {
   return APair.fromArray(CONSTANT_CTX, items, false);
 }
 
-/**
- * Create a Scheme symbol
- */
 export function sym(name: string): ASymbol {
   return new ASymbol(name);
 }
@@ -35,9 +29,6 @@ export function num(n: number): AExact | AInexact {
   return Number.isInteger(n) ? new AExact(n) : new AInexact(n);
 }
 
-/**
- * Create an exact number (rational)
- */
 export function exact(num: number, denom: number = 1): AExact {
   return new AExact(num, denom);
 }

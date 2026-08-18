@@ -59,10 +59,6 @@ export interface HermeticEnv {
   readonly config?: object;
 }
 
-/**
- * Build hermetic env: basePacks vocabulary + pure prelude + ingress on a fresh
- * session pair. See file header for BASE_ROSTER / prelude / ingress rules.
- */
 export async function hermeticEnv(
   basePacks: readonly EnvCapability[],
   prelude: string,

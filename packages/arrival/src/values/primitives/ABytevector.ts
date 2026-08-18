@@ -17,7 +17,6 @@ import { withInputProvenance } from "../op-helpers.js";
 import type { SourceLocation } from "../../errors.js";
 
 
-/** Anything that can seed a bytevector — coerced to Uint8Array in the constructor. */
 type BytevectorSource =
   | Uint8Array
   | ArrayBuffer
@@ -128,7 +127,6 @@ export class ABytevector extends AValue {
     return this.__bytevector__[Symbol.iterator]();
   }
 
-  // Semigroup — byte concatenation. Associative; equality via the Setoid above.
   ["arrival/tagless-final/concat"](other: ABytevector): ABytevector {
     const a = this.__bytevector__;
     const b = other.__bytevector__;

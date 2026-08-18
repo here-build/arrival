@@ -311,7 +311,7 @@ export default EnvCapability.define("scheme/equality", {
             <T>(x: T): x is Extract<T, boolean>;
           }
         ` },
-      // Raw JS boolean OR boxed ABool (same dual form as number?/string?).
+      // harvest `type:` is the dual boolean guard
       function (this: CallCtx, obj) {
         return bool(obj instanceof ABool);
       },

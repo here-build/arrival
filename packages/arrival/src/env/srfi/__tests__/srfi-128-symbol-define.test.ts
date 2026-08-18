@@ -116,14 +116,11 @@ describe("scheme/srfi-128 — comparator behavior equivalence (semantic-equivale
   });
 });
 
-// STAGE C CUT 4 (docs/plans/stage-c-corpse-deletion.md): the "standalone .apply(), deps
-// unwalked" mechanism this block used to contrast the two luck classes against is RETIRED
-// along with `lower()`/`assembleEnv` — `buildVocabulary` (the sole surviving bake path) ALWAYS
-// walks a capability's OWN declared `deps`, so BOTH luck classes collapse into "it just
-// resolves" now (there is no unwalked state to distinguish them by). The PRODUCT law that
-// survives — srfi-128's declared deps (`equality`/`numeric`/`chars`/`strings`/`lists`)
-// genuinely resolve BOTH `%type-rank` (native-sourced names) and `make-comparator` (the
-// BASE_PACKS-only `list`) — pinned via the sanctioned path.
+// `buildVocabulary` always walks a capability's own declared `deps`. Both luck
+// classes collapse to "it just resolves" — there is no unwalked state to distinguish
+// them by. srfi-128's declared deps (`equality`/`numeric`/`chars`/`strings`/`lists`)
+// resolve both `%type-rank` (native-sourced names) and `make-comparator` (the
+// BASE_PACKS-only `list`).
 describe("scheme/srfi-128 — the dep edge is real, both luck classes in one pack (§2.1's undeclared-dep bug class, now declared edges)", () => {
   it("srfi-128 ALONE (exec({capabilities})): both %type-rank (native-sourced) and make-comparator (BASE_PACKS-only list) resolve through its declared deps", async () => {
     await expect(exec('(%type-rank "a")', { capabilities: [srfi128] })).resolves.not.toThrow();

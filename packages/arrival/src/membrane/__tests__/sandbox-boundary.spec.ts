@@ -11,20 +11,17 @@ import { InteropAccessError } from "../../errors.js";
 
 describe("Sandbox Boundary", () => {
   describe("sandboxedAccess", () => {
-    // INVARIANT: accessMember returns own properties
     it("returns own properties", () => {
       const obj = { name: "Alice", age: 30 };
       expect(accessMember(obj, "name")).toBe("Alice");
       expect(accessMember(obj, "age")).toBe(30);
     });
 
-    // INVARIANT: accessMember returns the NOT_FOUND sentinel for missing properties (pins implementation, not behavior)
     it("returns NOT_FOUND for missing properties", () => {
       const obj = { name: "Alice" };
       expect(accessMember(obj, "missing")).toBe(NOT_FOUND);
     });
 
-    // INVARIANT: accessMember returns NOT_FOUND for null/undefined targets
     it("returns NOT_FOUND for null/undefined", () => {
       expect(accessMember(null, "key")).toBe(NOT_FOUND);
       expect(accessMember(undefined, "key")).toBe(NOT_FOUND);
@@ -38,7 +35,6 @@ describe("Sandbox Boundary", () => {
       expect(() => accessMember(obj, "prototype")).toThrow(InteropAccessError);
     });
 
-    // INVARIANT: accessMember throws InteropAccessError for Object.prototype-inherited properties (toString/hasOwnProperty/valueOf)
     it("throws for inherited properties from Object.prototype", () => {
       const obj = { name: "Alice" };
       expect(() => accessMember(obj, "toString")).toThrow(InteropAccessError);
@@ -46,7 +42,6 @@ describe("Sandbox Boundary", () => {
       expect(() => accessMember(obj, "valueOf")).toThrow(InteropAccessError);
     });
 
-    // INVARIANT: accessMember allows inherited properties from non-boundary prototypes
     it("allows inherited properties from non-boundary prototypes", () => {
       class MyClass {
         inheritedMethod() {
@@ -91,33 +86,28 @@ describe("Sandbox Boundary", () => {
   });
 
   describe("sandboxedHas", () => {
-    // INVARIANT: accessHas returns true for own properties
     it("returns true for own properties", () => {
       const obj = { name: "Alice" };
       expect(accessHas(obj, "name")).toBe(true);
     });
 
-    // INVARIANT: accessHas returns false for missing properties
     it("returns false for missing properties", () => {
       const obj = { name: "Alice" };
       expect(accessHas(obj, "missing")).toBe(false);
     });
 
-    // INVARIANT: accessHas returns false (not throw) for blocked properties
     it("returns false for blocked properties (doesn't throw)", () => {
       const obj = { name: "Alice" };
       expect(accessHas(obj, "constructor")).toBe(false);
       expect(accessHas(obj, "__proto__")).toBe(false);
     });
 
-    // INVARIANT: accessHas returns false for Object.prototype-inherited properties
     it("returns false for Object.prototype inherited properties", () => {
       const obj = { name: "Alice" };
       expect(accessHas(obj, "toString")).toBe(false);
       expect(accessHas(obj, "hasOwnProperty")).toBe(false);
     });
 
-    // INVARIANT: accessHas returns true for non-boundary inherited properties
     it("returns true for non-boundary inherited properties", () => {
       class MyClass {
         method() {}
@@ -128,13 +118,11 @@ describe("Sandbox Boundary", () => {
   });
 
   describe("sandboxedKeys", () => {
-    // INVARIANT: accessKeys returns only own enumerable keys
     it("returns own enumerable keys", () => {
       const obj = { a: 1, b: 2, c: 3 };
       expect(accessKeys(obj)).toEqual(["a", "b", "c"]);
     });
 
-    // INVARIANT: accessKeys never includes inherited keys
     it("never includes inherited keys", () => {
       class MyClass {
         method() {}
@@ -148,31 +136,19 @@ describe("Sandbox Boundary", () => {
       expect(keys).not.toContain("toString");
     });
 
-    // INVARIANT: accessKeys returns an empty array for null/undefined
     it("returns empty array for null/undefined", () => {
       expect(accessKeys(null)).toEqual([]);
       expect(accessKeys(undefined)).toEqual([]);
     });
   });
 
-  // `accessSet` (the interop WRITE face) was deleted 2026-07-10 — a mutation
-  // face violates total immutability and had zero production callers.
-  // DEAD (atlas invariants, no longer testable — the API itself is gone):
-  //   - accessSet sets own properties
-  //   - accessSet shadows an inherited property by creating an own property instead
-  //   - accessSet throws InteropAccessError for blocked property names
-  //   - accessSet throws TypeError for null/undefined targets
-
-
   describe("markAsSandboxBoundary", () => {
-    // INVARIANT: markInteropBoundary marks a class's prototype as a boundary
     it("marks a class as a boundary", () => {
       class TestClass {}
       markInteropBoundary(TestClass);
       expect(isInteropBoundary(TestClass.prototype)).toBe(true);
     });
 
-    // INVARIANT: markInteropBoundary marks a plain object as a boundary
     it("marks an object as a boundary", () => {
       const obj = {};
       markInteropBoundary(obj);
@@ -214,7 +190,6 @@ describe("Sandbox Boundary", () => {
   });
 
   describe("Array access", () => {
-    // INVARIANT: index access and .length on arrays are allowed
     it("allows index access on arrays", () => {
       const arr = ["a", "b", "c"];
       expect(accessMember(arr, "0")).toBe("a");
@@ -222,7 +197,6 @@ describe("Sandbox Boundary", () => {
       expect(accessMember(arr, "length")).toBe(3);
     });
 
-    // INVARIANT: Array.prototype methods (push/map/filter) are blocked
     it("blocks Array.prototype methods", () => {
       const arr = ["a", "b", "c"];
       expect(() => accessMember(arr, "push")).toThrow(InteropAccessError);
@@ -232,19 +206,16 @@ describe("Sandbox Boundary", () => {
   });
 
   describe("Real-world attack vectors", () => {
-    // INVARIANT: constructor.constructor (Function-constructor) escape is blocked
     it("blocks constructor.constructor (Function constructor) escape", () => {
       const obj = {};
       expect(() => accessMember(obj, "constructor")).toThrow(InteropAccessError);
     });
 
-    // INVARIANT: __proto__ manipulation is blocked
     it("blocks __proto__ manipulation", () => {
       const obj = {};
       expect(() => accessMember(obj, "__proto__")).toThrow(InteropAccessError);
     });
 
-    // INVARIANT: prototype property access on a function is blocked
     it("blocks prototype property access", () => {
       const fn = function () {};
       expect(() => accessMember(fn, "prototype")).toThrow(InteropAccessError);
@@ -278,21 +249,16 @@ describe("Sandbox Boundary", () => {
       expect(() => accessMember(obj, Symbol.species)).toThrow(InteropAccessError);
     });
 
-    // INVARIANT: non-well-known (user-created) symbols are allowed through accessMember
     it("allows non-well-known symbols (user symbols)", () => {
       const userSymbol = Symbol("user-data");
       const obj = { [userSymbol]: "safe value" };
       expect(accessMember(obj, userSymbol)).toBe("safe value");
     });
 
-    // INVARIANT: accessHas returns false for blocked well-known symbols
     it("sandboxedHas returns false for blocked symbols", () => {
       const obj = { [Symbol.toPrimitive]: () => 42 };
       expect(accessHas(obj, Symbol.toPrimitive)).toBe(false);
     });
-
-    // DEAD (atlas invariant, no longer testable — accessSet deleted 2026-07-10):
-    //   accessSet blocks well-known symbols
 
   });
 
@@ -359,7 +325,6 @@ describe("Sandbox Boundary", () => {
       expect(isInteropBoundary(TypeError.prototype)).toBe(true);
     });
 
-    // INVARIANT: a local (non-global) class prototype is not flagged; its own methods stay reachable
     it("does NOT flag a local (non-global) class prototype; its own method stays reachable", () => {
       class Widget {
         greet() {
@@ -370,7 +335,6 @@ describe("Sandbox Boundary", () => {
       expect(accessMember(new Widget(), "greet")).toBeInstanceOf(Function);
     });
 
-    // INVARIANT: an ad-hoc object used as a prototype is not falsely flagged as a boundary
     it("does NOT falsely flag an ad-hoc object used as a prototype (own data stays reachable)", () => {
       // It inherits `constructor` from Object — the own-constructor guard keeps it
       // OFF the boundary set, so a child's access to its own data is not blocked.
@@ -379,7 +343,6 @@ describe("Sandbox Boundary", () => {
       expect(accessMember(Object.create(proto), "helper")).toBe(1);
     });
 
-    // INVARIANT: boundary detection is identity-checked — spoofing constructor.name to "Object" does not fool it
     it("is identity-checked: spoofing constructor.name = 'Object' is not a boundary", () => {
       // ctor.name === "Object" but globalThis.Object !== this impostor → not flagged.
       const impostor = { constructor: function Object() {} };
