@@ -368,7 +368,9 @@ export function extract_patterns(
                 invariant(copyLastPair instanceof APair, "syntax: last_pair of a non-empty pair spine is a pair");
                 // Ellipsis surgery on a PRIVATE clone — a sanctioned __tieKnot call site.
                 __tieKnot(copyLastPair, "cdr", nil);
-                bindings["..."].symbols[name] = copy;
+                // Ellipsis cell is a list of repetitions: wrap the proper prefix so
+                // `(x ...)` iterates elements, not the prefix as one item.
+                bindings["..."].symbols[name] = consCell(ctx, copy, nil);
                 return traverse(pattern.cdr.cdr, last_pair.cdr, state);
               }
             }
@@ -390,6 +392,11 @@ export function extract_patterns(
           } else {
             return false;
           }
+        }
+        // (x ... . b) never enters the trailing-trim loop (`cdr.cdr` is the
+        // symbol `b`). A proper list has no remainder — bind `b` to ().
+        if (pattern.cdr.cdr instanceof ASymbol) {
+          return traverse(pattern.cdr.cdr, nil, state);
         }
         return true;
       } else if (pattern.car instanceof APair) {

@@ -5,8 +5,9 @@
 // accepts a proper singleton and a dotted pair; a longer rest (cdr is a pair)
 // still misses so the empty-ellipsis arm cannot steal the LIPS trim path.
 //
+// `(x ... . b)` binds the remainder: proper → b=(), improper → the dotted cdr.
+//
 // Still open:
-//   - `(x ... . b)` — match succeeds, eval dies (#:b unbound / number in call-head).
 //   - quoted `'(... (x ...))` — silent unsubstituted `(x ...)`.
 import { describe, expect, it } from "vitest";
 import { freshEnv } from "../_fresh-env.js";
@@ -97,34 +98,50 @@ describe("syntax-rules ellipsis-escape hole (quoted (... <template>))", () => {
   });
 });
 
-describe("syntax-rules (x ... . b) arm — match succeeds, then eval dies", () => {
+describe("syntax-rules (x ... . b) arm", () => {
   // This arm does NOT use the trailing-handler loop (`cdr.cdr` is the symbol `b`).
-  // Match returns true; the expansion is wrong and dies at eval.
-  it("(x ... . b) vs proper (1 2 3 4 5): unbound hygienic #:b", async () => {
-    const msg = await boom(
+  it("(x ... . b) vs proper (1 2 3 4 5): x=(1 2 3 4 5), b=() → ((1 2 3 4 5))", async () => {
+    const out = await run(
       `(let-syntax ((m (syntax-rules () ((_ x ... . b) (cons (list x ...) b))))) (m 1 2 3 4 5))`,
     );
-    expect(msg).toMatch(/Unbound variable `Symbol\(#:b\)'/);
+    expect(String(out)).toBe("((1 2 3 4 5))");
   });
 
-  it("(x ... . b) vs improper (1 2 3 4 . 5): number in call-head", async () => {
-    const msg = await boom(
+  it("(x ... . b) vs improper (1 2 3 4 . 5): x=(1 2 3 4), b=5 → ((1 2 3 4) . 5)", async () => {
+    const out = await run(
       `(let-syntax ((m (syntax-rules () ((_ x ... . b) (cons (list x ...) b))))) (m 1 2 3 4 . 5))`,
     );
-    expect(msg).toMatch(/Not callable: a number sits in operator\/call-head position/);
+    expect(String(out)).toBe("((1 2 3 4) . 5)");
   });
-
 });
 
 // Probe stops after restore_data_gensyms: the transcribed form is not evaluated as Scheme.
 const DOTTED_TAIL_PATTERN = "(_ x ... a . b)";
 const DOTTED_TAIL_TEMPLATE = "(cons (list x ...) (cons a b))";
+const ELLIPSIS_DOTTED_PATTERN = "(_ x ... . b)";
+const ELLIPSIS_DOTTED_TEMPLATE = "(cons (list x ...) b)";
 
 type ExpansionProbe = { bindings: false } | { bindings: true; expansion: string };
 
+async function probeExpansion(
+  patternSrc: string,
+  templateSrc: string,
+  useSite: string,
+): Promise<ExpansionProbe> {
+  const [pattern] = await parse(patternSrc);
+  const [template] = await parse(templateSrc);
+  return probeParsed(pattern, template, useSite);
+}
+
 async function probeDottedTailExpansion(useSite: string): Promise<ExpansionProbe> {
-  const [pattern] = await parse(DOTTED_TAIL_PATTERN);
-  const [template] = await parse(DOTTED_TAIL_TEMPLATE);
+  return probeExpansion(DOTTED_TAIL_PATTERN, DOTTED_TAIL_TEMPLATE, useSite);
+}
+
+async function probeEllipsisDottedExpansion(useSite: string): Promise<ExpansionProbe> {
+  return probeExpansion(ELLIPSIS_DOTTED_PATTERN, ELLIPSIS_DOTTED_TEMPLATE, useSite);
+}
+
+async function probeParsed(pattern: unknown, template: unknown, useSite: string): Promise<ExpansionProbe> {
   const [code] = await parse(useSite);
   // Glass Resolver(env) + unmetered RunContext — same mint execStateOverFrame uses
   // when the caller does not pass a live runCtx/resolver.
@@ -176,6 +193,24 @@ describe("syntax-rules dotted-tail expansion probe (form after restore_data_gens
     expect(probe.bindings).toBe(true);
     if (probe.bindings) {
       expect(probe.expansion).toBe("(#:cons (#:list) (#:cons 1 2))");
+    }
+  });
+});
+
+describe("syntax-rules (x ... . b) expansion probe (form after restore_data_gensyms, no eval)", () => {
+  it("proper: (m 1 2 3 4 5) transcribes to (#:cons (#:list 1 2 3 4 5) ())", async () => {
+    const probe = await probeEllipsisDottedExpansion("(m 1 2 3 4 5)");
+    expect(probe.bindings).toBe(true);
+    if (probe.bindings) {
+      expect(probe.expansion).toBe("(#:cons (#:list 1 2 3 4 5) ())");
+    }
+  });
+
+  it("improper: (m 1 2 3 4 . 5) transcribes to (#:cons (#:list 1 2 3 4) 5)", async () => {
+    const probe = await probeEllipsisDottedExpansion("(m 1 2 3 4 . 5)");
+    expect(probe.bindings).toBe(true);
+    if (probe.bindings) {
+      expect(probe.expansion).toBe("(#:cons (#:list 1 2 3 4) 5)");
     }
   });
 });
