@@ -39,7 +39,7 @@ export { LexicalScope, type SessionScope } from "./eval/LexicalScope.js";
 // Run identity: `CONSTANT_CTX`/`HeapMeter` and the run cache/effect-log/read-guard
 // families live on `/host-internals` (host-integration machinery). `RunContext` and its
 // teardown door stay here — `exec({ runCtx })` reuse is an eval concern every host needs.
-export { RunContext } from "./run/RunContext.js";
+export { RunContext, type MembraneClosure } from "./run/RunContext.js";
 export { disposeRunContext } from "./run/run-lifecycle.js";
 
 // Membrane crossing — `exec`'s return values are already crossed (via `toJS`); these

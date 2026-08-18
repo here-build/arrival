@@ -5,6 +5,7 @@
  * Model: docs/execution.md §HERMETIC, §CTX-SPECIES, §CHANNELS — data-local run-state, two
  * ctx species (live-run / CONSTANT_CTX), six channels' arm-subset-wise
  * `X | undefined ⇒ facility off` (resourcePaths alone defaults ON — §CHANNELS).
+ * `membraneClosure` is the observation wrap (§REACTIVITY), not a CQS channel.
  * This file is their enforcement site.
  *
  * PLACEMENT TEST for a new field: varies between concurrent runs → here; never → global
@@ -49,6 +50,25 @@ export type CapabilityConfigurationTable = ReadonlyMap<object, unknown>;
 export interface HeapMeter {
   used: number;
   max: number;
+}
+
+/**
+ * Host wrap around one membrane interaction. `undefined` on the run ⇒ identity
+ * (facility off). `T` may be a `Promise` — reverse-membrane wrappers are async.
+ *
+ * MUST be reentrant: a wrap's `work()` may itself cross (host impl `@`s a
+ * borrowed object, a reverse call's body reads a member). Nesting is the law,
+ * not a bug.
+ *
+ * Closed over by reverse-membrane wrappers at mint (`scope.runCtx`) so a late
+ * JS→Scheme call after `exec` returns still sees THIS run's wrap.
+ */
+export type MembraneClosure = <T>(work: () => T) => T;
+
+/** Identity when `runCtx` is missing or the wrap is unset. */
+export function applyMembraneClosure<T>(runCtx: RunContext | undefined, work: () => T): T {
+  const wrap = runCtx?.membraneClosure;
+  return wrap === undefined ? work() : wrap(work);
 }
 
 /** Mint a fresh per-run context for one `exec()`. Single birth place.
@@ -100,6 +120,13 @@ export class RunContext {
   readonly vocabulary?: ReadonlyMap<string, unknown>;
   /** This tuple's degraded-capability list (same shape as `Vocabulary.degraded`). Opaque. */
   readonly degraded?: readonly unknown[];
+  /**
+   * Host wrap around every membrane interaction (borrowed-store read, host-fn
+   * fire, reverse-membrane re-entry, result egress). `undefined` ⇒ identity.
+   * Not a CQS channel — observation, not temporal zoning (docs/execution.md
+   * §REACTIVITY). CONSTANT_CTX leaves it unset.
+   */
+  readonly membraneClosure: MembraneClosure | undefined;
 
   constructor(
     opts: {
@@ -126,6 +153,8 @@ export class RunContext {
       vocabulary?: ReadonlyMap<string, unknown>;
       /** Supplied by `assembleRun` only. */
       degraded?: readonly unknown[];
+      /** See {@link RunContext.membraneClosure}. */
+      membraneClosure?: MembraneClosure;
     } = {},
     /** Internal: `true` for CONSTANT_CTX — no capabilityResources store. Never pass from
      *  an ordinary mint. */
@@ -143,6 +172,7 @@ export class RunContext {
     this.capabilityConfigurations = opts.capabilityConfigurations;
     this.vocabulary = opts.vocabulary;
     this.degraded = opts.degraded;
+    this.membraneClosure = opts.membraneClosure;
     // eslint-disable-next-line unicorn/no-negated-condition -- resource-store init is the live path; _noResourceStore is the hermetic opt-out
     if (!_noResourceStore) {
       this.capabilityResources = new WeakMap<object, unknown>();

@@ -17,7 +17,7 @@ export { applyCallback, type ACallable } from "../values/primitives/ACallable.js
 export { is_callable_value } from "../values/value-guards.js";
 
 // Run-neutral evaluation context + the evaluator's per-frame contract.
-export { CONSTANT_CTX, type HeapMeter } from "../run/RunContext.js";
+export { CONSTANT_CTX, type HeapMeter, applyMembraneClosure, type MembraneClosure } from "../run/RunContext.js";
 export { type EvalContext, type StackFrame } from "../eval/evaluator.js";
 
 // RUN-READER DOOR — cross-cutting prerequisite for MCP DI: discovery takes run context,

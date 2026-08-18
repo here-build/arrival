@@ -139,11 +139,13 @@ host passed a non-`undefined` value into `new RunContext(...)` (plus the `resour
 default above), read only at these two named sites.
 
 **One arming surface, stated once.** `ExecOptions`
-(`cache`/`effects`/`reads`/`notes`/`display`/`resourcePaths`/`strictCQSstrings`)
-is the public door: a field set rides `new RunContext(...)` onto the matching `RunContext` channel;
+(`cache`/`effects`/`reads`/`notes`/`display`/`resourcePaths`/`strictCQSstrings`/`membraneClosure`)
+is the public door: a field set rides `new RunContext(...)` onto the matching `RunContext` field;
 a field omitted leaves it `undefined`. The per-channel `ExecOptions` field docs and the
 `run/*` file headers describe the SAME wiring from two ends — the option is the entry, the
 channel is the landing. There is no third landing and no transformation between them.
+`membraneClosure` is the observation wrap (§REACTIVITY), not a CQS channel — same arming
+door, different readers (the membrane sites, not the rosetta/eval-loop pair above).
 
 **`execExpr` deliberately drops the model-facing channels.** The single-form entry
 (`require`, prelude eval) mints its `RunContext` with `{ signal, heapBudget, cache, effects,
@@ -530,8 +532,18 @@ declares the query path or voids its output (`"effects-only-return"`, type-level
 subscription. A path-atom bus keyed on those footprints, a `createReactionHub` that re-ran
 `exec` when they overlapped, and `this.reactiveAtoms` as a manual bridge were a second
 catalog next to any live graph the program actually walked. Observation of live handles is
-a host concern (term hooks on the tagless algebra). Re-adding a path-keyed subscribe API
-inside Arrival recreates the catalog.
+a host concern: `RunContext.membraneClosure` wraps every membrane interaction
+(borrowed-store read, host-fn fire, reverse-membrane re-entry, result egress). The wrap
+is reentrant — `work()` may itself cross. Reverse-membrane wrappers close over
+`scope.runCtx` at mint, so a late JS→Scheme call after `exec` returns still sees this
+run's wrap. `undefined` ⇒ identity. Re-adding a path-keyed subscribe API inside Arrival
+recreates the catalog.
+
+*Enforcement sites: `run/RunContext.ts` (`applyMembraneClosure`), `values/primitives/ACallable.ts`
+(host-fn fire + reverse wrap), `common/symbols/rosetta.ts` (baked hostImpl),
+`common/scheme-zod/index.ts` (`z.procedure` both directions), `membrane/AJSObject.ts` /
+`membrane/AJSArray.ts` / `values/primitives/APair.ts` (`AJSArrayList`) (borrowed-store
+terms), `eval/generator-exec.ts` (result egress).*
 
 ---
 

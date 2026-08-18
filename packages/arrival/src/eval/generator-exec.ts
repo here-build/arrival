@@ -27,7 +27,7 @@ import type { EnvCapability } from "../common/capability.js";
 import type { EvalPreludeInto, EvalSchemeInto, SchemeEnv } from "../common/scheme-env.js";
 import { parse as readerParse } from "../reader/parse.js";
 import { parseProgram, validateAgainstResolution, type ParsedProgram } from "./exec-phases.js";
-import { RunContext } from "../run/RunContext.js";
+import { applyMembraneClosure, RunContext, type MembraneClosure } from "../run/RunContext.js";
 import { disposeRunContext } from "../run/run-lifecycle.js";
 import type { DisplaySink, NoteSink } from "../run/note-sink.js";
 import type { RunCache } from "../run/run-cache.js";
@@ -67,7 +67,7 @@ export async function execInFrame(source: string, frame: AmbientRuntime, runCtx?
       );
       results.push(result);
     }
-    return results.map((v) => toJS(v));
+    return results.map((v) => applyMembraneClosure(actualRunCtx, () => toJS(v)));
   } finally {
     if (ownRunCtx) await disposeRunContext(actualRunCtx);
   }
@@ -200,6 +200,13 @@ export interface ExecOptions {
    * (same channel as cache/effects/reads). CONSTANT_CTX stays facility-off.
    */
   resourcePaths?: ResourcePathLog;
+  /**
+   * Host wrap around every membrane interaction (docs/execution.md §REACTIVITY).
+   * Rides onto RunContext.membraneClosure. Unset ⇒ identity. Reentrant — a wrap's
+   * `work()` may itself cross. Reverse-membrane wrappers close over this run's
+   * wrap at mint, so a late JS→Scheme call after exec returns still sees it.
+   */
+  membraneClosure?: MembraneClosure;
   /**
    * THE EXIT CONTRACT. When supplied, the LAST form's result is validated
    * against this schema at the exit boundary — AFTER toJS unwrap, so the schema
@@ -346,6 +353,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     resourcePaths,
     notes,
     display,
+    membraneClosure,
     strict,
     staticValidation,
   } = options;
@@ -392,6 +400,7 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     resourcePaths,
     notes,
     display,
+    membraneClosure,
   });
 
   // Fresh scope per call unless the caller opts into continuity. Fresh root is
@@ -489,7 +498,7 @@ export async function exec<T extends readonly unknown[] = unknown[]>(
 ): Promise<T>;
 export async function exec(code: string | SchemeValue, options: ExecOptions = {}): Promise<readonly unknown[]> {
   const state = await execState(code, options);
-  const values = state.values.map((v) => toJS(v));
+  const values = state.values.map((v) => applyMembraneClosure(state.runCtx, () => toJS(v)));
   const contract = options.output;
   if (contract !== undefined) {
     // THE EXIT DOOR — outbound twin of define/overridable's validation.
@@ -550,6 +559,7 @@ export async function execExpr(
     reads,
     strictCQSstrings,
     resourcePaths,
+    membraneClosure,
     runCtx: passedRunCtx,
   }: ExecOptions = {},
 ): Promise<SchemeValue> {
@@ -570,6 +580,7 @@ export async function execExpr(
       reads,
       strictCQSstrings,
       resourcePaths,
+      membraneClosure,
     }));
   let runResolver = resolver;
   if (runResolver === undefined) {
@@ -656,6 +667,7 @@ export async function execStateOverFrame(
     resourcePaths,
     notes,
     display,
+    membraneClosure,
     strict,
   } = options;
   if (!isAmbientRuntime(env)) throw new AmbientShapeError("execStateOverFrame", "expected a concrete AmbientRuntime");
@@ -678,6 +690,7 @@ export async function execStateOverFrame(
       resourcePaths,
       notes,
       display,
+      membraneClosure,
     });
 
   try {
@@ -724,7 +737,7 @@ export async function execOverFrame(
   options: ExecOptionsOverFrame,
 ): Promise<readonly unknown[]> {
   const state = await execStateOverFrame(code, options);
-  return state.values.map((v) => toJS(v));
+  return state.values.map((v) => applyMembraneClosure(state.runCtx, () => toJS(v)));
 }
 
 /** Single-form COMPLEX tier over a caller-held live frame — mirrors execExpr,
@@ -743,6 +756,7 @@ export async function execExprOverFrame(
     reads,
     strictCQSstrings,
     resourcePaths,
+    membraneClosure,
     runCtx: passedRunCtx,
   }: ExecOptionsOverFrame,
 ): Promise<SchemeValue> {
@@ -752,7 +766,16 @@ export async function execExprOverFrame(
   const runCtxOwned = passedRunCtx === undefined;
   const runCtx =
     passedRunCtx ??
-    new RunContext({ signal, heapBudget, cache, effects, reads, strictCQSstrings, resourcePaths });
+    new RunContext({
+      signal,
+      heapBudget,
+      cache,
+      effects,
+      reads,
+      strictCQSstrings,
+      resourcePaths,
+      membraneClosure,
+    });
   const runSignal = runCtx.signal;
   try {
     const value = expectValue(

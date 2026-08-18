@@ -40,7 +40,7 @@ import type { RunCache } from "../run/run-cache.js";
 import type { EffectLog } from "../run/effect-log.js";
 import type { ReadGuard } from "../run/read-guard.js";
 import type { ResourcePathLog } from "../run/resource-paths.js";
-import { RunContext } from "../run/RunContext.js";
+import { RunContext, type MembraneClosure } from "../run/RunContext.js";
 import { buildVocabulary, type Vocabulary } from "./vocabulary.js";
 import { bindValue, mintResolvingFrame, type ResolvingAmbient } from "./AmbientRuntime.js";
 import invariant from "tiny-invariant";
@@ -67,6 +67,8 @@ export interface AssembleRunOptions {
   readonly resourcePaths?: ResourcePathLog;
   readonly notes?: NoteSink;
   readonly display?: DisplaySink;
+  /** Host wrap around membrane interactions — see RunContext.membraneClosure. */
+  readonly membraneClosure?: MembraneClosure;
   /** Reuse an existing RunContext (REPL continuity). The run carries its own vocabulary, so
    *  `capabilities`/`config` are ignored on this path and no prelude re-runs. */
   readonly runCtx?: RunContext;
@@ -126,6 +128,7 @@ export async function assembleRun(opts: AssembleRunOptions): Promise<RunContext>
     resourcePaths: opts.resourcePaths,
     notes: opts.notes,
     display: opts.display,
+    membraneClosure: opts.membraneClosure,
     capabilityConfigurations: vocabulary.configsByCapability,
     vocabulary: vocabulary.map,
     degraded: vocabulary.degraded,
