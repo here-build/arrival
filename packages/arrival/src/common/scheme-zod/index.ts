@@ -11,7 +11,7 @@
 // this module imports back except type-only edges.
 
 import * as z from "zod";
-import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
+import { applyMembraneClosure, CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import { makeCallCtx } from "../../run/CallCtx.js";
 // TYPE-ONLY: erased at compile — a value import of rosetta.ts would close the
 // scheme-zod ↔ ACallable ↔ rosetta init cycle (see ACallable.ts header).
@@ -839,20 +839,22 @@ export function procedure<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(input?
           // Close over `scope` at decode — never re-read ambient at invoke time.
           // `withRegionCall` owns escape/pending/abort; this owns only marshaling.
           const wrapper = (...jsArgs: unknown[]) =>
-            withRegionCall(scope, async () => {
-              // Install closed-over `scope.runCtx` — invoke may run long after
-              // decode, when ambient scope is unrelated or undefined.
-              const schemeArgs = input
-                ? withMarshalCtx(scope.runCtx, () => jsArgs.map((a) => z.encode(input, a as never)))
-                : jsArgs;
-              // Re-entry nests under exporting invocation (`scope.dynSite`);
-              // `withDynamicCallSite` for nested lambda re-entry.
-              const callCtx = makeCallCtx(scope.runCtx, scope.dynSite as InvocationLike | undefined);
-              const r = await withDynamicCallSite(scope.dynSite, () =>
-                applyCallback(callable, schemeArgs as SchemeValue[], callCtx),
-              );
-              return output ? withMarshalCtx(scope.runCtx, () => z.decode(output, r as never)) : r;
-            });
+            applyMembraneClosure(scope.runCtx, () =>
+              withRegionCall(scope, async () => {
+                // Install closed-over `scope.runCtx` — invoke may run long after
+                // decode, when ambient scope is unrelated or undefined.
+                const schemeArgs = input
+                  ? withMarshalCtx(scope.runCtx, () => jsArgs.map((a) => z.encode(input, a as never)))
+                  : jsArgs;
+                // Re-entry nests under exporting invocation (`scope.dynSite`);
+                // `withDynamicCallSite` for nested lambda re-entry.
+                const callCtx = makeCallCtx(scope.runCtx, scope.dynSite as InvocationLike | undefined);
+                const r = await withDynamicCallSite(scope.dynSite, () =>
+                  applyCallback(callable, schemeArgs as SchemeValue[], callCtx),
+                );
+                return output ? withMarshalCtx(scope.runCtx, () => z.decode(output, r as never)) : r;
+              }),
+            );
           byKey.set("typed", wrapper);
           return wrapper;
         },
@@ -863,13 +865,15 @@ export function procedure<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(input?
             contract: undefined,
             // `callCtx.runCtx` is THIS invocation's live run — direct channel,
             // no ambient guess. Installed for synchronous per-arg marshal below.
-            impl: async (schemeArgs, callCtx) => {
-              const jsArgs = withMarshalCtx(callCtx.runCtx, () =>
-                input ? schemeArgs.map((a) => z.decode(input, a as never)) : schemeArgs,
-              );
-              const r = await jsFn(...jsArgs);
-              return withMarshalCtx(callCtx.runCtx, () => (output ? z.encode(output, r as never) : r)) as SchemeValue;
-            } }) },
+            impl: async (schemeArgs, callCtx) =>
+              applyMembraneClosure(callCtx.runCtx, async () => {
+                const jsArgs = withMarshalCtx(callCtx.runCtx, () =>
+                  input ? schemeArgs.map((a) => z.decode(input, a as never)) : schemeArgs,
+                );
+                const r = await jsFn(...jsArgs);
+                return withMarshalCtx(callCtx.runCtx, () => (output ? z.encode(output, r as never) : r)) as SchemeValue;
+              }),
+            }) },
     ),
   );
 }

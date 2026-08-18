@@ -22,7 +22,7 @@
 import { AValue } from "./AValue.js";
 import type { MembraneExit, SchemeBounceMarker, SchemeValue, WrapperKey } from "../types.js";
 import { tf } from "../tagless-final.js";
-import type { RunContext } from "../../run/RunContext.js";
+import { applyMembraneClosure, type RunContext } from "../../run/RunContext.js";
 // CallCtx lives here-ward specifically so this file never transitively imports
 // common/scheme-zod.ts (would close a cycle that could leave z.instanceof codecs undefined).
 import { makeCallCtx, type CallCtx } from "../../run/CallCtx.js";
@@ -114,11 +114,13 @@ export function hostFnToCallable(
             "jsToScheme: a host-function callable applied before membrane init (membrane/rosetta.ts not loaded)",
           );
         }
-        const jsArgs = args.map((a) => marshal!.toJS(a));
-        const result = fn(...jsArgs);
-        return result instanceof Promise
-          ? result.then((r) => marshal!.jsToScheme(callCtx.runCtx, r) as SchemeValue)
-          : (marshal!.jsToScheme(callCtx.runCtx, result) as SchemeValue);
+        return applyMembraneClosure(callCtx.runCtx, () => {
+          const jsArgs = args.map((a) => marshal!.toJS(a));
+          const result = fn(...jsArgs);
+          return result instanceof Promise
+            ? result.then((r) => marshal!.jsToScheme(callCtx.runCtx, r) as SchemeValue)
+            : (marshal!.jsToScheme(callCtx.runCtx, result) as SchemeValue);
+        });
       },
     },
     provenance,
@@ -152,20 +154,22 @@ function hostProjectionOf(self: ACallable, exit?: MembraneExit): (...args: unkno
   const cached = byKey.get(WRAPPER_KEY);
   if (cached) return cached;
   const wrapper = (...jsArgs: unknown[]): Promise<unknown> =>
-    withRegionCall(scope, async () => {
-      if (marshal === undefined) {
-        throw new Error("arrival/toJS: callable crossing before membrane init (membrane/rosetta.ts not loaded)");
-      }
-      // Args mint under the ENCLOSING invocation's runCtx (scope.runCtx), never CONSTANT_CTX.
-      const schemeArgs = (await Promise.all(
-        jsArgs.map(async (a) => marshal!.jsToScheme(scope.runCtx, await a)),
-      )) as SchemeValue[];
-      const callCtx = makeCallCtx(scope.runCtx, scope.dynSite as InvocationLike | undefined);
-      // Re-entry trace nests under the exporting invocation.
-      const raw = await withDynamicCallSite(scope.dynSite, () => applyCallback(self, schemeArgs, callCtx));
-      invariant(!isBounceMarker(raw), "arrival/toJS: a reverse-membrane call resolved to a bounce token");
-      return withRegionScope(scope, () => (exit === undefined ? marshal!.toJS(raw) : exit.element(raw)));
-    });
+    applyMembraneClosure(scope.runCtx, () =>
+      withRegionCall(scope, async () => {
+        if (marshal === undefined) {
+          throw new Error("arrival/toJS: callable crossing before membrane init (membrane/rosetta.ts not loaded)");
+        }
+        // Args mint under the ENCLOSING invocation's runCtx (scope.runCtx), never CONSTANT_CTX.
+        const schemeArgs = (await Promise.all(
+          jsArgs.map(async (a) => marshal!.jsToScheme(scope.runCtx, await a)),
+        )) as SchemeValue[];
+        const callCtx = makeCallCtx(scope.runCtx, scope.dynSite as InvocationLike | undefined);
+        // Re-entry trace nests under the exporting invocation.
+        const raw = await withDynamicCallSite(scope.dynSite, () => applyCallback(self, schemeArgs, callCtx));
+        invariant(!isBounceMarker(raw), "arrival/toJS: a reverse-membrane call resolved to a bounce token");
+        return withRegionScope(scope, () => (exit === undefined ? marshal!.toJS(raw) : exit.element(raw)));
+      }),
+    );
   byKey.set(WRAPPER_KEY, wrapper);
   // Register reverse-admission mapping at mint time (before returning).
   WRAPPER_ORIGIN.set(wrapper, self);

@@ -30,6 +30,7 @@ import { formatPositionalRejection } from "./positional-rejection.js";
 import type { SchemeValue } from "../../values/types.js";
 import invariant from "tiny-invariant";
 import { type CallCtx } from "../../run/CallCtx.js";
+import { applyMembraneClosure } from "../../run/RunContext.js";
 import {
   assertContractAxes,
   type BakeRuntimeOpts,
@@ -344,12 +345,12 @@ _installRosettaMembraneApply(async (proc, args, callCtx) => {
     const runCache = callCtx.runCtx.cache;
     const burstLog = callCtx.runCtx.effects;
     const runReads = callCtx.runCtx.reads;
-    const fire = async (): Promise<unknown> => {
-      const value = scope
-        ? await withRegionScope(scope, () => m.hostImpl.call(callCtx, ...decodedArgs))
-        : await m.hostImpl.call(callCtx, ...decodedArgs);
-      return value;
-    };
+    const fire = async (): Promise<unknown> =>
+      applyMembraneClosure(callCtx.runCtx, () =>
+        scope
+          ? withRegionScope(scope, () => m.hostImpl.call(callCtx, ...decodedArgs))
+          : m.hostImpl.call(callCtx, ...decodedArgs),
+      );
     // Fast-path: no cache, no effect-log, and no path-derived storage work → bare fire.
     // Path Q/E with armed cache/effects must enter penetrateThroughCache (I6–I8).
     const needsPathStorage =
