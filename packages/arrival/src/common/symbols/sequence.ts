@@ -38,7 +38,7 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
       declaredCallbackRoles: contract.callbackRoles,
     });
     // Erase to non-generic run shape (same boundary as rosetta's rawImpl).
-    const run = function (this: CallCtx, ...args: unknown[]) {
+    const run = function (this: CallCtx, ...args: readonly SchemeValue[]) {
       return impl(args as DecodedArgs<I, "scheme">, this.runCtx);
     } as SequenceSymbolDef["run"];
     return new ANativeProcedure({
@@ -60,7 +60,7 @@ export function sequence(tpl: TemplateStringsArray, ...sub: unknown[]) {
         refPolicy: contract.refPolicy,
         metadata: opts.metadata,
       } satisfies SequenceSymbolDef,
-      impl: (args, callCtx) => run.apply(callCtx, args) as Promise<SchemeValue>,
+      impl: (args, callCtx) => run.call(callCtx, ...args),
       provenanceRole: provenance,
       cacheClass,
       callbackRoles,

@@ -18,9 +18,20 @@ import { EOF } from "../values/primitives/EOF.js";
 
 import { AOpaqueHandle } from "../values/primitives/AOpaqueHandle.js";
 import { isMarkedInteropPrivate } from "./interop-access.js";
-import { R7RSError, UnrecognizedCrossingError, AsyncCrossingError, NoLensError, RedundantCrossingError } from "../errors.js";
+import {
+  R7RSError,
+  UnrecognizedCrossingError,
+  AsyncCrossingError,
+  NoLensError,
+  RedundantCrossingError,
+} from "../errors.js";
 import { is_promise } from "../eval/guards.js";
-import { _installCallableMarshal, hostFnToCallable, originalCallableOf, type ACallable } from "../values/primitives/ACallable.js";
+import {
+  _installCallableMarshal,
+  hostFnToCallable,
+  originalCallableOf,
+  type ACallable,
+} from "../values/primitives/ACallable.js";
 
 import { type AUnwrap, type AWrap, type EgressMode, type SchemeValue } from "../values/types.js";
 import invariant from "tiny-invariant";
@@ -107,7 +118,8 @@ export function egressAValue(value: AValue, options: RosettaOptions): unknown {
   return value["arrival/toJS"]({
     element: (el: unknown) => withRegionScope(pinned, () => egressUnknown(el, options)),
     modeKey: modeKeyOf(options),
-    cache: pinned.egressProxies });
+    cache: pinned.egressProxies,
+  });
 }
 
 /** Terminal-passthrough door (P5): a boxed shape with no `arrival/toJS` term —
@@ -301,7 +313,8 @@ export const OWNED_ARTIFACT_CLAIMS: readonly InboundClaim[] = [
       if (merged === v.provenance) return v;
       const deep = v["arrival/withProvenanceDeep"];
       return deep === undefined ? v.withProvenance(merged) : deep.call(v, ctx, p, seen);
-    } },
+    },
+  },
   {
     // R9 RE-ADMISSION (docs/membrane.md §INBOUND / RULINGS.md R9): a value that crossed
     // OUT as an egress-proxy (bare/membrane/gated — all register in PROXY_ORIGIN) and
@@ -315,7 +328,8 @@ export const OWNED_ARTIFACT_CLAIMS: readonly InboundClaim[] = [
       const original = originalBoxOf(v as object);
       invariant(original !== undefined, "inbound claim 'R9 egress proxy': box called off its predicate");
       return jsToSchemeImpl(ctx, original, p, seen);
-    } },
+    },
+  },
   {
     // Function-shaped sibling of R9: callable's host projection (`hostProjectionOf`)
     // crossing back IN re-admits as ORIGINAL callable, not re-wrapped by phase 2's
@@ -327,19 +341,22 @@ export const OWNED_ARTIFACT_CLAIMS: readonly InboundClaim[] = [
       const original = originalCallableOf(v as object);
       invariant(original !== undefined, "inbound claim 'reverse-membrane wrapper': box called off its predicate");
       return original;
-    } },
+    },
+  },
   {
     // Reader-internal sentinel (not a SchemeValue). Identity so INTEROP_BOUNDARY
     // does not mint an AOpaqueHandle. Public toJS does not accept EOF.
     name: "reader token (EOF) → identity (not a SchemeValue)",
     claims: (v) => v instanceof EOF,
-    box: (_ctx, v) => v },
+    box: (_ctx, v) => v,
+  },
   {
     // Non-AValue scheme orphans: identity, no provenance slot. BEFORE branded-host
     // (INTEROP_BOUNDARY stamp overlap with isMarkedInteropPrivate — see phase header).
     name: "scheme orphan (R7RSError) → identity",
     claims: (v) => v instanceof R7RSError,
-    box: (_ctx, v) => v },
+    box: (_ctx, v) => v,
+  },
   {
     // Branded HOST class (`@arrival.private` / markInteropPrivate) — opaque-crossing
     // contract (docs/membrane.md §INBOUND; interop-access.ts). Mint/reuse THIS RUN's
@@ -349,9 +366,13 @@ export const OWNED_ARTIFACT_CLAIMS: readonly InboundClaim[] = [
     name: "branded host instance → opaque handle (mint/reuse, whiteroom contract)",
     claims: (v) => typeof v === "object" && v !== null && isMarkedInteropPrivate(v),
     box: (ctx, v, p) => {
-      invariant(typeof v === "object" && v !== null, "inbound claim 'branded host instance': box called off its predicate");
+      invariant(
+        typeof v === "object" && v !== null,
+        "inbound claim 'branded host instance': box called off its predicate",
+      );
       return AOpaqueHandle.for(ctx, v, p);
-    } },
+    },
+  },
 ] as const;
 
 export const FOREIGN_LENS_CLAIMS: readonly InboundClaim[] = [
@@ -359,12 +380,14 @@ export const FOREIGN_LENS_CLAIMS: readonly InboundClaim[] = [
     // null → nil: list-end bottom, provenance-stamped when supplied.
     name: "null → nil",
     claims: (v) => v === null,
-    box: (ctx, _v, p) => (p === EMPTY_PROVENANCE ? nil : new ANil(p)) },
+    box: (ctx, _v, p) => (p === EMPTY_PROVENANCE ? nil : new ANil(p)),
+  },
   {
     // undefined: familiar host absence → #void lens, no warn. Never collapses with null→nil.
     name: "undefined → #void (lens)",
     claims: (v) => v === undefined,
-    box: () => theVoid },
+    box: () => theVoid,
+  },
   {
     // Object-typed plain data: JS array IS R7RS vector → AJSArray; plain-prototype →
     // AJSObject. ONE row, internal ladder (Array.isArray first) — not two order-dependent
@@ -377,7 +400,8 @@ export const FOREIGN_LENS_CLAIMS: readonly InboundClaim[] = [
     box: (ctx, v, p) => {
       invariant(typeof v === "object" && v !== null, "inbound claim 'object ladder': box called off its predicate");
       return Array.isArray(v) ? new AJSArray(v, p) : new AJSObject(v, p);
-    } },
+    },
+  },
   {
     // Host Error → borrowed AJSObject; `stack` collapses absent via interop read policy
     // (error-object-exit.law). R7RSError claimed by phase 1 scheme-orphan first.
@@ -387,7 +411,8 @@ export const FOREIGN_LENS_CLAIMS: readonly InboundClaim[] = [
     box: (ctx, v, p) => {
       invariant(v instanceof Error, "inbound claim 'host Error': box called off its predicate");
       return new AJSObject(v, p);
-    } },
+    },
+  },
   {
     // JS primitives → boxing.ts. bigint EXCLUDED — phase 3 NoLensError `"bigint"`;
     // claiming here would silent-reinterpret into AExact.
@@ -396,7 +421,8 @@ export const FOREIGN_LENS_CLAIMS: readonly InboundClaim[] = [
       const tag = typeof v;
       return tag === "string" || tag === "number" || tag === "boolean";
     },
-    box: (ctx, v, p) => fromJs(ctx, v, p) },
+    box: (ctx, v, p) => fromJs(ctx, v, p),
+  },
   {
     // Symbol.for('x') → keyword `:x`. Unique symbol → phase 3 (no portable identity).
     name: "symbol → :keyword (registered)",
@@ -406,7 +432,8 @@ export const FOREIGN_LENS_CLAIMS: readonly InboundClaim[] = [
       const key = Symbol.keyFor(v);
       invariant(key !== undefined, "inbound claim 'registered symbol': box called off its predicate (unregistered)");
       return new ASymbol(`:${key}`, p);
-    } },
+    },
+  },
   {
     // Declared raw passthrough (named superset: FFI identity) — mirrors outbound allow-list.
     name: "binary (Uint8Array/ArrayBuffer/DataView/Buffer) → raw passthrough (declared)",
@@ -415,7 +442,8 @@ export const FOREIGN_LENS_CLAIMS: readonly InboundClaim[] = [
       v instanceof ArrayBuffer ||
       v instanceof DataView ||
       (typeof Buffer !== "undefined" && v instanceof Buffer),
-    box: (_ctx, v) => v },
+    box: (_ctx, v) => v,
+  },
   {
     // Bare host fn → ARosettaProcedure (docs/membrane.md §CALLABLE-LENS): args
     // scheme→js, result js→scheme. Reached only when phase 1 reverse-wrapper missed.
@@ -424,7 +452,8 @@ export const FOREIGN_LENS_CLAIMS: readonly InboundClaim[] = [
     box: (ctx, v, p) => {
       invariant(typeof v === "function", "inbound claim 'function': box called off its predicate");
       return hostFnToCallable(ctx, v as (...args: unknown[]) => unknown, p);
-    } },
+    },
+  },
 ] as const;
 
 export const INCOMPATIBILITY_DOOR_CLAIMS: readonly InboundClaim[] = [
@@ -435,14 +464,16 @@ export const INCOMPATIBILITY_DOOR_CLAIMS: readonly InboundClaim[] = [
     claims: (v) => is_promise(v),
     box: () => {
       throw jsToSchemeAsyncDoor();
-    } },
+    },
+  },
   {
     // Unique symbol: no stable cross-realm key — EXPLICITLY INCOMPATIBLE.
     name: "unique symbol → door (no lens)",
     claims: (v) => typeof v === "symbol",
     box: () => {
       throw new NoLensError("unique-symbol");
-    } },
+    },
+  },
   {
     // Host bigint: exact numbers are safe-integer ratios, not unbounded integers.
     // Cure: bigintToNumber (this file) or encode to AExact before the membrane (z.bigint).
@@ -450,16 +481,21 @@ export const INCOMPATIBILITY_DOOR_CLAIMS: readonly InboundClaim[] = [
     claims: (v) => typeof v === "bigint",
     box: () => {
       throw new NoLensError("bigint");
-    } },
+    },
+  },
   {
     // Residual exotics (Date/Map/Set/RegExp, unbranded class): no lens. Cures: brand
     // `@arrival.private`, or hand plain data.
     name: "unbranded/exotic object → door (no lens)",
     claims: (v) => typeof v === "object" && v !== null,
     box: (_ctx, v) => {
-      invariant(typeof v === "object" && v !== null, "inbound claim 'unbranded/exotic object': box called off its predicate");
+      invariant(
+        typeof v === "object" && v !== null,
+        "inbound claim 'unbranded/exotic object': box called off its predicate",
+      );
       throw new NoLensError("unbranded-class", v.constructor?.name ?? "<anonymous object>");
-    } },
+    },
+  },
 ] as const;
 
 /**
@@ -541,4 +577,5 @@ export function bigintToNumber(value: bigint): number {
 // mode-keyed region-disciplined projection stays callableToHostFn above.
 _installCallableMarshal({
   jsToScheme: (runCtx, value) => jsToScheme(runCtx, value, {}),
-  toJS: (value) => toJS(value) });
+  toJS: (value) => toJS(value),
+});

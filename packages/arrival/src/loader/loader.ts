@@ -12,8 +12,10 @@ import { currentRunResolver } from "../eval/evaluator.js";
 import { execExpr, parse } from "../eval/generator-exec.js";
 import type { Resolver } from "../eval/Resolver.js";
 import { jsToScheme } from "../membrane/rosetta.js";
+import { ABytevector } from "../values/primitives/ABytevector.js";
 import { ADict } from "../values/primitives/ADict.js";
 import { APair } from "../values/primitives/APair.js";
+import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { CONSTANT_CTX } from "../run/RunContext.js";
 import { nil } from "../values/primitives/ANil.js";
@@ -48,6 +50,17 @@ export function runResolverOf(ctx: unknown, verb: string): Resolver {
   const resolver = currentRunResolver();
   RunResolverUnreachableError.invariant(resolver !== undefined, verb);
   return resolver;
+}
+
+/** Re-publish a captured resolver across an `await` (the isolate holder is sync-only). */
+export async function withPublishedRunResolver<T>(resolver: Resolver, fn: () => T | Promise<T>): Promise<T> {
+  const prev = currentRunResolver();
+  globalThis.__arrivalRunResolver = resolver;
+  try {
+    return await fn();
+  } finally {
+    globalThis.__arrivalRunResolver = prev;
+  }
 }
 
 /** The run env these verbs spill module `define`s into — the composed resolver's lexical
@@ -191,24 +204,28 @@ export const normalizeToJson = (v: unknown): unknown => JSON.parse(JSON.stringif
  *  host config loaders share the exact same dialect as `(require "…json")`. */
 export { parseJsonc } from "./parse-jsonc.js";
 
-/** Decode a `Loader.read` result to source text — the ONE coercion every
+/** Decode loader contents to source text — the ONE coercion every
  *  {@link ContentResolver} must use, in place of `String(contents)`.
  *
- *  `read` is contractually `string | Uint8Array` (a byte-returning fs — node's
- *  `fs.promises.readFile(path)` with no encoding, plexus-vfs's `.promises`, an
- *  FS-Access handle — is a first-class loader source). `String()` on a
- *  `Uint8Array` joins byte VALUES with commas rather than decoding UTF-8:
- *  `String(new TextEncoder().encode(";;"))` is `"59,59"`, not `";;"`. Fed to
- *  `parse`, that garble reads as a number followed by a free `,` — surfacing as
- *  `Unbound variable \`unquote'` at line 1 of a file whose bytes are perfectly
- *  valid scheme. Every resolver routes through here so no format can regress
- *  into that silent mistranslation.
+ *  `read` is `string | Uint8Array`. Registered native verbs receive the boxed
+ *  twins (`AString` / `ABytevector`) — same two payloads, already constructed.
+ *
+ *  `String()` on a `Uint8Array` joins byte VALUES with commas rather than
+ *  decoding UTF-8: `String(new TextEncoder().encode(";;"))` is `"59,59"`, not
+ *  `";;"`. Fed to `parse`, that garble reads as a number followed by a free `,`
+ *  — `Unbound variable \`unquote'` at line 1 of a file whose bytes are valid
+ *  scheme. Every resolver routes through here so no format can regress into
+ *  that silent mistranslation.
  *
  *  Exported for the dep-bearing ext capabilities (`ext/yaml`, `ext/toml`,
  *  `arrival/handlebars`), which resolve contents outside this module — same
  *  one-definition-no-drift reason as {@link normalizeToJson}. */
-export const contentsToText = (contents: string | Uint8Array): string =>
-  typeof contents === "string" ? contents : new TextDecoder().decode(contents);
+export function contentsToText(contents: string | Uint8Array | AString | ABytevector): string {
+  if (typeof contents === "string") return contents;
+  if (contents instanceof Uint8Array) return new TextDecoder().decode(contents);
+  if (contents instanceof AString) return contents.valueOf();
+  return new TextDecoder().decode(contents.__bytevector__);
+}
 
 /** Shape a required DATA value into the program's world: arrays → scheme LISTS (Pair
  *  chains) at EVERY depth, plain objects → {@link ADict} (scheme values stored as-is),

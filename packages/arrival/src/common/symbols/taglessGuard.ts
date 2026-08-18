@@ -16,7 +16,7 @@ import { type SchemeValue } from "../../values/types.js";
 export function taglessGuard(tpl: TemplateStringsArray, ...sub: unknown[]): ANativeProcedure {
   const { name, doc } = parseNameDoc(tpl, sub);
   // Same ctx-via-this dispatch as tagless; divergence: missing method → #f.
-  const run = async function (this: CallCtx, ...args: unknown[]): Promise<unknown> {
+  const run = async function (this: CallCtx, ...args: readonly SchemeValue[]): Promise<SchemeValue> {
     const runCtx = this.runCtx;
     const schemeArgs = args;
     const receiver = schemeArgs[schemeArgs.length - 1];
@@ -39,7 +39,7 @@ export function taglessGuard(tpl: TemplateStringsArray, ...sub: unknown[]): ANat
       run,
       provenance: "pipe",
     } satisfies TaglessGuardSymbolDef,
-    impl: (args, callCtx) => run.apply(callCtx, args) as Promise<SchemeValue>,
+    impl: (args, callCtx) => run.call(callCtx, ...args),
     provenanceRole: "pipe",
   });
 }

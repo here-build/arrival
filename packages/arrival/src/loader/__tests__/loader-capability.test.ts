@@ -28,7 +28,7 @@ import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
 import { AString } from "../../values/primitives/AString.js";
 
 import { arrivalLoaderCapability } from "../loader-capability.js";
-import { loaderFromResolver } from "../loader.js";
+import { contentsToText, loaderFromResolver } from "../loader.js";
 import type { RunEnv } from "../loader.js";
 
 // `arrivalLoaderCapability` declares no `symbol.define`/`defineSyntax` entries, so
@@ -88,14 +88,13 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
   });
 
   it("require/register-extension: callable from a DEPENDENT capability's prelude via the per-run prelude pass; unbound from user code", async () => {
-    // An ext-style capability: a `symbol.native` resolver verb (the loader's
-    // `applyCallback` dispatches its apply term) + a prelude that registers the suffix
-    // by name. The per-run prelude pass supplies the scope.
+    // An ext-style capability: a rosetta resolver (boxed contents in, module value
+    // out) + a prelude that registers the suffix by name.
     const extCap = EnvCapability.define("test/ext-upper", {
       symbols: (symbol, z) => ({
-        "test/upper-resolve": symbol.native`test/upper-resolve: uppercases module contents (ResolverResult value kind)`(
-          { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
-          (contents: unknown) => ({ kind: "value", value: String(contents).toUpperCase() }) as never,
+        "test/upper-resolve": symbol.rosetta`test/upper-resolve: uppercases module contents`(
+          { input: [z.union([z.string, z.bytevector])], output: [z.string] },
+          (contents) => contentsToText(contents).toUpperCase(),
         ) }),
       prelude: `(require/register-extension ".upper" "test/upper-resolve")` });
     // Tuple identity is config-object-IDENTITY-keyed (`buildVocabulary`'s memo) — reuse the SAME

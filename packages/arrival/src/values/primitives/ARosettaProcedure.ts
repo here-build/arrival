@@ -20,7 +20,7 @@ interface Arity {
   readonly max: number | null;
 }
 type CallResult = SchemeValue | SchemeBounceMarker | Promise<SchemeValue>;
-type CallableImpl = (args: SchemeValue[], callCtx: CallCtx) => CallResult;
+type CallableImpl = (args: readonly SchemeValue[], callCtx: CallCtx) => CallResult;
 
 /** Bake-closed membrane state for a `symbol.rosetta` verb. */
 export interface RosettaMembrane {
@@ -62,7 +62,11 @@ export function _linkRosettaHostProjection(fn: (self: ARosettaProcedure, exit?: 
 }
 
 /** Membrane apply body — installed from symbols/rosetta.ts (owns zod + membrane imports). */
-export type RosettaMembraneApply = (proc: ARosettaProcedure, args: SchemeValue[], callCtx: CallCtx) => CallResult;
+export type RosettaMembraneApply = (
+  proc: ARosettaProcedure,
+  args: readonly SchemeValue[],
+  callCtx: CallCtx,
+) => CallResult;
 
 let membraneApply: RosettaMembraneApply | undefined;
 /** symbols/rosetta.ts module-init only. */
@@ -143,7 +147,7 @@ export class ARosettaProcedure extends AValue {
     return this;
   }
 
-  ["arrival/tagless-final/apply"](args: SchemeValue[], callCtx: CallCtx): CallResult {
+  ["arrival/tagless-final/apply"](args: readonly SchemeValue[], callCtx: CallCtx): CallResult {
     if (this.membrane !== undefined) {
       invariant(
         membraneApply !== undefined,

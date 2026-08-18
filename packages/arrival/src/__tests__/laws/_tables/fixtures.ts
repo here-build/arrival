@@ -105,10 +105,11 @@ export async function withLawEnv(): Promise<LawEnv> {
       arity: { min: 0, max: null },
       contract: undefined,
       impl: (args) =>
-        new AJSArray(
+        new AJSArray<readonly unknown[]>(
           args.map((a) => toJS(a, {})),
           collapseProvenance(...args),
-        ) }),
+        )
+    }),
   );
   return { env, mintedIds };
 }

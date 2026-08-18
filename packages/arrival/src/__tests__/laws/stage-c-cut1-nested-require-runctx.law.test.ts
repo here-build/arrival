@@ -34,7 +34,7 @@ import { describe, expect, it } from "vitest";
 import { EnvCapability } from "../../common/capability.js";
 import { exec, execState } from "../../eval/generator-exec.js";
 import { arrivalLoaderCapability } from "../../loader/loader-capability.js";
-import { loaderFromResolver } from "../../loader/loader.js";
+import { contentsToText, loaderFromResolver } from "../../loader/loader.js";
 
 const files = (table: Record<string, string>) =>
   loaderFromResolver((path) => {
@@ -43,16 +43,15 @@ const files = (table: Record<string, string>) =>
     return hit;
   });
 
-/** Same minimal ext-capability shape `loader-extension-registry-vocabulary.test.ts` uses: a
- *  `symbol.native` resolver + a prelude registering it by name — the production ext-yaml/
- *  ext-toml/handlebars shape, minus a real parser dependency. */
+/** Same resolver shape ext-yaml/ext-toml use: rosetta over boxed contents, return
+ *  IS the module value. */
 function makeUpperExtCapability(name: string, suffix: string, resolverName: string): EnvCapability {
   return EnvCapability.define(name, {
     deps: [arrivalLoaderCapability],
     symbols: (symbol, z) => ({
-      [resolverName]: symbol.native`${resolverName}: uppercases module contents (ResolverResult value kind)`(
-        { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
-        (contents: unknown) => ({ kind: "value", value: String(contents).toUpperCase() }) as never,
+      [resolverName]: symbol.rosetta`${resolverName}: uppercases module contents`(
+        { input: [z.union([z.string, z.bytevector])], output: [z.string] },
+        (contents) => contentsToText(contents).toUpperCase(),
       ) }),
     prelude: `(require/register-extension "${suffix}" "${resolverName}")` });
 }

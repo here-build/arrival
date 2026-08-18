@@ -210,7 +210,7 @@ export class ASymbol extends AValue {
  * string) so the target decides how to fold/match it — no centralized accessor call here.
  */
 export class AKeywordSymbol extends ASymbol {
-  ["arrival/tagless-final/apply"](args: SchemeValue[], callCtx: CallCtx, _canBounce = false): CallResult {
+  ["arrival/tagless-final/apply"](args: readonly SchemeValue[], callCtx: CallCtx, _canBounce = false): CallResult {
     if (args.length === 0) return this;
     const target = args[0] as unknown as Record<string, unknown> | null | undefined;
     const getter = target?.["arrival/tagless-final/get"];

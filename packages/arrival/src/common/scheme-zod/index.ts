@@ -35,7 +35,7 @@ import { AJSObject } from "../../membrane/AJSObject.js";
 import { AJSArray } from "../../membrane/AJSArray.js";
 import { markSpineAdopting } from "../spine-adoption.js";
 import { CodecFidelityError, R7RSError } from "../../errors.js";
-import { ALambda, DoorProcedure, applyCallback } from "../../values/primitives/ACallable.js";
+import { ALambda, DoorProcedure, applyCallback, ACallable } from "../../values/primitives/ACallable.js";
 import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
 import { ARosettaProcedure } from "../../values/primitives/ARosettaProcedure.js";
 import { currentRegionScope, DETACHED_SCOPE, withRegionCall } from "../../membrane/region-scope.js";
@@ -493,7 +493,7 @@ export const bytevector = named(
  *  `z.lambda` and still throws its teaching `PurityError` when invoked. */
 export const lambda = named(
   "lambda",
-  z.custom<ALambda | ANativeProcedure | ARosettaProcedure | DoorProcedure>(
+  z.custom<ACallable>(
     (v) =>
       v instanceof ALambda ||
       v instanceof ANativeProcedure ||

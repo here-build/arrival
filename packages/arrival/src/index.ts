@@ -26,7 +26,7 @@
 // ── EVAL ─────────────────────────────────────────────────────────────────────────────────────
 // Generator-based evaluator: flat trampoline for stack safety. `exec`/`parse`/`execState`
 // are the canonical stack-safe, budget-bounded path.
-export { exec, parse, execState, type ExecState } from "./eval/generator-exec.js";
+export { exec, execExpr, parse, execState, type ExecState } from "./eval/generator-exec.js";
 export { type ExecOptions } from "./eval/generator-exec.js";
 
 // Lexical-binding scope handle for `exec({ scope })` — hold a `LexicalScope.for(env)`

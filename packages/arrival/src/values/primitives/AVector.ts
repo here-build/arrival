@@ -29,6 +29,7 @@ import { deriveSortCompare, withInputProvenance } from "../op-helpers.js";
 import { reStampChild } from "./deep-restamp.js";
 import { APair } from "./APair.js";
 import { ASymbol } from "./ASymbol.js";
+import type { MaybePromise } from "../../common/symbols/_bake.js";
 
 /** Code-position lowering cache for `[…]` literal nodes — `(vector …)` built once per node. */
 const LOWERED_LITERAL = new WeakMap<AVector, APair<SchemeValue, SchemeValue>>();
@@ -217,7 +218,11 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   }
 
   // Async-aware reduce, SRFI fold `fn(element, acc)`, left fold.
-  async ["arrival/tagless-final/reduce"]<Acc>(fn: ACallable, initial: Acc, runCtx: RunContext): Promise<Acc> {
+  async ["arrival/tagless-final/reduce"]<Acc extends SchemeValue>(
+    fn: ACallable,
+    initial: Acc,
+    runCtx: RunContext,
+  ): Promise<Acc> {
     strictGate(runCtx, {
       op: "reduce",
       rule: "`reduce` (SRFI-1) operates on lists; a vector is not a list",
@@ -275,7 +280,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     });
     const out: SchemeValue[] = [];
     for (const v of this.__vector__) {
-      const verdict = await applyCallback(pred, [v], makeCallCtx(runCtx));
+      const verdict = await pred.call(makeCallCtx(runCtx), v);
       if (is_false(verdict)) break;
       out.push(v);
     }
@@ -284,7 +289,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   }
 
   async ["arrival/tagless-final/drop-while"](
-    pred: (x: SchemeValue) => unknown | Promise<unknown>,
+    pred: (x: SchemeValue) => MaybePromise<SchemeValue>,
     runCtx: RunContext,
   ): Promise<AVector> {
     strictGate(runCtx, {
@@ -294,7 +299,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     });
     let i = 0;
     for (; i < this.__vector__.length; i++) {
-      const verdict = await applyCallback(pred, [this.__vector__[i]], makeCallCtx(runCtx));
+      const verdict = await pred.call(makeCallCtx(runCtx), this.__vector__[i]);
       if (is_false(verdict)) break;
     }
     const out = this.__vector__.slice(i);

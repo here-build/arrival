@@ -739,7 +739,7 @@ describe("R9 RE-ADMISSION — jsToScheme∘toJS = id on containers (the bifuncto
     const out = toJS(list);
     const back = jsToScheme(CONSTANT_CTX, out);
     expect(back).toBe(list);
-    expect((back as APair<AExact, any>).car).toBe(list.car);
+    expect(back["arrival/tagless-final/car"]()).toBe(list.car);
   });
 
   it("vector: round-trips to the SAME box", () => {
@@ -759,7 +759,7 @@ describe("R9 RE-ADMISSION — jsToScheme∘toJS = id on containers (the bifuncto
   it("re-admission goes through the SAME 'AValue → identity / provenance re-stamp' row: a fresh provenance stamp on re-entry unions onto the original box's own lineage, never overwrites", () => {
     const vec = new AVector([new AExact(1)]);
     const out = toJS(vec);
-    const stamped = jsToScheme(CONSTANT_CTX, out, {}, PROV) as AVector;
+    const stamped = jsToScheme(CONSTANT_CTX, out, {}, PROV);
     // A fresh stamp forces a re-stamp (not the identity fast path) — but it's still the
     // registry's EXISTING "AValue → identity" row doing the work (re-dispatched with the
     // ORIGINAL box), not a duplicated re-stamp implementation in the new R9 row.

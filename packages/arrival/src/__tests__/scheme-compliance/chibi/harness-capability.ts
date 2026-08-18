@@ -30,7 +30,7 @@
 import { testCallCtx } from "../../../symbol/index.js";
 import type { CallCtx } from "../../../run/CallCtx.js";
 import { EnvCapability } from "../../../common/capability.js";
-import { applyCallback } from "../../../values/primitives/ACallable.js";
+import { ACallable, applyCallback } from "../../../values/primitives/ACallable.js";
 import { ABool } from "../../../values/primitives/ABool.js";
 import { type AVoid, theVoid } from "../../../values/primitives/AVoid.js";
 import { printValue } from "../../../values/print.js";
@@ -59,7 +59,7 @@ export interface OutcomeSink {
  *  fetched comparator lambda. One harness per `CorpusRunner`. */
 export function createChibiHarnessV2(): { capability: EnvCapability; sink: OutcomeSink } {
   const queue: StepOutcome[] = [];
-  let comparator: unknown; // the scheme `chibi-test-equal?` lambda, fetched once (see prelude)
+  let comparator: ACallable | undefined; // the scheme `chibi-test-equal?` lambda, fetched once (see prelude)
 
   const capability = EnvCapability.define("test/harness-v2", {
     symbols: (symbol, z) => ({

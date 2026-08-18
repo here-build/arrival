@@ -30,6 +30,7 @@ import { AJSArrayList } from "../values/primitives/APair.js";
 import { accessHas, accessKeys, accessMember, NOT_FOUND } from "./interop-access.js";
 import { ForeignProxyFreezeError, InteropAccessError, strictGate } from "../errors.js";
 import { foldMemberName } from "./AJSObject.js";
+import { MaybePromise } from "../loader/index.js";
 
 /**
  * Pending-cell cache for Promise-valued reads off the borrowed source
@@ -129,7 +130,7 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
     return this.vec()[tf("filter")](pred, runCtx);
   }
 
-  ["arrival/tagless-final/reduce"]<Acc>(
+  ["arrival/tagless-final/reduce"]<Acc extends SchemeValue>(
     fn: Parameters<AVector["arrival/tagless-final/reduce"]>[0],
     initial: Acc,
     runCtx: RunContext,
@@ -153,14 +154,14 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
   }
 
   ["arrival/tagless-final/take-while"](
-    pred: (x: SchemeValue) => unknown | Promise<unknown>,
+    pred: (x: SchemeValue) => MaybePromise<SchemeValue>,
     runCtx: RunContext,
   ): Promise<AVector> {
     return this.vec()[tf("take-while")](pred, runCtx);
   }
 
   ["arrival/tagless-final/drop-while"](
-    pred: (x: SchemeValue) => unknown | Promise<unknown>,
+    pred: (x: SchemeValue) => MaybePromise<SchemeValue>,
     runCtx: RunContext,
   ): Promise<AVector> {
     return this.vec()[tf("drop-while")](pred, runCtx);

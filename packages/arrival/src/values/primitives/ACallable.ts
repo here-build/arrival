@@ -36,18 +36,15 @@ import { withDynamicCallSite } from "../../eval/dynamic-call-site.js";
 import invariant from "tiny-invariant";
 import { ARosettaProcedure, _linkRosettaHostProjection } from "./ARosettaProcedure.js";
 import { ANativeProcedure, _linkNativeHostProjection } from "./ANativeProcedure.js";
+import type { MaybePromise } from "../../common/symbols/_bake.js";
 
-export type CallResult = SchemeValue | SchemeBounceMarker | Promise<SchemeValue>;
+export type CallResult = SchemeBounceMarker | MaybePromise<SchemeValue>;
 
 /** Arity bounds. `max: null` ⇒ variadic. Drives arity check and MCP/type-lens introspection. */
 export interface Arity {
   readonly min: number;
   readonly max: number | null;
 }
-
-/** Host-JS callable body: scheme-value args in, CallResult out, CallCtx threaded explicitly
- *  (never via `this`). An impl that needs only bare run state reads `callCtx.runCtx`. */
-export type CallableImpl = (args: SchemeValue[], callCtx: CallCtx) => CallResult;
 
 // Shared leaf behavior as free functions. Procedure identity is load-bearing
 // (`(eq? car car)`), so provenance stamping is a no-op and equality is reference identity.
@@ -192,13 +189,13 @@ export class ALambda extends AValue {
   __name__?: string | symbol;
   /** Positional parameter names, for tracer↔param-slot correlation. */
   __params__?: string[];
-  readonly #runner: (args: SchemeValue[], callCtx: CallCtx, canBounce: boolean) => CallResult;
+  readonly #runner: (args: readonly SchemeValue[], callCtx: CallCtx, canBounce: boolean) => CallResult;
 
   constructor(opts: {
     name: string | symbol;
     arity: Arity;
     scope: unknown;
-    runner: (args: SchemeValue[], callCtx: CallCtx, canBounce: boolean) => CallResult;
+    runner: (args: readonly SchemeValue[], callCtx: CallCtx, canBounce: boolean) => CallResult;
   }) {
     // Identity minted at bake/define time; live work threads callCtx per-call.
     super();
@@ -219,7 +216,7 @@ export class ALambda extends AValue {
     return this;
   }
 
-  ["arrival/tagless-final/apply"](args: SchemeValue[], callCtx: CallCtx, canBounce = false): CallResult {
+  ["arrival/tagless-final/apply"](args: readonly SchemeValue[], callCtx: CallCtx, canBounce = false): CallResult {
     return this.#runner(args, callCtx, canBounce);
   }
 
@@ -277,23 +274,19 @@ export type ACallable = ALambda | ANativeProcedure | ARosettaProcedure | DoorPro
  * when the callee is a callable VALUE. Bare host functions are DOORED.
  * `canBounce` stays false: HOF-applied callbacks are never in tail position.
  *
- * `args` is `readonly unknown[]` (spine-walk convention); cast ONCE here.
- * `callCtx` has no default — every remaining `makeCallCtx(runCtx)` is a literal,
- * grep-able confession (real CallCtx with no invocation), not a silent fallback.
+ * `args` is `readonly SchemeValue[]`. `callCtx` has no default — every remaining
+ * `makeCallCtx(runCtx)` is a literal, grep-able confession (real CallCtx with no
+ * invocation), not a silent fallback.
  */
-export function applyCallback(fn: unknown, args: readonly unknown[], callCtx: CallCtx): CallResult {
-  const term = (fn as Partial<ALambda> | null | undefined)?.[tf("apply")];
-  if (typeof term === "function") {
-    return (term as (args: SchemeValue[], callCtx: CallCtx, canBounce?: boolean) => CallResult).call(
-      fn,
-      args as SchemeValue[],
-      callCtx,
-      false,
-    );
-  }
-  throw new TypeError(
+export function applyCallback(
+  fn: ACallable | null | undefined,
+  args: readonly SchemeValue[],
+  callCtx: CallCtx,
+): MaybePromise<SchemeValue> {
+  TypeError.invariant(typeof fn?.[tf("apply")] === "function", () =>
     typeof fn === "function"
       ? "not applicable: bare host function (mint an ANativeProcedure / ARosettaProcedure / hostFnToCallable)"
       : `not applicable: ${fn === null ? "null" : typeof fn === "object" ? "a non-callable value" : typeof fn}`,
   );
+  return fn[tf("apply")](args, callCtx, false) as MaybePromise<SchemeValue>;
 }

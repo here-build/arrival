@@ -23,6 +23,7 @@ import type { RunContext } from "../../run/RunContext.js";
 import type { CallCtx } from "../../run/CallCtx.js";
 import { LOCATION } from "../../well-known-symbols.js";
 import type { SourceLocation } from "../../errors.js";
+import type { MaybePromise } from "../../common/symbols/_bake.js";
 
 export const EMPTY_PROVENANCE: ReadonlySet<number> = new Set<number>();
 
@@ -151,43 +152,47 @@ export abstract class AValue {
   /** Element count — per-primitive divergence lives on the term. */
   ["arrival/tagless-final/length"]?(runCtx?: RunContext): AValue | number;
   /** Functor — map over elements. `runCtx` REQUIRED. Callback is ACallable. */
-  ["arrival/tagless-final/map"]?(fn: unknown, runCtx: RunContext): SchemeValue | Promise<SchemeValue>;
+  ["arrival/tagless-final/map"]?(fn: unknown, runCtx: RunContext): MaybePromise<SchemeValue>;
   /** Filterable — ACallable pred or host RegExp sugar. `runCtx` required. */
-  ["arrival/tagless-final/filter"]?(pred: unknown, runCtx: RunContext): SchemeValue | Promise<SchemeValue>;
+  ["arrival/tagless-final/filter"]?(pred: unknown, runCtx: RunContext): MaybePromise<SchemeValue>;
   /** Foldable left-fold — scheme convention `fn(element, acc)`. Callback is ACallable. */
-  ["arrival/tagless-final/reduce"]?<Acc>(fn: unknown, initial: Acc, runCtx: RunContext): Acc | Promise<Acc>;
+  ["arrival/tagless-final/reduce"]?<Acc extends SchemeValue>(
+    fn: unknown,
+    initial: Acc,
+    runCtx: RunContext,
+  ): Acc | Promise<Acc>;
   /** Ordering — sorted sequence (container-preserving); default is elements' own `lte`. */
   ["arrival/tagless-final/sort"]?(comparator: unknown, runCtx: RunContext): SchemeValue;
   /** Prefix — first n elements, in the receiver's OWN representation. */
-  ["arrival/tagless-final/take"]?(n: number, runCtx: RunContext): SchemeValue | Promise<SchemeValue>;
+  ["arrival/tagless-final/take"]?(n: number, runCtx: RunContext): MaybePromise<SchemeValue>;
   /** Suffix — receiver after first n elements. */
-  ["arrival/tagless-final/drop"]?(n: number, runCtx: RunContext): SchemeValue | Promise<SchemeValue>;
+  ["arrival/tagless-final/drop"]?(n: number, runCtx: RunContext): MaybePromise<SchemeValue>;
   /** Longest satisfying prefix — pred SEQUENTIAL (stop at first falsy). */
   ["arrival/tagless-final/take-while"]?(
     pred: (x: unknown) => unknown | Promise<unknown>,
     runCtx: RunContext,
-  ): SchemeValue | Promise<SchemeValue>;
+  ): MaybePromise<SchemeValue>;
   /** The take-while remainder. */
   ["arrival/tagless-final/drop-while"]?(
     pred: (x: unknown) => unknown | Promise<unknown>,
     runCtx: RunContext,
-  ): SchemeValue | Promise<SchemeValue>;
+  ): MaybePromise<SchemeValue>;
   /** Applicable — INVOKE this value as a procedure. Callability IS declaring this term.
    *  `callCtx` threaded WHOLE (never via `this` — `this` is the callable value itself).
    *  `canBounce` opts a lambda into TCO bounce protocol. */
   ["arrival/tagless-final/apply"]?(
-    args: SchemeValue[],
+    args: readonly SchemeValue[],
     callCtx: CallCtx,
     canBounce?: boolean,
-  ): SchemeValue | SchemeBounceMarker | Promise<SchemeValue>;
+  ): SchemeBounceMarker | MaybePromise<SchemeValue>;
   /** Keyed member read — `:key` accessor and membrane `readMember` face. Absence IS
    *  the semantics: no term ⇒ no members (face answers nil). */
-  ["arrival/tagless-final/get"]?(key: SchemeValue | string, runCtx?: RunContext): SchemeValue | Promise<SchemeValue>;
+  ["arrival/tagless-final/get"]?(key: SchemeValue | string, runCtx?: RunContext): MaybePromise<SchemeValue>;
   ["arrival/tagless-final/has"]?(key: SchemeValue | string): boolean;
   ["arrival/tagless-final/keys"]?(): string[];
   ["arrival/tagless-final/car"]?(runCtx?: RunContext): SchemeValue;
   ["arrival/tagless-final/cdr"]?(runCtx?: RunContext): SchemeValue;
-  ["arrival/tagless-final/vector-ref"]?(k: number): SchemeValue | Promise<SchemeValue>;
+  ["arrival/tagless-final/vector-ref"]?(k: number): MaybePromise<SchemeValue>;
   /** Semigroup — `this ⋄ other`: container-preserving PURE append. */
   ["arrival/tagless-final/concat"]?(other: unknown): SchemeValue;
   ["arrival/tagless-final/traverse"]?(of: (x: unknown) => unknown, f: (x: unknown) => unknown): unknown;

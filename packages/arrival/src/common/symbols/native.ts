@@ -22,7 +22,7 @@ import {
 import { assertNoResourcePathProducers } from "../../run/resource-paths.js";
 
 /** Native host fn over scheme values. Slot bans on ContourContract (`_bake.ts` §1.7). */
-export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
+function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
   const { name, doc } = parseNameDoc(tpl, sub);
   return <const I extends VectorSpec, const O extends VectorSpec, const Rest extends RestSpec = undefined>(
     contract: ContourContract<I, O, Rest>,
@@ -45,13 +45,18 @@ export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
     // before impl runs — native has no validation, and .car on a raw array reads undefined.
     // Computed once; undefined when no slot adopts.
     const adoptArgs = buildSlotAdopter(contract.input, contract.inputRest);
-    const hostImpl = (
+    // Interpreter args are untyped SchemeValues; impl wants the contract tuple.
+    // Passthrough (no list slot) is the same widening — adoption is the typed path.
+    const hostImpl: (this: CallCtx, ...a: readonly SchemeValue[]) => unknown =
       adoptArgs === undefined
-        ? impl
-        : function (this: unknown, ...args: unknown[]) {
-            return (impl as (this: unknown, ...a: unknown[]) => unknown).apply(this, adoptArgs(args));
-          }
-    ) as (this: CallCtx, ...a: unknown[]) => unknown;
+        ? (impl as (this: CallCtx, ...a: readonly SchemeValue[]) => unknown)
+        : function (this: CallCtx, ...args: readonly SchemeValue[]) {
+            // apply demands a mutable array; the adopter's tuple is one.
+            return (impl as (this: CallCtx, ...a: SchemeValue[]) => ReturnType<typeof impl>).apply(
+              this,
+              adoptArgs(args),
+            );
+          };
     return new ANativeProcedure({
       name,
       arity: { min: 0, max: null },
@@ -73,10 +78,12 @@ export function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
         refPolicy: contract.refPolicy,
         metadata: opts.metadata,
       } satisfies NativeSymbolDef,
-      impl: (args, callCtx) => hostImpl.apply(callCtx, args) as SchemeValue,
+      impl: (args, callCtx) => hostImpl.apply(callCtx, args as SchemeValue[]) as SchemeValue,
       provenanceRole: provenance,
       cacheClass,
       callbackRoles,
     });
   };
 }
+
+export default native;

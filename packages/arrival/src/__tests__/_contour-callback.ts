@@ -12,7 +12,7 @@ import type { SchemeValue } from "../values/types.js";
 import { schemeTrue, schemeFalse } from "../values/primitives/ABool.js";
 
 export function contourCallback(
-  impl: (args: SchemeValue[], callCtx: CallCtx) => CallResult,
+  impl: (args: readonly SchemeValue[], callCtx: CallCtx) => CallResult,
   name = "test-cb",
 ): ANativeProcedure {
   return new ANativeProcedure({
@@ -27,7 +27,7 @@ export function unaryContour(
   f: (x: SchemeValue) => SchemeValue | CallResult,
   name = "unary-cb",
 ): ANativeProcedure {
-  return contourCallback((args) => f(args[0] as SchemeValue) as CallResult, name);
+  return contourCallback((args) => f(args[0]), name);
 }
 
 /** Identity map callback — preserves the element box. */
@@ -36,7 +36,7 @@ export const idContour = unaryContour((x) => x, "id");
 export const keepAllContour = contourCallback(() => schemeTrue, "keep-all");
 
 export function filterContour(pred: (x: SchemeValue) => boolean, name = "filter-pred"): ANativeProcedure {
-  return contourCallback((args) => (pred(args[0] as SchemeValue) ? schemeTrue : schemeFalse), name);
+  return contourCallback((args) => (pred(args[0]) ? schemeTrue : schemeFalse), name);
 }
 
 /** Reduce callback: scheme convention `fn(element, acc)`. Acc may be a host value. */

@@ -93,7 +93,7 @@ export function is_callable_value(o: unknown): o is ACallable {
 /** Structural, not nominal — admits ANY value answering `arrival/tagless-final/apply`
  *  (e.g. a self-applying keyword `ASymbol`). Used only at call-dispatch gates that must
  *  recognize such values; consumers relying on `ACallable`'s `.arity` stay on `is_callable_value`. */
-export function is_applyable(o: unknown): boolean {
+export function is_applyable(o: unknown): o is ACallable {
   return typeof (o as Record<PropertyKey, unknown> | null | undefined)?.[tf("apply")] === "function";
 }
 

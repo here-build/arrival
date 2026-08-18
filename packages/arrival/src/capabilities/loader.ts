@@ -7,7 +7,7 @@
 //     `loaderFromResolver`/`RequireResolver`
 //   • EXT-AUTHOR — `ExtensionHandler`/`ContentResolver`/`RequireTypeProvider`/
 //     `ResolverResult`, `contentsToText`/`normalizeToJson`/`parseJsonc`/`valueToTsType`/
-//     `resolveRequireType`, `SchemeForm`/`MaybePromise`
+//     `resolveRequireType`, `SchemeForm`/`MaybePromise`, `runResolverOf`
 export {
   type Loader,
   type FsReadLike,
@@ -19,11 +19,11 @@ export {
   type RequireTypeProvider,
   type ResolverResult,
   contentsToText,
-  normalizeToJson,
   parseJsonc,
   valueToTsType,
   resolveRequireType,
   type SchemeForm,
   type MaybePromise,
+  runResolverOf,
 } from "../loader/loader.js";
 export { arrivalLoaderCapability } from "../loader/loader-capability.js";

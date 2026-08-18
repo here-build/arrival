@@ -259,7 +259,7 @@ function buildDefineProcedure(
       // Validate first and z.pair rejects the raw array before adoption runs.
       // Adoption ≠ decode: z.decode is plane crossing (discarded here on purpose); adoption
       // is representation on the scheme plane — AValue in, AValue out, O(1), same store.
-      const args = def.adoptArgs === undefined ? rawArgs : (def.adoptArgs(rawArgs) as typeof rawArgs);
+      const args = def.adoptArgs === undefined ? rawArgs : def.adoptArgs(rawArgs);
       // Rejection is a door: raw ZodError.message is unactionable JSON. Same positional
       // humanizer as the tool-call surface.
       if (def.validate) {

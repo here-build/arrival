@@ -22,8 +22,11 @@
 // APair subclass can, which is what adopting at the argument boundary does.
 
 import { isSpineAdopting } from "../common/spine-adoption.js";
+import type { DecodedArgsWithRest, RestSpec, VectorSpec } from "../common/symbols/_bake.js";
 import { AJSArray } from "./AJSArray.js";
 import { AJSArrayList } from "../values/primitives/APair.js";
+import type { ANil } from "../values/primitives/ANil.js";
+import type { SchemeValue } from "../values/types.js";
 
 /**
  * Project one argument onto its spine chart, if it is a vector-chart value.
@@ -44,6 +47,8 @@ import { AJSArrayList } from "../values/primitives/APair.js";
  *      contract rejection into a silent success. A vector is not a list (R7RS); use
  *      (vector->list v) for the explicit, tracked way across.
  */
+export function adoptSpine(v: AJSArray): AJSArrayList | ANil;
+export function adoptSpine<T>(v: T): T;
 export function adoptSpine(v: unknown): unknown {
   if (v instanceof AJSArray) return AJSArrayList.at(v, 0);
   return v;
@@ -58,19 +63,40 @@ export function adoptSpine(v: unknown): unknown {
  *
  * restSchema covers the variadic tail (for-each's inputRest), where EVERY trailing
  * argument is a list and each adopts independently.
+ *
+ * Incoming args are raw SchemeValues (a `z.listAlike` slot may still hold AJSArray).
+ * The result is the impl's scheme-face tuple — `z.listAlike` is AListAlike after this
+ * runs. Whether any slot adopts is a runtime WeakSet check, so the return stays
+ * `| undefined`; the type cannot see the mark.
+ *
+ * `AdoptedArgs` keeps a concrete tuple when it is already SchemeValues, and falls
+ * back to `SchemeValue[]` when `I`/`Rest` are still the wide VectorSpec bounds
+ * (define's erased factory body).
  */
-export function buildSlotAdopter(
-  input: readonly unknown[] | unknown,
-  inputRest: unknown,
-): ((args: readonly unknown[]) => unknown[]) | undefined {
+export type AdoptedArgs<I extends VectorSpec, Rest extends RestSpec = undefined> =
+  DecodedArgsWithRest<I, Rest, "scheme"> extends infer T
+    ? T extends readonly SchemeValue[]
+      ? T
+      : SchemeValue[]
+    : SchemeValue[];
+
+export type SlotAdopter<I extends VectorSpec, Rest extends RestSpec = undefined> = (
+  args: readonly SchemeValue[],
+) => AdoptedArgs<I, Rest>;
+
+export function buildSlotAdopter<const I extends VectorSpec, const Rest extends RestSpec = undefined>(
+  input: I,
+  inputRest?: Rest,
+): SlotAdopter<I, Rest> | undefined {
   const slots: readonly unknown[] = Array.isArray(input) ? input : [];
   const adoptingSlots = slots.map(isSpineAdopting);
   const restAdopts = isSpineAdopting(inputRest);
   if (!adoptingSlots.some(Boolean) && !restAdopts) return undefined;
 
-  return (args: readonly unknown[]): unknown[] =>
+  return (args) =>
     args.map((arg, i) => {
       const adopts = i < adoptingSlots.length ? adoptingSlots[i] : restAdopts;
       return adopts ? adoptSpine(arg) : arg;
-    });
+      // `.map` erases the per-slot tuple; the contract is SlotAdopter's return.
+    }) as AdoptedArgs<I, Rest>;
 }

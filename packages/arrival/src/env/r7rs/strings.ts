@@ -12,7 +12,7 @@
 
 import foldCase from "fold-case";
 import dedent from "dedent";
-import { applyCallback } from "../../values/primitives/ACallable.js";
+import { ACallable, applyCallback } from "../../values/primitives/ACallable.js";
 import { CallCtx } from "../../run/CallCtx.js";
 import invariant from "tiny-invariant";
 
@@ -308,7 +308,7 @@ export default EnvCapability.define("scheme/strings", {
         // proc's return BECOMES the output character — `element-transformer`.
         callbackRoles: ["element-transformer"],
       },
-      function (this: CallCtx, proc: unknown, ...strings: AString[]) {
+      function (this: CallCtx, proc, ...strings) {
         invariant(strings.length > 0, "string-map: expected at least one string");
         const strs = strings.map(stringValue);
         const minLen = Math.min(...strs.map((s) => s.length));
@@ -353,7 +353,7 @@ export default EnvCapability.define("scheme/strings", {
           }
         `,
       },
-      function (this: CallCtx, proc: unknown, ...strings: AString[]): AVoid | Promise<AVoid> {
+      function (this: CallCtx, proc, ...strings): AVoid | Promise<AVoid> {
         invariant(strings.length > 0, "string-for-each: expected at least one string");
         const strs = strings.map(stringValue);
         const minLen = Math.min(...strs.map((s) => s.length));

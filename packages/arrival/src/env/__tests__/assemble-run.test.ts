@@ -19,7 +19,7 @@ import { exec, execInFrame } from "../../eval/generator-exec.js";
 import { bindValue, mintResolvingFrame, isAmbientRuntime } from "../AmbientRuntime.js";
 import { UnboundVariableError } from "../../errors.js";
 import type { SchemeValue } from "../../values/types.js";
-import { applyCallback } from "../../values/primitives/ACallable.js";
+import { ACallable, applyCallback } from "../../values/primitives/ACallable.js";
 
 /** The REAL evalScheme, required whenever a fixture declares a `symbol.define` — mirrors
  *  `generator-exec.ts`'s own private `capabilityEvalScheme`: the internal bake seam, never the
@@ -161,7 +161,7 @@ describe("assembleRun — preludeOnly overlay: invisible from user code, visible
     //    stored ALambda using THIS dispatch's own CallCtx (this run's real runCtx), the same seam
     //    every HOF (`map`/`filter`/`fold`) uses to invoke a callback it was handed.
     const cap = EnvCapability.define("test/prelude-only-closure-capture", {
-      resources: (): { closure?: SchemeValue } => ({ closure: undefined }),
+      resources: (): { closure?: ACallable } => ({ closure: undefined }),
       // Minted DURING the prelude pass: a lambda closing over `prelude-only/secret` (visible only
       // here), immediately stashed into this run's resource bag via the preludeOnly registration
       // verb `store-closure!` — the sanctioned channel, never a leaked `define`.
@@ -172,7 +172,7 @@ describe("assembleRun — preludeOnly overlay: invisible from user code, visible
           () => "SECRET-42",
         ),
         "store-closure!": symbol.native`store-closure!: stash a prelude-minted closure (raw scheme value) into this run's resources`(
-          { input: [sz.schemeValue], output: [sz.schemeValue], preludeOnly: true },
+          { input: [sz.lambda], output: [sz.lambda], preludeOnly: true },
           function (closure) {
             this.resources.closure = closure;
             return closure;

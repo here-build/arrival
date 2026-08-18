@@ -27,15 +27,16 @@ import { z } from "zod";
 
 import { EnvCapability } from "../../common/capability.js";
 import { exec, execState } from "../../eval/generator-exec.js";
-import { applyCallback } from "../../values/primitives/ACallable.js";
+import { ACallable, applyCallback } from "../../values/primitives/ACallable.js";
 import type { CallCtx } from "../../run/CallCtx.js";
 
 /** A capability whose verbs (a) read this run's configured greeting, (b) stash a closure into a
  *  cross-run JS holder, and (c) apply the stashed closure through THIS dispatch's own runCtx. A
  *  fresh `held` per builder keeps the tests isolated. */
 function crossRunCapability() {
-  let held: unknown;
-  const cap = EnvCapability.define("law/next-cut-cross-run", {
+  let held: ACallable | undefined;
+
+  return EnvCapability.define("law/next-cut-cross-run", {
     configuration: { greeting: z.string().optional() },
     symbols: (symbol, sz) => ({
       "read-config": symbol.rosetta`read-config: this run's configured greeting, or "none"`(
@@ -45,7 +46,7 @@ function crossRunCapability() {
         },
       ),
       "capture!": symbol.native`capture!: stash a raw scheme closure into a cross-run JS holder`(
-        { input: [sz.schemeValue], output: [sz.schemeValue] },
+        { input: [sz.lambda], output: [sz.schemeValue] },
         function (closure) {
           held = closure;
           return closure;
@@ -55,19 +56,20 @@ function crossRunCapability() {
         { input: [], output: [sz.schemeValue] },
         function (this: CallCtx) {
           if (held === undefined) throw new Error("nothing held");
-          return applyCallback(held, [], this) as unknown as never;
+          return applyCallback(held, [], this);
         },
       ),
       // Immediately applies its lambda argument through THIS dispatch's own runCtx — used to
       // prove a lambda MINTED DURING run B's call (the arg is minted by run B's body) also
       // observes B (its def-time ctx.runCtx is the substituted bodyCtx = B).
       "apply-now": symbol.native`apply-now: apply the given lambda immediately through THIS dispatch's runCtx`(
-        { input: [sz.schemeValue], output: [sz.schemeValue] },
+        { input: [sz.lambda], output: [sz.schemeValue] },
         function (this: CallCtx, thunk) {
-          return applyCallback(thunk, [], this) as unknown as never;
+          return applyCallback(thunk, [], this);
         },
-      ) }) });
-  return cap;
+      ),
+    }),
+  });
 }
 
 describe("LAW — call-time runCtx: configuration follows the INVOKING run", () => {

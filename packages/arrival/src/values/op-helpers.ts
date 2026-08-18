@@ -10,7 +10,7 @@
 import invariant from "tiny-invariant";
 import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
 import { makeCallCtx } from "../run/CallCtx.js";
-import { applyCallback } from "./primitives/ACallable.js";
+import { ACallable, applyCallback } from "./primitives/ACallable.js";
 import { currentRegionScope, isSilentRegion, recordHostScheduleVerdict } from "../membrane/region-scope.js";
 
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./primitives/AValue.js";
@@ -202,14 +202,14 @@ const describeOrdElement = (v: unknown): string =>
  *  • Comparator present → number comparator used DIRECTLY, else SRFI-95 `less?`.
  *    Number branch REQUIRED: reading number through `!is_false` mis-orders. */
 export function deriveSortCompare(
-  comparator: import("./primitives/ACallable.js").ACallable | undefined,
+  comparator: ACallable | undefined,
   runCtx: RunContext,
-): (a: unknown, b: unknown) => number {
+): (a: SchemeValue, b: SchemeValue) => number {
   if (comparator !== undefined && comparator !== null) {
     // Comparator is a callable VALUE — invoke through the seam, not bare fn.
     // runCtx threaded for ctx-honesty. Region-scope host-schedule wiring is separate
     // (order-attribution); this only closes the metering gap.
-    const call = (a: unknown, b: unknown): unknown => applyCallback(comparator, [a, b], makeCallCtx(runCtx));
+    const call = (a: SchemeValue, b: SchemeValue) => applyCallback(comparator, [a, b], makeCallCtx(runCtx));
     // Host-schedule: sort's comparator verdict SEQUENCE is the record.
     // Element ordinals fall back to comparator CALL ORDER (Array.sort carries no index).
     let callOrdinal = 0;

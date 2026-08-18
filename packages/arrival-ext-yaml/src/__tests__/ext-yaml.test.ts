@@ -51,9 +51,9 @@ describe("arrivalYamlCapability — .yaml/.yml on the vocabulary (default) path"
     const conflicting = EnvCapability.define("test/ext-yaml-conflict", {
       deps: [arrivalYamlCapability],
       symbols: (symbol, z) => ({
-        "test/other-yaml-resolve": symbol.native`test/other-yaml-resolve: rival .yaml handler`(
-          { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
-          (() => ({ kind: "value", value: "rival" })) as never,
+        "test/other-yaml-resolve": symbol.rosetta`test/other-yaml-resolve: rival .yaml handler`(
+          { input: [z.union([z.string, z.bytevector])], output: [z.dict()] },
+          () => ({ rival: true }),
         ),
       }),
       prelude: `(require/register-extension ".yaml" test/other-yaml-resolve)`,

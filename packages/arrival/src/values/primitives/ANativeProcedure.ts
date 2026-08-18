@@ -23,7 +23,7 @@ export interface Arity {
   readonly max: number | null;
 }
 type CallResult = SchemeValue | SchemeBounceMarker | Promise<SchemeValue>;
-export type CallableImpl = (args: SchemeValue[], callCtx: CallCtx) => CallResult;
+export type CallableImpl = (args: readonly SchemeValue[], callCtx: CallCtx) => CallResult;
 
 type AnyFn = (...args: any[]) => unknown;
 
@@ -141,7 +141,7 @@ export class ANativeProcedure extends AValue {
   withProvenance(): SchemeValue {
     return this;
   }
-  ["arrival/tagless-final/apply"](args: SchemeValue[], callCtx: CallCtx): CallResult {
+  ["arrival/tagless-final/apply"](args: readonly SchemeValue[], callCtx: CallCtx): CallResult {
     return this.#impl(args, callCtx);
   }
   ["arrival/tagless-final/equals"](other: unknown): boolean {

@@ -22,7 +22,7 @@ function describeReceiver(v: unknown): string {
 export function tagless(tpl: TemplateStringsArray, ...sub: unknown[]): ANativeProcedure {
   const { name, doc } = parseNameDoc(tpl, sub);
   // function, not arrow: needs CallCtx via `this` for runCtx.
-  const run = async function (this: CallCtx, ...args: unknown[]): Promise<unknown> {
+  const run = async function (this: CallCtx, ...args: readonly SchemeValue[]): Promise<SchemeValue> {
     const runCtx = this.runCtx;
     const schemeArgs = args;
     const receiver = schemeArgs[schemeArgs.length - 1];
@@ -36,7 +36,8 @@ export function tagless(tpl: TemplateStringsArray, ...sub: unknown[]): ANativePr
         receiver,
       );
     }
-    return await fn.call(receiver, ...leading, runCtx);
+    // @ts-expect-error tagless-final is complicated
+    return fn.call(receiver, ...leading, runCtx);
   };
   // No Contract param, provenance always pipe; acc-chain via withCallbackRoles.
   return new ANativeProcedure({
@@ -51,7 +52,7 @@ export function tagless(tpl: TemplateStringsArray, ...sub: unknown[]): ANativePr
       run,
       provenance: "pipe",
     } satisfies TaglessSymbolDef,
-    impl: (args, callCtx) => run.apply(callCtx, args) as Promise<SchemeValue>,
+    impl: (args, callCtx) => run.call(callCtx, ...args),
     provenanceRole: "pipe",
   });
 }

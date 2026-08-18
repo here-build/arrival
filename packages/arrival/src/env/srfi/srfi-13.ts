@@ -20,7 +20,7 @@ import invariant from "tiny-invariant";
 import dedent from "dedent";
 import { type } from "../../membrane/typecheck.js";
 import { type RunContext } from "../../run/RunContext.js";
-import { applyCallback } from "../../values/primitives/ACallable.js";
+import { ACallable, applyCallback } from "../../values/primitives/ACallable.js";
 import { type CallCtx, makeCallCtx } from "../../symbol/index.js";
 import { EnvCapability } from "../../common/capability.js";
 import {
@@ -150,7 +150,7 @@ const isWhitespace = (c: string): boolean => /\s/u.test(c);
  * unmetered, off cache/effects/abort, regardless of what the invoking run actually
  * configured. Every caller below threads its own `this.runCtx`. */
 function criterionFlags(
-  criterion: unknown,
+  criterion: ACallable,
   chars: readonly string[],
   runCtx: RunContext,
 ): boolean[] | Promise<boolean[]> {
@@ -182,7 +182,7 @@ function afterFlags<T>(flags: boolean[] | Promise<boolean[]>, fn: (f: boolean[])
  * `criterionFlags` (a user predicate must observe the run's real ctx) and into the
  * result mint below. */
 function trimImpl(name: string, side: "both" | "left" | "right") {
-  return function (this: CallCtx, str: unknown, criterion?: unknown): AString | Promise<AString> {
+  return function (this: CallCtx, str: AString, criterion?: ACallable): AString | Promise<AString> {
     const chars = [...stringValue(str)];
     const runCtx = this.runCtx;
     // Default criterion: whitespace (SRFI-13's char-set:whitespace, sans charsets).
@@ -222,7 +222,7 @@ export default EnvCapability.define("scheme/srfi-13", {
   symbols: (symbol, z) => ({
     "string-null?": symbol.native`string-null?: #t iff the string is empty (SRFI-13)`(
       { input: [z.string], output: [z.boolean] },
-      function (this: CallCtx, str: unknown): ABool {
+      function (this: CallCtx, str): ABool {
         return withInputProvenance([str], schemeBool(stringValue(str).length === 0));
       },
     ),
@@ -230,14 +230,14 @@ export default EnvCapability.define("scheme/srfi-13", {
     // SRFI-13 argument order: the AFFIX comes first — (string-prefix? prefix s).
     "string-prefix?": symbol.native`string-prefix?: #t iff s starts with prefix — (string-prefix? prefix s) (SRFI-13)`(
       { input: [z.string, z.string], output: [z.boolean] },
-      function (this: CallCtx, prefix: unknown, str: unknown): ABool {
+      function (this: CallCtx, prefix, str): ABool {
         return withInputProvenance([prefix, str], schemeBool(stringValue(str).startsWith(stringValue(prefix))));
       },
     ),
 
     "string-suffix?": symbol.native`string-suffix?: #t iff s ends with suffix — (string-suffix? suffix s) (SRFI-13)`(
       { input: [z.string, z.string], output: [z.boolean] },
-      function (this: CallCtx, suffix: unknown, str: unknown): ABool {
+      function (this: CallCtx, suffix, str): ABool {
         return withInputProvenance([suffix, str], schemeBool(stringValue(str).endsWith(stringValue(suffix))));
       },
     ),
@@ -246,7 +246,7 @@ export default EnvCapability.define("scheme/srfi-13", {
     "string-index":
       symbol.native`string-index: index of the first char matching a char or one-arg predicate, or #f (SRFI-13; no charsets)`(
         {
-          input: [z.string, z.schemeValue],
+          input: [z.string, z.lambda],
           output: [z.union([z.exact, z.boolean])],
           type: dedent`
           {
@@ -254,10 +254,9 @@ export default EnvCapability.define("scheme/srfi-13", {
           }
         `,
         },
-        function (this: CallCtx, str: unknown, criterion: unknown): AExact | ABool | Promise<AExact | ABool> {
+        function (this: CallCtx, str, criterion): AExact | ABool | Promise<AExact | ABool> {
           const chars = [...stringValue(str)];
-          const runCtx = this.runCtx;
-          return afterFlags(criterionFlags(criterion, chars, runCtx), (f) => {
+          return afterFlags(criterionFlags(criterion, chars, this.runCtx), (f) => {
             const i = f.indexOf(true);
             return withInputProvenance([str, criterion], i === -1 ? schemeBool(false) : new AExact(i));
           });
@@ -267,7 +266,7 @@ export default EnvCapability.define("scheme/srfi-13", {
     "string-count":
       symbol.native`string-count: how many chars match a char or one-arg predicate (SRFI-13; no charsets)`(
         {
-          input: [z.string, z.schemeValue],
+          input: [z.string, z.lambda],
           output: [z.exact],
           type: dedent`
           {
@@ -275,7 +274,7 @@ export default EnvCapability.define("scheme/srfi-13", {
           }
         `,
         },
-        function (this: CallCtx, str: unknown, criterion: unknown): AExact | Promise<AExact> {
+        function (this: CallCtx, str, criterion): AExact | Promise<AExact> {
           const chars = [...stringValue(str)];
           const runCtx = this.runCtx;
           return afterFlags(criterionFlags(criterion, chars, runCtx), (f) => {
@@ -345,13 +344,13 @@ export default EnvCapability.define("scheme/srfi-13", {
     // string-trim-left is a non-index synonym of official left trim (compat).
     "string-trim":
       symbol.native`string-trim: the left end shed of whitespace, or of chars matching a char/one-arg predicate (SRFI-13; no charsets)`(
-        { input: [z.string, z.schemeValue.optional()], output: [z.string] },
+        { input: [z.string, z.lambda.optional()], output: [z.string] },
         trimImpl("string-trim", "left"),
       ),
 
     "string-trim-both":
       symbol.native`string-trim-both: both ends shed of whitespace, or of chars matching a char/one-arg predicate (SRFI-13; no charsets)`(
-        { input: [z.string, z.schemeValue.optional()], output: [z.string] },
+        { input: [z.string, z.lambda.optional()], output: [z.string] },
         trimImpl("string-trim-both", "both"),
       ),
 
@@ -359,7 +358,7 @@ export default EnvCapability.define("scheme/srfi-13", {
 
     "string-trim-right":
       symbol.native`string-trim-right: the right end shed of whitespace, or of chars matching a char/one-arg predicate (SRFI-13; no charsets)`(
-        { input: [z.string, z.schemeValue.optional()], output: [z.string] },
+        { input: [z.string, z.lambda.optional()], output: [z.string] },
         trimImpl("string-trim-right", "right"),
       ),
 
@@ -369,7 +368,7 @@ export default EnvCapability.define("scheme/srfi-13", {
     "string-pad":
       symbol.native`string-pad: right-justified to exactly len — pads on the left with char (default space), truncates from the left when too long (SRFI-13)`(
         { input: [z.string, z.schemeNumber, z.char.optional()], output: [z.string] },
-        function (this: CallCtx, str: unknown, len: unknown, char?: unknown): AString {
+        function (this: CallCtx, str, len, char): AString {
           const chars = [...stringValue(str)];
           const k = toIndex(len);
           // O(1) cap check BEFORE `.repeat` allocates — see assertAllocatable.
@@ -385,7 +384,7 @@ export default EnvCapability.define("scheme/srfi-13", {
     "string-pad-right":
       symbol.native`string-pad-right: left-justified to exactly len — pads on the right with char (default space), truncates on the right when too long (SRFI-13)`(
         { input: [z.string, z.schemeNumber, z.char.optional()], output: [z.string] },
-        function (this: CallCtx, str: unknown, len: unknown, char?: unknown): AString {
+        function (this: CallCtx, str, len, char): AString {
           const chars = [...stringValue(str)];
           const k = toIndex(len);
           assertAllocatable(k, "string-pad-right");
@@ -397,7 +396,7 @@ export default EnvCapability.define("scheme/srfi-13", {
 
     "string-reverse": symbol.native`string-reverse: a reversed copy of the string (SRFI-13)`(
       { input: [z.string], output: [z.string] },
-      function (this: CallCtx, str: unknown): AString {
+      function (this: CallCtx, str): AString {
         return withInputProvenance([str], new AString([...stringValue(str)].toReversed().join("")));
       },
     ),
@@ -446,7 +445,7 @@ export default EnvCapability.define("scheme/srfi-13", {
     "string-tokenize":
       symbol.native`string-tokenize: the list of maximal runs of token chars — default non-whitespace, or chars matching a char/one-arg predicate (SRFI-13; no charsets)`(
         {
-          input: [z.string, z.schemeValue.optional()],
+          input: [z.string, z.lambda.optional()],
           output: [z.schemeValue],
           // Output `z.schemeValue` images to `unknown`, but the impl `APair.fromArray`s the tokens — it
           // returns a proper list of token strings. Author-assert `List<string>`. criterion stays
@@ -454,7 +453,7 @@ export default EnvCapability.define("scheme/srfi-13", {
           // whole string"; the docstring teaches the domain), matching the sibling trim/index ops.
           type: "(str: string, criterion?: unknown) => List<string>",
         },
-        function (this: CallCtx, str: unknown, criterion?: unknown): AListAlike | Promise<AListAlike> {
+        function (this: CallCtx, str, criterion): AListAlike | Promise<AListAlike> {
           const chars = [...stringValue(str)];
           const runCtx = this.runCtx;
           const flags =

@@ -44,9 +44,9 @@ describe("arrivalTomlCapability — .toml on the vocabulary (default) path", () 
     const conflicting = EnvCapability.define("test/ext-toml-conflict", {
       deps: [arrivalTomlCapability],
       symbols: (symbol, z) => ({
-        "test/other-toml-resolve": symbol.native`test/other-toml-resolve: rival .toml handler`(
-          { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
-          (() => ({ kind: "value", value: "rival" })) as never,
+        "test/other-toml-resolve": symbol.rosetta`test/other-toml-resolve: rival .toml handler`(
+          { input: [z.union([z.string, z.bytevector])], output: [z.dict()] },
+          () => ({ rival: true }),
         ),
       }),
       prelude: `(require/register-extension ".toml" test/other-toml-resolve)`,

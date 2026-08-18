@@ -22,7 +22,7 @@ import { toJS } from "../../membrane/membrane.js";
 import type { SchemeValue } from "../../values/types.js";
 import { getCapabilityResources } from "../../run/CallCtx.js";
 import { arrivalLoaderCapability } from "../loader-capability.js";
-import { loaderFromResolver } from "../loader.js";
+import { contentsToText, loaderFromResolver } from "../loader.js";
 
 const boxed = (v: SchemeValue): unknown => toJS(v);
 
@@ -46,16 +46,15 @@ const realEvalPrelude: EvalPreludeInto = (env, src, runCtx) => {
   return execInFrame(src, env, runCtx);
 };
 
-/** A minimal ext-style capability — the SAME resolver shape ext-yaml/ext-toml/handlebars use in
- *  production (a `symbol.native` resolver + a prelude registering it by name), minus a real
- *  parser dependency: it uppercases the file's contents. */
+/** A minimal ext-style capability — the SAME resolver shape ext-yaml/ext-toml use
+ *  (rosetta over boxed contents, return IS the module value), minus a parser. */
 function makeUpperExtCapability(name: string, suffix: string, resolverName: string): EnvCapability {
   return EnvCapability.define(name, {
     deps: [arrivalLoaderCapability],
     symbols: (symbol, z) => ({
-      [resolverName]: symbol.native`${resolverName}: uppercases module contents (ResolverResult value kind)`(
-        { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
-        (contents: unknown) => ({ kind: "value", value: String(contents).toUpperCase() }) as never,
+      [resolverName]: symbol.rosetta`${resolverName}: uppercases module contents`(
+        { input: [z.union([z.string, z.bytevector])], output: [z.string] },
+        (contents) => contentsToText(contents).toUpperCase(),
       ) }),
     prelude: `(require/register-extension "${suffix}" "${resolverName}")` });
 }

@@ -16,6 +16,7 @@ import { execStateOverFrame as execState, parse } from "../../eval/generator-exe
 import { extract_patterns, restore_data_gensyms, transform_syntax } from "../../eval/syntax-rules.js";
 import { Resolver } from "../../eval/Resolver.js";
 import { RunContext } from "../../run/RunContext.js";
+import { SchemeValue } from "../../values/types.js";
 
 const env = await freshEnv();
 
@@ -131,7 +132,7 @@ async function probeEllipsisDottedExpansion(useSite: string): Promise<ExpansionP
   return probeExpansion(ELLIPSIS_DOTTED_PATTERN, ELLIPSIS_DOTTED_TEMPLATE, useSite);
 }
 
-async function probeParsed(pattern: unknown, template: unknown, useSite: string): Promise<ExpansionProbe> {
+async function probeParsed(pattern: SchemeValue, template: SchemeValue, useSite: string): Promise<ExpansionProbe> {
   const [code] = await parse(useSite);
   // Glass Resolver(env) + unmetered RunContext — same mint execStateOverFrame uses
   // when the caller does not pass a live runCtx/resolver.

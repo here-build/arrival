@@ -25,6 +25,7 @@
 
 import * as z from "../scheme-zod/index.js";
 import { type ANativeProcedure, type NativeSymbolDef } from "../../values/primitives/ANativeProcedure.js";
+import type { SchemeValue } from "../../values/types.js";
 import { type RunContext } from "../../run/RunContext.js";
 import { type CallCtx } from "../../run/CallCtx.js";
 import { Macro } from "../../eval/Macro.js";
@@ -126,7 +127,7 @@ export type DecodedArgsWithRest<
   F extends Face = "js",
 > = Rest extends z.ZodTypeAny
   ? I extends readonly z.ZodTypeAny[]
-    ? SpecInfer<I, F> extends infer Head extends readonly unknown[]
+    ? SpecInfer<I, F> extends infer Head extends readonly ("js" extends F ? unknown : AValue)[]
       ? [...Head, ...ProjectFace<Rest, F>[]]
       : never
     : never
@@ -151,6 +152,7 @@ import {
   ResourcePathShapeError,
   type ResourcePathFn,
 } from "../../run/resource-paths.js";
+import { AValue } from "../../values/primitives/AValue.js";
 export type { ResourcePathFn };
 
 /** Per-z.lambda-arm dual of `ProvenanceRole` (host role). Shape extracts where it decides;
@@ -387,7 +389,7 @@ export interface TaglessSymbolDef {
   readonly doc?: string;
   readonly in: z.ZodTypeAny;
   readonly out: z.ZodTypeAny;
-  readonly run: (...schemeArgs: unknown[]) => Promise<unknown>;
+  readonly run: (...schemeArgs: readonly SchemeValue[]) => MaybePromise<SchemeValue>;
   /** Always `"pipe"` — no Contract param, no author override channel. */
   readonly provenance: ProvenanceRole;
   /** Harvest signature (shapeless binder; HOF generics set this for List/vector overloads). */
@@ -409,7 +411,7 @@ export interface TaglessGuardSymbolDef {
   readonly doc?: string;
   readonly in: z.ZodTypeAny;
   readonly out: z.ZodTypeAny;
-  readonly run: (...schemeArgs: unknown[]) => Promise<unknown>;
+  readonly run: (...schemeArgs: readonly SchemeValue[]) => Promise<SchemeValue>;
   /** Always `"pipe"`. */
   readonly provenance: ProvenanceRole;
   /** Harvest signature — type predicates set a TS type-guard form. */
@@ -430,7 +432,7 @@ export interface SequenceSymbolDef {
   readonly doc?: string;
   readonly in: z.ZodTypeAny;
   readonly out: z.ZodTypeAny;
-  readonly run: (this: CallCtx, ...schemeArgs: unknown[]) => Promise<unknown>;
+  readonly run: (this: CallCtx, ...schemeArgs: readonly SchemeValue[]) => MaybePromise<SchemeValue>;
   readonly type?: string;
   /** Resolved role (`contract.provenance ?? "pipe"`). */
   readonly provenance: ProvenanceRole;
@@ -499,7 +501,7 @@ export interface DefineSymbolDef {
   readonly out: z.ZodTypeAny;
   /** Spine adoption from AUTHORED slots (normalized `in` lost per-slot identity).
    *  Applied before body runs — body walks a real spine, not a borrowed vector. */
-  readonly adoptArgs?: (args: readonly unknown[]) => unknown[];
+  readonly adoptArgs?: (args: readonly SchemeValue[]) => SchemeValue[];
   /** Factory discriminator — not re-derivable from normalized vectors. */
   readonly callable: boolean;
   /** Single-value return from authored (pre-normalization) output. Always true for constants.

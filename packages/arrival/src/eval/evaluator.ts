@@ -1187,7 +1187,7 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // CALLING run at invocation (callCtx.runCtx: meter, strict, channels, signal,
   // cache). bodyCtx takes resolver/dynamic frame from def-time ctx, runCtx/strict/
   // signal from callCtx.
-  const runner = (values: SchemeValue[], callCtx: CallCtx, canBounce: boolean): CallResult => {
+  const runner = (values: readonly SchemeValue[], callCtx: CallCtx, canBounce: boolean): CallResult => {
     const callResolver = closureResolver.child("lambda", "lambda");
     let argNode: SchemeValue = args;
     let i = 0;
@@ -1520,7 +1520,7 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     // before any TICK check runs (the budget can't rescue an overflow in await
     // machinery). The `run(...)` fallback (HOF escape, `canBounce` false) forwards
     // `signal`; the bounce path inherits the outer ctx's signal directly.
-    const runner = (values: SchemeValue[], callCtx: CallCtx, canBounce: boolean): CallResult => {
+    const runner = (values: readonly SchemeValue[], callCtx: CallCtx, canBounce: boolean): CallResult => {
       const loopResolver = letResolver.child("named-let", "named-let");
 
       for (const [i, param] of params.entries()) {

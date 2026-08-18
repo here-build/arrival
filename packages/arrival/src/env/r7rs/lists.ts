@@ -473,7 +473,7 @@ export default EnvCapability.define("scheme/lists", {
         emit: applyEmitRule,
       },
       // listToArray doors improper/atom final arg (no non-iterable spread crash).
-      function (this: CallCtx, fn: unknown, ...rest: unknown[]) {
+      function (this: CallCtx, fn, ...rest) {
         invariant(rest.length > 0, "apply: requires an argument list as the final argument");
         const spread = listToArray(rest[rest.length - 1] as AListAlike);
         // Thread whole CallCtx (not just runCtx) so invocation provenance reaches fn.
@@ -692,7 +692,7 @@ export default EnvCapability.define("scheme/lists", {
         // compare is `control` (equality selector decides which sublist egresses).
         callbackRoles: ["control"],
       },
-      function (this: CallCtx, obj, list, compare?: SchemeValue) {
+      function (this: CallCtx, obj, list, compare) {
         let current: unknown = list;
         requireListArg("member", list);
         TypeError.invariant(!(list instanceof APair && isCircularList(list)), "member: circular list");
@@ -701,7 +701,7 @@ export default EnvCapability.define("scheme/lists", {
             compare === undefined
               ? structuralEqual(obj, current.car)
               : !is_false(
-                  call_function(compare as Parameters<typeof call_function>[0], [obj, current.car], {
+                  call_function(compare, [obj, current.car], {
                     runCtx: this.runCtx,
                   }),
                 );

@@ -81,7 +81,7 @@ describe("dict-literal true shape — the P-table probes (dict-literal-true-shap
 
   it("P6 — membrane exit rides ADict's own egress proxy, not a raw null-proto reader artifact", async () => {
     const v = await evalOne("'{a: (+ 1 2)}");
-    const crossed = toJS(v) as Record<string, unknown>;
+    const crossed = toJS(v!) as Record<string, unknown>;
     expect(Object.keys(crossed)).toEqual(["a"]);
     // The OLD AJSObject carrier's `arrival/toJS` returned `this.source` directly — the
     // reader's own null-prototype static-key map, handed to JS AS-IS (an AST-adjacent

@@ -38,6 +38,9 @@ import {
 } from "./loader-extensions.js";
 import type { RunContext } from "../run/RunContext.js";
 import { getCapabilityResources } from "../run/CallCtx.js";
+import { ABytevector } from "../values/primitives/ABytevector.js";
+import { AString } from "../values/primitives/AString.js";
+import type { SchemeValue } from "../values/types.js";
 import {
   dataToScheme,
   dirOf,
@@ -49,6 +52,7 @@ import {
   type RunEnv,
   runEnvOf,
   runResolverOf,
+  withPublishedRunResolver,
   type SchemeVal,
 } from "./loader.js";
 
@@ -76,7 +80,7 @@ const isLoader = (v: unknown): v is Loader =>
 interface RequireSession {
   /** Each resolved path loads EXACTLY ONCE; sequential repeats and concurrent siblings
    *  await that one promise. */
-  readonly inflight: Map<string, Promise<{ value: SchemeVal }>>;
+  readonly inflight: Map<string, Promise<SchemeValue>>;
   /** Paths whose module forms are mid-evaluation (`.scm` load only): re-entrant require is
    *  a genuine R7RS cycle (awaiting would deadlock). */
   readonly evaluating: Set<string>;
@@ -127,7 +131,7 @@ function loaderRegistryOf(runCtx: RunContext): ExtensionResolverRegistry {
 // without referencing internal AmbientRuntime across the package boundary. External use
 // goes through exec({ capabilities, config }), generic-erased; symbols body still checked
 // against real shapes at the define call site.
-export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.define("arrival/loader", {
+export const arrivalLoaderCapability = EnvCapability.define("arrival/loader", {
   configuration: {
     /** PRIMARY: the raw read-capable filesystem arming `(require …)`. The capability derives its own
      *  `Loader` from this (`makeFsLoader`) — no host `makeFsLoader` step. */
@@ -229,10 +233,10 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
             if (pending) {
               // Own ancestor → real cycle. Else settled hit or concurrent sibling — share.
               RequireCycleError.invariant(!evaluating.has(path), [...loadingStack, path]);
-              return (await pending).value;
+              return await pending;
             }
 
-            const load = (async (): Promise<{ value: SchemeVal }> => {
+            const load = (async (): Promise<SchemeValue> => {
               const contents = await loader.read(path);
               // Capability-registered suffix wins over builtin table. Registry stores NAME —
               // late-bound against THIS env (resource-armed resolver sees THIS env's resource).
@@ -240,18 +244,19 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
               // scoping guarantee (must root the capability).
               const resolverName = lookupExtensionResolverIn(loaderRegistryOf(this.runCtx), path);
               const registered = resolverName === undefined ? undefined : resolver.lookup(resolverName);
-              let result: ResolverResult;
               if (is_applyable(registered)) {
-                // Thread full CallCtx, not just runCtx. Bridge through unknown: registry contract
-                // is ResolverResult; applyCallback's CallResult can't express that.
-                result = (await applyCallback(registered, [contents, { path }], this)) as unknown as ResolverResult;
-              } else {
-                const handler = pickHandler(path, loader.resolvers);
-                RequireResolverError.invariant(handler !== undefined, "no-resolver", path);
-                result = await handler.resolve(contents, { path });
+                // Scheme verb: contents boxed, return IS the module value (yaml/toml rosetta
+                // encode the parse; handlebars native returns the pretreat lambda).
+                const boxed =
+                  typeof contents === "string" ? new AString(contents) : new ABytevector(contents);
+                // require already awaited; re-publish the resolver captured before that.
+                return withPublishedRunResolver(resolver, () => applyCallback(registered, [boxed], this));
               }
+              const handler = pickHandler(path, loader.resolvers);
+              RequireResolverError.invariant(handler !== undefined, "no-resolver", path);
+              const result = await handler.resolve(contents, { path });
 
-              let value: SchemeVal = theVoid;
+              let value: SchemeValue = theVoid;
               if (result.kind === "value") {
                 // dataToScheme: arrays→lists, objects→member-readable. DATA only — JS function
                 // would void (CALLABLE RULE, loader.ts); callables use kind:"eval" + scheme lambda.
@@ -278,12 +283,12 @@ export const arrivalLoaderCapability: EnvCapability<any, any> = EnvCapability.de
                 // load returns void singleton, not raw JS undefined.
                 if (isLoad) value = theVoid;
               }
-              return { value };
+              return value;
             })();
 
             inflight.set(path, load);
             try {
-              return (await load).value;
+              return await load;
             } catch (error) {
               // Don't poison cache — drop so path can retry. Annotate requireChain (deepest
               // wins). Best-effort if frozen.

@@ -18,6 +18,7 @@ import * as z from "../common/scheme-zod/index.js";
 import { type AEntity, symbol } from "../symbol/index.js";
 import { type NativeSymbolDef } from "../values/primitives/ANativeProcedure.js";
 import { type DecodedArgs, type DecodedArgsWithRest, type DecodedReturn, type SpecInfer } from "../common/symbols/_bake.js";
+import { type SlotAdopter, buildSlotAdopter } from "../membrane/adopt-spine.js";
 import type { APair } from "../values/primitives/APair.js";
 import type { AString } from "../values/primitives/AString.js";
 import type { ANil } from "../values/primitives/ANil.js";
@@ -112,6 +113,21 @@ describe("symbol contract — wrong-typed impls must NOT compile", () => {
       );
     }
     expectTypeOf<true>().toEqualTypeOf<true>();
+  });
+});
+
+describe("buildSlotAdopter — scheme-face tuple after adoption", () => {
+  test("listAlike slot: raw SchemeValue[] in, AListAlike tuple out", () => {
+    expectTypeOf(buildSlotAdopter([z.listAlike])).toEqualTypeOf<
+      SlotAdopter<readonly [typeof z.listAlike]> | undefined
+    >();
+    expectTypeOf<ReturnType<SlotAdopter<[typeof z.listAlike]>>>().toEqualTypeOf<[AListAlike]>();
+  });
+
+  test("listAlike head + schemeValue rest: tail is SchemeValue[]", () => {
+    expectTypeOf<ReturnType<SlotAdopter<[typeof z.listAlike], typeof z.schemeValue>>>().toEqualTypeOf<
+      [AListAlike, ...SchemeValue[]]
+    >();
   });
 });
 

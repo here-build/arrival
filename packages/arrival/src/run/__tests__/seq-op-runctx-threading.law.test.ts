@@ -105,7 +105,7 @@ describe("W1 seq-op ctx threading — AVector map/filter/reduce thread the invoc
   it("reduce: callback observes the passed liveCtx, not CONSTANT_CTX", async () => {
     const vec = new AVector([one, two]);
     const probe = makeProbe();
-    await vec["arrival/tagless-final/reduce"](probe.fn, 0, liveCtx);
+    await vec["arrival/tagless-final/reduce"](probe.fn, new AExact(0), liveCtx);
     expect(probe.observed).toHaveLength(2);
     for (const ctx of probe.observed) {
       expect(ctx.heapMeter).toBeDefined();

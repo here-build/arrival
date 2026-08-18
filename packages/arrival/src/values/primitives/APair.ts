@@ -592,7 +592,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // evaluated without applyCallback.
   ["arrival/tagless-final/map"](fn: ACallable, runCtx: RunContext): MaybePromise<AListAlike> {
     chargeHeap(runCtx, countPairElements(this));
-    const elements: unknown[] = [];
+    const elements: SchemeValue[] = [];
     let node: unknown = this;
     while (node instanceof APair) {
       if (isEmptyPairSentinel(node)) break;
@@ -705,7 +705,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     let node: unknown = this;
     while (node instanceof APair) {
       if (isEmptyPairSentinel(node)) break;
-      const verdict = await applyCallback(pred, [node.car], makeCallCtx(runCtx));
+      const verdict = await pred.call(makeCallCtx(runCtx), node.car);
       if (is_false(verdict)) break; // R7RS: only #f is false
       out.push(node.car);
       node = node.cdr;
@@ -722,7 +722,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     let node: SchemeValue = this;
     while (node instanceof APair) {
       if (isEmptyPairSentinel(node)) return node.cdr;
-      const verdict = await applyCallback(pred, [node.car], makeCallCtx(runCtx));
+      const verdict = await pred.call(makeCallCtx(runCtx), node.car);
       if (is_false(verdict)) return node; // R7RS: only #f is false
       node = node.cdr as SchemeValue;
     }

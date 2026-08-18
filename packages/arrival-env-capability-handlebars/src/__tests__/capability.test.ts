@@ -44,9 +44,9 @@ describe("arrivalHandlebarsCapability — .hbs on the vocabulary (default) path"
     const conflicting = EnvCapability.define("test/ext-hbs-conflict", {
       deps: [arrivalHandlebarsCapability],
       symbols: (symbol, z) => ({
-        "test/other-hbs-resolve": symbol.native`test/other-hbs-resolve: rival .hbs handler`(
-          { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
-          (() => ({ kind: "value", value: "rival" })) as never,
+        "test/other-hbs-resolve": symbol.rosetta`test/other-hbs-resolve: rival .hbs handler`(
+          { input: [z.union([z.string, z.bytevector])], output: [z.dict()] },
+          () => ({ rival: true }),
         ),
       }),
       prelude: `(require/register-extension ".hbs" test/other-hbs-resolve)`,

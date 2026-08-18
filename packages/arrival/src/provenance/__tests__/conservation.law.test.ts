@@ -520,7 +520,7 @@ describe("named sheds — the only legal losses", () => {
   it("egress: toJS leaves lineage in the trace keyed by scope; the returned JS value carries no provenance property", async () => {
     const raw = await runRaw(`a`, { a: sStr("a", 100) });
     expect(provOf(raw)).toEqual([100]); // pre-egress: the boxed value IS stamped
-    const egressed: unknown = toJS(raw);
+    const egressed: unknown = toJS(raw!);
     expect(egressed).toBe("a");
     // The trace keeps the lineage keyed by scope (P4/P12); the crossed-over JS value
     // itself carries no `provenance` property at all — not an empty one, ABSENT.

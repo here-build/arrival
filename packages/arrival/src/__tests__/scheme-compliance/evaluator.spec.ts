@@ -52,7 +52,7 @@ describe("Generator Evaluator with Real Scheme Types", () => {
     const contour = (
       name: string,
       arity: { min: number; max: number | null },
-      impl: (args: SchemeValue[]) => SchemeValue,
+      impl: (args: readonly SchemeValue[]) => SchemeValue,
     ) =>
       new ANativeProcedure({
         name,

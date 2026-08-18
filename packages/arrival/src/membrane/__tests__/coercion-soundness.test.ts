@@ -49,6 +49,7 @@ import { provOf } from "../../provenance/lineage.js";
 import { tf } from "../../values/tagless-final.js";
 import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
 import { harvestContracts } from "../../__tests__/_symbols-harvest.js";
+import { AExact } from "../../values/primitives/AExact.js";
 
 // Q20b: this file calls carrier ops (map/filter/length/sort) directly against
 // pre-stamped fixtures, which route through op-helpers.ts's accumulation — force
@@ -324,7 +325,13 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
   });
   it("reduce(AJSArray) folds the borrowed elements via a vector [RESOLVED]", async () => {
     expect(tf("reduce") in mkArr()).toBe(true);
-    const n = await force(mkArr()[tf("reduce")](reduceContour((_e, acc: number) => acc + 1), 0, CONSTANT_CTX));
+    const n = await force(
+      mkArr()[tf("reduce")](
+        reduceContour((_e, acc: number) => acc + 1),
+        new AExact(0),
+        CONSTANT_CTX,
+      ),
+    );
     expect(n).toBe(2);
   });
 });
@@ -416,9 +423,13 @@ describe("strict mode gates generic list-ops on a vector (loose tolerates, stric
   });
   it("filter/reduce(vector): strict rejects them (SRFI-1 list-ops)", async () => {
     await expect(mkVec()[tf("filter")](keepAllContour, strict)).rejects.toThrow(PortabilityError);
-    await expect(mkVec()[tf("reduce")](reduceContour((_e, a: number) => a), 0, strict)).rejects.toThrow(
-      PortabilityError,
-    );
+    await expect(
+      mkVec()[tf("reduce")](
+        reduceContour((_e, a: number) => a),
+        new AExact(0),
+        strict,
+      ),
+    ).rejects.toThrow(PortabilityError);
   });
   it("sort(vector) is NOT gated — SRFI-132 accepts vectors", () => {
     expect(mkVec()[tf("sort")](cmp, strict)).toBeInstanceOf(AVector);
