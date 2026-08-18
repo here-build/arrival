@@ -747,8 +747,8 @@ describe("resource-path CQS — producer shape + strictCQSstrings", () => {
   /**
    * N-PATHS-PRODUCER-ALIASING (ruling 2026-08-13): produced Q/E are frozen
    * COPIES at production — a producer returning a cached/shared array that is
-   * later mutated must not corrupt the journal, effect-log `resourcePaths`
-   * stamps, or the reactiveAtoms membership closure.
+   * later mutated must not corrupt the journal or effect-log `resourcePaths`
+   * stamps.
    */
   it("N-PATHS-PRODUCER-ALIASING — produced paths are frozen copies; later mutation invisible", () => {
     const shared: string[][] = [["d", "1"]];

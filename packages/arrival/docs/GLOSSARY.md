@@ -127,11 +127,6 @@ the impl fires and its result is written; in `replay` mode a hit answers WITHOUT
 per cache class (`view`/`sink`/`pure`/undeclared) is fixed here — the single home for the
 record/replay table. *(owner: execution.md §MODE-LAW)*
 
-**path atom** — one reactive cell keyed by `serializeResourcePath` (verbatim — Phase 5 mints no
-second encoding) on a `PathAtomBus`: live `Q≠[]` penetrations observe it; committed `E≠[]`
-invalidates by SEGMENT-WISE overlap on path tuples, never string-prefix on keys. MobX sits
-behind the internal `AtomProxy` — not a public FRP surface. *(owner: execution.md §REACTIVITY)*
-
 **prelude-define frame** — the per-run frame holding every prelude `(define …)` (bootstrap pass
 AND mid-run `require/extension` packs), rooted between the user's session scope and the shared
 vocabulary chain (`session → defines → chain`), so prelude defines are main-phase bindings that
@@ -148,20 +143,6 @@ main-map symbol; main-phase code sees only the main one. *(owner: environments.m
 emphasize the ctx + lineage it carries so the box layer can execute the program. See *box*.
 *(owner: PRINCIPLES.md P0)*
 
-**reaction envelope** — a host-side unit over one whole top-level `exec`/tool under a
-`createReactionHub`: fresh run per invoke (fresh path log, prior-E, `record` cache),
-subscriptions replaced wholesale on success, self-write suppressed. NO manual trigger
-(RX-AUTO — "it's just scheme"): a unit births dirty, `settle` is the single sequential clock
-(at-most-once per unit per call, dirty-flag CARRYOVER — an undrained wake survives to the
-next settle; a live cycle stays visibly dirty), and only atoms reporting re-arms a unit.
-*(owner: execution.md §REACTIVITY)*
-
-**reactiveAtoms** — the per-penetration in-symbol bridge on `CallCtx`: exact-Q-membership-gated
-`get(path)` returning cells whose `reportChanged` is a ONE-SHOT invalidation signal per
-(penetration, path) — store liveness, never a substitute for declared `effects`. Minted
-whenever path producers are declared; INERT when the bus is off/replay (membership still
-teaches). *(owner: execution.md §REACTIVITY)*
-
 **region** — a `RegionScope`: a token `{open, pending, signal}` minted for ONE symbol invocation
 that binds every reverse-crossed callable (a Scheme lambda handed to host JS) so it re-enters the
 two-layer execution inside a real frame; call-after-return and return-with-calls-in-flight throw
@@ -172,7 +153,7 @@ a fresh region. *(owner: membrane.md §REGION; replay-container role PROVENANCE.
 segment = domain root. Overlap is segment-wise prefix either direction, never string-join.
 Produced dynamically by rosetta-only `queries?`/`effects?` contract fns over DECODED args,
 never from the impl's return. One key encoding (`serializeResourcePath`) serves door messages,
-host footprints, confirm manifests, and path atoms. *(owner: execution.md §RESOURCE-PATHS)*
+host footprints, and confirm manifests. *(owner: execution.md §RESOURCE-PATHS)*
 
 **Σ∩T narrow** — constrained decoding's next-token mask: the intersection of Σ (the bound-symbol
 set the oracle proves legal by SCOPE and STRUCTURE) with T (the subset the type lens proves

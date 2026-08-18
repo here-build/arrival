@@ -24,7 +24,6 @@ import { attestDeep, freshIfSingleton } from "../../values/attestation.js";
 import { jsToScheme } from "../../membrane/rosetta.js";
 import { penetrateThroughCache } from "../../run/run-cache.js";
 import { applyResourcePathCqs, type ResourcePath } from "../../run/resource-paths.js";
-import { mintReactiveAtoms } from "../../run/reactive-atoms.js";
 import { closeRegionScope, openRegionScope, withRegionScope } from "../../membrane/region-scope.js";
 import { decodeKwargsStrict, drainDroppedKwargNotes } from "../kwargs-rejection.js";
 import { formatPositionalRejection } from "./positional-rejection.js";
@@ -345,35 +344,10 @@ _installRosettaMembraneApply(async (proc, args, callCtx) => {
     const runCache = callCtx.runCtx.cache;
     const burstLog = callCtx.runCtx.effects;
     const runReads = callCtx.runCtx.reads;
-    const pathAtoms = callCtx.runCtx.pathAtoms;
-    // Observe live Q after CQS; replay-silent; never skip applyResourcePathCqs.
-    const liveAtoms = pathAtoms !== undefined && runCache?.mode !== "replay";
-    if (liveAtoms && producedQueries.length > 0) {
-      pathAtoms.observe(producedQueries);
-    }
-    // Mint (inert if bus off / replay) so bridge impls stay unchanged; doored Q never reaches here.
-    const pathProducersDeclared = pathQueryFn !== undefined || pathEffectFn !== undefined;
     const fire = async (): Promise<unknown> => {
-      const implCtx: CallCtx = pathProducersDeclared
-        ? {
-            ...callCtx,
-            reactiveAtoms: mintReactiveAtoms({
-              verbName: name,
-              queries: producedQueries,
-              effects: producedEffects,
-              bus: liveAtoms ? pathAtoms : undefined,
-              runCtx: callCtx.runCtx,
-            }),
-          }
-        : callCtx;
       const value = scope
-        ? await withRegionScope(scope, () => m.hostImpl.call(implCtx, ...decodedArgs))
-        : await m.hostImpl.call(implCtx, ...decodedArgs);
-      // Stage non-sink E only after successful impl (void-sink skips fire entirely).
-      // commitRun at successful run end flushes (RX-CLOCK); abandon on throw.
-      if (liveAtoms && producedEffects.length > 0) {
-        pathAtoms.stageEffects(producedEffects);
-      }
+        ? await withRegionScope(scope, () => m.hostImpl.call(callCtx, ...decodedArgs))
+        : await m.hostImpl.call(callCtx, ...decodedArgs);
       return value;
     };
     // Fast-path: no cache, no effect-log, and no path-derived storage work → bare fire.

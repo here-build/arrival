@@ -33,9 +33,7 @@ import type { DisplaySink, NoteSink } from "../run/note-sink.js";
 import type { RunCache } from "../run/run-cache.js";
 import type { EffectLog } from "../run/effect-log.js";
 import { checkReadWriteGuard, type ReadGuard } from "../run/read-guard.js";
-import type { PathAtomBus } from "../run/path-atom-bus.js";
 import type { ResourcePathLog } from "../run/resource-paths.js";
-import { noteReactiveAtomsRun, retireReactiveAtomsRun } from "../run/reactive-atoms.js";
 // TYPE-ONLY (erased — no runtime scheme-zod edge): exec exit contract's schema type.
 import type { output as ZodOutputOf, ZodType } from "../common/scheme-zod/index.js";
 import type { AListAlike, SchemeValue } from "../values/types.js";
@@ -191,12 +189,6 @@ export interface ExecOptions {
    */
   reads?: ReadGuard;
   /**
-   * Path-keyed atom bus (run/path-atom-bus.ts). Live Q≠[] penetrations observe;
-   * successful non-sink E≠[] stage for commit at successful run end. Replay stays
-   * silent at the penetration (not by short-circuiting CQS). Unset ⇒ no reactivity.
-   */
-  pathAtoms?: PathAtomBus;
-  /**
    * Opt-in runtime assert that every CQS path segment is a string (default false).
    * Type-level `ResourcePath` is the law; use this in non-prod harnesses to catch
    * producers that smuggle non-strings past TS. Rides onto RunContext.strictCQSstrings.
@@ -350,7 +342,6 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     cache,
     effects,
     reads,
-    pathAtoms,
     strictCQSstrings,
     resourcePaths,
     notes,
@@ -397,15 +388,11 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     cache,
     effects,
     reads,
-    pathAtoms,
     strictCQSstrings,
     resourcePaths,
     notes,
     display,
   });
-  // Atoms live per run context: an owned run starting on this bus supersedes the
-  // previous owned run's cells (P-RX-ATOM-SUPERSEDE). Reused runCtx never notes.
-  if (runCtxOwned && runCtx.pathAtoms !== undefined) noteReactiveAtomsRun(runCtx.pathAtoms, runCtx);
 
   // Fresh scope per call unless the caller opts into continuity. Fresh root is
   // prelude-define-framed; seeds stay out of the walk.
@@ -434,10 +421,6 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
       try {
         result = expectValue(await (runCtx.reads ? runCtx.reads.tracker.region(runForm) : runForm()));
       } catch (e) {
-        if (runCtxOwned) {
-          runCtx.pathAtoms?.abandonRun(); // RX-UNIT — see the commitRun note below
-          retireReactiveAtomsRun(runCtx); // abandoned run's cells die (atoms live per run context)
-        }
         if (e instanceof ArrivalError && e.cause instanceof TypeError && !isHostRuntimeBug(e.cause)) throw e.cause;
         throw e;
       }
@@ -447,12 +430,6 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
         checkReadWriteGuard(runCtx.effects.entries, runCtx.reads.tracker.log, runCtx.reads.writeSetOf);
       }
     }
-    // RX-CLOCK: invalidate staged path-E only when the whole run commits successfully.
-    // RX-UNIT: the unit is the WHOLE top-level exec, so the clock is gated on
-    // `runCtxOwned` — the same flag that gates disposal. A nested exec / a REPL pass
-    // reusing a caller's runCtx is INSIDE someone else's run; firing here would flush
-    // the parent's staged effects mid-run. A host that owns the runCtx owns the clock.
-    if (runCtxOwned) runCtx.pathAtoms?.commitRun();
     return { values: results, scope: runResolver.scope, runCtx };
   } finally {
     // Only THIS call's own (freshly-minted) RunContext is disposed here.
@@ -571,7 +548,6 @@ export async function execExpr(
     cache,
     effects,
     reads,
-    pathAtoms,
     strictCQSstrings,
     resourcePaths,
     runCtx: passedRunCtx,
@@ -592,11 +568,9 @@ export async function execExpr(
       cache,
       effects,
       reads,
-      pathAtoms,
       strictCQSstrings,
       resourcePaths,
     }));
-  if (runCtxOwned && runCtx.pathAtoms !== undefined) noteReactiveAtomsRun(runCtx.pathAtoms, runCtx);
   let runResolver = resolver;
   if (runResolver === undefined) {
     const vocabulary = await buildVocabulary(BASE_ROSTER, undefined, capabilityEvalScheme);
@@ -621,16 +595,8 @@ export async function execExpr(
         { signal: runSignal, budgetMs },
       ),
     );
-    // RX-UNIT: `require`'s module-eval loop threads the REQUIRING run's live runCtx
-    // through here, so an unowned runCtx means this call is a form inside someone
-    // else's run — never its own unit, never its own clock (see execState).
-    if (runCtxOwned) runCtx.pathAtoms?.commitRun();
     return value;
   } catch (e) {
-    if (runCtxOwned) {
-      runCtx.pathAtoms?.abandonRun();
-      retireReactiveAtomsRun(runCtx); // abandoned run's cells die (atoms live per run context)
-    }
     if (e instanceof ArrivalError && e.cause instanceof TypeError) throw e.cause;
     throw e;
   } finally {
@@ -686,7 +652,6 @@ export async function execStateOverFrame(
     cache,
     effects,
     reads,
-    pathAtoms,
     strictCQSstrings,
     resourcePaths,
     notes,
@@ -709,13 +674,11 @@ export async function execStateOverFrame(
       cache,
       effects,
       reads,
-      pathAtoms,
       strictCQSstrings,
       resourcePaths,
       notes,
       display,
     });
-  if (runCtxOwned && runCtx.pathAtoms !== undefined) noteReactiveAtomsRun(runCtx.pathAtoms, runCtx);
 
   try {
     const results: SchemeValue[] = [];
@@ -739,10 +702,6 @@ export async function execStateOverFrame(
       try {
         result = expectValue(await (runCtx.reads ? runCtx.reads.tracker.region(runForm) : runForm()));
       } catch (e) {
-        if (runCtxOwned) {
-          runCtx.pathAtoms?.abandonRun(); // RX-UNIT — see the commitRun note below
-          retireReactiveAtomsRun(runCtx); // abandoned run's cells die (atoms live per run context)
-        }
         if (e instanceof ArrivalError && e.cause instanceof TypeError && !isHostRuntimeBug(e.cause)) throw e.cause;
         throw e;
       }
@@ -752,7 +711,6 @@ export async function execStateOverFrame(
         checkReadWriteGuard(runCtx.effects.entries, runCtx.reads.tracker.log, runCtx.reads.writeSetOf);
       }
     }
-    if (runCtxOwned) runCtx.pathAtoms?.commitRun(); // RX-UNIT / RX-CLOCK — see execState
     return { values: results, scope: runResolver.scope, runCtx };
   } finally {
     if (runCtxOwned) await disposeRunContext(runCtx);
@@ -783,7 +741,6 @@ export async function execExprOverFrame(
     cache,
     effects,
     reads,
-    pathAtoms,
     strictCQSstrings,
     resourcePaths,
     runCtx: passedRunCtx,
@@ -795,8 +752,7 @@ export async function execExprOverFrame(
   const runCtxOwned = passedRunCtx === undefined;
   const runCtx =
     passedRunCtx ??
-    new RunContext({ signal, heapBudget, cache, effects, reads, pathAtoms, strictCQSstrings, resourcePaths });
-  if (runCtxOwned && runCtx.pathAtoms !== undefined) noteReactiveAtomsRun(runCtx.pathAtoms, runCtx);
+    new RunContext({ signal, heapBudget, cache, effects, reads, strictCQSstrings, resourcePaths });
   const runSignal = runCtx.signal;
   try {
     const value = expectValue(
@@ -805,16 +761,8 @@ export async function execExprOverFrame(
         budgetMs,
       }),
     );
-    // RX-UNIT: `require`'s module-eval loop threads the REQUIRING run's live runCtx
-    // through here, so an unowned runCtx means this call is a form inside someone
-    // else's run — never its own unit, never its own clock (see execState).
-    if (runCtxOwned) runCtx.pathAtoms?.commitRun();
     return value;
   } catch (e) {
-    if (runCtxOwned) {
-      runCtx.pathAtoms?.abandonRun();
-      retireReactiveAtomsRun(runCtx); // abandoned run's cells die (atoms live per run context)
-    }
     if (e instanceof ArrivalError && e.cause instanceof TypeError) throw e.cause;
     throw e;
   } finally {

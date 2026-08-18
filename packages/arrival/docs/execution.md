@@ -4,8 +4,8 @@
 > unit of interpretation whose per-run state is minted once and threaded explicitly through
 > the ops that need it, never reached for ambiently. This document says what that state IS, where it
 > lives (data-local, not global), and how the per-run seams — cache, effects, reads, notes,
-> display, pathAtoms, resourcePaths — arm the interception facilities that turn a bare
-> interpreter into a cacheable, burstable, read-guarded, temporally-zoned, reactive one.
+> display, resourcePaths — arm the interception facilities that turn a bare
+> interpreter into a cacheable, burstable, read-guarded, temporally-zoned one.
 > §14 SESSIONS is the CONSUMER view (sessions, scopes, budgets as a host wires them); the
 > sections before it are the ontology under it — what the machine IS, so the wiring is the
 > only shape it could take.
@@ -53,12 +53,11 @@ Four homes, by lifetime:
 - **Keyed residency** — a module-housed `WeakMap`/`WeakSet` keyed by a run-scoped object
   (typically `RunContext` itself); lifetime = the KEY's, not the module's. Used when a leaf
   must hold run-associated state without importing the owning layer (a `WeakMap<RunContext,
-  X>` needs no `RunContext` write access, only identity). Five sites, all independently
+  X>` needs no `RunContext` write access, only identity). Four sites, all independently
   audit-found: `inFlight` (`run/penetration.ts` — the single-flight in-progress-promise table;
   moved here from `run/run-cache.ts` when `penetrateThroughCache` did, audit P2 — cite
   `penetration.ts`, not `run-cache.ts`),
-  `retiredRuns` / `lastRunByBus` (`run/reactive-atoms.ts` — supersede tracking for an
-  abandoned run's cells), `lifecycles` (`run/run-lifecycle.ts` — the disposal-callback table
+  `lifecycles` (`run/run-lifecycle.ts` — the disposal-callback table
   `onRunContextDispose` reads and writes), `vocabularyByRunCtx` (`env/assemble-run.ts` — the
   per-run `Vocabulary` a `CallCtx` dispatch looks up), `preludeDefinesByRunCtx`
   (`env/assemble-run.ts` — the per-run prelude-define frame, R12's persistence mechanism).
@@ -108,11 +107,11 @@ landing on the VALUE's own `.location` field (AValue) — no ctx involved, and n
 
 *Enforcement sites: `run/RunContext.ts`.*
 
-## 3. CHANNELS — seven independent seams, armed subset-wise
+## 3. CHANNELS — six independent seams, armed subset-wise
 
 **`X | undefined ⇒ facility off.`** Each channel on `RunContext` is an independent per-run
 seam; `undefined` means that facility is off. A run may carry any subset — they are siblings,
-none a field of another. Six default off; **`resourcePaths` alone defaults ON** (see below).
+none a field of another. Five default off; **`resourcePaths` alone defaults ON** (see below).
 
 | Channel | Facility when armed | Off (`undefined`) |
 |---|---|---|
@@ -121,7 +120,6 @@ none a field of another. Six default off; **`resourcePaths` alone defaults ON** 
 | `reads` | read-tracking + the read∩write deferral guard (§8) | no tracking, no guard |
 | `notes` | model-facing bookkeeping sink (§9) | notes dropped |
 | `display` | host `(display …)` affordance sink (§9) | no display verb bound |
-| `pathAtoms` | path-keyed atom bus — live Q observe, commit-clock invalidate (§13) | no observe/invalidate |
 | `resourcePaths` | per-run Q/E journal + the temporal-immutability door (§12) | no journal, no door |
 
 **The one inverted default.** `resourcePaths` is a LAW channel, not an observability channel:
@@ -130,23 +128,18 @@ an ordinary `new RunContext(...)` always mints a fresh `MemoryResourcePathLog`, 
 facility-off is `CONSTANT_CTX` territory. `ExecOptions.resourcePaths` injects a harness spy or
 custom log, never an off-switch. Everything else keeps the opt-in default.
 
-**The sanctioned readers — exactly two, named here so the claim stays grep-checkable
-(audit D1 corrected the prior "one reader" text, which §8/§13 of this same document, and
-the code, already contradicted).** All seven channels are read off `this.runCtx.<channel>`
-at the baked rosetta `run` wrapper — the chokepoint (§10, `common/symbols/rosetta.ts`) —
-PER PENETRATION: `cache`/`effects`/`reads`/`pathAtoms`/`resourcePaths`/`notes` are all read
-there. The eval loop (`eval/generator-exec.ts`) is the second, narrower reader, for three
-things §8 and §13 already document and this paragraph now cross-links instead of
-contradicting: the per-form `reads.tracker.region(...)` wrap plus the post-form
-`checkReadWriteGuard` call (§8's read-guard region); the `pathAtoms?.commitRun()` /
-`abandonRun()` RX-UNIT/RX-CLOCK commit-or-abandon clock (§13); and the
-`pathAtoms !== undefined` check that arms `noteReactiveAtomsRun` at run entry (§13's
-liveness note). Nothing else consults a channel — a facility's whole armed/off behavior is
-decided by whether the host passed a non-`undefined` value into `new RunContext(...)` (plus
-the `resourcePaths` default above), read only at these two named sites.
+**The sanctioned readers — exactly two, named here so the claim stays grep-checkable.** All
+six channels are read off `this.runCtx.<channel>` at the baked rosetta `run` wrapper — the
+chokepoint (§10, `common/symbols/rosetta.ts`) — PER PENETRATION:
+`cache`/`effects`/`reads`/`resourcePaths`/`notes` are all read there. The eval loop
+(`eval/generator-exec.ts`) is the second, narrower reader: the per-form
+`reads.tracker.region(...)` wrap plus the post-form `checkReadWriteGuard` call (§8). Nothing
+else consults a channel — a facility's whole armed/off behavior is decided by whether the
+host passed a non-`undefined` value into `new RunContext(...)` (plus the `resourcePaths`
+default above), read only at these two named sites.
 
 **One arming surface, stated once.** `ExecOptions`
-(`cache`/`effects`/`reads`/`notes`/`display`/`pathAtoms`/`resourcePaths`/`strictCQSstrings`)
+(`cache`/`effects`/`reads`/`notes`/`display`/`resourcePaths`/`strictCQSstrings`)
 is the public door: a field set rides `new RunContext(...)` onto the matching `RunContext` channel;
 a field omitted leaves it `undefined`. The per-channel `ExecOptions` field docs and the
 `run/*` file headers describe the SAME wiring from two ends — the option is the entry, the
@@ -508,13 +501,13 @@ Q→E→Q and doors with the hybrid teaching clause (`ResourcePathConflictError`
 void-sink gather, never dual-keyed with `sink`); `Q≠[]` → view-style value cache when `cache`
 armed (explicit `pure` never stores); both → hybrid (impl fires, E logged, return cacheable);
 neither → untracked. `serializeResourcePath` is the ONE key encoding — door messages,
-`writeSetOfResourcePaths` host footprints, confirm-manifest rows, and atom keys (§13) share it.
+`writeSetOfResourcePaths` host footprints, and confirm-manifest rows share it.
 
 **Segment typing:** `ResourcePath = readonly string[]` is the type-level law;
-`strictCQSstrings` (default false; the reaction envelope defaults it true) adds the runtime
+`strictCQSstrings` (default false) adds the runtime
 assert. Producer SHAPE (array of segment-arrays) is always enforced
 (`ResourcePathProducerError`), and produced paths are frozen COPIES — a producer's own array
-mutated later never corrupts the journal, effect-log stamps, or membership closures.
+mutated later never corrupts the journal or effect-log stamps.
 
 **Three bake doors on the axis pairing (2026-08-13):** a **queries-declaring contract must
 serialize on both vectors** (`ResourcePathShapeError` — no `z.lambda`/`z.schemeValue`/
@@ -531,59 +524,14 @@ declares the query path or voids its output (`"effects-only-return"`, type-level
 `common/symbols/native.ts` / `sequence.ts` (bake door). Design history:
 `docs/design-history/resource-paths-cqs-DRAFT.md`.*
 
-## 13. REACTIVITY — path atoms, reaction envelope, in-symbol bridge
+## 13. REACTIVITY — Arrival does not own a reactive runtime
 
-Three layers over ONE path vocabulary (§12's keys); no Scheme-plane FRP verbs exist or will.
-
-**Membrane arming.** With `pathAtoms` armed and the run not replay-silent: every live `Q≠[]`
-penetration calls `bus.observe(Q)` after the CQS door passes; every successful non-sink
-`E≠[]` fire stages its paths, and `commitRun` at SUCCESSFUL whole-run end flushes them as
-invalidations (RX-CLOCK — a doored or thrown run abandons staged work). The commit clock is
-gated on `runCtxOwned`: a nested exec inside someone else's run never flushes the parent's
-staged effects. Invalidation matches by SEGMENT-WISE overlap on path tuples — never
-string-prefix on serialized keys (the two agree only over string segments).
-
-**Host reaction envelope.** A **unit** is a whole top-level `exec`/tool under a
-`createReactionHub` envelope: fresh run every invoke (fresh path log, prior-E, `record`
-cache — never the parent's), subscriptions replaced wholesale after each SUCCESSFUL run,
-self-write suppressed (a unit's own committed E never wakes it), host param atoms opt-in only
-(`optInParams`, disjoint `param:` key namespace, never door fuel). **RX-AUTO:** there is NO
-manual trigger — "it's just scheme". A unit births DIRTY; `settle({maxRounds})` is the single
-sequential clock (its first drain IS the initial run; a concurrent settle throws), and only
-atoms reporting / param atoms / `hub.invalidate` re-arm a unit. Settle drains with
-**at-most-once per unit per settle**; a wake landing AFTER a unit's turn **carries over** to
-the next settle (P-RX-SETTLE-CARRYOVER) — a live A↔B cycle stays visibly dirty across bounded
-settles rather than silently absorbing the last update. A unit disposed while queued is
-skipped silently (death is final). Host lifecycle: create (enable), dispose (stop), settle.
-
-**Bare (non-envelope) writers get a degraded bus, silently.** `HubPublicBus` — the
-`PathAtomBus` a bare `exec`/`execState` call is armed with when no `createReactionHub`
-envelope owns it — implements `observe` as a documented no-op (no unit owns a bare call's
-reads, so there is nothing to subscribe); its staged effects still publish as FOREIGN on
-`commitRun`, so other envelopes' units still wake. A bare-run reader that expects its own
-OWN observe to arm a subscription will find nothing does — an envelope is required for that.
-
-**In-symbol bridge (`this.reactiveAtoms`).** Minted per penetration whenever path producers
-are declared, closed over that call's produced Q: `get(path)` is EXACT-Q-membership gated
-(E-only and undeclared paths teach via `ReactiveAtomMembershipError`); `reportObserved` joins
-the membrane's observe; `reportChanged` says "this query result is different now" — bridge
-liveness from an in-process store, NEVER a substitute for declared `effects`. It is a
-**one-shot invalidation signal**: at most one delivery per (penetration, path); a new
-invocation regenerates. Cells live **per run context**: an ABANDONED run's cells retire
-immediately; a new owned run on the same bus retires its predecessor's (supersede); a
-committed run with no successor keeps its cells live — that persistence IS the bridge.
-Packs bridge with one-time self-disposing watchers — keep-alive subscriptions across
-re-invokes are a leak by contract. When the bus is off or the run replay-silent the mint is
-INERT (membership still teaches; report* deliver nowhere), so bridge capabilities run
-unchanged outside an envelope. Self-wake is allowed: `reportChanged` publishes as foreign,
-so the reporting unit re-invokes if it also observed (store liveness ≠ own effect).
-
-*Enforcement sites: `run/path-atom-bus.ts` (bus, keys, MobX behind `AtomProxy` — internal,
-optional peer), `reactivity/reaction-envelope.ts` (hub/envelope/settle, incl. `HubPublicBus`
-— moved here from `run/` post-audit-B1, a tier above the knot, see `docs/strata.md` §2),
-`run/reactive-atoms.ts` (mint, membership, one-shot, generation), `common/symbols/rosetta.ts`
-(observe/stage/mint sites), `eval/generator-exec.ts` (commit/abandon clock). Living design:
-`docs/working-proposals/cqs-reactivity/` (monorepo root).*
+`queries` / `effects` are the CQS door (§12): same-run temporal immutability, not
+subscription. A path-atom bus keyed on those footprints, a `createReactionHub` that re-ran
+`exec` when they overlapped, and `this.reactiveAtoms` as a manual bridge were a second
+catalog next to any live graph the program actually walked. Observation of live handles is
+a host concern (term hooks on the tagless algebra). Re-adding a path-keyed subscribe API
+inside Arrival recreates the catalog.
 
 ---
 

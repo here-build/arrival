@@ -3,10 +3,10 @@
  *
  * Every channel may import this file; it imports nothing but types (no runtime
  * dependency on any channel, journal, or door). Split out of resource-paths.ts
- * (hermeticity audit P1) because the sibling channels (read-guard.ts,
- * path-atom-bus.ts, reactive-atoms.ts) each value-import a subset of this
- * algebra while resource-paths.ts is ALSO the resourcePaths channel proper
- * (journal, door, CQS apply) — this file is the shared half, not the channel.
+ * (hermeticity audit P1) because sibling channels (read-guard.ts) value-import
+ * a subset of this algebra while resource-paths.ts is ALSO the resourcePaths
+ * channel proper (journal, door, CQS apply) — this file is the shared half,
+ * not the channel.
  *
  * A resource path is a segment tuple (e.g. `["db","projects",id]`). Overlap is
  * segment-wise prefix either direction — not string-join.

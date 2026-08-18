@@ -49,7 +49,7 @@ export {
 
 // Resource-path CQS: domain-lane temporal zoning. Ordinary runs always carry a path
 // log; `exec(src, { resourcePaths, strictCQSstrings })` injects a spy / strict mode.
-// `serializeResourcePath` is the Phase 4 host-footprint key encoding (writeSetOf / atoms).
+// `serializeResourcePath` is the host-footprint key encoding (writeSetOf).
 export {
   MemoryResourcePathLog,
   applyResourcePathCqs,
@@ -70,46 +70,6 @@ export {
   type ResourcePathEvent,
   type InterveningDoorWitness,
 } from "../run/resource-paths.js";
-
-// MobX sits behind AtomProxy; product law never asserts MobX API.
-export type { AtomProxy, ProxyAtom } from "../run/atom-proxy.js";
-export {
-  atomKey,
-  keysArePrefixRelated,
-  wouldNotify,
-  isPathAtomKey,
-  paramAtomKey,
-  MemoryPathAtomBus,
-  ProxyPathAtomBus,
-  createMemoryAtomProxy,
-  type PathAtomBus,
-} from "../run/path-atom-bus.js";
-// `createMobxAtomProxy` is deliberately NOT re-exported here. Its module has a
-// top-level `import { createAtom } from "mobx"`, and mobx is an OPTIONAL peer — a
-// static re-export would make every host-internals consumer fail to resolve the
-// barrel without mobx installed, i.e. silently promote the optional peer to a hard
-// dependency. Reach it by its own subpath instead:
-//   import { createMobxAtomProxy } from "@inhuman.tools/arrival/mobx-atom-proxy";
-
-// Abandon retires; an owned run on the same bus supersedes its predecessor.
-export {
-  ReactiveAtomMembershipError,
-  mintReactiveAtoms,
-  noteReactiveAtomsRun,
-  retireReactiveAtomsRun,
-  type ReactiveAtoms,
-  type ReactiveAtomCell,
-  type MintReactiveAtomsOpts,
-} from "../run/reactive-atoms.js";
-
-// Re-invoke is a new exec; self-suppress; at-most-once-per-unit; not a public FRP surface.
-export {
-  createReactionHub,
-  type ReactionHub,
-  type ReactionEnvelope,
-  type ReactionUnitSpec,
-  type SettleOptions,
-} from "../reactivity/reaction-envelope.js";
 
 // Per-run model-facing note channel — a renderer mints one and drains it.
 export { createNoteSink, createDisplaySink, type NoteSink, type DisplaySink } from "../run/note-sink.js";

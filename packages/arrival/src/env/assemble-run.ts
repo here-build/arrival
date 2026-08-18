@@ -39,7 +39,6 @@ import type { DisplaySink, NoteSink } from "../run/note-sink.js";
 import type { RunCache } from "../run/run-cache.js";
 import type { EffectLog } from "../run/effect-log.js";
 import type { ReadGuard } from "../run/read-guard.js";
-import type { PathAtomBus } from "../run/path-atom-bus.js";
 import type { ResourcePathLog } from "../run/resource-paths.js";
 import { RunContext } from "../run/RunContext.js";
 import { buildVocabulary, type Vocabulary } from "./vocabulary.js";
@@ -63,8 +62,6 @@ export interface AssembleRunOptions {
   readonly cache?: RunCache;
   readonly effects?: EffectLog;
   readonly reads?: ReadGuard;
-  /** Phase 5 path-atom bus (observe Q / stage E). See ExecOptions.pathAtoms. */
-  readonly pathAtoms?: PathAtomBus;
   readonly strictCQSstrings?: boolean;
   /** Override CQS prior-effect log (harness spy). Default: fresh MemoryResourcePathLog. */
   readonly resourcePaths?: ResourcePathLog;
@@ -125,7 +122,6 @@ export async function assembleRun(opts: AssembleRunOptions): Promise<RunContext>
     cache: opts.cache,
     effects: opts.effects,
     reads: opts.reads,
-    pathAtoms: opts.pathAtoms,
     strictCQSstrings: opts.strictCQSstrings,
     resourcePaths: opts.resourcePaths,
     notes: opts.notes,

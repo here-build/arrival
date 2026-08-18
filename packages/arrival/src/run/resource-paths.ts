@@ -242,7 +242,7 @@ export function assertNoResourcePathProducers(
  * force resource naming into serializable, accessible form — an external resource
  * is pointed at by id / well-known name. An unkeyable slot (z.dynamic / z.lambda /
  * z.schemeValue) would crash `runCacheKey` at the path-Q view-elevation the moment
- * any cache is armed (reaction envelopes always arm one). Mirror of the view gate.
+ * any cache is armed. Mirror of the view gate.
  */
 export class ResourcePathShapeError extends ArrivalError {
   public readonly name = "ResourcePathShapeError";
@@ -362,8 +362,7 @@ function producePaths(
       }
     }
     // Frozen COPY (N-PATHS-PRODUCER-ALIASING): a producer returning a cached/shared
-    // array later mutated must not corrupt the journal, effect-log resourcePaths
-    // stamps, or the reactiveAtoms membership closure.
+    // array later mutated must not corrupt the journal or effect-log resourcePaths stamps.
     out.push(Object.freeze([...path]) as ResourcePath);
   }
   return Object.freeze(out);

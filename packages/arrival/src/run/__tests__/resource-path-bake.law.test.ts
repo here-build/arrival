@@ -45,8 +45,8 @@ describe("resource-path bake (S2)", () => {
    * StringTuple[]` is forcing resource naming into serializable, accessible
    * form (point at an external resource by id / well-known name). An unkeyable
    * arg (z.dynamic / z.lambda) would crash `runCacheKey` at the path-Q
-   * view-elevation the moment ANY cache is armed — and every reaction envelope
-   * arms a record cache. Bake door, mirroring the `view` shape gate.
+   * view-elevation the moment ANY cache is armed. Bake door, mirroring the
+   * `view` shape gate.
    */
   it("N-Q-SHAPE — queries-declaring contract with unkeyable slots bake-doors", () => {
     // z.dynamic input — decoded arg is an arbitrary raw value, no stable key

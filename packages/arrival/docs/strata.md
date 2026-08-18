@@ -81,10 +81,7 @@ reproduced here — the point is that every pair below is checked, not narrated)
 
 **Practiced direction inside the knot, for the `run` stratum specifically** (not a hard
 wall, a norm the audit measured): `run/` (base) ← `membrane`/`common/symbols` ← `eval` ←
-`env`. One file violated it — `run/reaction-envelope.ts` importing `eval/generator-exec.ts`
-(audit finding B1). **B1 is fixed on `main`**: that file is now `src/reactivity/reaction-envelope.ts`,
-a tier ABOVE the knot (§3) — `run/` kept the bus (`path-atom-bus.ts`) and the mint/membership
-primitives (`reactive-atoms.ts`); nothing in `run/` or `eval/` imports `reactivity/` back.
+`env`.
 
 ## 3. One-directional layers above the knot
 
@@ -92,9 +89,7 @@ Everything else in `src/` depends on the knot (directly or transitively) and is 
 depended on BY the knot:
 
 `reader`, `symbol`, `emit`, `static-validation`, `oracle`, `type-layer`, `loader`,
-`capabilities`, `utils`, `lsp-internals`, `host-internals`, `reflect-internals`, `index.ts`,
-and **`reactivity`** (the tier B1's fix created — `src/reactivity/reaction-envelope.ts`
-imports `eval` + `run`; nothing in the knot imports `reactivity`).
+`capabilities`, `utils`, `lsp-internals`, `host-internals`, `reflect-internals`, `index.ts`.
 
 **Named individual leak edges** — a one-directional layer having ONE upward edge that
 shouldn't exist is a placement bug (Wave B of the audit), not a knot-membership question;

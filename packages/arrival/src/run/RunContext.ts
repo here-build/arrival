@@ -3,7 +3,7 @@
  * `runCtx`. The run's identity: state CONSTANT for one run, DIFFERING between concurrent runs.
  *
  * Model: docs/execution.md §HERMETIC, §CTX-SPECIES, §CHANNELS — data-local run-state, two
- * ctx species (live-run / CONSTANT_CTX), seven channels' arm-subset-wise
+ * ctx species (live-run / CONSTANT_CTX), six channels' arm-subset-wise
  * `X | undefined ⇒ facility off` (resourcePaths alone defaults ON — §CHANNELS).
  * This file is their enforcement site.
  *
@@ -18,7 +18,6 @@ import type { RunCache } from "./run-cache.js";
 import type { DisplaySink, NoteSink } from "./note-sink.js";
 import type { EffectLog } from "./effect-log.js";
 import type { ReadGuard } from "./read-guard.js";
-import type { PathAtomBus } from "./path-atom-bus.js";
 import { MemoryResourcePathLog, type ResourcePathLog } from "./resource-paths.js";
 import { disposeRunContext } from "./run-lifecycle.js";
 
@@ -71,14 +70,6 @@ export class RunContext {
    *  each top-level form and runs the read∩write guard (docs/execution.md §READ-GUARD). */
   readonly reads: ReadGuard | undefined;
   /**
-   * Path-keyed atom bus (Phase 5). `undefined` ⇒ no observe/invalidate.
-   * When armed: live Q≠[] penetrations call `observe`; successful non-sink E≠[] fires
-   * stage for `commitRun` at successful run end (RX-CLOCK). Replay-mode runs stay silent
-   * (rosetta gates on cache.mode). Host re-invoke envelope (reactivity/reaction-envelope.ts) supplies
-   * a per-unit bus that publishes through a shared hub.
-   */
-  readonly pathAtoms: PathAtomBus | undefined;
-  /**
    * Resource-path prior-effect set for CQS (run/resource-paths.ts).
    * Unlike cache/effects/reads (opt-in `undefined` = facility off), ordinary mints
    * always get a fresh {@link MemoryResourcePathLog} so CQS is on by default for
@@ -118,7 +109,6 @@ export class RunContext {
       cache?: RunCache;
       effects?: EffectLog;
       reads?: ReadGuard;
-      pathAtoms?: PathAtomBus;
       /**
        * Override path log (harness spy). Ordinary mint: fresh MemoryResourcePathLog.
        * CONSTANT_CTX (`_noResourceStore`): undefined unless explicitly supplied.
@@ -147,7 +137,6 @@ export class RunContext {
     this.cache = opts.cache;
     this.effects = opts.effects;
     this.reads = opts.reads;
-    this.pathAtoms = opts.pathAtoms;
     this.strictCQSstrings = opts.strictCQSstrings ?? false;
     this.notes = opts.notes;
     this.display = opts.display;
