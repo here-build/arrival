@@ -61,6 +61,7 @@ describe("inbound registry — the declared, ordered claim table IS the law", ()
       "undefined → #void (lens)",
       "object → array/plain-object containment ladder",
       "host Error → borrowed AJSObject (declared lens)",
+      "inherited interop-boundary → borrowed AJSObject (read-policy, not opaque)",
       "scalar → boxer table (fromJs)",
       "symbol → :keyword (registered)",
       "binary (Uint8Array/ArrayBuffer/DataView/Buffer) → raw passthrough (declared)",

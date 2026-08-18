@@ -262,39 +262,65 @@ export function markInteropPrivate<T extends Function>(target: T, _context?: unk
 export const arrival = { private: markInteropPrivate };
 
 /**
- * Does `value`'s own class (or an ancestor) carry the EXPLICIT
- * `@arrival.private`/`markInteropPrivate` stamp — opaque-crossing recognition test
- * (rosetta inbound registry).
+ * Explicit `INTEROP_BOUNDARY` on this prototype or its own constructor — the two
+ * marker arms {@link isMarkedInteropPrivate} and {@link hasInheritedInteropStamp}
+ * share. Not {@link isInteropBoundary}: that also answers true for Object.prototype
+ * and every built-in, which would make every class instance look ancestor-stamped.
+ */
+function classCarriesExplicitStamp(proto: object): boolean {
+  if (
+    Object.prototype.hasOwnProperty.call(proto, INTEROP_BOUNDARY) &&
+    (proto as Record<symbol, unknown>)[INTEROP_BOUNDARY] === true
+  ) {
+    return true;
+  }
+  const ctor = Reflect.getOwnPropertyDescriptor(proto, "constructor")?.value;
+  return (
+    typeof ctor === "function" &&
+    Object.prototype.hasOwnProperty.call(ctor, INTEROP_BOUNDARY) &&
+    (ctor as unknown as Record<symbol, unknown>)[INTEROP_BOUNDARY] === true
+  );
+}
+
+/**
+ * Does `value`'s OWN class carry the EXPLICIT `@arrival.private`/`markInteropPrivate`
+ * stamp — opaque-crossing recognition test (rosetta inbound registry).
+ *
+ * OWN CLASS ONLY. An ancestor stamp is a READ-POLICY stop ({@link isInteropBoundary}
+ * + {@link accessMember}), not opaque-crossing. A subclass of a stamped engine
+ * (PlexusModel → DriverSpec) must borrow as AJSObject so its own accessors stay
+ * readable; see {@link hasInheritedInteropStamp}.
  *
  * NARROWER than {@link isInteropBoundary}: that also answers true for every JS built-in
  * prototype, null, and the AValue/ArrivalError FAMILY rules ("does the READ POLICY stop
- * here"). This walks only the two explicit-marker arms (own-prototype stamp, own-static
- * class stamp) — never the built-in list, global-constructor generalization, or either
- * nominal family. Plain objects, Date/Map, and unstamped arrival-internal classes never
- * answer true unless THEY carry the marker.
+ * here"). This checks only the two explicit-marker arms on the immediate prototype
+ * (own-prototype stamp, own-static class stamp) — never the built-in list,
+ * global-constructor generalization, either nominal family, or ancestor classes.
+ * Plain objects, Date/Map, and unstamped arrival-internal classes never answer true
+ * unless THEY carry the marker.
  *
- * AValue/ArrivalError families may also carry/inherit this marker — callers place the
+ * AValue/ArrivalError families may also carry this marker — callers place the
  * check AFTER rows that claim AValue, the EOF reader token, and scheme orphans (R7RSError); order,
  * not this predicate, scopes use to genuinely-new host classes.
  */
 export function isMarkedInteropPrivate(value: object): boolean {
-  let proto: object | null = Reflect.getPrototypeOf(value);
+  const proto = Reflect.getPrototypeOf(value);
+  return proto !== null && classCarriesExplicitStamp(proto);
+}
+
+/**
+ * An ANCESTOR class (not the instance's own) carries an explicit `INTEROP_BOUNDARY`
+ * stamp. Inherited stamp is a read-policy stop, not `@arrival.private`: inbound
+ * borrows as AJSObject so subclass members stay readable and the walk still
+ * blocks at the ancestor. Unstamped classes (no stamp anywhere) stay the
+ * unbranded/exotic door.
+ */
+export function hasInheritedInteropStamp(value: object): boolean {
+  let proto = Reflect.getPrototypeOf(value);
+  if (proto === null) return false;
+  proto = Reflect.getPrototypeOf(proto);
   while (proto !== null) {
-    if (
-      Object.prototype.hasOwnProperty.call(proto, INTEROP_BOUNDARY) &&
-      (proto as Record<symbol, unknown>)[INTEROP_BOUNDARY] === true
-    ) {
-      return true;
-    }
-    const ctor = Reflect.getOwnPropertyDescriptor(proto, "constructor")?.value;
-    if (
-      ctor &&
-      typeof ctor === "function" &&
-      Object.prototype.hasOwnProperty.call(ctor, INTEROP_BOUNDARY) &&
-      (ctor as unknown as Record<symbol, unknown>)[INTEROP_BOUNDARY] === true
-    ) {
-      return true;
-    }
+    if (classCarriesExplicitStamp(proto)) return true;
     proto = Reflect.getPrototypeOf(proto);
   }
   return false;

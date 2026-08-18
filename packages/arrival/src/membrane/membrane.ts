@@ -36,7 +36,7 @@ import { AInexact } from "../values/primitives/AInexact.js";
 import { APair } from "../values/primitives/APair.js";
 import { jsToScheme } from "./rosetta.js";
 import { RedundantCrossingError, NoLensError } from "../errors.js";
-import { isMarkedInteropPrivate } from "./interop-access.js";
+import { hasInheritedInteropStamp, isMarkedInteropPrivate } from "./interop-access.js";
 import { AOpaqueHandle } from "../values/primitives/AOpaqueHandle.js";
 import { Syntax } from "../eval/Syntax.js";
 import { type ACallable } from "../values/primitives/ACallable.js";
@@ -152,14 +152,19 @@ export function fromJS<T>(value: [T] extends [AValue] ? never : T): FromJSResult
   if (isBytevectorLike(value)) return value;
   if (value instanceof Promise) return value;
   if (value !== null && typeof value === "object") {
-    // Binary membrane (docs/membrane.md §INBOUND): branded `@arrival.private` instance
-    // has an explicit lens (AOpaqueHandle, run-scoped). Plain-prototype object is the
-    // other lens (borrowed, identity-cached). Anything else (Date/Map/Set/unbranded class)
-    // is EXPLICITLY INCOMPATIBLE — NoLensError, same as rosetta's registry.
+    // Binary membrane (docs/membrane.md §INBOUND): own-class `@arrival.private` is
+    // the opaque lens (AOpaqueHandle, run-scoped). Plain-prototype object is the
+    // borrowed lens (identity-cached). An ancestor `INTEROP_BOUNDARY` without an
+    // own-class stamp is also borrowed — read-policy stop, not opaque. Anything
+    // else (Date/Map/Set/unbranded class) is EXPLICITLY INCOMPATIBLE — NoLensError,
+    // same as rosetta's registry.
     if (isMarkedInteropPrivate(value)) {
       return AOpaqueHandle.for(CONSTANT_CTX, value as object, EMPTY_PROVENANCE);
     }
     if (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null) {
+      return jsToWrapper.get(value as object);
+    }
+    if (hasInheritedInteropStamp(value as object)) {
       return jsToWrapper.get(value as object);
     }
     throw new NoLensError("unbranded-class", (value as object).constructor?.name ?? "<anonymous object>");

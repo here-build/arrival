@@ -31,7 +31,13 @@ import { EnvCapability } from "../../common/capability.js";
 import { exec } from "../../eval/generator-exec.js";
 import { jsToScheme } from "../rosetta.js";
 import { RunContext, CONSTANT_CTX } from "../../run/RunContext.js";
-import { markInteropPrivate, isMarkedInteropPrivate, arrival } from "../interop-access.js";
+import {
+  INTEROP_BOUNDARY,
+  markInteropPrivate,
+  isMarkedInteropPrivate,
+  arrival,
+} from "../interop-access.js";
+import { AJSObject } from "../AJSObject.js";
 import { AOpaqueHandle } from "../../values/primitives/AOpaqueHandle.js";
 import { eq, structuralEqual } from "../../values/structural-equal.js";
 import { printValue } from "../../values/print.js";
@@ -258,5 +264,89 @@ describe("opaque-crossing contract — eq? across two crossings sharing ONE cach
   it("(eq? (get-shared-widget) (get-shared-widget)) is #t — two mints of the same instance are eq?", async () => {
     const [result] = await exec("(eq? (get-shared-widget) (get-shared-widget))", { capabilities: [cap] });
     expect(result).toBe(true);
+  });
+});
+
+/**
+ * Inherited `INTEROP_BOUNDARY` is a READ-POLICY stop (`accessMember` walks up to it),
+ * not `@arrival.private`. Only the instance's OWN class opt-in mints an opaque handle.
+ * A subclass of a stamped engine (PlexusModel → DriverSpec) therefore borrows as
+ * AJSObject: subclass accessors are readable; engine members stay blocked.
+ */
+describe("inherited INTEROP_BOUNDARY is a read-policy stop, not opaque-crossing", () => {
+  class Engine {
+    static [INTEROP_BOUNDARY] = true;
+    get uuid() {
+      return "hidden";
+    }
+  }
+  class Spec extends Engine {
+    constructor(
+      readonly name: string,
+      readonly can: string[],
+    ) {
+      super();
+    }
+  }
+  class Parent extends Engine {
+    constructor(readonly child: Spec) {
+      super();
+    }
+  }
+
+  const spec = new Spec("openai-compat", ["completion"]);
+  const parent = new Parent(spec);
+
+  it("isMarkedInteropPrivate is true only for the stamped class, not a subclass", () => {
+    expect(isMarkedInteropPrivate(new Engine())).toBe(true);
+    expect(isMarkedInteropPrivate(spec)).toBe(false);
+    expect(isMarkedInteropPrivate(parent)).toBe(false);
+    expect(isMarkedInteropPrivate(new PlainWidget("plain"))).toBe(false);
+  });
+
+  it("jsToScheme of a subclass borrows as AJSObject; own stamp stays opaque", () => {
+    const boxed = jsToScheme<unknown>(CONSTANT_CTX, spec);
+    expect(boxed).toBeInstanceOf(AJSObject);
+    expect((boxed as AJSObject).source).toBe(spec);
+
+    const engine = jsToScheme<unknown>(CONSTANT_CTX, new Engine());
+    expect(engine).toBeInstanceOf(AOpaqueHandle);
+  });
+
+  it("nested AJSObject.get re-boxes a subclass field as AJSObject, not opaque", () => {
+    const boxed = new AJSObject(parent);
+    const nested = boxed.get("child");
+    expect(nested).toBeInstanceOf(AJSObject);
+    expect((nested as AJSObject).source).toBe(spec);
+    const name = (nested as AJSObject).get("name");
+    expect(name.valueOf()).toBe("openai-compat");
+  });
+
+  it("(:name spec) reads the subclass field; (:uuid spec) is blocked at the ancestor", async () => {
+    const cap = EnvCapability.define("test/inherited-boundary-borrow", {
+      symbols: (symbol, z) => ({
+        "get-spec": symbol.rosetta`get-spec: returns a subclass of a stamped engine`(
+          { input: [], output: [z.dynamic] },
+          function () {
+            return spec as unknown as SchemeValue;
+          },
+        ),
+        "get-parent": symbol.rosetta`get-parent: returns a parent holding a nested subclass`(
+          { input: [], output: [z.dynamic] },
+          function () {
+            return parent as unknown as SchemeValue;
+          },
+        ),
+      }),
+    });
+
+    const [name] = await exec("(:name (get-spec))", { capabilities: [cap] });
+    expect(String(name)).toBe("openai-compat");
+
+    const [uuidAbsent] = await exec("(null? (:uuid (get-spec)))", { capabilities: [cap] });
+    expect(uuidAbsent).toBe(true);
+
+    const [nested] = await exec("(:name (:child (get-parent)))", { capabilities: [cap] });
+    expect(String(nested)).toBe("openai-compat");
   });
 });

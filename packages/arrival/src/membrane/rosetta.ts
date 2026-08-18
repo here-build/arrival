@@ -17,7 +17,7 @@ import { ASymbol } from "../values/primitives/ASymbol.js";
 import { EOF } from "../values/primitives/EOF.js";
 
 import { AOpaqueHandle } from "../values/primitives/AOpaqueHandle.js";
-import { isMarkedInteropPrivate } from "./interop-access.js";
+import { hasInheritedInteropStamp, isMarkedInteropPrivate } from "./interop-access.js";
 import {
   R7RSError,
   UnrecognizedCrossingError,
@@ -286,8 +286,10 @@ export interface InboundClaim {
  *
  *   PHASE 2 — {@link FOREIGN_LENS_CLAIMS}: typeof-disjoint lenses (array/plain-object
  *   ladder lives INSIDE the single "object" row). Familiar crossings only — no
- *   warn-and-degrade middle tier. Bare host function → genuine `ARosettaProcedure`
- *   (`hostFnToCallable`), completing the callable bifunctor with `hostProjectionOf`.
+ *   warn-and-degrade middle tier. Inherited `INTEROP_BOUNDARY` (no own-class stamp)
+ *   borrows as AJSObject — read-policy, not opaque. Bare host function → genuine
+ *   `ARosettaProcedure` (`hostFnToCallable`), completing the callable bifunctor
+ *   with `hostProjectionOf`.
  *
  *   PHASE 3 — {@link INCOMPATIBILITY_DOOR_CLAIMS}: explicitly incompatible — never silent
  *   degrade. Each row names its refusal and cure (`NoLensError` / `AsyncCrossingError`).
@@ -410,6 +412,21 @@ export const FOREIGN_LENS_CLAIMS: readonly InboundClaim[] = [
     claims: (v) => v instanceof Error,
     box: (ctx, v, p) => {
       invariant(v instanceof Error, "inbound claim 'host Error': box called off its predicate");
+      return new AJSObject(v, p);
+    },
+  },
+  {
+    // Ancestor `INTEROP_BOUNDARY` without an OWN-class stamp: read-policy stop,
+    // not `@arrival.private`. Borrow so subclass accessors stay readable and
+    // accessMember still blocks at the stamped ancestor. Own-class stamp is
+    // phase 1's opaque-handle row; no stamp anywhere is phase 3's unbranded door.
+    name: "inherited interop-boundary → borrowed AJSObject (read-policy, not opaque)",
+    claims: (v) => typeof v === "object" && v !== null && hasInheritedInteropStamp(v),
+    box: (_ctx, v, p) => {
+      invariant(
+        typeof v === "object" && v !== null,
+        "inbound claim 'inherited interop-boundary': box called off its predicate",
+      );
       return new AJSObject(v, p);
     },
   },

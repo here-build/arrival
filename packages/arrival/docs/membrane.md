@@ -279,13 +279,18 @@ to completion before phase 2, phase 2 before phase 3's catch-all doors):
    instance (mints/reuses a run-scoped `AOpaqueHandle`, the whiteroom opaque-crossing
    contract). Those owned non-AValue rows MUST precede the branded-instance row:
    `isMarkedInteropPrivate` reads the same `INTEROP_BOUNDARY` stamp they carry
-   for the read-policy walk, so checking brand-first would mis-mint them as a handle.
+   for the read-policy walk *on their own class*, so checking brand-first would
+   mis-mint them as a handle. An ancestor-only stamp is not this row — it is the
+   phase-2 inherited-boundary borrow.
 2. **PHASE 2 — the foreign lens table.** Every remaining row is a declared LENS, keyed
    by a distinct `typeof` tag: `null → nil`; `undefined → #void` (a lens now, no warn —
    the other host bottom, never collapsed with `null`); the array/plain-object
    containment ladder (one row, Array.isArray checked first — not two order-dependent
    siblings); a host `Error` (borrowed `AJSObject`, `stack` hidden by the interop
-   policy — its own declared lens, not a Date/Map-style exotic); scalars to the
+   policy — its own declared lens, not a Date/Map-style exotic); a class whose
+   *ancestor* (not its own class) carries an explicit `INTEROP_BOUNDARY` stamp
+   (borrowed `AJSObject` — the stamp is a read-policy stop, not `@arrival.private`;
+   own-class stamp stays phase 1's opaque handle); scalars to the
    `boxing.ts` boxer table (`bigint` deliberately excluded — it is phase 3's door,
    not a silent AExact mint); a REGISTERED symbol to the keyword `:x`; the DECLARED
    raw-identity lane (binary FFI); and — the row the 2026-07-23 ruling left open,
