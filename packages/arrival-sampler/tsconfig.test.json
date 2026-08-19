@@ -1,0 +1,14 @@
+{
+  // The eslint projectService's `defaultProject` (see eslint.config.mjs). It mirrors the base check: the
+  // package's tsconfig.json deliberately carries NO src exclude — every file (browser kernel, node decode,
+  // runner, tests, benchmarks, research) must typecheck — so the "test project" is just that same broad
+  // check under the conventional name the lint references. Inherits the base compilerOptions via `extends`;
+  // restates include/exclude (not reliably carried through `extends`) so eslint's typed-lint project-matches
+  // every linted src file. Sibling convention: arrival-lsp / envelope-crypto / arrival-codemirror.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "dist-server"]
+}

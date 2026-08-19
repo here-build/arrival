@@ -1,0 +1,26 @@
+{
+  "extends": [
+    "@here.build/tsconfig/purpose/lib",
+    "@here.build/tsconfig/env/browser-widespread"
+  ],
+  "compilerOptions": {
+    // This config CHECKS the whole package and EMITS NOTHING. It deliberately carries NO src exclude:
+    // every file — browser kernel, node decode, runner, tests, harness, research, benchmarks — must
+    // typecheck, so `npm run typecheck` and the IDE surface every error. (A src exclude here would
+    // silently drop a file from checking the moment nothing imports it — the bug that hid a missing
+    // lens stub in a benchmark.) Emit is the job of the two build configs, which narrow by ENTRY-POINT
+    // include, never by an exclude blacklist:
+    //   • tsconfig.build.json → browser `.` dist/   (entry: src/index.ts kernel graph)
+    //   • tsconfig.server.json → node `./server` dist-server/  (entry: the decode roots)
+    "noEmit": true,
+    // es2023 for the tests' Array.prototype.toSorted; dom for the browser kernel; node for decode/test globals.
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "types": ["node"],
+    "paths": {
+      "@inhuman.tools/arrival/oracle": ["./node_modules/@inhuman.tools/arrival/dist/oracle/index.d.ts"],
+      "@inhuman.tools/arrival/env": ["./node_modules/@inhuman.tools/arrival/dist/env/index.d.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts"],
+  "exclude": ["node_modules", "dist", "dist-server"]
+}

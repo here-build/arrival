@@ -1,3 +1,6 @@
 [submodule "packages/arrival/vendor/chibi-scheme"]
 	path = packages/arrival/vendor/chibi-scheme
 	url = https://github.com/ashinn/chibi-scheme.git
+[submodule "packages/arrival-sampler/scripts/bfcl_official/gorilla"]
+	path = packages/arrival-sampler/scripts/bfcl_official/gorilla
+	url = https://github.com/ShishirPatil/gorilla.git

@@ -1,0 +1,15 @@
+models/
+# Build output
+dist-server/
+
+# Research outputs and BFCL run artifacts (pruned; committed baselines in other places if needed)
+__research-output__/
+__custdev-output__/
+__benchmarks__/__research-output__/
+scripts/bfcl_official/result/
+scripts/bfcl_official/score/
+**/__pycache__/
+**/*.pyc
+
+# venv for scripts
+scripts/bfcl_official/.venv/

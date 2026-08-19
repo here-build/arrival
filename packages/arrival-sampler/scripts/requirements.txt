@@ -1,0 +1,11 @@
+# BFCL python reference-benchmark runner — dependencies.
+#
+# NONE. By design the runner is pure Python standard library (urllib, json, argparse,
+# random, dataclasses, re). LM Studio's HTTP API is called via urllib; the BFCL dataset is
+# fetched via urllib. This keeps the reference benchmark a zero-install, drift-proof script
+# (no pinned third-party version to go stale or be slopsquatted).
+#
+# Requires Python 3.10+ (uses `X | Y` type unions and `frozenset[str]` style hints).
+#
+# If you later prefer the `requests` library for transport, the current PyPI release is
+# requests==2.34.2 (verified on pypi.org 2026-06). But it is NOT needed.

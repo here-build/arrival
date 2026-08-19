@@ -1,0 +1,14 @@
+{
+  "_comment": "EXPLICIT resolution map: a roster CANONICAL key (the org/repo in rosters.json) -> the ACTUAL on-disk LM Studio repo(s) (publisher/repo under ~/.lmstudio/models) holding this model's weights. Replaces resolveGguf's fuzzy publisher-blind match, which mis-resolved when a model exists under several publishers at different quants. USUALLY one repo; TWO when q4 and f16 live under different publishers (glm-4.7-flash, qwen3-14b have bartowski bf16 + a separate q4 repo). resolveGguf gathers ggufs from ALL listed repos and picks the target quant: q4 = the WORKHORSE (default); fp16 = best-effort REFERENCE — where no f16 exists locally it ladders DOWN (q8 last resort). An unmapped key falls back to the fuzzy match.",
+  "essentialai/rnj-1": ["bartowski/EssentialAI_rnj-1-instruct-GGUF"],
+  "Mungert/Arch-Agent-1.5B-GGUF": ["Mungert/Arch-Agent-1.5B-GGUF"],
+  "Mungert/Arch-Agent-3B-GGUF": ["mradermacher/Arch-Agent-3B-GGUF"],
+  "mradermacher/Arch-Agent-7B-GGUF": ["mradermacher/Arch-Agent-7B-GGUF"],
+  "zai-org/glm-4.7-flash": ["lmstudio-community/GLM-4.7-Flash-GGUF", "bartowski/zai-org_GLM-4.7-Flash-GGUF"],
+  "ibm/granite-4.0-h-tiny": ["lmstudio-community/granite-4.0-h-tiny-GGUF"],
+  "Salesforce/xLAM-1b-fc-r-gguf": ["Salesforce/xLAM-1b-fc-r-gguf"],
+  "mradermacher/Hammer2.1-3b-GGUF": ["mradermacher/Hammer2.1-3b-GGUF"],
+  "qwen/qwen3-14b": ["lmstudio-community/Qwen3-14B-GGUF", "bartowski/Qwen_Qwen3-14B-GGUF"],
+  "qwen/qwen3-8b": ["unsloth/Qwen3-8B-GGUF"],
+  "mradermacher/Nanbeige4.1-3B-GGUF": ["mradermacher/Nanbeige4.1-3B-GGUF"]
+}

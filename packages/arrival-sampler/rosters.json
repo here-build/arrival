@@ -1,0 +1,21 @@
+{
+  "_comment": "THE model roster — one source of truth, importable by any language: the TS eval harness (src/__harness__/gguf-models.ts binds + validates this), the python BFCL reference runner (scripts/), a future sweep. Each entry is an LM Studio owner/repo `key` + a display `label`. Edit the model set HERE. `params`/family/role are deliberately ABSENT — they are experiment-axis decorations, added as a complete layer when a strength-sorted table needs them.",
+  "fast": [
+    { "key": "essentialai/rnj-1", "label": "rnj-1" },
+    { "key": "Mungert/Arch-Agent-1.5B-GGUF", "label": "Arch-Agent-1.5B" }
+  ],
+  "full": [
+    { "key": "essentialai/rnj-1", "label": "rnj-1" },
+    { "key": "zai-org/glm-4.7-flash", "label": "glm-4.7-flash" },
+    { "key": "ibm/granite-4.0-h-tiny", "label": "granite-4.0-h-tiny" },
+    { "key": "Salesforce/xLAM-1b-fc-r-gguf", "label": "xLAM-1b-fc-r" },
+    { "key": "mradermacher/Hammer2.1-3b-GGUF", "label": "Hammer2.1-3b" },
+    { "key": "mradermacher/Arch-Agent-7B-GGUF", "label": "Arch-Agent-7B" },
+    { "key": "Mungert/Arch-Agent-3B-GGUF", "label": "Arch-Agent-3B" },
+    { "key": "Mungert/Arch-Agent-1.5B-GGUF", "label": "Arch-Agent-1.5B" },
+    { "key": "qwen/qwen3-14b", "label": "qwen3-14b" },
+    { "key": "qwen/qwen3-8b", "label": "qwen3-8b" },
+    { "key": "mradermacher/Nanbeige4.1-3B-GGUF", "label": "Nanbeige4.1-3B" }
+  ],
+  "extended": []
+}

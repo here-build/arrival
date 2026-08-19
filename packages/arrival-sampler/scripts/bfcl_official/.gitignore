@@ -1,0 +1,16 @@
+# The python 3.12 venv (recreate via setup.sh — never committed).
+.venv/
+
+# BFCL outputs (BFCL_PROJECT_ROOT is set to this dir by the run wrappers).
+result/
+score/
+.file_locks/
+
+# Local endpoint secrets (copy from .env.example).
+.env
+
+# The per-run id filter the mini-run helper writes (transient).
+test_case_ids_to_generate.json
+
+__pycache__/
+*.pyc

@@ -1,0 +1,20 @@
+// tsconfig.server.json — builds the NODE-ONLY `./server` + `./decode` subpaths for the minimal LLM wiring
+// (on-demand + OpenAI compat) into dist-server/. Keeps research out of the browser kernel.
+//
+// Env is node here (vs the browser env the default build targets) so node-llama-cpp + AbortSignal type.
+// The `@inhuman.tools/arrival/oracle` deep import resolves the same way the test config does (the shipped
+// declaration), since arrival's exports map doesn't publish /oracle under NodeNext (path-mapped below).
+{
+  "extends": ["@here.build/tsconfig/purpose/lib"],
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist-server",
+    "declaration": true,
+    "declarationMap": true,
+    "types": ["node"],
+    "paths": {
+      "@inhuman.tools/arrival/oracle": ["./node_modules/@inhuman.tools/arrival/dist/oracle/index.d.ts"]
+    }
+  },
+  "include": ["src/runners/local/server-generate.ts", "src/runners/local/llama-cpp-generate.ts", "src/runners/local/pick-constrained.ts", "src/runners/gguf/lmstudio.ts", "src/runners/server/model-resolve.ts", "src/runners/palettes.ts", "src/runners/server/index.ts", "src/runners/server/cli.ts"]
+}

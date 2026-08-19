@@ -1,0 +1,26 @@
+{
+  "description": "Synthetic per-step decode stream for the G3 post-form-close aggregation test. Each entry is the ACCEPTED PREFIX before that step's token plus the step's classification. The first 6 steps build the task program `(set-timer 600)`; the prefix at the step that emits the final `)` is still mid-form (form not yet closed), so steps 0..6 are pre/at-close. Once the prefix already contains the closed `(set-timer 600)`, every later step is post-form padding: a second top-level form `(play-sound \"beep\")` and trailing prose. 11 post-close steps total. `postForm` is intentionally NOT stored here — the test derives it from `prefix` via firstTopLevelFormClosed so detection itself is under test.",
+  "taskId": "fixture-set-timer",
+  "steps": [
+    { "prefix": "", "preferKind": "feasible", "closeable": false },
+    { "prefix": "(", "preferKind": "feasible", "closeable": false },
+    { "prefix": "(set-timer", "preferKind": "feasible", "closeable": false },
+    { "prefix": "(set-timer ", "preferKind": "feasible", "closeable": false },
+    { "prefix": "(set-timer 6", "preferKind": "sigma", "closeable": false, "attemptedAtom": "6" },
+    { "prefix": "(set-timer 600", "preferKind": "feasible", "closeable": false },
+    { "prefix": "(set-timer 600", "preferKind": "structural", "closeable": false },
+
+    { "prefix": "(set-timer 600)", "preferKind": "feasible", "closeable": true },
+    { "prefix": "(set-timer 600)\n", "preferKind": "feasible", "closeable": true },
+    { "prefix": "(set-timer 600)\n(", "preferKind": "feasible", "closeable": false },
+    { "prefix": "(set-timer 600)\n(play-sound", "preferKind": "feasible", "closeable": false },
+    { "prefix": "(set-timer 600)\n(play-sound ", "preferKind": "feasible", "closeable": false },
+    { "prefix": "(set-timer 600)\n(play-sound \"beep\"", "preferKind": "sigma", "closeable": false, "attemptedAtom": "beep" },
+    { "prefix": "(set-timer 600)\n(play-sound \"beep\")", "preferKind": "feasible", "closeable": true },
+    { "prefix": "(set-timer 600)\n(play-sound \"beep\")\n", "preferKind": "feasible", "closeable": true },
+    { "prefix": "(set-timer 600)\n(play-sound \"beep\")\nThis", "preferKind": "structural", "closeable": true },
+    { "prefix": "(set-timer 600)\n(play-sound \"beep\")\nThis sets", "preferKind": "structural", "closeable": true },
+    { "prefix": "(set-timer 600)\n(play-sound \"beep\")\nThis sets a", "preferKind": "structural", "closeable": true },
+    { "prefix": "(set-timer 600)\n(play-sound \"beep\")\nThis sets a timer", "preferKind": "structural", "closeable": true }
+  ]
+}

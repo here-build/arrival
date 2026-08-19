@@ -1,0 +1,11 @@
+# BFCL reference-benchmark local caches + outputs — never committed (large, regenerated).
+# Dataset cache (downloaded gorilla tracks) + per-(model,entry) response/score cache:
+.bfcl-cache/
+# Per-model score tables + JSON reports:
+.bfcl-results/
+
+# Python venv + bytecode.
+.venv/
+venv/
+__pycache__/
+*.pyc
