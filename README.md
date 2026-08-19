@@ -84,9 +84,6 @@ Everything else comes on top of the language, in a variety of shapes:
   `@here.build/editor-theme` (commons).
 - `arrival-modules` — `(require …)` loader plus opt-in filetype packs on
   `./yaml`, `./toml`, `./handlebars` (parsers are optional peers).
-- `arrival-env-capability-sql` / `arrival-env-capability-http` — opt-in
-  `(sql/query)` / `(http/get|post)` effect packs (host-bound resolvers;
-  inert by default).
 
 ## Status
 

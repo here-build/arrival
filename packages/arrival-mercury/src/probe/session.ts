@@ -22,9 +22,8 @@
  * much heavier shape than this harness needs. This module instead roots its
  * OWN tiny, session-private capability (`probe/infer`, below) that binds the
  * bare scheme name `infer` to a substitution-aware impl: a call → recorded-
- * result table standing in for the real effect-log
- * (`@inhuman.tools/arrival-effects`'s `EffectLog`, keyed the same way —
- * `CallSignature`'s `[model, prompt, schema, cacheKey]` tuple, same shape the
+ * result table standing in for a recorded-result map, keyed the same way
+ * (`CallSignature`'s `[model, prompt, schema, cacheKey]` tuple, same shape the
  * retired capability's own key used). Rooting it as a HOST capability
  * (`openSession`'s `capabilities`, highest precedence) makes it
  * exactly as first-class as any production verb — the corpus below spells
