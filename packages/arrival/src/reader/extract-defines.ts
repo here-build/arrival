@@ -14,14 +14,15 @@
  *
  * Consumes the parse output as plain structure: Pair / SchemeSymbol are
  * duck-typed on `car`/`cdr` / `__name__`, and each form's `__location__` is
- * read via its registry symbol (`Symbol.for("__location__")`) — no dependency
- * on the concrete primitive classes.
+ * read via the {@link LOCATION} registry symbol — no dependency on the
+ * concrete primitive classes.
  */
 import { parse } from "./parse.js";
+import { LOCATION } from "../well-known/symbols.js";
 
 /**
  * Source location of a parsed form — mirrors the reader's `SourceLocation`
- * (errors.ts), read structurally from `Symbol.for("__location__")` on the pair.
+ * (errors.ts), read structurally from {@link LOCATION} on the pair.
  */
 export interface SourceLocation {
   /** 1-indexed line number. */
@@ -43,8 +44,6 @@ export interface DefineInfo {
   variadic?: boolean;
   location?: SourceLocation;
 }
-
-const LOCATION_KEY = Symbol.for("__location__");
 
 const isPair = (v: unknown): v is { car: unknown; cdr: unknown } =>
   v !== null && typeof v === "object" && "car" in v && "cdr" in v;
@@ -72,7 +71,7 @@ function chainLength(p: unknown): { count: number; variadic: boolean } {
 }
 
 const locationOf = (form: unknown): SourceLocation | undefined =>
-  (form as Record<symbol, unknown>)[LOCATION_KEY] as SourceLocation | undefined;
+  (form as Record<symbol, unknown>)[LOCATION] as SourceLocation | undefined;
 
 export async function extractDefines(source: string): Promise<DefineInfo[]> {
   let forms: unknown[];

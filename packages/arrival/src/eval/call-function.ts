@@ -20,7 +20,7 @@ import { makeCallCtx } from "../run/CallCtx.js";
 import { is_applyable } from "../values/value-guards.js";
 import { applyCallback, type ACallable } from "../values/primitives/ACallable.js";
 import { APair } from "../values/primitives/APair.js";
-import { DATA } from "../well-known-symbols.js";
+import { DATA } from "../well-known/symbols.js";
 import type { SchemeValue } from "../values/types.js";
 import { promise_all } from "../utils/promises.js";
 

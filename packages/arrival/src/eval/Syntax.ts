@@ -1,5 +1,6 @@
 import { TF_EXPAND } from "../values/tagless-final.js";
 import { INTEROP_BOUNDARY } from "../membrane/interop-access.js";
+import { MERGE } from "../well-known/symbols.js";
 import type { AmbientRuntime } from "../env/AmbientRuntime.js";
 import type { SchemeValue } from "../values/types.js";
 import type { Expansion, MacroExpansion, MacroInvokeContext, MacroTransformer } from "./Macro.js";
@@ -24,7 +25,7 @@ export class Syntax {
   static [INTEROP_BOUNDARY] = true;
   // Value-layer macro identity — is_macro_value treats Syntax as a macro too.
   readonly ["arrival/is-macro"] = true;
-  static __merge_env__ = Symbol.for("merge");
+  static __merge_env__ = MERGE;
   // SRFI-139
   static Parameter = class SyntaxParameter {
     static [INTEROP_BOUNDARY] = true;

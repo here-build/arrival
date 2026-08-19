@@ -31,6 +31,7 @@ import type { R7RSError } from "../errors.js";
 import type { ACallable } from "./primitives/ACallable.js";
 import type { ARosettaProcedure } from "./primitives/ARosettaProcedure.js";
 import { AValue } from "./primitives/AValue.js";
+import type { IsAny } from "../types/utility.js";
 
 /**
  * Opaque bounce-marker for the trampoline. Real `Bounce` lives in eval/evaluator.ts;
@@ -100,9 +101,6 @@ export type SchemeValue =
 // Stated as a type so every violator fails at tsc. Limit is honest: bare `unknown[]`
 // still passes; what fails is a caller that statically knows it holds scheme values
 // and buries them in a JS store. Penetration-point invariant is AJSArray.boxElement.
-
-/** `any` detector (`0 extends (1 & T)`): without this, `any[]` collapses to `never`. */
-type IsAny<T> = 0 extends 1 & T ? true : false;
 
 /** `never` iff T is known to carry a boxed scheme value; T otherwise. */
 export type JSWorldValue<T> = IsAny<T> extends true ? T : [Extract<T, AValue>] extends [never] ? T : never;

@@ -7,7 +7,7 @@
 //     `loaderFromResolver`/`RequireResolver`
 //   • EXT-AUTHOR — `ExtensionHandler`/`ContentResolver`/`RequireTypeProvider`/
 //     `ResolverResult`, `contentsToText`/`normalizeToJson`/`parseJsonc`/`valueToTsType`/
-//     `resolveRequireType`, `SchemeForm`/`MaybePromise`, `runResolverOf`
+//     `resolveRequireType`, `SchemeForm`/`MaybePromise` (home: `src/types/utility.ts`), `runResolverOf`
 export {
   type Loader,
   type FsReadLike,

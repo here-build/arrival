@@ -29,7 +29,7 @@ import { deriveSortCompare, withInputProvenance } from "../op-helpers.js";
 import { reStampChild } from "./deep-restamp.js";
 import { APair } from "./APair.js";
 import { ASymbol } from "./ASymbol.js";
-import type { MaybePromise } from "../../common/symbols/_bake.js";
+import type { MaybePromise } from "../../types/utility.js";
 
 /** Code-position lowering cache for `[…]` literal nodes — `(vector …)` built once per node. */
 const LOWERED_LITERAL = new WeakMap<AVector, APair<SchemeValue, SchemeValue>>();
@@ -269,10 +269,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   }
 
   // Longest satisfying prefix — SEQUENTIAL walk (stop at first falsy is the semantics).
-  async ["arrival/tagless-final/take-while"](
-    pred: (x: SchemeValue) => unknown | Promise<unknown>,
-    runCtx: RunContext,
-  ): Promise<AVector> {
+  async ["arrival/tagless-final/take-while"](pred: ACallable, runCtx: RunContext): Promise<AVector> {
     strictGate(runCtx, {
       op: "take-while",
       rule: "`take-while` (SRFI-1) operates on lists; a vector is not a list",
@@ -280,7 +277,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     });
     const out: SchemeValue[] = [];
     for (const v of this.__vector__) {
-      const verdict = await pred.call(makeCallCtx(runCtx), v);
+      const verdict = await applyCallback(pred, [v], makeCallCtx(runCtx));
       if (is_false(verdict)) break;
       out.push(v);
     }
@@ -288,10 +285,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     return withInputProvenance([this, ...out], new AVector(out));
   }
 
-  async ["arrival/tagless-final/drop-while"](
-    pred: (x: SchemeValue) => MaybePromise<SchemeValue>,
-    runCtx: RunContext,
-  ): Promise<AVector> {
+  async ["arrival/tagless-final/drop-while"](pred: ACallable, runCtx: RunContext): Promise<AVector> {
     strictGate(runCtx, {
       op: "drop-while",
       rule: "`drop-while` (SRFI-1) operates on lists; a vector is not a list",
@@ -299,7 +293,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     });
     let i = 0;
     for (; i < this.__vector__.length; i++) {
-      const verdict = await pred.call(makeCallCtx(runCtx), this.__vector__[i]);
+      const verdict = await applyCallback(pred, [this.__vector__[i]!], makeCallCtx(runCtx));
       if (is_false(verdict)) break;
     }
     const out = this.__vector__.slice(i);

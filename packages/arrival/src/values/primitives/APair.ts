@@ -11,7 +11,7 @@
  * Lineage: free monoid over elements; Fantasy Land Functor/Foldable/Traversable/
  * Chain/Monoid/Semigroup. Trampolined style (Ganz et al., ICFP 1999); Floyd cycle detect.
  */
-import { CYCLES, DATA, REF } from "../../well-known-symbols.js";
+import { CYCLES, DATA, REF } from "../../well-known/symbols.js";
 import { applyMembraneClosure, CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import { makeCallCtx } from "../../run/CallCtx.js";
 import { applyCallback, type ACallable } from "./ACallable.js";
@@ -37,7 +37,7 @@ import { ANil, nil } from "./ANil.js";
 import { printValue } from "../print.js";
 import { chargeHeap } from "../../heap-budget.js";
 import { tf } from "../tagless-final.js";
-import { MaybePromise } from "../../common/symbols/_bake.js";
+import type { MaybePromise } from "../../types/utility.js";
 
 // Trampoline thunk: `mark_cycles` walks arbitrarily deep lists, so it bounces
 // through these instead of recursing and overflowing the native stack.
@@ -697,15 +697,12 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   }
 
   // SRFI-1 take-while — SEQUENTIAL (stop at first falsy). LENGTH-CHANGING.
-  async ["arrival/tagless-final/take-while"](
-    pred: (x: unknown) => unknown | Promise<unknown>,
-    runCtx: RunContext,
-  ): Promise<AListAlike> {
+  async ["arrival/tagless-final/take-while"](pred: ACallable, runCtx: RunContext): Promise<AListAlike> {
     const out: SchemeValue[] = [];
     let node: unknown = this;
     while (node instanceof APair) {
       if (isEmptyPairSentinel(node)) break;
-      const verdict = await pred.call(makeCallCtx(runCtx), node.car);
+      const verdict = await applyCallback(pred, [node.car], makeCallCtx(runCtx));
       if (is_false(verdict)) break; // R7RS: only #f is false
       out.push(node.car);
       node = node.cdr;
@@ -715,14 +712,11 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   }
 
   // SRFI-1 drop-while — SHARED tail, sequential pred.
-  async ["arrival/tagless-final/drop-while"](
-    pred: (x: unknown) => unknown | Promise<unknown>,
-    runCtx: RunContext,
-  ): Promise<SchemeValue> {
+  async ["arrival/tagless-final/drop-while"](pred: ACallable, runCtx: RunContext): Promise<SchemeValue> {
     let node: SchemeValue = this;
     while (node instanceof APair) {
       if (isEmptyPairSentinel(node)) return node.cdr;
-      const verdict = await pred.call(makeCallCtx(runCtx), node.car);
+      const verdict = await applyCallback(pred, [node.car], makeCallCtx(runCtx));
       if (is_false(verdict)) return node; // R7RS: only #f is false
       node = node.cdr as SchemeValue;
     }

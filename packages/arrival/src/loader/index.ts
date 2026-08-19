@@ -7,7 +7,8 @@
  *     `loaderFromResolver`/`RequireResolver`
  *   • EXT-AUTHOR — `ExtensionHandler`/`ContentResolver`/`RequireTypeProvider`/
  *     `ResolverResult`, `contentsToText`/`normalizeToJson`/`parseJsonc`/`valueToTsType`/
- *     `resolveRequireType`, `SchemeForm`/`MaybePromise` (riders those signatures need).
+ *     `resolveRequireType`, `SchemeForm`/`MaybePromise` (riders those signatures need;
+ *     `MaybePromise` lives in `src/types/utility.ts`).
  *
  * `arrivalLoaderCapability` is the declarative face — the one EnvCapability an assembling
  * consumer roots; sibling modules carry the machinery. A loader-derivable env (fs or a

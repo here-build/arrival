@@ -6,6 +6,7 @@ import { isSchemeString, isString, type SchemeStringLike, type SchemeValue } fro
 import { nil } from "./ANil.js";
 import type { CallResult } from "./ACallable.js";
 import { attachOffendingValue } from "../../errors.js";
+import { ASYMBOL_LITERAL, ASYMBOL_OBJECT, DATA } from "../../well-known/symbols.js";
 
 /**
  * Provenance × interning invariant: `SchemeSymbol.list[name]` is the canonical
@@ -61,14 +62,15 @@ export class ASymbol extends AValue {
    *  `gensym`'s `hidden_prop(symbol, "__literal__", name)` (values/values-repr.ts); `name` is
    *  a string (named gensym) or number (anonymous `#:gN`); a gensym minted via the
    *  no-double-gensym path carries no slot at all — hence `?` + `string | number`. */
-  static readonly literal: unique symbol = Symbol.for("__literal__");
-  static readonly object = Symbol.for("__object__");
+  static readonly literal = ASYMBOL_LITERAL;
+  static readonly object = ASYMBOL_OBJECT;
   readonly kind = "symbol" as const;
   /** Interned symbols carry their string name; a GENSYM carries a raw ES6 `symbol`
    *  as its name — the symbol IS the uniqueness (uninterned by construction, no
    *  capture in macro expansion). Every reader must handle both arms. */
   declare __name__: string | symbol;
   declare [ASymbol.literal]?: string | number;
+  declare [DATA]?: boolean;
 
   constructor(
     name: string | symbol | SchemeStringLike,

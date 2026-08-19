@@ -30,7 +30,7 @@ import { AJSArrayList } from "../values/primitives/APair.js";
 import { accessHas, accessKeys, accessMember, NOT_FOUND } from "./interop-access.js";
 import { ForeignProxyFreezeError, InteropAccessError, strictGate } from "../errors.js";
 import { foldMemberName } from "./AJSObject.js";
-import { MaybePromise } from "../loader/index.js";
+import type { MaybePromise } from "../types/utility.js";
 
 /**
  * Pending-cell cache for Promise-valued reads off the borrowed source

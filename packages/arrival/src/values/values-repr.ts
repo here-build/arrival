@@ -12,7 +12,7 @@ import { AString } from "./primitives/AString.js";
 import { ASymbol } from "./primitives/ASymbol.js";
 import { AExact } from "./primitives/AExact.js";
 import { AInexact } from "./primitives/AInexact.js";
-import { DATA } from "../well-known-symbols.js";
+import { DATA } from "../well-known/symbols.js";
 import { ACharacter } from "./primitives/ACharacter.js";
 import type { SchemeValue } from "./types.js";
 import { ABool } from "./primitives/ABool.js";

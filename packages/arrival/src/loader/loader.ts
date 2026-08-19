@@ -23,8 +23,9 @@ import type { SchemeEnv } from "../common/scheme-env.js";
 import type { SchemeValue } from "../values/types.js";
 import { RunResolverUnreachableError, RequirePathError } from "../errors.js";
 import { parseJsonc } from "./parse-jsonc.js";
+import type { MaybePromise } from "../types/utility.js";
 
-export type MaybePromise<T> = T | Promise<T>;
+export type { MaybePromise };
 
 /** The run env the verbs evaluate module forms into — typed `SchemeEnv`, never the
  *  package-internal `AmbientRuntime` class. Every real caller's env is a base-linked live one

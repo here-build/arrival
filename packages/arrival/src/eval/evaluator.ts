@@ -126,7 +126,7 @@ import { AVector } from "../values/primitives/AVector.js";
 import { Macro, type TransformerArgs } from "./Macro.js";
 import { Syntax } from "./Syntax.js";
 import { APair } from "../values/primitives/APair.js";
-import { DATA } from "../well-known-symbols.js";
+import { DATA } from "../well-known/symbols.js";
 import { AListAlike, type SchemeBounceMarker, type SchemeValue } from "../values/types.js";
 import { ANil, nil } from "../values/primitives/ANil.js";
 import { AKernelKeyword } from "../values/AKernelKeyword.js";
@@ -295,7 +295,7 @@ interface DataMarked {
 
 function is_data_marked(o: unknown): o is DataMarked {
   if (o === null || typeof o !== "object") return false;
-  // Data mark is the `__data__` SYMBOL (Symbol.for("__data__")), set by quote() —
+  // Data mark is the DATA registry symbol (`arrival/data`), set by quote() —
   // check by symbol, not a string key. A hygiene-gensym'd `#:quote` resolves to the
   // quote Macro and takes this path; a string-key miss would re-evaluate quoted
   // data inside syntax-rules expansions.

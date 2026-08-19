@@ -18,6 +18,7 @@
 // answer with, and the run identity a resolving read threads.
 import type { AmbientValue } from "../env/AmbientRuntime.js";
 import type { RunContext } from "../run/RunContext.js";
+import type { MaybePromise } from "../types/utility.js";
 
 /** A rosetta (host-fn) contribution config. Defined here, not imported, so this package
  *  needn't depend on the runtime. */
@@ -98,7 +99,7 @@ export interface SchemeEnv {
 
 /** Evaluate scheme `source` into `env`. arrival-scheme's `exec(source, { env })`
  *  is the canonical implementation; injected so this package is evaluator-agnostic. */
-export type EvalSchemeInto<E = SchemeEnv> = (env: E, source: string) => unknown | Promise<unknown>;
+export type EvalSchemeInto<E = SchemeEnv> = (env: E, source: string) => MaybePromise<unknown>;
 
 /** Evaluate PER-RUN PRELUDE `source` into `env`, THREADED WITH THIS RUN'S `runCtx`
  *  (`env/assemble-run.ts`'s `assembleRun`). Distinct from {@link EvalSchemeInto} — which stays
@@ -108,4 +109,4 @@ export type EvalSchemeInto<E = SchemeEnv> = (env: E, source: string) => unknown 
  *  must spawn/read THIS run's `capabilityResources` bag, not a bystander run's. arrival-scheme's
  *  `exec(source, { env, runCtx, skipBootstrapWait: true })` satisfies it (see
  *  `generator-exec.ts`'s `preludeEvalScheme`). */
-export type EvalPreludeInto<E = SchemeEnv> = (env: E, source: string, runCtx: RunContext) => unknown | Promise<unknown>;
+export type EvalPreludeInto<E = SchemeEnv> = (env: E, source: string, runCtx: RunContext) => MaybePromise<unknown>;

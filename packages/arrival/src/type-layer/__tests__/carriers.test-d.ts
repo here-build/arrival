@@ -1,11 +1,9 @@
 // carriers.test-d.ts — bite-guard for the R3 carrier model (the committed spike).
 // Runs via `vitest --typecheck`. Proves the 3-way slot probes, empty-list covariance,
 // list ≠ vector, deep algebra composition, dict → object — and that wrong programs bite.
+import { describe, expectTypeOf, test } from "vitest";
 import type { List, SlotKind, ElemOf, AcceptsBareWord, IsStringTyped } from "../carriers.js";
 import { car, cons, filter, list, map, reduce } from "../carriers.js";
-
-type Assert<T extends true> = T;
-type Eq<A, B> = (<G>() => G extends A ? 1 : 2) extends (<G>() => G extends B ? 1 : 2) ? true : false;
 
 // harvested tools (what schema-to-ts emits)
 declare function set_timer(seconds: number): void;
@@ -30,17 +28,32 @@ const _comp: number = reduce(
 );
 configure({ name: "a", age: 30 }); // (dict :name "a" :age 30) → object literal
 
-// probe assertions (the 3-way slot verdict)
-type _k_list = Assert<Eq<SlotKind<Parameters<typeof get_route>[0]>, "list">>;
-type _e_list = Assert<Eq<ElemOf<Parameters<typeof get_route>[0]>, string>>;
-type _k_vec = Assert<Eq<SlotKind<Parameters<typeof sum_readings>[0]>, "vector">>;
-type _e_vec = Assert<Eq<ElemOf<Parameters<typeof sum_readings>[0]>, number>>;
-type _k_enum = Assert<Eq<SlotKind<Parameters<typeof get_weather>[1]>, "string">>;
-type _k_scalar = Assert<Eq<SlotKind<Parameters<typeof set_timer>[0]>, "scalar">>;
-type _bare_str = Assert<Eq<AcceptsBareWord<Parameters<typeof note>[0]>, true>>;
-type _bare_lst = Assert<Eq<AcceptsBareWord<Parameters<typeof get_route>[0]>, false>>;
-type _str_enum = Assert<Eq<IsStringTyped<Parameters<typeof get_weather>[1]>, true>>;
-type _elem_lol = Assert<Eq<ElemOf<List<List<number>>>, List<number>>>;
+describe("carriers — 3-way slot probes", () => {
+  test("list slot: kind + element", () => {
+    expectTypeOf<SlotKind<Parameters<typeof get_route>[0]>>().toEqualTypeOf<"list">();
+    expectTypeOf<ElemOf<Parameters<typeof get_route>[0]>>().toEqualTypeOf<string>();
+  });
+
+  test("vector slot: kind + element", () => {
+    expectTypeOf<SlotKind<Parameters<typeof sum_readings>[0]>>().toEqualTypeOf<"vector">();
+    expectTypeOf<ElemOf<Parameters<typeof sum_readings>[0]>>().toEqualTypeOf<number>();
+  });
+
+  test("enum / scalar kinds", () => {
+    expectTypeOf<SlotKind<Parameters<typeof get_weather>[1]>>().toEqualTypeOf<"string">();
+    expectTypeOf<SlotKind<Parameters<typeof set_timer>[0]>>().toEqualTypeOf<"scalar">();
+  });
+
+  test("bare-word / string-typed probes", () => {
+    expectTypeOf<AcceptsBareWord<Parameters<typeof note>[0]>>().toEqualTypeOf<true>();
+    expectTypeOf<AcceptsBareWord<Parameters<typeof get_route>[0]>>().toEqualTypeOf<false>();
+    expectTypeOf<IsStringTyped<Parameters<typeof get_weather>[1]>>().toEqualTypeOf<true>();
+  });
+
+  test("nested list element", () => {
+    expectTypeOf<ElemOf<List<List<number>>>>().toEqualTypeOf<List<number>>();
+  });
+});
 
 // bites — wrong programs that MUST error
 // @ts-expect-error scalar where list expected

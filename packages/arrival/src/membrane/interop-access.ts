@@ -35,6 +35,7 @@ import { InteropAccessError, ArrivalError, Unterminated, ParseError, EvalError, 
 // and every ArrivalError subclass. Benign two-file cycle with AValue (it imports
 // INTEROP_BOUNDARY from here). InteropAccessError already came from errors.ts.
 import { AValue } from "../values/primitives/AValue.js";
+import { INTEROP_BOUNDARY } from "../well-known/symbols.js";
 
 /**
  * Marks classes/prototypes as interop boundaries — inherited property access stops.
@@ -45,9 +46,9 @@ import { AValue } from "../values/primitives/AValue.js";
  * }
  * ```
  *
- * Boundary mark must not be sandbox-forgeable.
+ * Boundary mark must not be sandbox-forgeable. Home: `well-known/symbols.ts`.
  */
-export const INTEROP_BOUNDARY = Symbol.for("scheme:interop-boundary");
+export { INTEROP_BOUNDARY };
 
 /**
  * Built-in prototypes that are ALWAYS interop boundaries — standard JS built-ins

@@ -84,9 +84,11 @@ export default EnvCapability.define("scheme/vectors", {
     vector: symbol.native`vector: a vector of the given objects`(
       // Elements are scheme values by design (any object may sit in a vector slot) — the
       // typed z.schemeValue replacement, matching make-vector's own fill-slot convention.
+      // Same split as `bytevector` (`inputRest: z.schemeNumber`): empty fixed + rest of
+      // ELEMENTS. `inputRest: z.vector()` is `vector-append` (rest of containers).
       {
         input: [],
-        inputRest: z.vector(),
+        inputRest: z.schemeValue,
         output: [z.vector()],
         type: dedent`
           {

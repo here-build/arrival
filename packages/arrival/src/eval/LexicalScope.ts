@@ -6,8 +6,18 @@ import {
 } from "../env/AmbientRuntime.js";
 import type { RunContext } from "../run/RunContext.js";
 import { INTEROP_BOUNDARY } from "../membrane/interop-access.js";
+import { MERGE } from "../well-known/symbols.js";
 
 export type { EnvWithInternals, LexicalScopeInternals } from "../env/AmbientRuntime.js";
+
+/**
+ * Stable wrapper-per-env so `LexicalScope.for(e) === LexicalScope.for(e)`.
+ * Hygiene literal check compares `refFrame(name) === defResolver.scope` by
+ * IDENTITY, so the wrapper a `refFrame` walk returns must be the SAME object
+ * the `.scope` getter hands back. WeakMap so a frame's wrapper is GC'd with
+ * the frame.
+ */
+const wrappers = new WeakMap<AmbientRuntime, LexicalScope>();
 
 /**
  * The LEXICAL binding chain — let/lambda/letrec/do/catch frames, the names a
@@ -22,17 +32,6 @@ export type { EnvWithInternals, LexicalScopeInternals } from "../env/AmbientRunt
  * root), plus merge-frame plumbing (`kind`/`ownSymbolEntries`/`parent`/
  * `define`). Each is a pass-through over the env today.
  */
-const MERGE_SCOPE: symbol = Symbol.for("merge"); // ≡ Syntax.__merge_env__ (registered symbol)
-
-/**
- * Stable wrapper-per-env so `LexicalScope.for(e) === LexicalScope.for(e)`.
- * Hygiene literal check compares `refFrame(name) === defResolver.scope` by
- * IDENTITY, so the wrapper a `refFrame` walk returns must be the SAME object
- * the `.scope` getter hands back. WeakMap so a frame's wrapper is GC'd with
- * the frame.
- */
-const wrappers = new WeakMap<AmbientRuntime, LexicalScope>();
-
 export class LexicalScope<E extends AmbientRuntime = AmbientRuntime> {
   // Outside AValue/ArrivalError families — own interop stamp.
   static [INTEROP_BOUNDARY] = true;
@@ -73,8 +72,8 @@ export class LexicalScope<E extends AmbientRuntime = AmbientRuntime> {
    * ≡ `env.__name__ === Syntax.__merge_env__`.
    */
   get kind(): "merge" | undefined {
-    // `__name__` is `string | symbol` — merge-frame's Symbol.for("merge") compares directly.
-    return this.env.__name__ === MERGE_SCOPE ? "merge" : undefined;
+    // `__name__` is `string | symbol` — merge-frame's MERGE compares directly.
+    return this.env.__name__ === MERGE ? "merge" : undefined;
   }
 
   get parent(): LexicalScope | null {

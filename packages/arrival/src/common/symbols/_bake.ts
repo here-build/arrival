@@ -41,6 +41,7 @@ import {
 import type { Activation } from "../capability.js";
 // TYPE-ONLY, one-directional (`common/symbols` → `emit`): compiler rule surface a Contract may carry.
 import type { EmitRule, RefPolicy } from "../../emit/emit-rule.js";
+import type { MaybePromise } from "../../types/utility.js";
 
 // ── 1. Args-vector spec + decoded-type inference ─────────────────────────────
 
@@ -91,9 +92,6 @@ type SpecInferReturn<S extends VectorSpec, F extends Face> = S extends readonly 
 export type DecodedReturn<O extends VectorSpec, F extends Face = "js"> = O extends readonly [z.ZodTypeAny]
   ? SpecInferReturn<O, F>[0]
   : SpecInferReturn<O, F>;
-
-/** async is implicit — bake awaits. */
-export type MaybePromise<T> = T | Promise<T>;
 
 // ── 1.5 Metadata — per-field static-or-dynamic (read channel: ./metadata.js) ─
 

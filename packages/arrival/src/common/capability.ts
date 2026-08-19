@@ -24,7 +24,6 @@ import {
   type DefineSyntaxSymbolDef,
   type Face,
   type MacroSymbolDef,
-  type MaybePromise,
   type MetadataRecord,
 } from "./symbols/_bake.js";
 // Value imports for `EnvCapability.define`'s injected `(symbol, z)` factory pair.
@@ -38,6 +37,7 @@ import { ANativeProcedure } from "../values/primitives/ANativeProcedure.js";
 import { ARosettaProcedure } from "../values/primitives/ARosettaProcedure.js";
 import type { AmbientValue } from "../env/AmbientRuntime.js";
 import type { RunContext } from "../run/RunContext.js";
+import type { MaybePromise } from "../types/utility.js";
 import { onRunContextDispose } from "../run/run-lifecycle.js";
 import { type DegradationInfo } from "./degradation.js";
 

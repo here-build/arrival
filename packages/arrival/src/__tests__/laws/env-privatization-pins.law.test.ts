@@ -85,6 +85,7 @@ describe("V0 pin — barrel surface", () => {
         "deepProvenance",
         "disposeRunContext",
         "exec",
+        "execExpr",
         "execState",
         // Host run-error rendering (scheme stack + require chain) — errors.ts.
         "formatRunError",

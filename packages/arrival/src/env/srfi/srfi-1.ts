@@ -59,7 +59,8 @@
 // %any-null? / %some / %any / %every / %every-value / zip use that idiom. take/drop are
 // tagless dispatchers. validate:false unused — evidence-gated only.
 import { type CallCtx, makeCallCtx, withContractFields } from "../../symbol/index.js";
-import { type MaybePromise, resolveMethod, withCallbackRoles } from "../../common/symbols/_bake.js";
+import { resolveMethod, withCallbackRoles } from "../../common/symbols/_bake.js";
+import type { MaybePromise } from "../../types/utility.js";
 import dedent from "dedent";
 import { EnvCapability } from "../../common/capability.js";
 import type { EmitCtx, EmitRule } from "../../emit/emit-rule.js";

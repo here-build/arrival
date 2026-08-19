@@ -35,7 +35,7 @@ import { withDynamicCallSite } from "../../eval/dynamic-call-site.js";
 import invariant from "tiny-invariant";
 import { ARosettaProcedure, _linkRosettaHostProjection } from "./ARosettaProcedure.js";
 import { ANativeProcedure, _linkNativeHostProjection } from "./ANativeProcedure.js";
-import type { MaybePromise } from "../../common/symbols/_bake.js";
+import type { MaybePromise } from "../../types/utility.js";
 
 export type CallResult = SchemeBounceMarker | MaybePromise<SchemeValue>;
 

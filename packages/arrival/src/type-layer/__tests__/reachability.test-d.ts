@@ -2,19 +2,32 @@
 // At a List slot, admit a head iff its return COULD be a list — mask only PROVABLY non-list.
 // `CouldBeList` (on a resolved return type) is the gate's core logic; the `[unknown] extends [R]`
 // nuke-guard keeps `if` / `car` / generic returns admissible so `(if …)` is never blocked.
+import { describe, expectTypeOf, test } from "vitest";
 import type { CouldBeList, List } from "../carriers.js";
 import { car, cdr, list, map } from "../carriers.js";
 
-type Assert<T extends true> = T;
-type Eq<A, B> = (<G>() => G extends A ? 1 : 2) extends (<G>() => G extends B ? 1 : 2) ? true : false;
+describe("CouldBeList on RESOLVED return types — the gate's verdict", () => {
+  test("list is a list", () => {
+    expectTypeOf<CouldBeList<List<string>>>().toEqualTypeOf<true>();
+  });
 
-// CouldBeList on RESOLVED return types — the gate's verdict
-type _cbl_list = Assert<Eq<CouldBeList<List<string>>, true>>;
-type _cbl_union = Assert<Eq<CouldBeList<List<string> | List<number>>, true>>; // (if …) branch union
-type _cbl_unknown = Assert<Eq<CouldBeList<unknown>, true>>; // the nuke-guard (generic / if / car)
-type _cbl_vector = Assert<Eq<CouldBeList<readonly number[]>, false>>; // vector ≠ list (disjoint) → mask
-type _cbl_number = Assert<Eq<CouldBeList<number>, false>>; // provably non-list → mask
-type _cbl_string = Assert<Eq<CouldBeList<string>, false>>;
+  test("(if …) branch union of lists", () => {
+    expectTypeOf<CouldBeList<List<string> | List<number>>>().toEqualTypeOf<true>();
+  });
+
+  test("unknown — the nuke-guard (generic / if / car)", () => {
+    expectTypeOf<CouldBeList<unknown>>().toEqualTypeOf<true>();
+  });
+
+  test("vector ≠ list (disjoint) → mask", () => {
+    expectTypeOf<CouldBeList<readonly number[]>>().toEqualTypeOf<false>();
+  });
+
+  test("provably non-list → mask", () => {
+    expectTypeOf<CouldBeList<number>>().toEqualTypeOf<false>();
+    expectTypeOf<CouldBeList<string>>().toEqualTypeOf<false>();
+  });
+});
 
 // call-site reachability — list-returning expressions fill a list slot; non-list ones bite
 declare function ifList<A, B>(cond: unknown, a: A, b: B): A | B; // models (if cond a b) → A | B

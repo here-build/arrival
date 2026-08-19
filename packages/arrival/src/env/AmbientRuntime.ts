@@ -95,8 +95,8 @@ export class AmbientRuntime {
   static ["arrival/is-environment"] = true;
 
   protected constructor(
-    // `string | symbol`: merge-frame identity is `Symbol.for("merge")`
-    // (Syntax.__merge_env__); LexicalScope.kind compares by symbol identity —
+    // `string | symbol`: merge-frame identity is MERGE (`well-known/symbols.ts`;
+    // Syntax.__merge_env__). LexicalScope.kind compares by symbol identity —
     // string coercion would break hygiene. Display sites wrap with `String(...)`.
     public __name__: string | symbol = "anonymous",
     public __env__: Record<string | symbol, AmbientValue> = {},

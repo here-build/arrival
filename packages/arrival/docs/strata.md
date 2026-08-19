@@ -16,9 +16,11 @@ a stale stratum map is exactly the failure this document exists to close.
 
 - **`errors.ts`** — the error root, type-only leaf. `ErrorClass` taxonomy, no imports out of
   the leaf tier.
-- **`well-known-symbols.ts`** — zero imports.
+- **`well-known/`** — `Symbol.for` registry (`DATA`, `LOCATION`, `INTEROP_BOUNDARY`, …). Zero imports.
+- **`types/`** — type-only TypeScript plumbing (`MaybePromise`, `IsAny`). Zero imports.
+  Distinct from `utils/` (runtime: `maybeThen`). Importable from anywhere, including the knot.
 
-Both are importable from anywhere without creating a stratum violation, by construction.
+All three are importable from anywhere without creating a stratum violation, by construction.
 
 ## 2. THE KNOT — the two-interpreter core (closed member list)
 

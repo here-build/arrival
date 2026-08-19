@@ -12,6 +12,7 @@ import { eof } from "../values/primitives/EOF.js";
 import { ParseError, Unterminated } from "../errors.js";
 import { directives, hash_literals, parsable_contants } from "./lexical-grammar.js";
 import * as specials from "./specials.js";
+import { LexerState } from "../well-known/symbols.js";
 
 /**
  * FSM transition row: `[char_re, prev_re, next_re, from_state, to_state]`. A row fires when the
@@ -45,19 +46,20 @@ function match_or_null(re: RegExp | string | null, char: string): boolean {
 }
 
 export class Lexer {
-  // FSM state markers (interned via Symbol.for so user syntax-extensions can name the same states).
-  static readonly string = Symbol.for("string");
-  static readonly string_escape = Symbol.for("string_escape");
-  static readonly symbol = Symbol.for("symbol");
-  static readonly comment = Symbol.for("comment");
-  static readonly character = Symbol.for("character");
-  static readonly bracket = Symbol.for("bracket");
-  static readonly b_symbol = Symbol.for("b_symbol");
-  static readonly b_symbol_ex = Symbol.for("b_symbol_ex");
-  static readonly b_comment = Symbol.for("b_comment");
-  static readonly i_comment = Symbol.for("i_comment");
-  static readonly l_datum = Symbol.for("l_datum");
-  static readonly dot = Symbol.for("dot");
+  // FSM state markers — interned in well-known/symbols.ts so a syntax-extension
+  // (or a second Lexer evaluation) can name the same states.
+  static readonly string = LexerState.string;
+  static readonly string_escape = LexerState.string_escape;
+  static readonly symbol = LexerState.symbol;
+  static readonly comment = LexerState.comment;
+  static readonly character = LexerState.character;
+  static readonly bracket = LexerState.bracket;
+  static readonly b_symbol = LexerState.b_symbol;
+  static readonly b_symbol_ex = LexerState.b_symbol_ex;
+  static readonly b_comment = LexerState.b_comment;
+  static readonly i_comment = LexerState.i_comment;
+  static readonly l_datum = LexerState.l_datum;
+  static readonly dot = LexerState.dot;
   // `,` is a token boundary: R7RS §7.1.1 classes it a delimiter (it is unquote syntax),
   // and the collection literals need `1,` to lex as `1` + `,` (JSON-gravity separators,
   // see reader/Parser.ts read_literal_elements). Symbols containing a comma still exist

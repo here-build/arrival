@@ -5,10 +5,9 @@
  * table is FIXED — no runtime add/remove reader-macro verb exists.
  */
 import { ASymbol } from "../values/primitives/ASymbol.js";
+import { LITERAL, SYMBOL } from "../well-known/symbols.js";
 
-/** Prefix expands to a single quoted/wrapped datum (`'x` → `(quote x)`). */
-export const LITERAL = Symbol.for("literal");
-export const SYMBOL = Symbol.for("symbol");
+export { LITERAL, SYMBOL };
 export function names() {
   return Object.keys(__list__);
 }

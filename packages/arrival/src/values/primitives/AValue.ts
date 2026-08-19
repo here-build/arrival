@@ -21,9 +21,10 @@ import type { SeenMap } from "../structural-equal.js";
 import type { MembraneExit, SchemeBounceMarker, SchemeValue } from "../types.js";
 import type { RunContext } from "../../run/RunContext.js";
 import type { CallCtx } from "../../run/CallCtx.js";
-import { LOCATION } from "../../well-known-symbols.js";
+import { LOCATION } from "../../well-known/symbols.js";
 import type { SourceLocation } from "../../errors.js";
-import type { MaybePromise } from "../../common/symbols/_bake.js";
+import type { MaybePromise } from "../../types/utility.js";
+import { ACallable } from "./ACallable.js";
 
 export const EMPTY_PROVENANCE: ReadonlySet<number> = new Set<number>();
 
@@ -168,15 +169,9 @@ export abstract class AValue {
   /** Suffix — receiver after first n elements. */
   ["arrival/tagless-final/drop"]?(n: number, runCtx: RunContext): MaybePromise<SchemeValue>;
   /** Longest satisfying prefix — pred SEQUENTIAL (stop at first falsy). */
-  ["arrival/tagless-final/take-while"]?(
-    pred: (x: unknown) => unknown | Promise<unknown>,
-    runCtx: RunContext,
-  ): MaybePromise<SchemeValue>;
+  ["arrival/tagless-final/take-while"]?(pred: ACallable, runCtx: RunContext): MaybePromise<SchemeValue>;
   /** The take-while remainder. */
-  ["arrival/tagless-final/drop-while"]?(
-    pred: (x: unknown) => unknown | Promise<unknown>,
-    runCtx: RunContext,
-  ): MaybePromise<SchemeValue>;
+  ["arrival/tagless-final/drop-while"]?(pred: ACallable, runCtx: RunContext): MaybePromise<SchemeValue>;
   /** Applicable — INVOKE this value as a procedure. Callability IS declaring this term.
    *  `callCtx` threaded WHOLE (never via `this` — `this` is the callable value itself).
    *  `canBounce` opts a lambda into TCO bounce protocol. */
