@@ -22,7 +22,7 @@ import { disposeRunContext, execState, LexicalScope } from "@inhuman.tools/arriv
 import { rosettaTypesOf } from "@inhuman.tools/arrival/lsp-internals";
 import { resolveRequireType } from "@inhuman.tools/arrival-modules";
 import { inhumanRunnerCapability } from "@inhuman.tools/runner-capability";
-import { loaderFromResolver } from "@inhuman.tools/llm-plane-arrival-chain";
+import { loaderFromResolver } from "@inhuman.tools/arrival-modules";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { assembleHostPrelude } from "../host-prelude.js";

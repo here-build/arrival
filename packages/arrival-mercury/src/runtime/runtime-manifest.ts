@@ -92,7 +92,7 @@ export const RUNTIME_MANIFEST: Readonly<Record<string, RuntimeEntry>> = {
   "infer/scalar": e("inferScalar", "stage0"),
   "infer/chat/scalar": e("inferChatScalar", "stage0"),
   // The REAL replacement (cross-package drift fix, rework-zone guidelines §4): the
-  // LLM/MCP layer's `chat/completion` (`@inhuman.tools/llm-plane-arrival-env`) declares
+  // LLM/MCP layer's `chat/completion` (`@inhuman.tools/llm-plane/arrival-env`) declares
   // no Contract-level `emit`, so it falls to this same rung-3 shim. `dotprompt/run`
   // needs no row here — mercury's own `product/prompt-module.ts` already has dedicated
   // codegen for `.prompt` units and never reaches the generic RuntimeRef fallback.

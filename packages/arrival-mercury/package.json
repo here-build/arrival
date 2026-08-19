@@ -78,7 +78,7 @@
     "@inhuman.tools/arrival": "workspace:^",
     "@inhuman.tools/arrival-modules": "workspace:^",
     "@inhuman.tools/arrival-internals-types-prelude": "workspace:^",
-    "@inhuman.tools/llm-plane-arrival-env": "workspace:^",
+    "@inhuman.tools/llm-plane": "workspace:^",
     "@inhuman.tools/runner-capability": "workspace:^",
     "handlebars": "4.7.9",
     "pluralize": "8.0.0",

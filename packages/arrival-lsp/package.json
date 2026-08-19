@@ -83,13 +83,13 @@
     "@inhuman.tools/arrival-internals-types-prelude": "workspace:^",
     "@inhuman.tools/arrival-mercury": "workspace:^",
     "@inhuman.tools/arrival-sugarcoat": "workspace:^",
-    "@inhuman.tools/llm-plane-arrival-chain": "workspace:^",
     "@inhuman.tools/runner-capability": "workspace:^",
     "typescript": "6.0.2"
   },
   "devDependencies": {
     "@inhuman.tools/arrival": "workspace:^",
     "@inhuman.tools/arrival-modules": "workspace:^",
+    "@inhuman.tools/llm-plane": "workspace:^",
     "@here.build/eslint-configs": "0.9.0",
     "@here.build/tsconfig": "0.9.0",
     "@types/node": "24.0.0",

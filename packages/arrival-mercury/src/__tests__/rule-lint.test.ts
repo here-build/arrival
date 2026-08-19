@@ -20,7 +20,7 @@
  *     `cons` in .../lists.ts and .../srfi/srfi-1.ts, Wave 3 — `filter`'s own ambient
  *     gap closed in oracle/harness.ts's `greenfieldRegistryFor`, so it now checks
  *     through this SAME second sweep, not a first-sweep exception; the infer family's
- *     five real symbols joining `@inhuman.tools/llm-plane-arrival-env`'s `src/infer.ts`
+ *     five real symbols joining `@inhuman.tools/llm-plane/arrival-env`'s `src/infer.ts`
  *     Contracts, R2 — all moved off this table per rules/phase1.ts's own relocation
  *     note), is executed — across a spread of arities, so every `exactly()`-gated
  *     branch gets a turn — against a Proxy-wrapped ctx that records every property

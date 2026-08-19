@@ -12,7 +12,7 @@
  *
  * Not a special import path. Convert the target to scheme, then compile.
  */
-import { promptContentsToSchemeSource } from "@inhuman.tools/llm-plane-arrival-env";
+import { promptContentsToSchemeSource } from "@inhuman.tools/llm-plane/arrival-env";
 
 import { compileScmModule, type ScmCompileDeps } from "./scm-module.js";
 import type { CompileFileOptions, CompileFileResult } from "./types.js";

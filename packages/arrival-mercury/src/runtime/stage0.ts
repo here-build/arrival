@@ -230,7 +230,7 @@ export async function inferChatScalar(..._args: unknown[]): Promise<unknown> {
 }
 
 /**
- * `chat/completion` — the LLM/MCP layer's real verb (`@inhuman.tools/llm-plane-arrival-env`'s
+ * `chat/completion` — the LLM/MCP layer's real verb (`@inhuman.tools/llm-plane/arrival-env`'s
  * `chat.ts`), which replaced the whole `infer`/`infer/chat/*` family above (the retired
  * `arrival/infer` capability's own file). It declares no Contract-level `emit` (the layer's
  * whole package has none — verified directly, `grep -n "emit:" src/*.ts` over

@@ -139,7 +139,7 @@ describe("car / cdr — syntax over the array representation (§4.3, Law U)", ()
 // The infer family's five real Contract-backed symbols (infer, infer/chat,
 // infer/chat/system, infer/chat/user, infer/chat/assistant) no longer carry a RULE in
 // `phase1Rules` — each is now the `emit` field of its own Contract in
-// `@inhuman.tools/llm-plane-arrival-env`'s `src/infer.ts` (`arrivalInferCapability`),
+// `@inhuman.tools/llm-plane/arrival-env`'s `src/infer.ts` (`arrivalInferCapability`),
 // so this file's EMPTY-based registry (`withRules(EMPTY, phase1Rules)`, above) can no
 // longer resolve their APPLICATION-position residuals (there is neither a table rule
 // nor a base row to fall through to — `compile(...)`'s registry has no base at all,

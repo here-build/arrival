@@ -1,13 +1,14 @@
 // require-shape — `(require "data.json")` resolves to its GRANULAR shape, not
 // `unknown`. The editor twin of the runtime loader registry: the lens is fed a
 // `resolveRequireType` seam derived from the same table family the runtime
-// resolves with (arrival-chain's `resolveRequireTypeWithPrompts`: the loader's
+// resolves with (`resolveRequireTypeWithPrompts`: the loader's
 // builtins + the dep-bearing formats' capability handlers' editor facets), so a
 // data file's `(require)` hovers/checks as its precise object/list type.
 //
 // Per `.claude/rules/tests.md` this is a `__tests__/` verdict (boolean pass/fail).
 
-import { loaderFromResolver, resolveRequireTypeWithPrompts } from "@inhuman.tools/llm-plane-arrival-chain";
+import { loaderFromResolver } from "@inhuman.tools/arrival-modules";
+import { resolveRequireTypeWithPrompts } from "@inhuman.tools/llm-plane/arrival-env";
 import { describe, expect, it } from "vitest";
 
 import { assembleHostPrelude } from "../host-prelude.js";

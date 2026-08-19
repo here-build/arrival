@@ -10,7 +10,7 @@
  * export shape as product — not a special import path, just a thinner pipeline.
  */
 import { hbsContentsToSchemeSource } from "@inhuman.tools/arrival-modules/handlebars";
-import { resolvePromptRequireType } from "@inhuman.tools/llm-plane-arrival-env";
+import { resolvePromptRequireType } from "@inhuman.tools/llm-plane/arrival-env";
 
 import { emitTypes, type EmitTypesOptions } from "./emit.js";
 

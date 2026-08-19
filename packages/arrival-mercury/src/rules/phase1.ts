@@ -127,7 +127,7 @@
  *    this note used to say the infer family's five real Contract-backed symbols
  *    (`infer`, `infer/chat`, `infer/chat/system`, `infer/chat/user`,
  *    `infer/chat/assistant`) moved onto their own Contracts in
- *    `@inhuman.tools/llm-plane-arrival-env`'s `src/infer.ts` (`arrivalInferCapability`).
+ *    `@inhuman.tools/llm-plane/arrival-env`'s `src/infer.ts` (`arrivalInferCapability`).
  *    That whole file/capability is GONE — the LLM/MCP layer's whiteroom rebuild
  *    replaced the entire family with `chat/completion` (`./chat.ts`) and
  *    `dotprompt/run`/`dotprompt/build-bundle` (`./prompt.ts`), neither of which is
@@ -309,7 +309,7 @@ const compoundCxrRules: SymbolRuleTable = Object.fromEntries(compoundCxrNames().
 // ─── infer/scalar / infer/chat/scalar — RELOCATED (R2), except these two ─────────────
 // The infer family's FIVE real Contract-backed symbols (`infer`, `infer/chat`,
 // `infer/chat/system`, `infer/chat/user`, `infer/chat/assistant`) moved onto their own
-// Contract's `emit` field — `@inhuman.tools/llm-plane-arrival-env`'s `src/infer.ts`
+// Contract's `emit` field — `@inhuman.tools/llm-plane/arrival-env`'s `src/infer.ts`
 // (`arrivalInferCapability`), carrying `inferEmitRule("infer")` etc., byte-identical to
 // this file's own (now-deleted) `inferRule` factory. See the module header's relocation
 // note for the full account, including WHY that move was safe outright (no ambient gap
@@ -400,7 +400,7 @@ export const phase1Rules: SymbolRuleTable = {
   // infer / infer/chat / infer/chat/system / infer/chat/user / infer/chat/assistant —
   // RELOCATED (R2, module header's relocation note); no table row remains for any of
   // them — `withRules`' fallthrough to the harvested Contract row
-  // (`@inhuman.tools/llm-plane-arrival-env`'s `arrivalInferCapability`) resolves them
+  // (`@inhuman.tools/llm-plane/arrival-env`'s `arrivalInferCapability`) resolves them
   // now.
   //
   // The infer-scalar-fold peephole's targets (../peepholes/infer.ts) — NOT relocated,
