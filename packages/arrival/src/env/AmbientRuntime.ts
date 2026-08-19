@@ -5,7 +5,7 @@ import type { Macro } from "../eval/Macro.js";
 import type { SchemeValue } from "../values/types.js";
 import type { Syntax } from "../eval/Syntax.js";
 import invariant from "tiny-invariant";
-import { fromJS, isSchemeValue } from "../membrane/membrane.js";
+import { isSchemeValue } from "../membrane/membrane.js";
 import { quote } from "../values/values-repr.js";
 import { APair } from "../values/primitives/APair.js";
 import type { RunContext } from "../run/RunContext.js";
@@ -210,12 +210,12 @@ export function assertResolvedBinding(value: unknown, name: string | symbol, res
  *     surface binds a discarded child prelude scope (R12: invocation survives, reference
  *     does not).
  *
- * CARVE-OUTS:
+ * CARVE-OUTS (in the AmbientValue union, not isSchemeValue):
  *   • `Error` — catch-frame bind of a raised condition (R7RSError extends host `Error`,
- *     not AValue; `isSchemeValue` misses it)
- *   • `fromJS` tail — bake-time boxing for `{ value }` defs / require leaves (assembly
- *     is pre-run; run-neutral mint is correct)
+ *     not AValue)
+ *   • `RegExp` — syntax-rules literal pattern stored as itself
  *
+ * Raw JS is refused. Box at the writer (`jsToScheme` / `symbol.value`).
  * Bare host functions are DOORED. Env-resident callables are ACallable values.
  * Replay playback mints ARosettaProcedure before this door.
  *
@@ -232,20 +232,18 @@ export function assertResolvedBinding(value: unknown, name: string | symbol, res
  *     `_lookupWithResolvers` would NOT be behavior-identical (audit S3).
  */
 export function bindValue(env: AmbientRuntime, name: BindingName, value: AmbientValue): void {
-  let storedValue: AmbientValue;
+  const keyName = String(name instanceof ASymbol ? name.__name__ : name instanceof AString ? name.valueOf() : name);
 
   if (typeof value === "function") {
     throw new TypeError(
-      `bindValue: bare host function refused for "${String(name instanceof ASymbol ? name.__name__ : name instanceof AString ? name.valueOf() : name)}" — mint an ANativeProcedure / ARosettaProcedure (hostFnToCallable) instead`,
+      `bindValue: bare host function refused for "${keyName}" — mint an ANativeProcedure / ARosettaProcedure (hostFnToCallable) instead`,
     );
   }
 
-  if (isSchemeValue(value)) {
-    storedValue = value;
-  } else if (value instanceof Error) {
-    storedValue = value; // Error carve-out — see preamble
-  } else {
-    storedValue = fromJS(value) as AmbientValue;
+  if (!isSchemeValue(value) && !(value instanceof Error) && !(value instanceof RegExp)) {
+    throw new TypeError(
+      `bindValue: raw JS ${typeof value} refused for "${keyName}" — env storage is inside the membrane; box at the writer (jsToScheme / symbol.value)`,
+    );
   }
 
   let key: string | symbol;
@@ -256,7 +254,7 @@ export function bindValue(env: AmbientRuntime, name: BindingName, value: Ambient
   } else {
     key = name;
   }
-  env.__env__[key as string] = storedValue;
+  env.__env__[key as string] = value;
 }
 
 /**

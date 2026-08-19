@@ -89,8 +89,8 @@ export {
   type RuntimeAssembler,
 } from "../common/kernel.js";
 
-// `bindValue` — binds a name into a live `AmbientRuntime` env, `fromJS`-boxing a raw JS
-// value unless it's already a SchemeValue (or one of the small documented carve-outs).
+// `bindValue` — binds a name into a live `AmbientRuntime` env. The value is already
+// scheme-world (`AmbientValue`); raw JS is refused.
 // Cross-package door for arrival-provenance's `analysis/uneval.ts` (`buildUneval`) —
 // arms `uneval`'s re-execution scope by binding the run's output as `result` before
 // evaluating a selector as one more tapped step.

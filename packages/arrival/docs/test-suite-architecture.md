@@ -28,7 +28,7 @@ The eager goldens (golden-prov-*) stay as the oracle side of the static-lineage 
 (representation-in, representation-out, round-trip promise yes/no). The exit convention is a
 single column — the table structurally cannot express "strings boxed, booleans raw" without
 the contradiction being visible in the diff, which is what keeps the convention from drifting
-once it's decided. Strict doors: every forbidden crossing (boxed into fromJS, raw into toJS,
+once it's decided. Strict doors: every forbidden crossing (raw into toJS,
 borrowed fn, AValue from JS) is an `it.each` over the violation table asserting the TAUGHT
 message.
 

@@ -5,7 +5,7 @@
  * `Operator`, `OperatorRegistry`, the operator instances, the pre-built registries)
  * has been deleted — the numeric core it served is carved into the `scheme/numeric`
  * pack (env/r7rs/numeric.ts) and witnessed at the scheme surface by numbers.spec /
- * r7rs-numbers. What remains is the WRAPPER layer (fromJS / toJS / isSchemeValue /
+ * r7rs-numbers. What remains is the WRAPPER layer (jsToScheme / toJS / isSchemeValue /
  * the membrane wrappers), which survives.
  */
 
@@ -13,9 +13,8 @@ import { describe, expect, it, vi } from "vitest";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
+import { jsToScheme } from "../rosetta.js";
 import {
-  // Wrapper layer
-  fromJS,
   toJS,
   isSchemeValue,
   isBytevectorLike } from "../membrane.js";
@@ -83,106 +82,67 @@ describe("Wrapper Layer", () => {
     });
   });
 
-  describe("fromJS", () => {
+  describe("jsToScheme", () => {
     it("converts null to nil; undefined to #void (no portable representation)", () => {
-      expect(fromJS(null)).toBe(nil);
-      expect(fromJS(undefined)).toBe(theVoid);
+      expect(jsToScheme(CONSTANT_CTX, null)).toBe(nil);
+      expect(jsToScheme(CONSTANT_CTX, undefined)).toBe(theVoid);
     });
 
-    // INVARIANT: JS primitives (bool/number/string) materialize into boxed AValue subtypes,
-    // never a raw leak; a registered symbol (Symbol.for) materializes to ASymbol. A UNIQUE
-    // symbol and host bigint have no lens — they DOOR (NoLensError), they do not materialize.
     it("MATERIALIZES primitives to boxed AValues (host-agnostic — never a raw leak)", () => {
-      expect(fromJS(true)).toBeInstanceOf(ABool);
-      expect(fromJS(42)).toBeInstanceOf(AExact);
-      expect(fromJS("hello")).toBeInstanceOf(AString);
-      // a UNIQUE symbol has no lens (no portable identity) → door; a REGISTERED one → the keyword :test
-      expect(() => fromJS(Symbol("test"))).toThrow(/no lens for a unique JS symbol/);
-      expect(fromJS(Symbol.for("test"))).toBeInstanceOf(ASymbol);
+      expect(jsToScheme(CONSTANT_CTX, true)).toBeInstanceOf(ABool);
+      expect(jsToScheme(CONSTANT_CTX, 42)).toBeInstanceOf(AExact);
+      expect(jsToScheme(CONSTANT_CTX, "hello")).toBeInstanceOf(AString);
+      expect(() => jsToScheme(CONSTANT_CTX, Symbol("test"))).toThrow(/no lens for a unique JS symbol/);
+      expect(jsToScheme(CONSTANT_CTX, Symbol.for("test"))).toBeInstanceOf(ASymbol);
     });
 
-    // INVARIANT: host bigint DOORS (NoLensError kind `"bigint"`) — same spirit as
-    // unique-symbol. Exact numbers are safe-int ratios; convert with Number/
-    // bigintToNumber in the safe range (or pass inexact/string) before re-crossing.
     it("bigint DOORS — no lens for a host bigint (never boxed, never raw passthrough)", () => {
-      expect(() => fromJS(42n)).toThrow(/no lens for a host bigint/);
+      expect(() => jsToScheme(CONSTANT_CTX, 42n)).toThrow(/no lens for a host bigint/);
     });
 
-    it("refuses an already-boxed scheme value (strict one-way door)", () => {
-      // fromJS is the JS→Scheme entry; an interpreter-minted value never crosses
-      // it. The old pass-through masked which-side-am-I-on confusion in callers.
+    it("already-boxed AValue re-admits by identity", () => {
       const exact = new AExact(42);
-      // @ts-expect-error type-level: an AValue argument resolves to never
-      expect(() => fromJS(exact)).toThrow(/already-boxed/);
-
-      const pair = new APair(new AExact(1), new AExact(2));
-      // @ts-expect-error type-level: an AValue argument resolves to never
-      expect(() => fromJS(pair)).toThrow(/already-boxed/);
+      expect(jsToScheme(CONSTANT_CTX, exact)).toBe(exact);
     });
 
     it("borrows arrays as a vector (AJSArray) keeping source identity", () => {
       const arr = [1, 2, 3];
-      const wrapped = fromJS(arr);
+      const wrapped = jsToScheme(CONSTANT_CTX, arr);
       expect(wrapped).toBeInstanceOf(AJSArray);
       expect((wrapped as AJSArray).source).toBe(arr);
     });
 
     it("passes through bytevector-like types", () => {
       const u8 = new Uint8Array(10);
-      expect(fromJS(u8)).toBe(u8);
+      expect(jsToScheme(CONSTANT_CTX, u8)).toBe(u8);
 
       const ab = new ArrayBuffer(10);
-      expect(fromJS(ab)).toBe(ab);
+      expect(jsToScheme(CONSTANT_CTX, ab)).toBe(ab);
     });
 
-    it("passes through Promises", () => {
-      const p = Promise.resolve(42);
-      expect(fromJS(p)).toBe(p);
+    it("bare Promise DOORS", () => {
+      expect(() => jsToScheme(CONSTANT_CTX, Promise.resolve(42))).toThrow(/bare Promise cannot cross/);
     });
 
     it("materializes a borrowed function to a callable (ARosettaProcedure, reverse-membrane lens)", () => {
-      expect(fromJS(() => 42)).toBeInstanceOf(ARosettaProcedure);
+      expect(jsToScheme(CONSTANT_CTX, () => 42)).toBeInstanceOf(ARosettaProcedure);
     });
 
-    // INVARIANT: no membrane warning fires anymore — V's ruling (2026-07-23/24) retired
-    // the warn tier entirely off this path: `undefined` is a plain lens (no warn), a
-    // unique symbol doors (NoLensError, no warn), and a bare host function — the last row
-    // that still warned — is now the callable lens above (no warn either). Nothing left on
-    // `fromJS`/`jsToScheme` still emits a membrane warning; `setMembraneWarnings`'s
-    // toggle/dedupe behavior itself is pinned directly against `warnMembrane` in
-    // membrane-warn-bounded.law.test.ts, unrelated to any live producer here.
     it("emits no console.warn materializing a borrowed function (the warn tier's last row is retired)", () => {
       const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
       try {
-        fromJS(() => 42);
+        jsToScheme(CONSTANT_CTX, () => 42);
         expect(spy).not.toHaveBeenCalled();
       } finally {
         spy.mockRestore();
       }
     });
 
-    it("wraps objects in SchemeJSObject", () => {
+    it("wraps objects in AJSObject", () => {
       const obj = { a: 1 };
-      const wrapped = fromJS(obj);
+      const wrapped = jsToScheme(CONSTANT_CTX, obj);
       expect(wrapped).toBeInstanceOf(AJSObject);
       expect((wrapped as AJSObject).source).toBe(obj);
-    });
-
-    it("returns same wrapper for same object (identity cache)", () => {
-      const obj = { a: 1 };
-      const wrapped1 = fromJS(obj);
-      const wrapped2 = fromJS(obj);
-      expect(wrapped1).toBe(wrapped2);
-    });
-
-    it("refuses re-entry of a wrapper — double-wrapping is impossible", () => {
-      const obj = { a: 1 };
-      const wrapped = fromJS(obj);
-      // No longer a type error: `wrapped: FromJSResult` (membrane.ts) is a boundary-wide
-      // union (includes Uint8Array/ArrayBuffer/DataView/Function/Promise, none of which
-      // extend AValue), so `[T] extends [AValue]` no longer holds for the WHOLE union —
-      // the runtime door below is still real, just no longer caught statically.
-      expect(() => fromJS(wrapped)).toThrow(/already-boxed/);
     });
   });
 
@@ -313,33 +273,24 @@ describe("Wrapper Layer", () => {
   describe("Identity Preservation (roundtrip)", () => {
     it("preserves object identity through roundtrip", () => {
       const original = { a: 1 };
-      const wrapped = fromJS(original);
-      // @ts-expect-error fromJS returns `FromJSResult` (wider than `SchemeValue`); toJS expects
-      // SchemeValue. The runtime value IS a SchemeValue (AJSObject) — the mismatch is in the union.
-      const unwrapped = toJS(wrapped);
-      expect(unwrapped).toBe(original);
+      const wrapped = jsToScheme(CONSTANT_CTX, original);
+      expect(toJS(wrapped)).toBe(original);
     });
 
-    // INVARIANT: a borrowed function crosses in as a callable, not the same fn object
-    // (a genuine marshal wrapper is required to cross args/result at call time) — see
-    // crossing.law.test.ts's "function (borrowed)" row for the full asymmetric-round-trip law.
     it("a borrowed function crosses IN as a callable (ARosettaProcedure) — not a #void, not identity-preserving", () => {
-      expect(fromJS(() => 42)).toBeInstanceOf(ARosettaProcedure);
+      expect(jsToScheme(CONSTANT_CTX, () => 42)).toBeInstanceOf(ARosettaProcedure);
     });
 
     it("preserves array identity through the borrow (.source + toJS round-trip)", () => {
       const original = [1, 2, 3];
-      const wrapped = fromJS(original);
+      const wrapped = jsToScheme(CONSTANT_CTX, original);
       expect((wrapped as AJSArray).source).toBe(original);
-      // @ts-expect-error fromJS returns `FromJSResult` (wider than `SchemeValue`); toJS expects
-      // SchemeValue. The runtime value IS a SchemeValue (AJSArray) — the mismatch is in the union.
-      expect(toJS(wrapped)).toBe(original); // toJS unwraps via the TO_JS protocol → the same array
+      expect(toJS(wrapped)).toBe(original);
     });
 
     it("preserves Uint8Array identity (pass-through)", () => {
       const original = new Uint8Array([1, 2, 3]);
-      const wrapped = fromJS(original);
-      expect(wrapped).toBe(original);
+      expect(jsToScheme(CONSTANT_CTX, original)).toBe(original);
     });
   });
 });

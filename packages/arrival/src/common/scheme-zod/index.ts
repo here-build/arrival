@@ -13,9 +13,7 @@
 import * as z from "zod";
 import { applyMembraneClosure, CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import { makeCallCtx } from "../../run/CallCtx.js";
-// TYPE-ONLY: erased at compile — a value import of rosetta.ts would close the
-// scheme-zod ↔ ACallable ↔ rosetta init cycle (see ACallable.ts header).
-import type { InvocationLike } from "../../membrane/rosetta.js";
+import { jsToScheme, type InvocationLike } from "../../membrane/rosetta.js";
 
 import { APair } from "../../values/primitives/APair.js";
 import { ANil } from "../../values/primitives/ANil.js";
@@ -807,7 +805,8 @@ export function instance<T extends object>(Ctor: new (...args: any[]) => T) {
 
 /**
  * Callable crossing the membrane. With `input`/`output`, each call marshals
- * per-argument; untyped HOF callbacks (`map`/`filter`) omit both (passthrough).
+ * per-argument; untyped callbacks still box JS args via jsToScheme (same as
+ * hostProjectionOf). `map`/`filter` HOF apply already-scheme elements and omit both.
  *
  * Return-direction ban: rosetta result is never a bare JS function — encode
  * only legitimate for an argument marshalled inward.
@@ -845,7 +844,7 @@ export function procedure<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(input?
                 // decode, when ambient scope is unrelated or undefined.
                 const schemeArgs = input
                   ? withMarshalCtx(scope.runCtx, () => jsArgs.map((a) => z.encode(input, a as never)))
-                  : jsArgs;
+                  : jsArgs.map((a) => jsToScheme(scope.runCtx, a));
                 // Re-entry nests under exporting invocation (`scope.dynSite`);
                 // `withDynamicCallSite` for nested lambda re-entry.
                 const callCtx = makeCallCtx(scope.runCtx, scope.dynSite as InvocationLike | undefined);

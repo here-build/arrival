@@ -271,7 +271,7 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
 
   // Indexed access — boxes JUST element k (no full materialize). jsToScheme carries
   // THIS container's provenance so (vector-ref borrowed k) stamps identically to
-  // (vector->list borrowed). fromJS would drop provenance (CONSTANT_CTX/EMPTY).
+  // (vector->list borrowed). A CONSTANT_CTX mint would drop provenance.
   ["arrival/tagless-final/vector-ref"](k: number, runCtx?: RunContext): SchemeValue | Promise<SchemeValue> {
     return applyMembraneClosure(runCtx, () => {
       this.freezeSource();

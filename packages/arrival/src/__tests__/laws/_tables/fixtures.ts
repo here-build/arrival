@@ -14,7 +14,6 @@
  */
 import { freshEnv } from "../../_fresh-env.js";
 import { execStateOverFrame } from "../../../eval/generator-exec.js";
-import { fromJS } from "../../../membrane/membrane.js";
 import { AValue } from "../../../values/primitives/AValue.js";
 import { APair } from "../../../values/primitives/APair.js";
 import { AVector } from "../../../values/primitives/AVector.js";

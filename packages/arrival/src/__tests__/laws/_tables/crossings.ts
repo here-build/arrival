@@ -11,7 +11,7 @@
  */
 export interface CrossingRow {
   readonly type: string;
-  /** JS value entering scheme space (fromJS/jsToScheme) becomes… */
+  /** JS value entering scheme space (jsToScheme) becomes… */
   readonly entryForm: string; // e.g. "AExact" | "AInexact" | "AString" | "borrowed AJSArray" | "VOID (refused, warn)"
   /** scheme value exiting to JS (toJS/toJS) becomes… R1-gated. */
   /** ruled by R1: uniform plain-JS exit (containers = lazy ref-tracking proxy) */
@@ -37,14 +37,13 @@ export const CROSSINGS: readonly CrossingRow[] = [
   // symbol has no lens (no portable identity), so it DOORS (NoLensError) instead of
   // silently degrading to #void.
   { type: "unique symbol", entryForm: "DOOR (no lens — NoLensError)", exitForm: "n/a", roundTrip: false },
-  { type: "array", entryForm: "borrowed AJSArray (identity-cached)", exitForm: "raw source array", roundTrip: true },
-  { type: "plain object", entryForm: "AJSObject (identity-cached, lazy)", exitForm: "raw source object", roundTrip: true },
+  { type: "array", entryForm: "borrowed AJSArray", exitForm: "raw source array", roundTrip: true },
+  { type: "plain object", entryForm: "AJSObject (lazy)", exitForm: "raw source object", roundTrip: true },
   { type: "Uint8Array/ArrayBuffer/DataView", entryForm: "raw passthrough (named superset: FFI identity)", exitForm: "raw", roundTrip: true },
-  // Promise: fromJS keeps the raw passthrough (the evaluator trampoline awaits it), but the
-  // jsToScheme registry DOORS a bare Promise (jsToSchemeAsyncDoor) — a Promise VALUE inside a
-  // structure never reaches the router: the holding container settles it lazily on entry read
+  // Bare Promise doors (jsToSchemeAsyncDoor). A Promise VALUE inside a structure never
+  // reaches the router: the holding container settles it lazily on entry read
   // (pending-entry.ts; the inbound-registry law owns those rows).
-  { type: "Promise", entryForm: "raw at fromJS (trampoline awaits); jsToScheme DOORS — structure entries settle lazily", exitForm: "n/a", roundTrip: false },
+  { type: "Promise", entryForm: "DOOR (bare Promise — AsyncCrossingError); structure entries settle lazily", exitForm: "n/a", roundTrip: false },
   // Residual exotics (an unbranded class instance / Map / Date / RegExp / Set …): formerly a
   // SILENT raw leak, then a warn-and-borrow AJSObject — V's ruling (2026-07-23) retires that
   // tolerance tier too: no lens exists for an unbranded class instance, so it DOORS
@@ -77,8 +76,6 @@ export interface ViolationRow {
 
 export const VIOLATIONS: readonly ViolationRow[] = [
   { name: "bare Promise into jsToScheme", act: "jsToScheme(ctx, Promise.resolve(1))", door: /bare Promise cannot cross/ },
-  { name: "boxed value into fromJS", act: "fromJS(new AExact(...))", door: /already-boxed/ },
-  { name: "wrapper re-entry into fromJS", act: "fromJS(fromJS({}))", door: /already-boxed/ },
   { name: "raw JS value into toJS", act: "toJS(42 as never)", door: /already JS/ },
   { name: "membrane write", act: "AJSObject.set(...)", door: /writes are banned/ },
   { name: "membrane delete", act: "AJSObject.delete(...)", door: /mutations are banned/ },

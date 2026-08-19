@@ -12,8 +12,7 @@
 //
 // toJS IS the membrane: a callable's `arrival/toJS` returns a HOST-CALLABLE function —
 // reverse-membrane projection (JS args cross IN, apply term runs, result crosses OUT).
-// Not display (that's `arrival/print`). Marshallers are INJECTED (`_installCallableMarshal`)
-// because importing rosetta.ts here would close the scheme-zod init cycle.
+// Not display (that's `arrival/print`). Crossings call `jsToScheme`/`toJS` directly.
 //
 // REGION-DISCIPLINED (docs/membrane.md §REGION): wrapper closes over
 // `currentRegionScope() ?? DETACHED_SCOPE`, minted/cached on THAT scope's own `cache` —
@@ -29,7 +28,7 @@ import { makeCallCtx, type CallCtx } from "../../run/CallCtx.js";
 import { PurityError } from "../../errors.js";
 // TYPE-ONLY: erased at compile — a real value import would close the scheme-zod cycle.
 import type { DoorSymbolDef } from "../../common/symbols/_bake.js";
-import type { InvocationLike } from "../../membrane/rosetta.js";
+import { jsToScheme, toJS, type InvocationLike } from "../../membrane/rosetta.js";
 // Region discipline sits BELOW this file — safe runtime edge, no cycle.
 import { currentRegionScope, DETACHED_SCOPE, withRegionCall, withRegionScope } from "../../membrane/region-scope.js";
 import { withDynamicCallSite } from "../../eval/dynamic-call-site.js";
@@ -49,18 +48,6 @@ export interface Arity {
 // Shared leaf behavior as free functions. Procedure identity is load-bearing
 // (`(eq? car car)`), so provenance stamping is a no-op and equality is reference identity.
 const callableEquals = (self: object, other: unknown): boolean => other === self;
-
-// ── Injected marshal seam (see preamble, toJS IS the membrane) ──
-// membrane/rosetta.ts installs at its own module init. Before that init: door loudly (P5).
-interface CallableMarshal {
-  jsToScheme: (runCtx: RunContext, value: unknown) => unknown;
-  toJS: (value: SchemeValue) => unknown;
-}
-let marshal: CallableMarshal | undefined;
-/** Module-init hook for membrane/rosetta.ts ONLY — not a public extension point. */
-export function _installCallableMarshal(m: CallableMarshal): void {
-  marshal = m;
-}
 
 // ── Inbound reverse-membrane lens (hostFnToCallable) — bifunctor's OTHER leg ──
 // hostProjectionOf is outbound (scheme callable → host fn); this is js→scheme.
@@ -108,20 +95,14 @@ export function hostFnToCallable(
       arity: { min: 0, max: null },
       contract: undefined,
       strategy: undefined,
-      hostApply: (args, callCtx): CallResult => {
-        if (marshal === undefined) {
-          throw new Error(
-            "jsToScheme: a host-function callable applied before membrane init (membrane/rosetta.ts not loaded)",
-          );
-        }
-        return applyMembraneClosure(callCtx.runCtx, () => {
-          const jsArgs = args.map((a) => marshal!.toJS(a));
+      hostApply: (args, callCtx): CallResult =>
+        applyMembraneClosure(callCtx.runCtx, () => {
+          const jsArgs = args.map((a) => toJS(a));
           const result = fn(...jsArgs);
           return result instanceof Promise
-            ? result.then((r) => marshal!.jsToScheme(callCtx.runCtx, r) as SchemeValue)
-            : (marshal!.jsToScheme(callCtx.runCtx, result) as SchemeValue);
-        });
-      },
+            ? result.then((r) => jsToScheme(callCtx.runCtx, r))
+            : jsToScheme(callCtx.runCtx, result);
+        }),
     },
     provenance,
   );
@@ -141,8 +122,7 @@ const WRAPPER_KEY: WrapperKey = "mem";
 /**
  * Build (once per (callable, scope)) the host-callable reverse-membrane wrapper.
  * Region-disciplined: closes over scope AT MINT TIME, never re-reads ambient later.
- * `exit` when supplied is reused VERBATIM for the result leg; bare falls back to
- * marshal's default-options toJS.
+ * `exit` when supplied is reused VERBATIM for the result leg; bare falls back to `toJS`.
  */
 function hostProjectionOf(self: ACallable, exit?: MembraneExit): (...args: unknown[]) => unknown {
   const scope = currentRegionScope() ?? DETACHED_SCOPE;
@@ -156,18 +136,15 @@ function hostProjectionOf(self: ACallable, exit?: MembraneExit): (...args: unkno
   const wrapper = (...jsArgs: unknown[]): Promise<unknown> =>
     applyMembraneClosure(scope.runCtx, () =>
       withRegionCall(scope, async () => {
-        if (marshal === undefined) {
-          throw new Error("arrival/toJS: callable crossing before membrane init (membrane/rosetta.ts not loaded)");
-        }
         // Args mint under the ENCLOSING invocation's runCtx (scope.runCtx), never CONSTANT_CTX.
         const schemeArgs = (await Promise.all(
-          jsArgs.map(async (a) => marshal!.jsToScheme(scope.runCtx, await a)),
+          jsArgs.map(async (a) => jsToScheme(scope.runCtx, await a)),
         )) as SchemeValue[];
         const callCtx = makeCallCtx(scope.runCtx, scope.dynSite as InvocationLike | undefined);
         // Re-entry trace nests under the exporting invocation.
         const raw = await withDynamicCallSite(scope.dynSite, () => applyCallback(self, schemeArgs, callCtx));
         invariant(!isBounceMarker(raw), "arrival/toJS: a reverse-membrane call resolved to a bounce token");
-        return withRegionScope(scope, () => (exit === undefined ? marshal!.toJS(raw) : exit.element(raw)));
+        return withRegionScope(scope, () => (exit === undefined ? toJS(raw) : exit.element(raw)));
       }),
     );
   byKey.set(WRAPPER_KEY, wrapper);

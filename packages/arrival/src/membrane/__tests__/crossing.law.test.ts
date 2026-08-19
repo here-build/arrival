@@ -17,7 +17,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import { CROSSINGS, VIOLATIONS } from "../../__tests__/laws/_tables/crossings.js";
-import { fromJS, toJS, isSchemeValue } from "../membrane.js";
+import { toJS, isSchemeValue } from "../membrane.js";
 import { jsToScheme, modeKeyOf } from "../rosetta.js";
 
 import { exec } from "../../eval/generator-exec.js";
@@ -55,15 +55,9 @@ function expectNoProvenanceProperty(x: unknown): void {
   }
 }
 
-/**
- * `fromJS` is typed to return `FromJSResult` — a NAMED SUPERSET of `SchemeValue`
- * (control forms / raw FFI passthrough live outside the value-intent union, per
- * membrane.ts's own doc). `toJS` takes `SchemeValue`. Every value this grid feeds
- * back into `toJS` for a round-trip assertion is honestly a `SchemeValue` at
- * runtime — the mismatch is only in the declared union's width. membrane.spec.ts
- * pins the same gap with a repeated `@ts-expect-error`; centralized here once
- * instead of scattered per call site.
- */
+/** Inbound entry for this grid — the one JS→Scheme door. */
+const enter = <T>(v: T) => jsToScheme(CONSTANT_CTX, v);
+
 const exitJS = (entered: unknown): unknown => toJS(entered as SchemeValue);
 
 describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, row) => {
@@ -79,7 +73,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
   switch (row.type) {
     case "boolean": {
       it(entryTitle, () => {
-        const entered = fromJS(true);
+        const entered = enter(true);
         expect(entered).toBeInstanceOf(ABool);
         expect((entered as ABool).valueOf()).toBe(true);
       });
@@ -91,8 +85,8 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         expect(f).toBe(false);
       });
       it(roundTripTitle, () => {
-        expect(exitJS(fromJS(true))).toBe(true);
-        expect(exitJS(fromJS(false))).toBe(false);
+        expect(exitJS(enter(true))).toBe(true);
+        expect(exitJS(enter(false))).toBe(false);
       });
       it(provenanceTitle, () => {
         const stamped = jsToScheme(CONSTANT_CTX, true, {}, PROV);
@@ -105,7 +99,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
 
     case "safe-int number": {
       it(entryTitle, () => {
-        const entered = fromJS(42);
+        const entered = enter(42);
         expect(entered).toBeInstanceOf(AExact);
         expect((entered as AExact).num).toBe(42);
       });
@@ -115,7 +109,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         expect(typeof n).toBe("number");
       });
       it(roundTripTitle, () => {
-        expect(exitJS(fromJS(42))).toBe(42);
+        expect(exitJS(enter(42))).toBe(42);
       });
       it(provenanceTitle, () => {
         const stamped = jsToScheme(CONSTANT_CTX, 42, {}, PROV);
@@ -128,7 +122,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
 
     case "float number": {
       it(entryTitle, () => {
-        const entered = fromJS(3.14);
+        const entered = enter(3.14);
         expect(entered).toBeInstanceOf(AInexact);
         expect((entered as AInexact).real).toBe(3.14);
       });
@@ -138,7 +132,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         expect(typeof n).toBe("number");
       });
       it(roundTripTitle, () => {
-        expect(exitJS(fromJS(3.14))).toBe(3.14);
+        expect(exitJS(enter(3.14))).toBe(3.14);
       });
       it(provenanceTitle, () => {
         const stamped = jsToScheme(CONSTANT_CTX, 3.14, {}, PROV);
@@ -155,11 +149,11 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
       // safe range (or pass inexact/string) before re-crossing. Codecs that speak
       // bigint on the host face (`z.bigint`) encode to AExact BEFORE the membrane.
       it(entryTitle, () => {
-        expect(() => fromJS(10n)).toThrow(/no lens for a host bigint/);
+        expect(() => enter(10n)).toThrow(/no lens for a host bigint/);
       });
       // exitForm: "n/a" — no exit cell (the crossing doors before any box exists).
       it(roundTripTitle, () => {
-        expect(() => fromJS(10n)).toThrow(/no lens for a host bigint/);
+        expect(() => enter(10n)).toThrow(/no lens for a host bigint/);
         expect(() => jsToScheme(CONSTANT_CTX, 12345678901234567890n)).toThrow(/no lens for a host bigint/);
       });
       it(provenanceTitle, () => {
@@ -172,7 +166,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
 
     case "string": {
       it(entryTitle, () => {
-        const entered = fromJS("hello");
+        const entered = enter("hello");
         expect(entered).toBeInstanceOf(AString);
         expect((entered as AString).valueOf()).toBe("hello");
       });
@@ -182,7 +176,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         expect(typeof s).toBe("string");
       });
       it(roundTripTitle, () => {
-        expect(exitJS(fromJS("hello"))).toBe("hello");
+        expect(exitJS(enter("hello"))).toBe("hello");
       });
       it(provenanceTitle, () => {
         const stamped = jsToScheme(CONSTANT_CTX, "hello", {}, PROV);
@@ -195,7 +189,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
 
     case "null": {
       it(entryTitle, () => {
-        expect(fromJS(null)).toBe(nil);
+        expect(enter(null)).toBe(nil);
       });
       it(exitTitle, () => {
         // nil-as-array (V ruling 2026-07-13): '()'s JS face is [] — the empty case of
@@ -227,7 +221,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         // warn-then-void tolerance is retired.
         const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
         try {
-          expect(fromJS(undefined)).toBe(theVoid);
+          expect(enter(undefined)).toBe(theVoid);
           expect(spy).not.toHaveBeenCalled();
         } finally {
           spy.mockRestore();
@@ -237,7 +231,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         expect(toJS(theVoid)).toBe(undefined);
       });
       it(roundTripTitle, () => {
-        expect(exitJS(fromJS(undefined))).toBe(undefined);
+        expect(exitJS(enter(undefined))).toBe(undefined);
       });
       it(provenanceTitle, () => {
         // theVoid is a shared, data-free singleton (the "unspecified" marker) — jsToScheme
@@ -253,7 +247,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
 
     case "registered symbol (Symbol.for)": {
       it(entryTitle, () => {
-        const entered = fromJS(Symbol.for("test"));
+        const entered = enter(Symbol.for("test"));
         expect(entered).toBeInstanceOf(ASymbol);
         expect((entered as ASymbol).__name__).toBe(":test");
       });
@@ -262,7 +256,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
       // this now would invent that unrelated decision.
       it.todo(exitTitle);
       it(`${roundTripTitle} — a symbol exits as a string, never the original JS Symbol`, () => {
-        const out = exitJS(fromJS(Symbol.for("test")));
+        const out = exitJS(enter(Symbol.for("test")));
         expect(typeof out).toBe("string");
         // ⚖️ 2026-07-14 representation ruling (compiler campaign, constitution §2.1):
         // symbol egress = the INTERNED NAME, plain — the apostrophe marker died
@@ -289,12 +283,12 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
       // warn-then-void tolerance is retired; it now DOORS (NoLensError), naming the
       // cure (register it, or pass a string/keyword instead).
       it(entryTitle, () => {
-        expect(() => fromJS(Symbol("test"))).toThrow(/no lens for a unique JS symbol/);
+        expect(() => enter(Symbol("test"))).toThrow(/no lens for a unique JS symbol/);
       });
       // exitForm: "n/a" — no exit cell for this row (the crossing doors before any
       // box exists to exit).
       it(roundTripTitle, () => {
-        expect(() => fromJS(Symbol("x"))).toThrow(/no lens for a unique JS symbol/);
+        expect(() => enter(Symbol("x"))).toThrow(/no lens for a unique JS symbol/);
       });
       it(provenanceTitle, () => {
         // No carrier to stamp: the crossing doors BEFORE any box could carry a
@@ -307,19 +301,18 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
     case "array": {
       it(entryTitle, () => {
         const arr = [1, 2, 3];
-        const entered = fromJS(arr);
+        const entered = enter(arr);
         expect(entered).toBeInstanceOf(AJSArray);
         expect((entered as AJSArray).source).toBe(arr);
         expect((entered as AJSArray).kind).toBe("vector");
-        expect(fromJS(arr)).toBe(entered);
       });
       it(exitTitle, () => {
         const arr = [1, 2, 3];
-        expect(exitJS(fromJS(arr))).toBe(arr);
+        expect(exitJS(enter(arr))).toBe(arr);
       });
       it(roundTripTitle, () => {
         const arr = [1, 2, 3];
-        expect(exitJS(fromJS(arr))).toBe(arr);
+        expect(exitJS(enter(arr))).toBe(arr);
       });
       it(provenanceTitle, () => {
         const stamped = jsToScheme(CONSTANT_CTX, ["a", "b"], {}, PROV);
@@ -336,18 +329,17 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
     case "plain object": {
       it(entryTitle, () => {
         const obj = { a: 1 };
-        const entered = fromJS(obj);
+        const entered = enter(obj);
         expect(entered).toBeInstanceOf(AJSObject);
         expect((entered as AJSObject).source).toBe(obj);
-        expect(fromJS(obj)).toBe(entered);
       });
       it(exitTitle, () => {
         const obj = { a: 1 };
-        expect(exitJS(fromJS(obj))).toBe(obj);
+        expect(exitJS(enter(obj))).toBe(obj);
       });
       it(roundTripTitle, () => {
         const obj = { a: 1 };
-        expect(exitJS(fromJS(obj))).toBe(obj);
+        expect(exitJS(enter(obj))).toBe(obj);
       });
       // Regression, carried from rosetta-environment.test.ts (retired in the 2026-07-09
       // suite consolidation): `Object.entries` in toJS used to drop symbol keys, so
@@ -357,7 +349,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         const SECRET = Symbol("secret");
         const original: Record<string | symbol, unknown> = { visible: 1 };
         original[SECRET] = [4, 5, 6];
-        const roundTripped = exitJS(fromJS(original)) as Record<string | symbol, unknown>;
+        const roundTripped = exitJS(enter(original)) as Record<string | symbol, unknown>;
         expect(roundTripped.visible).toBe(1);
         expect(roundTripped[SECRET]).toEqual([4, 5, 6]);
       });
@@ -376,24 +368,24 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
     case "Uint8Array/ArrayBuffer/DataView": {
       it(entryTitle, () => {
         const u8 = new Uint8Array([1, 2, 3]);
-        expect(fromJS(u8)).toBe(u8);
-        expect(isSchemeValue(fromJS(u8))).toBe(false); // stays raw, never boxed
+        expect(enter(u8)).toBe(u8);
+        expect(isSchemeValue(enter(u8))).toBe(false); // stays raw, never boxed
         const ab = new ArrayBuffer(10);
-        expect(fromJS(ab)).toBe(ab);
+        expect(enter(ab)).toBe(ab);
         const dv = new DataView(new ArrayBuffer(10));
-        expect(fromJS(dv)).toBe(dv);
+        expect(enter(dv)).toBe(dv);
       });
       it(exitTitle, () => {
         // Never boxed on entry — there is no SchemeValue to exit. toJS is a
         // strict door (raw FFI identity stays on the JS side).
         const u8 = new Uint8Array([1, 2, 3]);
-        expect(isSchemeValue(fromJS(u8))).toBe(false);
-        expect(() => toJS(fromJS(u8) as never)).toThrow(RedundantCrossingError);
+        expect(isSchemeValue(enter(u8))).toBe(false);
+        expect(() => toJS(enter(u8) as never)).toThrow(RedundantCrossingError);
       });
       it(roundTripTitle, () => {
         const u8 = new Uint8Array([1, 2, 3]);
         // Identity is the inbound FFI passthrough, not an egress peel.
-        expect(fromJS(u8)).toBe(u8);
+        expect(enter(u8)).toBe(u8);
         expect(() => toJS(u8 as never)).toThrow(RedundantCrossingError);
       });
       it(provenanceTitle, () => {
@@ -409,21 +401,13 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
 
     case "Promise": {
       it(entryTitle, () => {
-        // fromJS keeps the raw passthrough (the evaluator trampoline awaits it)…
-        const p = Promise.resolve(42);
-        expect(fromJS(p)).toBe(p);
-        // …but a bare Promise into jsToScheme DOORS (jsToSchemeAsyncDoor): the old
-        // silent exotic passthrough is closed — settle first, or let the holding
+        // Bare Promise doors (jsToSchemeAsyncDoor): settle first, or let the holding
         // structure's entry read settle it lazily (the inbound-registry law owns
         // the pending-cell rows).
-        expect(() => jsToScheme(CONSTANT_CTX, Promise.resolve(42))).toThrow(/bare Promise cannot cross/);
+        expect(() => enter(Promise.resolve(42))).toThrow(/bare Promise cannot cross/);
       });
-      // exitForm: "n/a" — a Promise never crosses back out through toJS; the evaluator
-      // trampoline awaits it before anything could exit.
-      it(`${roundTripTitle} — fromJS identity pass-through is the whole projection`, () => {
-        const p = Promise.resolve(42);
-        expect(fromJS(p)).toBe(p);
-        expect(isSchemeValue(fromJS(p))).toBe(false);
+      it(roundTripTitle, () => {
+        expect(() => enter(Promise.resolve(42))).toThrow(/bare Promise cannot cross/);
       });
       it(provenanceTitle, () => {
         // No carrier to stamp: the crossing doors BEFORE any box could carry a
@@ -487,7 +471,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
         // lens, ACallable.ts's hostFnToCallable).
         const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
         try {
-          const entered = fromJS(() => 42);
+          const entered = enter(() => 42);
           expect(entered).toBeInstanceOf(ARosettaProcedure);
           expect(spy).not.toHaveBeenCalled();
         } finally {
@@ -498,7 +482,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
       // migration (region.law.test.ts owns its acceptance tests); today there is no
       // region-scoped wrapper to test, so filling this now would just re-pin the gap.
       it(`${roundTripTitle} — a host fn crosses in as a callable, out as a marshaling wrapper (not the SAME fn object, but SAME behavior)`, async () => {
-        const out = exitJS(fromJS(() => 42));
+        const out = exitJS(enter(() => 42));
         expect(typeof out).toBe("function");
         await expect((out as (...a: unknown[]) => unknown)()).resolves.toBe(42);
       });
@@ -586,7 +570,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
     }
 
     case "native vector (scheme→JS only)": {
-      it.todo(entryTitle); // scheme→JS only — fromJS(array) mints a BORROWED AJSArray, never an AVector
+      it.todo(entryTitle); // scheme→JS only — enter(array) mints a BORROWED AJSArray, never an AVector
       it(exitTitle, () => {
         const vec = new AVector([
           new AExact(1),
@@ -621,7 +605,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
     }
 
     case "native dict (scheme→JS only)": {
-      it.todo(entryTitle); // scheme→JS only — fromJS(object) mints a BORROWED AJSObject, never an ADict
+      it.todo(entryTitle); // scheme→JS only — enter(object) mints a BORROWED AJSObject, never an ADict
       it(exitTitle, () => {
         const dict = new ADict([
           [new ASymbol("a"), new AExact(1)],
@@ -837,33 +821,6 @@ describe.each(VIOLATIONS.map((v) => [v.name, v] as const))("forbidden crossing: 
       break;
     }
 
-    case "boxed value into fromJS": {
-      it(title, () => {
-        const exact = new AExact(42);
-        // @ts-expect-error type-level: an AValue argument resolves to never — the point of
-        // this row is the RUNTIME door, deliberately called past the type-level one.
-        expect(() => fromJS(exact)).toThrow(v.door);
-        const pair = new APair(new AExact(1), new AExact(2));
-        // @ts-expect-error see above
-        expect(() => fromJS(pair)).toThrow(v.door);
-      });
-      break;
-    }
-
-    case "wrapper re-entry into fromJS": {
-      it(title, () => {
-        const obj = { a: 1 };
-        const wrapped = fromJS(obj);
-        // NOTE: no `@ts-expect-error` here (unlike the concrete-AValue row above) — `wrapped`'s
-        // static type is the wide `FromJSResult` union, which the `[T] extends [AValue] ? never
-        // : T` conditional does NOT collapse to `never` for (the union also contains non-AValue
-        // members). The runtime door still fires — `isSchemeValue` narrows at runtime where the
-        // type system can't narrow the union statically.
-        expect(() => fromJS(wrapped)).toThrow(v.door);
-      });
-      break;
-    }
-
     case "raw JS value into toJS": {
       it(title, () => {
         // Deliberately breach the type-level door: `toJS`'s parameter is `SchemeValue` —
@@ -904,16 +861,12 @@ describe.each(VIOLATIONS.map((v) => [v.name, v] as const))("forbidden crossing: 
 describe("forgery guard: a borrowed object's own arrival/*-named key is DATA, never protocol (F3, key-taxonomy corollary — PRINCIPLES.md P7 / RULINGS.md key taxonomy)", () => {
   // The key taxonomy puts algebra instruction keys ("arrival/class" — retired, "arrival/toJS",
   // …) in plain-string space so every static interpreter can read them as data — which means a
-  // FOREIGN object crossing fromJS can carry an own data property with that exact name by
-  // pure coincidence (or by a hostile actor deliberately probing the membrane). The guard
-  // is structural, not a denylist: fromJS's object arm always wraps a plain object in an
-  // AJSObject (membrane.ts), and every protocol read (type(), toJS(), the interop-boundary
-  // check) is read off the WRAPPER's own class or the wrapper's own methods — never off the
-  // wrapped source's data keys. A forged "arrival/class"/"arrival/toJS" own key therefore has
-  // no path to being mistaken for a brand or the method it names.
-  it('fromJS({"arrival/class": "fake"}) crosses as plain data — the forged key never masquerades as protocol', () => {
+  // FOREIGN object crossing inbound can carry an own data property with that exact name by
+  // coincidence. The guard is structural: the object ladder wraps a plain object in an
+  // AJSObject, and every protocol read is off the WRAPPER — never the source's data keys.
+  it('jsToScheme({"arrival/class": "fake"}) crosses as plain data — the forged key never masquerades as protocol', () => {
     const forged = { "arrival/class": "fake" };
-    const entered = fromJS(forged) as AJSObject;
+    const entered = enter(forged) as AJSObject;
     expect(entered).toBeInstanceOf(AJSObject);
     // The protocol identity is the WRAPPER's own class — never derived from the wrapped
     // source's data. AJSObject extends AValue, so it answers the family's interop-boundary
@@ -926,9 +879,9 @@ describe("forgery guard: a borrowed object's own arrival/*-named key is DATA, ne
     expect((read as AString).valueOf()).toBe("fake");
   });
 
-  it('fromJS({"arrival/toJS": fn}) crosses as plain data — the forged key is never invoked as the toJS protocol method', () => {
+  it('jsToScheme({"arrival/toJS": fn}) crosses as plain data — the forged key is never invoked as the toJS protocol method', () => {
     const forged = { "arrival/toJS": () => "pwned" };
-    const entered = fromJS(forged) as AJSObject;
+    const entered = enter(forged) as AJSObject;
     expect(entered).toBeInstanceOf(AJSObject);
     // toJS(entered) invokes the WRAPPER's own `arrival/toJS` method (AJSObject.ts), which
     // reconstructs a plain object from the source's members — it never looks up (let alone

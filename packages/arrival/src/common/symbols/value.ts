@@ -2,10 +2,11 @@
 // docs/environments.md §SYMBOL-KINDS.
 
 import { parseNameDoc, type ValueSymbolDef } from "./_bake.js";
-import { fromJS, isSchemeValue } from "../../membrane/membrane.js";
+import { jsToScheme } from "../../membrane/rosetta.js";
+import { CONSTANT_CTX } from "../../run/RunContext.js";
 import type { AmbientValue } from "../../env/AmbientRuntime.js";
 
-/** Honest return: AmbientValue minus bare host functions (fromJS never produces bare procedures). */
+/** Honest return: AmbientValue minus bare host functions (jsToScheme mints an ARosettaProcedure). */
 type NonCallableAmbientValue = Exclude<AmbientValue, (...args: any[]) => any>;
 
 /** Stamp def onto boxed's own `.contract` — non-enumerable, define-once (same slot every kind
@@ -36,13 +37,13 @@ function stampValueContract(boxed: unknown, def: ValueSymbolDef): void {
   }
 }
 
-/** Raw value binding. Boxes at define time (fromJS / passthrough); stamps .contract.
+/** Raw value binding. Boxes at define time through jsToScheme; stamps .contract.
  *  No nested value field — the box IS the value. */
 export function value(tpl: TemplateStringsArray, ...sub: unknown[]): (v: unknown) => NonCallableAmbientValue {
   const { name, doc } = parseNameDoc(tpl, sub);
   const def: ValueSymbolDef = { kind: "value", name, doc };
   return (v: unknown): NonCallableAmbientValue => {
-    const boxed = isSchemeValue(v) ? (v as AmbientValue) : (fromJS(v) as AmbientValue);
+    const boxed = jsToScheme(CONSTANT_CTX, v) as AmbientValue;
     stampValueContract(boxed, def);
     return boxed as NonCallableAmbientValue;
   };

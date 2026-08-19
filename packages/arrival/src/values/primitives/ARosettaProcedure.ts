@@ -1,10 +1,10 @@
 // ARosettaProcedure — host-JS MEMBRANE callable (rosetta / MCP / reverse-membrane lens).
 // Bake state + apply ownership sit on the class, not a factory-local closure.
 //
-// The apply spine body cannot live here as a static import of scheme-zod / membrane:
-// ACallable imports this module; scheme-zod imports ACallable — a value import of either
-// graph hits TDZ on ACallable's marshal install. Body installed once from symbols/rosetta.ts
-// via `_installRosettaMembraneApply`.
+// The apply spine body cannot live here as a static import of scheme-zod:
+// ACallable imports this module; scheme-zod imports ACallable — a value import of
+// scheme-zod here would TDZ on ACallable class bindings (`z.instanceof`). Body
+// installed once from symbols/rosetta.ts via `_installRosettaMembraneApply`.
 
 import { AValue } from "./AValue.js";
 import type { MembraneExit, SchemeBounceMarker, SchemeValue } from "../types.js";

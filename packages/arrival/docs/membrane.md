@@ -52,7 +52,7 @@ from symbol.rosetta impls."** This retired the void-and-warn tolerance the funct
 row carried through the 2026-07-23 binary-membrane restructure (§INBOUND) — that
 ruling settled every OTHER shape but left the bare-function row a documented,
 unresolved fork (lens-to-callable vs door); this is the fork resolved. A host function
-reaching the generic membrane (`fromJS`, `jsToScheme`, `boxing.ts`'s `fromJs`) mints
+reaching the generic membrane (`jsToScheme`, `boxing.ts`'s `fromJs`) mints
 (or reuses, per-run) an `ARosettaProcedure` whose apply term IS the reverse membrane:
 scheme args cross scheme→js (default-options `schemeToJs`), the host fn runs, and its
 result — awaited first if it's a `Promise` — crosses js→scheme under the CALLING
@@ -98,7 +98,7 @@ two). It materializes to `#void` silently, same as any other declared crossing.
 
 **A unique (non-registered) symbol has NO LENS — it doors.** It carries no portable
 cross-realm key and no identity a Scheme program could reconstruct across a crossing,
-so `jsToScheme`/`fromJS` refuse it loudly (`NoLensError`) instead of degrading to
+so `jsToScheme` refuses it loudly (`NoLensError`) instead of degrading to
 `#void`: register it (`Symbol.for(name)`) to cross as a `:keyword`, or pass a
 string/keyword directly.
 
@@ -164,8 +164,8 @@ registry in `rosetta.ts` (§INBOUND):
 3. **RAW (the third lane)** — two carriers cross by identity, unboxed, because they
    are not value-intent and have no faithful Scheme form: binary FFI
    (`Uint8Array`/`ArrayBuffer`/`DataView`/`Buffer`, identity-preserving for the
-   polymorphic bytevector ops), and a `Promise` at `fromJS` only (kept raw for the
-   evaluator trampoline to await; a bare Promise into `jsToScheme` doors). Host
+   polymorphic bytevector ops). A bare `Promise` into `jsToScheme` doors (the
+   evaluator trampoline awaits before any inbound crossing). Host
    `bigint` is **not** raw — it DOORS (`NoLensError` kind `"bigint"`, same spirit as
    unique-symbol): exact numbers are safe-integer ratios; convert with
    `Number`/`bigintToNumber` in the safe range (or pass an inexact/string) before
@@ -541,17 +541,13 @@ doors, by crossing:
 
 | Door | Fires when | Class |
 |---|---|---|
-| Redundant crossing (strict one-way) | an already-boxed value reaches `fromJS`, or a raw JS value reaches `toJS` — the caller is confused about which side it stands on | `RedundantCrossingError` |
+| Redundant crossing (strict one-way) | a raw JS value reaches `toJS` — the caller is confused about which side it stands on | `RedundantCrossingError` |
 | Unrecognized (P5 terminal) | `schemeToJs` reaches a boxed shape with no `arrival/toJS` branch — a silent return would leak internal representation | `UnrecognizedCrossingError` |
 | Async | a *bare* `Promise` reaches `jsToScheme` directly (every sanctioned path settles first; a Promise inside a structure settles lazily) | `AsyncCrossingError` |
 | No lens (the binary membrane, §INBOUND phase 3) | a unique JS symbol, or an unbranded/exotic class instance, has no defined crossing into the algebra — names its cure (register the symbol; brand the class `@arrival.private`, or hand plain data) | `NoLensError` |
 | Region escape / incomplete | a reverse lambda outlives its invocation, or an invocation returns with calls in flight (§REGION) | `RegionEscapeError` / `RegionIncompleteError` |
 | Raw crossing | a raw JS scalar surfaces on an env read — a writer bypassed the storage membrane (`environments.md §HERMETIC`) | `RawCrossingError` |
 | `z.dynamic` callable | a callable crosses a `z.dynamic` slot (§REGION) | teaching throw |
-
-The `fromJS`/`toJS` strictness is also a *type-level* door: `fromJS`'s parameter
-resolves an `AValue`-typed argument to `never`, so the confusion is often caught in
-`tsc` before the runtime throw is ever reached.
 
 **Error-to-host is a crossing, not a door.** An `R7RSError` produced *as a value*
 (a guard's `else` returning it, `raise-continuable` resuming with it) exits as a
@@ -569,7 +565,7 @@ warning would otherwise emit hundreds of thousands of identical lines and OOM th
 process, turning an O(1) diagnostic into an O(n) one on the hot path. Bounded by the
 handful of distinct warning shapes, never by the size of the data crossing — the
 same reasoning the note-sink exists for. The 2026-07-23/24 rulings retired every LIVE
-producer on the `fromJS`/`jsToScheme` inbound path itself (`undefined` is a plain
+producer on the `jsToScheme` inbound path itself (`undefined` is a plain
 lens, a unique symbol doors, a bare function is now §CALLABLE-LENS's callable — none
 warn); the mechanism survives for ONE remaining caller, unrelated to a fresh inbound
 crossing: `values/primitives/deep-restamp.ts`'s re-stamp of a bare host-fn

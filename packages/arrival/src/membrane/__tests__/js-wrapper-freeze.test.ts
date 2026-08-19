@@ -10,8 +10,8 @@
 
 import { describe, it, expect } from "vitest";
 // Import the package entry first so the membrane↔wrappers↔AmbientRuntime module cycle is fully
-// initialized before we construct AJSArray/AJSObject directly below — the wrappers call jsToScheme/
-// fromJS from that cycle at runtime, and the entry sequences the bridge bootstrap (`void initBridge()`).
+// initialized before we construct AJSArray/AJSObject directly below — the wrappers call jsToScheme
+// from that cycle at runtime, and the entry sequences the bridge bootstrap (`void initBridge()`).
 import "../../index.js";
 import { AJSObject } from "../AJSObject.js";
 import { AJSArray } from "../AJSArray.js";

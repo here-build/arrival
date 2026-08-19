@@ -10,7 +10,7 @@
  * They should compose: jsToScheme → toJS round-trips, fromJs → toJs round-trips,
  * and the two APIs agree on the SHAPE of converted values.
  *
- * The membrane now MATERIALIZES faithfully: BOTH `jsToScheme` and `fromJS` box every
+ * The membrane now MATERIALIZES faithfully: `jsToScheme` boxes every
  * primitive (number→exact, boolean→ABool, string→AString) through the boxer registry,
  * map undefined → #void (a lens, no warn), a bare function → a genuine scheme-callable
  * `ARosettaProcedure` (the reverse-membrane lens, V's 2026-07-24 ruling — args cross
@@ -27,7 +27,7 @@ import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { fromJs } from "../boxing.js";
 import { is_nil } from "../../values/value-guards.js";
-import { fromJS, isSchemeValue, toJS } from "../membrane.js";
+import { isSchemeValue, toJS } from "../membrane.js";
 import { AJSObject } from "../AJSObject.js";
 import { AJSArray } from "../AJSArray.js";
 import { jsToScheme } from "../rosetta.js";
@@ -287,50 +287,35 @@ describe("isSchemeValue completeness — every native AValue subtype is recognis
 });
 
 // =========================================================================
-// fromJS / toJS — membrane.ts cross-boundary symmetry
+// jsToScheme / toJS — inbound/outbound symmetry
 // =========================================================================
 
-describe("membrane fromJS / toJS — round-trip + wrapper-cache identity", () => {
+describe("membrane jsToScheme / toJS — round-trip", () => {
   it("primitive round-trips: string", () => {
-    // @ts-expect-error fromJS returns `FromJSResult` (wider than `SchemeValue`); toJS expects
-    // SchemeValue. The runtime value IS a SchemeValue — the mismatch is in the declared union.
-    expect(toJS(fromJS("hello"))).toBe("hello");
+    expect(toJS(jsToScheme(CONSTANT_CTX, "hello"))).toBe("hello");
   });
 
   it("primitive round-trips: number", () => {
-    // @ts-expect-error fromJS returns `FromJSResult` (wider than `SchemeValue`); see above.
-    expect(toJS(fromJS(42))).toBe(42);
+    expect(toJS(jsToScheme(CONSTANT_CTX, 42))).toBe(42);
   });
 
   it("bigint DOORS at the membrane (never boxed; never raw passthrough)", () => {
-    expect(() => fromJS(10n)).toThrow(/no lens for a host bigint/);
+    expect(() => jsToScheme(CONSTANT_CTX, 10n)).toThrow(/no lens for a host bigint/);
     expect(() => toJS(10n as never)).toThrow(/toJS: received a non-scheme value/);
   });
 
-  // LAW (nil-as-array, V 2026-07-13): null enters as nil; nil exits as [] — the
-  // empty list's array face. Asymmetric by design (ingress permissive, egress canonical).
   it("null enters as nil; nil exits as []", () => {
-    // fromJS(null) → nil (the singleton). toJS(nil) → [] via ANil's arrival/toJS.
-    // @ts-expect-error fromJS returns `FromJSResult` (wider than `SchemeValue`); see above.
-    expect(toJS(fromJS(null))).toEqual([]);
+    expect(toJS(jsToScheme(CONSTANT_CTX, null))).toEqual([]);
   });
 
-  it("object round-trips through SchemeJSObject (same source reference)", () => {
+  it("object round-trips through AJSObject (same source reference)", () => {
     const obj = { a: 1 };
-    const wrapped = fromJS(obj);
+    const wrapped = jsToScheme(CONSTANT_CTX, obj);
     expect(wrapped).toBeInstanceOf(AJSObject);
-    // @ts-expect-error fromJS returns `FromJSResult` (wider than `SchemeValue`); see above.
     expect(toJS(wrapped)).toBe(obj);
   });
 
   it("a borrowed function crosses IN as a callable (ARosettaProcedure, reverse-membrane lens)", () => {
-    expect(fromJS(() => 42)).toBeInstanceOf(ARosettaProcedure);
-  });
-
-  it("wrapper cache: same JS object → same wrapper instance", () => {
-    const obj = { x: 1 };
-    const a = fromJS(obj);
-    const b = fromJS(obj);
-    expect(a).toBe(b);
+    expect(jsToScheme(CONSTANT_CTX, () => 42)).toBeInstanceOf(ARosettaProcedure);
   });
 });

@@ -657,7 +657,7 @@ export class RawCrossingError extends ArrivalError {
         ? `\`${variable}\` resolved to a raw JS ${jsType} in ${where} — a writer bypassed the ` +
             `storage membrane. AmbientRuntime storage is inside the membrane: values enter the interpreter ` +
             `only as capabilities (EnvCapability symbols/resolvers) or overrides (exec's \`override\`), ` +
-            `each boxing at its own boundary (jsToScheme/fromJS). Fix the writer, not this read.`
+            `each boxing at its own boundary (jsToScheme). Fix the writer, not this read.`
         : `resolver "${where}" answered \`${variable}\` with a raw JS ${jsType} — a resolver ` +
             `boxes at its own boundary (jsToScheme under the read's ctx; a \`pure\` resolver mints ` +
             `run-neutrally, since its hits are memoized across runs). Raw JS never enters resolution.`,
@@ -759,22 +759,16 @@ export class NoLensError extends ArrivalError {
   }
 }
 
-/** `fromJS`/`toJS` received a value already on the OTHER side of the membrane it
- *  guards — an already-boxed scheme value reaching `fromJS`, or a raw JS value
- *  reaching `toJS`. STRICT one-way doors: the caller is confused about which side
- *  of the membrane it stands on; the value should be used/passed through directly,
- *  never re-crossed. */
+/** `toJS` received a value already on the JS side of the membrane. STRICT one-way
+ *  door: the caller is confused about which side it stands on. */
 export class RedundantCrossingError extends ArrivalError {
   public readonly name = "RedundantCrossingError";
   readonly "arrival/error-category": ErrorClass = "other";
 
-  constructor(public readonly direction: "fromJS" | "toJS") {
+  constructor(public readonly direction: "toJS" = "toJS") {
     super(
-      direction === "fromJS"
-        ? "fromJS: received an already-boxed scheme value — fromJS is the JS→Scheme membrane " +
-            "entry; an interpreter-minted value never crosses it. Use the value directly."
-        : "toJS: received a non-scheme value — toJS is the Scheme→JS membrane exit; a raw JS " +
-            "value is already JS. Pass it through directly.",
+      "toJS: received a non-scheme value — toJS is the Scheme→JS membrane exit; a raw JS " +
+        "value is already JS. Pass it through directly.",
     );
   }
 }

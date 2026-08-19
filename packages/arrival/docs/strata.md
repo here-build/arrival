@@ -70,7 +70,7 @@ reproduced here — the point is that every pair below is checked, not narrated)
   closing the cycle through `common/scheme-zod` would TDZ a `z.instanceof` capture). The
   member still belongs in the knot: it is pulled in by `common/symbols ⇄ common/scheme-zod`
   (both directions, both packages under `common/`) plus `common/scheme-zod → membrane/values`.
-- `env → membrane`: `env/AmbientRuntime.ts` — `import { fromJS } from "../membrane/membrane.js"`
+- `env → membrane`: `env/AmbientRuntime.ts` — `import { isSchemeValue } from "../membrane/membrane.js"`
 - `membrane → env`: `membrane/membrane.ts` — `import { AmbientRuntime, isAmbientRuntime } from "../env/AmbientRuntime.js"` (see D4 below for *why*)
 - `env → provenance`: `env/srfi/srfi-28.ts` (and `srfi-13.ts`, `polyglot/polyglot.ts`) — `import { collapseProvenance, taintString } from "../../provenance/provenance-collapse.js"`
 - `provenance → env`: `provenance/gamma.ts` — `import { bindValue } from "../env/AmbientRuntime.js"`
@@ -153,18 +153,13 @@ this shape"). Both directions carry their own charter comment, not a shared one:
   reused verbatim under region discipline (`docs/PROVENANCE.md` §4 owns the "replay" word
   for this half; `execution.md` §11 TWO-REPLAYS cross-links, does not duplicate).
 
-**Bake↔runtime `_install*` seams** — the injected-dependency doors that let the BOTTOM of
-the knot (`values/primitives/ACallable.ts`, `values/primitives/ARosettaProcedure.ts`) defer
-their membrane-crossing bodies to `common/symbols/rosetta.ts` (the knot's baked chokepoint)
-without a static value-import cycle at module-init time:
+**Bake↔runtime `_install*` seams** — the injected-dependency door that lets the BOTTOM of
+the knot (`values/primitives/ARosettaProcedure.ts`) defer its membrane-crossing body to
+`common/symbols/rosetta.ts` without a static value-import cycle at module-init time:
 
-- `values/primitives/ACallable.ts`'s `_installCallableMarshal` — installed from
-  `membrane/rosetta.ts:612`. The file's own header: "importing rosetta.ts here would close
-  the scheme-zod init cycle."
 - `values/primitives/ARosettaProcedure.ts`'s `_installRosettaMembraneApply` — installed from
   `common/symbols/rosetta.ts`. The file's own header: a static import of scheme-zod/membrane
-  here would TDZ on `ACallable`'s own marshal install (the two seams close each other's
-  cycle, in effect).
+  here would TDZ on `ACallable`'s live `jsToScheme`/`toJS` imports.
 
 Both are documented, single-purpose doors — not a general escape hatch. A THIRD `_install*`
 door is not sanctioned by this entry; it needs its own charter.

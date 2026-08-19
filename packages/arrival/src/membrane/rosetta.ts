@@ -26,12 +26,7 @@ import {
   RedundantCrossingError,
 } from "../errors.js";
 import { is_promise } from "../eval/guards.js";
-import {
-  _installCallableMarshal,
-  hostFnToCallable,
-  originalCallableOf,
-  type ACallable,
-} from "../values/primitives/ACallable.js";
+import { hostFnToCallable, originalCallableOf, type ACallable } from "../values/primitives/ACallable.js";
 
 import { type AUnwrap, type AWrap, type EgressMode, type SchemeValue } from "../values/types.js";
 import invariant from "tiny-invariant";
@@ -588,11 +583,3 @@ export function bigintToNumber(value: bigint): number {
   return Number(value);
 }
 
-// Callable-toJS marshal install (module init): ACallable's arrival/toJS builds its
-// reverse-membrane wrapper through these crossings but cannot import this module
-// (scheme-zod init cycle) — seam injected once at membrane load. Default-options only;
-// mode-keyed region-disciplined projection stays callableToHostFn above.
-_installCallableMarshal({
-  jsToScheme: (runCtx, value) => jsToScheme(runCtx, value, {}),
-  toJS: (value) => toJS(value),
-});

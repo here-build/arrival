@@ -379,8 +379,7 @@ describe("G6 equality-suite cleanup", () => {
   describe("LANDMINE pin — eq?/eqv? scalar boundary must NOT widen", () => {
     // SchemeBool's Setoid is representation-BLIND: it also matches a RAW JS boolean
     // (`this.value === other`). eq?/eqv? must NOT inherit that — a raw JS boolean
-    // is not eq? to a boxed SchemeBool. raw booleans DO flow as scheme values
-    // (membrane.fromJS(true) === true), so this boundary is reachable. This test
+    // is not eq? to a boxed SchemeBool. This test
     // pins eq()'s SchemeBool case so a naive route-through-Setoid (which would
     // flip #f→#t here) is caught.
     it("eq?/eqv? of a boxed SchemeBool vs a raw JS boolean is #f", () => {

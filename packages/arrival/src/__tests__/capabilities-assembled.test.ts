@@ -23,6 +23,7 @@
 import { describe, expect, it } from "vitest";
 
 import { mintPlainFrame, mintFrame, bindValue } from "../env/AmbientRuntime.js";
+import { AExact } from "../values/primitives/AExact.js";
 import { Capabilities } from "../eval/Capabilities.js";
 import { sealResolutionChain } from "../eval/CompiledResolutionChain.js";
 
@@ -32,9 +33,9 @@ describe("Capabilities (3b.3 — assembled base sentinel)", () => {
     // one name owned on the ROOT, one owned on the CHILD (the base's own top, where the
     // sealed chain is built).
     const root = mintPlainFrame("test-capabilities-root");
-    bindValue(root, "root-builtin", 1 as never);
+    bindValue(root, "root-builtin", new AExact(1));
     const base = mintFrame(root, "test-capabilities-base");
-    bindValue(base, "leaf-builtin", 2 as never);
+    bindValue(base, "leaf-builtin", new AExact(2));
 
     const chain = sealResolutionChain(base);
     const caps = new Capabilities(base, chain);

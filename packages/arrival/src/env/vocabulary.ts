@@ -134,7 +134,7 @@ function makeBindTarget(
   return (def) => ({
     set: (name: string, value: unknown) => {
       bindValue(bakeEnv, name, value as AmbientValue);
-      // STORED (possibly fromJS-wrapped) value — raw `__env__` read, not `.get()`
+      // STORED value — raw `__env__` read, not `.get()`
       // (which quotes APair for host; vocabulary must hold chain-lookup shape).
       const stored = bakeEnv.__env__[name];
       const target = "preludeOnly" in def && def.preludeOnly ? preludeOnlyMap : mainMap;
