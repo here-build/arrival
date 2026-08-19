@@ -10,10 +10,9 @@
 
 import { describe, expect, it, beforeAll } from "vitest";
 import { inferenceEnv } from "../../env/inference-env.js";
-import { ensureInferenceEnvPopulated } from "../../eval/generator-exec.js";
+import { ensureInferenceEnvPopulated, exec } from "../../eval/generator-exec.js";
 import { DoorProcedure } from "../../values/primitives/ACallable.js";
 import { PurityError } from "../../errors.js";
-import { exec } from "../../eval/generator-exec.js";
 
 /** R7RS §6.12 / §6.14 names that policy requires as doors (not Unbound). */
 const R7RS_SANDBOX_DOORS = ["eval", "load"] as const;

@@ -16,9 +16,8 @@
  *
  * THIS MODULE is the resourcePaths CHANNEL — run log + door error + CQS apply.
  * The channel-neutral pure algebra (`ResourcePath`, `pathsOverlap`,
- * `serializeResourcePath`, …) lives in `./path-algebra.js` and is re-exported
- * here for compatibility (hermeticity audit P1). Path producers live on
- * CrossingContract (rosetta only); the chokepoint is the membrane apply.
+ * `serializeResourcePath`, …) lives in `./path-algebra.js`. Path producers live
+ * on CrossingContract (rosetta only); the chokepoint is the membrane apply.
  *
  * Channel model: unlike cache/effects/reads (opt-in undefined), ordinary
  * RunContext mints always carry a fresh MemoryResourcePathLog so CQS is on by
@@ -35,13 +34,6 @@
 import { ArrivalError, type ErrorClass } from "../errors.js";
 import { pathsOverlap, serializeResourcePath, type ResourcePath } from "./path-algebra.js";
 
-// Re-export the channel-neutral pure algebra so existing external imports of
-// resource-paths.ts stay valid (P1: the channel and its shared vocabulary now
-// live in separate files; this module is the resourcePaths CHANNEL — journal,
-// door, CQS apply — see src/run/path-algebra.ts for the pure half).
-export { anyPathOverlap, findOverlappingPair, pathsOverlap, serializeResourcePath } from "./path-algebra.js";
-export type { ResourcePath } from "./path-algebra.js";
-
 /**
  * One journal entry on a resource-path log. Total order across Q and E is
  * what intervening-door needs; flat effectPaths is derived for compat.
@@ -53,7 +45,7 @@ export type ResourcePathEvent =
 /**
  * Decoded-arg path producer (contract field). Invoked after decode, before impl.
  * Return type pins string segments at the type level; authors name decoded slots
- * with concrete param types. Sole home — re-exported from `_bake` for CrossingContract.
+ * with concrete param types. Sole home.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- authoring ergonomics; runtime is post-decode
 export type ResourcePathFn = (...decodedArgs: any[]) => readonly ResourcePath[];

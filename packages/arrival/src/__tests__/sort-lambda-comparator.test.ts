@@ -24,7 +24,7 @@
 import { describe, expect, it } from "vitest";
 import { execStateOverFrame as execState } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../env/inference-env.js";
-import { toJS } from "../index.js";
+import { toJS } from "../membrane/rosetta.js";
 
 const run = (code: string) => execState(code, { env: inferenceEnv.child("sort-lambda-comparator") });
 

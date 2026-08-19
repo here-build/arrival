@@ -7,7 +7,6 @@
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { LITERAL, SYMBOL } from "../well-known/symbols.js";
 
-export { LITERAL, SYMBOL };
 export function names() {
   return Object.keys(__list__);
 }

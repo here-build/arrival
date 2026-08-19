@@ -30,12 +30,11 @@
 //   message instead of an opaque `car`-on-wrong-shape crash deep in the body (§4.2's "a
 //   wrong-arity call... now fails at the contract boundary, with a better message").
 import { describe, expect, it } from "vitest";
-import { exec } from "../../../index.js";
-import { execInFrame } from "../../../eval/generator-exec.js";
+import { exec, execInFrame } from "../../../eval/generator-exec.js";
 import { buildVocabulary } from "../../vocabulary.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
 import { schemaCapability } from "../../schema/schema.js";
-import type { AEntity } from "../../../symbol/index.js";
+import type { AEntity } from "../../../common/symbols/_bake.js";
 import type { SymbolDeclaration } from "../../../common/capability.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 

@@ -28,7 +28,7 @@
 // Wiring-only → pause-trivial. cut/cute ship as SRFI-26. Sole definition site.
 
 import { EnvCapability } from "../../common/capability.js";
-import { type CallCtx } from "../../symbol/index.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 import dedent from "dedent";
 import { schemeBool, stringValue } from "../../values/op-helpers.js";
 import { collapseProvenance, taintString } from "../../provenance/provenance-collapse.js";

@@ -16,7 +16,7 @@
 //   • curry       — not SRFI-235; arity-aware partial application + procedure-min-arity.
 import { EnvCapability } from "../../common/capability.js";
 import dedent from "dedent";
-import { type CallCtx } from "../../symbol/index.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 import { is_callable_value } from "../../values/value-guards.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import polyglot from "../polyglot/polyglot.js";

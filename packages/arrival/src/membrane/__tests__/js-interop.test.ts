@@ -11,7 +11,7 @@
  *                    to `it()`. So this file doubles as the regression target.
  */
 import { describe, expect, it } from "vitest";
-import { exec } from "../../index.js";
+import { exec } from "../../eval/generator-exec.js";
 import { ABool } from "../../values/primitives/ABool.js";
 
 const one = async (src: string): Promise<any> => (await exec(src))[0];

@@ -21,7 +21,7 @@ import dedent from "dedent";
 import { type } from "../../membrane/typecheck.js";
 import { type RunContext } from "../../run/RunContext.js";
 import { ACallable, applyCallback } from "../../values/primitives/ACallable.js";
-import { type CallCtx, makeCallCtx } from "../../symbol/index.js";
+import { type CallCtx, makeCallCtx } from "../../run/CallCtx.js";
 import { EnvCapability } from "../../common/capability.js";
 import {
   assertAllocatable,
@@ -38,8 +38,7 @@ import { AExact } from "../../values/primitives/AExact.js";
 import { APair } from "../../values/primitives/APair.js";
 import { nil } from "../../values/primitives/ANil.js";
 import { ACharacter } from "../../values/primitives/ACharacter.js";
-import { is_false } from "../../values/value-guards.js";
-import { is_promise } from "../../eval/guards.js";
+import { is_false, is_promise } from "../../values/value-guards.js";
 import { promise_all } from "../../utils/promises.js";
 import { to_array } from "../pack-helpers.js";
 import type { AListAlike } from "../../values/types.js";

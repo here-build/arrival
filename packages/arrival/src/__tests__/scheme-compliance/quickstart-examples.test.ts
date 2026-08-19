@@ -4,7 +4,7 @@ import type { EnvWithInternals, ResolvingAmbient } from "../../env/AmbientRuntim
  * Test all examples from the Quick Start section to ensure they work
  */
 import { describe, expect, it } from "vitest";
-import { jsToScheme, toJS } from "../../index.js";
+import { jsToScheme, toJS } from "../../membrane/rosetta.js";
 import { execOverFrame as exec, execStateOverFrame as execState } from "../../eval/generator-exec.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";

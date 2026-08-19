@@ -21,7 +21,7 @@ import listsPack from "../env/r7rs/lists.js";
 import stringsPack from "../env/r7rs/strings.js";
 import srfi1Pack from "../env/srfi/srfi-1.js";
 import equalityPack from "../env/r7rs/equality.js";
-import type { AEntity } from "../symbol/index.js";
+import type { AEntity } from "../common/symbols/_bake.js";
 import { APair } from "../values/primitives/APair.js";
 import { nil } from "../values/primitives/ANil.js";
 import { AString } from "../values/primitives/AString.js";

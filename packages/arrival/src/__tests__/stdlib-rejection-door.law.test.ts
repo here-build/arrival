@@ -41,8 +41,7 @@ import { describe, expect, it } from "vitest";
 
 import { execStateOverFrame as execState } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../env/inference-env.js";
-import { toJS } from "../index.js";
-import { jsToScheme } from "../membrane/rosetta.js";
+import { toJS, jsToScheme } from "../membrane/rosetta.js";
 import { CONSTANT_CTX } from "../run/RunContext.js";
 
 /** Bindings cross via `jsToScheme`, so `xs` arrives as a borrowed array — exactly what a tool

@@ -39,7 +39,7 @@ import stringsPack from "../strings.js";
 import dedent from "dedent";
 const norm = (s: string) => s.replace(/\s+/g, " ").trim();
 import { signatureOf } from "../../../type-layer/schema-to-ts.js";
-import type { AEntity } from "../../../symbol/index.js";
+import type { AEntity } from "../../../common/symbols/_bake.js";
 import { AString } from "../../../values/primitives/AString.js";
 import { ACharacter } from "../../../values/primitives/ACharacter.js";
 import { APair } from "../../../values/primitives/APair.js";

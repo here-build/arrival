@@ -30,7 +30,7 @@ import { describe, expect, it } from "vitest";
 
 import { exec, execState } from "../eval/generator-exec.js";
 import { LexicalScope } from "../eval/LexicalScope.js";
-import { toJS } from "../membrane/membrane.js";
+import { toJS } from "../membrane/rosetta.js";
 
 describe("default exec — Stage C Cut 2 isolation", () => {
   it("two SEPARATE bare exec calls do NOT share top-level defines (no cross-exec leakage)", async () => {

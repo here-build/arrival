@@ -36,8 +36,19 @@ import polyglotClojure from "./polyglot/polyglot-clojure.js";
 import polyglotLisp from "./polyglot/polyglot-lisp.js";
 import polyglotRacket from "./polyglot/polyglot-racket.js";
 import sugarcoat from "./sugarcoat/sugarcoat.js";
-import { allR7rs, binding, exceptions, lists } from "./r7rs/index.js";
-import { allSrfi, srfi1 } from "./srfi/index.js";
+import { allR7rs } from "./r7rs/index.js";
+import { allSrfi } from "./srfi/index.js";
+
+function packNamed<T extends { readonly name: string }>(packs: readonly T[], name: string): T {
+  const pack = packs.find((p) => p.name === name);
+  if (!pack) throw new TypeError(`base-packs: ${name} is not in the palette`);
+  return pack;
+}
+
+const binding = packNamed(allR7rs, "scheme/r7rs/binding");
+const exceptions = packNamed(allR7rs, "scheme/r7rs/exceptions");
+const lists = packNamed(allR7rs, "scheme/lists");
+const srfi1 = packNamed(allSrfi, "scheme/srfi-1");
 
 // polyglotStubs is its OWN entry (not a SRFI) — cross-dialect doors with no SRFI/R7RS lineage.
 // sugarcoat is its OWN entry — JS-shaped aliases (** % == …) for the sugarcoat surface.

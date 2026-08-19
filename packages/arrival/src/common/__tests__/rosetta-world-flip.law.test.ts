@@ -14,7 +14,8 @@
  */
 import { describe, it, expect } from "vitest";
 import * as z from "../scheme-zod/index.js";
-import { symbol, makeCallCtx } from "../../symbol/index.js";
+import { symbol } from "../../symbol/index.js";
+import { makeCallCtx } from "../../run/CallCtx.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AString } from "../../values/primitives/AString.js";
 import { tf } from "../../values/tagless-final.js";

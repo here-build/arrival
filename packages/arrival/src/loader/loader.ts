@@ -25,8 +25,6 @@ import { RunResolverUnreachableError, RequirePathError } from "../errors.js";
 import { parseJsonc } from "./parse-jsonc.js";
 import type { MaybePromise } from "../types/utility.js";
 
-export type { MaybePromise };
-
 /** The run env the verbs evaluate module forms into — typed `SchemeEnv`, never the
  *  package-internal `AmbientRuntime` class. Every real caller's env is a base-linked live one
  *  (the prelude-scope mint in loader-capability.ts's `require/extension`). */
@@ -186,10 +184,6 @@ const DATA_PARSERS: Record<string, (text: string) => unknown> = {
  *  builtin data resolvers use — one definition, no drift. */
 // eslint-disable-next-line unicorn/prefer-structured-clone -- JSON projection, not a clone
 export const normalizeToJson = (v: unknown): unknown => JSON.parse(JSON.stringify(v));
-
-/** JSONC parse — see `parse-jsonc.ts`. Re-exported so mercury's data-module and
- *  host config loaders share the exact same dialect as `(require "…json")`. */
-export { parseJsonc } from "./parse-jsonc.js";
 
 /** Decode loader contents to source text — the ONE coercion every
  *  {@link ContentResolver} must use, in place of `String(contents)`.

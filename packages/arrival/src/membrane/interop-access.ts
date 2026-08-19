@@ -32,8 +32,7 @@ import "@here.build/error-invariant";
 
 import { InteropAccessError, ArrivalError, Unterminated, ParseError, EvalError, R7RSError } from "../errors.js";
 // Nominal families the boundary walk recognizes in one shot: every AValue subclass
-// and every ArrivalError subclass. Benign two-file cycle with AValue (it imports
-// INTEROP_BOUNDARY from here). InteropAccessError already came from errors.ts.
+// and every ArrivalError subclass. InteropAccessError already came from errors.ts.
 import { AValue } from "../values/primitives/AValue.js";
 import { INTEROP_BOUNDARY } from "../well-known/symbols.js";
 
@@ -48,7 +47,6 @@ import { INTEROP_BOUNDARY } from "../well-known/symbols.js";
  *
  * Boundary mark must not be sandbox-forgeable. Home: `well-known/symbols.ts`.
  */
-export { INTEROP_BOUNDARY };
 
 /**
  * Built-in prototypes that are ALWAYS interop boundaries — standard JS built-ins

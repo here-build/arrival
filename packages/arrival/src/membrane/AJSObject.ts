@@ -24,7 +24,7 @@ import { type SchemeValue } from "../values/types.js";
 // Runtime import cycle (benign — see header): jsToScheme is a hoisted export function,
 // called only inside get() at runtime.
 import { jsToScheme } from "./rosetta.js";
-import { is_promise } from "../eval/guards.js";
+import { is_promise } from "../values/value-guards.js";
 import { settleEntry } from "../values/primitives/pending-entry.js";
 
 /**

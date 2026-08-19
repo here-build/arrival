@@ -8,10 +8,12 @@
 //   import { overridableCapability } from "@inhuman.tools/arrival/capabilities/overridable";
 //   import { makeFsLoader } from "@inhuman.tools/arrival/capabilities/loader";
 
-export { overridableCapability } from "./overridable.js";
-export { schemaCapability } from "./schema.js";
+export { overridableCapability } from "../env/overridable/overridable.js";
+export { schemaCapability } from "../env/schema/schema.js";
+export { arrivalLoaderCapability } from "../loader/loader-capability.js";
+export type { MaybePromise } from "../types/utility.js";
+export { parseJsonc } from "../loader/parse-jsonc.js";
 export {
-  arrivalLoaderCapability,
   type Loader,
   type FsReadLike,
   makeFsLoader,
@@ -22,9 +24,7 @@ export {
   type RequireTypeProvider,
   type ResolverResult,
   contentsToText,
-  parseJsonc,
   valueToTsType,
   resolveRequireType,
   type SchemeForm,
-  type MaybePromise,
-} from "./loader.js";
+} from "../loader/loader.js";

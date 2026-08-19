@@ -43,14 +43,13 @@
 import { describe, expect, it } from "vitest";
 import controlPack from "../control.js";
 import { EXCLUDED } from "../../../__tests__/scheme-compliance/chibi/registries.js";
-import { PurityError } from "../../../errors.js";
-import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
+import { PurityError, DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
 import { DoorProcedure } from "../../../values/primitives/ACallable.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
 import { buildVocabulary } from "../../vocabulary.js";
 import { execInFrame } from "../../../eval/generator-exec.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
-import type { AEntity, DoorSymbolDef } from "../../../symbol/index.js";
+import type { AEntity, DoorSymbolDef } from "../../../common/symbols/_bake.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
 const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);

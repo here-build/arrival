@@ -27,7 +27,7 @@
 import { describe, expect, it } from "vitest";
 import { EnvCapability } from "../../common/capability.js";
 import { exec } from "../../eval/generator-exec.js";
-import { toJS } from "../membrane.js";
+import { toJS } from "../rosetta.js";
 import { AValue } from "../../values/primitives/AValue.js";
 
 describe("the z.dynamic-callable door", () => {

@@ -1,8 +1,7 @@
 // polyglot-lisp pack — assemble onto a real env, then RUN the Common Lisp
 // idiom family. Split out of polyglot.test.ts (V, 2026-07-10 dialect split —
 // see polyglot.ts's header for the full rationale).
-import { execState as bareExecState } from "../../../index.js";
-import { execStateOverFrame, type ExecOptionsOverFrame } from "../../../eval/generator-exec.js";
+import { execState as bareExecState, execStateOverFrame, type ExecOptionsOverFrame } from "../../../eval/generator-exec.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
 import { applyCapability } from "../../../__tests__/_fresh-env.js";

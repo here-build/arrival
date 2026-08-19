@@ -1,6 +1,5 @@
 import { TF_EXPAND } from "../values/tagless-final.js";
-import { INTEROP_BOUNDARY } from "../membrane/interop-access.js";
-import { MERGE } from "../well-known/symbols.js";
+import { INTEROP_BOUNDARY, MERGE } from "../well-known/symbols.js";
 import type { AmbientRuntime } from "../env/AmbientRuntime.js";
 import type { SchemeValue } from "../values/types.js";
 import type { Expansion, MacroExpansion, MacroInvokeContext, MacroTransformer } from "./Macro.js";

@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { exec, parse } from "../index.js";
+import { exec, parse } from "../eval/generator-exec.js";
 import { AKeywordSymbol, ASymbol } from "../values/primitives/ASymbol.js";
 
 describe("Racket #:keyword ≡ :keyword", () => {

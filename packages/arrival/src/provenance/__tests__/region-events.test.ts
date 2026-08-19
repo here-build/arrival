@@ -21,7 +21,7 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 
-import { toJS } from "../../membrane/membrane.js";
+import { toJS } from "../../membrane/rosetta.js";
 import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
 import {
   closeRegionScope,

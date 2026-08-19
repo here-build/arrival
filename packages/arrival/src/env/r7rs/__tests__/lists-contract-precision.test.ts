@@ -28,7 +28,7 @@ import listsPack from "../lists.js";
 import dedent from "dedent";
 const norm = (s: string) => s.replace(/\s+/g, " ").trim();
 import { signatureOf } from "../../../type-layer/schema-to-ts.js";
-import type { AEntity } from "../../../symbol/index.js";
+import type { AEntity } from "../../../common/symbols/_bake.js";
 import { APair } from "../../../values/primitives/APair.js";
 import { ANil, nil } from "../../../values/primitives/ANil.js";
 import { AExact } from "../../../values/primitives/AExact.js";

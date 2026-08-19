@@ -36,8 +36,7 @@
  * SHAPE per leaf, not the id values.
  */
 import { describe, it, expect } from "vitest";
-import { is_nil } from "../../values/value-guards.js";
-import { is_pair } from "../../values/value-guards.js";
+import { is_nil, is_pair } from "../../values/value-guards.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { sStr, runRaw, type EnvSetup } from "../../__tests__/_lineage-test-helpers.js";
 import { ANil } from "../../values/primitives/ANil.js";

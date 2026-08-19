@@ -51,12 +51,12 @@
       "default": "./dist/capabilities/index.js"
     },
     "./capabilities/overridable": {
-      "types": "./dist/capabilities/overridable.d.ts",
-      "default": "./dist/capabilities/overridable.js"
+      "types": "./dist/env/overridable/overridable.d.ts",
+      "default": "./dist/env/overridable/overridable.js"
     },
     "./capabilities/schema": {
-      "types": "./dist/capabilities/schema.d.ts",
-      "default": "./dist/capabilities/schema.js"
+      "types": "./dist/env/schema/schema.d.ts",
+      "default": "./dist/env/schema/schema.js"
     },
     "./capabilities/loader": {
       "types": "./dist/capabilities/loader.d.ts",

@@ -19,7 +19,7 @@
 // record — exactly like `eval/exec-phases.ts`'s `rosterEntries` already treats those.
 import type { SymbolDeclaration } from "../common/capability.js";
 import { contractOf } from "../common/capability-internals.js";
-import type { AEntity } from "../symbol/index.js";
+import type { AEntity } from "../common/symbols/_bake.js";
 
 export function harvestContracts(symbols: Record<string, SymbolDeclaration> | unknown): Record<string, AEntity> {
   const out: Record<string, AEntity> = {};

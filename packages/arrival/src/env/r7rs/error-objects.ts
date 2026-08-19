@@ -18,7 +18,7 @@
 
 import { R7RSError, R7RSFileError, R7RSReadError } from "../../errors.js";
 import { EnvCapability } from "../../common/capability.js";
-import { type CallCtx } from "../../symbol/index.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 import { APair } from "../../values/primitives/APair.js";
 import { nil } from "../../values/primitives/ANil.js";
 import { type ABool } from "../../values/primitives/ABool.js";

@@ -5,10 +5,7 @@ import {
   type LexicalScopeInternals,
 } from "../env/AmbientRuntime.js";
 import type { RunContext } from "../run/RunContext.js";
-import { INTEROP_BOUNDARY } from "../membrane/interop-access.js";
-import { MERGE } from "../well-known/symbols.js";
-
-export type { EnvWithInternals, LexicalScopeInternals } from "../env/AmbientRuntime.js";
+import { INTEROP_BOUNDARY, MERGE } from "../well-known/symbols.js";
 
 /**
  * Stable wrapper-per-env so `LexicalScope.for(e) === LexicalScope.for(e)`.

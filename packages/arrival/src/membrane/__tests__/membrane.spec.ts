@@ -13,11 +13,8 @@ import { describe, expect, it, vi } from "vitest";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
-import { jsToScheme } from "../rosetta.js";
-import {
-  toJS,
-  isSchemeValue,
-  isBytevectorLike } from "../membrane.js";
+import { jsToScheme, toJS } from "../rosetta.js";
+import { isSchemeValue, isBytevectorLike } from "../membrane.js";
 import { AJSObject } from "../AJSObject.js";
 import { AJSArray } from "../AJSArray.js";
 import { nil } from "../../values/primitives/ANil.js";

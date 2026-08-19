@@ -25,8 +25,7 @@ import { describe, expect, it } from "vitest";
 
 import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
-import { toJS } from "../../index.js";
-import { jsToScheme } from "../rosetta.js";
+import { toJS, jsToScheme } from "../rosetta.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 
 /** `xs` is bound through `jsToScheme`, so it arrives as a real `AJSArray` — exactly what an MCP

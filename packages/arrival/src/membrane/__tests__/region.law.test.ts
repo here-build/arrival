@@ -29,7 +29,7 @@
  */
 import { describe, expect, it } from "vitest";
 import * as z from "../../common/scheme-zod/index.js";
-import { toJS } from "../membrane.js";
+import { toJS } from "../rosetta.js";
 import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
 import { closeRegionScope, openRegionScope, withRegionScope } from "../region-scope.js";
 import { CONSTANT_CTX, RunContext } from "../../run/RunContext.js";

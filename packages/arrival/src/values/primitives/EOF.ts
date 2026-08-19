@@ -1,4 +1,4 @@
-import { INTEROP_BOUNDARY } from "../../membrane/interop-access.js";
+import { INTEROP_BOUNDARY } from "../../well-known/symbols.js";
 
 /** Reader-internal "source exhausted" sentinel. Compared by identity against {@link eof}
  *  so the lexer/parser can distinguish end-of-input from any datum (`#f`, `nil`, etc.).

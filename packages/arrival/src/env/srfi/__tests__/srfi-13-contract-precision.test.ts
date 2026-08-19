@@ -16,7 +16,7 @@
 //                        images to the redundant `string | string` (both print `string`).
 import { describe, expect, it } from "vitest";
 import srfi13 from "../srfi-13.js";
-import type { AEntity } from "../../../symbol/index.js";
+import type { AEntity } from "../../../common/symbols/_bake.js";
 import { signatureOf } from "../../../type-layer/schema-to-ts.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 

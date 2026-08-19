@@ -31,12 +31,8 @@ import { EnvCapability } from "../../common/capability.js";
 import { exec } from "../../eval/generator-exec.js";
 import { jsToScheme } from "../rosetta.js";
 import { RunContext, CONSTANT_CTX } from "../../run/RunContext.js";
-import {
-  INTEROP_BOUNDARY,
-  markInteropPrivate,
-  isMarkedInteropPrivate,
-  arrival,
-} from "../interop-access.js";
+import { INTEROP_BOUNDARY } from "../../well-known/symbols.js";
+import { markInteropPrivate, isMarkedInteropPrivate, arrival } from "../interop-access.js";
 import { AJSObject } from "../AJSObject.js";
 import { AOpaqueHandle } from "../../values/primitives/AOpaqueHandle.js";
 import { eq, structuralEqual } from "../../values/structural-equal.js";

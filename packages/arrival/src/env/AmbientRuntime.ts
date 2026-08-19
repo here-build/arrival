@@ -11,7 +11,7 @@ import { APair } from "../values/primitives/APair.js";
 import type { RunContext } from "../run/RunContext.js";
 import { unboundVariableError } from "../unbound-variable.js";
 import { RawCrossingError } from "../errors.js";
-import { INTEROP_BOUNDARY } from "../membrane/interop-access.js";
+import { INTEROP_BOUNDARY } from "../well-known/symbols.js";
 
 export type BindingName = string | symbol | ASymbol | AString;
 

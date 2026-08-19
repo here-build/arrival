@@ -23,7 +23,7 @@
 
 import type { EffectLog } from "./effect-log.js";
 import type { ReadTracker } from "./read-guard.js";
-import type { ResourcePath } from "./resource-paths.js";
+import type { ResourcePath } from "./path-algebra.js";
 import { runCacheKey, type RunCache, type RunCacheClass } from "./run-cache.js";
 
 /** Per-cache in-flight registry (single-flight). WeakMap keyed by the cache ENTITY: the pending

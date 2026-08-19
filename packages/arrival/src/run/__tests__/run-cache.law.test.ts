@@ -19,7 +19,8 @@
  */
 import { describe, it, expect } from "vitest";
 import * as z from "../../common/scheme-zod/index.js";
-import { symbol, testCallCtx } from "../../symbol/index.js";
+import { symbol } from "../../symbol/index.js";
+import { testCallCtx } from "../CallCtx.js";
 
 import { EnvCapability } from "../../common/capability.js";
 import { exec } from "../../eval/generator-exec.js";

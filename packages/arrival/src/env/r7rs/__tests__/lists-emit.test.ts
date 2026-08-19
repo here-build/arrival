@@ -18,7 +18,7 @@
 // unchanged.
 import { describe, expect, it } from "vitest";
 
-import type { AEntity } from "../../../symbol/index.js";
+import type { AEntity } from "../../../common/symbols/_bake.js";
 import type { EmitCtx } from "../../../emit/emit-rule.js";
 import { ArrayLit, Arrow, Bin, Binding, Call, Index, Lit, Member, Method, Ref, Spread, type R } from "../../../emit/residual-lite.js";
 import listsPack from "../lists.js";

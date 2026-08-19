@@ -16,12 +16,11 @@
  * Acar, Cheney & Levy, "Functional Programs That Explain Their Work", ICFP 2012).
  */
 
-import { INTEROP_BOUNDARY } from "../../membrane/interop-access.js";
+import { INTEROP_BOUNDARY, LOCATION } from "../../well-known/symbols.js";
 import type { SeenMap } from "../structural-equal.js";
 import type { MembraneExit, SchemeBounceMarker, SchemeValue } from "../types.js";
 import type { RunContext } from "../../run/RunContext.js";
 import type { CallCtx } from "../../run/CallCtx.js";
-import { LOCATION } from "../../well-known/symbols.js";
 import type { SourceLocation } from "../../errors.js";
 import type { MaybePromise } from "../../types/utility.js";
 import { ACallable } from "./ACallable.js";

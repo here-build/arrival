@@ -50,8 +50,8 @@ export { disposeRunContext } from "./run/run-lifecycle.js";
 // Inbound twin: `jsToScheme`. Worlds do not mix: scheme-side values cross with `toJS`
 // once; JS-side values (e.g. `exec` results) never re-cross. `isSchemeValue` is a
 // membrane predicate for double-wrap prevention / codec gates — not a soft peel.
-export { toJS, isSchemeValue } from "./membrane/membrane.js";
-export { jsToScheme } from "./membrane/rosetta.js";
+export { isSchemeValue } from "./membrane/membrane.js";
+export { toJS, jsToScheme } from "./membrane/rosetta.js";
 // Membrane null/absent leaf — crosses both ways, so it travels with the eval surface
 // rather than the value-class reflection tier (`/reflect-internals`).
 export { ANil } from "./values/primitives/ANil.js";

@@ -22,7 +22,7 @@ import { printValue } from "../values/print.js";
 import { type JSWorldArray, type SchemeValue } from "../values/types.js";
 // Runtime import cycle (benign — see header): hoisted export function, runtime-only use.
 import { jsToScheme } from "./rosetta.js";
-import { is_promise } from "../eval/guards.js";
+import { is_promise } from "../values/value-guards.js";
 import { settleEntry } from "../values/primitives/pending-entry.js";
 import { tf } from "../values/tagless-final.js";
 import { type ANil, nil } from "../values/primitives/ANil.js";
@@ -30,7 +30,7 @@ import { AJSArrayList } from "../values/primitives/APair.js";
 import { accessHas, accessKeys, accessMember, NOT_FOUND } from "./interop-access.js";
 import { ForeignProxyFreezeError, InteropAccessError, strictGate } from "../errors.js";
 import { foldMemberName } from "./AJSObject.js";
-import type { MaybePromise } from "../types/utility.js";
+import type { ACallable } from "../values/primitives/ACallable.js";
 
 /**
  * Pending-cell cache for Promise-valued reads off the borrowed source
@@ -153,17 +153,11 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
     return applyMembraneClosure(runCtx, () => this.vec()[tf("drop")](n, runCtx));
   }
 
-  ["arrival/tagless-final/take-while"](
-    pred: (x: SchemeValue) => MaybePromise<SchemeValue>,
-    runCtx: RunContext,
-  ): Promise<AVector> {
+  ["arrival/tagless-final/take-while"](pred: ACallable, runCtx: RunContext): Promise<AVector> {
     return applyMembraneClosure(runCtx, () => this.vec()[tf("take-while")](pred, runCtx));
   }
 
-  ["arrival/tagless-final/drop-while"](
-    pred: (x: SchemeValue) => MaybePromise<SchemeValue>,
-    runCtx: RunContext,
-  ): Promise<AVector> {
+  ["arrival/tagless-final/drop-while"](pred: ACallable, runCtx: RunContext): Promise<AVector> {
     return applyMembraneClosure(runCtx, () => this.vec()[tf("drop-while")](pred, runCtx));
   }
 

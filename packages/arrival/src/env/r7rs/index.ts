@@ -3,7 +3,8 @@
 // The portable Scheme control forms arrival supports as macros, expanded from
 // the small special-form core, split per R7RS section into one module-singleton
 // `EnvCapability` each (mirroring env/srfi/). Importable from ONE subpath:
-//   import { binding, exceptions, allR7rs } from "./r7rs/index.js";
+//   import { allR7rs } from "./r7rs/index.js";
+//   import binding from "./r7rs/binding.js";
 //
 // Assembly is order-independent (docs/environments.md §ASSEMBLY: every form is a
 // `define-macro`, expanded at CALL time against the fully-assembled userEnv, so
@@ -27,13 +28,5 @@ import lists from "./lists.js";
 import control from "./control.js";
 import host from "./host.js";
 import r7rsEval from "./eval.js";
-
-export { default as syntax } from "./syntax.js";
-export { default as binding } from "./binding.js";
-export { default as exceptions } from "./exceptions.js";
-export { default as lists } from "./lists.js";
-export { default as control } from "./control.js";
-export { default as host } from "./host.js";
-export { default as r7rsEval } from "./eval.js";
 
 export const allR7rs = [syntax, binding, exceptions, lists, control, host, r7rsEval] as const;

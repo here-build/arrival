@@ -17,15 +17,15 @@
  */
 import { describe, it, expect } from "vitest";
 import * as z from "../../common/scheme-zod/index.js";
-import { symbol, testCallCtx } from "../../symbol/index.js";
+import { symbol } from "../../symbol/index.js";
+import { testCallCtx } from "../CallCtx.js";
 
 import { exec } from "../../eval/generator-exec.js";
-import { RunContext } from "../../run/RunContext.js";
+import { RunContext, CONSTANT_CTX } from "../../run/RunContext.js";
 import { MemoryRunCache } from "../../run/run-cache.js";
 import { MemoryEffectLog, burst, BurstDrainError, type EffectEntry } from "../../run/effect-log.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AVoid } from "../../values/primitives/AVoid.js";
-import { CONSTANT_CTX } from "../../run/RunContext.js";
 
 const num = (n: number) => new AExact(n);
 

@@ -17,7 +17,7 @@
 // manifold's H-4 one-line-wall contract pins the plain form downstream).
 
 import { describe, expect, it } from "vitest";
-import { exec } from "../../index.js";
+import { exec } from "../../eval/generator-exec.js";
 import { suggestFromVocabulary, unboundVariableError } from "../../unbound-variable.js";
 
 describe("suggestFromVocabulary — the vocabulary-sourced typo gate (unit, no eval)", () => {

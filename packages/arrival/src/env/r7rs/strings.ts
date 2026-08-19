@@ -34,7 +34,7 @@ import { AExact } from "../../values/primitives/AExact.js";
 import { APair } from "../../values/primitives/APair.js";
 import { nil } from "../../values/primitives/ANil.js";
 import { ACharacter } from "../../values/primitives/ACharacter.js";
-import { is_promise } from "../../eval/guards.js";
+import { is_promise } from "../../values/value-guards.js";
 import { promise_all } from "../../utils/promises.js";
 import { EnvCapability } from "../../common/capability.js";
 import { type AVoid, theVoid } from "../../values/primitives/AVoid.js";

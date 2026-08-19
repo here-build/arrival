@@ -30,7 +30,7 @@ import * as fc from "fast-check";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { execState, execStateOverFrame, parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
-import { toJS } from "../../membrane/membrane.js";
+import { toJS } from "../../membrane/rosetta.js";
 import type { Classifier } from "../../provenance/lineage.js";
 import { buildWireframe } from "../../provenance/wireframe/builder.js";
 import { freeVars } from "../../provenance/wireframe/free-vars.js";

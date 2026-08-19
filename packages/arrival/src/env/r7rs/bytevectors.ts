@@ -17,7 +17,7 @@
  */
 
 import dedent from "dedent";
-import { type CallCtx } from "../../symbol/index.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 import { ABytevector } from "../../values/primitives/ABytevector.js";
 import { AString } from "../../values/primitives/AString.js";
 import { asBytevector, schemeBool, stringValue, toIndex, withInputProvenance } from "../../values/op-helpers.js";

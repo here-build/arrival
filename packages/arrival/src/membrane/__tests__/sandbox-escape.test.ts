@@ -21,18 +21,15 @@
 import { describe, expect, it } from "vitest";
 import type { EnvWithInternals, ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
-import { execOverFrame, execStateOverFrame } from "../../eval/generator-exec.js";
+import { execOverFrame, execStateOverFrame, execOverFrame as gexec } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
-import {
-  INTEROP_BOUNDARY,
-  accessMember,
-  isInteropBoundary } from "../interop-access.js";
+import { INTEROP_BOUNDARY } from "../../well-known/symbols.js";
+import { accessMember, isInteropBoundary } from "../interop-access.js";
 import { InteropAccessError } from "../../errors.js";
 import { AString } from "../../values/primitives/AString.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { jsToScheme } from "../rosetta.js";
-import { execOverFrame as gexec } from "../../eval/generator-exec.js";
 import { tf } from "../../values/tagless-final.js";
 
 // ============================================================================

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { freshEnv } from "./_fresh-env.js";
 import { execOverFrame as exec, execStateOverFrame as execState } from "../eval/generator-exec.js";
-import { toJS } from "../membrane/membrane.js";
+import { toJS } from "../membrane/rosetta.js";
 
 /**
  * A fresh, per-call capability-assembled env must expose the WHOLE current

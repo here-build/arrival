@@ -13,7 +13,8 @@ import dedent from "dedent";
 import unicodeProperties from "unicode-properties";
 import invariant from "tiny-invariant";
 
-import { withContractFields, type CallCtx } from "../../symbol/index.js";
+import { withContractFields } from "../../common/symbols/_bake.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 import { charValue, coerceNumeric, deriveOrd, schemeBool as bool } from "../../values/op-helpers.js";
 import { schemeFalse, schemeTrue } from "../../values/primitives/ABool.js";
 import { AInexact } from "../../values/primitives/AInexact.js";

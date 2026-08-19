@@ -31,7 +31,7 @@ import { freeVars } from "../../provenance/wireframe/free-vars.js";
 import type { WireframeGraph } from "../../provenance/wireframe/types.js";
 import { WireLocalityError } from "../../errors.js";
 import { scopeId } from "../../provenance/scope-id.js";
-import { toJS } from "../../membrane/membrane.js";
+import { toJS } from "../../membrane/rosetta.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { isEagerProvenanceOracleEnabled, setEagerProvenanceOracleEnabled } from "../../values/op-helpers.js";
 import { EnvCapability } from "../../common/capability.js";

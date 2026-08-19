@@ -29,7 +29,7 @@ import { EnvCapability } from "../../common/capability.js";
 import { exec, execInFrame, execState } from "../../eval/generator-exec.js";
 import { UnboundVariableError } from "../../errors.js";
 import { AmbientRuntime } from "../AmbientRuntime.js";
-import { toJS } from "../../membrane/membrane.js";
+import { toJS } from "../../membrane/rosetta.js";
 import { arrivalLoaderCapability } from "../../loader/loader-capability.js";
 import { loaderFromResolver, type RunEnv } from "../../loader/loader.js";
 import type { EnvPack } from "../../common/kernel.js";

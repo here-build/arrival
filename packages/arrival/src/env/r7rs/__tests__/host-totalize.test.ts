@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import hostPack, { HOST_DOOR_NAMES } from "../host.js";
 import { exec } from "../../../eval/generator-exec.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
-import type { AEntity } from "../../../symbol/index.js";
+import type { AEntity } from "../../../common/symbols/_bake.js";
 import { PurityError } from "../../../errors.js";
 import { DoorProcedure } from "../../../values/primitives/ACallable.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";

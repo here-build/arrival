@@ -2,13 +2,9 @@ import { Macro } from "./Macro.js";
 import { Syntax } from "./Syntax.js";
 import { TF_EXPAND } from "../values/tagless-final.js";
 // Leaf value-kernel predicates live in value-guards.ts (no AmbientRuntime/Macro dep)
-// so Pair.ts can import them without the evaluator world. This module does not
-// re-export most of them — import leaf predicates from value-guards directly.
-// `is_promise` is the one exception: re-exported below for compatibility (P3 —
-// it moved to value-guards.ts since it has no Macro/Syntax/TF_EXPAND dependency).
+// so Pair.ts can import them without the evaluator world. Import them from
+// value-guards directly — this module is the evaluator-world guards (Macro/Syntax).
 import { is_callable_value } from "../values/value-guards.js";
-
-export { is_promise } from "../values/value-guards.js";
 
 export function is_int(value: unknown): value is number {
   return typeof value === "number" && Number.parseInt(value.toString(), 10) === value;

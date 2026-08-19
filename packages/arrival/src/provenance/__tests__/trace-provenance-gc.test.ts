@@ -16,8 +16,10 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { EnvCapability, execState, toJS } from "../../index.js";
-import { EvalTrace } from "../../provenance/index.js";
+import { EnvCapability } from "../../common/capability.js";
+import { execState } from "../../eval/generator-exec.js";
+import { toJS } from "../../membrane/rosetta.js";
+import { EvalTrace } from "../trace.js";
 
 /** One provenance-source tool that mints a large string — the retained-value shape a
  *  multi-MB tool response actually takes. */

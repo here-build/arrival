@@ -36,7 +36,7 @@
 // the arrival printer, being display-only, differs from R7RS `write`). Non-string args
 // render identically under `~a` and `~s`.
 
-import { type CallCtx } from "../../symbol/index.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 import { EnvCapability } from "../../common/capability.js";
 import { stringValue, isSchemeNumber } from "../../values/op-helpers.js";
 import { collapseProvenance, taintString } from "../../provenance/provenance-collapse.js";

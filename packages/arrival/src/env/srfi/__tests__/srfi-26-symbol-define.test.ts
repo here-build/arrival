@@ -29,7 +29,7 @@
 //      `static-validation.law.test.ts` LAW 4 row, which pins the same fact for
 //      `(cut cons <> 1)` against the DEFAULT assembled base).
 import { describe, expect, it } from "vitest";
-import { type AEntity } from "../../../symbol/index.js";
+import type { AEntity } from "../../../common/symbols/_bake.js";
 import { EnvCapability } from "../../../common/capability.js";
 import { exec, execOverFrame, execInFrame } from "../../../eval/generator-exec.js";
 import { applyCapability, freshEnv } from "../../../__tests__/_fresh-env.js";

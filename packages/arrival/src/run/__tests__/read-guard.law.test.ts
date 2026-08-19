@@ -33,7 +33,7 @@ import {
   writeSetOfResourcePaths,
   ReadYourDeferredWriteError,
   type WriteSetResolver } from "../../run/read-guard.js";
-import { serializeResourcePath } from "../../run/resource-paths.js";
+import { serializeResourcePath } from "../path-algebra.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. checkReadWriteGuard — the pure function, direct

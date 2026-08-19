@@ -1,5 +1,5 @@
 import { TF_EXPAND } from "../values/tagless-final.js";
-import { INTEROP_BOUNDARY } from "../membrane/interop-access.js";
+import { INTEROP_BOUNDARY } from "../well-known/symbols.js";
 import type { RunContext } from "../run/RunContext.js";
 import type { SchemeValue } from "../values/types.js";
 import type { APair } from "../values/primitives/APair.js";

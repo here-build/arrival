@@ -15,7 +15,7 @@
 // three needed that treatment.
 
 import { describe, expect, it } from "vitest";
-import { exec } from "../../index.js";
+import { exec } from "../../eval/generator-exec.js";
 
 describe("F6 doors — resource caps teach (allocation limit)", () => {
   // values/op-helpers.ts's `assertAllocatable(len, fnName)` throws

@@ -6,15 +6,3 @@
 // (vitest --typecheck / `test-d` script).
 
 export * as symbol from "../common/symbols/index.js";
-export type {
-  VectorSpec,
-  RestSpec,
-  Contract,
-  ProvenanceRole,
-  CacheClass,
-  DoorSymbolDef,
-  AEntity,
-} from "../common/symbols/_bake.js";
-export type { CallCtx } from "../run/CallCtx.js";
-export { makeCallCtx, testCallCtx } from "../run/CallCtx.js";
-export { withContractFields } from "../common/symbols/_bake.js";

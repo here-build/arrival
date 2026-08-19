@@ -13,7 +13,7 @@
  * exactly what the F1 grid's conservation/box-discipline checks need to track.
  */
 import { freshEnv } from "../../_fresh-env.js";
-import type { EnvWithInternals } from "../../../env/AmbientRuntime.js";
+import type { EnvWithInternals, ResolvingAmbient } from "../../../env/AmbientRuntime.js";
 import { execStateOverFrame } from "../../../eval/generator-exec.js";
 import { AValue } from "../../../values/primitives/AValue.js";
 import { APair } from "../../../values/primitives/APair.js";
@@ -22,9 +22,8 @@ import { AJSArray } from "../../../membrane/AJSArray.js";
 import { ADict } from "../../../values/primitives/ADict.js";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { collapseProvenance } from "../../../provenance/provenance-collapse.js";
-import { toJS } from "../../../membrane/membrane.js";
+import { toJS } from "../../../membrane/rosetta.js";
 import * as z from "../../../common/scheme-zod/index.js";
-import type { ResolvingAmbient } from "../../../env/AmbientRuntime.js";
 import type { SchemeValue } from "../../../values/types.js";
 import type { CarrierRow } from "./carriers.js";
 import { ANativeProcedure } from "../../../values/primitives/ANativeProcedure.js";

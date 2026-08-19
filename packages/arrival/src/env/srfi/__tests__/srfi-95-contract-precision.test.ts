@@ -12,7 +12,7 @@
 // sort protocol — the override states that documented shape, not an invention.
 import { describe, expect, it } from "vitest";
 import srfi95 from "../srfi-95.js";
-import type { AEntity } from "../../../symbol/index.js";
+import type { AEntity } from "../../../common/symbols/_bake.js";
 import { signatureOf } from "../../../type-layer/schema-to-ts.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 

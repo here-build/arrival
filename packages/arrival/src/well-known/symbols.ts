@@ -57,10 +57,10 @@ export const MERGE = Symbol.for("merge");
 /** Prefix expands to a single quoted/wrapped datum (`'x` → `(quote x)`). */
 export const LITERAL = Symbol.for("literal");
 
-/** Symbol token / lexer symbol-state. `specials.SYMBOL` and `Lexer.symbol` are this. */
+/** Symbol token / lexer symbol-state. Reader specials and `Lexer.symbol` use this. */
 export const SYMBOL = Symbol.for("symbol");
 
-/** Kleene-star intern (`*`). `lexical-grammar.glob`. */
+/** Kleene-star intern (`*`). */
 export const GLOB = Symbol.for("*");
 
 // ── ASymbol hidden slots ────────────────────────────────────────────────────

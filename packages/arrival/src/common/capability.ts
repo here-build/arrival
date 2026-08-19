@@ -12,7 +12,7 @@
 import { z } from "zod";
 
 import { type Ref, type Resource, ResourceCell, windDownAll } from "./resources.js";
-import type { RestSpec, VectorSpec } from "../symbol/index.js";
+import type { RestSpec, VectorSpec } from "./symbols/_bake.js";
 import { CallCtx } from "../run/CallCtx.js";
 import {
   type BakeRuntimeOpts,

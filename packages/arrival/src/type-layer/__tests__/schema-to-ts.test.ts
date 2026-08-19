@@ -5,7 +5,8 @@
 import { schemeTrue } from "../../values/primitives/ABool.js";
 import { describe, expect, it } from "vitest";
 import * as z from "../../common/scheme-zod/index.js";
-import { symbol, withContractFields } from "../../symbol/index.js";
+import { symbol } from "../../symbol/index.js";
+import { withContractFields } from "../../common/symbols/_bake.js";
 import { contractOf } from "../../common/capability-internals.js";
 import { printType, signatureOf, sTagToTsType } from "../schema-to-ts.js";
 

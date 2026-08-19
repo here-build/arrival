@@ -42,8 +42,7 @@ import {
 } from "../common/capability-internals.js";
 import { buildDegradationInfo, collectDegraded, type DegradedCapability } from "../common/degradation.js";
 import { bindCapabilityDefines } from "../common/symbols/define-bake.js";
-import type { AEntity } from "../symbol/index.js";
-import type { DefineSymbolDef, DefineSyntaxSymbolDef, RosettaSymbolDef } from "../common/symbols/_bake.js";
+import type { AEntity, DefineSymbolDef, DefineSyntaxSymbolDef, RosettaSymbolDef } from "../common/symbols/_bake.js";
 import type { AliasSymbolDef } from "../common/symbols/alias.js";
 import type { PreludeBindTarget } from "../common/kernel.js";
 import { linearizeDag } from "../common/dag-linearize.js";

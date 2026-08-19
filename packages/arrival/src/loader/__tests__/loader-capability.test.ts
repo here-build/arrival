@@ -15,7 +15,7 @@
 //      symbol-define-static-program-validation.md §3.7).
 import { describe, expect, it } from "vitest";
 import { exec, execState, execInFrame } from "../../eval/generator-exec.js";
-import { toJS } from "../../membrane/membrane.js";
+import { toJS } from "../../membrane/rosetta.js";
 import type { SchemeValue } from "../../values/types.js";
 import { EnvCapability } from "../../common/capability.js";
 import { buildVocabulary } from "../../env/vocabulary.js";

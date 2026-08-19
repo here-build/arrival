@@ -16,7 +16,7 @@ import { z } from "zod";
 
 import { TypeTagError } from "../../errors.js";
 import { EnvCapability } from "../../common/capability.js";
-import { toJS } from "../../membrane/membrane.js";
+import { toJS } from "../../membrane/rosetta.js";
 import { stripOptionalSuffix, tagToJsonSchema } from "../../common/schema-tag.js";
 import type { SchemeValue } from "../../values/types.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";

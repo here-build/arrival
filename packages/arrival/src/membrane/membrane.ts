@@ -1,10 +1,9 @@
 /**
  * Membrane — typed boundary crossing for Scheme ↔ JS interop.
  *
- * Inbound is `jsToScheme` (rosetta.ts). Outbound is `toJS`, re-exported here so the
- * barrel path (`membrane.js`) stays the public door. Member access (`@`/`@?`/`@keys`,
- * `:key`) lives on the values (`arrival/tagless-final/get|has|keys`); the membrane
- * has no member-read face.
+ * Inbound is `jsToScheme` (rosetta.ts). Outbound is `toJS` (same file). Member access
+ * (`@`/`@?`/`@keys`, `:key`) lives on the values (`arrival/tagless-final/get|has|keys`);
+ * the membrane has no member-read face. This module is the already-scheme door.
  *
  * Lineage: object-capability membranes (Miller 2006; Van Cutsem & Miller 2013).
  * Member-read protocol mirrors GraalVM Truffle InteropLibrary — see interop-access.ts.
@@ -89,11 +88,6 @@ export function isBytevectorLike(value: unknown): value is Uint8Array | ArrayBuf
     (typeof Buffer !== "undefined" && value instanceof Buffer)
   );
 }
-
-/** Public Scheme → JS exit. Implementation lives next to the private element
- *  walker in rosetta.ts so mixed-world recursion stays membrane-private.
- *  Re-exported here so the barrel path (`membrane.js`) stays the public door. */
-export { toJS } from "./rosetta.js";
 
 // Polyglot member access lives ON the values (tagless algebra):
 // arrival/tagless-final/get|has|keys — ADict structurally, AJSObject/AJSArray through

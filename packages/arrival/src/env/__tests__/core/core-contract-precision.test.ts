@@ -16,7 +16,7 @@
 import { describe, expect, it } from "vitest";
 import core from "../../core/core.js";
 import { signatureOf } from "../../../type-layer/schema-to-ts.js";
-import type { AEntity } from "../../../symbol/index.js";
+import type { AEntity } from "../../../common/symbols/_bake.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
 // `scheme/core`'s `symbols` is a plain object (no config/resources builder), but realize

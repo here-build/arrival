@@ -28,7 +28,8 @@ import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
-import { symbol, testCallCtx } from "../../symbol/index.js";
+import { symbol } from "../../symbol/index.js";
+import { testCallCtx } from "../../run/CallCtx.js";
 import * as z from "../scheme-zod/index.js";
 import { EnvCapability } from "../capability.js";
 

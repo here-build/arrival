@@ -8,6 +8,8 @@
 //   • EXT-AUTHOR — `ExtensionHandler`/`ContentResolver`/`RequireTypeProvider`/
 //     `ResolverResult`, `contentsToText`/`normalizeToJson`/`parseJsonc`/`valueToTsType`/
 //     `resolveRequireType`, `SchemeForm`/`MaybePromise` (home: `src/types/utility.ts`), `runResolverOf`
+export type { MaybePromise } from "../types/utility.js";
+export { parseJsonc } from "../loader/parse-jsonc.js";
 export {
   type Loader,
   type FsReadLike,
@@ -19,11 +21,9 @@ export {
   type RequireTypeProvider,
   type ResolverResult,
   contentsToText,
-  parseJsonc,
   valueToTsType,
   resolveRequireType,
   type SchemeForm,
-  type MaybePromise,
   runResolverOf,
 } from "../loader/loader.js";
 export { arrivalLoaderCapability } from "../loader/loader-capability.js";

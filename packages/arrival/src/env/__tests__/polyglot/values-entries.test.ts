@@ -16,11 +16,9 @@ import { describe, expect, it } from "vitest";
 
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
-import { execOverFrame as exec, execStateOverFrame as execState } from "../../../eval/generator-exec.js";
-import { execState as execStateCapabilities } from "../../../eval/generator-exec.js";
+import { execOverFrame as exec, execStateOverFrame as execState, execState as execStateCapabilities } from "../../../eval/generator-exec.js";
 import { inferenceEnv } from "../../inference-env.js";
-import { jsToScheme } from "../../../membrane/rosetta.js";
-import { toJS } from "../../../membrane/membrane.js";
+import { jsToScheme, toJS } from "../../../membrane/rosetta.js";
 import type { SchemeValue } from "../../../values/types.js";
 import { arrivalLoaderCapability } from "../../../loader/loader-capability.js";
 import { loaderFromResolver } from "../../../loader/loader.js";

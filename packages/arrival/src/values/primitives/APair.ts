@@ -961,17 +961,11 @@ export class AJSArrayList extends APair<SchemeValue, SchemeValue> {
     return applyMembraneClosure(runCtx, () => super["arrival/tagless-final/drop"](n, runCtx));
   }
 
-  override ["arrival/tagless-final/take-while"](
-    pred: (x: unknown) => unknown | Promise<unknown>,
-    runCtx: RunContext,
-  ): Promise<AListAlike> {
+  override ["arrival/tagless-final/take-while"](pred: ACallable, runCtx: RunContext): Promise<AListAlike> {
     return applyMembraneClosure(runCtx, () => super["arrival/tagless-final/take-while"](pred, runCtx));
   }
 
-  override ["arrival/tagless-final/drop-while"](
-    pred: (x: unknown) => unknown | Promise<unknown>,
-    runCtx: RunContext,
-  ): Promise<SchemeValue> {
+  override ["arrival/tagless-final/drop-while"](pred: ACallable, runCtx: RunContext): Promise<SchemeValue> {
     return applyMembraneClosure(runCtx, () => super["arrival/tagless-final/drop-while"](pred, runCtx));
   }
 

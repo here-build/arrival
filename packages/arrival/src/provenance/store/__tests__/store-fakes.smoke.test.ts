@@ -7,7 +7,8 @@
  */
 import { describe, expect, it } from "vitest";
 
-import type { MintRecord, RecordId } from "../index.js";
+import type { MintRecord } from "../records.js";
+import type { RecordId } from "../ids.js";
 import { PayloadStoreFake, ProvenanceStoreFake, ProvenanceWriteFailure } from "../fakes.js";
 import { recordIdKey } from "../ids.js";
 

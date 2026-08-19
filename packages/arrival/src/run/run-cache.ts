@@ -8,8 +8,6 @@
  * alongside effects/reads/paths at the baked rosetta `run` wrapper (docs/execution.md
  * §CHOKEPOINT) — lives in `./penetration.ts` (hermeticity audit P2: this file is named
  * for one of the four channels the chokepoint composes, not the chokepoint itself).
- * `penetrateThroughCache` is re-exported below for compatibility.
- *
  * Full model: docs/execution.md §MODE-LAW, §BURST, §TWO-REPLAYS.
  *
  * THE MODE LAW (keep in step with docs/execution.md §MODE-LAW):
@@ -24,9 +22,6 @@
  *              |                                      | never stored
  *   undeclared | fire                                 | fire — regenerateable default
  */
-
-// Compatibility re-export: rosetta still imports from here; new code should import `penetration.js`.
-export { penetrateThroughCache } from "./penetration.js";
 
 export type RunCacheEntry =
   | { kind: "value"; value: unknown } // a `view` result — the decoded-face JS value,

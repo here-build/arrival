@@ -144,14 +144,13 @@ export type ProvenanceRole = "pipe" | "fan" | "source" | "sink" | "transparent" 
 /** Cache-class vocabulary — explicit declaration, never derived from lineage role. See `Contract.cacheClass`. */
 export type CacheClass = "view" | "pure";
 
-/** Resource-path producer — sole home is run/resource-paths.ts; re-exported for CrossingContract. */
+/** Resource-path producer — sole home is run/resource-paths.ts. */
 import {
   ResourcePathRoleConflictError,
   ResourcePathShapeError,
   type ResourcePathFn,
 } from "../../run/resource-paths.js";
 import { AValue } from "../../values/primitives/AValue.js";
-export type { ResourcePathFn };
 
 /** Per-z.lambda-arm dual of `ProvenanceRole` (host role). Shape extracts where it decides;
  *  `Contract.callbackRoles` declares where underdetermined (`extractCallbackRoles`):

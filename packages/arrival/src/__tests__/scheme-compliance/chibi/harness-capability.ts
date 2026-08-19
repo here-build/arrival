@@ -27,7 +27,7 @@
 // derives section nesting structurally at collection time, so these forms become
 // `section-begin`/`section-end` steps the runner never executes — no runtime group-stack is
 // needed (unlike v1's `js-test-begin`/`js-test-end`).
-import { testCallCtx } from "../../../symbol/index.js";
+import { testCallCtx } from "../../../run/CallCtx.js";
 import type { CallCtx } from "../../../run/CallCtx.js";
 import { EnvCapability } from "../../../common/capability.js";
 import { ACallable, applyCallback } from "../../../values/primitives/ACallable.js";

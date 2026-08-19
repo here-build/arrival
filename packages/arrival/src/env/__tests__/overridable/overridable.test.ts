@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { execState, type ExecOptions } from "../../../index.js";
+import { execState, type ExecOptions } from "../../../eval/generator-exec.js";
 import { AExact } from "../../../values/primitives/AExact.js";
 import { AString } from "../../../values/primitives/AString.js";
 import { APair } from "../../../values/primitives/APair.js";

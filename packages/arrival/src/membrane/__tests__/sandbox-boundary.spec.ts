@@ -1,12 +1,6 @@
 import { describe, it, expect } from "vitest";
-import {
-  INTEROP_BOUNDARY,
-  accessMember,
-  accessHas,
-  accessKeys,
-  NOT_FOUND,
-  markInteropBoundary,
-  isInteropBoundary } from "../interop-access.js";
+import { INTEROP_BOUNDARY } from "../../well-known/symbols.js";
+import { accessMember, accessHas, accessKeys, NOT_FOUND, markInteropBoundary, isInteropBoundary } from "../interop-access.js";
 import { InteropAccessError } from "../../errors.js";
 
 describe("Sandbox Boundary", () => {

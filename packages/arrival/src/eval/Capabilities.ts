@@ -1,7 +1,7 @@
 import type { AmbientRuntime, AmbientValue } from "../env/AmbientRuntime.js";
 import type { RunContext } from "../run/RunContext.js";
 import type { CompiledResolutionChain } from "./CompiledResolutionChain.js";
-import { INTEROP_BOUNDARY } from "../membrane/interop-access.js";
+import { INTEROP_BOUNDARY } from "../well-known/symbols.js";
 
 /**
  * The CAPABILITY base — the builtins/preludes/host-supplied resolvers a run is

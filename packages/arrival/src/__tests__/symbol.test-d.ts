@@ -15,7 +15,8 @@
 
 import { describe, expectTypeOf, test } from "vitest";
 import * as z from "../common/scheme-zod/index.js";
-import { type AEntity, symbol } from "../symbol/index.js";
+import type { AEntity } from "../common/symbols/_bake.js";
+import { symbol } from "../symbol/index.js";
 import { type NativeSymbolDef } from "../values/primitives/ANativeProcedure.js";
 import { type DecodedArgs, type DecodedArgsWithRest, type DecodedReturn, type SpecInfer } from "../common/symbols/_bake.js";
 import { type SlotAdopter, buildSlotAdopter } from "../membrane/adopt-spine.js";

@@ -21,8 +21,7 @@
 
 import { describe, expect, it } from "vitest";
 import { exec, execState } from "../../eval/generator-exec.js";
-import { toJS } from "../membrane.js";
-import { errorToHost, jsToScheme } from "../rosetta.js";
+import { toJS, errorToHost, jsToScheme } from "../rosetta.js";
 import { R7RSError, R7RSReadError } from "../../errors.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { EMPTY_PROVENANCE } from "../../values/primitives/AValue.js";
@@ -30,7 +29,7 @@ import { nil } from "../../values/primitives/ANil.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AJSObject } from "../AJSObject.js";
 import { type SchemeValue } from "../../values/types.js";
-import { EnvCapability } from "../../index.js";
+import { EnvCapability } from "../../common/capability.js";
 
 describe("error-object exit arm (value position)", () => {
   it("make-error-object as a final form exits as a same-class host Error", async () => {

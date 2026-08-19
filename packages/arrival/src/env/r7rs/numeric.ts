@@ -23,7 +23,7 @@ import invariant from "tiny-invariant";
 // `TypeError.invariant` is a global augmentation — import explicitly so correctness
 // doesn't depend on load order.
 import "@here.build/error-invariant";
-import { type Contract, type RestSpec, type VectorSpec } from "../../symbol/index.js";
+import type { Contract, RestSpec, VectorSpec } from "../../common/symbols/_bake.js";
 import { EnvCapability } from "../../common/capability.js";
 import type { EmitCtx, EmitRule } from "../../emit/emit-rule.js";
 import { Bin, Binding, Call, Lit, Method, Ref, Un, type BinOp, type R } from "../../emit/residual-lite.js";

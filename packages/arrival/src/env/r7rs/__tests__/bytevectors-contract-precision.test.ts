@@ -13,7 +13,7 @@
 // (`.success` is `true`, not `false`) until the fix narrows the element schema.
 import { describe, expect, it } from "vitest";
 import bytevectorsPack from "../bytevectors.js";
-import type { AEntity } from "../../../symbol/index.js";
+import type { AEntity } from "../../../common/symbols/_bake.js";
 import { ABytevector } from "../../../values/primitives/ABytevector.js";
 import { AExact } from "../../../values/primitives/AExact.js";
 import { AString } from "../../../values/primitives/AString.js";

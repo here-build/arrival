@@ -33,7 +33,8 @@ import {
 import { classifierFromEnv } from "../../provenance/lineage-classifier-from-env.js";
 import { buildWireframe } from "../../provenance/wireframe/builder.js";
 import * as z from "../../common/scheme-zod/index.js";
-import { symbol, type AEntity, type ProvenanceRole } from "../../symbol/index.js";
+import { symbol } from "../../symbol/index.js";
+import type { AEntity, ProvenanceRole } from "../../common/symbols/_bake.js";
 import { EnvCapability } from "../../common/capability.js";
 import { declaresAccChain, withCallbackRoles, type CallbackRoles } from "../../common/symbols/_bake.js";
 import type { NativeSymbolDef } from "../../values/primitives/ANativeProcedure.js";

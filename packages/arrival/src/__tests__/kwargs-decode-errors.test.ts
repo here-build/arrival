@@ -19,7 +19,8 @@ import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../run/RunContext.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
-import { symbol, testCallCtx } from "../symbol/index.js";
+import { symbol } from "../symbol/index.js";
+import { testCallCtx } from "../run/CallCtx.js";
 import * as z from "../common/scheme-zod/index.js";
 
 /** Build a keyword `ASymbol` exactly as evaluating `:key` now does (self-evaluating —

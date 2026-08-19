@@ -5,8 +5,7 @@
 // — see polyglot.ts's header for the full split rationale. This file keeps only
 // what stays in the shared core: @/@?/@keys/dict, nil, compose/pipe/flow,
 // %interleave.
-import { exec as bareExec } from "../../../index.js";
-import { execStateOverFrame, type ExecOptionsOverFrame } from "../../../eval/generator-exec.js";
+import { exec as bareExec, execStateOverFrame, type ExecOptionsOverFrame } from "../../../eval/generator-exec.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
 import { applyCapability } from "../../../__tests__/_fresh-env.js";

@@ -32,7 +32,7 @@ import { inferenceEnv } from "../env/inference-env.js";
 import { type ResolvingAmbient } from "../env/AmbientRuntime.js";
 import { EnvCapability } from "../common/capability.js";
 import { applyCapability } from "../__tests__/_fresh-env.js";
-import { toJS } from "../membrane/membrane.js";
+import { toJS } from "../membrane/rosetta.js";
 import type { EvalTap } from "../eval/evaluator.js";
 import type { Classifier, DeclaredRole } from "../provenance/lineage.js";
 import { buildWireframe } from "../provenance/wireframe/builder.js";

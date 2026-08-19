@@ -24,7 +24,8 @@
 import { AJSArray } from "../../membrane/AJSArray.js";
 import { strictGate } from "../../errors.js";
 import dedent from "dedent";
-import { withContractFields, type CallCtx } from "../../symbol/index.js";
+import { withContractFields } from "../../common/symbols/_bake.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 import { ABool, schemeFalse, schemeTrue } from "../../values/primitives/ABool.js";
 import { AJSObject } from "../../membrane/AJSObject.js";
 import { ADict } from "../../values/primitives/ADict.js";

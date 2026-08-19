@@ -17,13 +17,13 @@
  */
 import { assertSingleLoad } from "../single-load.js";
 import type { Invocation } from "./dynamic-call-site.js";
-import { is_promise } from "./guards.js";
+import { is_promise } from "../values/value-guards.js";
 import { emitMint, isEmissionEnabled } from "../provenance/store/emit.js";
 import type { OrdinalPath, RegionEpoch, RegionId, TemplateHash } from "../provenance/store/ids.js";
 import type { PayloadStore, ProvenanceStore } from "../provenance/store/interfaces.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { isSilentRegion } from "../membrane/region-scope.js";
-import { toJS } from "../membrane/membrane.js";
+import { toJS } from "../membrane/rosetta.js";
 import type { SchemeValue } from "../values/types.js";
 
 /** One port's static address — everything an emission needs BESIDES which

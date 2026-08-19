@@ -15,15 +15,9 @@ import { exec } from "../../eval/generator-exec.js";
 import { CONSTANT_CTX, RunContext } from "../RunContext.js";
 import { MemoryRunCache } from "../run-cache.js";
 import { MemoryEffectLog } from "../effect-log.js";
-import { testCallCtx } from "../../symbol/index.js";
-import {
-  MemoryResourcePathLog,
-  ResourcePathConflictError,
-  ResourcePathProducerError,
-  applyResourcePathCqs,
-  type ResourcePath,
-  type ResourcePathLog,
-} from "../resource-paths.js";
+import { testCallCtx } from "../CallCtx.js";
+import { MemoryResourcePathLog, ResourcePathConflictError, ResourcePathProducerError, applyResourcePathCqs, type ResourcePathLog } from "../resource-paths.js";
+import type { ResourcePath } from "../path-algebra.js";
 
 // ── Fake capability family (SUITE §Fake capability family) ───────────────────
 

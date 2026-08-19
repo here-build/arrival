@@ -12,7 +12,7 @@
 import { describe, it, expect, expectTypeOf } from "vitest";
 import { CONSTANT_CTX } from "../run/RunContext.js";
 import * as arrival from "../symbol/index.js";
-import { testCallCtx } from "../symbol/index.js";
+import { testCallCtx } from "../run/CallCtx.js";
 import * as z from "../common/scheme-zod/index.js";
 import { APair } from "../values/primitives/APair.js";
 import { AValue } from "../values/primitives/AValue.js";

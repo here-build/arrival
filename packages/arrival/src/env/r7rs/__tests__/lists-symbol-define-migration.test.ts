@@ -53,14 +53,13 @@
 import { describe, expect, it } from "vitest";
 import listsPack from "../lists.js";
 import { EXPECTED_FAILURES } from "../../../__tests__/scheme-compliance/chibi/registries.js";
-import { PurityError } from "../../../errors.js";
-import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
+import { PurityError, DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
 import { DoorProcedure } from "../../../values/primitives/ACallable.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
 import { BASE_PACKS } from "../../base-packs.js";
 import { execOverFrame as exec, execInFrame } from "../../../eval/generator-exec.js";
 import { buildVocabulary } from "../../vocabulary.js";
-import type { AEntity, DoorSymbolDef } from "../../../symbol/index.js";
+import type { AEntity, DoorSymbolDef } from "../../../common/symbols/_bake.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 

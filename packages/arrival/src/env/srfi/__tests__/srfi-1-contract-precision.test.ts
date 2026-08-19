@@ -17,7 +17,7 @@
 // overload set verbatim.
 import { describe, expect, it } from "vitest";
 import srfi1 from "../srfi-1.js";
-import type { AEntity } from "../../../symbol/index.js";
+import type { AEntity } from "../../../common/symbols/_bake.js";
 import { signatureOf } from "../../../type-layer/schema-to-ts.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 import { ANativeProcedure } from "../../../values/primitives/ANativeProcedure.js";

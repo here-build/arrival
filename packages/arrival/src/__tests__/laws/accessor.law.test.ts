@@ -18,8 +18,7 @@ import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { execOverFrame as exec, execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
-import { jsToScheme } from "../../membrane/rosetta.js";
-import { toJS } from "../../membrane/membrane.js";
+import { jsToScheme, toJS } from "../../membrane/rosetta.js";
 
 async function execOne(expr: string, env = inferenceEnv): Promise<any> {
   const results = await exec(expr, { env });

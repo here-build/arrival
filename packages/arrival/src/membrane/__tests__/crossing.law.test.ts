@@ -17,8 +17,8 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import { CROSSINGS, VIOLATIONS } from "../../__tests__/laws/_tables/crossings.js";
-import { toJS, isSchemeValue } from "../membrane.js";
-import { jsToScheme, modeKeyOf } from "../rosetta.js";
+import { toJS, jsToScheme, modeKeyOf } from "../rosetta.js";
+import { isSchemeValue } from "../membrane.js";
 
 import { exec } from "../../eval/generator-exec.js";
 import { setMembraneWarnings } from "../membrane-warn.js";

@@ -9,15 +9,13 @@
 import { describe, it, expect } from "vitest";
 import type { EnvWithInternals, ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
-import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
-import { parse } from "../../eval/generator-exec.js";
+import { execStateOverFrame as execState, parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { AVector } from "../../values/primitives/AVector.js";
 import { APair } from "../../values/primitives/APair.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import type { SchemeValue } from "../../values/types.js";
-import { classify, fullCone, type Classifier } from "../../provenance/lineage.js";
-import { provOf } from "../../provenance/lineage.js";
+import { classify, fullCone, type Classifier, provOf } from "../../provenance/lineage.js";
 import { sStr, sNum, run, runRaw } from "../../__tests__/_lineage-test-helpers.js";
 import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
 

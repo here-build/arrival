@@ -21,7 +21,7 @@
 // exercise these through the REAL harvest + walker + render pipeline, unchanged.
 import { describe, expect, it } from "vitest";
 
-import type { AEntity } from "../../../symbol/index.js";
+import type { AEntity } from "../../../common/symbols/_bake.js";
 import type { EmitCtx } from "../../../emit/emit-rule.js";
 import { Binding, Bin, Call, Lit, Member, Ref, Un, type R } from "../../../emit/residual-lite.js";
 import equalityPack from "../equality.js";

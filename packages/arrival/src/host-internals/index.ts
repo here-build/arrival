@@ -54,22 +54,24 @@ export {
   MemoryResourcePathLog,
   applyResourcePathCqs,
   assertNoResourcePathProducers,
-  pathsOverlap,
-  anyPathOverlap,
-  findOverlappingPair,
   findInterveningDoor,
-  serializeResourcePath,
   ResourcePathConflictError,
   ResourcePathDeclarationError,
   ResourcePathProducerError,
   ResourcePathRoleConflictError,
   ResourcePathShapeError,
-  type ResourcePath,
   type ResourcePathFn,
   type ResourcePathLog,
   type ResourcePathEvent,
   type InterveningDoorWitness,
 } from "../run/resource-paths.js";
+export {
+  pathsOverlap,
+  anyPathOverlap,
+  findOverlappingPair,
+  serializeResourcePath,
+  type ResourcePath,
+} from "../run/path-algebra.js";
 
 // Per-run model-facing note channel — a renderer mints one and drains it.
 export { createNoteSink, createDisplaySink, type NoteSink, type DisplaySink } from "../run/note-sink.js";

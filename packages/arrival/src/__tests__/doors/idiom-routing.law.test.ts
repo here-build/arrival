@@ -18,7 +18,7 @@
 // reaches unbound-variable. See racket-hash-colon-keywords.test.ts.
 
 import { describe, expect, it } from "vitest";
-import { exec } from "../../index.js";
+import { exec } from "../../eval/generator-exec.js";
 import { unboundVariableError } from "../../unbound-variable.js";
 import { PurityError } from "../../errors.js";
 

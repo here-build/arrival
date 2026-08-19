@@ -9,8 +9,11 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { deepProvenance, EnvCapability, execState, toJS } from "../../index.js";
-import { EvalTrace } from "../../provenance/index.js";
+import { deepProvenance } from "../deep-provenance.js";
+import { EnvCapability } from "../../common/capability.js";
+import { execState } from "../../eval/generator-exec.js";
+import { toJS } from "../../membrane/rosetta.js";
+import { EvalTrace } from "../trace.js";
 
 const weather = EnvCapability.define("test/weather", {
   symbols: (symbol, z) => ({

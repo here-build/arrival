@@ -25,7 +25,9 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { scan, structuralScanner, makeOracle, makeOracleEnv } from "../oracle/index.js";
+import { scan, structuralScanner } from "../oracle/scanner.js";
+import { makeOracle } from "../oracle/index.js";
+import { makeOracleEnv } from "../oracle/env.js";
 import { AmbientRuntime, type AmbientValue } from "../env/AmbientRuntime.js";
 
 // ---------------------------------------------------------------------------------------------

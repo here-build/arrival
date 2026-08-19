@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 import srfi13 from "../../env/srfi/srfi-13.js";
-import { testCallCtx } from "../../symbol/index.js";
+import { testCallCtx } from "../CallCtx.js";
 import { RunContext, CONSTANT_CTX } from "../../run/RunContext.js";
 import { AString } from "../../values/primitives/AString.js";
 import type { EnvCapability } from "../../common/capability.js";

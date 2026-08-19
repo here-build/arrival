@@ -15,7 +15,7 @@
  * `resourcePaths` carries the contract `effects` path tuples when the path-E arm enqueued.
  */
 
-import type { ResourcePath } from "./resource-paths.js";
+import type { ResourcePath } from "./path-algebra.js";
 
 /** One effect penetration. `index` is minted by `enqueue` — program order, never
  *  re-derived from a statement position (a burst replays in THIS order, not a recomputed one). */

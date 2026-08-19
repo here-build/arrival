@@ -29,7 +29,7 @@
 // (suggestions derive from the chain's live vocabulary), different subject.
 
 import { describe, expect, it } from "vitest";
-import { exec } from "../../index.js";
+import { exec } from "../../eval/generator-exec.js";
 import { PurityError } from "../../errors.js";
 import { BASE_PACKS } from "../../env/base-packs.js";
 import { contractOf } from "../../common/capability-internals.js";

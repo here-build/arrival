@@ -30,7 +30,7 @@ import type { ResourcePathLog } from "../run/resource-paths.js";
 // TYPE-ONLY (erased — no runtime scheme-zod edge): exec exit contract's schema type.
 import type { output as ZodOutputOf, ZodType } from "../common/scheme-zod/index.js";
 import type { AListAlike, SchemeValue } from "../values/types.js";
-import { toJS } from "../membrane/membrane.js";
+import { toJS } from "../membrane/rosetta.js";
 
 /**
  * INTERNAL BAKE SEAM — not reachable through public ExecOptions. Evaluate parsed

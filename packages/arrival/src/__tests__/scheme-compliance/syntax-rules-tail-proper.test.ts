@@ -10,7 +10,7 @@
 // literal symbols by restore_data_gensyms ON THE FORM (once per expansion), so quote yields
 // the literal symbol with no post-eval, O(depth)-composing fixup.
 import { describe, expect, it } from "vitest";
-import { toJS } from "../../index.js";
+import { toJS } from "../../membrane/rosetta.js";
 import { execStateOverFrame, type ExecOptionsOverFrame } from "../../eval/generator-exec.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";

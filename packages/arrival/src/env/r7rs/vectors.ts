@@ -32,7 +32,7 @@ import { type SchemeValue } from "../../values/types.js";
 import { ACharacter } from "../../values/primitives/ACharacter.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { APair } from "../../values/primitives/APair.js";
-import { is_promise } from "../../eval/guards.js";
+import { is_promise } from "../../values/value-guards.js";
 import { promise_all } from "../../utils/promises.js";
 import invariant from "tiny-invariant";
 import {

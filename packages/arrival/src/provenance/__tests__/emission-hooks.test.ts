@@ -21,7 +21,7 @@ import { type ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { EvalTrace } from "../../provenance/trace.js";
 import { inferenceEnv } from "../../env/inference-env.js";
-import { toJS } from "../../membrane/membrane.js";
+import { toJS } from "../../membrane/rosetta.js";
 import { withRecordCoordinateAsync, type EmissionSink, type RecordCoordinate } from "../../eval/provenance-hooks.js";
 import { PayloadStoreFake, ProvenanceStoreFake } from "../../provenance/store/fakes.js";
 import { setEmissionEnabled } from "../../provenance/store/emit.js";

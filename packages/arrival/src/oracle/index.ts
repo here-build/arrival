@@ -9,23 +9,6 @@
 // Σ and T attach behind the same surface; without an env the scanner degrades them
 // gracefully per the contract (validSymbols/expectedType → null, produces → true).
 
-export type {
-  CursorPosition,
-  EvalResult,
-  FormKind,
-  OracleEnv,
-  OracleScanner,
-  OracleSession,
-  OracleState,
-  TokenClass,
-  TypeTag,
-} from "./contract.js";
-
-export { scan, structuralScanner, makeSigmaScanner, validNextClasses } from "./scanner.js";
-export { computeValidSymbols, scanScope } from "./sigma.js";
-export type { OracleEnvΣ, ScopeState } from "./sigma.js";
-export { makeOracleEnv, oracleEnvFromBindings } from "./env.js";
-
 import { structuralScanner, makeSigmaScanner } from "./scanner.js";
 import { makeOracleEnv } from "./env.js";
 import type { OracleScanner } from "./contract.js";

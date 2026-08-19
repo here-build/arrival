@@ -13,10 +13,9 @@
  * sub-evaluations receive their parent as the second arg to enter().
  */
 import { beforeAll, describe, expect, it } from "vitest";
-import type { EnvWithInternals } from "../env/AmbientRuntime.js";
+import type { EnvWithInternals, ResolvingAmbient } from "../env/AmbientRuntime.js";
 import { exec, execStateOverFrame } from "../eval/generator-exec.js";
 import { freshEnv } from "./_fresh-env.js";
-import type { ResolvingAmbient } from "../env/AmbientRuntime.js";
 import type { APair } from "../values/primitives/APair.js";
 import { ANativeProcedure } from "../values/primitives/ANativeProcedure.js";
 import { AExact } from "../values/primitives/AExact.js";

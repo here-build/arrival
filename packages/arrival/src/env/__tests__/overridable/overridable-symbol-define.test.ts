@@ -29,14 +29,13 @@
 //     interim per §3.4's DEFERRED per-position walker note).
 import { describe, expect, it } from "vitest";
 
-import { exec, execState, LexicalScope, type ExecOptions } from "../../../index.js";
-import { execInFrame } from "../../../eval/generator-exec.js";
+import { exec, execState, type ExecOptions, execInFrame } from "../../../eval/generator-exec.js";
+import { LexicalScope } from "../../../eval/LexicalScope.js";
 import { AString } from "../../../values/primitives/AString.js";
 import { buildVocabulary } from "../../vocabulary.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
 import { overridableCapability } from "../../overridable/overridable.js";
-import type { AEntity } from "../../../symbol/index.js";
-import type { DefineSyntaxSymbolDef } from "../../../common/symbols/_bake.js";
+import type { AEntity, DefineSyntaxSymbolDef } from "../../../common/symbols/_bake.js";
 import type { SymbolDeclaration } from "../../../common/capability.js";
 import { contractOf } from "../../../common/capability-internals.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";

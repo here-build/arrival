@@ -25,7 +25,7 @@ import {
   NoLensError,
   RedundantCrossingError,
 } from "../errors.js";
-import { is_promise } from "../eval/guards.js";
+import { is_promise } from "../values/value-guards.js";
 import { hostFnToCallable, originalCallableOf, type ACallable } from "../values/primitives/ACallable.js";
 
 import { type AUnwrap, type AWrap, type EgressMode, type SchemeValue } from "../values/types.js";

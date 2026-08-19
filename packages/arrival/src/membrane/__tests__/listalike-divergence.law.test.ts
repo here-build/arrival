@@ -69,8 +69,7 @@ import { describe, expect, it } from "vitest";
 
 import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
-import { toJS } from "../../index.js";
-import { jsToScheme } from "../rosetta.js";
+import { toJS, jsToScheme } from "../rosetta.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 
 /** A hang is a FAILURE, never a CI wall-clock death: the walk is raced against a deadline and the

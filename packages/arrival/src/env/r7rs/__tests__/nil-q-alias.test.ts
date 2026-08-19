@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { exec } from "../../../index.js";
+import { exec } from "../../../eval/generator-exec.js";
 
 describe("nil? aliases null?", () => {
   it("agrees on nil and non-empty list", async () => {

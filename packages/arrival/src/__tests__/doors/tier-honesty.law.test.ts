@@ -13,7 +13,7 @@ import { buildWireframe } from "../../provenance/wireframe/builder.js";
 import { replayGraphEgress, ReplayScopeError } from "../../provenance/replay.js";
 import { answerQuery, ReplayMemo, type ReplayMemoKey } from "../../provenance/replay-memo.js";
 import { recordRun } from "../provenance/q16-harness.js";
-import type { EvidenceTier } from "../../provenance/store/index.js";
+import type { EvidenceTier } from "../../provenance/store/interfaces.js";
 import { PayloadStoreFake } from "../../provenance/store/fakes.js";
 import { PayloadTierMachine } from "../../provenance/store/tiering.js";
 

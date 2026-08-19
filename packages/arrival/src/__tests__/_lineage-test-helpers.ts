@@ -10,7 +10,7 @@
  * the ambient value so nested or interleaved use is safe.
  */
 import * as z from "../common/scheme-zod/index.js";
-import type { EnvWithInternals, ResolvingAmbient } from "../env/AmbientRuntime.js";
+import type { EnvWithInternals, ResolvingAmbient, AmbientRuntime } from "../env/AmbientRuntime.js";
 import { CONSTANT_CTX } from "../run/RunContext.js";
 import { execStateOverFrame } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../env/inference-env.js";
@@ -18,7 +18,6 @@ import type { AString } from "../values/primitives/AString.js";
 import type { AValue } from "../values/primitives/AValue.js";
 import { jsToScheme } from "../membrane/rosetta.js";
 import { provOf } from "../provenance/lineage.js";
-import type { AmbientRuntime } from "../env/AmbientRuntime.js";
 import { isEagerProvenanceOracleEnabled, setEagerProvenanceOracleEnabled } from "../values/op-helpers.js";
 import type { SchemeValue } from "../values/types.js";
 

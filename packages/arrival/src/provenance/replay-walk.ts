@@ -41,7 +41,7 @@ import { withSilentRegion } from "../membrane/region-scope.js";
 import { applyWireInEnv } from "./gamma.js";
 import { hermeticEnv, type HermeticEnv, type IngressBindings } from "./hermetic-env.js";
 import { boxPayload, FrozenMints, ReplayScopeError, withUnionedProvenance, type ReplayedValue } from "./replay.js";
-import { toJS } from "../membrane/membrane.js";
+import { toJS } from "../membrane/rosetta.js";
 import type { EmittedWire, Wire, WireframeGraph, WireframeProgram } from "./wireframe/types.js";
 
 /** One γ step: a wire's application, its consumer coordinate (which node/slot it

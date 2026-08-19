@@ -19,7 +19,8 @@
  */
 import { describe, it, expect, beforeAll } from "vitest";
 import * as z from "../../common/scheme-zod/index.js";
-import { symbol, type CacheClass } from "../../symbol/index.js";
+import { symbol } from "../../symbol/index.js";
+import type { CacheClass } from "../../common/symbols/_bake.js";
 import { type NativeSymbolDef } from "../../values/primitives/ANativeProcedure.js";
 import { type RosettaSymbolDef, type SequenceSymbolDef } from "../../common/symbols/_bake.js";
 import { EnvCapability } from "../../common/capability.js";

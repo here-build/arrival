@@ -28,7 +28,7 @@
 import { zodToTs, printNode, createAuxiliaryTypeStore, type OptionalTypeOverrideFunction } from "zod-to-ts";
 import * as z from "../common/scheme-zod/index.js";
 import { tagToJsonSchema } from "../common/schema-tag.js";
-import type { AEntity } from "../symbol/index.js";
+import type { AEntity } from "../common/symbols/_bake.js";
 
 // Scheme primitive → its PLAIN-TS IMAGE (Scheme is a TS subset; see carriers.ts).
 //

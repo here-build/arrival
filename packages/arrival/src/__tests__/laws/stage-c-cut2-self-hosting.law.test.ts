@@ -42,7 +42,7 @@ import { describe, expect, it } from "vitest";
 import { EnvCapability } from "../../common/capability.js";
 import { exec, execState } from "../../eval/generator-exec.js";
 import { LexicalScope } from "../../eval/LexicalScope.js";
-import { toJS } from "../../membrane/membrane.js";
+import { toJS } from "../../membrane/rosetta.js";
 
 describe("LAW 1 — bare exec rides the self-hosted vocabulary path", () => {
   it("execState(code) with no options has runCtx.vocabulary defined and resolves a base symbol", async () => {

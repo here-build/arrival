@@ -6,6 +6,7 @@
 // the evaluator's AmbientRuntime/Macro world).
 import { directives } from "./lexical-grammar.js";
 import * as specials from "./specials.js";
+import { LITERAL, SYMBOL } from "../well-known/symbols.js";
 
 export function is_special(token: unknown): boolean {
   return typeof token === "string" && specials.names().includes(token);
@@ -27,11 +28,11 @@ export function is_builtin(token: unknown): boolean {
 
 // A reader macro whose expansion wraps a single datum (`'x` → `(quote x)`).
 export function is_literal(special: unknown): boolean {
-  return typeof special === "string" && specials.type(special) === specials.LITERAL;
+  return typeof special === "string" && specials.type(special) === LITERAL;
 }
 
 export function is_symbol_extension(special: unknown): boolean {
-  return typeof special === "string" && specials.type(special) === specials.SYMBOL;
+  return typeof special === "string" && specials.type(special) === SYMBOL;
 }
 
 export function is_directive(token: unknown): boolean {

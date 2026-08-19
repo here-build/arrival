@@ -16,7 +16,7 @@
 // Bodies route through machinery natives (%handler-car/cdr, %with-restore, …)
 // rather than bare car/cdr/try. deferred: fold onto plain forms (both bakeable).
 import { EnvCapability } from "../../common/capability.js";
-import { type CallCtx } from "../../symbol/index.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 import { R7RSError } from "../../errors.js";
 import { AString } from "../../values/primitives/AString.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";

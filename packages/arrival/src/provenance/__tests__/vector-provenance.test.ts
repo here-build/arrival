@@ -12,7 +12,7 @@ import { AVector } from "../../values/primitives/AVector.js";
 import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
 import { harvestContracts } from "../../__tests__/_symbols-harvest.js";
 import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
-import { testCallCtx } from "../../symbol/index.js";
+import { testCallCtx } from "../../run/CallCtx.js";
 
 // this helper/execState needs the eager oracle ON
 requireEagerOracle();

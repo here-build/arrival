@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 import { execOverFrame as exec, execStateOverFrame as execState } from "../eval/generator-exec.js";
 import { nativeOnlyRoot } from "./_fresh-env.js";
 import { inferenceEnv } from "../env/inference-env.js";
-import { toJS } from "../membrane/membrane.js";
+import { toJS } from "../membrane/rosetta.js";
 import { ANil } from "../values/primitives/ANil.js";
 import type { ResolvingAmbient } from "../env/AmbientRuntime.js";
 

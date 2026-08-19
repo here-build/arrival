@@ -11,7 +11,7 @@
  * `__location__`, so `scopeId` degrades from `head@line:col` to bare `head`.
  * Pre-derive `scope` (`scopeId(node)`) while the live Pair is in hand.
  */
-import { toJS } from "../membrane/membrane.js";
+import { toJS } from "../membrane/rosetta.js";
 import type { APair } from "../values/primitives/APair.js";
 import type { SchemeValue } from "../values/types.js";
 

@@ -1,5 +1,5 @@
 // Unified SRFI palette — assemble each capability onto a real env and run one verb.
-import { toJS } from "../../../index.js";
+import { toJS } from "../../../membrane/rosetta.js";
 import { execOverFrame, execStateOverFrame } from "../../../eval/generator-exec.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
@@ -11,18 +11,17 @@ import { ZodTuple, type ZodOptional, type ZodTypeAny } from "zod";
 import type { SequenceSymbolDef } from "../../../common/symbols/_bake.js";
 import type { ANativeProcedure } from "../../../values/primitives/ANativeProcedure.js";
 import core from "../../core/core.js";
-import {
-  allSrfi,
-  srfi1,
-  srfi13,
-  srfi26,
-  srfi43,
-  srfi95,
-  srfi128,
-  srfi189,
-  srfi2,
-  srfi8,
-  srfi235 } from "../index.js";
+import { allSrfi } from "../index.js";
+import srfi1 from "../srfi-1.js";
+import srfi13 from "../srfi-13.js";
+import srfi26 from "../srfi-26.js";
+import srfi43 from "../srfi-43.js";
+import srfi95 from "../srfi-95.js";
+import srfi128 from "../srfi-128.js";
+import srfi189 from "../srfi-189.js";
+import srfi2 from "../srfi-2.js";
+import srfi8 from "../srfi-8.js";
+import srfi235 from "../srfi-235.js";
 
 /** Assemble one capability onto a fresh env; return a `(num src)` runner. `scheme/core` is
  *  folded in ALONGSIDE (never as the capability's OWN declared dep — see srfi-26.ts's header

@@ -12,7 +12,7 @@
 // the door is reachable through realistic call shapes, not only zero-arg apply).
 
 import { describe, expect, it } from "vitest";
-import { exec } from "../../index.js";
+import { exec } from "../../eval/generator-exec.js";
 import { PurityError } from "../../errors.js";
 
 /** A door "fires" if the PurityError surfaces either directly or through the

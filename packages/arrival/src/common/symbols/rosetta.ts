@@ -22,8 +22,9 @@ import {
 import { AValue, pointProvenance, unionProvenance } from "../../values/primitives/AValue.js";
 import { attestDeep, freshIfSingleton } from "../../values/attestation.js";
 import { jsToScheme } from "../../membrane/rosetta.js";
-import { penetrateThroughCache } from "../../run/run-cache.js";
-import { applyResourcePathCqs, type ResourcePath } from "../../run/resource-paths.js";
+import { penetrateThroughCache } from "../../run/penetration.js";
+import { applyResourcePathCqs } from "../../run/resource-paths.js";
+import type { ResourcePath } from "../../run/path-algebra.js";
 import { closeRegionScope, openRegionScope, withRegionScope } from "../../membrane/region-scope.js";
 import { decodeKwargsStrict, drainDroppedKwargNotes } from "../kwargs-rejection.js";
 import { formatPositionalRejection } from "./positional-rejection.js";

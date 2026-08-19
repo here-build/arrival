@@ -18,7 +18,7 @@ import { exec, execState, execInFrame } from "../../eval/generator-exec.js";
 import { assembleRun } from "../../env/assemble-run.js";
 import { isAmbientRuntime } from "../../env/AmbientRuntime.js";
 import type { EvalPreludeInto, EvalSchemeInto } from "../../common/scheme-env.js";
-import { toJS } from "../../membrane/membrane.js";
+import { toJS } from "../../membrane/rosetta.js";
 import type { SchemeValue } from "../../values/types.js";
 import { getCapabilityResources } from "../../run/CallCtx.js";
 import { arrivalLoaderCapability } from "../loader-capability.js";

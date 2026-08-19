@@ -13,7 +13,7 @@ import { buildVocabulary } from "../vocabulary.js";
 import { assembleRun } from "../assemble-run.js";
 import { exec, execInFrame } from "../../eval/generator-exec.js";
 import { isAmbientRuntime } from "../AmbientRuntime.js";
-import { toJS } from "../../membrane/membrane.js";
+import { toJS } from "../../membrane/rosetta.js";
 import { DoorProcedure } from "../../values/primitives/ACallable.js";
 import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
 import { PurityError, SymbolKeyMismatchError } from "../../errors.js";
