@@ -1,6 +1,6 @@
 // types/utility.ts — type-only TypeScript plumbing. Zero imports, no domain types.
 //
-// These aliases are consumed from values, membrane, bake, loader, and env. Parking
+// These aliases are consumed from values, membrane, bake, and env. Parking
 // them in any of those layers mints a fake edge — `AJSArray` importing `MaybePromise`
 // from loader would put membrane above the knot. `utils/` is the runtime twin
 // (`maybeThen`); this file is the type twin. Not `_bake`: bake sits inside the knot,

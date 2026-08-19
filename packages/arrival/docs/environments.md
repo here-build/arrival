@@ -560,7 +560,7 @@ must read PER-RUN resource state.
 
 **Enforcement sites:** `env/vocabulary.ts`, `env/assemble-run.ts` (`preludeDefinesOf` /
 `ensurePreludeDefineFrame`), `eval/generator-exec.ts` (`runRootedScope`, the
-`preludeEvalScheme` callback), `loader/loader-capability.ts` (`require/extension`),
+`preludeEvalScheme` callback), `@inhuman.tools/arrival-modules` (`require/extension`),
 `common/scheme-env.ts` (`EvalPreludeInto`), `env/__tests__/assemble-run.test.ts` +
 `env/__tests__/prelude-persistence.law.test.ts` (the law suites).
 
@@ -710,7 +710,7 @@ check (`instanceof z.ZodOptional | z.ZodDefault`), not zod's `.isOptional()` —
 fail-closed, invisible to degradation; only a declared-optional key can degrade.
 
 **Enforcement sites:** `common/degradation.ts`, `common/capability.ts`, `common/symbols/_bake.ts`,
-`common/kernel.ts`, `loader/loader-capability.ts`.
+`common/kernel.ts`, `@inhuman.tools/arrival-modules`.
 
 ---
 
@@ -726,8 +726,8 @@ callbacks.
 `requiresConfig` door.** The primary surface is `configuration.fs` — a raw read-capable
 filesystem; the capability derives its own `Loader` internally (`makeFsLoader`). A pre-built
 `configuration.loader` is accepted and *wins* over `fs`, for the one thing `fs` cannot express: a
-caller injecting custom resolvers (the `.yaml`/`.toml` handlers `arrival-ext-yaml`/
-`arrival-ext-toml` thread).
+caller injecting custom resolvers (the `.yaml`/`.toml` handlers `@inhuman.tools/arrival-modules/yaml` /
+`@inhuman.tools/arrival-modules/toml` thread).
 **`require` is callable when a loader is derivable** (from `fs` or `loader`); with neither armed
 it binds a cause-carrying `DoorProcedure` via the auto-derived `requiresConfig: [["fs",
 "loader"]]` gate (§DEGRADATION-D2 — the any-of GROUP form: satisfied while at least one key is
@@ -770,8 +770,8 @@ never linked into the live env and is dropped when the call resolves (§PRELUDE'
 asymmetry: the applied pack's own prelude defines are lost with `C'`; only its declared symbols
 reach the env).
 
-**Enforcement sites:** `loader/loader-capability.ts`, `loader/loader.ts`,
-`loader/loader-extensions.ts`.
+**Enforcement sites:** `@inhuman.tools/arrival-modules` (`loader-capability.ts`,
+`loader.ts`, `loader-extensions.ts`).
 
 ---
 

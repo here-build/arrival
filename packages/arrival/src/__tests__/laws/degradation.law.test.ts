@@ -115,7 +115,7 @@ describe("LAW 1 — required-and-absent config rejects at vocabulary build", () 
 
 describe("LAW 4 — present-but-invalid config rejects (degradation only narrows ABSENCE)", () => {
   // Widened to `EnvCapability<any, any>` (the same declared-type idiom
-  // arrival's src/loader/loader-capability.ts uses) so the WRONG-SHAPED config this
+  // `@inhuman.tools/arrival-modules` uses) so the WRONG-SHAPED config this
   // test deliberately supplies type-checks without a cast — the runtime `schema.parse`
   // rejection is the thing under test, not TS's own config-shape guard.
   const invalidCap = (): EnvCapability<any, any> =>

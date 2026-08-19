@@ -17,34 +17,37 @@
 // Config consumed by `buildVocabulary` directly. Slice mirrors loader-facing fields of
 // the session builder so the ONE shared config bag feeds this capability with no adapter
 // (real structural zod checks; ignores the rest of the bag).
-import type { EvalTap } from "../eval/evaluator.js";
-import { execExpr } from "../eval/generator-exec.js";
-import { EnvCapability } from "../common/capability.js";
-import { createRuntimeAssembler, type EnvPack, type RuntimeAssembler } from "../common/kernel.js";
-import * as z from "../common/scheme-zod/index.js";
-import { applyCallback } from "../values/primitives/ACallable.js";
-import { is_applyable } from "../values/value-guards.js";
-import { theVoid } from "../values/primitives/AVoid.js";
-import invariant from "tiny-invariant";
-import { RequireCycleError, RequireResolverError } from "../errors.js";
+import {
+  EnvCapability,
+  execExpr,
+  type EvalTap,
+  type RunContext,
+  type SchemeValue,
+  z,
+} from "@inhuman.tools/arrival";
 import {
   AmbientRuntime,
   type AmbientValue,
+  applyCallback,
+  createRuntimeAssembler,
+  ensurePreludeDefineFrame,
+  type EnvPack,
   type EnvWithInternals,
+  getCapabilityResources,
+  is_applyable,
   isAmbientRuntime,
   type ResolvingAmbient,
-} from "../env/AmbientRuntime.js";
-import { ensurePreludeDefineFrame } from "../env/assemble-run.js";
+  type RuntimeAssembler,
+} from "@inhuman.tools/arrival/host-internals";
+import { ABytevector, AString, theVoid } from "@inhuman.tools/arrival/reflect-internals";
+import invariant from "tiny-invariant";
+
+import { RequireCycleError, RequireResolverError } from "./errors.js";
 import {
   lookupExtensionResolverIn,
   registerExtensionTransformer,
   type ExtensionResolverRegistry,
 } from "./loader-extensions.js";
-import type { RunContext } from "../run/RunContext.js";
-import { getCapabilityResources } from "../run/CallCtx.js";
-import { ABytevector } from "../values/primitives/ABytevector.js";
-import { AString } from "../values/primitives/AString.js";
-import type { SchemeValue } from "../values/types.js";
 import {
   dataToScheme,
   dirOf,
@@ -52,7 +55,6 @@ import {
   type Loader,
   makeFsLoader,
   pickHandler,
-  type ResolverResult,
   type RunEnv,
   runEnvOf,
   runResolverOf,
@@ -140,7 +142,7 @@ export const arrivalLoaderCapability = EnvCapability.define("arrival/loader", {
      *  `Loader` from this (`makeFsLoader`) — no host `makeFsLoader` step. */
     fs: z.custom<FsReadLike>(isFsReadLike, "fs must expose readFile(path)").optional(),
     /** COMPAT: a pre-built `Loader` (WINS over `fs`) — the seam for a caller that injects CUSTOM
-     *  resolvers into the table (arrival-chain's `.yaml`/`.toml` handlers). */
+     *  resolvers into the table (`./yaml` / `./toml` handlers). */
     loader: z.custom<Loader>(isLoader, "loader must have resolve()/read()/resolvers:Map").optional(),
     tap: z
       .custom<EvalTap>(

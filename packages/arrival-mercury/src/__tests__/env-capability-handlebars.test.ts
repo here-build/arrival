@@ -1,13 +1,14 @@
 /**
- * Reference example: opt-in EnvCapability package → mercury compile.
+ * Reference example: opt-in EnvCapability pack → mercury compile.
  *
- * `arrival-env-capability-handlebars` owns the handlebars dep + Contract.emit +
- * `/runtime` surface. Mercury's RUNTIME_MANIFEST maps RuntimeRefs to that package.
- * A `.hbs` file is pretreat→scheme (import executable), then ordinary scm compile.
+ * `@inhuman.tools/arrival-modules/handlebars` owns the handlebars dep +
+ * Contract.emit + `/handlebars/runtime` surface. Mercury's RUNTIME_MANIFEST
+ * maps RuntimeRefs to that subpath. A `.hbs` file is pretreat→scheme
+ * (import executable), then ordinary scm compile.
  */
 import { describe, expect, it } from "vitest";
 
-import { arrivalHandlebarsCapability, hbsContentsToSchemeSource } from "@inhuman.tools/arrival-env-capability-handlebars";
+import { arrivalHandlebarsCapability, hbsContentsToSchemeSource } from "@inhuman.tools/arrival-modules/handlebars";
 
 import { compileHbsFile } from "../build/hbs-module.js";
 import { greenfieldRegistryFor, openOracleSession } from "../registry/greenfield-session.js";
@@ -15,7 +16,7 @@ import { emitRegistryOf } from "../registry/harvest.js";
 import type { EmitRegistry } from "../registry/harvest.js";
 import { withRules } from "../rules/overlay.js";
 
-describe("arrival-env-capability-handlebars × mercury (reference)", () => {
+describe("@inhuman.tools/arrival-modules/handlebars × mercury (reference)", () => {
   it("hbsContentsToSchemeSource is the CALLABLE RULE pretreat", () => {
     expect(hbsContentsToSchemeSource("Hi {{name}}")).toContain("template/handlebars");
     // Fixed-first lambda (not bare-symbol variadic) so mercury classify can lower it.
@@ -49,7 +50,7 @@ describe("arrival-env-capability-handlebars × mercury (reference)", () => {
     );
 
     expect(compiled.shape.defaultFace).toBe("function");
-    expect(compiled.content).toContain("@inhuman.tools/arrival-env-capability-handlebars/runtime");
+    expect(compiled.content).toContain("@inhuman.tools/arrival-modules/handlebars/runtime");
     expect(compiled.content).toContain("templateHandlebars");
     expect(compiled.content).toContain("Hello {{name}}!");
     expect(compiled.content).toMatch(/export default (async )?function/);

@@ -13,7 +13,7 @@
  * `parseJsonc` the runtime `(require "…json")` path uses — require-time and
  * build-time dialects stay identical.
  */
-import { parseJsonc } from "@inhuman.tools/arrival/capabilities/loader";
+import { parseJsonc } from "@inhuman.tools/arrival-modules";
 import { parse as parseYaml } from "yaml";
 
 import type { CompileFileResult } from "./types.js";

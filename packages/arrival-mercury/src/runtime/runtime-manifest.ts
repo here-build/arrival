@@ -42,8 +42,8 @@ const e = (
   ...(module === undefined ? {} : { module }),
 });
 
-/** Reference capability package — handlebars owns its dep + /runtime emit surface. */
-const HBS_RUNTIME = "@inhuman.tools/arrival-env-capability-handlebars/runtime";
+/** Handlebars runtime subpath — owns the parser dep + /runtime emit surface. */
+const HBS_RUNTIME = "@inhuman.tools/arrival-modules/handlebars/runtime";
 
 /**
  * Corpus-driven + cold-stdlib map. Grow by adding a row (and a stage0 export

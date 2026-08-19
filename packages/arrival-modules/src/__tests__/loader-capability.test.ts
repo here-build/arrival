@@ -14,23 +14,12 @@
 //   4. `Vocabulary.degraded` enumerates the missing keys (design doc
 //      symbol-define-static-program-validation.md §3.7).
 import { describe, expect, it } from "vitest";
-import { exec, execState, execInFrame } from "../../eval/generator-exec.js";
-import { toJS } from "../../membrane/rosetta.js";
-import type { SchemeValue } from "../../values/types.js";
-import { EnvCapability } from "../../common/capability.js";
-import { buildVocabulary } from "../../env/vocabulary.js";
+import { EnvCapability, exec, execState, toJS, type SchemeValue } from "@inhuman.tools/arrival";
+import { AmbientRuntime, execInFrame, type EnvPack } from "@inhuman.tools/arrival/host-internals";
 import invariant from "tiny-invariant";
-import { AmbientRuntime, type EnvWithInternals, type ResolvingAmbient } from "../../env/AmbientRuntime.js";
-import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
-import { AString } from "../../values/primitives/AString.js";
-import { arrivalLoaderCapability } from "../loader-capability.js";
-import { contentsToText, loaderFromResolver } from "../loader.js";
-import type { RunEnv } from "../loader.js";
 
-// `arrivalLoaderCapability` declares no `symbol.define`/`defineSyntax` entries, so
-// `buildVocabulary`'s Pass-2 bake never actually calls this — a real evalScheme is supplied only
-// because the parameter is required at the type level (`EvalSchemeInto`, no optional callers).
-const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
+import { arrivalLoaderCapability } from "../loader-capability.js";
+import { contentsToText, loaderFromResolver, type RunEnv } from "../loader.js";
 
 /** Unwrap an `execState` boxed value. `exec` results are already JS — do not re-cross. */
 const boxed = (v: SchemeValue): unknown => toJS(v);
@@ -115,20 +104,13 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
         "greeter",
         {
           name: "ext/greeter",
-          apply: (env: RunEnv) => {
+          apply: async (_env: RunEnv, ctx) => {
             applies += 1;
-            // The assembler applies registry packs onto the REAL live env; with the
-            // JS-side write surface retired, the pack binds through the module-internal
-            // door exactly as capability.ts's apply does (same instanceof narrow).
-            // W8: ANativeProcedure, not a bare host fn.
-            invariant(env instanceof AmbientRuntime, "registry pack expects a real env");
-            const writable = env as EnvWithInternals<ResolvingAmbient>;
-            writable.bind("greeting-of", new ANativeProcedure({
-                name: "greeting-of",
-                arity: { min: 0, max: 0 },
-                contract: undefined,
-                impl: () => new AString("hi") }));
-          } },
+            invariant(ctx.preludeEvalScope !== undefined, "registry pack: preludeEvalScope expected");
+            invariant(ctx.preludeEvalScope instanceof AmbientRuntime, "registry pack expects a real env");
+            await execInFrame(`(define (greeting-of) "hi")`, ctx.preludeEvalScope);
+          },
+        } satisfies EnvPack<RunEnv>,
       ],
     ]);
     const results = await exec(`(require/extension :greeter) (require/extension :greeter) (greeting-of)`, {
@@ -139,19 +121,6 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
   });
 
   describe("door-set degradation — the auto-derived requiresConfig doors, mode-independent (D2)", () => {
-    it("Vocabulary.degraded enumerates arrival/loader with ALL missing keys when nothing is configured", async () => {
-      const vocabulary = await buildVocabulary([arrivalLoaderCapability], {}, evalScheme);
-      expect(vocabulary.degraded).toEqual([
-        {
-          capability: "arrival/loader",
-          needs: [
-            { kind: "configuration", key: "fs" },
-            { kind: "configuration", key: "loader" },
-            { kind: "configuration", key: "extensionRegistry" },
-          ] },
-      ]);
-    });
-
     it("an armed loader is NOT degraded — `require` binds for real", async () => {
       const results = await exec(`(require "cfg.json")`, {
         capabilities: [arrivalLoaderCapability],

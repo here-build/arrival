@@ -5,8 +5,7 @@
 // round-tripping (polyglot.ts's own header note on why: a borrowed store re-crossed
 // that way could carry AValues into JS-world storage). This file proves the OBSERVABLE
 // half of that contract across every receiver kind the protocol claims to support:
-// a `{…}` dict literal, a borrowed JS object, a borrowed JS array, and a required
-// `.json` object (the loader capability's own receiver shape).
+// a `{…}` dict literal, a borrowed JS object, and a borrowed JS array.
 //
 // THE ORACLE (per the task brief): never hand-write an expected values/entries list.
 // `@keys` + `@` (read one key at a time) is the ground truth every `@values`/`@entries`
@@ -16,12 +15,11 @@ import { describe, expect, it } from "vitest";
 
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
-import { execOverFrame as exec, execStateOverFrame as execState, execState as execStateCapabilities } from "../../../eval/generator-exec.js";
+import { execOverFrame as exec, execStateOverFrame as execState } from "../../../eval/generator-exec.js";
 import { inferenceEnv } from "../../inference-env.js";
 import { jsToScheme, toJS } from "../../../membrane/rosetta.js";
 import type { SchemeValue } from "../../../values/types.js";
-import { arrivalLoaderCapability } from "../../../loader/loader-capability.js";
-import { loaderFromResolver } from "../../../loader/loader.js";
+
 
 let scratchCounter = 0;
 /** Every fixture gets its own frame name — cheap, avoids any risk of cross-case bleed. */
@@ -78,19 +76,6 @@ const RECEIVERS: Array<{ label: string; mkObj: () => Promise<SchemeValue> }> = [
   { label: "a {…} dict literal (built via the real `dict` constructor)", mkObj: () => mintDict({ a: 1, b: 2, c: 3 }) },
   { label: "a borrowed JS object", mkObj: async () => jsToScheme(CONSTANT_CTX, { x: 10, y: 20, z: 30 }) },
   { label: "a borrowed JS array", mkObj: async () => jsToScheme(CONSTANT_CTX, [100, 200, 300]) },
-  {
-    label: "a required .json object (loader capability)",
-    mkObj: async () => {
-      const loader = loaderFromResolver((path) => {
-        if (path === "cfg.json") return `{"p": 7, "q": 8, "r": 9}`;
-        throw new Error(`no such file: ${path}`);
-      });
-      const state = await execStateCapabilities(`(require "cfg.json")`, {
-        capabilities: [arrivalLoaderCapability],
-        config: { loader } });
-      return state.values.at(-1)!;
-    },
-  },
 ];
 
 describe("@values — own member values, as a vector, in @keys order", () => {

@@ -12,15 +12,9 @@
 //     detector — "cannot register .yaml twice".
 
 import { describe, expect, it } from "vitest";
+import { EnvCapability, exec, execState, toJS, type SchemeValue } from "@inhuman.tools/arrival";
+import { getCapabilityResources } from "@inhuman.tools/arrival/host-internals";
 
-import { EnvCapability } from "../../common/capability.js";
-import { exec, execState, execInFrame } from "../../eval/generator-exec.js";
-import { assembleRun } from "../../env/assemble-run.js";
-import { isAmbientRuntime } from "../../env/AmbientRuntime.js";
-import type { EvalPreludeInto, EvalSchemeInto } from "../../common/scheme-env.js";
-import { toJS } from "../../membrane/rosetta.js";
-import type { SchemeValue } from "../../values/types.js";
-import { getCapabilityResources } from "../../run/CallCtx.js";
 import { arrivalLoaderCapability } from "../loader-capability.js";
 import { contentsToText, loaderFromResolver } from "../loader.js";
 
@@ -32,19 +26,6 @@ const files = (table: Record<string, string>) =>
     if (hit === undefined) throw new Error(`no such file: ${path}`);
     return hit;
   });
-
-/** The REAL evalScheme/evalPrelude — mirrors `generator-exec.ts`'s own private
- *  `capabilityEvalScheme`/`preludeEvalScheme` (see `env/__tests__/assemble-run.test.ts`, same
- *  idiom): both route through the internal bake seam (`execInFrame`), never the public exec
- *  surface. */
-const realEvalScheme: EvalSchemeInto = (env, src) => {
-  if (!isAmbientRuntime(env)) throw new Error("expected a concrete AmbientRuntime");
-  return execInFrame(src, env);
-};
-const realEvalPrelude: EvalPreludeInto = (env, src, runCtx) => {
-  if (!isAmbientRuntime(env)) throw new Error("expected a concrete AmbientRuntime");
-  return execInFrame(src, env, runCtx);
-};
 
 /** A minimal ext-style capability — the SAME resolver shape ext-yaml/ext-toml use
  *  (rosetta over boxed contents, return IS the module value), minus a parser. */
@@ -71,13 +52,15 @@ describe("loader extension registry — vocabulary path (Stage B4)", () => {
   it("PER-RUN LAW: a fresh RunContext of the SAME tuple gets a FRESH, independently-populated registry", async () => {
     const ext = makeUpperExtCapability("test/ext-upper-freshness", ".upperfresh", "test/upper-resolve-freshness");
 
-    const runA = await assembleRun({ capabilities: [ext], evalScheme: realEvalScheme, evalPrelude: realEvalPrelude });
-    const runB = await assembleRun({ capabilities: [ext], evalScheme: realEvalScheme, evalPrelude: realEvalPrelude });
+    const runA = await execState("#t", { capabilities: [ext], config: { loader: files({}) } });
+    const runB = await execState("#t", { capabilities: [ext], config: { loader: files({}) } });
 
-    const regA = (getCapabilityResources(runA, arrivalLoaderCapability) as { extensionResolvers: Map<string, string> })
-      .extensionResolvers;
-    const regB = (getCapabilityResources(runB, arrivalLoaderCapability) as { extensionResolvers: Map<string, string> })
-      .extensionResolvers;
+    const regA = (
+      getCapabilityResources(runA.runCtx, arrivalLoaderCapability) as { extensionResolvers: Map<string, string> }
+    ).extensionResolvers;
+    const regB = (
+      getCapabilityResources(runB.runCtx, arrivalLoaderCapability) as { extensionResolvers: Map<string, string> }
+    ).extensionResolvers;
 
     expect(regA).not.toBe(regB); // distinct Map instances, never a shared/leaked reference
     expect(regA.get(".upperfresh")).toBe("test/upper-resolve-freshness");

@@ -3,7 +3,7 @@
 // shared with `env/vocabulary.ts`'s `buildVocabulary` via `dag-linearize.ts`'s domain-agnostic
 // walk. Live consumer: `createRuntimeAssembler` — mid-run, live-env pack applier backing
 // `(require/extension :name)` (§LOADER): host-supplied `EnvPack`s registered via
-// `arrivalLoaderCapability`'s `extensionRegistry` config key, applied onto an ALREADY-LIVE env
+// `@inhuman.tools/arrival-modules`' `extensionRegistry` config key, applied onto an ALREADY-LIVE env
 // after vocabulary-path bootstrap has already run. Bootstrap assembly is
 // `env/vocabulary.ts`'s `buildVocabulary` (mints a frozen `Vocabulary` map — not this module).
 //
@@ -40,7 +40,7 @@ export interface EnvPack<E = unknown> {
  *  capability.ts's bindTarget only ever writes. BOOTSTRAP assembly (`env/vocabulary.ts`'s
  *  `buildVocabulary`) mirrors it into its own `preludeOnly` Map; MID-RUN application
  *  (this module's `RuntimeAssembler`) hands the caller's adapter over a real, discarded child
- *  frame (loader-capability.ts wraps `AmbientRuntime.bind` — `SchemeEnv` itself
+ *  frame (`@inhuman.tools/arrival-modules` wraps `AmbientRuntime.bind` — `SchemeEnv` itself
  *  carries no write member; docs/environments.md §HERMETIC). */
 export interface PreludeBindTarget {
   set(name: string, value: unknown): unknown;
@@ -53,7 +53,7 @@ export interface PackContext<E = unknown> {
   readonly order: readonly string[];
   /** The scope a `preludeOnly` symbol routes its BINDING onto instead of the runtime env —
    *  caller-supplied (`RuntimeAssembler.require`): a discarded child `C'` of the live env
-   *  (@inhuman.tools/arrival/capabilities/loader's `arrivalLoaderCapability`,
+   *  (@inhuman.tools/arrival-modules's `arrivalLoaderCapability`,
    *  `require/extension`'s declaration). Undefined when that caller passes none.
    *  Bootstrap's `preludeOnly` binding lands on `env/vocabulary.ts`'s `preludeOnly` Map
    *  directly, no kernel-level overlay. */
@@ -64,7 +64,7 @@ export interface PackContext<E = unknown> {
    *  preludeOnly binds — never main-phase-resolvable); `preludeEvalScope` = a child `D'`
    *  of `C'` the prelude evaluates in. Re-parenting a LIVE env is unsafe (concurrent
    *  lookups), so lookups miss `D'`/`C'` → hit `liveEnv` → base. After `require()`
-   *  returns, the CALLER (loader-capability.ts) copies `D'`'s own defines into the
+   *  returns, the CALLER (`@inhuman.tools/arrival-modules`) copies `D'`'s own defines into the
    *  run's persistent prelude-define frame — a mid-run pack's prelude DOES contribute
    *  runtime bindings; only the seed dies. NOTE: binding persistence is CALLER-DEFINED —
    *  bootstrap `.set` persists via `Vocabulary`; mid-run `.set` (the seed) is discarded. */

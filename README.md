@@ -82,11 +82,8 @@ Everything else comes on top of the language, in a variety of shapes:
   sugarcoat): structural editing, ghost text, param hints, and the full IDE
   surface (lint/hover/completion/goto). Theme chrome lives in
   `@here.build/editor-theme` (commons).
-- `arrival-ext-toml` / `arrival-ext-yaml` — opt-in EnvCapability packs that
-  own the TOML/YAML parser dependencies (the extension mechanism's own
-  examples of "package owns the dep").
-- `arrival-env-capability-handlebars` — opt-in Handlebars pack (`.hbs`
-  import-executable + template verbs); reference capability for mercury.
+- `arrival-modules` — `(require …)` loader plus opt-in filetype packs on
+  `./yaml`, `./toml`, `./handlebars` (parsers are optional peers).
 - `arrival-env-capability-sql` / `arrival-env-capability-http` — opt-in
   `(sql/query)` / `(http/get|post)` effect packs (host-bound resolvers;
   inert by default).

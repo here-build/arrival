@@ -222,7 +222,7 @@ export class AmbientRuntime {
  *     recorded ingress into a fresh hermetic scope under region discipline (the env ⇄
  *     provenance charter, `docs/strata.md` §5); `provenance/replay.ts` playback-frame
  *     op registration binds an already-minted ARosettaProcedure.
- *   • mid-run prelude overlay — `loader/loader-capability.ts`'s `require`/`extension`
+ *   • mid-run prelude overlay — `@inhuman.tools/arrival-modules`' `require`/`extension`
  *     surface binds a discarded child prelude scope (R12: invocation survives, reference
  *     does not).
  *   • replay-scope post-hoc bind — `@inhuman.tools/arrival-provenance`'s `buildUneval`
@@ -243,7 +243,7 @@ export class AmbientRuntime {
  *   • `env/vocabulary.ts` — reads the just-bound entry back (`bakeEnv.__env__[name]`)
  *     because vocabulary must hold the chain-lookup SHAPE, and `.get()` would quote a
  *     `APair` for host consumption — the wrong shape here (stated at its own call site).
- *   • `env/assemble-run.ts` / `loader/loader-capability.ts` — copy a prelude frame's OWN
+ *   • `env/assemble-run.ts` / `@inhuman.tools/arrival-modules` — copy a prelude frame's OWN
  *     already-bound names into the run's define frame (stated at each call site).
  *   • `oracle/env.ts` — Σ's static callability probe reads `frame.__env__[id]` directly so
  *     a malformed raw scalar (a writer bug) degrades to "not callable" instead of crashing

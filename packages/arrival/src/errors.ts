@@ -190,10 +190,10 @@ export function isHostRuntimeBug(e: unknown): boolean {
 
 /** Render a thrown error into a display-ready message for a host's run-error surface. A
  *  non-empty `schemeStack` contributes form-by-form frames (`toString()` — form +
- *  file:line + procedure); a `requireChain` (annotated by the loader when a throw escapes
- *  a required module — entry → failing module) is appended. Plain errors fall back to
- *  `.message`. `requireChain` stays duck-typed: the loader annotates it best-effort onto
- *  whatever error escapes (loader-capability.ts), frozen targets included. */
+ *  file:line + procedure); a `requireChain` (annotated by `@inhuman.tools/arrival-modules`
+ *  when a throw escapes a required module — entry → failing module) is appended. Plain
+ *  errors fall back to `.message`. `requireChain` stays duck-typed: the loader annotates
+ *  it best-effort onto whatever error escapes, frozen targets included. */
 export function formatRunError(error: unknown): string {
   if (!(error instanceof Error)) return String(error);
   const err = error as Error & { schemeStack?: unknown[]; requireChain?: unknown };
@@ -1106,104 +1106,6 @@ export class AmbientShapeError extends ArrivalError {
     public readonly detail: string,
   ) {
     super(`${site}: ${detail}`);
-  }
-}
-
-// -------------------------------------------------------------------------
-// :: Loader doors — `require` is ONE designed door (the VFS membrane
-// penetration); each of these names a distinct way it refuses.
-// -------------------------------------------------------------------------
-
-/** A require verb (`require`/`require/extension`/…) ran outside evaluator
- *  dispatch, so `this.resolver` is missing (`loader/loader.ts`'s
- *  `runResolverOf`). Direct JS calls must go through `exec`/`execExpr`. */
-export class RunResolverUnreachableError extends ArrivalError {
-  public readonly name = "RunResolverUnreachableError";
-  readonly "arrival/error-category": ErrorClass = "other";
-
-  constructor(public readonly verb: string) {
-    super(
-      `${verb}: no run resolver on this CallCtx — the verb was called outside evaluator ` +
-        `dispatch (direct JS calls must go through exec/execExpr so makeCallCtx receives the composed resolver).`,
-    );
-  }
-}
-
-/** A `require`d path fails the traversal jail (`loader/loader.ts`'s
- *  `normalizePath`): a NUL byte in a path segment, or a `..` that would escape
- *  above the project root. */
-export class RequirePathError extends ArrivalError {
-  public readonly name = "RequirePathError";
-  readonly "arrival/error-category": ErrorClass = "other";
-
-  constructor(
-    public readonly kind: "nul-byte" | "escapes-root",
-    public readonly path: string,
-  ) {
-    super(
-      kind === "nul-byte"
-        ? `require: invalid path (NUL byte): ${JSON.stringify(path)}`
-        : `require: path escapes the project root: ${path}`,
-    );
-  }
-}
-
-/** `require` detected its own module still evaluating higher up the same chain —
- *  awaiting it would deadlock (`loader/loader-capability.ts`). Only a module
- *  actively evaluating (not merely a settled cache hit or a concurrent sibling)
- *  can cycle. */
-export class RequireCycleError extends ArrivalError {
-  public readonly name = "RequireCycleError";
-  readonly "arrival/error-category": ErrorClass = "other";
-
-  constructor(public readonly chain: readonly string[]) {
-    super(`require: cyclic dependency: ${chain.join(" → ")}`);
-  }
-}
-
-/** `require`/`require/extension` found no handler for a path (no built-in or
- *  capability-registered resolver matches its suffix), or no ARMED extension for
- *  a requested `:name` (`loader/loader-capability.ts`). */
-export class RequireResolverError extends ArrivalError {
-  public readonly name = "RequireResolverError";
-  readonly "arrival/error-category": ErrorClass = "other";
-
-  constructor(
-    public readonly kind: "no-resolver" | "no-extension",
-    /** The unresolved path (`"no-resolver"`) or extension name (`"no-extension"`). */
-    public readonly path: string,
-    /** Currently-armed extension names — set only for `"no-extension"`. */
-    public readonly armedExtensions?: readonly string[],
-  ) {
-    super(
-      kind === "no-resolver"
-        ? `require: no resolver for ${path}`
-        : `require/extension: no extension :${path}. Armed extensions: ${
-            armedExtensions && armedExtensions.length > 0
-              ? armedExtensions.map((k) => `:${k}`).join(", ")
-              : "(none — the host registered no extension packs for this env)"
-          }`,
-    );
-  }
-}
-
-/** Two capabilities registered different resolver verbs for the same file suffix
- *  (`loader/loader-extensions.ts`'s `registerExtension`) — a suffix maps to
- *  exactly one resolver; last-write-wins would silently pick one at random
- *  assembly-order. */
-export class ExtensionSuffixConflictError extends ArrivalError {
-  public readonly name = "ExtensionSuffixConflictError";
-  readonly "arrival/error-category": ErrorClass = "other";
-
-  constructor(
-    public readonly suffix: string,
-    public readonly existing: string,
-    public readonly attempted: string,
-  ) {
-    super(
-      `require/register-extension: "${suffix}" is already handled by "${existing}", cannot reassign to ` +
-        `"${attempted}". A file suffix maps to exactly one resolver; two capabilities are claiming it.`,
-    );
   }
 }
 

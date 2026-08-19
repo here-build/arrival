@@ -27,6 +27,7 @@ export { nil, ANil } from "../values/primitives/ANil.js";
 export { theVoid, AVoid } from "../values/primitives/AVoid.js";
 export { ASymbol } from "../values/primitives/ASymbol.js";
 export { AString } from "../values/primitives/AString.js";
+export { ABytevector } from "../values/primitives/ABytevector.js";
 export { APair } from "../values/primitives/APair.js";
 export { AVector } from "../values/primitives/AVector.js";
 export { ADict, type DictLiteralNode } from "../values/primitives/ADict.js";

@@ -26,14 +26,10 @@
 import { describe, expect, it } from "vitest";
 
 import { EnvCapability } from "../../common/capability.js";
-import { exec, execInFrame, execState } from "../../eval/generator-exec.js";
+import { exec, execState } from "../../eval/generator-exec.js";
 import { UnboundVariableError } from "../../errors.js";
-import { AmbientRuntime } from "../AmbientRuntime.js";
 import { toJS } from "../../membrane/rosetta.js";
-import { arrivalLoaderCapability } from "../../loader/loader-capability.js";
-import { loaderFromResolver, type RunEnv } from "../../loader/loader.js";
-import type { EnvPack } from "../../common/kernel.js";
-import invariant from "tiny-invariant";
+
 
 const boxed = (v: unknown): unknown => toJS(v as never);
 
@@ -124,39 +120,5 @@ describe("prelude-define persistence (audit B4)", () => {
     const second = await exec("run-stamp", { capabilities: [cap] });
     expect(first[0]).toBe(1);
     expect(second[0]).toBe(2);
-  });
-});
-
-describe("prelude-define persistence — mid-run require/extension (audit B4)", () => {
-  const files = (table: Record<string, string>) =>
-    loaderFromResolver((path) => {
-      const hit = table[path];
-      if (hit === undefined) throw new Error(`no such file: ${path}`);
-      return hit;
-    });
-
-  it("P-EXT-PRELUDE-DEFINE — an extension pack's prelude define is callable after (require/extension …)", async () => {
-    const pack: EnvPack<RunEnv> = {
-      name: "ext/definer",
-      apply: async (_env, ctx) => {
-        invariant(ctx.preludeEvalScope !== undefined, "test pack: preludeEvalScope expected");
-        invariant(ctx.preludeEvalScope instanceof AmbientRuntime, "test pack: concrete frame expected");
-        await execInFrame(`(define (ext-helper) "from-ext")`, ctx.preludeEvalScope);
-      } };
-    const results = await exec(`(require/extension :definer) (ext-helper)`, {
-      capabilities: [arrivalLoaderCapability],
-      config: { loader: files({}), extensionRegistry: new Map([["definer", pack]]) } });
-    expect(results.at(-1)).toBe("from-ext");
-  });
-
-  it("N-EXT-PRELUDE-SEED — the mid-run prelude seed (require/register-extension) never rides along into the main phase", async () => {
-    const pack: EnvPack<RunEnv> = {
-      name: "ext/quiet",
-      apply: async () => {} };
-    await expect(
-      exec(`(require/extension :quiet) (require/register-extension ".x" "nope")`, {
-        capabilities: [arrivalLoaderCapability],
-        config: { loader: files({}), extensionRegistry: new Map([["quiet", pack]]) } }),
-    ).rejects.toThrow(/Unbound variable/);
   });
 });

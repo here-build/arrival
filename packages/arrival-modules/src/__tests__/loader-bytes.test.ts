@@ -12,7 +12,8 @@
 
 import { describe, expect, it } from "vitest";
 
-import { exec } from "../../eval/generator-exec.js";
+import { exec } from "@inhuman.tools/arrival";
+
 import { arrivalLoaderCapability } from "../loader-capability.js";
 import { makeFsLoader } from "../loader.js";
 

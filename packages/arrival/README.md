@@ -347,9 +347,9 @@ consumers skip the pass for such programs (the runtime doors remain the backstop
 
 **Subpath exports** — granular, tree-shaken entries (see `package.json` `exports` for the
 authoritative list): `/reflect-internals`, `/lsp-internals`, `/host-internals`, `/capability`,
-`/capabilities`, `/capabilities/overridable`, `/capabilities/schema`, `/capabilities/loader`,
+`/capabilities`, `/capabilities/overridable`, `/capabilities/schema`,
 `/resources`, `/emit`, `/schema-tag`, `/attestation`, `/provenance`, `/provenance/store`,
-`/type-layer`.
+`/type-layer`. `(require …)` lives in `@inhuman.tools/arrival-modules`.
 
 **Decomposed processing** — for cases the three declared doors (`capabilities` / `config` /
 `scope`) don't cover: the self-hosted `Vocabulary` a capability tuple builds into is memoized by

@@ -2,7 +2,8 @@
 // (effect log, run cache, read guard), burst/note/display sinks, the membrane's
 // callable-crossing seam, the mid-run assembly kernel (`createRuntimeAssembler`, for a
 // host-armed `configuration.extensionRegistry`), the structural `SchemeEnv` contract a
-// pack types against, and the interop-sealing marks the whiteroom Blob-law needs.
+// pack types against, the concrete `AmbientRuntime` face sibling packages mint
+// mid-run frames on, and the interop-sealing marks the whiteroom Blob-law needs.
 // The `-internals` name is the no-stability-contract signal — a sibling contract between
 // arrival core and packages that embed a run (runner-capability, llm-plane-arrival-chain,
 // MCP/studio hosts), never the capability-authoring public surface.
@@ -12,9 +13,10 @@
 export { arrival, markInteropPrivate, markInteropBoundary } from "../membrane/interop-access.js";
 
 // Callable-crossing seam: the ONE invocation site for any JS caller resolving a scheme
-// callable value, plus its guard.
+// callable value, plus its guard. `is_applyable` is the structural twin (any value
+// answering `arrival/tagless-final/apply`, including self-applying keywords).
 export { applyCallback, type ACallable } from "../values/primitives/ACallable.js";
-export { is_callable_value } from "../values/value-guards.js";
+export { is_callable_value, is_applyable } from "../values/value-guards.js";
 
 // Run-neutral evaluation context + the evaluator's per-frame contract.
 export { CONSTANT_CTX, type HeapMeter, applyMembraneClosure, type MembraneClosure } from "../run/RunContext.js";
@@ -76,13 +78,28 @@ export {
 // Per-run model-facing note channel — a renderer mints one and drains it.
 export { createNoteSink, createDisplaySink, type NoteSink, type DisplaySink } from "../run/note-sink.js";
 
-// Structural env contract a pack/consumer types against (never the concrete
-// `AmbientRuntime` class).
+// Structural env contract a pack/consumer types against. The concrete
+// `AmbientRuntime` class (and `isAmbientRuntime`) live here too — sibling
+// packages that mint mid-run frames (`arrival-modules` `require/extension`)
+// need `.child` / `.bind` / the brand check. Privilege is this door, not a
+// secret function.
 export { type SchemeEnv } from "../common/scheme-env.js";
-// Privileged write face — `bind` is protected on AmbientRuntime. Widen at the
-// definition that intends to write (`scope as LexicalScopeWithInternals`).
-export { type EnvWithInternals, type LexicalScopeInternals } from "../env/AmbientRuntime.js";
+export {
+  AmbientRuntime,
+  isAmbientRuntime,
+  type AmbientValue,
+  type EnvWithInternals,
+  type LexicalScopeInternals,
+  type ResolvingAmbient,
+} from "../env/AmbientRuntime.js";
 export { type LexicalScopeWithInternals } from "../eval/LexicalScope.js";
+// Per-run prelude-define frame + capability resource bag — `require/extension`
+// copies pack prelude defines here; `require/register-extension` reads the
+// loader's per-run registry off the same bag.
+export { ensurePreludeDefineFrame } from "../env/assemble-run.js";
+export { getCapabilityResources } from "../run/CallCtx.js";
+// Bake/prelude eval into a concrete frame — mid-run packs and their tests.
+export { execInFrame } from "../eval/generator-exec.js";
 
 // Mid-run assembly kernel: `createRuntimeAssembler` applies host-registered `EnvPack`s
 // onto an already-live env (backing a host-armed `configuration.extensionRegistry` —

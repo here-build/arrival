@@ -31,10 +31,10 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { EnvCapability } from "../../common/capability.js";
-import { exec, execState } from "../../eval/generator-exec.js";
-import { arrivalLoaderCapability } from "../../loader/loader-capability.js";
-import { contentsToText, loaderFromResolver } from "../../loader/loader.js";
+import { EnvCapability, exec, execState } from "@inhuman.tools/arrival";
+
+import { arrivalLoaderCapability } from "../loader-capability.js";
+import { contentsToText, loaderFromResolver } from "../loader.js";
 
 const files = (table: Record<string, string>) =>
   loaderFromResolver((path) => {

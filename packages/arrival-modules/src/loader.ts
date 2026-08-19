@@ -8,22 +8,14 @@
  * per-RunContext resources bag. `runResolverOf`/`runEnvOf` read the composed
  * resolver off `this: CallCtx` (evaluator dispatch puts it there).
  */
-import { execExpr, parse } from "../eval/generator-exec.js";
-import type { Resolver } from "../eval/Resolver.js";
-import type { CallCtx } from "../run/CallCtx.js";
-import { jsToScheme } from "../membrane/rosetta.js";
-import { ABytevector } from "../values/primitives/ABytevector.js";
-import { ADict } from "../values/primitives/ADict.js";
-import { APair } from "../values/primitives/APair.js";
-import { AString } from "../values/primitives/AString.js";
-import { ASymbol } from "../values/primitives/ASymbol.js";
-import { CONSTANT_CTX } from "../run/RunContext.js";
-import { nil } from "../values/primitives/ANil.js";
-import type { SchemeEnv } from "../common/scheme-env.js";
-import type { SchemeValue } from "../values/types.js";
-import { RunResolverUnreachableError, RequirePathError } from "../errors.js";
+import { execExpr, parse, jsToScheme, type CallCtx, type SchemeValue } from "@inhuman.tools/arrival";
+import { CONSTANT_CTX, type SchemeEnv } from "@inhuman.tools/arrival/host-internals";
+import { ABytevector, ADict, APair, AString, ASymbol, nil } from "@inhuman.tools/arrival/reflect-internals";
+import { RunResolverUnreachableError, RequirePathError } from "./errors.js";
 import { parseJsonc } from "./parse-jsonc.js";
-import type { MaybePromise } from "../types/utility.js";
+
+/** Sync-or-async. A type that forces `Promise<T>` would tax every sync resolver. */
+export type MaybePromise<T> = T | Promise<T>;
 
 /** The run env the verbs evaluate module forms into — typed `SchemeEnv`, never the
  *  package-internal `AmbientRuntime` class. Every real caller's env is a base-linked live one
@@ -42,7 +34,11 @@ export type SchemeVal = Awaited<ReturnType<typeof execExpr>>;
  *  WHY resolver not just env: lexical frame is null-rooted; stdlib lives on capability base.
  *  Evaluating forms against env alone loses builtins. Through THIS resolver, defines still
  *  spill into `resolver.env` and builtins resolve as for the requiring program. */
-export function runResolverOf(ctx: CallCtx, verb: string): Resolver {
+/** The composed resolver `CallCtx.resolver` names — env + lookup. Arrival's
+ *  concrete `Resolver` class is not part of this package's surface. */
+export type RunResolver = NonNullable<CallCtx["resolver"]>;
+
+export function runResolverOf(ctx: CallCtx, verb: string): RunResolver {
   const resolver = ctx.resolver;
   RunResolverUnreachableError.invariant(resolver !== undefined, verb);
   return resolver;
@@ -159,9 +155,9 @@ export function dirOf(path: string): string {
 //
 // Only the DEP-FREE formats parse here. `.json` accepts JSONC (// and /* */ comments +
 // trailing commas — the tsconfig/VS Code dialect); strict JSON is a subset. Dep-bearing
-// formats — `.yaml`/`.yml` (`yaml`), `.toml` (`smol-toml`) — live in their own opt-in
-// ext capabilities (arrival-chain `packs/ext-yaml.ts` / `ext-toml.ts`), each owning its
-// parser, so the loader carries no external dep (per .claude/rules/env-quasi-packages.md
+// formats — `.yaml`/`.yml` (`yaml`), `.toml` (`smol-toml`) — live on this package's
+// `./yaml` and `./toml` export paths, each owning its parser as an optional peer,
+// so the loader barrel carries no external dep (per .claude/rules/env-quasi-packages.md
 // — split to isolate an external dependency). Those capabilities register their resolver
 // by NAME at bootstrap; `require`'s ext→name overlay resolves it. Known wart: that
 // overlay is the RUNTIME face only — the editor type seam (`resolveRequireType`) reads
@@ -308,8 +304,8 @@ export function valueToTsType(value: unknown, depth = 0): string {
  *  `require`'s by-name overlay uses the capability verb and this entry is the fallback — identical
  *  value (same `normalizeToJson`), no divergence.
  *
- *  Dep-bearing formats are NOT builtins: `.yaml`/`.yml` (`ext/yaml`), `.toml` (`ext/toml`), `.hbs`
- *  (`ext/handlebars`), `.prompt` (`ext/prompt`) each own their dep. That sheds the loader's external
+ *  Dep-bearing formats are NOT builtins: `.yaml`/`.yml` (`./yaml`), `.toml` (`./toml`), `.hbs`
+ *  (`./handlebars`), `.prompt` (`ext/prompt`) each own their dep. That sheds the loader's external
  *  deps — at the cost that `.yaml`/`.toml` hover as `unknown` in the lens (the by-name registry has
  *  no type channel; see the data-parsers note above). `.hbs`/`.prompt` never had a type provider. */
 export function defaultResolvers(): Map<string, ExtensionHandler> {

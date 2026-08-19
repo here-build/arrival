@@ -4,7 +4,7 @@
  * Same two-face story as `.prompt`: pretreat (`hbsContentsToSchemeSource`) then
  * import-executable (`compileScmModule`). No special import path.
  */
-import { hbsContentsToSchemeSource } from "@inhuman.tools/arrival-env-capability-handlebars";
+import { hbsContentsToSchemeSource } from "@inhuman.tools/arrival-modules/handlebars";
 
 import { compileScmModule, type ScmCompileDeps } from "./scm-module.js";
 import type { CompileFileOptions, CompileFileResult } from "./types.js";

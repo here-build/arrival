@@ -58,10 +58,6 @@
       "types": "./dist/env/schema/schema.d.ts",
       "default": "./dist/env/schema/schema.js"
     },
-    "./capabilities/loader": {
-      "types": "./dist/capabilities/loader.d.ts",
-      "default": "./dist/capabilities/loader.js"
-    },
     "./resources": {
       "types": "./dist/common/resources-surface/index.d.ts",
       "default": "./dist/common/resources-surface/index.js"

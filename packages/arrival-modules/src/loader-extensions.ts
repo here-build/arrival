@@ -19,15 +19,17 @@
 // Shared primitives (`registerExtensionIn` / `lookupExtensionResolverIn`) keep the
 // conflict door and longest-suffix match in one place.
 
-import { ExtensionSuffixConflictError } from "../errors.js";
-import { type MacroTransformer, type TransformerArgs } from "../eval/Macro.js";
-import { ANil, nil } from "../values/primitives/ANil.js";
-import { APair } from "../values/primitives/APair.js";
-import { AString } from "../values/primitives/AString.js";
-import { ASymbol } from "../values/primitives/ASymbol.js";
-import type { SchemeValue } from "../values/types.js";
-import type { RunContext } from "../run/RunContext.js";
+import type { RunContext, SchemeValue } from "@inhuman.tools/arrival";
+import { ANil, APair, AString, ASymbol, nil } from "@inhuman.tools/arrival/reflect-internals";
 import invariant from "tiny-invariant";
+
+import { ExtensionSuffixConflictError } from "./errors.js";
+
+/** The args bag a `require/register-extension` transformer receives. `runCtx`
+ *  rides MacroInvokeContext (evaluator threads it). */
+interface TransformerArgs {
+  runCtx: RunContext;
+}
 
 /** ext-suffix (e.g. `".prompt"`) → NAME of the resolver verb. */
 export type ExtensionResolverRegistry = Map<string, string>;
@@ -93,7 +95,7 @@ export function lookupExtensionResolverIn(registry: ExtensionResolverRegistry, p
  */
 export function registerExtensionTransformer(
   resolveRegistry: (runCtx: RunContext) => ExtensionResolverRegistry,
-): MacroTransformer {
+): (rest: SchemeValue, ctx: TransformerArgs) => SchemeValue {
   return function (rest: SchemeValue, ctx: TransformerArgs): SchemeValue {
     invariant(rest instanceof APair, "require/register-extension: expected (suffix resolver-name)");
     const suffixForm = rest.car;

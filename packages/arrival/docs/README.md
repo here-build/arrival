@@ -48,7 +48,7 @@ directory name; names survive `git mv`, links rot.
 | Execution / run model | `execution.md` | `src/run/`, `src/eval/` |
 | Static-analysis plane | `static-plane.md` | `src/type-layer/`, `src/oracle/`, `src/static-validation/` |
 | Provenance | `PROVENANCE.md` | `src/provenance/` |
-| Loader / modules | `environments.md` §LOADER | `src/loader/` |
+| Loader / modules | `environments.md` §LOADER | `@inhuman.tools/arrival-modules` |
 | Errors / doors | `grammar.md` §ERRORS | `src/errors.ts` |
 | Capability authoring | `writing-capabilities.md` | — (how-to over `src/common/`, `src/membrane/`) |
 | LLM agent card | `llm-agent-card.md` | — (system-prompt surface; custdev-measured) |
