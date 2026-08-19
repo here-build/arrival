@@ -202,11 +202,11 @@ export {
 
 // ── the ATTRIBUTION CIRCUIT — extract (CoreForm → StaticProv, I1's totality proof) +
 //    circuitToSexpr (its homoiconic render), plus the registry `extractProgram` needs
-//    (static-prov.ts's G1 freeze; circuit-sexpr.ts's T6b). The ONE surface a host OUTSIDE
-//    the arrival-mercury → arrival-reflect edge (e.g. inhuman-mcp-worker) needs
-//    to inject a live `circuit` capability into an arrival-reflect `ResultHandle` — see
-//    arrival-reflect's `handle-provenance.ts` (`circuitOf`) for why arrival-reflect itself can
-//    never import this package directly. ──
+//    (static-prov.ts's G1 freeze; circuit-sexpr.ts's T6b). The ONE surface a host that
+//    already depends on both this compiler and `@inhuman.tools/arrival-provenance/reflect`
+//    (e.g. inhuman-mcp-worker) needs to inject a live `circuit` capability into a
+//    `ResultHandle` — see `/reflect`'s `circuitOf` for why the analysis plane does not
+//    import this package. ──
 export { extractProgram, type ExtractCtx } from "./extract/index.js";
 export { defaultRegistry } from "./extract/arm-containers.js";
 export { circuitToSexpr } from "./model/circuit-sexpr.js";
@@ -269,8 +269,8 @@ export type {
 // generator (T5c's siblings). None of these were previously reachable outside
 // this package (only extract/circuitToSexpr were, for T6b's `circuit`
 // capability) — T6c's whole job is wiring the two rails together, and the
-// wiring lives OUTSIDE this package (mcp-worker, which sits outside the
-// arrival-mercury → arrival-reflect edge — see arrival-reflect's
+// wiring lives OUTSIDE this package (mcp-worker, which already depends on both
+// this compiler and `@inhuman.tools/arrival-provenance/reflect` — see `/reflect`'s
 // `circuitOf` doc for why). Exporting these is pure plumbing: no logic here
 // changes, every symbol is re-exported verbatim from its owning module. ──
 export { channels, circuitVerdict, planeOf, type Channels, type ChannelAnchor, type ChannelTerminals, type CircuitRole, type CircuitVerdict, type Plane } from "./verdict/circuit-verdict.js";

@@ -29,6 +29,7 @@ The surface, in three subpaths:
 - **`.`** — capture + region-model primitives: `EvalTrace`, `Invocation` (each carries its own computed `.provenance`; dataflow minted at boundaries), `traceToForest`, `traceToRegions` (the studio blueprint) with an incremental `TraceRegionFold`. Plus `trace-snapshot` / `trace-artifact` serialization.
 - **`./analysis`** — turn a finished trace into render-models: a statechart, a flow graph, forest-collapse (`collapseMDL`), and the reverse-chain slicer (`buildSlice` / `buildUneval`).
 - **`./verdict`** — `groundingVerdict`, the whole-result grounding seal: a lineage-completeness oracle over a finished traced run (not a truth oracle — it signs a provably-traced fabrication from a lying tool just as readily as a fact).
+- **`./reflect`** — the query layer over a finished run: `ResultHandle` (causal value now, teleological provenance on demand), `why`/`where`/`how`/`dag`/`blast` (named projections of `/analysis`), the wire-safe choke, and the `arrival/reflect` Scheme capability. Not re-exported from `.`.
 
 ## License
 

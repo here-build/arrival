@@ -1,7 +1,7 @@
 /**
  * circuitToSexpr — StaticProv → homoiconic sexpr, `dag`'s STATIC sibling.
  *
- * `arrival-reflect`'s `(dag h)` renders the RUNTIME computation DAG (one run's
+ * `@inhuman.tools/arrival-provenance/reflect`'s `(dag h)` renders the RUNTIME computation DAG (one run's
  * traced dataflow). This renders the COMPILE-TIME attribution CIRCUIT `extract`
  * produces over a program's CoreForm — the same value `circuit-verdict.ts`'s
  * `channels()` folds, here rendered instead of folded. Pure and total: every
@@ -11,7 +11,7 @@
  *
  * ── `:site` is a bare NodeId, not `head@line:col` ───────────────────────────
  *
- * `arrival-reflect`'s `dagOf`/`whereOf` address nodes as `head@line:col`
+ * `/reflect`'s `dagOf`/`whereOf` address nodes as `head@line:col`
  * strings, resolved from a runtime trace that carries span + source text
  * alongside every point. A `StaticProv` carries only the NodeId (`site` —
  * "mint-order, unknowable by hand," fixture-corpus.ts's own description of it)

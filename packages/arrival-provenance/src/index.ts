@@ -7,9 +7,9 @@
 // analysis stack natively (`./analysis/*`) instead of re-exporting it from
 // core's `/provenance` subpath — core keeps only the capture spine + static
 // wireframe plane (`@inhuman.tools/arrival/provenance`), which this default
-// entry still draws its capture-primitive re-exports from. The two-tier
-// public contract (default entry vs `/analysis`, see `analysis.ts`) is
-// unchanged; only where the code physically lives moved.
+// entry still draws its capture-primitive re-exports from. Subpaths:
+// default / `/analysis` / `/verdict` / `/reflect`. `/reflect` is not
+// re-exported from here — opt in at the subpath.
 //
 // The only non-passthrough export is `EvalTrace`: this file keeps the local
 // mobx-reactive `ObservableEvalTrace` (from `./trace.js`) so studio/UI
