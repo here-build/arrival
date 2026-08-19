@@ -19,7 +19,6 @@
  * assembler); the wire-level half is now asserted directly above it.
  */
 import * as fc from "fast-check";
-import { mintFrame } from "../../env/AmbientRuntime.js";
 import { describe, it, expect, beforeAll } from "vitest";
 import { parse, exec, execState, execStateOverFrame } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
@@ -267,7 +266,7 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
         const program = buildWireframe(forms, { classifier: classifierWithSink, isBaseName: corpusIsBaseName });
         const wireframe = prospectiveSourceCone(program);
 
-        const env = mintFrame(inferenceEnv, "w1-begin-finding");
+        const env = inferenceEnv.child("w1-begin-finding");
         // Test-local EnvCapability: identity passthrough, `z.dynamic` on both sides (no
         // transform, matching the historical `fn: (x) => x` shape exactly).
         await applyCapability(env, [

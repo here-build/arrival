@@ -23,7 +23,6 @@
  *       one law for the other).
  */
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../env/AmbientRuntime.js";
 import { execOverFrame as exec, execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { APair } from "../../values/primitives/APair.js";
@@ -34,7 +33,7 @@ import { APair } from "../../values/primitives/APair.js";
 const bigTemplate = (n: number) => `(quote (${Array.from({ length: n }, (_, i) => `(cell${i} a b c)`).join(" ")}))`;
 
 const run = (code: string, heapBudget?: number) =>
-  exec(code, { env: mintFrame(inferenceEnv, "macro-heap-law"), heapBudget });
+  exec(code, { env: inferenceEnv.child("macro-heap-law"), heapBudget });
 
 describe("law (a) — the budget door: a tight-budget run expanding a large template dies on it", () => {
   it("expanding a 200-form quoted template trips a 100-cell budget", async () => {
@@ -80,7 +79,7 @@ describe("law (a) — the budget door: a tight-budget run expanding a large temp
 
 describe("law (b) — expansion output pairs stay fully located", () => {
   it("expansion-constructed pairs stay fully located", async () => {
-    const env = mintFrame(inferenceEnv, "macro-heap-law-identity");
+    const env = inferenceEnv.child("macro-heap-law-identity");
     const { values } = await execState(
       `(define-syntax wrap (syntax-rules () ((_ x) (quote (alpha beta (gamma x))))))
        (wrap 42)`,

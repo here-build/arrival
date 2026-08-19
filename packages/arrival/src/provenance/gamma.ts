@@ -14,14 +14,13 @@
  * closure; it does not re-verify it.
  */
 import invariant from "tiny-invariant";
-
 import { exec, execState } from "../eval/generator-exec.js";
 import type { EnvCapability } from "../common/capability.js";
-import { bindValue } from "../env/AmbientRuntime.js";
 import { BASE_ROSTER } from "../env/base-roster.js";
 import type { SchemeValue } from "../values/types.js";
 import { withSilentRegion } from "../membrane/region-scope.js";
 import { hermeticEnv, type HermeticEnv, type IngressBindings } from "./hermetic-env.js";
+import type { LexicalScopeWithInternals } from "../eval/LexicalScope.js";
 import { IngressBindingError } from "../errors.js";
 import type { EmittedWire } from "./wireframe/types.js";
 
@@ -89,8 +88,8 @@ export async function applyWireInEnv(
   ingress: IngressBindings,
 ): Promise<SchemeValue> {
   assertIngressCovers(wire, ingress);
-  const wireScope = base.scope.child(`gamma-wire-${wire.span}`);
-  for (const [name, value] of Object.entries(ingress)) bindValue(wireScope.env, name, value);
+  const wireScope = base.scope.child(`gamma-wire-${wire.span}`) as LexicalScopeWithInternals<typeof base.scope>;
+  for (const [name, value] of Object.entries(ingress)) wireScope.env.bind(name, value);
   const state = await execState(wireApplication(wire), {
     capabilities: base.capabilities,
     config: base.config,

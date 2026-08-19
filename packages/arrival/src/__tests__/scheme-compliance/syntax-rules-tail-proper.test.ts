@@ -10,7 +10,6 @@
 // literal symbols by restore_data_gensyms ON THE FORM (once per expansion), so quote yields
 // the literal symbol with no post-eval, O(depth)-composing fixup.
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../env/AmbientRuntime.js";
 import { toJS } from "../../index.js";
 import { execStateOverFrame, type ExecOptionsOverFrame } from "../../eval/generator-exec.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
@@ -41,7 +40,7 @@ describe("syntax-rules — form-returning + tail-proper", () => {
       (define-syntax my-if (syntax-rules () ((my-if t a b) (if t a b))))
       (define (loop n) (my-if (= n 0) 'done (loop (- n 1))))
       (loop 50000)`;
-      expect(repr(await exec(src, { env: mintFrame(sandboxedEnv, "tco1") }))).toBe("done");
+      expect(repr(await exec(src, { env: sandboxedEnv.child("tco1") }))).toBe("done");
     },
     60000,
   );
@@ -51,14 +50,14 @@ describe("syntax-rules — form-returning + tail-proper", () => {
       (define-syntax classify
         (syntax-rules () ((classify n) (cond ((< n 0) 'neg) ((= n 0) 'zero) (else 'pos)))))
       (classify 5)`;
-    expect(repr(await exec(src, { env: mintFrame(sandboxedEnv, "tco2") }))).toBe("pos");
+    expect(repr(await exec(src, { env: sandboxedEnv.child("tco2") }))).toBe("pos");
   });
 
   it("a quoted LIST of template identifiers is fully restored", async () => {
     const src = `
       (define-syntax tags (syntax-rules () ((tags) '(alpha beta gamma))))
       (tags)`;
-    expect(repr(await exec(src, { env: mintFrame(sandboxedEnv, "tco3") }))).toBe("(alpha beta gamma)");
+    expect(repr(await exec(src, { env: sandboxedEnv.child("tco3") }))).toBe("(alpha beta gamma)");
   });
 
   it("hygiene still holds (template binding does not capture a user identifier)", async () => {
@@ -66,13 +65,13 @@ describe("syntax-rules — form-returning + tail-proper", () => {
       (define-syntax sa (syntax-rules () ((sa a) (let ((tmp 1000)) (+ a tmp)))))
       (define tmp 7)
       (sa tmp)`;
-    expect(val(await exec(src, { env: mintFrame(sandboxedEnv, "tco4") }))).toBe(1007);
+    expect(val(await exec(src, { env: sandboxedEnv.child("tco4") }))).toBe(1007);
   });
 
   it("quasiquote in a template works (unquote hole stays code, literals restored)", async () => {
     const src = `
       (define-syntax pair-up (syntax-rules () ((pair-up x) \`(tag ,x))))
       (pair-up 42)`;
-    expect(repr(await exec(src, { env: mintFrame(sandboxedEnv, "tco5") }))).toBe("(tag 42)");
+    expect(repr(await exec(src, { env: sandboxedEnv.child("tco5") }))).toBe("(tag 42)");
   });
 });

@@ -21,9 +21,8 @@
  * first — a port-reaching define must never enter `prelude` (source smuggling).
  */
 import invariant from "tiny-invariant";
-
-import { bindValue, isAmbientRuntime, type AmbientValue } from "../env/AmbientRuntime.js";
-import { LexicalScope, type SessionScope } from "../eval/LexicalScope.js";
+import { isAmbientRuntime, type AmbientValue } from "../env/AmbientRuntime.js";
+import { LexicalScope, type LexicalScopeWithInternals, type SessionScope } from "../eval/LexicalScope.js";
 import type { EnvCapability } from "../common/capability.js";
 import type { EvalPreludeInto, EvalSchemeInto } from "../common/scheme-env.js";
 import { assembleRun } from "../env/assemble-run.js";
@@ -44,7 +43,7 @@ const replayEvalPrelude: EvalPreludeInto = (env, source, runCtx) => {
 };
 
 /** Recorded port/slot payloads a wire's parameters resolve to — already-boxed
- *  `AmbientValue`s (`bindValue`'s honest type), not raw JS. */
+ *  `AmbientValue`s (`.bind`'s honest type), not raw JS. */
 export type IngressBindings = Readonly<Record<string, AmbientValue>>;
 
 /**
@@ -73,12 +72,12 @@ export async function hermeticEnv(
     evalScheme: replayEvalScheme,
     evalPrelude: replayEvalPrelude,
   });
-  const scope = LexicalScope.fresh("provenance-hermetic-replay");
+  const scope = LexicalScope.fresh("provenance-hermetic-replay") as LexicalScopeWithInternals<SessionScope>;
   // Prelude as ordinary top-level into persistent root (header: non-discarded bindings).
   if (prelude.length > 0) {
     await execState(prelude, { capabilities: basePacks, config, scope, runCtx });
   }
   // Ingress after prelude — wins on name collision.
-  for (const [name, value] of Object.entries(ingress)) bindValue(scope.env, name, value);
+  for (const [name, value] of Object.entries(ingress)) scope.env.bind(name, value);
   return { runCtx, scope, capabilities: basePacks, config };
 }

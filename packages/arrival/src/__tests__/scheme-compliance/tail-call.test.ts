@@ -58,15 +58,13 @@
  * (generator-exec `exec`, full default env for `if`/`=`/`-`/`+`), returning the
  * unwrapped value of the last top-level form.
  */
-
 import { describe, expect, it } from "vitest";
+import type { EnvWithInternals, ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { execState, execStateOverFrame } from "../../eval/generator-exec.js";
 import { freshEnv } from "../_fresh-env.js";
 import { nil } from "../../values/primitives/ANil.js";
 import type { ExecOptions, ExecOptionsOverFrame } from "../../eval/generator-exec.js";
 import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
-// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../../env/AmbientRuntime.js";
 
 /**
  * Execute Scheme source through the full default-env trampoline and return the
@@ -266,19 +264,15 @@ describe("tail-call optimization (R7RS §3.5)", () => {
       // own chibi-harness uses for its bookkeeping) — pure dataflow from the guest:
       // it just calls a bound function; the count lives in JS, not a mutated binding.
       let ticks = 0;
-      const env = await freshEnv();
-      bindValue(
-        env,
-        "tick",
-        new ANativeProcedure({
+      const env = await freshEnv() as EnvWithInternals<ResolvingAmbient>;
+      env.bind("tick", new ANativeProcedure({
           name: "tick",
           arity: { min: 0, max: 0 },
           contract: undefined,
           impl: () => {
             ticks += 1;
             return nil;
-          } }),
-      );
+          } }));
       await execSource(
         `(define (f n) (if (= n 0) 0 (begin (f (- n 1)) (tick))))
          (f 5000)`,

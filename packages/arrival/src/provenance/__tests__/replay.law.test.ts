@@ -27,9 +27,7 @@
  * effect rows, where replay is shown to be MORE precise than the abstract cone.
  */
 import * as fc from "fast-check";
-import { mintFrame } from "../../env/AmbientRuntime.js";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-
 import { execState, execStateOverFrame, parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { toJS } from "../../membrane/membrane.js";
@@ -232,7 +230,7 @@ describe("replay-nondeterminism (§4 R1 + §7: frozen-payload replay stable unde
    *  test-local `EnvCapability`, one verb per source op, all sharing the SAME
    *  per-op call counter closure the historical loop built. */
   async function mutatedEnv(calls: Map<string, number>) {
-    const env = mintFrame(inferenceEnv, "q16-mutated-world");
+    const env = inferenceEnv.child("q16-mutated-world");
     await applyCapability(env, [
       EnvCapability.define("test/mutated-world", {
         symbols: (symbol, z) => {
@@ -420,7 +418,7 @@ describe("effect-track replay-between-records (§4 CHOSEN, §7 sub-gate)", () =>
     // NEITHER pure-γ-only NOR playback-only: mutate the world (the effect op now
     // answers ×100) — the replay is IDENTICAL, because the events come from the
     // stream and the stretches from γ, and the live op is never consulted.
-    const mutated = mintFrame(inferenceEnv, "q16-mutated-effect");
+    const mutated = inferenceEnv.child("q16-mutated-effect");
     let liveCalls = 0;
     // Test-local EnvCapability. `mutated` is never actually touched by
     // `replayBetweenRecords` below (no `env` field in its args) — this binding exists

@@ -4,7 +4,7 @@
 // `global_env`/`user_env` (env-roots.ts) and the ambient bootstrap (`ensureBaseAssembled`/
 // `initBridge`) this file used to ride. STAGE C CUT 4 retired `lower()`/`assembleEnv`
 // themselves — `envFromCapabilities` (below) is the replacement idiom: `buildVocabulary` a
-// capability closure, then flatly `bindValue` its `.map` onto a fresh frame — the SAME idiom
+// capability closure, then flatly `.bind` its `.map` onto a fresh frame — the SAME idiom
 // `eval/generator-exec.ts`'s own `ensureInferenceEnvPopulated` uses to populate `inferenceEnv`.
 // Three flavors survive, all rebuilt over the self-hosted vocabulary (env/vocabulary.ts,
 // env/base-roster.ts):
@@ -29,8 +29,7 @@
 //   • `envFromCapabilities(caps, config?)` — bind exactly one capability closure's `Vocabulary`
 //     onto a fresh, otherwise-empty frame. The general-purpose replacement for the retired
 //     `assembleEnv(env, [cap.lower({evalScheme})])` fixture idiom.
-import type { AmbientRuntime, ResolvingAmbient } from "../env/AmbientRuntime.js";
-import { bindValue, mintFrame, mintResolvingFrame } from "../env/AmbientRuntime.js";
+import { AmbientRuntime, type EnvWithInternals, ResolvingAmbient } from "../env/AmbientRuntime.js";
 import type { EnvCapability } from "../common/capability.js";
 import { buildVocabulary } from "../env/vocabulary.js";
 import { BASE_PACKS } from "../env/base-packs.js";
@@ -56,7 +55,7 @@ let counter = 0;
  *  carrying the complete self-hosted `BASE_ROSTER` surface. Await once per test (or per file). */
 export async function freshEnv(): Promise<ResolvingAmbient> {
   await ensureInferenceEnvPopulated();
-  return mintFrame(inferenceEnv, `test-env-${++counter}`);
+  return inferenceEnv.child(`test-env-${++counter}`);
 }
 
 /** Bind `caps`' own `Vocabulary` directly ONTO an EXISTING frame (mutating it in place) — the
@@ -86,8 +85,9 @@ export async function applyCapability(
   config?: object,
 ): Promise<void> {
   const vocabulary = await buildVocabulary(caps, config, evalScheme);
-  for (const [name, value] of vocabulary.map) bindValue(env, name, value);
-  for (const [name, value] of vocabulary.preludeOnly) bindValue(env, name, value);
+  const writable = env as EnvWithInternals<ResolvingAmbient>;
+  for (const [name, value] of vocabulary.map) writable.bind(name, value);
+  for (const [name, value] of vocabulary.preludeOnly) writable.bind(name, value);
   for (const { text } of vocabulary.preludes) {
     await evalScheme(env, text);
   }
@@ -104,7 +104,7 @@ export async function envFromCapabilities(
   config?: object,
   name = "test-vocabulary",
 ): Promise<ResolvingAmbient> {
-  const frame = mintResolvingFrame(`${name}-${++counter}`);
+  const frame = ResolvingAmbient.root(`${name}-${++counter}`);
   await applyCapability(frame, caps, config);
   return frame;
 }

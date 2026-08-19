@@ -21,7 +21,6 @@
  */
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-
 import { APair } from "../../values/primitives/APair.js";
 import { AVector } from "../../values/primitives/AVector.js";
 import { AString } from "../../values/primitives/AString.js";
@@ -36,7 +35,7 @@ import { EnvCapability, type SymbolFactory } from "../../common/capability.js";
 import { applyCapability } from "../../__tests__/_fresh-env.js";
 import { makeCallCtx } from "../../symbol/index.js";
 import type * as schemeZod from "../../common/scheme-zod/index.js";
-import { ResolvingAmbient, mintResolvingFrame } from "../../env/AmbientRuntime.js";
+import { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { ARosettaProcedure } from "../../values/primitives/ARosettaProcedure.js";
 import { withDynamicCallSite } from "../../eval/dynamic-call-site.js";
 import { nil } from "../../values/primitives/ANil.js";
@@ -279,7 +278,7 @@ function recordingEnv(): { env: ResolvingAmbient; verbs: Record<string, ARosetta
   // A REAL frame (hermetic-Environment ruling: capability apply narrows to the concrete
   // `AmbientRuntime`); `verbs` reads the frame's own storage record — same boundary narrow
   // the old synthetic recorder did.
-  const env = mintResolvingFrame("conservation-recording", {}, null);
+  const env = ResolvingAmbient.root("conservation-recording");
   const verbs = new Proxy({} as Record<string, ARosettaProcedure>, { get: (_t, n) => env.__env__[n as string] });
   return { env, verbs };
 }

@@ -21,8 +21,7 @@
  * every base-owned name's `refFrame` resolves to the SAME `globalRoot`.
  */
 import { describe, expect, it } from "vitest";
-
-import { mintPlainFrame, mintFrame, bindValue } from "../env/AmbientRuntime.js";
+import { AmbientRuntime , type EnvWithInternals, type ResolvingAmbient } from "../env/AmbientRuntime.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { Capabilities } from "../eval/Capabilities.js";
 import { sealResolutionChain } from "../eval/CompiledResolutionChain.js";
@@ -32,10 +31,10 @@ describe("Capabilities (3b.3 — assembled base sentinel)", () => {
     // A two-frame chain (root + child) mirroring the retired `user_env → global_env` shape:
     // one name owned on the ROOT, one owned on the CHILD (the base's own top, where the
     // sealed chain is built).
-    const root = mintPlainFrame("test-capabilities-root");
-    bindValue(root, "root-builtin", new AExact(1));
-    const base = mintFrame(root, "test-capabilities-base");
-    bindValue(base, "leaf-builtin", new AExact(2));
+    const root = AmbientRuntime.root("test-capabilities-root") as EnvWithInternals<ResolvingAmbient>;
+    root.bind("root-builtin", new AExact(1));
+    const base = root.child("test-capabilities-base") as EnvWithInternals<ResolvingAmbient>;
+    base.bind("leaf-builtin", new AExact(2));
 
     const chain = sealResolutionChain(base);
     const caps = new Capabilities(base, chain);

@@ -96,8 +96,9 @@ sense §4)*
 
 **hermetic environment** — the runtime-and-storage discipline: an assembled env can only be BORN
 (assembled) and READ from JS — never mutated or extended. The structural `SchemeEnv` contract
-carries `get`/`registerResolver`/`list` and deliberately no `set`/`inherit`/`merge`; two
-module-internal minters plus `bindValue` are the only writers. Run-state is likewise data-local
+carries `get`/`registerResolver`/`list` and deliberately no `set`/`inherit`/`merge`;
+`AmbientRuntime.bind` / `.child` / `.root` are the privileged writer doors, reachable only
+by holding the concrete internals class. Run-state is likewise data-local
 per `exec()`, never ambient. *(owner: environments.md §HERMETIC; run-state execution.md §HERMETIC)*
 
 **hybrid (path)** — a penetration whose path producers yield BOTH `Q≠[]` and `E≠[]` (an

@@ -11,9 +11,8 @@
  * Resolvers live on `ResolvingAmbient` only; construction targets that type
  * at the layers that register resolvers.
  */
-
 import { describe, expect, it } from "vitest";
-import { AmbientRuntime, ResolvingAmbient, mintResolvingFrame } from "../env/AmbientRuntime.js";
+import { AmbientRuntime, ResolvingAmbient } from "../env/AmbientRuntime.js";
 import type { ResolverSpec } from "../common/scheme-env.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { CONSTANT_CTX } from "../run/RunContext.js";
@@ -23,7 +22,6 @@ import { nil } from "../values/primitives/ANil.js";
 const FOUND = new AExact(42);
 
 const lookup = (env: AmbientRuntime, name: string) => env._lookupWithResolvers(name);
-
 
 describe("AmbientRuntime Module Composition", () => {
   describe("Resolver Yielding", () => {
@@ -44,7 +42,7 @@ describe("AmbientRuntime Module Composition", () => {
           return name === "target" ? FOUND : undefined;
         } };
 
-      const env = mintResolvingFrame("test", {}, null);
+      const env = ResolvingAmbient.root("test");
       env.registerResolver(resolver1);
       env.registerResolver(resolver2);
 
@@ -61,7 +59,7 @@ describe("AmbientRuntime Module Composition", () => {
         id: "nil-resolver",
         resolve: (name) => (name === "nil-value" ? nil : undefined) };
 
-      const env = mintResolvingFrame("test", {}, null);
+      const env = ResolvingAmbient.root("test");
       env.registerResolver(resolver);
 
       // nil is a valid FOUND value, should not continue searching
@@ -76,12 +74,12 @@ describe("AmbientRuntime Module Composition", () => {
       // evaluator boxed values on every path.
       const Y = new AExact(2);
       const W = new AExact(4);
-      const env = mintResolvingFrame("parent", { x: new AExact(1) }, null);
+      const env = ResolvingAmbient.root("parent", { x: new AExact(1) });
       env.registerResolver({
         id: "parent-resolver",
         resolve: (name) => (name === "y" ? Y : undefined) });
 
-      const child = mintResolvingFrame("child", { z: new AExact(3) }, env);
+      const child = env.child("child", { z: new AExact(3) });
       child.registerResolver({
         id: "child-resolver",
         resolve: (name) => (name === "w" ? W : undefined) });

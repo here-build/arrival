@@ -21,9 +21,10 @@
 // because both start from "a closed re-derivation of a value"; they have zero code in common
 // (verified: no shared helpers, no shared imports) and this relocation is the first point they
 // needed genuinely different homes.
-
 import { execState, parse, toJS, type LexicalScope, type SchemeValue } from "@inhuman.tools/arrival";
-import { bindValue } from "@inhuman.tools/arrival/host-internals";
+
+/** Same fusion as arrival `LexicalScopeWithInternals` (on `/host-internals` after rebuild). */
+type UnevalWritableScope = LexicalScope & { readonly env: { bind(name: string, value: SchemeValue): void } };
 import {
   buildSlice,
   writeForm,
@@ -104,7 +105,8 @@ export function buildUneval(opts: {
       // Bind the run's output as `result`, then evaluate the selector as ONE more tapped step —
       // the effective value is produced by the SAME pure evaluator, so it carries provenance and
       // becomes a trace node, exactly like any value the program itself computed.
-      bindValue(scope.env, "result", result as never);
+      const writable = scope as UnevalWritableScope;
+      writable.env.bind("result", result as never);
       const sel = await parse(selector);
       const lastForm = sel.at(-1);
       if (lastForm === undefined) throw new Error(`uneval: selector "${selector}" parsed to zero forms`);

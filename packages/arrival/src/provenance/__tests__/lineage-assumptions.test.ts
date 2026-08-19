@@ -7,6 +7,7 @@
  * Measured first, then locked — snapshots record observed reality.
  */
 import { describe, it, expect } from "vitest";
+import type { EnvWithInternals, ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { parse } from "../../eval/generator-exec.js";
@@ -19,8 +20,6 @@ import { classify, fullCone, type Classifier } from "../../provenance/lineage.js
 import { provOf } from "../../provenance/lineage.js";
 import { sStr, sNum, run, runRaw } from "../../__tests__/_lineage-test-helpers.js";
 import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
-// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue, mintFrame } from "../../env/AmbientRuntime.js";
 
 // this helper/execState needs the eager oracle ON
 requireEagerOracle();
@@ -214,8 +213,8 @@ describe("v0.1 FINALIZATION GATES (G1–G7)", () => {
     const mkVec = () => new AVector([sStr("a", 100), sStr("b", 101)], new Set([7]));
     const summary = (r: unknown) => ({ ctor: (r as { constructor?: { name?: string } })?.constructor?.name ?? typeof r, prov: provOf(r) });
     const oneShot = async (src: string): Promise<unknown> => {
-      const env = mintFrame(inferenceEnv, `la-${seq++}`);
-      bindValue(env, "xs", mkVec());
+      const env = inferenceEnv.child(`la-${seq++}`) as EnvWithInternals<ResolvingAmbient>;
+      env.bind("xs", mkVec());
       // execState (COMPLEX tier): `summary` reads the BOXED result's constructor
       // name + `provOf` provenance — a boxed-state concern (RULINGS.md R1).
       const [r] = (await execState(src, { env })).values;

@@ -17,7 +17,6 @@
 // Config consumed by `buildVocabulary` directly. Slice mirrors loader-facing fields of
 // the session builder so the ONE shared config bag feeds this capability with no adapter
 // (real structural zod checks; ignores the rest of the bag).
-
 import type { EvalTap } from "../eval/evaluator.js";
 import { execExpr } from "../eval/generator-exec.js";
 import { EnvCapability } from "../common/capability.js";
@@ -28,8 +27,13 @@ import { is_applyable } from "../values/value-guards.js";
 import { theVoid } from "../values/primitives/AVoid.js";
 import invariant from "tiny-invariant";
 import { RequireCycleError, RequireResolverError } from "../errors.js";
-
-import { bindValue, AmbientRuntime, type AmbientValue, mintFrame, isAmbientRuntime } from "../env/AmbientRuntime.js";
+import {
+  AmbientRuntime,
+  type AmbientValue,
+  type EnvWithInternals,
+  isAmbientRuntime,
+  type ResolvingAmbient,
+} from "../env/AmbientRuntime.js";
 import { ensurePreludeDefineFrame } from "../env/assemble-run.js";
 import {
   lookupExtensionResolverIn,
@@ -335,25 +339,25 @@ export const arrivalLoaderCapability = EnvCapability.define("arrival/loader", {
             const pack = extensionRegistry.get(name);
             RequireResolverError.invariant(pack !== undefined, "no-extension", name, [...extensionRegistry.keys()]);
             const assembler = resources.getOrCreateAssembler(env);
-            // Discarded child, hand-bound (SchemeEnv has no write member) — mintFrame + bindValue.
+            // Discarded child, hand-bound (SchemeEnv has no write member) — env.child + env.bind.
             invariant(
               isAmbientRuntime(env),
               "require/extension: the run env is not an arrival AmbientRuntime — a mid-run prelude scope must be minted off a real frame to receive bindings.",
             );
-            const preludeScope = mintFrame(env, `prelude/${name}`);
-            bindValue(preludeScope, "require/register-extension", registerExtension.macro);
+            const preludeScope = env.child(`prelude/${name}`) as EnvWithInternals;
+            preludeScope.bind("require/register-extension", registerExtension.macro);
             // The eval child: pack prelude defines land HERE, apart from the seed binds.
-            const preludeEvalScope = mintFrame(preludeScope, `prelude/${name}/defines`);
+            const preludeEvalScope = preludeScope.child(`prelude/${name}/defines`);
             await assembler.require(pack, {
-              preludeScope: { set: (n, v) => bindValue(preludeScope, n, v as AmbientValue) },
+              preludeScope: { set: (n, v) => preludeScope.bind(n, v as AmbientValue) },
               // through-unknown widen: assembler typed over structural RunEnv; frame is concrete.
               preludeEvalScope: preludeEvalScope as RunEnv & AmbientRuntime,
             });
             // Persist the pack's prelude defines into this run's define frame (own-record
-            // read, sanctioned: list() is own names; values entered through bindValue).
-            const defines = ensurePreludeDefineFrame(this.runCtx);
+            // read, sanctioned: list() is own names; values entered through `.bind`).
+            const defines = ensurePreludeDefineFrame(this.runCtx) as EnvWithInternals<ResolvingAmbient>;
             for (const defineName of preludeEvalScope.list()) {
-              bindValue(defines, defineName, preludeEvalScope.__env__[defineName]!);
+              defines.bind(defineName, preludeEvalScope.__env__[defineName]!);
             }
             return theVoid;
           },

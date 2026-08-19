@@ -55,14 +55,13 @@ import { z } from "zod";
 // so both are usable in the same file without shadowing, matching every other test that
 // declares both a capability's `configuration` (JS zod) and a native's contract (scheme-zod).
 import * as sz from "../../common/scheme-zod/index.js";
-
 import { EnvCapability } from "../../common/capability.js";
 import { buildVocabulary } from "../../env/vocabulary.js";
 import { missingOptionalKeys } from "../../common/degradation.js";
 import { DoorProcedure } from "../../values/primitives/ACallable.js";
 import { PurityError } from "../../errors.js";
 import { nil } from "../../values/primitives/ANil.js";
-import { bindValue, ResolvingAmbient, mintResolvingFrame } from "../../env/AmbientRuntime.js";
+import {  ResolvingAmbient , type EnvWithInternals } from "../../env/AmbientRuntime.js";
 import { execInFrame } from "../../eval/generator-exec.js";
 
 const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
@@ -73,7 +72,7 @@ const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as s
  *  `{ set }` mock can no longer receive bindings; `bound` is a read facade over the
  *  frame's own storage record.) */
 function recordingEnv(): { env: ResolvingAmbient; bound: { get(name: string): unknown; has(name: string): boolean } } {
-  const env = mintResolvingFrame("degradation-recording", {}, null);
+  const env = ResolvingAmbient.root("degradation-recording") as EnvWithInternals<ResolvingAmbient>;
   return {
     env,
     bound: { get: (name) => env.__env__[name], has: (name) => Object.hasOwn(env.__env__, name) } };
@@ -83,7 +82,8 @@ function recordingEnv(): { env: ResolvingAmbient; bound: { get(name: string): un
  *  `cap.lower({config}).apply(env, undefined as never)` idiom. */
 async function applyOnto(env: ResolvingAmbient, cap: EnvCapability, config?: object): Promise<void> {
   const vocabulary = await buildVocabulary([cap], config, evalScheme);
-  for (const [name, value] of vocabulary.map) bindValue(env, name, value);
+  const writable = env as EnvWithInternals<ResolvingAmbient>;
+  for (const [name, value] of vocabulary.map) writable.bind(name, value);
 }
 
 // ============================================================================

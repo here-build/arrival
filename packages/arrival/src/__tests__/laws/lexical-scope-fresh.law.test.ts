@@ -1,7 +1,7 @@
 /**
  * LAW (V1) — the environment-privatization design §II.1/D6:
  * `LexicalScope.fresh()`, the one new public API this round adds. Closes the "bare
- * `mintFrame(sandboxedEnv)` for isolation" gap — before this, minting an ISOLATED
+ * `sandboxedEnv.child()` for isolation" gap — before this, minting an ISOLATED
  * scope required routing through the instance surface being retired (§II.1: "isolation
  * itself still routes through the surface being retired").
  *
@@ -12,7 +12,6 @@
  *      accumulation works exactly like `execState(...).scope` round-tripping already does.
  */
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../env/AmbientRuntime.js";
 import { exec, execState } from "../../eval/generator-exec.js";
 import { LexicalScope } from "../../eval/LexicalScope.js";
 

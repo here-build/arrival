@@ -65,10 +65,8 @@
 // RED until the rework lands. That is intentional and correct: this file is the specification of
 // DONE. Do not weaken a row to make it pass — a weakened row is how the last two false greens got
 // written. If a row here is red, the medium is still lying to the model.
-
 import { describe, expect, it } from "vitest";
 
-import { mintFrame } from "../../env/AmbientRuntime.js";
 import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { toJS } from "../../index.js";
@@ -84,11 +82,7 @@ const runOne = async (code: string, bindings: Record<string, unknown>): Promise<
   try {
     const { values } = await Promise.race([
       execState(code, {
-        env: mintFrame(
-          inferenceEnv,
-          "listalike-divergence",
-          Object.fromEntries(Object.entries(bindings).map(([k, v]) => [k, jsToScheme(CONSTANT_CTX, v)])),
-        ) }),
+        env: inferenceEnv.child("listalike-divergence", Object.fromEntries(Object.entries(bindings).map(([k, v]) => [k, jsToScheme(CONSTANT_CTX, v)]))) }),
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error("__DEADLINE__")), DEADLINE_MS)),
     ]);
     return `OK ${JSON.stringify(toJS(values[0], {}))}`;

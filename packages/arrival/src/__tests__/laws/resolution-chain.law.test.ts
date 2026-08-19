@@ -27,23 +27,20 @@
  *   represent.
  */
 import { describe, expect, it } from "vitest";
-
-import { mintPlainFrame, mintResolvingFrame, isAmbientRuntime } from "../../env/AmbientRuntime.js";
+import {  isAmbientRuntime, AmbientRuntime, ResolvingAmbient , type EnvWithInternals } from "../../env/AmbientRuntime.js";
 import { compileResolutionChain, sealResolutionChain } from "../../eval/CompiledResolutionChain.js";
 import { execInFrame } from "../../eval/generator-exec.js";
 import { buildVocabulary } from "../../env/vocabulary.js";
 import { BASE_ROSTER } from "../../env/base-roster.js";
 import { AExact } from "../../values/primitives/AExact.js";
-// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../../env/AmbientRuntime.js";
 
 const boxed = (n: number) => new AExact(n);
 
 describe("CompiledResolutionChain — LAW 2: merge-at-seal", () => {
   it("resolver-free layers merge child-wins into ONE flat map", () => {
-    const root = mintPlainFrame("root", { a: boxed(1), shadowed: boxed(100) }, null);
-    const mid = mintPlainFrame("mid", { b: boxed(2), shadowed: boxed(200) }, root);
-    const leaf = mintPlainFrame("leaf", { c: boxed(3), shadowed: boxed(300) }, mid);
+    const root = AmbientRuntime.root("root", { a: boxed(1), shadowed: boxed(100) });
+    const mid = root.child("mid", { b: boxed(2), shadowed: boxed(200) });
+    const leaf = mid.child("leaf", { c: boxed(3), shadowed: boxed(300) });
 
     const chain = compileResolutionChain(leaf);
     expect(chain.steps).toHaveLength(1);
@@ -68,8 +65,8 @@ describe("CompiledResolutionChain — LAW 2: merge-at-seal", () => {
       return execInFrame(source, env);
     };
     const vocabulary = await buildVocabulary(BASE_ROSTER, undefined, evalScheme);
-    const chainFrame = mintResolvingFrame("resolution-chain-law-vocabulary");
-    for (const [name, value] of vocabulary.map) bindValue(chainFrame, name, value);
+    const chainFrame = ResolvingAmbient.root("resolution-chain-law-vocabulary") as EnvWithInternals<ResolvingAmbient>;
+    for (const [name, value] of vocabulary.map) chainFrame.bind(name, value);
 
     // Zero live resolvers: no pack declares `spec.resolvers` (the contract is retired),
     // and the kernel's preludeOnly overlay was dropped at seal (LAW 5).
@@ -91,15 +88,15 @@ describe("CompiledResolutionChain — LAW 2: merge-at-seal", () => {
 describe("CompiledResolutionChain — LAW 4: content address", () => {
   it("deterministic per topology, sensitive to vocabulary", () => {
     const build = () => {
-      const root = mintPlainFrame("root", { a: boxed(1) }, null);
-      return mintPlainFrame("leaf", { b: boxed(2) }, root);
+      const root = AmbientRuntime.root("root", { a: boxed(1) });
+      return root.child("leaf", { b: boxed(2) });
     };
     const h1 = compileResolutionChain(build()).hash;
     const h2 = compileResolutionChain(build()).hash;
     expect(h2).toBe(h1); // deterministic composition (realm-independent)
 
-    const widened = build();
-    bindValue(widened, "c", boxed(3));
+    const widened = build() as EnvWithInternals<ResolvingAmbient>;
+    widened.bind("c", boxed(3));
     expect(compileResolutionChain(widened).hash).not.toBe(h1); // vocabulary-sensitive
   });
 });
@@ -116,7 +113,7 @@ describe("CompiledResolutionChain — LAW 5: the bake seal leaves zero resolver 
   // `compileResolutionChain` refusing a base with a live registered resolver — is
   // mechanism-agnostic and survives below unchanged.
   it("compileResolutionChain refuses to compile a base with a LIVE registered resolver — the sealed chain has no representation for one anymore", () => {
-    const base = mintResolvingFrame("still-registered", {}, null);
+    const base = ResolvingAmbient.root("still-registered");
     base.registerResolver({ id: "leftover", resolve: () => undefined });
     expect(() => compileResolutionChain(base)).toThrow(/live resolver/);
   });

@@ -508,7 +508,7 @@ already holds that entry.
 
 **The prelude pass runs over TWO frames: a discarded NULL-ROOTED seed, and an eval child
 whose defines persist** (ruling 2026-08-13, audit B4). The SEED — a fresh
-`mintResolvingFrame("assemble-run-prelude-seed")`, no parent at all (Stage C Cut 2's
+`ResolvingAmbient.root("assemble-run-prelude-seed")`, no parent at all (Stage C Cut 2's
 self-contained posture, matching `vocabulary.ts`'s own `bakeEnv`), never reused, never
 returned, discarded once the pass completes — holds the main map (`Vocabulary.map`) THEN the
 preludeOnly overlay (`Vocabulary.preludeOnly`). On a cross-capability name collision between
@@ -576,17 +576,22 @@ older comments as "hermetic-AmbientRuntime"; that alias is dead — one name). T
 interpreter only as capabilities or overrides; a pack contributes bindings *declaratively*, it
 does not write.
 
-**Two module-internal doors are the ONLY writers, and they are not on the public surface.**
-Frame *birth* is `mintFrame`/`mintPlainFrame`/`mintResolvingFrame` (subtype-preserving: a
-`ResolvingAmbient` parent mints a resolver-capable child, so a capability base built on
-`inferenceEnv` — or `env/vocabulary.ts`'s own null-rooted `bakeEnv` — stays resolver-capable
-with no ceremony). Binding is `bindValue`. Both are
-module-internal, never barrel-exported; the legitimate writers are all inside the membrane — the
-evaluator's frame binds, capability assembly (`apply()` and the Pass-2 define binds), internal
-rosetta bind, and the replay playback frame. A new public bind API elsewhere is a regression.
+**Privilege is the concrete internals type, not a secret function.** `SchemeEnv` is the
+hermetic JS face — read-only. Frame *birth* is `AmbientRuntime.child` / `.root` (and the
+`ResolvingAmbient` overrides): subtype-preserving, so a `ResolvingAmbient` parent mints a
+resolver-capable child, and a capability base built on `inferenceEnv` — or
+`env/vocabulary.ts`'s own null-rooted `bakeEnv` — stays resolver-capable with no ceremony.
+Null-parent birth is `AmbientRuntime.root` / `ResolvingAmbient.root` (there is no parent
+instance). Binding is `bind` on the frame prototype, **absent from `AmbientRuntime`'s
+type** — a public `LexicalScope.env` does not type `.bind`. Writers *extend* the
+declaration at the definition that intends to write (`scope as LexicalScopeWithInternals`,
+`resolver as LexicalScopeWithInternals<Resolver>`, `env as EnvWithInternals`); every such
+annotation is an access site. After that, `.env.bind` / `.bind` is ordinary method use.
+The types are on `/host-internals`, not the public barrel. A new public bind API on
+`SchemeEnv` is a regression.
 
 **Storage is inside the membrane, and the read face doors on a raw scalar.** Every writer boxes
-at its own boundary before `bindValue`; so a raw JS scalar (string/number/bigint/boolean)
+at its own boundary before `.bind`; so a raw JS scalar (string/number/bigint/boolean)
 surfacing on a read means a writer bypassed the membrane — the read face teaches and refuses
 (`RawCrossingError`), never silently re-boxes. The same predicate guards the resolver boundary:
 a fallback resolver must hand back a boxed scheme value or a membrane primitive, never a raw
@@ -603,7 +608,7 @@ and doors on missing config instead — §DEGRADATION-D2).
 
 **The retired `global_env`/`user_env` pair is now a SINGLE null-rooted frame per Vocabulary,
 sealed once.** `generator-exec.ts`'s `sealedVocabularyChain` mints one NULL-ROOTED
-`mintPlainFrame("exec-vocabulary")` per `Vocabulary` object (memoized in a `WeakMap`, so it is
+`AmbientRuntime.root("exec-vocabulary")` per `Vocabulary` object (memoized in a `WeakMap`, so it is
 built once no matter how many runs share the tuple), binds every `Vocabulary.map` entry onto
 it, then seals it via `sealResolutionChain` into a frozen `CompiledResolutionChain` — the
 sealed artifact has no write surface, so the write window (mint the frame, bind it, seal it)
@@ -759,7 +764,7 @@ the root set, lowest precedence, applied first).
 **`(require/extension …)` builds a mid-run child `C'`.** It resolves the named pack, applies it
 (and its deps, C3 order) to the *live* env through the per-env `RuntimeAssembler`, and returns
 void — the pack's symbols are now live. Because bootstrap's phase-gated machinery cannot touch a
-live env, each call seeds a fresh discarded child `C' = mintFrame(liveEnv, "prelude/<name>")`
+live env, each call seeds a fresh discarded child `C' = liveEnv.child("prelude/<name>")`
 seeded with `register-extension`, passed as both the bind target and the eval scope; `C'` is
 never linked into the live env and is dropped when the call resolves (§PRELUDE's mid-run
 asymmetry: the applied pack's own prelude defines are lost with `C'`; only its declared symbols

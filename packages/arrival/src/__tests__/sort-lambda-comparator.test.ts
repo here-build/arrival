@@ -23,11 +23,10 @@
 // of silently mis-sorting.
 import { describe, expect, it } from "vitest";
 import { execStateOverFrame as execState } from "../eval/generator-exec.js";
-import { mintFrame } from "../env/AmbientRuntime.js";
 import { inferenceEnv } from "../env/inference-env.js";
 import { toJS } from "../index.js";
 
-const run = (code: string) => execState(code, { env: mintFrame(inferenceEnv, "sort-lambda-comparator") });
+const run = (code: string) => execState(code, { env: inferenceEnv.child("sort-lambda-comparator") });
 
 describe("S1 — sort with a lambda comparator throws instead of silently mis-sorting", () => {
   it("a lambda comparator throws an honest, named door (never silently reorders)", async () => {

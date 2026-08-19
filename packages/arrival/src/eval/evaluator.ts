@@ -83,12 +83,12 @@
  * `normalizeBindings` / `normalizeClause`; executable spec in
  * src/reader/__tests__/polyglot/macro-special-brackets.spec.ts.
  */
-
 import invariant from "tiny-invariant";
 import { theVoid } from "../values/primitives/AVoid.js";
 import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
 import { AValue, unionProvenance } from "../values/primitives/AValue.js";
-import { bindValue, AmbientRuntime, type AmbientValue, isAmbientRuntime } from "../env/AmbientRuntime.js";
+import { AmbientRuntime, type AmbientValue, isAmbientRuntime } from "../env/AmbientRuntime.js";
+import type { LexicalScopeWithInternals } from "./LexicalScope.js";
 import { unboundVariableError } from "../unbound-variable.js";
 import {
   ArrivalError,
@@ -1112,7 +1112,8 @@ function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       value.__name__ = symbol_name(name);
     }
 
-    bindValue(ctxResolver(ctx).env, name, value);
+    const resolver = ctxResolver(ctx) as LexicalScopeWithInternals<Resolver>;
+    resolver.env.bind(name, value);
     return theVoid;
   }
 
@@ -1130,7 +1131,8 @@ function* evalDefine(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     value.__name__ = symbol_name(first);
   }
 
-  bindValue(ctxResolver(ctx).env, first, value);
+  const resolver = ctxResolver(ctx) as LexicalScopeWithInternals<Resolver>;
+  resolver.env.bind(first, value);
   return theVoid;
 }
 
@@ -1158,18 +1160,18 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // cache). bodyCtx takes resolver/dynamic frame from def-time ctx, runCtx/strict/
   // signal from callCtx.
   const runner = (values: readonly SchemeValue[], callCtx: CallCtx, canBounce: boolean): CallResult => {
-    const callResolver = closureResolver.child("lambda", "lambda");
+    const callResolver = closureResolver.child("lambda", "lambda") as LexicalScopeWithInternals<Resolver>;
     let argNode: SchemeValue = args;
     let i = 0;
     while (argNode instanceof APair) {
       const argName = argNode.car;
-      if (argName instanceof ASymbol) bindValue(callResolver.env, argName, values[i]);
+      if (argName instanceof ASymbol) callResolver.env.bind(argName, values[i]);
       i++;
       argNode = argNode.cdr;
     }
     // Rest arg: (lambda (a b . rest) …) — allocate against the CALLER's meter.
     if (argNode instanceof ASymbol) {
-      bindValue(callResolver.env, argNode, APair.fromArray(callCtx.runCtx, values.slice(i), false));
+      callResolver.env.bind(argNode, APair.fromArray(callCtx.runCtx, values.slice(i), false));
     }
     // Dynamic call site: set by evaluatePair / wrapLambdaValue just before invoke;
     // else fall back to lexical ctx. Read in the synchronous prologue so a later
@@ -1234,7 +1236,7 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     code: SchemeValue,
     evalArgs: TransformerArgs,
   ): Promise<SchemeValue> {
-    const macroResolver = defResolver.child("macro", "macro");
+    const macroResolver = defResolver.child("macro", "macro") as LexicalScopeWithInternals<Resolver>;
 
     // Fexpr semantics: parameters bind to unevaluated argument forms, not values.
     let argNode: SchemeValue = args;
@@ -1244,7 +1246,7 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       const argName = argNode.car;
       if (argName instanceof ASymbol) {
         const value = codeNode instanceof APair ? codeNode.car : nil;
-        bindValue(macroResolver.env, argName, value);
+        macroResolver.env.bind(argName, value);
       }
       argNode = argNode.cdr;
       if (codeNode instanceof APair) {
@@ -1253,7 +1255,7 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     }
 
     if (argNode instanceof ASymbol) {
-      bindValue(macroResolver.env, argNode, codeNode);
+      macroResolver.env.bind(argNode, codeNode);
     }
 
     // Forward signal so macro expansion is also budget-bounded. `signal` rides the
@@ -1262,7 +1264,8 @@ function* evalDefineMacro(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       signal: evalArgs.signal as AbortSignal | undefined,
     });
   });
-  bindValue(ctxResolver(ctx).env, name, macro);
+  const resolver = ctxResolver(ctx) as LexicalScopeWithInternals<Resolver>;
+  resolver.env.bind(name, macro);
 
   return theVoid;
 }
@@ -1470,7 +1473,7 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // shape everything below already understands (see normalizeBindings).
   const normalizedBindings = normalizeBindings(bindings, letForm, true, 2, 2);
 
-  const letResolver = ctxResolver(ctx).child("let", "let");
+  const letResolver = ctxResolver(ctx).child("let", "let") as LexicalScopeWithInternals<Resolver>;
 
   if (name) {
     const params: ASymbol[] = [];
@@ -1491,10 +1494,10 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     // machinery). The `run(...)` fallback (HOF escape, `canBounce` false) forwards
     // `signal`; the bounce path inherits the outer ctx's signal directly.
     const runner = (values: readonly SchemeValue[], callCtx: CallCtx, canBounce: boolean): CallResult => {
-      const loopResolver = letResolver.child("named-let", "named-let");
+      const loopResolver = letResolver.child("named-let", "named-let") as LexicalScopeWithInternals<Resolver>;
 
       for (const [i, param] of params.entries()) {
-        bindValue(loopResolver.env, param, values[i]);
+        loopResolver.env.bind(param, values[i]);
       }
 
       const dynamicInv = currentDynamicCallSite() ?? ctx.currentInvocation;
@@ -1536,7 +1539,7 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     loopLambda.__name__ = symbol_name(name);
     loopLambda.__params__ = params.map((p) => symbol_name(p));
 
-    bindValue(letResolver.env, name, loopLambda);
+    letResolver.env.bind(name, loopLambda);
   }
 
   // Binding RHS: non-tail (values feed the let frame; only the body is tail).
@@ -1569,7 +1572,7 @@ function* evalLet(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   }
 
   for (const [i, varName] of names.entries()) {
-    bindValue(letResolver.env, varName, values[i]);
+    letResolver.env.bind(varName, values[i]);
   }
 
   // Body inherits the let's tail flag; pass-through (tail-collapsible).
@@ -1586,7 +1589,7 @@ function* evalLetStar(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // BG2/BG3: consume both bracket surfaces (see normalizeBindings).
   const normalizedBindings = normalizeBindings(bindings, "let*", true, 2, 2);
 
-  const letStarResolver = ctxResolver(ctx).child("let*", "let*");
+  const letStarResolver = ctxResolver(ctx).child("let*", "let*") as LexicalScopeWithInternals<Resolver>;
 
   let bindNode: SchemeValue = normalizedBindings;
   while (bindNode instanceof APair) {
@@ -1606,7 +1609,7 @@ function* evalLetStar(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       value = yield value;
     }
 
-    bindValue(letStarResolver.env, varName, value);
+    letStarResolver.env.bind(varName, value);
     bindNode = bindNode.cdr;
   }
 
@@ -1625,7 +1628,7 @@ function* evalLetrec(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   // function (R7RS: letrec* evaluates left-to-right, same as our letrec).
   const normalizedBindings = normalizeBindings(bindings, "letrec", true, 2, 2);
 
-  const letrecResolver = ctxResolver(ctx).child("letrec", "letrec");
+  const letrecResolver = ctxResolver(ctx).child("letrec", "letrec") as LexicalScopeWithInternals<Resolver>;
 
   const bindingList: Array<{ name: ASymbol; expr: SchemeValue }> = [];
   let bindNode: SchemeValue = normalizedBindings;
@@ -1644,7 +1647,7 @@ function* evalLetrec(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     // pass overwrites it. theVoid is the unassigned-slot sentinel (referencing
     // it before assignment is an R7RS error caught elsewhere); `undefined` is
     // not a SchemeValue / AmbientValue.
-    bindValue(letrecResolver.env, varName, theVoid);
+    letrecResolver.env.bind(varName, theVoid);
     bindingList.push({ name: varName, expr: valExpr });
     bindNode = bindNode.cdr;
   }
@@ -1655,7 +1658,7 @@ function* evalLetrec(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     if (is_promise(value)) {
       value = yield value;
     }
-    bindValue(letrecResolver.env, name, value);
+    letrecResolver.env.bind(name, value);
   }
 
   return yield { call: evalBegin(body, { ...ctx, resolver: letrecResolver }), tail: ctx.tail === true };
@@ -2057,7 +2060,7 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
   const test = testClause.car;
   const resultExprs = testClause.cdr;
 
-  const doResolver = ctxResolver(ctx).child("do", "do");
+  const doResolver = ctxResolver(ctx).child("do", "do") as LexicalScopeWithInternals<Resolver>;
   const vars: Array<{ name: ASymbol; step: SchemeValue | null }> = [];
 
   // Only the result-expression(s) are tail; bindings/test/step/body are non-tail.
@@ -2093,7 +2096,7 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
       initValue = yield initValue;
     }
 
-    bindValue(doResolver.env, varName, initValue);
+    doResolver.env.bind(varName, initValue);
     vars.push({ name: varName, step: stepExpr });
 
     bindNode = bindNode.cdr;
@@ -2135,7 +2138,7 @@ function* evalDo(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
     for (const [i, { name, step }] of vars.entries()) {
       if (step !== null) {
-        bindValue(doResolver.env, name, newValues[i]);
+        doResolver.env.bind(name, newValues[i]);
       }
     }
   }
@@ -2238,7 +2241,7 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 
       const handlers = catchCdr.cdr;
 
-      const catchResolver = ctxResolver(ctx).child("catch", "catch");
+      const catchResolver = ctxResolver(ctx).child("catch", "catch") as LexicalScopeWithInternals<Resolver>;
 
       // Bind the error. A `%raise` of a raw (non-Error) scheme value is stringified by the
       // trampoline's `failAndWrap` (`rawRaisedValues`' own doc comment above `run()`) —
@@ -2271,7 +2274,7 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
         delete errObj.cause;
         delete errObj.fileName;
       }
-      bindValue(catchResolver.env, varName, errorValue);
+      catchResolver.env.bind(varName, errorValue);
 
       try {
         // Forward signal: a catch handler running an unbounded computation

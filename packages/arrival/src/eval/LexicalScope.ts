@@ -1,12 +1,13 @@
 import {
   AmbientRuntime,
-  mintFrame,
-  mintResolvingFrame,
   ResolvingAmbient,
   type AmbientValue,
+  type LexicalScopeInternals,
 } from "../env/AmbientRuntime.js";
 import type { RunContext } from "../run/RunContext.js";
 import { INTEROP_BOUNDARY } from "../membrane/interop-access.js";
+
+export type { EnvWithInternals, LexicalScopeInternals } from "../env/AmbientRuntime.js";
 
 /**
  * The LEXICAL binding chain — let/lambda/letrec/do/catch frames, the names a
@@ -61,7 +62,7 @@ export class LexicalScope<E extends AmbientRuntime = AmbientRuntime> {
    * drop that contract.
    */
   static fresh(name: string | symbol = "session"): SessionScope {
-    return LexicalScope.for(mintResolvingFrame(name, {}, null));
+    return LexicalScope.for(ResolvingAmbient.root(name));
   }
 
   constructor(readonly env: E) {}
@@ -112,13 +113,13 @@ export class LexicalScope<E extends AmbientRuntime = AmbientRuntime> {
   /**
    * Fresh CHILD frame of this scope — the public frame-BIRTH door for a
    * session owner (per-run scope above a long-lived session scope). Subtype-
-   * preserving via `mintFrame`, so a {@link SessionScope}'s child keeps the
+   * preserving via `env.child`, so a {@link SessionScope}'s child keeps the
    * structural `SchemeEnv` pack-write contract. NO bindings parameter: the
    * child is born EMPTY, populated only by the evaluator (program `define`s)
    * or capability assembly — never by a JS-side record.
    */
   child(name?: string | symbol): LexicalScope<E> {
-    return LexicalScope.for(mintFrame(this.env, name) as E);
+    return LexicalScope.for(this.env.child(name) as E);
   }
 
   toString(): string {
@@ -130,3 +131,16 @@ export class LexicalScope<E extends AmbientRuntime = AmbientRuntime> {
  *  so `.env` satisfies the structural SchemeEnv pack-write contract. Named so
  *  session products can state the refinement without the internal class name. */
 export type SessionScope = LexicalScope<ResolvingAmbient>;
+
+/**
+ * A lexical-scope handle (or any `.env` handle — `Resolver`) widened to the
+ * privileged write face. Fuse at the definition that intends to write:
+ *   `const catchResolver = ctxResolver(ctx).child("catch", "catch") as LexicalScopeWithInternals<Resolver>`
+ *   `const scope = sessionScope as LexicalScopeWithInternals`
+ * Then `.env.bind` is in type. Each such annotation is an access site — the
+ * module-level equivalent of a protected method.
+ *
+ * `T & LexicalScopeInternals` *extends* `T` (adds `.env.bind`); a direct `as` overlaps.
+ */
+export type LexicalScopeWithInternals<T extends { readonly env: AmbientRuntime } = LexicalScope> = T &
+  LexicalScopeInternals<T["env"]>;

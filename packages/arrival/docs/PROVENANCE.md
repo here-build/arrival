@@ -366,14 +366,15 @@ Two artifacts share the word "provenance" and must not be conflated:
   `UnevalContainer` (`analysis/uneval.ts`), and the rest of `analysis/*` (flow graphs, region
   folding, statecharts, lineage).
 
-**The door is exactly five subpaths**, verified by grepping every `@inhuman.tools/arrival*`
+**The door is exactly four subpaths**, verified by grepping every `@inhuman.tools/arrival*`
 import in `arrival-provenance/src/`: the package root (`ANil`/`ArrivalError`/`deepProvenance`/
 `toJS`/`execState`/`parse`/`LexicalScope`/`SchemeValue`), `/provenance` (`scopeId`,
 `snapshotTrace`, `headOf`, `userCallSite`, `extractDefines`, `EvalTrace`/`PlainInv`/`PlainTrace`
 types), `/reflect-internals` (the value-class hierarchy: `AValue`/`APair`/`AVoid`/`ABool`/
-`AString`/`AVector`/`ADict`/`ASymbol`), `/host-internals` — one import, `bindValue` (the sole
-sanctioned re-export named in `env/AmbientRuntime.ts`'s `bindValue` preamble, audit S2b), and
-`/attestation` — one import, `isAttested`. No other subpath and no reach-in past a barrel is
+`AString`/`AVector`/`ADict`/`ASymbol`), and `/attestation` — one import, `isAttested`.
+`buildUneval` binds the run's output through `scope.env.bind("result", …)` on the live
+`LexicalScope` already imported from the package root — no `/host-internals` writer door.
+No other subpath and no reach-in past a barrel is
 used anywhere in the package. `arrival-provenance/src/analysis/uneval.ts`'s own header names
 the split with core's `provenance/uneval.ts` explicitly: "the two halves shared a file only
 because both start from 'a closed re-derivation of a value'; they have zero code in common …

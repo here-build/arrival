@@ -10,14 +10,14 @@
 // The transformer-constructor is invoked as `(syntax-rules (literals) (pattern
 // template)…)` → returns a Syntax that rewrites a matching form via the engine.
 // `this` is the define-syntax invocation env.
-
 import { EnvCapability } from "../../common/capability.js";
 import { Syntax } from "../../eval/Syntax.js";
-import { bindValue, AmbientRuntime, mintFrame } from "../AmbientRuntime.js";
+import { AmbientRuntime } from "../AmbientRuntime.js";
 import { extract_patterns, restore_data_gensyms, transform_syntax } from "../../eval/syntax-rules.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { APair } from "../../values/primitives/APair.js";
 import { Resolver } from "../../eval/Resolver.js";
+import type { LexicalScopeWithInternals } from "../../eval/LexicalScope.js";
 import type { TransformerArgs } from "../../eval/Macro.js";
 import type { SchemeValue } from "../../values/types.js";
 import { ANil } from "../../values/primitives/ANil.js";
@@ -81,14 +81,15 @@ export default EnvCapability.define("scheme/macros", {
           // expansion, copy its symbol-keyed gensyms up into the parent and unwrap.
           let useScope = useResolver.scope;
           if (useScope.kind === "merge") {
+            const parent = useScope.parent as LexicalScopeWithInternals;
             for (const [sym, value] of useScope.ownSymbolEntries()) {
               // Evaluator-frame-family write, not an assembly write (hermeticity audit P6):
               // this hoists an already-hygienic gensym binding one merge-frame up during
               // expansion, the same family as define/let/lambda frame binds — it just
               // happens to be authored from an env pack file rather than eval/. See
-              // AmbientRuntime.ts's `bindValue` preamble (S2a) for the family census this
+              // AmbientRuntime.ts's `.bind` preamble (S2a) for the family census this
               // site is counted in.
-              bindValue(useScope.parent!.env, sym, value);
+              parent.env.bind(sym, value);
             }
             useScope = useScope.parent!;
           }
@@ -140,7 +141,7 @@ export default EnvCapability.define("scheme/macros", {
                 if (new_expr) {
                   expr = new_expr;
                 }
-                const new_env = mintFrame(var_scope, Syntax.__merge_env__, defChild.env.__env__);
+                const new_env = var_scope.child(Syntax.__merge_env__, defChild.env.__env__);
                 // Form-returning (always): hand back the transcribed FORM + its hygiene scope.
                 // The evaluator re-expands it in tail position — the transformer NEVER evaluates
                 // inside itself, so a macro in tail position stays tail-proper (no nested run()

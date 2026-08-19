@@ -10,7 +10,7 @@
 // `scope.get` — an interpreter round-trip. Classifier reads already-bound names.
 //
 // NULL-ROOTED, SELF-CONTAINED (docs/environments.md §HERMETIC): `bakeEnv` is a
-// null-parent scratch (`mintResolvingFrame`). Caller folds `BASE_ROSTER` into
+// null-parent scratch (`ResolvingAmbient.root`). Caller folds `BASE_ROSTER` into
 // `capabilities` before calling (`generator-exec.ts` `execStateViaVocabulary`), so
 // the base stdlib is an ordinary C3 member of THIS tuple — baked deps-first in the
 // same loop. By the time a dependent's `symbol.define` bakes, its deps (and free
@@ -27,10 +27,8 @@
 //
 // Bare `{ fn }` capabilities are rejected at the type level (`SymbolDeclaration`
 // union) — no runtime refusal door.
-
 import { z } from "zod";
 import invariant from "tiny-invariant";
-
 import { EnvCapability, type SymbolDeclaration } from "../common/capability.js";
 import {
   contractOf,
@@ -62,7 +60,7 @@ import {
   SymbolKeyMismatchError,
   VocabularyCapabilityConflictError,
 } from "../errors.js";
-import { bindValue, mintResolvingFrame, type AmbientValue, type ResolvingAmbient } from "./AmbientRuntime.js";
+import { type AmbientValue, type EnvWithInternals, ResolvingAmbient } from "./AmbientRuntime.js";
 
 /** One symbol vocabulary, built ONCE per (capability-set, config) tuple — see module
  *  header. Contents are immutable minted values or baked closures over the frozen
@@ -129,11 +127,11 @@ function memoized(
 function makeBindTarget(
   mainMap: Map<string, AmbientValue>,
   preludeOnlyMap: Map<string, AmbientValue>,
-  bakeEnv: ResolvingAmbient,
+  bakeEnv: EnvWithInternals<ResolvingAmbient>,
 ): (def: AEntity) => PreludeBindTarget {
   return (def) => ({
     set: (name: string, value: unknown) => {
-      bindValue(bakeEnv, name, value as AmbientValue);
+      bakeEnv.bind(name, value as AmbientValue);
       // STORED value — raw `__env__` read, not `.get()`
       // (which quotes APair for host; vocabulary must hold chain-lookup shape).
       const stored = bakeEnv.__env__[name];
@@ -145,8 +143,13 @@ function makeBindTarget(
 }
 
 /** Bind into main map + bakeEnv — kinds that skip `bindTarget` (kernel keywords, value tail). */
-function bindDirect(mainMap: Map<string, AmbientValue>, bakeEnv: ResolvingAmbient, name: string, value: unknown): void {
-  bindValue(bakeEnv, name, value as AmbientValue);
+function bindDirect(
+  mainMap: Map<string, AmbientValue>,
+  bakeEnv: EnvWithInternals<ResolvingAmbient>,
+  name: string,
+  value: unknown,
+): void {
+  bakeEnv.bind(name, value as AmbientValue);
   mainMap.set(name, bakeEnv.__env__[name]);
 }
 
@@ -157,7 +160,7 @@ async function processCapability(
   config: object | undefined,
   mainMap: Map<string, AmbientValue>,
   preludeOnlyMap: Map<string, AmbientValue>,
-  bakeEnv: ResolvingAmbient,
+  bakeEnv: EnvWithInternals<ResolvingAmbient>,
   evalScheme: EvalSchemeInto,
 ): Promise<{ configuration: Record<string, unknown>; degraded: DegradedCapability | undefined }> {
   const capabilityName = cap.name;
@@ -338,7 +341,7 @@ async function buildFresh(
   const degradedByName = new Map<string, DegradedCapability | undefined>();
   const preludes: { capability: EnvCapability; text: string }[] = [];
   // Null-rooted scratch — resolves against THIS build's static core only (header).
-  const bakeEnv: ResolvingAmbient = mintResolvingFrame("vocabulary-bake");
+  const bakeEnv = ResolvingAmbient.root("vocabulary-bake") as EnvWithInternals<ResolvingAmbient>;
 
   // Deps-first (self overwrites dep); each capability fully (Pass 1 + 2) before next.
   for (const name of [...order].toReversed()) {

@@ -1,4 +1,5 @@
 import { CONSTANT_CTX } from "../run/RunContext.js";
+import type { EnvWithInternals, ResolvingAmbient } from "../env/AmbientRuntime.js";
 /**
  * Test escaped symbols and edge cases in arrival
  *
@@ -11,15 +12,12 @@ import { CONSTANT_CTX } from "../run/RunContext.js";
  * file keeps define/resolve, `@` property access, MCP UUID resolution
  * patterns, and evaluator/membrane symbol resolution.
  */
-
 import { describe, expect, it } from "vitest";
 import { inferenceEnv } from "../env/inference-env.js";
 import { execOverFrame as exec } from "../eval/generator-exec.js";
 import { jsToScheme } from "../membrane/rosetta.js";
 import { EnvCapability } from "../common/capability.js";
 import { applyCapability } from "./_fresh-env.js";
-// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue, mintFrame } from "../env/AmbientRuntime.js";
 
 async function execOne(expr: string, env = inferenceEnv): Promise<any> {
   const results = await exec(expr, { env });
@@ -53,7 +51,7 @@ describe("Escaped Symbol Resolution", () => {
     it("should access numeric object keys", async () => {
       const result = await execOne(
         `(@ test-obj :|24|)`,
-        mintFrame(inferenceEnv, "escaped-test", {
+        inferenceEnv.child("escaped-test", {
           // Box the host object through the membrane — `inherit` stores its record
           // values raw, so the binding must already be a Scheme value (it is read
           // back through `@`/keyword-access as an AJSObject).
@@ -102,7 +100,7 @@ describe("Escaped Symbol Resolution", () => {
         "foo-bar": "hyphenated",
         foo_bar: "underscored" };
 
-      bindValue(inferenceEnv, "test-obj", jsToScheme(CONSTANT_CTX, testObj));
+      (inferenceEnv as EnvWithInternals<ResolvingAmbient>).bind("test-obj", jsToScheme(CONSTANT_CTX, testObj));
 
       const result = await execOne(`
         (list
@@ -121,7 +119,7 @@ describe("Escaped Symbol Resolution", () => {
           name: "Button",
           type: "component" } };
 
-      bindValue(inferenceEnv, "components", jsToScheme(CONSTANT_CTX, component));
+      (inferenceEnv as EnvWithInternals<ResolvingAmbient>).bind("components", jsToScheme(CONSTANT_CTX, component));
 
       const result = await execOne(`
         (@ components :|794f1e9c-5726-4a0c-a8b6-c0ae5f31f4e4|)
@@ -139,7 +137,7 @@ describe("Escaped Symbol Resolution", () => {
             "24": "numeric property value" },
         ] };
 
-      bindValue(inferenceEnv, "data", jsToScheme(CONSTANT_CTX, data));
+      (inferenceEnv as EnvWithInternals<ResolvingAmbient>).bind("data", jsToScheme(CONSTANT_CTX, data));
 
       const result = await execOne(`
         (begin
@@ -165,7 +163,7 @@ describe("Escaped Symbol Resolution", () => {
       ];
 
       // Convert to scheme list — scheme filter expects pair chains, not JS arrays
-      bindValue(inferenceEnv, "items", jsToScheme(CONSTANT_CTX, items));
+      (inferenceEnv as EnvWithInternals<ResolvingAmbient>).bind("items", jsToScheme(CONSTANT_CTX, items));
 
       // Use `string=?` for string comparison — `eq?` is reference identity (R7RS § 6.1)
       // and post-eq?/eqv?-split returns #f for two distinct heap string instances.

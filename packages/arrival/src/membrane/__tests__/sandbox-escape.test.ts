@@ -18,8 +18,8 @@
  * be removed. (Vitest 3+ docs sometimes call this `.failing`; in vitest 4 the
  * canonical name is `.fails`.)
  */
-
 import { describe, expect, it } from "vitest";
+import type { EnvWithInternals, ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { execOverFrame, execStateOverFrame } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
@@ -34,8 +34,6 @@ import { AValue } from "../../values/primitives/AValue.js";
 import { jsToScheme } from "../rosetta.js";
 import { execOverFrame as gexec } from "../../eval/generator-exec.js";
 import { tf } from "../../values/tagless-final.js";
-// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../../env/AmbientRuntime.js";
 
 // ============================================================================
 // CRITICAL: sandbox escape vectors
@@ -208,7 +206,7 @@ describe("CRITICAL: accessor isolation leaks", () => {
   it("benign :keyword and dot access on a plain object still resolve", async () => {
     // Guard against over-blocking: legitimate own-property access must keep
     // working through both paths after the isolation is applied.
-    bindValue(inferenceEnv, "__probe_obj", jsToScheme(CONSTANT_CTX, { name: "maya", nested: { city: "lisbon" } }));
+    (inferenceEnv as EnvWithInternals<ResolvingAmbient>).bind("__probe_obj", jsToScheme(CONSTANT_CTX, { name: "maya", nested: { city: "lisbon" } }));
     const [byKeyword] = await execOverFrame("(:name __probe_obj)", { env: inferenceEnv });
     expect(String(byKeyword)).toBe("maya");
   });
@@ -367,8 +365,8 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
     a.self = a;
     const b: Record<string, unknown> = {};
     b.self = b;
-    bindValue(inferenceEnv, "__cyc_a", jsToScheme(CONSTANT_CTX, a));
-    bindValue(inferenceEnv, "__cyc_b", jsToScheme(CONSTANT_CTX, b));
+    (inferenceEnv as EnvWithInternals<ResolvingAmbient>).bind("__cyc_a", jsToScheme(CONSTANT_CTX, a));
+    (inferenceEnv as EnvWithInternals<ResolvingAmbient>).bind("__cyc_b", jsToScheme(CONSTANT_CTX, b));
 
     // execState (COMPLEX tier): the test name asserts the BOXED `#f` verdict
     // specifically (RULINGS.md R1) — `exec`'s plain-JS exit would give the raw

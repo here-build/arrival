@@ -11,15 +11,13 @@
 //
 // The mint is driven here by a SYNTHETIC ctx (a POJO invocation), exactly the
 // direct-JS shape the host-fn lens tests use — no full evaluator needed to prove the wiring.
-
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX, RunContext } from "../../run/RunContext.js";
-
 import { EnvCapability } from "../capability.js";
 import { applyCapability } from "../../__tests__/_fresh-env.js";
 import { symbol, makeCallCtx, type CallCtx } from "../../symbol/index.js";
 import * as z from "../scheme-zod/index.js";
-import { ResolvingAmbient, mintResolvingFrame } from "../../env/AmbientRuntime.js";
+import { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
@@ -35,7 +33,7 @@ function recordingEnv(): { env: ResolvingAmbient; verbs: Record<string, ARosetta
   // A REAL frame (hermetic-Environment ruling: capability apply narrows to the concrete
   // `AmbientRuntime`); `verbs` reads the frame's own storage record — same boundary narrow
   // the old synthetic recorder did.
-  const env = mintResolvingFrame("rosetta-symbol-recording", {}, null);
+  const env = ResolvingAmbient.root("rosetta-symbol-recording");
   const verbs = new Proxy({} as Record<string, ARosettaProcedure>, { get: (_t, n) => env.__env__[n as string] });
   return { env, verbs };
 }

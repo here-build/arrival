@@ -1,4 +1,5 @@
 import { CONSTANT_CTX } from "../../run/RunContext.js";
+import type { EnvWithInternals, ResolvingAmbient } from "../../env/AmbientRuntime.js";
 /**
  * Test the `|...|` bar-quoted SYMBOL-GRAMMAR reader — empty `||`, escaped
  * `\|`, unicode inside bars, special chars, case-sensitivity, and the
@@ -10,13 +11,10 @@ import { CONSTANT_CTX } from "../../run/RunContext.js";
  * ../Parser-level `|...|` cases in parser.test.ts is acceptable (not deduped
  * here per the split's own instructions).
  */
-
 import { describe, expect, it } from "vitest";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { execOverFrame as exec } from "../../eval/generator-exec.js";
 import { jsToScheme } from "../../membrane/rosetta.js";
-// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../../env/AmbientRuntime.js";
 
 // Helper to execute and get first result
 async function execOne(expr: string, env = inferenceEnv): Promise<any> {
@@ -42,7 +40,7 @@ describe("Escaped Symbol Resolution", () => {
       const testObj = {
         "24": "numeric key value" };
 
-      bindValue(inferenceEnv, "test-obj", jsToScheme(CONSTANT_CTX, testObj));
+      (inferenceEnv as EnvWithInternals<ResolvingAmbient>).bind("test-obj", jsToScheme(CONSTANT_CTX, testObj));
 
       // :24 should be treated as keyword and converted to "24" by @ function
       const result1 = await execOne(`(@ test-obj :24)`);

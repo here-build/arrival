@@ -4,14 +4,7 @@
  * (env/vocabulary.ts + env/base-roster.ts). Drives each top-level form through
  * `run()`.
  */
-
-import {
-  AmbientRuntime,
-  mintPlainFrame,
-  mintResolvingFrame,
-  isAmbientRuntime,
-  bindValue,
-} from "../env/AmbientRuntime.js";
+import { AmbientRuntime, isAmbientRuntime, type EnvWithInternals } from "../env/AmbientRuntime.js";
 import { buildVocabulary, type Vocabulary } from "../env/vocabulary.js";
 import { assembleRun, preludeDefinesOf, vocabularyOf } from "../env/assemble-run.js";
 import { BASE_ROSTER } from "../env/base-roster.js";
@@ -285,8 +278,8 @@ function sealedVocabularyChain(vocabulary: Vocabulary): {
 } {
   let sealed = sealedChainByVocabulary.get(vocabulary);
   if (sealed === undefined) {
-    const chainFrame = mintPlainFrame("exec-vocabulary");
-    for (const [name, value] of vocabulary.map) bindValue(chainFrame, name, value);
+    const chainFrame = AmbientRuntime.root("exec-vocabulary") as EnvWithInternals;
+    for (const [name, value] of vocabulary.map) chainFrame.bind(name, value);
     const chain = sealResolutionChain(chainFrame);
     sealed = Object.freeze({ chainFrame, chain });
     sealedChainByVocabulary.set(vocabulary, sealed);
@@ -302,7 +295,7 @@ function sealedVocabularyChain(vocabulary: Vocabulary): {
  */
 function runRootedScope(runCtx: RunContext): LexicalScope {
   const defines = preludeDefinesOf(runCtx);
-  return defines === undefined ? LexicalScope.fresh() : LexicalScope.for(mintResolvingFrame("session", {}, defines));
+  return defines === undefined ? LexicalScope.fresh() : LexicalScope.for(defines.child("session"));
 }
 
 /**
@@ -637,7 +630,8 @@ let _inferenceEnvPopulated: Promise<void> | undefined;
 export function ensureInferenceEnvPopulated(): Promise<void> {
   return (_inferenceEnvPopulated ??= (async () => {
     const vocabulary = await buildVocabulary(BASE_ROSTER, undefined, capabilityEvalScheme);
-    for (const [name, value] of vocabulary.map) bindValue(inferenceEnv, name, value);
+    const env = inferenceEnv as EnvWithInternals<typeof inferenceEnv>;
+    for (const [name, value] of vocabulary.map) env.bind(name, value);
   })());
 }
 

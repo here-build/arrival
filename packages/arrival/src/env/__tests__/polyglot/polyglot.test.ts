@@ -7,12 +7,10 @@
 // %interleave.
 import { exec as bareExec } from "../../../index.js";
 import { execStateOverFrame, type ExecOptionsOverFrame } from "../../../eval/generator-exec.js";
-import { mintFrame } from "../../AmbientRuntime.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
 import { applyCapability } from "../../../__tests__/_fresh-env.js";
 import { describe, expect, it } from "vitest";
-
 import polyglot from "../../polyglot/polyglot.js";
 
 // This whole file stringifies the BOXED result's Scheme print form (list "(1 4 9)")
@@ -27,7 +25,7 @@ async function exec(code: string, options: ExecOptionsOverFrame) {
 
 describe("@inhuman.tools/arrival/polyglot (shared core)", () => {
   it("installs @/@?/@keys/dict and compose/pipe run correctly standalone", async () => {
-    const env = mintFrame(sandboxedEnv, "polyglot-core-test");
+    const env = sandboxedEnv.child("polyglot-core-test");
     await applyCapability(env, [polyglot]);
 
     const num = async (src: string) => Number((await exec(src, { env }))[0]);

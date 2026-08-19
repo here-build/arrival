@@ -40,7 +40,7 @@ export interface EnvPack<E = unknown> {
  *  capability.ts's bindTarget only ever writes. BOOTSTRAP assembly (`env/vocabulary.ts`'s
  *  `buildVocabulary`) mirrors it into its own `preludeOnly` Map; MID-RUN application
  *  (this module's `RuntimeAssembler`) hands the caller's adapter over a real, discarded child
- *  frame (loader-capability.ts wraps the module-internal `bindValue` — `SchemeEnv` itself
+ *  frame (loader-capability.ts wraps `AmbientRuntime.bind` — `SchemeEnv` itself
  *  carries no write member; docs/environments.md §HERMETIC). */
 export interface PreludeBindTarget {
   set(name: string, value: unknown): unknown;

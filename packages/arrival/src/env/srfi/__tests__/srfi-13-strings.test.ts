@@ -10,16 +10,14 @@
  * Provenance: booleans/indices carry the searched strings' lineage; derived strings
  * carry the source's; split/tokenize taint EACH piece so list elements stay grounded.
  */
-
 import { describe, it, expect } from "vitest";
+import type { EnvWithInternals, ResolvingAmbient } from "../../AmbientRuntime.js";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { execOverFrame, execStateOverFrame, execInFrame } from "../../../eval/generator-exec.js";
 import { inferenceEnv } from "../../inference-env.js";
 import { AString } from "../../../values/primitives/AString.js";
 import { AValue } from "../../../values/primitives/AValue.js";
 import { requireEagerOracle } from "../../../__tests__/_require-eager-oracle.js";
-// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue, mintFrame } from "../../AmbientRuntime.js";
 
 // Q20b: SRFI-13's provenance assertions run real programs — force the oracle ON
 // for this file's lifetime.
@@ -33,8 +31,8 @@ const js = (x: unknown) => (x instanceof AValue ? x["arrival/toJS"]() : x);
 
 let seq = 0;
 async function run(src: string, bindings: Record<string, AString> = {}): Promise<unknown> {
-  const env = mintFrame(inferenceEnv, `srfi-13-${seq++}`);
-  for (const [k, v] of Object.entries(bindings)) bindValue(env, k, v);
+  const env = inferenceEnv.child(`srfi-13-${seq++}`) as EnvWithInternals<ResolvingAmbient>;
+  for (const [k, v] of Object.entries(bindings)) env.bind(k, v);
   const [r] = await execOverFrame(src, { env });
   return r;
 }
@@ -42,8 +40,8 @@ async function run(src: string, bindings: Record<string, AString> = {}): Promise
 // execState (COMPLEX tier): the "carries the provenance" cells below assert box
 // discipline directly (`toBeInstanceOf(AValue)`, `.provenance` — RULINGS.md R1).
 async function runBoxed(src: string, bindings: Record<string, AString> = {}): Promise<unknown> {
-  const env = mintFrame(inferenceEnv, `srfi-13-${seq++}`);
-  for (const [k, v] of Object.entries(bindings)) bindValue(env, k, v);
+  const env = inferenceEnv.child(`srfi-13-${seq++}`) as EnvWithInternals<ResolvingAmbient>;
+  for (const [k, v] of Object.entries(bindings)) env.bind(k, v);
   const [r] = (await execStateOverFrame(src, { env })).values;
   return r;
 }

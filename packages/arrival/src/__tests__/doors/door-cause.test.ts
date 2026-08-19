@@ -11,14 +11,13 @@
 //
 // The DECLARATION-DRIVEN law over the ~100 production doors (every BASE_PACKS door gets
 // `cause.owner` = its pack) is pinned in the sibling `declared-doors.law.test.ts`.
-
 import { describe, expect, it } from "vitest";
 import { symbol } from "../../symbol/index.js";
 import { DoorProcedure } from "../../values/primitives/ACallable.js";
 import { is_callable_value } from "../../values/value-guards.js";
 import { PurityError } from "../../errors.js";
 import { EnvCapability } from "../../common/capability.js";
-import { ResolvingAmbient, mintResolvingFrame } from "../../env/AmbientRuntime.js";
+import { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { applyCapability } from "../_fresh-env.js";
 
 describe("DoorProcedure — the introspectable door binding (unit, no capability/env)", () => {
@@ -85,7 +84,7 @@ describe("DoorProcedure — the introspectable door binding (unit, no capability
  *  `bound` is a read facade over the frame's own storage record, keeping this suite's
  *  `bound.get(name)` idiom without the retired write surface. */
 function recordingEnv(): { env: ResolvingAmbient; bound: { get(name: string): unknown } } {
-  const env = mintResolvingFrame("door-cause-recording", {}, null);
+  const env = ResolvingAmbient.root("door-cause-recording");
   return { env, bound: { get: (name) => env.__env__[name] } };
 }
 

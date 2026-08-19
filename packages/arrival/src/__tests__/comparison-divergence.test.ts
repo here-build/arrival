@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../env/AmbientRuntime.js";
 import { execOverFrame as exec } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../env/inference-env.js";
 import { is_false } from "../values/value-guards.js";
@@ -23,7 +22,7 @@ import { is_false } from "../values/value-guards.js";
  */
 
 const run = (code: string, strict: boolean) =>
-  exec(code, { env: mintFrame(inferenceEnv, "cmp-divergence"), strict });
+  exec(code, { env: inferenceEnv.child("cmp-divergence"), strict });
 const truthy = async (code: string, strict: boolean): Promise<boolean> =>
   !is_false((await run(code, strict))[0]);
 

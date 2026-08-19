@@ -18,7 +18,8 @@
  * D4 — fan/binder/transparent/opaque → `ReplayScopeError` with route, never a wrong value.
  */
 import { execState } from "../eval/generator-exec.js";
-import { bindValue, type AmbientValue } from "../env/AmbientRuntime.js";
+import { type AmbientValue } from "../env/AmbientRuntime.js";
+import type { LexicalScopeWithInternals } from "../eval/LexicalScope.js";
 import { BASE_ROSTER } from "../env/base-roster.js";
 import { collapseProvenance } from "./provenance-collapse.js";
 import { AValue, EMPTY_PROVENANCE, pointProvenance } from "../values/primitives/AValue.js";
@@ -272,15 +273,12 @@ export async function replayProgramWithPlayback(opts: PlaybackReplayOptions): Pr
   const { source, playback, basePacks = [], config } = opts;
   return withSilentRegion(async () => {
     const base = await hermeticEnv([...basePacks, ...BASE_ROSTER], "", {}, config);
-    const playbackScope = base.scope.child("provenance-playback");
+    const playbackScope = base.scope.child("provenance-playback") as LexicalScopeWithInternals<typeof base.scope>;
     for (const [op, payloads] of playback) {
       const queue = [...payloads];
-      // ARosettaProcedure — bindValue doors a bare host fn. Fresh source point per
+      // ARosettaProcedure — `.bind` doors a bare host fn. Fresh source point per
       // fire (same mint as a live source crossing); recorded stamps ride in boxPayload.
-      bindValue(
-        playbackScope.env,
-        op,
-        new ARosettaProcedure({
+      playbackScope.env.bind(op, new ARosettaProcedure({
           name: op,
           arity: { min: 0, max: null },
           contract: undefined,
@@ -303,8 +301,7 @@ export async function replayProgramWithPlayback(opts: PlaybackReplayOptions): Pr
             }
             return jsToScheme(runCtx, boxPayload(next), undefined, resultProvenance);
           },
-        }),
-      );
+        }));
     }
     const state = await execState(source, {
       capabilities: base.capabilities,

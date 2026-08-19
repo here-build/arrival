@@ -13,7 +13,6 @@
 // for a gensym), NOT symbol_name's string description — the two differ for gensyms, and
 // looking up by the description silently fell through to (failed) application.
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../env/AmbientRuntime.js";
 import { execOverFrame as exec } from "../../eval/generator-exec.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";
@@ -28,7 +27,7 @@ describe("syntax-rules → kernel special forms (keyword unlock)", () => {
         (syntax-rules ()
           ((my-when test body ...) (if test (begin body ...)))))
       (my-when #t 1 2 42)`;
-    expect(val(await exec(src, { env: mintFrame(sandboxedEnv, "sf1") }))).toBe(42);
+    expect(val(await exec(src, { env: sandboxedEnv.child("sf1") }))).toBe(42);
   });
 
   it("a macro expanding to `let` introduces a (hygienic) binding", async () => {
@@ -37,7 +36,7 @@ describe("syntax-rules → kernel special forms (keyword unlock)", () => {
         (syntax-rules ()
           ((with-ten name body ...) (let ((name 10)) body ...))))
       (with-ten n (* n n))`;
-    expect(val(await exec(src, { env: mintFrame(sandboxedEnv, "sf2") }))).toBe(100);
+    expect(val(await exec(src, { env: sandboxedEnv.child("sf2") }))).toBe(100);
   });
 
   it("HYGIENE: a template-introduced binding does not capture a user identifier", async () => {
@@ -49,7 +48,7 @@ describe("syntax-rules → kernel special forms (keyword unlock)", () => {
           ((shadowing body) (let ((tmp 999)) body))))
       (define tmp 7)
       (shadowing tmp)`;
-    expect(val(await exec(src, { env: mintFrame(sandboxedEnv, "sf3") }))).toBe(7);
+    expect(val(await exec(src, { env: sandboxedEnv.child("sf3") }))).toBe(7);
   });
 
   it("recursive macro expansion through `if` terminates and selects the right branch", async () => {
@@ -59,6 +58,6 @@ describe("syntax-rules → kernel special forms (keyword unlock)", () => {
           ((pick) 0)
           ((pick (t r) clause ...) (if t r (pick clause ...)))))
       (pick (#f 1) (#f 2) (#t 3) (#t 4))`;
-    expect(val(await exec(src, { env: mintFrame(sandboxedEnv, "sf4") }))).toBe(3);
+    expect(val(await exec(src, { env: sandboxedEnv.child("sf4") }))).toBe(3);
   });
 });

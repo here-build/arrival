@@ -3,12 +3,10 @@
 // 2026-07-10 dialect split — see polyglot.ts's header for the full rationale).
 import { execState as bareExecState } from "../../../index.js";
 import { execStateOverFrame, type ExecOptionsOverFrame } from "../../../eval/generator-exec.js";
-import { mintFrame } from "../../AmbientRuntime.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
 import { applyCapability } from "../../../__tests__/_fresh-env.js";
 import { describe, expect, it } from "vitest";
-
 import polyglotRacket from "../../polyglot/polyglot-racket.js";
 
 async function exec(code: string, options: ExecOptionsOverFrame) {
@@ -17,7 +15,7 @@ async function exec(code: string, options: ExecOptionsOverFrame) {
 
 describe("@inhuman.tools/arrival/polyglot-racket", () => {
   it("installs ~>/~>> (aliasing Clojure's ->/->>) and dict-count, assembled STANDALONE", async () => {
-    const env = mintFrame(sandboxedEnv, "polyglot-racket-test");
+    const env = sandboxedEnv.child("polyglot-racket-test");
     // Assembling JUST polyglot-racket pulls in scheme/polyglot-clojure (for the
     // ->/->> that ~>/~>> expand to, and str) transitively via its own declared
     // `deps` — the C3 dep walk this pack's header documents.

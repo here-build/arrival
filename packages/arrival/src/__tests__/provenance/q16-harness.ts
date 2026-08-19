@@ -21,9 +21,7 @@
  * the real ones; only the DECIDING-WHEN caller is the harness.
  */
 import invariant from "tiny-invariant";
-
-import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
-import { AmbientRuntime, mintFrame } from "../../env/AmbientRuntime.js";
+import type { AmbientRuntime, ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { execStateOverFrame } from "../../eval/generator-exec.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { toJS } from "../../membrane/membrane.js";
@@ -225,7 +223,7 @@ export async function recordRun(
   const store = new ProvenanceStoreFake();
   const payloads = new PayloadStoreFake();
   const registry = new RecordingRegistry(store, payloads, regionId);
-  const env = mintFrame(baseEnv, `q16-record-${regionId}`);
+  const env = baseEnv.child(`q16-record-${regionId}`);
   for (const [op, shape] of Object.entries(sources)) await registry.register(env, op, shape);
 
   // this helper/execState needs the eager oracle ON

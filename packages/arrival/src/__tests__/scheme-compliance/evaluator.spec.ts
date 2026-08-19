@@ -1,11 +1,10 @@
 /**
  * Tests for the generator-based evaluator using real scheme types
  */
-
 import { beforeEach, describe, expect, it } from "vitest";
 import { theVoid } from "../../values/primitives/AVoid.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
-import { ResolvingAmbient, mintResolvingFrame } from "../../env/AmbientRuntime.js";
+import { type EnvWithInternals, ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import run from "../../eval/evaluator.js";
 // `execExpr` is the COMPLEX-tier form-at-a-time entry (SchemeValue in, boxed
 // SchemeValue out, never unwrapped) — the direct replacement for the retired
@@ -28,8 +27,6 @@ import { ALambda, hostFnToCallable } from "../../values/primitives/ACallable.js"
 import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
 import { EMPTY_PROVENANCE } from "../../values/primitives/AValue.js";
 import { type SchemeValue } from "../../values/types.js";
-// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../../env/AmbientRuntime.js";
 
 describe("Generator Evaluator with Real Scheme Types", () => {
   // `ResolvingAmbient`, not the plain `AmbientRuntime` its raw evaluator-level content
@@ -38,7 +35,7 @@ describe("Generator Evaluator with Real Scheme Types", () => {
   // structurally satisfies and plain `AmbientRuntime` does not — a byte-identical stand-in
   // here (no resolver ever registered), see the file header for why this test builds a
   // hand-rolled env instead of the default base.
-  let env: ResolvingAmbient;
+  let env: EnvWithInternals<ResolvingAmbient>;
 
   beforeEach(() => {
     // Note: SchemeExact has num/denom (for rationals), not value
@@ -63,7 +60,7 @@ describe("Generator Evaluator with Real Scheme Types", () => {
     const numOf = (a: SchemeValue): number =>
       a instanceof AExact ? a.num : a instanceof AInexact ? a.real : (a as unknown as number);
     const bool = (b: boolean) => (b ? schemeTrue : schemeFalse);
-    env = mintResolvingFrame("test-env", {
+    env = ResolvingAmbient.root("test-env", {
       "+": contour("+", { min: 0, max: null }, (args) => {
         let result = 0;
         let hasInexact = false;
@@ -107,7 +104,8 @@ describe("Generator Evaluator with Real Scheme Types", () => {
       ),
       not: contour("not", { min: 1, max: 1 }, ([x]) => bool(x === schemeFalse || x === nil)),
       "#t": schemeTrue,
-      "#f": schemeFalse });
+      "#f": schemeFalse,
+    }) as EnvWithInternals<ResolvingAmbient>;
   });
 
   describe("run() trampoline", () => {
@@ -149,8 +147,8 @@ describe("Generator Evaluator with Real Scheme Types", () => {
     });
 
     it("should look up symbols in environment", async () => {
-      bindValue(env, "x", new AExact(10));
-      bindValue(env, "y", new AExact(20));
+      env.bind("x", new AExact(10));
+      env.bind("y", new AExact(20));
       expect(await execExprOverFrame(new ASymbol("x"), { env })).toEqual(new AExact(10));
       expect(await execExprOverFrame(new ASymbol("y"), { env })).toEqual(new AExact(20));
     });
@@ -171,18 +169,14 @@ describe("Generator Evaluator with Real Scheme Types", () => {
     // promise is awaited and its result boxes through the reverse membrane.
     // W8: bare env-resident host fns are doored; mint via hostFnToCallable.
     it("should handle JS functions that return promises", async () => {
-      bindValue(
-        env,
-        "async-add",
-        hostFnToCallable(
+      env.bind("async-add", hostFnToCallable(
           CONSTANT_CTX,
           async (a: unknown, b: unknown) => {
             await new Promise((r) => setTimeout(r, 1));
             return (a as number) + (b as number);
           },
           EMPTY_PROVENANCE,
-        ),
-      );
+        ));
 
       const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("async-add"), new AExact(10), new AExact(20)], false);
       const result = await execExprOverFrame(code, { env });
@@ -218,7 +212,7 @@ describe("Generator Evaluator with Real Scheme Types", () => {
 
       it("should evaluate unquoted expressions", async () => {
         // `(1 ,(+ 1 1) 3)
-        bindValue(env, "x", new AExact(10));
+        env.bind("x", new AExact(10));
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("quasiquote"), APair.fromArray(CONSTANT_CTX, [new AExact(1), APair.fromArray(CONSTANT_CTX, [new ASymbol("unquote"), new ASymbol("x")], false), new AExact(3)], false)], false);
         const result = (await execExprOverFrame(code, { env })) as APair<any, any>;
         expect(result.car).toEqual(new AExact(1));
@@ -269,18 +263,14 @@ describe("Generator Evaluator with Real Scheme Types", () => {
 
       it("should execute side effects", async () => {
         let sideEffect = 0;
-        bindValue(
-          env,
-          "inc!",
-          new ANativeProcedure({
+        env.bind("inc!", new ANativeProcedure({
             name: "inc!",
             arity: { min: 0, max: 0 },
             contract: undefined,
             impl: () => {
               sideEffect++;
               return new AExact(sideEffect);
-            } }),
-        );
+            } }));
 
         // (begin (inc!) (inc!) (inc!))
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("begin"), APair.fromArray(CONSTANT_CTX, [new ASymbol("inc!")], false), APair.fromArray(CONSTANT_CTX, [new ASymbol("inc!")], false), APair.fromArray(CONSTANT_CTX, [new ASymbol("inc!")], false)], false);
@@ -340,7 +330,7 @@ describe("Generator Evaluator with Real Scheme Types", () => {
     describe("let", () => {
       it("should use parallel binding semantics", async () => {
         // (let ((x 1) (y x)) y) - should fail because x isn't bound yet
-        bindValue(env, "x", new AExact(100));
+        env.bind("x", new AExact(100));
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("let"), APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol("x"), new AExact(1)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol("y"), new ASymbol("x")], false)], false), new ASymbol("y")], false);
         // y should be 100 (outer x), not 1 (inner x)
         expect(await execExprOverFrame(code, { env })).toEqual(new AExact(100));
@@ -356,18 +346,14 @@ describe("Generator Evaluator with Real Scheme Types", () => {
 
       it("should short-circuit on false", async () => {
         let called = false;
-        bindValue(
-          env,
-          "side-effect",
-          new ANativeProcedure({
+        env.bind("side-effect", new ANativeProcedure({
             name: "side-effect",
             arity: { min: 0, max: 0 },
             contract: undefined,
             impl: () => {
               called = true;
               return schemeTrue;
-            } }),
-        );
+            } }));
         // (and #f (side-effect))
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("and"), schemeFalse, APair.fromArray(CONSTANT_CTX, [new ASymbol("side-effect")], false)], false);
         expect(await execExprOverFrame(code, { env })).toBe(schemeFalse);
@@ -390,18 +376,14 @@ describe("Generator Evaluator with Real Scheme Types", () => {
 
       it("should short-circuit on true", async () => {
         let called = false;
-        bindValue(
-          env,
-          "side-effect",
-          new ANativeProcedure({
+        env.bind("side-effect", new ANativeProcedure({
             name: "side-effect",
             arity: { min: 0, max: 0 },
             contract: undefined,
             impl: () => {
               called = true;
               return schemeFalse;
-            } }),
-        );
+            } }));
         // (or 1 (side-effect))
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("or"), new AExact(1), APair.fromArray(CONSTANT_CTX, [new ASymbol("side-effect")], false)], false);
         expect(await execExprOverFrame(code, { env })).toEqual(new AExact(1));
@@ -436,11 +418,7 @@ describe("Generator Evaluator with Real Scheme Types", () => {
       // W8: hostFnToCallable mints ARosettaProcedure (scheme args → JS, result boxes back).
       it("should handle => syntax", async () => {
         // (cond ((+ 1 2) => double))
-        bindValue(
-          env,
-          "double",
-          hostFnToCallable(CONSTANT_CTX, (x: unknown) => (x as number) * 2, EMPTY_PROVENANCE),
-        );
+        env.bind("double", hostFnToCallable(CONSTANT_CTX, (x: unknown) => (x as number) * 2, EMPTY_PROVENANCE));
         const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("cond"), APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new AExact(1), new AExact(2)], false), new ASymbol("=>"), new ASymbol("double")], false)], false);
         expect(((await execExprOverFrame(code, { env })) as AExact)["arrival/toJS"]()).toBe(6);
       });
@@ -502,18 +480,14 @@ describe("Generator Evaluator with Real Scheme Types", () => {
 
       it("should execute body on each iteration", async () => {
         let count = 0;
-        bindValue(
-          env,
-          "inc!",
-          new ANativeProcedure({
+        env.bind("inc!", new ANativeProcedure({
             name: "inc!",
             arity: { min: 0, max: 0 },
             contract: undefined,
             impl: () => {
               count++;
               return theVoid;
-            } }),
-        );
+            } }));
         // (do ((i 0 (+ i 1))) ((>= i 3)) (inc!))
         const code = APair.fromArray(CONSTANT_CTX, [
           new ASymbol("do"),

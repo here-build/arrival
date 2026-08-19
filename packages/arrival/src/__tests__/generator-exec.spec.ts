@@ -4,8 +4,8 @@
  * Verifies that the generator-based evaluator works correctly when
  * wired to the scheme parser.
  */
-
 import { describe, expect, it } from "vitest";
+import type { EnvWithInternals, ResolvingAmbient } from "../env/AmbientRuntime.js";
 import { theVoid } from "../values/primitives/AVoid.js";
 import { execExpr, execState, execStateOverFrame, parse, type ExecOptions } from "../eval/generator-exec.js";
 import { ABool } from "../values/primitives/ABool.js";
@@ -17,8 +17,6 @@ import { nil } from "../values/primitives/ANil.js";
 import { freshEnv } from "./_fresh-env.js";
 import type { SchemeValue } from "../values/types.js";
 import { ANativeProcedure } from "../values/primitives/ANativeProcedure.js";
-// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../env/AmbientRuntime.js";
 
 // This whole file exercises the EVALUATOR's correctness (arithmetic, special forms,
 // macros, …) through box-shaped assertions (`toBeInstanceOf`, `.num`, `.__name__`) —
@@ -274,19 +272,15 @@ describe("generator-exec", () => {
     // INVARIANT: try's finally clause runs after a successful body, after the body
     it("should run finally clause after success", async () => {
       const log: string[] = [];
-      const env = await freshEnv();
-      bindValue(
-        env,
-        "log",
-        new ANativeProcedure({
+      const env = await freshEnv() as EnvWithInternals<ResolvingAmbient>;
+      env.bind("log", new ANativeProcedure({
           name: "log",
           arity: { min: 1, max: 1 },
           contract: undefined,
           impl: (args) => {
             log.push(String((args[0] as AString).valueOf()));
             return nil;
-          } }),
-      );
+          } }));
       await execStateOverFrame(
         `(try
            (log "body")
@@ -298,19 +292,15 @@ describe("generator-exec", () => {
 
     it("should run finally clause after catch", async () => {
       const log: string[] = [];
-      const env = await freshEnv();
-      bindValue(
-        env,
-        "log",
-        new ANativeProcedure({
+      const env = await freshEnv() as EnvWithInternals<ResolvingAmbient>;
+      env.bind("log", new ANativeProcedure({
           name: "log",
           arity: { min: 1, max: 1 },
           contract: undefined,
           impl: (args) => {
             log.push(String((args[0] as AString).valueOf()));
             return nil;
-          } }),
-      );
+          } }));
       await execStateOverFrame(
         `(try
            (begin (log "body") (raise "error"))

@@ -75,8 +75,8 @@ export interface ResolverSpec {
  *  read only from JS, never mutated or extended (docs/environments.md §HERMETIC). This contract is
  *  defined HERE, not imported from arrival-scheme, so the dependency only ever points
  *  arrival-scheme → arrival-scheme-env (no cycle). A pack contributes bindings DECLARATIVELY
- *  (`symbols`/`resolvers`/`bootstrap`); binding is the assembly machinery's own act, through the
- *  module-internal `bindValue`/`mintFrame` (AmbientRuntime.ts, never barrel-exported). */
+ *  (`symbols`/`resolvers`/`bootstrap`); binding is the assembly machinery's own act, through
+ *  `AmbientRuntime.bind` / `.child` / `.root` (the concrete internals class, never barrel-exported). */
 export interface SchemeEnv {
   get(name: string, options?: { throwError?: boolean }): unknown;
   /** Register a catchall resolver (fires on a name the env did not bind). This is the

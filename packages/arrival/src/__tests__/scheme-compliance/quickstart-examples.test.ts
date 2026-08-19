@@ -1,8 +1,8 @@
 import { CONSTANT_CTX } from "../../run/RunContext.js";
+import type { EnvWithInternals, ResolvingAmbient } from "../../env/AmbientRuntime.js";
 /**
  * Test all examples from the Quick Start section to ensure they work
  */
-
 import { describe, expect, it } from "vitest";
 import { jsToScheme, toJS } from "../../index.js";
 import { execOverFrame as exec, execStateOverFrame as execState } from "../../eval/generator-exec.js";
@@ -10,8 +10,6 @@ import { execOverFrame as exec, execStateOverFrame as execState } from "../../ev
 import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";
 import { EnvCapability } from "../../common/capability.js";
 import { applyCapability } from "../_fresh-env.js";
-// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../../env/AmbientRuntime.js";
 
 describe("Quick Start Examples", () => {
   it("Basic execution example", async () => {
@@ -76,7 +74,7 @@ describe("Quick Start Examples", () => {
       { id: "charlie", priority: 20 },
     ];
 
-    bindValue(sandboxedEnv, "users", jsToScheme(CONSTANT_CTX, users, {}));
+    (sandboxedEnv as EnvWithInternals<ResolvingAmbient>).bind("users", jsToScheme(CONSTANT_CTX, users, {}));
 
     // execState (COMPLEX tier): toJS wants BOXED values — `exec` already unwraps.
     const { values: results } = await execState(

@@ -13,6 +13,7 @@
  * exactly what the F1 grid's conservation/box-discipline checks need to track.
  */
 import { freshEnv } from "../../_fresh-env.js";
+import type { EnvWithInternals } from "../../../env/AmbientRuntime.js";
 import { execStateOverFrame } from "../../../eval/generator-exec.js";
 import { AValue } from "../../../values/primitives/AValue.js";
 import { APair } from "../../../values/primitives/APair.js";
@@ -27,8 +28,6 @@ import type { ResolvingAmbient } from "../../../env/AmbientRuntime.js";
 import type { SchemeValue } from "../../../values/types.js";
 import type { CarrierRow } from "./carriers.js";
 import { ANativeProcedure } from "../../../values/primitives/ANativeProcedure.js";
-// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../../../env/AmbientRuntime.js";
 
 /**
  * Box a raw JS leaf — or (the only path `src` actually takes, see below) an
@@ -67,13 +66,10 @@ export interface LawEnv {
  *    CONTAINER. A borrowed store holds JS-world values only (V's hygiene law).
  */
 export async function withLawEnv(): Promise<LawEnv> {
-  const env = await freshEnv();
+  const env = await freshEnv() as EnvWithInternals<ResolvingAmbient>;
   const mintedIds: number[] = [];
   let seq = 0;
-  bindValue(
-    env,
-    "src",
-    new ANativeProcedure({
+  env.bind("src", new ANativeProcedure({
       name: "src",
       arity: { min: 1, max: 1 },
       contract: undefined,
@@ -81,8 +77,7 @@ export async function withLawEnv(): Promise<LawEnv> {
         const id = ++seq;
         mintedIds.push(id);
         return stampFresh(args[0], id);
-      } }),
-  );
+      } }));
   // `borrow-array` CROSSES its arguments into the JS world, then borrows the result.
   //
   // It used to hand the raw JS array of ALREADY-BOXED args straight to `fromJS`, producing an
@@ -96,10 +91,7 @@ export async function withLawEnv(): Promise<LawEnv> {
   // themselves land ungrounded (raw JS has no lineage — it acquires the container's on the way back
   // in, which is AJSArray's documented Option-C discipline). So `elementBoxes` answers `null` for
   // this carrier now (see its doc), and the container's own provenance ⊇ {1,2,3} is the signal.
-  bindValue(
-    env,
-    "borrow-array",
-    new ANativeProcedure({
+  env.bind("borrow-array", new ANativeProcedure({
       name: "borrow-array",
       arity: { min: 0, max: null },
       contract: undefined,
@@ -108,8 +100,7 @@ export async function withLawEnv(): Promise<LawEnv> {
           args.map((a) => toJS(a, {})),
           collapseProvenance(...args),
         )
-    }),
-  );
+    }));
   return { env, mintedIds };
 }
 

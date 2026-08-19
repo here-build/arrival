@@ -23,7 +23,6 @@
 // Each test carries an explicit short timeout: a regression must FAIL the test, never hang CI.
 import { describe, expect, it } from "vitest";
 
-import { mintFrame } from "../../env/AmbientRuntime.js";
 import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { toJS } from "../../index.js";
@@ -34,11 +33,7 @@ import { CONSTANT_CTX } from "../../run/RunContext.js";
  *  tool returning a JSON array hands the model. That receiver is the whole point of this file. */
 const run = (code: string, bindings: Record<string, unknown> = {}) =>
   execState(code, {
-    env: mintFrame(
-      inferenceEnv,
-      "listalike-exhaustion",
-      Object.fromEntries(Object.entries(bindings).map(([k, v]) => [k, jsToScheme(CONSTANT_CTX, v)])),
-    ) });
+    env: inferenceEnv.child("listalike-exhaustion", Object.fromEntries(Object.entries(bindings).map(([k, v]) => [k, jsToScheme(CONSTANT_CTX, v)]))) });
 
 const out = async (code: string, bindings: Record<string, unknown> = {}) => {
   const { values } = await run(code, bindings);

@@ -12,7 +12,6 @@
 // handler). The auxiliary keywords `else`/`=>` survive hygiene because evalCond/evalCase
 // match them by `.literal()` (the un-renamed name), not the renamed symbol description.
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../env/AmbientRuntime.js";
 import { execOverFrame as exec } from "../../eval/generator-exec.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";
@@ -27,11 +26,11 @@ const repr = (rs: readonly unknown[]) => String(rs[rs.length - 1]);
 
 describe("cond/case/when/unless — special forms that are first-class keywords", () => {
   it("alias a control form: (define c cond) → c IS cond", async () => {
-    expect(val(await exec(`(define c cond) (c (#f 1) (#t 2) (else 3))`, { env: mintFrame(sandboxedEnv, "cf1") }))).toBe(2);
+    expect(val(await exec(`(define c cond) (c (#f 1) (#t 2) (else 3))`, { env: sandboxedEnv.child("cf1") }))).toBe(2);
   });
 
   it("alias when: (define w when) → w IS when", async () => {
-    expect(val(await exec(`(define w when) (w #t 41 42)`, { env: mintFrame(sandboxedEnv, "cf2") }))).toBe(42);
+    expect(val(await exec(`(define w when) (w #t 41 42)`, { env: sandboxedEnv.child("cf2") }))).toBe(42);
   });
 
   it("user syntax-rules macro expanding to `when` resolves the keyword", async () => {
@@ -39,7 +38,7 @@ describe("cond/case/when/unless — special forms that are first-class keywords"
       (define-syntax twice-when
         (syntax-rules () ((twice-when t a) (when t (+ a a)))))
       (twice-when #t 21)`;
-    expect(val(await exec(src, { env: mintFrame(sandboxedEnv, "cf3") }))).toBe(42);
+    expect(val(await exec(src, { env: sandboxedEnv.child("cf3") }))).toBe(42);
   });
 
   it("user macro expanding to `cond` with else — else survives hygiene (.literal() match)", async () => {
@@ -48,7 +47,7 @@ describe("cond/case/when/unless — special forms that are first-class keywords"
         (syntax-rules ()
           ((classify n) (cond ((< n 0) 'neg) ((= n 0) 'zero) (else 'pos)))))
       (classify 5)`;
-    expect(repr(await exec(src, { env: mintFrame(sandboxedEnv, "cf4") }))).toBe("pos");
+    expect(repr(await exec(src, { env: sandboxedEnv.child("cf4") }))).toBe("pos");
   });
 
   it("user macro expanding to `case` with => and else — both auxiliary keywords survive hygiene", async () => {
@@ -57,6 +56,6 @@ describe("cond/case/when/unless — special forms that are first-class keywords"
         (syntax-rules ()
           ((bucket k) (case k ((1 2 3) => (lambda (x) (* x 100))) (else 'big)))))
       (bucket 2)`;
-    expect(val(await exec(src, { env: mintFrame(sandboxedEnv, "cf5") }))).toBe(200);
+    expect(val(await exec(src, { env: sandboxedEnv.child("cf5") }))).toBe(200);
   });
 });

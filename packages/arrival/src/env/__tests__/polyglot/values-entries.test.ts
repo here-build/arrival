@@ -14,7 +14,6 @@
 // entries mismatch or an order flip cannot hide behind a "looks reasonable" assertion.
 import { describe, expect, it } from "vitest";
 
-import { mintFrame } from "../../AmbientRuntime.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { execOverFrame as exec, execStateOverFrame as execState } from "../../../eval/generator-exec.js";
@@ -29,7 +28,7 @@ import { loaderFromResolver } from "../../../loader/loader.js";
 let scratchCounter = 0;
 /** Every fixture gets its own frame name — cheap, avoids any risk of cross-case bleed. */
 function envWithObj(obj: SchemeValue): ResolvingAmbient {
-  return mintFrame(inferenceEnv, `values-entries-${scratchCounter++}`, { obj });
+  return inferenceEnv.child(`values-entries-${scratchCounter++}`, { obj });
 }
 
 /** The oracle walk: one `@keys` call, then one `@` per key, driven from the TEST side so the
@@ -72,7 +71,7 @@ async function mintDict(pairs: Record<string, number>): Promise<SchemeValue> {
   const args = Object.entries(pairs)
     .map(([k, v]) => `${JSON.stringify(k)} ${v}`)
     .join(" ");
-  const state = await execState(`(dict ${args})`, { env: mintFrame(inferenceEnv, `dict-mint-${scratchCounter++}`) });
+  const state = await execState(`(dict ${args})`, { env: inferenceEnv.child(`dict-mint-${scratchCounter++}`) });
   return state.values[0]!;
 }
 
@@ -177,7 +176,7 @@ describe("@values / @entries — term-less receiver ⇒ empty vector (absence is
   ];
 
   it.each(TERMLESS)("%s: @values, @entries, and @keys are all empty", async (_label, litExpr) => {
-    const env = mintFrame(inferenceEnv, `termless-${scratchCounter++}`);
+    const env = inferenceEnv.child(`termless-${scratchCounter++}`);
     const keysLen = await execState(`(let ((obj ${litExpr})) (vector-length (@keys obj)))`, { env });
     expect(Number(keysLen.values[0])).toBe(0);
     const valuesLen = await execState(`(let ((obj ${litExpr})) (vector-length (@values obj)))`, { env });

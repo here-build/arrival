@@ -13,14 +13,13 @@
  * sub-evaluations receive their parent as the second arg to enter().
  */
 import { beforeAll, describe, expect, it } from "vitest";
+import type { EnvWithInternals } from "../env/AmbientRuntime.js";
 import { exec, execStateOverFrame } from "../eval/generator-exec.js";
 import { freshEnv } from "./_fresh-env.js";
 import type { ResolvingAmbient } from "../env/AmbientRuntime.js";
 import type { APair } from "../values/primitives/APair.js";
 import { ANativeProcedure } from "../values/primitives/ANativeProcedure.js";
 import { AExact } from "../values/primitives/AExact.js";
-// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue, mintFrame } from "../env/AmbientRuntime.js";
 
 let userEnv: ResolvingAmbient;
 beforeAll(async () => {
@@ -134,17 +133,13 @@ describe("evaluation tap", () => {
     const pending = new Promise<unknown>((r) => {
       resolveAsync = r;
     });
-    const env = mintFrame(userEnv, "tap-async-test");
+    const env = userEnv.child("tap-async-test") as EnvWithInternals<ResolvingAmbient>;
     // W8: ANativeProcedure (returns a Promise of a scheme value) — bare fns are doored.
-    bindValue(
-      env,
-      "await-this",
-      new ANativeProcedure({
+    env.bind("await-this", new ANativeProcedure({
         name: "await-this",
         arity: { min: 0, max: 0 },
         contract: undefined,
-        impl: () => pending.then((v) => new AExact(v as number)) as never }),
-    );
+        impl: () => pending.then((v) => new AExact(v as number)) as never }));
 
     const { events, tap } = recorder();
     // execState (COMPLEX tier): this test only cares about tap enter/exit accounting.

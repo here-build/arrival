@@ -13,20 +13,16 @@
 //      a plain unbound-variable error from user code.
 //   4. `Vocabulary.degraded` enumerates the missing keys (design doc
 //      symbol-define-static-program-validation.md §3.7).
-
 import { describe, expect, it } from "vitest";
-
 import { exec, execState, execInFrame } from "../../eval/generator-exec.js";
 import { toJS } from "../../membrane/membrane.js";
 import type { SchemeValue } from "../../values/types.js";
 import { EnvCapability } from "../../common/capability.js";
 import { buildVocabulary } from "../../env/vocabulary.js";
 import invariant from "tiny-invariant";
-// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue, AmbientRuntime, type ResolvingAmbient } from "../../env/AmbientRuntime.js";
+import { AmbientRuntime, type EnvWithInternals, type ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
 import { AString } from "../../values/primitives/AString.js";
-
 import { arrivalLoaderCapability } from "../loader-capability.js";
 import { contentsToText, loaderFromResolver } from "../loader.js";
 import type { RunEnv } from "../loader.js";
@@ -126,15 +122,12 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
             // door exactly as capability.ts's apply does (same instanceof narrow).
             // W8: ANativeProcedure, not a bare host fn.
             invariant(env instanceof AmbientRuntime, "registry pack expects a real env");
-            bindValue(
-              env,
-              "greeting-of",
-              new ANativeProcedure({
+            const writable = env as EnvWithInternals<ResolvingAmbient>;
+            writable.bind("greeting-of", new ANativeProcedure({
                 name: "greeting-of",
                 arity: { min: 0, max: 0 },
                 contract: undefined,
-                impl: () => new AString("hi") }),
-            );
+                impl: () => new AString("hi") }));
           } },
       ],
     ]);

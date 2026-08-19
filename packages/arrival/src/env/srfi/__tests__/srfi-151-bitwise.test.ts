@@ -13,9 +13,7 @@
  * If a real bitwise demand ever lands and gets a split-limb implementation, these
  * rows flip from door-pins to behavior-pins — deliberately, in that commit.
  */
-
 import { execOverFrame } from "../../../eval/generator-exec.js";
-import { mintFrame } from "../../AmbientRuntime.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
 import { applyCapability } from "../../../__tests__/_fresh-env.js";
@@ -23,7 +21,7 @@ import { describe, expect, it } from "vitest";
 import srfi151 from "../srfi-151.js";
 
 async function mk() {
-  const env = mintFrame(sandboxedEnv, `s151-${Math.random().toString(36).slice(2)}`);
+  const env = sandboxedEnv.child(`s151-${Math.random().toString(36).slice(2)}`);
   await applyCapability(env, [srfi151]);
   return (src: string) => execOverFrame(src, { env });
 }

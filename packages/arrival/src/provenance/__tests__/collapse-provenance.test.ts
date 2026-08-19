@@ -7,8 +7,8 @@
  * is a SILENT provenance hole (no error, just a missing edge), so each structured
  * carrier gets a pin. See provenance-collapse.ts.
  */
-
 import { describe, it, expect } from "vitest";
+import type { EnvWithInternals, ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
@@ -19,8 +19,6 @@ import { APair } from "../../values/primitives/APair.js";
 import { AJSArray } from "../../membrane/AJSArray.js";
 import { nil } from "../../values/primitives/ANil.js";
 import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
-// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue, mintFrame } from "../../env/AmbientRuntime.js";
 
 // this helper/execState needs the eager oracle ON
 requireEagerOracle();
@@ -73,9 +71,9 @@ describe("collapseProvenance — sound over every structured carrier", () => {
 
 describe("string-append / join carry deep collapse-provenance end-to-end", () => {
   it("join over a list of stamped values keeps every point", async () => {
-    const env = mintFrame(inferenceEnv, "collapse-prov-join");
-    bindValue(env, "a", stamped("alpha", 1));
-    bindValue(env, "b", stamped("beta", 2));
+    const env = inferenceEnv.child("collapse-prov-join") as EnvWithInternals<ResolvingAmbient>;
+    env.bind("a", stamped("alpha", 1));
+    env.bind("b", stamped("beta", 2));
     // execState (COMPLEX tier): asserts box discipline + provenance (RULINGS.md R1).
     const [r] = (await execState(`(join "," (list a b))`, { env })).values;
     expect(r).toBeInstanceOf(AString);
@@ -83,9 +81,9 @@ describe("string-append / join carry deep collapse-provenance end-to-end", () =>
   });
 
   it("string-append over a nested collapse keeps every point", async () => {
-    const env = mintFrame(inferenceEnv, "collapse-prov-append");
-    bindValue(env, "a", stamped("alpha", 1));
-    bindValue(env, "b", stamped("beta", 2));
+    const env = inferenceEnv.child("collapse-prov-append") as EnvWithInternals<ResolvingAmbient>;
+    env.bind("a", stamped("alpha", 1));
+    env.bind("b", stamped("beta", 2));
     const [r] = (await execState(`(string-append "x:" (join "," (list a b)))`, { env })).values;
     expect(r).toBeInstanceOf(AString);
     expect(sorted((r as AString).provenance as Set<number>)).toEqual([1, 2]);

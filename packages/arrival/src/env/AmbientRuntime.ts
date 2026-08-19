@@ -24,20 +24,15 @@ function ownProps(obj: object): (string | symbol)[] {
   return [...(Object.keys(obj) as (string | symbol)[]), ...Object.getOwnPropertySymbols(obj)];
 }
 
-/**
- * RAW frame minters — module-internal, NOT barrel-exported (unlike {@link bindValue},
- * which gained the one sanctioned `host-internals` re-export named at its own doc — see
- * S2b). Constructor arm is not on the public type; assigned from each
- * class's static block (only scope a protected constructor is callable from).
- * Production birth: {@link mintFrame} (subtype-preserving child) or null-parent here
- * (isolated root). Storage-law tests reach these raws for exact chain shapes.
- */
-export let mintPlainFrame!: (
+/** File-local constructor captures — protected ctor is only callable from each class's
+ *  static block. {@link AmbientRuntime.root} / {@link AmbientRuntime.child} are the
+ *  public-to-internals birth doors. */
+let mintPlainFrame!: (
   name?: string | symbol,
   bindings?: Record<string | symbol, AmbientValue>,
   parent?: AmbientRuntime | null,
 ) => AmbientRuntime;
-export let mintResolvingFrame!: (
+let mintResolvingFrame!: (
   name?: string | symbol,
   bindings?: Record<string | symbol, AmbientValue>,
   parent?: AmbientRuntime | null,
@@ -61,11 +56,37 @@ export let mintResolvingFrame!: (
  * (common/scheme-env.ts), never this class. Name is deliberate: not "Scope"
  * ({@link LexicalScope}) or "Frame".
  *
- * HERMETIC FROM JS (docs/environments.md §HERMETIC). No public birth: no `inherit()` /
- * `merge()`, no public constructor arm. Frame birth is module-internal
- * {@link mintFrame} / {@link mintPlainFrame} / {@link mintResolvingFrame} — same
- * not-exported discipline as {@link bindValue}.
+ * HERMETIC FROM JS (docs/environments.md §HERMETIC). `SchemeEnv` is the hermetic JS
+ * face — read-only: `get`/`registerResolver`/`list`/`allBoundNames`, no `set`, no
+ * `inherit`, no `merge`. Frame birth is {@link AmbientRuntime.child} / {@link AmbientRuntime.root}
+ * (and the {@link ResolvingAmbient} overrides). Storage write lives on the prototype at
+ * runtime but is **absent from this class type** — a public `LexicalScope.env` does not
+ * type `.bind`. Writers extend the declaration at the definition that intends to write
+ * (`scope as LexicalScopeWithInternals`, `env as EnvWithInternals`). After that,
+ * `.env.bind` / `.bind` is ordinary method use.
  */
+
+/**
+ * Privileged write face of a handle that has `.env` (`LexicalScope`, `Resolver`).
+ * Extends that handle with {@link EnvWithInternals} on `.env`. Fuse at the
+ * definition that intends to write — see {@link LexicalScopeWithInternals}.
+ */
+export interface LexicalScopeInternals<E extends AmbientRuntime = AmbientRuntime> {
+  readonly env: EnvWithInternals<E>;
+}
+
+/**
+ * A frame extended with the privileged write. `bind` is not on {@link AmbientRuntime}'s
+ * type (so a public `.env` cannot call it). Assign at the definition that intends to write:
+ *   `const env = parent.child("frame") as EnvWithInternals`
+ * Then `env.bind` is in type. Each such annotation is an access site.
+ *
+ * This is `T & { bind }` — an extension, not a visibility change — so `as EnvWithInternals`
+ * overlaps directly.
+ */
+export type EnvWithInternals<T extends AmbientRuntime = AmbientRuntime> = T & {
+  bind(name: BindingName, value: AmbientValue): void;
+};
 export class AmbientRuntime {
   // Outside the AValue/ArrivalError families (interop-access.ts FAMILY RULEs); own stamp.
   static [INTEROP_BOUNDARY] = true;
@@ -82,9 +103,31 @@ export class AmbientRuntime {
     public __parent__: AmbientRuntime | null = null,
   ) {}
 
-  /** Capture the protected constructor for the raw minter; public type has no birth arm. */
   static {
     mintPlainFrame = (name, bindings, parent) => new AmbientRuntime(name, bindings, parent);
+  }
+
+  /** Null-parent plain frame. Isolated root — no `__parent__`. */
+  static root(
+    name?: string | symbol,
+    bindings?: Record<string | symbol, AmbientValue>,
+  ): AmbientRuntime {
+    return mintPlainFrame(name, bindings, null);
+  }
+
+  /**
+   * Fresh child of this frame. Subtype-preserving: a {@link ResolvingAmbient} parent
+   * yields a resolver-capable child; a plain parent yields a plain lexical frame.
+   */
+  child(this: ResolvingAmbient, name?: string | symbol, bindings?: Record<string | symbol, AmbientValue>): ResolvingAmbient;
+  child(name?: string | symbol, bindings?: Record<string | symbol, AmbientValue>): AmbientRuntime;
+  child(
+    name: string | symbol = `child of ${String(this.__name__) || "unknown"}`,
+    bindings: Record<string | symbol, AmbientValue> = {},
+  ): AmbientRuntime {
+    return this instanceof ResolvingAmbient
+      ? mintResolvingFrame(name, bindings, this)
+      : mintPlainFrame(name, bindings, this);
   }
 
   list(): (string | symbol)[] {
@@ -121,8 +164,8 @@ export class AmbientRuntime {
 
   /**
    * Read face — INVARIANT DOOR (docs/environments.md §HERMETIC): storage is inside the
-   * membrane; writers box before {@link bindValue}. A raw JS scalar on read means a writer
-   * bypassed the membrane — teach and refuse, never silently re-box.
+   * membrane; writers box before {@link AmbientRuntime.bind}. A raw JS scalar on read
+   * means a writer bypassed the membrane — teach and refuse, never silently re-box.
    *
    * APair: cycle-mark + quote so host/hygiene reads get DATA the evaluator won't
    * re-evaluate (read-settling, not membrane coercion).
@@ -160,6 +203,86 @@ export class AmbientRuntime {
   }
 }
 
+/**
+ * THE ONE storage write. Not on {@link AmbientRuntime}'s type — a public `.env`
+ * cannot call it. The fused {@link EnvWithInternals} / {@link LexicalScopeWithInternals}
+ * extend the declaration with `bind`; `as EnvWithInternals` at the write's
+ * definition is the access site.
+ *
+ * Legitimate writers, restated as FAMILIES (audit S2a):
+ *
+ *   • evaluator / hygiene frame binds — `define`/let/lambda/letrec/catch, PLUS
+ *     `env/macros/macros.ts`'s merge-frame gensym hoist (tagged at its own write site:
+ *     an evaluator-frame-family write authored from an env pack file, not an assembly
+ *     write — see P6).
+ *   • assembly / chain seeding — capability assembly (symbol bind + define-bake Pass 2),
+ *     `env/vocabulary.ts`'s bake-env mirror, `env/assemble-run.ts`'s prelude-seed /
+ *     prelude-defines binds, `eval/generator-exec.ts`'s chain-frame / inference-env binds.
+ *   • replay / γ ingress — `provenance/hermetic-env.ts` and `provenance/gamma.ts` bind
+ *     recorded ingress into a fresh hermetic scope under region discipline (the env ⇄
+ *     provenance charter, `docs/strata.md` §5); `provenance/replay.ts` playback-frame
+ *     op registration binds an already-minted ARosettaProcedure.
+ *   • mid-run prelude overlay — `loader/loader-capability.ts`'s `require`/`extension`
+ *     surface binds a discarded child prelude scope (R12: invocation survives, reference
+ *     does not).
+ *   • replay-scope post-hoc bind — `@inhuman.tools/arrival-provenance`'s `buildUneval`
+ *     (`analysis/uneval.ts`) binds a finished run's output as `result` on the live
+ *     `LexicalScope.env` rather than re-executing it (audit S2b).
+ *
+ * CARVE-OUTS (in the AmbientValue union, not isSchemeValue):
+ *   • `Error` — catch-frame bind of a raised condition (R7RSError extends host `Error`,
+ *     not AValue)
+ *   • `RegExp` — syntax-rules literal pattern stored as itself
+ *
+ * Raw JS is refused. Box at the writer (`jsToScheme` / `symbol.value`).
+ * Bare host functions are DOORED. Env-resident callables are ACallable values.
+ * Replay playback mints ARosettaProcedure before this door.
+ *
+ * SANCTIONED RAW `__env__` READERS outside this class (audit S2c — the `.get()` door
+ * above throws `RawCrossingError` on a raw JS scalar; these three bypass it on purpose):
+ *   • `env/vocabulary.ts` — reads the just-bound entry back (`bakeEnv.__env__[name]`)
+ *     because vocabulary must hold the chain-lookup SHAPE, and `.get()` would quote a
+ *     `APair` for host consumption — the wrong shape here (stated at its own call site).
+ *   • `env/assemble-run.ts` / `loader/loader-capability.ts` — copy a prelude frame's OWN
+ *     already-bound names into the run's define frame (stated at each call site).
+ *   • `oracle/env.ts` — Σ's static callability probe reads `frame.__env__[id]` directly so
+ *     a malformed raw scalar (a writer bug) degrades to "not callable" instead of crashing
+ *     introspection; see the sanction comment at that file for why rerouting through
+ *     `_lookupWithResolvers` would NOT be behavior-identical (audit S3).
+ */
+function bind(this: AmbientRuntime, name: BindingName, value: AmbientValue): void {
+  const keyName = String(name instanceof ASymbol ? name.__name__ : name instanceof AString ? name.valueOf() : name);
+
+  if (typeof value === "function") {
+    throw new TypeError(
+      `bind: bare host function refused for "${keyName}" — mint an ANativeProcedure / ARosettaProcedure (hostFnToCallable) instead`,
+    );
+  }
+
+  if (!isSchemeValue(value) && !(value instanceof Error) && !(value instanceof RegExp)) {
+    throw new TypeError(
+      `bind: raw JS ${typeof value} refused for "${keyName}" — env storage is inside the membrane; box at the writer (jsToScheme / symbol.value)`,
+    );
+  }
+
+  let key: string | symbol;
+  if (name instanceof ASymbol) {
+    key = name.__name__;
+  } else if (name instanceof AString) {
+    key = name.valueOf();
+  } else {
+    key = name;
+  }
+  this.__env__[key as string] = value;
+}
+
+Object.defineProperty(AmbientRuntime.prototype, "bind", {
+  value: bind,
+  writable: false,
+  enumerable: false,
+  configurable: false,
+});
+
 /** JS leaf types that must never surface from inside the membrane. */
 function isRawJsScalar(value: unknown): value is string | number | bigint | boolean {
   const t = typeof value;
@@ -184,84 +307,10 @@ export function assertResolvedBinding(value: unknown, name: string | symbol, res
 }
 
 /**
- * THE ONE storage write — module-internal, NOT a method (docs/environments.md §HERMETIC:
- * no JS-side write surface). ONE sanctioned barrel re-export exists: `host-internals/index.ts`
- * re-exports {@link bindValue} directly (its own header names the reason) for
- * `@inhuman.tools/arrival-provenance`'s `buildUneval` (`analysis/uneval.ts`), which mutates
- * a replay scope's `result` binding post-hoc rather than re-executing it (audit S2b).
- * Every other consumer reaches this door only through the membrane (rosetta bind, evaluator
- * frame bind) — never a second barrel.
- *
- * Legitimate writers, restated as FAMILIES (audit S2a — the enumeration had drifted to
- * three items while five families actually write here):
- *
- *   • evaluator / hygiene frame binds — `define`/let/lambda/letrec/catch, PLUS
- *     `env/macros/macros.ts`'s merge-frame gensym hoist (tagged at its own write site:
- *     an evaluator-frame-family write authored from an env pack file, not an assembly
- *     write — see P6).
- *   • assembly / chain seeding — capability assembly (symbol bind + define-bake Pass 2),
- *     `env/vocabulary.ts`'s bake-env mirror, `env/assemble-run.ts`'s prelude-seed /
- *     prelude-defines binds, `eval/generator-exec.ts`'s chain-frame / inference-env binds.
- *   • replay / γ ingress — `provenance/hermetic-env.ts` and `provenance/gamma.ts` bind
- *     recorded ingress into a fresh hermetic scope under region discipline (the env ⇄
- *     provenance charter, `docs/strata.md` §5); `provenance/replay.ts` playback-frame
- *     op registration binds an already-minted ARosettaProcedure.
- *   • mid-run prelude overlay — `loader/loader-capability.ts`'s `require`/`extension`
- *     surface binds a discarded child prelude scope (R12: invocation survives, reference
- *     does not).
- *
- * CARVE-OUTS (in the AmbientValue union, not isSchemeValue):
- *   • `Error` — catch-frame bind of a raised condition (R7RSError extends host `Error`,
- *     not AValue)
- *   • `RegExp` — syntax-rules literal pattern stored as itself
- *
- * Raw JS is refused. Box at the writer (`jsToScheme` / `symbol.value`).
- * Bare host functions are DOORED. Env-resident callables are ACallable values.
- * Replay playback mints ARosettaProcedure before this door.
- *
- * SANCTIONED RAW `__env__` READERS outside this class (audit S2c — the `.get()` door
- * above throws `RawCrossingError` on a raw JS scalar; these three bypass it on purpose):
- *   • `env/vocabulary.ts` — reads the just-`bindValue`d entry back (`bakeEnv.__env__[name]`)
- *     because vocabulary must hold the chain-lookup SHAPE, and `.get()` would quote a
- *     `APair` for host consumption — the wrong shape here (stated at its own call site).
- *   • `env/assemble-run.ts` / `loader/loader-capability.ts` — copy a prelude frame's OWN
- *     already-`bindValue`d names into the run's define frame (stated at each call site).
- *   • `oracle/env.ts` — Σ's static callability probe reads `frame.__env__[id]` directly so
- *     a malformed raw scalar (a writer bug) degrades to "not callable" instead of crashing
- *     introspection; see the sanction comment at that file for why rerouting through
- *     `_lookupWithResolvers` would NOT be behavior-identical (audit S3).
- */
-export function bindValue(env: AmbientRuntime, name: BindingName, value: AmbientValue): void {
-  const keyName = String(name instanceof ASymbol ? name.__name__ : name instanceof AString ? name.valueOf() : name);
-
-  if (typeof value === "function") {
-    throw new TypeError(
-      `bindValue: bare host function refused for "${keyName}" — mint an ANativeProcedure / ARosettaProcedure (hostFnToCallable) instead`,
-    );
-  }
-
-  if (!isSchemeValue(value) && !(value instanceof Error) && !(value instanceof RegExp)) {
-    throw new TypeError(
-      `bindValue: raw JS ${typeof value} refused for "${keyName}" — env storage is inside the membrane; box at the writer (jsToScheme / symbol.value)`,
-    );
-  }
-
-  let key: string | symbol;
-  if (name instanceof ASymbol) {
-    key = name.__name__;
-  } else if (name instanceof AString) {
-    key = name.valueOf();
-  } else {
-    key = name;
-  }
-  env.__env__[key as string] = value;
-}
-
-/**
  * BAKED-ROOT specialization — the only place fallback resolvers live
  * (docs/environments.md §PRELUDE). Production producers: kernel prelude-scope resolver
  * and pack-declared `EnvCapability.resolvers`. Apply targets stay `ResolvingAmbient`
- * (`mintFrame` preserves parent class, so a capability-augmented base stays resolver-capable).
+ * (`.child` preserves parent class, so a capability-augmented base stays resolver-capable).
  *
  * Plain lexical frames are deliberately NOT `ResolvingAmbient` — only the baked capability
  * base is ambient middleware. A glass caller that wants a resolver layer builds that layer
@@ -272,6 +321,21 @@ export class ResolvingAmbient extends AmbientRuntime implements SchemeEnv {
 
   static {
     mintResolvingFrame = (name, bindings, parent) => new ResolvingAmbient(name, bindings, parent);
+  }
+
+  /** Null-parent resolving frame. Isolated root — no `__parent__`. */
+  static override root(
+    name?: string | symbol,
+    bindings?: Record<string | symbol, AmbientValue>,
+  ): ResolvingAmbient {
+    return mintResolvingFrame(name, bindings, null);
+  }
+
+  override child(
+    name: string | symbol = `child of ${String(this.__name__) || "unknown"}`,
+    bindings: Record<string | symbol, AmbientValue> = {},
+  ): ResolvingAmbient {
+    return mintResolvingFrame(name, bindings, this);
   }
 
   /** Register a fallback resolver; tried in order when normal lookup fails. */
@@ -322,37 +386,6 @@ export class ResolvingAmbient extends AmbientRuntime implements SchemeEnv {
 
     return this.__parent__?._lookupWithResolvers(name, ctx);
   }
-}
-
-/**
- * THE ONE frame-birth door — module-internal, NOT barrel-exported, NOT a method
- * (docs/environments.md §HERMETIC: public `inherit()`/`merge()` would be capability
- * composition in disguise). Subtype-preserving: ResolvingAmbient parent → resolver-capable
- * child; plain parent → plain lexical frame.
- *
- * Live callers (all inside the membrane): root layering (env-roots / inference-env);
- * assembly (`generator-exec` exec-capabilities base); evaluator frame chain
- * (`Resolver.child` / merge frame / `LexicalScope.child` — including provenance replay
- * frames via `LexicalScope.child`).
- */
-export function mintFrame(
-  parent: ResolvingAmbient,
-  name?: string | symbol,
-  bindings?: Record<string, AmbientValue>,
-): ResolvingAmbient;
-export function mintFrame(
-  parent: AmbientRuntime,
-  name?: string | symbol,
-  bindings?: Record<string, AmbientValue>,
-): AmbientRuntime;
-export function mintFrame(
-  parent: AmbientRuntime,
-  name: string | symbol = `child of ${String(parent.__name__) || "unknown"}`,
-  bindings: Record<string, AmbientValue> = {},
-): AmbientRuntime {
-  return parent instanceof ResolvingAmbient
-    ? mintResolvingFrame(name, bindings, parent)
-    : mintPlainFrame(name, bindings, parent);
 }
 
 /**

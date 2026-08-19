@@ -24,8 +24,8 @@
  *      environment-privatization census this file pins.
  *   3. write-into-scope + override VALUE-INJECTION parity — the census's original claim
  *      (§II.1's table: `env.set(name, jsToScheme(ctx, dataValue))` → `override`) is re-pinned
- *      against the surviving mechanisms: a direct `bindValue` onto a `LexicalScope.fresh()`
- *      root (the module-internal write door, unchanged by this cut) vs `define/overridable` +
+ *      against the surviving mechanisms: a direct `env.bind` onto a `LexicalScope.fresh()`
+ *      root (the privileged write on the concrete internals class) vs `define/overridable` +
  *      a plain `{ capabilities: [overridableCapability], config: { params } }` run (the
  *      `override` sugar's own underlying capability, still fully present — only the
  *      `ExecOptions.override` CONVENIENCE wrapper died). Both paths must produce identical
@@ -36,16 +36,14 @@
 import { describe, expect, it } from "vitest";
 import * as arrival from "../../index.js";
 import { exec, execState } from "../../eval/generator-exec.js";
-import { LexicalScope } from "../../eval/LexicalScope.js";
+import { LexicalScope, type LexicalScopeWithInternals, type SessionScope } from "../../eval/LexicalScope.js";
 import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";
 import { jsToScheme } from "../../membrane/rosetta.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { overridableCapability } from "../../env/overridable/overridable.js";
 // In-package test: internal-module access (AmbientRuntime is not barrel-exported).
-import { AmbientRuntime, mintFrame } from "../../env/AmbientRuntime.js";
-// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue } from "../../env/AmbientRuntime.js";
+import { AmbientRuntime } from "../../env/AmbientRuntime.js";
 
 describe("V0 pin — barrel surface", () => {
   it("global_env / env are no longer barrel-exported (V1 zero-consumer cut)", () => {
@@ -106,18 +104,18 @@ describe("V0 pin — barrel surface", () => {
 });
 
 describe("write-into-scope + override VALUE-INJECTION parity", () => {
-  it("the internal write (bindValue + jsToScheme) and define/overridable + a capability config produce IDENTICAL values", async () => {
+  it("the internal write (env.bind + jsToScheme) and define/overridable + a capability config produce IDENTICAL values", async () => {
     const users = [
       { id: "alice", priority: 15 },
       { id: "bob", priority: 5 },
     ];
 
-    // The manual membrane path — reachable only through the module-internal `bindValue` (V7:
+    // The manual membrane path — reachable only through `AmbientRuntime.bind` (V7:
     // the public `env.set` is hard-deleted) onto a plain `LexicalScope.fresh()` root — no glass
-    // needed at all, since `bindValue` writes onto ANY concrete frame the vocabulary path's
+    // needed at all, since `.bind` writes onto ANY concrete frame the vocabulary path's
     // `scope` option accepts.
-    const manualScope = LexicalScope.fresh("parity-manual");
-    bindValue(manualScope.env, "users", jsToScheme(CONSTANT_CTX, users, {}));
+    const manualScope = LexicalScope.fresh("parity-manual") as LexicalScopeWithInternals<SessionScope>;
+    manualScope.env.bind("users", jsToScheme(CONSTANT_CTX, users, {}));
     const { values: manualValues } = await execState(`(map (lambda (u) (:id u)) users)`, { scope: manualScope });
 
     // The declared-parameter path — `define/overridable` + the overridable capability's OWN
@@ -140,8 +138,8 @@ describe("write-into-scope + override VALUE-INJECTION parity", () => {
   it("...and IDENTICAL provenance — both paths mint through jsToScheme(CONSTANT_CTX, …), so both are provenance-empty (run-neutral)", async () => {
     const priority = 15;
 
-    const manualScope = LexicalScope.fresh("parity-provenance-manual");
-    bindValue(manualScope.env, "priority", jsToScheme(CONSTANT_CTX, priority, {}));
+    const manualScope = LexicalScope.fresh("parity-provenance-manual") as LexicalScopeWithInternals<SessionScope>;
+    manualScope.env.bind("priority", jsToScheme(CONSTANT_CTX, priority, {}));
     const { values: manualValues } = await execState(`(* priority 2)`, { scope: manualScope });
 
     const { values: declaredValues } = await execState(
@@ -165,13 +163,13 @@ describe("write-into-scope + override VALUE-INJECTION parity", () => {
 describe("V6 pin — no public host-fn registration method on AmbientRuntime / SchemeEnv", () => {
   // Public defineRosetta is gone on the class and the SchemeEnv contract (compile error
   // everywhere). Playback-frame registration binds an ARosettaProcedure through
-  // bindValue — never a public defineRosetta / barrel export.
+  // `env.bind` — never a public defineRosetta / barrel export.
   it("AmbientRuntime.prototype.defineRosetta no longer exists", () => {
     expect("defineRosetta" in AmbientRuntime.prototype).toBe(false);
   });
 
   it("a live env instance answers to `get` but not `defineRosetta` (nor `set`/`inherit`/`merge` — the V7/V8 rows)", () => {
-    const env = mintFrame(sandboxedEnv, "pin-host-fn-reg-gone");
+    const env = sandboxedEnv.child("pin-host-fn-reg-gone");
     expect(typeof env.get).toBe("function");
     expect("defineRosetta" in env).toBe(false);
   });
@@ -191,13 +189,13 @@ describe("V7 pin — the MONADIC contract (hermetic-Environment ruling, 2026-07-
   //   3. a resolver answering a raw JS scalar doors at the probe — resolvers box at
   //      their own boundary, under the resolving read's ctx.
   it("no env instance answers `set` — not a fresh session root, not a base child", () => {
-    expect("set" in mintFrame(sandboxedEnv, "pin-monadic")).toBe(false);
+    expect("set" in sandboxedEnv.child("pin-monadic")).toBe(false);
     expect("set" in LexicalScope.fresh("pin-monadic-fresh").env).toBe(false);
     expect("set" in AmbientRuntime.prototype).toBe(false);
   });
 
   it("raw JS in storage doors on read (a writer bypassed the membrane) — box() re-boxing is dead", () => {
-    const env = mintFrame(sandboxedEnv, "pin-raw-storage");
+    const env = sandboxedEnv.child("pin-raw-storage");
     // The only way raw JS can still land in storage is a direct record poke — the exact
     // bypass the door exists to catch.
     env.__env__["smuggled"] = 42 as never;
@@ -227,17 +225,17 @@ describe("V8 pin — MONADIC BIRTH (public inheritance dissolved, 2026-07-11)", 
   // EXTENDED from JS. Doctrine: every production inherit was capability composition in
   // disguise. Concretely pinned:
   //   1. `inherit` and `merge` are gone from the concrete class (no instance answers
-  //      them) — frame birth is the module-internal `mintFrame`/`mintPlainFrame`/
-  //      `mintResolvingFrame` (AmbientRuntime.ts, never barrel-exported), reached only by
-  //      the assembly machinery, the evaluator, and the replay ingress;
+  //      them) — frame birth is `AmbientRuntime.child` / `.root` (and the
+  //      `ResolvingAmbient` overrides), reached only by holding the concrete internals
+  //      class: assembly machinery, the evaluator, and the replay ingress;
   //   2. no bindings-record ingestion from JS — the constructor arm left the public
-  //      type (protected ctor; the raw minters are the static-block escape), and the
-  //      one public frame-birth door, `LexicalScope.child`, takes NO bindings record;
+  //      type (protected ctor), and the one public frame-birth door,
+  //      `LexicalScope.child`, takes NO bindings record;
   //   3. `LexicalScope.define` / `Resolver.define` are gone (ruling A on the
   //      session-owner question — no convenience carve-out): the evaluator's
-  //      frame-binds go through the internal `bindValue` directly.
+  //      frame-binds go through `env.bind` directly.
   it("no env instance answers `inherit` or `merge` — not a session root, not a base child", () => {
-    const child = mintFrame(sandboxedEnv, "pin-birth");
+    const child = sandboxedEnv.child("pin-birth");
     expect("inherit" in child).toBe(false);
     expect("merge" in child).toBe(false);
     expect("inherit" in AmbientRuntime.prototype).toBe(false);

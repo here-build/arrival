@@ -16,7 +16,6 @@
 // (mirrors every other cross-suite fixture bound this way).
 import { describe, expect, it } from "vitest";
 
-import { mintFrame } from "../../AmbientRuntime.js";
 import { execOverFrame as exec, execStateOverFrame as execState } from "../../../eval/generator-exec.js";
 import { inferenceEnv } from "../../inference-env.js";
 import { jsToScheme } from "../../../membrane/rosetta.js";
@@ -25,7 +24,7 @@ import { PortabilityError } from "../../../errors.js";
 
 let scratchCounter = 0;
 const emptyArrayEnv = () =>
-  mintFrame(inferenceEnv, `null-strict-${scratchCounter++}`, { xs: jsToScheme(CONSTANT_CTX, []) });
+  inferenceEnv.child(`null-strict-${scratchCounter++}`, { xs: jsToScheme(CONSTANT_CTX, []) });
 
 describe("null? on an empty BORROWED array — the loose/strict divergence", () => {
   it("loose (default): (null? xs) on an empty borrowed array is #t", async () => {
@@ -53,7 +52,7 @@ describe("null? on an empty BORROWED array — the loose/strict divergence", () 
   });
 
   it("a NON-EMPTY borrowed array never reaches the tolerance — it is not null? in EITHER mode", async () => {
-    const env = mintFrame(inferenceEnv, `null-strict-nonempty-${scratchCounter++}`, {
+    const env = inferenceEnv.child(`null-strict-nonempty-${scratchCounter++}`, {
       xs: jsToScheme(CONSTANT_CTX, [1]) });
     const [loose] = await exec(`(null? xs)`, { env, strict: false });
     expect(loose).toBe(false);
@@ -64,37 +63,37 @@ describe("null? on an empty BORROWED array — the loose/strict divergence", () 
 
 describe("null? disjointness that must NOT regress: list vs vector never converge outside the borrowed-array tolerance", () => {
   it("(null? (list)) is #t in BOTH modes — the real empty list", async () => {
-    const looseEnv = mintFrame(inferenceEnv, `null-list-loose-${scratchCounter++}`);
+    const looseEnv = inferenceEnv.child(`null-list-loose-${scratchCounter++}`);
     const [loose] = await exec(`(null? (list))`, { env: looseEnv, strict: false });
     expect(loose).toBe(true);
-    const strictEnv = mintFrame(inferenceEnv, `null-list-strict-${scratchCounter++}`);
+    const strictEnv = inferenceEnv.child(`null-list-strict-${scratchCounter++}`);
     const [strict] = await exec(`(null? (list))`, { env: strictEnv, strict: true });
     expect(strict).toBe(true);
   });
 
   it("(null? '()) is #t in BOTH modes — the literal empty list", async () => {
-    const looseEnv = mintFrame(inferenceEnv, `null-quote-loose-${scratchCounter++}`);
+    const looseEnv = inferenceEnv.child(`null-quote-loose-${scratchCounter++}`);
     const [loose] = await exec(`(null? '())`, { env: looseEnv, strict: false });
     expect(loose).toBe(true);
-    const strictEnv = mintFrame(inferenceEnv, `null-quote-strict-${scratchCounter++}`);
+    const strictEnv = inferenceEnv.child(`null-quote-strict-${scratchCounter++}`);
     const [strict] = await exec(`(null? '())`, { env: strictEnv, strict: true });
     expect(strict).toBe(true);
   });
 
   it("(null? (vector)) is #f in BOTH modes — a genuine scheme vector is never the empty list", async () => {
-    const looseEnv = mintFrame(inferenceEnv, `null-vector-ctor-loose-${scratchCounter++}`);
+    const looseEnv = inferenceEnv.child(`null-vector-ctor-loose-${scratchCounter++}`);
     const [loose] = await exec(`(null? (vector))`, { env: looseEnv, strict: false });
     expect(loose).toBe(false);
-    const strictEnv = mintFrame(inferenceEnv, `null-vector-ctor-strict-${scratchCounter++}`);
+    const strictEnv = inferenceEnv.child(`null-vector-ctor-strict-${scratchCounter++}`);
     const [strict] = await exec(`(null? (vector))`, { env: strictEnv, strict: true });
     expect(strict).toBe(false);
   });
 
   it("(null? #()) is #f in BOTH modes — the #() LITERAL form of the same disjointness", async () => {
-    const looseEnv = mintFrame(inferenceEnv, `null-vector-lit-loose-${scratchCounter++}`);
+    const looseEnv = inferenceEnv.child(`null-vector-lit-loose-${scratchCounter++}`);
     const [loose] = await exec(`(null? #())`, { env: looseEnv, strict: false });
     expect(loose).toBe(false);
-    const strictEnv = mintFrame(inferenceEnv, `null-vector-lit-strict-${scratchCounter++}`);
+    const strictEnv = inferenceEnv.child(`null-vector-lit-strict-${scratchCounter++}`);
     const [strict] = await exec(`(null? #())`, { env: strictEnv, strict: true });
     expect(strict).toBe(false);
   });

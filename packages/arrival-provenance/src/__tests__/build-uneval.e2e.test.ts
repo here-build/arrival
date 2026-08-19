@@ -16,14 +16,13 @@
  *   - opts: `{ scope, result, trace, source, forms }` — NOT `env`
  *   - `forms: []` → output form is `lastTopLevelForm(trace)` (identity-safe)
  *   - re-parse of `source` for forms is an identity pitfall (points/outputNode ===)
- *   - `uneval` mutates scope via bindValue("result", …) — never re-exec on that scope
+ *   - `uneval` mutates scope via `scope.env.bind("result", …)` — never re-exec on that scope
  *
  * Residual honesty: re-exec re-invokes live Rosetta ports. Deterministic fixtures match;
  * non-deterministic sources would diverge without frozen-ingress (Phase 3, out of scope).
  */
 import { EnvCapability, exec, execState, LexicalScope } from "@inhuman.tools/arrival";
 import { describe, expect, it } from "vitest";
-
 import { buildUneval, lastTopLevelForm } from "../analysis.js";
 import { EvalTrace } from "../index.js";
 

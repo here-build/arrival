@@ -77,6 +77,10 @@ export { createNoteSink, createDisplaySink, type NoteSink, type DisplaySink } fr
 // Structural env contract a pack/consumer types against (never the concrete
 // `AmbientRuntime` class).
 export { type SchemeEnv } from "../common/scheme-env.js";
+// Privileged write face — `bind` is protected on AmbientRuntime. Widen at the
+// definition that intends to write (`scope as LexicalScopeWithInternals`).
+export { type EnvWithInternals, type LexicalScopeInternals } from "../env/AmbientRuntime.js";
+export { type LexicalScopeWithInternals } from "../eval/LexicalScope.js";
 
 // Mid-run assembly kernel: `createRuntimeAssembler` applies host-registered `EnvPack`s
 // onto an already-live env (backing a host-armed `configuration.extensionRegistry` —
@@ -88,10 +92,3 @@ export {
   type PreludeBindTarget,
   type RuntimeAssembler,
 } from "../common/kernel.js";
-
-// `bindValue` — binds a name into a live `AmbientRuntime` env. The value is already
-// scheme-world (`AmbientValue`); raw JS is refused.
-// Cross-package door for arrival-provenance's `analysis/uneval.ts` (`buildUneval`) —
-// arms `uneval`'s re-execution scope by binding the run's output as `result` before
-// evaluating a selector as one more tapped step.
-export { bindValue } from "../env/AmbientRuntime.js";

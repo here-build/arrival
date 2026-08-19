@@ -24,7 +24,7 @@
 import { AValue } from "../values/primitives/AValue.js";
 import { ANativeProcedure } from "../values/primitives/ANativeProcedure.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
-import { type BindingName, AmbientRuntime, type AmbientValue, mintFrame } from "../env/AmbientRuntime.js";
+import { type BindingName, AmbientRuntime, type AmbientValue } from "../env/AmbientRuntime.js";
 import type { RunContext } from "../run/RunContext.js";
 import type { SchemeValue } from "../values/types.js";
 import { LexicalScope } from "./LexicalScope.js";
@@ -238,11 +238,11 @@ export class Resolver {
    * Fresh nested lexical frame carrying the SAME capability base —
    * `this.capabilities` propagates verbatim (never re-derived from the child
    * env), so the macro/hygiene seam keeps a stable globalRoot across expansion
-   * frames. Frame mint is module-internal mintFrame; this class has no define —
-   * evaluator frame-binds go straight through bindValue.
+   * frames. Frame mint is `this.env.child`; this class has no define —
+   * evaluator frame-binds go straight through `env.bind`.
    */
   child(name?: string | symbol, kind?: ScopeKind): Resolver {
-    return new Resolver(mintFrame(this.env, name), this.capabilities, kind);
+    return new Resolver(this.env.child(name), this.capabilities, kind);
   }
 
   /** Whether `name` is bound in THIS frame (not the chain). ≡ `env.has`. */

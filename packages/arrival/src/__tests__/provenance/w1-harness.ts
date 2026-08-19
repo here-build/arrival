@@ -34,8 +34,7 @@
  * separately asserting the trade IS visible (a proper superset, not vacuously equal)
  * on the pure-mux rows where the arms deliberately diverge.
  */
-import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
-import { AmbientRuntime, mintFrame } from "../../env/AmbientRuntime.js";
+import type { AmbientRuntime, ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { execStateOverFrame } from "../../eval/generator-exec.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { AString } from "../../values/primitives/AString.js";
@@ -144,7 +143,7 @@ export async function runEagerCone(
   sources: Record<string, SourceShape>,
   registry: SourceRegistry,
 ): Promise<Set<string>> {
-  const env = mintFrame(baseEnv, `w1-agreement-${Math.random().toString(36).slice(2)}`);
+  const env = baseEnv.child(`w1-agreement-${Math.random().toString(36).slice(2)}`);
   for (const [op, shape] of Object.entries(sources)) await registry.register(env, op, shape);
   // this helper/execState needs the eager oracle ON
   const savedOracle = isEagerProvenanceOracleEnabled();

@@ -52,7 +52,7 @@
 //     `deps`-declaring, per the wave's "verified together on the merged tree
 //     by the last lander" protocol, H1's own commit message). `freshEnv()`
 //     assembles the SAME `BASE_PACKS` set through the SAME `assembleEnv`
-//     entry point, just onto a private `mintFrame(global_env)` layer instead of
+//     entry point, just onto a private `global_env.child()` layer instead of
 //     the process-wide memoized singleton — behaviorally identical once the
 //     singleton's transient conflict resolves, and robust to it either way.
 //   ROW 4 — the validator's macro-firewall row still holds: the SAME programs
@@ -61,7 +61,6 @@
 //     inside a bound form's body is the documented `binder` blind spot — it
 //     surfaces only at runtime, not as a StaticValidationError.
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../AmbientRuntime.js";
 import syntaxPack from "../syntax.js";
 import { execOverFrame as exec, execInFrame } from "../../../eval/generator-exec.js";
 import { StaticValidationError } from "../../../static-validation/validate-program.js";

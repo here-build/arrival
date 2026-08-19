@@ -12,7 +12,6 @@
 // keeping the oracle free of a runtime dependency on the evaluator.
 //
 // `signatureOf` is T — not modelled here; returns null (graceful per the contract).
-
 import type { AmbientRuntime } from "../env/AmbientRuntime.js";
 import type { Macro } from "../eval/Macro.js";
 import type { Syntax } from "../eval/Syntax.js";
@@ -64,7 +63,7 @@ export function makeOracleEnv(env: AmbientRuntime): OracleEnvΣ {
     let frame: AmbientRuntime | null = env;
     while (frame) {
       // RAW `__env__` READ — sanctioned, not rerouted through `.get()` / `_lookupWithResolvers`
-      // (audit S3; writer-side half of this sanction is AmbientRuntime.ts's `bindValue`
+      // (audit S3; writer-side half of this sanction is AmbientRuntime.ts's `.bind`
       // preamble, S2c). Two reasons, both behavior changes if rerouted:
       //   1. `.get()` throws `RawCrossingError` on a raw JS scalar (a writer bug) — a static
       //      probe should degrade that name to "unbound," not crash introspection.

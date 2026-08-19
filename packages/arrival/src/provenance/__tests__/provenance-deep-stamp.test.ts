@@ -14,8 +14,8 @@
  * `(@ obj :x)` and `(:x obj)` route through the same `.get`, so the cached
  * AValue makes `(eq? (@ obj :x) (@ obj :x))` return #t.
  */
-
 import { describe, expect, it } from "vitest";
+import type { EnvWithInternals, ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { EMPTY_PROVENANCE } from "../../values/primitives/AValue.js";
 import { schemeFalse, schemeTrue } from "../../values/primitives/ABool.js";
@@ -29,8 +29,6 @@ import { jsToScheme } from "../../membrane/rosetta.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { execOverFrame as exec } from "../../eval/generator-exec.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
-// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue, mintFrame } from "../../env/AmbientRuntime.js";
 
 const PROV = new Set<number>([42]);
 
@@ -183,9 +181,9 @@ describe("dict-ref / @ / :key all route through SchemeJSObject.get", () => {
     // Both `@` and `:key` dispatch into `obj.get(...)` for SchemeJSObject
     // targets — the wrapper's cache makes the two surfaces return the same
     // AValue instance, so `(eq? (@ obj :x) (:x obj))` holds.
-    const env = mintFrame(inferenceEnv, "test");
+    const env = inferenceEnv.child("test") as EnvWithInternals<ResolvingAmbient>;
     const wrapper = new AJSObject({ x: "hello" });
-    bindValue(env, "obj", wrapper);
+    env.bind("obj", wrapper);
     const [viaAt] = await exec("(@ obj :x)", { env });
     const [viaColon] = await exec("(:x obj)", { env });
     expect(viaAt).toBe(viaColon);

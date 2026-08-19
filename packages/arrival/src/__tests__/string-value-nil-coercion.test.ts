@@ -11,10 +11,9 @@
 // vector, object, dict) — leaf/scalar kinds keep `String(x)`.
 import { describe, expect, it } from "vitest";
 import { execStateOverFrame as execState } from "../eval/generator-exec.js";
-import { mintFrame } from "../env/AmbientRuntime.js";
 import { inferenceEnv } from "../env/inference-env.js";
 
-const run = (code: string) => execState(code, { env: mintFrame(inferenceEnv, "string-value-nil-coercion") });
+const run = (code: string) => execState(code, { env: inferenceEnv.child("string-value-nil-coercion") });
 
 describe("B1 — stringValue throws on container/nil kinds instead of silently coercing", () => {
   it.each([

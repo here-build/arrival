@@ -8,15 +8,13 @@
 // preludeOnly SEPARATION, define bake, memo identity, prelude COLLECTION dedup) — this file is
 // the EXECUTION-side proof: single-execution-per-run, preludeOnly overlay visibility +
 // lexical-capture, prelude-define discard, and per-run effect freshness.
-
 import { describe, expect, it } from "vitest";
-
 import { EnvCapability } from "../../common/capability.js";
 import type { EvalPreludeInto, EvalSchemeInto } from "../../common/scheme-env.js";
 import { buildVocabulary } from "../vocabulary.js";
 import { assembleRun } from "../assemble-run.js";
 import { exec, execInFrame } from "../../eval/generator-exec.js";
-import { bindValue, mintResolvingFrame, isAmbientRuntime } from "../AmbientRuntime.js";
+import {  isAmbientRuntime, ResolvingAmbient , type EnvWithInternals } from "../AmbientRuntime.js";
 import { UnboundVariableError } from "../../errors.js";
 import type { SchemeValue } from "../../values/types.js";
 import { ACallable, applyCallback } from "../../values/primitives/ACallable.js";
@@ -106,9 +104,9 @@ describe("assembleRun — registration-conflict door as the execution-dedup dete
     // preludeOnly overlaid on a fresh discarded frame) and run the SAME prelude text AGAIN
     // against the SAME runCtx.
     const vocab = await buildVocabulary([registry], undefined, realEvalScheme);
-    const preludeScope = mintResolvingFrame("test-simulated-regression");
-    for (const [name, value] of vocab.map) bindValue(preludeScope, name, value);
-    for (const [name, value] of vocab.preludeOnly) bindValue(preludeScope, name, value);
+    const preludeScope = ResolvingAmbient.root("test-simulated-regression") as EnvWithInternals<ResolvingAmbient>;
+    for (const [name, value] of vocab.map) preludeScope.bind(name, value);
+    for (const [name, value] of vocab.preludeOnly) preludeScope.bind(name, value);
 
     await expect(realEvalPrelude(preludeScope, vocab.preludes[0]!.text, runCtx)).rejects.toThrow(/cannot register yaml twice/);
   });

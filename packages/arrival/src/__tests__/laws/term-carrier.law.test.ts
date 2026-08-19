@@ -71,7 +71,6 @@
  *     exits by identity (see the toJS case's own comment).
  */
 import { describe, it, expect } from "vitest";
-import { mintFrame } from "../../env/AmbientRuntime.js";
 import { TERMS } from "./_tables/terms.js";
 import { CARRIERS, type CarrierRow } from "./_tables/carriers.js";
 import { mint3, mint3Pair, elementBoxes, deepIds, containerProv, toPlain } from "./_tables/fixtures.js";
@@ -90,14 +89,14 @@ requireEagerOracle();
  *  (execState) — this file asserts box discipline/provenance on the return, a
  *  COMPLEX-tier concern (RULINGS.md R1), not the SIMPLE tier's plain-JS exit. */
 async function run1(env: ResolvingAmbient, c: SchemeValue, src: string): Promise<SchemeValue> {
-  const [r] = (await execState(src, { env: mintFrame(env, "call-site", { c }) })).values;
+  const [r] = (await execState(src, { env: env.child("call-site", { c }) })).values;
   return r;
 }
 
 /** Runs `src` against a law env with two containers bound as `c1`/`c2`. Boxed-result
  *  tier (execState) — see `run1`. */
 async function run2(env: ResolvingAmbient, c1: SchemeValue, c2: SchemeValue, src: string): Promise<SchemeValue> {
-  const [r] = (await execState(src, { env: mintFrame(env, "call-site", { c1, c2 }) })).values;
+  const [r] = (await execState(src, { env: env.child("call-site", { c1, c2 }) })).values;
   return r;
 }
 

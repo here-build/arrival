@@ -26,10 +26,8 @@
 //
 // Clause 3 is not a formality. It would be trivial to "fix" clauses 1 and 2 by making the verbs
 // throw more eagerly, and thereby destroy the only answer they exist to give.
-
 import { describe, expect, it } from "vitest";
 
-import { mintFrame } from "../env/AmbientRuntime.js";
 import { execStateOverFrame as execState } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../env/inference-env.js";
 import { toJS } from "../index.js";
@@ -41,11 +39,7 @@ import { CONSTANT_CTX } from "../run/RunContext.js";
 const run = async (code: string, bindings: Record<string, unknown> = {}): Promise<string> => {
   try {
     const { values } = await execState(code, {
-      env: mintFrame(
-        inferenceEnv,
-        "search-honesty",
-        Object.fromEntries(Object.entries(bindings).map(([k, v]) => [k, jsToScheme(CONSTANT_CTX, v)])),
-      ) });
+      env: inferenceEnv.child("search-honesty", Object.fromEntries(Object.entries(bindings).map(([k, v]) => [k, jsToScheme(CONSTANT_CTX, v)]))) });
     return `OK ${JSON.stringify(toJS(values[0], {}))}`;
   } catch (e) {
     return `DOOR ${e instanceof Error ? e.message : String(e)}`;

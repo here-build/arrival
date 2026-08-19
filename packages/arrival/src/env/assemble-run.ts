@@ -32,7 +32,6 @@
 // reusing call rebuilds nothing and re-preludes nothing (a second prelude pass would double-fire
 // its effects). The caller does not re-supply `(capabilities, config)`: the run it holds already
 // carries their product.
-
 import type { EnvCapability } from "../common/capability.js";
 import type { EvalPreludeInto, EvalSchemeInto } from "../common/scheme-env.js";
 import type { DisplaySink, NoteSink } from "../run/note-sink.js";
@@ -42,7 +41,7 @@ import type { ReadGuard } from "../run/read-guard.js";
 import type { ResourcePathLog } from "../run/resource-paths.js";
 import { RunContext, type MembraneClosure } from "../run/RunContext.js";
 import { buildVocabulary, type Vocabulary } from "./vocabulary.js";
-import { bindValue, mintResolvingFrame, type ResolvingAmbient } from "./AmbientRuntime.js";
+import { type EnvWithInternals, ResolvingAmbient } from "./AmbientRuntime.js";
 import invariant from "tiny-invariant";
 
 export interface AssembleRunOptions {
@@ -98,7 +97,7 @@ export function preludeDefinesOf(runCtx: RunContext): ResolvingAmbient | undefin
 export function ensurePreludeDefineFrame(runCtx: RunContext): ResolvingAmbient {
   let frame = preludeDefinesByRunCtx.get(runCtx);
   if (frame === undefined) {
-    frame = mintResolvingFrame("run-prelude-defines");
+    frame = ResolvingAmbient.root("run-prelude-defines");
     preludeDefinesByRunCtx.set(runCtx, frame);
   }
   return frame;
@@ -138,7 +137,7 @@ export async function assembleRun(opts: AssembleRunOptions): Promise<RunContext>
   // The run's prelude-define frame exists for EVERY owned mint (even a prelude-less
   // tuple): mid-run `(require/extension …)` may append extension-prelude defines later,
   // and the exec entry roots the user scope here unconditionally.
-  const defines = ensurePreludeDefineFrame(runCtx);
+  const defines = ensurePreludeDefineFrame(runCtx) as EnvWithInternals<ResolvingAmbient>;
 
   // Per-run prelude (module header). preludes already C3-ordered + identity-deduped.
   if (vocabulary.preludes.length > 0) {
@@ -155,18 +154,18 @@ export async function assembleRun(opts: AssembleRunOptions): Promise<RunContext>
     //   EVAL — a child the prelude TEXT evaluates against, so its `(define …)`s land
     //   separately from the seed; after the pass they are copied into the run's
     //   persistent define frame and become main-phase bindings.
-    const preludeSeed = mintResolvingFrame("assemble-run-prelude-seed");
-    for (const [name, value] of vocabulary.map) bindValue(preludeSeed, name, value);
-    for (const [name, value] of vocabulary.preludeOnly) bindValue(preludeSeed, name, value);
-    const preludeScope = mintResolvingFrame("assemble-run-prelude", {}, preludeSeed);
+    const preludeSeed = ResolvingAmbient.root("assemble-run-prelude-seed") as EnvWithInternals<ResolvingAmbient>;
+    for (const [name, value] of vocabulary.map) preludeSeed.bind(name, value);
+    for (const [name, value] of vocabulary.preludeOnly) preludeSeed.bind(name, value);
+    const preludeScope = preludeSeed.child("assemble-run-prelude");
     for (const { text } of vocabulary.preludes) {
       await opts.evalPrelude(preludeScope, text, runCtx);
     }
     // Persist the pass's defines. Own-record read, sanctioned here: `list()` is the
-    // frame's OWN names and the values were bound through `bindValue` (already boxed) —
+    // frame's OWN names and the values were bound through `.bind` (already boxed) —
     // same boundary narrow vocabulary.ts documents for its own raw reads.
     for (const name of preludeScope.list()) {
-      bindValue(defines, name, preludeScope.__env__[name]!);
+      defines.bind(name, preludeScope.__env__[name]!);
     }
   }
 

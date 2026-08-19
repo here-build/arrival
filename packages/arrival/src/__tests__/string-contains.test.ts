@@ -10,8 +10,8 @@
  * boolean (lineage erased) and `string-contains?` did not exist at all — an agent
  * reaching for it got `Unbound variable string-contains?`.
  */
-
 import { describe, it, expect } from "vitest";
+import type { EnvWithInternals, ResolvingAmbient } from "../env/AmbientRuntime.js";
 import { CONSTANT_CTX } from "../run/RunContext.js";
 import { execOverFrame, execStateOverFrame } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../env/inference-env.js";
@@ -19,8 +19,6 @@ import { AString } from "../values/primitives/AString.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AValue } from "../values/primitives/AValue.js";
 import { requireEagerOracle } from "./_require-eager-oracle.js";
-// In-package test: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue, mintFrame } from "../env/AmbientRuntime.js";
 
 // Q20b: string-contains's provenance assertions run real programs — force the
 // oracle ON for this file's lifetime.
@@ -34,7 +32,7 @@ const js = (x: unknown) => (x instanceof AValue ? x["arrival/toJS"]() : x);
 
 describe("string-contains? — boolean predicate", () => {
   it("true when present, false when absent", async () => {
-    const env = mintFrame(inferenceEnv, "string-contains-pred");
+    const env = inferenceEnv.child("string-contains-pred") as EnvWithInternals<ResolvingAmbient>;
     const [hit] = await execOverFrame('(string-contains? "research-Alloy.docx" "Alloy")', { env });
     const [miss] = await execOverFrame('(string-contains? "spoolsv.exe" "Alloy")', { env });
     expect(js(hit)).toBe(true);
@@ -42,8 +40,8 @@ describe("string-contains? — boolean predicate", () => {
   });
 
   it("carries the provenance of the searched string (grounded decision)", async () => {
-    const env = mintFrame(inferenceEnv, "string-contains-pred-prov");
-    bindValue(env, "name", stamped("Alloy.exe", 7));
+    const env = inferenceEnv.child("string-contains-pred-prov") as EnvWithInternals<ResolvingAmbient>;
+    env.bind("name", stamped("Alloy.exe", 7));
     // execState (COMPLEX tier): asserts box discipline directly (RULINGS.md R1).
     const [r] = (await execStateOverFrame('(string-contains? name "Alloy")', { env })).values;
     expect(r).toBeInstanceOf(AValue);
@@ -53,14 +51,14 @@ describe("string-contains? — boolean predicate", () => {
 
 describe("string-contains — SRFI-13 index-or-#f", () => {
   it("returns the index of the first occurrence", async () => {
-    const env = mintFrame(inferenceEnv, "string-contains-idx");
+    const env = inferenceEnv.child("string-contains-idx") as EnvWithInternals<ResolvingAmbient>;
     const [r] = (await execStateOverFrame('(string-contains "abcAlloy" "Alloy")', { env })).values;
     expect(r).toBeInstanceOf(AExact);
     expect(js(r)).toBe(3);
   });
 
   it("returns #f when absent (still truthy-correct: 0 is a real index)", async () => {
-    const env = mintFrame(inferenceEnv, "string-contains-miss");
+    const env = inferenceEnv.child("string-contains-miss") as EnvWithInternals<ResolvingAmbient>;
     const [miss] = await execOverFrame('(string-contains "abc" "Alloy")', { env });
     const [zero] = await execOverFrame('(string-contains "Alloy" "Alloy")', { env });
     expect(js(miss)).toBe(false);

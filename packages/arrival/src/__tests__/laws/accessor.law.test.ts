@@ -15,7 +15,6 @@
  * membrane's universal "absent" value), never `undefined`/a thrown error.
  */
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../env/AmbientRuntime.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { execOverFrame as exec, execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
@@ -36,7 +35,7 @@ describe("keyword-as-getter: (:key obj) reads obj[key]", () => {
   it("bare :keyword applies as a getter", async () => {
     const result = await execOne(
       "(:pasword obj)",
-      mintFrame(inferenceEnv, "keyword-accessor-getter", {
+      inferenceEnv.child("keyword-accessor-getter", {
         obj: jsToScheme(CONSTANT_CTX, { pasword: "swordfish" }) }),
     );
     expect(result.toString()).toBe("swordfish");
@@ -44,7 +43,7 @@ describe("keyword-as-getter: (:key obj) reads obj[key]", () => {
 
   it("a missing key reads as nil, not undefined or a thrown error", async () => {
     const obj = { name: "test" };
-    const env = mintFrame(inferenceEnv, "keyword-accessor-missing", {
+    const env = inferenceEnv.child("keyword-accessor-missing", {
       obj: jsToScheme(CONSTANT_CTX, obj) });
     const result = await execOneBoxed(`(:missing obj)`, env);
     expect(result.constructor.name).toBe("ANil");
@@ -58,7 +57,7 @@ describe("keyword-as-getter composes: it's ordinary callable data, so HOFs take 
       { id: "2", name: "Bob" },
       { id: "3", name: "Charlie" },
     ];
-    const env = mintFrame(inferenceEnv, "keyword-accessor-map", {
+    const env = inferenceEnv.child("keyword-accessor-map", {
       users: jsToScheme(CONSTANT_CTX, users) });
     expect(await execOne(`(map :name users)`, env)).toEqual(["Alice", "Bob", "Charlie"]);
   });
@@ -69,7 +68,7 @@ describe("keyword-as-getter composes: it's ordinary callable data, so HOFs take 
       { active: false, name: "Item 2" },
       { active: true, name: "Item 3" },
     ];
-    const env = mintFrame(inferenceEnv, "keyword-accessor-filter", {
+    const env = inferenceEnv.child("keyword-accessor-filter", {
       items: jsToScheme(CONSTANT_CTX, items) });
     const filtered = await execOne(`(filter :active items)`, env);
     expect(filtered).toHaveLength(2);
@@ -87,7 +86,7 @@ describe("adjacent reader case: a pipe-quoted symbol resolves as an ordinary var
   it("(list |24|) — |24| is a bound identifier, not a numeric literal", async () => {
     const result = await execOneBoxed(
       `(list |24|)`,
-      mintFrame(inferenceEnv, "pipe-symbol-variable", {
+      inferenceEnv.child("pipe-symbol-variable", {
         "24": jsToScheme(CONSTANT_CTX, "unqouted") }),
     );
     expect(result.car.toString()).toEqual("unqouted");

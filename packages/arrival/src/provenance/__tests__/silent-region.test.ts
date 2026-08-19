@@ -24,8 +24,7 @@
  * those, this file stays the Q15 smoke/discipline suite.
  */
 import { afterEach, describe, expect, it } from "vitest";
-import { mintFrame, type ResolvingAmbient } from "../../env/AmbientRuntime.js";
-
+import { type ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { execStateOverFrame } from "../../eval/generator-exec.js";
 import { EvalTrace } from "../../provenance/trace.js";
 import { inferenceEnv } from "../../env/inference-env.js";
@@ -98,7 +97,7 @@ describe("A. silent-region mode suppresses emission, never doors (§4 CHOSEN, ro
       expect(await wrapper(41)).toBe(41); // the real call still works, unaffected
       closeRegionScope(scope);
 
-      const env = mintFrame(inferenceEnv, "silent-mint");
+      const env = inferenceEnv.child("silent-mint");
       await registerSource(env);
       const trace = new EvalTrace();
       const result = await withRecordCoordinateAsync(RECORD_COORD, mintSink, () =>
@@ -129,7 +128,7 @@ describe("A. silent-region mode suppresses emission, never doors (§4 CHOSEN, ro
     await wrapper(41);
     closeRegionScope(scope);
 
-    const env = mintFrame(inferenceEnv, "loud-mint");
+    const env = inferenceEnv.child("loud-mint");
     await registerSource(env);
     const trace = new EvalTrace();
     await withRecordCoordinateAsync(RECORD_COORD, mintSink, () => execStateOverFrame("(fetch-item)", { env, tap: trace }));
@@ -163,7 +162,7 @@ describe("A. silent-region mode suppresses emission, never doors (§4 CHOSEN, ro
       await wrapper(1);
       closeRegionScope(scope);
 
-      const env = mintFrame(inferenceEnv, "silent-nested-mint");
+      const env = inferenceEnv.child("silent-nested-mint");
       await registerSource(env);
       const trace = new EvalTrace();
       await withRecordCoordinateAsync(
@@ -323,7 +322,7 @@ describe("C. glass whole-program replay — the SAME silent discipline generaliz
     const sink: EmissionSink = { store, payloads, regionId: "region-glass" };
 
     // Real run — mints one record.
-    const env1 = mintFrame(inferenceEnv, "glass-real-run");
+    const env1 = inferenceEnv.child("glass-real-run");
     await registerSource(env1);
     const trace1 = new EvalTrace();
     const real = await withRecordCoordinateAsync(RECORD_COORD, sink, () =>
@@ -339,7 +338,7 @@ describe("C. glass whole-program replay — the SAME silent discipline generaliz
     // penetration playback; the real penetration-cache machinery is later product
     // work per the task brief — this row pins only the discipline), run again under
     // a silent region, at the SAME coordinate a real drill-in would reuse.
-    const env2 = mintFrame(inferenceEnv, "glass-replay-run");
+    const env2 = inferenceEnv.child("glass-replay-run");
     await registerSource(env2);
     const trace2 = new EvalTrace();
     const replayed = await withSilentRegion(() =>

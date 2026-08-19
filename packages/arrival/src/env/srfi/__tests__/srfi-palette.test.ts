@@ -1,7 +1,6 @@
 // Unified SRFI palette — assemble each capability onto a real env and run one verb.
 import { toJS } from "../../../index.js";
 import { execOverFrame, execStateOverFrame } from "../../../eval/generator-exec.js";
-import { mintFrame } from "../../AmbientRuntime.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
 import { applyCapability } from "../../../__tests__/_fresh-env.js";
@@ -12,7 +11,6 @@ import { ZodTuple, type ZodOptional, type ZodTypeAny } from "zod";
 import type { SequenceSymbolDef } from "../../../common/symbols/_bake.js";
 import type { ANativeProcedure } from "../../../values/primitives/ANativeProcedure.js";
 import core from "../../core/core.js";
-
 import {
   allSrfi,
   srfi1,
@@ -33,7 +31,7 @@ import {
  *  available through `BASE_PACKS`'s own positional guarantee, which this per-pack STANDALONE
  *  fixture doesn't have. */
 async function withCap(cap: EnvCapability, name: string) {
-  const env = mintFrame(sandboxedEnv, name);
+  const env = sandboxedEnv.child(name);
   await applyCapability(env, [cap, core]);
   return async (src: string) => Number((await execOverFrame(src, { env }))[0]);
 }
@@ -64,7 +62,7 @@ describe("@inhuman.tools/arrival/srfi", () => {
     expect(await num("((cut + 1 <>) 5)")).toBe(6);
   });
   it("SRFI-8 receive is a multi-return purity door", async () => {
-    const env = mintFrame(sandboxedEnv, "s8");
+    const env = sandboxedEnv.child("s8");
     await applyCapability(env, [srfi8]);
     await expect(execOverFrame("(receive 1 2)", { env })).rejects.toThrow(
       /multiple-value returns are omitted|continuation arity|not available/,
@@ -98,7 +96,7 @@ describe("@inhuman.tools/arrival/srfi", () => {
 // Assembles srfi-1 EXPLICITLY (the accessors are not registered globally this round).
 describe("@inhuman.tools/arrival/srfi-1 — positional accessors", () => {
   async function accEnv() {
-    const env = mintFrame(sandboxedEnv, `s1acc-${Math.random().toString(36).slice(2)}`);
+    const env = sandboxedEnv.child(`s1acc-${Math.random().toString(36).slice(2)}`);
     await applyCapability(env, [srfi1]);
     const num = async (src: string) => Number((await execOverFrame(src, { env }))[0]);
     const raw = (src: string) => execOverFrame(src, { env });
@@ -206,7 +204,7 @@ describe("SRFI-95 sort — contract element precision", () => {
 
 describe("SRFI-95 sort — end-to-end behavior (previously uncovered via the builtin dispatch)", () => {
   async function sortEnv() {
-    const env = mintFrame(sandboxedEnv, `s95-${Math.random().toString(36).slice(2)}`);
+    const env = sandboxedEnv.child(`s95-${Math.random().toString(36).slice(2)}`);
     await applyCapability(env, [srfi95]);
     // execState (COMPLEX tier): toJS wants BOXED values — `exec` already unwraps.
     return async (src: string) => (await execStateOverFrame(src, { env })).values;

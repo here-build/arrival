@@ -3,12 +3,10 @@
 // see polyglot.ts's header for the full rationale).
 import { execState as bareExecState } from "../../../index.js";
 import { execStateOverFrame, type ExecOptionsOverFrame } from "../../../eval/generator-exec.js";
-import { mintFrame } from "../../AmbientRuntime.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
 import { applyCapability } from "../../../__tests__/_fresh-env.js";
 import { describe, expect, it } from "vitest";
-
 import polyglotLisp from "../../polyglot/polyglot-lisp.js";
 
 async function exec(code: string, options: ExecOptionsOverFrame) {
@@ -17,7 +15,7 @@ async function exec(code: string, options: ExecOptionsOverFrame) {
 
 describe("@inhuman.tools/arrival/polyglot-lisp", () => {
   it("mapcar / remove-if / remove-if-not run correctly assembled STANDALONE (no core dep needed)", async () => {
-    const env = mintFrame(sandboxedEnv, "polyglot-lisp-test");
+    const env = sandboxedEnv.child("polyglot-lisp-test");
     // Unlike its Clojure/Racket siblings, polyglot-lisp needs no dep on
     // scheme/polyglot (core) — nothing here reaches @/@?/@keys/dict/compose.
     await applyCapability(env, [polyglotLisp]);

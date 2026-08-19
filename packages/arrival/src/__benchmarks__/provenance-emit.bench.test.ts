@@ -22,7 +22,6 @@
  * emission CORE's own overhead.
  */
 import { describe, it, expect } from "vitest";
-
 import { emitFanInstantiation, emitIngressBinding, emitMint, emitMuxDecision, setEmissionEnabled } from "../provenance/store/emit.js";
 import { PayloadStoreFake, ProvenanceStoreFake } from "../provenance/store/fakes.js";
 import type { RecordId } from "../provenance/store/ids.js";
@@ -32,7 +31,6 @@ import { CONSTANT_CTX } from "../run/RunContext.js";
 import { setEagerProvenanceOracleEnabled, withInputProvenance } from "../values/op-helpers.js";
 import { jsToScheme } from "../membrane/rosetta.js";
 // In-package bench: the module-internal storage write (hermetic-Environment ruling — no public set).
-import { bindValue, mintFrame } from "../env/AmbientRuntime.js";
 
 const REGION = "bench-region";
 const ITERATIONS = 5000;
@@ -128,9 +126,9 @@ describe("Q20b — eager-oracle accumulation overhead: default-OFF vs forced-ON 
   const WARMUP_ITERATIONS = 500;
 
   async function runExecLoop(iterations: number): Promise<number> {
-    const env = mintFrame(inferenceEnv, `q20b-bench-${Math.random().toString(36).slice(2)}`);
-    bindValue(env, "a", jsToScheme(CONSTANT_CTX, 10, {}, new Set([100])));
-    bindValue(env, "b", jsToScheme(CONSTANT_CTX, 20, {}, new Set([200])));
+    const env = inferenceEnv.child(`q20b-bench-${Math.random().toString(36).slice(2)}`);
+    env.bind("a", jsToScheme(CONSTANT_CTX, 10, {}, new Set([100])));
+    env.bind("b", jsToScheme(CONSTANT_CTX, 20, {}, new Set([200])));
     const start = performance.now();
     for (let i = 0; i < iterations; i++) {
       await execState(`(string-append "sum=" (number->string (+ a (* b 2) ${i})))`, { env });

@@ -20,16 +20,13 @@
 // violation). So the canonical S-only reference (`analyzePrefix` from sift's prefix-oracle.ts) is
 // reproduced here VERBATIM, attributed below. The corpus is the single-sourced bridge: if sift's
 // reference and this inlined copy ever drift, the fix is to re-sync this block from prefix-oracle.ts.
-
 import { ANativeProcedure } from "../values/primitives/ANativeProcedure.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-
 import { scan, structuralScanner, makeOracle, makeOracleEnv } from "../oracle/index.js";
-import { AmbientRuntime, mintFrame, mintPlainFrame } from "../env/AmbientRuntime.js";
-import type { AmbientValue } from "../env/AmbientRuntime.js";
+import { AmbientRuntime, type AmbientValue } from "../env/AmbientRuntime.js";
 
 // ---------------------------------------------------------------------------------------------
 // CANONICAL REFERENCE — verbatim copy of sift/src/sampler/prefix-oracle.ts `analyzePrefix`.
@@ -337,14 +334,10 @@ function sigmaEnv(): AmbientRuntime {
     contract: undefined,
     impl: (args) => args[0] as never,
   });
-  return mintPlainFrame(
-    "sigma-test",
-    {
+  return AmbientRuntime.root("sigma-test", {
       car: fn,
       "+": fn,
-      flows: 42 as unknown as AmbientValue },
-    null,
-  );
+      flows: 42 as unknown as AmbientValue });
 }
 
 describe("oracle Layer-Σ — graceful degradation when no env is injected", () => {
@@ -384,8 +377,8 @@ describe("oracle Layer-Σ — env-backed validSymbols (live when an env is given
   });
 
   it("makeOracleEnv enumerates the parent chain and resolves nearest-binding callability", () => {
-    const root = mintPlainFrame("root", { car: ((x: unknown) => x) as unknown as AmbientValue }, null);
-    const child = mintFrame(root, "child", { y: 7 as unknown as AmbientValue });
+    const root = AmbientRuntime.root("root", { car: ((x: unknown) => x) as unknown as AmbientValue });
+    const child = root.child("child", { y: 7 as unknown as AmbientValue });
     const oe = makeOracleEnv(child);
     expect(oe.boundSymbols().has("car")).toBe(true); // inherited from parent
     expect(oe.boundSymbols().has("y")).toBe(true); // own frame

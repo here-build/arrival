@@ -19,7 +19,7 @@
 //   `deps` names the five packs whose free names this pack's bodies actually call
 //   (`cons`/`list`/`apply`/`length` — scheme/lists; `pair?`/`null?` — scheme/equality;
 //   `string-append` — scheme/strings; `=` — scheme/numeric; `error` — scheme/r7rs/exceptions).
-// ROW 2 — the §2.1 bake FV law: this pack lowers standalone (`mintFrame(await nativeOnlyRoot(), ...)`, a bare
+// ROW 2 — the §2.1 bake FV law: this pack lowers standalone (`await nativeOnlyRoot().child(...)`, a bare
 //   root with none of BASE_PACKS' `.scm` preludes applied) — the FV law is a STATIC allowlist
 //   check (`ownNames(K) ∪ exports(deps) ∪ SPECIAL_FORMS/KEYWORD_SYNTAX ∪ resolver-synth`),
 //   independent of what the runtime `env` happens to already have bound, so this is the real
@@ -30,8 +30,6 @@
 //   message instead of an opaque `car`-on-wrong-shape crash deep in the body (§4.2's "a
 //   wrong-arity call... now fails at the contract boundary, with a better message").
 import { describe, expect, it } from "vitest";
-
-
 import { exec } from "../../../index.js";
 import { execInFrame } from "../../../eval/generator-exec.js";
 import { buildVocabulary } from "../../vocabulary.js";

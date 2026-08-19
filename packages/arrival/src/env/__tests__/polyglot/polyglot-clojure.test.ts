@@ -3,12 +3,10 @@
 // 2026-07-10 dialect split — see polyglot.ts's header for the full rationale).
 import { execState as bareExecState } from "../../../index.js";
 import { execStateOverFrame, type ExecOptionsOverFrame } from "../../../eval/generator-exec.js";
-import { mintFrame } from "../../AmbientRuntime.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
 import { applyCapability } from "../../../__tests__/_fresh-env.js";
 import { describe, expect, it } from "vitest";
-
 import polyglotClojure from "../../polyglot/polyglot-clojure.js";
 
 async function exec(code: string, options: ExecOptionsOverFrame) {
@@ -17,7 +15,7 @@ async function exec(code: string, options: ExecOptionsOverFrame) {
 
 describe("@inhuman.tools/arrival/polyglot-clojure", () => {
   it("installs the threading macros and comp; they run correctly assembled STANDALONE", async () => {
-    const env = mintFrame(sandboxedEnv, "polyglot-clojure-test");
+    const env = sandboxedEnv.child("polyglot-clojure-test");
     // Assembling JUST polyglot-clojure pulls in scheme/polyglot (core), srfi-1,
     // and the R7RS natives transitively via its own declared `deps` (C3 dep walk)
     // — the same standalone-composition story polyglot.test.ts's pre-split

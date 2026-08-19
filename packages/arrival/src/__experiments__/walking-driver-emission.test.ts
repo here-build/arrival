@@ -27,10 +27,9 @@
  * the driver tap to advance the ambient coordinate per designated enter.
  */
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-
 import { ensureInferenceEnvPopulated, execStateOverFrame, parse } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../env/inference-env.js";
-import { mintFrame, type ResolvingAmbient } from "../env/AmbientRuntime.js";
+import { type ResolvingAmbient } from "../env/AmbientRuntime.js";
 import { EnvCapability } from "../common/capability.js";
 import { applyCapability } from "../__tests__/_fresh-env.js";
 import { toJS } from "../membrane/membrane.js";
@@ -115,7 +114,7 @@ describe("walking-driver spike: skeleton from parse, meat from the live walk", (
       ordinalPath: rootOrdinalPath(sourceIdx),
       regionEpoch: EPOCH };
 
-    const env = mintFrame(inferenceEnv, "walking-driver-spike");
+    const env = inferenceEnv.child("walking-driver-spike");
     await registerSource(env);
 
     const enters: string[] = [];
@@ -172,7 +171,7 @@ describe("walking-driver spike: skeleton from parse, meat from the live walk", (
       ordinalPath: [0],
       regionEpoch: EPOCH };
 
-    const env = mintFrame(inferenceEnv, "walking-driver-spike-off");
+    const env = inferenceEnv.child("walking-driver-spike-off");
     await registerSource(env);
 
     const enters: string[] = [];

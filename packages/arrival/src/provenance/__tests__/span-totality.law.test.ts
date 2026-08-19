@@ -18,7 +18,6 @@
  * swap/or shapes the syntax-rules trio exercises.
  */
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../env/AmbientRuntime.js";
 import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { EvalTrace } from "../../provenance/trace.js";
@@ -38,7 +37,7 @@ function spanless(value: unknown, out: APair<any, any>[] = [], seen = new Set<un
 }
 
 const run = async (src: string) => {
-  const env = mintFrame(inferenceEnv, `span-totality-${Math.random().toString(36).slice(2)}`);
+  const env = inferenceEnv.child(`span-totality-${Math.random().toString(36).slice(2)}`);
   const { values } = await execState(src, { env });
   return values[values.length - 1]; // last top-level form's value (defines yield void)
 };
@@ -76,7 +75,7 @@ describe("W0 span totality — structural (quoted template skeletons are fully l
 describe("W0 span totality — behavioral (expanded forms are trace-visible)", () => {
   it("a macro expanding to (+ a b) yields a tracked, located `+` node in the trace", async () => {
     const trace = new EvalTrace();
-    const env = mintFrame(inferenceEnv, "span-totality-trace");
+    const env = inferenceEnv.child("span-totality-trace");
     const { values } = await execState(
       `
       (define-syntax my-add (syntax-rules () ((_ a b) (+ a b))))

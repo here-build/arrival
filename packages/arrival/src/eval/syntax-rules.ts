@@ -32,10 +32,10 @@
 // R7RS §4.3 syntax-rules; ellipsis sub-patterns per SRFI-46.
 // ----------------------------------------------------------------------
 import invariant from "tiny-invariant";
-import { bindValue } from "../env/AmbientRuntime.js";
 import type { RunContext } from "../run/RunContext.js";
 import { chargeHeap } from "../heap-budget.js";
 import type { Resolver } from "./Resolver.js";
+import type { LexicalScopeWithInternals } from "./LexicalScope.js";
 import type { Capabilities } from "./Capabilities.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
@@ -587,7 +587,7 @@ interface TransformOptions {
 export function transform_syntax({
   bindings,
   expr,
-  scope: defChild,
+  scope: rawDefChild,
   symbols,
   names,
   ellipsis: ellipsis_symbol,
@@ -595,6 +595,7 @@ export function transform_syntax({
 }: TransformOptions) {
   // `scope` is the def-time syntax-child RESOLVER (`defResolver.child("syntax")`); the
   // engine consults its refFrame/lookupSettled/define instead of raw env .ref/.get/.set.
+  const defChild = rawDefChild as LexicalScopeWithInternals<Resolver>;
   const gensyms: Record<string | symbol, ASymbol> = {};
 
   function transform(symbol: SchemeValue): SchemeValue {
@@ -649,7 +650,7 @@ export function transform_syntax({
       // template-introduced (unbound) identifier yields undefined and nothing is copied.
       const value = defChild.lookupSettled(name);
       if (value !== undefined) {
-        bindValue(defChild.env, gensym_name, value);
+        defChild.env.bind(gensym_name, value);
       }
       // Record the rename so restore_data_gensyms can un-rename free output symbols post-eval.
       names.push({

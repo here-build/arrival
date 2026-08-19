@@ -73,7 +73,7 @@ reproduced here — the point is that every pair below is checked, not narrated)
 - `env → membrane`: `env/AmbientRuntime.ts` — `import { isSchemeValue } from "../membrane/membrane.js"`
 - `membrane → env`: `membrane/membrane.ts` — `import { AmbientRuntime, isAmbientRuntime } from "../env/AmbientRuntime.js"` (see D4 below for *why*)
 - `env → provenance`: `env/srfi/srfi-28.ts` (and `srfi-13.ts`, `polyglot/polyglot.ts`) — `import { collapseProvenance, taintString } from "../../provenance/provenance-collapse.js"`
-- `provenance → env`: `provenance/gamma.ts` — `import { bindValue } from "../env/AmbientRuntime.js"`
+- `provenance → env`: `provenance/hermetic-env.ts` — `import { isAmbientRuntime, type AmbientValue } from "../env/AmbientRuntime.js"`
 - `values → provenance`: `values/primitives/APair.ts` — `import { collapseProvenance } from "../../provenance/provenance-collapse.js"`
 - `provenance → values`: `provenance/gamma.ts` — `import type { SchemeValue } from "../values/types.js"`
 - `common/symbols → provenance`: `common/symbols/define-bake.ts` — `import { freeVars } from "../../provenance/wireframe/free-vars.js"`
@@ -145,10 +145,10 @@ this shape"). Both directions carry their own charter comment, not a shared one:
   inference-stamped values into one flat carrier, and without re-stamping the provenance
   graph loses the edge back to every folded member (see `provenance-collapse.ts`'s header
   for the full argument).
-- **provenance-side**: `provenance/gamma.ts` (γ = `hermeticApply`) and
-  `provenance/hermetic-env.ts` (the hermetic assembler for replay) import
-  `env/AmbientRuntime.ts` (`bindValue`, `isAmbientRuntime`), `env/assemble-run.ts`
-  (`assembleRun`), and `env/base-roster.ts` — both files' headers state the composition:
+- **provenance-side**: `provenance/hermetic-env.ts` (the hermetic assembler for replay)
+  imports `env/AmbientRuntime.ts` (`isAmbientRuntime`, `AmbientValue`) and
+  `env/assemble-run.ts` (`assembleRun`); `provenance/gamma.ts` (γ = `hermeticApply`)
+  imports `env/base-roster.ts` — both files' headers state the composition:
   γ-replay is "not a second env stack", it is `assembleRun`/`execState`/`LexicalScope`
   reused verbatim under region discipline (`docs/PROVENANCE.md` §4 owns the "replay" word
   for this half; `execution.md` §11 TWO-REPLAYS cross-links, does not duplicate).

@@ -10,7 +10,6 @@
 // catches a non-keyword head by name. That win lands when the fallback is removed (the
 // macro-cut pass, once every special form is a keyword marker).
 import { describe, expect, it } from "vitest";
-import { mintFrame } from "../../env/AmbientRuntime.js";
 import { toJS } from "../../index.js";
 import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
@@ -18,7 +17,7 @@ import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";
 
 describe("kernel keywords — value-carried special-form dispatch", () => {
   it("(define => lambda) — the alias IS lambda (aliasing falls out of value-carried dispatch)", async () => {
-    const env = mintFrame(sandboxedEnv, "kw-alias-lambda");
+    const env = sandboxedEnv.child("kw-alias-lambda");
     // execState (COMPLEX tier): toJS wants BOXED values — `exec` already unwraps.
     const { values: results } = await execState(
       `
@@ -31,7 +30,7 @@ describe("kernel keywords — value-carried special-form dispatch", () => {
   });
 
   it("define and let are first-class keyword values too — bind one, use the binding as a head", async () => {
-    const env = mintFrame(sandboxedEnv, "kw-alias-let");
+    const env = sandboxedEnv.child("kw-alias-let");
     // execState (COMPLEX tier): toJS wants BOXED values — `exec` already unwraps.
     const { values: results } = await execState(
       `
@@ -44,7 +43,7 @@ describe("kernel keywords — value-carried special-form dispatch", () => {
   });
 
   it("unaliased lambda / define / let still dispatch as their kernel handlers", async () => {
-    const env = mintFrame(sandboxedEnv, "kw-plain");
+    const env = sandboxedEnv.child("kw-plain");
     // execState (COMPLEX tier): toJS wants BOXED values — `exec` already unwraps.
     const { values: results } = await execState(
       `
