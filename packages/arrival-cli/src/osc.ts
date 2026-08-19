@@ -1,13 +1,16 @@
 /**
  * Terminal-feature emitters — OSC (Operating System Command) + SGR escapes that modern
- * terminals honor and older ones ignore harmlessly. Pure string builders; the caller writes
- * them to the stream. Kept in one leaf so the terminal-compat details live in one place
- * (sibling to `ansi.ts`, which owns cursor/color escapes).
+ * terminals honor and older ones ignore harmlessly. Pure string builders plus one
+ * best-effort I/O probe (`probeCanvas`). Kept in one leaf so the terminal-compat
+ * details live in one place (sibling to `ansi.ts`, which owns cursor/region; color
+ * SGR is `tints.ts`).
  *
  * Graceful degradation is the contract: a terminal without OSC-8 shows the plain link text,
  * without OSC-133 shows the plain output, without OSC-52 simply doesn't copy — never a
- * garbled screen. So these are safe to emit unconditionally.
+ * garbled screen. So these are safe to emit unconditionally. OSC 10/11 are the exception
+ * that wait on a reply: timeout / no-TTY → empty canvas, never a hang.
  */
+import type { Readable, Writable } from "node:stream";
 
 const ESC = "\x1b";
 const BEL = "\x07";
@@ -66,4 +69,108 @@ export function curlyUnderline(text: string, rgb?: readonly [number, number, num
   const openColor = rgb === undefined ? "" : `${ESC}[58:2::${rgb[0]}:${rgb[1]}:${rgb[2]}m`;
   const closeColor = rgb === undefined ? "" : `${ESC}[59m`;
   return `${ESC}[4:3m${openColor}${text}${ESC}[4:0m${closeColor}`;
+}
+
+// ── OSC 10/11 canvas probe ─────────────────────────────────────────────────────
+// Native look: OSC 11 is the background *tint* (hue + chroma + L), OSC 10 is the
+// default foreground's perceptual brightness. Both replies share one 80ms window.
+// Unsupported terminals ignore the queries; a timeout is a no-op, not an error.
+
+/** OSC 10 — foreground color query (BEL-terminated; ST also accepted on the reply). */
+export const OSC10_QUERY = `${OSC}10;?${BEL}`;
+
+/** OSC 11 — background color query. */
+export const OSC11_QUERY = `${OSC}11;?${BEL}`;
+
+export type OscRgb = { r: number; g: number; b: number };
+
+/**
+ * Parse OSC 11 (or OSC 10) color payload.
+ * Accepts `rgb:rrrr/gggg/bbbb` (XParseColor) and `#rrggbb` / `rrggbb`.
+ */
+export function parseOscColorPayload(payload: string): OscRgb | null {
+  const s = payload.trim();
+  const xparse = /^rgb:([0-9a-fA-F]{1,4})\/([0-9a-fA-F]{1,4})\/([0-9a-fA-F]{1,4})$/.exec(s);
+  if (xparse) {
+    const scale = (hex: string): number => {
+      const n = parseInt(hex, 16);
+      const max = (1 << (hex.length * 4)) - 1;
+      return Math.round((n / max) * 255);
+    };
+    return { r: scale(xparse[1]!), g: scale(xparse[2]!), b: scale(xparse[3]!) };
+  }
+  const hex = /^#?([0-9a-fA-F]{6})$/.exec(s);
+  if (hex) {
+    const h = hex[1]!;
+    return { r: parseInt(h.slice(0, 2), 16), g: parseInt(h.slice(2, 4), 16), b: parseInt(h.slice(4, 6), 16) };
+  }
+  return null;
+}
+
+/**
+ * Extract an OSC 10 or 11 payload from a reply buffer (BEL or ST terminated).
+ * Requires a terminator — an unterminated partial chunk must return null so the
+ * probe keeps waiting instead of finishing early with a truncated payload.
+ */
+export function extractOscColorFromBuffer(buf: string, code: 10 | 11): string | null {
+  const m = new RegExp(String.raw`\x1b\]${code};([^\x07\x1b]+)(?:\x07|\x1b\\)`).exec(buf);
+  return m?.[1] ?? null;
+}
+
+export function extractOsc11FromBuffer(buf: string): string | null {
+  return extractOscColorFromBuffer(buf, 11);
+}
+
+export function extractOsc10FromBuffer(buf: string): string | null {
+  return extractOscColorFromBuffer(buf, 10);
+}
+
+export type CanvasProbe = {
+  readonly bg?: OscRgb;
+  readonly fg?: OscRgb;
+};
+
+/**
+ * Best-effort OSC 11 + OSC 10 probe. Non-TTY or timeout → whatever arrived
+ * (possibly empty). Leftover keystrokes typed during the window are discarded
+ * (the REPL has not started reading yet; an 80ms boot race is not worth a
+ * re-inject path).
+ */
+export async function probeCanvas(opts: {
+  stdin?: Readable & { isTTY?: boolean };
+  stdout?: Writable & { isTTY?: boolean };
+  timeoutMs?: number;
+} = {}): Promise<CanvasProbe> {
+  const stdin = opts.stdin ?? process.stdin;
+  const stdout = opts.stdout ?? process.stdout;
+  const timeoutMs = opts.timeoutMs ?? 80;
+  if (stdin.isTTY !== true || stdout.isTTY !== true) return {};
+
+  return new Promise((resolve) => {
+    let buf = "";
+    let settled = false;
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      stdin.off("data", onData);
+      const bgPayload = extractOsc11FromBuffer(buf);
+      const fgPayload = extractOsc10FromBuffer(buf);
+      resolve({
+        bg: bgPayload === null ? undefined : (parseOscColorPayload(bgPayload) ?? undefined),
+        fg: fgPayload === null ? undefined : (parseOscColorPayload(fgPayload) ?? undefined),
+      });
+    };
+    const onData = (chunk: string | Buffer): void => {
+      buf += typeof chunk === "string" ? chunk : chunk.toString("utf8");
+      if (extractOsc11FromBuffer(buf) !== null && extractOsc10FromBuffer(buf) !== null) finish();
+    };
+    const timer = setTimeout(finish, timeoutMs);
+    stdin.on("data", onData);
+    try {
+      stdout.write(OSC11_QUERY + OSC10_QUERY);
+    } catch {
+      finish();
+    }
+  });
 }

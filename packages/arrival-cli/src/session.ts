@@ -38,6 +38,7 @@ import { toSExprString } from "@inhuman.tools/arrival-serializer";
 import type { ArmedCapabilities } from "./capabilities.js";
 import type { OutputMode } from "./output-mode.js";
 import { colorizeSexpr } from "./sexpr-color.js";
+import { paint, streamColorMode, type ColorMode } from "./tints.js";
 
 /** Per-run ALLOCATION cap — same default + env var as runner-capability's entry defaults. */
 function heapDefault(): number {
@@ -164,16 +165,27 @@ export function formatDiagnostic(d: Diagnostic): string {
   return `${d.severity}: ${d.message}${suggestions}`;
 }
 
+/** `formatDiagnostic` plus a severity tint. Identity when `mode` is `"none"` — the
+ *  REPL painter tints the whole error block itself, so it keeps the plain form. */
+export function paintDiagnostic(d: Diagnostic, mode: ColorMode): string {
+  const text = formatDiagnostic(d);
+  return mode === "none" ? text : paint(text, d.severity === "warning" ? "warning" : "error", mode);
+}
+
 /**
  * Errors as their teaching text. A `StaticValidationError` fans out to its COMPLETE
  * diagnostic list (cause + every site, cascade-fused); everything else prints its
  * message — arrival's runtime doors (unbound-variable with suggestions, budget,
  * purity) already speak in cures, so the message IS the UX. No stack traces.
+ *
+ * Color follows stderr: a TTY gets the severity tint; a pipe stays byte-identical
+ * (`streamColorMode`). Pass `mode` to pin (tests, or check's stdout sink).
  */
-export function printError(e: unknown): void {
+export function printError(e: unknown, mode: ColorMode = streamColorMode(process.stderr.isTTY === true)): void {
   if (e instanceof StaticValidationError) {
-    for (const d of e.diagnostics) console.error(formatDiagnostic(d));
+    for (const d of e.diagnostics) console.error(paintDiagnostic(d, mode));
     return;
   }
-  console.error(e instanceof Error ? e.message : String(e));
+  const msg = e instanceof Error ? e.message : String(e);
+  console.error(mode === "none" ? msg : paint(msg, "error", mode));
 }

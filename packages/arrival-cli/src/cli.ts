@@ -33,11 +33,11 @@ import { formDetail, renderFormDetail } from "./form-detail.js";
 import { exportRun } from "./run-export.js";
 import { renderRunOutline } from "./run-outline.js";
 import { runView } from "./run-view.js";
-import { colorMode } from "./tints.js";
+import { attuneTerminal, paint, streamColorMode, type ColorMode } from "./tints.js";
 import {
   budgets,
-  formatDiagnostic,
   loaderSession,
+  paintDiagnostic,
   printError,
   printValue,
   REQUIRE_SKIP_NOTE,
@@ -87,8 +87,13 @@ async function readSource(file: string): Promise<string> {
 
 /** Color mode for the stderr inspection surfaces (outline / form detail): follows
  *  stderr's OWN isTTY (clig.dev per-stream rule) — a piped stderr stays uncolored. */
-function stderrMode(): ReturnType<typeof colorMode> {
-  return process.stderr.isTTY === true && process.env.NO_COLOR === undefined ? colorMode(process.env) : "none";
+function stderrMode(): ColorMode {
+  return streamColorMode(process.stderr.isTTY === true);
+}
+
+/** Color mode for check's stdout (diagnostics ARE the product). */
+function stdoutMode(): ColorMode {
+  return streamColorMode(process.stdout.isTTY === true);
 }
 
 /** Render the run outline to stderr (never stdout — stdout is the program's values, kept
@@ -131,7 +136,7 @@ async function runFile(file: string, mode: OutputMode, inspect: Inspect, armed?:
       // The loader-armed ambient, jailed to the file's dir. Static validation still
       // can't see require-spilled bindings (see session.ts header) — runtime doors
       // remain the backstop, stated out loud.
-      process.stderr.write(`${REQUIRE_SKIP_NOTE}\n`);
+      process.stderr.write(`${paint(REQUIRE_SKIP_NOTE, "gutter", stderrMode())}\n`);
       const { capabilities, config, runCtx, scope } = await loaderSession(
         path.dirname(path.resolve(file)),
         `arrival-file:${path.basename(file)}`,
@@ -185,9 +190,10 @@ function emitInspection(trace: EvalTrace, inspect: Inspect, absFile: string): vo
 
 async function checkFile(file: string, armed?: ArmedCapabilities): Promise<number> {
   const source = await readSource(file);
+  const mode = stdoutMode();
   if (usesRequire(source)) {
     // The pass would false-report every require-spilled name; it makes no claims here.
-    console.log(`${REQUIRE_SKIP_NOTE}\n${file}: skipped`);
+    console.log(`${paint(REQUIRE_SKIP_NOTE, "gutter", mode)}\n${file}: ${paint("skipped", "gutter", mode)}`);
     return 0;
   }
   const sentinel = new Error("arrival check: validation-only — evaluation refused by design");
@@ -204,18 +210,19 @@ async function checkFile(file: string, armed?: ArmedCapabilities): Promise<numbe
       ...(armed === undefined ? {} : { capabilities: armed.capabilities, config: armed.config }),
     });
     // Only an EMPTY program reaches here (no form ever touched the aborted signal).
-    console.log(`${file}: ok`);
+    console.log(`${file}: ${paint("ok", "done", mode)}`);
     return 0;
   } catch (e) {
     if (e === sentinel) {
-      console.log(`${file}: ok`);
+      console.log(`${file}: ${paint("ok", "done", mode)}`);
       return 0;
     }
     if (e instanceof StaticValidationError) {
       console.log(`${file}:`); // per-file attribution — `check` accepts many files
-      for (const d of e.diagnostics) console.log(formatDiagnostic(d));
+      for (const d of e.diagnostics) console.log(paintDiagnostic(d, mode));
       const errors = e.diagnostics.filter((d) => d.severity === "error").length;
-      console.log(`${e.diagnostics.length} problem${e.diagnostics.length === 1 ? "" : "s"} (${errors} error${errors === 1 ? "" : "s"})`);
+      const summary = `${e.diagnostics.length} problem${e.diagnostics.length === 1 ? "" : "s"} (${errors} error${errors === 1 ? "" : "s"})`;
+      console.log(paint(summary, "gutter", mode));
       return errors > 0 ? 1 : 0;
     }
     printError(e); // reader/parse error — still a diagnostic outcome
@@ -259,12 +266,15 @@ async function main(argv: string[]): Promise<number> {
         );
         return 2;
       }
-      const armed = await armCapabilities(values.with ?? [], values.config, process.cwd());
       const mode = resolveOutputMode({
         stdoutIsTTY: process.stdout.isTTY === true,
         env: process.env,
         json: values.json === true,
       });
+      const [armed] = await Promise.all([
+        armCapabilities(values.with ?? [], values.config, process.cwd()),
+        mode.color ? attuneTerminal() : Promise.resolve(),
+      ]);
       return runFile(
         file,
         mode,
@@ -277,7 +287,10 @@ async function main(argv: string[]): Promise<number> {
         process.stderr.write(`arrival check: missing <file.scm>\n${USAGE}`);
         return 2;
       }
-      const armed = await armCapabilities(values.with ?? [], values.config, process.cwd());
+      const [armed] = await Promise.all([
+        armCapabilities(values.with ?? [], values.config, process.cwd()),
+        attuneTerminal(),
+      ]);
       // EVERY file is checked (no fail-fast — CI wants the complete list), exit is the worst
       // per-file outcome: any error-tier diagnostic anywhere ⇒ 1.
       let worst = 0;

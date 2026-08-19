@@ -13,4 +13,4 @@ export { replFromSession, repl } from "./repl.js";
 export { replInk, type ReplAppProps } from "./repl-ink.js";
 export { budgets, loaderSession, type LoaderSession } from "./session.js";
 export { readOwnVersion } from "./greeting.js";
-export { colorMode } from "./tints.js";
+export { colorMode, streamColorMode, type ColorMode } from "./tints.js";

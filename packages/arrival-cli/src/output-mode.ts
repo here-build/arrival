@@ -16,10 +16,12 @@
  *     `CLICOLOR_FORCE` forces it back through a pipe; `TERM=dumb` disables. JSON is never
  *     colored — it's a payload, not a view.
  *
- * The truecolor-vs-256 ladder is NOT decided here — that is a terminal-CAPABILITY
- * question `tints.ts`'s `colorMode` already owns. This resolves POLICY (format + whether
- * to color at all); the painter resolves capability. Composed, never duplicated.
+ * The depth ladder (truecolor / 256 / 16) is NOT decided here — that is a
+ * terminal-CAPABILITY question `tints.ts`'s `colorMode` owns. This resolves POLICY
+ * (format + whether to color at all) by delegating the color boolean to
+ * `streamColorMode`; the painter resolves capability. Composed, never duplicated.
  */
+import { streamColorMode } from "./tints.js";
 
 export type OutputFormat = "sexpr" | "json";
 
@@ -37,22 +39,12 @@ export interface OutputContext {
   readonly json: boolean;
 }
 
-/** `CLICOLOR_FORCE` present and not `"0"` — the "color through a pipe anyway" override. */
-function colorForced(env: NodeJS.ProcessEnv): boolean {
-  const v = env.CLICOLOR_FORCE;
-  return v !== undefined && v !== "" && v !== "0";
-}
-
 /**
- * Should the s-expr be colored? Precedence (highest first): `NO_COLOR` off →
- * `CLICOLOR_FORCE` on → `TERM=dumb` off → is-a-TTY. Mirrors `tints.ts`'s `colorMode`
- * NO_COLOR-first rule so the two agree on "colors wanted at all".
+ * Should the s-expr be colored? Delegates to `streamColorMode` so run's value
+ * coloring and check/repl/stderr diagnostics share one policy.
  */
 function wantsColor(ctx: OutputContext): boolean {
-  if (ctx.env.NO_COLOR !== undefined) return false;
-  if (colorForced(ctx.env)) return true;
-  if (ctx.env.TERM === "dumb") return false;
-  return ctx.stdoutIsTTY;
+  return streamColorMode(ctx.stdoutIsTTY, ctx.env) !== "none";
 }
 
 /** Resolve the display mode for a run. Pure — no globals, no side effects. */

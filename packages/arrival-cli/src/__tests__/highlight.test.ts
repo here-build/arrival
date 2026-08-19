@@ -22,6 +22,7 @@ describe("highlightScheme — identity under strip", () => {
     it(`round-trips: ${JSON.stringify(s).slice(0, 40)}`, () => {
       expect(stripAnsi(highlightScheme(s, "truecolor"))).toBe(s);
       expect(stripAnsi(highlightScheme(s, "256"))).toBe(s);
+      expect(stripAnsi(highlightScheme(s, "16"))).toBe(s);
     });
   }
 });

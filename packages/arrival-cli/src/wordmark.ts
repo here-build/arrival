@@ -11,8 +11,7 @@
  * hues (accent 211° → variant 285°, tints.ts's HUE table) — not an invented rainbow,
  * per D4's "derive from Delta" posture.
  */
-import { fg256, fgTruecolor, RESET } from "./ansi.js";
-import { colorMode, HUE, tintRgb } from "./tints.js";
+import { colorMode, HUE, paintRgb, solveRgb, type ColorMode } from "./tints.js";
 
 const GLYPH_HEIGHT = 6;
 
@@ -80,7 +79,7 @@ function glyphRows(word: string): string[] {
 /** Paint one already-composed row with a left→right hue sweep, ONE truecolor/256 run
  *  per character (a run-length merge would shave escape-code bytes but this is a
  *  six-line, ~50-column splash printed once per session start — not a hot path). */
-function paintRow(row: string, mode: ReturnType<typeof colorMode>): string {
+function paintRow(row: string, mode: ColorMode): string {
   if (mode === "none") return row;
   const width = row.length;
   let out = "";
@@ -92,14 +91,16 @@ function paintRow(row: string, mode: ReturnType<typeof colorMode>): string {
     }
     const t = width <= 1 ? 0 : i / (width - 1);
     const hue = HUE.accent + t * (HUE.variant - HUE.accent);
-    const [r, g, b] = tintRgb(0.72, 0.17, hue);
-    out += mode === "truecolor" ? fgTruecolor(r, g, b) + ch + RESET : fg256(r, g, b) + ch + RESET;
+    // Same differentiate-tier solve the rest of the palette uses, so the splash
+    // tracks ground (a light terminal doesn't get a washed 0.72-L ribbon).
+    const [r, g, b] = solveRgb(0.17, hue, "differentiate");
+    out += paintRgb(ch, r, g, b, mode);
   }
   return out;
 }
 
 /** The wordmark's rendered lines — "arrival", gradient-tinted, ready to `console.log`
  *  one line per element. Callers compose it with the identity line (repl.ts). */
-export function wordmark(mode: ReturnType<typeof colorMode> = colorMode()): string[] {
+export function wordmark(mode: ColorMode = colorMode()): string[] {
   return glyphRows("arrival").map((row) => paintRow(row, mode));
 }

@@ -24,14 +24,15 @@ import { disposeRunContext, execState } from "@inhuman.tools/arrival";
 import { scan } from "@inhuman.tools/arrival/lsp-internals";
 import { EMPTY_REPL_MODEL, foldReplEvent, type ReplBlock, type ReplFoldModel } from "@inhuman.tools/mcp-substrate";
 
+import { CLEAR_SCREEN, CURSOR_HOME } from "./ansi.js";
 import type { ArmedCapabilities } from "./capabilities.js";
 import { emitForms } from "./form-emitter.js";
 import { identityLine, readOwnVersion } from "./greeting.js";
-import { replInk } from "./repl-ink.js";
 import type { Lens } from "./lens.js";
 import { paintRegion, renderTurn } from "./painter.js";
+import { replInk } from "./repl-ink.js";
 import { budgets, loaderSession, printError, printSchemeValue, type LoaderSession } from "./session.js";
-import { CLEAR_SCREEN, CURSOR_HOME } from "./ansi.js";
+import { attuneTerminal } from "./tints.js";
 
 const PROMPT = "arrival> ";
 const CONTINUE = "     ... ";
@@ -178,6 +179,7 @@ export async function replFromSession(
 ): Promise<number> {
   const interactive = process.stdin.isTTY === true;
   if (!interactive) return replPlain(session);
+  await attuneTerminal();
   // `ARRIVAL_REPL=classic` keeps the pre-Ink painter path — the escape hatch if the TUI
   // misbehaves on some terminal.
   if (process.env.ARRIVAL_REPL === "classic") return replInteractive(session);

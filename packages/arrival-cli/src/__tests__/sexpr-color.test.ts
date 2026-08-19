@@ -23,6 +23,7 @@ describe("colorizeSexpr — identity under strip", () => {
     it(`round-trips: ${JSON.stringify(s).slice(0, 40)}`, () => {
       expect(stripAnsi(colorizeSexpr(s, "truecolor"))).toBe(s);
       expect(stripAnsi(colorizeSexpr(s, "256"))).toBe(s);
+      expect(stripAnsi(colorizeSexpr(s, "16"))).toBe(s);
     });
   }
 });

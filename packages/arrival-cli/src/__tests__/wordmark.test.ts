@@ -37,6 +37,12 @@ describe("wordmark", () => {
     expect(rows.some((r) => r.includes("\x1b[38;5;"))).toBe(true);
   });
 
+  it("16 mode round-trips to the same plain art through chalk's basic rung", () => {
+    const rows = wordmark("16");
+    expect(rows.map(stripAnsi)).toEqual(PLAIN);
+    expect(rows.some((r) => r.includes("\x1b["))).toBe(true);
+  });
+
   it("the gradient sweeps hue left→right — first and last painted glyph differ in color", () => {
     const [row] = wordmark("truecolor");
     const codes = [...(row ?? "").matchAll(/\x1b\[38;2;(\d+);(\d+);(\d+)m/g)];

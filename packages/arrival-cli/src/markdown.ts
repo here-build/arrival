@@ -13,11 +13,8 @@
  * (it drops other OSC), so they survive the render tree; SGR bold/italic and the paint colors
  * survive too.
  */
-import { RESET, sgr } from "./ansi.js";
 import { hyperlink } from "./osc.js";
-import { DARCULA, paintHex, type colorMode } from "./tints.js";
-
-type ColorMode = ReturnType<typeof colorMode>;
+import { DARCULA, paintAttr, paintHex, type ColorMode } from "./tints.js";
 
 /** A serializer string literal `"…"` (the whole trimmed value) → its unescaped content; else
  *  `null` (a list, scalar, or a value that isn't a single top-level string). */
@@ -44,17 +41,14 @@ export function looksLikeMarkdown(text: string): boolean {
 function inline(s: string, mode: ColorMode): string {
   let out = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, t: string, u: string) => hyperlink(u, tintish(t, DARCULA.property, mode)));
   out = out.replace(/`([^`]+)`/g, (_m, c: string) => tintish(c, DARCULA.string, mode));
-  out = out.replace(/\*\*([^*]+)\*\*/g, (_m, b: string) => wrap(sgr("bold"), b, mode));
-  out = out.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, (_m, pre: string, i: string) => pre + wrap(sgr("italic"), i, mode));
-  out = out.replace(/_([^_\n]+)_/g, (_m, i: string) => wrap(sgr("italic"), i, mode));
+  out = out.replace(/\*\*([^*]+)\*\*/g, (_m, b: string) => paintAttr(b, "bold", mode));
+  out = out.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, (_m, pre: string, i: string) => pre + paintAttr(i, "italic", mode));
+  out = out.replace(/_([^_\n]+)_/g, (_m, i: string) => paintAttr(i, "italic", mode));
   return out;
 }
 
 function tintish(text: string, hex: string, mode: ColorMode): string {
   return mode === "none" ? text : paintHex(text, hex, mode);
-}
-function wrap(open: string, text: string, mode: ColorMode): string {
-  return mode === "none" ? text : `${open}${text}${RESET}`;
 }
 
 /** Render markdown to ANSI lines. Fence markers are dropped and the code body dimmed; headers
@@ -73,7 +67,7 @@ export function renderMarkdown(md: string, mode: ColorMode): string[] {
     }
     const h = /^(#{1,6}) (.*)$/.exec(line);
     if (h) {
-      out.push(wrap(sgr("bold"), tintish(inline(h[2]!, mode), DARCULA.heading, mode), mode));
+      out.push(paintAttr(tintish(inline(h[2]!, mode), DARCULA.heading, mode), "bold", mode));
       continue;
     }
     const li = /^[-*+] (.*)$/.exec(line);
