@@ -934,8 +934,9 @@ describe("resource-path CQS — seams (cache / burst / CONSTANT_CTX / ExecOption
 // ── S3 Storage / hybrid (Phase 3b — I6 / I7 / I8) ────────────────────────────
 //
 // Path E≠[] is a SEPARATE arm from void-sink (no dual-key). Pure path-E fires then
-// logs a fired EffectLog entry with resourcePaths. Path Q≠[] elevates to view-style
-// cache when class allows. Hybrid does both and never void-skips.
+// logs a fired EffectLog entry with resourcePaths. Path Q≠[] is CQS journal only —
+// it does not elevate to view-cache (cache is `cacheClass: "view"`, opt-in). Hybrid
+// fires the impl and logs E; the return is not automatically a cache entry.
 
 describe("resource-path CQS — S3 storage / hybrid (I6–I8)", () => {
   it("P-I6 — E≠[] + effects armed ⇒ effect-log entry carries resource paths (fired)", async () => {
@@ -959,7 +960,7 @@ describe("resource-path CQS — S3 storage / hybrid (I6–I8)", () => {
     expect(pathLog.effectPaths).toContainEqual(["test", "a", "1"]);
   });
 
-  it("P-I7 — Q≠[] + cache armed ⇒ value stored; replay serves without re-fire", async () => {
+  it("P-I7 — Q≠[] + cache armed + unclassified ⇒ NOT stored; replay re-fires", async () => {
     const spies: SpyMap = {};
     const { cap } = makePathCap(spies);
     const record = new MemoryRunCache("record");
@@ -969,10 +970,8 @@ describe("resource-path CQS — S3 storage / hybrid (I6–I8)", () => {
     });
     expect(spies.read).toBe(1);
     expect(r1).toBe("a:1");
-    // Path Q elevates unclassified → view-style: a value entry was written
-    expect([...record.entries.values()].some((e) => e.kind === "value" && e.value === "a:1")).toBe(
-      true,
-    );
+    // CQS query is not a cache class — interpreter does not snapshot the source.
+    expect([...record.entries.values()].some((e) => e.kind === "value")).toBe(false);
 
     const spies2: SpyMap = {};
     const { cap: cap2 } = makePathCap(spies2);
@@ -981,11 +980,11 @@ describe("resource-path CQS — S3 storage / hybrid (I6–I8)", () => {
       capabilities: [cap2],
       cache: replay,
     });
-    expect(spies2.read ?? 0).toBe(0); // cache hit — impl not called
+    expect(spies2.read).toBe(1); // re-enter impl — host cache (if any) is outside
     expect(r2).toBe("a:1");
   });
 
-  it("P-I8 — hybrid both non-empty: impl runs, E logged, return cacheable", async () => {
+  it("P-I8 — hybrid both non-empty: impl runs, E logged, return not auto-cached", async () => {
     const spies: SpyMap = {};
     const { cap, pathLog } = makePathCap(spies);
     const effects = new MemoryEffectLog();
@@ -1004,12 +1003,10 @@ describe("resource-path CQS — S3 storage / hybrid (I6–I8)", () => {
       fired: true,
       resourcePaths: [["test", "a", "1"]],
     });
-    expect([...cache.entries.values()].some((e) => e.kind === "value" && e.value === "row:a:1")).toBe(
-      true,
-    );
+    expect([...cache.entries.values()].some((e) => e.kind === "value")).toBe(false);
     expect(pathLog.effectPaths).toContainEqual(["test", "a", "1"]);
 
-    // Replay: value served; path-E arm does not re-enqueue on fold
+    // Replay: re-enters impl (no view snapshot). Path-E arm does not re-enqueue on fold.
     const spies2: SpyMap = {};
     const { cap: cap2 } = makePathCap(spies2);
     const effects2 = new MemoryEffectLog();
@@ -1019,7 +1016,7 @@ describe("resource-path CQS — S3 storage / hybrid (I6–I8)", () => {
       cache: replay,
       effects: effects2,
     });
-    expect(spies2.upsert ?? 0).toBe(0);
+    expect(spies2.upsert).toBe(1);
     expect(row2).toBe("row:a:1");
     expect(effects2.entries).toHaveLength(0);
   });

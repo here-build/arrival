@@ -102,10 +102,11 @@ by holding the concrete internals class. Run-state is likewise data-local
 per `exec()`, never ambient. *(owner: environments.md §HERMETIC; run-state execution.md §HERMETIC)*
 
 **hybrid (path)** — a penetration whose path producers yield BOTH `Q≠[]` and `E≠[]` (an
-upsert): impl fires (never void-sink skip), E rides the effect log, the return is cacheable,
-and the Q≺E record makes it touch its domain ONCE per run — a second identical call is its own
-Q→E→Q door with the hybrid teaching clause. The hybrid shape is what LICENSES an effectful
-verb's return (upsert-with-return): effects-only must be void-family by bake door. *(owner:
+upsert): impl fires (never void-sink skip), E rides the effect log, the return is not
+auto-cached (interpreter cache is `cacheClass: "view"`, opt-in), and the Q≺E record makes it
+touch its domain ONCE per run — a second identical call is its own Q→E→Q door with the hybrid
+teaching clause. The hybrid shape is what LICENSES an effectful verb's return
+(upsert-with-return): effects-only must be void-family by bake door. *(owner:
 execution.md §RESOURCE-PATHS)*
 
 **ingress** — a wire's inputs: the parameters of the lambda-lifted closed arrival lambda

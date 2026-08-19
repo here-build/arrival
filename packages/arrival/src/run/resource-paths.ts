@@ -233,8 +233,8 @@ export function assertNoResourcePathProducers(
  * (ruling 2026-08-13). `queries: (...args) => StringTuple[]` exists precisely to
  * force resource naming into serializable, accessible form — an external resource
  * is pointed at by id / well-known name. An unkeyable slot (z.dynamic / z.lambda /
- * z.schemeValue) would crash `runCacheKey` at the path-Q view-elevation the moment
- * any cache is armed. Mirror of the view gate.
+ * z.schemeValue) is not a resource pointer. Mirror of the view-shape gate (if the
+ * verb also declares `cacheClass: "view"`, the same slots are the cache key).
  */
 export class ResourcePathShapeError extends ArrivalError {
   public readonly name = "ResourcePathShapeError";

@@ -773,10 +773,9 @@ export function assertCacheClassShape(
 
 /** Queries shape gate (ruling 2026-08-13): a queries-declaring contract must serialize on BOTH
  *  vectors — same slot rules as the `view` gate (`z.lambda` / `z.schemeValue` / `z.dynamic`
- *  refuse). The path-Q view-elevation keys the value cache on decoded args and every reaction
- *  envelope arms a record cache, so an unkeyable slot is a latent runtime crash; and the design
- *  intent of `queries` is precisely serializable resource naming (point at an external resource
- *  by id / well-known name). Effects-only contracts are not gated (no keyed storage). */
+ *  refuse). Path producers name resources from decoded args; an unkeyable slot is not a
+ *  resource id. (If the verb also declares `cacheClass: "view"`, those slots are the cache
+ *  key — same gate, different axis.) Effects-only contracts are not gated (no keyed storage). */
 export function assertResourcePathContractShape(
   name: string,
   queries: ResourcePathFn | undefined,

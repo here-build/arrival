@@ -93,8 +93,9 @@ async function sharedFire(
  *   - Arm 2 (path E≠[]): SEPARATE — after a successful non-sink fire, when path effects
  *     non-empty and effects armed and !replay, enqueue a **fired** manifest entry carrying
  *     `resourcePaths` (I6). Hybrid (Q and E) uses this arm too — impl runs, not void-skip (I8).
- *   - Path Q≠[]: when cache armed and class allows (not `pure`), treat as view-style value
- *     cache (I7). Explicit `cacheClass: "pure"` never stores.
+ *   - Path Q≠[]: CQS journal only. Cache is `cacheClass: "view"` (opt-in), never
+ *     implied by a query. Interpreter cache of a source (LLM, MCP, …) is a host
+ *     plane — the membrane does not snapshot it.
  */
 export async function penetrateThroughCache(
   cache: RunCache | undefined,
@@ -114,9 +115,7 @@ export async function penetrateThroughCache(
   reads?: ReadTracker,
 ): Promise<unknown> {
   const { symbolName, cacheClass, sink, rawArgs } = penetration;
-  const pathQueries = penetration.pathQueries ?? [];
   const pathEffects = penetration.pathEffects ?? [];
-  const hasPathQ = pathQueries.length > 0;
   const hasPathE = pathEffects.length > 0;
 
   // ARM 1 — classic void-sink gather during a PRIME run. Condition unchanged (not dual-keyed
@@ -168,12 +167,11 @@ export async function penetrateThroughCache(
     return result;
   }
 
-  // Path Q≠[] elevates to view-style caching when class allows. Explicit pure never stores.
-  const treatAsView = cacheClass === "view" || (hasPathQ && cacheClass !== "pure");
+  // Cache is declared `cacheClass: "view"` — never implied by a CQS query.
+  const treatAsView = cacheClass === "view";
 
   if (treatAsView) {
-    // total by the two gates that carry it: assertCacheClassShape (declared view) AND
-    // assertResourcePathContractShape (path-Q view-elevation) — a throw here is a real bug
+    // total by assertCacheClassShape (declared view). A throw here is a bake-gate miss.
     const key = runCacheKey(symbolName, decodedArgs);
     if (cache.mode === "replay") {
       const pending = pendingFor(cache).get(key);

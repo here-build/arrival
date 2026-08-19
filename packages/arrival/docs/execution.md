@@ -510,9 +510,11 @@ Q→E→Q and doors with the hybrid teaching clause (`ResourcePathConflictError`
 
 **Storage cut, derived from produced paths** (never a free-form declaration for this axis):
 `E≠[]` → an effect-log entry when `effects` armed (a FIRED manifest row — separate arm from
-void-sink gather, never dual-keyed with `sink`); `Q≠[]` → view-style value cache when `cache`
-armed (explicit `pure` never stores); both → hybrid (impl fires, E logged, return cacheable);
-neither → untracked. `serializeResourcePath` is the ONE key encoding — door messages,
+void-sink gather, never dual-keyed with `sink`); `Q≠[]` → CQS journal only (temporal
+immutability). Interpreter value-cache is **`cacheClass: "view"`**, opt-in, orthogonal —
+a query does not become a snapshot. Host planes (LLM InferStore, disk pins) sit under the
+provider, never in Scheme. Hybrid → impl fires, E logged, return not auto-cached. Neither
+→ untracked. `serializeResourcePath` is the ONE key encoding — door messages,
 `writeSetOfResourcePaths` host footprints, and confirm-manifest rows share it.
 
 **Segment typing:** `ResourcePath = readonly string[]` is the type-level law;
@@ -523,8 +525,8 @@ mutated later never corrupts the journal or effect-log stamps.
 
 **Three bake doors on the axis pairing (2026-08-13):** a **queries-declaring contract must
 serialize on both vectors** (`ResourcePathShapeError` — no `z.lambda`/`z.schemeValue`/
-`z.dynamic` slots; resources are pointed at by serializable id, and the path-Q value cache
-keys on decoded args); **sink ∧ queries is a contradiction** (`ResourcePathRoleConflictError`,
+`z.dynamic` slots; resources are pointed at by serializable id, and path producers read
+decoded args); **sink ∧ queries is a contradiction** (`ResourcePathRoleConflictError`,
 type-level twin on `CrossingContract`) — under gather a sink's impl is skipped, so a declared
 Q would journal a read for a body that never ran (sink+effects stays legal — a sink IS an
 effect); and **effects-only must be void-family** — the return of an effectful verb is

@@ -157,7 +157,7 @@ This draft stays design-history until then.
 | I4 | Query then effect same tree: ok |
 | I5 | Dynamic path from arg id |
 | I6 | `E≠∅` ⇒ effect-log when armed |
-| I7 | `Q≠∅` ⇒ cache hit path when cache armed |
+| I7 | **superseded 2026-08-19:** `Q≠∅` is CQS journal only. Interpreter cache is `cacheClass: "view"` (opt-in), never implied by a query. |
 | I8 | Hybrid both non-empty |
 | I9 | Native cannot declare paths (bake) |
 | I10 | Order: path fns → check → impl |
