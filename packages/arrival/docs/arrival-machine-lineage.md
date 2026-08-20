@@ -28,7 +28,7 @@ our fidelity to it; a reviewer who doesn't can go read the citation.
 | **Effects as data** | **Interaction Trees** (Xia et al., POPL 2020) + **algebraic effects & handlers** (Plotkin–Pretnar 2013; OCaml 5 one-shot) | The rosetta families `mcp/*` `llm/*` `chat/*` (arrival's LLM/MCP capability plane) emit effect **requests** — the `Vis` (visible) nodes / membrane crossings. Pure reductions are the `Tau` (silent) steps. The host capability is the handler. The core never performs an effect; it *asks*. |
 | **The persisted log** | **Event sourcing / durable execution** (Fowler; Temporal `SideEffect`) | `effect-log.ts` record/replay (`inhuman/foundations/arrival-effects/src/effect-log.ts` — a same-named file in core, `arrival/packages/arrival/src/run/effect-log.ts`, documents the opposite discipline: append-only, never dedupes, the "two effects, always" poison rule). Content-addressed inference (`{model+config, hash(input), version}`) is the `SideEffect` memo: a non-deterministic crossing recorded once, never re-fired on replay. |
 | **Incremental re-reading** | **Build Systems à la Carte** (Mokhov–Mitchell–Peyton Jones, ICFP 2018 / JFP 2020): constructive traces, minimality, early cutoff, dynamic deps + **Adapton** (Hammer et al., PLDI 2014): demand-driven self-adjusting computation (`miniAdapton` = a Scheme instantiation) | The effect-log *is* the constructive trace. Re-run = replay the pure core (free, referentially transparent) + replay the recorded crossings. Same key ⇒ same Promise ⇒ early cutoff for free. |
-| **Backward re-reading** | **how/why/where-provenance** (Green–Karvounarakis–Tannen, PODS 2007; Buneman et al. for why/where) + **dynamic program slicing** (Weiser 1981; Agrawal–Horgan 1990) | The per-invocation `Set<call-id>` is the provenance carrier — exact, recorded, not substring-derived. `whyOf`/`whereOf`/`howOf`/`dagOf` (`inhuman/foundations/arrival-reflect/src/handle-provenance.ts`) are projections of one `buildSlice` over the trace. |
+| **Backward re-reading** | **how/why/where-provenance** (Green–Karvounarakis–Tannen, PODS 2007; Buneman et al. for why/where) + **dynamic program slicing** (Weiser 1981; Agrawal–Horgan 1990) | The per-invocation `Set<call-id>` is the provenance carrier — exact, recorded, not substring-derived. `whyOf`/`whereOf`/`howOf`/`dagOf` (`arrival/packages/arrival-provenance/src/reflect/handle-provenance.ts`) are projections of one `buildSlice` over the trace. |
 
 ## The delta (the "C++"): Arrival — one log, three readings
 
@@ -46,12 +46,6 @@ things in the log are membrane crossings, so re-running the pure remainder costs
 nothing and can never disagree with itself. One log carries all three meanings
 because the meaning is *in the trace*, not in three bookkeeping layers.
 
-**The name was load-bearing all along.** Chiang's *Story of Your Life* / *Arrival*:
-the heptapod conceives the whole utterance at once — order-free, cause and end
-co-present, readable in any direction. Our trace has exactly that property — its
-meaning is **reading-direction-independent**. The two directional readings are
-already in the code as `ResultHandle`'s dual view (`arrival-reflect/src/result-handle.ts`):
-
 ```ts
 readonly value: unknown;                                                  // causal — eager, always present
 async teleological(signal?: AbortSignal): Promise<{ trace, outputNode }>  // teleological — lazy, memoized once
@@ -61,8 +55,7 @@ async teleological(signal?: AbortSignal): Promise<{ trace, outputNode }>  // tel
 - **teleological** — backward: from the end (the output) to its purpose/evidence, built lazily on first ask and memoized thereafter. *Teleological* literally = explained-by-its-end. The provenance reading, pre-warmed once asked.
 - **incremental** — the third reading: the same trace diffed against current state.
 
-Reading direction changes **cost**, never **value**. That invariant is the heptapod
-property made mechanical.
+Reading direction changes **cost**, never **value**.
 
 ## Citation table — code choice → named base → the review test
 
@@ -76,8 +69,8 @@ Each row is a falsifiable fidelity claim. If the property fails, we've drifted f
 | `effect-log.ts` record/replay (`arrival-effects`'s file — not core's same-named one) | event sourcing / Temporal `SideEffect` | Replaying the log reproduces the value bit-identically; non-deterministic crossings are memoized, not re-fired. |
 | content-addressed inference | à-la-carte early-cutoff + durable memo | Same key ⇒ same Promise (cross-invocation, cross-user dedup); the trace is the constructive trace. |
 | `Set<call-id>` per invocation | how/why-provenance semiring (Green–Tannen) | The dataflow graph is **exact** (recorded), not derived by substring tricks. |
-| `whyOf`/`whereOf`/`howOf` over `buildSlice` (`arrival-reflect/src/handle-provenance.ts`) | why/where-provenance + dynamic slicing | `how` returns a **runnable** re-derivation slice; running it reproduces the output (re-derivable provenance). |
-| `ResultHandle.value` (eager) / `.teleological()` (lazy, memoized) (`arrival-reflect/src/result-handle.ts`) | the two directional readings of one trace | Same trace; `teleological()` pre-warms backward on first ask, causal `value` stays forward-eager. Direction changes cost, never value. |
+| `whyOf`/`whereOf`/`howOf` over `buildSlice` (`arrival-provenance/src/reflect/handle-provenance.ts`) | why/where-provenance + dynamic slicing | `how` returns a **runnable** re-derivation slice; running it reproduces the output (re-derivable provenance). |
+| `ResultHandle.value` (eager) / `.teleological()` (lazy, memoized) (`arrival-provenance/src/reflect/result-handle.ts`) | the two directional readings of one trace | Same trace; `teleological()` pre-warms backward on first ask, causal `value` stays forward-eager. Direction changes cost, never value. |
 
 ## Cross-references
 

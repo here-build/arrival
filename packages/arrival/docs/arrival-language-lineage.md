@@ -77,15 +77,13 @@ The **two genuinely new reifications** are the contribution — the "C++ on C":
 
 1. **The backward-readable trace** (`teleological`). Provenance and slicing exist;
    reifying the trace as a *direction-invariant* object you can read forward
-   (replay) or backward (purpose) — the heptapod property from the machine-lineage
-   doc — is ours.
+   (replay) or backward (purpose).
 2. **Inference as a content-addressed effect.** Church made sampling an effect;
    making the oracle an LLM, keyed by `{model, hash(input), version}` and
    deduplicated globally, is ours.
 
 So the honest whole-system name: **a probabilistic Scheme (Church) built with a
-workbench's bounded reifications (Racket), plus a direction-invariant trace.**
-"Arrival" is that, with the heptapod trace as its signature.
+workbench's bounded reifications (Racket), plus a direction-invariant trace.**.
 
 ## The value-algebra floor (the internal seventh)
 
