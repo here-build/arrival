@@ -35,8 +35,8 @@
 import { deepProvenance } from "@inhuman.tools/arrival";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { openOracleSession } from "../index.js";
 import type { OracleSession } from "../index.js";
+import { openRunnerOracleSession } from "./runner-plane.js";
 import { SchemeSemanticModel } from "../model/model.js";
 import type { AnchorPort } from "../model/types.js";
 import { emitRegistryOf } from "../registry/harvest.js";
@@ -59,7 +59,7 @@ import {
 
 let session: OracleSession;
 beforeAll(async () => {
-  session = await openOracleSession();
+  session = await openRunnerOracleSession();
 }, 120_000);
 afterAll(async () => {
   await session.dispose();

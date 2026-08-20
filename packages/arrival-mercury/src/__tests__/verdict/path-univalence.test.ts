@@ -36,7 +36,8 @@ import { extractProgram } from "../../extract/index.js";
 import { desugar } from "../../front/desugar.js";
 import { parseSexprs } from "../../front/parse.js";
 import type { StaticProv } from "../../model/static-prov.js";
-import { openProbeSession, recordRun, type ProbeSession, type ProbeTable } from "../../probe/session.js";
+import { recordRun, type ProbeSession, type ProbeTable } from "../../probe/session.js";
+import { openRunnerProbeSession } from "../runner-plane.js";
 import { fieldProv, type FieldPath } from "../../verdict/field-prov.js";
 
 const extractOf = (src: string): StaticProv => {
@@ -130,7 +131,7 @@ describe("INV-6 — path-univalence sweep", () => {
   let session: ProbeSession;
 
   beforeAll(async () => {
-    session = await openProbeSession();
+    session = await openRunnerProbeSession();
   }, 60_000);
 
   afterAll(async () => {

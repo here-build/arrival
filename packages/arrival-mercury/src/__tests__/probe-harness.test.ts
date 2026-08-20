@@ -21,7 +21,8 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { openProbeSession, probe, recordRun, type CallRef, type ProbeSession, type ProbeTable } from "../probe/session.js";
+import { probe, recordRun, type CallRef, type ProbeSession, type ProbeTable } from "../probe/session.js";
+import { openRunnerProbeSession } from "./runner-plane.js";
 import { leafVerdicts, type ProbeAttempt } from "../probe/verdict.js";
 import { witnessesFor, type Witness } from "../probe/witness.js";
 
@@ -52,7 +53,7 @@ describe("probe harness — provenance by perturbation, Phase A", () => {
   let session: ProbeSession;
 
   beforeAll(async () => {
-    session = await openProbeSession();
+    session = await openRunnerProbeSession();
   }, 60_000);
 
   afterAll(async () => {

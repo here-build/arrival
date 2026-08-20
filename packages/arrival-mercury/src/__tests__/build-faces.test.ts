@@ -36,6 +36,7 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import { buildProject } from "../build/project.js";
 import type { BuildResult } from "../build/types.js";
+import { RUNNER_PLANE } from "./runner-plane.js";
 
 const SCRATCH = path.join(tmpdir(), `mercury-build-faces-${process.pid}-${randomBytes(4).toString("hex")}`);
 const loader = register({ namespace: `mercury-build-faces-${process.pid}` });
@@ -94,7 +95,10 @@ describe("build faces (program-face-always-function)", () => {
     // Forced module classification: the default classifier calls a DAG-root
     // with a program face a pipeline; the module-face trailing-expression
     // shape needs an explicit classifier (as `build.classifier` configs do).
-    const result = await buildProject(readProject("module-face-trailing-expression"), { classifyFile: () => "module" });
+    const result = await buildProject(readProject("module-face-trailing-expression"), {
+      capabilities: RUNNER_PLANE,
+      classifyFile: () => "module",
+    });
     const code = fileOf(result, "mod.ts");
     expect(code).toContain("export default function Main()");
     expect(code).not.toMatch(/export default \w+;/); // the pre-ruling eager-binding suffix
@@ -104,7 +108,7 @@ describe("build faces (program-face-always-function)", () => {
   });
 
   it("pipeline face: exports `export default function run(…)`, no post-render suffix", async () => {
-    const result = await buildProject(readProject("pipeline-face-no-suffix"));
+    const result = await buildProject(readProject("pipeline-face-no-suffix"), { capabilities: RUNNER_PLANE });
     const code = fileOf(result, "main.ts");
     expect(code).toMatch(/export default function run\(/);
     expect(code).not.toContain("export default run;");
@@ -116,7 +120,7 @@ describe("build faces (program-face-always-function)", () => {
     // lib2 is required (non-root) => module face with a program face; main2 is
     // the DAG root with a program face => pipeline. The audit's miscompile
     // bound the sibling's FUNCTION where the interpreter yields its VALUE.
-    const result = await buildProject(readProject("bound-require-function-face"));
+    const result = await buildProject(readProject("bound-require-function-face"), { capabilities: RUNNER_PLANE });
     const lib = fileOf(result, "lib2.ts");
     expect(lib).toContain("export default function Main()");
     const main = fileOf(result, "main2.ts");
@@ -127,7 +131,7 @@ describe("build faces (program-face-always-function)", () => {
   });
 
   it("bound require of a data file (value face) reads the import directly and re-exports its allocated JS name", async () => {
-    const result = await buildProject(readProject("bound-require-value-face"));
+    const result = await buildProject(readProject("bound-require-value-face"), { capabilities: RUNNER_PLANE });
     const lib = fileOf(result, "lib3.ts");
     // Value face: direct import binding, never called.
     expect(lib).toContain('import { default as parsedConfig } from "./config.js"');
@@ -146,7 +150,7 @@ describe("build faces (program-face-always-function)", () => {
     // used to flow up as ONE `metric.threshold` — a caller param setting two
     // distinct upstream knobs at once. The second collision must escalate to
     // the path-qualified key.
-    const result = await buildProject(readProject("flow-up-knobs-distinct"));
+    const result = await buildProject(readProject("flow-up-knobs-distinct"), { capabilities: RUNNER_PLANE });
     const main = fileOf(result, "main.ts");
     const keys = [...main.matchAll(/inhumanParams\["([^"]+)"\]/g)].map((m) => m[1]);
     const uniqueNamespaced = new Set(keys.filter((k) => k !== "threshold"));
@@ -160,7 +164,7 @@ describe("build faces (program-face-always-function)", () => {
     // Structural pin of the contract bit itself (consumed by the require
     // machinery): rebuilding the same projects, the emitted CONSUMPTION shapes
     // are the observable — a call for a program face, a bare read for data.
-    const result = await buildProject(readProject("export-shape-face-kind"));
+    const result = await buildProject(readProject("export-shape-face-kind"), { capabilities: RUNNER_PLANE });
     const entry = fileOf(result, "entry.ts");
     expect(entry).toContain("const p = pProgram()");
     expect(entry).not.toContain("const d = dProgram");

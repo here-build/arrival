@@ -54,8 +54,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as fc from "fast-check";
 
 import { emitRegistryOf, narrowsMembersOf, phase1Rules, withRules } from "@inhuman.tools/arrival-mercury";
-import { cleanupOracleScratch, openOracleSession, runOracle } from "@inhuman.tools/arrival-mercury-oracle";
+import { cleanupOracleScratch, runOracle } from "@inhuman.tools/arrival-mercury-oracle";
 import type { OracleSession } from "@inhuman.tools/arrival-mercury-oracle";
+import { openRunnerOracleSession } from "./runner-plane.js";
 import {
   arbitrarySchemeValue,
   PREDICATE_CONSUMERS,
@@ -102,7 +103,7 @@ describe("schema-driven fuzzer — Law N narrows-flagged rows (oracle-harness.md
   let narrowsMembers: ReadonlySet<string>;
 
   beforeAll(async () => {
-    session = await openOracleSession();
+    session = await openRunnerOracleSession();
     // The SAME registry construction `compileGreenfield` uses internally
     // (harness.ts's `greenfieldRegistryFor`, not exported — re-derived here from
     // the exported primitives, so there is nothing to drift out of sync with).

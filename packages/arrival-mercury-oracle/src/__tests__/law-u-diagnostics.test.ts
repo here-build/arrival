@@ -42,8 +42,9 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { cleanupOracleScratch, compileGreenfield, evalCompiled, evalInterpreter, openOracleSession } from "@inhuman.tools/arrival-mercury-oracle";
+import { cleanupOracleScratch, compileGreenfield, evalCompiled, evalInterpreter } from "@inhuman.tools/arrival-mercury-oracle";
 import type { OracleSession } from "@inhuman.tools/arrival-mercury-oracle";
+import { openRunnerOracleSession } from "./runner-plane.js";
 
 interface Subject {
   readonly name: string;
@@ -89,7 +90,7 @@ function hasNoGuardMachinery(compiled: string): boolean {
 describe("Law U — undefined-behavior forms compile clean, run representation-native (constitution §5.2)", () => {
   let session: OracleSession;
   beforeAll(async () => {
-    session = await openOracleSession();
+    session = await openRunnerOracleSession();
   }, 120_000);
   afterAll(async () => {
     await session.dispose();

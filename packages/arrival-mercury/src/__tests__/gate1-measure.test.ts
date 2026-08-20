@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { GATE1_MANIFEST, runGate1Measurement, SAMPLE_SIZE_THRESHOLD } from "../gate1/measure.js";
-import { openOracleSession } from "../index.js";
+import { openRunnerOracleSession } from "./runner-plane.js";
 import type { OracleSession } from "../index.js";
 
 const REPORT_PATH = fileURLToPath(new URL("fixtures/gate1-report.json", import.meta.url));
@@ -25,7 +25,7 @@ const REPORT_PATH = fileURLToPath(new URL("fixtures/gate1-report.json", import.m
 describe("Gate 1 — type-availability measurement over the committed corpus", () => {
   let session: OracleSession;
   beforeAll(async () => {
-    session = await openOracleSession();
+    session = await openRunnerOracleSession();
   }, 120_000);
   afterAll(async () => {
     await session.dispose();

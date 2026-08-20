@@ -5,10 +5,12 @@
  *
  * The tsx-bound differential-oracle harness (interpreter ≡ compiled, corpus runner,
  * error classifier) now lives in `@inhuman.tools/arrival-mercury-oracle`. The
- * session-assembly seam (`openOracleSession`/`greenfieldRegistryFor`) and the pure
+ * session-assembly seam (`openSession`/`openOracleSession`/`greenfieldRegistryFor`) and the pure
  * value utilities (`oracleEqual`/`show`) are compiler-owned (tsx-free, with
- * compiler-side callers) and re-exported here from their homes.
+ * compiler-side callers) and re-exported here from their homes. Hosts pass the
+ * vocabulary (`capabilities`); mercury does not default a product plane.
  */
+export { openSession, type MercurySession } from "./session.js";
 export { greenfieldRegistryFor, openOracleSession, type OracleSession } from "./registry/greenfield-session.js";
 export { oracleEqual, show } from "./verdict/value-equal.js";
 

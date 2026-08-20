@@ -11,7 +11,8 @@ import { describe, expect, it } from "vitest";
 import { arrivalHandlebarsCapability, hbsContentsToSchemeSource } from "@inhuman.tools/arrival-modules/handlebars";
 
 import { compileHbsFile } from "../build/hbs-module.js";
-import { greenfieldRegistryFor, openOracleSession } from "../registry/greenfield-session.js";
+import { greenfieldRegistryFor } from "../registry/greenfield-session.js";
+import { openRunnerOracleSession } from "./runner-plane.js";
 import { emitRegistryOf } from "../registry/harvest.js";
 import type { EmitRegistry } from "../registry/harvest.js";
 import { withRules } from "../rules/overlay.js";
@@ -31,7 +32,7 @@ describe("@inhuman.tools/arrival-modules/handlebars × mercury (reference)", () 
   });
 
   it("compileHbsFile emits import from the package /runtime + default program face", async () => {
-    await using session = await openOracleSession();
+    await using session = await openRunnerOracleSession();
     const ambient = greenfieldRegistryFor(session);
     // Static harvest fill-in (same pattern as srfi-1 in greenfieldRegistryFor):
     // ambient wins; handlebars package fills names the ambient may not yet carry

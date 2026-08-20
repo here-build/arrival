@@ -15,7 +15,7 @@
  * resolution): the three regression modes it guards all surface as a forbidden
  * specifier ON a mercury source file — a `tsx`/`node:*` import, an import of the
  * oracle package, or an import of the node-disk prelude root (which must be
- * `/browser`). Workspace deps that are themselves browser-safe (arrival, runner-capability)
+ * `/browser`). Workspace deps that are themselves browser-safe (arrival)
  * are intentionally not recursed into.
  *
  * NOT gated: the root barrel (`index.ts`) legitimately re-exports node-side build

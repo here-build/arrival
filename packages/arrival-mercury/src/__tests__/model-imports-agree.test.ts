@@ -26,7 +26,8 @@ import type { ClassifyResult } from "../coreform/types.js";
 import { SchemeSemanticModel } from "../model/model.js";
 import { MULTI_SLOT, TWO_CROSSINGS } from "../model/__fixtures__.js";
 import { materializeImports } from "../naming/index.js";
-import { openOracleSession, type OracleSession } from "../registry/greenfield-session.js";
+import type { OracleSession } from "../registry/greenfield-session.js";
+import { openRunnerOracleSession } from "./runner-plane.js";
 import type { EmitRegistry } from "../registry/harvest.js";
 import { emitRegistryOf } from "../registry/index.js";
 import { phase1Rules, withRules } from "../rules/index.js";
@@ -36,7 +37,7 @@ import { runtimeRefsOf, walk } from "../walker/index.js";
 let session: OracleSession;
 let registry: EmitRegistry;
 beforeAll(async () => {
-  session = await openOracleSession();
+  session = await openRunnerOracleSession();
   registry = withRules(emitRegistryOf(session.runCtx), phase1Rules);
 }, 120_000);
 afterAll(async () => {

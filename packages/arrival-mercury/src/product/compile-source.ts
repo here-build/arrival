@@ -7,7 +7,11 @@
  * entry (studio, REPL preview, tools).
  *
  * Does not open a second pipeline — greenfield Residual → ts.factory only.
+ * Either `registry` (already harvested) or `capabilities` (mint a session and
+ * harvest) is required — mercury does not default a product plane.
  */
+import type { EnvCapability } from "@inhuman.tools/arrival";
+
 import type { EmitRegistry } from "../registry/index.js";
 import { greenfieldRegistryFor, openOracleSession } from "../registry/greenfield-session.js";
 import { SchemeSemanticModel } from "../model/model.js";
@@ -24,8 +28,10 @@ export interface CompileSourceOptions {
    * the materializer wiring that already threads `register` on oracle wrap.
    */
   register?: CompileRegister;
-  /** Inject a registry (tests / pre-opened session). Skips openOracleSession. */
+  /** Pre-harvested emit registry. Skips session assembly. Wins over `capabilities`. */
   registry?: EmitRegistry;
+  /** Host vocabulary used to mint a session and harvest the registry. Required when `registry` is omitted. */
+  capabilities?: readonly EnvCapability[];
   /** Runtime import path emitted for stage-0 / cold stdlib. Default `./stage0.js`. */
   runtimeImportPath?: string;
 }
@@ -47,19 +53,24 @@ export interface CompileSourceResult {
  * Compile one scheme source string to a TypeScript module.
  * Always materializes through {@link SchemeSemanticModel}.
  */
-export async function compileSource(source: string, opts: CompileSourceOptions = {}): Promise<CompileSourceResult> {
+export async function compileSource(source: string, opts: CompileSourceOptions): Promise<CompileSourceResult> {
   const runtimeImportPath = opts.runtimeImportPath ?? "./stage0.js";
 
   if (opts.registry !== undefined) {
     return compileWithRegistry(source, opts.registry, runtimeImportPath);
   }
 
-  // No injected registry: assemble a greenfield session and harvest its registry.
+  if (opts.capabilities === undefined) {
+    throw new Error(
+      "compileSource: pass `registry` (pre-harvested) or `capabilities` (host vocabulary) — mercury does not default a product plane",
+    );
+  }
+
+  // Assemble a session over the host vocabulary and harvest its registry.
   // `greenfield-session` is tsx-free (unlike the oracle harness), so this stays a
-  // static import and the module remains browser-safe. `openOracleSession` still
-  // needs a node runtime (it builds an arrival session); a browser caller injects a
-  // `registry` via the branch above instead.
-  const session = await openOracleSession();
+  // static import and the module remains browser-safe. A browser caller injects a
+  // `registry` via the branch above instead of minting a session here.
+  const session = await openOracleSession(opts.capabilities);
   try {
     return compileWithRegistry(source, greenfieldRegistryFor(session), runtimeImportPath);
   } finally {

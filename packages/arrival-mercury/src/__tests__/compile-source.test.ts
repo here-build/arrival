@@ -6,15 +6,15 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   compileSource,
   greenfieldRegistryFor,
-  openOracleSession,
   type OracleSession,
   SchemeSemanticModel,
 } from "../index.js";
+import { openRunnerOracleSession } from "./runner-plane.js";
 
 describe("compileSource (product API)", () => {
   let session: OracleSession;
   beforeAll(async () => {
-    session = await openOracleSession();
+    session = await openRunnerOracleSession();
   }, 120_000);
   afterAll(async () => {
     await session.dispose();
@@ -35,5 +35,9 @@ describe("compileSource (product API)", () => {
     const a = await compileSource(source, { registry });
     const b = await compileSource(source, { registry });
     expect(a.code).toBe(b.code);
+  });
+
+  it("refuses to assemble a session without registry or capabilities", async () => {
+    await expect(compileSource("(+ 1 2)", {})).rejects.toThrow(/does not default a product plane/);
   });
 });

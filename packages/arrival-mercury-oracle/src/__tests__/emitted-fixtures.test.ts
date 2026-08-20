@@ -24,8 +24,9 @@ import { fileURLToPath } from "node:url";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { cleanupOracleScratch, compileGreenfield, openOracleSession } from "@inhuman.tools/arrival-mercury-oracle";
+import { cleanupOracleScratch, compileGreenfield } from "@inhuman.tools/arrival-mercury-oracle";
 import type { OracleSession } from "@inhuman.tools/arrival-mercury-oracle";
+import { openRunnerOracleSession } from "./runner-plane.js";
 
 const dirOf = (rel: string): string => fileURLToPath(new URL(rel, import.meta.url));
 const casesFrom = (rel: string): { name: string; source: string }[] =>
@@ -42,7 +43,7 @@ if (CASES.length === 0) throw new Error("emitted-fixtures: no .scm cases found â
 
 let session: OracleSession;
 beforeAll(async () => {
-  session = await openOracleSession();
+  session = await openRunnerOracleSession();
 }, 120_000);
 afterAll(async () => {
   await session.dispose();

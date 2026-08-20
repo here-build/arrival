@@ -54,8 +54,9 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { compileGreenfield, openOracleSession } from "@inhuman.tools/arrival-mercury-oracle";
+import { compileGreenfield } from "@inhuman.tools/arrival-mercury-oracle";
 import type { OracleSession } from "@inhuman.tools/arrival-mercury-oracle";
+import { openRunnerOracleSession } from "./runner-plane.js";
 
 const corpusDir = fileURLToPath(new URL("corpus/", import.meta.url));
 const read = (name: string): string => readFileSync(`${corpusDir}${name}.scm`, "utf8");
@@ -119,7 +120,7 @@ const SUBJECTS = ["quotient-neg", "member-assoc", "or-in-define"] as const;
 describe("emitted output passes tsc --strict (§9 enforcement spine, minimal form)", () => {
   let session: OracleSession;
   beforeAll(async () => {
-    session = await openOracleSession();
+    session = await openRunnerOracleSession();
   }, 120_000);
   afterAll(async () => {
     await session.dispose();

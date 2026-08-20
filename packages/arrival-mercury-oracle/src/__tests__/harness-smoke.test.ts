@@ -10,17 +10,17 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   assertProgramFace,
   cleanupOracleScratch,
-  openOracleSession,
   runCorpusCase,
   runOracle,
   type OracleSession,
 } from "@inhuman.tools/arrival-mercury-oracle";
+import { openRunnerOracleSession } from "./runner-plane.js";
 
 describe("oracle harness smoke", () => {
   let session: OracleSession;
 
   beforeAll(async () => {
-    session = await openOracleSession();
+    session = await openRunnerOracleSession();
   }, 60_000);
 
   afterAll(async () => {

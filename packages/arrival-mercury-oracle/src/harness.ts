@@ -83,9 +83,9 @@ import { classifyCompiledError, type ErrorClass } from "./error-classifier.js";
 // The session-assembly seam (`openOracleSession`/`greenfieldRegistryFor`) and the
 // pure value utilities (`oracleEqual`/`show`) live in the COMPILER
 // (`arrival-mercury`: registry/greenfield-session, verdict/value-equal) — they are
-// tsx-free and have compiler-side callers that must not pull `tsx/esm/api`. This
-// harness (the tsx-bound differential runner) imports them back DOWN and re-exports
-// them so its own corpus/test consumers keep a single import surface.
+// tsx-free and have compiler-side callers that must not pull `tsx/esm/api`. Hosts
+// pass `capabilities`; this harness re-exports the seam so corpus/test consumers
+// keep a single import surface.
 export { greenfieldRegistryFor, openOracleSession, oracleEqual, show, type OracleSession };
 
 export type Outcome =

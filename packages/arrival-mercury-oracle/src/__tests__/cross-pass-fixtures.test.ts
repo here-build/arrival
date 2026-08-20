@@ -21,9 +21,10 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { extractFacts, narrowsMembersOf, render, walk } from "@inhuman.tools/arrival-mercury";
-import { cleanupOracleScratch, greenfieldRegistryFor, openOracleSession } from "@inhuman.tools/arrival-mercury-oracle";
+import { cleanupOracleScratch, greenfieldRegistryFor } from "@inhuman.tools/arrival-mercury-oracle";
 import type { ClassifyResult, CoreForm, FactsExtraction, HoleReason, NodeId, TypeFacts } from "@inhuman.tools/arrival-mercury";
 import type { OracleSession } from "@inhuman.tools/arrival-mercury-oracle";
+import { openRunnerOracleSession } from "./runner-plane.js";
 
 const corpusDir = fileURLToPath(new URL("corpus/", import.meta.url));
 const fixturesDir = fileURLToPath(new URL("fixtures/cross-pass/", import.meta.url));
@@ -135,7 +136,7 @@ interface CrossPassFixture {
 describe("cross-pass fixtures — (virtual-TS, facts, residual) per corpus row (constitution §5.3)", () => {
   let session: OracleSession;
   beforeAll(async () => {
-    session = await openOracleSession();
+    session = await openRunnerOracleSession();
   }, 120_000);
   afterAll(async () => {
     await session.dispose();

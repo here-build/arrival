@@ -6,12 +6,13 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { compileGreenfield, openOracleSession } from "@inhuman.tools/arrival-mercury-oracle";
+import { compileGreenfield } from "@inhuman.tools/arrival-mercury-oracle";
 import type { OracleSession } from "@inhuman.tools/arrival-mercury-oracle";
+import { openRunnerOracleSession } from "./runner-plane.js";
 
 let session: OracleSession;
 beforeAll(async () => {
-  session = await openOracleSession();
+  session = await openRunnerOracleSession();
 }, 120_000);
 afterAll(async () => {
   await session.dispose();

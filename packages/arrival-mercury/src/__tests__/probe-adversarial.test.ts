@@ -44,7 +44,8 @@ import { extractProgram } from "../extract/index.js";
 import { desugar } from "../front/desugar.js";
 import { parseSexprs } from "../front/parse.js";
 import { seal } from "../seal.js";
-import { openProbeSession, probe, recordRun, type CallRef, type ProbeSession, type ProbeTable } from "../probe/session.js";
+import { probe, recordRun, type CallRef, type ProbeSession, type ProbeTable } from "../probe/session.js";
+import { openRunnerProbeSession } from "./runner-plane.js";
 import { leafVerdicts, type ProbeAttempt } from "../probe/verdict.js";
 import { witnessesFor, type Witness } from "../probe/witness.js";
 import { circuitVerdict, type CircuitVerdict } from "../verdict/circuit-verdict.js";
@@ -130,7 +131,7 @@ describe("provenance by perturbation — THE ADVERSARIAL CORPUS (security review
   let session: ProbeSession;
 
   beforeAll(async () => {
-    session = await openProbeSession();
+    session = await openRunnerProbeSession();
   }, 60_000);
 
   afterAll(async () => {

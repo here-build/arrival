@@ -11,14 +11,15 @@ import { EnvCapability } from "@inhuman.tools/arrival/capability";
 import type { EmitRule } from "@inhuman.tools/arrival/emit";
 import { symbol, withContractFields } from "@inhuman.tools/arrival";
 
-import { openOracleSession, type OracleSession } from "../registry/greenfield-session.js";
+import type { OracleSession } from "../registry/greenfield-session.js";
+import { openRunnerOracleSession } from "./runner-plane.js";
 import { emitRegistryOf } from "../registry/index.js";
 
 describe("emitRegistryOf over the real oracle run", () => {
   let session: OracleSession;
 
   beforeAll(async () => {
-    session = await openOracleSession();
+    session = await openRunnerOracleSession();
   }, 60_000);
 
   afterAll(async () => {

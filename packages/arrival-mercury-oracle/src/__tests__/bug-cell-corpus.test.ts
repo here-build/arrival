@@ -27,8 +27,9 @@ import { fileURLToPath } from "node:url";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { cleanupOracleScratch, openOracleSession, oracleEqual, runOracle, show } from "@inhuman.tools/arrival-mercury-oracle";
+import { cleanupOracleScratch, oracleEqual, runOracle, show } from "@inhuman.tools/arrival-mercury-oracle";
 import type { ExpectedOutcome, OracleSession, Outcome } from "@inhuman.tools/arrival-mercury-oracle";
+import { openRunnerOracleSession } from "./runner-plane.js";
 import { CORPUS_EXPECTATIONS } from "./corpus/expectations.js";
 
 const corpusDir = fileURLToPath(new URL("corpus/", import.meta.url));
@@ -81,7 +82,7 @@ function checkSide(side: "interpreter" | "compiled", outcome: Outcome, expected:
 describe("bug-cell corpus — interpreter ≡ expected ≡ compiled", () => {
   let session: OracleSession;
   beforeAll(async () => {
-    session = await openOracleSession();
+    session = await openRunnerOracleSession();
   }, 120_000);
   afterAll(async () => {
     await session.dispose();

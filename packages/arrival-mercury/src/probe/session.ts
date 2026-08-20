@@ -206,12 +206,14 @@ export type ProbeSession = MercurySession;
 const routerOf = new WeakMap<ProbeSession, InferRouter>();
 
 /** Open a fresh probe session — the one expensive capability-DAG assembly,
- *  reusable across many `recordRun`/`probe` calls (§2.4's reuse contract). */
-export async function openProbeSession(): Promise<ProbeSession> {
+ *  reusable across many `recordRun`/`probe` calls (§2.4's reuse contract).
+ *  `capabilities` is the host plane; `probe/infer` is prepended (highest
+ *  precedence) so the substitution seam wins a name clash with `infer`. */
+export async function openProbeSession(capabilities: readonly EnvCapability[]): Promise<ProbeSession> {
   const router: InferRouter = {};
   const session = await openSession({
     name: "arrival-mercury-probe",
-    capabilities: [buildProbeInferCapability(router)],
+    capabilities: [buildProbeInferCapability(router), ...capabilities],
     params: {},
   });
   routerOf.set(session, router);

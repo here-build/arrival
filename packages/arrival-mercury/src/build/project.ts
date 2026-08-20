@@ -11,6 +11,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import type { EnvCapability } from "@inhuman.tools/arrival";
+
 import type { Span } from "../coreform/types.js";
 import { classify } from "../coreform/classify.js";
 import { desugar } from "../front/desugar.js";
@@ -202,6 +204,9 @@ function loadStage0Source(): string {
 }
 
 export interface BuildProjectOptions {
+  /** Host vocabulary used to mint the compile session and harvest the emit
+   *  registry. Required — mercury does not default a product plane. */
+  readonly capabilities: readonly EnvCapability[];
   /** Output basename for the copied stage-0 runtime module (no extension).
    *  Default `"stage0"`. */
   readonly stage0Basename?: string;
@@ -310,7 +315,7 @@ function resolveFlowUp(
  * `load-project.ts`) already produce for `run`/`compile` — this function adds
  * no filesystem access of its own.
  */
-export async function buildProject(files: Readonly<Record<string, string>>, opts?: BuildProjectOptions): Promise<BuildResult> {
+export async function buildProject(files: Readonly<Record<string, string>>, opts: BuildProjectOptions): Promise<BuildResult> {
   const stage0Basename = opts?.stage0Basename ?? "stage0";
   const warnings: BuildWarning[] = [];
   const outFiles: BuildFile[] = [];
@@ -356,7 +361,7 @@ export async function buildProject(files: Readonly<Record<string, string>>, opts
   const classifyFile: ClassifyFile = opts?.classifyFile ?? defaultClassifier(requiredBy, hasProgramFaceOf);
 
   const shapes = new Map<string, ExportShape>();
-  const session = await openOracleSession();
+  const session = await openOracleSession(opts.capabilities);
   try {
     const baseRegistry = greenfieldRegistryFor(session);
     for (const relPath of order) {

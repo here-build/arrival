@@ -1,14 +1,17 @@
 /**
- * registry/greenfield-session — assemble the greenfield interpreter session and
+ * registry/greenfield-session — assemble a greenfield interpreter session and
  * harvest its emit registry. The tsx-free half of what used to live in
  * `oracle/harness.ts`, lifted here so the compiler path (`product/compile-source`,
  * `build/project`) can build the registry it needs WITHOUT importing the harness
  * (which loads `tsx/esm/api` at module eval — browser/edge poison).
  *
- * Transitively node-free: `openSession` (this package's own session mint over
- * the runner plane) and the registry / rules harvest are all browser-safe. The
- * differential oracle (`arrival-mercury-oracle`) imports these back DOWN from here.
+ * The host supplies the vocabulary (`capabilities`). Mercury does not default a
+ * product plane. Transitively node-free: `openSession` and the registry / rules
+ * harvest are browser-safe. The differential oracle (`arrival-mercury-oracle`)
+ * imports these back DOWN from here.
  */
+import type { EnvCapability } from "@inhuman.tools/arrival";
+
 import { openSession, type MercurySession } from "../session.js";
 
 import { phase1Rules, withRules, type OverlayEmitRegistry } from "../rules/index.js";
@@ -22,17 +25,13 @@ import { emitRegistryOf } from "./index.js";
 export type OracleSession = MercurySession;
 
 /**
- * Build the one shared interpreter session. No `loader` is passed — every
- * corpus/fuzz program is a self-contained snippet, so `(require …)` stays an
- * unbound symbol by capability withholding. The retired `arrival/infer` capability
- * (and its required `InferFn` stub) is gone — the LLM/MCP layer's `chat/completion`
- * is what's bound now, and an unarmed `providers` bag makes any real dispatch throw
- * the layer's own teaching door the moment a program actually calls one (the same
- * "fails loudly, never an unbound-variable red herring" posture the retired stub
- * existed to give `(infer …)`), so no host-side stub is needed here at all.
+ * Build the one shared interpreter session over `capabilities`. No `loader` is
+ * passed — every corpus/fuzz program is a self-contained snippet, so
+ * `(require …)` stays an unbound symbol by capability withholding unless a
+ * host capability binds it.
  */
-export async function openOracleSession(): Promise<OracleSession> {
-  return openSession({ name: "arrival-mercury-oracle", params: {} });
+export async function openOracleSession(capabilities: readonly EnvCapability[]): Promise<OracleSession> {
+  return openSession({ name: "arrival-mercury-oracle", capabilities, params: {} });
 }
 
 /** One `withRules(harvest, phase1Rules)` registry per session's `RunContext` — the
