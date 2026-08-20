@@ -14,8 +14,6 @@
  * line/cursor — a terminal editor cannot afford React's async-state lag mid-word.
  */
 import React, { useCallback, useReducer, useRef, useState } from "react";
-import { Box, render, Static, Text, useApp, useInput, useStdout } from "ink";
-
 import { scan } from "@inhuman.tools/arrival/lsp-internals";
 import {
   EMPTY_REPL_MODEL,
@@ -24,17 +22,18 @@ import {
   type ReplBlockState,
   type ReplFoldModel,
 } from "@inhuman.tools/mcp-substrate";
+import { Box, render, Static, Text, useApp, useInput, useStdout } from "ink";
 
 import { DISABLE_AUTOWRAP, ENABLE_AUTOWRAP } from "./ansi.js";
 import { emitForms } from "./form-emitter.js";
-import { pushHistory, recallNext, recallPrev, type NavState } from "./history-nav.js";
 import { highlightScheme } from "./highlight.js";
+import { pushHistory, recallNext, recallPrev, type NavState } from "./history-nav.js";
+import { toLens, type Lens } from "./lens.js";
 import { looksLikeMarkdown, renderMarkdown, topLevelString } from "./markdown.js";
 import { clipboardSet, COMMAND_START, commandDone, notify } from "./osc.js";
-import { colorizeSexpr } from "./sexpr-color.js";
-import { toLens, type Lens } from "./lens.js";
-import { paint, colorMode, type TintName } from "./tints.js";
 import type { LoaderSession } from "./session.js";
+import { colorizeSexpr } from "./sexpr-color.js";
+import { paint, colorMode, type TintName } from "./tints.js";
 
 type ColorMode = ReturnType<typeof colorMode>;
 
@@ -83,7 +82,17 @@ function wordRight(line: string, cursor: number): number {
 
 /** One block's lines. Source is highlighted through the lens; content (the value) subtly
  *  colored; the glyph carries state. Mirrors painter.ts's `renderBlock` but in Ink Text. */
-function BlockView({ block, lens, mode, width }: { block: ReplBlock; lens: Lens; mode: ColorMode; width: number }): React.ReactElement {
+function BlockView({
+  block,
+  lens,
+  mode,
+  width,
+}: {
+  block: ReplBlock;
+  lens: Lens;
+  mode: ColorMode;
+  width: number;
+}): React.ReactElement {
   const glyph = paint(GLYPH[block.state], TINT[block.state], mode);
   const src = block.source === "" ? "" : highlightScheme(toLens(block.source, lens), mode);
   const srcLines = src.split("\n");
@@ -98,13 +107,15 @@ function BlockView({ block, lens, mode, width }: { block: ReplBlock; lens: Lens;
   const rows: React.ReactElement[] = [
     <Box key="s0" width={width} justifyContent="space-between">
       <Text>{`${glyph} ${srcLines[0] ?? ""}`}</Text>
-      {elapsed !== "" ? <Text>{elapsed}</Text> : null}
+      {elapsed === "" ? null : <Text>{elapsed}</Text>}
     </Box>,
   ];
-  srcLines.slice(1).forEach((l, i) => rows.push(<Text key={`s${i + 1}`}>{`  ${l}`}</Text>));
+  for (const [i, l] of srcLines.slice(1).entries()) rows.push(<Text key={`s${i + 1}`}>{`  ${l}`}</Text>);
 
   if (block.state === "skipped") {
-    rows.push(<Text key="skip">{paint("  (skipped — an earlier form in this submission crashed)", "skipped", mode)}</Text>);
+    rows.push(
+      <Text key="skip">{paint("  (skipped — an earlier form in this submission crashed)", "skipped", mode)}</Text>,
+    );
   } else {
     let ci = 0;
     for (const c of block.content) {
@@ -126,7 +137,17 @@ function BlockView({ block, lens, mode, width }: { block: ReplBlock; lens: Lens;
   return <Box flexDirection="column">{rows}</Box>;
 }
 
-function TurnView({ blocks, lens, mode, width }: { blocks: readonly ReplBlock[]; lens: Lens; mode: ColorMode; width: number }): React.ReactElement {
+function TurnView({
+  blocks,
+  lens,
+  mode,
+  width,
+}: {
+  blocks: readonly ReplBlock[];
+  lens: Lens;
+  mode: ColorMode;
+  width: number;
+}): React.ReactElement {
   return (
     <Box flexDirection="column">
       {blocks.map((b, i) => (
@@ -170,7 +191,14 @@ export interface ReplAppProps {
   readonly mode?: ColorMode;
 }
 
-function ReplApp({ session, budgetMs, heapBudget, version, capabilityCount, mode = colorMode() }: ReplAppProps): React.ReactElement {
+function ReplApp({
+  session,
+  budgetMs,
+  heapBudget,
+  version,
+  capabilityCount,
+  mode = colorMode(),
+}: ReplAppProps): React.ReactElement {
   const { exit, waitUntilRenderFlush } = useApp();
   // The raw stream Ink itself writes to (the real terminal in production, the fake capture
   // stream under ink-testing-library) — `write` is Ink's blessed side-channel for external
@@ -202,7 +230,7 @@ function ReplApp({ session, budgetMs, heapBudget, version, capabilityCount, mode
   const applyEntry = (st: InputBuffer, entry: string): void => {
     const lines = entry.split("\n");
     st.pending = lines.slice(0, -1).join("\n");
-    st.line = lines[lines.length - 1] ?? "";
+    st.line = lines.at(-1) ?? "";
     st.cursor = st.line.length;
   };
 
@@ -413,7 +441,7 @@ function ReplApp({ session, budgetMs, heapBudget, version, capabilityCount, mode
           }
           onEnter(cur.pending === "" ? cur.line : `${cur.pending}\n${cur.line}`);
         }
-        const trailing = segments[segments.length - 1] ?? "";
+        const trailing = segments.at(-1) ?? "";
         const cur = input.current;
         if (trailing !== "" && !key.ctrl && !key.meta) {
           cur.line = cur.line.slice(0, cur.cursor) + trailing + cur.line.slice(cur.cursor);

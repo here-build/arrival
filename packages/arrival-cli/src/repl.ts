@@ -3,8 +3,8 @@
  * paired with a single session scope — defines land in the scope and accumulate across
  * turns, unchanged from before):
  *
- *   • TTY (`replInteractive`): the awesome-REPL wave 1 experience — the gradient-
- *     wordmark greeting (greeting.ts), provenance-tinted blocks that cascade
+ *   • TTY (`replInteractive`): the greeting (default: a shibboleth quote, not a
+ *     wordmark — greeting.ts), provenance-tinted blocks that cascade
  *     pending→running→done/error/skipped as `ReplEvent`s land (form-emitter.ts →
  *     mcp-substrate's `foldReplEvent` → painter.ts), and the sugarcoat lens (`,lens`
  *     flips scrollback rendering — lens.ts).
@@ -27,7 +27,14 @@ import { EMPTY_REPL_MODEL, foldReplEvent, type ReplBlock, type ReplFoldModel } f
 import { CLEAR_SCREEN, CURSOR_HOME } from "./ansi.js";
 import type { ArmedCapabilities } from "./capabilities.js";
 import { emitForms } from "./form-emitter.js";
-import { identityLine, readOwnVersion } from "./greeting.js";
+import {
+  bannerLines,
+  greetingLines,
+  identityLine,
+  readOwnVersion,
+  resolveBanner,
+  type BannerKind,
+} from "./greeting.js";
 import type { Lens } from "./lens.js";
 import { paintRegion, renderTurn } from "./painter.js";
 import { replInk } from "./repl-ink.js";
@@ -70,8 +77,8 @@ async function replPlain(session: LoaderSession): Promise<number> {
     try {
       const { values } = await execState(src, { capabilities, config, runCtx, scope, ...budgets() });
       for (const v of values) printSchemeValue(v);
-    } catch (e) {
-      printError(e);
+    } catch (error) {
+      printError(error);
     }
   }
   await disposeRunContext(runCtx);
@@ -93,14 +100,18 @@ async function replay(history: readonly (readonly ReplBlock[])[], lens: Lens, ca
 
 /** The wave-1 TTY experience: greeting, then per-submission provenance-tint cascades,
  *  then a frozen scrollback record — `,lens` replays the whole record in the other lens. */
-async function replInteractive(session: LoaderSession, armed?: ArmedCapabilities): Promise<number> {
+async function replInteractive(
+  session: LoaderSession,
+  opts: { capabilityCount: number; banner: BannerKind; version: string },
+): Promise<number> {
   const { capabilities, config, runCtx, scope } = session;
   let lens: Lens = "sugarcoat"; // D3: sugarcoat ON by default — it's the marketing surface
-  const capabilityCount = armed?.capabilities.length ?? 0;
+  const { capabilityCount, banner, version } = opts;
   const history: ReplBlock[][] = []; // settled turns, oldest → newest
 
-  const version = await readOwnVersion();
-  process.stdout.write(`${identityLine({ version, capabilityCount, lens })}\n\n`);
+  process.stdout.write(
+    `${greetingLines({ version, capabilityCount, lens }, undefined, { kind: banner }).join("\n")}\n\n`,
+  );
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
   let buffer = "";
@@ -175,21 +186,27 @@ async function replInteractive(session: LoaderSession, armed?: ArmedCapabilities
  */
 export async function replFromSession(
   session: LoaderSession,
-  opts: { version?: string; capabilityCount?: number } = {},
+  opts: { version?: string; capabilityCount?: number; banner?: string } = {},
 ): Promise<number> {
   const interactive = process.stdin.isTTY === true;
   if (!interactive) return replPlain(session);
   await attuneTerminal();
+  const version = opts.version ?? (await readOwnVersion());
+  const capabilityCount = opts.capabilityCount ?? 0;
+  const banner = resolveBanner(process.env, opts.banner);
   // `ARRIVAL_REPL=classic` keeps the pre-Ink painter path — the escape hatch if the TUI
   // misbehaves on some terminal.
-  if (process.env.ARRIVAL_REPL === "classic") return replInteractive(session);
-  // Default TTY: the Ink bottom-anchored TUI (repl-ink.tsx).
-  const version = opts.version ?? (await readOwnVersion());
+  if (process.env.ARRIVAL_REPL === "classic") {
+    return replInteractive(session, { capabilityCount, banner, version });
+  }
+  // Default TTY: quote/wordmark above the Ink region (identity rides the prompt).
+  const top = bannerLines({ kind: banner });
+  if (top.length > 0) process.stdout.write(`${top.join("\n")}\n\n`);
   try {
     await replInk({
       session,
       ...budgets(),
-      capabilityCount: opts.capabilityCount ?? 0,
+      capabilityCount,
       version,
     });
   } finally {
@@ -201,7 +218,7 @@ export async function replFromSession(
 /** `armed` — the host-armed capability set (`--with` / config file), assembled into
  *  the session ambient at start; the whole session sees one vocabulary. The `arrival`
  *  bin's own repl: assemble the loader session here, then render via the host seam. */
-export async function repl(armed?: ArmedCapabilities): Promise<number> {
+export async function repl(armed?: ArmedCapabilities, opts: { banner?: string } = {}): Promise<number> {
   const session = await loaderSession(process.cwd(), "arrival-repl", armed);
-  return replFromSession(session, { capabilityCount: armed?.capabilities.length ?? 0 });
+  return replFromSession(session, { capabilityCount: armed?.capabilities.length ?? 0, banner: opts.banner });
 }

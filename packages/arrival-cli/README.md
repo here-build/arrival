@@ -213,9 +213,11 @@ existing `config.params` shape is the intended shape.
 door on stderr and the session survives, multi-line forms continue until parens balance (the reader's own
 scanner, not a hand-rolled counter), Ctrl-D exits.
 
-On a TTY you get the full experience — greeting, provenance-tinted per-form cascade, and the **sugarcoat
-lens on by default** (scrollback renders in sugarcoat's JS/Python-shaped face; type `,lens` to flip to
-classic Scheme and back). Piped/non-TTY input is the plain contract — no ANSI, one value per form:
+On a TTY you get the full experience — a shibboleth quote as the splash (not a wordmark;
+`--banner wordmark` / `ARRIVAL_BANNER=wordmark` brings the gradient back; `--banner off` is
+silent), provenance-tinted per-form cascade, and the **sugarcoat lens on by default**
+(scrollback renders in sugarcoat's JS/Python-shaped face; type `,lens` to flip to classic
+Scheme and back). Piped/non-TTY input is the plain contract — no ANSI, one value per form:
 
 ```
 $ printf '(define x 21)\n(* x 2)\n' | arrival repl

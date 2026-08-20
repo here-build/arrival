@@ -4,6 +4,7 @@
  * to lines so the shot path never needs a TTY.
  */
 import { greetingLines } from "../greeting.js";
+import { QUOTES } from "../quotes.js";
 import { highlightScheme } from "../highlight.js";
 import { colorizeSexpr } from "../sexpr-color.js";
 import { paintDiagnostic } from "../session.js";
@@ -32,7 +33,11 @@ function block(state: "done" | "error" | "skipped" | "pending" | "running", sour
 export function sampleFrame(paper: Rgb, ink: Rgb): string[] {
   attuneFromProbe({ bg: paper, fg: ink });
   const lines = [
-    ...greetingLines({ version: "0.9.0", capabilityCount: 0, lens: "sugarcoat" }, MODE),
+    ...greetingLines(
+      { version: "0.9.0", capabilityCount: 0, lens: "sugarcoat" },
+      MODE,
+      { kind: "quote", quote: QUOTES[17], width: 72 },
+    ),
     "",
     ...block("done", "(define (square n) (* n n))"),
     "",

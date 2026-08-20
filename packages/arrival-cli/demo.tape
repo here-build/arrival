@@ -16,8 +16,9 @@
 # the wordmark splash gets ONE beat, not a scene — greeting flashes, then the
 # paste-and-cascade starts by second ~2. Beats:
 #
-#   0.0s   greeting: gradient "arrival" wordmark + the one fetch-style identity line —
-#          THE static screenshot frame (§1.2), composed and held just long enough to read
+#   0.0s   greeting: default shibboleth quote (not the wordmark) + the fetch-style
+#          identity line — held just long enough to read. Tape the wordmark with
+#          ARRIVAL_BANNER=wordmark if that's the shot.
 #   ~2s    ONE Enter submitting THREE top-level forms on one line — a real multi-form
 #          topology in a single call (three separate Enters would fire three separate
 #          single-form turns, not one cascading topology): topology paints all three

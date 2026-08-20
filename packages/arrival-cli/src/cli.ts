@@ -71,10 +71,15 @@ options:
                             EnvCapability instance(s)
   --config <file>           config file (default: ./arrival.config.ts|.json) —
                             { capabilities: [{ module, config? }…], config? }
+  --banner quote|wordmark|off
+                            (repl) splash at session start. Default: quote
+                            (a shibboleth line, not a wordmark). ARRIVAL_BANNER
+                            is the env equivalent.
 
 environment:
   ARRIVAL_HEAP_MAX          per-run allocation budget (default 100000000 cells)
   ARRIVAL_RUN_BUDGET_MS     wall-clock budget in ms   (default 300000)
+  ARRIVAL_BANNER            quote (default) | wordmark | off
 `;
 
 async function readSource(file: string): Promise<string> {
@@ -242,6 +247,7 @@ async function main(argv: string[]): Promise<number> {
       outline: { type: "boolean" },
       form: { type: "string" },
       export: { type: "boolean" },
+      banner: { type: "string" },
     },
   });
   if (values.help === true) {
@@ -299,7 +305,7 @@ async function main(argv: string[]): Promise<number> {
     }
     case "repl": {
       const armed = await armCapabilities(values.with ?? [], values.config, process.cwd());
-      return repl(armed);
+      return repl(armed, { banner: values.banner });
     }
     case undefined:
       process.stderr.write(USAGE);
