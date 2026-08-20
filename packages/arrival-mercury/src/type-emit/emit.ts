@@ -168,6 +168,8 @@ interface Ctx {
    * ⇒ kwargs; ZodType rest ⇒ variadic values.
    */
   kwargsMembers: ReadonlySet<string>;
+  /** Require-path suffixes whose `(require "…")` result is a kwargs callable. Host-supplied. */
+  kwargsRequireSuffixes: readonly string[];
   /** Emitted TS identifier → the ORIGINAL scheme source text it was minted from,
    *  populated at every `define`/`define/overridable` binding site (`emitDefine`).
    *  With {@link encodeSchemeIdent} the map is lossless/invertible, but we still
@@ -406,7 +408,7 @@ function recordSpan(ctx: Ctx, start: number, node: Node): void {
 
 function emitBuiltinCall(name: string, n: ListNode, ctx: Ctx): void {
   const start = ctx.buf.offset;
-  // Require-as-import: `(require "data.prompt")` → the imported default binding.
+  // Require-as-import: `(require "path")` → the imported default binding.
   if (name === "require" && n.list.length >= 2) {
     const pathNode = n.list[1];
     if (isAtom(pathNode) && pathNode.str) {
@@ -429,34 +431,31 @@ function headTakesKwargs(name: string, ctx: Ctx): boolean {
   return ctx.kwargsMembers.has(name);
 }
 
-/** `(require "….prompt")` — prompts are kwargs callables (path + :k v rest). */
-function isRequirePromptForm(fn: Node): boolean {
-  return (
-    isList(fn) &&
-    !isNil(fn) &&
-    fn.list.length === 2 &&
-    isAtom(fn.list[0]) &&
-    fn.list[0]!.atom === "require" &&
-    isAtom(fn.list[1]) &&
-    !!fn.list[1]!.str &&
-    fn.list[1]!.atom.endsWith(".prompt")
-  );
+/** `(require "…<suffix>")` — host-declared kwargs callables (path + :k v rest). */
+function isKwargsRequireForm(fn: Node, suffixes: readonly string[]): boolean {
+  if (suffixes.length === 0) return false;
+  if (!isList(fn) || isNil(fn) || fn.list.length !== 2) return false;
+  if (!isAtom(fn.list[0]) || fn.list[0].atom !== "require") return false;
+  const pathNode = fn.list[1];
+  if (!isAtom(pathNode) || !pathNode.str) return false;
+  const path = pathNode.atom;
+  return suffixes.some((s) => path.endsWith(s));
 }
 
 /**
- * Names bound to `(require "….prompt")` in this forest — local kwargs heads
- * (same collection sugarcoat uses for kwarg render). Merged with opts.kwargsMembers.
+ * Names bound to a kwargs-require in this forest — local kwargs heads.
+ * Merged with opts.kwargsMembers.
  */
-function collectPromptKwargHeads(forest: readonly Node[]): Set<string> {
+function collectRequireKwargHeads(forest: readonly Node[], suffixes: readonly string[]): Set<string> {
   const heads = new Set<string>();
+  if (suffixes.length === 0) return heads;
   const visit = (n: Node): void => {
     if (!isList(n) || isNil(n)) return;
     const h = n.list[0];
     if (isAtom(h) && !h.str && (h.atom === "define" || h.atom === "define/overridable")) {
-      // (define name (require "x.prompt")) or (define (name …) …) — only value form.
       const nameNode = n.list[1];
       const val = h.atom === "define/overridable" ? n.list[3] : n.list[2];
-      if (isAtom(nameNode) && !nameNode.str && val && isRequirePromptForm(val)) {
+      if (isAtom(nameNode) && !nameNode.str && val && isKwargsRequireForm(val, suffixes)) {
         heads.add(nameNode.atom);
       }
     }
@@ -471,7 +470,7 @@ function collectPromptKwargHeads(forest: readonly Node[]): Set<string> {
 function emitCall(fn: Node, args: Node[], ctx: Ctx, form: ListNode): void {
   const start = ctx.buf.offset;
   const kwargs =
-    (isAtom(fn) && !fn.str && headTakesKwargs(fn.atom, ctx)) || isRequirePromptForm(fn);
+    (isAtom(fn) && !fn.str && headTakesKwargs(fn.atom, ctx)) || isKwargsRequireForm(fn, ctx.kwargsRequireSuffixes);
   if (isAtom(fn) && !fn.str) {
     // Named head — direct call; kwargs collapse only when inputRest is a record.
     emitExpr(fn, ctx);
@@ -479,7 +478,7 @@ function emitCall(fn: Node, args: Node[], ctx: Ctx, form: ListNode): void {
     emitArgs(args, ctx, kwargs);
     ctx.buf.raw(")");
   } else if (kwargs) {
-    // Computed kwargs head (e.g. `(require "x.prompt")`) — same call shape as named:
+    // Computed kwargs head (e.g. `(require "x.ext")` for a host suffix) — same call shape as named:
     // `fn({ key?, … })` after leading-positional→key promotion (see emitArgs).
     emitExpr(fn, ctx);
     ctx.buf.raw("(");
@@ -1758,9 +1757,14 @@ export interface EmitTypesOptions {
   narrowsMembers?: ReadonlySet<string>;
   /**
    * Heads with **record-shaped** Contract `inputRest` (kwargs channel). Merged
-   * with names bound to `(require "….prompt")` in the program. See `Ctx.kwargsMembers`.
+   * with names bound to a kwargs-require (see `kwargsRequireSuffixes`).
    */
   kwargsMembers?: ReadonlySet<string>;
+  /**
+   * Require-path suffixes whose `(require "…")` result is a kwargs callable.
+   * Host-supplied — mercury does not name domain filetypes. Empty ⇒ none.
+   */
+  kwargsRequireSuffixes?: readonly string[];
   /**
    * Require-as-import map: scheme require path → TS import binding. When present,
    * `(require "path")` emits the binding (default import of a virtual module).
@@ -1782,10 +1786,11 @@ export function emitTypes(source: string | readonly Node[], opts?: EmitTypesOpti
 
   const nameOf = resolveNames(forest, []);
   const setVars = collectSetBangNames(forest, nameOf);
-  // inputRest-record heads: host harvest ∪ local prompt bindings ∪ inline require-prompt.
+  const kwargsRequireSuffixes = opts?.kwargsRequireSuffixes ?? [];
+  // inputRest-record heads: host harvest ∪ local bindings of kwargs-requires.
   const kwargsMembers = new Set<string>([
     ...(opts?.kwargsMembers ?? EMPTY_SET),
-    ...collectPromptKwargHeads(forest),
+    ...collectRequireKwargHeads(forest, kwargsRequireSuffixes),
   ]);
   // Demand harvest: compose domains + lazy multi-arg formal shapes (map/lambda, calls).
   const demandCtx: DemandHarvestCtx = {
@@ -1801,6 +1806,7 @@ export function emitTypes(source: string | readonly Node[], opts?: EmitTypesOpti
     hostMembers: opts?.hostMembers ?? EMPTY_SET,
     narrowsMembers: opts?.narrowsMembers ?? EMPTY_SET,
     kwargsMembers,
+    kwargsRequireSuffixes,
     declaredNames: new Map(),
     requireBindings: opts?.requireBindings ?? new Map(),
     demandCtx,

@@ -1,10 +1,9 @@
-// Types-only require faces — twin of build/prompt-module + build/hbs-module.
+// Types-only require faces — twin of build/hbs-module + host-synthesized reqType.
 import { describe, expect, it } from "vitest";
 
 import {
   emitDataRequireFace,
   emitHbsRequireFace,
-  emitPromptRequireFace,
   emitRequireFaceModule,
 } from "../type-emit/require-face.js";
 
@@ -15,14 +14,11 @@ describe("emitRequireFaceModule — types faces", () => {
     expect(ts).toContain('List<{ "name": string }>');
   });
 
-  it("prompt face: typed callable with key? + template holes", () => {
-    const src = '{{role "user"}}\nHi {{name}}.';
-    const ts = emitPromptRequireFace(src, "greet.prompt");
-    expect(ts).not.toBeNull();
-    expect(ts!).toContain("export default __default");
-    expect(ts!).toContain('"key"?: string');
-    expect(ts!).toContain('"name": unknown');
-    expect(ts!).toMatch(/\(vars:/);
+  it("host-synthesized callable face is the reqType stub", () => {
+    const reqType = '(vars: { "key"?: string; "name": unknown }) => string';
+    const ts = emitRequireFaceModule("greet.prompt", '{{role "user"}}\nHi {{name}}.', reqType);
+    expect(ts).toContain("export default __default");
+    expect(ts).toContain(reqType);
   });
 
   it("hbs face: pretreat → emitTypes → default export", () => {
@@ -33,13 +29,9 @@ describe("emitRequireFaceModule — types faces", () => {
     expect(ts).not.toContain("export {};");
   });
 
-  it("dispatch: .prompt uses content when present", () => {
-    const ts = emitRequireFaceModule(
-      "x.prompt",
-      '{{role "user"}}\n{{topic}}',
-      "(vars: any) => any",
-    );
-    expect(ts).toContain('"topic": unknown');
+  it("dispatch: non-hbs uses host reqType even when content is present", () => {
+    const ts = emitRequireFaceModule("x.prompt", '{{role "user"}}\n{{topic}}', "(vars: any) => any");
+    expect(ts).toContain("(vars: any) => any");
   });
 
   it("dispatch: data path uses registry type string", () => {

@@ -292,7 +292,7 @@ export { witnessesFor, type Witness, type WitnessAxis, type WitnessOptions } fro
 //    CLI package (`@inhuman.tools/inhuman`) is the sole consumer; this is the
 //    ONE new public surface this lane adds — everything else above is
 //    untouched. ──
-export { buildProject, type BuildProjectOptions } from "./build/project.js";
+export { buildProject, type BuildProjectOptions, type PretreatFile } from "./build/project.js";
 export type {
   BuildFile,
   BuildResult,

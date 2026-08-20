@@ -75,7 +75,7 @@ const litStr = (id: () => NodeId, span: Span, value: string): CoreForm => ({
 /** The Picoschema-adjacent type tags this v0 coercion understands. Anything else
  *  (an enum, an object shape, a symbol reference) passes through as a plain
  *  string — the SAME "honest gap, not a silent miscompile" posture the
- *  `.prompt` schema folder documents for its own unhandled shapes. */
+ *  pretreat schema folder documents for its own unhandled shapes. */
 export type CoercionTag = "number" | "integer" | "boolean" | "string";
 
 /** Fold `overridableType` down to a coercion tag. Only a bare string-literal tag

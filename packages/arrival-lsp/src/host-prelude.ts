@@ -37,6 +37,8 @@ export interface HostPrelude {
    * Heads whose Contract `inputRest` is a **plain record** (kwargs channel).
    * Threaded into `emitTypes({ kwargsMembers })` so trailing `:k v` collapse
    * only for true kwargs callees — not for positional HOFs like `map`/`where`.
+   * Path-suffix kwargs (`(require "x.prompt")`) are a separate host option
+   * (`kwargsRequireSuffixes` on the language service).
    */
   kwargsMembers: string[];
 }
@@ -50,7 +52,7 @@ export interface AssembleHostPreludeOptions {
   preamble?: string;
   /**
    * Subset of entry names with record-shaped `inputRest`. When omitted, empty
-   * (emitter still discovers local `(require "….prompt")` bindings itself).
+   * (path-suffix kwargs are `kwargsRequireSuffixes` on the language service).
    */
   kwargsMembers?: readonly string[];
 }

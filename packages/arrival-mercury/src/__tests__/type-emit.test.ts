@@ -227,7 +227,9 @@ describe("type-emit: inputRest kwargs vs keyword-as-fn", () => {
   });
 
   it('((require "x.prompt") path :label l) — path promotes to key in the kwargs bag', () => {
-    const r = emitTypes('((require "x.prompt") "cache/key" :label lab :reasons rs)');
+    const r = emitTypes('((require "x.prompt") "cache/key" :label lab :reasons rs)', {
+      kwargsRequireSuffixes: [".prompt"],
+    });
     // Leading positional is call-site identity → `key` field, one arg (not 2).
     expect(r.ts).toContain('require("x.prompt")({ key: "cache/key", label: lab, reasons: rs })');
     expect(r.ts).not.toContain('require("x.prompt")("cache/key"');
@@ -236,13 +238,16 @@ describe("type-emit: inputRest kwargs vs keyword-as-fn", () => {
   });
 
   it("explicit :key wins over positional promotion", () => {
-    const r = emitTypes('((require "x.prompt") :key "k" :label lab)');
+    const r = emitTypes('((require "x.prompt") :key "k" :label lab)', {
+      kwargsRequireSuffixes: [".prompt"],
+    });
     expect(r.ts).toContain('require("x.prompt")({ key: "k", label: lab })');
   });
 
   it("local binding of (require ….prompt) is a kwargs head", () => {
     const r = emitTypes(
       '(define triage (require "triage.prompt"))\n(triage "k" :summary s :tagline t)',
+      { kwargsRequireSuffixes: [".prompt"] },
     );
     expect(r.ts).toContain('triage({ key: "k", summary: s, tagline: t })');
   });

@@ -79,14 +79,14 @@ export type BuildWarningCode =
   /** A project file whose extension v0 doesn't recognize at all (`project.ts`'s
    *  main loop) — never compiled, never even parsed. */
   | "build/unrecognized-ext"
-  /** A `.prompt` file failed pure convert→scheme or scm compile (`project.ts`).
-   *  Never carries a span: a `.prompt` file is not user CoreForm. */
-  | "build/prompt-unsupported"
+  /** A host-pretreat file failed convert→scheme or scm compile (`project.ts`).
+   *  Never carries a span: pretreat input is not user CoreForm. */
+  | "build/pretreat-unsupported"
   /** A `.hbs` file failed pure convert→scheme or scm compile. */
   | "build/hbs-unsupported"
-  /** A `(require "…")` whose `.prompt` target failed convert/compile — same gap
-   *  as `build/prompt-unsupported`, from the require site (has a CoreForm span). */
-  | "build/prompt-phase1-gap"
+  /** A `(require "…")` whose pretreat target failed convert/compile — same gap
+   *  as `build/pretreat-unsupported`, from the require site (has a CoreForm span). */
+  | "build/pretreat-gap"
   /** A `(require "…")` that didn't resolve to a compiled sibling for any OTHER
    *  reason — dangling (no such file in the project), or the target itself
    *  never got a shape recorded (an upstream cycle/data-parse-error). */
@@ -127,8 +127,8 @@ export type BuildWarningCode =
    *  `build/overridable-flow-up-namespaced`. */
   | "build/overridable-flow-up-nonliteral-default";
 
-/** A non-fatal build-time note — a file this build couldn't fully handle (the
- *  `.prompt` gap), a require that didn't resolve, a dependency cycle. Surfaced to
+/** A non-fatal build-time note — a file this build couldn't fully handle (a
+ *  pretreat gap), a require that didn't resolve, a dependency cycle. Surfaced to
  *  the CLI as warnings, never silently dropped (errors-as-doors: teach, don't ban).
  *  `code` is the stable identity (DX memo item 4); `span` is the `.scm` SOURCE
  *  position of the responsible CoreForm node — present whenever one genuinely
@@ -152,7 +152,7 @@ export interface BuildResult {
   readonly files: readonly BuildFile[];
   readonly warnings: readonly BuildWarning[];
   /** Project-relative INPUT paths that produced no compiled output at all —
-   *  an unrecognized extension, a `.prompt` file (always, v0), or a data file
+   *  an unrecognized extension, a pretreat/hbs failure, or a data file
    *  whose parse threw. Distinct from a "door" (`project.ts`'s doors/skipped
    *  split, DX memo item 1): a door is a gap INSIDE a file that still compiled;
    *  a skip is a whole file that never did. */
@@ -173,7 +173,7 @@ export type RequireResolution =
       readonly kind: "unresolved";
       /** Which {@link BuildWarningCode} the requiring file's own warning should
        *  carry — `resolveRequire` already knows WHY resolution failed (dangling
-       *  vs. an upstream `.prompt` gap vs. some other uncompiled sibling), so it
+       *  vs. an upstream pretreat gap vs. some other uncompiled sibling), so it
        *  picks the code once, at the source of truth, rather than making
        *  `scm-module.ts` re-derive it from prose. */
       readonly code: BuildWarningCode;

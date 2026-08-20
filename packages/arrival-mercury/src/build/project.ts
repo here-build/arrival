@@ -22,7 +22,7 @@ import { defaultClassifier, type ClassifyFile } from "./classify.js";
 import { compileDataFile, DATA_EXTENSIONS } from "./data-module.js";
 import { foldOverridableExports, type FlowedUpOverridable, type OverridableExport } from "./overridable.js";
 import { compileHbsFile, HBS_EXT } from "./hbs-module.js";
-import { compilePromptFile, PROMPT_EXT } from "./prompt-module.js";
+import { compilePretreatFile, type PretreatFile } from "./pretreat-module.js";
 import { cleanName } from "../walker/names.js";
 import { flattenTopBegins, hasProgramFace, scanRequires } from "./require-scan.js";
 import { aliasFromPath, compileScmModule } from "./scm-module.js";
@@ -81,7 +81,7 @@ interface FileInfo {
   /** Resolved dependency edges this `.scm` file requires — ONLY targets that
    *  exist among the project's own files (a dangling require is a per-file
    *  `resolveRequire` warning at compile time, not a graph edge). Empty for
-   *  every non-`.scm` file (data/`.prompt` files have no requires of their
+   *  every non-`.scm` file (data/pretreat files have no requires of their
    *  own). */
   readonly deps: readonly RequireEdge[];
   /** Only meaningful for `.scm` — does this file's own flattened top-level
@@ -207,6 +207,10 @@ export interface BuildProjectOptions {
   /** Host vocabulary used to mint the compile session and harvest the emit
    *  registry. Required — mercury does not default a product plane. */
   readonly capabilities: readonly EnvCapability[];
+  /** Extension (including the dot) → bytes-to-scheme pretreat. Domain filetypes
+   *  (`.prompt`, …) register here; mercury compiles the generated scheme and
+   *  never names those extensions. */
+  readonly pretreat?: Readonly<Record<string, PretreatFile>>;
   /** Output basename for the copied stage-0 runtime module (no extension).
    *  Default `"stage0"`. */
   readonly stage0Basename?: string;
@@ -218,6 +222,8 @@ export interface BuildProjectOptions {
    *  `build.classifier` to a value of this type before calling in). */
   readonly classifyFile?: ClassifyFile;
 }
+
+export type { PretreatFile };
 
 /** The project-root-anchored form of `relPath` — `classify.ts`'s `absPath`
  *  argument, reusing `resolveSpecifier`'s OWN "a leading `/` means root-
@@ -231,7 +237,7 @@ function rootAnchored(relPath: string): string {
  *  collecting every reachable dependency's OWN published overridables
  *  (`ExportShape.overridables`) — the transitive knob cone. A
  *  dependency that never got a recorded `shape` (an upstream cycle/data-
- *  parse-error/`.prompt` gap) contributes nothing — an already-warned gap
+ *  parse-error/pretreat gap) contributes nothing — an already-warned gap
  *  elsewhere, not a new failure here. `visited` guards a diamond dependency
  *  from being counted twice and a require CYCLE from looping forever
  *  (mirrors `topoSort`'s own revisit guard; breadth-first since only
@@ -316,7 +322,8 @@ function resolveFlowUp(
  * no filesystem access of its own.
  */
 export async function buildProject(files: Readonly<Record<string, string>>, opts: BuildProjectOptions): Promise<BuildResult> {
-  const stage0Basename = opts?.stage0Basename ?? "stage0";
+  const stage0Basename = opts.stage0Basename ?? "stage0";
+  const pretreatOf = opts.pretreat ?? {};
   const warnings: BuildWarning[] = [];
   const outFiles: BuildFile[] = [];
   // Project-relative INPUT paths that end up with NO compiled output at all —
@@ -333,13 +340,13 @@ export async function buildProject(files: Readonly<Record<string, string>>, opts
     const ext = extOf(relPath);
     if (ext === SCM_EXT) {
       infos.set(relPath, { relPath, ext, ...analyzeScmFile(relPath, content, files) });
-    } else if (DATA_EXTENSIONS.has(ext) || ext === PROMPT_EXT || ext === HBS_EXT) {
+    } else if (DATA_EXTENSIONS.has(ext) || ext === HBS_EXT || pretreatOf[ext] !== undefined) {
       infos.set(relPath, { relPath, ext, deps: [], hasProgramFace: false, localOverridableNames: [] });
     } else {
       warnings.push({
         path: relPath,
         code: "build/unrecognized-ext",
-        message: `unrecognized file type "${ext || "(none)"}" — v0 handles .scm/.prompt/.hbs/.json/.yaml/.yml/.txt; skipped`,
+        message: `unrecognized file type "${ext || "(none)"}" — v0 handles .scm/.hbs/.json/.yaml/.yml/.txt plus host pretreat extensions; skipped`,
       });
       skippedFiles.push(relPath);
     }
@@ -369,22 +376,23 @@ export async function buildProject(files: Readonly<Record<string, string>>, opts
       if (info === undefined) continue; // an unrecognized-extension file, already warned
       const source = files[relPath]!;
 
-      if (info.ext === PROMPT_EXT || info.ext === HBS_EXT) {
+      const pretreat = pretreatOf[info.ext];
+      if (info.ext === HBS_EXT || pretreat !== undefined) {
         // Import-executable pretreat: bytes → scheme → compileScmModule.
-        // `.hbs` is the reference capability package; `.prompt` follows the same face.
+        // `.hbs` is the well-known handlebars pack; other extensions come from `opts.pretreat`.
         try {
           const runtimeImportPath = importSpecifierBetween(relPath, `${stage0Basename}.ts`);
           const compiled =
             info.ext === HBS_EXT
               ? compileHbsFile(source, { baseRegistry }, { path: relPath, runtimeImportPath })
-              : compilePromptFile(source, { baseRegistry }, { path: relPath, runtimeImportPath });
+              : compilePretreatFile(source, pretreat, { baseRegistry }, { path: relPath, runtimeImportPath });
           shapes.set(relPath, compiled.shape);
           outFiles.push({ path: outPathFor(relPath), content: compiled.content });
           for (const w of compiled.warnings) warnings.push({ path: relPath, ...w });
         } catch (e) {
           warnings.push({
             path: relPath,
-            code: info.ext === HBS_EXT ? "build/hbs-unsupported" : "build/prompt-unsupported",
+            code: info.ext === HBS_EXT ? "build/hbs-unsupported" : "build/pretreat-unsupported",
             message: e instanceof Error ? e.message : String(e),
           });
           skippedFiles.push(relPath);
@@ -434,13 +442,12 @@ export async function buildProject(files: Readonly<Record<string, string>>, opts
         const shape = shapes.get(target);
         if (shape === undefined) {
           // The target IS a project file, just never got a recorded shape —
-          // parse/compile failure (prompt or data) or a require cycle. Prompt
-          // keeps its own code so callers can still filter "prompt failed".
-          const code = extOf(target) === PROMPT_EXT ? "build/prompt-phase1-gap" : "build/unresolved-require";
-          const why =
-            extOf(target) === PROMPT_EXT
-              ? "the .prompt failed to convert/compile (see its own warning)"
-              : "a require cycle or an upstream data-parse-error";
+          // parse/compile failure (pretreat or data) or a require cycle.
+          const pretreatFailed = pretreatOf[extOf(target)] !== undefined;
+          const code = pretreatFailed ? "build/pretreat-gap" : "build/unresolved-require";
+          const why = pretreatFailed
+            ? "host pretreat failed to convert/compile (see its own warning)"
+            : "a require cycle or an upstream data-parse-error";
           return { kind: "unresolved", code, reason: `— "${target}" was not compiled (${why}; see its own warning)` };
         }
         return { kind: "resolved", importPath: importSpecifierBetween(relPath, target), shape };

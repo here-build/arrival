@@ -14,7 +14,6 @@ export { narrowsMembersOf } from "./narrows.js";
 export {
   emitDataRequireFace,
   emitHbsRequireFace,
-  emitPromptRequireFace,
   emitRequireFaceModule,
   emitTypedRequireFace,
 } from "./require-face.js";

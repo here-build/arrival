@@ -1,16 +1,14 @@
 /**
  * Types-only require faces — per-file `export default` modules for the type lens.
  *
- * Product compile (full runtime TS) lives in `build/prompt-module.ts` /
- * `build/hbs-module.ts`: pretreat → `compileScmModule`.
+ * Product compile (full runtime TS) lives in `build/hbs-module.ts` /
+ * `build/pretreat-module.ts`: pretreat → `compileScmModule`.
  *
- * Types compile (this file) is the simplified twin: pretreat → `emitTypes` where
- * that yields a usable face, else a typed default-export stub from the pure
- * type synthesizer (`resolvePromptRequireType`). Same CALLABLE RULE / default-
- * export shape as product — not a special import path, just a thinner pipeline.
+ * Types compile (this file) is the simplified twin: `.hbs` pretreat → `emitTypes`;
+ * every other path is a typed default-export stub from the host `reqType`.
+ * Domain filetypes (`.prompt`) synthesize that string outside mercury.
  */
 import { hbsContentsToSchemeSource } from "@inhuman.tools/arrival-modules/handlebars";
-import { resolvePromptRequireType } from "@inhuman.tools/llm-plane/arrival-env";
 
 import { emitTypes, type EmitTypesOptions } from "./emit.js";
 
@@ -22,8 +20,8 @@ export function emitDataRequireFace(reqType: string): string {
 }
 
 /**
- * Typed stub default export. Used for `.prompt` (full pretreat→emitTypes still
- * mangles bare-symbol `(lambda args …)` to a zero-arg arrow) and as fallback.
+ * Typed stub default export. Fallback when pretreat→emitTypes is not used
+ * (data files, host-synthesized callable faces).
  */
 export function emitTypedRequireFace(reqType: string): string {
   return `const __default: ${reqType} = null as any as ${reqType};\nexport default __default;\n`;
@@ -41,20 +39,9 @@ export function emitHbsRequireFace(content: string, opts?: EmitTypesOptions): st
 }
 
 /**
- * `.prompt` types face: pure type synthesizer → typed default export.
- * Product uses pretreat→compileScmModule; types stay on resolvePromptRequireType
- * until kwargs-shaped scheme lambda emit is honest for `(lambda args …)`.
- */
-export function emitPromptRequireFace(content: string, path: string): string | null {
-  const reqType = resolvePromptRequireType(content, path);
-  if (reqType === null) return null;
-  return emitTypedRequireFace(reqType);
-}
-
-/**
  * Dispatch: build the virtual-module TS for one require path.
- * @param content file bytes when available (enables hbs pretreat / prompt type synth)
- * @param reqType registry/synthesizer type string (data files; prompt fallback)
+ * @param content file bytes when available (enables hbs pretreat)
+ * @param reqType host-synthesized type string (data files; domain callables)
  */
 export function emitRequireFaceModule(
   path: string,
@@ -64,9 +51,6 @@ export function emitRequireFaceModule(
 ): string {
   if (path.endsWith(".hbs") && content !== null) {
     return emitHbsRequireFace(content, opts);
-  }
-  if (path.endsWith(".prompt") && content !== null) {
-    return emitPromptRequireFace(content, path) ?? emitTypedRequireFace(reqType);
   }
   return emitDataRequireFace(reqType);
 }

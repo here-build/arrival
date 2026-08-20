@@ -120,6 +120,7 @@ export function getSchemeIdeAudit(): Readonly<SchemeIdeAudit> {
 let hostConfig: {
   host?: { prelude: string; members: readonly string[]; kwargsMembers?: readonly string[] };
   schemePrelude?: string;
+  kwargsRequireSuffixes?: readonly string[];
 } = {};
 
 /** Resolves when configureSchemeIdeHost has run at least once (or timeout). */
@@ -161,6 +162,7 @@ function connectOptionsFromHost(): {
   compilerOptions: { noImplicitAny: boolean };
   host?: { prelude: string; members: readonly string[]; kwargsMembers?: readonly string[] };
   schemePrelude: string;
+  kwargsRequireSuffixes?: readonly string[];
 } {
   const schemePrelude =
     hostConfig.schemePrelude && hostConfig.schemePrelude.length > 0
@@ -179,6 +181,7 @@ function connectOptionsFromHost(): {
 export function configureSchemeIdeHost(config: {
   host?: { prelude: string; members: readonly string[]; kwargsMembers?: readonly string[] };
   schemePrelude?: string;
+  kwargsRequireSuffixes?: readonly string[];
 }): void {
   hostConfig = config;
   hostConfigGeneration += 1;

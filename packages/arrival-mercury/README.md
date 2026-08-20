@@ -51,7 +51,7 @@ foundation package when LSP consumers land; the **name travels with it**.
 
 ## Product surfaces
 
-- **`buildProject`** — multi-file in-memory project compile. The host passes `capabilities` (the product vocabulary); mercury does not default a plane. CLI `inhuman build` / `inhuman compile` are disk clients of this.
+- **`buildProject`** — multi-file in-memory project compile. The host passes `capabilities` (the product vocabulary) and optional `pretreat` (domain bytes→scheme, e.g. `.prompt`); mercury does not default a plane or name those extensions. CLI `inhuman build` / `inhuman compile` are disk clients of this.
 - **`SchemeSemanticModel`** — organ 1; construct explicitly, then materialize from its views.
 - **Oracle** — differential agreement: interpreter ≡ compiled (greenfield path only; string-emit path is not gate-authoritative).
 

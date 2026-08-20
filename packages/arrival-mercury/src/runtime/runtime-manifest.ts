@@ -94,8 +94,8 @@ export const RUNTIME_MANIFEST: Readonly<Record<string, RuntimeEntry>> = {
   // The REAL replacement (cross-package drift fix, rework-zone guidelines §4): the
   // LLM/MCP layer's `chat/completion` (`@inhuman.tools/llm-plane/arrival-env`) declares
   // no Contract-level `emit`, so it falls to this same rung-3 shim. `dotprompt/run`
-  // needs no row here — mercury's own `product/prompt-module.ts` already has dedicated
-  // codegen for `.prompt` units and never reaches the generic RuntimeRef fallback.
+  // needs no row here — host pretreat emits scheme that calls `dotprompt/run`
+  // through the harvested registry, not a mercury-owned codegen path.
   "chat/completion": e("chatCompletion", "stage0"),
 
   // max-by: ramda maxBy is binary key-comparator, not list-argmax

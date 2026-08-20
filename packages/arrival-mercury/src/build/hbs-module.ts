@@ -1,8 +1,8 @@
 /**
  * `.hbs` → scheme → ordinary scm module compile.
  *
- * Same two-face story as `.prompt`: pretreat (`hbsContentsToSchemeSource`) then
- * import-executable (`compileScmModule`). No special import path.
+ * Well-known pretreat (`hbsContentsToSchemeSource`) then import-executable
+ * (`compileScmModule`). Domain filetypes register via `buildProject` pretreat.
  */
 import { hbsContentsToSchemeSource } from "@inhuman.tools/arrival-modules/handlebars";
 

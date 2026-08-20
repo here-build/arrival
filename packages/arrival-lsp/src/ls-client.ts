@@ -16,11 +16,13 @@ import type { SchemeLanguageService } from "./service-core.js";
 /** The wire-safe creation options (a structurally-cloneable subset). */
 export interface SchemeLsWorkerOptions {
   compilerOptions?: Record<string, unknown>;
-  host?: { prelude: string; members: readonly string[] };
+  host?: { prelude: string; members: readonly string[]; kwargsMembers?: readonly string[] };
   /** The scheme stdlib preamble source (arrival's `BUILTIN_PREAMBLE`) — a plain
    *  string, so it crosses postMessage as-is. Emitted ahead of the program so
    *  its `(define …)` helpers resolve. See `SchemeLanguageServiceOptions`. */
   schemePrelude?: string;
+  /** Require-path suffixes whose `(require "…")` result is a kwargs callable. */
+  kwargsRequireSuffixes?: readonly string[];
 }
 
 export type LsInit = { kind: "init"; options: SchemeLsWorkerOptions };

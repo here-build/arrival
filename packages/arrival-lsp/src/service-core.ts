@@ -156,6 +156,12 @@ export interface SchemeLanguageServiceOptions {
    * loadable forms). Absent → every require stays `unknown` via the host
    * ambient. */
   resolveRequireType?: (path: string) => string | null;
+  /**
+   * Require-path suffixes whose `(require "…")` result is a kwargs callable.
+   * Host-supplied (e.g. `[".prompt"]`). Empty ⇒ the emitter does not treat any
+   * require path as kwargs.
+   */
+  kwargsRequireSuffixes?: readonly string[];
 }
 
 /**
@@ -692,9 +698,10 @@ export function createSchemeLanguageServiceCore(
     return memberRoster;
   };
   /** Record-shaped inputRest heads (kwargs channel) — host harvest only; emit also
-   *  discovers local `(require "….prompt")` bindings itself. */
+   *  discovers local kwargs-requires for `opts.kwargsRequireSuffixes`. */
   const emitterKwargsMembers = (): ReadonlySet<string> =>
     new Set(opts?.host?.kwargsMembers ?? []);
+  const emitterKwargsRequireSuffixes = (): readonly string[] => opts?.kwargsRequireSuffixes ?? [];
 
   // The scheme stdlib preamble, emitted ONCE to TS and cached — it's constant
   // for the service's lifetime. Sits at the very front of every program module
@@ -710,6 +717,7 @@ export function createSchemeLanguageServiceCore(
           : emitTypes(opts.schemePrelude, {
               hostMembers: emitterMembers(),
               kwargsMembers: emitterKwargsMembers(),
+              kwargsRequireSuffixes: emitterKwargsRequireSuffixes(),
             }).ts.replace(/export \{\};\n$/, "");
     }
     return schemePreludeTs;
@@ -915,6 +923,7 @@ export function createSchemeLanguageServiceCore(
         emitRequireFaceModule(path, content, reqType, {
           hostMembers: emitterMembers(),
           kwargsMembers: emitterKwargsMembers(),
+          kwargsRequireSuffixes: emitterKwargsRequireSuffixes(),
         }),
       );
       const binding = `__req${reqI++}`;
@@ -940,6 +949,7 @@ export function createSchemeLanguageServiceCore(
         const dep = emitTypes(source, {
           hostMembers: emitterMembers(),
           kwargsMembers: emitterKwargsMembers(),
+          kwargsRequireSuffixes: emitterKwargsRequireSuffixes(),
           requireBindings,
         });
         const text = dep.ts.replace(/export \{\};\n$/, "");
@@ -954,6 +964,7 @@ export function createSchemeLanguageServiceCore(
     const { ts: emitted, mappings, declaredNames } = emitTypes(scheme, {
       hostMembers: emitterMembers(),
       kwargsMembers: emitterKwargsMembers(),
+      kwargsRequireSuffixes: emitterKwargsRequireSuffixes(),
       requireBindings,
     });
     const programBase = prefix.length + importBlock.length + depsText.length;
