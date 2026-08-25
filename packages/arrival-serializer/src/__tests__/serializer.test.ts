@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sexpr, slist, smap, toSExpr, toSExprString } from "../serializer";
+import { sexpr, toSExpr, toSExprString } from "../serializer";
 
 describe("S-Expression Serializer", () => {
   describe("new interface with Symbol.toSExpr", () => {
@@ -249,16 +249,6 @@ describe("S-Expression Serializer", () => {
     it("sexpr creates tagged expressions", () => {
       const expr = sexpr("add", 1, 2);
       expect(toSExprString(expr)).toBe("(add 1 2)");
-    });
-
-    it("smap creates map expressions", () => {
-      const map = smap({ x: 10, y: 20 });
-      expect(toSExprString(map)).toBe("{:x 10 :y 20}");
-    });
-
-    it("slist creates list expressions", () => {
-      const list = slist("a", "b", "c");
-      expect(toSExprString(list)).toBe("[a b c]"); // AI-readable: symbols not quoted
     });
   });
 

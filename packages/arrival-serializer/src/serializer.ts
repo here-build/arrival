@@ -1267,17 +1267,3 @@ export function serializeWithExtras(value: unknown, opts: SerializeWithExtrasOpt
  * Helper to create s-expression definitions
  */
 export const sexpr = (tag: string, ...args: any[]): SExprDefinition => [SEXPR_TAG, tag, ...args];
-
-/**
- * Helper to create a map from object
- */
-export const smap = (obj: Record<string, any>): SExprDefinition => [
-  SEXPR_TAG,
-  "dict",
-  ...Object.entries(obj).flatMap(([k, v]) => [`:${k}`, v]),
-];
-
-/**
- * Helper to create a list
- */
-export const slist = (...items: any[]): SExprDefinition => [SEXPR_TAG, "list", ...items];

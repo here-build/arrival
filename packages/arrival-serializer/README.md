@@ -72,8 +72,6 @@ Whether these forms also improve AI *consumption* (not just density) is unvalida
 - `formatSExpr(sexpr, indent?): string` — IR → pretty-printed string.
 - `toSExprString(obj, indent?): string` — the two combined.
 - `sexpr(tag, ...args): SExprDefinition` — tagged s-expression.
-- `smap(obj): SExprDefinition` — `{:key value …}` from an object.
-- `slist(...items): SExprDefinition` — `[item …]` from arguments.
 
 ## Type Mappings
 
