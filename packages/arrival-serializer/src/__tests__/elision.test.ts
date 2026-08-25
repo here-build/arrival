@@ -24,7 +24,7 @@ describe("middle-elision is OPT-IN — OFF path unchanged", () => {
 
 describe("middle-elision ON — basic shape", () => {
   it("shows head + LOUD middle marker + tail, and records one ElisionRecord", () => {
-    const { text, elisions } = toSExprStringWithElisions(
+    const { text, elisions, reduced } = toSExprStringWithElisions(
       Array.from({ length: 100 }, (_, i) => i),
       { maxItems: 20, elideHead: 5, elideTail: 5 },
     );
@@ -32,13 +32,14 @@ describe("middle-elision ON — basic shape", () => {
     expect(text.startsWith("[0 1 2 3 4 ")).toBe(true);
     expect(text.trimEnd().endsWith("95 96 97 98 99]")).toBe(true);
     expect(elisions).toEqual([{ total: 100, notRendered: 90, shownShape: "numbers", hiddenShape: "numbers" }]);
+    expect(reduced).toBe(true);
   });
 });
 
 describe("per-array limit selection", () => {
   it("top-level array root gets topLevelArrayLimit — 80 objects fits under 100, no elision", () => {
     const sameShape = Array.from({ length: 80 }, (_, i) => ({ id: i, name: `n${i}` }));
-    const { text, elisions } = toSExprStringWithElisions(sameShape, {
+    const { text, elisions, reduced } = toSExprStringWithElisions(sameShape, {
       maxItems: 20,
       topLevelArrayLimit: 100,
       elideHead: 5,
@@ -46,6 +47,7 @@ describe("per-array limit selection", () => {
     });
     expect(text).not.toContain("were not rendered");
     expect(elisions).toEqual([]);
+    expect(reduced).toBe(false);
   });
 
   it("top-level array root over topLevelArrayLimit elides, descriptor 'similar items'", () => {

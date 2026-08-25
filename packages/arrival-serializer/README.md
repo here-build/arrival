@@ -71,6 +71,7 @@ Whether these forms also improve AI *consumption* (not just density) is unvalida
 - `toSExpr(obj): SExpr` — value → s-expression IR.
 - `formatSExpr(sexpr, indent?): string` — IR → pretty-printed string.
 - `toSExprString(obj, indent?): string` — the two combined.
+- `toSExprStringWithElisions(obj, opts?): { text, elisions, reduced }` — same walk as `toSExprString`, plus middle-elision records and `reduced` (true iff this render dropped content: tail-truncation, middle-elision, string cap, or hard-cut). Caps requested but everything fit ⇒ `reduced: false`.
 - `sexpr(tag, ...args): SExprDefinition` — tagged s-expression.
 
 ## Type Mappings

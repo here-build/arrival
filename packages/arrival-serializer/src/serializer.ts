@@ -29,10 +29,10 @@ const isNil = (element: any) => element?.constructor?.name === "ANil";
  * itself marked inline.
  *
  * SYNCHRONOUS MODULE STATE. The per-render context — `activeCaps`, `activeCollector`,
- * `activeElisionSink`, `activeLineageEnvelopes` — lives at module scope, not threaded through
- * every recursive `toSExpr`. Safe because serialization is SYNCHRONOUS: no re-entrancy within one
- * call. Each is saved and restored (not merely reset) so a caller's `format` callback that
- * re-enters a serializer entry point cannot clobber the outer call's state.
+ * `activeElisionSink`, `activeReduced`, `activeLineageEnvelopes` — lives at module scope, not
+ * threaded through every recursive `toSExpr`. Safe because serialization is SYNCHRONOUS: no
+ * re-entrancy within one call. Each is saved and restored (not merely reset) so a caller's
+ * `format` callback that re-enters a serializer entry point cannot clobber the outer call's state.
  */
 
 export const SEXPR_TAG = Symbol.for("expression");
@@ -85,9 +85,26 @@ let activeCaps: Caps = NO_CAPS;
  *  `SerializeOpts.lineageEnvelopes` was set (lineage-debugging consumers opting in). */
 let activeLineageEnvelopes = false;
 
+/** Did the CURRENT render pass actually drop content? Flipped by `truncatedMarker` (collection
+ *  tail-truncation and middle-elision), `capString`, and the hard-cut. Reset at the start of
+ *  every shrink-to-fit pass so only the FINAL pass stands. `toSExprString` snapshots it into
+ *  `lastRenderReduced` (saved/restored like the other module flags, so a `format` callback that
+ *  re-enters cannot clobber the outer call). */
+let activeReduced = false;
+let lastRenderReduced = false;
+const markReduced = (): void => {
+  activeReduced = true;
+};
+const beginReducedPass = (): void => {
+  activeReduced = false;
+};
+
 /** A `#| … |#` block-comment marker the formatter renders verbatim, so a truncated
  *  list still PARSES (the comment is ignored) — it round-trips to the shown sample. */
-const truncatedMarker = (note: string): SExpr => ({ [TRUNCATED_MARKER]: note });
+const truncatedMarker = (note: string): SExpr => {
+  markReduced();
+  return { [TRUNCATED_MARKER]: note };
+};
 
 // ── {core, extras}: serializer-side binary-leaf extraction ─────────────────────────────────
 // The seam lives HERE because this is the one place that walks every output value under the caps
@@ -400,6 +417,7 @@ function selectPrimaryArray(root: unknown, maxItems: number): PrimarySelection {
  *  `slice` never walks the dropped tail. */
 const capString = (full: string): string => {
   if (full.length <= activeCaps.maxStringChars) return full;
+  markReduced();
   return `${full.slice(0, activeCaps.maxStringChars)}…(+${full.length - activeCaps.maxStringChars} chars)`;
 };
 
@@ -1109,11 +1127,16 @@ export const toSExprString = (obj: any, optsOrIndent: number | SerializeOpts = 0
   // Saved/restored (not just reset to `false`) so a `format` callback that itself calls back
   // into a serializer entry point doesn't clobber an outer call's setting.
   const previousLineageEnvelopes = activeLineageEnvelopes;
+  const previousReduced = activeReduced;
   activeLineageEnvelopes = opts.lineageEnvelopes ?? false;
+  activeReduced = false;
   try {
-    return toSExprStringImpl(obj, opts, format);
+    const text = toSExprStringImpl(obj, opts, format);
+    lastRenderReduced = activeReduced;
+    return text;
   } finally {
     activeLineageEnvelopes = previousLineageEnvelopes;
+    activeReduced = previousReduced;
   }
 };
 
@@ -1161,6 +1184,7 @@ function toSExprStringImpl(obj: any, opts: SerializeOpts, format: (sexpr: SExpr)
   const render = (): string => {
     beginCollectorPass(); // shrink-to-fit re-renders must not re-collect extras / re-burn quota
     beginElisionPass(); // …nor re-collect elisions — only the FINAL pass's elisions stand.
+    beginReducedPass(); // …nor keep a prior pass's reduced bit.
     const primaryLimit =
       primarySelection === null
         ? maxItems
@@ -1203,23 +1227,39 @@ function toSExprStringImpl(obj: any, opts: SerializeOpts, format: (sexpr: SExpr)
   // markers `capItems`/`capString` already wove into the content itself — there is
   // deliberately no separate top-of-output banner; the inline markers carry the signal.
   if (out.length > maxTotalChars) {
+    markReduced();
     out = `${out.slice(0, maxTotalChars)}\n#| … output hard-truncated at ${maxTotalChars} chars |#`;
   }
   return out;
 }
 
+/** Result of `toSExprStringWithElisions` — the same text `toSExprString` would emit, plus
+ *  the two out-of-band signals a caller cannot recover by grepping the text (`#|` is also
+ *  used for environment notes, display echoes, and type-placeholder holes). */
+export type SerializedWithElisions = {
+  text: string;
+  /** Middle-elision records only — empty when elision is OFF or nothing elided. Tail-truncation,
+   *  string caps, and hard-cuts do not appear here; see `reduced`. */
+  elisions: ElisionRecord[];
+  /** True iff this render actually dropped content (collection tail-truncation, middle-elision,
+   *  string cap, or hard-cut). Caps requested but everything fit ⇒ false. */
+  reduced: boolean;
+};
+
 /**
- * Serialize a value to `{text, elisions}` — the additive sibling of
+ * Serialize a value to `{text, elisions, reduced}` — the additive sibling of
  * `toSExprString` for callers that need the collected `ElisionRecord`s to build a trailing
- * note (mcp-substrate's `runner.ts`). The SAME walk + caps + shrink-to-fit machinery renders
+ * note (mcp-substrate's `runner.ts`) or a `reduced` flag covering every squeeze path
+ * (harness overflow dumps). The SAME walk + caps + shrink-to-fit machinery renders
  * `text`; `toSExprString` itself never sets the sink, so its behaviour is untouched.
  */
-export function toSExprStringWithElisions(obj: any, opts: SerializeOpts = {}): { text: string; elisions: ElisionRecord[] } {
+export function toSExprStringWithElisions(obj: any, opts: SerializeOpts = {}): SerializedWithElisions {
   const sink: ElisionRecord[] = [];
   const previous = activeElisionSink;
   activeElisionSink = sink;
   try {
-    return { text: toSExprString(obj, opts), elisions: sink };
+    const text = toSExprString(obj, opts);
+    return { text, elisions: sink, reduced: lastRenderReduced };
   } finally {
     activeElisionSink = previous;
   }

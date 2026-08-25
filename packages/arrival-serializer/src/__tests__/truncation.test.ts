@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { toSExprString } from "../serializer.js";
+import { toSExprString, toSExprStringWithElisions } from "../serializer.js";
 
 describe("streaming truncation (opt-in)", () => {
   it("no opts → uncapped, unchanged behaviour", () => {
@@ -88,6 +88,36 @@ describe("streaming truncation (opt-in)", () => {
     expect(out.length).toBeLessThanOrEqual(50 + 100); // hard-cut marker is the only note
     expect(out).toContain("output hard-truncated at 50 chars");
     expect(out).not.toContain("⚠ output reduced to fit");
+  });
+});
+
+describe("reduced flag (toSExprStringWithElisions)", () => {
+  it("false when uncapped", () => {
+    expect(toSExprStringWithElisions([1, 2, 3]).reduced).toBe(false);
+  });
+
+  it("false when caps are set but everything fits", () => {
+    const { reduced, elisions } = toSExprStringWithElisions([1, 2, 3], { maxItems: 10, maxTotalChars: 1000 });
+    expect(reduced).toBe(false);
+    expect(elisions).toEqual([]);
+  });
+
+  it("true on collection tail-truncation — elisions stays empty (middle-elision is OFF)", () => {
+    const { reduced, elisions, text } = toSExprStringWithElisions(Array.from({ length: 100 }, (_, i) => i), {
+      maxItems: 5,
+    });
+    expect(reduced).toBe(true);
+    expect(elisions).toEqual([]);
+    expect(text).toContain("#| +95 more of 100 |#");
+  });
+
+  it("true on string cap", () => {
+    expect(toSExprStringWithElisions("x".repeat(5000), { maxStringChars: 20 }).reduced).toBe(true);
+  });
+
+  it("true on hard-cut", () => {
+    const deeplyNested = Array.from({ length: 50 }, (_, i) => ({ id: i, nested: { a: 1, b: 2, c: 3, d: 4 } }));
+    expect(toSExprStringWithElisions(deeplyNested, { maxTotalChars: 50 }).reduced).toBe(true);
   });
 });
 
