@@ -32,9 +32,9 @@ describe("R0 pin — serializer byte-identity (no-caps path)", () => {
     const out = toSExprString(fixture);
 
     expect(out).toBe(
-      '(dict :id 42 :name "hello \\"world\\"\\nline2\\ttab" :active true :tags (list a b c) ' +
-        ":nested (dict :x 1 :y (list 1 2 3) :z nil) :count 3.14 :big -9007199254740993 " +
-        ":aSet (set 1 2 3) :aMap (map :k1 1 :k2 2) :aDate \"2024-01-01T00:00:00.000Z\")",
+      '{:id 42 :name "hello \\"world\\"\\nline2\\ttab" :active #t :tags [a b c] ' +
+        ":nested {:x 1 :y [1 2 3] :z nil} :count 3.14 :big -9007199254740993 " +
+        ":aSet (set 1 2 3) :aMap (map :k1 1 :k2 2) :aDate \"2024-01-01T00:00:00.000Z\"}",
     );
   });
 
@@ -51,13 +51,13 @@ describe("R0 pin — serializer byte-identity (caps / truncation / shrink-to-fit
     const out = toSExprString(bigArr, { maxItems: 4, maxStringChars: 15, maxTotalChars: 600 });
 
     expect(out).toBe(
-      "(list\n" +
-        '  (dict :idx 0 :label "item-0-xxxxxxxx…(+12 chars)")\n' +
-        '  (dict :idx 1 :label "item-1-xxxxxxxx…(+12 chars)")\n' +
-        '  (dict :idx 2 :label "item-2-xxxxxxxx…(+12 chars)")\n' +
-        '  (dict :idx 3 :label "item-3-xxxxxxxx…(+12 chars)")\n' +
-        "  #| +36 more of 40 |#)",
+      "[\n" +
+        '  {:idx 0 :label "item-0-xxxxxxxx…(+12 chars)"}\n' +
+        '  {:idx 1 :label "item-1-xxxxxxxx…(+12 chars)"}\n' +
+        '  {:idx 2 :label "item-2-xxxxxxxx…(+12 chars)"}\n' +
+        '  {:idx 3 :label "item-3-xxxxxxxx…(+12 chars)"}\n' +
+        "  #| +36 more of 40 |#]",
     );
-    expect(out.length).toBe(241);
+    expect(out.length).toBe(217);
   });
 });

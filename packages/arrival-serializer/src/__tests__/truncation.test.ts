@@ -19,9 +19,21 @@ describe("streaming truncation (opt-in)", () => {
       Array.from({ length: 1000 }, (_, i) => i),
       { maxItems: 10 },
     );
+    expect(out.startsWith("[")).toBe(true);
+    expect(out.endsWith("]")).toBe(true);
     expect(out).toContain("#| +990 more of 1000 |#");
     expect(out).toContain("9"); // first items shown
     expect(out).not.toContain("999"); // the tail is never serialized
+  });
+
+  it("a capped dict keeps the marker inside the braces (so the form still parses)", () => {
+    const obj = Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`k${i}`, i]));
+    const out = toSExprString(obj, { maxItems: 3 });
+    expect(out.startsWith("{")).toBe(true);
+    expect(out.endsWith("}")).toBe(true);
+    expect(out).toContain("#| +17 more of 20 |#");
+    expect(out).toContain(":k0 0");
+    expect(out).not.toContain(":k19");
   });
 
   it("caps a long string with an inline char-count marker", () => {

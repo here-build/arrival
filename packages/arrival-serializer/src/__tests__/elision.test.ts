@@ -29,8 +29,8 @@ describe("middle-elision ON — basic shape", () => {
       { maxItems: 20, elideHead: 5, elideTail: 5 },
     );
     expect(text).toContain("#| 90 numbers were not rendered; total array length is 100 |#");
-    expect(text.startsWith("(list 0 1 2 3 4 ")).toBe(true);
-    expect(text.trimEnd().endsWith("95 96 97 98 99)")).toBe(true);
+    expect(text.startsWith("[0 1 2 3 4 ")).toBe(true);
+    expect(text.trimEnd().endsWith("95 96 97 98 99]")).toBe(true);
     expect(elisions).toEqual([{ total: 100, notRendered: 90, shownShape: "numbers", hiddenShape: "numbers" }]);
   });
 });

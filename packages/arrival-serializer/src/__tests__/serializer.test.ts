@@ -15,7 +15,7 @@ describe("S-Expression Serializer", () => {
       }
 
       const obj = new MyClass();
-      expect(toSExprString(obj)).toBe("(my-special-class :initialized true)");
+      expect(toSExprString(obj)).toBe("(my-special-class :initialized #t)");
     });
 
     it("falls back to displayName, name, or constructor.name", () => {
@@ -91,10 +91,10 @@ describe("S-Expression Serializer", () => {
   });
 
   describe("array serialization as Scheme lists", () => {
-    it("serializes arrays as (list ...)", () => {
-      expect(toSExprString([1, 2, 3])).toBe("(list 1 2 3)");
-      expect(toSExprString(["a", "b", "c"])).toBe("(list a b c)"); // AI-readable: symbols not quoted
-      expect(toSExprString([])).toBe("(list)");
+    it("serializes arrays as [ ... ]", () => {
+      expect(toSExprString([1, 2, 3])).toBe("[1 2 3]");
+      expect(toSExprString(["a", "b", "c"])).toBe("[a b c]"); // AI-readable: symbols not quoted
+      expect(toSExprString([])).toBe("[]");
     });
 
     it("handles nested arrays", () => {
@@ -103,18 +103,18 @@ describe("S-Expression Serializer", () => {
           [1, 2],
           [3, 4]
         ])
-      ).toBe("(list (list 1 2) (list 3 4))");
+      ).toBe("[[1 2] [3 4]]");
     });
 
     it("handles mixed content arrays", () => {
       const mixed = ["text", 42, true, null, { key: "value" }];
-      expect(toSExprString(mixed)).toBe("(list text 42 true nil (dict :key value))"); // AI-readable format
+      expect(toSExprString(mixed)).toBe("[text 42 #t nil {:key value}]"); // AI-readable format
     });
   });
 
   describe("object serialization as Scheme records", () => {
     it("serializes plain objects with dict notation", () => {
-      expect(toSExprString({ name: "arrival", version: "1.0" })).toBe('(dict :name arrival :version "1.0")'); // AI-readable: symbols not quoted unless needed
+      expect(toSExprString({ name: "arrival", version: "1.0" })).toBe('{:name arrival :version "1.0"}'); // AI-readable: symbols not quoted unless needed
     });
 
     it("handles nested objects", () => {
@@ -125,11 +125,11 @@ describe("S-Expression Serializer", () => {
           timeout: 5000
         }
       };
-      expect(toSExprString(obj)).toBe("(dict :name test :config (dict :enabled true :timeout 5000))"); // AI-readable format
+      expect(toSExprString(obj)).toBe("{:name test :config {:enabled #t :timeout 5000}}"); // AI-readable format
     });
 
     it("handles empty objects", () => {
-      expect(toSExprString({})).toBe("(dict)");
+      expect(toSExprString({})).toBe("{}");
     });
   });
 
@@ -138,8 +138,8 @@ describe("S-Expression Serializer", () => {
       expect(toSExprString("hello")).toBe("hello"); // AI-readable: simple strings as symbols
       expect(toSExprString(42)).toBe("42");
       expect(toSExprString(3.14)).toBe("3.14");
-      expect(toSExprString(true)).toBe("true");
-      expect(toSExprString(false)).toBe("false");
+      expect(toSExprString(true)).toBe("#t");
+      expect(toSExprString(false)).toBe("#f");
       expect(toSExprString(null)).toBe("nil");
       expect(toSExprString(undefined)).toBe("undefined");
       expect(toSExprString(BigInt(9007199254740991))).toBe("9007199254740991");
@@ -210,14 +210,14 @@ describe("S-Expression Serializer", () => {
       expect(result).toContain("DataNode");
       expect(result).toContain(":type data-node"); // AI-readable format
       expect(result).toContain(":value");
-      expect(result).toContain("(dict :x 10 :y 20)");
+      expect(result).toContain("{:x 10 :y 20}");
     });
   });
 
   describe("formatting with new representations", () => {
     it("formats objects as maps", () => {
       const obj = { name: "test", value: 42 };
-      expect(toSExprString(obj)).toBe("(dict :name test :value 42)"); // AI-readable format
+      expect(toSExprString(obj)).toBe("{:name test :value 42}"); // AI-readable format
     });
 
     it("formats custom objects with proper indentation", () => {
@@ -237,11 +237,11 @@ describe("S-Expression Serializer", () => {
       const result = toSExprString(new ComplexComponent());
       expect(result).toContain("(ComplexComponent");
       expect(result).toContain(":variants");
-      expect(result).toContain("(list base hover active)"); // AI-readable: symbols not quoted
+      expect(result).toContain("[base hover active]"); // AI-readable: symbols not quoted
       expect(result).toContain(":styles");
-      expect(result).toContain("(dict :background blue :padding 10)"); // AI-readable format
+      expect(result).toContain("{:background blue :padding 10}"); // AI-readable format
       expect(result).toContain(":children");
-      expect(result).toContain("(list 1 2 3)");
+      expect(result).toContain("[1 2 3]");
     });
   });
 
@@ -253,12 +253,12 @@ describe("S-Expression Serializer", () => {
 
     it("smap creates map expressions", () => {
       const map = smap({ x: 10, y: 20 });
-      expect(toSExprString(map)).toBe("(dict :x 10 :y 20)");
+      expect(toSExprString(map)).toBe("{:x 10 :y 20}");
     });
 
     it("slist creates list expressions", () => {
       const list = slist("a", "b", "c");
-      expect(toSExprString(list)).toBe("(list a b c)"); // AI-readable: symbols not quoted
+      expect(toSExprString(list)).toBe("[a b c]"); // AI-readable: symbols not quoted
     });
   });
 
@@ -372,7 +372,7 @@ describe("S-Expression Serializer", () => {
 
     it("`lineageEnvelopes: true` restores the {kind, provenance, …} envelope for NON-empty provenance", () => {
       const result = toSExprString(stringDuck(new Set([7])), { lineageEnvelopes: true });
-      expect(result).toBe("(dict :kind string :provenance (set 7))");
+      expect(result).toBe("{:kind string :provenance (set 7)}");
     });
 
     it("`lineageEnvelopes: true` still renders EMPTY provenance plain — nothing to show even opted in", () => {

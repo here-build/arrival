@@ -19,8 +19,8 @@ import { toSExpr, formatSExpr, toSExprString } from '@inhuman.tools/arrival-seri
 toSExprString(42);              // "42"
 toSExprString("hello");         // 'hello' (simple strings unquoted)
 toSExprString("with space");    // '"with space"' (quoted only when needed)
-toSExprString([1, 2, 3]);       // '(list 1 2 3)'
-toSExprString({ x: 10, y: 20 }); // '(dict :x 10 :y 20)'
+toSExprString([1, 2, 3]);       // '[1 2 3]'
+toSExprString({ x: 10, y: 20 }); // '{:x 10 :y 20}'
 
 // Custom serialization
 class Point {
@@ -37,7 +37,7 @@ toSExprString(new Point(10, 20)); // '(Point :x 10 :y 20)'
 
 ## Custom Serialization
 
-Implement `Symbol.toSExpr(ctx)` returning an array of parts. The serializer prepends a head tag and recurses into every part, applying `Symbol.toSExpr` again where present and otherwise following standard rules. **You never wrap properties** — a plain object among the parts auto-converts to `(dict :key value …)`.
+Implement `Symbol.toSExpr(ctx)` returning an array of parts. The serializer prepends a head tag and recurses into every part, applying `Symbol.toSExpr` again where present and otherwise following standard rules. **You never wrap properties** — a plain object among the parts auto-converts to `{:key value …}`.
 
 The head tag resolves through this fallback chain (see the dispatch site in `serializer.ts`):
 
@@ -72,8 +72,8 @@ Whether these forms also improve AI *consumption* (not just density) is unvalida
 - `formatSExpr(sexpr, indent?): string` — IR → pretty-printed string.
 - `toSExprString(obj, indent?): string` — the two combined.
 - `sexpr(tag, ...args): SExprDefinition` — tagged s-expression.
-- `smap(obj): SExprDefinition` — `(dict :key value …)` from an object.
-- `slist(...items): SExprDefinition` — a list s-expression.
+- `smap(obj): SExprDefinition` — `{:key value …}` from an object.
+- `slist(...items): SExprDefinition` — `[item …]` from arguments.
 
 ## Type Mappings
 
@@ -83,9 +83,9 @@ Whether these forms also improve AI *consumption* (not just density) is unvalida
 | `undefined` | `undefined`                           |
 | Numbers     | Numbers (with BigInt support)         |
 | Strings     | Unquoted when simple, `"quoted"` otherwise |
-| Booleans    | `true` / `false`                      |
-| Arrays      | `(list ...)`                          |
-| Objects     | `(dict :key value ...)`               |
+| Booleans    | `#t` / `#f`                           |
+| Arrays      | `[...]`                               |
+| Objects     | `{:key value ...}`                    |
 | Symbols     | `:keyword`                            |
 | Map         | `(map :key value ...)`                |
 | Set         | `(set ...)`                           |

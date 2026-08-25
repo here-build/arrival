@@ -30,7 +30,7 @@ describe("R6 — extraction: binary leaves become tagged literals + extras", () 
   it("a raw Blob leaf renders as #attachment and lands in extras", () => {
     const blob = png(2048);
     const { core, extras, overflow } = serializeWithExtras({ img: blob, n: 1 });
-    expect(core).toBe('(dict :img #attachment "att-1 (image/png, 2kB)" :n 1)');
+    expect(core).toBe('{:img #attachment "att-1 (image/png, 2kB)" :n 1}');
     expect(extras).toEqual([{ id: "att-1", blob }]);
     expect(overflow).toBe(0);
   });
@@ -39,7 +39,7 @@ describe("R6 — extraction: binary leaves become tagged literals + extras", () 
     const blob = png(100);
     const avalue = { "arrival/toJS": () => blob, kind: "blob", provenance: new Set() };
     const { core, extras } = serializeWithExtras({ shot: avalue });
-    expect(core).toBe('(dict :shot #attachment "att-1 (image/png, 100B)")');
+    expect(core).toBe('{:shot #attachment "att-1 (image/png, 100B)"}');
     expect(extras).toEqual([{ id: "att-1", blob }]);
   });
 
@@ -62,8 +62,8 @@ describe("R6 — extraction: binary leaves become tagged literals + extras", () 
 describe("R6 — byte-identity: toSExprString never extracts (the R0 pin, re-stated on this value)", () => {
   it("the same Blob-bearing value renders through toSExprString exactly as before (no tag, no collection)", () => {
     const value = { img: png(2048), n: 1 };
-    // A Blob has no enumerable own entries — today's plain-object walk renders it as `(dict)`.
-    expect(toSExprString(value)).toBe("(dict :img (dict) :n 1)");
+    // A Blob has no enumerable own entries — today's plain-object walk renders it as `{}`.
+    expect(toSExprString(value)).toBe("{:img {} :n 1}");
   });
 });
 
@@ -85,7 +85,7 @@ describe("R6 — round-trip law: core parses through arrival's own reader", () =
 describe("R6 — text budget is charged tag-only (~40 chars), never the byte size", () => {
   it("a 1MB blob costs the core only its tag", () => {
     const { core } = serializeWithExtras({ img: png(1024 * 1024) }, { maxTotalChars: 500 });
-    expect(core).toBe('(dict :img #attachment "att-1 (image/png, 1.0MB)")');
+    expect(core).toBe('{:img #attachment "att-1 (image/png, 1.0MB)"}');
     expect(core.length).toBeLessThan(80);
   });
 });

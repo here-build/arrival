@@ -10,12 +10,12 @@ describe("Quick Start Examples", () => {
   it("Simple object serialization", () => {
     const result = toSExprString({ name: "Alice", age: 30 });
     // Strings without special chars are unquoted (AI-readable format)
-    expect(result).toBe(`(dict :name Alice :age 30)`);
+    expect(result).toBe(`{:name Alice :age 30}`);
   });
 
   it("Array serialization", () => {
     const result = toSExprString([1, 2, 3]);
-    expect(result).toBe("(list 1 2 3)");
+    expect(result).toBe("[1 2 3]");
   });
 
   it("Custom serialization with Symbol.toSExpr", () => {
@@ -38,6 +38,6 @@ describe("Quick Start Examples", () => {
     // Multi-line formatting by default
     expect(result).toContain("Button");
     expect(result).toContain(`:label "Click me"`);
-    expect(result).toContain(":disabled false");
+    expect(result).toContain(":disabled #f");
   });
 });

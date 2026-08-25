@@ -73,16 +73,16 @@ describe("Arrival Integration", () => {
     const tests = [
       { expr: "42", expected: "42" },
       { expr: "3.14", expected: "3.14" }, // LNumber float
-      { expr: "#t", expected: "true" },
-      { expr: "#f", expected: "false" },
+      { expr: "#t", expected: "#t" },
+      { expr: "#f", expected: "#f" },
       { expr: '"hello world"', expected: `"hello world"` }, // R7RS double quotes — re-parses
       { expr: "'symbol-name", expected: "symbol-name" }, // Should be bare symbol
-      { expr: "()", expected: "(list nil)" }, // edge case - keeping like that for now
+      { expr: "()", expected: "[nil]" }, // edge case - keeping like that for now
     ];
 
     for (const { expr, expected } of tests) {
       // Raw scheme values (execState), not exec's toJS-collapsed ones — nil must stay ANil
-      // for the serializer's isNil check to render `nil` instead of a plain `(list)`.
+      // for the serializer's isNil check to render `nil` instead of a plain `[]`.
       const { values } = await execState(expr);
       const serialized = toSExprString(values);
       console.log(`${expr} -> ${serialized}`);

@@ -25,7 +25,7 @@ const isNil = (element: any) => element?.constructor?.name === "ANil";
  * limits apply STREAMING: the tail of a 10k-element array is never serialized, it costs
  * `maxItems`. If the capped render still exceeds `maxTotalChars`, the limits SHRINK uniformly and
  * re-render rather than tail-cutting the text — a tail-cut would gut a sibling (sever PSSCAN from
- * a `(list PSLIST PSSCAN)` diff). Only floor-still-over-budget falls back to a hard content cut,
+ * a `[PSLIST PSSCAN]` diff). Only floor-still-over-budget falls back to a hard content cut,
  * itself marked inline.
  *
  * SYNCHRONOUS MODULE STATE. The per-render context — `activeCaps`, `activeCollector`,
@@ -661,7 +661,7 @@ function toSExprDispatch(obj: any, visited: Set<any>): SExpr {
     return `:${name}`;
   }
 
-  // Array → (list ...)
+  // Array → list IR `["list", …]`, formatted as `[…]`
   if (Array.isArray(obj)) {
     return ["list", ...capItems(obj, (item) => toSExpr(item, visited))];
   }
@@ -721,7 +721,7 @@ function toSExprDispatch(obj: any, visited: Set<any>): SExpr {
     return toSExpr(obj["arrival/toJS"](), visited);
   }
 
-  // Plain object → dict literal `(dict :k v …)`
+  // Plain object → dict IR `["dict", :k, v, …]`, formatted as `{:k v …}`
   if (typeof obj === "object" && obj !== null) {
     const all = Object.entries(obj).filter(([, value]) => typeof value !== "function");
     const entries = capEntriesWithElision(all, activeCaps.defaultLimit, ([key, value]) => [
@@ -745,21 +745,29 @@ export function formatSExpr(sexpr: SExpr, indent = 0): string {
 
     const [head, ...tail] = sexpr;
 
-    // Special handling for dict literals — the canonical open-key map form
-    // `(dict :k v …)` (homoiconic, round-trips via the `dict` constructor).
+    // Dict literals render as Arrival's curly open-key form `{:k v …}` (the reader
+    // accepts this as a first-class literal). A truncation/elision marker in the
+    // tail is one ODD entry — emit it verbatim as a `#| … |#` comment so the
+    // braces still parse, never pair it as a key with the next item.
     if (head === "dict") {
-      if (tail.length === 0) return "(dict)";
+      if (tail.length === 0) return "{}";
 
       const pairs: string[] = [];
       for (let i = 0; i < tail.length; i += 2) {
+        const item = tail[i];
+        if (item && typeof item === "object" && !Array.isArray(item) && TRUNCATED_MARKER in item) {
+          pairs.push(formatSExpr(item, 0));
+          i -= 1; // consumed ONE entry, not a pair
+          continue;
+        }
         if (i + 1 < tail.length) {
-          const key = formatSExpr(tail[i], 0);
+          const key = formatSExpr(item, 0);
           const value = formatSExpr(tail[i + 1], 0);
           pairs.push(`${key} ${value}`);
         }
       }
 
-      return `(dict ${pairs.join(" ")})`;
+      return `{${pairs.join(" ")}}`;
     }
 
     // First element (operator) is never quoted, even if it's a string
@@ -767,6 +775,17 @@ export function formatSExpr(sexpr: SExpr, indent = 0): string {
       typeof head === "string" && !head.startsWith(":")
         ? head // Operators are unquoted
         : formatSExpr(head, 0);
+
+    // List IR renders as Arrival's vector literal `[…]` (the reader accepts this as
+    // first-class, equivalent to `(list …)` / `'(…)`). Every other head stays a call.
+    const wrapCall = (body: string, multiline: boolean): string => {
+      if (head === "list") {
+        if (!body) return "[]";
+        return multiline ? `[\n${body}]` : `[${body}]`;
+      }
+      if (!body) return `(${strHead})`;
+      return multiline ? `(${strHead}\n${body})` : `(${strHead} ${body})`;
+    };
 
     // Special formatting for maps
     if (head === "map") {
@@ -841,7 +860,7 @@ export function formatSExpr(sexpr: SExpr, indent = 0): string {
 
       if (!hasLongString && !hasComplexStructure) {
         const strTail = tail.map((item) => formatSExpr(item, 0)).join(" ");
-        return strTail ? `(${strHead} ${strTail})` : `(${strHead})`;
+        return wrapCall(strTail, false);
       }
     }
 
@@ -852,7 +871,7 @@ export function formatSExpr(sexpr: SExpr, indent = 0): string {
     if (isSimple) {
       // Single line for simple expressions
       const strTail = tail.map((item) => formatSExpr(item, 0)).join(" ");
-      return strTail ? `(${strHead} ${strTail})` : `(${strHead})`;
+      return wrapCall(strTail, false);
     } else {
       // Multi-line for complex expressions.
       const spaces = " ".repeat(indent);
@@ -889,7 +908,7 @@ export function formatSExpr(sexpr: SExpr, indent = 0): string {
         .filter((line) => line !== null)
         .join("\n");
 
-      return strTail ? `(${strHead}\n${strTail})` : `(${strHead})`;
+      return wrapCall(strTail, true);
     }
   }
 
@@ -955,7 +974,8 @@ export function formatSExpr(sexpr: SExpr, indent = 0): string {
   }
 
   if (typeof sexpr === "boolean") {
-    return sexpr ? "true" : "false";
+    // R7RS boolean literals — `#t`/`#f`, not JS `true`/`false`.
+    return sexpr ? "#t" : "#f";
   }
 
   if (sexpr === null) {
@@ -1077,7 +1097,7 @@ const FLOOR_STRING = 80;
  * before — studio views and existing callers are unaffected. With caps set, per-element
  * limits apply STREAMING (the tail of a huge collection is never serialized), and if the
  * result still exceeds `maxTotalChars` the limits SHRINK fairly and re-render — never a
- * tail-cut that would gut a sibling (e.g. PSSCAN in a `(list PSLIST PSSCAN)` diff).
+ * tail-cut that would gut a sibling (e.g. PSSCAN in a `[PSLIST PSSCAN]` diff).
  */
 export const toSExprString = (obj: any, optsOrIndent: number | SerializeOpts = 0): string => {
   const opts: SerializeOpts = typeof optsOrIndent === "number" ? { indent: optsOrIndent } : optsOrIndent;
