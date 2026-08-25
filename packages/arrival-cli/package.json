@@ -73,6 +73,6 @@
     "ink-testing-library": "4.0.0",
     "typescript": "6.0.2",
     "vitest": "4.1.0",
-    "zod": "4.3.6"
+    "zod": "^4.4.3"
   }
 }

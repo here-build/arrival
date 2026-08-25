@@ -63,7 +63,7 @@
     "hono": "4.12.0",
     "lodash-es": "4.17.23",
     "tiny-invariant": "1.3.3",
-    "zod": "4.3.6"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@here.build/eslint-configs": "0.9.0",
