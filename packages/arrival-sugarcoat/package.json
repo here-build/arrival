@@ -41,6 +41,9 @@
   "files": [
     "dist",
     "src",
+    "LEARN.md",
+    "GRAMMAR.md",
+    "editors",
     "!**/__tests__",
     "!**/__research__",
     "!**/__benchmarks__",

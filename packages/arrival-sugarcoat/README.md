@@ -20,6 +20,12 @@ You have Scheme programs — stored, generated, or agent-written — and humans 
 
 The original driver is AI–human collaboration: the LLM writes canonical Scheme, the editor sweetens it for the person reviewing, their tweaks convert back for the agent to continue. Neither side ever holds a lossy translation of the other's work. Nothing requires the AI, though — it works fine as a plain readability lens.
 
+## Install
+
+```bash
+pnpm add @inhuman.tools/arrival-sugarcoat
+```
+
 ## Quick start
 
 ```ts
@@ -34,6 +40,17 @@ sugarcoatToScheme("xs.map{ it * 2 }", scheme);    // → "(map (lambda (it) (* i
 
 **The full syntax — indentation, infix, subscripts, method chains, `it`, dicts, at-expressions — is a 5-minute read: [LEARN.md](./LEARN.md).**
 
+## API
+
+| Export | Role |
+|--------|------|
+| **`schemeToSugarcoat(text)`** | Canonical Scheme → Sugarcoat view. |
+| **`sugarcoatToScheme(text, prevClassic)`** | Fold an edited view back. The second argument is the previous stored classic — unchanged top-level forms splice byte-for-byte; only changed forms reprint. Malformed Sugarcoat **throws** (keep the buffer; skip the save). |
+| **`readSugarcoat(text)`** | Sugarcoat → classic AST nodes (the reader half of the lens). |
+| **`alignSugarcoatClassic(text)`** | Sugarcoat ↔ classic span pairing for IDE features on the sweet face. |
+| **`paramHints` / `paramHintsSugarcoat`** | Parameter-name inlay hints over classic / Sugarcoat text. |
+| **`tidyBoundNames`** | Bound-name recovery (`it` / singular noun). Import from the names subpath: `import { tidyBoundNames } from "@inhuman.tools/arrival-sugarcoat/names"`. |
+
 ## The guarantee
 
 `ast(sugarcoatToScheme(schemeToSugarcoat(x), x)) ≡ ast(x)` — render then read gives back the original intent, always. Every transform is an isolated deterministic rule with an inverse, and the pair is verified by round-tripping a real program corpus byte-for-byte.
@@ -47,7 +64,7 @@ sugarcoatToScheme("xs.map{ it * 2 }", scheme);    // → "(map (lambda (it) (* i
 1. **The lens** — `schemeToSugarcoat` / `sugarcoatToScheme`, everything above.
 2. **The runtime-free reader** — `parseSexprs` / `printScheme`, a standalone s-expression parser with comment and span tracking.
 
-The second is why half the toolchain depends on a "syntax skin": anything that must *parse* Scheme without *evaluating* it — the Mercury code generator, the type-lens LSP services, structural editing — imports the reader and never pulls the interpreter. Zero-dependency leaf either way (`tiny-invariant` is the only runtime dependency of the main entry).
+The second is why half the toolchain depends on a "syntax skin": anything that must *parse* Scheme without *evaluating* it — the Mercury code generator, the type-lens LSP services, structural editing — imports the reader and never pulls the interpreter. The main entry tree-shakes to `tiny-invariant`. The package still depends on `@here.build/lexical-namer` and `pluralize` for the `./names` subpath (`tidyBoundNames`); consumers of `.` do not pull those.
 
 ## Going deeper
 
@@ -57,4 +74,3 @@ The second is why half the toolchain depends on a "syntax skin": anything that m
 ## License
 
 [MIT](./LICENSE.md).
-

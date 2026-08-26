@@ -1,103 +1,93 @@
 # Arrival
 
-**The first ever language built for AI[^1], finally built for AI.**
+**A sandboxed R7RS-subset Scheme for LLM agents that need to compute, not just call tools.**
 
-[^1]: Lisp was born in 1958 for AI research — the first language built *for* AI. arrival is a
-    Lisp dialect finally built for AI *as the user*: the agent writes the programs. ![Elegant weapons,
-    for a more civilized age.](./assets/xkcd-297-lisp-cycles.png)
-    ([xkcd 297](https://xkcd.com/297/) by Randall Munroe, [CC BY-NC 2.5](https://creativecommons.org/licenses/by-nc/2.5/).)
+![Elegant weapons, for a more civilized age.](./assets/xkcd-297-lisp-cycles.png)
 
-Arrival is a symbolic stack built around LLMs' needs.
-It is not the first attempt to create a "special language for AI",
-and it is not even a special language designed for AI.
+Lisp was born in 1958 for AI research — the first language built *for* AI. arrival is a
+Lisp dialect built for AI *as the user*: the agent writes the programs.
+([xkcd 297](https://xkcd.com/297/) by Randall Munroe, [CC BY-NC 2.5](https://creativecommons.org/licenses/by-nc/2.5/).)
 
-It is the behavior of the language that matters.
+This repository is the public home of the `@inhuman.tools/arrival*` family, published by
+[here.build](https://here.build). Shared floor packages (`@here.build/tsconfig`, `collections`,
+`editor-theme`, …) live in [here-build/commons](https://github.com/here-build/commons).
 
-[Code Mode](https://blog.cloudflare.com/code-mode/) by Cloudflare proves the point:
-give the agent an environment, and it will do everything it needs.
+Agents are good at intent and bad at materialization. Arrival is a faithful R7RS sandbox
+without `set!` or `call/cc`, so the executed output is predictable. Syntax is extended toward
+Clojure, Racket, and Common Lisp only where R7RS is silent; attempts to violate the spec get a
+classified diagnostic that names the intended form. Language, `exec` API, and capabilities:
+[`packages/arrival`](./packages/arrival/README.md).
 
-[Toon](https://github.com/toon-format/toon) proves the second side:
-any format is good enough, as long as it's readable.
+## Install
 
-Arrival, as a stack, is the natural next step, consolidating that prior art.
+From npm (interpreter):
 
-## The language
+```bash
+npm install @inhuman.tools/arrival
+```
 
-Agents are good at intent and bad at materialization.
-Arrival compensates for that — Scheme was chosen deliberately.
-It is a faithful R7RS sandbox without dynamics or mutability (`set!` and `call/cc` eliminated);
-taking those away makes strong predictions about the executed output possible.
+```typescript
+import { exec } from "@inhuman.tools/arrival";
+const [result] = await exec(`(filter (lambda (x) (> x 5)) (list 1 3 7 9 2))`);
+// [7, 9]
+```
 
-Agents are not that good at writing Scheme, but they are good at writing Lisp in general.
-The cumulative dataset of dialects is large enough to teach agents;
-the problem is, what agents really know is not Scheme or any other dialect,
-but rather DeepDream output with brackets instead of dogs.
+CLI:
 
-That blur has a cost, and arrival pays it in syntax: extended to support well-known features from Clojure, Racket and Common Lisp.
-Nothing violates R7RS — only spec-undefined behavior was adjusted.
-Attempts to violate the spec, however, are not ignored — grammar errors are classified to identify
-which expression the LLM tried to write, and the diagnostic explains how to do it right.
+```bash
+npx @inhuman.tools/arrival-cli --help
+# or: npm install -g @inhuman.tools/arrival-cli   # installs the `arrival` bin
+```
+
+From this repository (Node `>=22`, pnpm `10.3.0`):
+
+```bash
+git clone --recurse-submodules https://github.com/here-build/arrival.git
+cd arrival
+pnpm install
+pnpm build
+pnpm test
+```
+
+`--recurse-submodules` is required for the Chibi-scheme R7RS conformance corpus
+(`packages/arrival/vendor/chibi-scheme`). A clone without it still builds; those tests skip.
 
 ## Packages
 
-> `arrival-manifold` (MCP multi-server collapse) and `arrival-bench` are
-> **not packaged in this repository** yet — they remain experimental in the
-> product monorepo and are not part of the publishable arrival workspace.
+All names are `@inhuman.tools/<dir>`.
 
-Everything else comes on top of the language, in a variety of shapes:
+**Language**
 
-- `arrival` — the interpreter, environment/capability system, and stdlib.
-  Environments compose from capability packs (C3-linearized); symbols carry
-  declared contracts (provenance role, cache class, emission knowledge) that
-  every tool downstream reads.
-- `arrival-cli` — `arrival run file.scm`, the REPL, and static checking.
-- `arrival-sugarcoat` — the syntax lens: classic ↔ sugarcoat rendering
-  (indentation I-expressions, curly-infix, accessors).
-- `arrival-serializer` — the JS ↔ S-expression wire: s-expression output
-  that is more compact than JSON for agent consumption.
-- `arrival-provenance` — analysis owner: forest, statechart, region tree,
-  flow graph, reverse-chain slicer (`buildUneval`), and the grounding seal
-  live natively here. Core (`arrival`'s `/provenance`) keeps only the capture
-  spine (`EvalTrace`, stamping); this package re-exports capture for
-  convenience and adds the mobx-reactive `ObservableEvalTrace` so studio/UI
-  consumers get reactive semantics without core taking on a mobx dependency.
-- `arrival-mcp` — the framework for MCP servers that run sandboxed code with
-  predefined capabilities: Model Context Protocol tools as values (discovery +
-  action tiers); `arrival-mcp-do` — the Durable Object session shell;
-  `mcp-substrate` — the doors system: error enrichment, session replay,
-  futility detection. Rejections teach and route; they do not ban.
-- `mcp-typescript-lsp` — TypeScript code-intelligence MCP tool (hover,
-  definition, references, impact analysis, …) as an arrival-mcp `McpTool`,
-  with s-expression results for agent reasoning.
-- `arrival-lsp` — the Scheme→TS type lens: arrival programs bite under
-  `tsc`, and diagnostics lift back to their `.scm` spans.
-- `arrival-mercury` — the Mercury compiler: arrival Scheme projected into
-  human-grade TypeScript, designed around the reader's mental model rather
-  than mechanically lowered.
-- `arrival-mercury-oracle` — the differential oracle: interpreter vs
-  compiled output, compared as black-box source-in/value-out outcomes;
-  split out from arrival-mercury to isolate the `tsx` runtime dependency
-  the compiler itself must not carry.
-- `arrival-codemirror` — CodeMirror 6 for arrival Scheme (classic +
-  sugarcoat): structural editing, ghost text, param hints, and the full IDE
-  surface (lint/hover/completion/goto). Theme chrome lives in
-  `@here.build/editor-theme` (commons).
-- `arrival-modules` — `(require …)` loader plus opt-in filetype packs on
-  `./yaml`, `./toml`, `./handlebars` (parsers are optional peers).
+- [`arrival`](./packages/arrival/README.md) — interpreter, capability environments, JS membrane. MIT
+- [`arrival-cli`](./packages/arrival-cli/README.md) — `arrival run`, REPL, `arrival check`. MIT
+- [`arrival-sugarcoat`](./packages/arrival-sugarcoat/README.md) — reversible classic ↔ sugarcoat view. MIT
+- [`arrival-modules`](./packages/arrival-modules/README.md) — `(require …)`; yaml/toml/handlebars are optional subpaths. MIT
+- [`arrival-serializer`](./packages/arrival-serializer/README.md) — JS → compact s-expressions. MIT
+- [`arrival-overridable-lens`](./packages/arrival-overridable-lens/README.md) — static read of `(define/overridable …)`. MIT
+
+**Types / editor**
+
+- [`arrival-lsp`](./packages/arrival-lsp/README.md) — Scheme→TS type lens (not the Language Server Protocol). MIT
+- [`arrival-internals-types-prelude`](./packages/arrival-internals-types-prelude/README.md) — shared `.d.ts` leaves so LSP and mercury do not cycle. MIT
+- [`arrival-codemirror`](./packages/arrival-codemirror/README.md) — CodeMirror 6 (classic + sugarcoat). MIT
+
+**Analysis / compiler (FSL-1.1-MIT)**
+
+- [`arrival-provenance`](./packages/arrival-provenance/README.md) — forest, slicer, grounding seal over a finished `EvalTrace`
+- [`arrival-mercury`](./packages/arrival-mercury/README.md) — Scheme → TypeScript; host supplies the capability plane
+- [`arrival-mercury-oracle`](./packages/arrival-mercury-oracle/README.md) — interpreter ≡ compiled; owns the `tsx` runtime the compiler must not carry
 
 ## Status
 
-Early, moving fast, published as a dialogue invitation: read it, challenge
-it, open issues. The API surface is still settling; we are not yet optimizing
-for external PRs.
+0.x. The API surface is still settling. Issues welcome; we are not yet optimizing for external PRs.
 
 ## License
 
-Dual-licensed by package (see root [`LICENSE.md`](./LICENSE.md)):
+Dual-licensed by package (see [`LICENSE.md`](./LICENSE.md); each package's `LICENSE.md` is authoritative):
 
-- **MIT** — language core (`arrival`), CLI, sugarcoat, serializer, LSP, codemirror,
-  env-capability packs, toml/yaml extensions, types-prelude, overridable-lens
-- **FSL-1.1-MIT** — MCP stack (`arrival-mcp`, `arrival-mcp-do`, `mcp-substrate`,
-  `mcp-typescript-lsp`), provenance, mercury compiler + oracle
+- **MIT** — language core, CLI, sugarcoat, serializer, modules, LSP, types-prelude, overridable-lens, codemirror
+- **FSL-1.1-MIT** — provenance, mercury compiler, mercury oracle (internal use and non-commercial research; not a competing hosted product; MIT after two years)
 
-Each package's `LICENSE.md` and `package.json` `"license"` field are authoritative.
+The interpreter is a fork of [LIPS.js](https://github.com/jcubic/lips) (MIT, Jakub T. Jankiewicz).
+The Chibi-scheme vendor tree is BSD-3-Clause (Alex Shinn), tests-only, not in the npm tarball.
+The xkcd 297 image is [CC BY-NC 2.5](https://creativecommons.org/licenses/by-nc/2.5/).

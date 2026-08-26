@@ -1,8 +1,8 @@
 # @inhuman.tools/arrival-serializer
 
-S-expression serializer for Arrival — converts JavaScript values to Scheme/Lisp s-expressions for LLM-facing output. It optimizes for token-efficient, human-readable entity representation, **not** round-trip fidelity: it does not yet guarantee lossless reconstruction.
+Standalone JavaScript → s-expression serializer for LLM-facing text. It is **not** a lossless round-trip.
 
-Serialization is two stages: `toSExpr` builds an s-expression (a plain JS array IR you can spread one representation inside another), and `formatSExpr` pretty-prints it. Custom types control their own form through `Symbol.toSExpr`.
+Serialization is two stages: `toSExpr` builds an s-expression (a plain JS array IR you can spread one representation inside another), and `formatSExpr` pretty-prints it. Custom types control their own form through `Symbol.toSExpr` / `Symbol.SExpr`, which come from the `@here.build/arrival-env` runtime dependency.
 
 ## Installation
 
@@ -10,19 +10,26 @@ Serialization is two stages: `toSExpr` builds an s-expression (a plain JS array 
 pnpm add @inhuman.tools/arrival-serializer
 ```
 
+`@here.build/arrival-env` is a runtime dependency (installed with this package). Import it wherever you implement `Symbol.toSExpr` / `Symbol.SExpr`.
+
 ## Quick Start
 
 ```typescript
 import { toSExpr, formatSExpr, toSExprString } from '@inhuman.tools/arrival-serializer';
 
-// Basic values
-toSExprString(42);              // "42"
-toSExprString("hello");         // 'hello' (simple strings unquoted)
-toSExprString("with space");    // '"with space"' (quoted only when needed)
-toSExprString([1, 2, 3]);       // '[1 2 3]'
-toSExprString({ x: 10, y: 20 }); // '{:x 10 :y 20}'
+toSExprString(42);               // 42
+toSExprString("hello");          // hello
+toSExprString("with space");     // "with space"
+toSExprString([1, 2, 3]);        // [1 2 3]
+toSExprString({ x: 10, y: 20 }); // {:x 10 :y 20}
+```
 
-// Custom serialization
+Quoting is lexical: strings with spaces or special characters get quotes; identifier-like tokens stay bare. Quoting is **not** a computed-vs-literal signal.
+
+```typescript
+import "@here.build/arrival-env"; // Symbol.toSExpr / Symbol.SExpr
+import { toSExprString } from '@inhuman.tools/arrival-serializer';
+
 class Point {
   constructor(public x: number, public y: number) {}
 
@@ -32,7 +39,7 @@ class Point {
   }
 }
 
-toSExprString(new Point(10, 20)); // '(Point :x 10 :y 20)'
+toSExprString(new Point(10, 20)); // (Point :x 10 :y 20)
 ```
 
 ## Custom Serialization
@@ -72,6 +79,7 @@ Whether these forms also improve AI *consumption* (not just density) is unvalida
 - `formatSExpr(sexpr, indent?): string` — IR → pretty-printed string.
 - `toSExprString(obj, indent?): string` — the two combined.
 - `toSExprStringWithElisions(obj, opts?): { text, elisions, reduced }` — same walk as `toSExprString`, plus middle-elision records and `reduced` (true iff this render dropped content: tail-truncation, middle-elision, string cap, or hard-cut). Caps requested but everything fit ⇒ `reduced: false`.
+- `serializeWithExtras(value, opts?): { core, extras, overflow }` — same walk, extracting binary leaves (`Blob`s) into `extras` and leaving `#attachment` tags in `core`.
 - `sexpr(tag, ...args): SExprDefinition` — tagged s-expression.
 
 ## Type Mappings
@@ -81,7 +89,7 @@ Whether these forms also improve AI *consumption* (not just density) is unvalida
 | `null`      | `nil`                                 |
 | `undefined` | `undefined`                           |
 | Numbers     | Numbers (with BigInt support)         |
-| Strings     | Unquoted when simple, `"quoted"` otherwise |
+| Strings     | Unquoted when identifier-like; `"quoted"` when they contain spaces or specials |
 | Booleans    | `#t` / `#f`                           |
 | Arrays      | `[...]`                               |
 | Objects     | `{:key value ...}`                    |
@@ -92,7 +100,7 @@ Whether these forms also improve AI *consumption* (not just density) is unvalida
 
 ## Scheme Integration
 
-Built-in support for Arrival's Scheme runtime types (duck-typed by constructor name, exposed from `@inhuman.tools/arrival/reflect-internals`):
+Built-in support for `@inhuman.tools/arrival`'s Scheme runtime types (duck-typed by constructor name, exposed from `@inhuman.tools/arrival/reflect-internals`):
 
 - `AExact` (exact integers / rationals) → Numbers or `num/denom`
 - `AInexact` (floats / complex) → Numbers or `real+imagi`
@@ -103,13 +111,11 @@ Built-in support for Arrival's Scheme runtime types (duck-typed by constructor n
 - `Values` → multiple return values
 - `EOF`, `Macro`, `Syntax`, `InputPort`/`OutputPort` → reader-friendly placeholders
 
-## Part of Arrival
+## Related
 
-- **@here.build/arrival-env** — type definitions and protocols
+- **@here.build/arrival-env** — `Symbol.toSExpr` / `Symbol.SExpr` protocol (runtime dependency of this package)
 - **@inhuman.tools/arrival** — the Scheme interpreter, exposing runtime types (e.g. via `/reflect-internals`)
-- **@inhuman.tools/arrival-serializer** — this package
 
 ## License
 
 [MIT](./LICENSE.md).
-

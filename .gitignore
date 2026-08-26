@@ -7,3 +7,8 @@ storybook-static/
 *.log
 .DS_Store
 .idea/
+.claude/
+.env
+.env.*
+.wrangler/
+.dev.vars

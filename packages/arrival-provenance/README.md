@@ -1,6 +1,6 @@
 # @inhuman.tools/arrival-provenance
 
-Trace analysis for [Arrival](../arrival/README.md), owned natively here. The full analysis stack — forest, statechart, region tree, flow graph, reverse-chain slicer (`buildUneval`), grounding seal — lives in this package. Core (`@inhuman.tools/arrival`'s `/provenance`) keeps only the **capture spine** (`EvalTrace`, stamping at the membrane); this package re-exports capture for a single import surface and **never drives the evaluator**. The one non-passthrough export is `EvalTrace`: this package's is the mobx-reactive `ObservableEvalTrace`, kept here so studio/UI consumers get byte-identical reactive semantics without core taking on a mobx dependency.
+After an `@inhuman.tools/arrival` eval, this package turns a finished `EvalTrace` into a forest, graph, or slice. It **never drives the evaluator**. Core `@inhuman.tools/arrival/provenance` is capture only (`EvalTrace`, stamping at the membrane); this package re-exports that capture and owns the analysis stack — forest, statechart, region tree, flow graph, reverse-chain slicer (`buildUneval`), grounding seal.
 
 ## Install
 
@@ -10,10 +10,16 @@ pnpm add @inhuman.tools/arrival-provenance
 
 ## Usage
 
-```ts
-import { traceToForest } from "@inhuman.tools/arrival-provenance";
+Hand the evaluator a tap; analysis runs on the finished trace:
 
-const forest = traceToForest(trace);   // `trace`: a finished EvalTrace
+```ts
+import { exec } from "@inhuman.tools/arrival";
+import { EvalTrace, traceToForest } from "@inhuman.tools/arrival-provenance";
+
+const trace = new EvalTrace();
+await exec(`(filter (lambda (x) (> x 5)) (list 1 3 7 9 2))`, { tap: trace });
+
+const forest = traceToForest(trace);
 ```
 
 The heavier analysis stack lives at the `./analysis` subpath:
@@ -24,13 +30,13 @@ import { traceToStatechart, buildSlice, buildUneval } from "@inhuman.tools/arriv
 const statechart = traceToStatechart(trace);
 ```
 
-The surface, in three subpaths:
+The surface, in four subpaths:
 
-- **`.`** — capture + region-model primitives: `EvalTrace`, `Invocation` (each carries its own computed `.provenance`; dataflow minted at boundaries), `traceToForest`, `traceToRegions` (the studio blueprint) with an incremental `TraceRegionFold`. Plus `trace-snapshot` / `trace-artifact` serialization.
+- **`.`** — capture + region-model primitives: `EvalTrace` (this package's export is the mobx-reactive `ObservableEvalTrace`; core stays mobx-free), `Invocation` (each carries its own computed `.provenance`; dataflow minted at boundaries), `traceToForest`, `traceToRegions` with an incremental `TraceRegionFold`. Plus `trace-snapshot` / `trace-artifact` serialization.
 - **`./analysis`** — turn a finished trace into render-models: a statechart, a flow graph, forest-collapse (`collapseMDL`), and the reverse-chain slicer (`buildSlice` / `buildUneval`).
 - **`./verdict`** — `groundingVerdict`, the whole-result grounding seal: a lineage-completeness oracle over a finished traced run (not a truth oracle — it signs a provably-traced fabrication from a lying tool just as readily as a fact).
 - **`./reflect`** — the query layer over a finished run: `ResultHandle` (causal value now, teleological provenance on demand), `why`/`where`/`how`/`dag`/`blast` (named projections of `/analysis`), the wire-safe choke, and the `arrival/reflect` Scheme capability. Not re-exported from `.`.
 
 ## License
 
-[FSL-1.1-MIT](./LICENSE.md) — Functional Source License 1.1, MIT Future License. Each version converts to MIT two years after its release date.
+[FSL-1.1-MIT](./LICENSE.md) — internal use and non-commercial research are permitted; offering a competing hosted product is a Competing Use. Each version converts to MIT two years after its release date.

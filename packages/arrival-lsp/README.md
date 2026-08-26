@@ -1,65 +1,79 @@
 # @inhuman.tools/arrival-lsp
 
-Scheme language service for arrival: a **type lens** over TypeScript's
-`LanguageService` (Volar-shaped — virtual TS, never run; diagnostics/completions/
-hover lifted back to Scheme spans). Ships **node + browser worker** runtimes so
-IDEs and tools (codemirror, the inhuman studio editor) share one substrate.
+Scheme→TS type lens: lower Scheme to virtual TypeScript, type-check it with
+tsc's `LanguageService` (never execute), and lift diagnostics, hover,
+completions, and definitions onto `.scm` spans.
 
-The `PRE` prelude and builtin `.d.ts` leaves declaration-merge so Scheme
-programs **bite** under `tsc` (`(car 5)` and `(+ "a" 1)` produce real diagnostics
-on `.scm` spans) — that prelude, its builtin leaves, and the leaf-authoring
-contract now live in the sibling package
-`@inhuman.tools/arrival-internals-types-prelude` (`src/prelude/types.d.ts` +
-`src/prelude/builtins/*.d.ts`, proven by its own `src/__tests__/prelude.test.ts`);
-see that package to add or change a builtin leaf.
+This is **not** the Language Server Protocol. The same surface ships as Node,
+browser, and worker entries.
 
-## Layout
-
-```
-src/
-  index.ts               ← public barrel (language-service, span-map, typed-scanner, host-prelude, service-core)
-  language-service.ts    ← Node entry: disk prelude + `typescript` package libs
-  browser.ts             ← Browser/worker entry: bundled prelude + inlined TS libs (this package's vite build)
-  service-core.ts        ← environment-agnostic core: emitTypes → ts.LanguageService → Mapper
-  worker.ts              ← (Shared)Worker entry attaching ls-server to the worker's ports
-  ls-client.ts / ls-server.ts / ls-protocol.ts  ← worker wire protocol (light/heavy split)
-  host-prelude.ts        ← assemble a lens `host` option from a host's rosetta type registry
-  span-map.ts            ← bidirectional position lens over emitTypes's Mapping[]
-  typed-scanner.ts       ← the Σ∩T bridge: narrow a completion scanner by Layer T
-  balance.ts             ← balance an incomplete Scheme prefix for cursor queries
-  __tests__/             ← language-service, browser-service, host-prelude, ls-protocol, etc. (verdicts)
-```
-
-## `typecheck` / `test`
+## Install
 
 ```bash
-pnpm typecheck   # tsc --noEmit over src
-pnpm test        # vitest: language-service, browser-service, host-prelude, ls-protocol, typed-scanner, etc.
+pnpm add @inhuman.tools/arrival-lsp
 ```
 
-## Emitter contract
+Depends on TypeScript 6.
 
-The emitter (`emitTypes`, `@inhuman.tools/arrival-mercury`'s
-`src/type-emit/emit.ts`, imported here via `service-core.ts`) lowers Scheme forms
-to **virtual TS that is type-checked, never run**. The load-bearing consequence
-for binding forms:
+## Usage (Node)
 
-- **`(let ((x v)) body)` / `(let* …)` at STATEMENT position → a pure TS block
-  statement**, NOT an IIFE:
-  ```ts
-  { const x = v; /* …body… */ }
-  ```
-  Because we only type-check (never execute), block-scoping is correct and
-  ceremony-free — an IIFE would add a function boundary that distorts control-flow
-  analysis and return-type inference for no benefit.
-- **At EXPRESSION position** (a value is needed and no statement block can be
-  placed, e.g. `(define r (let ((x 1)) (+ x 1)))`), the same binding form lowers
-  to an immediately-invoked arrow instead — `(() => { const x = …; return …; })()`
-  — the one place an arrow-call appears; the block-not-IIFE rule governs
-  statement/body position only.
-- **`set!`-ed variables lower to `let`** (the rest stay `const`), so reassignment
-  type-checks without widening every binding.
+```ts
+import { createSchemeLanguageService } from "@inhuman.tools/arrival-lsp";
 
-This block-not-IIFE lowering is the reason PRE's `sexpr` is only the *fallback*:
-most heads lower to direct calls inside these plain blocks, and TS checks them
-natively.
+const ls = createSchemeLanguageService();
+const diags = ls.getSemanticDiagnostics(`(define z (car 5))`);
+```
+
+`(car 5)` is a tsc error on the `5` in the Scheme source — `start` / `length` /
+`line` / `character` are Scheme coordinates, not the emitted TS. Hover,
+completions, and go-to-definition use the same lift:
+
+- `getQuickInfoAtPosition(scheme, offset)`
+- `getCompletionsAtPosition(scheme, offset)` / `getCompletionContext(scheme, offset)`
+- `getDefinitionAtPosition(scheme, offset)`
+
+Virtual TS is type-checked, never executed.
+
+## Subpaths
+
+| Export | Runtime |
+|--------|---------|
+| `.` | Node — disk prelude + the installed `typescript` package libs. |
+| `./browser` | Browser — bundled prelude + inlined TS libs; no `fs`. `createBrowserSchemeLanguageService`. |
+| `./worker` | (Shared)Worker entry. Importing it inside the worker attaches the server to the worker's ports. |
+| `./ls-client` | Light main-thread client (`connectSchemeLs`). Talks to a worker-hosted service without pulling `typescript` into the UI bundle. |
+
+Do **not** import `./ls-protocol` from the UI thread — that barrel includes the
+heavy serve side. Use `./ls-client` on the main thread and `./worker` inside the
+worker.
+
+Advanced (host wiring, incomplete prefixes, Scheme↔TS spans, `(require …)`):
+
+| Export | For |
+|--------|-----|
+| `./host-prelude` | Assemble a `host` option from a host type registry. |
+| `./balance` | Close an incomplete Scheme prefix for cursor queries. |
+| `./span-map` | Bidirectional position map over the lowered TS. |
+| `./require-path` | Resolve `(require …)` against a project file table. |
+
+## Related
+
+- [`@inhuman.tools/arrival-internals-types-prelude`](../arrival-internals-types-prelude) —
+  builtin `.d.ts` the lens declaration-merges so Scheme programs type-check under tsc.
+- [`@inhuman.tools/arrival-mercury/type-emit`](../arrival-mercury) — lowering
+  (Scheme → virtual TS).
+- [`@inhuman.tools/arrival-codemirror`](../arrival-codemirror) — CodeMirror 6
+  editor that consumes this service.
+
+## Develop
+
+From this package:
+
+```bash
+pnpm typecheck   # tsc -p tsconfig.test.json --noEmit
+pnpm test
+```
+
+## License
+
+[MIT](./LICENSE.md).

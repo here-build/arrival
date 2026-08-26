@@ -4,25 +4,16 @@
 programs from the terminal. This page documents the CLI's process surface — argv, stdin, stdout/stderr,
 exit codes; the language itself (the membrane, provenance, capabilities) is `@inhuman.tools/arrival`'s README.
 
-```
-arrival run <file.scm>       validate, then execute — prints each top-level form's value
-arrival check <file.scm> […] static diagnostics only, every file — no Scheme is evaluated
-arrival repl                 interactive session — persistent defines, Ctrl-D exits
-```
-
 ## Install
 
 ```sh
 npm install -g @inhuman.tools/arrival-cli   # installs the `arrival` bin
 arrival --help
+
+npx @inhuman.tools/arrival-cli --help       # same surface, no global install
 ```
 
 ## Running programs — values ARE the output
-
-arrival is a pure inference plane: there is **no `display`, no `format`, no ports** — deliberately, not
-as a gap (an ambient write has no value-construction site for provenance; the full argument is in the
-core README). Your program's output is its **values**: `run` prints each non-`define` top-level form's
-value to stdout, one per line; `define` forms print nothing.
 
 ```scheme
 ; hello.scm
@@ -34,6 +25,11 @@ value to stdout, one per line; `define` forms print nothing.
 $ arrival run hello.scm
 "hello, world"
 ```
+
+arrival is a pure inference plane: there is **no `display`, no `format`, no ports** — deliberately, not
+as a gap (an ambient write has no value-construction site for provenance; the full argument is in the
+core README). Your program's output is its **values**: `run` prints each non-`define` top-level form's
+value to stdout, one per line; `define` forms print nothing.
 
 Reach for `(display …)` anyway and the door teaches the model back:
 
@@ -49,9 +45,15 @@ your dataflow instead of streaming it out. Referenced at 1:0 — this program wo
 
 **Rendering.** Values print as s-expression text through `@inhuman.tools/arrival-serializer`, budget-bounded
 (long structures shrink fairly, never tail-cut): `(filter (lambda (x) (> x 5)) (list 1 3 7 9 2))` prints
-`(list 7 9)`. One honest wrinkle: a **computed** string prints quoted (`"hello, world"` above), while a
-bare top-level string **literal** prints unquoted (`"done"` as a whole form prints `done`) — a known
-rendering asymmetry; don't parse quoting as a type signal.
+`[7 9]`. Quoting is serializer rules (spaces and specials), not computed-vs-literal: `"hello, world"`
+is quoted because of the space and comma; a simple token like `done` is not. Don't parse quoting as a
+type signal.
+
+```
+arrival run <file.scm>       validate, then execute — exactly one file; prints each top-level form's value
+arrival check <file.scm> […] static diagnostics only, every listed file — no Scheme is evaluated
+arrival repl                 interactive session — persistent defines, Ctrl-D exits
+```
 
 ## Static validation — the whole program, before the first form runs
 
@@ -63,7 +65,8 @@ $ arrival run typo.scm
 error: Unbound symbol `fliter` Referenced at 1:0 — this program would crash there.
 ```
 
-`arrival check` is that pass **alone** — nothing evaluates:
+`arrival check` is that pass **alone** — nothing evaluates. Unlike `run` (exactly one file), `check`
+takes any number of files:
 
 ```
 $ arrival check ticket.scm more.scm
@@ -98,9 +101,8 @@ Three more `run` flags tap the same execution trace to answer "what actually hap
   states + total invocations — the machine/agent contract); this **replaces** the normal value
   output rather than joining it.
 
-See `docs/interactive-run-design.md` for the design (source/execution/value as one structure
-across lenses); the module headers (`run-view.ts`, `run-outline.ts`, `form-detail.ts`,
-`run-export.ts`) carry the mechanics.
+The module headers (`run-view.ts`, `run-outline.ts`, `form-detail.ts`, `run-export.ts`) carry the
+mechanics.
 
 ## Modules — `(require "file.scm")`
 
@@ -132,15 +134,15 @@ any ES module exporting `EnvCapability` instance(s):
 
 ```js
 // jira.mjs
-import { EnvCapability, symbol, z } from "@inhuman.tools/arrival";
+import { EnvCapability } from "@inhuman.tools/arrival/capability";
 
-export default new EnvCapability("demo/jira", {
-  symbols: {
+export default EnvCapability.define("demo/jira", {
+  symbols: (symbol, z) => ({
     "jira-ticket": symbol.rosetta`jira-ticket: fetch one ticket by key`(
       { input: [z.string], output: [z.string] },
       async (key) => `[${key}] Fix the flux capacitor`,   // any real fetch goes here
     ),
-  },
+  }),
 });
 ```
 
@@ -189,23 +191,9 @@ Per-entry `config` slices merge into the one shared bag (later entries win key-w
 validates its own slice. `--with` modules append after the config file's. A `.ts` config loads via
 node's native type-stripping (node ≥ 23.6; older node gets a teaching error pointing at `.json`).
 
-## Passing data in — an honest gap
+## Passing data in
 
-The language's designed door for host data is `define/overridable` (a typed, validated program
-parameter — see the core README). It isn't in the base roster (config-bearing, assembled fresh
-per run), so reaching it from the API means arming the capability explicitly alongside its config:
-
-```js
-import { exec } from "@inhuman.tools/arrival";
-import { overridableCapability } from "@inhuman.tools/arrival/capabilities/overridable";
-
-exec(src, { capabilities: [overridableCapability], config: { params: { city: "Paris" } } });
-```
-
-That door is **not reachable from this CLI yet**: there is no `--override` flag, and no `--with`
-module ships `overridable` armed by default. Today a CLI-run program runs on its declared
-defaults; parameterized runs go through the API. A `run --override key=json` mapping onto the
-existing `config.params` shape is the intended shape.
+Parameterized data is not a CLI flag yet; use the `@inhuman.tools/arrival` API.
 
 ## REPL
 
@@ -263,4 +251,3 @@ capability module itself executes during `check`.
 ## License
 
 [MIT](./LICENSE.md).
-

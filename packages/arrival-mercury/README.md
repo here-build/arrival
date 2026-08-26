@@ -1,39 +1,50 @@
 # @inhuman.tools/arrival-mercury
 
-**Arrival’s Mercury instance** — the scheme→TypeScript compiler that answers to
-the Mercury paradigm.
+Arrival Scheme → TypeScript. This package is the Scheme instance of the **Mercury**
+architecture: a semantic model answers questions; emission is the last, dumbest step.
 
-**Mercury is a paradigm, not a package name** (same class of word as Roslyn): a
-semantic model answers questions; emission is the last, dumbest step. This
-package is one *instance* of that architecture. The visual-model→React instance
-lives under `@here.build/mercury*`. The failed pass-pipeline predecessor
-`@inhuman.tools/mercury` is deprecated and downstream product CLIs consume the same compile API.
+## Who this is for
 
-## The four organs
+| Surface | Role |
+|---------|------|
+| **`compileSource`** | Single-buffer compile (studio, REPL, tools). |
+| **`buildProject`** | Multi-file in-memory compile. Disk I/O belongs to the host. |
+| **`./type-emit`** | LSP type lens — `emitTypes` produces virtual TypeScript that is type-checked, never run. |
+| **`./product`** + **`./circuit`** | Browser-safe compile and attribution-circuit projections. |
 
-| Organ | Role | Code |
-|-------|------|------|
-| **1. Semantic model** | Middle-end. Roslyn-style handle: decisions, not raw analyses. Policy lives here (`importsOf`, `asyncnessOf`, `shakeOf`, `idiomAt`, `factsAt`, …). | `src/model/` — **`SchemeSemanticModel`** |
-| **2. Structural end** | All structural optimization before any backend sees the tree; shaken live artifact. | coreform + model views (`shakeOf`, …) |
-| **3. Hybrid slotted tree** | Fluid Residual IR + hard `ts.factory` chunks (slots back into IR). | `src/residual/`, walker → `R` |
-| **4. Lookahead materializer** | Census → allocate names → emit once top-down via `ts.factory`. Zero post-passes on text. | `src/naming/` materializers + `src/residual/render.ts` |
+Differential agreement (interpreter ≡ compiled) is
+**`@inhuman.tools/arrival-mercury-oracle`**. That package owns `tsx`; this compiler
+must not carry it.
 
-**Law:** if an emitter chooses *semantics*, that choice belongs on
-`SchemeSemanticModel`. Manifestation (spelling, ramda call shape, file layout)
-is the materializer’s only job.
+## Compile
 
-### Gates
+```ts
+import { compileSource } from "@inhuman.tools/arrival-mercury/product";
 
-```bash
-pnpm --filter @inhuman.tools/arrival-mercury run check:gates
-# or from monorepo root:
-pnpm check:mercury-gates
+const { code, model } = await compileSource(
+  `(define (greet name) (string-append "hi " name))\n(greet "x")`,
+  { capabilities }, // host `EnvCapability[]` — the product vocabulary
+);
 ```
 
-Locks: no `@inhuman.tools/mercury` package/deps, oracle greenfield-only,
-type-emit free of type-lens imports, product APIs return `SchemeSemanticModel`.
+Mercury does **not** default a product plane. Pass `capabilities` (mint a session
+and harvest) or a pre-harvested `registry` (`greenfieldRegistryFor(session)`).
+Omit both and `compileSource` throws.
 
-### Emit contract = **loose** mode (not R7RS-strict)
+## Exports
+
+| Subpath | Surface | Browser-safe |
+|---------|---------|--------------|
+| **`.`** | Full compiler barrel (`compileSource`, `buildProject`, `SchemeSemanticModel`, …). Pulls `node:fs` via the project builder. | **No** |
+| **`./product`** | `compileSource` | Yes |
+| **`./circuit`** | Parse / desugar / classify + StaticProv projections (`circuitToSexpr`, mermaid, wireframe, …) | Yes |
+| **`./front`** | `parseSexprs`, `desugar`, node helpers | Yes |
+| **`./type-emit`** | `emitTypes` for `@inhuman.tools/arrival-lsp` | Yes |
+
+The root barrel is **not** browser-safe (`node:fs`). Import `./product` or
+`./circuit` from a browser / Vite graph.
+
+## Emit contract = **loose** mode (not R7RS-strict)
 
 Arrival’s interpreter defaults to **loose** (`ExecOptions.strict` defaults false):
 nil-tolerance, list-ish ops on array/vector spines, extra reader conveniences.
@@ -45,35 +56,40 @@ This compiler emits for **loose only**. We do not compile R7RS-strict throws
 the oracle (also loose by default) can agree without a second “strict residual”
 axis. That is intentional simplicity, not incompleteness.
 
-`SchemeSemanticModel` is a **public** export and the product path’s named
-middle-end — not an anonymous internal of `build/`. It may re-home to a
-foundation package when LSP consumers land; the **name travels with it**.
+## Gates
 
-## Product surfaces
+```bash
+pnpm --filter @inhuman.tools/arrival-mercury run check:gates
+```
 
-- **`buildProject`** — multi-file in-memory project compile. The host passes `capabilities` (the product vocabulary) and optional `pretreat` (domain bytes→scheme, e.g. `.prompt`); mercury does not default a plane or name those extensions. CLI `inhuman build` / `inhuman compile` are disk clients of this.
-- **`SchemeSemanticModel`** — organ 1; construct explicitly, then materialize from its views.
-- **Oracle** — differential agreement: interpreter ≡ compiled (greenfield path only; string-emit path is not gate-authoritative).
-
-Also owns: front-end desugar/nodes, CoreForm, type glass (`emitTypes`),
-**runtime imports** (`RUNTIME_MANIFEST`: stage0 Scheme-texture + **ramda** cold
-stdlib), the retired `arrival/infer` family's `RuntimeRef` surface (stage0
-stubs; `infer`/`infer/scalar`/`infer/chat/scalar` stay manifest-resident as
-the infer-scalar-fold peephole's own synthetic dispatch heads — see
-`rules/phase1.ts` — even though no vocabulary binds the bare names anymore)
-plus the LLM/MCP layer's real replacement (`chat/completion`, stage0 stub,
-same manifest), residual algebra + printer.
-
-Cold stdlib: prefer `ramda` when arity/order match **loose** faces (e.g.
-`length`). Keep stage0 for Law T, n-ary, wrong ramda shape (`max-by`,
-`list-ref`), and **loose nil-tolerance** shims (`car`/`cdr` empty → `[]`).
-See `RAMDA_DIVERGENCES` and `RUNTIME_MANIFEST`.
+Locks: no `@inhuman.tools/mercury` package/deps, oracle greenfield-only,
+type-emit free of type-lens imports, product APIs return `SchemeSemanticModel`.
 
 ## Testing
 
-See [TESTING.md](./TESTING.md) — the suite is an adversarial artifact: the
-negative flows (forges refused, fail-closed paths) are the product; positive
-flows exist so fail-closed doesn't degenerate into fail-everything.
+```bash
+pnpm test
+pnpm --filter @inhuman.tools/arrival-mercury run check:gates
+```
+
+Oracle corpus and interpreter ≡ compiled agreement live in
+`@inhuman.tools/arrival-mercury-oracle`.
+
+Contributor-internal test architecture (fail-closed law, forge taxonomy):
+[TESTING.md](./TESTING.md). Not a user-facing suite map.
+
+## The four organs
+
+Mercury is a paradigm, not a package name (same class of word as Roslyn). If an
+emitter chooses *semantics*, that choice belongs on `SchemeSemanticModel`.
+Manifestation (spelling, call shape, file layout) is the materializer’s only job.
+
+| Organ | Role |
+|-------|------|
+| **1. Semantic model** | Middle-end handle: decisions, not raw analyses (`importsOf`, `asyncnessOf`, `shakeOf`, …). **`SchemeSemanticModel`** is a public export. |
+| **2. Structural end** | Structural optimization before any backend sees the tree. |
+| **3. Hybrid slotted tree** | Fluid Residual IR + hard `ts.factory` chunks. |
+| **4. Lookahead materializer** | Census → allocate names → emit once top-down. Zero post-passes on text. |
 
 ## License
 

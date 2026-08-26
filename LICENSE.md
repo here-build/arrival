@@ -2,13 +2,19 @@
 
 This repository is dual-licensed by package:
 
-- **MIT** — `arrival`, `arrival-cli`, `arrival-codemirror`, env-capability packs
-  (handlebars/http/sql), `arrival-ext-{toml,yaml}`, `arrival-internals-types-prelude`,
-  `arrival-lsp`, `arrival-overridable-lens`, `arrival-serializer`, `arrival-sugarcoat`
+- **MIT** — `arrival`, `arrival-cli`, `arrival-codemirror`,
+  `arrival-internals-types-prelude`, `arrival-lsp`, `arrival-modules`,
+  `arrival-overridable-lens`, `arrival-serializer`, `arrival-sugarcoat`
 - **FSL-1.1-MIT** — `arrival-mercury`, `arrival-mercury-oracle`, `arrival-provenance`
 
 Each package's `LICENSE.md` and `package.json` `"license"` field are authoritative.
 The FSL text below applies to FSL packages only.
+
+Third-party notices (not the FSL grant):
+
+- **arrival** is a fork of [LIPS.js](https://github.com/jcubic/lips) (MIT, Jakub T. Jankiewicz)
+- The Chibi-scheme vendor tree is BSD-3-Clause (Alex Shinn), tests-only, not in the npm tarball
+- The xkcd 297 image is [CC BY-NC 2.5](https://creativecommons.org/licenses/by-nc/2.5/)
 
 ---
 
@@ -122,12 +128,6 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-## Upstream Licenses
-
-**arrival** is a fork of [LIPS.js](https://github.com/jcubic/lips) (MIT
-licensed by Jakub T. Jankiewicz). LIPS.js source files retain their original
-MIT license and copyright notices.
 
 ## Questions
 

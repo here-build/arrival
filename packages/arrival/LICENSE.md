@@ -19,3 +19,12 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Upstream
+
+This package is a fork of [LIPS.js](https://github.com/jcubic/lips) (MIT,
+Jakub T. Jankiewicz). LIPS.js source files retain their original MIT license
+and copyright notices.
+
+The Chibi-scheme vendor tree (`vendor/chibi-scheme`) is BSD-3-Clause
+(Alex Shinn). It is tests-only and is not in the npm tarball.
