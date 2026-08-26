@@ -25,7 +25,8 @@ import {
 import { StaticValidationError } from "@inhuman.tools/arrival/lsp-internals";
 import { APair } from "@inhuman.tools/arrival/reflect-internals";
 import { toSExprString } from "@inhuman.tools/arrival-serializer";
-import type { ContentBlock, ReplEvent } from "@inhuman.tools/mcp-substrate";
+import type { ContentBlock } from "./repl-model/content-block.js";
+import type { ReplEvent } from "./repl-model/repl-event.js";
 
 import { formatDiagnostic } from "./session.js";
 

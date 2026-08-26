@@ -22,7 +22,7 @@
  * repaints, not one final frame). See demo.tape's timing notes for how this reads on
  * camera.
  */
-import type { ReplBlock, ReplBlockState } from "@inhuman.tools/mcp-substrate";
+import type { ReplBlock, ReplBlockState } from "./repl-model/repl-fold.js";
 
 import { CARRIAGE_RETURN, CLEAR_TO_END, cursorUp } from "./ansi.js";
 import { paint, type TintName } from "./tints.js";

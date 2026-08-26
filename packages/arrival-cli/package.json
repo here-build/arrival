@@ -56,7 +56,6 @@
     "@inhuman.tools/arrival-modules": "workspace:^",
     "@inhuman.tools/arrival-serializer": "workspace:^",
     "@inhuman.tools/arrival-sugarcoat": "workspace:^",
-    "@inhuman.tools/mcp-substrate": "workspace:^",
     "chalk": "5.6.2",
     "culori": "4.0.2",
     "ink": "7.1.0",

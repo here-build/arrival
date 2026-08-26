@@ -21,7 +21,7 @@ import {
   type ReplBlock,
   type ReplBlockState,
   type ReplFoldModel,
-} from "@inhuman.tools/mcp-substrate";
+} from "./repl-model/repl-fold.js";
 import { Box, render, Static, Text, useApp, useInput, useStdout } from "ink";
 
 import { DISABLE_AUTOWRAP, ENABLE_AUTOWRAP } from "./ansi.js";

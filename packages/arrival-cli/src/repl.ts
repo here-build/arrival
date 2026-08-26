@@ -22,7 +22,7 @@ import readline from "node:readline";
 
 import { disposeRunContext, execState } from "@inhuman.tools/arrival";
 import { scan } from "@inhuman.tools/arrival/lsp-internals";
-import { EMPTY_REPL_MODEL, foldReplEvent, type ReplBlock, type ReplFoldModel } from "@inhuman.tools/mcp-substrate";
+import { EMPTY_REPL_MODEL, foldReplEvent, type ReplBlock, type ReplFoldModel } from "./repl-model/repl-fold.js";
 
 import { CLEAR_SCREEN, CURSOR_HOME } from "./ansi.js";
 import type { ArmedCapabilities } from "./capabilities.js";
