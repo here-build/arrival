@@ -1,11 +1,5 @@
 /**
- * Test-only product plane. Production hosts pass their own `capabilities`.
+ * Same in-repo test plane mercury uses. Oracle tests need an assembled
+ * session, not Inhuman's inference pack.
  */
-import { openOracleSession, type OracleSession } from "@inhuman.tools/arrival-mercury-oracle";
-import { inhumanRunnerCapability } from "@inhuman.tools/runner-capability";
-
-export const RUNNER_PLANE = [inhumanRunnerCapability] as const;
-
-export function openRunnerOracleSession(): Promise<OracleSession> {
-  return openOracleSession(RUNNER_PLANE);
-}
+export { TEST_PLANE, RUNNER_PLANE, openRunnerOracleSession } from "../../../arrival-mercury/src/__tests__/runner-plane.js";

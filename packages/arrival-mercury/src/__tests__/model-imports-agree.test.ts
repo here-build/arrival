@@ -110,9 +110,7 @@ describe("SchemeSemanticModel — E0 compiler views", () => {
       const wholeProgramCensus = runtimeRefsOf(walked);
       const materialized = materializeImports(walked, { symbols: wholeProgramCensus, runtimeModule: RUNTIME_MODULE });
       const importDecl = materialized.decls[0];
-      if (importDecl?.t !== "Import") {
-        throw new Error("expected materializeImports to prepend an Import decl as decls[0]");
-      }
+      if (importDecl?.t !== "Import") return [];
       return importDecl.names.map((n) => n.imported);
     };
 

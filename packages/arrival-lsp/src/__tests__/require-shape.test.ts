@@ -1,14 +1,19 @@
 // require-shape — `(require "data.json")` resolves to its GRANULAR shape, not
 // `unknown`. The editor twin of the runtime loader registry: the lens is fed a
-// `resolveRequireType` seam derived from the same table family the runtime
-// resolves with (`resolveRequireTypeWithPrompts`: the loader's
-// builtins + the dep-bearing formats' capability handlers' editor facets), so a
-// data file's `(require)` hovers/checks as its precise object/list type.
+// `resolveRequireType` seam over the loader builtins plus test-local type
+// facets for dep-bearing suffixes (yaml/hbs). Those suffixes have no type
+// channel on the loader barrel (the owning capability registers runtime parse
+// only); the lens still needs a type string, so this file supplies one.
 //
 // Per `.claude/rules/tests.md` this is a `__tests__/` verdict (boolean pass/fail).
 
-import { loaderFromResolver } from "@inhuman.tools/arrival-modules";
-import { resolveRequireTypeWithPrompts } from "@inhuman.tools/llm-plane/arrival-env";
+import {
+  loaderFromResolver,
+  resolveRequireType,
+  valueToTsType,
+  type ExtensionHandler,
+  type Loader,
+} from "@inhuman.tools/arrival-modules";
 import { describe, expect, it } from "vitest";
 
 import { assembleHostPrelude } from "../host-prelude.js";
@@ -21,9 +26,39 @@ const FILES: Record<string, string> = {
   "config.yaml": `title: Hi\ncount: 3`,
 };
 
-// The seam studio synthesizes: route each file's source through the loader
-// registry — the SAME registry the runtime resolves with — to a TS type string.
-const loader = loaderFromResolver((p) => FILES[p] ?? null);
+/** Fixture-only `key: value` maps — proves the lens seam, not yaml correctness. */
+const yamlType: ExtensionHandler = {
+  resolve: (contents) => ({ kind: "value", value: contents }),
+  type: (source) => {
+    const obj: Record<string, unknown> = {};
+    for (const line of source.split("\n")) {
+      const trimmed = line.trim();
+      if (trimmed === "") continue;
+      const colon = trimmed.indexOf(":");
+      if (colon < 0) continue;
+      const key = trimmed.slice(0, colon).trim();
+      const raw = trimmed.slice(colon + 1).trim();
+      const n = Number(raw);
+      obj[key] = raw !== "" && Number.isFinite(n) ? n : raw;
+    }
+    return valueToTsType(obj);
+  },
+};
+
+const hbsType: ExtensionHandler = {
+  resolve: (contents) => ({ kind: "value", value: contents }),
+  type: () => `(arg: unknown, ...rest: unknown[]) => string`,
+};
+
+function editorLoader(files: Record<string, string>): Loader {
+  const loader = loaderFromResolver((p) => files[p] ?? null);
+  loader.resolvers.set(".yaml", yamlType);
+  loader.resolvers.set(".yml", yamlType);
+  loader.resolvers.set(".hbs", hbsType);
+  return loader;
+}
+
+const loader = editorLoader(FILES);
 // `require` must be a HOST MEMBER for the emitter to lower `(require …)` →
 // `require(…)` (a bare `require` would resolve to Node's global → any).
 // In studio this comes from `rosettaTypesOf(env)`; here a one-entry roster.
@@ -32,7 +67,7 @@ const ls = createSchemeLanguageService({
   compilerOptions: { noImplicitAny: false },
   host,
   resolveModule: (p) => FILES[p] ?? null,
-  resolveRequireType: (p) => (FILES[p] === undefined ? null : resolveRequireTypeWithPrompts(loader, p, FILES[p]!)),
+  resolveRequireType: (p) => (FILES[p] === undefined ? null : resolveRequireType(loader, p, FILES[p]!)),
 });
 
 describe("(require data-file) → granular shape", () => {
@@ -83,7 +118,7 @@ describe("require-as-import — multi-path faces (no overload bag)", () => {
     "personas.yaml": `name: Ada\nage: 36\n`,
     "summary-of-persona.hbs": "Hello {{name}}",
   };
-  const multiLoader = loaderFromResolver((p) => multiFiles[p] ?? null);
+  const multiLoader = editorLoader(multiFiles);
   const multiLs = createSchemeLanguageService({
     compilerOptions: { noImplicitAny: false },
     host: assembleHostPrelude([["require", "(specifier: SStr): unknown"]]),
@@ -91,7 +126,7 @@ describe("require-as-import — multi-path faces (no overload bag)", () => {
     resolveRequireType: (p) => {
       const text = multiFiles[p];
       if (text === undefined) return null;
-      return resolveRequireTypeWithPrompts(multiLoader, p, text);
+      return resolveRequireType(multiLoader, p, text);
     },
   });
 

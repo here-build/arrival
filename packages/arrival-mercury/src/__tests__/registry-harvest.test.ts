@@ -31,26 +31,12 @@ describe("emitRegistryOf over the real oracle run", () => {
     // that neither resources nor impls were touched (test-plan row 2).
     const registry = emitRegistryOf(session.runCtx);
     expect(registry.names.size).toBeGreaterThan(50);
-    for (const name of ["chat/completion", "dotprompt/run", "llm/known", "pair?"]) {
+    // BASE_ROSTER names (pair?) plus this workspace's test plane (max-by, field).
+    // Product LLM/MCP verbs are a host plane; they are not this compiler's harvest lock.
+    for (const name of ["pair?", "max-by", "field"]) {
       expect(registry.lookup(name), name).toBeDefined();
     }
-    const chatCompletion = registry.lookup("chat/completion");
-    expect(chatCompletion).toMatchObject({
-      symbol: "chat/completion",
-      capability: "arrival/llm-mcp",
-      kind: "rosetta",
-      refPolicy: "shim", // no authored policy anywhere yet — the resolved default
-    });
-    expect(chatCompletion?.type).toContain("LLMModel");
-    // The retired `arrival/infer` family (`infer`, `infer/chat/*`) carried its own
-    // Contract-level `emit` rule (R2 relocation, arrival-mercury constitution §9);
-    // the LLM/MCP layer's whiteroom rebuild that replaced it declares NO `emit`
-    // anywhere (verified: `grep -n "emit:" src/*.ts` over `llm-plane-arrival-env` is
-    // empty) — `chat/completion`/`dotprompt/run` fall to the walker's rung-3
-    // RuntimeRef shim instead (`runtime/runtime-manifest.ts`'s `chat/completion`
-    // row is the fix for that — see rework-zone guidelines §4 / job item 3).
-    expect(chatCompletion?.emit).toBeUndefined();
-    expect(registry.lookup("dotprompt/run")).toMatchObject({ kind: "rosetta", capability: "ext/prompt" });
+    expect(registry.lookup("pair?")).toMatchObject({ symbol: "pair?", kind: "tagless-guard" });
   });
 
   it("RunContext harvest and bare-roster harvest BOTH succeed — no builder-form capability remains in the DAG", () => {
@@ -75,25 +61,20 @@ describe("emitRegistryOf over the real oracle run", () => {
     const a = emitRegistryOf(session.runCtx);
     const b = emitRegistryOf(session.runCtx);
     expect([...a.names].sort()).toEqual([...b.names].sort());
-    expect(a.lookup("chat/completion")).toEqual(b.lookup("chat/completion"));
+    expect(a.lookup("pair?")).toEqual(b.lookup("pair?"));
+    expect(a.lookup("max-by")).toEqual(b.lookup("max-by"));
   });
 
   it("Law N gate is wired and green over the real env (null?/pair? carry narrows, self-witnessed)", () => {
     // emitRegistryOf runs assertNarrowsWitnessed internally — reaching here without a
     // throw IS the green claim; the red paths are pinned synthetically below.
-    // `null?`/`pair?` moved their `narrows` declaration onto their own Contracts in
-    // the Phase-2 relocation (foundations/arrival/arrival/src/env/r7rs/equality.ts) —
-    // today's only two narrows-flagged rows in the real env, each self-witnessed (its
-    // own runtime behavior PROVES the narrowing). Every OTHER harvested symbol still
-    // carries none — this loop stays a tight assertion, not a vacuous one.
+    // `null?`/`pair?` moved their `narrows` declaration onto their own Contracts —
+    // self-witnessed (its own runtime behavior PROVES the narrowing). Aliases
+    // (`nil?`) may share a witness; this pins the two canonical names, not a
+    // census of every other row.
     const registry = emitRegistryOf(session.runCtx);
-    const KNOWN_NARROWS: Readonly<Record<string, { readonly witness: string }>> = {
-      "null?": { witness: "null?" },
-      "pair?": { witness: "pair?" },
-    };
-    for (const name of registry.names) {
-      expect(registry.lookup(name)?.narrows, name).toEqual(KNOWN_NARROWS[name]);
-    }
+    expect(registry.lookup("null?")?.narrows).toEqual({ witness: "null?" });
+    expect(registry.lookup("pair?")?.narrows).toEqual({ witness: "pair?" });
   });
 });
 

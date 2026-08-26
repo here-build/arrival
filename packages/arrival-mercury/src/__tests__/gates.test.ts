@@ -10,7 +10,8 @@ import { describe, expect, it } from "vitest";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(here, "../..");
-const monorepoRoot = path.resolve(packageRoot, "../../..");
+/** Arrival workspace root (`packages/` lives here). Not the product monorepo. */
+const workspaceRoot = path.resolve(packageRoot, "../..");
 
 function walkFiles(dir: string, pred: (p: string) => boolean, acc: string[] = []): string[] {
   if (!existsSync(dir)) return acc;
@@ -26,27 +27,17 @@ function walkFiles(dir: string, pred: (p: string) => boolean, acc: string[] = []
 
 describe("W9 gates — migration lock", () => {
   it("no @inhuman.tools/mercury package directory remains", () => {
-    expect(existsSync(path.join(monorepoRoot, "arrival/packages/mercury"))).toBe(false);
+    expect(existsSync(path.join(workspaceRoot, "packages/mercury"))).toBe(false);
   });
 
   it("no workspace package.json depends on @inhuman.tools/mercury", () => {
-    const packagesRoot = path.join(monorepoRoot, "arrival/packages");
+    const packagesRoot = path.join(workspaceRoot, "packages");
     const hits: string[] = [];
     for (const pkg of walkFiles(packagesRoot, (p) => p.endsWith("package.json"))) {
       const text = readFileSync(pkg, "utf8");
-      if (text.includes('"@inhuman.tools/mercury"')) hits.push(path.relative(monorepoRoot, pkg));
-    }
-    // also inhuman product that used to depend on it
-    for (const rel of ["inhuman/public-packages", "inhuman/saas", "experimental"]) {
-      const root = path.join(monorepoRoot, rel);
-      for (const pkg of walkFiles(root, (p) => p.endsWith("package.json"))) {
-        const text = readFileSync(pkg, "utf8");
-        if (text.includes('"@inhuman.tools/mercury"')) hits.push(path.relative(monorepoRoot, pkg));
-      }
+      if (text.includes('"@inhuman.tools/mercury"')) hits.push(path.relative(workspaceRoot, pkg));
     }
     expect(hits, hits.join("\n")).toEqual([]);
-    // The walk is O(monorepo tree) and grows with every added package — it
-    // rides the 5s default at ~4s today; give it an honest budget.
   }, 30_000);
 
   it("OracleSubject is greenfield-only (no dual emit path)", () => {
@@ -73,7 +64,7 @@ describe("W9 gates — migration lock", () => {
   });
 
   it("type-lens service-core imports emitTypes only via /type-emit subpath", () => {
-    const serviceCore = path.join(monorepoRoot, "arrival/packages/arrival-lsp/src/service-core.ts");
+    const serviceCore = path.join(workspaceRoot, "packages/arrival-lsp/src/service-core.ts");
     // Loud on relocation, per the scan-gate law (TESTING.md §4.2): a missing
     // subject is a failed gate, never a silently vacuous pass.
     expect(existsSync(serviceCore), `gate subject missing: ${serviceCore}`).toBe(true);

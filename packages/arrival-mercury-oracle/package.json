@@ -46,7 +46,6 @@
   "devDependencies": {
     "@here.build/eslint-configs": "0.9.0",
     "@here.build/tsconfig": "0.9.0",
-    "@inhuman.tools/runner-capability": "workspace:^",
     "@types/node": "24.0.0",
     "eslint": "9.39.2",
     "fast-check": "4.8.0",

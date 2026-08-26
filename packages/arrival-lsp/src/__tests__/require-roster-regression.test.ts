@@ -20,9 +20,7 @@
 
 import { disposeRunContext, execState, LexicalScope } from "@inhuman.tools/arrival";
 import { rosettaTypesOf } from "@inhuman.tools/arrival/lsp-internals";
-import { resolveRequireType } from "@inhuman.tools/arrival-modules";
-import { inhumanRunnerCapability } from "@inhuman.tools/runner-capability";
-import { loaderFromResolver } from "@inhuman.tools/arrival-modules";
+import { arrivalLoaderCapability, loaderFromResolver, resolveRequireType } from "@inhuman.tools/arrival-modules";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { assembleHostPrelude } from "../host-prelude.js";
@@ -36,15 +34,12 @@ const FILES: Record<string, string> = {
 // Stub: this session never executes requires (the lens only reads its roster).
 const stubLoader = loaderFromResolver((p) => FILES[p] ?? null);
 
-/** The runtime session mint (loaderSession idiom over the runner plane) — the
- *  rosetta-type registry keyed on its SCOPE frame (`rosettaTypesOf(scope.env)`)
- *  is the SINGLE SOURCE OF TRUTH studio derives the lens roster from. `require`
- *  is raw-bound by the loader capability (never `defineRosetta`-wrapped), so the
- *  mint stamps it into the side-table by hand — the runner-side convention this
- *  suite pins downstream of. Built async (eval has no sync path). */
+/** Live session mint over the in-repo loader pack. `require` is raw-bound (never
+ *  `defineRosetta`-wrapped), so the mint stamps it into the side-table by hand —
+ *  the host convention this suite pins. Built async (eval has no sync path). */
 let env: LexicalScope["env"];
 beforeAll(async () => {
-  const capabilities = [inhumanRunnerCapability] as const;
+  const capabilities = [arrivalLoaderCapability] as const;
   const config: Record<string, unknown> = { loader: stubLoader };
   const scope = LexicalScope.fresh("regression");
   const first = await execState("(begin)", { capabilities, config, scope });

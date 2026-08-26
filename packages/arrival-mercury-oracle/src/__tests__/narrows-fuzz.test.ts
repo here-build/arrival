@@ -100,6 +100,7 @@ function domainFor(witness: string): fc.Arbitrary<SchemeSample> {
 
 describe("schema-driven fuzzer — Law N narrows-flagged rows (oracle-harness.md §4.4)", () => {
   let session: OracleSession;
+  let registry: ReturnType<typeof withRules>;
   let narrowsMembers: ReadonlySet<string>;
 
   beforeAll(async () => {
@@ -107,7 +108,7 @@ describe("schema-driven fuzzer — Law N narrows-flagged rows (oracle-harness.md
     // The SAME registry construction `compileGreenfield` uses internally
     // (harness.ts's `greenfieldRegistryFor`, not exported — re-derived here from
     // the exported primitives, so there is nothing to drift out of sync with).
-    const registry = withRules(emitRegistryOf(session.ambient), phase1Rules);
+    registry = withRules(emitRegistryOf(session.runCtx), phase1Rules);
     narrowsMembers = narrowsMembersOf(registry);
   }, 120_000);
 
@@ -120,7 +121,14 @@ describe("schema-driven fuzzer — Law N narrows-flagged rows (oracle-harness.md
     // Sanity: today's harvest DOES carry narrows rows (null?, pair?) — a change
     // that silently drops the overlay would otherwise make this check vacuous.
     expect(narrowsMembers.size).toBeGreaterThan(0);
-    const missing = witnessesMissingConsumers(narrowsMembers, PREDICATE_CONSUMERS);
+    // Aliases (`nil?`) share a witness (`null?`). Law N keys consumers by
+    // witness, not by every name that carries a narrows field.
+    const witnesses = new Set<string>();
+    for (const name of narrowsMembers) {
+      const w = registry.lookup(name)?.narrows?.witness;
+      if (w !== undefined) witnesses.add(w);
+    }
+    const missing = witnessesMissingConsumers(witnesses, PREDICATE_CONSUMERS);
     expect(
       missing,
       `narrows-flagged witnesses with ZERO PREDICATE_CONSUMERS entries (Law N hard red, ` +

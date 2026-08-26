@@ -4,10 +4,11 @@
  * artifact; churn reviews like lockfile churn — a residual flip in a diff is
  * information, not noise).
  *
- * Layout: for each `corpus/<name>.scm` and `fixtures/gate1-corpus/<name>.scm`,
- * the greenfield pipeline's emission lands at `fixtures/emitted/<name>.ts`
- * (or `<name>.error.txt` when the program doors/throws at compile time —
- * a door is an artifact too).
+ * Layout: for each `corpus/<name>.scm`, the greenfield pipeline's emission
+ * lands at `fixtures/emitted/<name>.ts` (or `<name>.error.txt` when the
+ * program doors/throws at compile time — a door is an artifact too).
+ * Product notebooks (`gate1-corpus/inhuman-*`) are a host-plane corpus and
+ * are not this package's emission lock.
  *
  * Workflow:
  *   - add a case: drop a `.scm` into corpus/ — the fixture materializes on the
@@ -38,8 +39,8 @@ const casesFrom = (rel: string): { name: string; source: string }[] =>
       source: readFileSync(dirOf(rel) + f, "utf8"),
     }));
 
-const CASES = [...casesFrom("corpus/"), ...casesFrom("../../../arrival-mercury/src/__tests__/fixtures/gate1-corpus/")];
-if (CASES.length === 0) throw new Error("emitted-fixtures: no .scm cases found — corpus/ and gate1-corpus/ are empty?");
+const CASES = casesFrom("corpus/");
+if (CASES.length === 0) throw new Error("emitted-fixtures: no .scm cases found — corpus/ is empty?");
 
 let session: OracleSession;
 beforeAll(async () => {
