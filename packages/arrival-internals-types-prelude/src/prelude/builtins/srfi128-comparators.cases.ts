@@ -68,8 +68,8 @@ expectTypeOf(comparator$dash$hashable$qmark$(default$dash$comparator())).toEqual
 const w: boolean = default$dash$comparator();
 // @ts-expect-error =? requires a comparator first; a bare number is not a comparator tuple
 $eq$$qmark$(5, 1, 1);
-// @ts-expect-error make-comparator's type-test must be a 1-arg predicate, not a number
 make$dash$comparator(
+  // @ts-expect-error make-comparator's type-test must be a 1-arg predicate, not a number
   5,
   (a: unknown, b: unknown): boolean => true,
   (a: unknown, b: unknown): boolean => true,

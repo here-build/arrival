@@ -60,11 +60,11 @@ fold((x: string, acc: number): number => acc, 0, [1, 2, 3]);
 nth([10, 20], 1);
 // @ts-expect-error nth — wrong element type threaded out
 const n: string | undefined = nth(1, [10, 20, 30]);
-// @ts-expect-error for-each — callback param type mismatches the element type
 for$dash$each(
   (x: string): void => {
     x;
   },
+  // @ts-expect-error for-each — callback param type mismatches the element type
   [1, 2, 3],
 );
 // @ts-expect-error count — pred param type mismatches the element type
