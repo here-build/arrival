@@ -89,10 +89,10 @@ describe("Parser — #attachment tagged literal (serializer extras)", () => {
   it("consumes the following datum as one form", async () => {
     const forms = await readAll('#attachment "att-1 (image/png, 34kB)"');
     expect(forms).toHaveLength(1);
-    const form = forms[0] as APair;
+    const form = forms[0] as APair<any, any>;
     expect(form).toBeInstanceOf(APair);
     expect((form.car as ASymbol).valueOf()).toBe("attachment");
-    const payload = (form.cdr as APair).car as AString;
+    const payload = (form.cdr as APair<any, any>).car as AString;
     expect(payload).toBeInstanceOf(AString);
     expect(payload.valueOf()).toBe("att-1 (image/png, 34kB)");
   });
@@ -101,7 +101,7 @@ describe("Parser — #attachment tagged literal (serializer extras)", () => {
     const forms = await readAll('{:img #attachment "att-1 (image/png, 64B)"}');
     expect(forms).toHaveLength(1);
     expect(forms[0]).toBeInstanceOf(ADict);
-    const value = (forms[0] as ADict).get("img") as APair;
+    const value = (forms[0] as ADict).get("img") as APair<any, any>;
     expect(value).toBeInstanceOf(APair);
     expect((value.car as ASymbol).valueOf()).toBe("attachment");
   });
