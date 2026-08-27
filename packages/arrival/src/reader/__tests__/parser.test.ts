@@ -17,6 +17,8 @@ import { EOF } from "../../values/primitives/EOF.js";
 import { AVector } from "../../values/primitives/AVector.js";
 import { APair } from "../../values/primitives/APair.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
+import { AString } from "../../values/primitives/AString.js";
+import { ADict } from "../../values/primitives/ADict.js";
 import { Parser } from "../Parser.js";
 import type { SchemeValue } from "../../values/types.js";
 
@@ -80,6 +82,36 @@ describe("Parser — quote sugar (builtin extensions)", () => {
     expect(await readOne("`x")).toBe("(quasiquote x)");
     expect(await readOne(",x")).toBe("(unquote x)");
     expect(await readOne(",@x")).toBe("(unquote-splicing x)");
+  });
+});
+
+describe("Parser — #attachment tagged literal (serializer extras)", () => {
+  it("consumes the following datum as one form", async () => {
+    const forms = await readAll('#attachment "att-1 (image/png, 34kB)"');
+    expect(forms).toHaveLength(1);
+    const form = forms[0] as APair;
+    expect(form).toBeInstanceOf(APair);
+    expect((form.car as ASymbol).valueOf()).toBe("attachment");
+    const payload = (form.cdr as APair).car as AString;
+    expect(payload).toBeInstanceOf(AString);
+    expect(payload.valueOf()).toBe("att-1 (image/png, 34kB)");
+  });
+
+  it("fills a dict value slot so {:k #attachment \"…\"} has even arity", async () => {
+    const forms = await readAll('{:img #attachment "att-1 (image/png, 64B)"}');
+    expect(forms).toHaveLength(1);
+    expect(forms[0]).toBeInstanceOf(ADict);
+    const value = (forms[0] as ADict).get("img") as APair;
+    expect(value).toBeInstanceOf(APair);
+    expect((value.car as ASymbol).valueOf()).toBe("attachment");
+  });
+
+  it("does not shift later keys when a vector follows", async () => {
+    const forms = await readAll('{:img #attachment "att-1 (image/png, 34kB)" :list [1 2 3]}');
+    expect(forms).toHaveLength(1);
+    const dict = forms[0] as ADict;
+    expect(dict.keys()).toEqual(["img", "list"]);
+    expect(dict.get("list")).toBeInstanceOf(AVector);
   });
 });
 

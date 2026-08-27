@@ -46,6 +46,11 @@ describe("Lexer — structure", () => {
     { name: "the dotted-pair dot", input: "(a . b)", tokens: ["(", "a", ".", "b", ")"] },
     { name: "vector opener", input: "#(1 2)", tokens: ["#(", "1", "2", ")"] },
     { name: "bytevector opener", input: "#u8(1 2)", tokens: ["#u8(", "1", "2", ")"] },
+    {
+      name: "attachment tag is one token; payload is the next",
+      input: '#attachment "att-1 (image/png, 10B)"',
+      tokens: ["#attachment", '"att-1 (image/png, 10B)"'],
+    },
   ])("tokenizes $name", ({ input, tokens }) => {
     expect(lex(input)).toEqual(tokens);
   });

@@ -602,8 +602,8 @@ export class Parser {
         throw new Unterminated("Expecting expression, eof found");
       }
       // Every registered special is BUILTIN reader syntax (quote/quasiquote/unquote, #(...),
-      // #u8(...)) expanding into a list the interpreter evaluates later — no user-registered
-      // reader macros exist (that would require evaluating at parse time).
+      // #u8(...), #attachment) expanding into a list the interpreter evaluates later — no
+      // user-registered reader macros exist (that would require evaluating at parse time).
       invariant(builtin, () => `Parse Error: non-builtin reader extension ${special.symbol} is unsupported`);
       // `object` may still be a DatumReference placeholder here — the reader-internal
       // channel `_resolve_pair` patches before the form leaves the reader.

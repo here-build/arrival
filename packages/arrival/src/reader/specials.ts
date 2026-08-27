@@ -28,6 +28,9 @@ const defined_specials = [
   [",", new ASymbol("unquote"), LITERAL],
   ["#(", new ASymbol("vector"), LITERAL],
   ["#u8(", new ASymbol("bytevector"), LITERAL],
+  // Serializer extras: `#attachment "att-N (mime, size)"` is one datum so it can sit in a
+  // `{…}` value slot. Bounded (not a user reader-macro) — same LITERAL wrap as quote.
+  ["#attachment", new ASymbol("attachment"), LITERAL],
 ];
 
 export const __builtins__ = Object.freeze(defined_specials.map((arr) => arr[0]));
