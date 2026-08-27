@@ -39,7 +39,8 @@ import {
   sampledIndices,
   type DrillInRequest,
   type OffloadIngress,
-  type VerificationCandidate } from "../../provenance/offload.js";
+  type VerificationCandidate,
+} from "../../provenance/offload.js";
 import { CORPUS_BASE_NAMES, CORPUS_ROLES } from "../../__tests__/provenance/w1-corpus.js";
 import { recordRun, type RecordedMint, type RecordedRun } from "../../__tests__/provenance/q16-harness.js";
 
@@ -83,8 +84,7 @@ async function buildFixture(): Promise<{
   return { program, templateHash: hashGraph(program.main), run, ingress: ingressFromMints(run.mints) };
 }
 
-beforeAll(async () => {
-});
+beforeAll(async () => {});
 
 afterEach(() => {
   setEmissionEnabled(false); // module-global flag; recordRun restores
@@ -151,7 +151,8 @@ describe("§4 C6 first disjunct — epoch-mismatch refusal (task item 2)", () =>
       ingress,
       streamEpoch: EPOCH_B,
       regionId: run.regionId,
-      verificationPool: [candidate] };
+      verificationPool: [candidate],
+    };
     await expect(executor.drillIn(request)).rejects.toThrow(EpochRefusalError);
     try {
       await executor.drillIn(request);
@@ -172,7 +173,8 @@ describe("§4 C6 second disjunct — sampled wire-γ verification (task item 3)"
       ingress,
       streamEpoch: EPOCH_B,
       regionId: run.regionId,
-      verificationPool: [candidate] };
+      verificationPool: [candidate],
+    };
     const response = await executor.drillIn(request);
     expect(response.trust).toBe("verified");
     expect(response.value).toEqual(run.egress);
@@ -188,7 +190,8 @@ describe("§4 C6 second disjunct — sampled wire-γ verification (task item 3)"
       ingress,
       streamEpoch: EPOCH_B,
       regionId: run.regionId,
-      verificationPool: [candidate] });
+      verificationPool: [candidate],
+    });
     // Second call: SAME (regionId, streamEpoch), no pool — must NOT refuse.
     const second = await executor.drillIn({ templateHash, ingress, streamEpoch: EPOCH_B, regionId: run.regionId });
     expect(second.trust).toBe("verified");
@@ -237,7 +240,8 @@ describe("§4 C6 second disjunct — sampled wire-γ verification (task item 3)"
       ingress,
       streamEpoch: EPOCH_B,
       regionId: run.regionId,
-      verificationPool: [] };
+      verificationPool: [],
+    };
     await expect(executor.drillIn(request)).rejects.toThrow(EpochRefusalError);
     try {
       await executor.drillIn(request);
@@ -298,7 +302,8 @@ describe("unresolvable template-hash — a foreign/stale hash is a teaching door
       templateHash: "template-v0:deadbeef",
       ingress,
       streamEpoch: EPOCH_A,
-      regionId: run.regionId };
+      regionId: run.regionId,
+    };
     await expect(executor.drillIn(request)).rejects.toThrow(/no graph in this executor's program matches/);
   });
 });

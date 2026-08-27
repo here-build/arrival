@@ -66,7 +66,7 @@ const displayOf = (arg: unknown): string => printValue(arg);
 const writeOf = (arg: unknown): string => {
   if (isStringLike(arg)) {
     const s = stringValue(arg);
-    return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+    return `"${s.replaceAll("\\", "\\\\").replaceAll('"', String.raw`\"`)}"`;
   }
   return printValue(arg);
 };
@@ -167,7 +167,7 @@ export default EnvCapability.define("scheme/srfi-28", {
             // (digits + comma), unlike every other directive here. The rest of SRFI-48
             // (~r/~t/~c/~p, column directives, port-backed padding chars) is intentionally
             // NOT implemented — see the module header's scope-narrowing note.
-            const fixedPoint = /^(\d*)(?:,(\d*))?[fF]/.exec(fmt.slice(i + 1));
+            const fixedPoint = /^(\d*)(?:,(\d*))?f/i.exec(fmt.slice(i + 1));
             if (fixedPoint) {
               const [directiveText, widthStr, decimalsStr] = fixedPoint;
               const width = widthStr ? Number.parseInt(widthStr, 10) : undefined;

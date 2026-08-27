@@ -133,7 +133,7 @@ describe("boundNameHints: the non-written overlay", () => {
   it("emits a hint at each recovered param's binding site", () => {
     const src = "(map (lambda (e) (:family e)) evidence)";
     const hints = boundNameHints(src);
-    expect(hints).toEqual([{ pos: src.indexOf("e)") , name: "it" }]);
+    expect(hints).toEqual([{ pos: src.indexOf("e)"), name: "it" }]);
   });
   it("emits no hint when the name is unchanged (original survives)", () => {
     expect(boundNameHints("(call/cc (lambda (k) (k 1)))")).toEqual([]);

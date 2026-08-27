@@ -68,7 +68,7 @@ for (const [label, env] of roots) {
       // (cadr (list 1)): cdr → (), then car of () — the unified ANil nil-projection. The WHOLE
       // family now inherits the atoms' mode-gating (the old strict resolver always threw here).
       // execState (COMPLEX tier): asserts box discipline (`toBeInstanceOf(ANil)`, RULINGS.md R1).
-      expect(((await execState("(cadr '(1))", { env })).values[0])).toBeInstanceOf(ANil);
+      expect((await execState("(cadr '(1))", { env })).values[0]).toBeInstanceOf(ANil);
       await expect(exec("(cadr '(1))", { env, strict: true })).rejects.toThrow();
     });
   });

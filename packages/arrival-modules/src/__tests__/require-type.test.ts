@@ -10,7 +10,8 @@ import {
   resolveRequireType,
   valueToTsType,
   type ExtensionHandler,
-  type Loader } from "../loader.js";
+  type Loader,
+} from "../loader.js";
 
 describe("valueToTsType — JS value → lens TS type", () => {
   it("maps scalars to plain TS natives (not SStr/SNum/SBool brands)", () => {
@@ -44,11 +45,7 @@ describe("resolveRequireType — route a file's source through the registry", ()
   });
 
   it("JSONC comments/trailing commas still yield the same granular shape", () => {
-    const ts = resolveRequireType(
-      loader,
-      "personas.json",
-      `// people roster\n[{"name":"a","age":30,},]\n`,
-    );
+    const ts = resolveRequireType(loader, "personas.json", `// people roster\n[{"name":"a","age":30,},]\n`);
     expect(ts).toBe(`List<{ "name": string; "age": number }>`);
   });
 
@@ -65,10 +62,12 @@ describe("resolveRequireType — route a file's source through the registry", ()
   it("a custom extension registered with a `type` provider is reachable", () => {
     const custom: ExtensionHandler = {
       resolve: (contents) => ({ kind: "value", value: String(contents) }),
-      type: () => `{ "csv": List<string> }` };
+      type: () => `{ "csv": List<string> }`,
+    };
     const customLoader: Loader = {
       ...loader,
-      resolvers: new Map(defaultResolvers()).set(".csv", custom) };
+      resolvers: new Map(defaultResolvers()).set(".csv", custom),
+    };
     expect(resolveRequireType(customLoader, "rows.csv", "a,b\n1,2")).toBe(`{ "csv": List<string> }`);
   });
 });

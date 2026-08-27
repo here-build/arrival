@@ -1,34 +1,10 @@
 import { nodejs } from "@here.build/eslint-configs";
-import { fileURLToPath } from "node:url";
-import path from "node:path";
-
-const dirname = path.dirname(fileURLToPath(import.meta.url));
+import { arrivalOverlay } from "../../eslint.arrival.mjs";
 
 export default [
   ...nodejs,
-  {
-    files: ["src/**/*.ts"],
-    languageOptions: {
-      parserOptions: {
-        projectService: {
-          // tsconfig.test.json includes src/__tests__ (its exclude overrides the
-          // base's) — tests are project-matched, no capped allowDefaultProject
-          // list needed.
-          defaultProject: "tsconfig.test.json",
-        },
-        tsconfigRootDir: dirname,
-      },
-    },
-  },
-  {
-    files: ["src/**/*.test.ts"],
-    rules: {
-      "no-console": "off",
-      "sonarjs/no-nested-functions": "off",
-    },
-  },
-  {
-    // dist-cases/ are type-test fixtures (not real source).
-    ignores: ["node_modules/*", "dist/*", "dist-cases/*", "**/*.config.*", "src/**/*.cases.ts"],
-  },
+  ...arrivalOverlay({
+    tsconfigRootDir: import.meta.dirname,
+    extraIgnores: ["src/**/*.cases.ts"],
+  }),
 ];

@@ -25,7 +25,7 @@ export function tagless(tpl: TemplateStringsArray, ...sub: unknown[]): ANativePr
   const run = async function (this: CallCtx, ...args: readonly SchemeValue[]): Promise<SchemeValue> {
     const runCtx = this.runCtx;
     const schemeArgs = args;
-    const receiver = schemeArgs[schemeArgs.length - 1];
+    const receiver = schemeArgs.at(-1);
     const leading = schemeArgs.slice(0, -1);
     // Free author string cast to TaglessOp at this boundary; typo just resolves no method.
     const fn = resolveMethod(receiver, tf(name as TaglessOp));

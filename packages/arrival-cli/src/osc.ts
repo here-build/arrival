@@ -12,8 +12,8 @@
  */
 import type { Readable, Writable } from "node:stream";
 
-const ESC = "\x1b";
-const BEL = "\x07";
+const ESC = "\u001B";
+const BEL = "\u0007";
 const OSC = `${ESC}]`;
 const ST = `${ESC}\\`; // string terminator (ST) — preferred over BEL for OSC where accepted
 
@@ -93,16 +93,20 @@ export function parseOscColorPayload(payload: string): OscRgb | null {
   const xparse = /^rgb:([0-9a-fA-F]{1,4})\/([0-9a-fA-F]{1,4})\/([0-9a-fA-F]{1,4})$/.exec(s);
   if (xparse) {
     const scale = (hex: string): number => {
-      const n = parseInt(hex, 16);
+      const n = Number.parseInt(hex, 16);
       const max = (1 << (hex.length * 4)) - 1;
       return Math.round((n / max) * 255);
     };
     return { r: scale(xparse[1]!), g: scale(xparse[2]!), b: scale(xparse[3]!) };
   }
-  const hex = /^#?([0-9a-fA-F]{6})$/.exec(s);
+  const hex = /^#?([0-9a-f]{6})$/i.exec(s);
   if (hex) {
     const h = hex[1]!;
-    return { r: parseInt(h.slice(0, 2), 16), g: parseInt(h.slice(2, 4), 16), b: parseInt(h.slice(4, 6), 16) };
+    return {
+      r: Number.parseInt(h.slice(0, 2), 16),
+      g: Number.parseInt(h.slice(2, 4), 16),
+      b: Number.parseInt(h.slice(4, 6), 16),
+    };
   }
   return null;
 }
@@ -136,11 +140,13 @@ export type CanvasProbe = {
  * (the REPL has not started reading yet; an 80ms boot race is not worth a
  * re-inject path).
  */
-export async function probeCanvas(opts: {
-  stdin?: Readable & { isTTY?: boolean };
-  stdout?: Writable & { isTTY?: boolean };
-  timeoutMs?: number;
-} = {}): Promise<CanvasProbe> {
+export async function probeCanvas(
+  opts: {
+    stdin?: Readable & { isTTY?: boolean };
+    stdout?: Writable & { isTTY?: boolean };
+    timeoutMs?: number;
+  } = {},
+): Promise<CanvasProbe> {
   const stdin = opts.stdin ?? process.stdin;
   const stdout = opts.stdout ?? process.stdout;
   const timeoutMs = opts.timeoutMs ?? 80;

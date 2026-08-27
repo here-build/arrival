@@ -86,8 +86,9 @@ export class StaticValidationError extends Error {
   constructor(diagnostics: readonly Diagnostic[]) {
     const errors = diagnostics.filter((d) => d.severity === "error");
     super(
-      `Static validation found ${errors.length} error${errors.length === 1 ? "" : "s"} — nothing was evaluated:\n` +
-        errors.map((d) => `  • ${d.message}`).join("\n"),
+      `Static validation found ${errors.length} error${errors.length === 1 ? "" : "s"} — nothing was evaluated:\n${errors
+        .map((d) => `  • ${d.message}`)
+        .join("\n")}`,
     );
     this.name = "StaticValidationError";
     this.diagnostics = diagnostics;
@@ -176,14 +177,14 @@ export function validateProgram(forms: readonly SchemeValue[], vocabulary: Progr
     const hint = suggestions.length === 0 ? "" : ` — did you mean ${suggestions.map((s) => `\`${s}\``).join(" or ")}?`;
     // The impure-resolver downgrade: honesty over strictness, per-chain, visible.
     const impure = vocabulary.hasImpureResolver;
-    const message =
-      `Unbound symbol \`${node.name}\`${hint} Referenced at ${siteList(sites)}` +
-      (impure
+    const message = `Unbound symbol \`${node.name}\`${hint} Referenced at ${siteList(sites)}${
+      impure
         ? " (a dynamic resolver in this assembly may still answer it at runtime)."
-        : " — this program would crash there.");
-    const publicMessage =
-      `symbol ${node.name} does not exist - look at list of available functions at tool description` +
-      (suggestions.length === 0 ? "" : ` (did you mean ${suggestions.map((s) => `\`${s}\``).join(" or ")}?)`);
+        : " — this program would crash there."
+    }`;
+    const publicMessage = `symbol ${node.name} does not exist - look at list of available functions at tool description${
+      suggestions.length === 0 ? "" : ` (did you mean ${suggestions.map((s) => `\`${s}\``).join(" or ")}?)`
+    }`;
     diagnostics.push({
       firstOrder: node.references[0].order,
       diagnostic: {

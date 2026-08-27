@@ -20,6 +20,7 @@ const symbolArb = nameArb.map((n) => new ASymbol(n));
 // distinct-heap clones (pins implementation, not behavior — compares __name__ directly).
 setoidLaws("SchemeSymbol", {
   arb: symbolArb,
-  equalClone: (s) => new ASymbol(s.__name__) });
+  equalClone: (s) => new ASymbol(s.__name__),
+});
 
 ordLaws("SchemeSymbol", symbolArb);

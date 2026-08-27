@@ -118,20 +118,20 @@ function num_pre_parse(arg: string): {
   } = {};
   if (parts![1]) {
     // eslint-disable-next-line unicorn/prefer-spread -- prefix flags are ASCII source units (`split("")`), not code points
-    const type = parts![1].replaceAll("#", "").toLowerCase().split("");
-    if (type.includes("x")) {
+    const type = new Set(parts![1].replaceAll("#", "").toLowerCase().split(""));
+    if (type.has("x")) {
       options.radix = 16;
-    } else if (type.includes("o")) {
+    } else if (type.has("o")) {
       options.radix = 8;
-    } else if (type.includes("b")) {
+    } else if (type.has("b")) {
       options.radix = 2;
-    } else if (type.includes("d")) {
+    } else if (type.has("d")) {
       options.radix = 10;
     }
-    if (type.includes("i")) {
+    if (type.has("i")) {
       options.inexact = true;
     }
-    if (type.includes("e")) {
+    if (type.has("e")) {
       options.exact = true;
     }
   }
@@ -197,18 +197,16 @@ export function parse_float(arg: string, loc?: SourceLocation): AExact | AInexac
   const parse = num_pre_parse(arg);
   const value = string_to_float(parse.number!);
   const simple_number = (parse.number!.match(/\.0$/) || !/\./.test(parse.number!)) && !/e/i.test(parse.number!);
-  if (!parse.inexact) {
-    if (parse.exact && simple_number) {
-      return mintExact(assertSafeExactComponent(Math.round(value), arg), 1, undefined, "parse float", loc);
-    }
-    // An EXPONENT numeral (e.g. "1e2") defaults to INEXACT regardless of magnitude
-    // (R7RS §7.1.1: only a decimal-point-free, exponent-free numeral defaults exact) —
-    // an explicit #e is required to reach the exact arm at all, and that arm (below,
-    // "approximate as a rational via its decimal string") already handles any
-    // integer-valued float uniformly, whether it came from decimal or exponent form. A
-    // magnitude too big for a safe-int component ParseErrors there instead of
-    // constructing an unbounded rational — there is no bignum fallback under RATIO.
+  if (!parse.inexact && parse.exact && simple_number) {
+    return mintExact(assertSafeExactComponent(Math.round(value), arg), 1, undefined, "parse float", loc);
   }
+  // An EXPONENT numeral (e.g. "1e2") defaults to INEXACT regardless of magnitude
+  // (R7RS §7.1.1: only a decimal-point-free, exponent-free numeral defaults exact) —
+  // an explicit #e is required to reach the exact arm at all, and that arm (below,
+  // "approximate as a rational via its decimal string") already handles any
+  // integer-valued float uniformly, whether it came from decimal or exponent form. A
+  // magnitude too big for a safe-int component ParseErrors there instead of
+  // constructing an unbounded rational — there is no bignum fallback under RATIO.
   // Inexact float, but exact was requested — approximate as a rational via its decimal string.
   if (parse.exact) {
     const floatVal = value;

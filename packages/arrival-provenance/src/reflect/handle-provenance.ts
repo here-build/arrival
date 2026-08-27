@@ -105,16 +105,13 @@ export async function dagOf(h: ResultHandle, signal?: AbortSignal): Promise<stri
   const g = traceToFlowGraph(trace);
   const s = (x: string): string => JSON.stringify(x);
   const node = (n: (typeof g.nodes)[number]): string =>
-    `    (node ${s(n.id)} :label ${s(n.label)} :box ${n.boxType}` +
-    (n.count > 1 ? ` :count ${n.count}` : "") +
-    (n.layer != null ? ` :layer ${n.layer}` : "") +
-    (n.parentId ? ` :parent ${s(n.parentId)}` : "") +
-    ")";
+    `    (node ${s(n.id)} :label ${s(n.label)} :box ${n.boxType}${n.count > 1 ? ` :count ${n.count}` : ""}${
+      n.layer == null ? "" : ` :layer ${n.layer}`
+    }${n.parentId ? ` :parent ${s(n.parentId)}` : ""})`;
   const edge = (e: (typeof g.edges)[number]): string =>
-    `    (-> ${s(e.from)} ${s(e.to)}` +
-    (e.kind === "loopback" ? " :loopback #t" : "") +
-    (e.fields?.length ? ` :fields (${e.fields.map(s).join(" ")})` : "") +
-    ")";
+    `    (-> ${s(e.from)} ${s(e.to)}${e.kind === "loopback" ? " :loopback #t" : ""}${
+      e.fields?.length ? ` :fields (${e.fields.map(s).join(" ")})` : ""
+    })`;
   return `(dag\n  (nodes\n${g.nodes.map(node).join("\n")})\n  (edges\n${g.edges.map(edge).join("\n")}))`;
 }
 
@@ -208,8 +205,8 @@ async function leafRows(
       return renderLeaf(path, display, advisory);
     });
     return { leaves: `(${rows.join(" ")})` };
-  } catch (e) {
-    return { leaves: "nil", unavailable: e instanceof Error ? e.message : String(e) };
+  } catch (error) {
+    return { leaves: "nil", unavailable: error instanceof Error ? error.message : String(error) };
   }
 }
 
@@ -228,7 +225,8 @@ async function tryAttested(h: ResultHandle, signal?: AbortSignal): Promise<reado
  *  `SealVerdict`) rendered as the sexpr fragment `groundedOf`/`attestOf` embed per leaf. */
 function renderAttestedVerdict(v: AttestedLeafVerdict): string {
   if (v.kind === "content-attested") return "content-attested";
-  if (v.kind === "selection-attested") return `selection-attested :vocabulary (${[...v.vocabulary].map(quote).join(" ")})`;
+  if (v.kind === "selection-attested")
+    return `selection-attested :vocabulary (${[...v.vocabulary].map(quote).join(" ")})`;
   return `not-attestable :reason ${quote(v.reason)}`;
 }
 
@@ -296,7 +294,8 @@ function renderFieldMeta(field: AttestedField): string {
   let out = "";
   if (field.cone !== undefined) out += ` :cone ${field.cone}`;
   if (field.frontier !== undefined) out += ` :frontier ${renderFieldPath(field.frontier)}`;
-  if (field.crossedFans !== undefined && field.crossedFans.length > 0) out += ` :crossed-fans (${field.crossedFans.join(" ")})`;
+  if (field.crossedFans !== undefined && field.crossedFans.length > 0)
+    out += ` :crossed-fans (${field.crossedFans.join(" ")})`;
   return out;
 }
 
@@ -308,13 +307,16 @@ function renderFieldMeta(field: AttestedField): string {
 async function fieldOrFailClosed(h: ResultHandle, path: FieldPath, signal?: AbortSignal): Promise<AttestedField> {
   try {
     return await h.attestedField(path);
-  } catch (e) {
-    if (signal?.aborted && e instanceof Error && /abort/i.test(e.name + e.message)) {
-      throw e; // upstream cancellation — not a verdict.
+  } catch (error) {
+    if (signal?.aborted && error instanceof Error && /abort/i.test(error.name + error.message)) {
+      throw error; // upstream cancellation — not a verdict.
     }
     return {
       at: path,
-      verdict: { kind: "not-attestable", reason: `${UNAVAILABLE_REASON}: ${e instanceof Error ? e.message : String(e)}` },
+      verdict: {
+        kind: "not-attestable",
+        reason: `${UNAVAILABLE_REASON}: ${error instanceof Error ? error.message : String(error)}`,
+      },
     };
   }
 }
@@ -345,7 +347,8 @@ export async function groundedOf(h: ResultHandle, signal?: AbortSignal, path?: F
     (ord, display, advisory) =>
       `(leaf :path ${ord} :display ${display} :verdict not-attestable :reason ${quote(UNAVAILABLE_REASON)} :advisory ${advisory})`,
   );
-  const reason = unavailable === undefined ? UNAVAILABLE_REASON : `${UNAVAILABLE_REASON}; trace unavailable: ${unavailable}`;
+  const reason =
+    unavailable === undefined ? UNAVAILABLE_REASON : `${UNAVAILABLE_REASON}; trace unavailable: ${unavailable}`;
   return `(grounding :reason ${quote(reason)} :leaves ${leaves})`;
 }
 
@@ -370,7 +373,8 @@ export async function attestOf(h: ResultHandle, signal?: AbortSignal, path?: Fie
     (ord, display, advisory) =>
       `(leaf :path ${ord} :display ${display} :verdict not-attestable :static pending :probe pending :advisory ${advisory})`,
   );
-  const reason = unavailable === undefined ? UNAVAILABLE_REASON : `${UNAVAILABLE_REASON}; trace unavailable: ${unavailable}`;
+  const reason =
+    unavailable === undefined ? UNAVAILABLE_REASON : `${UNAVAILABLE_REASON}; trace unavailable: ${unavailable}`;
   return `(attestation :reason ${quote(reason)} :leaves ${leaves})`;
 }
 

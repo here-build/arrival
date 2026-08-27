@@ -39,12 +39,16 @@ describe("resolveOutputMode — color", () => {
   });
 
   it("NO_COLOR wins over CLICOLOR_FORCE (explicit off beats force)", () => {
-    expect(resolveOutputMode({ stdoutIsTTY: false, env: { NO_COLOR: "1", CLICOLOR_FORCE: "1" }, json: false }).color).toBe(false);
+    expect(
+      resolveOutputMode({ stdoutIsTTY: false, env: { NO_COLOR: "1", CLICOLOR_FORCE: "1" }, json: false }).color,
+    ).toBe(false);
   });
 
   it("TERM=dumb disables color on a TTY (but CLICOLOR_FORCE still overrides)", () => {
     expect(resolveOutputMode({ stdoutIsTTY: true, env: { TERM: "dumb" }, json: false }).color).toBe(false);
-    expect(resolveOutputMode({ stdoutIsTTY: true, env: { TERM: "dumb", CLICOLOR_FORCE: "1" }, json: false }).color).toBe(true);
+    expect(
+      resolveOutputMode({ stdoutIsTTY: true, env: { TERM: "dumb", CLICOLOR_FORCE: "1" }, json: false }).color,
+    ).toBe(true);
   });
 
   it("--json is never colored even on a forcing TTY", () => {

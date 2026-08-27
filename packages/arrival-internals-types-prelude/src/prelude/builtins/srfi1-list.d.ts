@@ -18,27 +18,26 @@
 // change the signatures:
 //   • take / drop  — COUNT-first, list-LAST: prefix / suffix of length n.
 
-  // Prefix / suffix by count. Count-first, list-last; element type preserved.
+// Prefix / suffix by count. Count-first, list-last; element type preserved.
 declare function take<T>(n: number, xs: List<T>): List<T>;
 declare function drop<T>(n: number, xs: List<T>): List<T>;
 
-
-  // Deep recursive flatten. Depth unbounded → element type collapses to `unknown`;
-  // the argument is still pinned to a list so a non-list bites.
+// Deep recursive flatten. Depth unbounded → element type collapses to `unknown`;
+// the argument is still pinned to a list so a non-list bites.
 declare function flatten(xs: List<unknown>): List<unknown>;
 
-  // Left fold (fn, init, list) with callback (element, acc) — Scheme order.
-  // NoInfer on init so empty `[]` seed does not pin B to never[] before the body.
+// Left fold (fn, init, list) with callback (element, acc) — Scheme order.
+// NoInfer on init so empty `[]` seed does not pin B to never[] before the body.
 declare function fold<A, B>(f: (x: A, acc: B) => B, init: NoInfer<B>, xs: List<A>): B;
 
-  // Indexed element read. Index-first, list-last; out-of-range is the miss value.
+// Indexed element read. Index-first, list-last; out-of-range is the miss value.
 declare function nth<T>(index: number, xs: List<T>): T | undefined;
 
-  // Side-effecting iteration. Callback param bound to the element type; yields void.
+// Side-effecting iteration. Callback param bound to the element type; yields void.
 declare function for$dash$each<A>(f: (a: A) => unknown, xs: List<A>): void;
 
-  // Count elements satisfying a predicate. Pred-first, list-last; result is a number.
+// Count elements satisfying a predicate. Pred-first, list-last; result is a number.
 declare function count<A>(pred: (a: A) => unknown, xs: List<A>): number;
 
-  // Inverse filter — drop the elements matching pred.
+// Inverse filter — drop the elements matching pred.
 declare function remove<T>(pred: (x: T) => boolean, xs: List<T>): List<T>;

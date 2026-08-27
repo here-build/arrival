@@ -13,8 +13,7 @@
  * (`#| … |#` truncation markers, `#attachment` tags): an unrecognized run is just a symbol,
  * passed through in the default foreground.
  */
-import { DARCULA, paintHex } from "./tints.js";
-import { colorMode } from "./tints.js";
+import { colorMode, DARCULA, paintHex } from "./tints.js";
 
 type ColorMode = ReturnType<typeof colorMode>;
 
@@ -29,7 +28,8 @@ function isNumber(atom: string): boolean {
  *  so the value palette matches the code highlighter exactly. */
 function atomColor(atom: string): string {
   if (atom.length > 1 && atom.startsWith(":")) return DARCULA.property; // :keyword → purple
-  if (atom === "#t" || atom === "#f" || atom === "#true" || atom === "#false" || atom === "nil") return DARCULA.constant;
+  if (atom === "#t" || atom === "#f" || atom === "#true" || atom === "#false" || atom === "nil")
+    return DARCULA.constant;
   if (atom.startsWith("#\\")) return DARCULA.string; // char literal → green (like a string)
   if (isNumber(atom)) return DARCULA.number; // number → blue
   return DARCULA.symbol; // plain identifier → baseline gray-blue

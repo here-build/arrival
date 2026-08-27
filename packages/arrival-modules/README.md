@@ -16,12 +16,12 @@ Yaml, toml, and handlebars are **not** on this barrel.
 
 `(require "x.yaml")` does not work until you root `./yaml` **and** install `yaml`. Same for toml (`smol-toml`) and handlebars (`handlebars`).
 
-| Subpath | Capability | Optional peer |
-| --- | --- | --- |
-| `./yaml` | `arrivalYamlCapability` | `yaml` |
-| `./toml` | `arrivalTomlCapability` | `smol-toml` |
-| `./handlebars` | `arrivalHandlebarsCapability` | `handlebars` |
-| `./handlebars/runtime` | pure JS (`templateHandlebars`, `handlebarsParse`, `handlebarsRun`) | — |
+| Subpath                | Capability                                                         | Optional peer |
+| ---------------------- | ------------------------------------------------------------------ | ------------- |
+| `./yaml`               | `arrivalYamlCapability`                                            | `yaml`        |
+| `./toml`               | `arrivalTomlCapability`                                            | `smol-toml`   |
+| `./handlebars`         | `arrivalHandlebarsCapability`                                      | `handlebars`  |
+| `./handlebars/runtime` | pure JS (`templateHandlebars`, `handlebarsParse`, `handlebarsRun`) | —             |
 
 `./handlebars/runtime` is the surface mercury emit imports. It is not re-exported from `.`.
 

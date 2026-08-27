@@ -5,7 +5,7 @@ syntax, and every form shown folds back to the s-expression next to it. `;; ≡`
 canonical form a line lowers to. Every example here is real renderer output.
 
 Plain Scheme is always valid input — parens never stop working. Sugarcoat is what the
-renderer *chooses* to show you, and what the reader accepts back.
+renderer _chooses_ to show you, and what the reader accepts back.
 
 ## Indentation
 
@@ -44,10 +44,10 @@ rows.map{(r) => (dict :id r[:id] :label r[:label].strip)}
 {{a + b} * c}            ;; ≡ (* (+ a b) c)   — looser child keeps them
 ```
 
-`==` is `equal?`; `and`/`or`, `=`, `eq?`, `eqv?` render as themselves, so equality *kind*
+`==` is `equal?`; `and`/`or`, `=`, `eq?`, `eqv?` render as themselves, so equality _kind_
 and logical intent survive the round-trip.
 
-`and` / `or` prefer a **flat n-expr** (associative collapse) for the *same* op:
+`and` / `or` prefer a **flat n-expr** (associative collapse) for the _same_ op:
 
 ```scheme
 {a and b and c}          ;; ≡ (and a b c)
@@ -96,7 +96,7 @@ it[:verdict]  ;; ≡ (:verdict it)
 
 ## Method-dot chains
 
-`.symbol` seats the receiver in the *last* argument slot of the call it chains into:
+`.symbol` seats the receiver in the _last_ argument slot of the call it chains into:
 
 ```scheme
 x.f.g                       ;; ≡ (g (f x))
@@ -116,7 +116,7 @@ items.fold{(acc it) => acc + it}  0   ;; ✗ NOT a seed — this APPLIES the fol
 ```
 
 One rule covers unary pipes, higher-order calls with a trailing lambda, and seeded folds.
-The brackets must be *tight* (no space before `(` or `{`) — a spaced `{…}` is a sibling
+The brackets must be _tight_ (no space before `(` or `{`) — a spaced `{…}` is a sibling
 operand, not a trailing lambda.
 
 ## `it` and arrow lambdas
@@ -135,7 +135,7 @@ users.filter{(u) => u[:age] < 30}
 ;; ≡ (fold (lambda (acc x) (+ acc x)) knil xs)
 ```
 
-The lens never renames *your* parameters — `u` stays `u`. When you want `it`-ification
+The lens never renames _your_ parameters — `u` stays `u`. When you want `it`-ification
 (or `items` → `item` recovery), that's the explicit opt-in `tidyBoundNames` pass from
 `@inhuman.tools/arrival-sugarcoat/names`, or its no-touch twin `boundNameHints` for editor
 inlays.
@@ -209,11 +209,11 @@ reader). They fold to `(dict …)` / `(list …)`:
 
 **`{}` is shared with n-expr.** Discrimination is odd/even at the top level:
 
-| shape | meaning |
-|---|---|
-| even forms (incl. empty) | dict — kv pairs |
+| shape                      | meaning              |
+| -------------------------- | -------------------- |
+| even forms (incl. empty)   | dict — kv pairs      |
 | odd, `operand op operand…` | n-expr — curly-infix |
-| single form | unwrap (`{x}` ≡ `x`) |
+| single form                | unwrap (`{x}` ≡ `x`) |
 
 ```scheme
 {a + b}                   ;; ≡ (+ a b)          — odd, op in the middle

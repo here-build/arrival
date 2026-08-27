@@ -17,9 +17,4 @@
 
 declare function map<A, B>(f: (a: A) => B, xs: List<A>): List<B>;
 declare function map<A, B, R>(f: (a: A, b: B) => R, as: List<A>, bs: List<B>): List<R>;
-declare function map<A, B, C, R>(
-  f: (a: A, b: B, c: C) => R,
-  as: List<A>,
-  bs: List<B>,
-  cs: List<C>,
-): List<R>;
+declare function map<A, B, C, R>(f: (a: A, b: B, c: C) => R, as: List<A>, bs: List<B>, cs: List<C>): List<R>;

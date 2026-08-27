@@ -272,15 +272,19 @@ describe("generator-exec", () => {
     // INVARIANT: try's finally clause runs after a successful body, after the body
     it("should run finally clause after success", async () => {
       const log: string[] = [];
-      const env = await freshEnv() as EnvWithInternals<ResolvingAmbient>;
-      env.bind("log", new ANativeProcedure({
+      const env = (await freshEnv()) as EnvWithInternals<ResolvingAmbient>;
+      env.bind(
+        "log",
+        new ANativeProcedure({
           name: "log",
           arity: { min: 1, max: 1 },
           contract: undefined,
           impl: (args) => {
             log.push(String((args[0] as AString).valueOf()));
             return nil;
-          } }));
+          },
+        }),
+      );
       await execStateOverFrame(
         `(try
            (log "body")
@@ -292,15 +296,19 @@ describe("generator-exec", () => {
 
     it("should run finally clause after catch", async () => {
       const log: string[] = [];
-      const env = await freshEnv() as EnvWithInternals<ResolvingAmbient>;
-      env.bind("log", new ANativeProcedure({
+      const env = (await freshEnv()) as EnvWithInternals<ResolvingAmbient>;
+      env.bind(
+        "log",
+        new ANativeProcedure({
           name: "log",
           arity: { min: 1, max: 1 },
           contract: undefined,
           impl: (args) => {
             log.push(String((args[0] as AString).valueOf()));
             return nil;
-          } }));
+          },
+        }),
+      );
       await execStateOverFrame(
         `(try
            (begin (log "body") (raise "error"))

@@ -20,9 +20,7 @@ const exactArb = fc
   .map(([num, denom]) => new AExact(num, denom));
 
 // Inexact reals incl. NaN / ±0 / ±Infinity — the cases that bite reflexivity.
-const inexactArb = fc
-  .double({ noDefaultInfinity: false, noNaN: false })
-  .map((real) => new AInexact(real));
+const inexactArb = fc.double({ noDefaultInfinity: false, noNaN: false }).map((real) => new AInexact(real));
 
 setoidLaws("SchemeExact", { arb: exactArb, equalClone: (a) => new AExact(a.num, a.denom) });
 setoidLaws("SchemeInexact", { arb: inexactArb, equalClone: (a) => new AInexact(a.real) });

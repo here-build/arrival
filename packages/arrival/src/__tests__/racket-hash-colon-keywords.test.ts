@@ -41,8 +41,8 @@ describe("Racket #:keyword ≡ :keyword", () => {
   });
 
   it("accessor apply: (#:name d) ≡ (:name d)", async () => {
-    const [viaHash] = await exec("(#:name (dict :name \"Ada\"))");
-    const [viaColon] = await exec("(:name (dict :name \"Ada\"))");
+    const [viaHash] = await exec('(#:name (dict :name "Ada"))');
+    const [viaColon] = await exec('(:name (dict :name "Ada"))');
     expect(viaHash).toBe("Ada");
     expect(viaColon).toBe("Ada");
   });

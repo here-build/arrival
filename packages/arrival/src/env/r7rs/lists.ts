@@ -301,7 +301,7 @@ const applyEmitRule: EmitRule<R> = {
   call: (args, ctx) => {
     if (args.length < 2) ctx.door("`apply` wants a function and a trailing argument list");
     const f = args[0]!;
-    const last = args[args.length - 1]!;
+    const last = args.at(-1)!;
     if (args.length === 2 && f.t === "RuntimeRef") {
       const fold = FOLD_OPS[f.symbol];
       if (fold !== undefined) {
@@ -475,7 +475,7 @@ export default EnvCapability.define("scheme/lists", {
       // listToArray doors improper/atom final arg (no non-iterable spread crash).
       function (this: CallCtx, fn, ...rest) {
         invariant(rest.length > 0, "apply: requires an argument list as the final argument");
-        const spread = listToArray(rest[rest.length - 1] as AListAlike);
+        const spread = listToArray(rest.at(-1) as AListAlike);
         // Thread whole CallCtx (not just runCtx) so invocation provenance reaches fn.
         return applyCallback(fn, [...rest.slice(0, -1), ...spread], this) as SchemeValue | Promise<SchemeValue>;
       },

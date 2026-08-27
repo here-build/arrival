@@ -60,18 +60,18 @@ export function classify(harvest: HarvestProgram[]): { counts: Record<string, nu
     try {
       gotForest = readSugarcoat(sugarcoat);
       r.got_canonical = gotForest.map(show).join("\n");
-    } catch (e) {
+    } catch (error) {
       r.outcome = "ERROR";
-      r.door = String((e as Error).message).slice(0, 200);
+      r.door = String((error as Error).message).slice(0, 200);
       results.push(r);
       continue;
     }
     let expForest: Node[];
     try {
       expForest = parseSexprs(expected);
-    } catch (e) {
+    } catch (error) {
       r.outcome = "EXPECT_INVALID";
-      r.door = String((e as Error).message).slice(0, 200);
+      r.door = String((error as Error).message).slice(0, 200);
       results.push(r);
       continue;
     }
@@ -81,8 +81,8 @@ export function classify(harvest: HarvestProgram[]): { counts: Record<string, nu
       const rerender = gotForest.map((n) => schemeToSugarcoat(show(n))).join("\n");
       const reread = readSugarcoat(rerender);
       r.idempotent = forestEq(reread, gotForest);
-    } catch (e) {
-      r.idempotent = "render/reread threw: " + String((e as Error).message).slice(0, 120);
+    } catch (error) {
+      r.idempotent = "render/reread threw: " + String((error as Error).message).slice(0, 120);
     }
     results.push(r);
   }

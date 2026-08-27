@@ -94,9 +94,9 @@ const HK_K = 0.14;
  * Coefficients: Delta foundation.css `--🧮hue-factor` / quickdraw `nayataniHueFactor`
  * (R²≈0.98 vs VAC q(θ)). Inherently ~[0.54, 0.92] — no clamp.
  */
-const NAY_A0 = 0.77911;
-const NAY_COS = [0.08091, 0.06202, -0.01415] as const;
-const NAY_SIN = [-0.13593, -0.00365, 0.03377] as const;
+const NAY_A0 = 0.779_11;
+const NAY_COS = [0.080_91, 0.062_02, -0.014_15] as const;
+const NAY_SIN = [-0.135_93, -0.003_65, 0.033_77] as const;
 
 export function hueFactor(h: number): number {
   let v = NAY_A0;
@@ -303,8 +303,7 @@ function contrastFloor(color: Oklch, theme: ThemeCanvas): Oklch {
 
 function emitOklch(color: Oklch): [number, number, number] {
   const clamped = clampChroma({ mode: "oklch", l: color.l, c: Math.max(0, color.c), h: color.h }, "oklch");
-  const o =
-    clamped && "l" in clamped ? asOklch(clamped, color) : { ...color, c: Math.max(0, color.c) };
+  const o = clamped && "l" in clamped ? asOklch(clamped, color) : { ...color, c: Math.max(0, color.c) };
   return oklchToSrgb(o.l, o.c, o.h);
 }
 
@@ -326,10 +325,7 @@ function voiceOklch(tier: TintTier, theme: ThemeCanvas): Oklch {
     "oklch",
   )(TIER_MIX[tier]);
   const mixed = asOklch(p ?? {}, theme.fg);
-  return contrastFloor(
-    { l: solveLightness(targetAl(tier, theme), mixed.c, mixed.h), c: mixed.c, h: mixed.h },
-    theme,
-  );
+  return contrastFloor({ l: solveLightness(targetAl(tier, theme), mixed.c, mixed.h), c: mixed.c, h: mixed.h }, theme);
 }
 
 /**
@@ -354,7 +350,12 @@ function appearOklch(c: number, hDeg: number, tier: TintTier, theme: ThemeCanvas
 }
 
 /** Recede with no identity chroma → voice (their ink). Else the identity, as seen on this paper. */
-export function solveRgb(c: number, hDeg: number, tier: TintTier, theme: ThemeCanvas = canvas): [number, number, number] {
+export function solveRgb(
+  c: number,
+  hDeg: number,
+  tier: TintTier,
+  theme: ThemeCanvas = canvas,
+): [number, number, number] {
   const o = tier === "recede" && c === 0 ? voiceOklch(tier, theme) : appearOklch(c, hDeg, tier, theme);
   return emitOklch(o);
 }

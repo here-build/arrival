@@ -22,7 +22,11 @@ function trackOpen(id: RecordId, seq: number): ProvenanceRecord {
 function trackClose(id: RecordId, seq: number, settled = true): ProvenanceRecord {
   return { kind: "track-close", id, seq, settled };
 }
-function hostSchedule(id: RecordId, seq: number, triples: readonly { left: readonly number[]; right: readonly number[]; verdict: number }[]): ProvenanceRecord {
+function hostSchedule(
+  id: RecordId,
+  seq: number,
+  triples: readonly { left: readonly number[]; right: readonly number[]; verdict: number }[],
+): ProvenanceRecord {
   return { kind: "host-schedule", id, seq, triples };
 }
 
@@ -36,7 +40,8 @@ describe("foldRegionStream — the empty/base case", () => {
       unsettledCloses: 0,
       pending: 0,
       hostSchedules: [],
-      lastSeq: 0 });
+      lastSeq: 0,
+    });
   });
 });
 
@@ -167,7 +172,12 @@ describe("nextTrackOrdinal — §5 C2/D1 collision avoidance for a resumed scope
 
   it("ignores non-track record kinds entirely", () => {
     const records: ProvenanceRecord[] = [
-      { kind: "mint", id: { templateHash: COORD.templateHash, ordinalPath: [0, 7], regionEpoch: COORD.regionEpoch }, seq: 1, payloadHash: "payload-v0:0" },
+      {
+        kind: "mint",
+        id: { templateHash: COORD.templateHash, ordinalPath: [0, 7], regionEpoch: COORD.regionEpoch },
+        seq: 1,
+        payloadHash: "payload-v0:0",
+      },
     ];
     expect(nextTrackOrdinal(records, COORD)).toBe(0);
   });

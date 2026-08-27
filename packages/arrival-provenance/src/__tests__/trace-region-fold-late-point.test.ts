@@ -56,8 +56,7 @@ describe("TraceRegionFold — late point promotion (streaming-host marking race)
             // The enter→crossing window (arg eval / tool resolution in the real plane).
             await preCrossing.promise;
             // The provider crossing — exactly the studio hook's marking.
-            const inv = (this as { invocation?: { currentInvocation?: Invocation } })?.invocation
-              ?.currentInvocation;
+            const inv = (this as { invocation?: { currentInvocation?: Invocation } })?.invocation?.currentInvocation;
             if (inv) trace.markProvenancePoint(inv);
             // The model streams…
             await streaming.promise;

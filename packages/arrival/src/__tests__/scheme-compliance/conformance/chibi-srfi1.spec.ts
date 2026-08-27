@@ -81,7 +81,10 @@ if (!fs.existsSync(SRFI1_TEST_PATH)) {
 
     const registerUnreadable = (step: Extract<Step, { kind: "unreadable" }>): void => {
       const label = `${normalizeText(step.text).slice(0, 160)}  ${SRFI1_TEST_PATH}:${step.line}`.slice(0, 300);
-      it.skip(`${label} — excluded: unreadable [reader door: ${step.readerError.slice(0, 100)}]`.slice(0, 300), () => {});
+      it.skip(
+        `${label} — excluded: unreadable [reader door: ${step.readerError.slice(0, 100)}]`.slice(0, 300),
+        () => {},
+      );
     };
 
     // One flat, corpus-ordered row list — same shape as the main spec (standalone tests,
@@ -94,8 +97,10 @@ if (!fs.existsSync(SRFI1_TEST_PATH)) {
     for (const step of manifest.steps) {
       if (step.kind === "test") rows.push({ sectionPath: step.sectionPath, emit: () => registerTest(step) });
       else if (step.kind === "block")
-        for (const member of step.members) rows.push({ sectionPath: member.sectionPath, emit: () => registerTest(member) });
-      else if (step.kind === "unreadable") rows.push({ sectionPath: step.sectionPath, emit: () => registerUnreadable(step) });
+        for (const member of step.members)
+          rows.push({ sectionPath: member.sectionPath, emit: () => registerTest(member) });
+      else if (step.kind === "unreadable")
+        rows.push({ sectionPath: step.sectionPath, emit: () => registerUnreadable(step) });
     }
 
     const registerRows = (group: readonly Row[], depth: number): void => {

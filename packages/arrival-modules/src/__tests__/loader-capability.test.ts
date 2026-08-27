@@ -41,13 +41,16 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
   it("door by absence: no extensionRegistry ⇒ `require/extension` binds a door naming it", async () => {
     await expect(
       exec(`(require/extension :sql)`, { capabilities: [arrivalLoaderCapability], config: { loader: files({}) } }),
-    ).rejects.toThrow(/require\/extension @ arrival\/loader is not available.*requires configuration `extensionRegistry`/s);
+    ).rejects.toThrow(
+      /require\/extension @ arrival\/loader is not available.*requires configuration `extensionRegistry`/s,
+    );
   });
 
   it("an armed loader resolves a data module (raw scheme args + no return marshal)", async () => {
     const results = await exec(`(define cfg (require "cfg.json")) (assoc "irrelevant" (list)) cfg`, {
       capabilities: [arrivalLoaderCapability],
-      config: { loader: files({ "cfg.json": `{"name":"world"}` }) } });
+      config: { loader: files({ "cfg.json": `{"name":"world"}` }) },
+    });
     const cfg = results.at(-1) as Record<string, unknown>;
     expect(cfg).toMatchObject({ name: "world" });
   });
@@ -60,7 +63,8 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
     }`;
     const results = await exec(`(define cfg (require "cfg.json")) cfg`, {
       capabilities: [arrivalLoaderCapability],
-      config: { loader: files({ "cfg.json": src }) } });
+      config: { loader: files({ "cfg.json": src }) },
+    });
     const cfg = results.at(-1) as Record<string, unknown>;
     expect(cfg).toMatchObject({ name: "world", tags: ["a", "b"] });
   });
@@ -68,7 +72,8 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
   it("a .scm require spills its defines into the RUN env (the ctx-read frame)", async () => {
     const results = await exec(`(require "lib.scm") (+ lib-answer 1)`, {
       capabilities: [arrivalLoaderCapability],
-      config: { loader: files({ "lib.scm": `(define lib-answer 41)` }) } });
+      config: { loader: files({ "lib.scm": `(define lib-answer 41)` }) },
+    });
     expect(Number(results.at(-1))).toBe(42);
   });
 
@@ -80,8 +85,10 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
         "test/upper-resolve": symbol.rosetta`test/upper-resolve: uppercases module contents`(
           { input: [z.union([z.string, z.bytevector])], output: [z.string] },
           (contents) => contentsToText(contents).toUpperCase(),
-        ) }),
-      prelude: `(require/register-extension ".upper" "test/upper-resolve")` });
+        ),
+      }),
+      prelude: `(require/register-extension ".upper" "test/upper-resolve")`,
+    });
     // Tuple identity is config-object-IDENTITY-keyed (`buildVocabulary`'s memo) — reuse the SAME
     // config (and capabilities array) across both calls so the reused `runCtx` matches this
     // tuple, not a distinct one.
@@ -115,7 +122,8 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
     ]);
     const results = await exec(`(require/extension :greeter) (require/extension :greeter) (greeting-of)`, {
       capabilities: [arrivalLoaderCapability],
-      config: { loader: files({}), extensionRegistry: registry } });
+      config: { loader: files({}), extensionRegistry: registry },
+    });
     expect(results.at(-1)).toBe("hi");
     expect(applies).toBe(1);
   });
@@ -124,7 +132,8 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
     it("an armed loader is NOT degraded — `require` binds for real", async () => {
       const results = await exec(`(require "cfg.json")`, {
         capabilities: [arrivalLoaderCapability],
-        config: { loader: files({ "cfg.json": `{"name":"world"}` }) } });
+        config: { loader: files({ "cfg.json": `{"name":"world"}` }) },
+      });
       const cfg = results.at(-1) as Record<string, unknown>;
       expect(cfg).toMatchObject({ name: "world" });
     });
@@ -145,7 +154,8 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
     // else module code can't see base builtins (`string-append` unbound).
     it("a required .scm module sees base builtins (string-append) and spills its defines", async () => {
       const table: Record<string, string> = {
-        "lib.scm": `(define (greet name) (string-append "hello " name))` };
+        "lib.scm": `(define (greet name) (string-append "hello " name))`,
+      };
       const results = await exec(`(require "lib.scm") (greet "world")`, {
         capabilities: [arrivalLoaderCapability],
         config: {
@@ -154,8 +164,11 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
               const hit = table[p];
               if (hit === undefined) throw new Error(`no such file: ${p}`);
               return hit;
-            } },
-          dirname: "" } });
+            },
+          },
+          dirname: "",
+        },
+      });
       expect(results.at(-1)).toBe("hello world");
     });
 
@@ -165,7 +178,9 @@ describe("arrivalLoaderCapability — the declarative module system", () => {
         capabilities: [arrivalLoaderCapability],
         config: {
           fs: { readFile: (p: string) => table[p] ?? "" },
-          dirname: "" } });
+          dirname: "",
+        },
+      });
       expect(results.at(-1)).toMatchObject({ name: "world" });
     });
   });

@@ -15,7 +15,7 @@
 // `null?` use.
 //
 // Byte-parity with the PRE-relocation compiler-side rule is proven on the mercury
-// side (arrival/packages/arrival-mercury): rules-phase1.test.ts's own "not"/
+// side (`@inhuman.tools/arrival-mercury`): rules-phase1.test.ts's own "not"/
 // "null?/pair?" goldens moved to this file's Contract-level proof once the table
 // rows were deleted; the narrows-carriage, narrows-fuzz, and cross-pass/gate3 tests
 // exercise these through the REAL harvest + walker + render pipeline, unchanged.
@@ -43,7 +43,8 @@ function nativeDef(name: string) {
 
 function taglessGuardDef(name: string) {
   const def = anyDef(name);
-  if (def.kind !== "tagless-guard") throw new Error(`equality pack: ${name} is not a tagless-guard def (got ${def.kind})`);
+  if (def.kind !== "tagless-guard")
+    throw new Error(`equality pack: ${name} is not a tagless-guard def (got ${def.kind})`);
   return def;
 }
 
@@ -62,7 +63,8 @@ function testCtx(over: Partial<EmitCtx<R>> = {}): EmitCtx<R> {
     door: (reason) => {
       throw new Error(reason);
     },
-    ...over };
+    ...over,
+  };
 }
 
 const ref = (name: string): R => Ref(Binding(name));
@@ -112,8 +114,12 @@ describe("equality Contract.emit — the Phase-2 relocation drill (null? / pair?
   it("null?: a proven list/pair/nonEmptyList fact → the clean xs.length === 0 form", () => {
     const def = nativeDef("null?");
     const xs = ref("xs");
-    expect(def.emit!.call([xs], testCtx({ argFacts: [{ list: true }] }))).toEqual(Bin("===", Member(xs, "length"), Lit(0)));
-    expect(def.emit!.call([xs], testCtx({ argFacts: [{ pair: true }] }))).toEqual(Bin("===", Member(xs, "length"), Lit(0)));
+    expect(def.emit!.call([xs], testCtx({ argFacts: [{ list: true }] }))).toEqual(
+      Bin("===", Member(xs, "length"), Lit(0)),
+    );
+    expect(def.emit!.call([xs], testCtx({ argFacts: [{ pair: true }] }))).toEqual(
+      Bin("===", Member(xs, "length"), Lit(0)),
+    );
     expect(def.emit!.call([xs], testCtx({ argFacts: [{ nonEmptyList: true }] }))).toEqual(
       Bin("===", Member(xs, "length"), Lit(0)),
     );
@@ -140,7 +146,9 @@ describe("equality Contract.emit — the Phase-2 relocation drill (null? / pair?
   it("pair?: a proven array-representation fact → the clean xs.length > 0 form", () => {
     const def = taglessGuardDef("pair?");
     const xs = ref("xs");
-    expect(def.emit!.call([xs], testCtx({ argFacts: [{ list: true }] }))).toEqual(Bin(">", Member(xs, "length"), Lit(0)));
+    expect(def.emit!.call([xs], testCtx({ argFacts: [{ list: true }] }))).toEqual(
+      Bin(">", Member(xs, "length"), Lit(0)),
+    );
   });
 
   it("pair?: a mis-arity call doors", () => {

@@ -36,14 +36,16 @@ describe("arrival/overridable — plain define plus validation, through the cons
   it("a host-supplied override wins over the in-form default, and validates", async () => {
     const result = await exec(`(define/overridable city (s/string) "Berlin") city`, {
       capabilities,
-      config: { params: { city: "Paris" } } });
+      config: { params: { city: "Paris" } },
+    });
     expect((result.at(-1) as AString)["arrival/toJS"]()).toBe("Paris");
   });
 
   it("default fallback: absent params ⇒ the in-form default fires (and validates)", async () => {
     const result = await exec(`(define/overridable city (s/string) "Berlin") city`, {
       capabilities,
-      config: { params: {} } });
+      config: { params: {} },
+    });
     expect((result.at(-1) as AString)["arrival/toJS"]()).toBe("Berlin");
   });
 
@@ -70,17 +72,17 @@ describe("arrival/overridable — plain define plus validation, through the cons
     await expect(
       exec(`(define/overridable age (s/number) 30) age`, {
         capabilities,
-        config: { params: { age: "not-a-number" } } }),
-    ).rejects.toThrow(
-      /define\/overridable age: expected number, got "not-a-number" \(from an environment override\)/,
-    );
+        config: { params: { age: "not-a-number" } },
+      }),
+    ).rejects.toThrow(/define\/overridable age: expected number, got "not-a-number" \(from an environment override\)/);
   });
 
   it("a bad DEFAULT throws exactly as loud as a bad override — validated the same", async () => {
     await expect(
       exec(`(define/overridable age (s/number) "thirty") age`, {
         capabilities,
-        config: { params: {} } }),
+        config: { params: {} },
+      }),
     ).rejects.toThrow(/define\/overridable age: expected number, got "thirty" \(from the in-form default\)/);
   });
 
@@ -88,7 +90,8 @@ describe("arrival/overridable — plain define plus validation, through the cons
     await expect(
       exec(`(define/overridable age "not-a-real-type" 30) age`, {
         capabilities,
-        config: { params: {} } }),
+        config: { params: {} },
+      }),
     ).rejects.toThrow(/define\/overridable age: unrecognized type tag/);
   });
 
@@ -111,7 +114,8 @@ describe("arrival/overridable — plain define plus validation, through the cons
     await expect(
       exec(`(define/overridable x '("frobnicate" 1) 5) x`, {
         capabilities,
-        config: { params: { x: "literally anything" } } }),
+        config: { params: { x: "literally anything" } },
+      }),
     ).rejects.toThrow(/define\/overridable x: unrecognized type tag/);
     await expect(
       exec(`(define/overridable x '() 5) x`, { capabilities, config: { params: { x: "anything" } } }),
@@ -121,14 +125,16 @@ describe("arrival/overridable — plain define plus validation, through the cons
   it("an `/optional`-suffixed tag is tolerated (the suffix is inert here) — validation still applies", async () => {
     const result = await exec(`(define/overridable size (s/optional (s/number)) 10) size`, {
       capabilities,
-      config: { params: {} } });
+      config: { params: {} },
+    });
     expect((result.at(-1) as AExact)["arrival/toJS"]()).toBe(10);
   });
 
   it("`overridable/resolve` is a real RUNTIME verb — callable directly by user code, no sealing", async () => {
     const result = await exec(`(overridable/resolve 'city (s/string) "Berlin")`, {
       capabilities,
-      config: { params: { city: "Paris" } } });
+      config: { params: { city: "Paris" } },
+    });
     expect((result.at(-1) as AString)["arrival/toJS"]()).toBe("Paris");
   });
 });
@@ -141,10 +147,10 @@ describe("arrival/overridable — plain define plus validation, through the cons
 // with no extra wiring at the test's own capability list.
 describe("arrival/overridable — structured s/* forms: enum, object, optional", () => {
   it("(s/enum ...) as a type tag validates an override against the enum's values", async () => {
-    const result = await exec(
-      `(define/overridable tier (s/enum "free" "pro") "free") tier`,
-      { capabilities, config: { params: { tier: "pro" } } },
-    );
+    const result = await exec(`(define/overridable tier (s/enum "free" "pro") "free") tier`, {
+      capabilities,
+      config: { params: { tier: "pro" } },
+    });
     expect((result.at(-1) as AString)["arrival/toJS"]()).toBe("pro");
   });
 
@@ -152,7 +158,8 @@ describe("arrival/overridable — structured s/* forms: enum, object, optional",
     await expect(
       exec(`(define/overridable tier (s/enum "free" "pro") "free") tier`, {
         capabilities,
-        config: { params: { tier: "enterprise" } } }),
+        config: { params: { tier: "enterprise" } },
+      }),
     ).rejects.toThrow(/define\/overridable tier: expected one of \["free","pro"\], got "enterprise"/);
   });
 
@@ -164,7 +171,8 @@ describe("arrival/overridable — structured s/* forms: enum, object, optional",
        (@ profile "name")`,
       {
         capabilities,
-        config: { params: { profile: { name: "Maya", age: 30 } } } },
+        config: { params: { profile: { name: "Maya", age: 30 } } },
+      },
     );
     expect((result.at(-1) as AString)["arrival/toJS"]()).toBe("Maya");
   });
@@ -230,7 +238,8 @@ describe("define/overridable through capabilities+config — the door the overri
   it("a param binds, boxed at the membrane, no ceremony", async () => {
     const result = await exec(`(define/overridable city (s/string) "Berlin") city`, {
       capabilities,
-      config: { params: { city: "Paris" } } });
+      config: { params: { city: "Paris" } },
+    });
     expect((result.at(-1) as AString)["arrival/toJS"]()).toBe("Paris");
   });
 
@@ -265,9 +274,8 @@ describe("define/overridable through capabilities+config — the door the overri
     await expect(
       exec(`(define/overridable age (s/number) 30) age`, {
         capabilities,
-        config: { params: { age: "not-a-number" } } }),
-    ).rejects.toThrow(
-      /define\/overridable age: expected number, got "not-a-number" \(from an environment override\)/,
-    );
+        config: { params: { age: "not-a-number" } },
+      }),
+    ).rejects.toThrow(/define\/overridable age: expected number, got "not-a-number" \(from an environment override\)/);
   });
 });

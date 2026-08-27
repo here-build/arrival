@@ -74,7 +74,7 @@ describe("overridableFormsFromForms", () => {
 });
 
 describe("extractRequires", () => {
-  it("lists top-level (require \"path\") strings in order", async () => {
+  it('lists top-level (require "path") strings in order', async () => {
     const requires = await extractRequires(`(require "config.scm")\n(require "shared.scm")\n(define x 1)`);
     expect(requires).toEqual(["config.scm", "shared.scm"]);
   });

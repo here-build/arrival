@@ -14,12 +14,7 @@
 import fs from "fs";
 import path from "path";
 import { parse as readerParse } from "../../../reader/parse.js";
-import {
-  buildManifestFromForms,
-  headSymbolName,
-  splitTopLevelForms,
-  type Manifest,
-  type RawForm } from "./manifest.js";
+import { buildManifestFromForms, headSymbolName, splitTopLevelForms, type Manifest, type RawForm } from "./manifest.js";
 
 export const SRFI1_TEST_PATH = path.resolve(import.meta.dirname, "../../../../vendor/chibi-scheme/lib/srfi/1/test.sld");
 

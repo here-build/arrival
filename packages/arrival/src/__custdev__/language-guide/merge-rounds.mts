@@ -17,15 +17,17 @@ if (files.length === 0) {
 const reports = files.map((f) => JSON.parse(fs.readFileSync(f, "utf8")));
 const cells = reports.flatMap((r) => r.cells);
 const summary = summarize(
-  cells.map((c: {
-    model: string;
-    task: string;
-    exec_ok: boolean;
-    oracle_ok: boolean;
-    underuse: boolean;
-    invite_hit: boolean;
-    oddities: string[];
-  }) => c),
+  cells.map(
+    (c: {
+      model: string;
+      task: string;
+      exec_ok: boolean;
+      oracle_ok: boolean;
+      underuse: boolean;
+      invite_hit: boolean;
+      oddities: string[];
+    }) => c,
+  ),
 );
 
 const g = reports[0]!;
@@ -46,25 +48,27 @@ for (const c of cells) {
 
 // Failure detail
 const fails = cells.filter((c: { oracle_ok: boolean }) => !c.oracle_ok);
-const failTable = fails.map((c: {
-  model: string;
-  task: string;
-  exec_ok: boolean;
-  error: string | null;
-  oddities: string[];
-  underuse: boolean;
-  preferred: string[];
-  program: string | null;
-}) => ({
-  model: c.model,
-  task: c.task,
-  exec_ok: c.exec_ok,
-  error: (c.error ?? "").slice(0, 200),
-  oddities: c.oddities,
-  underuse: c.underuse,
-  preferred: c.preferred,
-  program_preview: (c.program ?? "").slice(0, 240),
-}));
+const failTable = fails.map(
+  (c: {
+    model: string;
+    task: string;
+    exec_ok: boolean;
+    error: string | null;
+    oddities: string[];
+    underuse: boolean;
+    preferred: string[];
+    program: string | null;
+  }) => ({
+    model: c.model,
+    task: c.task,
+    exec_ok: c.exec_ok,
+    error: (c.error ?? "").slice(0, 200),
+    oddities: c.oddities,
+    underuse: c.underuse,
+    preferred: c.preferred,
+    program_preview: (c.program ?? "").slice(0, 240),
+  }),
+);
 
 const merged = {
   ts: new Date().toISOString(),
@@ -82,11 +86,7 @@ const merged = {
 };
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const out = path.join(
-  HERE,
-  "__custdev-output__",
-  `merged-${new Date().toISOString().replace(/[:.]/g, "-")}.json`,
-);
+const out = path.join(HERE, "__custdev-output__", `merged-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
 fs.writeFileSync(out, JSON.stringify(merged, null, 2));
 console.log(JSON.stringify({ summary, byModel, acceptance: gate, failCount: fails.length }, null, 2));
 console.log(`wrote ${out}`);

@@ -52,13 +52,23 @@ export const arrivalReflectCapability = EnvCapability.define("arrival/reflect", 
       } as never,
     ),
     how: symbol.rosetta`how: A runnable Scheme slice that re-derives the value (how-provenance).`(
-      { input: [z.instance(ResultHandle)], inputRest: z.dynamic, output: [z.dynamic], type: "(h: ResultHandle): string" },
+      {
+        input: [z.instance(ResultHandle)],
+        inputRest: z.dynamic,
+        output: [z.dynamic],
+        type: "(h: ResultHandle): string",
+      },
       function (this: ReflectThis, h: ResultHandle, ...rest: unknown[]) {
         return howOf(handle(h, "how"), this.runCtx.signal) as never;
       } as never,
     ),
     dag: symbol.rosetta`dag: Console overview: the run's computation DAG as homoiconic sexpr (nodes + dataflow edges). Works on a PARTIAL trace too — a timed-out run's value is {__timeout__: #t, …} and (dag h) still shows how far it got.`(
-      { input: [z.instance(ResultHandle)], inputRest: z.dynamic, output: [z.dynamic], type: "(h: ResultHandle): string" },
+      {
+        input: [z.instance(ResultHandle)],
+        inputRest: z.dynamic,
+        output: [z.dynamic],
+        type: "(h: ResultHandle): string",
+      },
       function (this: ReflectThis, h: ResultHandle, ...rest: unknown[]) {
         return dagOf(handle(h, "dag"), this.runCtx.signal) as never;
       } as never,

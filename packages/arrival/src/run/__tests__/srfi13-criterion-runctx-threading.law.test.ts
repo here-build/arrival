@@ -42,7 +42,9 @@ function makeProbe(): { fn: ANativeProcedure; observed: RunContext[] } {
       impl: (_args, callCtx) => {
         observed.push(callCtx.runCtx);
         return schemeFalse; // never matches — every char flows through the predicate once
-      } }) };
+      },
+    }),
+  };
 }
 
 describe("W1 srfi-13 criterion ctx threading — a user predicate observes the invocation's real ctx, not CONSTANT_CTX", () => {

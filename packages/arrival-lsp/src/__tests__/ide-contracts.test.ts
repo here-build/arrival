@@ -61,9 +61,7 @@ describe("C2 — compose/pipe through the language service", () => {
   });
 
   it("wrong pipeline call bites on `1` with 2345", () => {
-    const scheme =
-      `(define state-of (compose :state last :versions))\n` +
-      `(define s (state-of 1))`;
+    const scheme = `(define state-of (compose :state last :versions))\n` + `(define s (state-of 1))`;
     const diags = errors(scheme);
     expect(diags).toHaveLength(1);
     expect(scheme.slice(diags[0]!.start, diags[0]!.start + diags[0]!.length)).toBe("1");

@@ -33,9 +33,7 @@ type Task = {
   oracle: unknown;
 };
 
-type ModelSpec =
-  | { id: string; kind: "grok"; model: string }
-  | { id: string; kind: "claude"; model: string };
+type ModelSpec = { id: string; kind: "grok"; model: string } | { id: string; kind: "claude"; model: string };
 
 const ALL_MODELS: ModelSpec[] = [
   { id: "longcat", kind: "grok", model: "longcat" },
@@ -46,7 +44,10 @@ const ALL_MODELS: ModelSpec[] = [
 
 function parseList(env: string | undefined, fallback: string[]): string[] {
   if (!env || !env.trim()) return fallback;
-  return env.split(",").map((s) => s.trim()).filter(Boolean);
+  return env
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 function which(cmd: string): boolean {
@@ -103,7 +104,10 @@ function callClaude(model: string, prompt: string): string {
   return out;
 }
 
-async function execProgram(fixture: string, program: string): Promise<{ ok: boolean; value: unknown; error: string | null }> {
+async function execProgram(
+  fixture: string,
+  program: string,
+): Promise<{ ok: boolean; value: unknown; error: string | null }> {
   // Dynamic import so the script still loads if dist is stale until we call.
   const { exec } = await import("../../../dist/index.js");
   const source = `${fixture}\n${program}`;
@@ -263,10 +267,7 @@ async function main() {
   };
 
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  const outPath = path.join(
-    OUT_DIR,
-    `round-${new Date().toISOString().replace(/[:.]/g, "-")}.json`,
-  );
+  const outPath = path.join(OUT_DIR, `round-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
   fs.writeFileSync(outPath, JSON.stringify(report, null, 2));
 
   console.log("\n=== SUMMARY ===");

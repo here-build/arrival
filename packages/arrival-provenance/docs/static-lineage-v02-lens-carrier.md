@@ -33,11 +33,11 @@ migration.**
 
 **The reframe (the one canonical statement).** Keep `AValue.provenance` (the eager per-value Set — the
 per-leaf grounding the sift seal, the trace tap, the serializer cache key, and ~64 stamp sites all
-depend on); **retire only the field-point *mint***, replacing `computeProvenance`'s field-point half with
+depend on); **retire only the field-point _mint_**, replacing `computeProvenance`'s field-point half with
 the carrier's `fieldResolve` for the (base, key) edge queries. **The `AValue` flip and the eager-Set
 "memory win" are OFF THE TABLE** — the Stage-B pre-mortem (§7) found the flip a security regression (it
-breaks the seal's per-leaf grounding → would sign laundered literals) *and* the memory win illusory (the
-Set is already shared-by-reference; a per-value tree-ref allocates *more*). They unlock only behind a
+breaks the seal's per-leaf grounding → would sign laundered literals) _and_ the memory win illusory (the
+Set is already shared-by-reference; a per-value tree-ref allocates _more_). They unlock only behind a
 genesis-labelled per-value carrier (v02-G6), not in this arc. Everywhere this doc weighs "the single
 unlock" / "delete the Set" / "flip `AValue`", **this paragraph supersedes it.**
 
@@ -76,20 +76,20 @@ stays.
 
 ### Gate status
 
-| Gate | What | Status |
-|---|---|---|
-| **G0** | runtime leaf-stamp (per-value carrier at `tap.exit`, auto-bound) | ✅ PROVEN LIVE (`eebb1f50f7`) |
-| **Gsec** | seal per-leaf grounding stays on `AValue.provenance`; `merge` barrier never reaches it | INVARIANT — continuous, re-run after every L1/L2 change; P1 hermetic gate LANDED (`a6039bcf05`) |
-| **L1 / G1′** | `fieldResolve` = total field-point source (mint-only retirement scope) | ✅ COMPLETE |
-| — E1 | NAMED-pin / POSITIONAL-forward (normalized provenance) | ✅ DECIDED + BUILT (`a66f33fce8`) |
-| — E2 | multi-field edge SET (per-edge `fieldResolve` union == live) | ✅ DONE (`3cd459d174`) |
-| — E3 | regions value-presence `field` | STAYS LIVE — non-perturbation proof, not reproduced |
-| — E4 | type reconcile (`stepKey:number` vs consumer `field?:string`) | DISSOLVED by E1 |
-| — E5 | `fetch`/`db` provenancePoint upgrade | DISSOLVED by the rosetta-default flip (`14739d70c3`) |
-| **L2 / G4′** | per-consumer byte-identity off the carrier, dual-run, mint dies last | ACTIVE — golden `it.todo`s land first |
-| **L4 — G6** | chunk-uneval viz; genesis-labelled per-value carrier; fan×lens single wire | DEFERRED |
-| **L4 — G3/G1** | `AValue.provenance` flip + eager-Set deletion (the memory win) | OFF THE TABLE until G6 (illusory cost + Gsec) |
-| **L4 — G2/G5** | JOIN / shared-sibling-complement proof | DEFERRED (until shared structure bites) |
+| Gate           | What                                                                                   | Status                                                                                          |
+| -------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| **G0**         | runtime leaf-stamp (per-value carrier at `tap.exit`, auto-bound)                       | ✅ PROVEN LIVE (`eebb1f50f7`)                                                                   |
+| **Gsec**       | seal per-leaf grounding stays on `AValue.provenance`; `merge` barrier never reaches it | INVARIANT — continuous, re-run after every L1/L2 change; P1 hermetic gate LANDED (`a6039bcf05`) |
+| **L1 / G1′**   | `fieldResolve` = total field-point source (mint-only retirement scope)                 | ✅ COMPLETE                                                                                     |
+| — E1           | NAMED-pin / POSITIONAL-forward (normalized provenance)                                 | ✅ DECIDED + BUILT (`a66f33fce8`)                                                               |
+| — E2           | multi-field edge SET (per-edge `fieldResolve` union == live)                           | ✅ DONE (`3cd459d174`)                                                                          |
+| — E3           | regions value-presence `field`                                                         | STAYS LIVE — non-perturbation proof, not reproduced                                             |
+| — E4           | type reconcile (`stepKey:number` vs consumer `field?:string`)                          | DISSOLVED by E1                                                                                 |
+| — E5           | `fetch`/`db` provenancePoint upgrade                                                   | DISSOLVED by the rosetta-default flip (`14739d70c3`)                                            |
+| **L2 / G4′**   | per-consumer byte-identity off the carrier, dual-run, mint dies last                   | ACTIVE — golden `it.todo`s land first                                                           |
+| **L4 — G6**    | chunk-uneval viz; genesis-labelled per-value carrier; fan×lens single wire             | DEFERRED                                                                                        |
+| **L4 — G3/G1** | `AValue.provenance` flip + eager-Set deletion (the memory win)                         | OFF THE TABLE until G6 (illusory cost + Gsec)                                                   |
+| **L4 — G2/G5** | JOIN / shared-sibling-complement proof                                                 | DEFERRED (until shared structure bites)                                                         |
 
 ### Corpus prerequisites (P) — closed
 
@@ -106,7 +106,7 @@ stays.
 ## §3 — Gate contracts (strict)
 
 Every gate is a falsifiable contract: a **named green test** over a **defined corpus**, a **falsifier**
-that *can* fail, the **invariant** it guards, **reversibility**.
+that _can_ fail, the **invariant** it guards, **reversibility**.
 
 > ★ **`sift` is an APPLIED consumer — a real-world proof of the architecture (the DFIR seal + its
 > tools), to be EJECTED, NOT core arrival.** The seal is validated **downstream in sift's own lane**,
@@ -116,6 +116,7 @@ that *can* fail, the **invariant** it guards, **reversibility**.
 > real world, not a core PR gate.
 
 ### Gsec — the grounding invariant [continuous, criterion #0 — re-run after EVERY L1/L2 change]
+
 - **Green (CORE, hermetic — the actual gate):** a core-arrival test that per-value grounding holds — a
   partial-fabrication value `(list (:k (some-source)) "literal")` built in **pure arrival** (no sift) has
   a detectably-ungrounded leaf; mechanism-1 (`AValue.provenance` per-value Set) stays intact (the tap
@@ -126,15 +127,16 @@ that *can* fail, the **invariant** it guards, **reversibility**.
   lane** — the real-world demonstration that the invariant matters, NOT a core PR gate.
 - **Falsifier:** a core change that empties/flips per-value grounding (the `merge` barrier corrupting a
   leaf's `.provenance`, or an `AValue` flip) — caught hermetically in core. The laundered-verdict signing
-  is its *downstream consequence* (caught in sift's lane, after the fact).
+  is its _downstream consequence_ (caught in sift's lane, after the fact).
 - **Invariant:** per-value grounding stays on `AValue.provenance` (the Set); the `merge` barrier never
   reaches the per-value grounding path. **Reversibility:** mechanism-1 is never retired in this arc; the
   seal (applied) never migrates to the carrier.
 
 ### E1 — non-keyword `@`/`car`/index edges [DECIDED + BUILT 2026-06-20: NAMED-pin / POSITIONAL-forward]
-- **DECISION:** the carrier tracks NORMALIZED PROVENANCE (producer + *named* location), collapsing the
+
+- **DECISION:** the carrier tracks NORMALIZED PROVENANCE (producer + _named_ location), collapsing the
   access mechanism AND the exact position. The cut is **named-location vs positional-access**, not
-  keyword-*syntax*:
+  keyword-_syntax_:
   - **named** (`:k` / `(@ x :k)` / `(@ x "k")`) → normalize to field-name + **PIN** (the access syntax
     collapses; one normalized fact "came from the `k` field of P"). **ADOPT** the `@`-keyword/`@`-string
     recovery — the same named field the live mint dropped only via its head-position artifact
@@ -157,6 +159,7 @@ that *can* fail, the **invariant** it guards, **reversibility**.
   (`:k`/`@:k`/`@"k"`) that drops its field-name pin; an undocumented named-`@` golden diff.
 
 ### E2 — multi-field edge SET [✅ DONE (`3cd459d174`)]
+
 - **Green:** the carrier's per-pluck `fieldResolve`, UNIONED per `(producer,consumer)` edge, equals the
   live dag edge's `:fields`. Proven by `lineage-field-shadow-multifield.test.ts` on the P2 program (one
   producer, consumer plucking `(:field (car p))` + `(:other (car p))`): both plucks auto-resolve to the
@@ -168,6 +171,7 @@ that *can* fail, the **invariant** it guards, **reversibility**.
   don't).
 
 ### E3 — regions value-presence `field` [STAYS LIVE — non-perturbation proof, NOT reproduction]
+
 - **Green:** with `--ir-lineage` ON + the mint retired, `attributeFieldEdges` produces **byte-identical**
   `RegionEdge.field` across the regions corpus — regions keeps computing `field` from **live**
   `meta.inputs` + `valuePresent`, sourcing at most the `inputsProvenance` id-set from the carrier.
@@ -181,30 +185,34 @@ that *can* fail, the **invariant** it guards, **reversibility**.
   value-presence half is irreducibly live.
 
 ### E4 — type reconcile [DISSOLVED by the E1 decision]
+
 - The E1 named/positional normalization FORWARDS all positional access, so **no numeric key ever reaches
   `:fields`** — the `stepKey: number` vs consumer `field?: string` seam never arises. `fieldResolve`'s
-  consumer-key is always a string field-name or forwarded. *(If a future gate ever needs the raw index as
-  a position, it lives on the z-stack/fan axis — v02-G6 — not the `:fields` key.)*
+  consumer-key is always a string field-name or forwarded. _(If a future gate ever needs the raw index as
+  a position, it lives on the z-stack/fan axis — v02-G6 — not the `:fields` key.)_
 
 ### E5 — `fetch`/`db` provenancePoint upgrade [✅ DISSOLVED by the rosetta-default flip, `14739d70c3`]
+
 - The flip (D-v02-5: provenance points are the DEFAULT for every rosetta, `pure` is the opt-out) makes
   `http/get`/`http/post`/`sql/query` (`data-effects.ts:416-419`) provenance points **automatically** — no
   opt-in. G0's leaf-stamp covers them via the eager stamp. Verified: data-effect tests green; Gsec holds.
   The E5 build dissolved into the default flip — there is nothing left to register.
 
 ### L1 done = combined shadow
+
 `fieldResolve` reproduces the FULL field-point query set — base + (base,key) + multi-field + the
 E1-chosen non-keyword behavior — on the corpus, dual-run diff empty. (regions `field` excluded — E3 stays
 live.) **✅ MET.** Next: L2.
 
 ### L2 — per-consumer migration + mint death [ACTIVE]
+
 - **Precondition green (core):** the enumerated golden `it.todo`/`c` rows (`golden-handle-provenance`
   whyOf/whereOf/dagOf static===eager on multi-source-noise + map-infer-fan; `golden-prov-*`) flip to `it`
   and pass on the **live mint** — the diff baseline. (Sift's `seal-lineage-golden:200-208` is the
   downstream-lane twin, not a core gate.)
 - **Per consumer** — all **core** (`arrival-provenance`/`arrival-chain`): dag `:fields` → slice base
   (`resolveReadIds`) → [regions: E3 non-perturbation] → `trace-to-chain` → incremental fold. (Sift's seal
-  *signing* rides on `resolveReadIds` and is re-validated DOWNSTREAM in its ejected lane, not here.) Each:
+  _signing_ rides on `resolveReadIds` and is re-validated DOWNSTREAM in its ejected lane, not here.) Each:
   (a) reads the carrier behind `--ir-lineage`; (b) **dual-run diff empty on the corpus**; (c) its golden
   green off the carrier; (d) flag flips. **Falsifier:** any corpus input where carrier ≠ live for that
   consumer.
@@ -231,7 +239,7 @@ because in a value-graph the `(R,t)` pair is already one node.
   chunk's `uneval` targets **minimal scheme with no polyglot** (arrival's `@`/`:key`/pluck sugars compile
   away), so the chunk must be one canonical primitive shape; "prettify" (re-sugar `(@ obj :foo)` →
   `obj.foo`) is an optional later display layer, not the carrier's concern. The no-lookahead property the
-  sampler relies on lives at the *canonical* level (head determines the op) — recognition handles the many
+  sampler relies on lives at the _canonical_ level (head determines the op) — recognition handles the many
   syntaxes; the emitted node is uniform. `cdr`/rest stay **pipes** (sound over-approximation — consumers
   only ever pin keyword/`car`/index fields).
 - **walk()** — the single folded walk (M1, Stage A) takes `opts: {countOnly?, demand?}`. The field case
@@ -240,40 +248,41 @@ because in a value-graph the `(R,t)` pair is already one node.
   / `collectSlots` are folded into the one `opts` recursion (no longer three drifting `switch(n.kind)`
   recursions).
 - **M2 — the `merge` demand-barrier.** A field demand must not blindly distribute through a `merge`: a
-  `merge` is a fan-in to a *fresh* value (genesis / `(+ a b)`), so a `:foo` demand selects the labeled
+  `merge` is a fan-in to a _fresh_ value (genesis / `(+ a b)`), so a `:foo` demand selects the labeled
   child (genesis-labeling, v02-G6) or falls back to the full cone. Sound-as-provenance (conservative).
-  Couples to the genesis field-labeling. (Stage A landed this barrier — it is *correct for the cone query*
+  Couples to the genesis field-labeling. (Stage A landed this barrier — it is _correct for the cone query_
   but is exactly the thing Gsec must keep off the seal's per-leaf grounding path; see §7.)
 - The carrier **IS a read-only Getter**; its losslessness is the Bancilhon–Spyratos complement (an
-  *offline* soundness proof, never a runtime obligation — there is **no "GetGet" law**, a Getter is
+  _offline_ soundness proof, never a runtime obligation — there is **no "GetGet" law**, a Getter is
   lawless in isolation); its backward interpretation is one Atkey–Perera per-op adjoint among many,
   composing by the chain rule. Three borrowed structures, the same arrow read backward.
 
 ### Absorption + canonical step
 
 `trace.ts`'s base+innermost-key absorption is kept for the carrier's provenance queries; the viz
-reconstructs the path from the tree's *nesting structure*, not a stored path. The field node's `step` is
+reconstructs the path from the tree's _nesting structure_, not a stored path. The field node's `step` is
 the **canonical** member-read (normalized from the surface accessors), so the chunk's `uneval` is valid
 minimal-scheme. **Positional steps forward through to the innermost keyword above them** — `fieldResolve`
-resolves to the innermost *keyword* (`(:verdict (car (infer)))` pins `verdict`, not `car`), matching the
+resolves to the innermost _keyword_ (`(:verdict (car (infer)))` pins `verdict`, not `car`), matching the
 live minter (the seal/dag only ever pin keywords). The `car`/`index` field nodes stay (the viz/z-stack
 needs them); only the consumer-key resolution forwards.
 
 ### Normalized provenance — NAMED-pin / POSITIONAL-forward
 
-The carrier tracks **producer + *named* location**, not access-type or invocation. Named fields
+The carrier tracks **producer + _named_ location**, not access-type or invocation. Named fields
 (`:k`/`(@ x :k)`/`(@ x "k")`) normalize to the field-name and **pin** (the access syntax collapses);
 positional access (`car`/`vector-ref`/`list-ref`/`@`-int) **forwards** to the producer (the exact index
 is the z-stack/fan axis, not a lens pin). Grounded in the positional/keyed prior-art (Buneman–Cheney;
 Clojure `Indexed` vs `Associative`) + the fan×lens viz model. This is the where-provenance resolution
 re-derived, not invented (Buneman–Khanna–Tan "Why & Where" ICDT'01: a value is copied-from a unique path
 of edge labels; nested/NRC flattening demotes the array index to an ordinary key/ordinality). The carrier
-*syntax* keeps two step-kinds (JSONPath `[i]` vs `.field`; Clojure's `Indexed` vs `Associative`); the
-*cone* uses one unified path with positional transparent.
+_syntax_ keeps two step-kinds (JSONPath `[i]` vs `.field`; Clojure's `Indexed` vs `Associative`); the
+_cone_ uses one unified path with positional transparent.
 
 ### The consumer-equivalence contract
 
 The field-node walk serves EXACTLY the two queries the JOIN consumers run today:
+
 - **`basePoint(carrier)`** = producer invocation id, **key discarded** — the sift seal's `resolveReadIds`
   (`slice.ts:169-181`).
 - **`(basePoint, key)`** = producer + innermost-projected key, **key kept** as edge `:fields` — the dag's
@@ -284,24 +293,25 @@ What survives the reframe: field-points become tree-carried where-provenance len
 
 ### The runtime leaf-stamp (G0)
 
-The static carrier's slot space (source *names* / AST Pairs) is **one-to-MANY** with the runtime
+The static carrier's slot space (source _names_ / AST Pairs) is **one-to-MANY** with the runtime
 producer-id space (`inv.id`, minted per `enter`, `trace.ts:469`). A per-program `name → ids` map
 **collapses** the distinct invocations the dag's Lamport ordering depends on — `(map infer xs)` over 3
 elements mints 3 producer-ids but the static tree has one `infer` node. **So the feasible unit is a
 PER-VALUE carrier**: each produced `AValue` carries `{tree-ref, bindings}` assembled at `tap.exit` (the
-auto-bind hook is `trace.ts:509`), where `inv.id` is in scope and the bindings resolve against *this*
+auto-bind hook is `trace.ts:509`), where `inv.id` is in scope and the bindings resolve against _this_
 invocation's children — the aliasing dissolves because each value's bindings are scoped to its own
-producing invocation. The dag does the name-collapse itself, *last* (`statechart.ts:197`), after building
+producing invocation. The dag does the name-collapse itself, _last_ (`statechart.ts:197`), after building
 the causal graph from distinct ids.
 
 **Key simplification the spike surfaced: the producer-ids ALREADY FLOW** — the eager stamp already places
 `inv.id` on every source value at the source hook (`rosetta.ts:453-459`, where source-op-fired + `inv.id`
-+ the value coincide), generalizing the already-shipped `argProvenance → buildInputsProvenance`
-`slot→producer-id[]` map. So the leaf-stamp does **not** mint runtime ids; it is a per-value *binding
-assembler* that captures what's already flowing, scoped per consumer-invocation. The 4 hard tap behaviors
-(authoritative-mark/forward, size-1-forward, `symbolContributions`) are **not reproduced** — they are tap
-workarounds for having no static tree; `fullCone`/`fieldResolve` encode pipe/merge/fan/mux structurally.
-Consumers read through `fieldResolve` for the `(base,key)` edge query.
+
+- the value coincide), generalizing the already-shipped `argProvenance → buildInputsProvenance`
+  `slot→producer-id[]` map. So the leaf-stamp does **not** mint runtime ids; it is a per-value _binding
+  assembler_ that captures what's already flowing, scoped per consumer-invocation. The 4 hard tap behaviors
+  (authoritative-mark/forward, size-1-forward, `symbolContributions`) are **not reproduced** — they are tap
+  workarounds for having no static tree; `fullCone`/`fieldResolve` encode pipe/merge/fan/mux structurally.
+  Consumers read through `fieldResolve` for the `(base,key)` edge query.
 
 **Scope shipped: dag `:fields` only**, proven live on the two-infer react/reflect gepa edge
 (`lineage-field-shadow-autobound.test.ts`). Deferred to later gates: the regions `field` (value-presence
@@ -310,13 +320,13 @@ id-monotonic — strictly harder), and the looped/HOF z-axis (fan×lens).
 
 ### The viz constraint — fan × lens = a single parametric wire (z-stack × lens)
 
-V's load-bearing requirement: the inhuman flowchart renders a projection *through* an iteration as ONE
+V's load-bearing requirement: the inhuman flowchart renders a projection _through_ an iteration as ONE
 wire over the generalized shape, not N unrolled wires. For
 `another = provenanced.map{ (dict :foo it[:bar]) }`, the wire from `provenanced` to `another` is the
 parametric path **`source[number][:bar] → result[number][:foo]`** — `[number]` is the **z-stack** (the
 fan/iteration axis: the generalized `[number]["foo"]` TS pattern, NOT a specific element), `[:bar]`/
 `[:foo]` are the lens steps. So the **field node must COMPOSE with the fan node**: a field projection
-*inside* a fan template produces a *parametric* lens-path (the z-binder shared across the fan, the field
+_inside_ a fan template produces a _parametric_ lens-path (the z-binder shared across the fan, the field
 step applied per-element), carried once and rendered as a single wire. This is confluent-IR §5's
 "parametric provenance composed with a lens" made concrete. It is a **carrier-shaping constraint** (the
 field node nests inside the fan template; the path is `[z-axis][field]`), not a rendering detail. v02-G6
@@ -324,15 +334,16 @@ owns it; the carrier must not collapse the fan axis away when a field is project
 
 ### Genesis vs projection
 
-There is **no "write"** — dicts are read-only; `(dict :foo X)` is a **genesis** that *reveals immutable
-structure previously unknown*, not a mutation. So the carrier has two **dual** field operations on
+There is **no "write"** — dicts are read-only; `(dict :foo X)` is a **genesis** that _reveals immutable
+structure previously unknown_, not a mutation. So the carrier has two **dual** field operations on
 immutable values, neither a put:
-- **projection** (`(:bar x)` — *read* a sub-position; the `field` node; this is what the seal/dag
+
+- **projection** (`(:bar x)` — _read_ a sub-position; the `field` node; this is what the seal/dag
   field-points are — reads only).
-- **genesis** (`(dict :foo X)` — *construct*, labeling a result field). For provenance, genesis is a
+- **genesis** (`(dict :foo X)` — _construct_, labeling a result field). For provenance, genesis is a
   **merge** (union the placed values' cones); the `:foo` is a constructor **label**, not a target.
 
-The single viz wire connects a *genesis*-field (`result[:foo]`) to a *projection*-field (`source[:bar]`)
+The single viz wire connects a _genesis_-field (`result[:foo]`) to a _projection_-field (`source[:bar]`)
 through the fan — two structure-revelations, dual, no mutation. **The genesis field-labeling is a v02-G6
 (viz) refinement** (so `result[:foo]` is addressable for the wire); the built 2a projection already
 covers the provenance / v02-G1 side.
@@ -350,6 +361,7 @@ risk). Dissolves E5 (http/sql are sources automatically).
 **★ The flip was not flawless — it required marking five effectful, non-source control forms `pure: true`,
 or they would spuriously mint points** (an adversarial audit, this session, surfaced them; the fix lands
 as a sibling commit, possibly alongside this doc):
+
 - `declare/expose` (`expose.ts`), `mcp/declare` (`mcp-declare.ts`), `require/extension`
   (`require-extension.ts`), `require/register-extension` (`loader-extensions.ts`) — each REGISTERS a
   handler / applies a pack **for effect** and returns a callable or `undefined`; no external DATA is born,
@@ -360,16 +372,16 @@ as a sibling commit, possibly alongside this doc):
   gate). `pure: true` makes it PRESERVE (forward) the approved value's lineage. This is the same
   laundering shape the Stage-B pre-mortem flagged for the seal; here it is closed at the source.
 
-`require` is marked `pure` for a different reason (it returns a callable — data is born at *invoke*, not
+`require` is marked `pure` for a different reason (it returns a callable — data is born at _invoke_, not
 require; conservative, preserves its pre-flip non-point behavior).
 
 ### Shared / improper structure — RESOLVED policy + the one genuine novelty
 
 A sub-value reachable by >1 lens-path (Scheme shares structure; no true cycles, mutation is
 purity-doored → a **DAG**, not a cycle). **Verdict (a settled transfer):** attribute a shared sub-value's
-provenance to the **JOIN (lub)** of demands from *all* reaching paths, same-origin paths collapsing by
+provenance to the **JOIN (lub)** of demands from _all_ reaching paths, same-origin paths collapsing by
 **producer-identity** — never one canonical path. Three reasons: (1) **soundness requires it** —
-Atkey–Perera's backward map is a *least* input slice; the minimal slice reconstructing both paths is
+Atkey–Perera's backward map is a _least_ input slice; the minimal slice reconstructing both paths is
 `demand(p1) ⊔ demand(p2)`; canonical-path under-approximates → unsound round-trip. (2) It **matches
 `unionProvenance`** (already joins distinct-by-reference, collapses same-reference). (3) Precedented
 (demand-slicing access-path sets; partial-value join). **The attribution policy stays ISOLATED +
@@ -379,7 +391,7 @@ canonical-path or another policy can replace it without touching the node or `wa
 **The genuine novelty** (the publishable sliver): location-provenance over a **confluently-persistent
 sharing DAG** of untyped functional ADTs — where "same sub-value" is value-identity at runtime but
 by-slot-name in the static tree — and proving the lens-complement sibling-prune stays sound **when a
-sibling is shared with the focused path** (the complement is set-difference on *reaching-path-sets*, not on
+sibling is shared with the focused path** (the complement is set-difference on _reaching-path-sets_, not on
 positions). No prior art **found** (to our knowledge: where-prov can't share cells; optics assume tree
 foci; Galois-slicing-as-AD does not address aliasing). It is a **carrier-shaping constraint** (store
 reaching-path sets; key same-origin collapse on producer-identity), not a blocker. (G2/G5 — deferred until
@@ -388,12 +400,12 @@ shared structure actually bites a consumer.)
 ### Author-time surfacing (the Volar layer, `arrival/packages/arrival-lsp`)
 
 The honest crash (`car`-of-dict = type error — unanimous in the cons tradition: CL/R7RS/Racket/Elisp all
-make the hash-table type disjoint) should fire at *author-time*, not just runtime, and it keys off the
+make the hash-table type disjoint) should fire at _author-time_, not just runtime, and it keys off the
 **core accessor forms** (`car`/`cdr`/`@`/`:key`/`vector-ref`), **independent of which surface renders
 them**. (Per the `scheme ⟷ sweet ⟷ sugarcoat` trimorphism: vanilla sweet = SRFI-105 curly-infix `{…}`
 only — SRFI-110 indentation intentionally omitted from the grammar; sugarcoat = the readability dialect on
 top — `it`, `=>`, `.symbol`, `[n]`/`[:k]` accessors, python-indents leveraging 110 as a transpiled display
-lens. The `[…]` subscripts are sugarcoat and a surface *in flux* — NOT the lowering basis.) The `.d.ts`
+lens. The `[…]` subscripts are sugarcoat and a surface _in flux_ — NOT the lowering basis.) The `.d.ts`
 prelude (`src/prelude/`) gives the core ops **branded** signatures — `car<C extends Cons<any,any>>(c: C):
 Car<C>`; `@`/`:key` over the membrane's `readMember` domain; `vector-ref` over vectors — so **TS's own
 checker is the positional/keyed enforcer**: `(car aDict)` → `SchemeMap` not assignable to `Cons` →
@@ -402,7 +414,7 @@ bespoke checker (no editorial layer over the platform); the static reject set = 
 domains (bifunctor faithfulness). **Keep the type level SHALLOW** — branded predicates
 (`IsPositional`/`IsKeyed`) + one-step extractors (`Car<C>`); type-CHECKING, never type-EVALUATION (a
 type-level evaluator is a second source of truth that drifts and hits TS instantiation limits;
-*Turing-completeness is the warning, not the invitation*). The one branded category feeds **both** the
+_Turing-completeness is the warning, not the invitation_). The one branded category feeds **both** the
 lens (author-time honest crash) and the lineage (runtime provenance: positional transparent, keyed pin) so
 they can't drift — one cut, two readings.
 
@@ -419,7 +431,7 @@ they can't drift — one cut, two readings.
   attribution policy stays ISOLATED + swappable (one strategy function at the resolution boundary), so it
   is rollback-able.
 - **D-v02-4 = NAMED-pin / POSITIONAL-forward (E1).** The carrier tracks normalized provenance (producer +
-  *named* location), not access-type or invocation. Named fields pin; positional forwards (the index is
+  _named_ location), not access-type or invocation. Named fields pin; positional forwards (the index is
   the z-stack/fan axis). Resolves E1, dissolves E4. Built: `fieldResolve` forwards `{index}` like `{car}`;
   the index node stays for the viz/z-stack.
 - **D-v02-5 = ROSETTA POINTS BY DEFAULT (the flip, `14739d70c3`).** A rosetta mints by default (`pure` is
@@ -449,7 +461,7 @@ assembly**, not frontier — exactly the "you're assembling, not inventing" outc
 ## §7 — Archive
 
 > **Historical narrative — the deliberation that produced §1–§4. Conclusions live in §1–§4; the line-cites
-> below predate Stage A's walk-fold + the G0 insert and have drifted. Kept for the *reasoning trail*, not as
+> below predate Stage A's walk-fold + the G0 insert and have drifted. Kept for the _reasoning trail_, not as
 > current state.** Where any passage below says "the single unlock," "flip `AValue`," "delete the Set," or
 > "the memory win," §1's reframe supersedes it.
 
@@ -486,35 +498,37 @@ on the clean scope (keyword projections on the producer) and **surfaced one dive
 any deletion** — the point of shadowing. The static `kind:"field"` node **conflated two operations the
 runtime keeps distinct** — keyword projection `(:verdict x)` (the live minter mints a field-point, the
 seal/dag pin) vs positional `car`/`index` (the runtime treats as a transparent forwarder, mints nothing).
-2a's absorption kept the innermost *any* member-read, so `(:verdict (car (infer)))` absorbed to `car`
+2a's absorption kept the innermost _any_ member-read, so `(:verdict (car (infer)))` absorbed to `car`
 (key=null) while live pinned `verdict`. **The fix (now shipped, §4 absorption): make `car`/`index`
-transparent to a keyword above them** — `fieldResolve` resolves to the innermost *keyword*, matching the
+transparent to a keyword above them** — `fieldResolve` resolves to the innermost _keyword_, matching the
 live minter; the `car`/`index` field nodes stay (the viz/z-stack needs them); only the consumer-key
 resolution changed.
 
 **Prior-art grounding (3-lens cross-runtime research, 2026-06-20 — the fix is not arbitrary).** The
 positional/keyed split, and "positional → transparent / keyed → pin," is the settled consensus:
+
 - **`car`-of-dict = type error, unanimously** in the cons tradition (CL `type-error`; R7RS/SRFI-69/125
   mandate the hash-table type disjoint; Racket `exn:fail:contract`; Elisp `wrong-type-argument`). **No
   opaque node** — opaque would fabricate a representation for what the type system already makes
   impossible. Arrival's `car` (typecheck `pair`) + dict-as-`SchemeJSObject` + `@`/`:key` (a generic keyed
   accessor) is **exactly Racket's model**: structural `car` + a separate generic keyed accessor.
-- **The provenance *semantics* unify index+field into one path-step** (Buneman–Khanna–Tan ICDT'01:
+- **The provenance _semantics_ unify index+field into one path-step** (Buneman–Khanna–Tan ICDT'01:
   nested/NRC flattening demotes the array index to an ordinary key/ordinality). So "positional forwards,
-  keyed pins" *is* the where-provenance resolution — re-derived, not invented.
-- **The carrier *syntax* keeps two step-kinds** (JSONPath `[i]` vs `.field`; Clojure's `Indexed` vs
+  keyed pins" _is_ the where-provenance resolution — re-derived, not invented.
+- **The carrier _syntax_ keeps two step-kinds** (JSONPath `[i]` vs `.field`; Clojure's `Indexed` vs
   `Associative`). So `PathStep = {field}|{car}|{index}` straddles both layers: two kinds in the node
   (viz), one unified path with positional transparent (cone).
-- **"Honest crash > unstable lie"** (V) = Clojure's own rationale: `(first a-map)` → an *entry* is honest;
-  `(nth a-map 0)` *throws* because a position the map lacks would be a lie — and a *sorted* map still isn't
+- **"Honest crash > unstable lie"** (V) = Clojure's own rationale: `(first a-map)` → an _entry_ is honest;
+  `(nth a-map 0)` _throws_ because a position the map lacks would be a lie — and a _sorted_ map still isn't
   `Indexed` (Python `OrderedDict` refuses `od[0]` for the same reason). Arrival stays in this camp
-  *because it has cons*. The runtimes that dropped `car`/`cdr` (Hy #909, Janet, Fennel) did so *because*
+  _because it has cons_. The runtimes that dropped `car`/`cdr` (Hy #909, Janet, Fennel) did so _because_
   their substrate is indexed/iterable, not cons — the opposite of arrival.
 
 **Audit must-fix backlog (DONE — Stage A folded these into the one walk):**
+
 - **M1 — one traversal, not three.** `walk` / `walkField` / `collectSlots` (+ `fieldResolve`) were
   separate `switch(n.kind)` recursions. **DONE:** folded to one parameterized fold (`walk` + optional
-  `demand?`). 
+  `demand?`).
 - **M2 — a field demand must not blindly distribute through a `merge`.** **DONE:** Stage A added the
   demand-barrier (a `:foo` demand selects the labeled child or falls back to the full cone). Couples to
   the genesis field-labeling (v02-G6).
@@ -536,34 +550,35 @@ independently re-derives the v0.1 doc's own recorded verdict ("Path B is not a c
 v0.2-gated") — and sharpens it with concrete witnesses. This produced §1's reframe.
 
 **Why it's not a 3-consumer migration — the three core findings:**
-1. **The security gap (sharpest).** Stage A's `merge` demand-barrier — *correct* for the cone query —
+
+1. **The security gap (sharpest).** Stage A's `merge` demand-barrier — _correct_ for the cone query —
    **breaks the sift seal's per-leaf grounding**, and the seal is a SECURITY gate. `leafGrounded`
-   (`discovery.ts:114`) walks the *runtime value tree* and checks `l.provenance.size > 0` **per leaf**;
-   the carrier answers *whole-output over the AST* and, at a `merge`, unions all children with the demand
+   (`discovery.ts:114`) walks the _runtime value tree_ and checks `l.provenance.size > 0` **per leaf**;
+   the carrier answers _whole-output over the AST_ and, at a `merge`, unions all children with the demand
    dropped. So `(list (:PID (car (psscan))) "model-typed-literal")` — today rejected as a partial
    fabrication — would yield one non-empty cone, and a carrier-based seal **would sign the laundered
-   literal.** The carrier *structurally cannot* express "leaf B is ungrounded." → **Gsec invariant (§3).**
+   literal.** The carrier _structurally cannot_ express "leaf B is ungrounded." → **Gsec invariant (§3).**
 2. **Two carriers, not one.** `AValue.provenance` is the **eager, untapped per-op stamp** (mechanism 1,
-   ~64 sites, on *every* value — what `exec(src).provenance` returns, what golden-prov tests read, what
-   the seal reads per-leaf, *and what the trace tap itself reads*, `trace.ts:105`). Both shadows only ever
+   ~64 sites, on _every_ value — what `exec(src).provenance` returns, what golden-prov tests read, what
+   the seal reads per-leaf, _and what the trace tap itself reads_, `trace.ts:105`). Both shadows only ever
    proved the **tapped field-points** (mechanism 2). Flipping `AValue.provenance` severs mechanism 1
-   *silently* — under the tap that depends on it, the serializer's `instanceof Set && size===0` gate (it
+   _silently_ — under the tap that depends on it, the serializer's `instanceof Set && size===0` gate (it
    feeds the **content-addressed cache key**), and ~64 stamp sites. → **keep mechanism 1 (§1).**
 3. **The runtime wiring didn't exist (at pre-mortem time).** How a `(tree-ref, Bindings)` attaches to a
-   value and binds producer-ids *as values flow mid-eval* existed nowhere in the repo. Both shadows
-   correlated the *static* carrier against **manually-assembled** bindings (`bindingsForSkeleton`). → **G0
+   value and binds producer-ids _as values flow mid-eval_ existed nowhere in the repo. Both shadows
+   correlated the _static_ carrier against **manually-assembled** bindings (`bindingsForSkeleton`). → **G0
    built the runtime leaf-stamp (§4); now PROVEN LIVE.**
 
 **Quieter landmines:** `pruneChildProvenance` nulls a value the regions consumer **structurally recovers
 because** it was nulled; the trace cap is the **runaway-loop OOM guard**; there are **5+ consumers, not 3**
 (add `trace-to-chain.ts`, `infer-content.ts`, and the live incremental `TraceRegionFold` reading
-`fieldPointMeta` across ticks — outside any shadow); the dag/regions read *non-keyword* `@`/`car`/index
-edges and a *value-presence* field-derivation (`attributeFieldEdges` from `inputsProvenance`) the carrier
-didn't model — and the carrier *alters* non-keyword edges (more correct, but a behavior change requiring a
+`fieldPointMeta` across ticks — outside any shadow); the dag/regions read _non-keyword_ `@`/`car`/index
+edges and a _value-presence_ field-derivation (`attributeFieldEdges` from `inputsProvenance`) the carrier
+didn't model — and the carrier _alters_ non-keyword edges (more correct, but a behavior change requiring a
 deliberate re-baseline). All folded into L1/L2 (§2, §3).
 
-**Net:** the divergence the 2b shadow was built to surface is closed, but its green is *necessary, nowhere
-near sufficient*. What's reachable now is a narrow, staged, reversible **field-point-mint** retirement —
+**Net:** the divergence the 2b shadow was built to surface is closed, but its green is _necessary, nowhere
+near sufficient_. What's reachable now is a narrow, staged, reversible **field-point-mint** retirement —
 not the AValue flip. The pre-mortem prevented an irreversible mistake (a laundered-verdict security
 regression + a silently-severed eager plane + a changed cache key); that is exactly what it was for.
 
@@ -578,12 +593,12 @@ confirming the design in §4.
 
 **The memory-win is confirmed illusory (4 corroborations).** The flat `Set<number>` is already
 shared-by-reference in the common cases (`EMPTY_PROVENANCE` singleton; size-1 forward; authoritative
-forward-by-ref — the fix for two heap-dump war stories). A per-value `{tree-ref, bindings}` is a *new*
+forward-by-ref — the fix for two heap-dump war stories). A per-value `{tree-ref, bindings}` is a _new_
 allocation where the Set is a shared reference; the "O(program) shared tree" win holds only for the
-*classifier skeleton*, not the per-value bindings the dag needs. So the AValue flip is off the table on
+_classifier skeleton_, not the per-value bindings the dag needs. So the AValue flip is off the table on
 **cost** as well as safety — and the G0 carrier is justified as the **field-point source riding alongside
 the Set** (additive, `--ir-lineage`-gated for the dual-run proof), not as a replacement.
 
-**One precondition (now dissolved by D-v02-5):** `fetch`/`db-read` were registered *without*
+**One precondition (now dissolved by D-v02-5):** `fetch`/`db-read` were registered _without_
 `provenancePoint`, so they minted no runtime id — `classify` called them sources but there was nothing to
 bind. The rosetta points-by-default flip (`14739d70c3`) closed this; infer/`.prompt`/MCP were already 1:1.

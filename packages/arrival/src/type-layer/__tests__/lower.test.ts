@@ -22,11 +22,14 @@ function compileErrors(source: string): string[] {
     target: ts.ScriptTarget.ES2022,
     lib: ["lib.es2022.d.ts"],
     noEmit: true,
-    skipLibCheck: true };
+    skipLibCheck: true,
+  };
   const host = ts.createCompilerHost(options);
   const getSourceFile = host.getSourceFile.bind(host);
   host.getSourceFile = (name, lang, onError, shouldCreate) =>
-    name === fileName ? ts.createSourceFile(name, source, lang, true) : getSourceFile(name, lang, onError, shouldCreate);
+    name === fileName
+      ? ts.createSourceFile(name, source, lang, true)
+      : getSourceFile(name, lang, onError, shouldCreate);
   const fileExists = host.fileExists.bind(host);
   host.fileExists = (name) => name === fileName || fileExists(name);
   const readFile = host.readFile.bind(host);
@@ -50,23 +53,28 @@ describe("lower — scheme → TS emitter", () => {
     {
       name: "non-identifier head: string-append escapes to _.string$dash$append",
       input: "(string-append a b)",
-      expected: "_.string$dash$append(a, b)" },
+      expected: "_.string$dash$append(a, b)",
+    },
     {
       name: "kwargs: a single :keyword value run flips to an object literal",
       input: '(create_user :name "Ada")',
-      expected: 'create_user({ name: "Ada" })' },
+      expected: 'create_user({ name: "Ada" })',
+    },
     {
       name: "kwargs: multiple :keyword value pairs flip to an object literal",
       input: '(create_user :name "Ada" :mode "fast")',
-      expected: 'create_user({ name: "Ada", mode: "fast" })' },
+      expected: 'create_user({ name: "Ada", mode: "fast" })',
+    },
     {
       name: "kwargs: leading positional args stay positional, trailing keywords fold to object",
       input: "(f x :a 1)",
-      expected: "f(x, { a: 1 })" },
+      expected: "f(x, { a: 1 })",
+    },
     {
       name: "kwargs: a bare keyword with no value lowers to { key: undefined }",
       input: "(create_user :name)",
-      expected: "create_user({ name: undefined })" },
+      expected: "create_user({ name: undefined })",
+    },
     { name: "car is a functional carrier global, not a field read", input: "(car x)", expected: "car(x)" },
     { name: "cdr is a functional carrier global, not a field read", input: "(cdr x)", expected: "cdr(x)" },
     { name: "list lowers to the carrier constructor", input: "(list a b)", expected: "list(a, b)" },
@@ -77,16 +85,19 @@ describe("lower — scheme → TS emitter", () => {
     {
       name: "a vector literal nested in a call lowers to a native TS array arg",
       input: "(foo #(1 2 3))",
-      expected: "foo([1, 2, 3])" },
+      expected: "foo([1, 2, 3])",
+    },
     {
       name: "(dict ...) lowers to an object literal",
       input: '(dict :name "a" :age 30)',
-      expected: '{ name: "a", age: 30 }' },
+      expected: '{ name: "a", age: 30 }',
+    },
     { name: "a keyword-headed read lowers to a bracket field access", input: "(:key obj)", expected: 'obj["key"]' },
     {
       name: "a lambda lowers to a TS arrow function",
       input: "(lambda (x y) (+ x y))",
-      expected: "((x, y) => _.$plus$(x, y))" },
+      expected: "((x, y) => _.$plus$(x, y))",
+    },
     { name: "a string atom lowers to its TS string literal", input: '"hi"', expected: '"hi"' },
     { name: "a number atom lowers unchanged", input: "42", expected: "42" },
     { name: "a negative number atom lowers unchanged", input: "-5", expected: "-5" },
@@ -95,7 +106,8 @@ describe("lower — scheme → TS emitter", () => {
     {
       name: "multiple top-level forms become `;\\n`-separated statements",
       input: "(foo 1) (bar 2)",
-      expected: "foo(1);\nbar(2)" },
+      expected: "foo(1);\nbar(2)",
+    },
   ])("$name", ({ input, expected }) => {
     expect(ts1(input)).toBe(expected);
   });
@@ -108,14 +120,16 @@ describe("lower — quoted data recurses (the false-positive killer)", () => {
     {
       name: "a quoted NESTED list recurses as quoted data, never an application",
       input: '\'(("a" 1))',
-      expected: 'list(list("a", 1))' },
+      expected: 'list(list("a", 1))',
+    },
     { name: "a flat quoted list is unchanged", input: "'(1 2 3)", expected: "list(1, 2, 3)" },
     { name: "a dotted quoted pair lowers to cons", input: "'((k . v))", expected: "list(cons(k, v))" },
     { name: "deep nesting recurses at every level", input: "'((1 (2 3)) 4)", expected: "list(list(1, list(2, 3)), 4)" },
     {
       name: "a multi-element dotted list folds right through the proper elements",
       input: "'(a b . c)",
-      expected: "cons(a, cons(b, c))" },
+      expected: "cons(a, cons(b, c))",
+    },
   ])("$name", ({ input, expected }) => {
     expect(ts1(input)).toBe(expected);
   });
@@ -127,20 +141,24 @@ describe("lower — quasiquote degrades to quoted data, unquote stays live", () 
     {
       name: "a quasiquoted list with no unquote lowers exactly like a quote",
       input: "`(a b c)",
-      expected: "list(a, b, c)" },
+      expected: "list(a, b, c)",
+    },
     {
       name: "an (unquote e) node inside emits the LIVE expression, not further-quoted data",
       input: "`(a ,b c)",
-      expected: "list(a, b, c)" },
+      expected: "list(a, b, c)",
+    },
     { name: "unquote-splicing also emits the live expression", input: "`(a ,@b c)", expected: "list(a, b, c)" },
     {
       name: "a nested quasiquoted list still recurses as quoted data",
       input: "`((a ,b) c)",
-      expected: "list(list(a, b), c)" },
+      expected: "list(list(a, b), c)",
+    },
     {
       name: "a stray unquote outside a quasiquote stays inert (degrades to the live inner expr)",
       input: ",b",
-      expected: "b" },
+      expected: "b",
+    },
   ])("$name", ({ input, expected }) => {
     expect(ts1(input)).toBe(expected);
   });
@@ -153,21 +171,25 @@ describe("lower — top-level define lowers to a const statement", () => {
     {
       name: "(define (f a b) body) → const f = (a: any, b: any) => body",
       input: "(define (add2 a b) (+ a b))",
-      expected: "const add2 = (a: any, b: any) => _.$plus$(a, b)" },
+      expected: "const add2 = (a: any, b: any) => _.$plus$(a, b)",
+    },
     {
       name: "a multi-form function body folds to a comma sequence, mirroring emitLambda",
       input: "(define (f x) (foo x) (bar x))",
-      expected: "const f = (x: any) => (foo(x), bar(x))" },
+      expected: "const f = (x: any) => (foo(x), bar(x))",
+    },
     { name: "a zero-arg function define", input: "(define (f) 1)", expected: "const f = () => 1" },
     { name: "(define x) with no value lowers to undefined", input: "(define x)", expected: "const x = undefined" },
     {
       name: "multiple top-level defines are separate const statements",
       input: "(define x 1) (define y 2)",
-      expected: "const x = 1;\nconst y = 2" },
+      expected: "const x = 1;\nconst y = 2",
+    },
     {
       name: "a NESTED define (inside a lambda body) keeps the prior application-call lowering",
       input: "(lambda () (define x 1) x)",
-      expected: "(() => (define(x, 1), x))" },
+      expected: "(() => (define(x, 1), x))",
+    },
   ])("$name", ({ input, expected }) => {
     expect(ts1(input)).toBe(expected);
   });
@@ -186,40 +208,49 @@ describe("lower — s.* combinators (TS reserved-word forms)", () => {
     {
       name: "let → s.let(v1, v2, (a, b) => body)",
       input: "(let ((a 1) (b 2)) (+ a b))",
-      expected: "s.let(1, 2, (a, b) => _.$plus$(a, b))" },
+      expected: "s.let(1, 2, (a, b) => _.$plus$(a, b))",
+    },
     {
       name: "named let → s.namedLet(v, (loop, i) => body)",
       input: "(let loop ((i 0)) (loop i))",
-      expected: "s.namedLet(0, (loop, i) => loop(i))" },
+      expected: "s.namedLet(0, (loop, i) => loop(i))",
+    },
     {
       name: "let* → nested s.let calls (sequential scoping)",
       input: "(let* ((a 1) (b a)) b)",
-      expected: "s.let(1, (a) => s.let(a, (b) => b))" },
+      expected: "s.let(1, (a) => s.let(a, (b) => b))",
+    },
     {
       name: "letrec → the same flat emission as let (advisory fidelity)",
       input: "(letrec ((a 1)) a)",
-      expected: "s.let(1, (a) => a)" },
+      expected: "s.let(1, (a) => a)",
+    },
     {
       name: "letrec* → the same flat emission as let (advisory fidelity)",
       input: "(letrec* ((a 1)) a)",
-      expected: "s.let(1, (a) => a)" },
+      expected: "s.let(1, (a) => a)",
+    },
     {
       name: "cond → s.cond([test, e], …, [true, d]) — else becomes true",
       input: "(cond (#t 1) (else 2))",
-      expected: "s.cond([true, 1], [true, 2])" },
+      expected: "s.cond([true, 1], [true, 2])",
+    },
     { name: "do → parse-safety only", input: "(do 1 2)", expected: "s.do(1, 2)" },
     {
       name: "case → parse-safety only (shape is incidental)",
       input: "(case x (1 2))",
-      expected: "s.case(x, _.$1$(2))" },
+      expected: "s.case(x, _.$1$(2))",
+    },
     {
       name: "a reserved word in ARGUMENT position routes through `_`: for",
       input: "(f for)",
-      expected: "f(_.for)" },
+      expected: "f(_.for)",
+    },
     {
       name: "a reserved word in ARGUMENT position routes through `_`: class/new/return",
       input: "(f class new return)",
-      expected: "f(_.class, _.new, _.return)" },
+      expected: "f(_.class, _.new, _.return)",
+    },
   ])("$name", ({ input, expected }) => {
     expect(ts1(input)).toBe(expected);
   });
@@ -276,7 +307,8 @@ describe("lower — integration: lowered call ∩ harvested prelude", () => {
     {
       name: "a VALID lowered call type-checks clean against the harvest",
       input: '(set_timer 600)\n(get_route \'("A" "B") "fast")',
-      valid: true },
+      valid: true,
+    },
     { name: "a vector where a list is expected BITES", input: '(get_route #(1 2 3) "fast")', valid: false },
     { name: "a string where a number is expected BITES", input: '(set_timer "ten")', valid: false },
   ])("$name", ({ input, valid }) => {

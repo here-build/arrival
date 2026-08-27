@@ -192,7 +192,7 @@ export function foldSchemaTag(node: unknown): { ok: true; value: unknown } | { o
     case "s/boolean": {
       // Zero-arg top-level scalar — the base type is HARDCODED by the constructor itself,
       // never parsed, same posture as the `s/field/<type>` sugars below.
-      if (args.length !== 0) return { ok: false };
+      if (args.length > 0) return { ok: false };
       return { ok: true, value: symName(head).slice("s/".length) };
     }
     case "s/field/string":

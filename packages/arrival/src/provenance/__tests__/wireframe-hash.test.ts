@@ -19,7 +19,8 @@ const ROLES: Record<string, DeclaredRole> = {
   "src-b": "source",
   "fetch-item": "source",
   "emit!": "sink",
-  map: "fan" };
+  map: "fan",
+};
 const CLASSIFIER: Classifier = { roleOf: (op) => ROLES[op] };
 const BASE = new Set(["+", "-", "*", ">", "positive?", "car", "cdr", "cons", "list"]);
 const isBaseName = (n: string): boolean => BASE.has(n);
@@ -29,8 +30,7 @@ async function wf(code: string): Promise<WireframeProgram> {
   return buildWireframe(forms, { classifier: CLASSIFIER, isBaseName });
 }
 
-beforeAll(async () => {
-});
+beforeAll(async () => {});
 
 describe("templateHash (§5 D3: spans STRIPPED — dedup and store identity)", () => {
   it("building the SAME program twice from source text yields IDENTICAL hashes", async () => {
@@ -86,7 +86,7 @@ describe("templateHash (§5 D3: spans STRIPPED — dedup and store identity)", (
   });
 });
 
-describe("siteHash (§5 D3: spans KEPT — plane identity; \"the two sites render as two wires\")", () => {
+describe('siteHash (§5 D3: spans KEPT — plane identity; "the two sites render as two wires")', () => {
   it("two sites sharing one templateHash mint TWO DIFFERENT siteHashes — one per span", async () => {
     const p = await wf("(list (map (lambda (v) (src-a v)) xs) (map (lambda (v) (src-a v)) ys))");
     const fans = p.main.nodes.filter((n) => n.kind === "fan");

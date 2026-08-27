@@ -413,9 +413,10 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
         );
       try {
         result = expectValue(await (runCtx.reads ? runCtx.reads.tracker.region(runForm) : runForm()));
-      } catch (e) {
-        if (e instanceof ArrivalError && e.cause instanceof TypeError && !isHostRuntimeBug(e.cause)) throw e.cause;
-        throw e;
+      } catch (error) {
+        if (error instanceof ArrivalError && error.cause instanceof TypeError && !isHostRuntimeBug(error.cause))
+          throw error.cause;
+        throw error;
       }
       results.push(result);
 
@@ -589,9 +590,9 @@ export async function execExpr(
       ),
     );
     return value;
-  } catch (e) {
-    if (e instanceof ArrivalError && e.cause instanceof TypeError) throw e.cause;
-    throw e;
+  } catch (error) {
+    if (error instanceof ArrivalError && error.cause instanceof TypeError) throw error.cause;
+    throw error;
   } finally {
     // A passed-in runCtx is CALLER-owned — only a runCtx THIS call minted is torn down.
     if (runCtxOwned) await disposeRunContext(runCtx);
@@ -695,9 +696,10 @@ export async function execStateOverFrame(
         );
       try {
         result = expectValue(await (runCtx.reads ? runCtx.reads.tracker.region(runForm) : runForm()));
-      } catch (e) {
-        if (e instanceof ArrivalError && e.cause instanceof TypeError && !isHostRuntimeBug(e.cause)) throw e.cause;
-        throw e;
+      } catch (error) {
+        if (error instanceof ArrivalError && error.cause instanceof TypeError && !isHostRuntimeBug(error.cause))
+          throw error.cause;
+        throw error;
       }
       results.push(result);
 
@@ -764,9 +766,9 @@ export async function execExprOverFrame(
       }),
     );
     return value;
-  } catch (e) {
-    if (e instanceof ArrivalError && e.cause instanceof TypeError) throw e.cause;
-    throw e;
+  } catch (error) {
+    if (error instanceof ArrivalError && error.cause instanceof TypeError) throw error.cause;
+    throw error;
   } finally {
     if (runCtxOwned) await disposeRunContext(runCtx);
   }

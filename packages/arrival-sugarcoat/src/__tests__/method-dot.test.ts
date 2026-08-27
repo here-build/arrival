@@ -4,7 +4,10 @@ import { readSugarcoatExpr, readSugarcoat } from "../sugarcoat-read.js";
 
 const render = (scheme: string): string => schemeToSugarcoat(scheme).trim();
 const read = (sugarcoat: string): string => printScheme(readSugarcoatExpr(sugarcoat));
-const readAll = (sugarcoat: string): string => readSugarcoat(sugarcoat).map((f) => printScheme(f)).join("\n");
+const readAll = (sugarcoat: string): string =>
+  readSugarcoat(sugarcoat)
+    .map((f) => printScheme(f))
+    .join("\n");
 
 // §2/§3/§4.3 — the method dot reads as the receiver-last fold: every step seats the
 // receiver in the LAST arg slot, unifying subscript `[…]` and method `.op`.
@@ -66,9 +69,9 @@ describe("cyclic idempotence: sugarcoat → scheme → sugarcoat", () => {
 // value (same CST + §4.3 fold as the inline chain, just broken by indentation).
 describe("newline method chains (⏎.op)", () => {
   it("folds dot-lines onto the parent value", () => {
-    const sugarcoat = ["closure", "  .map{ it[:verdict] }", "  .filter{ it == \"miss\" }", "  .length"].join("\n");
+    const sugarcoat = ["closure", "  .map{ it[:verdict] }", '  .filter{ it == "miss" }', "  .length"].join("\n");
     expect(readAll(sugarcoat)).toBe(
-      "(length (filter (lambda (it) (equal? it \"miss\")) (map (lambda (it) (:verdict it)) closure)))",
+      '(length (filter (lambda (it) (equal? it "miss")) (map (lambda (it) (:verdict it)) closure)))',
     );
   });
 
@@ -80,7 +83,7 @@ describe("newline method chains (⏎.op)", () => {
 
   it("a long method chain renders broken: base ⏎ one .op per line", () => {
     const out = schemeToSugarcoat(
-      "(length (filter (lambda (item) (equal? (longish-field-name item) \"audience-miss\")) (map (lambda (item) (transform-the-record item)) the-closure-collection)))",
+      '(length (filter (lambda (item) (equal? (longish-field-name item) "audience-miss")) (map (lambda (item) (transform-the-record item)) the-closure-collection)))',
     );
     const lines = out.split("\n");
     expect(lines[0]).toBe("the-closure-collection");

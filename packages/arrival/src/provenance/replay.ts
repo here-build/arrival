@@ -277,7 +277,9 @@ export async function replayProgramWithPlayback(opts: PlaybackReplayOptions): Pr
       const queue = [...payloads];
       // ARosettaProcedure — `.bind` doors a bare host fn. Fresh source point per
       // fire (same mint as a live source crossing); recorded stamps ride in boxPayload.
-      playbackScope.env.bind(op, new ARosettaProcedure({
+      playbackScope.env.bind(
+        op,
+        new ARosettaProcedure({
           name: op,
           arity: { min: 0, max: null },
           contract: undefined,
@@ -300,13 +302,15 @@ export async function replayProgramWithPlayback(opts: PlaybackReplayOptions): Pr
             }
             return jsToScheme(runCtx, boxPayload(next), undefined, resultProvenance);
           },
-        }));
+        }),
+      );
     }
     const state = await execState(source, {
       capabilities: base.capabilities,
       config: base.config,
       scope: playbackScope,
-      runCtx: base.runCtx });
+      runCtx: base.runCtx,
+    });
     const boxed = state.values.at(-1);
     if (boxed === undefined) {
       throw new ReplayScopeError("port", "program", "the program evaluated zero forms — nothing to replay");
@@ -375,7 +379,8 @@ export async function replayBetweenRecords(opts: ReplayBetweenRecordsOptions): P
       steps.push({ kind: "port-event", record, payload: frozen });
       acc = await applyWireInEnv(base, stretch.wire, {
         [stretch.accParam]: acc,
-        [stretch.eventParam]: boxPayload(frozen) });
+        [stretch.eventParam]: boxPayload(frozen),
+      });
       steps.push({ kind: "pure", value: toJS(acc) });
     }
     return { steps, egress: toJS(acc), egressBoxed: acc };

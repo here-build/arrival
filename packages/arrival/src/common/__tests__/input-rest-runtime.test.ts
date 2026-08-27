@@ -29,7 +29,6 @@ import { normalizeInputVector } from "../symbols/_bake.js";
 import * as z from "../scheme-zod/index.js";
 import { EnvCapability } from "../capability.js";
 
-
 /** Invoke a baked rosetta procedure via its apply term (the sole membrane spine). */
 function fire(proc: { ["arrival/tagless-final/apply"](args: any[], callCtx: any): any }, callCtx: any, ...args: any[]) {
   return proc["arrival/tagless-final/apply"](args, callCtx);
@@ -76,9 +75,7 @@ describe("Contract.inputRest runtime — INTEGRATION ((tool head r1 r2 …) thro
     // binds an ARosettaProcedure, not a bare fn) rather than a raw `env.set(name, def.run)`
     // bare-fn bypass — the ledger's "bare-fn env.set harness wiring" row (replacedBy:
     // "EnvCapability-wired fixtures") retires with this fixture.
-    await applyCapability(env, [
-      EnvCapability.define("test/input-rest-runtime", { symbols: () => ({ headtail }) }),
-    ]);
+    await applyCapability(env, [EnvCapability.define("test/input-rest-runtime", { symbols: () => ({ headtail }) })]);
   });
 
   it('(headtail "h") — 0-length tail through a real exec', async () => {

@@ -17,14 +17,7 @@
 // Config consumed by `buildVocabulary` directly. Slice mirrors loader-facing fields of
 // the session builder so the ONE shared config bag feeds this capability with no adapter
 // (real structural zod checks; ignores the rest of the bag).
-import {
-  EnvCapability,
-  execExpr,
-  type EvalTap,
-  type RunContext,
-  type SchemeValue,
-  z,
-} from "@inhuman.tools/arrival";
+import { EnvCapability, execExpr, type EvalTap, type RunContext, type SchemeValue, z } from "@inhuman.tools/arrival";
 import {
   AmbientRuntime,
   type AmbientValue,

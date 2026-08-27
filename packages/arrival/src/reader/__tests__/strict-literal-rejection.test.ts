@@ -31,6 +31,6 @@ describe("strict rejects the #void/#null reader literals (portability control)",
 
   it("loose (default): #null resolves to nil", async () => {
     const [result] = (await execState("#null")).values;
-    expect((result)).toBeInstanceOf(ANil);
+    expect(result).toBeInstanceOf(ANil);
   });
 });

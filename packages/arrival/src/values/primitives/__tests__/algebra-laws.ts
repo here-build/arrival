@@ -51,8 +51,11 @@ export function setoidLaws<T>(name: string, { arb, equalClone }: SetoidArbs<T>):
     });
     it("transitivity: a≡b ∧ b≡c ⇒ a≡c", () => {
       fc.assert(
-        fc.property(arb, arb, arb, (a, b, c) =>
-          !(equals(a as FL, b as FL) && equals(b as FL, c as FL)) || equals(a as FL, c as FL),
+        fc.property(
+          arb,
+          arb,
+          arb,
+          (a, b, c) => !(equals(a as FL, b as FL) && equals(b as FL, c as FL)) || equals(a as FL, c as FL),
         ),
       );
     });
@@ -73,15 +76,16 @@ export function ordLaws<T>(name: string, arb: fc.Arbitrary<T>): void {
     });
     it("antisymmetry: a≤b ∧ b≤a ⇒ a ≡ b", () => {
       fc.assert(
-        fc.property(arb, arb, (a, b) =>
-          !(lte(a as FL, b as FL) && lte(b as FL, a as FL)) || equals(a as FL, b as FL),
-        ),
+        fc.property(arb, arb, (a, b) => !(lte(a as FL, b as FL) && lte(b as FL, a as FL)) || equals(a as FL, b as FL)),
       );
     });
     it("transitivity: a≤b ∧ b≤c ⇒ a≤c", () => {
       fc.assert(
-        fc.property(arb, arb, arb, (a, b, c) =>
-          !(lte(a as FL, b as FL) && lte(b as FL, c as FL)) || lte(a as FL, c as FL),
+        fc.property(
+          arb,
+          arb,
+          arb,
+          (a, b, c) => !(lte(a as FL, b as FL) && lte(b as FL, c as FL)) || lte(a as FL, c as FL),
         ),
       );
     });

@@ -8,7 +8,13 @@
  * docs/working-proposals/cqs-reactivity/test-suite-design/SUITE.md (S0).
  */
 import { describe, it, expect } from "vitest";
-import { pathsOverlap, anyPathOverlap, findOverlappingPair, serializeResourcePath, type ResourcePath } from "../path-algebra.js";
+import {
+  pathsOverlap,
+  anyPathOverlap,
+  findOverlappingPair,
+  serializeResourcePath,
+  type ResourcePath,
+} from "../path-algebra.js";
 
 const p = (...segs: string[]): ResourcePath => segs;
 

@@ -75,7 +75,9 @@ describe("scheme/srfi-26 — cut/cute expansion equivalence (semantic-equivalenc
     let calls = 0;
     const cap = EnvCapability.define("test/srfi-26-cute-once", {
       symbols: (symbol, z) => ({
-        "bump!": symbol.rosetta`bump!: JS-side call counter`({ input: [], output: [z.number] }, () => ++calls) }) });
+        "bump!": symbol.rosetta`bump!: JS-side call counter`({ input: [], output: [z.number] }, () => ++calls),
+      }),
+    });
     await applyCapability(env, [cap]);
 
     // cut: (bump!) is NOT a slot — it stays in the lambda body, re-evaluating per call.

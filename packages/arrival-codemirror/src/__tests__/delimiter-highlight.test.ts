@@ -2,12 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { StringStream } from "@codemirror/language";
 
-import {
-  parser,
-  classifyCurlyForms,
-  scanCurlyBody,
-  type DelimKind,
-} from "../scheme-sugarcoat.js";
+import { parser, classifyCurlyForms, scanCurlyBody, type DelimKind } from "../scheme-sugarcoat.js";
 
 /** Drive the StreamParser over multi-line source → [text, tag] pairs (tag "" = null). */
 function tokens(src: string): Array<[string, string]> {
@@ -96,12 +91,7 @@ describe("dict vs n-expr braces", () => {
   it("nested dict inside n-expr gets both kinds", () => {
     // `{d == {:a 1}}` — outer n-expr, inner dict
     const tags = braceTags("{d == {:a 1}}");
-    expect(tags).toEqual([
-      "sugarcoatNexprBrace",
-      "sugarcoatDictBrace",
-      "sugarcoatDictBrace",
-      "sugarcoatNexprBrace",
-    ]);
+    expect(tags).toEqual(["sugarcoatNexprBrace", "sugarcoatDictBrace", "sugarcoatDictBrace", "sugarcoatNexprBrace"]);
   });
 });
 

@@ -35,7 +35,7 @@ function renderAst(v: unknown): string {
       parts.push(renderAst(node.car));
       node = node.cdr;
     }
-    const tail = (node instanceof ANil) ? "" : ` . ${renderAst(node)}`;
+    const tail = node instanceof ANil ? "" : ` . ${renderAst(node)}`;
     return `(${parts.join(" ")}${tail})`;
   }
   if (v instanceof AString) return JSON.stringify(v.toString());

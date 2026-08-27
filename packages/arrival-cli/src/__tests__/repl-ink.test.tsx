@@ -37,9 +37,7 @@ afterAll(async () => {
 });
 
 function mount() {
-  return render(
-    <ReplApp session={session} budgetMs={30_000} capabilityCount={0} version="test" mode="none" />,
-  );
+  return render(<ReplApp session={session} budgetMs={30_000} capabilityCount={0} version="test" mode="none" />);
 }
 
 async function waitUntil(get: () => string | undefined, pred: (s: string) => boolean, ms = 3000): Promise<string> {
@@ -245,7 +243,10 @@ describe("replInk ,copy", () => {
 
     const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     stdin.write(",copy\r");
-    await waitUntil(() => (writeSpy.mock.calls.length > 0 ? "done" : ""), (s) => s === "done");
+    await waitUntil(
+      () => (writeSpy.mock.calls.length > 0 ? "done" : ""),
+      (s) => s === "done",
+    );
     expect(writeSpy.mock.calls.some((call) => String(call[0]).includes(clipboardSet("3")))).toBe(true);
     writeSpy.mockRestore();
     unmount();
@@ -269,7 +270,9 @@ describe("replInk markdown value rendering", () => {
     const frame = await waitUntil(lastFrame, (f) => stripAnsi(f).includes("Hello"));
     // The block SOURCE line still shows the typed `"# Hello"`; the rendered VALUE is a bare
     // markdown header line "Hello" (no `#`, no quotes) — assert that content line exists.
-    const contentLines = stripAnsi(frame).split("\n").map((l) => l.trim());
+    const contentLines = stripAnsi(frame)
+      .split("\n")
+      .map((l) => l.trim());
     expect(contentLines).toContain("Hello");
     expect(contentLines).not.toContain('"# Hello"'); // the value is not shown as a raw literal line
     unmount();

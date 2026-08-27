@@ -98,7 +98,9 @@ const inferSources: EnvSetup = async (env) => {
       "infer-dict": symbol.native`infer-dict: fake structured source`(
         { input: [z.schemeValue], output: [z.schemeValue], provenance: "source" },
         () => jsToScheme(CONSTANT_CTX, { field: sStr("FV", FIELD_ID), other: sStr("OV", OTHER_ID) }) as never,
-      ) }) });
+      ),
+    }),
+  });
   await applyCapability(env, [cap]);
 };
 
@@ -125,7 +127,8 @@ describe("GOLDEN (G2 oracle) — a single Rosetta-IN crossing MINTS one leaf", (
     // the provenance is the mint alone. This is the classifier's `source` node.
     expect({
       value: await value(`(infer-x "ignored-prompt")`),
-      prov: await prov(`(infer-x "ignored-prompt")`) }).toMatchInlineSnapshot(`
+      prov: await prov(`(infer-x "ignored-prompt")`),
+    }).toMatchInlineSnapshot(`
         {
           "prov": [
             500,
@@ -143,7 +146,8 @@ describe("GOLDEN (G2 oracle) — a pure pipe over the source PROPAGATES, never r
     // never to CARRY a new id (AValue.ts on-value provenance rationale).
     expect({
       value: await value(`(string-upcase (infer-x "p"))`),
-      prov: await prov(`(string-upcase (infer-x "p"))`) }).toMatchInlineSnapshot(`
+      prov: await prov(`(string-upcase (infer-x "p"))`),
+    }).toMatchInlineSnapshot(`
         {
           "prov": [
             500,
@@ -158,7 +162,8 @@ describe("GOLDEN (G2 oracle) — a pure pipe over the source PROPAGATES, never r
     // merge: the literal is not a source (lineage-spike.test.ts pure-predicate case).
     expect({
       value: await value(`(string-append "pre-" (infer-x "p"))`),
-      prov: await prov(`(string-append "pre-" (infer-x "p"))`) }).toMatchInlineSnapshot(`
+      prov: await prov(`(string-append "pre-" (infer-x "p"))`),
+    }).toMatchInlineSnapshot(`
         {
           "prov": [
             500,
@@ -175,7 +180,8 @@ describe("GOLDEN (G2 oracle) — a MERGE of two infer sources fans both points i
     // depends on both crossings, so both minted ids are carried (set-union, sorted).
     expect({
       value: await value(`(string-append (infer-x "a") (infer-y "b"))`),
-      prov: await prov(`(string-append (infer-x "a") (infer-y "b"))`) }).toMatchInlineSnapshot(`
+      prov: await prov(`(string-append (infer-x "a") (infer-y "b"))`),
+    }).toMatchInlineSnapshot(`
         {
           "prov": [
             500,
@@ -199,7 +205,8 @@ describe("GOLDEN (G2 oracle) — a FIELD PROJECTION refines a point (narrows the
     // spaced `(: field …)` reads `field` as a free variable (Unbound variable).
     expect({
       value: await value(`(:field (infer-dict "p"))`),
-      prov: await prov(`(:field (infer-dict "p"))`) }).toMatchInlineSnapshot(`
+      prov: await prov(`(:field (infer-dict "p"))`),
+    }).toMatchInlineSnapshot(`
         {
           "prov": [
             700,
@@ -215,7 +222,8 @@ describe("GOLDEN (G2 oracle) — a FIELD PROJECTION refines a point (narrows the
     // cone to the projected field's id. Pinned so a rewrite can't diverge the two.
     expect({
       value: await value(`(@ (infer-dict "p") "field")`),
-      prov: await prov(`(@ (infer-dict "p") "field")`) }).toMatchInlineSnapshot(`
+      prov: await prov(`(@ (infer-dict "p") "field")`),
+    }).toMatchInlineSnapshot(`
         {
           "prov": [
             700,

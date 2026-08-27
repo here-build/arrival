@@ -5,7 +5,7 @@
  * ever lands.
  */
 
-const ESC = "\x1b[";
+const ESC = "\u001B[";
 
 // ── Cursor / region control — the painter's "full-frame diff" primitive: move the
 // cursor up `n` lines (to the top of the region just painted), then clear from there

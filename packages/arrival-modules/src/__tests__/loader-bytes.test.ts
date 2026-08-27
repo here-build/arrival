@@ -24,34 +24,39 @@ const byteFiles = (table: Record<string, string>) =>
       const hit = table[path];
       if (hit === undefined) throw new Error(`no such file: ${path}`);
       return new TextEncoder().encode(hit);
-    } });
+    },
+  });
 
 describe("Loader.read returning Uint8Array", () => {
   it("a .scm module decodes as UTF-8 — comment bytes are not read as numbers", async () => {
     const results = await exec(`(require "lib.scm") (+ lib-answer 1)`, {
       capabilities: [arrivalLoaderCapability],
-      config: { loader: byteFiles({ "lib.scm": `;; the answer, minus one\n(define lib-answer 41)` }) } });
+      config: { loader: byteFiles({ "lib.scm": `;; the answer, minus one\n(define lib-answer 41)` }) },
+    });
     expect(Number(results.at(-1))).toBe(42);
   });
 
   it("multi-byte UTF-8 survives the round trip (not one byte per character)", async () => {
     const results = await exec(`(require "lib.scm") greeting`, {
       capabilities: [arrivalLoaderCapability],
-      config: { loader: byteFiles({ "lib.scm": `(define greeting "héllo — 🌍")` }) } });
+      config: { loader: byteFiles({ "lib.scm": `(define greeting "héllo — 🌍")` }) },
+    });
     expect(results.at(-1)).toBe("héllo — 🌍");
   });
 
   it("a .json data module parses from bytes", async () => {
     const results = await exec(`(define cfg (require "cfg.json")) cfg`, {
       capabilities: [arrivalLoaderCapability],
-      config: { loader: byteFiles({ "cfg.json": `{"name":"wörld"}` }) } });
+      config: { loader: byteFiles({ "cfg.json": `{"name":"wörld"}` }) },
+    });
     expect(results.at(-1)).toMatchObject({ name: "wörld" });
   });
 
   it("a .txt module yields its text, not its byte list", async () => {
     const results = await exec(`(require "note.txt")`, {
       capabilities: [arrivalLoaderCapability],
-      config: { loader: byteFiles({ "note.txt": "plain words" }) } });
+      config: { loader: byteFiles({ "note.txt": "plain words" }) },
+    });
     expect(results.at(-1)).toBe("plain words");
   });
 });

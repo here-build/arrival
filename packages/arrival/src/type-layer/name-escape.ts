@@ -47,7 +47,7 @@ const FROM_NAMED: ReadonlyMap<string, string> = new Map([...NAMED].map(([c, w]) 
 
 /** A name that is already a valid TS identifier AND free of the `$` sigil — a fixed point of the
  *  lens (escape = id). The regex excludes `$`, so any `$`-bearing name is (re-)escaped. */
-const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const IDENTIFIER = /^[A-Z_]\w*$/i;
 
 /** ECMAScript RESERVED WORDS — never printable as a bare identifier/head, even though they match
  *  the `IDENTIFIER` char regex: `for`/`class`/`new`/`return`/… as a plain identifier or CALL head
@@ -127,7 +127,7 @@ function charFor(token: string): string {
   const named = FROM_NAMED.get(token);
   if (named !== undefined) return named;
   if (token.length === 1 && token >= "0" && token <= "9") return token;
-  if (token.startsWith("u")) return String.fromCodePoint(parseInt(token.slice(1), 16));
+  if (token.startsWith("u")) return String.fromCodePoint(Number.parseInt(token.slice(1), 16));
   return token; // unreachable for well-formed escaped names; identity is the safe default
 }
 
@@ -139,10 +139,10 @@ function charFor(token: string): string {
 export function escapeName(name: string): string {
   if (isTsIdentifier(name)) return name;
   let out = "";
-  // eslint-disable-next-line unicorn/no-for-loop -- index distinguishes a leading digit (i === 0) from a mid-name one
+
   for (let i = 0; i < name.length; i++) {
     const ch = name[i]!;
-    const isIdentChar = /[A-Za-z0-9_]/.test(ch);
+    const isIdentChar = /\w/.test(ch);
     // a mid-name digit/letter/underscore is literal; a special char — or a LEADING digit (i === 0,
     // which can't start an identifier) — becomes a token.
     out += isIdentChar && !(i === 0 && ch >= "0" && ch <= "9") ? ch : `$${tokenFor(ch)}$`;
@@ -151,12 +151,12 @@ export function escapeName(name: string): string {
 }
 
 /** A `$token$` run: a named word, a bare digit, or a `u<hex>` codepoint. */
-const TOKEN = /\$([a-z][a-z0-9]*|[0-9]|u[0-9a-f]+)\$/g;
+const TOKEN = /\$([a-z][a-z0-9]*|\d|u[0-9a-f]+)\$/g;
 
 /**
  * Backward leg of the lens: a TS identifier (an escaped name) → the original scheme symbol name.
  * Literal identifier runs pass through; each `$token$` decodes via `charFor`.
  */
 export function unescapeName(escaped: string): string {
-  return escaped.replace(TOKEN, (_, token: string) => charFor(token));
+  return escaped.replaceAll(TOKEN, (_, token: string) => charFor(token));
 }

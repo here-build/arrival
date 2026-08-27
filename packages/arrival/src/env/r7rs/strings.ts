@@ -12,7 +12,7 @@
 
 import foldCase from "fold-case";
 import dedent from "dedent";
-import { ACallable, applyCallback } from "../../values/primitives/ACallable.js";
+import { applyCallback } from "../../values/primitives/ACallable.js";
 import { CallCtx } from "../../run/CallCtx.js";
 import invariant from "tiny-invariant";
 

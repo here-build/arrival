@@ -5,11 +5,11 @@
 // OWNS the `smol-toml` parser (optional peer), registers `.toml` by name at
 // bootstrap, and returns the parse as a dict so a `.toml` require yields the
 // same shape as its `.json` twin.
-import {EnvCapability} from "@inhuman.tools/arrival/capability";
-import {parse as parseToml} from "smol-toml";
+import { EnvCapability } from "@inhuman.tools/arrival/capability";
+import { parse as parseToml } from "smol-toml";
 
-import {arrivalLoaderCapability} from "../loader-capability.js";
-import {contentsToText} from "../loader.js";
+import { arrivalLoaderCapability } from "../loader-capability.js";
+import { contentsToText } from "../loader.js";
 
 export const arrivalTomlCapability = EnvCapability.define("toml", {
   // Loader first in C3: prelude calls require/register-extension (preludeOnly on loader).

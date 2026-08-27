@@ -63,7 +63,12 @@ async function registerSource(env: ResolvingAmbient): Promise<void> {
   await applyCapability(env, [
     EnvCapability.define("spike/fetch-item", {
       symbols: (symbol, z) => ({
-        "fetch-item": symbol.rosetta`fetch-item: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 42) }) }),
+        "fetch-item": symbol.rosetta`fetch-item: a zero-arg numeric source`(
+          { input: [], output: [z.number] },
+          () => 42,
+        ),
+      }),
+    }),
   ]);
 }
 
@@ -78,7 +83,8 @@ function thinDriverTap(entersLog: string[]): EvalTap {
       entersLog.push(node instanceof APair ? scopeId(node) : "<non-pair>");
       return { id: nextId++ };
     },
-    exit: () => undefined };
+    exit: () => undefined,
+  };
 }
 
 beforeAll(async () => {
@@ -112,7 +118,8 @@ describe("walking-driver spike: skeleton from parse, meat from the live walk", (
     const coordinate: RecordCoordinate = {
       templateHash,
       ordinalPath: rootOrdinalPath(sourceIdx),
-      regionEpoch: EPOCH };
+      regionEpoch: EPOCH,
+    };
 
     const env = inferenceEnv.child("walking-driver-spike");
     await registerSource(env);
@@ -169,7 +176,8 @@ describe("walking-driver spike: skeleton from parse, meat from the live walk", (
     const coordinate: RecordCoordinate = {
       templateHash: hashGraph(program.main),
       ordinalPath: [0],
-      regionEpoch: EPOCH };
+      regionEpoch: EPOCH,
+    };
 
     const env = inferenceEnv.child("walking-driver-spike-off");
     await registerSource(env);
@@ -179,7 +187,8 @@ describe("walking-driver spike: skeleton from parse, meat from the live walk", (
       execStateOverFrame(forms[0], {
         env,
         tap: thinDriverTap(enters),
-        nodeFilter: (node) => node instanceof APair && designatedSpans.has(scopeId(node)) }),
+        nodeFilter: (node) => node instanceof APair && designatedSpans.has(scopeId(node)),
+      }),
     );
     expect(toJS(result.values[0], {})).toBe(48);
 

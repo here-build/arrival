@@ -108,7 +108,7 @@ export function scanScope(src: string): ScopeState {
   const finishToken = () => {
     if (!midToken) return;
     midToken = false;
-    const top = stack[stack.length - 1];
+    const top = stack.at(-1);
     if (top) {
       // A binding frame (lambda-list / define-sig / let-pair) has NO operator head — every relevant
       // atom binds, including the first. Only an APPLICATION-shaped frame's first atom is its head.
@@ -229,7 +229,7 @@ export function scanScope(src: string): ScopeState {
 
     if (c === "(" || c === "[" || c === "{") {
       finishToken();
-      const parent = stack[stack.length - 1];
+      const parent = stack.at(-1);
       const kind = childRole(parent);
       stack.push({ locals: [], kind, head: null, elems: 0 });
       continue;
@@ -237,7 +237,7 @@ export function scanScope(src: string): ScopeState {
     if (c === ")" || c === "]" || c === "}") {
       finishToken();
       stack.pop();
-      const parent = stack[stack.length - 1];
+      const parent = stack.at(-1);
       if (parent) parent.elems++;
       continue;
     }

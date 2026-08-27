@@ -100,7 +100,10 @@ describe("Generator Evaluator with Real Scheme Types", () => {
       cdr: contour("cdr", { min: 1, max: 1 }, ([pair]) => (pair as APair<any, any>).cdr),
       cons: contour("cons", { min: 2, max: 2 }, ([a, b]) => new APair(a!, b!)),
       "null?": contour("null?", { min: 1, max: 1 }, ([x]) =>
-        bool(x === nil || (x !== null && typeof x === "object" && (x as { toString?: () => string }).toString?.() === "()")),
+        bool(
+          x === nil ||
+            (x !== null && typeof x === "object" && (x as { toString?: () => string }).toString?.() === "()"),
+        ),
       ),
       not: contour("not", { min: 1, max: 1 }, ([x]) => bool(x === schemeFalse || x === nil)),
       "#t": schemeTrue,
@@ -154,13 +157,25 @@ describe("Generator Evaluator with Real Scheme Types", () => {
     });
 
     it("should evaluate simple function calls", async () => {
-      const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new AExact(1), new AExact(2), new AExact(3)], false);
+      const code = APair.fromArray(
+        CONSTANT_CTX,
+        [new ASymbol("+"), new AExact(1), new AExact(2), new AExact(3)],
+        false,
+      );
       const result = await execExprOverFrame(code, { env });
       expect(result).toEqual(new AExact(6));
     });
 
     it("should evaluate nested function calls", async () => {
-      const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), APair.fromArray(CONSTANT_CTX, [new ASymbol("*"), new AExact(2), new AExact(3)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol("*"), new AExact(4), new AExact(5)], false)], false);
+      const code = APair.fromArray(
+        CONSTANT_CTX,
+        [
+          new ASymbol("+"),
+          APair.fromArray(CONSTANT_CTX, [new ASymbol("*"), new AExact(2), new AExact(3)], false),
+          APair.fromArray(CONSTANT_CTX, [new ASymbol("*"), new AExact(4), new AExact(5)], false),
+        ],
+        false,
+      );
       const result = await execExprOverFrame(code, { env });
       expect(result).toEqual(new AExact(26)); // 6 + 20
     });
@@ -169,14 +184,17 @@ describe("Generator Evaluator with Real Scheme Types", () => {
     // promise is awaited and its result boxes through the reverse membrane.
     // W8: bare env-resident host fns are doored; mint via hostFnToCallable.
     it("should handle JS functions that return promises", async () => {
-      env.bind("async-add", hostFnToCallable(
+      env.bind(
+        "async-add",
+        hostFnToCallable(
           CONSTANT_CTX,
           async (a: unknown, b: unknown) => {
             await new Promise((r) => setTimeout(r, 1));
             return (a as number) + (b as number);
           },
           EMPTY_PROVENANCE,
-        ));
+        ),
+      );
 
       const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("async-add"), new AExact(10), new AExact(20)], false);
       const result = await execExprOverFrame(code, { env });
@@ -188,7 +206,11 @@ describe("Generator Evaluator with Real Scheme Types", () => {
     describe("quote", () => {
       it("should return its argument unevaluated", async () => {
         // (quote (1 2 3))
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("quote"), APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2), new AExact(3)], false)], false);
+        const code = APair.fromArray(
+          CONSTANT_CTX,
+          [new ASymbol("quote"), APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2), new AExact(3)], false)],
+          false,
+        );
         const result = (await execExprOverFrame(code, { env })) as APair<any, any>;
         expect(result.car).toEqual(new AExact(1));
         expect((result.cdr as APair<any, any>).car).toEqual(new AExact(2));
@@ -205,7 +227,14 @@ describe("Generator Evaluator with Real Scheme Types", () => {
     describe("quasiquote", () => {
       it("should return simple list unevaluated", async () => {
         // `(1 2 3)
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("quasiquote"), APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2), new AExact(3)], false)], false);
+        const code = APair.fromArray(
+          CONSTANT_CTX,
+          [
+            new ASymbol("quasiquote"),
+            APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2), new AExact(3)], false),
+          ],
+          false,
+        );
         const result = (await execExprOverFrame(code, { env })) as APair<any, any>;
         expect(result.car).toEqual(new AExact(1));
       });
@@ -213,7 +242,22 @@ describe("Generator Evaluator with Real Scheme Types", () => {
       it("should evaluate unquoted expressions", async () => {
         // `(1 ,(+ 1 1) 3)
         env.bind("x", new AExact(10));
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("quasiquote"), APair.fromArray(CONSTANT_CTX, [new AExact(1), APair.fromArray(CONSTANT_CTX, [new ASymbol("unquote"), new ASymbol("x")], false), new AExact(3)], false)], false);
+        const code = APair.fromArray(
+          CONSTANT_CTX,
+          [
+            new ASymbol("quasiquote"),
+            APair.fromArray(
+              CONSTANT_CTX,
+              [
+                new AExact(1),
+                APair.fromArray(CONSTANT_CTX, [new ASymbol("unquote"), new ASymbol("x")], false),
+                new AExact(3),
+              ],
+              false,
+            ),
+          ],
+          false,
+        );
         const result = (await execExprOverFrame(code, { env })) as APair<any, any>;
         expect(result.car).toEqual(new AExact(1));
         expect((result.cdr as APair<any, any>).car).toEqual(new AExact(10));
@@ -222,10 +266,29 @@ describe("Generator Evaluator with Real Scheme Types", () => {
 
       it("should handle unquote-splicing", async () => {
         // `(1 ,@(list 2 3) 4)
-        const code = APair.fromArray(CONSTANT_CTX, [
-          new ASymbol("quasiquote"),
-          APair.fromArray(CONSTANT_CTX, [new AExact(1), APair.fromArray(CONSTANT_CTX, [new ASymbol("unquote-splicing"), APair.fromArray(CONSTANT_CTX, [new ASymbol("list"), new AExact(2), new AExact(3)], false)], false), new AExact(4)], false),
-        ], false);
+        const code = APair.fromArray(
+          CONSTANT_CTX,
+          [
+            new ASymbol("quasiquote"),
+            APair.fromArray(
+              CONSTANT_CTX,
+              [
+                new AExact(1),
+                APair.fromArray(
+                  CONSTANT_CTX,
+                  [
+                    new ASymbol("unquote-splicing"),
+                    APair.fromArray(CONSTANT_CTX, [new ASymbol("list"), new AExact(2), new AExact(3)], false),
+                  ],
+                  false,
+                ),
+                new AExact(4),
+              ],
+              false,
+            ),
+          ],
+          false,
+        );
         const result = await execExprOverFrame(code, { env });
         const arr = (result as APair<any, any>).to_array();
         expect(arr.length).toBe(4);
@@ -244,12 +307,25 @@ describe("Generator Evaluator with Real Scheme Types", () => {
       });
 
       it("should evaluate nested if expressions", async () => {
-        const code = APair.fromArray(CONSTANT_CTX, [
-          new ASymbol("if"),
-          APair.fromArray(CONSTANT_CTX, [new ASymbol("<"), new AExact(1), new AExact(2)], false),
-          APair.fromArray(CONSTANT_CTX, [new ASymbol("if"), APair.fromArray(CONSTANT_CTX, [new ASymbol(">"), new AExact(3), new AExact(2)], false), new AExact(100), new AExact(200)], false),
-          new AExact(300),
-        ], false);
+        const code = APair.fromArray(
+          CONSTANT_CTX,
+          [
+            new ASymbol("if"),
+            APair.fromArray(CONSTANT_CTX, [new ASymbol("<"), new AExact(1), new AExact(2)], false),
+            APair.fromArray(
+              CONSTANT_CTX,
+              [
+                new ASymbol("if"),
+                APair.fromArray(CONSTANT_CTX, [new ASymbol(">"), new AExact(3), new AExact(2)], false),
+                new AExact(100),
+                new AExact(200),
+              ],
+              false,
+            ),
+            new AExact(300),
+          ],
+          false,
+        );
         expect(await execExprOverFrame(code, { env })).toEqual(new AExact(100));
       });
     });
@@ -263,17 +339,30 @@ describe("Generator Evaluator with Real Scheme Types", () => {
 
       it("should execute side effects", async () => {
         let sideEffect = 0;
-        env.bind("inc!", new ANativeProcedure({
+        env.bind(
+          "inc!",
+          new ANativeProcedure({
             name: "inc!",
             arity: { min: 0, max: 0 },
             contract: undefined,
             impl: () => {
               sideEffect++;
               return new AExact(sideEffect);
-            } }));
+            },
+          }),
+        );
 
         // (begin (inc!) (inc!) (inc!))
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("begin"), APair.fromArray(CONSTANT_CTX, [new ASymbol("inc!")], false), APair.fromArray(CONSTANT_CTX, [new ASymbol("inc!")], false), APair.fromArray(CONSTANT_CTX, [new ASymbol("inc!")], false)], false);
+        const code = APair.fromArray(
+          CONSTANT_CTX,
+          [
+            new ASymbol("begin"),
+            APair.fromArray(CONSTANT_CTX, [new ASymbol("inc!")], false),
+            APair.fromArray(CONSTANT_CTX, [new ASymbol("inc!")], false),
+            APair.fromArray(CONSTANT_CTX, [new ASymbol("inc!")], false),
+          ],
+          false,
+        );
         const result = await execExprOverFrame(code, { env });
         expect(result).toEqual(new AExact(3));
         expect(sideEffect).toBe(3);
@@ -290,14 +379,30 @@ describe("Generator Evaluator with Real Scheme Types", () => {
 
       it("should evaluate the value expression", async () => {
         // (define x (+ 1 2))
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("define"), new ASymbol("x"), APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new AExact(1), new AExact(2)], false)], false);
+        const code = APair.fromArray(
+          CONSTANT_CTX,
+          [
+            new ASymbol("define"),
+            new ASymbol("x"),
+            APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new AExact(1), new AExact(2)], false),
+          ],
+          false,
+        );
         await execExprOverFrame(code, { env });
         expect(env._lookupWithResolvers("x")).toEqual(new AExact(3));
       });
 
       it("should define a function with shorthand syntax", async () => {
         // (define (add a b) (+ a b))
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("define"), APair.fromArray(CONSTANT_CTX, [new ASymbol("add"), new ASymbol("a"), new ASymbol("b")], false), APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new ASymbol("a"), new ASymbol("b")], false)], false);
+        const code = APair.fromArray(
+          CONSTANT_CTX,
+          [
+            new ASymbol("define"),
+            APair.fromArray(CONSTANT_CTX, [new ASymbol("add"), new ASymbol("a"), new ASymbol("b")], false),
+            APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new ASymbol("a"), new ASymbol("b")], false),
+          ],
+          false,
+        );
         await execExprOverFrame(code, { env });
         const add = env._lookupWithResolvers("add");
         // Scheme lambdas are ALambda values (callable-as-value) carrying a mutable __name__.
@@ -313,15 +418,42 @@ describe("Generator Evaluator with Real Scheme Types", () => {
       it("should capture closure environment", async () => {
         // (define a 10)
         // ((lambda (x) (+ a x)) 5)
-        await execExprOverFrame(APair.fromArray(CONSTANT_CTX, [new ASymbol("define"), new ASymbol("a"), new AExact(10)], false), { env });
-        const code = APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol("lambda"), APair.fromArray(CONSTANT_CTX, [new ASymbol("x")], false), APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new ASymbol("a"), new ASymbol("x")], false)], false), new AExact(5)], false);
+        await execExprOverFrame(
+          APair.fromArray(CONSTANT_CTX, [new ASymbol("define"), new ASymbol("a"), new AExact(10)], false),
+          { env },
+        );
+        const code = APair.fromArray(
+          CONSTANT_CTX,
+          [
+            APair.fromArray(
+              CONSTANT_CTX,
+              [
+                new ASymbol("lambda"),
+                APair.fromArray(CONSTANT_CTX, [new ASymbol("x")], false),
+                APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new ASymbol("a"), new ASymbol("x")], false),
+              ],
+              false,
+            ),
+            new AExact(5),
+          ],
+          false,
+        );
         const result = await execExprOverFrame(code, { env });
         expect(result).toEqual(new AExact(15));
       });
 
       it("should handle rest parameters", async () => {
         // ((lambda args args) 1 2 3)
-        const code = APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol("lambda"), new ASymbol("args"), new ASymbol("args")], false), new AExact(1), new AExact(2), new AExact(3)], false);
+        const code = APair.fromArray(
+          CONSTANT_CTX,
+          [
+            APair.fromArray(CONSTANT_CTX, [new ASymbol("lambda"), new ASymbol("args"), new ASymbol("args")], false),
+            new AExact(1),
+            new AExact(2),
+            new AExact(3),
+          ],
+          false,
+        );
         const result = (await execExprOverFrame(code, { env })) as APair<any, any>;
         expect(result.to_array()).toEqual([new AExact(1), new AExact(2), new AExact(3)]);
       });
@@ -331,7 +463,22 @@ describe("Generator Evaluator with Real Scheme Types", () => {
       it("should use parallel binding semantics", async () => {
         // (let ((x 1) (y x)) y) - should fail because x isn't bound yet
         env.bind("x", new AExact(100));
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("let"), APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol("x"), new AExact(1)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol("y"), new ASymbol("x")], false)], false), new ASymbol("y")], false);
+        const code = APair.fromArray(
+          CONSTANT_CTX,
+          [
+            new ASymbol("let"),
+            APair.fromArray(
+              CONSTANT_CTX,
+              [
+                APair.fromArray(CONSTANT_CTX, [new ASymbol("x"), new AExact(1)], false),
+                APair.fromArray(CONSTANT_CTX, [new ASymbol("y"), new ASymbol("x")], false),
+              ],
+              false,
+            ),
+            new ASymbol("y"),
+          ],
+          false,
+        );
         // y should be 100 (outer x), not 1 (inner x)
         expect(await execExprOverFrame(code, { env })).toEqual(new AExact(100));
       });
@@ -346,23 +493,35 @@ describe("Generator Evaluator with Real Scheme Types", () => {
 
       it("should short-circuit on false", async () => {
         let called = false;
-        env.bind("side-effect", new ANativeProcedure({
+        env.bind(
+          "side-effect",
+          new ANativeProcedure({
             name: "side-effect",
             arity: { min: 0, max: 0 },
             contract: undefined,
             impl: () => {
               called = true;
               return schemeTrue;
-            } }));
+            },
+          }),
+        );
         // (and #f (side-effect))
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("and"), schemeFalse, APair.fromArray(CONSTANT_CTX, [new ASymbol("side-effect")], false)], false);
+        const code = APair.fromArray(
+          CONSTANT_CTX,
+          [new ASymbol("and"), schemeFalse, APair.fromArray(CONSTANT_CTX, [new ASymbol("side-effect")], false)],
+          false,
+        );
         expect(await execExprOverFrame(code, { env })).toBe(schemeFalse);
         expect(called).toBe(false);
       });
 
       it("should return last value if all true", async () => {
         // (and 1 2 3)
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("and"), new AExact(1), new AExact(2), new AExact(3)], false);
+        const code = APair.fromArray(
+          CONSTANT_CTX,
+          [new ASymbol("and"), new AExact(1), new AExact(2), new AExact(3)],
+          false,
+        );
         expect(await execExprOverFrame(code, { env })).toEqual(new AExact(3));
       });
     });
@@ -376,16 +535,24 @@ describe("Generator Evaluator with Real Scheme Types", () => {
 
       it("should short-circuit on true", async () => {
         let called = false;
-        env.bind("side-effect", new ANativeProcedure({
+        env.bind(
+          "side-effect",
+          new ANativeProcedure({
             name: "side-effect",
             arity: { min: 0, max: 0 },
             contract: undefined,
             impl: () => {
               called = true;
               return schemeFalse;
-            } }));
+            },
+          }),
+        );
         // (or 1 (side-effect))
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("or"), new AExact(1), APair.fromArray(CONSTANT_CTX, [new ASymbol("side-effect")], false)], false);
+        const code = APair.fromArray(
+          CONSTANT_CTX,
+          [new ASymbol("or"), new AExact(1), APair.fromArray(CONSTANT_CTX, [new ASymbol("side-effect")], false)],
+          false,
+        );
         expect(await execExprOverFrame(code, { env })).toEqual(new AExact(1));
         expect(called).toBe(false);
       });
@@ -400,26 +567,63 @@ describe("Generator Evaluator with Real Scheme Types", () => {
     describe("cond", () => {
       it("should evaluate else clause when nothing matches", async () => {
         // (cond ((> 1 2) 'no) (else 'yes))
-        const code = APair.fromArray(CONSTANT_CTX, [
-          new ASymbol("cond"),
-          APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(">"), new AExact(1), new AExact(2)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol("quote"), new ASymbol("no")], false)], false),
-          APair.fromArray(CONSTANT_CTX, [new ASymbol("else"), APair.fromArray(CONSTANT_CTX, [new ASymbol("quote"), new ASymbol("yes")], false)], false),
-        ], false);
+        const code = APair.fromArray(
+          CONSTANT_CTX,
+          [
+            new ASymbol("cond"),
+            APair.fromArray(
+              CONSTANT_CTX,
+              [
+                APair.fromArray(CONSTANT_CTX, [new ASymbol(">"), new AExact(1), new AExact(2)], false),
+                APair.fromArray(CONSTANT_CTX, [new ASymbol("quote"), new ASymbol("no")], false),
+              ],
+              false,
+            ),
+            APair.fromArray(
+              CONSTANT_CTX,
+              [new ASymbol("else"), APair.fromArray(CONSTANT_CTX, [new ASymbol("quote"), new ASymbol("yes")], false)],
+              false,
+            ),
+          ],
+          false,
+        );
         const result = (await execExprOverFrame(code, { env })) as ASymbol;
         expect(result.__name__).toBe("yes");
       });
 
       it("should return test value when no expressions", async () => {
         // (cond (5)) => 5
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("cond"), APair.fromArray(CONSTANT_CTX, [new AExact(5)], false)], false);
+        const code = APair.fromArray(
+          CONSTANT_CTX,
+          [new ASymbol("cond"), APair.fromArray(CONSTANT_CTX, [new AExact(5)], false)],
+          false,
+        );
         expect(await execExprOverFrame(code, { env })).toEqual(new AExact(5));
       });
 
       // W8: hostFnToCallable mints ARosettaProcedure (scheme args → JS, result boxes back).
       it("should handle => syntax", async () => {
         // (cond ((+ 1 2) => double))
-        env.bind("double", hostFnToCallable(CONSTANT_CTX, (x: unknown) => (x as number) * 2, EMPTY_PROVENANCE));
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("cond"), APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new AExact(1), new AExact(2)], false), new ASymbol("=>"), new ASymbol("double")], false)], false);
+        env.bind(
+          "double",
+          hostFnToCallable(CONSTANT_CTX, (x: unknown) => (x as number) * 2, EMPTY_PROVENANCE),
+        );
+        const code = APair.fromArray(
+          CONSTANT_CTX,
+          [
+            new ASymbol("cond"),
+            APair.fromArray(
+              CONSTANT_CTX,
+              [
+                APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new AExact(1), new AExact(2)], false),
+                new ASymbol("=>"),
+                new ASymbol("double"),
+              ],
+              false,
+            ),
+          ],
+          false,
+        );
         expect(((await execExprOverFrame(code, { env })) as AExact)["arrival/toJS"]()).toBe(6);
       });
     });
@@ -427,13 +631,35 @@ describe("Generator Evaluator with Real Scheme Types", () => {
     describe("case", () => {
       it("should use else when no match", async () => {
         // (case 5 ((1) 'one) ((2) 'two) (else 'other))
-        const code = APair.fromArray(CONSTANT_CTX, [
-          new ASymbol("case"),
-          new AExact(5),
-          APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new AExact(1)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol("quote"), new ASymbol("one")], false)], false),
-          APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new AExact(2)], false), APair.fromArray(CONSTANT_CTX, [new ASymbol("quote"), new ASymbol("two")], false)], false),
-          APair.fromArray(CONSTANT_CTX, [new ASymbol("else"), APair.fromArray(CONSTANT_CTX, [new ASymbol("quote"), new ASymbol("other")], false)], false),
-        ], false);
+        const code = APair.fromArray(
+          CONSTANT_CTX,
+          [
+            new ASymbol("case"),
+            new AExact(5),
+            APair.fromArray(
+              CONSTANT_CTX,
+              [
+                APair.fromArray(CONSTANT_CTX, [new AExact(1)], false),
+                APair.fromArray(CONSTANT_CTX, [new ASymbol("quote"), new ASymbol("one")], false),
+              ],
+              false,
+            ),
+            APair.fromArray(
+              CONSTANT_CTX,
+              [
+                APair.fromArray(CONSTANT_CTX, [new AExact(2)], false),
+                APair.fromArray(CONSTANT_CTX, [new ASymbol("quote"), new ASymbol("two")], false),
+              ],
+              false,
+            ),
+            APair.fromArray(
+              CONSTANT_CTX,
+              [new ASymbol("else"), APair.fromArray(CONSTANT_CTX, [new ASymbol("quote"), new ASymbol("other")], false)],
+              false,
+            ),
+          ],
+          false,
+        );
         const result = (await execExprOverFrame(code, { env })) as ASymbol;
         expect(result.__name__).toBe("other");
       });
@@ -442,13 +668,21 @@ describe("Generator Evaluator with Real Scheme Types", () => {
     describe("when", () => {
       it("should execute body when test is true", async () => {
         // (when #t 1 2 3)
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("when"), schemeTrue, new AExact(1), new AExact(2), new AExact(3)], false);
+        const code = APair.fromArray(
+          CONSTANT_CTX,
+          [new ASymbol("when"), schemeTrue, new AExact(1), new AExact(2), new AExact(3)],
+          false,
+        );
         expect(await execExprOverFrame(code, { env })).toEqual(new AExact(3));
       });
 
       it("should return undefined when test is false", async () => {
         // (when #f 1 2 3)
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("when"), schemeFalse, new AExact(1), new AExact(2), new AExact(3)], false);
+        const code = APair.fromArray(
+          CONSTANT_CTX,
+          [new ASymbol("when"), schemeFalse, new AExact(1), new AExact(2), new AExact(3)],
+          false,
+        );
         expect(await execExprOverFrame(code, { env })).toBe(theVoid);
       });
     });
@@ -456,13 +690,21 @@ describe("Generator Evaluator with Real Scheme Types", () => {
     describe("unless", () => {
       it("should execute body when test is false", async () => {
         // (unless #f 1 2 3)
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("unless"), schemeFalse, new AExact(1), new AExact(2), new AExact(3)], false);
+        const code = APair.fromArray(
+          CONSTANT_CTX,
+          [new ASymbol("unless"), schemeFalse, new AExact(1), new AExact(2), new AExact(3)],
+          false,
+        );
         expect(await execExprOverFrame(code, { env })).toEqual(new AExact(3));
       });
 
       it("should return undefined when test is true", async () => {
         // (unless #t 1 2 3)
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("unless"), schemeTrue, new AExact(1), new AExact(2), new AExact(3)], false);
+        const code = APair.fromArray(
+          CONSTANT_CTX,
+          [new ASymbol("unless"), schemeTrue, new AExact(1), new AExact(2), new AExact(3)],
+          false,
+        );
         expect(await execExprOverFrame(code, { env })).toBe(theVoid);
       });
     });
@@ -470,31 +712,82 @@ describe("Generator Evaluator with Real Scheme Types", () => {
     describe("do", () => {
       it("should iterate until test is true", async () => {
         // (do ((i 0 (+ i 1))) ((>= i 5) i))
-        const code = APair.fromArray(CONSTANT_CTX, [
-          new ASymbol("do"),
-          APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol("i"), new AExact(0), APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new ASymbol("i"), new AExact(1)], false)], false)], false),
-          APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(">="), new ASymbol("i"), new AExact(5)], false), new ASymbol("i")], false),
-        ], false);
+        const code = APair.fromArray(
+          CONSTANT_CTX,
+          [
+            new ASymbol("do"),
+            APair.fromArray(
+              CONSTANT_CTX,
+              [
+                APair.fromArray(
+                  CONSTANT_CTX,
+                  [
+                    new ASymbol("i"),
+                    new AExact(0),
+                    APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new ASymbol("i"), new AExact(1)], false),
+                  ],
+                  false,
+                ),
+              ],
+              false,
+            ),
+            APair.fromArray(
+              CONSTANT_CTX,
+              [
+                APair.fromArray(CONSTANT_CTX, [new ASymbol(">="), new ASymbol("i"), new AExact(5)], false),
+                new ASymbol("i"),
+              ],
+              false,
+            ),
+          ],
+          false,
+        );
         expect(await execExprOverFrame(code, { env })).toEqual(new AExact(5));
       });
 
       it("should execute body on each iteration", async () => {
         let count = 0;
-        env.bind("inc!", new ANativeProcedure({
+        env.bind(
+          "inc!",
+          new ANativeProcedure({
             name: "inc!",
             arity: { min: 0, max: 0 },
             contract: undefined,
             impl: () => {
               count++;
               return theVoid;
-            } }));
+            },
+          }),
+        );
         // (do ((i 0 (+ i 1))) ((>= i 3)) (inc!))
-        const code = APair.fromArray(CONSTANT_CTX, [
-          new ASymbol("do"),
-          APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol("i"), new AExact(0), APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new ASymbol("i"), new AExact(1)], false)], false)], false),
-          APair.fromArray(CONSTANT_CTX, [APair.fromArray(CONSTANT_CTX, [new ASymbol(">="), new ASymbol("i"), new AExact(3)], false)], false),
-          APair.fromArray(CONSTANT_CTX, [new ASymbol("inc!")], false),
-        ], false);
+        const code = APair.fromArray(
+          CONSTANT_CTX,
+          [
+            new ASymbol("do"),
+            APair.fromArray(
+              CONSTANT_CTX,
+              [
+                APair.fromArray(
+                  CONSTANT_CTX,
+                  [
+                    new ASymbol("i"),
+                    new AExact(0),
+                    APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new ASymbol("i"), new AExact(1)], false),
+                  ],
+                  false,
+                ),
+              ],
+              false,
+            ),
+            APair.fromArray(
+              CONSTANT_CTX,
+              [APair.fromArray(CONSTANT_CTX, [new ASymbol(">="), new ASymbol("i"), new AExact(3)], false)],
+              false,
+            ),
+            APair.fromArray(CONSTANT_CTX, [new ASymbol("inc!")], false),
+          ],
+          false,
+        );
         await execExprOverFrame(code, { env });
         expect(count).toBe(3);
       });
@@ -504,22 +797,45 @@ describe("Generator Evaluator with Real Scheme Types", () => {
       it("should define a simple macro", async () => {
         // (define-macro (my-when test . body) `(if ,test (begin ,@body)))
         // Then: (my-when #t 1 2 3)
-        const defineMacro = APair.fromArray(CONSTANT_CTX, [
-          new ASymbol("define-macro"),
-          new APair(new ASymbol("my-when"), new APair(new ASymbol("test"), new ASymbol("body"))),
-          APair.fromArray(CONSTANT_CTX, [
-            new ASymbol("quasiquote"),
-            APair.fromArray(CONSTANT_CTX, [
-              new ASymbol("if"),
-              APair.fromArray(CONSTANT_CTX, [new ASymbol("unquote"), new ASymbol("test")], false),
-              // (begin ,@body) = (begin (unquote-splicing body))
-              APair.fromArray(CONSTANT_CTX, [new ASymbol("begin"), APair.fromArray(CONSTANT_CTX, [new ASymbol("unquote-splicing"), new ASymbol("body")], false)], false),
-            ], false),
-          ], false),
-        ], false);
+        const defineMacro = APair.fromArray(
+          CONSTANT_CTX,
+          [
+            new ASymbol("define-macro"),
+            new APair(new ASymbol("my-when"), new APair(new ASymbol("test"), new ASymbol("body"))),
+            APair.fromArray(
+              CONSTANT_CTX,
+              [
+                new ASymbol("quasiquote"),
+                APair.fromArray(
+                  CONSTANT_CTX,
+                  [
+                    new ASymbol("if"),
+                    APair.fromArray(CONSTANT_CTX, [new ASymbol("unquote"), new ASymbol("test")], false),
+                    // (begin ,@body) = (begin (unquote-splicing body))
+                    APair.fromArray(
+                      CONSTANT_CTX,
+                      [
+                        new ASymbol("begin"),
+                        APair.fromArray(CONSTANT_CTX, [new ASymbol("unquote-splicing"), new ASymbol("body")], false),
+                      ],
+                      false,
+                    ),
+                  ],
+                  false,
+                ),
+              ],
+              false,
+            ),
+          ],
+          false,
+        );
         await execExprOverFrame(defineMacro, { env });
 
-        const code = APair.fromArray(CONSTANT_CTX, [new ASymbol("my-when"), schemeTrue, new AExact(1), new AExact(2), new AExact(3)], false);
+        const code = APair.fromArray(
+          CONSTANT_CTX,
+          [new ASymbol("my-when"), schemeTrue, new AExact(1), new AExact(2), new AExact(3)],
+          false,
+        );
         expect(await execExprOverFrame(code, { env })).toEqual(new AExact(3));
       });
     });
@@ -536,7 +852,19 @@ describe("Generator Evaluator with Real Scheme Types", () => {
         // verified at the full-env layer in doors/purity.law.test.ts). The point at
         // THIS layer: delay no longer evaluates lazily; it is gone from the
         // special-form table.
-        await expect(execExprOverFrame(APair.fromArray(CONSTANT_CTX, [new ASymbol("delay"), APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new AExact(1), new AExact(2)], false)], false), { env })).rejects.toThrow();
+        await expect(
+          execExprOverFrame(
+            APair.fromArray(
+              CONSTANT_CTX,
+              [
+                new ASymbol("delay"),
+                APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new AExact(1), new AExact(2)], false),
+              ],
+              false,
+            ),
+            { env },
+          ),
+        ).rejects.toThrow();
       });
     });
   });
@@ -544,7 +872,11 @@ describe("Generator Evaluator with Real Scheme Types", () => {
   describe("performance - deep recursion", () => {
     it("should handle deep recursion without stack overflow", async () => {
       // Create a deeply nested expression: (+ 1 (+ 1 (+ 1 ... (+ 1 0)...)))
-      let code: APair<any, any> | typeof nil = APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new AExact(1), new AExact(0)], false);
+      let code: APair<any, any> | typeof nil = APair.fromArray(
+        CONSTANT_CTX,
+        [new ASymbol("+"), new AExact(1), new AExact(0)],
+        false,
+      );
 
       // 10,000 levels of nesting
       for (let i = 0; i < 10000; i++) {

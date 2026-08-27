@@ -5,7 +5,7 @@ composable contribution of **symbols** (verbs), **configuration** (per-env, vali
 **resources** (external ports), **prelude** (scheme bootstrap), and **deps** (grants). The
 R7RS base, every SRFI, every dialect pack, and your domain tools are all this same shape;
 `buildVocabulary` C3-linearizes the dependency DAG and applies each capability once. What the
-machine *is* — the C3 assembly, the seam a baked verb crosses — is the
+machine _is_ — the C3 assembly, the seam a baked verb crosses — is the
 ontology in `environments.md`. **This file is the author's how-to: the recipe you follow,
 with each law it rests on cited to its home in `environments.md`.**
 
@@ -25,7 +25,7 @@ constructor survives only as `.define`'s own internal call — every real pack a
 ## Declare the honest codec
 
 A rosetta contract's schemas are the membrane **crossing**, not documentation. `z.list(z.number)`
-*is* the transform: the scheme proper-list decodes to a real JS `number[]` before the impl runs,
+_is_ the transform: the scheme proper-list decodes to a real JS `number[]` before the impl runs,
 and the return encodes back through the output codec. The impl reads and returns plain JS; nothing
 scheme-shaped leaks in. One contract has four readers that must agree — the four-reader law is
 `environments.md` §CONTRACT; the authoring rule is: **declare the codec that matches what the impl
@@ -60,7 +60,7 @@ parametric contract is the tell that you wanted tagless.
 
 Every symbol carries a **provenance role** (where results come from) and, optionally, a **cache
 class** (a serialization/replay axis). They are orthogonal, and the same word `pure` names a value
-on *each* — the standing migrator trap. The axis definitions and the `pure`-naming hazard are
+on _each_ — the standing migrator trap. The axis definitions and the `pure`-naming hazard are
 `environments.md` §AXES; what you declare:
 
 - **provenance role** — `"source"` mints a fresh origin (external data), `"pipe"` forwards its
@@ -81,7 +81,7 @@ whose contract carries a real return, and void-by-law is what makes **gather-the
 (`environments.md` §AXES). If an "effect" must hand a result back into the program, it is not a sink
 — it is a source with consequences, and must say so.
 
-Whether an effect is *dangerous* is a separate static fact — **danger is an attribute of the action,
+Whether an effect is _dangerous_ is a separate static fact — **danger is an attribute of the action,
 not the argument set.** It is declared once at the verb (`tool.effect` for a plain mutation,
 `tool.risky` for an irreversible one), on every call it will ever receive, never flipped by a caller
 argument or a runtime condition.
@@ -89,7 +89,7 @@ argument or a runtime condition.
 ## Dynamics belong to the rig, not to behavior
 
 Describe-time personalization — a per-session catalog line, a live welcome screen — is sanctioned and
-has a declared channel (`dynamicDescription`). A verb whose *runtime behavior* silently depends on who
+has a declared channel (`dynamicDescription`). A verb whose _runtime behavior_ silently depends on who
 is calling is not: an actor-dependent input is a **declared argument the actor passes**, visible in the
 program text, never ambient state smuggled through the environment. Configuration reaches a baked verb
 through `this.configuration`/`this.resources` — `EnvCapability.define`'s injected `(symbol, z)` factory
@@ -105,7 +105,7 @@ wind-down with stable `Ref` identity. The absolute law over them — **anything 
 defers the read to the moment it runs with a live activation** — is `environments.md` §RESOURCES; the
 authoring consequences:
 
-- Verb impls qualify automatically — the first touch of any of a capability's symbols pre-spawns *all*
+- Verb impls qualify automatically — the first touch of any of a capability's symbols pre-spawns _all_
   its resources before the body runs, so `.live` never races. Describe-time surfaces qualify only if
   authored lazily: an `inputSchema` resolving against a live handle must be a **getter**, a
   `dynamicDescription` a **thunk**. Reading `.live` at construction time (module top-level, spec
@@ -128,7 +128,7 @@ happened to be assembled first. The FV locality law and the C3 assembly it keeps
 ## Doors, not walls
 
 An omitted verb is a declaration, not an absence: `symbol.notImplemented` binds a **door** that throws
-a teaching error carrying the reason and the alternative bound in *this* environment. The same posture
+a teaching error carrying the reason and the alternative bound in _this_ environment. The same posture
 runs through the machinery — the sink shape gate, the view serialization gate, the free-variable law,
 the alias-target check all refuse at bake with the fix in the message. Never withhold a symbol by
 silently omitting it from the record; if a verb is gated on an optional config key, declare that key
@@ -151,17 +151,17 @@ Two run-time consequences of the laws above:
   sibling — until the client confirms.
 - Dynamic metadata obeys the resource-deferral law: getters and `dynamicDescription` thunks resolve
   against the live activation per read, never eagerly; a `dynamicDescription` resolving `undefined`
-  falls back to the static `description` and is *not* flagged session-generated — a failed live fetch
+  falls back to the static `description` and is _not_ flagged session-generated — a failed live fetch
   degrades to the static truth, it doesn't fabricate.
 
 ## Testing a capability
 
 Build a **tiny capability** inline in the test — one or two verbs closing over a local log — and drive
 it through the same public entry a consumer uses (`exec`, or `DiscoveryTool.call` for MCP behavior). No
-mocks of the machinery; the machinery *is* the subject. Assert on the **observable effect ledger** (the
+mocks of the machinery; the machinery _is_ the subject. Assert on the **observable effect ledger** (the
 closed-over log, the returned values, the thrown door text), never on internals. Name behavioral
 invariants as law-style rows — one `it` per clause, the clause in the test name — so a failing row names
-the violated clause, not a line number. A door's *message* is public surface: pin the teaching text,
+the violated clause, not a line number. A door's _message_ is public surface: pin the teaching text,
 not just the throw.
 
 ## Naming
@@ -170,7 +170,7 @@ not just the throw.
   materialization can change; the intent is the durable name. Kebab-case, `?` suffix for predicates.
 - Capability names are `domain/thing` — the door's cause owner and the assembly's audit key, so make it
   legible. Subject-scoped packs spell the namespace directly into each verb's own record key
-  (`"process/list": symbol.native\`process/list: …\`(...)` — `symbolPrefix` was retired 2026-07-22,
+  (`"process/list": symbol.native\`process/list: …\`(...)`—`symbolPrefix` was retired 2026-07-22,
   test-only and never a production author).
 - The doc line after `name: ` is the agent-facing catalog entry — prompt text; budget it like prompt
   text, warnings inline (`(irreversible)`).

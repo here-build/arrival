@@ -57,6 +57,6 @@ export function recallNext(history: readonly string[], nav: NavState | null): Re
 /** Append a submission to history, skipping a consecutive duplicate (zsh `hist_ignore_dups`).
  *  Returns a new array — callers holding a ref reassign `.current`. */
 export function pushHistory(history: readonly string[], entry: string): string[] {
-  if (entry === "" || history[history.length - 1] === entry) return history.slice();
+  if (entry === "" || history.at(-1) === entry) return [...history];
   return [...history, entry];
 }

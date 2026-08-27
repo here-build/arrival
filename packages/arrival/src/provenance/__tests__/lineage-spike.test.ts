@@ -152,7 +152,14 @@ describe("lineage spike — `if` / `cond` classify to a `mux` (selector ∪ arms
     expect(n.kind).toBe("mux");
     if (n.kind !== "mux") return;
     expect(n.op).toBe("cond");
-    expect(n.arms[0]).toEqual({ kind: "merge", op: "*", children: [{ kind: "leaf", slot: "p" }, { kind: "leaf", slot: "q" }] });
+    expect(n.arms[0]).toEqual({
+      kind: "merge",
+      op: "*",
+      children: [
+        { kind: "leaf", slot: "p" },
+        { kind: "leaf", slot: "q" },
+      ],
+    });
     expect(fullCone(n, { v: [5], p: [9], q: [13] })).toEqual([5, 9, 13]);
   });
 

@@ -15,10 +15,10 @@ describe("SchemeInexact real div/mul by zero — R7RS infinities (was 'NaNNaNi')
       a: Infinity,
       b: 0,
       op: "mul" as const,
-      expected: "+nan.0" },
+      expected: "+nan.0",
+    },
     { name: "real div stays real (2.0 / 4.0 → 0.5)", a: 2, b: 4, op: "div" as const, expected: "0.5" },
   ])("$name", ({ a, b, op, expected }) => {
     expect(inx(a)[op](inx(b)).toString()).toBe(expected);
   });
-
 });

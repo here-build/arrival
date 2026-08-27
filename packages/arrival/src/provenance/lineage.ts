@@ -181,7 +181,7 @@ function memberRead(head: unknown, args: unknown[]): { step: PathStep; argExpr: 
   const name = opName(head);
 
   // (:foo x) — keyword accessor. Head is `:foo`; a bare `:` (no field) is not one.
-  if (name.length > 1 && name.startsWith(":") && args.length >= 1) {
+  if (name.length > 1 && name.startsWith(":") && args.length > 0) {
     return { step: { field: name.slice(1) }, argExpr: args[0] };
   }
 
@@ -202,7 +202,7 @@ function memberRead(head: unknown, args: unknown[]): { step: PathStep; argExpr: 
     return null; // computed key (`(@ x k)`) — not a static field
   }
 
-  if (name === "car" && args.length >= 1) return { step: { car: true }, argExpr: args[0] };
+  if (name === "car" && args.length > 0) return { step: { car: true }, argExpr: args[0] };
 
   if ((name === "vector-ref" || name === "list-ref") && args.length >= 2) {
     const i = literalIndex(args[1]);

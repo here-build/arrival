@@ -36,7 +36,11 @@ const DYNAMICS_AND_MUTATORS: ReadonlyArray<readonly [name: string, src: string, 
   // "omitted from arrival by design" phrasing (non-local re-entry / dynamic extent
   // severs value provenance — no single construction site to root lineage at).
   ["call/cc", "(call/cc (lambda (k) (k 1)))", /omitted from arrival by design/],
-  ["call-with-current-continuation", "(call-with-current-continuation (lambda (k) (k 1)))", /omitted from arrival by design/],
+  [
+    "call-with-current-continuation",
+    "(call-with-current-continuation (lambda (k) (k 1)))",
+    /omitted from arrival by design/,
+  ],
   ["dynamic-wind", "(dynamic-wind (lambda () 1) (lambda () 2) (lambda () 3))", /omitted from arrival by design/],
   ["make-parameter", "(make-parameter 10)", /omitted from arrival by design/],
   ["parameterize", "(parameterize () 1)", /omitted from arrival by design/],
@@ -71,11 +75,15 @@ const DYNAMICS_AND_MUTATORS: ReadonlyArray<readonly [name: string, src: string, 
   ["vector-set!", "(vector-set! (vector 1 2 3) 0 9)", /frozen by design|construct a new value/],
   ["vector-fill!", "(vector-fill! (vector 1 2 3) 0)", /frozen by design|construct a new value/],
   ["vector-copy!", "(vector-copy! (vector 1 2 3) 0 (vector 4 5 6))", /frozen by design|construct a new value/],
-  ["string-set!", '(string-set! (string #\\a #\\b) 0 #\\z)', /frozen by design|construct a new value/],
-  ["string-fill!", '(string-fill! (string #\\a #\\b) #\\z)', /frozen by design|construct a new value/],
-  ["string-copy!", '(string-copy! (string #\\a #\\b) 0 (string #\\c #\\d))', /frozen by design|construct a new value/],
+  ["string-set!", "(string-set! (string #\\a #\\b) 0 #\\z)", /frozen by design|construct a new value/],
+  ["string-fill!", "(string-fill! (string #\\a #\\b) #\\z)", /frozen by design|construct a new value/],
+  ["string-copy!", "(string-copy! (string #\\a #\\b) 0 (string #\\c #\\d))", /frozen by design|construct a new value/],
   ["bytevector-u8-set!", "(bytevector-u8-set! (bytevector 1 2 3) 0 9)", /frozen by design|construct a new value/],
-  ["bytevector-copy!", "(bytevector-copy! (bytevector 1 2 3) 0 (bytevector 4 5 6))", /frozen by design|construct a new value/],
+  [
+    "bytevector-copy!",
+    "(bytevector-copy! (bytevector 1 2 3) 0 (bytevector 4 5 6))",
+    /frozen by design|construct a new value/,
+  ],
   ["bytevector-fill!", "(bytevector-fill! (bytevector 1 2 3) 0)", /frozen by design|construct a new value/],
 ] as const;
 

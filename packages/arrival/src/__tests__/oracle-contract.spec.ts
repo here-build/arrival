@@ -132,7 +132,8 @@ function refAnalyze(src: string): RefState {
     position,
     closeable: depth === 0 && !inText,
     closeSuffix: depth > 0 ? ")".repeat(depth) : "",
-    overClosed: min < 0 };
+    overClosed: min < 0,
+  };
 }
 // --- end canonical reference ---------------------------------------------------------------------
 
@@ -187,15 +188,18 @@ describe("oracle Layer-S — feasible() matches structural feasibility (no over-
 });
 
 describe("oracle Layer-S — analyze() exposes the full contract surface with graceful Σ/T", () => {
-  it.each(CORPUS)("Σ/T degrade gracefully on every prefix of %j (validSymbols=null, expectedType=null, produces=true)", (entry) => {
-    for (const prefix of prefixesOf(entry)) {
-      const st = structuralScanner.analyze(prefix);
-      expect(st.validSymbols()).toBeNull();
-      expect(st.expectedType()).toBeNull();
-      expect(st.produces("anything", "AnyType")).toBe(true);
-      expect(st.validClasses()).toBeInstanceOf(Set);
-    }
-  });
+  it.each(CORPUS)(
+    "Σ/T degrade gracefully on every prefix of %j (validSymbols=null, expectedType=null, produces=true)",
+    (entry) => {
+      for (const prefix of prefixesOf(entry)) {
+        const st = structuralScanner.analyze(prefix);
+        expect(st.validSymbols()).toBeNull();
+        expect(st.expectedType()).toBeNull();
+        expect(st.produces("anything", "AnyType")).toBe(true);
+        expect(st.validClasses()).toBeInstanceOf(Set);
+      }
+    },
+  );
 
   // INVARIANT: appending closeSuffix to a well-nested, non-truncated prefix always
   // closes it to depth 0. Only well-nested, non-text-truncated entries are repairable
@@ -337,9 +341,10 @@ function sigmaEnv(): AmbientRuntime {
     impl: (args) => args[0] as never,
   });
   return AmbientRuntime.root("sigma-test", {
-      car: fn,
-      "+": fn,
-      flows: 42 as unknown as AmbientValue });
+    car: fn,
+    "+": fn,
+    flows: 42 as unknown as AmbientValue,
+  });
 }
 
 describe("oracle Layer-Σ — graceful degradation when no env is injected", () => {

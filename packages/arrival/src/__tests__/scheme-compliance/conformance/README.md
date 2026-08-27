@@ -10,10 +10,10 @@ Arrival's default product mode is **loose** (zimmerframe: nil-tolerant `car`/`cd
 ops on vectors, etc.). R7RS/chibi goldens need **strict**. Dual pass replaces "permanent
 `it.fails` under the wrong mode":
 
-| Pass | How | Golden |
-|------|-----|--------|
-| **A — strict** | `CorpusRunner.create(manifest, { strict: true })` | Chibi / R7RS expected outcomes |
-| **B — loose** | Explicit pins (e.g. `golden-loose-car-cdr-empty.test.ts`) | **Current** Arrival loose behavior |
+| Pass           | How                                                       | Golden                             |
+| -------------- | --------------------------------------------------------- | ---------------------------------- |
+| **A — strict** | `CorpusRunner.create(manifest, { strict: true })`         | Chibi / R7RS expected outcomes     |
+| **B — loose**  | Explicit pins (e.g. `golden-loose-car-cdr-empty.test.ts`) | **Current** Arrival loose behavior |
 
 v1 mode-split: `(car '())` / `(cdr '())` only.
 
@@ -36,7 +36,7 @@ until a form needs Pass A; pass `{ strict: true }` the same way when promoting a
 ## Architecture
 
 Collection time (top-level `await`): `chibi/manifest.ts` splits the corpus into ordered
-*steps* — `setup`, `test`, `block`, `unreadable` (reader door), `section` — parses each form,
+_steps_ — `setup`, `test`, `block`, `unreadable` (reader door), `section` — parses each form,
 and assigns a verdict from `chibi/registries.ts`: `it` / `it.fails` (known gap, flips loudly
 when fixed) / `it.skip` / `it.todo`.
 
@@ -57,7 +57,7 @@ poisoning is loud and attributed.
 
 ## Block steps
 
-A top-level `(let () (define …) (test …) …)` is one *evaluation* with k *outcome slots*: the
+A top-level `(let () (define …) (test …) …)` is one _evaluation_ with k _outcome slots_: the
 first member's `it` triggers the block, each member consumes its slot, and members after a
 mid-block abort get an explicit `block-aborted` outcome. The unit of evaluation is the
 top-level form; the unit of verdict is the test form.

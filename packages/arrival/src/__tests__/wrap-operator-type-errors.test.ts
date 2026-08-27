@@ -15,9 +15,8 @@
 import { describe, expect, it } from "vitest";
 import { exec } from "../eval/generator-exec.js";
 
-
 describe("wrapOperator: type-error provenance (audit #42)", () => {
-  it("(* 0 \"\") names the operator + arg types", async () => {
+  it('(* 0 "") names the operator + arg types', async () => {
     let caught: Error | undefined;
     try {
       await exec('(* 0 "")');
@@ -33,7 +32,7 @@ describe("wrapOperator: type-error provenance (audit #42)", () => {
     expect(((caught as TypeError).cause as Error).message).toMatch(/scheme.?numeric/i);
   });
 
-  it("(- (* 0 \"\") (- (- 0 0) 0)) — the original fuzz repro — surfaces a clean type error", async () => {
+  it('(- (* 0 "") (- (- 0 0) 0)) — the original fuzz repro — surfaces a clean type error', async () => {
     let caught: Error | undefined;
     try {
       await exec('(- (* 0 "") (- (- 0 0) 0))');

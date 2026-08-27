@@ -15,7 +15,7 @@ export interface AliasSymbolDef {
 /** Template head is the whole target name (no name:doc split — inherits target's doc). */
 export function alias(tpl: TemplateStringsArray, ...sub: (string | number)[]): AliasSymbolDef {
   let target = "";
-  // eslint-disable-next-line unicorn/no-for-loop -- tagged-template zip: tpl[i] interleaved with sub[i]
+
   for (let i = 0; i < tpl.length; i++) {
     target += tpl[i];
     if (i < sub.length) target += String(sub[i]);

@@ -15,18 +15,13 @@ describe("bare formals — arbitrary length, type from consumers", () => {
     expect(program).not.toMatch(/const str = \(\)\s*=>/);
     expect(program).toContain('str("a", 1, "b", "c")');
     const diags = ls.getSemanticDiagnostics(scheme);
-    const arity = diags.filter((d) =>
-      /Expected 0 arguments|Expected \d+ arguments/.test(String(d.messageText ?? "")),
-    );
+    const arity = diags.filter((d) => /Expected 0 arguments|Expected \d+ arguments/.test(String(d.messageText ?? "")));
     expect(arity).toEqual([]);
   });
 
   it("rest element type is call-site common denom when body only yields List<any>", () => {
     // Body uses `args` only as map's list (trivial List<any>); call sites are all strings.
-    const scheme =
-      `(define join (lambda args (apply string-append args)))\n` +
-      `(define a (join "x" "y" "z"))\n` +
-      `a`;
+    const scheme = `(define join (lambda args (apply string-append args)))\n` + `(define a (join "x" "y" "z"))\n` + `a`;
     const ls = createSchemeLanguageService({ compilerOptions: { noImplicitAny: false } });
     const program = ls.getTypelevelProgram(scheme);
     expect(program).toMatch(/\(\.\.\.args(?::[^)]*)?\)\s*=>/);

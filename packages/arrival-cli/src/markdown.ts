@@ -26,7 +26,7 @@ export function topLevelString(serialized: string): string | null {
 
 const ESCAPES: Record<string, string> = { n: "\n", t: "\t", r: "\r", '"': '"', "\\": "\\" };
 function unescape(body: string): string {
-  return body.replace(/\\(.)/g, (_m, c: string) => ESCAPES[c] ?? c);
+  return body.replaceAll(/\\(.)/g, (_m, c: string) => ESCAPES[c] ?? c);
 }
 
 /** Does the string carry markdown BLOCK structure worth rendering (vs a plain string with a
@@ -39,11 +39,16 @@ export function looksLikeMarkdown(text: string): boolean {
  *  so consuming spans (link, code) run before the emphasis spans; the color/SGR escapes
  *  inserted carry no `*`/`` ` ``/`[`, so later regexes don't trip on them. */
 function inline(s: string, mode: ColorMode): string {
-  let out = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, t: string, u: string) => hyperlink(u, tintish(t, DARCULA.property, mode)));
-  out = out.replace(/`([^`]+)`/g, (_m, c: string) => tintish(c, DARCULA.string, mode));
-  out = out.replace(/\*\*([^*]+)\*\*/g, (_m, b: string) => paintAttr(b, "bold", mode));
-  out = out.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, (_m, pre: string, i: string) => pre + paintAttr(i, "italic", mode));
-  out = out.replace(/_([^_\n]+)_/g, (_m, i: string) => paintAttr(i, "italic", mode));
+  let out = s.replaceAll(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, t: string, u: string) =>
+    hyperlink(u, tintish(t, DARCULA.property, mode)),
+  );
+  out = out.replaceAll(/`([^`]+)`/g, (_m, c: string) => tintish(c, DARCULA.string, mode));
+  out = out.replaceAll(/\*\*([^*]+)\*\*/g, (_m, b: string) => paintAttr(b, "bold", mode));
+  out = out.replaceAll(
+    /(^|[^*])\*([^*\n]+)\*(?!\*)/g,
+    (_m, pre: string, i: string) => pre + paintAttr(i, "italic", mode),
+  );
+  out = out.replaceAll(/_([^_\n]+)_/g, (_m, i: string) => paintAttr(i, "italic", mode));
   return out;
 }
 

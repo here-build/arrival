@@ -59,7 +59,7 @@ describe("renderRunOutline", () => {
     expect(stripAnsi(lines[0]!)).toContain("1:0");
   });
 
-  it("`mode: \"none\"` stays byte-identical even when a file is given — no OSC 8 leaks into piped output", () => {
+  it('`mode: "none"` stays byte-identical even when a file is given — no OSC 8 leaks into piped output', () => {
     const plain = renderRunOutline(NODES, "none");
     const withFile = renderRunOutline(NODES, "none", "/abs/example.scm");
     expect(withFile).toEqual(plain);

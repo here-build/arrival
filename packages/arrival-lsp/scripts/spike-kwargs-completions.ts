@@ -16,7 +16,7 @@
 //
 // Run: cd arrival/packages/arrival-lsp && node_modules/.bin/tsx scripts/spike-kwargs-completions.ts
 
-import { emitTypes } from "@inhuman.tools/arrival-mercury/type-emit";
+import { emitTypes } from "@inhuman.tools/arrival-types-bridge";
 import ts from "typescript";
 
 import { readFileSync } from "node:fs";
@@ -34,7 +34,9 @@ import { stripGlobalValues } from "../src/ts-lib-strip.js";
 function loadTsLibFilesForSpike() {
   const require = createRequire(import.meta.url);
   const tsLibDir = path.dirname(require.resolve("typescript"));
-  return TS_LIB_FILE_NAMES.map((name) => [name, stripGlobalValues(name, readFileSync(path.join(tsLibDir, name), "utf8"))] as const);
+  return TS_LIB_FILE_NAMES.map(
+    (name) => [name, stripGlobalValues(name, readFileSync(path.join(tsLibDir, name), "utf8"))] as const,
+  );
 }
 const TS_LIB_FILES = loadTsLibFilesForSpike();
 
@@ -146,9 +148,20 @@ function rawProbe(label: string, tsBody: string, marker: string): void {
   const tsText = tsBody.replace(marker, "");
   const names = raw.completionsAt(tsText, tsOffset);
   // Report only the SHORT/relevant entries (filter the JS-global noise for readability).
-  const interesting = names.filter(
-    (n) =>
-      ["thai", "italian", "mexican", "vegan", "halal", "kosher", "dietary_requirements", "operating_hours", "location", "cuisine", "max_results"].includes(n),
+  const interesting = names.filter((n) =>
+    [
+      "thai",
+      "italian",
+      "mexican",
+      "vegan",
+      "halal",
+      "kosher",
+      "dietary_requirements",
+      "operating_hours",
+      "location",
+      "cuisine",
+      "max_results",
+    ].includes(n),
   );
   console.log(`\n[${label}]`);
   console.log(`  total native entries: ${names.length}`);
@@ -249,12 +262,24 @@ function rawKwKeys(preamble: string): string[] {
   const supportFiles = new Map(TS_LIB_FILES);
   let programText = "export {};\n";
   let version = 0;
-  const options: ts.CompilerOptions = { noEmit: true, strict: true, target: ts.ScriptTarget.ES2022, lib: ["lib.es2022.d.ts"], types: [], skipLibCheck: false };
+  const options: ts.CompilerOptions = {
+    noEmit: true,
+    strict: true,
+    target: ts.ScriptTarget.ES2022,
+    lib: ["lib.es2022.d.ts"],
+    types: [],
+    skipLibCheck: false,
+  };
   const inMem = (fn: string): string | undefined => preludeFiles.get(fn) ?? supportFiles.get(fn);
   const host: ts.LanguageServiceHost = {
     getScriptFileNames: () => [...preludeFiles.keys(), PROGRAM_FILE],
     getScriptVersion: (fn) => (fn === PROGRAM_FILE ? String(version) : "1"),
-    getScriptSnapshot: (fn) => (fn === PROGRAM_FILE ? ts.ScriptSnapshot.fromString(programText) : inMem(fn) === undefined ? undefined : ts.ScriptSnapshot.fromString(inMem(fn)!)),
+    getScriptSnapshot: (fn) =>
+      fn === PROGRAM_FILE
+        ? ts.ScriptSnapshot.fromString(programText)
+        : inMem(fn) === undefined
+          ? undefined
+          : ts.ScriptSnapshot.fromString(inMem(fn)!),
     getCurrentDirectory: () => "/",
     getCompilationSettings: () => options,
     getDefaultLibFileName: () => TS_DEFAULT_LIB,

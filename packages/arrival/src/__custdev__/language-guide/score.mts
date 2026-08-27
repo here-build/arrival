@@ -102,12 +102,7 @@ function hits(src: string, patterns: Array<[string, RegExp]>): string[] {
   return out;
 }
 
-export function scoreProgram(
-  program: string,
-  invite: Invite[],
-  inviteAny: boolean,
-  passedOracle: boolean,
-): CellScore {
+export function scoreProgram(program: string, invite: Invite[], inviteAny: boolean, passedOracle: boolean): CellScore {
   const preferred = hits(program, PREFERRED_PATTERNS);
   const tolerated = hits(program, TOLERATED_PATTERNS);
   const oddities = hits(program, ODDITY_PATTERNS);
@@ -168,15 +163,17 @@ export function sha256(s: string): string {
   return createHash("sha256").update(s).digest("hex").slice(0, 12);
 }
 
-export function summarize(cells: Array<{
-  model: string;
-  task: string;
-  exec_ok: boolean;
-  oracle_ok: boolean;
-  underuse: boolean;
-  invite_hit: boolean;
-  oddities: string[];
-}>) {
+export function summarize(
+  cells: Array<{
+    model: string;
+    task: string;
+    exec_ok: boolean;
+    oracle_ok: boolean;
+    underuse: boolean;
+    invite_hit: boolean;
+    oddities: string[];
+  }>,
+) {
   const n = cells.length || 1;
   const exec_pass = cells.filter((c) => c.exec_ok).length / n;
   const oracle_pass = cells.filter((c) => c.oracle_ok).length / n;
@@ -184,8 +181,7 @@ export function summarize(cells: Array<{
   const invite_hit =
     cells.filter((c) => c.oracle_ok).length === 0
       ? 0
-      : cells.filter((c) => c.oracle_ok && c.invite_hit).length /
-        cells.filter((c) => c.oracle_ok).length;
+      : cells.filter((c) => c.oracle_ok && c.invite_hit).length / cells.filter((c) => c.oracle_ok).length;
 
   // Cross-model families: same task + same oddity name on ≥2 models
   const oddMap = new Map<string, Set<string>>();

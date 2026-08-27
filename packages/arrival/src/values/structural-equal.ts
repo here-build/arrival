@@ -86,7 +86,7 @@ export function structuralEqual(a: unknown, b: unknown, seen: SeenMap = new Map(
     if (!aArr || !bArr || (a as unknown[]).length !== (b as unknown[]).length) return false;
     const aArr2 = a as unknown[];
     const bArr2 = b as unknown[];
-    // eslint-disable-next-line unicorn/no-for-loop -- pairwise index walk of two equal-length arrays
+
     for (let i = 0; i < aArr2.length; i++) {
       if (!structuralEqual(aArr2[i], bArr2[i], seen)) return false;
     }

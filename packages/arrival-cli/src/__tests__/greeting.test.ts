@@ -62,9 +62,7 @@ describe("pickQuote / wrapText", () => {
 describe("greetingLines", () => {
   it("off is just the identity line", () => {
     const lines = greetingLines(FACTS, "none", { kind: "off" });
-    expect(lines).toEqual([
-      "arrival 0.1.0 — no capabilities armed · sugarcoat lens · ,lens to flip, ? for help",
-    ]);
+    expect(lines).toEqual(["arrival 0.1.0 — no capabilities armed · sugarcoat lens · ,lens to flip, ? for help"]);
   });
 
   it("quote is wrapped shibboleth + blank + identity — not a wordmark", () => {

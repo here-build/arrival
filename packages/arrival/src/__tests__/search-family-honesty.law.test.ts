@@ -38,7 +38,11 @@ import { CONSTANT_CTX } from "../run/RunContext.js";
 const run = async (code: string, bindings: Record<string, unknown> = {}): Promise<string> => {
   try {
     const { values } = await execState(code, {
-      env: inferenceEnv.child("search-honesty", Object.fromEntries(Object.entries(bindings).map(([k, v]) => [k, jsToScheme(CONSTANT_CTX, v)]))) });
+      env: inferenceEnv.child(
+        "search-honesty",
+        Object.fromEntries(Object.entries(bindings).map(([k, v]) => [k, jsToScheme(CONSTANT_CTX, v)])),
+      ),
+    });
     return `OK ${JSON.stringify(toJS(values[0], {}))}`;
   } catch (e) {
     return `DOOR ${e instanceof Error ? e.message : String(e)}`;
@@ -70,7 +74,12 @@ describe("LAW 1 — a NON-LIST argument is a door, never a silent #f", () => {
 describe("LAW 2 — a TOOL-RETURNED alist is readable (entries are JSON 2-element arrays)", () => {
   // The shape every MCP tool produces for an alist. Entries are AJSArray (the vector chart),
   // not APair — which is exactly what used to be skipped in silence.
-  const ALIST = { pairs: [["a", 1], ["b", 2]] };
+  const ALIST = {
+    pairs: [
+      ["a", 1],
+      ["b", 2],
+    ],
+  };
 
   it("assoc finds an entry in a tool alist", async () => {
     expect(await run(`(assoc "a" pairs)`, ALIST)).toBe('OK ["a",1]');

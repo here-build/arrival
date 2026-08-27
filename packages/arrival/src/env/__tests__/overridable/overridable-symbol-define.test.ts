@@ -66,7 +66,9 @@ describe("arrival/overridable — structural: no prelude field, define-syntax ki
   it("`overridable/resolve` stays a `rosetta` entry with its `in`/`out` contract intact (never migrated)", () => {
     // `overridable/resolve` mints an ARosettaProcedure directly — its contract
     // (still `kind: "rosetta"`, still carrying `in`/`out`) rides `.contract`.
-    const def = contractOf(resolveSymbols()["overridable/resolve"]) as (AEntity & { in?: unknown; out?: unknown }) | undefined;
+    const def = contractOf(resolveSymbols()["overridable/resolve"]) as
+      | (AEntity & { in?: unknown; out?: unknown })
+      | undefined;
     expect(def).toBeDefined();
     expect(def!.kind).toBe("rosetta");
     expect(def!.in).toBeDefined();
@@ -80,9 +82,7 @@ describe("arrival/overridable — structural: no prelude field, define-syntax ki
 
 describe("arrival/overridable — the §2.1 bake FV law is out of scope for defineSyntax (regression pin)", () => {
   it("bakes standalone (existing deps unchanged), never throws a bake FV/role door", async () => {
-    await expect(
-      buildVocabulary([overridableCapability], { params: {} }, evalScheme),
-    ).resolves.not.toThrow();
+    await expect(buildVocabulary([overridableCapability], { params: {} }, evalScheme)).resolves.not.toThrow();
   });
 
   it("never throws DefineLocalityError/DefineForwardReferenceError/ProvenanceRoleShapeError", async () => {
@@ -102,7 +102,8 @@ describe("arrival/overridable — end-to-end through the ONE consumer door, post
     const result = (
       await exec(`(define/overridable city (s/string) "Berlin") city`, {
         capabilities,
-        config: { params: { city: "Paris" } } })
+        config: { params: { city: "Paris" } },
+      })
     ).at(-1);
     expect(result).toBe("Paris");
   });
@@ -111,7 +112,8 @@ describe("arrival/overridable — end-to-end through the ONE consumer door, post
     const result = (
       await exec(`(define/overridable city (s/string) "Berlin") city`, {
         capabilities,
-        config: { params: {} } })
+        config: { params: {} },
+      })
     ).at(-1);
     expect(result).toBe("Berlin");
   });
@@ -119,7 +121,8 @@ describe("arrival/overridable — end-to-end through the ONE consumer door, post
   it("`overridable/resolve` remains callable directly — the macro is pure ergonomics over it", async () => {
     const [result] = await exec(`(overridable/resolve 'city (s/string) "Berlin")`, {
       capabilities,
-      config: { params: { city: "Paris" } } });
+      config: { params: { city: "Paris" } },
+    });
     expect(result).toBe("Paris");
   });
 });
@@ -129,7 +132,8 @@ describe("arrival/overridable — a teaching-door message survives the migration
     await expect(
       exec(`(define/overridable age (s/number) 30) age`, {
         capabilities,
-        config: { params: { age: "not-a-number" } } }),
+        config: { params: { age: "not-a-number" } },
+      }),
     ).rejects.toThrow(/define\/overridable age: expected number, got "not-a-number" \(from an environment override\)/);
   });
 });
@@ -162,7 +166,8 @@ describe("arrival/overridable — the §3.4 macro firewall: `name`'s formal posi
       exec(`(define/overridable city (s/string) "Berlin") (totally-unbound-name city)`, {
         capabilities,
         config: { params: {} },
-        staticValidation: "on" }),
+        staticValidation: "on",
+      }),
     ).rejects.toThrow(/unbound/i);
   });
 });
@@ -176,7 +181,8 @@ describe("arrival/overridable — boxed-state access still round-trips (R1 sanit
     }
     const result = await boxedExec(`(define/overridable city (s/string) "Berlin") city`, {
       capabilities,
-      config: { params: { city: "Paris" } } });
+      config: { params: { city: "Paris" } },
+    });
     expect((result.at(-1) as AString)["arrival/toJS"]()).toBe("Paris");
   });
 });

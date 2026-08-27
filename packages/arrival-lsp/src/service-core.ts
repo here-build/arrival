@@ -14,15 +14,13 @@
 import { PROGRAM_FILE } from "@inhuman.tools/arrival-internals-types-prelude/virtual-files";
 // The runtime-free reader (spans on every node) — the require scanner's truth.
 import { parseSexprs, type Node } from "@inhuman.tools/arrival-sugarcoat";
-// Subpath only — package root pulls model/oracle graph; type-emit is front+Buf only
-// (avoids circular load with arrival-mercury ↔ type-lens at the module level).
 import {
   emitRequireFaceModule,
   emitTypes,
   encodeSchemeIdent,
   decodeSchemeIdent,
   schemeifyTsText,
-} from "@inhuman.tools/arrival-mercury/type-emit";
+} from "@inhuman.tools/arrival-types-bridge";
 import ts from "typescript";
 
 import { balancePrefix, stringLiteralType } from "./balance.js";
@@ -395,9 +393,11 @@ function isTrivialRestType(rendered: string): boolean {
  * accepts any via `repr`). Bare rest is honest; body still typechecks.
  */
 function isOverfitPrimitiveRestList(rendered: string): boolean {
-  return /^(List|ReadonlyArray|readonly\s+\w+\[\]|Array)<(string|number|boolean)>$/.test(rendered)
-    || /^(string|number|boolean)\[\]$/.test(rendered)
-    || /^readonly (string|number|boolean)\[\]$/.test(rendered);
+  return (
+    /^(List|ReadonlyArray|readonly\s+\w+\[\]|Array)<(string|number|boolean)>$/.test(rendered) ||
+    /^(string|number|boolean)\[\]$/.test(rendered) ||
+    /^readonly (string|number|boolean)\[\]$/.test(rendered)
+  );
 }
 
 /**
@@ -434,14 +434,10 @@ function inferRestParamAnnotation(
   checker: ts.TypeChecker,
 ): string | null {
   const bodyTypes = expectedTypesOf(restName, body, checker);
-  if (bodyTypes !== null && bodyTypes.size >= 1) {
+  if (bodyTypes !== null && bodyTypes.size > 0) {
     if (bodyTypes.size === 1) {
       const t = [...bodyTypes][0]!;
-      if (
-        !isTrivialRestType(t) &&
-        !isOverfitPrimitiveRestList(t) &&
-        annotatableType(t)
-      ) {
+      if (!isTrivialRestType(t) && !isOverfitPrimitiveRestList(t) && annotatableType(t)) {
         return t;
       }
     }
@@ -454,7 +450,7 @@ function inferRestParamAnnotation(
   if (elements === null) return null;
   const el = commonDenominatorType(elements);
   if (el === null) return null;
-  if (/^List</.test(el) || /\[\]$/.test(el) || /^readonly /.test(el)) return el;
+  if (el.startsWith("List<") || /\[\]$/.test(el) || el.startsWith("readonly ")) return el;
   return `List<${el}>`;
 }
 
@@ -488,8 +484,7 @@ function expectedRestElementTypesFromCallSites(
   return blocked ? null : expected;
 }
 
-// schemeifyTsText — re-exported from mercury/type-emit (single source of truth).
-export { schemeifyTsText } from "@inhuman.tools/arrival-mercury/type-emit";
+export { schemeifyTsText } from "@inhuman.tools/arrival-types-bridge";
 
 // An atom character (arrival's lexer: not whitespace/bracket/string/quote/comment) —
 // the same class the sampler's typed-scanner uses for partial-atom stripping.
@@ -699,8 +694,7 @@ export function createSchemeLanguageServiceCore(
   };
   /** Record-shaped inputRest heads (kwargs channel) — host harvest only; emit also
    *  discovers local kwargs-requires for `opts.kwargsRequireSuffixes`. */
-  const emitterKwargsMembers = (): ReadonlySet<string> =>
-    new Set(opts?.host?.kwargsMembers ?? []);
+  const emitterKwargsMembers = (): ReadonlySet<string> => new Set(opts?.host?.kwargsMembers);
   const emitterKwargsRequireSuffixes = (): readonly string[] => opts?.kwargsRequireSuffixes ?? [];
 
   // The scheme stdlib preamble, emitted ONCE to TS and cached — it's constant
@@ -878,7 +872,7 @@ export function createSchemeLanguageServiceCore(
     // The scheme stdlib preamble leads the module — an implicit dependency ahead
     // of the require closure. Untracked in rawDeps: it has no Scheme mapper, so
     // its defines are in scope but its own spans never lift to a diagnostic.
-    let prefix = emittedSchemePrelude();
+    const prefix = emittedSchemePrelude();
     // Data-file requires resolve to a shape face (virtual module), scheme requires
     // load into scope (dep). A path is a data file iff the registry yields a type
     // for it. Collected over the WHOLE tree (value-position
@@ -961,7 +955,11 @@ export function createSchemeLanguageServiceCore(
       for (const r of programRequires) emitDep(r.path);
     }
 
-    const { ts: emitted, mappings, declaredNames } = emitTypes(scheme, {
+    const {
+      ts: emitted,
+      mappings,
+      declaredNames,
+    } = emitTypes(scheme, {
       hostMembers: emitterMembers(),
       kwargsMembers: emitterKwargsMembers(),
       kwargsRequireSuffixes: emitterKwargsRequireSuffixes(),
@@ -1054,14 +1052,7 @@ export function createSchemeLanguageServiceCore(
         node.parameters.forEach((param, paramIndex) => {
           if (param.type !== undefined || !ts.isIdentifier(param.name)) return;
           if (param.dotDotDotToken !== undefined) {
-            const restAnn = inferRestParamAnnotation(
-              param.name.text,
-              node.body,
-              boundName,
-              paramIndex,
-              sf,
-              checker,
-            );
+            const restAnn = inferRestParamAnnotation(param.name.text, node.body, boundName, paramIndex, sf, checker);
             if (restAnn !== null) {
               insertions.push({ pos: param.name.end, text: `: ${restAnn}` });
             }
@@ -1128,7 +1119,7 @@ export function createSchemeLanguageServiceCore(
         if (d.code === 2304 || d.code === 2552 || NOISY_SUGGESTION_TS_CODES.has(d.code)) {
           const rawAtom = SCHEME_ATOM.test(lifted) ? lifted : /Cannot find name '([^']+)'/.exec(messageText)?.[1];
           // TS message may quote the encoded name; prefer scheme spelling.
-          const atom = rawAtom !== undefined ? schemeifyTsText(rawAtom) : schemeifyTsText(lifted);
+          const atom = rawAtom === undefined ? schemeifyTsText(lifted) : schemeifyTsText(rawAtom);
           severity = "suggestion";
           messageText =
             opts?.resolveModule === undefined
@@ -1635,12 +1626,7 @@ export function createSchemeLanguageServiceCore(
       // collide with a substrate name (`(define Array …)` — a const, vs the
       // baseline's type-only `Array` interface) must survive. Name-only
       // matching would treat it as the baseline entry and drop it.
-      if (
-        baseline.has(`${e.name} ${e.kind}`) ||
-        e.name.startsWith("__") ||
-        e.name === "sexpr" ||
-        seen.has(e.name)
-      ) {
+      if (baseline.has(`${e.name} ${e.kind}`) || e.name.startsWith("__") || e.name === "sexpr" || seen.has(e.name)) {
         continue;
       }
       seen.add(e.name);

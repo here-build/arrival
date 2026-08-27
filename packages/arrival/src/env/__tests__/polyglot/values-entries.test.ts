@@ -20,7 +20,6 @@ import { inferenceEnv } from "../../inference-env.js";
 import { jsToScheme, toJS } from "../../../membrane/rosetta.js";
 import type { SchemeValue } from "../../../values/types.js";
 
-
 let scratchCounter = 0;
 /** Every fixture gets its own frame name — cheap, avoids any risk of cross-case bleed. */
 function envWithObj(obj: SchemeValue): ResolvingAmbient {
@@ -95,7 +94,7 @@ describe("@values — own member values, as a vector, in @keys order", () => {
     expect((await exec(`(pair? (@values obj))`, { env }))[0]).toBe(false);
   });
 
-  it("nested read composes: (@ (car (@values obj)) \"somekey\") reaches into a nested record", async () => {
+  it('nested read composes: (@ (car (@values obj)) "somekey") reaches into a nested record', async () => {
     const env = envWithObj(jsToScheme(CONSTANT_CTX, { a: { somekey: 42 } }));
     // loose-mode car reads a vector's first slot (projection-nil-tolerance.test.ts's
     // own convention) — the first (only) value here is the nested record.

@@ -50,9 +50,11 @@ describe("LAW — callable arrival/toJS is the reverse membrane", () => {
   it("ARosettaProcedure: toJS crosses through the FULL rosetta marshal (contract stays live)", async () => {
     const cap = EnvCapability.define("law/tojs-rosetta", {
       symbols: (symbol, sz) => ({
-        "shout": symbol.rosetta`shout: upper-case a string`({ input: [sz.string], output: [sz.string] }, (s) =>
+        shout: symbol.rosetta`shout: upper-case a string`({ input: [sz.string], output: [sz.string] }, (s) =>
           (s as string).toUpperCase(),
-        ) }) });
+        ),
+      }),
+    });
     const proc = (await lastValue("shout", { capabilities: [cap], config: {} })) as ARosettaProcedure;
     expect(proc).toBeInstanceOf(ARosettaProcedure);
     const fn = proc["arrival/toJS"]() as (...args: unknown[]) => unknown;
@@ -66,12 +68,14 @@ describe("LAW — callable arrival/toJS is the reverse membrane", () => {
     const cap = EnvCapability.define("law/tojs-door", {
       configuration: { key: z.string().optional() },
       symbols: (symbol, sz) => ({
-        "gated": symbol.rosetta`gated: needs config`(
+        gated: symbol.rosetta`gated: needs config`(
           { input: [], output: [sz.string], requiresConfig: ["key"] },
           function (this: { configuration?: { key?: string } }) {
             return this.configuration?.key ?? "?";
           },
-        ) }) });
+        ),
+      }),
+    });
     // No config ⇒ the bind chooses a door.
     const door = (await lastValue("gated", { capabilities: [cap], config: {} })) as DoorProcedure;
     expect(door).toBeInstanceOf(DoorProcedure);

@@ -1,11 +1,8 @@
 # Strata — the bottom-up dependency-order registry
 
-> Seeded by `docs/design-history/2026-08-hermeticity-audit.md` findings **S5** ("no stratum
-> map document exists") and **S6** ("the interpreter knot is emergent"). Before this file,
-> every wall-crispness verdict in that audit had to be judged against topology *measured*
-> from imports, because no document stated the *intended* one. This is that document —
-> dependency order only, not crossing mechanics (those live per-subsystem, see the pointer
-> at the bottom).
+> This is the intended dependency order — not crossing mechanics (those live per-subsystem,
+> see the pointer at the bottom). Without it, wall-crispness has to be judged against
+> topology _measured_ from imports.
 
 Method: every claim below was checked by grepping actual `import`/`export … from` edges
 between `src/` top-level directories (and, inside `common/`, its two knot sub-packages) —
@@ -31,23 +28,23 @@ values ⇄ eval ⇄ membrane ⇄ run ⇄ common/symbols ⇄ common/scheme-zod �
 Eight buckets, one SCC. **Closed member list — a directory joins this list only by a
 ruling recorded here, never by accretion.** Current members:
 
-| Bucket | Source |
-|---|---|
-| values | `src/values/` |
-| eval | `src/eval/` |
-| membrane | `src/membrane/` |
-| run | `src/run/` |
-| common/symbols | `src/common/symbols/` |
+| Bucket            | Source                   |
+| ----------------- | ------------------------ |
+| values            | `src/values/`            |
+| eval              | `src/eval/`              |
+| membrane          | `src/membrane/`          |
+| run               | `src/run/`               |
+| common/symbols    | `src/common/symbols/`    |
 | common/scheme-zod | `src/common/scheme-zod/` |
-| env | `src/env/` |
-| provenance | `src/provenance/` |
+| env               | `src/env/`               |
+| provenance        | `src/provenance/`        |
 
 **Why it is real, not emergent-by-accident:** tagless-final (`PRINCIPLES.md` P0/P7) means a
 value class implements both interpreters' terms in one place, so `values` must see `eval`
 (dispatch) and `membrane` (crossing) at the type level, and every other bucket closes the
 same loop for its own reason — `env` stores values, `run` carries the channels values are
 minted against, `provenance` collapses/wire-emits over value structure, `common/symbols`
-bakes contracts that constrain values *and* membrane slots, `common/scheme-zod` codecs
+bakes contracts that constrain values _and_ membrane slots, `common/scheme-zod` codecs
 decode straight into `CallCtx` (`run`) and `InvocationLike` (`membrane`). Big is fine here;
 what would not be fine is leaving it undeclared — which is what S6 flagged.
 
@@ -68,12 +65,12 @@ reproduced here — the point is that every pair below is checked, not narrated)
 - `common/scheme-zod → membrane`: `common/scheme-zod/index.ts` — `import type { InvocationLike } from "../../membrane/rosetta.js"`
 - `run → common/scheme-zod`: none directly (`common/symbols/_bake.ts`'s own header notes
   `CallCtx`/`makeCallCtx` are imported from `run/CallCtx.ts` directly rather than housed in
-  `_bake` *because* `_bake` imports `scheme-zod`, and `scheme-zod` imports `ACallable` back —
+  `_bake` _because_ `_bake` imports `scheme-zod`, and `scheme-zod` imports `ACallable` back —
   closing the cycle through `common/scheme-zod` would TDZ a `z.instanceof` capture). The
   member still belongs in the knot: it is pulled in by `common/symbols ⇄ common/scheme-zod`
   (both directions, both packages under `common/`) plus `common/scheme-zod → membrane/values`.
 - `env → membrane`: `env/AmbientRuntime.ts` — `import { isSchemeValue } from "../membrane/membrane.js"`
-- `membrane → env`: `membrane/membrane.ts` — `import { AmbientRuntime, isAmbientRuntime } from "../env/AmbientRuntime.js"` (see D4 below for *why*)
+- `membrane → env`: `membrane/membrane.ts` — `import { AmbientRuntime, isAmbientRuntime } from "../env/AmbientRuntime.js"` (see D4 below for _why_)
 - `env → provenance`: `env/srfi/srfi-28.ts` (and `srfi-13.ts`, `polyglot/polyglot.ts`) — `import { collapseProvenance, taintString } from "../../provenance/provenance-collapse.js"`
 - `provenance → env`: `provenance/hermetic-env.ts` — `import { isAmbientRuntime, type AmbientValue } from "../env/AmbientRuntime.js"`
 - `values → provenance`: `values/primitives/APair.ts` — `import { collapseProvenance } from "../../provenance/provenance-collapse.js"`
@@ -108,7 +105,7 @@ clean":
   and `eval/generator-exec.ts` import `validateProgram`/`vocabularyFromChain`/`StaticValidationError`
   back. Declared at `static-validation/validate-program.ts`'s header (D6, see below) — the
   validator judges the sealed chain the evaluator produces, and the evaluator calls it at
-  parse phase before the first form evaluates. This is a *declared* two-file mutual, not a
+  parse phase before the first form evaluates. This is a _declared_ two-file mutual, not a
   second knot.
 - **utils** — **P5 is fixed on `main`**: `utils/typecheck.ts` moved to `membrane/typecheck.ts`
   (its own edge dissolves — it's inside the knot now, not a leak from above it), and
@@ -131,14 +128,14 @@ clean":
    ONCE rather than re-litigated per occurrence.
 3. **`CONSTANT_CTX` (`run/RunContext.ts`) is the sanctioned any-stratum ctx import.** It is
    the one `RunContext` value that carries no run-state (§CTX-SPECIES, `execution.md` §2)
-   and is therefore safe to import from a leaf that needs *some* ctx to satisfy a signature
+   and is therefore safe to import from a leaf that needs _some_ ctx to satisfy a signature
    with no live run behind it (audit P8's example: `reader/specials.ts:8`). A file reaching
    for `CONSTANT_CTX` is not thereby joining the knot — it is consuming the one constant the
    knot exports for exactly this purpose.
 
 ## 5. Declared exceptions, with charters
 
-**`env ⇄ provenance` mutual — the model for a *declared* big exception** (audit §8: "copy
+**`env ⇄ provenance` mutual — the model for a _declared_ big exception** (audit §8: "copy
 this shape"). Both directions carry their own charter comment, not a shared one:
 
 - **env-side**: `env/srfi/srfi-13.ts`, `env/srfi/srfi-28.ts`, `env/polyglot/polyglot.ts`

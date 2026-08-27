@@ -29,14 +29,8 @@ const config: StorybookConfig = {
         transform(code: string, id: string) {
           if (!id.includes("arrival-lsp") || !code.includes('query: "?raw"')) return null;
           return code
-            .replaceAll(
-              'import.meta.glob("typescript/lib/',
-              'import.meta.glob("../node_modules/typescript/lib/',
-            )
-            .replaceAll(
-              '{ eager: true, query: "?raw" }',
-              '{ eager: true, query: "?raw", import: "default" }',
-            );
+            .replaceAll('import.meta.glob("typescript/lib/', 'import.meta.glob("../node_modules/typescript/lib/')
+            .replaceAll('{ eager: true, query: "?raw" }', '{ eager: true, query: "?raw", import: "default" }');
         },
       },
     ];

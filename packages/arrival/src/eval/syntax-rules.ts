@@ -392,7 +392,7 @@ export function extract_patterns(
         }
         return true;
       } else if (pattern.car instanceof APair) {
-        var names = [...pattern_names];
+        const names = [...pattern_names];
         if (code instanceof ANil) {
           bindings["..."].lists.push(nil);
           return true;
@@ -408,7 +408,7 @@ export function extract_patterns(
         return true;
       }
       if (Array.isArray(pattern.car)) {
-        var names = [...pattern_names];
+        const names = [...pattern_names];
         let node = code;
         const new_state = { ...state, pattern_names: names, ellipsis: true };
         while (node instanceof APair) {
@@ -675,6 +675,7 @@ export function transform_syntax({
       const name = expr.valueOf();
       const bound = bindings[name];
       if (is_gensym(expr) && !bound) {
+        // Unbound gensym — fall through.
       }
       if (bound) {
         if (bound instanceof APair) {
@@ -841,7 +842,7 @@ export function transform_syntax({
                 // there are two cases ((a . b) ...) and (a ...)
                 new_bind[key] = value as SchemeValue;
               };
-              let car = transform_ellipsis_expr(new_expr, bind, { nested: true }, next);
+              const car = transform_ellipsis_expr(new_expr, bind, { nested: true }, next);
               // undefined can be null caused by null binding
               // on empty ellipsis
               if (car !== undefined) {
@@ -885,6 +886,7 @@ export function transform_syntax({
           if (rest_second instanceof APair && ASymbol.is(rest_second.car, ellipsis_symbol)) {
             // case (x ... ...)
           } else {
+            // case (x ...) — handled below.
           }
           // case: (x ...)
           const name = first.__name__;

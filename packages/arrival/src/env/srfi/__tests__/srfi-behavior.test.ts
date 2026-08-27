@@ -55,12 +55,24 @@ describe("SRFI-43 — vector library (pure)", () => {
 
 describe("SRFI-189 — Maybe & Either", () => {
   it.each([
-    { name: "maybe-bind-short-circuits-just", input: "(maybe-bind (just 5) (lambda (x) (just (* x x))))", expected: "(just 25)" },
-    { name: "maybe-bind-short-circuits-nothing", input: "(maybe-bind (nothing) (lambda (x) (just x)))", expected: "(nothing)" },
+    {
+      name: "maybe-bind-short-circuits-just",
+      input: "(maybe-bind (just 5) (lambda (x) (just (* x x))))",
+      expected: "(just 25)",
+    },
+    {
+      name: "maybe-bind-short-circuits-nothing",
+      input: "(maybe-bind (nothing) (lambda (x) (just x)))",
+      expected: "(nothing)",
+    },
     { name: "maybe-ref-default-just", input: "(maybe-ref/default (just 7) 0)", expected: "7" },
     { name: "maybe-ref-default-nothing", input: "(maybe-ref/default (nothing) 0)", expected: "0" },
     { name: "either-map-right", input: "(either-map (lambda (x) (+ x 1)) (right 4))", expected: "(right 5)" },
-    { name: "either-bind-left-short-circuits", input: "(either-bind (left 'err) (lambda (x) (right x)))", expected: "(left err)" },
+    {
+      name: "either-bind-left-short-circuits",
+      input: "(either-bind (left 'err) (lambda (x) (right x)))",
+      expected: "(left err)",
+    },
     // These SRFI preludes bottom out in the equality pack's predicates, which box now
     // (the Face split: eq?/equal?/not return the schemeTrue/schemeFalse flyweights).
     { name: "just?", input: "(just? (just 1))", expected: "#t" },
@@ -79,7 +91,9 @@ describe("SRFI-8 receive + SRFI-2 and-let* (expression macros)", () => {
   // define-values) stay BLOCKED on a separate gap: macro-introduced
   // (begin (define …)) doesn't splice into the enclosing scope.
   it("receive is a multi-return purity door", async () => {
-    await expect(run("(receive 1 2)")).rejects.toThrow(/multiple-value returns are omitted|continuation arity|not available/);
+    await expect(run("(receive 1 2)")).rejects.toThrow(
+      /multiple-value returns are omitted|continuation arity|not available/,
+    );
   });
 
   it.each([

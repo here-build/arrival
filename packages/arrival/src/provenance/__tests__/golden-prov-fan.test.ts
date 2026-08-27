@@ -43,7 +43,8 @@ async function value(src: string, binds: Record<string, unknown> = {}): Promise<
 }
 
 // a Pair-backed source of three provenance-stamped strings, ids 100/101/102.
-const triple = () => APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as unknown as AValue;
+const triple = () =>
+  APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false) as unknown as AValue;
 
 // ============================================================================
 // GOLDEN — runnable NOW. These go GREEN and become the gate-G2 equivalence
@@ -57,9 +58,11 @@ describe("GOLDEN (G2 oracle) — pure-map length over a Pair source: the A13 lea
   it("(length (map id xs)): the count's cone is the MINIMAL grouping fact (empty), not every element id — the A13 leak is closed [GATE: G2]", async () => {
     expect({
       value: await value(`(length (map (lambda (e) e) xs))`, { xs: triple() }),
-      prov: await prov(`(length (map (lambda (e) e) xs))`, { xs: triple() }) }).toEqual({
+      prov: await prov(`(length (map (lambda (e) e) xs))`, { xs: triple() }),
+    }).toEqual({
       value: 3,
-      prov: [] });
+      prov: [],
+    });
   });
 
   it("(map id xs): the mapped LIST head's own provenance is EMPTY — element ids live on the elements", async () => {
@@ -75,12 +78,13 @@ describe("GOLDEN (G2 oracle) — pure-map length over a Pair source: the A13 lea
 });
 
 describe("GOLDEN (G2 oracle) — filter RUNS the predicate; the count carries the survivors", () => {
-  it("(length (filter pred xs)): pred drops \"b\"; count is 2, provenance is the survivors", async () => {
+  it('(length (filter pred xs)): pred drops "b"; count is 2, provenance is the survivors', async () => {
     // The predicate is pure (string=?), so it mints nothing of its own here; the
     // surviving elements (a=100, c=102) carry their provenance into the count.
     expect({
       value: await value(`(length (filter (lambda (e) (not (string=? e "b"))) xs))`, { xs: triple() }),
-      prov: await prov(`(length (filter (lambda (e) (not (string=? e "b"))) xs))`, { xs: triple() }) }).toMatchInlineSnapshot(`
+      prov: await prov(`(length (filter (lambda (e) (not (string=? e "b"))) xs))`, { xs: triple() }),
+    }).toMatchInlineSnapshot(`
         {
           "prov": [
             100,
@@ -105,7 +109,8 @@ describe("GOLDEN (G2 oracle) — filter RUNS the predicate; the count carries th
   it("(length (filter pred xs)) keeping ALL: pred always true; count is 3, all ids carried", async () => {
     expect({
       value: await value(`(length (filter (lambda (e) #t) xs))`, { xs: triple() }),
-      prov: await prov(`(length (filter (lambda (e) #t) xs))`, { xs: triple() }) }).toMatchInlineSnapshot(`
+      prov: await prov(`(length (filter (lambda (e) #t) xs))`, { xs: triple() }),
+    }).toMatchInlineSnapshot(`
         {
           "prov": [
             100,
@@ -122,7 +127,8 @@ describe("GOLDEN (G2 oracle) — filter RUNS the predicate; the count carries th
     // anchor for the filter cone: zero survivors ⇒ zero element ids.
     expect({
       value: await value(`(length (filter (lambda (e) #f) xs))`, { xs: triple() }),
-      prov: await prov(`(length (filter (lambda (e) #f) xs))`, { xs: triple() }) }).toMatchInlineSnapshot(`
+      prov: await prov(`(length (filter (lambda (e) #f) xs))`, { xs: triple() }),
+    }).toMatchInlineSnapshot(`
         {
           "prov": [],
           "value": 0,
@@ -132,15 +138,18 @@ describe("GOLDEN (G2 oracle) — filter RUNS the predicate; the count carries th
 });
 
 describe("GOLDEN (G2 oracle) — NESTED fan: (length (map g (filter p xs)))", () => {
-  it("filter drops \"b\", map is identity; count is 2, survivors' provenance", async () => {
+  it('filter drops "b", map is identity; count is 2, survivors\' provenance', async () => {
     // The nesting the spike's classify() can shape statically (fan-over-fan) but
     // never ran live. Eager golden: the inner filter's survivors flow out through
     // the outer map into the count.
     expect({
       value: await value(`(length (map (lambda (e) e) (filter (lambda (e) (not (string=? e "b"))) xs)))`, {
-        xs: triple() }),
+        xs: triple(),
+      }),
       prov: await prov(`(length (map (lambda (e) e) (filter (lambda (e) (not (string=? e "b"))) xs)))`, {
-        xs: triple() }) }).toMatchInlineSnapshot(`
+        xs: triple(),
+      }),
+    }).toMatchInlineSnapshot(`
           {
             "prov": [
               100,
@@ -154,7 +163,8 @@ describe("GOLDEN (G2 oracle) — NESTED fan: (length (map g (filter p xs)))", ()
   it("nested all-pass: filter keeps all, map identity; count is 3, all ids", async () => {
     expect({
       value: await value(`(length (map (lambda (e) e) (filter (lambda (e) #t) xs)))`, { xs: triple() }),
-      prov: await prov(`(length (map (lambda (e) e) (filter (lambda (e) #t) xs)))`, { xs: triple() }) }).toMatchInlineSnapshot(`
+      prov: await prov(`(length (map (lambda (e) e) (filter (lambda (e) #t) xs)))`, { xs: triple() }),
+    }).toMatchInlineSnapshot(`
         {
           "prov": [
             100,
@@ -182,9 +192,7 @@ describe("GATE G2 TARGET (static path, --ir-lineage on) — pure-map length cone
   //   Target (static):            prov == [<grouping id>] (one collection-level id)
   // The COUNT must remain 3 either way (laziness/statics change the cone, never
   // the value — A18/CAPABILITY confluence).
-  it.todo(
-    "(length (map id xs)) static cone == [grouping-fact] only — NOT [100,101,102] (the A13 leak is closed)",
-  );
+  it.todo("(length (map id xs)) static cone == [grouping-fact] only — NOT [100,101,102] (the A13 leak is closed)");
 
   it.todo("(length (map id xs)) static VALUE still == 3 (cone differs, count must not)");
 });

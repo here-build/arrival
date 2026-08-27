@@ -58,7 +58,8 @@ function hostSchedule(templateHash: string, ordinal: number, seq: number): Prove
     kind: "host-schedule",
     id: { templateHash, ordinalPath: [ordinal], regionEpoch: "e0" },
     seq,
-    triples: [{ left: [0], right: [1], verdict: -1 }] };
+    triples: [{ left: [0], right: [1], verdict: -1 }],
+  };
 }
 
 describe("C2 — MERGE BLOCKER: forced mid-run eviction + fold-reconstruction under REAL workerd", () => {

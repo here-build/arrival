@@ -39,4 +39,4 @@ The surface, in four subpaths:
 
 ## License
 
-[FSL-1.1-MIT](./LICENSE.md) — internal use and non-commercial research are permitted; offering a competing hosted product is a Competing Use. Each version converts to MIT two years after its release date.
+[MIT](./LICENSE.md)

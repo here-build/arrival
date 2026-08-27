@@ -124,8 +124,7 @@ describe("dep problems roll up; never mis-span", () => {
     expect(local.getSemanticDiagnostics(avgOnly).filter((d) => d.code === 0)).toHaveLength(0);
     expect(local.getSemanticDiagnostics(avgOnly)).toHaveLength(0);
 
-    const concatCall =
-      `(require "lib/helpers.scm")\n(define y (string-concat "," "a" "b"))`;
+    const concatCall = `(require "lib/helpers.scm")\n(define y (string-concat "," "a" "b"))`;
     const concatDiags = local.getSemanticDiagnostics(concatCall);
     expect(concatDiags.filter((d) => d.messageText.includes("required file"))).toHaveLength(0);
   });
@@ -188,9 +187,7 @@ describe("compose/pipe pipeline generics (I/O over A)", () => {
       `(define s (state-of p))`;
     expect(ls.getSemanticDiagnostics(good)).toHaveLength(0);
 
-    const bad =
-      `(define state-of (compose :state last :versions))\n` +
-      `(define s (state-of 1))`;
+    const bad = `(define state-of (compose :state last :versions))\n` + `(define s (state-of 1))`;
     const diags = ls.getSemanticDiagnostics(bad);
     expect(diags).toHaveLength(1);
     expect(bad.slice(diags[0]!.start, diags[0]!.start + diags[0]!.length)).toBe("1");

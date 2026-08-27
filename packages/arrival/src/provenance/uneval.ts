@@ -91,9 +91,9 @@ function framedFreeVars(e: WireEmission): Set<string> {
   let fv = freeVars(e.expr, opts);
   for (let i = e.frames.length - 1; i >= 0; i--) {
     const frame = e.frames[i];
-    const names = frame.entries.map((en) => en.name);
+    const names = new Set(frame.entries.map((en) => en.name));
     if (frame.kind === "let") {
-      const next = new Set<string>([...fv].filter((n) => !names.includes(n)));
+      const next = new Set<string>([...fv].filter((n) => !names.has(n)));
       for (const en of frame.entries) for (const n of freeVars(en.rhs, opts)) next.add(n);
       fv = next;
     } else if (frame.kind === "let*") {
@@ -104,7 +104,7 @@ function framedFreeVars(e: WireEmission): Set<string> {
     } else {
       // letrec / letrec*: all names bind everywhere (inits included).
       for (const en of frame.entries) for (const n of freeVars(en.rhs, opts)) fv.add(n);
-      fv = new Set<string>([...fv].filter((n) => !names.includes(n)));
+      fv = new Set<string>([...fv].filter((n) => !names.has(n)));
     }
   }
   return fv;

@@ -54,7 +54,7 @@ const MAX_SUGGESTIONS = 3;
  *  punctuation-only spellings (`->`, `->>`, `~>`, `@`, `@?`) are the ENTIRE
  *  identity of those names. */
 function canonicalize(s: string): string {
-  return s.toLowerCase().replace(/[-_\s]/g, "");
+  return s.toLowerCase().replaceAll(/[-_\s]/g, "");
 }
 
 /** Locale-independent, code-unit-wise comparator (suggestion ordering must be

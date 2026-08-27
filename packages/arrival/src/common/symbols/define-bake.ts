@@ -265,9 +265,9 @@ function buildDefineProcedure(
       if (def.validate) {
         try {
           z.decode(def.in, args);
-        } catch (e) {
-          if (e instanceof ZodError) throw new Error(formatPositionalRejection(def.name, e, args, def.in));
-          throw e;
+        } catch (error) {
+          if (error instanceof ZodError) throw new Error(formatPositionalRejection(def.name, error, args, def.in));
+          throw error;
         }
       }
       return (async (): Promise<SchemeValue> => {

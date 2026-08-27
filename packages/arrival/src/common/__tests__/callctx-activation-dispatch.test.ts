@@ -59,7 +59,8 @@ const shoutResource: Resource<Shout> = {
   acquire: async () => {
     shoutSpawns++;
     return port({ up: (s: string) => s.toUpperCase() }, () => undefined);
-  } };
+  },
+};
 
 // A BAKED rosetta verb (the target authoring form — no `ThisType`/builder closure anywhere):
 // its impl reads `this.configuration`/`this.resources` off the flat `CallCtx` itself.
@@ -78,7 +79,9 @@ const greeter = new EnvCapability("test/greeter-activation", {
         if (cfg === undefined || res === undefined) return `NO-ACTIVATION:${s}`;
         return `${cfg.tag}:${(await res.shout.get()).up(s)}`;
       },
-    ) } });
+    ),
+  },
+});
 
 describe("CallCtx activation dispatch (Stage 1b)", () => {
   it("threads a capability's `configuration` onto `this` at real evaluator dispatch", async () => {
@@ -100,7 +103,8 @@ describe("CallCtx activation dispatch (Stage 1b)", () => {
       capabilities: [greeter, ...BASE_ROSTER],
       config,
       evalScheme: testEvalScheme,
-      evalPrelude: testEvalPrelude });
+      evalPrelude: testEvalPrelude,
+    });
     try {
       const [first] = await exec('(greet "a")', { capabilities: [greeter], config, runCtx });
       const [second] = await exec('(greet "b")', { capabilities: [greeter], config, runCtx });

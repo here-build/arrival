@@ -38,14 +38,16 @@ describe("EnvCapability — config validation (the vocabulary-build path)", () =
   it("validates config through zod when the vocabulary builds — bad enum rejects", async () => {
     const cap = EnvCapability.define("test/config-validation", {
       configuration: { context: z.enum(["browser", "node", "bun"]), retries: z.number().default(3) },
-      symbols: () => ({}) });
+      symbols: () => ({}),
+    });
     await expect(buildVocabulary([cap], { context: "deno" }, evalScheme)).rejects.toThrow();
   });
 
   it("a satisfied config bakes cleanly; defaults are applied", async () => {
     const cap = EnvCapability.define("test/config-defaults", {
       configuration: { context: z.enum(["browser", "node", "bun"]), retries: z.number().default(3) },
-      symbols: () => ({}) });
+      symbols: () => ({}),
+    });
     const vocabulary = await buildVocabulary([cap], { context: "node" }, evalScheme);
     expect(vocabulary.configsByCapability.get(cap)).toEqual({ context: "node", retries: 3 });
   });

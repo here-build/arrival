@@ -31,13 +31,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import {
-  schemeToSugarcoat,
-  printScheme,
-  parseSexprs,
-  nodeEq,
-  normalizePolyglot,
-} from "../sugarcoat-render.js";
+import { schemeToSugarcoat, printScheme, parseSexprs, nodeEq, normalizePolyglot } from "../sugarcoat-render.js";
 // Importing the reader registers it with schemeToSugarcoat (I-expr / @{} re-entry).
 import { readSugarcoat, readSugarcoatExpr, sugarcoatToScheme } from "../sugarcoat-read.js";
 

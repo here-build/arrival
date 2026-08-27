@@ -6,7 +6,7 @@ import { createSchemeLanguageService } from "../language-service.js";
 const STR_PRELUDE = `(define str (lambda args (apply string-append (map (lambda (x) (if (string? x) x (repr x))) args))))`;
 
 describe("str rest domain — any values, not List<string>-only", () => {
-  it("(str \"\\n\" (map …)) is legal when body is polymorphic (no List<string> overfit)", () => {
+  it(String.raw`(str "\n" (map …)) is legal when body is polymorphic (no List<string> overfit)`, () => {
     const scheme =
       `(define cls (list (list 1 2)))\n` +
       `(define clsBlock\n` +
@@ -30,5 +30,6 @@ describe("str rest domain — any values, not List<string>-only", () => {
     const listClash = diags.filter((d) =>
       /List<string>|not assignable to parameter of type/.test(String(d.messageText ?? "")),
     );
-    expect(listClash).toEqual([]);  });
+    expect(listClash).toEqual([]);
+  });
 });

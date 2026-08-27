@@ -32,7 +32,8 @@ import {
   checkReadWriteGuard,
   writeSetOfResourcePaths,
   ReadYourDeferredWriteError,
-  type WriteSetResolver } from "../../run/read-guard.js";
+  type WriteSetResolver,
+} from "../../run/read-guard.js";
 import { serializeResourcePath } from "../path-algebra.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -41,7 +42,8 @@ import { serializeResourcePath } from "../path-algebra.js";
 
 const entry = (over: Partial<EffectEntry> & { verbName: string; decodedArgs: readonly unknown[] }): EffectEntry => ({
   index: 0,
-  ...over });
+  ...over,
+});
 
 /** Effects named "write!" write the key at decodedArgs[0] — matches the `write!` verb
  *  the wired describe block below binds, so ONE resolver serves both sections. */
@@ -138,11 +140,7 @@ describe("Phase 4 host footprints — path-shaped writeSetOf keys", () => {
     );
     // disjoint path key — fine
     expect(() =>
-      checkReadWriteGuard(
-        entries,
-        [{ key: serializeResourcePath(["test", "b"]), clock: 1 }],
-        writeSetOfResourcePaths,
-      ),
+      checkReadWriteGuard(entries, [{ key: serializeResourcePath(["test", "b"]), clock: 1 }], writeSetOfResourcePaths),
     ).not.toThrow();
   });
 
@@ -186,7 +184,9 @@ function makeCap(tracker: MemoryReadTracker) {
           writeFires++;
           return undefined;
         },
-      ) }) });
+      ),
+    }),
+  });
   return { cap, writeFires: () => writeFires };
 }
 

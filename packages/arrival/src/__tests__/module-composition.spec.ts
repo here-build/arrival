@@ -33,14 +33,16 @@ describe("AmbientRuntime Module Composition", () => {
         resolve: (name) => {
           callOrder.push("resolver-1");
           return undefined;
-        } };
+        },
+      };
 
       const resolver2: ResolverSpec = {
         id: "resolver-2",
         resolve: (name) => {
           callOrder.push("resolver-2");
           return name === "target" ? FOUND : undefined;
-        } };
+        },
+      };
 
       const env = ResolvingAmbient.root("test");
       env.registerResolver(resolver1);
@@ -57,7 +59,8 @@ describe("AmbientRuntime Module Composition", () => {
     it("should distinguish between undefined (yield) and a found nil (found)", () => {
       const resolver: ResolverSpec = {
         id: "nil-resolver",
-        resolve: (name) => (name === "nil-value" ? nil : undefined) };
+        resolve: (name) => (name === "nil-value" ? nil : undefined),
+      };
 
       const env = ResolvingAmbient.root("test");
       env.registerResolver(resolver);
@@ -77,12 +80,14 @@ describe("AmbientRuntime Module Composition", () => {
       const env = ResolvingAmbient.root("parent", { x: new AExact(1) });
       env.registerResolver({
         id: "parent-resolver",
-        resolve: (name) => (name === "y" ? Y : undefined) });
+        resolve: (name) => (name === "y" ? Y : undefined),
+      });
 
       const child = env.child("child", { z: new AExact(3) });
       child.registerResolver({
         id: "child-resolver",
-        resolve: (name) => (name === "w" ? W : undefined) });
+        resolve: (name) => (name === "w" ? W : undefined),
+      });
 
       expect(child._lookupWithResolvers("z")).toEqual(new AExact(3));
 

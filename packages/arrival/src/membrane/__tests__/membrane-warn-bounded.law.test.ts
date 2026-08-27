@@ -84,9 +84,7 @@ describe("NEGATIVE — the warning cannot scale with the data", () => {
 
   it("the suppression notice itself is emitted ONCE, not once per suppressed crossing", () => {
     for (let i = 0; i < 1000; i++) warnMembrane("a JS `undefined`");
-    const notices = warn.mock.calls
-      .map((c) => String(c[0]))
-      .filter((t) => t.includes("further identical crossings"));
+    const notices = warn.mock.calls.map((c) => String(c[0])).filter((t) => t.includes("further identical crossings"));
     expect(notices).toHaveLength(1);
   });
 

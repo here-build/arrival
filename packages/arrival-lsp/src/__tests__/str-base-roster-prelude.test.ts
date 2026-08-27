@@ -18,9 +18,7 @@ describe("str from real BASE_ROSTER schemePrelude", () => {
       schemePrelude,
     });
     const diags = ls.getSemanticDiagnostics(`(define x (str "a" 1 "b"))`);
-    const bad = diags.filter(
-      (d) => (d.code === 2304 || d.code === 2552) && String(d.messageText).includes("str"),
-    );
+    const bad = diags.filter((d) => (d.code === 2304 || d.code === 2552) && String(d.messageText).includes("str"));
     expect(bad.map((d) => d.messageText)).toEqual([]);
   });
 });

@@ -23,7 +23,8 @@ const KEY = (over: Partial<ReplayMemoKey> = {}): ReplayMemoKey => ({
   templateHash: "th-0",
   ordinalPath: [0],
   demand: "value",
-  ...over });
+  ...over,
+});
 
 describe("ReplayMemo — LRU mechanics (§4 m2: size-capped, ephemeral, never persisted)", () => {
   it("a miss returns undefined and leaves the memo untouched", () => {
@@ -139,7 +140,8 @@ describe("answerQuery — the FULL envelope (replay/replayed-cached arms here, Q
       memo,
       key: KEY(),
       replay: async () => replayed(10, 5),
-      fallback: unreachableFallback });
+      fallback: unreachableFallback,
+    });
     expect(answer.tier).toBe("replayed");
     expect(answer.value).toBe(10);
     expect(answer.stampIds).toEqual([5]);
@@ -157,7 +159,8 @@ describe("answerQuery — the FULL envelope (replay/replayed-cached arms here, Q
         replayCalls++;
         return replayed(999, 999); // would be WRONG if ever consulted
       },
-      fallback: unreachableFallback });
+      fallback: unreachableFallback,
+    });
     expect(answer.tier).toBe("replayed-cached");
     expect(answer.value).toBe(10);
     expect(replayCalls).toBe(0);
@@ -171,7 +174,14 @@ describe("answerQuery — the FULL envelope (replay/replayed-cached arms here, Q
       replay: async () => {
         throw new ReplayScopeError("fan", "some-span", "out of this driver's claimed scope");
       },
-      fallback: async () => ({ tier: "recorded", storageTier: "do", value: "fallback-value", stampIds: [7], retention: "standard" }) });
+      fallback: async () => ({
+        tier: "recorded",
+        storageTier: "do",
+        value: "fallback-value",
+        stampIds: [7],
+        retention: "standard",
+      }),
+    });
     expect(answer.tier).toBe("recorded");
     expect(answer.value).toBe("fallback-value");
     expect(answer.stampIds).toEqual([7]);
@@ -188,7 +198,8 @@ describe("answerQuery — the FULL envelope (replay/replayed-cached arms here, Q
         replay: async () => {
           throw new Error("a genuine bug, not a scope refusal");
         },
-        fallback: unreachableFallback }),
+        fallback: unreachableFallback,
+      }),
     ).rejects.toThrow("a genuine bug, not a scope refusal");
   });
 });

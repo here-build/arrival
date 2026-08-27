@@ -43,7 +43,11 @@ describe("renderBlock", () => {
       counters: { elapsedMs: 0 },
       error: "unbound symbol nope",
     };
-    expect(renderBlock(block, "scheme").map(stripAnsi)).toEqual(["✗ (nope)", '  (error "unbound symbol nope")', "  0ms"]);
+    expect(renderBlock(block, "scheme").map(stripAnsi)).toEqual([
+      "✗ (nope)",
+      '  (error "unbound symbol nope")',
+      "  0ms",
+    ]);
   });
 
   it("skipped: distinct body text, no gutter — 'queued but never reached' vs 'still queued'", () => {

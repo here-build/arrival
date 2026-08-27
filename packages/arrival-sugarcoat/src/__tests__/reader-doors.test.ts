@@ -18,7 +18,9 @@ describe("curly close-check names the real problem", () => {
 describe("trailing-lambda body teaches the code-context rule", () => {
   it("indentation forms inside a trailing lambda point at the delimited spelling", () => {
     const src = "rows.map{(r) => dict\n  id: r[:id]\n  label: r[:label]}";
-    expect(() => readSugarcoat(src)).toThrowError(/trailing-lambda body.*indentation forms don't group inside braces.*delimited/s);
+    expect(() => readSugarcoat(src)).toThrowError(
+      /trailing-lambda body.*indentation forms don't group inside braces.*delimited/s,
+    );
   });
 
   it("unknown operator inside a trailing lambda names the operator too", () => {

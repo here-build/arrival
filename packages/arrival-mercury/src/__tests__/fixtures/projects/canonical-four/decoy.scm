@@ -1,1 +1,0 @@
-(let ((e (dict :v (car (infer "m" "v")) :o "FAKE"))) (number->string (:o e)))

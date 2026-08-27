@@ -37,7 +37,6 @@ import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 // shared seen map so mutually-cyclic structures terminate.
 // ─────────────────────────────────────────────────────────────────────────────
 
-
 // Source op fns FROM THE CAPABILITY's inlined `symbols` (the bare *_OPS map was
 // inlined into the constructor; the capability default export is the single
 // declaration site). These packs are all the record form of `spec.symbols`.
@@ -49,7 +48,9 @@ const opsOf = (cap: EnvCapability): Record<string, (...a: any[]) => any> =>
     // API. Entries resolving to neither (no `impl`, no `value`) are DROPPED so the
     // record's values are honestly all-functions — the op-helpers below call them as such.
     Object.entries(harvestContracts(cap.spec.symbols)).flatMap(([k, v]) => {
-      const op = (v as { impl?: (...a: any[]) => any; value?: (...a: any[]) => any }).impl ?? (v as { value?: (...a: any[]) => any }).value;
+      const op =
+        (v as { impl?: (...a: any[]) => any; value?: (...a: any[]) => any }).impl ??
+        (v as { value?: (...a: any[]) => any }).value;
       return op ? [[k, op] as const] : [];
     }),
   );
@@ -170,8 +171,7 @@ describe("G2 Pair Setoid", () => {
 // on mutual cycles once it owns the recursion.
 // ─────────────────────────────────────────────────────────────────────────────
 describe("G3 Vector Setoid — cyclic vectors terminate", () => {
-  const vecEq = (v: AVector, other: unknown, seen?: Map<object, Set<object>>): boolean =>
-    v[tf("equals")](other, seen);
+  const vecEq = (v: AVector, other: unknown, seen?: Map<object, Set<object>>): boolean => v[tf("equals")](other, seen);
 
   it("mutually-cyclic vectors a↔b vs c↔d compare equal AND terminate", () => {
     const a = new AVector([new AExact(1)]);
@@ -232,8 +232,8 @@ describe("G4 equal? regression — structuralEqual", () => {
 
   it("Pair & Vector now route through their own Setoid (sanity)", () => {
     // tagless-final/equals is declared directly on AValue subtypes — no cast needed.
-    expect(typeof (new APair(new AExact(1), nil))[tf("equals")]).toBe("function");
-    expect(typeof (new AVector([]))[tf("equals")]).toBe("function");
+    expect(typeof new APair(new AExact(1), nil)[tf("equals")]).toBe("function");
+    expect(typeof new AVector([])[tf("equals")]).toBe("function");
   });
 });
 
@@ -253,7 +253,6 @@ describe("G5 eq?/eqv? landmine — must stay identity/scalar", () => {
   });
 });
 
-
 // ─────────────────────────────────────────────────────────────────────────────
 // G6 — EQUALITY-SUITE CLEANUP (tagless-final wave). Two changes under test:
 //   (1) the duplicate op-helpers `eqv` is collapsed onto the canonical
@@ -272,8 +271,7 @@ describe("G5 eq?/eqv? landmine — must stay identity/scalar", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe("G6 equality-suite cleanup", () => {
   // A distinct-instance symbol of the same name (uninterned provenance clone).
-  const distinctSym = (name: string): ASymbol =>
-    new ASymbol(name).withProvenance(new Set([1]));
+  const distinctSym = (name: string): ASymbol => new ASymbol(name).withProvenance(new Set([1]));
 
   // INVARIANT: eqv? over scalars matches exactness/char/bool identity, and
   // treats distinct-instance same-name symbols and nil clones as eqv.
@@ -305,8 +303,7 @@ describe("G6 equality-suite cleanup", () => {
   });
 
   describe("eq()/eqv() scalar result == the term's own Setoid", () => {
-    const EQM = (x: AValue, y: unknown): boolean =>
-      x[tf("equals")](y);
+    const EQM = (x: AValue, y: unknown): boolean => x[tf("equals")](y);
     const pairs: { name: string; x: AValue; y: AValue }[] = [
       { name: "exact==exact", x: new AExact(1), y: new AExact(1) },
       { name: "exact!=exact", x: new AExact(1), y: new AExact(2) },
@@ -346,10 +343,7 @@ describe("G6 equality-suite cleanup", () => {
 
     it("assv finds a distinct-instance symbol key of the same name", () => {
       const needle = distinctSym("k");
-      const alist = list(
-        new APair(new ASymbol("j"), new AExact(1)),
-        new APair(new ASymbol("k"), new AExact(2)),
-      );
+      const alist = list(new APair(new ASymbol("j"), new AExact(1)), new APair(new ASymbol("k"), new AExact(2)));
       const found = LIST_OPS.assv(needle, alist);
       expect(found).not.toBe(false);
       expect(((found as APair<any, any>).car as ASymbol).__name__).toBe("k");
@@ -400,9 +394,7 @@ describe("G6 equality-suite cleanup", () => {
       // independently pin the Setoid's representation-blindness as DURABLE, general JS-API
       // convenience, not a transitional accommodation. A throw here would contradict those
       // verified-durable siblings — the aspirational door the purge explicitly warns against.
-      expect(
-        (new ABool(true))[tf("equals")](true),
-      ).toBe(true);
+      expect(new ABool(true)[tf("equals")](true)).toBe(true);
     });
   });
 });

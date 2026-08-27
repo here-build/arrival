@@ -18,7 +18,8 @@ const charArb = fc
 
 setoidLaws("SchemeCharacter", {
   arb: charArb,
-  equalClone: (c) => new ACharacter(c.__char__) });
+  equalClone: (c) => new ACharacter(c.__char__),
+});
 ordLaws("SchemeCharacter", charArb);
 
 // Nil: bare singleton + provenance clones — all observably equal.

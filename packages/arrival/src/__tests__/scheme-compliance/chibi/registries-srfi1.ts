@@ -43,13 +43,15 @@ export const MODE_SPLIT_INVENTORY = [
     loose: "nil",
     strict: "throws TypeError (R7RS: () is not a pair)",
     site: "values/primitives/ANil.ts car — runCtx.strict",
-    intentional: true as const },
+    intentional: true as const,
+  },
   {
     form: "(cdr '())",
     loose: "nil",
     strict: "throws TypeError (R7RS: () is not a pair)",
     site: "values/primitives/ANil.ts cdr — runCtx.strict",
-    intentional: true as const },
+    intentional: true as const,
+  },
   // Candidates for later dual-pass rows (documented, not yet dual-registered):
   // { form: "(car #(1 2 3))", loose: "1", strict: "PortabilityError", site: "AVector car strictGate", intentional: true },
   // { form: "(map f #(…))", loose: "list-like", strict: "PortabilityError → vector-map", site: "AVector map strictGate", intentional: true },
@@ -68,8 +70,10 @@ export const EXCLUDED: readonly Exclusion[] = [
   {
     match: {
       kind: "symbols",
-      anyOf: ["values", "call-with-values", "let-values", "let*-values", "define-values", "receive"] },
-    feature: "multiple values (R7RS §6.10 / SRFI-8) — omitted by design (continuation family)" },
+      anyOf: ["values", "call-with-values", "let-values", "let*-values", "define-values", "receive"],
+    },
+    feature: "multiple values (R7RS §6.10 / SRFI-8) — omitted by design (continuation family)",
+  },
   // Official SRFI-1 exports outside arrival's shipped agent-grain subset (src/env/srfi/
   // srfi-1.ts's DOORS map, the "not-in-subset — pure but unshipped" cluster) — a scope
   // boundary the pack's own file header documents ("SCOPE (honest): NOT the full SRFI-1
@@ -88,22 +92,29 @@ export const EXCLUDED: readonly Exclusion[] = [
         "pair-fold-right",
         "pair-for-each",
         "list=",
-      ] },
-    feature: "official SRFI-1 export outside arrival's shipped agent-grain subset (src/env/srfi/srfi-1.ts DOORS) — scope boundary, not a bug" },
+      ],
+    },
+    feature:
+      "official SRFI-1 export outside arrival's shipped agent-grain subset (src/env/srfi/srfi-1.ts DOORS) — scope boundary, not a bug",
+  },
   // lset-* (list-as-set algebra) — its own DOORS cluster (LSET/LSET_BANG reasons),
   // separated from the group above only for a clearer feature string.
   {
     match: {
       kind: "symbols",
-      anyOf: ["lset<=", "lset=", "lset-adjoin", "lset-union", "lset-intersection", "lset-difference", "lset-xor"] },
-    feature: "list-as-set algebra (lset-*) outside the shipped SRFI-1 subset (src/env/srfi/srfi-1.ts DOORS)" },
+      anyOf: ["lset<=", "lset=", "lset-adjoin", "lset-union", "lset-intersection", "lset-difference", "lset-xor"],
+    },
+    feature: "list-as-set algebra (lset-*) outside the shipped SRFI-1 subset (src/env/srfi/srfi-1.ts DOORS)",
+  },
   // Bare `fold` is deliberately NOT bound under this name — reduce (left fold) and
   // fold-right cover the same ground under arrival's own naming (srfi-1.ts's own
   // `fold: symbol.notImplemented` comment). A naming/scope decision, not an omission of the
   // underlying capability.
   {
     match: { kind: "symbols", anyOf: ["fold"] },
-    feature: "bare SRFI-1 fold not bound under this name — arrival binds reduce/fold-right instead (src/env/srfi/srfi-1.ts)" },
+    feature:
+      "bare SRFI-1 fold not bound under this name — arrival binds reduce/fold-right instead (src/env/srfi/srfi-1.ts)",
+  },
   // NOTE: purity mutators (take!/append!/append-map!/vector-set!/set!) are NOT here — they
   // live in EXPECTED_FAILURES below, matching registries.ts's own main-corpus classification
   // (a documented gap with a fix gate, not a permanent design omission).
@@ -129,11 +140,13 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
   {
     match: { kind: "symbols", anyOf: ["take!", "append!", "append-map!", "vector-set!"] },
     reason: "intentional — purity invariant (frozen entities); writing/linear-update methods are doored",
-    gate: "plan-2026-06-11-purity-pass" },
+    gate: "plan-2026-06-11-purity-pass",
+  },
   {
     match: { kind: "symbols", anyOf: ["set!"] },
     reason: "intentional — purity invariant; lexical set! (variable rebinding) is doored",
-    gate: "plan-2026-06-11-purity-pass (r7rs/binding)" },
+    gate: "plan-2026-06-11-purity-pass (r7rs/binding)",
+  },
   // `(car '())` / `(cdr '())` — MIGRATED to dual pass (M5). Pass A runs this corpus with
   // `strict: true` so chibi's `(test-error …)` forms are real green rows; Pass B pins loose
   // nil via golden-loose-car-cdr-empty.test.ts. Do not re-register as EXPECTED_FAILURE.
@@ -149,10 +162,12 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
       kind: "form",
       exact: normalizeText(
         `(test '((a . 3) (b . 7) (c . 1)) (delete-duplicates '((a . 3) (b . 7) (a . 9) (c . 1)) (lambda (x y) (eq? (car x) (car y)))))`,
-      ) },
+      ),
+    },
     reason:
       "arrival's delete-duplicates is single-arg only (src/env/srfi/srfi-1.ts contract: input: [listAlike]) — SRFI-1's optional custom-equality 2nd argument isn't implemented; calling with one throws a zod contract error (\"Too big: expected array to have <=1 items\") rather than falling back to a default compare",
-    gate: "arrival gap — src/env/srfi/srfi-1.ts delete-duplicates lacks the optional comparator SRFI-1 specifies" },
+    gate: "arrival gap — src/env/srfi/srfi-1.ts delete-duplicates lacks the optional comparator SRFI-1 specifies",
+  },
 ];
 
 // ── STAGED — none yet. ───────────────────────────────────────────────────────────────────────

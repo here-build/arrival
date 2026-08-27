@@ -125,7 +125,7 @@ describe("ROW 3 — bake sanity: the pack lowers cleanly and behaves unregressed
 
   it("a representative door (string-set!, the purity omission) still teaches rather than mutating", async () => {
     const env = await freshEnv();
-    await expect(execState('(string-set! (make-string 3 #\\a) 0 #\\b)', { env })).rejects.toThrow();
+    await expect(execState("(string-set! (make-string 3 #\\a) 0 #\\b)", { env })).rejects.toThrow();
   });
 });
 

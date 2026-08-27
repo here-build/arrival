@@ -31,9 +31,7 @@ const escape2 = `(let-syntax ((m (syntax-rules () ((_ x y) '(... (... x y)))))) 
 
 describe("syntax-rules trailing / ellipsis — controls (must stay green)", () => {
   it("proper tail after ellipsis: ((_ x ... a b) …) on (m 1 2 3 4 5)", async () => {
-    const out = await run(
-      `(let-syntax ((m (syntax-rules () ((_ x ... a b) (list (list x ...) a b))))) (m 1 2 3 4 5))`,
-    );
+    const out = await run(`(let-syntax ((m (syntax-rules () ((_ x ... a b) (list (list x ...) a b))))) (m 1 2 3 4 5))`);
     expect(String(out)).toBe("((1 2 3) 4 5)");
   });
 
@@ -57,9 +55,7 @@ describe("syntax-rules trailing-handler hole (improper remainder)", () => {
   });
 
   it("empty ellipsis + exact tail already works: (x ... a b) vs (1 2)", async () => {
-    const out = await run(
-      `(let-syntax ((m (syntax-rules () ((_ x ... a b) (list (list x ...) a b))))) (m 1 2))`,
-    );
+    const out = await run(`(let-syntax ((m (syntax-rules () ((_ x ... a b) (list (list x ...) a b))))) (m 1 2))`);
     expect(String(out)).toBe("(() 1 2)");
   });
 
@@ -86,16 +82,12 @@ describe("syntax-rules ellipsis-escape (quoted (... <template>))", () => {
 describe("syntax-rules (x ... . b) arm", () => {
   // This arm does NOT use the trailing-handler loop (`cdr.cdr` is the symbol `b`).
   it("(x ... . b) vs proper (1 2 3 4 5): x=(1 2 3 4 5), b=() → ((1 2 3 4 5))", async () => {
-    const out = await run(
-      `(let-syntax ((m (syntax-rules () ((_ x ... . b) (cons (list x ...) b))))) (m 1 2 3 4 5))`,
-    );
+    const out = await run(`(let-syntax ((m (syntax-rules () ((_ x ... . b) (cons (list x ...) b))))) (m 1 2 3 4 5))`);
     expect(String(out)).toBe("((1 2 3 4 5))");
   });
 
   it("(x ... . b) vs improper (1 2 3 4 . 5): x=(1 2 3 4), b=5 → ((1 2 3 4) . 5)", async () => {
-    const out = await run(
-      `(let-syntax ((m (syntax-rules () ((_ x ... . b) (cons (list x ...) b))))) (m 1 2 3 4 . 5))`,
-    );
+    const out = await run(`(let-syntax ((m (syntax-rules () ((_ x ... . b) (cons (list x ...) b))))) (m 1 2 3 4 . 5))`);
     expect(String(out)).toBe("((1 2 3 4) . 5)");
   });
 });
@@ -114,11 +106,7 @@ const ESCAPE_0_TEMPLATE = "'(... ...)";
 
 type ExpansionProbe = { bindings: false } | { bindings: true; expansion: string };
 
-async function probeExpansion(
-  patternSrc: string,
-  templateSrc: string,
-  useSite: string,
-): Promise<ExpansionProbe> {
+async function probeExpansion(patternSrc: string, templateSrc: string, useSite: string): Promise<ExpansionProbe> {
   const [pattern] = await parse(patternSrc);
   const [template] = await parse(templateSrc);
   return probeParsed(pattern, template, useSite);

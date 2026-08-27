@@ -23,7 +23,9 @@ import type { APair } from "../../../values/primitives/APair.js";
 
 describe("lists Contract precision — cons: car/cdr are z.schemeValue (SchemeValue), not z.custom<unknown>()", () => {
   test("NEW shape (z.schemeValue x2) decodes [SchemeValue, SchemeValue] — matches cons's real migrated contract exactly", () => {
-    expectTypeOf<DecodedArgs<[typeof z.schemeValue, typeof z.schemeValue]>>().toEqualTypeOf<[SchemeValue, SchemeValue]>();
+    expectTypeOf<DecodedArgs<[typeof z.schemeValue, typeof z.schemeValue]>>().toEqualTypeOf<
+      [SchemeValue, SchemeValue]
+    >();
   });
 });
 
@@ -48,9 +50,7 @@ describe("lists Contract precision — make-list: fill is z.schemeValue.optional
     // limitation, verified directly: even non-generic `string | null` hits it the same way).
     // A runtime-value union (TS infers the type args) doesn't have this problem.
     const makeListOutput = z.union([z.pair, z.nil]);
-    expectTypeOf<DecodedReturn<[typeof makeListOutput]>>().toEqualTypeOf<
-      [SchemeValue, SchemeValue] | null
-    >();
+    expectTypeOf<DecodedReturn<[typeof makeListOutput]>>().toEqualTypeOf<[SchemeValue, SchemeValue] | null>();
   });
 });
 
@@ -79,7 +79,9 @@ describe("lists Contract precision — memq/memv/assq/assv/member/assoc: output 
 describe("lists Contract precision — member/assoc: obj is z.schemeValue (not z.custom<unknown>()); compare's return type is `unknown` (not `boolean`) — matches srfi-1.ts's filter predicate convention and the is_false-guarded actual usage", () => {
   test("NEW compare schema: (a: unknown, b: unknown) => unknown — honest about a boxed-SchemeBool return (the is_false guard exists precisely because this ISN'T always a raw JS boolean)", () => {
     const newCompare = z.custom<(a: unknown, b: unknown) => unknown>().optional();
-    expectTypeOf<DecodedArgs<[typeof newCompare]>>().toEqualTypeOf<[((a: unknown, b: unknown) => unknown) | undefined]>();
+    expectTypeOf<DecodedArgs<[typeof newCompare]>>().toEqualTypeOf<
+      [((a: unknown, b: unknown) => unknown) | undefined]
+    >();
   });
 
   test("NEW full shape: [z.schemeValue, list, compare?] decodes [SchemeValue, APair|null, ((a,b)=>unknown)|undefined] — matches member/assoc's real migrated contract (nil's JS face is null, not ANil — AList is the scheme face)", () => {
@@ -109,7 +111,9 @@ describe("lists Contract precision — list->array: output is z.array(z.schemeVa
 describe("lists Contract precision — flatten: output is z.union([z.pair, z.nil, z.array(z.custom<unknown>())]) — matches `.flatten()`'s own declared TS return type (APair | ANil | unknown[]) exactly, tighter than a bare z.custom<unknown>()", () => {
   test("the union decodes to APair | null | unknown[] (nil's JS face is null now, and this really is the full 3-member union — the prior AList-migration note here was itself wrong: AList is 2-member and this union has 3)", () => {
     const flattenOutput = z.union([z.pair, z.nil, z.array(z.custom<unknown>())]);
-    expectTypeOf<DecodedReturn<[typeof flattenOutput]>>().toEqualTypeOf<[SchemeValue, SchemeValue] | null | unknown[]>();
+    expectTypeOf<DecodedReturn<[typeof flattenOutput]>>().toEqualTypeOf<
+      [SchemeValue, SchemeValue] | null | unknown[]
+    >();
   });
 });
 

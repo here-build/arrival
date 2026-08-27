@@ -81,7 +81,7 @@ imported and executed** to arm the vocabulary (see below).
 
 ## Machine output and run introspection
 
-`run --json` opts stdout's *values* into NDJSON (one JSON value per top-level form, for `| jq` and
+`run --json` opts stdout's _values_ into NDJSON (one JSON value per top-level form, for `| jq` and
 agent consumers) instead of the default s-expr text:
 
 ```
@@ -140,7 +140,7 @@ export default EnvCapability.define("demo/jira", {
   symbols: (symbol, z) => ({
     "jira-ticket": symbol.rosetta`jira-ticket: fetch one ticket by key`(
       { input: [z.string], output: [z.string] },
-      async (key) => `[${key}] Fix the flux capacitor`,   // any real fetch goes here
+      async (key) => `[${key}] Fix the flux capacitor`, // any real fetch goes here
     ),
   }),
 });
@@ -174,7 +174,7 @@ error: Unbound symbol `jira-ticket` Referenced at 1:0 — this program would cra
 Two sharp edges, stated plainly:
 
 - **The `./` prefix is required for local files** (ESM resolution rules): `--with ./jira.mjs` is a path;
-  `--with jira.mjs` is a *bare npm specifier* and fails with `cannot load … Cannot find package`. Paths
+  `--with jira.mjs` is a _bare npm specifier_ and fails with `cannot load … Cannot find package`. Paths
   resolve from the **cwd you invoke from**, not the script's directory.
 - **The module resolves its own imports from its own location** — `jira.mjs` must be able to resolve
   `@inhuman.tools/arrival` from where it sits (a project with the dependency installed). A stray file in a
@@ -184,7 +184,7 @@ Two sharp edges, stated plainly:
 from cwd (`--config <file>` overrides; module specifiers inside resolve relative to the file):
 
 ```json
-{ "capabilities": [{ "module": "./jira.mjs", "config": { "baseUrl": "…" } }], "config": { } }
+{ "capabilities": [{ "module": "./jira.mjs", "config": { "baseUrl": "…" } }], "config": {} }
 ```
 
 Per-entry `config` slices merge into the one shared bag (later entries win key-wise); each capability
@@ -216,15 +216,15 @@ $ printf '(define x 21)\n(* x 2)\n' | arrival repl
 
 ## Exit codes
 
-| code | meaning |
-|---|---|
-| 0 | `run`: executed clean · `check`: no error-tier diagnostics in ANY file · `repl`: clean exit |
-| 1 | `run`: validation or runtime error (doors on stderr) · `check`: at least one file has errors |
-| 2 | usage: missing/extra positionals, unknown command (usage text on stderr) |
+| code | meaning                                                                                      |
+| ---- | -------------------------------------------------------------------------------------------- |
+| 0    | `run`: executed clean · `check`: no error-tier diagnostics in ANY file · `repl`: clean exit  |
+| 1    | `run`: validation or runtime error (doors on stderr) · `check`: at least one file has errors |
+| 2    | usage: missing/extra positionals, unknown command (usage text on stderr)                     |
 
 Diagnostics go to **stdout** for `check` (they are its product, still human-teaching prose — not a
 stable machine format) and to **stderr** for `run` (stdout is reserved for your program's values —
-shell-capture `$(arrival run …)` gets values only). `run --json` opts the *values* into a machine
+shell-capture `$(arrival run …)` gets values only). `run --json` opts the _values_ into a machine
 format (see "Machine output and run introspection" above); `check`'s diagnostic text has no such
 switch yet. Gate CI on exit codes.
 
@@ -232,8 +232,8 @@ switch yet. Gate CI on exit codes.
 
 Every verb runs bounded, tunable by environment variable:
 
-| var | default | meaning |
-|---|---|---|
+| var                     | default  | meaning                               |
+| ----------------------- | -------- | ------------------------------------- |
 | `ARRIVAL_RUN_BUDGET_MS` | `300000` | per-run wall-clock budget (5 minutes) |
 
 A breach is a plain error (exit 1), e.g. `execution budget exceeded (49.97ms)`.

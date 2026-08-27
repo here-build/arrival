@@ -8,7 +8,7 @@
 > borrows on the way in, how a boxed value projects on the way out, how a callable
 > re-enters under region discipline, and where the crossing fails loudly. The laws the
 > code enforces (a borrowed function voids, a store holds one world, a crossing adds
-> its origin but never erases) *fall out of* the crossing's shape rather than being
+> its origin but never erases) _fall out of_ the crossing's shape rather than being
 > bolted onto it.
 
 Section anchors are CAPS so code comments can cite `docs/membrane.md §<ANCHOR>`. Each
@@ -20,8 +20,8 @@ Constitutional ground: `PRINCIPLES.md` §II — **P4** (one representation per s
 converted only at the membrane), **P5** (boundaries fail loudly at the crossing),
 **P6** (effects are region-bound to their invocation), **P7** (the class is the
 representation authority), **P9** (conversions are one-way unless a round-trip is
-promised), **P11** (mint at the edge). This document is the *map of the machine that
-implements those laws*; it links each and elaborates the mechanism, never restating
+promised), **P11** (mint at the edge). This document is the _map of the machine that
+implements those laws_; it links each and elaborates the mechanism, never restating
 the law text. Also `RULINGS.md` **R1** (uniform plain-JS exit, two-tier API) and
 **R9** (lazy egress proxies); `PROVENANCE.md` (the provenance-role vocabulary a
 crossing stamps with); and `environments.md §MEMBRANE-SEAM`, whose pointer-level summary
@@ -30,14 +30,14 @@ of the bake-side seam this document is the destination for — the bake contract
 they defer to (proxies, region discipline, egress projection) are here.
 
 **The guest-language frame (why a membrane at all).** Arrival is a **guest language**;
-JS is merely its *current host* — the relationship is GraalVM polyglot, not
+JS is merely its _current host_ — the relationship is GraalVM polyglot, not
 language-on-top-of-JS. Host and guest are peer worlds meeting only through this uniform
 interop surface, the way a Truffle foreign value answers `InteropLibrary` messages
 instead of exposing raw host mechanics (§HYGIENE, §MEMBER-READ). The operational
 criterion is **portability**: arrival stays architecturally re-hostable onto Python,
 Rust, or Go with no program breaking — re-hosting re-implements the host-side protocol
 translations while the reader, the base stdlib, and every Scheme program move intact.
-The membrane therefore *translates concepts* (application, sequence, member-access,
+The membrane therefore _translates concepts_ (application, sequence, member-access,
 absence), never hands off opaque pointers: `rosetta` is named for Apple's Rosetta —
 binary translation, runs as-if-native — not the Stone.
 
@@ -56,8 +56,8 @@ reaching the generic membrane (`jsToScheme`, `boxing.ts`'s `fromJs`) mints
 (or reuses, per-run) an `ARosettaProcedure` whose apply term IS the reverse membrane:
 scheme args cross scheme→js (default-options `schemeToJs`), the host fn runs, and its
 result — awaited first if it's a `Promise` — crosses js→scheme under the CALLING
-invocation's run (`ACallable.ts`'s `hostFnToCallable`). This is the *inbound* mirror of
-`hostProjectionOf` (§REGION), which already gives the *outbound* leg (a scheme callable
+invocation's run (`ACallable.ts`'s `hostFnToCallable`). This is the _inbound_ mirror of
+`hostProjectionOf` (§REGION), which already gives the _outbound_ leg (a scheme callable
 → a host-callable wrapper) — the callable bifunctor is now complete in both
 directions, not just one.
 
@@ -130,16 +130,16 @@ Totality is carried at the type level, not just at runtime. `jsToScheme<T>` retu
 `AWrap<T>` and `schemeToJs<T>` returns `AUnwrap<T>` (`values/types.ts`) — conditional
 types that mirror the runtime routers arm-for-arm, so a new crossing arm that the type
 forgets stops the type from telling the truth (P3), a compile-time debt not a silent
-one. The two public wrappers each perform the *one* sanctioned narrowing in the
+one. The two public wrappers each perform the _one_ sanctioned narrowing in the
 package: the cast target is exactly the conditional the contract promises, never
 `as any`.
 
 The identity holds on **owned** values, and the qualifier is load-bearing. A native
 container (`AVector`/`APair`/`ADict`) round-trips exactly. A **borrowed** carrier
-(`AJSArray`/`AJSObject`) round-trips to its *source identity* — it crosses back out as
+(`AJSArray`/`AJSObject`) round-trips to its _source identity_ — it crosses back out as
 the very JS object it wrapped, not a copy (§EGRESS, borrowed-carrier lane) — which is
 the identity the bifunctor promises for a value the JS side already owned. Where P9
-*refuses* a round-trip (a dotted pair folds one-way into an array), the bifunctor does
+_refuses_ a round-trip (a dotted pair folds one-way into an array), the bifunctor does
 not claim one; the studio's separate lens is where an exact round-trip is promised and
 tested as a law.
 
@@ -184,9 +184,9 @@ at the boundary.
 symbol and a host `bigint` have no lens at all and door (§INBOUND).
 
 **The freeze contract, stated once.** A borrowed source is frozen
-(`Object.freeze`) on the *first Scheme read* of its wrapper, so a `pure` rosetta — one
-that declares it only transforms its inputs and forwards their provenance — *physically
-cannot* mutate what it borrowed: prevention by construction. The freeze is idempotent
+(`Object.freeze`) on the _first Scheme read_ of its wrapper, so a `pure` rosetta — one
+that declares it only transforms its inputs and forwards their provenance — _physically
+cannot_ mutate what it borrowed: prevention by construction. The freeze is idempotent
 and lazy (a borrowed array's whole contract is that `.length` and `schemeToJs` never
 touch elements, so an eager scan would pay the cost the class exists to avoid), and
 unconditional — there is no per-run opt-out. The contract has one home here; its code
@@ -207,7 +207,7 @@ This is the most-restated invariant in the package; this section is its single h
 egress proxies — never a boxed `AValue`. Every flip between a Scheme entity and a
 native JS entity is TRACKED and EXPLICIT: no site accepts both a monadic `AValue` and a
 primitive JS value for the same slot. This is the only way to keep hygiene when the
-host is simultaneously the interpreter's *runner* and a Graal-style *parallel world* —
+host is simultaneously the interpreter's _runner_ and a Graal-style _parallel world_ —
 the JS side is not below the Scheme side, it is a peer world reached only across a
 tracked seam.
 
@@ -221,21 +221,21 @@ The law is enforced on **two** faces so no violator escapes:
 
 - **At the type level** — `AJSArray.source` is typed `JSWorldArray<S>` and the object
   sibling the same way. A caller that statically holds Scheme values (`SchemeValue[]`,
-  `AValue[]`) collapses to `never` and *fails to compile*; a bare `unknown[]` still
+  `AValue[]`) collapses to `never` and _fails to compile_; a bare `unknown[]` still
   passes, because `unknown` genuinely might be a JS value — nothing better is knowable
   there. A type catches every violator at once, in `tsc`, including the ones no test
   covers. The breakage IS the audit.
 - **At the penetration point** — `AJSArray.boxElement` (the single `invariant`
   guarding the crossing) throws if a raw slot ever holds an `AValue`. The check lives
-  *at the crossing*, O(1), not in the constructor: an O(n) constructor scan would pay
+  _at the crossing_, O(1), not in the constructor: an O(n) constructor scan would pay
   the cost the lazy borrow exists to avoid, and the crossing is the exact moment the
   flip happens.
 
 **`AJSArray.elementAt` / `boxElement` is THE declared penetration** for a borrowed
 array's elements — the one place an element crosses into the Scheme world, owned by the
 class that owns the store (P7). The spine chart `AJSArrayList` (§MEMBER-READ) calls
-*this* rather than owning a second boxing policy: one store, one crossing. A view
-carrying its own boxing is exactly how an earlier cut came to project over an *owned*
+_this_ rather than owning a second boxing policy: one store, one crossing. A view
+carrying its own boxing is exactly how an earlier cut came to project over an _owned_
 `AVector` (whose elements are already boxed) and silently re-stamp every one — caught
 only by the term-carrier law.
 
@@ -253,7 +253,7 @@ its list spine (`adoptSpine`) is an in-plane representation choice, `AValue` in 
 **`jsToScheme` totalizes the JS→Scheme crossing through `INBOUND_CLAIMS`: one DECLARED,
 ORDERED table of `(shape-predicate, boxer)` claims, folded first-claiming-row-wins.**
 The order is semantic law, not import accident, and a registry law test pins it. Where
-outbound dispatch lands on *our* classes (the term lives on the receiver, P7), inbound
+outbound dispatch lands on _our_ classes (the term lives on the receiver, P7), inbound
 dispatch faces JS shapes with no receiver yet — so each claim pairs a predicate with a
 constructor, and the router is the fold.
 
@@ -279,7 +279,7 @@ to completion before phase 2, phase 2 before phase 3's catch-all doors):
    instance (mints/reuses a run-scoped `AOpaqueHandle`, the whiteroom opaque-crossing
    contract). Those owned non-AValue rows MUST precede the branded-instance row:
    `isMarkedInteropPrivate` reads the same `INTEROP_BOUNDARY` stamp they carry
-   for the read-policy walk *on their own class*, so checking brand-first would
+   for the read-policy walk _on their own class_, so checking brand-first would
    mis-mint them as a handle. An ancestor-only stamp is not this row — it is the
    phase-2 inherited-boundary borrow.
 2. **PHASE 2 — the foreign lens table.** Every remaining row is a declared LENS, keyed
@@ -288,7 +288,7 @@ to completion before phase 2, phase 2 before phase 3's catch-all doors):
    containment ladder (one row, Array.isArray checked first — not two order-dependent
    siblings); a host `Error` (borrowed `AJSObject`, `stack` hidden by the interop
    policy — its own declared lens, not a Date/Map-style exotic); a class whose
-   *ancestor* (not its own class) carries an explicit `INTEROP_BOUNDARY` stamp
+   _ancestor_ (not its own class) carries an explicit `INTEROP_BOUNDARY` stamp
    (borrowed `AJSObject` — the stamp is a read-policy stop, not `@arrival.private`;
    own-class stamp stays phase 1's opaque handle); scalars to the
    `boxing.ts` boxer table (`bigint` deliberately excluded — it is phase 3's door,
@@ -316,7 +316,7 @@ because the caller's outer wrapper already carries the stamp — terminating the
 recursion at the cycle instead of spinning an infinite spine.
 
 **THE ADDITIVE LAW.** When a crossing re-stamps an already-provenanced value, it
-*merges* — ADD its origin, NEVER ERASE the value's. A rosetta promises HOLISTIC
+_merges_ — ADD its origin, NEVER ERASE the value's. A rosetta promises HOLISTIC
 causation (input-as-a-whole causes output-as-a-whole, because a JS impl is opaque and
 we cannot prove it did not mix its inputs): that is an EDGE we are entitled to add, not
 a licence to overwrite what the value already knew about itself.
@@ -343,7 +343,7 @@ per-builtin re-stamp.
 
 Egress is where the box layer hands off to the trace (P4): the value-side conversion is
 a total, honest projection with no residue of the world it left, and the provenance
-reading STAYS in the run's trace. Two named projection *modes* exist, and a container
+reading STAYS in the run's trace. Two named projection _modes_ exist, and a container
 never eagerly copies (R9):
 
 - **BARE** — serialization (`arrival/toJS`, no options): a nested callable stringifies
@@ -358,13 +358,13 @@ A third, **GATED** mode (identity **(gate, box)**) serves payload-tier state; it
 is snapshot-scoped, so its proxies are too. Gated is bare-mode by design (payload
 serialization wants print strings) and is never combined with a membrane exit today.
 
-**THE PROJECTION-KEYED IDENTITY LAW.** A single container box has *different*
+**THE PROJECTION-KEYED IDENTITY LAW.** A single container box has _different_
 observable projections under bare vs membrane vs gated egress, so proxy identity is
 **per projection, not one global slot**. The singleton/aliasing guarantee (two
 references to one list stay one array) holds WITHIN a slot; cross-slot identity is
 incoherent by construction once the projection depends on options and scope. The
-*types* declaring this law live in `values/types.ts` (`EgressMode`, `WrapperKey`,
-`MembraneExit`); the law is *keyed and enforced* across four sites, named once here so
+_types_ declaring this law live in `values/types.ts` (`EgressMode`, `WrapperKey`,
+`MembraneExit`); the law is _keyed and enforced_ across four sites, named once here so
 no reader hunts them:
 
 - `membrane/region-scope.ts` **owns** the two scope-bound caches
@@ -374,11 +374,11 @@ no reader hunts them:
   scope's cache (`membraneSlot`);
 - `membrane/rosetta.ts` **hands the pinned scope's cache in** (`egressAValue`) and keys
   the callable wrapper (`callableToHostFn`, by `EgressMode`);
-- `common/scheme-zod.ts` keys the *typed* callable wrapper (`z.procedure`, by
+- `common/scheme-zod.ts` keys the _typed_ callable wrapper (`z.procedure`, by
   `"typed"`) into the same scope cache.
 
 Why scope-bound and not (box, mode)-forever: a forever cache would resurrect a proxy
-pinned to a CLOSED (or DETACHED) scope for a *later* invocation — a spurious escape door
+pinned to a CLOSED (or DETACHED) scope for a _later_ invocation — a spurious escape door
 — or serve a DETACHED-pinned proxy into a live crossing's slots — discipline bypass by
 cache pollution.
 
@@ -391,11 +391,11 @@ break it.
 **The projection is one-way and read-only.** An egressed container is a projection of
 an immutable Scheme value, not a mailbox back into it — the write family
 (`set`/`delete`/`defineProperty`/`setPrototypeOf`) throws a teaching door whose fix is
-literally *"build the changed value on the Scheme side and egress that."*
+literally _"build the changed value on the Scheme side and egress that."_
 
 **Two mechanics keep the lazy proxy observationally plain:**
 
-- **register-before-materialize** — the proxy is placed in its cache slot *before* any
+- **register-before-materialize** — the proxy is placed in its cache slot _before_ any
   trap can run (built, set, returned; traps fire only on reads after return), so a
   cyclic reach-back resolves to the already-registered slot structurally, with no
   recursion. `JSON.stringify` on such a value then throws the same `TypeError` a
@@ -404,7 +404,7 @@ literally *"build the changed value on the Scheme side and egress that."*
   as a lazy pending cell (`pending-entry.ts`): the first read mints one settle chain
   (cached, so concurrent readers share it), settlement replaces the slot with the
   settled box, later reads are synchronous. A raw `Promise` never enters Scheme space
-  through a container read; only a *bare* Promise crossing `jsToScheme` directly doors
+  through a container read; only a _bare_ Promise crossing `jsToScheme` directly doors
   (§DOORS).
 
 **Register-before-materialize before the crossing runs:** every rosetta encode
@@ -452,7 +452,7 @@ seals nothing.
 ## REGION — reverse-crossed callables are bound to their exporting invocation
 
 A reverse lambda — a Scheme callable handed to host JS via `schemeToJs`'s `ACallable`
-branch or `z.procedure`'s typed decode — carries the ability to *re-enter* the two-layer
+branch or `z.procedure`'s typed decode — carries the ability to _re-enter_ the two-layer
 execution. P6 requires it to re-enter inside a real frame; the mechanism is the
 `RegionScope` token.
 
@@ -469,7 +469,7 @@ scope it was minted against). Four functions operate it:
 - `closeRegionScope` — called when the exporting invocation settles (rule 2).
 
 They enforce **two teaching doors** and two non-door rules: `RegionEscapeError` (rule 1
-— a call *after* the exporting invocation returned; the wrapper closed over a scope now
+— a call _after_ the exporting invocation returned; the wrapper closed over a scope now
 flagged `open: false`), `RegionIncompleteError` (rule 2 — the invocation returns with
 reverse calls still in flight), plus in-flight `pending` tracking (rule 3) and an
 abort-signal race derived from the run (rule 4). `reconstructRegionScope` is the
@@ -483,7 +483,7 @@ carrying the run's cache/effects/reads. A lambda calling a sink verb therefore h
 effect-burst arm (`this.runCtx.effects`) instead of firing inline. `CONSTANT_CTX` as
 the answer to "whose invocation is this?" is the provenance interpreter executing
 against a fake frame — the `DETACHED_SCOPE` degradation exists precisely for the
-*absence* of a real scope (a trace/display projection, or a unit test calling
+_absence_ of a real scope (a trace/display projection, or a unit test calling
 `.parse()` directly), never as a target.
 
 **Why an ambient holder.** `z.procedure`'s decode is a plain zod-codec transform with
@@ -501,12 +501,12 @@ symbol never share a wrapper. The cache is two-level (`WrapperKey`): two indepen
 factories build over it — `callableToHostFn` (the untyped passthrough, keyed by
 `EgressMode` since its projection varies with `RosettaOptions`) and `z.procedure`'s
 typed decode (keyed `"typed"`). The pre-split single key let whichever family crossed a
-callable *first* serve its wrapper to the other — the same defect class the
+callable _first_ serve its wrapper to the other — the same defect class the
 (box, mode, scope) container law fixes, one level down.
 
 **The `z.dynamic`-after-await burst-bypass hazard, and the bake-side gate.** A callable
-arriving through a `z.dynamic` slot is *undeclared*: `z.dynamic` performs no transform, so
-the raw callable is marshaled by the impl itself — possibly *after* the impl's first
+arriving through a `z.dynamic` slot is _undeclared_: `z.dynamic` performs no transform, so
+the raw callable is marshaled by the impl itself — possibly _after_ the impl's first
 `await`, by which point `withRegionScope`'s synchronous save/restore has already
 reverted the ambient scope. A reverse call minted from that stale marshal binds
 `DETACHED_SCOPE`/`CONSTANT_CTX`, reopening exactly the burst-bypass hole region
@@ -539,27 +539,27 @@ Every membrane door refuses a violation at the moment of crossing (P5), with a m
 that teaches — never tolerated inward to fail three calls later as a weird problem. The
 doors, by crossing:
 
-| Door | Fires when | Class |
-|---|---|---|
-| Redundant crossing (strict one-way) | a raw JS value reaches `toJS` — the caller is confused about which side it stands on | `RedundantCrossingError` |
-| Unrecognized (P5 terminal) | `schemeToJs` reaches a boxed shape with no `arrival/toJS` branch — a silent return would leak internal representation | `UnrecognizedCrossingError` |
-| Async | a *bare* `Promise` reaches `jsToScheme` directly (every sanctioned path settles first; a Promise inside a structure settles lazily) | `AsyncCrossingError` |
-| No lens (the binary membrane, §INBOUND phase 3) | a unique JS symbol, or an unbranded/exotic class instance, has no defined crossing into the algebra — names its cure (register the symbol; brand the class `@arrival.private`, or hand plain data) | `NoLensError` |
-| Region escape / incomplete | a reverse lambda outlives its invocation, or an invocation returns with calls in flight (§REGION) | `RegionEscapeError` / `RegionIncompleteError` |
-| Raw crossing | a raw JS scalar surfaces on an env read — a writer bypassed the storage membrane (`environments.md §HERMETIC`) | `RawCrossingError` |
-| `z.dynamic` callable | a callable crosses a `z.dynamic` slot (§REGION) | teaching throw |
+| Door                                            | Fires when                                                                                                                                                                                         | Class                                         |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| Redundant crossing (strict one-way)             | a raw JS value reaches `toJS` — the caller is confused about which side it stands on                                                                                                               | `RedundantCrossingError`                      |
+| Unrecognized (P5 terminal)                      | `schemeToJs` reaches a boxed shape with no `arrival/toJS` branch — a silent return would leak internal representation                                                                              | `UnrecognizedCrossingError`                   |
+| Async                                           | a _bare_ `Promise` reaches `jsToScheme` directly (every sanctioned path settles first; a Promise inside a structure settles lazily)                                                                | `AsyncCrossingError`                          |
+| No lens (the binary membrane, §INBOUND phase 3) | a unique JS symbol, or an unbranded/exotic class instance, has no defined crossing into the algebra — names its cure (register the symbol; brand the class `@arrival.private`, or hand plain data) | `NoLensError`                                 |
+| Region escape / incomplete                      | a reverse lambda outlives its invocation, or an invocation returns with calls in flight (§REGION)                                                                                                  | `RegionEscapeError` / `RegionIncompleteError` |
+| Raw crossing                                    | a raw JS scalar surfaces on an env read — a writer bypassed the storage membrane (`environments.md §HERMETIC`)                                                                                     | `RawCrossingError`                            |
+| `z.dynamic` callable                            | a callable crosses a `z.dynamic` slot (§REGION)                                                                                                                                                    | teaching throw                                |
 
-**Error-to-host is a crossing, not a door.** An `R7RSError` produced *as a value*
+**Error-to-host is a crossing, not a door.** An `R7RSError` produced _as a value_
 (a guard's `else` returning it, `raise-continuable` resuming with it) exits as a
 same-class host `Error`: message preserved, original stack carried over, **irritants
 crossed elementwise** through the caller's own exit fn. `R7RSError` is deliberately a
 host `Error` subclass, NOT an `AValue` box, so the strict-exit gate cannot carry it —
 this arm is its crossing, shared by `schemeToJsImpl` and `membrane.toJS` so the two
-exits cannot drift. A *raised* error never reaches this arm; it takes the throw path.
+exits cannot drift. A _raised_ error never reaches this arm; it takes the throw path.
 
 **Membrane-warn is bounded, per-crossing not per-value.** A non-portable host value
 materializing to `#void` emits a teaching warning — but only the first few times per
-*distinct shape*, then one suppression line, then silence. The fact belongs to the
+_distinct shape_, then one suppression line, then silence. The fact belongs to the
 RUN, not to each value that crosses: a large payload whose values all trip the same
 warning would otherwise emit hundreds of thousands of identical lines and OOM the
 process, turning an O(1) diagnostic into an O(n) one on the hot path. Bounded by the
@@ -617,9 +617,9 @@ Three mechanisms sit near the membrane and must be kept off it:
 1. **Spine adoption is an in-plane representation choice.** Projecting a borrowed
    `AJSArray` onto its list spine (`AJSArrayList` via `adoptSpine`) is `AValue` in,
    `AValue` out — the SAME backing store, the SAME provenance, O(1). It honors a
-   `z.listAlike` contract slot by handing the impl a real `APair` subclass *before* the
+   `z.listAlike` contract slot by handing the impl a real `APair` subclass _before_ the
    impl runs (several native impls field-read `.car`/`.cdr` directly). It must never be
-   routed through `z.decode`, the *plane* crossing (scheme → JS): three earlier attempts
+   routed through `z.decode`, the _plane_ crossing (scheme → JS): three earlier attempts
    died on exactly that confusion — a `z.codec` on the list schema computed an eager
    `APair` copy on every call and discarded it while the raw array sailed through and
    hung the body. Adoption is a chart choice on the Scheme plane, not a crossing.
@@ -629,11 +629,11 @@ Three mechanisms sit near the membrane and must be kept off it:
    crossing that neither MINTS nor STAMPS — cone-identical to `pipe`, "dedented" so the
    box layer treats it as pass-through. No declaration marks it today (a graph-layer
    target, unreachable in the live classifier); it is listed here so a reader does not
-   mistake the *word* "crossing" in its definition for a provenance-bearing event.
+   mistake the _word_ "crossing" in its definition for a provenance-bearing event.
 
-3. **The terminology fence: "egress" means two unrelated things.** In *this* document
+3. **The terminology fence: "egress" means two unrelated things.** In _this_ document
    "egress" is the membrane's Scheme → JS exit. In `provenance/*` "egress" is the
-   provenance-GRAPH concept — a region/track/wire's *output port* (`egress(Tᵢ)`,
+   provenance-GRAPH concept — a region/track/wire's _output port_ (`egress(Tᵢ)`,
    `graph.egress`, "a sink is a port with no egress wire", `cone(egress)`). They are
    unrelated: one is a value leaving the interpreter's world, the other is a node in the
    lineage plane. Named explicitly so a reader or a search tool never conflates the

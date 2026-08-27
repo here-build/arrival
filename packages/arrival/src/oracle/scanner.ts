@@ -109,7 +109,7 @@ export function scan(src: string): ScanResult {
   const finishToken = () => {
     if (!midToken) return;
     midToken = false;
-    const top = stack[stack.length - 1];
+    const top = stack.at(-1);
     if (top) {
       if (top.elems === 0) top.head = cur; // first element is the operator
       top.elems++;
@@ -165,7 +165,7 @@ export function scan(src: string): ScanResult {
       // as the reference does — a no-op increment with no live frame, an element with one).
       const quotePrefix = midToken && QUOTE_PREFIXES.has(cur);
       finishToken();
-      const parent = stack[stack.length - 1];
+      const parent = stack.at(-1);
       // A child form is data (quoted) if a quote prefix precedes it, OR its parent is already
       // quoted, OR its parent's head is `quote`/`quasiquote` (its operands are data).
       const quoted =
@@ -179,7 +179,7 @@ export function scan(src: string): ScanResult {
       depth--;
       if (depth < min) min = depth;
       stack.pop();
-      const parent = stack[stack.length - 1];
+      const parent = stack.at(-1);
       if (parent) parent.elems++; // a finished sub-form is one element of its parent
       continue;
     }
@@ -195,7 +195,7 @@ export function scan(src: string): ScanResult {
   }
 
   const inText = inString || inComment || blockComment > 0;
-  const top = stack[stack.length - 1];
+  const top = stack.at(-1);
 
   let position: CursorPosition;
   if (depth === 0) position = "top";
@@ -224,7 +224,7 @@ function classifyForm(
   position: CursorPosition,
   curToken: string,
 ): { formKind: FormKind; strict: boolean } {
-  const top = stack[stack.length - 1];
+  const top = stack.at(-1);
   if (!top) {
     // Top level: a form completed here is inevitable ⇒ strict.
     return { formKind: "top", strict: true };

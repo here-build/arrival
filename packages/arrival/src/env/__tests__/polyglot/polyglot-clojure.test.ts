@@ -1,7 +1,11 @@
 // polyglot-clojure pack — assemble onto a real env, then RUN the threading
 // macros and the Clojure stdlib completion. Split out of polyglot.test.ts (V,
 // 2026-07-10 dialect split — see polyglot.ts's header for the full rationale).
-import { execState as bareExecState, execStateOverFrame, type ExecOptionsOverFrame } from "../../../eval/generator-exec.js";
+import {
+  execState as bareExecState,
+  execStateOverFrame,
+  type ExecOptionsOverFrame,
+} from "../../../eval/generator-exec.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
 import { applyCapability } from "../../../__tests__/_fresh-env.js";
@@ -43,7 +47,15 @@ describe("@inhuman.tools/arrival/polyglot-clojure", () => {
   it("deps reach scheme/polyglot (core), srfi-1, and the R7RS natives this pack's bodies use", () => {
     const names = (polyglotClojure.spec.deps ?? []).map((d) => d.name);
     expect(names).toEqual(
-      expect.arrayContaining(["scheme/polyglot", "scheme/srfi-1", "scheme/equality", "scheme/numeric", "scheme/strings", "scheme/vectors", "scheme/lists"]),
+      expect.arrayContaining([
+        "scheme/polyglot",
+        "scheme/srfi-1",
+        "scheme/equality",
+        "scheme/numeric",
+        "scheme/strings",
+        "scheme/vectors",
+        "scheme/lists",
+      ]),
     );
   });
 });

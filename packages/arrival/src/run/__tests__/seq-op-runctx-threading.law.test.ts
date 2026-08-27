@@ -32,7 +32,9 @@ function makeProbe(): { fn: ANativeProcedure; observed: RunContext[] } {
       impl: (args, callCtx) => {
         observed.push(callCtx.runCtx);
         return args[0] as SchemeValue;
-      } }) };
+      },
+    }),
+  };
 }
 
 const one = new AExact(1);

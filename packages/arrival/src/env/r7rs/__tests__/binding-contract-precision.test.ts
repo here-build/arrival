@@ -27,7 +27,9 @@ describe("scheme/r7rs/binding — multi-return + set! are purity doors (R7RS imp
     for (const name of ["values", "call-with-values", "let-values", "let*-values", "define-values"] as const) {
       const def = symbols[name];
       if (def?.kind !== "door") throw new Error(`expected door: ${name}`);
-      expect(def.reason).toMatch(/multiple-value returns are omitted from arrival by design|continuation arity|call\/cc/);
+      expect(def.reason).toMatch(
+        /multiple-value returns are omitted from arrival by design|continuation arity|call\/cc/,
+      );
     }
   });
 });

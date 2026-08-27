@@ -16,7 +16,13 @@ import { CONSTANT_CTX, RunContext } from "../RunContext.js";
 import { MemoryRunCache } from "../run-cache.js";
 import { MemoryEffectLog } from "../effect-log.js";
 import { testCallCtx } from "../CallCtx.js";
-import { MemoryResourcePathLog, ResourcePathConflictError, ResourcePathProducerError, applyResourcePathCqs, type ResourcePathLog } from "../resource-paths.js";
+import {
+  MemoryResourcePathLog,
+  ResourcePathConflictError,
+  ResourcePathProducerError,
+  applyResourcePathCqs,
+  type ResourcePathLog,
+} from "../resource-paths.js";
 import type { ResourcePath } from "../path-algebra.js";
 
 // ── Fake capability family (SUITE §Fake capability family) ───────────────────
@@ -195,10 +201,7 @@ function makePathCap(spies: SpyMap, opts?: { pathFnThrow?: "queries" | "effects"
       // Decode non-trivial: raw id "raw:42" → decoded segment "42"
       "read-decoded": symbol.rosetta`read-decoded: `(
         {
-          input: [
-            z.string,
-            z.string.transform((s) => (s.startsWith("raw:") ? s.slice(4) : s)),
-          ],
+          input: [z.string, z.string.transform((s) => (s.startsWith("raw:") ? s.slice(4) : s))],
           output: [z.string],
           queries: q("read-decoded", (d, id) => [["test", d, id]]),
         },
@@ -209,10 +212,7 @@ function makePathCap(spies: SpyMap, opts?: { pathFnThrow?: "queries" | "effects"
       ),
       "write-decoded": symbol.rosetta`write-decoded: `(
         {
-          input: [
-            z.string,
-            z.string.transform((s) => (s.startsWith("raw:") ? s.slice(4) : s)),
-          ],
+          input: [z.string, z.string.transform((s) => (s.startsWith("raw:") ? s.slice(4) : s))],
           output: [z.undefinedResult],
           effects: e("write-decoded", (d, id) => [["test", d, id]]),
         },
@@ -281,10 +281,7 @@ describe("resource-path CQS door — core positives", () => {
 
   it("P-I4b — use query result after effects (no second read)", async () => {
     const spies: SpyMap = {};
-    const { result } = await run(
-      '(define r (read "a" "1")) (write "a" "1") r',
-      spies,
-    );
+    const { result } = await run('(define r (read "a" "1")) (write "a" "1") r', spies);
     expect(spies.read).toBe(1);
     expect(spies.write).toBe(1);
     // last form is held binding from first read — value is domain:id
@@ -300,10 +297,7 @@ describe("resource-path CQS door — core positives", () => {
 
   it("P-LANE — multi-domain interleave; A post-effect while B queries", async () => {
     const spies: SpyMap = {};
-    await run(
-      '(write "A" "1") (read "B" "1") (write "B" "1") (read "C" "9") (read "B" "2")',
-      spies,
-    );
+    await run('(write "A" "1") (read "B" "1") (write "B" "1") (read "C" "9") (read "B" "2")', spies);
     expect(spies.write).toBe(2);
     expect(spies.read).toBe(3);
   });
@@ -644,9 +638,7 @@ describe("resource-path CQS door — 3a-complete", () => {
     const spies: SpyMap = {};
     const { cap, pathLog } = makePathCap(spies);
     const runCtx = new RunContext({ resourcePaths: pathLog });
-    await expect(
-      exec('(fail-impl "a")', { capabilities: [cap], runCtx }),
-    ).rejects.toThrow(/plain-impl-boom/);
+    await expect(exec('(fail-impl "a")', { capabilities: [cap], runCtx })).rejects.toThrow(/plain-impl-boom/);
     expect(spies["fail-impl"]).toBe(1);
     expect(pathLog.effectPaths).toContainEqual(["test", "a"]);
     // bare E→Q legal under temporal immutability
@@ -732,9 +724,9 @@ describe("resource-path CQS — producer shape + strictCQSstrings", () => {
         ),
       }),
     });
-    await expect(
-      exec('(write-num "a")', { capabilities: [cap], strictCQSstrings: true }),
-    ).rejects.toBeInstanceOf(ResourcePathProducerError);
+    await expect(exec('(write-num "a")', { capabilities: [cap], strictCQSstrings: true })).rejects.toBeInstanceOf(
+      ResourcePathProducerError,
+    );
     expect(fires).toBe(0);
   });
 

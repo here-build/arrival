@@ -22,7 +22,8 @@ const TYPED: HarvestedPrelude = {
     "declare const fx_search: (a: { query: string; max_results?: number }) => void;",
     "declare const config: { count: number };",
   ].join("\n"),
-  members: ["add2", "fx_search", "list", "config"] };
+  members: ["add2", "fx_search", "list", "config"],
+};
 
 const lens = createDiagnoseLens(TYPED);
 
@@ -53,7 +54,7 @@ describe("createDiagnoseLens — diagnostic mechanics over a typed prelude", () 
   });
 
   it("2551 (typo'd property READ, bracket access — lower.ts's ONLY read shape): extracts a bare (unquoted) propertyName + candidates", () => {
-    const { diagnostics } = lens.diagnose('(:coun config)', [], { codes: [2551] });
+    const { diagnostics } = lens.diagnose("(:coun config)", [], { codes: [2551] });
     const d = diagnostics.find((x) => x.code === 2551);
     expect(d).toBeDefined();
     expect(d!.propertyName).toBe("coun"); // bare — no surrounding quotes from the string-literal node

@@ -81,7 +81,11 @@ const runOne = async (code: string, bindings: Record<string, unknown>): Promise<
   try {
     const { values } = await Promise.race([
       execState(code, {
-        env: inferenceEnv.child("listalike-divergence", Object.fromEntries(Object.entries(bindings).map(([k, v]) => [k, jsToScheme(CONSTANT_CTX, v)]))) }),
+        env: inferenceEnv.child(
+          "listalike-divergence",
+          Object.fromEntries(Object.entries(bindings).map(([k, v]) => [k, jsToScheme(CONSTANT_CTX, v)])),
+        ),
+      }),
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error("__DEADLINE__")), DEADLINE_MS)),
     ]);
     return `OK ${JSON.stringify(toJS(values[0], {}))}`;
@@ -103,7 +107,8 @@ const asPairListLiteral = (xs: readonly unknown[]): string =>
  *  and only what an MCP tool returning a JSON array hands the model. That receiver is the point. */
 const bothCharts = async (code: string, fixture: readonly unknown[]) => ({
   viaToolArray: await runOne(code, { xs: fixture }),
-  viaPairList: await runOne(code.replace(/\bxs\b/g, asPairListLiteral(fixture)), {}) });
+  viaPairList: await runOne(code.replace(/\bxs\b/g, asPairListLiteral(fixture)), {}),
+});
 
 /** [verb, program over `xs`, fixture] — the fixture is chosen so the verb WALKS TO EXHAUSTION or
  *  MATCHES, never short-circuits on the head. (Short-circuiting fixtures are how both prior false
@@ -178,7 +183,7 @@ describe("LAW: no list verb may distinguish a tool array from a pair-list", () =
 // in the same file, and whose audit swept its own call sites without ever turning to look at its
 // neighbour. Pinned here so the class, not just the instance, stays closed.
 describe("LAW: a coercion helper refuses, it never invents (charValue — B1's sibling)", () => {
-  it("(list->string '(1 2)) must NOT silently answer \"\"", { timeout: DEADLINE_MS }, async () => {
+  it('(list->string \'(1 2)) must NOT silently answer ""', { timeout: DEADLINE_MS }, async () => {
     const r = await runOne("(list->string '(1 2))", {});
     expect(r).not.toBe('OK ""');
     expect(r.startsWith("THREW")).toBe(true);
@@ -207,7 +212,11 @@ describe("LAW: a coercion helper refuses, it never invents (charValue — B1's s
 // production cannot construct. The one arrangement under which that decode succeeded was the one
 // arrangement that cannot exist. Pinned here so the two arms can never drift apart again.
 const VECTOR_CASES: readonly (readonly [string, string, readonly unknown[]])[] = [
-  ["vector-fold (symbol.define + z.vector — the family that threw)", "(vector-fold (lambda (acc e) (+ acc e)) 0 xs)", [1, 2, 3]],
+  [
+    "vector-fold (symbol.define + z.vector — the family that threw)",
+    "(vector-fold (lambda (acc e) (+ acc e)) 0 xs)",
+    [1, 2, 3],
+  ],
   ["vector-fold-right", "(vector-fold-right (lambda (acc e) (+ acc e)) 0 xs)", [1, 2, 3]],
   ["vector-count", "(vector-count even? xs)", [1, 2, 3, 4]],
   ["vector-index", "(vector-index even? xs)", [1, 2, 3]],

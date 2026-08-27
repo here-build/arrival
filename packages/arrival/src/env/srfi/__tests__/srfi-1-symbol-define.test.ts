@@ -106,7 +106,9 @@ describe("scheme/srfi-1 — behavior equivalence (§4.2 gate), weighted toward t
     // '() passes the listAlike boundary DELIBERATELY so %list-nth's message stays
     // the error surface (srfi-1.ts's first…tenth comment) — not a zod rejection.
     await expect(execStateOverFrame("(first '())", { env })).rejects.toThrow(/first: list has no elements/);
-    await expect(execStateOverFrame("(third '(1 2))", { env })).rejects.toThrow(/third: list has fewer than 3 elements/);
+    await expect(execStateOverFrame("(third '(1 2))", { env })).rejects.toThrow(
+      /third: list has fewer than 3 elements/,
+    );
   });
 
   it("any? / every? / some / %any-null? (named-let normalized) — HONEST #t/#f results, vacuous truths, parallel lists (2026-07-13 ruling: bare any/every are SRFI value-returning now — see the dedicated describe block below)", async () => {
@@ -288,7 +290,9 @@ describe("scheme/srfi-1 — the §2.1 bake FV law passes AS MIGRATED", () => {
           symbol.define`bad-span: reproduces the pre-migration srfi-1 bug (free values reference, no declared dep on scheme/binding)`(
             { input: [z.lambda, z.union([z.pair, z.nil])], output: [z.schemeValue] },
             `(lambda (pred xs) (values xs xs))`,
-          ) }) });
+          ),
+      }),
+    });
     await expect(buildVocabulary([undeclaredCap], undefined, evalScheme)).rejects.toThrow(DefineLocalityError);
   });
 });

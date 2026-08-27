@@ -39,7 +39,8 @@ import {
   isEagerProvenanceOracleEnabled,
   setEagerProvenanceOracleEnabled,
   withInputProvenance,
-  mintVerdict } from "../../values/op-helpers.js";
+  mintVerdict,
+} from "../../values/op-helpers.js";
 import { schemeTrue, schemeFalse } from "../../values/primitives/ABool.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { fromJs } from "../../membrane/boxing.js";
@@ -48,8 +49,7 @@ import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { jsToScheme } from "../../membrane/rosetta.js";
 
-const stamped = (v: number, id: number): AValue =>
-  fromJs(CONSTANT_CTX, v, new Set([id])) as AValue;
+const stamped = (v: number, id: number): AValue => fromJs(CONSTANT_CTX, v, new Set([id])) as AValue;
 
 // Restore to the CURRENT default (OFF, Q20b) after every test — never hardcode the
 // pre-Q20b value here, or a future default change silently desyncs this file from the
@@ -106,9 +106,7 @@ describe("Q20b — eager-oracle demotion (@ledger: Q20b — LANDED)", () => {
     // Under Q20b's default, the merge, the nested arithmetic, AND the string collapse
     // all accumulate nothing: the whole pipeline (parser → evaluator → op-helpers) never
     // touches the accumulation branch.
-    const [result] = (
-      await execState(`(string-append "sum=" (number->string (+ a (* b 2))))`, { env })
-    ).values;
+    const [result] = (await execState(`(string-append "sum=" (number->string (+ a (* b 2))))`, { env })).values;
     expect(result).toBeInstanceOf(AValue);
     expect((result as AValue).provenance.size).toBe(0);
   });

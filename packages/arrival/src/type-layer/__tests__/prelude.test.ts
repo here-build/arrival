@@ -16,11 +16,14 @@ function compileErrors(source: string): string[] {
     target: ts.ScriptTarget.ES2022,
     lib: ["lib.es2022.d.ts"],
     noEmit: true,
-    skipLibCheck: true };
+    skipLibCheck: true,
+  };
   const host = ts.createCompilerHost(options);
   const getSourceFile = host.getSourceFile.bind(host);
   host.getSourceFile = (name, lang, onError, shouldCreate) =>
-    name === fileName ? ts.createSourceFile(name, source, lang, true) : getSourceFile(name, lang, onError, shouldCreate);
+    name === fileName
+      ? ts.createSourceFile(name, source, lang, true)
+      : getSourceFile(name, lang, onError, shouldCreate);
   const fileExists = host.fileExists.bind(host);
   host.fileExists = (name) => name === fileName || fileExists(name);
   const readFile = host.readFile.bind(host);

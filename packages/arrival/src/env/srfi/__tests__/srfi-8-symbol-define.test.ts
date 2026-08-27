@@ -3,7 +3,12 @@
 import { describe, expect, it } from "vitest";
 import type { AEntity } from "../../../common/symbols/_bake.js";
 import { exec, execInFrame } from "../../../eval/generator-exec.js";
-import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError, PurityError } from "../../../errors.js";
+import {
+  DefineForwardReferenceError,
+  DefineLocalityError,
+  ProvenanceRoleShapeError,
+  PurityError,
+} from "../../../errors.js";
 import srfi8 from "../srfi-8.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 import { DoorProcedure } from "../../../values/primitives/ACallable.js";
@@ -47,6 +52,8 @@ describe("scheme/srfi-8 — doors-only (all-or-nothing multi-return ban)", () =>
     expect(caught).toBeDefined();
     const purity = caught instanceof PurityError || (caught as { cause?: unknown })?.cause instanceof PurityError;
     expect(purity).toBe(true);
-    expect((caught as Error).message).toMatch(/multiple-value returns are omitted from arrival by design|continuation arity/);
+    expect((caught as Error).message).toMatch(
+      /multiple-value returns are omitted from arrival by design|continuation arity/,
+    );
   });
 });

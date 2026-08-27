@@ -15,7 +15,7 @@
 //     compiler at runtime (createSchemeLanguageServiceCore uses `ts`); it is a
 //     regular dependency the consumer's bundler resolves.
 //   • `typescript/lib/*.d.ts?raw` TEXT must inline — that is the whole point.
-//   • workspace deps (@inhuman.tools/arrival-sugarcoat, @inhuman.tools/arrival-mercury)
+//   • workspace deps (@inhuman.tools/arrival-sugarcoat, @inhuman.tools/arrival-types-bridge)
 //     stay external like any bare import.
 //   • relative modules (service-core, ls-server, …) bundle in; browser and
 //     worker share hash-named chunks under dist/chunks/ (no collision with the
@@ -41,8 +41,7 @@ export default defineConfig({
     rollupOptions: {
       // Bare imports stay external — EXCEPT `?raw` asset text, which must
       // inline. Virtual modules (\0-prefixed) are Vite-internal, never external.
-      external: (id) =>
-        !id.includes("?raw") && !id.startsWith(".") && !id.startsWith("\0") && !path.isAbsolute(id),
+      external: (id) => !id.includes("?raw") && !id.startsWith(".") && !id.startsWith("\0") && !path.isAbsolute(id),
       output: {
         entryFileNames: "[name].js",
         chunkFileNames: "chunks/[name]-[hash].js",

@@ -52,8 +52,7 @@ import polyglotLisp from "../polyglot/polyglot-lisp.js";
 import polyglotRacket from "../polyglot/polyglot-racket.js";
 
 /** Mirrors `_fresh-env.ts` evalScheme for standalone vocabulary builds. */
-const evalScheme = (env: unknown, src: unknown): unknown =>
-  execInFrame(src as string, env as ResolvingAmbient);
+const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
 
 /**
  * Union of:
@@ -170,8 +169,9 @@ describe("migration-receipt filename gate", () => {
     const missing = [...ALLOWED_MIGRATION_RECEIPTS].filter((rel) => !found.includes(rel));
     expect(unexpected, `new migration receipts (not on allowlist): ${unexpected.join(", ")}`).toEqual([]);
     // Allowlist shrink is intentional on retire — missing allowlist entries mean update the set.
-    expect(missing, `allowlist stale (file gone — remove from ALLOWED_MIGRATION_RECEIPTS): ${missing.join(", ")}`).toEqual(
-      [],
-    );
+    expect(
+      missing,
+      `allowlist stale (file gone — remove from ALLOWED_MIGRATION_RECEIPTS): ${missing.join(", ")}`,
+    ).toEqual([]);
   });
 });

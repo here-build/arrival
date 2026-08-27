@@ -19,23 +19,38 @@ import { functorLaws } from "./algebra-laws.js";
 import { AExact } from "../AExact.js";
 import { tf, type TaglessOp } from "../../tagless-final.js";
 import type { AList, AListAlike, SchemeValue } from "../../types.js";
-import { unaryContour, filterContour, reduceContour, idContour, keepAllContour } from "../../../__tests__/_contour-callback.js";
-
+import {
+  unaryContour,
+  filterContour,
+  reduceContour,
+  idContour,
+  keepAllContour,
+} from "../../../__tests__/_contour-callback.js";
 
 type FL = Record<string, any>;
 
 // Pairs over small integer arrays (deep=false to keep raw JS numbers, so the
 // element-level transforms below are plain arithmetic). Includes the empty
 // list (nil) and length up to 4 so associativity has something to bite on.
-const intList = fc
-  .array(fc.integer({ min: -5, max: 5 }), { maxLength: 4 })
-  .map((arr) => APair.fromArray(CONSTANT_CTX, arr.map((n) => new AExact(n)), false) as AListAlike);
+const intList = fc.array(fc.integer({ min: -5, max: 5 }), { maxLength: 4 }).map(
+  (arr) =>
+    APair.fromArray(
+      CONSTANT_CTX,
+      arr.map((n) => new AExact(n)),
+      false,
+    ) as AListAlike,
+);
 
 // Non-empty variant for tests that need a Pair head (Functor laws map over a
 // Pair; nil has its own trivial behavior covered separately).
-const nonEmptyIntList = fc
-  .array(fc.integer({ min: -5, max: 5 }), { minLength: 1, maxLength: 4 })
-  .map((arr) => APair.fromArray(CONSTANT_CTX, arr.map((n) => new AExact(n)), false) as APair<any, any>);
+const nonEmptyIntList = fc.array(fc.integer({ min: -5, max: 5 }), { minLength: 1, maxLength: 4 }).map(
+  (arr) =>
+    APair.fromArray(
+      CONSTANT_CTX,
+      arr.map((n) => new AExact(n)),
+      false,
+    ) as APair<any, any>,
+);
 
 const eq = (a: unknown, b: unknown) => structuralEqual(a, b);
 
@@ -46,7 +61,8 @@ functorLaws<APair<any, any>, number>("Pair", {
   arb: nonEmptyIntList,
   f: (x) => x + 1,
   g: (x) => x * 2,
-  eq });
+  eq,
+});
 
 // ----------------------------------------------------------------------
 // Semigroup (list append) — associativity over structuralEqual. (Cannot use
@@ -67,7 +83,7 @@ describe("Pair — Semigroup (list-append)", () => {
   it("concat preserves element order and is pure (operands untouched)", () => {
     const a = APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2)], false) as APair<any, any>;
     const b = APair.fromArray(CONSTANT_CTX, [new AExact(3), new AExact(4)], false) as APair<any, any>;
-    const r = (a)[tf("concat")](b);
+    const r = a[tf("concat")](b);
     expect((r as APair<any, any>).to_array().map((v) => (v as AExact).valueOf())).toEqual([1, 2, 3, 4]);
     expect((a as APair<any, any>).to_array().map((v) => (v as AExact).valueOf())).toEqual([1, 2]);
     expect((b as APair<any, any>).to_array().map((v) => (v as AExact).valueOf())).toEqual([3, 4]);
@@ -81,7 +97,7 @@ describe("Pair — Monoid (nil identity)", () => {
   const concat = (a: FL, b: FL) => a[tf("concat")](b);
   // "empty" is declared on Pair/Vector/String but NOT in the canonical TaglessOp union today —
   // the `as TaglessOp` cast reaches the algebra method.
-  const empty = () => (APair)[tf("empty" as TaglessOp)]() as ANil;
+  const empty = () => APair[tf("empty" as TaglessOp)]() as ANil;
   // [impl-pinning] pins that empty() is the nil SINGLETON (===), not merely nil-equal.
   it("Pair['arrival/tagless-final/empty']() is nil", () => {
     expect(empty()).toBe(nil);
@@ -101,15 +117,27 @@ describe("Pair — Monoid (nil identity)", () => {
 // ----------------------------------------------------------------------
 describe("Pair — Foldable (reduce)", () => {
   it("reduce sums elements left-to-right", async () => {
-    const list = APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2), new AExact(3), new AExact(4)], false) as APair<any, any>;
+    const list = APair.fromArray(
+      CONSTANT_CTX,
+      [new AExact(1), new AExact(2), new AExact(3), new AExact(4)],
+      false,
+    ) as APair<any, any>;
     // arrival/tagless-final/reduce is element-FIRST: fn(element, acc).
-    const sum = await (list)[tf("reduce")](reduceContour((x, acc: number) => acc + (x as AExact).valueOf()), 0, CONSTANT_CTX);
+    const sum = await list[tf("reduce")](
+      reduceContour((x, acc: number) => acc + (x as AExact).valueOf()),
+      0,
+      CONSTANT_CTX,
+    );
     expect(sum).toBe(10);
   });
   it("reduce collects in order", async () => {
     const list = APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2), new AExact(3)], false) as APair<any, any>;
     // element-FIRST fn(element, acc): append the element onto the accumulator, in order.
-    const collected = await (list)[tf("reduce")](reduceContour((x, acc: number[]) => [...acc, (x as AExact).valueOf()]), [] as number[], CONSTANT_CTX);
+    const collected = await list[tf("reduce")](
+      reduceContour((x, acc: number[]) => [...acc, (x as AExact).valueOf()]),
+      [] as number[],
+      CONSTANT_CTX,
+    );
     expect(collected).toEqual([1, 2, 3]);
   });
   // [impl-pinning] pins zero fn calls over the sentinel, not just the returned value.
@@ -117,10 +145,14 @@ describe("Pair — Foldable (reduce)", () => {
     let calls = 0;
     // element-FIRST fn(element, acc); the sentinel never calls fn, so the seed is returned.
     // @ts-expect-error empty-pair sentinel: car is undefined (not a SchemeValue) by design
-    const r = await (new APair(undefined, nil))[tf("reduce")](reduceContour((_element, acc: string) => {
-      calls++;
-      return acc;
-    }), "SEED", CONSTANT_CTX);
+    const r = await new APair(undefined, nil)[tf("reduce")](
+      reduceContour((_element, acc: string) => {
+        calls++;
+        return acc;
+      }),
+      "SEED",
+      CONSTANT_CTX,
+    );
     expect(calls).toBe(0);
     expect(r).toBe("SEED");
   });
@@ -131,23 +163,36 @@ describe("Pair — Foldable (reduce)", () => {
 // ----------------------------------------------------------------------
 describe("Pair — Filterable (filter)", () => {
   it("filter keeps evens", async () => {
-    const list = APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2), new AExact(3), new AExact(4), new AExact(5), new AExact(6)], false) as APair<any, any>;
-    const evens = (await (list)[tf("filter")](filterContour((x) => (x as AExact).valueOf() % 2 === 0), CONSTANT_CTX)) as APair<any, any>;
+    const list = APair.fromArray(
+      CONSTANT_CTX,
+      [new AExact(1), new AExact(2), new AExact(3), new AExact(4), new AExact(5), new AExact(6)],
+      false,
+    ) as APair<any, any>;
+    const evens = (await list[tf("filter")](
+      filterContour((x) => (x as AExact).valueOf() % 2 === 0),
+      CONSTANT_CTX,
+    )) as APair<any, any>;
     expect(evens.to_array().map((v) => (v as AExact).valueOf())).toEqual([2, 4, 6]);
   });
   it("filter all-false yields nil", async () => {
     const list = APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(3), new AExact(5)], false) as APair<any, any>;
-    const r = await list[tf("filter")](filterContour(() => false), CONSTANT_CTX);
+    const r = await list[tf("filter")](
+      filterContour(() => false),
+      CONSTANT_CTX,
+    );
     expect(r).toBe(nil);
   });
   // [impl-pinning] pins that the predicate is never invoked over the sentinel.
   it("filter on empty-pair sentinel does not call the predicate", async () => {
     let calls = 0;
     // @ts-expect-error empty-pair sentinel: car is undefined (not a SchemeValue) by design
-    await (new APair(undefined, nil))[tf("filter")](filterContour(() => {
-      calls++;
-      return true;
-    }), CONSTANT_CTX);
+    await new APair(undefined, nil)[tf("filter")](
+      filterContour(() => {
+        calls++;
+        return true;
+      }),
+      CONSTANT_CTX,
+    );
     expect(calls).toBe(0);
   });
 });
@@ -167,7 +212,7 @@ describe("Pair — Traversable (traverse)", () => {
       return v;
     };
     const list = APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2)], false) as APair<any, any>;
-    (list)[tf("traverse")](of, (x: unknown) => x);
+    list[tf("traverse")](of, (x: unknown) => x);
     // base case of(nil) + one of(new Pair(...)) per element (leaf path) = 1 + 2.
     expect(ofCalls.length).toBe(3);
     // last-built base case wrapped nil
@@ -183,10 +228,14 @@ describe("Pair — Traversable (traverse)", () => {
         // and `other` wraps the rest — combine into a Pair.
         // @ts-expect-error `this` is untyped in this mock applicative
         return Id(new APair(this.value, other.value));
-      } });
+      },
+    });
     const list = APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2), new AExact(3)], false);
     // @ts-expect-error traverse result is the mock applicative, not a SchemeValue
-    const result = (list)[tf("traverse")]((v: unknown) => Id(v), (x: unknown) => Id(x)) as unknown as { value: unknown };
+    const result = list[tf("traverse")](
+      (v: unknown) => Id(v),
+      (x: unknown) => Id(x),
+    ) as unknown as { value: unknown };
     expect((result.value as APair<any, any>).to_array().map((v) => (v as AExact).valueOf())).toEqual([1, 2, 3]);
   });
 });
@@ -199,7 +248,7 @@ describe("Pair — Applicative (static of)", () => {
   it("of(x) is a one-element list (x)", () => {
     // "of" is declared on Pair/Vector/String but NOT in the canonical TaglessOp union today —
     // the `as TaglessOp` cast reaches the algebra method.
-    const p = (APair)[tf("of" as TaglessOp)](new AExact(42)) as APair<any, any>;
+    const p = APair[tf("of" as TaglessOp)](new AExact(42)) as APair<any, any>;
     expect(p).toBeInstanceOf(APair);
     expect((p.car as AExact).valueOf()).toBe(42);
     expect(p.cdr).toBe(nil);
@@ -219,10 +268,13 @@ describe("Pair — recursors terminate on Nil clones (provenance)", () => {
     // fn hands back the SAME AExact instance, so the result pair's car is that instance.
     const calls: unknown[] = [];
     const one = new AExact(1);
-    const r = (await new APair(one, cloneNil())[tf("map")](unaryContour((x) => {
-      calls.push(x);
-      return x;
-    }), CONSTANT_CTX)) as APair<any, any>;
+    const r = (await new APair(one, cloneNil())[tf("map")](
+      unaryContour((x) => {
+        calls.push(x);
+        return x;
+      }),
+      CONSTANT_CTX,
+    )) as APair<any, any>;
     expect(calls).toEqual([one]);
     expect(r.car).toBe(one);
     expect(r.cdr).toBeInstanceOf(ANil);

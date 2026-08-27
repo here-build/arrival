@@ -16,8 +16,7 @@
  */
 import { fileUrl, hyperlink } from "./osc.js";
 import type { TemplateNode, TemplateState } from "./run-view.js";
-import { paint, type TintName } from "./tints.js";
-import type { colorMode } from "./tints.js";
+import { paint, type TintName, type colorMode } from "./tints.js";
 
 type ColorMode = ReturnType<typeof colorMode>;
 

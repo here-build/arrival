@@ -30,7 +30,8 @@ import {
   emitTrackOpen,
   ensureStreamHeader,
   isEmissionEnabled,
-  setEmissionEnabled } from "../emit.js";
+  setEmissionEnabled,
+} from "../emit.js";
 import { PayloadStoreFake, ProvenanceStoreFake, ProvenanceWriteFailure } from "../fakes.js";
 import { recordIdKey, type RecordId } from "../ids.js";
 
@@ -92,7 +93,8 @@ describe("emitMint — payload lands before the record, value+stampIds round-tri
       regionId: REGION,
       id: ID_A,
       value: { hello: "world" },
-      stampIds: [7, 8] });
+      stampIds: [7, 8],
+    });
     expect(record).toBeDefined();
     if (record === undefined) throw new Error("unreachable");
     expect(record.kind).toBe("mint");
@@ -120,7 +122,14 @@ describe("emitMint — payload lands before the record, value+stampIds round-tri
     setEmissionEnabled(true);
     const store = new ProvenanceStoreFake();
     const payloads = new PayloadStoreFake();
-    const record = await emitMint({ store, payloads, regionId: REGION, id: ID_A, value: 9007199254740993n, stampIds: [] });
+    const record = await emitMint({
+      store,
+      payloads,
+      regionId: REGION,
+      id: ID_A,
+      value: 9007199254740993n,
+      stampIds: [],
+    });
     expect(record).toBeDefined();
   });
 });
@@ -143,8 +152,22 @@ describe("W3 port completeness — idempotent upsert through the REAL emission f
     const store = new ProvenanceStoreFake();
     const payloads = new PayloadStoreFake();
 
-    await emitMint({ store, payloads, regionId: REGION, id: { ...ID_A, templateHash: "mint" }, value: 1, stampIds: [] });
-    await emitMint({ store, payloads, regionId: REGION, id: { ...ID_A, templateHash: "mint" }, value: 1, stampIds: [] });
+    await emitMint({
+      store,
+      payloads,
+      regionId: REGION,
+      id: { ...ID_A, templateHash: "mint" },
+      value: 1,
+      stampIds: [],
+    });
+    await emitMint({
+      store,
+      payloads,
+      regionId: REGION,
+      id: { ...ID_A, templateHash: "mint" },
+      value: 1,
+      stampIds: [],
+    });
 
     await emitMuxDecision({ store, regionId: REGION, id: { ...ID_A, templateHash: "mux" }, arm: 1 });
     await emitMuxDecision({ store, regionId: REGION, id: { ...ID_A, templateHash: "mux" }, arm: 1 });
@@ -169,7 +192,15 @@ describe("W3 port completeness — idempotent upsert through the REAL emission f
     const stream = await store.readStream(REGION);
     expect(stream).toHaveLength(7); // one per DISTINCT id, despite 14 emit calls
     expect(new Set(stream.map((r) => r.kind))).toEqual(
-      new Set(["mint", "mux-decision", "fan-instantiation", "ingress-binding", "track-open", "track-close", "host-schedule"]),
+      new Set([
+        "mint",
+        "mux-decision",
+        "fan-instantiation",
+        "ingress-binding",
+        "track-open",
+        "track-close",
+        "host-schedule",
+      ]),
     );
   });
 
@@ -179,9 +210,9 @@ describe("W3 port completeness — idempotent upsert through the REAL emission f
     const payloads = new PayloadStoreFake();
 
     store.setWriteFailure(true);
-    await expect(emitMint({ store, payloads, regionId: REGION, id: ID_A, value: "v", stampIds: [] })).rejects.toBeInstanceOf(
-      ProvenanceWriteFailure,
-    );
+    await expect(
+      emitMint({ store, payloads, regionId: REGION, id: ID_A, value: "v", stampIds: [] }),
+    ).rejects.toBeInstanceOf(ProvenanceWriteFailure);
     expect(await store.readStream(REGION)).toHaveLength(0); // the failed attempt left nothing
 
     store.setWriteFailure(false);
@@ -252,7 +283,7 @@ describe("emitHostSchedule — §5 A6 row 6 + D5, Q11b", () => {
     expect(stream).toHaveLength(1); // ONE record for the whole schedule, never one per triple
   });
 
-  it("zero triples never lands a record — \"nothing happened\" is not information worth a write", async () => {
+  it('zero triples never lands a record — "nothing happened" is not information worth a write', async () => {
     setEmissionEnabled(true);
     const store = new ProvenanceStoreFake();
     const record = await emitHostSchedule({ store, regionId: REGION, id: ID_A, triples: [] });

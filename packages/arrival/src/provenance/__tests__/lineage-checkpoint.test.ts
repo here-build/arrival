@@ -32,7 +32,8 @@ const C: Classifier = {
         ? "fan"
         : ["ext-call"].includes(op)
           ? "opaque"
-          : undefined };
+          : undefined,
+};
 
 function countNodes(n: LineageNode): number {
   switch (n.kind) {

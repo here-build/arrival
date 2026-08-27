@@ -69,7 +69,7 @@ describe("not-callable door — computed head evaluates to a non-function", () =
   });
 
   it("names the actual scheme type (dict) rather than a raw 'object'", async () => {
-    const message = await doorMessage('(((lambda () (dict :a 1))) :a)');
+    const message = await doorMessage("(((lambda () (dict :a 1))) :a)");
     expect(message).toMatch(/dict/);
     expect(message).not.toMatch(/Not callable: object$/);
   });

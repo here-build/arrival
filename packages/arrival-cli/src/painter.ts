@@ -94,6 +94,6 @@ export interface Writer {
  *  thread it back in as `prevLineCount` on the next call for the SAME turn. */
 export function paintRegion(lines: readonly string[], prevLineCount: number, out: Writer = process.stdout): number {
   out.write(cursorUp(prevLineCount) + CARRIAGE_RETURN + CLEAR_TO_END);
-  if (lines.length > 0) out.write(lines.join("\n") + "\n");
+  if (lines.length > 0) out.write(`${lines.join("\n")}\n`);
   return lines.length;
 }

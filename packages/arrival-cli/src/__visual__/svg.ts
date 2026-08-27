@@ -26,9 +26,7 @@ export function rowsToSvg(rows: Rows, paper: Rgb, ink: Rgb): string {
       const fill = c.fg === undefined ? rgbCss(ink) : rgbCss(c.fg);
       const tx = (PAD_X + x * CH_PX).toFixed(1);
       const ty = (PAD_Y + (y + 0.8) * LH_PX).toFixed(1);
-      spans.push(
-        `<text x="${tx}" y="${ty}" fill="${fill}">${esc(c.ch === " " ? "\u00a0" : c.ch)}</text>`,
-      );
+      spans.push(`<text x="${tx}" y="${ty}" fill="${fill}">${esc(c.ch === " " ? "\u00a0" : c.ch)}</text>`);
     });
   });
   return `<?xml version="1.0" encoding="UTF-8"?>

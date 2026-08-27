@@ -1,6 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { INTEROP_BOUNDARY } from "../../well-known/symbols.js";
-import { accessMember, accessHas, accessKeys, NOT_FOUND, markInteropBoundary, isInteropBoundary } from "../interop-access.js";
+import {
+  accessMember,
+  accessHas,
+  accessKeys,
+  NOT_FOUND,
+  markInteropBoundary,
+  isInteropBoundary,
+} from "../interop-access.js";
 import { InteropAccessError } from "../../errors.js";
 
 describe("Sandbox Boundary", () => {
@@ -229,12 +236,20 @@ describe("Sandbox Boundary", () => {
     });
 
     it("blocks Symbol.iterator access", () => {
-      const obj = { [Symbol.iterator]: function* () { yield 1; } };
+      const obj = {
+        [Symbol.iterator]: function* () {
+          yield 1;
+        },
+      };
       expect(() => accessMember(obj, Symbol.iterator)).toThrow(InteropAccessError);
     });
 
     it("blocks Symbol.asyncIterator access", () => {
-      const obj = { [Symbol.asyncIterator]: async function* () { yield 1; } };
+      const obj = {
+        [Symbol.asyncIterator]: async function* () {
+          yield 1;
+        },
+      };
       expect(() => accessMember(obj, Symbol.asyncIterator)).toThrow(InteropAccessError);
     });
 
@@ -253,7 +268,6 @@ describe("Sandbox Boundary", () => {
       const obj = { [Symbol.toPrimitive]: () => 42 };
       expect(accessHas(obj, Symbol.toPrimitive)).toBe(false);
     });
-
   });
 
   // INVARIANT: WeakRef.prototype/FinalizationRegistry.prototype/SharedArrayBuffer.prototype are
@@ -289,7 +303,11 @@ describe("Sandbox Boundary", () => {
     // previously-accessible inherited methods become blocked immediately, without affecting own
     // properties (pins implementation, not behavior)
     it("markAsSandboxBoundary invalidates cache for plain objects", () => {
-      const proto = { method() { return "test"; } };
+      const proto = {
+        method() {
+          return "test";
+        },
+      };
       const child = Object.create(proto);
       child.ownProp = "own";
 
@@ -353,7 +371,8 @@ describe("Sandbox Boundary", () => {
           fired = true;
           return Object; // tries to masquerade as the real Object
         },
-        configurable: true });
+        configurable: true,
+      });
       // The boundary read uses the own DESCRIPTOR's .value (undefined for an
       // accessor), so it neither fires the getter nor is fooled into a boundary.
       expect(isInteropBoundary(proto)).toBe(false);

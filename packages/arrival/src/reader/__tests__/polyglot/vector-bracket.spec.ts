@@ -39,44 +39,47 @@ describe("vector-bracket / […] vectors", () => {
   // that trigger that specific door. `mode` dispatches read vs eval per row
   // since some codes have members of both.
 
-  it.each([
-    { name: "n_vector_dot", input: "[a . b]", mode: "read" as const },
-  ])("door E-LITERAL-DOT · $name", async ({ input, mode }) => {
-    let err: unknown;
-    try {
-      mode === "read" ? await readAst(input) : await evalJson(input);
-    } catch (e) {
-      err = e;
-    }
-    expect(err, "expected E-LITERAL-DOT, but succeeded").toBeDefined();
-    expect(errorClass(err)).toBe("E-LITERAL-DOT");
-  });
+  it.each([{ name: "n_vector_dot", input: "[a . b]", mode: "read" as const }])(
+    "door E-LITERAL-DOT · $name",
+    async ({ input, mode }) => {
+      let err: unknown;
+      try {
+        mode === "read" ? await readAst(input) : await evalJson(input);
+      } catch (e) {
+        err = e;
+      }
+      expect(err, "expected E-LITERAL-DOT, but succeeded").toBeDefined();
+      expect(errorClass(err)).toBe("E-LITERAL-DOT");
+    },
+  );
 
-  it.each([
-    { name: "n_vector_unterminated", input: "[1 2", mode: "read" as const },
-  ])("door E-UNTERMINATED · $name", async ({ input, mode }) => {
-    let err: unknown;
-    try {
-      mode === "read" ? await readAst(input) : await evalJson(input);
-    } catch (e) {
-      err = e;
-    }
-    expect(err, "expected E-UNTERMINATED, but succeeded").toBeDefined();
-    expect(errorClass(err)).toBe("E-UNTERMINATED");
-  });
+  it.each([{ name: "n_vector_unterminated", input: "[1 2", mode: "read" as const }])(
+    "door E-UNTERMINATED · $name",
+    async ({ input, mode }) => {
+      let err: unknown;
+      try {
+        mode === "read" ? await readAst(input) : await evalJson(input);
+      } catch (e) {
+        err = e;
+      }
+      expect(err, "expected E-UNTERMINATED, but succeeded").toBeDefined();
+      expect(errorClass(err)).toBe("E-UNTERMINATED");
+    },
+  );
 
-  it.each([
-    { name: "n_stray_square_close", input: "]", mode: "read" as const },
-  ])("door E-BRACKET-UNEXPECTED · $name", async ({ input, mode }) => {
-    let err: unknown;
-    try {
-      mode === "read" ? await readAst(input) : await evalJson(input);
-    } catch (e) {
-      err = e;
-    }
-    expect(err, "expected E-BRACKET-UNEXPECTED, but succeeded").toBeDefined();
-    expect(errorClass(err)).toBe("E-BRACKET-UNEXPECTED");
-  });
+  it.each([{ name: "n_stray_square_close", input: "]", mode: "read" as const }])(
+    "door E-BRACKET-UNEXPECTED · $name",
+    async ({ input, mode }) => {
+      let err: unknown;
+      try {
+        mode === "read" ? await readAst(input) : await evalJson(input);
+      } catch (e) {
+        err = e;
+      }
+      expect(err, "expected E-BRACKET-UNEXPECTED, but succeeded").toBeDefined();
+      expect(errorClass(err)).toBe("E-BRACKET-UNEXPECTED");
+    },
+  );
 
   it.each([
     { name: "n_bracket_mismatch_paren_closed_square", input: "(a]", mode: "read" as const },

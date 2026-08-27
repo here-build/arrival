@@ -33,7 +33,7 @@ async function catchEval(env: Awaited<ReturnType<typeof freshEnv>>, src: string)
 }
 
 describe("OFFENDING_VALUE — collection-type-error metadata", () => {
-  it("(take \"not-a-list\" 2) — offendingValueOf recovers the offending string; message unchanged", async () => {
+  it('(take "not-a-list" 2) — offendingValueOf recovers the offending string; message unchanged', async () => {
     const env = await freshEnv();
     const err = await catchEval(env, '(take "not-a-list" 2)');
     expect(err).toBeInstanceOf(Error);
@@ -47,7 +47,7 @@ describe("OFFENDING_VALUE — collection-type-error metadata", () => {
     expect(toJS(offending as AString, {})).toBe("not-a-list");
   });
 
-  it("(vector-ref \"hello\" 0) — offendingValueOf recovers the offending string; message unchanged", async () => {
+  it('(vector-ref "hello" 0) — offendingValueOf recovers the offending string; message unchanged', async () => {
     const env = await freshEnv();
     const err = await catchEval(env, '(vector-ref "hello" 0)');
     expect((err as Error).message).toBe(
@@ -69,7 +69,7 @@ describe("OFFENDING_VALUE — collection-type-error metadata", () => {
     expect(toJS(offending as AString, {})).toBe("not-a-pair");
   });
 
-  it("(reduce + 0 \"nope\") — the symbol.tagless dispatcher door (common/symbols/tagless.ts) also carries it", async () => {
+  it('(reduce + 0 "nope") — the symbol.tagless dispatcher door (common/symbols/tagless.ts) also carries it', async () => {
     const env = await freshEnv();
     const err = await catchEval(env, '(reduce + 0 "nope")');
     const offending = offendingValueOf(err);

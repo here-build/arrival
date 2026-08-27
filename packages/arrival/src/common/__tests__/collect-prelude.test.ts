@@ -19,7 +19,8 @@ describe("collectPrelude", () => {
     const dependent = EnvCapability.define("dependent", {
       prelude: "(define dependent 2)",
       deps: [base],
-      symbols: () => ({}) });
+      symbols: () => ({}),
+    });
     expect(collectPrelude([dependent])).toBe("(define base 1)\n(define dependent 2)");
   });
 

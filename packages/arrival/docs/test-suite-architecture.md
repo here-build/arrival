@@ -1,8 +1,8 @@
 # Test Suite Architecture
 
-*Derived from PRINCIPLES.md: the suite's job is to enforce the constitution, and its strongest
+_Derived from PRINCIPLES.md: the suite's job is to enforce the constitution, and its strongest
 form is the coherence law (P15) — one invariant × a table of subjects, `describe.each`/`it.each`
-all the way down. Point tests exist only where a law genuinely has one subject.*
+all the way down. Point tests exist only where a law genuinely has one subject._
 
 ## 1. What the suite enforces (the invariant families)
 
@@ -17,12 +17,13 @@ one, which is exactly how a carrier can ship `map` and silently lack `filter` wi
 grid ever showing a gap.
 
 **F2 — Provenance conservation (P10/P11).** Property-based + golden:
+
 - conservation: for generated pure programs, every input provenance id is reachable in the
   output's deep-collapsed provenance (no drops — append/cdr become rows here);
 - minting: ids appear ONLY at declared source crossings (mint-at-edge);
 - purity: `pure: true` ops never mint (the seal-laundering guard, generalized);
 - idempotence/commutativity/associativity of union (absorbs provenance-algebra.property).
-The eager goldens (golden-prov-*) stay as the oracle side of the static-lineage coherence law.
+  The eager goldens (golden-prov-\*) stay as the oracle side of the static-lineage coherence law.
 
 **F3 — Membrane crossing laws (P4/P5).** ONE table: every value type × both directions ×
 (representation-in, representation-out, round-trip promise yes/no). The exit convention is a
@@ -78,6 +79,7 @@ src/membrane/__tests__/   F3 crossing tables, strict doors, egress; also F5 regi
 ```
 
 Conventions:
+
 - **Law files are named `<subject>.law.test.ts`** and contain ONE law (possibly many rows).
 - **Tables are data modules** (`laws/_tables/*.ts`), typed, imported by law files AND usable
   by future interpreters (the static lineage classifier can consume CARRIERS/TERMS too).
@@ -88,4 +90,3 @@ Conventions:
 - **Stubs-first discipline**: new law families land as `it.todo` grids with the full tables
   populated — the SHAPE of the suite (which cells exist) is reviewable before any assertion
   body is written. A stub grid that can't express an invariant is a design bug caught free.
-

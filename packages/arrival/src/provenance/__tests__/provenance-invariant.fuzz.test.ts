@@ -29,10 +29,7 @@ describe("fuzz — provenance algebra invariants at depth", () => {
   it("nested-union round-trip: flattened ids == set union of leaf ids", () => {
     fc.assert(
       fc.property(
-        fc.array(
-          fc.uniqueArray(fc.integer({ min: 0, max: 10_000 }), { maxLength: 4 }),
-          { minLength: 1, maxLength: 5 },
-        ),
+        fc.array(fc.uniqueArray(fc.integer({ min: 0, max: 10_000 }), { maxLength: 4 }), { minLength: 1, maxLength: 5 }),
         (leafSets) => {
           // Round-trip 1: union all leaves at once.
           const flatLeaves = leafSets.map((ids) => new ABool(true, new Set(ids)));
@@ -57,15 +54,12 @@ describe("fuzz — provenance algebra invariants at depth", () => {
 
   it("nested-union idempotence: re-unioning a result through itself is a no-op", () => {
     fc.assert(
-      fc.property(
-        fc.uniqueArray(fc.integer({ min: 0, max: 10_000 }), { maxLength: 6 }),
-        (ids) => {
-          const seed = new ABool(true, ids.length === 0 ? EMPTY_PROVENANCE : new Set(ids));
-          const once = unionProvenance([seed]);
-          const twice = unionProvenance([new ABool(true, once), new ABool(true, once)]);
-          expect(new Set(twice)).toEqual(new Set(once));
-        },
-      ),
+      fc.property(fc.uniqueArray(fc.integer({ min: 0, max: 10_000 }), { maxLength: 6 }), (ids) => {
+        const seed = new ABool(true, ids.length === 0 ? EMPTY_PROVENANCE : new Set(ids));
+        const once = unionProvenance([seed]);
+        const twice = unionProvenance([new ABool(true, once), new ABool(true, once)]);
+        expect(new Set(twice)).toEqual(new Set(once));
+      }),
       { numRuns: 50 },
     );
   });

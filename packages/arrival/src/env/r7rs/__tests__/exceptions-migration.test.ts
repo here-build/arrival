@@ -85,10 +85,7 @@ describe("scheme/r7rs/exceptions — contract enforcement (§1.2, teaching error
 
   it("raise: a real R7RSError condition object round-trips through the ENFORCED contract (the `raisable = z.union([z.schemeValue, z.error])` fix, §1.2 — z.schemeValue alone rejects R7RSError, see exceptions.ts's contract comment)", async () => {
     const env = await freshEnv();
-    const [msg] = await exec(
-      `(guard (exn (else (error-object-message exn))) (error "BOOM!"))`,
-      { env },
-    );
+    const [msg] = await exec(`(guard (exn (else (error-object-message exn))) (error "BOOM!"))`, { env });
     expect((msg as { __string__?: string }).__string__ ?? String(msg)).toBe("BOOM!");
   });
 });
@@ -96,10 +93,7 @@ describe("scheme/r7rs/exceptions — contract enforcement (§1.2, teaching error
 describe("scheme/r7rs/exceptions — semantic equivalence regression rows (the two bugs THIS migration introduced and fixed, kept local for a fast repro)", () => {
   it("error-object-irritants round-trips the full irritant list through guard (regression: %error-object-from-irritants losing irritants when `error`'s output contract was z.schemeValue-only)", async () => {
     const env = await freshEnv();
-    const [irritants] = await exec(
-      `(error-object-irritants (guard (exn (else exn)) (error "BOOM!" 1 2 3)))`,
-      { env },
-    );
+    const [irritants] = await exec(`(error-object-irritants (guard (exn (else exn)) (error "BOOM!" 1 2 3)))`, { env });
     // A proper scheme list (1 2 3) — walk its pair spine rather than assume a JS shape.
     const out: number[] = [];
     let node: unknown = irritants;
@@ -139,7 +133,7 @@ describe("scheme/r7rs/exceptions — semantic equivalence regression rows (the t
 });
 
 describe("scheme/r7rs/exceptions — declared symbols carry the migrated kinds", () => {
-  it("raise/raise-continuable/with-exception-handler/error are `symbol.define` (kind: \"define\"), guard is `symbol.defineSyntax` (kind: \"define-syntax\") with macroAttribute \"binder\"", () => {
+  it('raise/raise-continuable/with-exception-handler/error are `symbol.define` (kind: "define"), guard is `symbol.defineSyntax` (kind: "define-syntax") with macroAttribute "binder"', () => {
     for (const name of ["raise", "raise-continuable", "with-exception-handler", "error"]) {
       expect(defineDef(name).kind).toBe("define");
     }

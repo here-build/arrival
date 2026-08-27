@@ -63,7 +63,9 @@ describe("CRITICAL: sandbox escape vectors", () => {
     // eval no longer exists at all — the host-language sweep deleted it from
     // wrappedOps — so the eval-escape path is closed at the source; the throw is
     // Unbound on `eval` itself, not on `+`.
-    await expect(execOverFrame("(eval (quote +))", { env: inferenceEnv })).rejects.toThrow(/eval|Unbound|not available/i);
+    await expect(execOverFrame("(eval (quote +))", { env: inferenceEnv })).rejects.toThrow(
+      /eval|Unbound|not available/i,
+    );
   });
 
   /**
@@ -76,9 +78,9 @@ describe("CRITICAL: sandbox escape vectors", () => {
     // Historically returned 5 (eval-escape worked). Now: throws Unbound at the
     // eval site — eval no longer exists, so the very first form `(eval ...)`
     // fails to resolve.
-    await expect(
-      execOverFrame(`((eval (quote +)) 2 3)`, { env: inferenceEnv })
-    ).rejects.toThrow(/eval|Unbound|not available/i);
+    await expect(execOverFrame(`((eval (quote +)) 2 3)`, { env: inferenceEnv })).rejects.toThrow(
+      /eval|Unbound|not available/i,
+    );
   });
 
   /**
@@ -96,7 +98,7 @@ describe("CRITICAL: sandbox escape vectors", () => {
     for (const forbidden of ["load", "set-obj!", "new", "instanceof"]) {
       await expect(
         execOverFrame(`(eval (quote ${forbidden}))`, { env: inferenceEnv }),
-        `${forbidden} must not be reachable via eval-escape`
+        `${forbidden} must not be reachable via eval-escape`,
       ).rejects.toThrow(/eval|Unbound|not available/i);
     }
   });
@@ -203,7 +205,10 @@ describe("CRITICAL: accessor isolation leaks", () => {
   it("benign :keyword and dot access on a plain object still resolve", async () => {
     // Guard against over-blocking: legitimate own-property access must keep
     // working through both paths after the isolation is applied.
-    (inferenceEnv as EnvWithInternals<ResolvingAmbient>).bind("__probe_obj", jsToScheme(CONSTANT_CTX, { name: "maya", nested: { city: "lisbon" } }));
+    (inferenceEnv as EnvWithInternals<ResolvingAmbient>).bind(
+      "__probe_obj",
+      jsToScheme(CONSTANT_CTX, { name: "maya", nested: { city: "lisbon" } }),
+    );
     const [byKeyword] = await execOverFrame("(:name __probe_obj)", { env: inferenceEnv });
     expect(String(byKeyword)).toBe("maya");
   });
@@ -296,9 +301,7 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
     const start = Date.now();
     // `(let loop () (loop))` is now flat under TCO (task #46), so the budget
     // fires cleanly instead of the loop blowing the JS stack first.
-    await expect(
-      gexec("(let loop () (loop))", { env: inferenceEnv, budgetMs: 150 }),
-    ).rejects.toThrow(/budget/i);
+    await expect(gexec("(let loop () (loop))", { env: inferenceEnv, budgetMs: 150 })).rejects.toThrow(/budget/i);
     // Bounded to ~one yield cadence past the 150ms deadline.
     expect(Date.now() - start).toBeLessThan(2000);
   }, 10000);
@@ -401,7 +404,9 @@ describe("registry poisoning vectors", () => {
    * this pin remains valid — AValue should never be exported.
    */
   it("AValue is NOT reachable from sandbox via (eval (quote AValue))", async () => {
-    await expect(execOverFrame("(eval (quote AValue))", { env: inferenceEnv })).rejects.toThrow(/eval|Unbound|not available/i);
+    await expect(execOverFrame("(eval (quote AValue))", { env: inferenceEnv })).rejects.toThrow(
+      /eval|Unbound|not available/i,
+    );
   });
 
   /**

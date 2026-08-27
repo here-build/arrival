@@ -18,8 +18,9 @@ const run = (code: string) => execState(code, { env: inferenceEnv.child("string-
 describe("B1 — stringValue throws on container/nil kinds instead of silently coercing", () => {
   it.each([
     {
-      name: "(string-length '()) throws (never silently returns 2, the `String(nil)` = \"()\" artifact)",
-      code: "(string-length '())" },
+      name: '(string-length \'()) throws (never silently returns 2, the `String(nil)` = "()" artifact)',
+      code: "(string-length '())",
+    },
     { name: "(string-upcase '()) throws", code: "(string-upcase '())" },
     { name: '(string-append "x" \'()) throws', code: '(string-append "x" \'())' },
     { name: '(string=? \'() "()") throws (never silently #t)', code: '(string=? \'() "()")' },
@@ -32,7 +33,7 @@ describe("B1 — stringValue throws on container/nil kinds instead of silently c
     // contract only in practice, but the fallback itself must remain permissive for
     // non-container kinds. `symbol->string` round-trips a symbol; this pins that the
     // narrowing doesn't regress leaf kinds.
-    const { values } = await run('(symbol->string \'hello)');
+    const { values } = await run("(symbol->string 'hello)");
     expect(values[0]?.valueOf()).toBe("hello");
   });
 });

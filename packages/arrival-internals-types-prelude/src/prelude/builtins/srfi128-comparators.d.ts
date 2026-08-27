@@ -44,124 +44,74 @@
 // `?`/punctuation names → bracketed string keys.
 // ─────────────────────────────────────────────────────────────────────────────
 
-  // Construct a comparator. 4th `hash` arg accepted (ignored at runtime) → optional.
+// Construct a comparator. 4th `hash` arg accepted (ignored at runtime) → optional.
 declare function make$dash$comparator(
-    typeTest: (x: unknown) => boolean,
-    equality: (a: unknown, b: unknown) => boolean,
-    ordering: (a: unknown, b: unknown) => boolean,
-    ...hash: [((x: unknown) => number)?]
-  ): [
-    "comparator",
-    (x: unknown) => boolean,
-    (a: unknown, b: unknown) => boolean,
-    (a: unknown, b: unknown) => boolean,
-  ];
+  typeTest: (x: unknown) => boolean,
+  equality: (a: unknown, b: unknown) => boolean,
+  ordering: (a: unknown, b: unknown) => boolean,
+  ...hash: [((x: unknown) => number)?]
+): ["comparator", (x: unknown) => boolean, (a: unknown, b: unknown) => boolean, (a: unknown, b: unknown) => boolean];
 
-  // The default total-order comparator — both are NULLARY and RETURN a comparator.
+// The default total-order comparator — both are NULLARY and RETURN a comparator.
 declare function make$dash$default$dash$comparator(): [
-    "comparator",
-    (x: unknown) => boolean,
-    (a: unknown, b: unknown) => boolean,
-    (a: unknown, b: unknown) => boolean,
-  ];
+  "comparator",
+  (x: unknown) => boolean,
+  (a: unknown, b: unknown) => boolean,
+  (a: unknown, b: unknown) => boolean,
+];
 declare function default$dash$comparator(): [
-    "comparator",
-    (x: unknown) => boolean,
-    (a: unknown, b: unknown) => boolean,
-    (a: unknown, b: unknown) => boolean,
-  ];
+  "comparator",
+  (x: unknown) => boolean,
+  (a: unknown, b: unknown) => boolean,
+  (a: unknown, b: unknown) => boolean,
+];
 
-  // Tag predicate — accepts any value, returns boolean.
+// Tag predicate — accepts any value, returns boolean.
 declare function comparator$qmark$(x: unknown): boolean;
 
-  // Extractors — pull the bundled predicate back out of a comparator tuple.
+// Extractors — pull the bundled predicate back out of a comparator tuple.
 declare function comparator$dash$type$dash$test$dash$predicate(
-    c: [
-      "comparator",
-      (x: unknown) => boolean,
-      (a: unknown, b: unknown) => boolean,
-      (a: unknown, b: unknown) => boolean,
-    ],
-  ): (x: unknown) => boolean;
+  c: ["comparator", (x: unknown) => boolean, (a: unknown, b: unknown) => boolean, (a: unknown, b: unknown) => boolean],
+): (x: unknown) => boolean;
 declare function comparator$dash$equality$dash$predicate(
-    c: [
-      "comparator",
-      (x: unknown) => boolean,
-      (a: unknown, b: unknown) => boolean,
-      (a: unknown, b: unknown) => boolean,
-    ],
-  ): (a: unknown, b: unknown) => boolean;
+  c: ["comparator", (x: unknown) => boolean, (a: unknown, b: unknown) => boolean, (a: unknown, b: unknown) => boolean],
+): (a: unknown, b: unknown) => boolean;
 declare function comparator$dash$ordering$dash$predicate(
-    c: [
-      "comparator",
-      (x: unknown) => boolean,
-      (a: unknown, b: unknown) => boolean,
-      (a: unknown, b: unknown) => boolean,
-    ],
-  ): (a: unknown, b: unknown) => boolean;
-  // Always #f at runtime, but the signature is still a boolean-returning predicate.
+  c: ["comparator", (x: unknown) => boolean, (a: unknown, b: unknown) => boolean, (a: unknown, b: unknown) => boolean],
+): (a: unknown, b: unknown) => boolean;
+// Always #f at runtime, but the signature is still a boolean-returning predicate.
 declare function comparator$dash$hashable$qmark$(
-    c: [
-      "comparator",
-      (x: unknown) => boolean,
-      (a: unknown, b: unknown) => boolean,
-      (a: unknown, b: unknown) => boolean,
-    ],
-  ): boolean;
+  c: ["comparator", (x: unknown) => boolean, (a: unknown, b: unknown) => boolean, (a: unknown, b: unknown) => boolean],
+): boolean;
 
-  // Relational chain ops — (cmp, a, b, …rest) → boolean. Comparator is the FIRST arg.
+// Relational chain ops — (cmp, a, b, …rest) → boolean. Comparator is the FIRST arg.
 declare function $eq$$qmark$(
-    c: [
-      "comparator",
-      (x: unknown) => boolean,
-      (a: unknown, b: unknown) => boolean,
-      (a: unknown, b: unknown) => boolean,
-    ],
-    a: unknown,
-    b: unknown,
-    ...rest: unknown[]
-  ): boolean;
+  c: ["comparator", (x: unknown) => boolean, (a: unknown, b: unknown) => boolean, (a: unknown, b: unknown) => boolean],
+  a: unknown,
+  b: unknown,
+  ...rest: unknown[]
+): boolean;
 declare function $less$$qmark$(
-    c: [
-      "comparator",
-      (x: unknown) => boolean,
-      (a: unknown, b: unknown) => boolean,
-      (a: unknown, b: unknown) => boolean,
-    ],
-    a: unknown,
-    b: unknown,
-    ...rest: unknown[]
-  ): boolean;
+  c: ["comparator", (x: unknown) => boolean, (a: unknown, b: unknown) => boolean, (a: unknown, b: unknown) => boolean],
+  a: unknown,
+  b: unknown,
+  ...rest: unknown[]
+): boolean;
 declare function $less$$eq$$qmark$(
-    c: [
-      "comparator",
-      (x: unknown) => boolean,
-      (a: unknown, b: unknown) => boolean,
-      (a: unknown, b: unknown) => boolean,
-    ],
-    a: unknown,
-    b: unknown,
-    ...rest: unknown[]
-  ): boolean;
+  c: ["comparator", (x: unknown) => boolean, (a: unknown, b: unknown) => boolean, (a: unknown, b: unknown) => boolean],
+  a: unknown,
+  b: unknown,
+  ...rest: unknown[]
+): boolean;
 declare function $greater$$qmark$(
-    c: [
-      "comparator",
-      (x: unknown) => boolean,
-      (a: unknown, b: unknown) => boolean,
-      (a: unknown, b: unknown) => boolean,
-    ],
-    a: unknown,
-    b: unknown,
-    ...rest: unknown[]
-  ): boolean;
+  c: ["comparator", (x: unknown) => boolean, (a: unknown, b: unknown) => boolean, (a: unknown, b: unknown) => boolean],
+  a: unknown,
+  b: unknown,
+  ...rest: unknown[]
+): boolean;
 declare function $greater$$eq$$qmark$(
-    c: [
-      "comparator",
-      (x: unknown) => boolean,
-      (a: unknown, b: unknown) => boolean,
-      (a: unknown, b: unknown) => boolean,
-    ],
-    a: unknown,
-    b: unknown,
-    ...rest: unknown[]
-  ): boolean;
+  c: ["comparator", (x: unknown) => boolean, (a: unknown, b: unknown) => boolean, (a: unknown, b: unknown) => boolean],
+  a: unknown,
+  b: unknown,
+  ...rest: unknown[]
+): boolean;

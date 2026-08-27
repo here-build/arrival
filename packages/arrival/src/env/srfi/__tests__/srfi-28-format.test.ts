@@ -56,7 +56,11 @@ async function runBoxed(src: string, bindings: Record<string, AString> = {}): Pr
 
 describe("format — SRFI-28 proper (format fmt arg ...)", () => {
   it.each([
-    { name: "plain string with no directives is returned verbatim", input: '(format "hello world")', value: "hello world" },
+    {
+      name: "plain string with no directives is returned verbatim",
+      input: '(format "hello world")',
+      value: "hello world",
+    },
     { name: "~a — display style, string arg", input: '(format "~a" "hi")', value: "hi" },
     { name: "~a — display style, number arg", input: '(format "n=~a" 42)', value: "n=42" },
     { name: "~a — display style, two args", input: '(format "~a and ~a" 1 2)', value: "1 and 2" },
@@ -76,19 +80,23 @@ describe("format — ~F / ~w,dF fixed-point (SRFI-48 bounded subset)", () => {
     {
       name: "~,2f — no width, 2 decimals (the #1 CL-style habit this door completes)",
       input: '(format "~,2f" 3.14159)',
-      value: "3.14" },
+      value: "3.14",
+    },
     {
       name: "~F alone — no width, no decimals, free-format render",
       input: '(format "~f" 3.5)',
-      value: "3.5" },
+      value: "3.5",
+    },
     {
       name: "~w,dF — width AND decimals, left-padded with spaces",
       input: '(format "[~8,2f]" 3.14159)',
-      value: "[    3.14]" },
+      value: "[    3.14]",
+    },
     {
       name: "width-only (no comma, no decimals) — free-format render, left-padded",
       input: '(format "[~6f]" 3.5)',
-      value: "[   3.5]" },
+      value: "[   3.5]",
+    },
     // Rounding follows JS's own `toFixed` semantics (pins implementation, not behavior —
     // a different rounding library would be an equally valid ~f).
     { name: "rounds via toFixed semantics — half rounds up", input: '(format "~,0f" 2.5)', value: "3" },
@@ -120,7 +128,8 @@ describe("format — ~s vs ~a on a string (quoted vs bare)", () => {
     {
       name: "~s escapes embedded quotes and backslashes (re-readable write form)",
       input: '(format "~s" "a\\"b")',
-      value: '"a\\"b"' },
+      value: '"a\\"b"',
+    },
   ])("$name", async ({ input, value }) => {
     expect(js(await run(input))).toBe(value);
   });
@@ -131,11 +140,13 @@ describe("format — SRFI-48/CL #f destination", () => {
     {
       name: "(format #f fmt arg ...) returns the same string as SRFI-28 — with args",
       input: '(format #f "~a-~a" 1 2)',
-      value: "1-2" },
+      value: "1-2",
+    },
     {
       name: "(format #f fmt arg ...) returns the same string as SRFI-28 — no args",
       input: '(format #f "plain")',
-      value: "plain" },
+      value: "plain",
+    },
   ])("$name", async ({ input, value }) => {
     expect(js(await run(input))).toBe(value);
   });
@@ -168,15 +179,18 @@ describe("format — directive and arity errors are clear", () => {
     {
       name: "too few arguments for the directives",
       input: '(format "~a ~a" 1)',
-      error: /too few arguments/ },
+      error: /too few arguments/,
+    },
     {
       name: "too many arguments for the directives",
       input: '(format "~a" 1 2)',
-      error: /too many arguments/ },
+      error: /too many arguments/,
+    },
     {
       name: "~d with a non-number argument is an error",
       input: '(format "~d" "not-a-number")',
-      error: /~d directive expects a number/ },
+      error: /~d directive expects a number/,
+    },
     { name: "no arguments at all is an error", input: "(format)", error: /expected a format string/ },
   ])("$name", async ({ input, error }) => {
     await expect(run(input)).rejects.toThrow(error);

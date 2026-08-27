@@ -108,10 +108,7 @@ export class AmbientRuntime {
   }
 
   /** Null-parent plain frame. Isolated root — no `__parent__`. */
-  static root(
-    name?: string | symbol,
-    bindings?: Record<string | symbol, AmbientValue>,
-  ): AmbientRuntime {
+  static root(name?: string | symbol, bindings?: Record<string | symbol, AmbientValue>): AmbientRuntime {
     return mintPlainFrame(name, bindings, null);
   }
 
@@ -119,7 +116,11 @@ export class AmbientRuntime {
    * Fresh child of this frame. Subtype-preserving: a {@link ResolvingAmbient} parent
    * yields a resolver-capable child; a plain parent yields a plain lexical frame.
    */
-  child(this: ResolvingAmbient, name?: string | symbol, bindings?: Record<string | symbol, AmbientValue>): ResolvingAmbient;
+  child(
+    this: ResolvingAmbient,
+    name?: string | symbol,
+    bindings?: Record<string | symbol, AmbientValue>,
+  ): ResolvingAmbient;
   child(name?: string | symbol, bindings?: Record<string | symbol, AmbientValue>): AmbientRuntime;
   child(
     name: string | symbol = `child of ${String(this.__name__) || "unknown"}`,
@@ -324,10 +325,7 @@ export class ResolvingAmbient extends AmbientRuntime implements SchemeEnv {
   }
 
   /** Null-parent resolving frame. Isolated root — no `__parent__`. */
-  static override root(
-    name?: string | symbol,
-    bindings?: Record<string | symbol, AmbientValue>,
-  ): ResolvingAmbient {
+  static override root(name?: string | symbol, bindings?: Record<string | symbol, AmbientValue>): ResolvingAmbient {
     return mintResolvingFrame(name, bindings, null);
   }
 

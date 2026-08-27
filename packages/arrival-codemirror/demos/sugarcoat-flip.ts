@@ -10,7 +10,12 @@ import { EditorView, lineNumbers } from "@codemirror/view";
 import { schemeToSugarcoat } from "@inhuman.tools/arrival-sugarcoat";
 import { createBrowserSchemeLanguageService } from "@inhuman.tools/arrival-lsp/browser";
 
-import { paramHintsExtension, schemeIde, schemeSugarcoat, sugarcoatIdeBackend } from "@inhuman.tools/arrival-codemirror";
+import {
+  paramHintsExtension,
+  schemeIde,
+  schemeSugarcoat,
+  sugarcoatIdeBackend,
+} from "@inhuman.tools/arrival-codemirror";
 
 const canonical = `(define (loud-names names)
   (map string-upcase names))

@@ -199,7 +199,8 @@ export class CorpusRunner {
     const outcome: StepOutcome = drained[0] ?? {
       kind: "error",
       phase: "actual-eval",
-      message: "js-run-test never fired for this step (the form did not dispatch through the harness hook)" };
+      message: "js-run-test never fired for this step (the form did not dispatch through the harness hook)",
+    };
     this.settled.set(step.index, outcome);
   }
 
@@ -218,7 +219,8 @@ export class CorpusRunner {
           phase: "block-aborted",
           message:
             abortedMessage ??
-            `block produced only ${drained.length} outcome(s) for ${step.members.length} member(s) — a member past this point never ran` },
+            `block produced only ${drained.length} outcome(s) for ${step.members.length} member(s) — a member past this point never ran`,
+        },
     );
     this.blockOutcomes.set(step.index, outcomes);
     step.members.forEach((member, i) => this.settled.set(member.index, outcomes[i]));

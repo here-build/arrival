@@ -10,4 +10,3 @@ minimumReleaseAge: 10080 # 7 days, in minutes
 minimumReleaseAgeExclude:
   - "@here.build/*"
   - "@inhuman.tools/*"
-

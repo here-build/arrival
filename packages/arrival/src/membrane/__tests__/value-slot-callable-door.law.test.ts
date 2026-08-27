@@ -39,7 +39,9 @@ describe("the z.dynamic-callable door", () => {
           function (v) {
             return v;
           },
-        ) }) });
+        ),
+      }),
+    });
 
     await expect(exec("(echo-dynamic (lambda (x) x))", { capabilities: [cap] })).rejects.toThrow(
       /a callable argument crossed a z\.dynamic slot/,
@@ -57,7 +59,9 @@ describe("the z.dynamic-callable door", () => {
           function (v) {
             return toJS(v as never);
           },
-        ) }) });
+        ),
+      }),
+    });
 
     const [result] = await exec("(echo-dynamic 42)", { capabilities: [cap] });
     expect(Number(result)).toBe(42);
@@ -74,7 +78,9 @@ describe("the z.dynamic-callable door", () => {
             called = true;
             return undefined;
           },
-        ) }) });
+        ),
+      }),
+    });
 
     await exec("(call-it (lambda (x) (+ x 1)))", { capabilities: [cap] });
     expect(called).toBe(true);
@@ -88,7 +94,9 @@ describe("the z.dynamic-callable door", () => {
           function (args) {
             return args.v;
           },
-        ) }) });
+        ),
+      }),
+    });
 
     await expect(exec("(echo-kwargs :v (lambda (x) x))", { capabilities: [cap] })).rejects.toThrow(
       /a callable argument crossed a z\.dynamic slot \(keyword argument :v\)/,
@@ -104,7 +112,9 @@ describe("the z.dynamic-callable door", () => {
             // World-flip rebaseline: raw JS out; the membrane boxes.
             return toJS(args.v as never);
           },
-        ) }) });
+        ),
+      }),
+    });
 
     const [result] = await exec('(echo-kwargs :v "hello")', { capabilities: [cap] });
     expect(result).toBe("hello");
@@ -124,7 +134,9 @@ describe("the z.dynamic-callable door", () => {
             receivedBoxed = v instanceof AValue;
             return toJS(v as never);
           },
-        ) }) });
+        ),
+      }),
+    });
 
     const [result] = await exec('(echo-dynamic (list 1 2 "three"))', { capabilities: [cap] });
     expect(receivedBoxed).toBe(true);

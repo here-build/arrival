@@ -5,20 +5,26 @@ import { freshEnv } from "./_fresh-env.js";
 import { execOverFrame as exec } from "../eval/generator-exec.js";
 
 const env = await freshEnv();
-const run = async (form: string) => String((await exec(form, { env }) as unknown[])[0]);
+const run = async (form: string) => String(((await exec(form, { env })) as unknown[])[0]);
 
 describe("vectors/bytevectors are immutable regardless of origin (purity invariant)", () => {
   it("mutating a vector literal is a door", async () => {
     await expect(run(`(vector-set! #(1 2 3) 0 9)`)).rejects.toThrow(/omitted from arrival|frozen/i);
   });
   it("mutating a CONSTRUCTED vector is the same door — the old 'stays mutable' split is gone", async () => {
-    await expect(run(`(let ((v (vector 1 2 3))) (vector-set! v 0 9) v)`)).rejects.toThrow(/omitted from arrival|frozen/i);
+    await expect(run(`(let ((v (vector 1 2 3))) (vector-set! v 0 9) v)`)).rejects.toThrow(
+      /omitted from arrival|frozen/i,
+    );
   });
   it("make-vector is immutable too (vector-fill! doored)", async () => {
-    await expect(run(`(let ((v (make-vector 2 0))) (vector-fill! v 7) v)`)).rejects.toThrow(/omitted from arrival|frozen/i);
+    await expect(run(`(let ((v (make-vector 2 0))) (vector-fill! v 7) v)`)).rejects.toThrow(
+      /omitted from arrival|frozen/i,
+    );
   });
   it("a CONSTRUCTED bytevector is immutable too (bytevector-u8-set! doored)", async () => {
-    await expect(run(`(let ((b (make-bytevector 2 0))) (bytevector-u8-set! b 0 5) b)`)).rejects.toThrow(/omitted from arrival|frozen/i);
+    await expect(run(`(let ((b (make-bytevector 2 0))) (bytevector-u8-set! b 0 5) b)`)).rejects.toThrow(
+      /omitted from arrival|frozen/i,
+    );
   });
 
   it("reading a literal vector is fine", async () => {

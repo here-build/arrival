@@ -47,8 +47,10 @@ function makeUpperExtCapability(name: string, suffix: string, resolverName: stri
       [resolverName]: symbol.rosetta`${resolverName}: uppercases module contents`(
         { input: [z.union([z.string, z.bytevector])], output: [z.string] },
         (contents) => contentsToText(contents).toUpperCase(),
-      ) }),
-    prelude: `(require/register-extension "${suffix}" "${resolverName}")` });
+      ),
+    }),
+    prelude: `(require/register-extension "${suffix}" "${resolverName}")`,
+  });
 }
 
 describe("LAW 1 — nested require (inside a required .scm module) resolves via the RUN's own per-run registry", () => {
@@ -60,7 +62,10 @@ describe("LAW 1 — nested require (inside a required .scm module) resolves via 
       config: {
         loader: files({
           "outer-nested.scm": `(require "inner-nested.nestedupper")`,
-          "inner-nested.nestedupper": "hello from inside" }) } });
+          "inner-nested.nestedupper": "hello from inside",
+        }),
+      },
+    });
 
     // The `.scm` module's own last form is the nested require — its value is what `load`
     // discards (require's own `load` branch always returns unspecified), so the observable
@@ -80,7 +85,10 @@ describe("LAW 2 — cross-run isolation holds one require-frame deeper", () => {
       config: {
         loader: files({
           "outer-iso-a.scm": `(require "inner-iso-a.nestediso")`,
-          "inner-iso-a.nestediso": "seen by run A" }) } });
+          "inner-iso-a.nestediso": "seen by run A",
+        }),
+      },
+    });
 
     // Run B: a SEPARATE exec() call, a capability set that never registered `.nestediso` (only
     // the bare loader) — its nested require of the SAME suffix must fail, proving run A's
@@ -92,7 +100,10 @@ describe("LAW 2 — cross-run isolation holds one require-frame deeper", () => {
         config: {
           loader: files({
             "outer-iso-b.scm": `(require "unseen-iso-b.nestediso")`,
-            "unseen-iso-b.nestediso": "unreachable" }) } }),
+            "unseen-iso-b.nestediso": "unreachable",
+          }),
+        },
+      }),
     ).rejects.toThrow(/no-resolver|no resolver/i);
   });
 });

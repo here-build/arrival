@@ -59,7 +59,8 @@ function testCtx(over: Partial<EmitCtx<R>> = {}): EmitCtx<R> {
     door: (reason) => {
       throw new Error(reason);
     },
-    ...over };
+    ...over,
+  };
 }
 
 const ref = (name: string): R => Ref(Binding(name));
@@ -92,6 +93,8 @@ describe("srfi-1 Contract.emit — the Phase-2 relocation drill (filter — Wave
   it("filter: a mis-arity call doors (totality — never a silent miscompile)", () => {
     const def = sequenceDef("filter");
     expect(() => def.emit!.call([ref("pred")], testCtx())).toThrow(/wants exactly 2 arguments/);
-    expect(() => def.emit!.call([ref("pred"), ref("xs"), ref("extra")], testCtx())).toThrow(/wants exactly 2 arguments/);
+    expect(() => def.emit!.call([ref("pred"), ref("xs"), ref("extra")], testCtx())).toThrow(
+      /wants exactly 2 arguments/,
+    );
   });
 });

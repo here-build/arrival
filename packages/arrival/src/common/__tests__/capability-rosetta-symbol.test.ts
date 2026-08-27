@@ -49,7 +49,8 @@ function invocationWithId(id: number): { invocation: InvocationLike; marked: () 
     markProvenancePoint() {
       didMark = true;
       this.isProvenancePoint = true;
-    } };
+    },
+  };
   return { invocation, marked: () => didMark };
 }
 
@@ -60,7 +61,8 @@ async function wireRosetta(def: ARosettaProcedure): Promise<ARosettaProcedure> {
   // from the gate by design: dissolution is a duplicate binding under a DIFFERENT name).
   const name = (def.contract as { name: string }).name;
   const cap = EnvCapability.define("test/rosetta", {
-    symbols: (symbol) => ({ [name]: def, verb: symbol.alias`${name}` }) });
+    symbols: (symbol) => ({ [name]: def, verb: symbol.alias`${name}` }),
+  });
   const { env, verbs } = recordingEnv();
   await applyCapability(env, [cap]);
   expect(verbs.verb).toBeInstanceOf(ARosettaProcedure);

@@ -138,9 +138,7 @@ describe("inbound registry — the declared, ordered claim table IS the law", ()
 
 describe("pending cells — a Promise inside a structure settles lazily on first access (maybeThen discipline)", () => {
   it("promise-in-DICT: first read returns the settle chain; it resolves to the boxed value CARRYING the dict's provenance; the read is SYNC after settlement", async () => {
-    const dict = new ADict([[new ASymbol(":answer"), Promise.resolve(42) as unknown as Promise<SchemeValue>]],
-      PROV,
-    );
+    const dict = new ADict([[new ASymbol(":answer"), Promise.resolve(42) as unknown as Promise<SchemeValue>]], PROV);
 
     const first = dict.get("answer");
     expect(first).toBeInstanceOf(Promise);

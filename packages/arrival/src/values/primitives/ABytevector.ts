@@ -91,7 +91,7 @@ export class ABytevector extends AValue {
     const a = this.__bytevector__;
     const b = other.__bytevector__;
     if (a.length !== b.length) return false;
-    // eslint-disable-next-line unicorn/no-for-loop -- pairwise byte compare; index is the walk
+
     for (let i = 0; i < a.length; i++) {
       if (a[i] !== b[i]) return false;
     }

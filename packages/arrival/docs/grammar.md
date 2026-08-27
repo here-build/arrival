@@ -29,18 +29,18 @@ their text.
 
 **The reader ships R7RS; it widens only where R7RS leaves a shape undefined, and every
 widening is a bounded, named, compile-erased superset.** This is P13 made concrete for
-the language surface: Racket and Clojure forms appear *only* at positions R7RS calls
+the language surface: Racket and Clojure forms appear _only_ at positions R7RS calls
 malformed, each lowering to a form stock Scheme already accepts. There is no
 Host-under-the-hood style "JS is the real semantics underneath" — a hidden host interpretation is a
 third reading the provenance and type layers never agreed to (P13's forbidden state).
 
 A superset earns its place iff it (a) lowers to pure spec with zero non-spec output
 residue, (b) completes a symmetry the platform's own grain left open — a datum already
-legal *everywhere else* that one position inertly rejected — and (c) is explicitly
+legal _everywhere else_ that one position inertly rejected — and (c) is explicitly
 enumerated, not an open escape hatch (P14). The curly-infix ban (§INFIX, `RULINGS.md`
 R6) is the mirror image: a candidate superset that fails (b) — braces would carry two
 grammars at once and an infix-shaped dict would misparse silently — so it is refused at
-a loud door instead of admitted. Faithfulness is judged at the *output*: the authoring
+a loud door instead of admitted. Faithfulness is judged at the _output_: the authoring
 surface is wider, the compiled artifact is R7RS.
 
 ---
@@ -52,11 +52,11 @@ its own grammar — the reader never erases which bracket produced it.** The dis
 is load-bearing because the two literals evaluate their contents differently, and a
 conforming reader must keep them apart:
 
-| surface | node | `evalElements` | code-position meaning |
-|---|---|---|---|
-| `[form …]` | `AVector` (literal) | `true` | elements evaluate — lowers once (cached) to `(vector …)` |
-| `#(form …)` | `AVector` (constant) | `false` | R7RS constant — elements never evaluate |
-| `{form …}` | `ADict` (literal) | — | lowers once (cached) to `(dict …)` |
+| surface     | node                 | `evalElements` | code-position meaning                                    |
+| ----------- | -------------------- | -------------- | -------------------------------------------------------- |
+| `[form …]`  | `AVector` (literal)  | `true`         | elements evaluate — lowers once (cached) to `(vector …)` |
+| `#(form …)` | `AVector` (constant) | `false`        | R7RS constant — elements never evaluate                  |
+| `{form …}`  | `ADict` (literal)    | —              | lowers once (cached) to `(dict …)`                       |
 
 `evalElements === true` is the single reader-set marker distinguishing a `[…]` literal
 from an R7RS `#(…)` constant; the Parser stamps it on `[`, and it survives as a field
@@ -167,7 +167,7 @@ ships).
 **Why a ban and not a silent parse.** SRFI-105 n-expressions flatten to an ODD-length
 element sequence (`k` operands + `k−1` operators = `2k−1`) with a bare symbol in the
 operator slot. If braces carried both grammars, a dict-shaped infix expression — or an
-infix-shaped dict — would misparse *silently*, the worst failure a reader can have. The
+infix-shaped dict — would misparse _silently_, the worst failure a reader can have. The
 ban keeps the error loud and points at the prefix form.
 
 **The detection guards the genuine-dict false positive.** The infix door fires only when
@@ -232,11 +232,11 @@ has exactly ONE legal reading among the parent dialects, and Arrival's meaning e
 unique reading. No shape exists whose Scheme meaning and Clojure/Racket meaning both exist
 and disagree:
 
-| surface | R7RS | Racket | Clojure | Arrival |
-|---|---|---|---|---|
-| `(let ((s v)) …)` | legal | legal | — | untouched |
-| `(let ([s v]) …)` | malformed | legal | — | = Racket (BG2b) |
-| `(let [s v …] …)` | malformed | — | legal | = Clojure (BG2a) |
+| surface           | R7RS      | Racket | Clojure | Arrival          |
+| ----------------- | --------- | ------ | ------- | ---------------- |
+| `(let ((s v)) …)` | legal     | legal  | —       | untouched        |
+| `(let ([s v]) …)` | malformed | legal  | —       | = Racket (BG2b)  |
+| `(let [s v …] …)` | malformed | —      | legal   | = Clojure (BG2a) |
 
 Where R7RS calls a shape malformed, Arrival gives it the single well-defined dialect
 meaning — which, by BG3, is byte-identical to a form R7RS DOES accept. The union of the
@@ -262,7 +262,7 @@ structural-equivalence argument is BG3's, transposed to clauses.
 converts ONLY the clause's own wrapper; it never looks inside element 0. So a `case`
 clause's datum-list head stays data: `[(1 2) "low"]`'s vector elements are `[(1 2), "low"]`,
 and rewrapping them as a list gives `((1 2) "low")` with the inner `(1 2)` untouched —
-exactly the paren image. A datum-list head that is *itself* a bracket vector
+exactly the paren image. A datum-list head that is _itself_ a bracket vector
 (`[[1 2] "low"]`) does NOT lower to `((1 2) "low")`; it doors `E-CASE-BRACKET-DATUM-LIST`,
 naming the vector-ness itself as the confusion, because the datum list is data and is never
 bracket-converted even inside a bracketed clause.
@@ -282,9 +282,9 @@ Racket's reading already equals the rewrite.
 
 ## 7. MEMBER-ACCESS — two syntaxes over one interop read
 
-*(This section owns the SYNTAX face of member access. The read MECHANISM — the interop
+_(This section owns the SYNTAX face of member access. The read MECHANISM — the interop
 policy, the prototype-walk boundary, the module-local capability brand — lives in
-`docs/membrane.md §MEMBER-READ`, its canonical home. Cross-link, don't restate.)*
+`docs/membrane.md §MEMBER-READ`, its canonical home. Cross-link, don't restate.)_
 
 **Two surface syntaxes read a member, and both bottom out in ONE interop read.** `@` /
 `@?` / `@keys` (the explicit read/has/keys surface) and `(:key obj)` (the keyword
@@ -331,21 +331,21 @@ Every grammar rejection is a teaching door carrying a stable, machine-checkable 
 on the thrown error (`errorClass` reads it off `.code` or the nearest cause). Messages
 stay free to teach; the specs match ONLY the class.
 
-| Code | Meaning |
-|---|---|
-| `E-DICT-ODD-ARITY` | `{…}` has an odd element count (a key without its value) |
-| `E-DICT-BAD-KEY` | `{…}` key is not a `:keyword` / `"string"` / trailing-colon `key:` / unquote form (read time), or a substituted key folded to a non-string (eval time) |
-| `E-DICT-DUP-KEY` | duplicate `{…}` key (read-time static, or post-quasiquote-substitution) |
-| `E-DICT-INFIX-BANNED` | `{…}` is infix-shaped (`{a * b}`) — the SRFI-105 curly-infix ban (§INFIX); steers to the prefix `(op …)` form |
-| `E-LITERAL-DOT` | `.` inside a `[…]`/`{…}` literal |
-| `E-EXPECTING-DATUM` | quote-family prefix (`'`, `` ` ``, `,`, `,@`) dangling against a close delimiter |
-| `E-UNTERMINATED` | EOF inside an open string/list/literal |
-| `E-BRACKET-MISMATCH` | close delimiter does not pair its opener (`(a]`) |
-| `E-BRACKET-UNEXPECTED` | close delimiter with nothing open (`]`) |
-| `E-LET-BRACKET-BINDINGS-LIST` | a whole-list bracket bindings form is malformed: odd element count, or the whole-list form on `do` (§BINDINGS, BG4) |
-| `E-LET-BRACKET-BINDING` | a per-element bracket binding is malformed: wrong length (≠2; ≠2–3 for `do`), or a non-symbol (incl. a destructuring vector) in the name slot |
-| `E-COND-BRACKET-CLAUSE` | a `cond`/`case`/`do`-test bracket clause is empty (`[]`) |
-| `E-CASE-BRACKET-DATUM-LIST` | a `case` clause's datum-list head is itself a bracket vector — the datum list is data, never bracket-converted (§CLAUSES, BG9) |
+| Code                          | Meaning                                                                                                                                                |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `E-DICT-ODD-ARITY`            | `{…}` has an odd element count (a key without its value)                                                                                               |
+| `E-DICT-BAD-KEY`              | `{…}` key is not a `:keyword` / `"string"` / trailing-colon `key:` / unquote form (read time), or a substituted key folded to a non-string (eval time) |
+| `E-DICT-DUP-KEY`              | duplicate `{…}` key (read-time static, or post-quasiquote-substitution)                                                                                |
+| `E-DICT-INFIX-BANNED`         | `{…}` is infix-shaped (`{a * b}`) — the SRFI-105 curly-infix ban (§INFIX); steers to the prefix `(op …)` form                                          |
+| `E-LITERAL-DOT`               | `.` inside a `[…]`/`{…}` literal                                                                                                                       |
+| `E-EXPECTING-DATUM`           | quote-family prefix (`'`, `` ` ``, `,`, `,@`) dangling against a close delimiter                                                                       |
+| `E-UNTERMINATED`              | EOF inside an open string/list/literal                                                                                                                 |
+| `E-BRACKET-MISMATCH`          | close delimiter does not pair its opener (`(a]`)                                                                                                       |
+| `E-BRACKET-UNEXPECTED`        | close delimiter with nothing open (`]`)                                                                                                                |
+| `E-LET-BRACKET-BINDINGS-LIST` | a whole-list bracket bindings form is malformed: odd element count, or the whole-list form on `do` (§BINDINGS, BG4)                                    |
+| `E-LET-BRACKET-BINDING`       | a per-element bracket binding is malformed: wrong length (≠2; ≠2–3 for `do`), or a non-symbol (incl. a destructuring vector) in the name slot          |
+| `E-COND-BRACKET-CLAUSE`       | a `cond`/`case`/`do`-test bracket clause is empty (`[]`)                                                                                               |
+| `E-CASE-BRACKET-DATUM-LIST`   | a `case` clause's datum-list head is itself a bracket vector — the datum list is data, never bracket-converted (§CLAUSES, BG9)                         |
 
 **One member-access rejection is code-less by design.** The `:key` accessor over a
 non-dict operand (`(:a 5)`) throws a plain `Error` — no stable `.code`, `errorClass`

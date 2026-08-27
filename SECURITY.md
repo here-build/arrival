@@ -7,6 +7,7 @@ If you believe you've found a security vulnerability in any of the packages in t
 **Email**: security@here.build
 
 Please include:
+
 - A description of the vulnerability
 - Steps to reproduce
 - Potential impact

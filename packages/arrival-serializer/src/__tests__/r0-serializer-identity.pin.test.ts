@@ -34,7 +34,7 @@ describe("R0 pin — serializer byte-identity (no-caps path)", () => {
     expect(out).toBe(
       '{:id 42 :name "hello \\"world\\"\\nline2\\ttab" :active #t :tags [a b c] ' +
         ":nested {:x 1 :y [1 2 3] :z nil} :count 3.14 :big -9007199254740993 " +
-        ":aSet (set 1 2 3) :aMap (map :k1 1 :k2 2) :aDate \"2024-01-01T00:00:00.000Z\"}",
+        ':aSet (set 1 2 3) :aMap (map :k1 1 :k2 2) :aDate "2024-01-01T00:00:00.000Z"}',
     );
   });
 

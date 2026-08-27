@@ -36,7 +36,9 @@ describe("Quick Start Examples", () => {
           "double-all": symbol.rosetta`double-all: doubles every element of a numeric list`(
             { input: [z.list(z.number)], output: [z.list(z.number)] },
             (numbers) => numbers.map((x) => x * 2),
-          ) }) }),
+          ),
+        }),
+      }),
     ]);
 
     // execState (COMPLEX tier): toJS wants BOXED values — `exec` already unwraps.
@@ -64,7 +66,9 @@ describe("Quick Start Examples", () => {
               const users = toJS(rawUsers) as Array<{ id: string; priority: number }>;
               return users.filter((u) => u.priority > 10) as never;
             },
-          ) }) }),
+          ),
+        }),
+      }),
     ]);
 
     // Pass JS data to Scheme

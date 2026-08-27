@@ -9,14 +9,7 @@ import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
 const symbols = harvestContracts(syntaxPack.spec.symbols);
 
-const SYNTAX_DOOR_NAMES = [
-  "include",
-  "include-ci",
-  "cond-expand",
-  "define-library",
-  "import",
-  "syntax-error",
-] as const;
+const SYNTAX_DOOR_NAMES = ["include", "include-ci", "cond-expand", "define-library", "import", "syntax-error"] as const;
 
 const door = async (src: string) => {
   try {

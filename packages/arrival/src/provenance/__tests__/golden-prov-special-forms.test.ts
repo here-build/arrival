@@ -39,7 +39,8 @@ import { sNum, run } from "../../__tests__/_lineage-test-helpers.js";
 /** STATIC classifier for the gate checks below — the control forms here use only
  *  arithmetic/comparison pures (no Rosetta-in, no fans). */
 const C: Classifier = {
-  roleOf: (op) => (["map", "filter"].includes(op) ? "fan" : undefined) };
+  roleOf: (op) => (["map", "filter"].includes(op) ? "fan" : undefined),
+};
 
 /** fullCone of the STATIC lineage tree for `src` under leaf bindings `b` (no eval). */
 async function staticCone(src: string, b: Record<string, readonly number[]>): Promise<number[]> {
@@ -97,7 +98,8 @@ describe("GOLDEN — `if` provenance (gate G2 oracle)", () => {
   it("two-armed merge in the taken branch: (if (< 0 x) (* v1 v2) -1)", async () => {
     // Predicate x=id7; taken arm is an arithmetic merge of v1=id100, v2=id200.
     // Cone = predicate ∪ both arm operands → {7,100,200}.
-    expect(await run(`(if (< 0 x) (* v1 v2) -1)`, { x: sNum(3, 7), v1: sNum(5, 100), v2: sNum(7, 200) })).toMatchInlineSnapshot(`
+    expect(await run(`(if (< 0 x) (* v1 v2) -1)`, { x: sNum(3, 7), v1: sNum(5, 100), v2: sNum(7, 200) }))
+      .toMatchInlineSnapshot(`
       [
         7,
         100,
@@ -130,7 +132,8 @@ describe("GOLDEN — `let` transparency (gate G2 oracle)", () => {
   });
 
   it("nested let threads provenance through both bindings: (let ((a v1)) (let ((b v2)) (+ a b)))", async () => {
-    expect(await run(`(let ((a v1)) (let ((b v2)) (+ a b)))`, { v1: sNum(5, 100), v2: sNum(7, 200) })).toMatchInlineSnapshot(`
+    expect(await run(`(let ((a v1)) (let ((b v2)) (+ a b)))`, { v1: sNum(5, 100), v2: sNum(7, 200) }))
+      .toMatchInlineSnapshot(`
       [
         100,
         200,
@@ -159,7 +162,8 @@ describe("GOLDEN — `cond` provenance (gate G2 oracle)", () => {
   it("matched clause: predicate provenance UNIONs the arm — (cond ((< v 0) a) (else b)) → {pred, a}", async () => {
     // v=-1 (id 5): clause 1 matches. predicate `(< v 0)` carries v=id5, arm `a`
     // carries id11 → result {5,11}. Same predicate-taint as `if`.
-    expect(await run(`(cond ((< v 0) a) (else b))`, { v: sNum(-1, 5), a: sNum(11, 11), b: sNum(22, 22) })).toMatchInlineSnapshot(`
+    expect(await run(`(cond ((< v 0) a) (else b))`, { v: sNum(-1, 5), a: sNum(11, 11), b: sNum(22, 22) }))
+      .toMatchInlineSnapshot(`
       [
         5,
         11,
@@ -173,7 +177,8 @@ describe("GOLDEN — `cond` provenance (gate G2 oracle)", () => {
     // predicate's provenance is discarded. Contrast the matched case above: ONLY
     // the matched clause's selector contributes. This asymmetry is exactly what a
     // `mux` lineage node must model (selector-on-the-taken-path ∪ taken-arm).
-    expect(await run(`(cond ((< v 0) a) (else b))`, { v: sNum(9, 5), a: sNum(11, 11), b: sNum(22, 22) })).toMatchInlineSnapshot(`
+    expect(await run(`(cond ((< v 0) a) (else b))`, { v: sNum(9, 5), a: sNum(11, 11), b: sNum(22, 22) }))
+      .toMatchInlineSnapshot(`
       [
         22,
       ]
@@ -182,7 +187,8 @@ describe("GOLDEN — `cond` provenance (gate G2 oracle)", () => {
 
   it("matched clause with a merge arm: (cond ((< v 0) (* p q)) (else 0)) → {pred, p, q}", async () => {
     // v=-1 (id 5) matches; arm `(* p q)` merges p=id9, q=id13. Cone = {5,9,13}.
-    expect(await run(`(cond ((< v 0) (* p q)) (else 0))`, { v: sNum(-1, 5), p: sNum(4, 9), q: sNum(2, 13) })).toMatchInlineSnapshot(`
+    expect(await run(`(cond ((< v 0) (* p q)) (else 0))`, { v: sNum(-1, 5), p: sNum(4, 9), q: sNum(2, 13) }))
+      .toMatchInlineSnapshot(`
       [
         5,
         9,
@@ -197,7 +203,14 @@ describe("GOLDEN — `cond` provenance (gate G2 oracle)", () => {
     // (Here the matched predicate happens to share v's id with the failed one, so
     // the snapshot alone can't separate them — `else arm` above is the clean
     // discriminator. This case pins the multi-clause shape.)
-    expect(await run(`(cond ((< v 0) z) ((> v 0) a) (else b))`, { v: sNum(5, 5), z: sNum(99, 99), a: sNum(11, 11), b: sNum(22, 22) })).toMatchInlineSnapshot(`
+    expect(
+      await run(`(cond ((< v 0) z) ((> v 0) a) (else b))`, {
+        v: sNum(5, 5),
+        z: sNum(99, 99),
+        a: sNum(11, 11),
+        b: sNum(22, 22),
+      }),
+    ).toMatchInlineSnapshot(`
       [
         5,
         11,
@@ -211,7 +224,15 @@ describe("GOLDEN — `cond` provenance (gate G2 oracle)", () => {
     // NOT contain 50 — proving the failed clause's distinct selector is dropped.
     // This is the sharpest G2 oracle for the cond mux: a classifier that unions
     // ALL selectors would wrongly include 50.
-    expect(await run(`(cond ((< w 0) z) ((> v 0) a) (else b))`, { w: sNum(7, 50), v: sNum(5, 5), z: sNum(99, 99), a: sNum(11, 11), b: sNum(22, 22) })).toMatchInlineSnapshot(`
+    expect(
+      await run(`(cond ((< w 0) z) ((> v 0) a) (else b))`, {
+        w: sNum(7, 50),
+        v: sNum(5, 5),
+        z: sNum(99, 99),
+        a: sNum(11, 11),
+        b: sNum(22, 22),
+      }),
+    ).toMatchInlineSnapshot(`
       [
         5,
         11,

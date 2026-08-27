@@ -14,7 +14,7 @@ import type { EvalPreludeInto, EvalSchemeInto } from "../../common/scheme-env.js
 import { buildVocabulary } from "../vocabulary.js";
 import { assembleRun } from "../assemble-run.js";
 import { exec, execInFrame } from "../../eval/generator-exec.js";
-import {  isAmbientRuntime, ResolvingAmbient , type EnvWithInternals } from "../AmbientRuntime.js";
+import { isAmbientRuntime, ResolvingAmbient, type EnvWithInternals } from "../AmbientRuntime.js";
 import { UnboundVariableError } from "../../errors.js";
 import type { SchemeValue } from "../../values/types.js";
 import { ACallable, applyCallback } from "../../values/primitives/ACallable.js";
@@ -50,7 +50,9 @@ describe("assembleRun — the diamond-DAG single-execution-per-run law", () => {
             this.resources.count += 1;
             return "ok";
           },
-        ) }) });
+        ),
+      }),
+    });
     const left = EnvCapability.define("test/prelude-diamond-left", { deps: [shared], symbols: () => ({}) });
     const right = EnvCapability.define("test/prelude-diamond-right", { deps: [shared], symbols: () => ({}) });
     const top = EnvCapability.define("test/prelude-diamond-top", { deps: [left, right], symbols: () => ({}) });
@@ -58,7 +60,8 @@ describe("assembleRun — the diamond-DAG single-execution-per-run law", () => {
     const runA = await assembleRun({
       capabilities: [top],
       evalScheme: realEvalScheme,
-      evalPrelude: realEvalPrelude });
+      evalPrelude: realEvalPrelude,
+    });
     expect((runA.capabilityResources?.get(shared) as { count: number }).count).toBe(1);
 
     // A SECOND RunContext from the SAME tuple: the memoized Vocabulary is shared, but prelude
@@ -67,7 +70,8 @@ describe("assembleRun — the diamond-DAG single-execution-per-run law", () => {
     const runB = await assembleRun({
       capabilities: [top],
       evalScheme: realEvalScheme,
-      evalPrelude: realEvalPrelude });
+      evalPrelude: realEvalPrelude,
+    });
     expect((runB.capabilityResources?.get(shared) as { count: number }).count).toBe(1);
     expect(runA.capabilityResources?.get(shared)).not.toBe(runB.capabilityResources?.get(shared));
   });
@@ -92,12 +96,15 @@ describe("assembleRun — registration-conflict door as the execution-dedup dete
             this.resources.keys.add(key);
             return key;
           },
-        ) }) });
+        ),
+      }),
+    });
 
     const runCtx = await assembleRun({
       capabilities: [registry],
       evalScheme: realEvalScheme,
-      evalPrelude: realEvalPrelude });
+      evalPrelude: realEvalPrelude,
+    });
     expect((runCtx.capabilityResources?.get(registry) as { keys: Set<string> }).keys.has("yaml")).toBe(true);
 
     // Simulate the regression: build the SAME prelude scope shape assembleRun would (main map +
@@ -108,7 +115,9 @@ describe("assembleRun — registration-conflict door as the execution-dedup dete
     for (const [name, value] of vocab.map) preludeScope.bind(name, value);
     for (const [name, value] of vocab.preludeOnly) preludeScope.bind(name, value);
 
-    await expect(realEvalPrelude(preludeScope, vocab.preludes[0]!.text, runCtx)).rejects.toThrow(/cannot register yaml twice/);
+    await expect(realEvalPrelude(preludeScope, vocab.preludes[0]!.text, runCtx)).rejects.toThrow(
+      /cannot register yaml twice/,
+    );
   });
 });
 
@@ -118,7 +127,8 @@ describe("assembleRun — prelude `(define …)` PERSISTS into the main phase (r
   it("a name a prelude `define`s IS bound from user code after assembly", async () => {
     const cap = EnvCapability.define("test/prelude-define-persists", {
       prelude: "(define leaked 42)",
-      symbols: () => ({}) });
+      symbols: () => ({}),
+    });
 
     const results = await exec("leaked", { capabilities: [cap] });
     expect(results[0]).toBe(42);
@@ -139,10 +149,10 @@ describe("assembleRun — preludeOnly overlay: invisible from user code, visible
         "prelude-only/secret": symbol.rosetta`prelude-only/secret: assembly-time-only`(
           { input: [], output: [sz.string], preludeOnly: true },
           () => "SECRET",
-        ) }) });
-    await expect(
-      exec("(prelude-only/secret)", { capabilities: [cap] }),
-    ).rejects.toBeInstanceOf(UnboundVariableError);
+        ),
+      }),
+    });
+    await expect(exec("(prelude-only/secret)", { capabilities: [cap] })).rejects.toBeInstanceOf(UnboundVariableError);
   });
 
   it("(b)+(c) visible from the prelude; a prelude-minted closure over it keeps working from user code", async () => {
@@ -169,21 +179,25 @@ describe("assembleRun — preludeOnly overlay: invisible from user code, visible
           { input: [], output: [sz.string], preludeOnly: true },
           () => "SECRET-42",
         ),
-        "store-closure!": symbol.native`store-closure!: stash a prelude-minted closure (raw scheme value) into this run's resources`(
-          { input: [sz.lambda], output: [sz.lambda], preludeOnly: true },
-          function (closure) {
-            this.resources.closure = closure;
-            return closure;
-          },
-        ),
-        "run-stored-closure": symbol.native`run-stored-closure: apply the resource-stashed closure through THIS dispatch's own runCtx`(
-          { input: [], output: [sz.schemeValue] },
-          function () {
-            const stored = this.resources.closure;
-            if (stored === undefined) throw new Error("no closure stored");
-            return applyCallback(stored, [], this) as SchemeValue;
-          },
-        ) }) });
+        "store-closure!":
+          symbol.native`store-closure!: stash a prelude-minted closure (raw scheme value) into this run's resources`(
+            { input: [sz.lambda], output: [sz.lambda], preludeOnly: true },
+            function (closure) {
+              this.resources.closure = closure;
+              return closure;
+            },
+          ),
+        "run-stored-closure":
+          symbol.native`run-stored-closure: apply the resource-stashed closure through THIS dispatch's own runCtx`(
+            { input: [], output: [sz.schemeValue] },
+            function () {
+              const stored = this.resources.closure;
+              if (stored === undefined) throw new Error("no closure stored");
+              return applyCallback(stored, [], this) as SchemeValue;
+            },
+          ),
+      }),
+    });
 
     // `run-stored-closure` is an ORDINARY (non-preludeOnly) verb — resolvable from user code —
     // yet its stored closure still resolves `prelude-only/secret`, a name user code itself
@@ -205,7 +219,9 @@ describe("assembleRun — per-run effect freshness", () => {
             this.resources.count += 1;
             return "ok";
           },
-        ) }) });
+        ),
+      }),
+    });
 
     const runA = await assembleRun({ capabilities: [cap], evalScheme: realEvalScheme, evalPrelude: realEvalPrelude });
     const runB = await assembleRun({ capabilities: [cap], evalScheme: realEvalScheme, evalPrelude: realEvalPrelude });
@@ -227,7 +243,8 @@ describe("assembleRun — evalPrelude required iff the tuple's closure declares 
   it("a tuple WITH a prelude but no evalPrelude supplied throws", async () => {
     const cap = EnvCapability.define("test/prelude-missing-evalPrelude", {
       prelude: "(define x 1)",
-      symbols: () => ({}) });
+      symbols: () => ({}),
+    });
     await expect(assembleRun({ capabilities: [cap], evalScheme: realEvalScheme })).rejects.toThrow(/evalPrelude/);
   });
 });

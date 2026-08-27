@@ -21,10 +21,8 @@ import { is_false } from "../values/value-guards.js";
  * old unconditional nil->#f; THIS pins the new behavior (per feedback-live-verify-is-the-gate).
  */
 
-const run = (code: string, strict: boolean) =>
-  exec(code, { env: inferenceEnv.child("cmp-divergence"), strict });
-const truthy = async (code: string, strict: boolean): Promise<boolean> =>
-  !is_false((await run(code, strict))[0]);
+const run = (code: string, strict: boolean) => exec(code, { env: inferenceEnv.child("cmp-divergence"), strict });
+const truthy = async (code: string, strict: boolean): Promise<boolean> => !is_false((await run(code, strict))[0]);
 
 describe("numeric core — identical in both modes (no divergence)", () => {
   it.each([false, true])("strict=%s: numeric < / = / <= compute by value", async (strict) => {
@@ -68,14 +66,21 @@ describe("LOOSE: cross-type throws (V: crashes on incompatible types, NOT the JS
 });
 
 describe("= stays NUMERIC (structural equality is equal?) — both modes reject non-numbers", () => {
-  it.each([false, true])("strict=%s: (= \"a\" \"a\") throws (use equal?/string=?)", async (strict) => {
+  it.each([false, true])('strict=%s: (= "a" "a") throws (use equal?/string=?)', async (strict) => {
     await expect(run('(= "a" "a")', strict)).rejects.toThrow();
   });
 });
 
 describe("STRICT = R7RS divergence probe — loose answers, strict throws", () => {
   // Each expression: loose gives a verdict (above); strict rejects it as non-R7RS-numeric.
-  const DIVERGENT = ['(< "a" "b")', "(< #\\a #\\b)", "(< 'apple 'banana)", "(< (quote ()) 5)", "(= (quote ()) (quote ()))", "(<= (quote ()) (quote ()))"];
+  const DIVERGENT = [
+    '(< "a" "b")',
+    "(< #\\a #\\b)",
+    "(< 'apple 'banana)",
+    "(< (quote ()) 5)",
+    "(= (quote ()) (quote ()))",
+    "(<= (quote ()) (quote ()))",
+  ];
   it.each(DIVERGENT)("strict rejects %s (R7RS-numeric only)", async (expr) => {
     await expect(run(expr, true)).rejects.toThrow();
   });

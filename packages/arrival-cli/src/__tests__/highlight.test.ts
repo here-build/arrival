@@ -7,7 +7,7 @@ import { stripAnsi } from "./ansi-strip.js";
 
 const SAMPLES = [
   "(define (fib n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))",
-  '(map (lambda (n) (* n n)) (iota 6))',
+  "(map (lambda (n) (* n n)) (iota 6))",
   '(let ((x 1) (y "two")) (+ x 3)) ; comment',
   "(cond (#t :yes) (else :no))",
   "#| block |# (require x)",

@@ -30,7 +30,8 @@ import {
   withRegionScope,
   withTrackCoordinate,
   type TrackCoordinate,
-  type TrackEmissionSink } from "../../membrane/region-scope.js";
+  type TrackEmissionSink,
+} from "../../membrane/region-scope.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { ProvenanceStoreFake } from "../../provenance/store/fakes.js";
 import { setEmissionEnabled } from "../../provenance/store/emit.js";
@@ -45,7 +46,12 @@ afterEach(() => {
 /** A trivial one-arg echo callable — same shape `membrane/region.law.test.ts` uses;
  *  enough surface for open/close counting, indifferent to what it computes. */
 function makeEcho(): ANativeProcedure {
-  return new ANativeProcedure({ name: "echo", arity: { min: 1, max: 1 }, contract: undefined, impl: (args) => args[0] });
+  return new ANativeProcedure({
+    name: "echo",
+    arity: { min: 1, max: 1 },
+    contract: undefined,
+    impl: (args) => args[0],
+  });
 }
 
 /** A callable whose impl always THROWS synchronously — proves track-close still fires
@@ -57,7 +63,8 @@ function makeThrowingProc(): ANativeProcedure {
     contract: undefined,
     impl: () => {
       throw new Error("region-events probe: deliberate failure");
-    } });
+    },
+  });
 }
 
 describe("track-open/track-close: real B3 counters through withRegionCall", () => {

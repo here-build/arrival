@@ -29,13 +29,17 @@ import type { ABytevector } from "../../../values/primitives/ABytevector.js";
 describe("bytevector Contract precision — wholly-variadic homogeneous element domains", () => {
   test("NEW bytevector shape: z.array(z.schemeNumber) decodes to ANumeric[] — each arg IS a scheme number, not unknown", () => {
     // Mirrors bytevector's real migrated contract: { input: z.array(z.schemeNumber), output: [z.bytevector] }.
-    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.schemeNumber>>, "scheme">>().toEqualTypeOf<ANumeric[]>();
+    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.schemeNumber>>, "scheme">>().toEqualTypeOf<
+      ANumeric[]
+    >();
   });
 
   test("NEW bytevector-append shape: z.array(z.bytevector) decodes to ABytevector[] on the scheme face — each arg IS a bytevector, not unknown", () => {
     // Mirrors bytevector-append's real migrated contract: { input: z.array(z.bytevector), output: [z.bytevector] }.
     // v2 bytevector is a codec: SCHEME face = ABytevector (the native op's face), JS face = Uint8Array.
-    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.bytevector>>, "scheme">>().toEqualTypeOf<ABytevector[]>();
+    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof z.bytevector>>, "scheme">>().toEqualTypeOf<
+      ABytevector[]
+    >();
   });
 });
 

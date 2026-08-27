@@ -15,7 +15,7 @@ reinvent. Verdict: **almost entirely assembly.** The residue is named in §5.
 
 Minimal neededness-respecting provenance across non-strict observations **is the lower adjoint of a
 Galois connection** over a lattice of **partial values with holes (⊥)** — Perera, Acar, Cheney & Levy,
-*Functional Programs That Explain Their Work*, ICFP 2012 (`mpi-sws.org/tr/2012-003`). Forward `eval`
+_Functional Programs That Explain Their Work_, ICFP 2012 (`mpi-sws.org/tr/2012-003`). Forward `eval`
 (extended to propagate holes) is total, monotone, meet-preserving (Thm 1); every meet-preserving map
 has a unique lower adjoint `uneval(u) = ⊓{ a | eval(a) ⊒ u }` = the **least input slice producing the
 demanded partial output** (Cor 1). **demand ⊣ provenance is literally that adjunction.**
@@ -35,21 +35,21 @@ is verbatim Perera's length example.
 
 ### STEAL — transfers as-is (all primary-source-verified)
 
-| Recipe | Source | Use |
-|---|---|---|
-| Galois slicing framework (holes lattice, meet-preserving fwd, lower-adjoint slice) | Perera–Acar–Cheney–Levy, ICFP 2012 | the whole model; our walk/fullCone/countCone instantiate it |
-| **Per-op adjoints composed by the chain rule** (reverse-mode AD; no monolithic replay) | **Atkey & Perera, arXiv:2511.09203, 2025** (CHAD-based) | **the v0.2 minimal-cone engine** — fits our tagless-final/ligature per-op grain |
-| `Const`-applicative dependency extraction; Applicative\|Monad = static-shape\|staging-hole boundary | Mokhov–Mitchell–PJ, *Build Systems à la Carte*, ICFP 2018 | rebuild `classify()` as a record-only FL interpretation — may fix the W1 `if`/`let`/`cond`+HOF gaps for free |
-| Absence analysis (dead-arg) / lub-of-branches (short-circuit) | Mycroft 1980; GHC absence; Graf–PJ–Keidel (arXiv:2403.02778, POPL'25 pub. unconfirmed) | classes (e) and (d) — cheapest rules |
-| Static projection-based slicing of first-order functional programs | Reps–Turnidge, LNCS 1110, 1996 | near-exact prior of our v0.1; the positional/field cookbook |
+| Recipe                                                                                              | Source                                                                                 | Use                                                                                                          |
+| --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Galois slicing framework (holes lattice, meet-preserving fwd, lower-adjoint slice)                  | Perera–Acar–Cheney–Levy, ICFP 2012                                                     | the whole model; our walk/fullCone/countCone instantiate it                                                  |
+| **Per-op adjoints composed by the chain rule** (reverse-mode AD; no monolithic replay)              | **Atkey & Perera, arXiv:2511.09203, 2025** (CHAD-based)                                | **the v0.2 minimal-cone engine** — fits our tagless-final/ligature per-op grain                              |
+| `Const`-applicative dependency extraction; Applicative\|Monad = static-shape\|staging-hole boundary | Mokhov–Mitchell–PJ, _Build Systems à la Carte_, ICFP 2018                              | rebuild `classify()` as a record-only FL interpretation — may fix the W1 `if`/`let`/`cond`+HOF gaps for free |
+| Absence analysis (dead-arg) / lub-of-branches (short-circuit)                                       | Mycroft 1980; GHC absence; Graf–PJ–Keidel (arXiv:2403.02778, POPL'25 pub. unconfirmed) | classes (e) and (d) — cheapest rules                                                                         |
+| Static projection-based slicing of first-order functional programs                                  | Reps–Turnidge, LNCS 1110, 1996                                                         | near-exact prior of our v0.1; the positional/field cookbook                                                  |
 
 ### ADAPT — exists, needs our-setting work
 
-| Technique | Source | Adaptation |
-|---|---|---|
-| where-provenance = source **locations**; field/positional pruning | Cheney–Chiticariu–Tan survey §4; Buneman–Khanna–Tan ICDT'01 | generalize relational `location=(R,t,Attr)` → a **lens-path over Pair/SchemeVector/record** |
-| read-only optics (Getter/Fold) compose by `∘`; Traversal∘Lens = z-depth-into-field | profunctor optics (Pickering–Gibbons–Wu); Foster lens laws | **only the read half** — never write back; lens laws are the *soundness proof of sibling-pruning, not runtime code* |
-| structured demand carrier (`Card :* SubDemand`, Prod/Call/Poly) | GHC demand analysis; Sergey–Vytiniotis–PJ(–Breitner) POPL'14/JFP'17 | collapse cardinality → {Absent,Present}; flip direction (their contravariant "how consumed" is adjoint to our covariant "where from") |
+| Technique                                                                          | Source                                                              | Adaptation                                                                                                                            |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| where-provenance = source **locations**; field/positional pruning                  | Cheney–Chiticariu–Tan survey §4; Buneman–Khanna–Tan ICDT'01         | generalize relational `location=(R,t,Attr)` → a **lens-path over Pair/SchemeVector/record**                                           |
+| read-only optics (Getter/Fold) compose by `∘`; Traversal∘Lens = z-depth-into-field | profunctor optics (Pickering–Gibbons–Wu); Foster lens laws          | **only the read half** — never write back; lens laws are the _soundness proof of sibling-pruning, not runtime code_                   |
+| structured demand carrier (`Card :* SubDemand`, Prod/Call/Poly)                    | GHC demand analysis; Sergey–Vytiniotis–PJ(–Breitner) POPL'14/JFP'17 | collapse cardinality → {Absent,Present}; flip direction (their contravariant "how consumed" is adjoint to our covariant "where from") |
 
 **Simplification to test first:** demand-as-projection (a per-node hole-lattice element pushed backward)
 may **subsume** the heavy "tree + lens" machinery of confluent-IR §5. Prototype it before building
@@ -57,7 +57,7 @@ StyleLens-style infra.
 
 ### GENUINELY OPEN — the residue (small, as hoped) → paper-ish notes forthcoming
 
-1. **Nested-aggregate-over-a-pipeline.** `(length (map f (filter p xs)))` — aggregation *not last*. No
+1. **Nested-aggregate-over-a-pipeline.** `(length (map f (filter p xs)))` — aggregation _not last_. No
    surveyed source covers it (DBs assume aggregation terminal; ProvSQL puts nested aggregation
    explicitly out of scope). Our pipeline composition over the cardinality axis is genuinely
    unaddressed.
@@ -72,14 +72,14 @@ StyleLens-style infra.
 
 ## 3. Theory constraints (sharpen the plan)
 
-- **Minimal provenance is UNCOMPUTABLE in general** — Cheney–Ahmed–Acar, *Provenance as Dependency
-  Analysis*, MSCS 21(6) 2011 (reduces to query-equivalence). Only the **per-run slice over a fixed
-  trace** is computable-and-minimal. ⟹ everywhere "minimal" must read **"minimal *for this run*,"**
+- **Minimal provenance is UNCOMPUTABLE in general** — Cheney–Ahmed–Acar, _Provenance as Dependency
+  Analysis_, MSCS 21(6) 2011 (reduces to query-equivalence). Only the **per-run slice over a fixed
+  trace** is computable-and-minimal. ⟹ everywhere "minimal" must read **"minimal _for this run_,"**
   never "minimal static cone." Our conservative "a static merge may collapse to a pipe at runtime" is
   the **theoretically correct** stance, not a compromise.
 - **A flat Set is provably insufficient** — GHC `Note [Don't optimise UProd(Used) to Used]`: it refuses
   to flatten a product demand because the flat form "doesn't convey any clue there is a product
-  involved." Our "flat Set can't address sub-structure" was *mathematically forced*.
+  involved." Our "flat Set can't address sub-structure" was _mathematically forced_.
 - **Auto-abort must stay SEQUENTIAL short-circuit** — Berry: parallel-OR is not stable ⇒ ambiguous
   backward slice (Atkey–Perera 2025: parallel-OR is not conditionally-multiplicative / not sliceable).
   `or`/`find`/`any` abort is fine; never a true parallel-or.
@@ -114,8 +114,8 @@ where-provenance"); Amsterdamer–Deutch–Tannen PODS 2011; Ikeda–Park–Wido
 1988; Agrawal–Horgan PLDI 1990; Coutts et al. ICFP 2007; Kiselyov et al. POPL 2017; **Fluid (Perera et
 al. 2025, `explorable-viz/fluid`)** (NEW — v0.2 viz prior art: backward-slicing-as-live-viz).
 
-**Demoted / flag-on-use (real but not fully verified this run):** Reps–Turnidge *tree-grammar
-projection mechanism* detail (cite as "static projection-based slicing of first-order functional
+**Demoted / flag-on-use (real but not fully verified this run):** Reps–Turnidge _tree-grammar
+projection mechanism_ detail (cite as "static projection-based slicing of first-order functional
 programs," don't assert the representation); ProvSQL exact "45.71M gates" figure (cite the qualitative
 "aggregation is the non-constant case" only); standard works not primary-fetched (Wadler Deforestation
 TCS'90, transducers, Differential Dataflow, DBSP, ILC, Mokhov BSàlC full text, Foster lens TOPLAS'07,

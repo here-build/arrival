@@ -43,9 +43,7 @@ describe("syntax-rules matcher off-by-one (PRE-EXISTING pre-L1 gap — drops fir
   });
 
   it("arity discrimination: count-to-2 on (c2 a b) → 2 (currently picks the 1-arg rule → 1)", async () => {
-    const out = await run(
-      `(let-syntax ((c2 (syntax-rules () ((_) 0) ((_ _) 1) ((_ _ _) 2)))) (c2 a b))`,
-    );
+    const out = await run(`(let-syntax ((c2 (syntax-rules () ((_) 0) ((_ _) 1) ((_ _ _) 2)))) (c2 a b))`);
     expect(String(out)).toBe("2");
   });
 
@@ -55,9 +53,7 @@ describe("syntax-rules matcher off-by-one (PRE-EXISTING pre-L1 gap — drops fir
   });
 
   it("head + ellipsis keeps the head: ((_ h a ...) (list h a ...)) on (m 1 2 3) → (1 2 3)", async () => {
-    const out = await run(
-      `(let-syntax ((m (syntax-rules () ((_ h a ...) (list h a ...))))) (m 1 2 3))`,
-    );
+    const out = await run(`(let-syntax ((m (syntax-rules () ((_ h a ...) (list h a ...))))) (m 1 2 3))`);
     expect(String(out)).toBe("(1 2 3)");
   });
 });
@@ -69,9 +65,7 @@ describe("syntax-rules VECTOR patterns (boxing S9 — needs the matcher fix AND 
   });
 
   it.fails("vector pattern with ellipsis: ((_ #(a ...)) (+ a ...)) on (m #(1 2 3 4)) → 10", async () => {
-    const out = await run(
-      `(let-syntax ((m (syntax-rules () ((_ #(a ...)) (+ a ...))))) (m #(1 2 3 4)))`,
-    );
+    const out = await run(`(let-syntax ((m (syntax-rules () ((_ #(a ...)) (+ a ...))))) (m #(1 2 3 4)))`);
     expect(String(out)).toBe("10");
   });
 

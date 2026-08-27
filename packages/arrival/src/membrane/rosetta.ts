@@ -582,4 +582,3 @@ export function bigintToNumber(value: bigint): number {
   }
   return Number(value);
 }
-

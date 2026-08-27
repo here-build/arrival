@@ -28,8 +28,7 @@ import { exec } from "../eval/generator-exec.js";
 // variable `+'" — the harness used to "pass" by routing through the
 // unbound-variable whitelist branch, never actually exercising the
 // arithmetic dispatch. See bridge.ts:236 war story.
-beforeAll(async () => {
-});
+beforeAll(async () => {});
 
 /**
  * Recursive grammar for small Scheme programs. Two terminal categories
@@ -47,7 +46,8 @@ const arbExpr = fc.letrec((tie) => ({
     fc.tuple(tie("expr"), tie("expr")).map(([a, b]) => `(- ${a} ${b})`),
     fc.tuple(tie("expr"), tie("expr")).map(([a, b]) => `(* ${a} ${b})`),
     fc.tuple(tie("expr"), tie("expr"), tie("expr")).map(([p, t, e]) => `(if ${p} ${t} ${e})`),
-  ) })).expr as fc.Arbitrary<string>;
+  ),
+})).expr as fc.Arbitrary<string>;
 
 /**
  * Whitelist of expected runtime errors — anything outside this list is a real

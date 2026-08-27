@@ -34,23 +34,28 @@ describe("list ops on a RUNTIME-cyclic list terminate (no spin / stack overflow)
     {
       title: "length on a circular list raises a clean error",
       op: "(length c)",
-      matcher: /circular/i },
+      matcher: /circular/i,
+    },
     {
       title: "reverse on a circular list raises a clean error (was 'Invalid array length')",
       op: "(reverse c)",
-      matcher: /circular/i },
+      matcher: /circular/i,
+    },
     {
       title: "list-copy on a circular list raises a clean error (was 'Maximum call stack')",
       op: "(list-copy c)",
-      matcher: /circular/i },
+      matcher: /circular/i,
+    },
     {
       title: "memq on a circular list raises a clean error",
       op: "(memq 99 c)",
-      matcher: /circular/i },
+      matcher: /circular/i,
+    },
     {
       title: "append with a circular non-last arg raises",
       op: "(append c (list 9))",
-      matcher: undefined },
+      matcher: undefined,
+    },
   ])("$title", async ({ op, matcher }) => {
     if (matcher) {
       await expect(run(cyclic(op))).rejects.toThrow(matcher);

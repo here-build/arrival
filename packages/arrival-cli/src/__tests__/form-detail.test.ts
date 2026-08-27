@@ -88,7 +88,7 @@ describe("renderFormDetail", () => {
     expect(calledFrom.every((l) => l.includes("file:///abs/fib.scm:1"))).toBe(true);
   });
 
-  it("`mode: \"none\"` stays byte-identical even when a file is given — no OSC 8 leaks", async () => {
+  it('`mode: "none"` stays byte-identical even when a file is given — no OSC 8 leaks', async () => {
     const d = formDetail(await traced("(+ 40 2)"), "+@1:0");
     const plain = renderFormDetail(d, "none");
     const withFile = renderFormDetail(d, "none", "/abs/fib.scm");

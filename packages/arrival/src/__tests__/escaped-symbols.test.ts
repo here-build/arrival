@@ -58,7 +58,9 @@ describe("Escaped Symbol Resolution", () => {
           "test-obj": jsToScheme(CONSTANT_CTX, {
             "24": "value-24",
             "42": "value-42",
-            normal: "normal-value" }) }),
+            normal: "normal-value",
+          }),
+        }),
       );
       expect(result).toBe("value-24");
     });
@@ -72,7 +74,9 @@ describe("Escaped Symbol Resolution", () => {
       await applyCapability(inferenceEnv, [
         EnvCapability.define("test/get-24", {
           symbols: (symbol, z) => ({
-            "get-24": symbol.rosetta`get-24: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 24) }) }),
+            "get-24": symbol.rosetta`get-24: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 24),
+          }),
+        }),
       ]);
 
       const result = await execOne(`(|get-24|)`);
@@ -86,7 +90,9 @@ describe("Escaped Symbol Resolution", () => {
             "my function": symbol.rosetta`my function: doubles its argument`(
               { input: [z.number], output: [z.number] },
               (x) => x * 2,
-            ) }) }),
+            ),
+          }),
+        }),
       ]);
 
       const result = await execOne(`(|my function| 21)`);
@@ -98,7 +104,8 @@ describe("Escaped Symbol Resolution", () => {
     it("should handle keywords with special characters", async () => {
       const testObj = {
         "foo-bar": "hyphenated",
-        foo_bar: "underscored" };
+        foo_bar: "underscored",
+      };
 
       (inferenceEnv as EnvWithInternals<ResolvingAmbient>).bind("test-obj", jsToScheme(CONSTANT_CTX, testObj));
 
@@ -117,7 +124,9 @@ describe("Escaped Symbol Resolution", () => {
       const component = {
         "794f1e9c-5726-4a0c-a8b6-c0ae5f31f4e4": {
           name: "Button",
-          type: "component" } };
+          type: "component",
+        },
+      };
 
       (inferenceEnv as EnvWithInternals<ResolvingAmbient>).bind("components", jsToScheme(CONSTANT_CTX, component));
 
@@ -134,8 +143,10 @@ describe("Escaped Symbol Resolution", () => {
           {
             id: "794f1e9c-5726-4a0c-a8b6-c0ae5f31f4e4",
             name: "My Project",
-            "24": "numeric property value" },
-        ] };
+            "24": "numeric property value",
+          },
+        ],
+      };
 
       (inferenceEnv as EnvWithInternals<ResolvingAmbient>).bind("data", jsToScheme(CONSTANT_CTX, data));
 
@@ -148,11 +159,7 @@ describe("Escaped Symbol Resolution", () => {
             (@ project :|24|)))
       `);
 
-      expect(result).toEqual([
-        "794f1e9c-5726-4a0c-a8b6-c0ae5f31f4e4",
-        "My Project",
-        "numeric property value",
-      ]);
+      expect(result).toEqual(["794f1e9c-5726-4a0c-a8b6-c0ae5f31f4e4", "My Project", "numeric property value"]);
     });
 
     it("should filter objects by properties with escaped keys", async () => {

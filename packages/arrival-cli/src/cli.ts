@@ -84,8 +84,8 @@ environment:
 async function readSource(file: string): Promise<string> {
   try {
     return await readFile(path.resolve(file), "utf8");
-  } catch (e) {
-    throw new Error(`arrival: cannot read ${file}: ${e instanceof Error ? e.message : String(e)}`);
+  } catch (error) {
+    throw new Error(`arrival: cannot read ${file}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -115,7 +115,8 @@ function emitOutline(trace: EvalTrace, absFile: string): void {
  *  callers, and sampled values, to stderr. `absFile` threads through the same as above. */
 function emitFormDetail(trace: EvalTrace, scope: string, absFile: string): void {
   process.stderr.write("\n");
-  for (const line of renderFormDetail(formDetail(trace, scope), stderrMode(), absFile)) process.stderr.write(`${line}\n`);
+  for (const line of renderFormDetail(formDetail(trace, scope), stderrMode(), absFile))
+    process.stderr.write(`${line}\n`);
 }
 
 interface Inspect {
@@ -174,8 +175,8 @@ async function runFile(file: string, mode: OutputMode, inspect: Inspect, armed?:
       if (trace !== undefined) emitInspection(trace, inspect, absFile);
     }
     return 0;
-  } catch (e) {
-    printError(e);
+  } catch (error) {
+    printError(error);
     // Even on a fault, the partial trace is worth showing — it marks the failing form
     // `error`, which is often the whole point of asking for it. In export mode the partial
     // contract still goes to stdout (a consumer sees how far it got).
@@ -216,20 +217,20 @@ async function checkFile(file: string, armed?: ArmedCapabilities): Promise<numbe
     // Only an EMPTY program reaches here (no form ever touched the aborted signal).
     console.log(`${file}: ${paint("ok", "done", mode)}`);
     return 0;
-  } catch (e) {
-    if (e === sentinel) {
+  } catch (error) {
+    if (error === sentinel) {
       console.log(`${file}: ${paint("ok", "done", mode)}`);
       return 0;
     }
-    if (e instanceof StaticValidationError) {
+    if (error instanceof StaticValidationError) {
       console.log(`${file}:`); // per-file attribution — `check` accepts many files
-      for (const d of e.diagnostics) console.log(paintDiagnostic(d, mode));
-      const errors = e.diagnostics.filter((d) => d.severity === "error").length;
-      const summary = `${e.diagnostics.length} problem${e.diagnostics.length === 1 ? "" : "s"} (${errors} error${errors === 1 ? "" : "s"})`;
+      for (const d of error.diagnostics) console.log(paintDiagnostic(d, mode));
+      const errors = error.diagnostics.filter((d) => d.severity === "error").length;
+      const summary = `${error.diagnostics.length} problem${error.diagnostics.length === 1 ? "" : "s"} (${errors} error${errors === 1 ? "" : "s"})`;
       console.log(paint(summary, "gutter", mode));
       return errors > 0 ? 1 : 0;
     }
-    printError(e); // reader/parse error — still a diagnostic outcome
+    printError(error); // reader/parse error — still a diagnostic outcome
     return 1;
   }
 }
@@ -319,8 +320,8 @@ main(process.argv.slice(2)).then(
   (code) => {
     process.exitCode = code;
   },
-  (e: unknown) => {
-    printError(e);
+  (error: unknown) => {
+    printError(error);
     process.exitCode = 1;
   },
 );

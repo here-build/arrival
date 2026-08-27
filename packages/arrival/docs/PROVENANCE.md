@@ -1,16 +1,15 @@
 # Arrival Provenance — Specification
 
-> *"The physical universe was a language with a perfectly ambiguous grammar. Every
+> _"The physical universe was a language with a perfectly ambiguous grammar. Every
 > physical event was an utterance that could be parsed in two entirely different ways,
 > one causal and the other teleological, both valid, neither one disqualifiable no
-> matter how much context was available."* — Ted Chiang, Story of Your Life
+> matter how much context was available."_ — Ted Chiang, Story of Your Life
 >
 > That sentence is P0. This document is its execution semantics.
 
-*Normative labels used below: **CHOSEN** · **EXCLUDED (because …)** (a rejected
+_Normative labels used below: **CHOSEN** · **EXCLUDED (because …)** (a rejected
 alternative named with its failure) · **DEFERRED (until …)** · **LIMIT** (accepted,
-documented). Design history — the objections behind these rulings and the full academic
-lineage — lives in [`design-history/`](design-history/).*
+documented)._
 
 **Deployment target (normative):** provenance cheap enough that a ~1000-SLOC arrival
 program runs WITH full provenance inside one Cloudflare Durable Object (128MB isolate,
@@ -22,9 +21,8 @@ Constitutional ground: PRINCIPLES.md P0 (two simultaneous interpretations), P10 
 is the only shed), and the language invariants — total immutability (the mutator family
 is teaching-doored) and no continuations (call/cc/dynamic-wind deliberately absent).
 Both absences are **load-bearing**: continuations are the classical region-escape
-channel and mutation the classical isolation-escape channel. Any future work adding
-either re-opens the objections recorded in
-[`provenance-design-challenges.md`](design-history/provenance-design-challenges.md).
+channel and mutation the classical isolation-escape channel. Adding either re-opens
+those isolation-escape channels.
 
 ## 1. Model
 
@@ -39,6 +37,7 @@ rosetta), **port-coupled muxes** (a mux whose selector cone reaches a port), fan
 instantiation points, binders. Nodes are where P0's two interpretations must agree;
 everything between nodes is wire. Ports are defined by MEANING (where the world touches
 the program), which is why the storage optimum and the user's ontology coincide (§8).
+
 - CHOSEN: a **pure-selector mux collapses INTO its wire** — its decision is a
   deterministic function of frozen ingress and is rederived by γ; recording it buys
   nothing replay cannot reconstruct. Only port-coupled muxes carry decision records.
@@ -55,6 +54,7 @@ the program), which is why the storage optimum and the user's ontology coincide 
 parameters = ingress, `FV(body) ⊆ params ∪ prelude-names` (checked at emission —
 wire-locality law). Locality is thereby syntactic; declared-vs-actual consumption drift
 is unrepresentable.
+
 - EXCLUDED: stamp-set-only edges (lose replay — the wire must carry the relation).
 - EXCLUDED: a storage-format choice between reader AST and tagless terms (false
   dichotomy — an arrival lambda IS Pairs-with-spans as data and the tagless algebra
@@ -70,6 +70,7 @@ prelude-eligible: it is wireframe material — its ports are designated nodes an
 call sites reference its template subgraph. `wire-locality`'s `prelude-names` means
 PURE-prelude names. A wire body calling a pure helper references it BY NAME; captures
 that resolve to prelude or native names are REFERENCES, never payloads.
+
 - EXCLUDED: inlining helpers into wire bodies (breaks per-template sharing; code blowup
   for shared helpers).
 - EXCLUDED: helpers-as-ingress (turns closures into retained payloads, and a captured
@@ -83,16 +84,18 @@ that resolve to prelude or native names are REFERENCES, never payloads.
 `apply` of the wire lambda to recorded ingress in a hermetic env (**base packs + program
 prelude + ingress bindings** via the env-capability assembler), executed under region
 discipline (§4) — replay is a track; no separate replay machinery exists.
+
 - EXCLUDED: the trace-slicing Galois adjunction as the general foundation (widening
   makes loop cones non-least). It holds and is claimed for LOOP-FREE wires (wire-γ law);
   loops get the abstract (widened) cone plus exact reconstruction via aggregation count
-  + quoted body, one γ-step away.
+  - quoted body, one γ-step away.
 
 **CHOSEN — collapse rule:** maximal pure connected subgraphs fold to one wire. Ports
 break segments by definition, so a wire body structurally contains no source, sink,
 gensym, or port-coupled mux — wire purity is by construction, not by audit.
 Pure-selector muxes live INSIDE wires (mux-collapse rule above); γ rederives their
 decisions.
+
 - LIMIT: segment granularity is phrasing-sensitive (`(+ (src-a) (src-b))` vs
   `(if f (src-a) (src-b))` collapse differently) — true of every PDG; accepted.
 
@@ -101,6 +104,7 @@ decisions.
 **CHOSEN — one declared `provenance` role per symbol declaration**, data in string key
 space (P7): `pipe` (default for native/sequence/tagless kinds) · `fan` · `source`
 (default for rosetta) · `sink` · `transparent` · `loop` · `opaque`.
+
 - EXCLUDED: the two ad-hoc booleans `fanout?`/`pure?` (degenerate two-word fragment of
   this vocabulary; each had exactly two readers).
 - EXCLUDED: heuristic classification (`isRosettaIn`, `.fanout` stamped on bound
@@ -114,12 +118,14 @@ space (P7): `pipe` (default for native/sequence/tagless kinds) · `fan` · `sour
 layers): `loop` lowers to `binder{cycles}`; `sink`/`transparent` are declaration-layer
 facts lowering to graph shapes (a sink is a port with no egress wire; a transparent is a
 membrane crossing that neither mints nor stamps — dedent).
+
 - EXCLUDED: two parallel vocabularies (vocabulary-v2 kinds vs wireframe node kinds were
   two design passes over one graph).
 
 **CHOSEN — callback roles extracted from the contract** (z.lambda position + return
 shape), with declaration override only where the contract underdetermines:
 **element-transformer** · **control** · **effect** · **accumulator**.
+
 - EXCLUDED (for now): the selector/decision split inside `control` and the second cone
   color it implies — one control role and ONE cone color until a product query needs
   "why sorted this way" separately from "where did element k come from". DEFERRED, not
@@ -151,6 +157,7 @@ parallel (element/control) · chained (accumulator — `egress(Tᵢ) → ingress
 ONLY sanctioned inter-track edge) · terminal (effect — no egress).
 
 **Invariants (normative statements):**
+
 - **I1 — value-egress provenance confinement**: for interior `n` of `Tᵢ`,
   `cone⁺(n) ∩ G ⊆ cone⁺(egress(Tᵢ))`; `= ∅` for effect tracks. EXCLUDED: the
   world-noninterference reading (sink events are real observations; I1 confines
@@ -183,6 +190,7 @@ are authoritative. Replay AVAILABILITY is tier-governed (§5): a payload at the 
 tier makes replay unavailable for demands that need it and the answer degrades under
 the tier-honesty law — stability is claimed for whatever the tiers still hold, never
 past them.
+
 - EXCLUDED: re-execution stability (a live `infer` re-fetch is a different run — never
   claimed).
 - CHOSEN: gensym is a mint; its identity is a recorded payload.
@@ -206,6 +214,7 @@ time-space trade at whole-program scale: re-run the ENTIRE program with penetrat
 playback, materializing only the demanded provenanced lens outputs — no
 partial-segment machinery for glass runs, no snapshot-bake artifact (the penetration
 stream IS the lazy snapshot of exactly what was read).
+
 - EXCLUDED: recorded-only LIMIT for glass runs (would gut drill-in exactly where the
   product lives); eager glass-env snapshotting (violates the storage thesis; reads
   capture lazily by occurring).
@@ -227,6 +236,7 @@ nature of the environment plus COMPLETE membrane-penetration capture — if ever
 membrane penetration is stored, the behavior itself is identical; behavioral identity,
 never node-pointer identity. The chain/env hash is therefore coarse (program +
 semantics epoch) — an addressing convenience, not a soundness mechanism.
+
 - EXCLUDED: per-pack impl hashing / BEAM-style hot-reload version arbitration (arrival
   is not BEAM; the env is static within a deployment and the epoch pins the
   interpreter; penetration completeness carries the rest).
@@ -260,14 +270,14 @@ choice.
 **CHOSEN — record kinds and their aggregation applicability**, stated per kind so the
 cheapness story doesn't quietly assume pure loop bodies:
 
-| Kind | Aggregates (RLE/ring)? |
-|---|---|
-| mint (WITH payload) | **never** — every payload is distinct information |
-| mux decision (port-coupled muxes only, per §1's mux-collapse rule) | never — each is information |
-| fan instantiation | YES — ordinal runs under stable wiring |
-| ingress binding | YES — stable wiring stores O(1)+count |
-| track open/close | YES — counter deltas |
-| host-schedule | never — the sequence IS the record |
+| Kind                                                               | Aggregates (RLE/ring)?                            |
+| ------------------------------------------------------------------ | ------------------------------------------------- |
+| mint (WITH payload)                                                | **never** — every payload is distinct information |
+| mux decision (port-coupled muxes only, per §1's mux-collapse rule) | never — each is information                       |
+| fan instantiation                                                  | YES — ordinal runs under stable wiring            |
+| ingress binding                                                    | YES — stable wiring stores O(1)+count             |
+| track open/close                                                   | YES — counter deltas                              |
+| host-schedule                                                      | never — the sequence IS the record                |
 
 Aggregation runs are PATH-SCOPED: a run is `(parent ordinal-path, start, count)` —
 inner-loop/fan ordinals restart per outer element, so runs never span parents.
@@ -322,6 +332,7 @@ door reports anyway.
 
 **CHOSEN — payload tiering** (against the 128MB target this is core design, not a
 footnote):
+
 1. in-memory ring (hot, bounded);
 2. DO storage (bounded by per-value size limits — chunk batches; verify current
    SQLite-DO row caps at implementation);
@@ -330,11 +341,11 @@ footnote):
    the R2 write is async I/O (no CPU-cap burn), and on R2 failure the payload degrades
    to stub under tier honesty;
 4. hash-only stub after eviction (value dropped, identity + stamps retained).
-Drill-in degrades PER TIER, deterministically, and NEVER silently: an answer states its
-evidence tier from the enum `replayed | replayed-cached | recorded | stub` ("value
-evicted, lineage intact"). EXCLUDED: unbounded retention (Appendix A.1: retained
-payloads are what broke 128MB first, pre-tiering); EXCLUDED: silent degradation (a stub
-answering as if replayed is a lie).
+   Drill-in degrades PER TIER, deterministically, and NEVER silently: an answer states its
+   evidence tier from the enum `replayed | replayed-cached | recorded | stub` ("value
+   evicted, lineage intact"). EXCLUDED: unbounded retention (Appendix A.1: retained
+   payloads are what broke 128MB first, pre-tiering); EXCLUDED: silent degradation (a stub
+   answering as if replayed is a lie).
 
 **CHOSEN — the template store is shared and immutable**: wire templates + prelude
 live in a cross-DO store (KV/R2) keyed by template-hash, cached forever; per-DO
@@ -346,6 +357,7 @@ version).
 class must demonstrably die inside the budget. Expressions O(program) per template,
 content-addressed; bindings O(ports); aggregated loops O(1)+count; budget arithmetic
 and break order in Appendix A.
+
 - LIMIT: ports are still Θ(data) for genuine fans — value-grain provenance cannot be
   cheaper than the data whose lineage it keeps; the gate is against ACCUMULATION
   overhead, not information.
@@ -384,6 +396,7 @@ this section formalizes at the package level (hermeticity audit D5).
 ## 6. Queries — the three surfaces
 
 **CHOSEN — the product trinity over one graph**:
+
 1. **Backward cone** — "where did this come from" (minimal witness; why-provenance).
 2. **Forward/sealing cone** — "what does adjusting this impact."
 3. **The plane at large** — the prospective graph rendered whole: plane (x,y) = template
@@ -397,9 +410,9 @@ this section formalizes at the package level (hermeticity audit D5).
 
 **CHOSEN — demand lattice**: value / count / field-k. Cone(count) ⊆ cone(value);
 struct-fact wires answer count-demand without touching elements.
-EXCLUDED (for now): further grades (cardinality intervals, keysets) — scope creep noted
-as a footgun in the
-[HalfBaked post-mortem](design-history/halfbaked-existence-review.md).
+EXCLUDED (for now): further grades (cardinality intervals, keysets) — further grades
+are scope creep that recreates a special carrier every egress path must know how to force.
+
 - LIMIT: the live plane's latency is flush-coupled — records emitted mid-CPU-burst
   reach the view at the next port/flush, not instantly; the "live" animation model is
   a product-side note, not a real-time guarantee.
@@ -413,30 +426,30 @@ stratum-1 question with stratum-3 material; that is why they go unused.
 
 ## 7. Laws (the test spec)
 
-| Law | Statement |
-|---|---|
-| wire-locality | FV(wire body) ⊆ params ∪ prelude-names, at emission |
-| wire-γ | apply(wire, recorded ingress) = recorded egress; subsumes segment losslessness, loop-free scope |
-| replay-nondeterminism | frozen-payload replay stable under a deliberately mutated external world; interior gensym/source/clock programs generated |
-| agreement | eager-oracle cone == wireframe cone, generated corpus — SCOPED per the pure-mux precision trade (§1): exact on port-coupled decisions + non-mux segments; abstract both-arms on pure-mux wires |
-| port completeness | every mint/decision/instantiation/ingress exactly once PER RECORD ID, idempotent under request retry/re-emission |
-| track containment (stamp) | I1 over stamp sets vs oracle |
-| track containment (replay) | I1 under replay |
-| track separation | zero inter-track edges except declared acc chain |
-| stream fold + monotonicity | fold(events) = final region state; completed ≤ started monotone, over emission orders; the SAME fold reconstructs region state on DO wake — the law is the recovery mechanism |
-| pure-mux derivation | γ over frozen ingress rederives every collapsed mux decision; ground truth = the eager oracle's recorded arm choices on the agreement corpus (the mux-collapse rule's soundness, §1) |
-| effect-track replay-between-records | pure stretches applied, recorded port events interleaved verbatim (§4 CHOSEN) |
-| tier honesty | every drill-in answer carries its evidence tier from the envelope enum `replayed \| replayed-cached \| recorded \| stub`; a stub or cached answer never presents as freshly replayed |
-| demand monotonicity | cone(count) ⊆ cone(value); cone(field-k) ⊆ cone(whole); count-demand traverses fact wires only (§6 lattice) |
-| I5 exterior collapse | a region is ONE wireframe node from G |
-| loop-unroll | widened vs exact-via-count cones — DEFERRED until a widened-vs-exact-cone consumer exists (both sides' machinery already present: widened loop cones refuse per-wire γ and reconstruct via aggregation count + playback) |
-| memory retention | sealed-value growth measured against the Appendix A budget |
+| Law                                 | Statement                                                                                                                                                                                                                |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| wire-locality                       | FV(wire body) ⊆ params ∪ prelude-names, at emission                                                                                                                                                                      |
+| wire-γ                              | apply(wire, recorded ingress) = recorded egress; subsumes segment losslessness, loop-free scope                                                                                                                          |
+| replay-nondeterminism               | frozen-payload replay stable under a deliberately mutated external world; interior gensym/source/clock programs generated                                                                                                |
+| agreement                           | eager-oracle cone == wireframe cone, generated corpus — SCOPED per the pure-mux precision trade (§1): exact on port-coupled decisions + non-mux segments; abstract both-arms on pure-mux wires                           |
+| port completeness                   | every mint/decision/instantiation/ingress exactly once PER RECORD ID, idempotent under request retry/re-emission                                                                                                         |
+| track containment (stamp)           | I1 over stamp sets vs oracle                                                                                                                                                                                             |
+| track containment (replay)          | I1 under replay                                                                                                                                                                                                          |
+| track separation                    | zero inter-track edges except declared acc chain                                                                                                                                                                         |
+| stream fold + monotonicity          | fold(events) = final region state; completed ≤ started monotone, over emission orders; the SAME fold reconstructs region state on DO wake — the law is the recovery mechanism                                            |
+| pure-mux derivation                 | γ over frozen ingress rederives every collapsed mux decision; ground truth = the eager oracle's recorded arm choices on the agreement corpus (the mux-collapse rule's soundness, §1)                                     |
+| effect-track replay-between-records | pure stretches applied, recorded port events interleaved verbatim (§4 CHOSEN)                                                                                                                                            |
+| tier honesty                        | every drill-in answer carries its evidence tier from the envelope enum `replayed \| replayed-cached \| recorded \| stub`; a stub or cached answer never presents as freshly replayed                                     |
+| demand monotonicity                 | cone(count) ⊆ cone(value); cone(field-k) ⊆ cone(whole); count-demand traverses fact wires only (§6 lattice)                                                                                                              |
+| I5 exterior collapse                | a region is ONE wireframe node from G                                                                                                                                                                                    |
+| loop-unroll                         | widened vs exact-via-count cones — DEFERRED until a widened-vs-exact-cone consumer exists (both sides' machinery already present: widened loop cones refuse per-wire γ and reconstruct via aggregation count + playback) |
+| memory retention                    | sealed-value growth measured against the Appendix A budget                                                                                                                                                               |
 
 **CHOSEN — generator corpus classes**: interior sources · nested regions (map-in-map,
 map-in-fold) · first-class HOFs · structured multi-field egress · macro-expanded
 bodies (post span-propagation) · deep mux nesting.
 
-## 8. Prior art (normative positioning; full lineage in [`design-history/provenance-lineage.md`](design-history/provenance-lineage.md))
+## 8. Prior art (normative positioning)
 
 Adopted terms: prospective/retrospective provenance (workflow lineage) ·
 backward/forward slice (Weiser; FOW PDG) · confinement/declassification (I1's frame —
@@ -454,34 +467,35 @@ Reference workload: ~1000 SLOC agent-shaped program — 30 rosetta calls, 5 fans
 
 ### A.1 — Pre-tiering arithmetic (the motivation for why tiering and the mux-collapse rule are core design)
 
-| Component | Estimate | Verdict |
-|---|---|---|
-| Wireframe (templates + expressions + prelude) | ~200–600 templates ≈ 60–180KB + expressions ≤ program text ~50KB | never the problem |
-| Fan/track records | Σ16.6k × ~3 records × ~64B ≈ 2.5MB; nested map +10⁵ tracks ≈ +15MB worst case | pressure |
-| Loop records (no RLE) | 3×10⁴ × ~200B ≈ 6MB | fixed by aggregation |
-| Mux decisions (all recorded) | 10⁴–10⁵ × ~48B ≈ 1–5MB, pure noise | fixed by the mux-collapse rule (§1) |
-| Mint payloads | source-per-element fan @1–10KB ≈ 1–10MB; 10⁴-iteration agent loop @2KB ≈ 20MB — **irreducible information** | governed by tiering |
-| Retained ingress, in-heap | pinned live set of crossed values: 10k×2KB docs = 20MB floor; 60–100MB plausible | **broke 128MB FIRST** |
-| Replay CPU per drill-in | large collapsed segment 10⁵ applies ≈ 1–10s | memo + γ-offload |
+| Component                                     | Estimate                                                                                                    | Verdict                             |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| Wireframe (templates + expressions + prelude) | ~200–600 templates ≈ 60–180KB + expressions ≤ program text ~50KB                                            | never the problem                   |
+| Fan/track records                             | Σ16.6k × ~3 records × ~64B ≈ 2.5MB; nested map +10⁵ tracks ≈ +15MB worst case                               | pressure                            |
+| Loop records (no RLE)                         | 3×10⁴ × ~200B ≈ 6MB                                                                                         | fixed by aggregation                |
+| Mux decisions (all recorded)                  | 10⁴–10⁵ × ~48B ≈ 1–5MB, pure noise                                                                          | fixed by the mux-collapse rule (§1) |
+| Mint payloads                                 | source-per-element fan @1–10KB ≈ 1–10MB; 10⁴-iteration agent loop @2KB ≈ 20MB — **irreducible information** | governed by tiering                 |
+| Retained ingress, in-heap                     | pinned live set of crossed values: 10k×2KB docs = 20MB floor; 60–100MB plausible                            | **broke 128MB FIRST**               |
+| Replay CPU per drill-in                       | large collapsed segment 10⁵ applies ≈ 1–10s                                                                 | memo + γ-offload                    |
 
 ### A.2 — Budget with mitigations applied (the numbers the budget gate enforces)
 
 With the mux-collapse rule (pure-mux collapse), RLE aggregation, and tiering active,
 sealed values live in STORAGE, not heap — the two columns separate:
 
-| Component | In-memory (128MB budget) | Storage (DO SQLite / R2) |
-|---|---|---|
-| Wireframe + prelude | ~0.2MB | shared template store (cross-DO, ~0.25MB once) |
-| Record ring | ring cap (~4–8MB, configurable) | full stream ~5–20MB per run |
-| Payloads | ring-resident recent only (inside ring cap) | 20–30MB per run (mints + ingress), oversize → R2 |
-| Region state | KBs (cache of the stream) | reconstruction = the fold, no extra storage |
-| Program live set | ~20MB (workload's own data — what a non-provenanced run uses) | — |
-| **Total** | **~30–40MB of 128 — ≥3× headroom** | ~30–60MB per run |
+| Component           | In-memory (128MB budget)                                      | Storage (DO SQLite / R2)                         |
+| ------------------- | ------------------------------------------------------------- | ------------------------------------------------ |
+| Wireframe + prelude | ~0.2MB                                                        | shared template store (cross-DO, ~0.25MB once)   |
+| Record ring         | ring cap (~4–8MB, configurable)                               | full stream ~5–20MB per run                      |
+| Payloads            | ring-resident recent only (inside ring cap)                   | 20–30MB per run (mints + ingress), oversize → R2 |
+| Region state        | KBs (cache of the stream)                                     | reconstruction = the fold, no extra storage      |
+| Program live set    | ~20MB (workload's own data — what a non-provenanced run uses) | —                                                |
+| **Total**           | **~30–40MB of 128 — ≥3× headroom**                            | ~30–60MB per run                                 |
 
 Provenance's IN-MEMORY overhead ≈ ring caps + wireframe ≈ ~10MB — the program's own
 live set dominates, as it should.
 
 **Break order (what the budget gate tests, in order):**
+
 1. **DO-storage write volume/cost** — the stream + payloads per run (~30–60MB writes);
 2. **R2 settle latency** on oversize payloads (async, but bounded by request lifetime);
 3. **ring misconfiguration** (a ring cap larger than headroom re-imports the A.1 break);

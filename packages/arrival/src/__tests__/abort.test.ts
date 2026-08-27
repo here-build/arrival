@@ -57,9 +57,7 @@ describe("AbortSignal execution budget", () => {
     // exercise the abort budget through a construct that actually iterates
     // flat. `(define (loop) (loop)) (loop)` has the same hazard for the same
     // reason — it goes through evalLambda's `run(...)` wrapper.
-    await expect(
-      exec("(do () (#f))", { signal: ctrl.signal }),
-    ).rejects.toThrow(/abort/i);
+    await expect(exec("(do () (#f))", { signal: ctrl.signal })).rejects.toThrow(/abort/i);
     // Generous upper bound: the trampoline only checks at the 5ms / 1000-iter
     // cadence, so abort propagates within ~one tick of the 50ms timer. Raised
     // 2000ms → 10000ms (G3 sunset triage, timing-flake hardening): this is a
@@ -75,9 +73,7 @@ describe("AbortSignal execution budget", () => {
     const ctrl = new AbortController();
     ctrl.abort();
     const start = Date.now();
-    await expect(
-      exec("(+ 1 2)", { signal: ctrl.signal }),
-    ).rejects.toThrow(/abort/i);
+    await expect(exec("(+ 1 2)", { signal: ctrl.signal })).rejects.toThrow(/abort/i);
     // Pre-abort fast path: no trampoline state allocated, throw on entry.
     // This should be effectively instantaneous (sub-millisecond), but we
     // give a wide margin to allow for parse/import overhead from the lazy
@@ -89,9 +85,7 @@ describe("AbortSignal execution budget", () => {
     const ctrl = new AbortController();
     const reason = new Error("custom budget exhausted");
     ctrl.abort(reason);
-    await expect(
-      exec("(+ 1 2)", { signal: ctrl.signal }),
-    ).rejects.toThrow("custom budget exhausted");
+    await expect(exec("(+ 1 2)", { signal: ctrl.signal })).rejects.toThrow("custom budget exhausted");
   });
 
   it("preserves signal.reason when abort fires mid-execution", async () => {
@@ -103,9 +97,7 @@ describe("AbortSignal execution budget", () => {
     // — until TCO (task #46) lands, named-let is a JS-call-stack hazard,
     // not a flat-iteration construct.
     queueMicrotask(() => ctrl.abort(reason));
-    await expect(
-      exec("(do () (#f))", { signal: ctrl.signal }),
-    ).rejects.toThrow("mid-run budget exhausted");
+    await expect(exec("(do () (#f))", { signal: ctrl.signal })).rejects.toThrow("mid-run budget exhausted");
   });
 
   it("runs to completion when signal never aborts", async () => {
@@ -118,9 +110,7 @@ describe("AbortSignal execution budget", () => {
     const ctrl = new AbortController();
     ctrl.abort();
     const [expr] = await parse("(+ 1 2)");
-    await expect(
-      execExpr(expr, { signal: ctrl.signal }),
-    ).rejects.toThrow(/abort/i);
+    await expect(execExpr(expr, { signal: ctrl.signal })).rejects.toThrow(/abort/i);
   });
 
   it("AbortError has the standard Web API shape", async () => {
@@ -158,7 +148,10 @@ describe("AbortSignal execution budget", () => {
   const deferred = <T = unknown>(): { promise: Promise<T>; resolve: (v: T) => void; reject: (e: unknown) => void } => {
     let resolve!: (v: T) => void;
     let reject!: (e: unknown) => void;
-    const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
     return { promise, resolve, reject };
   };
 
@@ -227,4 +220,3 @@ describe("AbortSignal execution budget", () => {
     }
   });
 });
-

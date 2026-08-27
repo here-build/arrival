@@ -234,7 +234,8 @@ describe("Wrapper Layer", () => {
         },
         method() {
           return "danger";
-        } };
+        },
+      };
       const obj = new AJSObject(source);
       expect((obj.get("data") as { valueOf(): unknown }).valueOf()).toBe(7);
       expect((obj.get("computed") as { valueOf(): unknown }).valueOf()).toBe(99);

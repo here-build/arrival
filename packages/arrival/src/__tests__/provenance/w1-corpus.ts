@@ -55,7 +55,8 @@ export const CORPUS_ROLES: Record<string, DeclaredRole> = {
   "fetch-y": "source",
   "get-config": "source",
   map: "fan",
-  filter: "fan" };
+  filter: "fan",
+};
 
 export const CORPUS_BASE_NAMES: ReadonlySet<string> = new Set([
   "+",
@@ -88,25 +89,29 @@ export const W1_CORPUS: readonly CorpusEntry[] = [
     klass: "interior-sources",
     code: `(+ (src-a) 1)`,
     sources: { "src-a": num },
-    precision: "exact" },
+    precision: "exact",
+  },
   {
     name: "scalar-merge",
     klass: "interior-sources",
     code: `(+ (src-a) (src-b))`,
     sources: { "src-a": num, "src-b": num },
-    precision: "exact" },
+    precision: "exact",
+  },
   {
     name: "let-transparency",
     klass: "interior-sources",
     code: `(let ((y (src-a))) (+ y 1))`,
     sources: { "src-a": num },
-    precision: "exact" },
+    precision: "exact",
+  },
   {
     name: "let-star-chain",
     klass: "interior-sources",
     code: `(let* ((y (src-a)) (z (+ y (src-b)))) (* z 2))`,
     sources: { "src-a": num, "src-b": num },
-    precision: "exact" },
+    precision: "exact",
+  },
 
   // ── nested-regions (map-in-map, filter-in-map) ─────────────────────────────
   {
@@ -114,7 +119,8 @@ export const W1_CORPUS: readonly CorpusEntry[] = [
     klass: "nested-regions",
     code: `(map (lambda (row) (map (lambda (v) (+ (fetch-item v) 1)) row)) (list (list 1 2) (list 3 4)))`,
     sources: { "fetch-item": num },
-    precision: "exact" },
+    precision: "exact",
+  },
   {
     name: "filter-in-map-empty-cone",
     klass: "nested-regions",
@@ -129,13 +135,15 @@ export const W1_CORPUS: readonly CorpusEntry[] = [
     klass: "structured-multi-field-egress",
     code: `(list (fetch-x 0) (+ (fetch-y 0) 1) (src-a))`,
     sources: { "fetch-x": num, "fetch-y": num, "src-a": num },
-    precision: "exact" },
+    precision: "exact",
+  },
   {
     name: "cons-mixed-with-pure-source",
     klass: "structured-multi-field-egress",
     code: `(cons (fetch-item 0) (+ (src-a) 1))`,
     sources: { "fetch-item": num, "src-a": num },
-    precision: "exact" },
+    precision: "exact",
+  },
 
   // ── field-access-chains ─────────────────────────────────────────────────────
   {
@@ -143,7 +151,8 @@ export const W1_CORPUS: readonly CorpusEntry[] = [
     klass: "field-access-chains",
     code: `(:flag (get-config))`,
     sources: { "get-config": dict("flag", "value") },
-    precision: "exact" },
+    precision: "exact",
+  },
 
   // ── prelude-helpers ─────────────────────────────────────────────────────────
   {
@@ -151,13 +160,15 @@ export const W1_CORPUS: readonly CorpusEntry[] = [
     klass: "prelude-helpers",
     code: `(define (double x) (* x 2)) (double (src-a))`,
     sources: { "src-a": num },
-    precision: "exact" },
+    precision: "exact",
+  },
   {
     name: "pure-helper-chain",
     klass: "prelude-helpers",
     code: `(define (inc x) (+ x 1)) (define (double-inc x) (* (inc x) 2)) (double-inc (src-a))`,
     sources: { "src-a": num },
-    precision: "exact" },
+    precision: "exact",
+  },
 
   // ── port-coupled-mux (selector reaches a port, arms are pure — exact) ───────
   {
@@ -165,13 +176,15 @@ export const W1_CORPUS: readonly CorpusEntry[] = [
     klass: "port-coupled-mux",
     code: `(if (positive? (src-a)) (+ 1 2) (* 3 4))`,
     sources: { "src-a": num },
-    precision: "exact" },
+    precision: "exact",
+  },
   {
     name: "port-coupled-if-selector-repeats-source",
     klass: "port-coupled-mux",
     code: `(if (equal? (fetch-x 0) (fetch-x 0)) (+ 1 1) (+ 2 2))`,
     sources: { "fetch-x": num },
-    precision: "exact" },
+    precision: "exact",
+  },
 
   // ── pure-mux (selector is source-free, arms differ — abstract both-arms) ────
   {
@@ -180,14 +193,16 @@ export const W1_CORPUS: readonly CorpusEntry[] = [
     code: `(if #t (src-a) (src-b))`,
     sources: { "src-a": num, "src-b": num },
     precision: "abstract",
-    extraInWireframe: ["src-b"] },
+    extraInWireframe: ["src-b"],
+  },
   {
     name: "pure-mux-literal-false",
     klass: "pure-mux",
     code: `(if #f (fetch-x 0) (fetch-y 0))`,
     sources: { "fetch-x": num, "fetch-y": num },
     precision: "abstract",
-    extraInWireframe: ["fetch-x"] },
+    extraInWireframe: ["fetch-x"],
+  },
 
   // ── deep-mux-nesting ─────────────────────────────────────────────────────────
   {
@@ -195,14 +210,16 @@ export const W1_CORPUS: readonly CorpusEntry[] = [
     klass: "deep-mux-nesting",
     code: `(if (positive? (src-a)) (if (positive? (fetch-x 0)) (+ 1 1) (+ 2 2)) (+ 3 3))`,
     sources: { "src-a": num, "fetch-x": num },
-    precision: "exact" },
+    precision: "exact",
+  },
   {
     name: "pure-mux-nested-inside-port-coupled-arm",
     klass: "deep-mux-nesting",
     code: `(if (positive? (src-a)) (if #t (fetch-x 0) (fetch-y 0)) (+ 9 9))`,
     sources: { "src-a": num, "fetch-x": num, "fetch-y": num },
     precision: "abstract",
-    extraInWireframe: ["fetch-y"] },
+    extraInWireframe: ["fetch-y"],
+  },
 
   // ── loop-programs (named-let + do; sources fire unconditionally every
   // iteration, loop bound is a corpus-controlled literal so eager and wireframe
@@ -212,7 +229,8 @@ export const W1_CORPUS: readonly CorpusEntry[] = [
     klass: "loop-programs",
     code: `(let loop ((i 0) (acc 0)) (if (> i 3) acc (loop (+ i 1) (+ acc (fetch-item i)))))`,
     sources: { "fetch-item": num },
-    precision: "exact" },
+    precision: "exact",
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -248,7 +266,8 @@ function makeRng(seed: number): Rng {
   return {
     float: () => rand(),
     int: (min, max) => min + Math.floor(rand() * (max - min + 1)),
-    pick: <T>(arr: readonly T[]): T => arr[Math.floor(rand() * arr.length)] as T };
+    pick: <T>(arr: readonly T[]): T => arr[Math.floor(rand() * arr.length)] as T,
+  };
 }
 
 const POOL = ["src-a", "src-b", "fetch-x", "fetch-y"] as const;

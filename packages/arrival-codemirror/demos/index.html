@@ -4,10 +4,22 @@
     <meta charset="utf-8" />
     <title>arrival-codemirror demos</title>
     <style>
-      body { font-family: system-ui, sans-serif; margin: 2rem; }
-      .cm-editor { border: 1px solid #ccc; min-height: 12rem; }
-      .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-      h2 { margin-top: 2.5rem; }
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 2rem;
+      }
+      .cm-editor {
+        border: 1px solid #ccc;
+        min-height: 12rem;
+      }
+      .pair {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+      }
+      h2 {
+        margin-top: 2.5rem;
+      }
     </style>
   </head>
   <body>
@@ -19,8 +31,14 @@
 
     <h2>2 · One program, two faces — same backend on both</h2>
     <div class="pair">
-      <div><h3>classic</h3><div id="classic"></div></div>
-      <div><h3>sugarcoat</h3><div id="sugarcoat"></div></div>
+      <div>
+        <h3>classic</h3>
+        <div id="classic"></div>
+      </div>
+      <div>
+        <h3>sugarcoat</h3>
+        <div id="sugarcoat"></div>
+      </div>
     </div>
 
     <script type="module" src="./vanilla-ide.ts"></script>

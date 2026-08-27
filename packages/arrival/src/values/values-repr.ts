@@ -133,8 +133,9 @@ export function box(object: unknown, _ctx: RunContext = CONSTANT_CTX): SchemeVal
         return new AExact(object);
       }
       return new AInexact(object);
+    default:
+      return object as SchemeValue;
   }
-  return object as SchemeValue;
 }
 
 // ----------------------------------------------------------------------

@@ -9,7 +9,7 @@ A ready-made TextMate derivation ships next to this file:
 [`editors/sugarcoat.tmLanguage.json`](./editors/sugarcoat.tmLanguage.json). The full-fidelity
 reference integration (highlighting + LSP over the lens) is `@inhuman.tools/arrival-codemirror`.
 
-**Notation** — PEG-style: `←` defines, `/` is *ordered* choice, `*`/`+`/`?` repeat, terminals are
+**Notation** — PEG-style: `←` defines, `/` is _ordered_ choice, `*`/`+`/`?` repeat, terminals are
 quoted, `[…]` is a character class. Lexing is maximal-munch. Grammar is three stacked passes, each
 consuming the previous one's output:
 
@@ -21,7 +21,7 @@ text ──(1. layout)──▶ logical-line tree ──(2. tokens)──▶ tok
 
 ## 1. Layout (I-expressions)
 
-Sugarcoat is indentation-structured. Layout runs *before* tokenization, on physical lines:
+Sugarcoat is indentation-structured. Layout runs _before_ tokenization, on physical lines:
 
 ```
 Program      ← LogicalLine*
@@ -34,7 +34,7 @@ LogicalLine  ← physical line + continuation lines        ; see coalescing
    at-expression body, §5) absorbs following physical lines until balanced — bracket balance beats
    layout. Inside code context the joined boundary is whitespace; inside an at-expression body the
    newline is literal content.
-3. **The offside rule.** After coalescing, a logical line's *indent* is its count of leading
+3. **The offside rule.** After coalescing, a logical line's _indent_ is its count of leading
    spaces. A line plus all following lines with strictly greater indent form one group:
 
 ```
@@ -51,7 +51,7 @@ Group  ← Line⟨i⟩ Line⟨>i⟩*         ; children = the maximal run of dee
      are binding-shaped pairs re-collects them into the canonical bindings list (the render
      elides the `(( ))`; the reader restores it).
 
-Indentation is *view-only*: it never reaches the canonical form and is regenerated on render.
+Indentation is _view-only_: it never reaches the canonical form and is regenerated on render.
 
 ## 2. Lexical grammar
 
@@ -104,7 +104,7 @@ StepLine       ← INDENT DOT Word Args? TrailingLambda?   ; child line starting
 ```
 
 **Method lowering — receiver-last fold.** `recv.op(a₁ … aₖ){Λ}` ⇒ `(op Λ a₁ … aₖ recv)` — the
-receiver seats in the *last* argument slot; a trailing lambda seats first. Chains fold left:
+receiver seats in the _last_ argument slot; a trailing lambda seats first. Chains fold left:
 `x.f.g` ⇒ `(g (f x))`. StepLines produce the identical CST — layout only.
 
 **Render gate.** Read is unconditional; render emits a dot/subscript chain iff it peels **≥ 2
@@ -130,12 +130,12 @@ non-portable `caddadar`; a keyed step (`[:k]`, `[k]`) always breaks the run.
 A free `{…}` is classified from its **flat top-level form sequence** (ops are ordinary atoms
 during classification):
 
-| kind | rule | folds to |
-|---|---|---|
-| dict | empty, or even length with no operator on an odd index | `(dict …)` |
-| unwrap | exactly one form | that form (SRFI-105 identity) |
-| n-expr | odd length ≥ 3, operators exactly at odd indices | Pratt infix fold |
-| error | anything else (e.g. `{a b c}`, truncated `{a +}`) | door |
+| kind   | rule                                                   | folds to                      |
+| ------ | ------------------------------------------------------ | ----------------------------- |
+| dict   | empty, or even length with no operator on an odd index | `(dict …)`                    |
+| unwrap | exactly one form                                       | that form (SRFI-105 identity) |
+| n-expr | odd length ≥ 3, operators exactly at odd indices       | Pratt infix fold              |
+| error  | anything else (e.g. `{a b c}`, truncated `{a +}`)      | door                          |
 
 Suffix keys flip in dict key slots: `name:` → `:name`. Nested `{…}`/`[…]`/`(…)` count as one form.
 
@@ -144,14 +144,14 @@ Suffix keys flip in dict key slots: `name:` → `:name`. Nested `{…}`/`[…]`/
 `Infix⟨p⟩`: read one operand; while the next token is an operator `g` with `prec(g) ≥ p`, fold a
 maximal same-glyph run (`{a + b + c}` is one n-ary node), operands read at `Infix⟨prec(g)+1⟩`.
 
-| level | canonical | glyph |
-|---|---|---|
-| 5 | `*` `/` `modulo` `quotient` `remainder` | same |
-| 4 | `+` `-` | same |
-| 3 | `<` `>` `<=` `>=` `=` `eq?` `eqv?` `equal?` | `equal?`→`==`, rest same |
-| 2 | `and` | same |
-| 1 | `or` | same |
-| 0 | `=>` | `=>` |
+| level | canonical                                   | glyph                    |
+| ----- | ------------------------------------------- | ------------------------ |
+| 5     | `*` `/` `modulo` `quotient` `remainder`     | same                     |
+| 4     | `+` `-`                                     | same                     |
+| 3     | `<` `>` `<=` `>=` `=` `eq?` `eqv?` `equal?` | `equal?`→`==`, rest same |
+| 2     | `and`                                       | same                     |
+| 1     | `or`                                        | same                     |
+| 0     | `=>`                                        | `=>`                     |
 
 The glyph map is injective for equality (`==`→`equal?`); `and`/`or` stay as scheme symbols.
 Word-form comparisons are a deliberate one-way rewrite: `lt`/`gt`/`lte`/`gte` → `<`/`>`/`<=`/`>=`
@@ -159,7 +159,7 @@ Word-form comparisons are a deliberate one-way rewrite: `lt`/`gt`/`lte`/`gte` �
 accepts legacy `&&`/`||` and math-skin `∧`/`∨` as aliases.
 
 **Associative flatten (`and` / `or` only).** Nested same-op trees render as one n-ary chain:
-`(and (and a b) c)` → `{a and b and c}` → `(and a b c)`. Conjunction/disjunction *intent*
+`(and (and a b) c)` → `{a and b and c}` → `(and a b c)`. Conjunction/disjunction _intent_
 survives; binary nesting does not — that is an intentional sugarcoat quotient, not a bug.
 
 **Boolean mixing is LICENSELESS.** `and` under `or` (and vice versa) never elides braces,
@@ -192,7 +192,7 @@ common indent then lowers to `(str …)` (dedent never exists in canonical form)
 literals coalesce on read — which is exactly the render-side representability gate.
 
 The graft body is **classic prefix context**: the parens are the grafted form's own parens
-(`@(+ x 1)` grafts `(+ x 1)`), so `@(x + 1)` grafts a *call of `x`* and `@({x + 1})` grafts a
+(`@(+ x 1)` grafts `(+ x 1)`), so `@(x + 1)` grafts a _call of `x`_ and `@({x + 1})` grafts a
 call of the sum — no infix, no postfix steps attach to a bare `@id` interp (`@s[:k]` leaves
 `[:k]` as literal prose; write `@(:k s)`).
 
@@ -233,19 +233,19 @@ territory:
 A basic highlighter needs exactly these classes (this is what the shipped TextMate grammar and
 the CodeMirror mode emit):
 
-| class | matches |
-|---|---|
-| comment | `;` to end of line |
-| string | `"…"` |
-| at-head | `@word{`, `@{`, `@dedent{` |
-| at-body | prose inside at-braces (string-ish) |
-| at-interp | `@id`, `@\|id\|`, `@(…)` inside a body |
-| keyword | `:name`, `name:` |
-| method | `.word` after a value |
-| subscript | `[0]`, `[1:]`, `[:key]` |
-| operator | infix glyphs incl. `=>`, `==`, `and`, `or` |
+| class      | matches                                                           |
+| ---------- | ----------------------------------------------------------------- |
+| comment    | `;` to end of line                                                |
+| string     | `"…"`                                                             |
+| at-head    | `@word{`, `@{`, `@dedent{`                                        |
+| at-body    | prose inside at-braces (string-ish)                               |
+| at-interp  | `@id`, `@\|id\|`, `@(…)` inside a body                            |
+| keyword    | `:name`, `name:`                                                  |
+| method     | `.word` after a value                                             |
+| subscript  | `[0]`, `[1:]`, `[:key]`                                           |
+| operator   | infix glyphs incl. `=>`, `==`, `and`, `or`                        |
 | definition | `define`, `lambda`, `let` family, `cond`, `if`, `else` head words |
-| constant | numbers, `#t` `#f`, `#\char` |
+| constant   | numbers, `#t` `#f`, `#\char`                                      |
 
 Fidelity beyond coloring (fold ranges, structural selection, hover, rename) should not be
 re-derived from this grammar — align spans via `alignSugarcoatClassic` and drive the canonical

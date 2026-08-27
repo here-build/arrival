@@ -27,7 +27,7 @@
  *   represent.
  */
 import { describe, expect, it } from "vitest";
-import {  isAmbientRuntime, AmbientRuntime, ResolvingAmbient , type EnvWithInternals } from "../../env/AmbientRuntime.js";
+import { isAmbientRuntime, AmbientRuntime, ResolvingAmbient, type EnvWithInternals } from "../../env/AmbientRuntime.js";
 import { compileResolutionChain, sealResolutionChain } from "../../eval/CompiledResolutionChain.js";
 import { execInFrame } from "../../eval/generator-exec.js";
 import { buildVocabulary } from "../../env/vocabulary.js";

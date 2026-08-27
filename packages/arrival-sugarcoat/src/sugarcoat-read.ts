@@ -148,8 +148,8 @@ function classifyCurly(items: Node[]): CurlyKind {
   // Full operand·op·operand… alternation (odd length, ops only on odd indices).
   if (items.length % 2 === 1) {
     let alt = true;
-    for (let i = 0; i < items.length; i++) {
-      if ((i % 2 === 1) !== isOpAtom(items[i]!)) {
+    for (const [i, item] of items.entries()) {
+      if ((i % 2 === 1) !== isOpAtom(item!)) {
         alt = false;
         break;
       }
@@ -160,9 +160,9 @@ function classifyCurly(items: Node[]): CurlyKind {
   }
   // Even length: dict unless an operator sits where an operand/key should, or an
   // odd slot holds an op (truncated infix like `{a +}` → [a, +]).
-  for (let i = 0; i < items.length; i++) {
-    if (i % 2 === 1 && isOpAtom(items[i]!)) return "error"; // `{a +}` or `{a + b +}`
-    if (i % 2 === 0 && isOpAtom(items[i]!)) return "error"; // `{+ 1}` as broken n-expr
+  for (const [i, item] of items.entries()) {
+    if (i % 2 === 1 && isOpAtom(item!)) return "error"; // `{a +}` or `{a + b +}`
+    if (i % 2 === 0 && isOpAtom(item!)) return "error"; // `{+ 1}` as broken n-expr
   }
   return "dict";
 }
@@ -235,7 +235,7 @@ type Tok =
 
 // ident-start glyphs (R7RS initial set, minus digits): a `.` only splits when the
 // next char is one of these — so `0.5`/`x.5` (decimals) and `(a . b)` stay whole.
-const IDENT_START = /[A-Za-z!$%&*/:<=>?^_~]/;
+const IDENT_START = /[A-Z!$%&*/:<=>?^_~]/i;
 
 /** `rewrite_L` — split a raw WORD at each method-dot into `(word? .)* word` tokens.
  *  A `.` at index k splits iff (a) it is SINGLE — neither neighbour is `.` (so `..`
@@ -267,7 +267,7 @@ function splitMethodDots(w: string, s: number, base?: number): Tok[] {
       next !== "." &&
       next !== undefined &&
       IDENT_START.test(next) &&
-      !/[0-9]/.test(next)
+      !/\d/.test(next)
     ) {
       if (seg.length > 0) out.push({ t: "word", v: seg, ...at(segStart, k) }); // left segment, if any
       out.push({ t: ".", ...at(k, k + 1) });
@@ -333,14 +333,20 @@ const QUOTE_WRAP: Record<string, string> = {
 const AT_HEAD = /[^\s{}()[\]"@]/;
 // bare `@id` interpolation: ident-ish; STOPS at `.` (not in the class) so prose
 // periods stay literal — richer holes use the `@(expr)` graft.
-const AT_INTERP = /[A-Za-z0-9!$%&*/:<=>?^_~+-]/;
+const AT_INTERP = /[\w!$%&*/:<=>?^~+-]/;
 const strAtom = (s: string): Node => ({ atom: s, str: true });
 
 // String atoms store the SOURCE-escaped form (the normal string tokenizer preserves
 // backslash sequences; printScheme wraps verbatim). The at-body reader accumulates
 // RAW characters (so dedent can see real newlines), then escapes at the end.
-const SCHEME_ESC: Record<string, string> = { "\\": "\\\\", '"': '\\"', "\n": "\\n", "\r": "\\r", "\t": "\\t" };
-const escapeSchemeString = (s: string): string => s.replace(/[\\"\n\r\t]/g, (ch) => SCHEME_ESC[ch]);
+const SCHEME_ESC: Record<string, string> = {
+  "\\": "\\\\",
+  '"': String.raw`\"`,
+  "\n": String.raw`\n`,
+  "\r": String.raw`\r`,
+  "\t": String.raw`\t`,
+};
+const escapeSchemeString = (s: string): string => s.replaceAll(/[\\"\n\r\t]/g, (ch) => SCHEME_ESC[ch]);
 const escapeStrParts = (parts: Node[]): Node[] =>
   parts.map((p) => ("atom" in p && p.str ? strAtom(escapeSchemeString(p.atom)) : p));
 
@@ -350,7 +356,7 @@ const escapeStrParts = (parts: Node[]): Node[] =>
  *  parts), so the strip is intra-part. The first line (inline after `{`) is excluded;
  *  blank lines don't lower the minimum. */
 function dedentParts(parts: Node[]): Node[] {
-  const skel = parts.map((p) => ("atom" in p && p.str ? p.atom : "\x00")).join("");
+  const skel = parts.map((p) => ("atom" in p && p.str ? p.atom : "\u0000")).join("");
   const lines = skel.split("\n");
   let min = Infinity;
   for (let k = 1; k < lines.length; k++) {
@@ -359,7 +365,7 @@ function dedentParts(parts: Node[]): Node[] {
   }
   if (min === Infinity || min === 0) return parts;
   return parts.map((p) =>
-    "atom" in p && p.str ? strAtom(p.atom.replace(/\n([ \t]*)/g, (_m, ws: string) => `\n${ws.slice(min)}`)) : p,
+    "atom" in p && p.str ? strAtom(p.atom.replaceAll(/\n([ \t]*)/g, (_m, ws: string) => `\n${ws.slice(min)}`)) : p,
   );
 }
 
@@ -410,7 +416,7 @@ function readTightSubscripts(src: string, start: number): { end: number } {
  * Op names exclude `:` — otherwise `@view.number->string:` (next prose is
  * a separator colon) greedily eats `number->string:` as one symbol.
  */
-const AT_METHOD_OP = /[A-Za-z0-9!$%&*/<=>?^_~+-]/; // AT_INTERP minus `:`
+const AT_METHOD_OP = /[\w!$%&*/<=>?^~+-]/; // AT_INTERP minus `:`
 function readTightMethodChain(src: string, start: number): { end: number } {
   let i = start;
   while (i < src.length && src[i] === ".") {
@@ -665,8 +671,7 @@ function tokenize(src: string, base?: number): Tok[] {
 
 /** Racket `#:limit` ≡ arrival `:limit` — same identity as ASymbol keyword mint. */
 const canonKeyword = (w: string): string => (w.length > 2 && w.startsWith("#:") ? `:${w.slice(2)}` : w);
-const atom = (w: string, str?: boolean): Node =>
-  str ? { atom: w, str: true } : { atom: canonKeyword(w) };
+const atom = (w: string, str?: boolean): Node => (str ? { atom: w, str: true } : { atom: canonKeyword(w) });
 const isColonKey = (t: Tok): t is Extract<Tok, { t: "word" }> =>
   t.t === "word" && !t.str && t.v.length > 1 && t.v.endsWith(":") && !t.v.slice(0, -1).includes(":");
 

@@ -4,7 +4,7 @@
 // the member roster so they narrow as call slots.
 import { describe, expect, it } from "vitest";
 
-import { encodeSchemeIdent } from "@inhuman.tools/arrival-mercury/type-emit";
+import { encodeSchemeIdent } from "@inhuman.tools/arrival-types-bridge";
 
 import { assembleHostPrelude } from "../host-prelude.js";
 import { createSchemeLanguageService } from "../language-service.js";

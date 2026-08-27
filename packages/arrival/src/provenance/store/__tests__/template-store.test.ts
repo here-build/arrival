@@ -30,8 +30,7 @@ async function wf(code: string): Promise<WireframeProgram> {
   return buildWireframe(forms, { classifier: CLASSIFIER, isBaseName });
 }
 
-beforeAll(async () => {
-});
+beforeAll(async () => {});
 
 describe("TemplateStoreFake — put/get round-trip (§5 C4)", () => {
   it("putTemplate then getTemplate returns the SAME graph, keyed by its own hash", async () => {

@@ -10,7 +10,10 @@ describe("streaming truncation (opt-in)", () => {
   });
 
   it("a bare indent number still means 'no caps'", () => {
-    const out = toSExprString(Array.from({ length: 200 }, (_, i) => i), 2);
+    const out = toSExprString(
+      Array.from({ length: 200 }, (_, i) => i),
+      2,
+    );
     expect(out).not.toContain("more of");
   });
 
@@ -103,9 +106,12 @@ describe("reduced flag (toSExprStringWithElisions)", () => {
   });
 
   it("true on collection tail-truncation — elisions stays empty (middle-elision is OFF)", () => {
-    const { reduced, elisions, text } = toSExprStringWithElisions(Array.from({ length: 100 }, (_, i) => i), {
-      maxItems: 5,
-    });
+    const { reduced, elisions, text } = toSExprStringWithElisions(
+      Array.from({ length: 100 }, (_, i) => i),
+      {
+        maxItems: 5,
+      },
+    );
     expect(reduced).toBe(true);
     expect(elisions).toEqual([]);
     expect(text).toContain("#| +95 more of 100 |#");

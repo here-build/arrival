@@ -32,8 +32,7 @@ export default defineConfig({
     rollupOptions: {
       // Bare imports stay external — EXCEPT `?raw` asset text, which must inline.
       // Virtual modules (\0-prefixed) are Vite-internal, never external.
-      external: (id) =>
-        !id.includes("?raw") && !id.startsWith(".") && !id.startsWith("\0") && !path.isAbsolute(id),
+      external: (id) => !id.includes("?raw") && !id.startsWith(".") && !id.startsWith("\0") && !path.isAbsolute(id),
       output: {
         entryFileNames: "[name].js",
         chunkFileNames: "chunks/[name]-[hash].js",

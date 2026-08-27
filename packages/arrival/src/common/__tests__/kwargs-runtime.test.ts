@@ -39,7 +39,6 @@ function pluck(key: string): unknown {
   return new ASymbol(`:${key}`);
 }
 
-
 /** Invoke a baked rosetta procedure via its apply term (the sole membrane spine). */
 function fire(proc: { ["arrival/tagless-final/apply"](args: any[], callCtx: any): any }, callCtx: any, ...args: any[]) {
   return proc["arrival/tagless-final/apply"](args, callCtx);

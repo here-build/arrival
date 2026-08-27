@@ -141,7 +141,7 @@ export class ProvenanceRing {
    *  this interface only guarantees the attempt is made and failures are never
    *  swallowed. */
   async preHibernate(): Promise<void> {
-    for (const regionId of [...this.buffers.keys()]) {
+    for (const regionId of this.buffers.keys()) {
       await this.flush(regionId);
     }
   }

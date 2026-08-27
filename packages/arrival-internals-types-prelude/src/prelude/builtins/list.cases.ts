@@ -11,9 +11,7 @@ expectTypeOf(list()).toEqualTypeOf<[]>();
 expectTypeOf(list(1)).toEqualTypeOf<List<number>>();
 // Heterogeneous fixed-arity is intentional (apply product / zip pairs).
 expectTypeOf(list(1, "a")).toEqualTypeOf<[number, string]>();
-expectTypeOf(list(1, "a", true, null, 5)).toEqualTypeOf<
-  [number, string, boolean, null, number]
->();
+expectTypeOf(list(1, "a", true, null, 5)).toEqualTypeOf<[number, string, boolean, null, number]>();
 
 // @ts-expect-error assigning a fixed product to a scalar bites
 const n: number = list(1, 2, 3);

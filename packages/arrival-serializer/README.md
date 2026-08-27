@@ -15,12 +15,12 @@ pnpm add @inhuman.tools/arrival-serializer
 ## Quick Start
 
 ```typescript
-import { toSExpr, formatSExpr, toSExprString } from '@inhuman.tools/arrival-serializer';
+import { toSExpr, formatSExpr, toSExprString } from "@inhuman.tools/arrival-serializer";
 
-toSExprString(42);               // 42
-toSExprString("hello");          // hello
-toSExprString("with space");     // "with space"
-toSExprString([1, 2, 3]);        // [1 2 3]
+toSExprString(42); // 42
+toSExprString("hello"); // hello
+toSExprString("with space"); // "with space"
+toSExprString([1, 2, 3]); // [1 2 3]
 toSExprString({ x: 10, y: 20 }); // {:x 10 :y 20}
 ```
 
@@ -28,14 +28,19 @@ Quoting is lexical: strings with spaces or special characters get quotes; identi
 
 ```typescript
 import "@here.build/arrival-env"; // Symbol.toSExpr / Symbol.SExpr
-import { toSExprString } from '@inhuman.tools/arrival-serializer';
+import { toSExprString } from "@inhuman.tools/arrival-serializer";
 
 class Point {
-  constructor(public x: number, public y: number) {}
+  constructor(
+    public x: number,
+    public y: number,
+  ) {}
 
-  [Symbol.SExpr]() { return "Point"; }          // optional head-tag override
+  [Symbol.SExpr]() {
+    return "Point";
+  } // optional head-tag override
   [Symbol.toSExpr](ctx) {
-    return [ctx.keyword('x'), this.x, ctx.keyword('y'), this.y];
+    return [ctx.keyword("x"), this.x, ctx.keyword("y"), this.y];
   }
 }
 
@@ -62,16 +67,16 @@ The `ctx` object provides the leaf constructors:
 
 ## Optimizing Representations
 
-Baseline output is already at least as compact as JSON, so optimize only the hottest, most data-heavy entities. Each technique shrinks a representation *while adding meaning*; applied systematically at data-heavy locations they yield materially fewer tokens than minified JSON and stay more readable than formatted JSON.
+Baseline output is already at least as compact as JSON, so optimize only the hottest, most data-heavy entities. Each technique shrinks a representation _while adding meaning_; applied systematically at data-heavy locations they yield materially fewer tokens than minified JSON and stay more readable than formatted JSON.
 
 - **Type + name + id** — `(User 'abc123 "John Doe")`: the head names the entity type, a quoted symbol marks the identifier, a string carries the display name.
 - **Flags as keywords** — emit a bare `:free-tier` when a boolean's presence alone is meaningful, and omit absent fields entirely (the same technique carries clear tags like `:div` / `:section` on render-tree nodes).
 - **Named collections** — `(members (User …) (User …))` for an unordered collection field, rather than a positional list.
-- **Views** — represent a *referenced* entity by a compact projection (`(User 'abc123 "John Doe")`) instead of inlining it in full. Doubles as cyclic-reference defense; a view may also project a *larger* structure when detail is the point (e.g. a component render tree).
+- **Views** — represent a _referenced_ entity by a compact projection (`(User 'abc123 "John Doe")`) instead of inlining it in full. Doubles as cyclic-reference defense; a view may also project a _larger_ structure when detail is the point (e.g. a component render tree).
 
 > **Why named heads and quoted identifiers read well:** a named head gives a semantic anchor the way a variable name does over a raw address. High-entropy strings like UUIDs are naturally read as pointers, and the `'abc123` quote signals "reference, not data" — the same cognitive pattern as pointers in code, which models trained on code recognize immediately.
 
-Whether these forms also improve AI *consumption* (not just density) is unvalidated — a domain worth researching.
+Whether these forms also improve AI _consumption_ (not just density) is unvalidated — a domain worth researching.
 
 ## API
 
@@ -84,19 +89,19 @@ Whether these forms also improve AI *consumption* (not just density) is unvalida
 
 ## Type Mappings
 
-| JavaScript  | S-Expression                          |
-|-------------|---------------------------------------|
-| `null`      | `nil`                                 |
-| `undefined` | `undefined`                           |
-| Numbers     | Numbers (with BigInt support)         |
+| JavaScript  | S-Expression                                                                   |
+| ----------- | ------------------------------------------------------------------------------ |
+| `null`      | `nil`                                                                          |
+| `undefined` | `undefined`                                                                    |
+| Numbers     | Numbers (with BigInt support)                                                  |
 | Strings     | Unquoted when identifier-like; `"quoted"` when they contain spaces or specials |
-| Booleans    | `#t` / `#f`                           |
-| Arrays      | `[...]`                               |
-| Objects     | `{:key value ...}`                    |
-| Symbols     | `:keyword`                            |
-| Map         | `(map :key value ...)`                |
-| Set         | `(set ...)`                           |
-| Date        | ISO string                            |
+| Booleans    | `#t` / `#f`                                                                    |
+| Arrays      | `[...]`                                                                        |
+| Objects     | `{:key value ...}`                                                             |
+| Symbols     | `:keyword`                                                                     |
+| Map         | `(map :key value ...)`                                                         |
+| Set         | `(set ...)`                                                                    |
+| Date        | ISO string                                                                     |
 
 ## Scheme Integration
 

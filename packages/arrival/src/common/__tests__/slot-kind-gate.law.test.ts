@@ -29,17 +29,11 @@ class SomeHostThing {
 describe("slot-kind runtime gate (audit B2a)", () => {
   it("N-SLOT-KIND-ROSETTA — z.schemeValue slot refuses at bake (untyped caller)", () => {
     expect(() =>
-      symbol.rosetta`sk-r-in: `(
-        { input: [z.schemeValue], output: [z.string] } as never,
-        (() => "x") as never,
-      ),
+      symbol.rosetta`sk-r-in: `({ input: [z.schemeValue], output: [z.string] } as never, (() => "x") as never),
     ).toThrow(ContractSlotKindError);
 
     expect(() =>
-      symbol.rosetta`sk-r-out: `(
-        { input: [z.string], output: [z.schemeValue] } as never,
-        ((s: string) => s) as never,
-      ),
+      symbol.rosetta`sk-r-out: `({ input: [z.string], output: [z.schemeValue] } as never, ((s: string) => s) as never),
     ).toThrow(ContractSlotKindError);
 
     // kwargs rest slots are inside the gate's view (object shape via cacheGateSlots)
@@ -53,10 +47,7 @@ describe("slot-kind runtime gate (audit B2a)", () => {
 
   it("N-SLOT-KIND-NATIVE — z.dynamic / z.instance slot refuses at bake (untyped caller)", () => {
     expect(() =>
-      symbol.native`sk-n-dyn: `(
-        { input: [z.dynamic], output: [z.schemeValue] } as never,
-        ((v: unknown) => v) as never,
-      ),
+      symbol.native`sk-n-dyn: `({ input: [z.dynamic], output: [z.schemeValue] } as never, ((v: unknown) => v) as never),
     ).toThrow(ContractSlotKindError);
 
     expect(() =>
@@ -67,10 +58,7 @@ describe("slot-kind runtime gate (audit B2a)", () => {
     ).toThrow(ContractSlotKindError);
 
     expect(() =>
-      symbol.native`sk-n-out: `(
-        { input: [z.schemeValue], output: [z.dynamic] } as never,
-        ((v: unknown) => v) as never,
-      ),
+      symbol.native`sk-n-out: `({ input: [z.schemeValue], output: [z.dynamic] } as never, ((v: unknown) => v) as never),
     ).toThrow(ContractSlotKindError);
   });
 
@@ -85,10 +73,7 @@ describe("slot-kind runtime gate (audit B2a)", () => {
 
   it("N-SLOT-KIND-DEFINE — z.dynamic / z.instance slot refuses at declaration (untyped caller)", () => {
     expect(() =>
-      symbol.define`sk-d-dyn: `(
-        { input: [z.dynamic], output: [z.schemeValue] } as never,
-        "(lambda (x) x)",
-      ),
+      symbol.define`sk-d-dyn: `({ input: [z.dynamic], output: [z.schemeValue] } as never, "(lambda (x) x)"),
     ).toThrow(ContractSlotKindError);
 
     expect(() =>
@@ -101,13 +86,9 @@ describe("slot-kind runtime gate (audit B2a)", () => {
 
   it("P-SLOT-KIND — each side's own honest slots still bake", () => {
     // rosetta: z.dynamic is the crossing's legitimate escape hatch
-    expect(() =>
-      symbol.rosetta`sk-r-ok: `({ input: [z.dynamic], output: [z.dynamic] }, (v) => v),
-    ).not.toThrow();
+    expect(() => symbol.rosetta`sk-r-ok: `({ input: [z.dynamic], output: [z.dynamic] }, (v) => v)).not.toThrow();
 
     // native: z.schemeValue is the contour's honest top type
-    expect(() =>
-      symbol.native`sk-n-ok: `({ input: [z.schemeValue], output: [z.schemeValue] }, (v) => v),
-    ).not.toThrow();
+    expect(() => symbol.native`sk-n-ok: `({ input: [z.schemeValue], output: [z.schemeValue] }, (v) => v)).not.toThrow();
   });
 });

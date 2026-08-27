@@ -106,8 +106,10 @@ if (!fs.existsSync(CHIBI_TESTS_PATH)) {
     for (const step of manifest.steps) {
       if (step.kind === "test") rows.push({ sectionPath: step.sectionPath, emit: () => registerTest(step) });
       else if (step.kind === "block")
-        for (const member of step.members) rows.push({ sectionPath: member.sectionPath, emit: () => registerTest(member) });
-      else if (step.kind === "unreadable") rows.push({ sectionPath: step.sectionPath, emit: () => registerUnreadable(step) });
+        for (const member of step.members)
+          rows.push({ sectionPath: member.sectionPath, emit: () => registerTest(member) });
+      else if (step.kind === "unreadable")
+        rows.push({ sectionPath: step.sectionPath, emit: () => registerUnreadable(step) });
     }
 
     // Group consecutive rows sharing a sectionPath PREFIX into nested `describe`s — corpus

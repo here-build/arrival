@@ -35,7 +35,7 @@ const yamlType: ExtensionHandler = {
       const trimmed = line.trim();
       if (trimmed === "") continue;
       const colon = trimmed.indexOf(":");
-      if (colon < 0) continue;
+      if (colon === -1) continue;
       const key = trimmed.slice(0, colon).trim();
       const raw = trimmed.slice(colon + 1).trim();
       const n = Number(raw);
@@ -93,9 +93,7 @@ describe("(require data-file) → granular shape", () => {
     // `age` is number; string-append wants string — must error, proving the field
     // type flows (an `unknown` require would NOT bite). (car sugarcoats to [0]
     // which no longer rejects numbers under noImplicitAny:false.)
-    const scheme =
-      `(define personas (require "personas.json"))\n` +
-      `(string-append (@ (car personas) "age") "x")`;
+    const scheme = `(define personas (require "personas.json"))\n` + `(string-append (@ (car personas) "age") "x")`;
     const diags = ls.getSemanticDiagnostics(scheme);
     expect(diags.length).toBeGreaterThan(0);
   });
@@ -152,4 +150,3 @@ describe("require-as-import — multi-path faces (no overload bag)", () => {
     expect(clash).toEqual([]);
   });
 });
-

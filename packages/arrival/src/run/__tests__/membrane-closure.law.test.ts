@@ -72,10 +72,10 @@ describe("borrowed-store terms", () => {
       }),
     });
     const before = count();
-    const [got] = (await exec(
-      `(list (@ (obj) :x) (:x (obj)) (@? (obj) :y) (vector-length (@keys (obj))))`,
-      { capabilities: [cap], membraneClosure: wrap },
-    )) as [unknown[]];
+    const [got] = (await exec(`(list (@ (obj) :x) (:x (obj)) (@? (obj) :y) (vector-length (@keys (obj))))`, {
+      capabilities: [cap],
+      membraneClosure: wrap,
+    })) as [unknown[]];
     expect(got).toEqual([1, 1, true, 2]);
     expect(count()).toBeGreaterThan(before);
   });
@@ -84,10 +84,7 @@ describe("borrowed-store terms", () => {
     const { wrap, count } = countingWrap();
     const cap = EnvCapability.define("test/membrane-closure-arr", {
       symbols: (symbol, z) => ({
-        arr: symbol.rosetta`arr: the host array`(
-          { input: [], output: [z.dynamic] },
-          () => [10, 20, 30],
-        ),
+        arr: symbol.rosetta`arr: the host array`({ input: [], output: [z.dynamic] }, () => [10, 20, 30]),
       }),
     });
     const before = count();
@@ -153,13 +150,10 @@ describe("host-fn fire + reverse-membrane re-entry", () => {
     let impls = 0;
     const cap = EnvCapability.define("test/membrane-closure-rosetta", {
       symbols: (symbol, z) => ({
-        inc: symbol.rosetta`inc: add one`(
-          { input: [z.number], output: [z.number] },
-          (n: number) => {
-            impls++;
-            return n + 1;
-          },
-        ),
+        inc: symbol.rosetta`inc: add one`({ input: [z.number], output: [z.number] }, (n: number) => {
+          impls++;
+          return n + 1;
+        }),
       }),
     });
     const before = count();

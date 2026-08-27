@@ -44,7 +44,9 @@ describe("factory stamping — the metadata bag reaches the def (the closed drop
         dynamicDescription: function () {
           fired += 1;
           return "live";
-        } } });
+        },
+      },
+    });
     expect(contractOf<RosettaSymbolDef>(def).metadata?.description).toBe("static text");
     expect(typeof contractOf<RosettaSymbolDef>(def).metadata?.dynamicDescription).toBe("function"); // the discriminant
     expect(fired).toBe(0); // bake resolved NOTHING
@@ -52,7 +54,8 @@ describe("factory stamping — the metadata bag reaches the def (the closed drop
 
   it("symbol.native carries the same optional bag", () => {
     const def = symbol.native`law/meta-native: doc`({ input: [zz.number], output: [zz.number] }, (n) => n, {
-      metadata: { docUrl: "https://example.test" } });
+      metadata: { docUrl: "https://example.test" },
+    });
     expect(contractOf<NativeSymbolDef>(def).metadata?.docUrl).toBe("https://example.test");
   });
 
@@ -75,7 +78,8 @@ describe("resolveMetadata — the unit surface (fake activation, no assembly)", 
         description: "static",
         endpoint: function (this: { configuration: { url: string } }) {
           return this.configuration.url;
-        } },
+        },
+      },
       activation,
     );
     expect(resolved).toEqual({ description: "static", endpoint: "https://cfg" });

@@ -33,13 +33,9 @@ expectTypeOf(maybe$qmark$("anything")).toEqualTypeOf<boolean>();
 expectTypeOf(right$qmark$(right(1))).toEqualTypeOf<boolean>();
 
 // maybe-map threads the wrapped type through the callback (T → B) → exact brand
-expectTypeOf(maybe$dash$map((x: number): string => `${x}`, just(1))).toEqualTypeOf<
-  ["just", string] | ["nothing"]
->();
+expectTypeOf(maybe$dash$map((x: number): string => `${x}`, just(1))).toEqualTypeOf<["just", string] | ["nothing"]>();
 // maybe-bind: function returns a Maybe; result unions with Nothing (number bind → exact)
-expectTypeOf(maybe$dash$bind(just(1), (x: number) => just(x))).toEqualTypeOf<
-  ["just", number] | ["nothing"]
->();
+expectTypeOf(maybe$dash$bind(just(1), (x: number) => just(x))).toEqualTypeOf<["just", number] | ["nothing"]>();
 // maybe-ref unwraps to the wrapped value type (literal through T)
 expectTypeOf(maybe$dash$ref(just(7))).toExtend<number>();
 expectTypeOf(maybe$dash$ref(just(7))).not.toBeAny();
@@ -47,9 +43,7 @@ expectTypeOf(maybe$dash$ref(just(7))).not.toBeAny();
 expectTypeOf(maybe$dash$ref$slash$default(just(7), "fallback")).toExtend<number | string>();
 expectTypeOf(maybe$dash$ref$slash$default(just(7), "fallback")).not.toBeAny();
 // maybe->either flips into Either with payload preserved
-expectTypeOf(maybe$dash$$greater$either(just(1), "no")).toExtend<
-  ["right", number] | ["left", string]
->();
+expectTypeOf(maybe$dash$$greater$either(just(1), "no")).toExtend<["right", number] | ["left", string]>();
 expectTypeOf(maybe$dash$$greater$either(just(1), "no")).not.toBeAny();
 // maybe->list collects to a list of the wrapped type
 expectTypeOf(maybe$dash$$greater$list(just(1))).toExtend<List<number>>();
@@ -58,18 +52,13 @@ expectTypeOf(maybe$dash$$greater$list(just(1))).not.toBeAny();
 expectTypeOf(list$dash$$greater$maybe([1, 2, 3])).toEqualTypeOf<["just", number] | ["nothing"]>();
 // either-map threads the Right payload through (R → B), Left preserved → exact brand
 expectTypeOf(
-  either$dash$map(
-    (x: number): boolean => x > 0,
-    right(1) as ["left", string] | ["right", number],
-  ),
+  either$dash$map((x: number): boolean => x > 0, right(1) as ["left", string] | ["right", number]),
 ).toEqualTypeOf<["left", string] | ["right", boolean]>();
 // either-ref unwraps the Right value type (literal through R)
 expectTypeOf(either$dash$ref(right(5))).toExtend<number>();
 expectTypeOf(either$dash$ref(right(5))).not.toBeAny();
 // either-swap swaps the sides (explicit type args pin L/R so the swap is observable)
-expectTypeOf(either$dash$swap<string, number>(left("x"))).toEqualTypeOf<
-  ["right", string] | ["left", number]
->();
+expectTypeOf(either$dash$swap<string, number>(left("x"))).toEqualTypeOf<["right", string] | ["left", number]>();
 // either->list collects the Right payload (literal through R)
 expectTypeOf(either$dash$$greater$list(right(9))).toExtend<List<number>>();
 expectTypeOf(either$dash$$greater$list(right(9))).not.toBeAny();

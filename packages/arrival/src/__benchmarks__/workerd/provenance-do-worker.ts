@@ -68,7 +68,8 @@ export class ProvenanceRegionDO extends DurableObject<Env> {
       const page = await this.ctx.storage.list<ProvenanceRecord>({
         prefix: RECORD_PREFIX,
         startAfter: cursor,
-        limit: 500 });
+        limit: 500,
+      });
       if (page.size === 0) break;
       for (const [key, value] of page) {
         out.push(value);
@@ -113,4 +114,5 @@ export class ProvenanceRegionDO extends DurableObject<Env> {
 export default {
   async fetch(): Promise<Response> {
     return new Response("provenance-budget workerd harness — RPC-only, no HTTP surface", { status: 404 });
-  } };
+  },
+};

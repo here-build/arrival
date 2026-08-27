@@ -26,5 +26,6 @@ describe("nested accessor coherence — LSP", () => {
     const unknownObj = diags.filter((d) =>
       /Object is of type 'unknown'|is of type 'unknown'/.test(String(d.messageText ?? "")),
     );
-    expect(unknownObj).toEqual([]);  });
+    expect(unknownObj).toEqual([]);
+  });
 });

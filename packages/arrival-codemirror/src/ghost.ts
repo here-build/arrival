@@ -16,7 +16,7 @@ import type { SchemeIdeBackend, SchemeIdeRichCompletion } from "./ide.js";
 // Same atom-character class as the completion source's SYMBOL_BEFORE. A single
 // character class under `*` cannot backtrack — the slow-regex flag is a false
 // positive on the `$` anchor (same verdict as ide.ts's SYMBOL_BEFORE).
-// eslint-disable-next-line sonarjs/slow-regex
+
 const ATOM_TAIL = /[\w\-!$%&*+./<=>?@^~]*$/;
 
 /** Insertion is safe iff nothing but whitespace and closers follows on the line
@@ -44,10 +44,12 @@ export function pickGhost(
     (e.fits === true ? 4 : 0) +
     (e.kind === "method" ? 0 : 1) +
     (position === "operator" && e.callable === true ? 2 : 0);
-  return pool.reduce<SchemeIdeRichCompletion | null>(
-    (best, e) => (!best || score(e) > score(best) || (score(e) === score(best) && e.name < best.name) ? e : best),
-    null,
-  )?.name ?? null;
+  return (
+    pool.reduce<SchemeIdeRichCompletion | null>(
+      (best, e) => (!best || score(e) > score(best) || (score(e) === score(best) && e.name < best.name) ? e : best),
+      null,
+    )?.name ?? null
+  );
 }
 
 class GhostWidget extends WidgetType {

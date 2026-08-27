@@ -95,7 +95,8 @@ describe("scheme-zod collection faces (interpreter vs JS)", () => {
   test("using with real contract shapes (mirrors env/r7rs usage)", () => {
     const listInVecOut = {
       input: [z.list(z.schemeValue)],
-      output: [z.vector(z.schemeValue)] } as const;
+      output: [z.vector(z.schemeValue)],
+    } as const;
 
     // Native impls receive the SCHEME face (raw containers); rosetta impls the JS face.
     type In = DecodedArgs<typeof listInVecOut.input, "scheme">;

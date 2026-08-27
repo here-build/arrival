@@ -44,7 +44,12 @@ async function registerSource(env: ResolvingAmbient): Promise<void> {
   await applyCapability(env, [
     EnvCapability.define("test/fetch-item", {
       symbols: (symbol, z) => ({
-        "fetch-item": symbol.rosetta`fetch-item: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 42) }) }),
+        "fetch-item": symbol.rosetta`fetch-item: a zero-arg numeric source`(
+          { input: [], output: [z.number] },
+          () => 42,
+        ),
+      }),
+    }),
   ]);
 }
 

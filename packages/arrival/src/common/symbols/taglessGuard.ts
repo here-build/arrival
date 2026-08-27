@@ -19,7 +19,7 @@ export function taglessGuard(tpl: TemplateStringsArray, ...sub: unknown[]): ANat
   const run = async function (this: CallCtx, ...args: readonly SchemeValue[]): Promise<SchemeValue> {
     const runCtx = this.runCtx;
     const schemeArgs = args;
-    const receiver = schemeArgs[schemeArgs.length - 1];
+    const receiver = schemeArgs.at(-1);
     const leading = schemeArgs.slice(0, -1);
     const fn = resolveMethod(receiver, tf(name as TaglessOp));
     if (fn === undefined) return mintVerdict([receiver], false);

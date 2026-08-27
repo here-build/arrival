@@ -23,8 +23,7 @@ import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { PortabilityError } from "../../../errors.js";
 
 let scratchCounter = 0;
-const emptyArrayEnv = () =>
-  inferenceEnv.child(`null-strict-${scratchCounter++}`, { xs: jsToScheme(CONSTANT_CTX, []) });
+const emptyArrayEnv = () => inferenceEnv.child(`null-strict-${scratchCounter++}`, { xs: jsToScheme(CONSTANT_CTX, []) });
 
 describe("null? on an empty BORROWED array — the loose/strict divergence", () => {
   it("loose (default): (null? xs) on an empty borrowed array is #t", async () => {
@@ -53,7 +52,8 @@ describe("null? on an empty BORROWED array — the loose/strict divergence", () 
 
   it("a NON-EMPTY borrowed array never reaches the tolerance — it is not null? in EITHER mode", async () => {
     const env = inferenceEnv.child(`null-strict-nonempty-${scratchCounter++}`, {
-      xs: jsToScheme(CONSTANT_CTX, [1]) });
+      xs: jsToScheme(CONSTANT_CTX, [1]),
+    });
     const [loose] = await exec(`(null? xs)`, { env, strict: false });
     expect(loose).toBe(false);
     const [strict] = await exec(`(null? xs)`, { env, strict: true });

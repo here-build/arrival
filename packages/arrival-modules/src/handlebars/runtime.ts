@@ -32,4 +32,4 @@ export function handlebarsRun(compiled: unknown, args: unknown): string {
   return runCompiledTemplate(asCompiledTemplate(compiled), a);
 }
 
-export type { CompiledTemplate };
+export { type CompiledTemplate } from "./compile.js";

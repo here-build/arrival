@@ -32,8 +32,8 @@ pnpm add @inhuman.tools/arrival-sugarcoat
 import { schemeToSugarcoat, sugarcoatToScheme } from "@inhuman.tools/arrival-sugarcoat";
 
 const scheme = "(map (lambda (it) (* it 2)) xs)";
-schemeToSugarcoat(scheme);                        // → "xs.map{ it * 2 }"
-sugarcoatToScheme("xs.map{ it * 2 }", scheme);    // → "(map (lambda (it) (* it 2)) xs)"
+schemeToSugarcoat(scheme); // → "xs.map{ it * 2 }"
+sugarcoatToScheme("xs.map{ it * 2 }", scheme); // → "(map (lambda (it) (* it 2)) xs)"
 ```
 
 `@inhuman.tools/arrival-codemirror` wires this into an editor: you type Sugarcoat, the buffer stores Scheme, live.
@@ -42,20 +42,20 @@ sugarcoatToScheme("xs.map{ it * 2 }", scheme);    // → "(map (lambda (it) (* i
 
 ## API
 
-| Export | Role |
-|--------|------|
-| **`schemeToSugarcoat(text)`** | Canonical Scheme → Sugarcoat view. |
+| Export                                     | Role                                                                                                                                                                                                                        |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`schemeToSugarcoat(text)`**              | Canonical Scheme → Sugarcoat view.                                                                                                                                                                                          |
 | **`sugarcoatToScheme(text, prevClassic)`** | Fold an edited view back. The second argument is the previous stored classic — unchanged top-level forms splice byte-for-byte; only changed forms reprint. Malformed Sugarcoat **throws** (keep the buffer; skip the save). |
-| **`readSugarcoat(text)`** | Sugarcoat → classic AST nodes (the reader half of the lens). |
-| **`alignSugarcoatClassic(text)`** | Sugarcoat ↔ classic span pairing for IDE features on the sweet face. |
-| **`paramHints` / `paramHintsSugarcoat`** | Parameter-name inlay hints over classic / Sugarcoat text. |
-| **`tidyBoundNames`** | Bound-name recovery (`it` / singular noun). Import from the names subpath: `import { tidyBoundNames } from "@inhuman.tools/arrival-sugarcoat/names"`. |
+| **`readSugarcoat(text)`**                  | Sugarcoat → classic AST nodes (the reader half of the lens).                                                                                                                                                                |
+| **`alignSugarcoatClassic(text)`**          | Sugarcoat ↔ classic span pairing for IDE features on the sweet face.                                                                                                                                                        |
+| **`paramHints` / `paramHintsSugarcoat`**   | Parameter-name inlay hints over classic / Sugarcoat text.                                                                                                                                                                   |
+| **`tidyBoundNames`**                       | Bound-name recovery (`it` / singular noun). Import from the names subpath: `import { tidyBoundNames } from "@inhuman.tools/arrival-sugarcoat/names"`.                                                                       |
 
 ## The guarantee
 
 `ast(sugarcoatToScheme(schemeToSugarcoat(x), x)) ≡ ast(x)` — render then read gives back the original intent, always. Every transform is an isolated deterministic rule with an inverse, and the pair is verified by round-tripping a real program corpus byte-for-byte.
 
-> **Why not byte-identity of the source?** Byte round-trip would preserve *spelling* — whether you wrote `caar` or `(car (car x))` — and spelling is exactly the noise a view should absorb. The lens quotients spelling and keeps intent: `(car (car x))` fuses to `caar`, formatting regenerates, and view-then-save never changes what a program means. What IS byte-stable is the stored file: saving an unedited view writes back the identical bytes.
+> **Why not byte-identity of the source?** Byte round-trip would preserve _spelling_ — whether you wrote `caar` or `(car (car x))` — and spelling is exactly the noise a view should absorb. The lens quotients spelling and keeps intent: `(car (car x))` fuses to `caar`, formatting regenerates, and view-then-save never changes what a program means. What IS byte-stable is the stored file: saving an unedited view writes back the identical bytes.
 
 > **Why isn't indentation stored?** Sugarcoat is indentation-structured (a line plus its deeper-indented children form one expression), but the canonical form carries zero layout semantics. The primary author of stored programs is a machine — it reads structure and gains nothing from layout, while inheriting every invisible-wrong-parse risk significant whitespace brings. So the store keeps visible delimiters; layout lives only in the human-facing view, regenerated on every render, impossible to corrupt.
 
@@ -64,7 +64,7 @@ sugarcoatToScheme("xs.map{ it * 2 }", scheme);    // → "(map (lambda (it) (* i
 1. **The lens** — `schemeToSugarcoat` / `sugarcoatToScheme`, everything above.
 2. **The runtime-free reader** — `parseSexprs` / `printScheme`, a standalone s-expression parser with comment and span tracking.
 
-The second is why half the toolchain depends on a "syntax skin": anything that must *parse* Scheme without *evaluating* it — the Mercury code generator, the type-lens LSP services, structural editing — imports the reader and never pulls the interpreter. The main entry tree-shakes to `tiny-invariant`. The package still depends on `@here.build/lexical-namer` and `pluralize` for the `./names` subpath (`tidyBoundNames`); consumers of `.` do not pull those.
+The second is why half the toolchain depends on a "syntax skin": anything that must _parse_ Scheme without _evaluating_ it — the Mercury code generator, the type-lens LSP services, structural editing — imports the reader and never pulls the interpreter. The main entry tree-shakes to `tiny-invariant`. The package still depends on `@here.build/lexical-namer` and `pluralize` for the `./names` subpath (`tidyBoundNames`); consumers of `.` do not pull those.
 
 ## Going deeper
 

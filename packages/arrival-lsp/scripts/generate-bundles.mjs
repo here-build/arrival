@@ -86,6 +86,4 @@ writeFileSync(
       .join("\n")}\n};\n`,
 );
 
-console.log(
-  `generated ts lib manifest + ?raw barrel (${libNamesInOrder.length} files, root ${ROOT_LIB})`,
-);
+console.log(`generated ts lib manifest + ?raw barrel (${libNamesInOrder.length} files, root ${ROOT_LIB})`);

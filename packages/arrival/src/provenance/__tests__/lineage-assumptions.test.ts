@@ -78,7 +78,12 @@ describe("CAPABILITY — eager map/filter/reduce pipelines yield the documented 
   // sNum returns AValue (the base class), but fromArray's generic constraint demands
   // `T extends SchemeValue`. The runtime value IS a SchemeValue (an AExact); the mismatch
   // is purely in the declared return type. We cast through unknown at the boundary.
-  const nums = () => APair.fromArray(CONSTANT_CTX, [1, 2, 3, 4, 5].map((x) => sNum(x, 0)) as unknown as SchemeValue[], false) as unknown as AValue;
+  const nums = () =>
+    APair.fromArray(
+      CONSTANT_CTX,
+      [1, 2, 3, 4, 5].map((x) => sNum(x, 0)) as unknown as SchemeValue[],
+      false,
+    ) as unknown as AValue;
   const jsVal = (r: unknown): unknown => (r instanceof AValue ? r["arrival/toJS"]() : r);
   const eval1 = async (chain: string): Promise<unknown> => jsVal(await runRaw(chain, { xs: nums() }));
 
@@ -126,7 +131,8 @@ describe("NEXT-STEP assumptions (designed; unblock as the slices land)", () => {
   // carry the full proof). These pin the headline closure here in the ledger.
   it("A4-classifier: classify() handles `let`/`if` (special forms), not just applications", async () => {
     const C: Classifier = {
-      roleOf: (op) => (["map", "filter"].includes(op) ? "fan" : undefined) };
+      roleOf: (op) => (["map", "filter"].includes(op) ? "fan" : undefined),
+    };
     const cone = async (src: string, b: Record<string, readonly number[]>): Promise<number[]> => {
       const [ast] = await parse(src);
       return fullCone(classify(ast, C), b);
@@ -209,7 +215,10 @@ describe("v0.1 FINALIZATION GATES (G1–G7)", () => {
   // drops on count/convert), not a behavioral guarantee — the static path may reshape this.
   it("G6-eager-golden(SchemeVector): a length-preserving vector-map PRESERVES the collection-level grouping fact; vector-length/vector->list drop to the bare scalar/Pair exactly as eager does (this map IS the G2 oracle)", async () => {
     const mkVec = () => new AVector([sStr("a", 100), sStr("b", 101)], new Set([7]));
-    const summary = (r: unknown) => ({ ctor: (r as { constructor?: { name?: string } })?.constructor?.name ?? typeof r, prov: provOf(r) });
+    const summary = (r: unknown) => ({
+      ctor: (r as { constructor?: { name?: string } })?.constructor?.name ?? typeof r,
+      prov: provOf(r),
+    });
     const oneShot = async (src: string): Promise<unknown> => {
       const env = inferenceEnv.child(`la-${seq++}`) as EnvWithInternals<ResolvingAmbient>;
       env.bind("xs", mkVec());
@@ -232,7 +241,8 @@ describe("v0.1 FINALIZATION GATES (G1–G7)", () => {
       mapLengthCoerce: await oneShot(`(length (map (lambda (e) e) xs))`),
       // vector->list converts the carrier; the collection-level box does not
       // ride onto the resulting Pair today.
-      vectorToList: await oneShot(`(vector->list xs)`) };
+      vectorToList: await oneShot(`(vector->list xs)`),
+    };
     expect(golden).toMatchInlineSnapshot(`
       {
         "mapLengthCoerce": {

@@ -40,7 +40,8 @@ import {
   SourceRegistry,
   runEagerCone,
   prospectiveSourceCone,
-  type SourceShape } from "../../__tests__/provenance/w1-harness.js";
+  type SourceShape,
+} from "../../__tests__/provenance/w1-harness.js";
 import { W1_CORPUS, CORPUS_ROLES, CORPUS_BASE_NAMES, genLinearProgram } from "../../__tests__/provenance/w1-corpus.js";
 
 const num: SourceShape = "num";
@@ -58,8 +59,7 @@ async function wf(code: string) {
   return buildWireframe(forms, { classifier: CLASSIFIER, isBaseName });
 }
 
-beforeAll(async () => {
-});
+beforeAll(async () => {});
 
 describe("wire-locality (§1 CHOSEN: a wire is a closed arrival lambda) — FLIPPED at Q8a", () => {
   it(
@@ -109,7 +109,12 @@ describe("wire-locality (§1 CHOSEN: a wire is a closed arrival lambda) — FLIP
       // vocabulary+prelude scope — proof the reference needed no payload.
       const base = await hermeticEnv([...BASE_ROSTER], p.prelude.source);
       const [result] = (
-        await execState(`(${w.source} 41)`, { capabilities: base.capabilities, config: base.config, scope: base.scope, runCtx: base.runCtx })
+        await execState(`(${w.source} 41)`, {
+          capabilities: base.capabilities,
+          config: base.config,
+          scope: base.scope,
+          runCtx: base.runCtx,
+        })
       ).values;
       expect(toJS(result)).toBe(42);
     },
@@ -275,7 +280,9 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
               "emit!": symbol.rosetta`emit!: identity passthrough (sink echo)`(
                 { input: [z.dynamic], output: [z.dynamic] },
                 (x: import("../../values/types.js").SchemeValue) => x,
-              ) }) }),
+              ),
+            }),
+          }),
         ]);
         const registry = new SourceRegistry();
         await registry.register(env, "src-a", num);
@@ -491,7 +498,12 @@ describe("Q7 — program prelude: a pure helper stays a REFERENCE, the positive 
       const prelude = buildPreludeSource(forms, membership);
       const base = await hermeticEnv([...BASE_ROSTER], prelude);
       const [result] = (
-        await execState("(caller 41)", { capabilities: base.capabilities, config: base.config, scope: base.scope, runCtx: base.runCtx })
+        await execState("(caller 41)", {
+          capabilities: base.capabilities,
+          config: base.config,
+          scope: base.scope,
+          runCtx: base.runCtx,
+        })
       ).values;
       expect(toJS(result)).toBe(42);
 

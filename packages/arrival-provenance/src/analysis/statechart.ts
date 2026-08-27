@@ -35,8 +35,7 @@
  * Distinguishing parallel-region-within-loop-region needs a mark hierarchy and
  * is a v1 follow-up; this v0 is the flat collapsed causal DAG.
  */
-import type { APair } from "@inhuman.tools/arrival/reflect-internals";
-import type { ASymbol } from "@inhuman.tools/arrival/reflect-internals";
+import type { APair, ASymbol } from "@inhuman.tools/arrival/reflect-internals";
 import type { SchemeValue } from "@inhuman.tools/arrival";
 
 import { carrierFieldEdges } from "./carrier-fields.js";
@@ -168,7 +167,10 @@ export function traceToStatechart(trace: EvalTrace, opts: { fieldEdges?: Map<str
 
   // 4. Collapse by Pair identity → one cell per AST node. Representative = lowest
   //    id; cell layer = lowest member layer (where the construct first fires).
-  const cellByNode = new Map<APair<SchemeValue, SchemeValue>, { rep: number; count: number; layer: number; label: string }>();
+  const cellByNode = new Map<
+    APair<SchemeValue, SchemeValue>,
+    { rep: number; count: number; layer: number; label: string }
+  >();
   const cellIdOf = new Map<number, number>(); // invocation id → representative id
   for (const [id, inv] of points) {
     const node = inv.node;

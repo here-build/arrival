@@ -16,7 +16,8 @@ import {
   NeverAggregatable,
   runKeyString,
   unfoldRun,
-  type AggregatableRecord } from "../aggregate.js";
+  type AggregatableRecord,
+} from "../aggregate.js";
 import { ProvenanceStoreFake, RunStoreFake } from "../fakes.js";
 import { appendOrdinal, ROOT_ORDINAL_PATH, type RecordId } from "../ids.js";
 import type { ProvenanceStore } from "../interfaces.js";
@@ -27,7 +28,8 @@ import type {
   MintRecord,
   MuxDecisionRecord,
   TrackCloseRecord,
-  TrackOpenRecord } from "../records.js";
+  TrackOpenRecord,
+} from "../records.js";
 
 const REGION = "agg-region";
 const TEMPLATE = "t-loop";
@@ -89,7 +91,14 @@ describe("foldRuns — path-scoped contiguous RLE", () => {
     const { runs, unaggregated } = foldRuns(records);
     expect(unaggregated).toHaveLength(0);
     expect(runs).toEqual([
-      { kind: "fan-instantiation", templateHash: TEMPLATE, regionEpoch: EPOCH, parentOrdinalPath: PARENT, start: 0, count: 5 },
+      {
+        kind: "fan-instantiation",
+        templateHash: TEMPLATE,
+        regionEpoch: EPOCH,
+        parentOrdinalPath: PARENT,
+        start: 0,
+        count: 5,
+      },
     ]);
   });
 
@@ -107,7 +116,8 @@ describe("foldRuns — path-scoped contiguous RLE", () => {
     const innerAt = (parent: readonly number[], ordinal: number, seq: number): IngressBindingRecord => ({
       kind: "ingress-binding",
       id: { templateHash: TEMPLATE, regionEpoch: EPOCH, ordinalPath: appendOrdinal(parent, ordinal) },
-      seq });
+      seq,
+    });
     // Inner loop restarts at ordinal 0 under EACH outer element — a naive
     // "contiguous ordinal" fold (ignoring parent) would wrongly chain outerA's
     // trailing ordinal into outerB's leading one.
@@ -153,11 +163,31 @@ describe("foldRuns — path-scoped contiguous RLE", () => {
   });
 
   it("runKeyString distinguishes kind/templateHash/regionEpoch/parentOrdinalPath independently", () => {
-    const a = runKeyString({ kind: "fan-instantiation", templateHash: "t1", regionEpoch: "e0", parentOrdinalPath: [0] });
+    const a = runKeyString({
+      kind: "fan-instantiation",
+      templateHash: "t1",
+      regionEpoch: "e0",
+      parentOrdinalPath: [0],
+    });
     const b = runKeyString({ kind: "ingress-binding", templateHash: "t1", regionEpoch: "e0", parentOrdinalPath: [0] });
-    const c = runKeyString({ kind: "fan-instantiation", templateHash: "t2", regionEpoch: "e0", parentOrdinalPath: [0] });
-    const d = runKeyString({ kind: "fan-instantiation", templateHash: "t1", regionEpoch: "e1", parentOrdinalPath: [0] });
-    const e = runKeyString({ kind: "fan-instantiation", templateHash: "t1", regionEpoch: "e0", parentOrdinalPath: [1] });
+    const c = runKeyString({
+      kind: "fan-instantiation",
+      templateHash: "t2",
+      regionEpoch: "e0",
+      parentOrdinalPath: [0],
+    });
+    const d = runKeyString({
+      kind: "fan-instantiation",
+      templateHash: "t1",
+      regionEpoch: "e1",
+      parentOrdinalPath: [0],
+    });
+    const e = runKeyString({
+      kind: "fan-instantiation",
+      templateHash: "t1",
+      regionEpoch: "e0",
+      parentOrdinalPath: [1],
+    });
     expect(new Set([a, b, c, d, e]).size).toBe(5);
   });
 });
@@ -209,7 +239,8 @@ describe("AggregatingProvenanceStore — the write-side hook", () => {
       allocateSeq: (regionId) => base.allocateSeq(regionId),
       readStream: (regionId) => base.readStream(regionId),
       getHeader: (regionId) => base.getHeader(regionId),
-      putHeader: (regionId, header) => base.putHeader(regionId, header) };
+      putHeader: (regionId, header) => base.putHeader(regionId, header),
+    };
     const agg = new AggregatingProvenanceStore(spiedBase, runStore);
 
     const N = 500;

@@ -6,15 +6,15 @@ import { colorizeSexpr } from "../sexpr-color.js";
 import { stripAnsi } from "./ansi-strip.js";
 
 const SAMPLES = [
-  '(1 2 3)',
+  "(1 2 3)",
   '(list "hello" "wo\\"rld" 42)',
-  '(:verdict (car reactions))',
-  '((a . b) [1 2] {x y})',
-  '(define (f x) (* x x)) ; a comment\n(f 3)',
-  '#| truncated: 40 more |#',
+  "(:verdict (car reactions))",
+  "((a . b) [1 2] {x y})",
+  "(define (f x) (* x x)) ; a comment\n(f 3)",
+  "#| truncated: 40 more |#",
   '"unterminated string with (parens) and ;semicolons',
-  '',
-  '   \n\t  ',
+  "",
+  "   \n\t  ",
   '(nested (deeply (list #t #f :key 3.14 -5 "s")))',
 ];
 
@@ -38,8 +38,8 @@ describe("colorizeSexpr — mode none is exact identity", () => {
 
 describe("colorizeSexpr — actually colors the structure", () => {
   it("emits escape codes for a paren'd expression on a color TTY", () => {
-    const out = colorizeSexpr('(a b)', "truecolor");
-    expect(out).not.toBe('(a b)');
+    const out = colorizeSexpr("(a b)", "truecolor");
+    expect(out).not.toBe("(a b)");
     // eslint-disable-next-line no-control-regex -- asserting an escape IS present
     expect(out).toMatch(/\x1b\[/);
   });

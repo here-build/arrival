@@ -89,7 +89,10 @@ describe("at-expression highlighting", () => {
     expect(toks.some(([txt, tag]) => txt === "lambda" && tag === "definitionKeyword")).toBe(true);
     expect(toks.some(([txt, tag]) => txt === "@(" && tag === "sugarcoatInterp")).toBe(true);
     expect(toks.some(([txt, tag]) => txt === ")" && tag === "sugarcoatInterp")).toBe(true);
-    const prose = toks.filter(([, tag]) => tag === "string").map(([txt]) => txt).join("");
+    const prose = toks
+      .filter(([, tag]) => tag === "string")
+      .map(([txt]) => txt)
+      .join("");
     expect(prose).toContain("pre");
     expect(prose).toContain("post");
   });

@@ -74,16 +74,19 @@ async function importModule(specifier: string, baseDir: string): Promise<Record<
   const load = async (url: string): Promise<Record<string, unknown>> => {
     try {
       return (await import(url)) as Record<string, unknown>;
-    } catch (e) {
-      if (e instanceof Error && "code" in e && e.code === "ERR_UNKNOWN_FILE_EXTENSION" && url.endsWith(".ts")) {
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "ERR_UNKNOWN_FILE_EXTENSION" &&
+        url.endsWith(".ts")
+      ) {
         throw new Error(
           `arrival: ${specifier} is TypeScript, and this node (${process.version}) cannot type-strip it. ` +
             `Use node ≥ 23.6, or a .js/.mjs/.json form of the module.`,
         );
       }
-      throw new Error(
-        `arrival: cannot load ${specifier}: ${e instanceof Error ? e.message : String(e)}`,
-      );
+      throw new Error(`arrival: cannot load ${specifier}: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
   if (specifier.startsWith("./") || specifier.startsWith("../") || path.isAbsolute(specifier)) {
@@ -142,14 +145,18 @@ function parseConfigShape(raw: unknown, file: string): ArrivalConfigFile {
   };
   if (!isRecord(raw)) return teach(`the top level is ${describeExport(raw)}, not an object`);
   if (raw.capabilities !== undefined) {
-    if (!Array.isArray(raw.capabilities)) return teach(`"capabilities" is ${describeExport(raw.capabilities)}, not an array`);
+    if (!Array.isArray(raw.capabilities))
+      return teach(`"capabilities" is ${describeExport(raw.capabilities)}, not an array`);
     for (const [i, entry] of raw.capabilities.entries()) {
       if (!isRecord(entry)) return teach(`capabilities[${i}] is ${describeExport(entry)}, not an object`);
-      if (typeof entry.module !== "string") return teach(`capabilities[${i}].module is ${describeExport(entry.module)}, not a module specifier string`);
-      if (entry.config !== undefined && !isRecord(entry.config)) return teach(`capabilities[${i}].config is ${describeExport(entry.config)}, not an object`);
+      if (typeof entry.module !== "string")
+        return teach(`capabilities[${i}].module is ${describeExport(entry.module)}, not a module specifier string`);
+      if (entry.config !== undefined && !isRecord(entry.config))
+        return teach(`capabilities[${i}].config is ${describeExport(entry.config)}, not an object`);
     }
   }
-  if (raw.config !== undefined && !isRecord(raw.config)) return teach(`"config" is ${describeExport(raw.config)}, not an object`);
+  if (raw.config !== undefined && !isRecord(raw.config))
+    return teach(`"config" is ${describeExport(raw.config)}, not an object`);
   return raw as ArrivalConfigFile;
 }
 
@@ -171,8 +178,8 @@ async function readConfigValue(file: string): Promise<unknown> {
     const text = await readFile(file, "utf8");
     try {
       return JSON.parse(text) as unknown;
-    } catch (e) {
-      throw new Error(`arrival: ${file} is not valid JSON: ${e instanceof Error ? e.message : String(e)}`);
+    } catch (error) {
+      throw new Error(`arrival: ${file} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
   const mod = await importModule(file, path.dirname(file));
@@ -191,10 +198,7 @@ async function readConfigValue(file: string): Promise<unknown> {
  */
 export async function loadConfigFile(cwd: string, override?: string): Promise<ArmedCapabilities | undefined> {
   let file: string | undefined;
-  if (override !== undefined) {
-    file = path.resolve(cwd, override);
-    if (!(await exists(file))) throw new Error(`arrival: cannot read config ${override}: no such file`);
-  } else {
+  if (override === undefined) {
     for (const base of CONFIG_BASENAMES) {
       const candidate = path.join(cwd, base);
       if (await exists(candidate)) {
@@ -202,6 +206,9 @@ export async function loadConfigFile(cwd: string, override?: string): Promise<Ar
         break;
       }
     }
+  } else {
+    file = path.resolve(cwd, override);
+    if (!(await exists(file))) throw new Error(`arrival: cannot read config ${override}: no such file`);
   }
   if (file === undefined) return undefined;
 

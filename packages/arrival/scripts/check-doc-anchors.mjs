@@ -20,10 +20,6 @@
  *   4. Register lint  — SHOUT docs mint an ID series or are an allowlisted
  *                       canon; kebab docs mint no `## X# —` ledger heading.
  *
- * Warnings (reported, non-fatal):
- *   - design-history/ files that link OUT to a living doc (append-only
- *     integrity). Pre-existing and pervasive; surfaced for review, not gated.
- *
  * Doc-structure rationale: scratchpad docs-structure-research §3 (CI-able
  * anti-rot checks) + docs/README.md (register legend).
  */
@@ -42,14 +38,17 @@ const SRC = join(PKG_ROOT, "src");
 const LEDGERS = {
   P: { file: join(DOCS, "PRINCIPLES.md"), mint: /(?:^|\n)\*\*P(\d+)\./g, label: "PRINCIPLES.md" },
   R: { file: join(DOCS, "RULINGS.md"), mint: /(?:^|\n)## R(\d+) —/g, label: "RULINGS.md" },
-  F: { file: join(DOCS, "test-suite-architecture.md"), mint: /(?:^|\n)\*\*F(\d+) —/g, label: "test-suite-architecture.md" },
+  F: {
+    file: join(DOCS, "test-suite-architecture.md"),
+    mint: /(?:^|\n)\*\*F(\d+) —/g,
+    label: "test-suite-architecture.md",
+  },
 };
 
 // SHOUT docs allowed to exist without minting an ID series (declared canon/ledger/hub).
 const REGISTER_ALLOWLIST = new Set(["PRINCIPLES", "RULINGS", "PROVENANCE", "GLOSSARY", "README"]);
 
 const errors = [];
-const warnings = [];
 
 // ── fs walk ───────────────────────────────────────────────────────────────
 function walk(dir, ext, out = []) {
@@ -75,7 +74,8 @@ for (const [letter, { file, mint, label }] of Object.entries(LEDGERS)) {
     seen.add(n);
     defined[letter].add(n);
   }
-  if (defined[letter].size === 0) errors.push(`[uniqueness] ${label}: no ${letter}# minting headings found — parser or file drift`);
+  if (defined[letter].size === 0)
+    errors.push(`[uniqueness] ${label}: no ${letter}# minting headings found — parser or file drift`);
 }
 
 // ── Citation detection (check 1) ────────────────────────────────────────────
@@ -138,7 +138,7 @@ const docBasenames = new Set(walk(DOCS, ".md").map((p) => basename(p)));
 function mdRefsIn(text) {
   const refs = new Set();
   for (const m of text.matchAll(/\]\(([^)]+?\.md)(?:#[^)]*)?\)/g)) refs.add(m[1]);
-  for (const m of text.matchAll(/(?<![\w/.-])((?:\.\.?\/|docs\/|design-history\/|reference\/)?[\w-]+\.md)\b/g)) refs.add(m[1]);
+  for (const m of text.matchAll(/(?<![\w/.-])((?:\.\.?\/|docs\/|reference\/)?[\w-]+\.md)\b/g)) refs.add(m[1]);
   return refs;
 }
 
@@ -146,20 +146,14 @@ function inScopeRef(p) {
   if (/^[a-z]+:\/\//i.test(p)) return false; // URL scheme
   const seg0 = p.split("/")[0];
   // cross-package: has a slash and its first segment is not a docs-internal dir or relative
-  if (p.includes("/") && !["docs", "design-history", "reference", ".", ".."].includes(seg0)) return false;
+  if (p.includes("/") && !["docs", "reference", ".", ".."].includes(seg0)) return false;
   return true;
 }
 
 function resolvesRef(fromDir, p) {
   // a bare mention resolves if a doc of that basename exists anywhere under docs/
-  // (covers a design-history-resident file cited bare, or a link's filename text)
   if (docBasenames.has(basename(p))) return true;
-  const candidates = [
-    resolve(fromDir, p),
-    resolve(DOCS, p),
-    resolve(PKG_ROOT, p),
-    resolve(DOCS, basename(p)),
-  ];
+  const candidates = [resolve(fromDir, p), resolve(DOCS, p), resolve(PKG_ROOT, p), resolve(DOCS, basename(p))];
   for (const c of candidates) {
     if (!c.startsWith(PKG_ROOT)) continue; // escapes the package → out of scope (cross-package link)
     if (existsSync(c)) return true;
@@ -196,37 +190,7 @@ for (const f of readdirSync(DOCS).filter((n) => n.endsWith(".md"))) {
   }
 }
 
-// ── Design-history append-only integrity (warning, non-fatal) ──────────────
-const LIVING = new Set([
-  "PRINCIPLES", "RULINGS", "PROVENANCE", "GLOSSARY", "README",
-  "execution", "membrane", "grammar", "environments", "static-plane",
-  "writing-capabilities", "test-suite-architecture",
-]);
-const dh = join(DOCS, "design-history");
-if (existsSync(dh)) {
-  for (const f of walk(dh, ".md")) {
-    const outlinks = new Set();
-    const text = readFileSync(f, "utf8");
-    // markdown links that resolve up to a living top-level doc, or reference/
-    for (const m of text.matchAll(/\]\(([^)]+?\.md)(?:#[^)]*)?\)/g)) {
-      const target = resolve(dirname(f), m[1]);
-      if (!target.startsWith(DOCS)) continue;
-      const inDocsRoot = dirname(target) === DOCS;
-      const inReference = dirname(target) === join(DOCS, "reference");
-      const stem = basename(target).replace(/\.md$/, "");
-      if ((inDocsRoot && LIVING.has(stem)) || inReference) outlinks.add(m[1]);
-    }
-    if (outlinks.size)
-      warnings.push(`[design-history-outlink] ${rel(f)}: links OUT to living doc(s): ${[...outlinks].join(", ")}`);
-  }
-}
-
 // ── Report ──────────────────────────────────────────────────────────────────
-if (warnings.length) {
-  console.warn(`\n⚠ ${warnings.length} append-only warning${warnings.length === 1 ? "" : "s"} (non-fatal):`);
-  for (const w of warnings) console.warn(`  ${w}`);
-}
-
 if (errors.length === 0) {
   console.log(`\n✓ doc-anchors: all ledger cites resolve, links are live, IDs unique, register clean.`);
   process.exit(0);

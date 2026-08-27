@@ -17,13 +17,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import {
-  schemeToSugarcoat,
-  printScheme,
-  parseSexprs,
-  normalizePolyglot,
-  nodeEq,
-} from "../sugarcoat-render.js";
+import { schemeToSugarcoat, printScheme, parseSexprs, normalizePolyglot, nodeEq } from "../sugarcoat-render.js";
 // Registers sugar reader for dual-path schemeToSugarcoat (at-expr / I-expr re-entry).
 import { readSugarcoat } from "../sugarcoat-read.js";
 
@@ -197,8 +191,7 @@ describe("free [] / {} lower to list/dict heads (sugarcoat surface)", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe("mode-override list-of-dict intent", () => {
-  const classic =
-    '(list (dict :form (quote notify) :level (quote error) :message "hi"))';
+  const classic = '(list (dict :form (quote notify) :level (quote error) :message "hi"))';
 
   it("classic → sugar → re-schemeToSugarcoat preserves AST", () => {
     const once = schemeToSugarcoat(classic).trim();

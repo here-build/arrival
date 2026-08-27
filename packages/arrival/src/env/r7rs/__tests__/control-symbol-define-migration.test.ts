@@ -43,7 +43,12 @@
 import { describe, expect, it } from "vitest";
 import controlPack from "../control.js";
 import { EXCLUDED } from "../../../__tests__/scheme-compliance/chibi/registries.js";
-import { PurityError, DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
+import {
+  PurityError,
+  DefineForwardReferenceError,
+  DefineLocalityError,
+  ProvenanceRoleShapeError,
+} from "../../../errors.js";
 import { DoorProcedure } from "../../../values/primitives/ACallable.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
 import { buildVocabulary } from "../../vocabulary.js";
@@ -180,7 +185,16 @@ describe("ROW 4 — FV law: N/A structurally (no symbol.define body exists to wa
 
 describe("ROW 5 — §6.10 boundary: map/for-each/values/call-with-values live OUTSIDE this pack", () => {
   it("this pack does not declare map/for-each/values/call-with-values", () => {
-    for (const name of ["map", "for-each", "string-map", "vector-map", "string-for-each", "vector-for-each", "values", "call-with-values"]) {
+    for (const name of [
+      "map",
+      "for-each",
+      "string-map",
+      "vector-map",
+      "string-for-each",
+      "vector-for-each",
+      "values",
+      "call-with-values",
+    ]) {
       expect(symbols[name]).toBeUndefined();
     }
   });

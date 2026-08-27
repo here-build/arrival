@@ -147,7 +147,12 @@ describe("capability arming (--with / config file)", () => {
   });
 
   it("non-capability module: teaching error naming what was found and what was expected", () => {
-    const { code, stderr } = arrival(["run", "--with", fixture("caps/not-a-capability.mjs"), fixture("uses-greet.scm")]);
+    const { code, stderr } = arrival([
+      "run",
+      "--with",
+      fixture("caps/not-a-capability.mjs"),
+      fixture("uses-greet.scm"),
+    ]);
     expect(code).toBe(1);
     expect(stderr).toContain("not a capability module");
     expect(stderr).toContain("default (function)");
@@ -168,21 +173,21 @@ describe("capability arming (--with / config file)", () => {
   });
 
   it("arrival.config.json auto-discovers from cwd", () => {
-    const res = spawnSync(
-      process.execPath,
-      [CLI, "run", fixture("uses-config-greet.scm")],
-      { encoding: "utf8", timeout: 90_000, cwd: fixture("config-armed") },
-    );
+    const res = spawnSync(process.execPath, [CLI, "run", fixture("uses-config-greet.scm")], {
+      encoding: "utf8",
+      timeout: 90_000,
+      cwd: fixture("config-armed"),
+    });
     expect(res.status).toBe(0);
     expect(res.stdout).toContain("hello, from-config-file");
   });
 
   it("arrival.config.ts loads via native type stripping (node ≥ 22.18)", () => {
-    const res = spawnSync(
-      process.execPath,
-      [CLI, "run", fixture("uses-config-greet.scm")],
-      { encoding: "utf8", timeout: 90_000, cwd: fixture("config-ts") },
-    );
+    const res = spawnSync(process.execPath, [CLI, "run", fixture("uses-config-greet.scm")], {
+      encoding: "utf8",
+      timeout: 90_000,
+      cwd: fixture("config-ts"),
+    });
     expect(res.status).toBe(0);
     expect(res.stdout).toContain("hello, from-ts-config");
   });

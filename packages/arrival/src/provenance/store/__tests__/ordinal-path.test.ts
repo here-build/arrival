@@ -13,7 +13,8 @@ import {
   ordinalPathKey,
   parentOrdinalPath,
   ROOT_ORDINAL_PATH,
-  trailingOrdinal } from "../ids.js";
+  trailingOrdinal,
+} from "../ids.js";
 
 describe("appendOrdinal — the z-axis nesting primitive (§6 instance-ordinal space)", () => {
   it("appends one ordinal per nested fan/loop instance, deepest last", () => {
@@ -40,7 +41,7 @@ describe("parentOrdinalPath / trailingOrdinal — the §5 round-3 m4 aggregation
     expect(reconstructed).toEqual(p);
   });
 
-  it("parentOrdinalPath of a root-only (length-1) path is empty — \"runs never span parents\"", () => {
+  it('parentOrdinalPath of a root-only (length-1) path is empty — "runs never span parents"', () => {
     expect(parentOrdinalPath([4])).toEqual([]);
   });
 
@@ -51,13 +52,7 @@ describe("parentOrdinalPath / trailingOrdinal — the §5 round-3 m4 aggregation
 
 describe("compareOrdinalPaths — deterministic total order, parent sorts before child", () => {
   it("orders by shared-prefix ordinal, then by length (shorter/parent first)", () => {
-    const paths = [
-      [1, 5],
-      [0],
-      [1],
-      [1, 0],
-      [0, 9],
-    ];
+    const paths = [[1, 5], [0], [1], [1, 0], [0, 9]];
     const sorted = [...paths].sort(compareOrdinalPaths);
     expect(sorted).toEqual([[0], [0, 9], [1], [1, 0], [1, 5]]);
   });

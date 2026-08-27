@@ -6,5 +6,7 @@
  * under structural typing and poison `BoxedSchemeValue` / AmbientRuntime.bind).
  */
 export class LambdaContext {
+  // Nominal brand — unread on purpose; empty body would be structurally `{}`.
+  // eslint-disable-next-line no-unused-private-class-members
   readonly #brand = "LambdaContext" as const;
 }

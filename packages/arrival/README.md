@@ -5,12 +5,12 @@ plain JS — transparent provenance, a capability sandbox, a JS membrane.
 
 ## Who this is for
 
-You are building an LLM-agent system and you want the agent to *compute* — filter, map, compose,
+You are building an LLM-agent system and you want the agent to _compute_ — filter, map, compose,
 pipe one tool's result straight into the next — inside a sandboxed symbolic REPL, instead of
 emitting a stream of opaque JSON tool calls. arrival gives the model an R7RS Scheme REPL with a
 typed capability surface, a JS interop membrane, and value-level provenance. Pass
 `staticValidation: "on"` to report every error before anything runs (the default is `"off"`). If
-you'd rather the agent's reasoning and its executable program be the *same artifact* than
+you'd rather the agent's reasoning and its executable program be the _same artifact_ than
 translate English-reasoning into a tool-call, this is for you.
 
 ## Quick Start
@@ -20,7 +20,7 @@ npm install @inhuman.tools/arrival
 ```
 
 ```typescript
-import { exec } from '@inhuman.tools/arrival';
+import { exec } from "@inhuman.tools/arrival";
 
 // One plain JS value per top-level form; the base assembles lazily on first call.
 const [result] = await exec(`(filter (lambda (x) (> x 5)) (list 1 3 7 9 2))`);
@@ -36,19 +36,18 @@ implementation. `exec` always assembles `BASE_ROSTER` and then the caller's `cap
 returns plain JS values — one per top-level form.
 
 ```typescript
-import { exec, EnvCapability } from '@inhuman.tools/arrival';
+import { exec, EnvCapability } from "@inhuman.tools/arrival";
 
 const weather = EnvCapability.define("demo/weather", {
   symbols: (symbol, z) => ({
     "forecast-for": symbol.rosetta`forecast-for: the current forecast for a city`(
       { input: [z.string], output: [z.string], provenance: "source" },
-      async (city) => `cloudy in ${city}`,   // any real fetch goes here
+      async (city) => `cloudy in ${city}`, // any real fetch goes here
     ),
   }),
 });
 
-const [line] = await exec(`(string-append "today: " (forecast-for "berlin"))`,
-                          { capabilities: [weather] });
+const [line] = await exec(`(string-append "today: " (forecast-for "berlin"))`, { capabilities: [weather] });
 // "today: cloudy in berlin"
 ```
 
@@ -65,10 +64,13 @@ gives it an `s/*` type and a default; the host supplies the value through the `o
 capability's shared config bag, validated against the declared type at the membrane.
 
 ```typescript
-import { exec } from '@inhuman.tools/arrival';
+import { exec } from "@inhuman.tools/arrival";
 import { overridableCapability } from "@inhuman.tools/arrival/capabilities/overridable";
 
-const users = [{ id: "alice", priority: 15 }, { id: "bob", priority: 5 }];
+const users = [
+  { id: "alice", priority: 15 },
+  { id: "bob", priority: 5 },
+];
 
 const [, highPriority] = await exec(
   `(define/overridable users
@@ -90,12 +92,14 @@ Multi-turn agent sessions need no framework and no hidden layer: mint a scope, r
 top-level `define`s accumulate across calls.
 
 ```typescript
-import { execState, toJS, LexicalScope } from '@inhuman.tools/arrival';
+import { execState, toJS, LexicalScope } from "@inhuman.tools/arrival";
 
-const scope = LexicalScope.fresh("agent-session");             // the session's mutable frame
-await execState(`(define (sq x) (* x x))`, { scope });         // turn 1 — defines land on the scope
-const { values: [v] } = await execState(`(sq 7)`, { scope });  // turn 2 — sees turn 1's define
-toJS(v);                                                       // 49
+const scope = LexicalScope.fresh("agent-session"); // the session's mutable frame
+await execState(`(define (sq x) (* x x))`, { scope }); // turn 1 — defines land on the scope
+const {
+  values: [v],
+} = await execState(`(sq 7)`, { scope }); // turn 2 — sees turn 1's define
+toJS(v); // 49
 ```
 
 The run model — hermetic per-run state, budgets observed live, and the session/scope surface — is
@@ -121,10 +125,9 @@ assemble by default (1, 2, 8, 13, 26, 28, 43, 95, 128, 151, 189, 235 — `src/en
 deliberately-absent ones (hash tables, random, time/date, …) are doored stubs naming why they're
 out and what to use instead — exactly the symbols an LLM agent predictably reaches for.
 
-The language stance — an R7RS-small sandboxed base, a forgiving superset layered *under* strict
-(never beside it), the reserved-zone rule keeping it non-conflicting with any SRFI — is the charter
-in [`docs/design-history/language-design-foundations.md`](./docs/design-history/language-design-foundations.md);
-read it before adding a reader macro, literal, or borrowing.
+The language stance — an R7RS-small sandboxed base, a forgiving superset layered _under_ strict
+(never beside it), the reserved-zone rule keeping it non-conflicting with any SRFI — is the charter;
+do not add a reader macro, literal, or borrowing that conflicts with that rule.
 
 **Writing programs (agents / LLMs):** system prompt =
 [`docs/llm-agent-card.md`](./docs/llm-agent-card.md) (minimal, custdev-measured). Human inventory
@@ -144,8 +147,8 @@ role (`source` / `pipe` / `fan` / `sink` / `transparent` / `loop` / `opaque`).
 [`docs/PROVENANCE.md`](./docs/PROVENANCE.md).
 
 ```typescript
-import { execState, deepProvenance, EnvCapability } from '@inhuman.tools/arrival';
-import { EvalTrace } from '@inhuman.tools/arrival/provenance';
+import { execState, deepProvenance, EnvCapability } from "@inhuman.tools/arrival";
+import { EvalTrace } from "@inhuman.tools/arrival/provenance";
 
 const weather = EnvCapability.define("demo/weather", {
   symbols: (symbol, z) => ({
@@ -157,25 +160,24 @@ const weather = EnvCapability.define("demo/weather", {
 });
 
 const trace = new EvalTrace();
-const { values: [line] } = await execState(
-  `(string-append "today: " (forecast-for "berlin"))`,
-  { capabilities: [weather], tap: trace },
-);
+const {
+  values: [line],
+} = await execState(`(string-append "today: " (forecast-for "berlin"))`, { capabilities: [weather], tap: trace });
 
-[...deepProvenance(line)];    // [1] — the value confesses which crossing it descends from
-trace.toolNameFor(1);         // "forecast-for"
+[...deepProvenance(line)]; // [1] — the value confesses which crossing it descends from
+trace.toolNameFor(1); // "forecast-for"
 ```
 
 `buildUneval` reverse-slices a traced run into a minimal re-runnable program that re-derives a
-chosen value. It lives in `@inhuman.tools/arrival-provenance`, which is **FSL-1.1-MIT**. That
+chosen value. It lives in `@inhuman.tools/arrival-provenance`. That
 package also owns `groundingVerdict` and the `whyOf` / `whereOf` / `howOf` queries; this package
 keeps the capture spine (`EvalTrace`, stamping) and `deepProvenance`. The `/attestation` subpath
-brands values so provenance unions forward while attestation *drops on compute*.
+brands values so provenance unions forward while attestation _drops on compute_.
 
 ```typescript
-import { execState, EnvCapability } from '@inhuman.tools/arrival';
-import { EvalTrace } from '@inhuman.tools/arrival/provenance';
-import { buildUneval } from '@inhuman.tools/arrival-provenance/analysis';
+import { execState, EnvCapability } from "@inhuman.tools/arrival";
+import { EvalTrace } from "@inhuman.tools/arrival/provenance";
+import { buildUneval } from "@inhuman.tools/arrival-provenance/analysis";
 
 const scanner = EnvCapability.define("demo/scanner", {
   symbols: (symbol, z) => ({
@@ -199,12 +201,12 @@ const src = `
 const state = await execState(src, { capabilities: [scanner], tap: t });
 
 const run = buildUneval({ scope: state.scope, result: state.values.at(-1), trace: t, source: src, forms: [] });
-const head = await run.uneval('(car result)');
+const head = await run.uneval("(car result)");
 
-head.value;        // "malware: evil.exe"
-head.provenance;   // descends from scan-output; chatter-feed never touched it
-head.program;      // (define verdict (string-append "malware: " (scan-output)))
-                   // (let ((result (list verdict "benign"))) (car result))
+head.value; // "malware: evil.exe"
+head.provenance; // descends from scan-output; chatter-feed never touched it
+head.program; // (define verdict (string-append "malware: " (scan-output)))
+// (let ((result (list verdict "benign"))) (car result))
 ```
 
 A seal walks every leaf and refuses to sign one that does not trace to a real source. It is a
@@ -216,7 +218,7 @@ cache and a fresh live run may diverge.
 
 **The dialect roster is reverse-engineered from LLM latent space, not designed.** It is a
 measurement of what models trained on all of Lisp believe Scheme is, turned into a surface: agent
-sessions are recorded, and every *phantom* (a verb the model confidently reached for that didn't
+sessions are recorded, and every _phantom_ (a verb the model confidently reached for that didn't
 exist) is a logged feature request. It is still R7RS Scheme — only the behaviors undefined by spec
 are enriched (PRINCIPLES P13).
 
@@ -228,23 +230,22 @@ are enriched (PRINCIPLES P13).
 
 Four dialect packs carry this (`src/env/polyglot/`): Clojure, Racket, Common Lisp, and the
 shared core — `{:key value …}` dicts, `[ … ]` vectors, the `(:key obj)` accessor, the `@` / `@?` /
-`@keys` member-read protocol. All of it canonicalizes at read time; the verbs that *can't* carry
+`@keys` member-read protocol. All of it canonicalizes at read time; the verbs that _can't_ carry
 over honestly (`setf`, `loop`, …) aren't absent — they're doored, with the reason and the working
 alternative.
 
 ## IO taken away — to come back with lineage
 
-No ports, no filesystem, no clock, no `random`. Not as a security posture — as an *algebraic* one:
+No ports, no filesystem, no clock, no `random`. Not as a security posture — as an _algebraic_ one:
 an ambient read has no construction site to root a value's lineage at, so admitting it would hole
-the one guarantee the language makes (the full argument:
-[`docs/design-history/why-no-io-dataflow-algebra.md`](./docs/design-history/why-no-io-dataflow-algebra.md)).
-Effects come back in as capability verbs that mint provenance at the membrane — a filesystem read
-is a recorded crossing that stamps its result, not a stream from nowhere.
+the one guarantee the language makes. Effects come back in as capability verbs that mint provenance
+at the membrane — a filesystem read is a recorded crossing that stamps its result, not a stream from
+nowhere.
 
 ## Errors are doors, not walls
 
-Every deliberate omission names the fact, the reason, and the exact alternative bound in *this*
-environment. The same discipline runs *before* execution when you opt in: the default is
+Every deliberate omission names the fact, the reason, and the exact alternative bound in _this_
+environment. The same discipline runs _before_ execution when you opt in: the default is
 `staticValidation: "off"`; pass `"on"` to check the whole program against the assembled vocabulary
 and report **every** problem at once, eslint-style:
 
@@ -296,7 +297,7 @@ consumers skip the pass for such programs (the runtime doors remain the backstop
 - `EvalTrace` (from `/provenance`) — the traced-run recorder (capture spine lives in core);
   `trace.toolNameFor(id)` / `trace.invocationById(id)` resolve a `deepProvenance` ordinal to the
   verb / invocation that minted it.
-- `buildUneval` (from `@inhuman.tools/arrival-provenance/analysis`, **FSL-1.1-MIT**) — reverse
+- `buildUneval` (from `@inhuman.tools/arrival-provenance/analysis`) — reverse
   slicer over a finished traced run; options take `scope: state.scope` (not `env`).
 
 **Subpath exports** — granular, tree-shaken entries (see `package.json` `exports` for the
@@ -341,16 +342,14 @@ Responsible disclosure and collaboration on improvements: security@here.build
 Interpretation costs roughly 10–100× native JS — worth it for isolation, compositional
 expressiveness, and lineage; not worth it for CPU-bound number crunching. Register
 performance-critical functions as capability verbs and keep Scheme for orchestration. arrival is
-simultaneously a runtime and an IR — designed to be compilable *toward* JavaScript — so raw speed is
-the *target's* concern and interpretation cost stays an authoring-time property, not the ceiling.
+simultaneously a runtime and an IR — designed to be compilable _toward_ JavaScript — so raw speed is
+the _target's_ concern and interpretation cost stays an authoring-time property, not the ceiling.
 
 ## Design foundations
 
 - [`docs/PRINCIPLES.md`](./docs/PRINCIPLES.md) — the governing principles: the two-interpreter
   keystone, the value plane, the membrane, provenance, the surface rules.
 - [`docs/PROVENANCE.md`](./docs/PROVENANCE.md) — the provenance substrate in full.
-- [`docs/design-history/language-design-foundations.md`](./docs/design-history/language-design-foundations.md)
-  — the language charter; read before adding a reader macro, literal, or borrowing.
 - [`docs/writing-capabilities.md`](./docs/writing-capabilities.md) — authoring your own capabilities.
 
 ## Why Scheme for AI Agents?
@@ -361,11 +360,11 @@ Sandboxing prevents exploration from accidentally executing actions.
 
 ### Prior art
 
-The stance — *symbolic programming as the reasoning medium, not static tool-calling* — is argued
-independently in Jordi de la Torre, [*From Tool Calling to Symbolic Thinking: LLMs in a Persistent
-Lisp Metaprogramming Loop*](https://arxiv.org/abs/2506.10021) (arXiv:2506.10021, 2025): embed Lisp
+The stance — _symbolic programming as the reasoning medium, not static tool-calling_ — is argued
+independently in Jordi de la Torre, [_From Tool Calling to Symbolic Thinking: LLMs in a Persistent
+Lisp Metaprogramming Loop_](https://arxiv.org/abs/2506.10021) (arXiv:2506.10021, 2025): embed Lisp
 in generation, intercept it through a **middleware layer**, give the model a **persistent REPL** in
-which it defines, invokes, and evolves its own tools. That paper offers *design principles*; arrival
+which it defines, invokes, and evolves its own tools. That paper offers _design principles_; arrival
 is the built system. Its middleware layer is our membrane (`@`); its persistent REPL is the per-run
 capability environment; its "evolve your own tools" is the capability DAG. Where it leaves the
 environment open, arrival's base is sandboxed, no-IO, and R7RS-faithful — the boundary that makes a

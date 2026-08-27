@@ -61,32 +61,23 @@ describe("r7rs identity — passing invariants (regression guards)", () => {
 });
 
 describe("r7rs identity — eq?/eqv? string-identity fixes (regression guards)", () => {
-  it(
-    "eq? on two distinct string-copy results is #f (R7RS § 6.1)",
-    async () => {
-      // FIXED (was: `the dissolved husk (then line 670)-672` compared strings via `.valueOf()`, returning #t
-      // for two unrelated heap instances — collapsing eq?/eqv? into string-equal? shape).
-      // R7RS § 6.1: `(eq? "x" "x")` on literals is implementation-defined, but distinct
-      // heap instances (`string-copy` minted fresh objects) should not compare eq? — the
-      // predicate is meant to be at most a pointer-grade check.
-      const r = await evalScheme(`(eq? (string-copy "abc") (string-copy "abc"))`);
-      expect(truthy(r)).toBe(false);
-    },
-  );
+  it("eq? on two distinct string-copy results is #f (R7RS § 6.1)", async () => {
+    // FIXED (was: `the dissolved husk (then line 670)-672` compared strings via `.valueOf()`, returning #t
+    // for two unrelated heap instances — collapsing eq?/eqv? into string-equal? shape).
+    // R7RS § 6.1: `(eq? "x" "x")` on literals is implementation-defined, but distinct
+    // heap instances (`string-copy` minted fresh objects) should not compare eq? — the
+    // predicate is meant to be at most a pointer-grade check.
+    const r = await evalScheme(`(eq? (string-copy "abc") (string-copy "abc"))`);
+    expect(truthy(r)).toBe(false);
+  });
 
-  it(
-    "eqv? on two distinct string-copy results is #f (R7RS § 6.1)",
-    async () => {
-      const r = await evalScheme(`(eqv? (string-copy "abc") (string-copy "abc"))`);
-      expect(truthy(r)).toBe(false);
-    },
-  );
+  it("eqv? on two distinct string-copy results is #f (R7RS § 6.1)", async () => {
+    const r = await evalScheme(`(eqv? (string-copy "abc") (string-copy "abc"))`);
+    expect(truthy(r)).toBe(false);
+  });
 
-  it(
-    "eqv? on two distinct make-string results is #f (R7RS § 6.1)",
-    async () => {
-      const r = await evalScheme(`(eqv? (make-string 1 #\\a) (make-string 1 #\\a))`);
-      expect(truthy(r)).toBe(false);
-    },
-  );
+  it("eqv? on two distinct make-string results is #f (R7RS § 6.1)", async () => {
+    const r = await evalScheme(`(eqv? (make-string 1 #\\a) (make-string 1 #\\a))`);
+    expect(truthy(r)).toBe(false);
+  });
 });

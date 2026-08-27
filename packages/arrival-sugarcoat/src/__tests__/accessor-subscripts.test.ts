@@ -6,7 +6,8 @@ import { readSugarcoatExpr, R7RS_ACCESSOR_DEPTH } from "../sugarcoat-read.js";
 import { printScheme } from "../sugarcoat-render.js";
 
 const render = (scheme: string): string => schemeToSugarcoat(scheme).trim();
-const read = (sugarcoat: string, accessorDepth?: number): string => printScheme(readSugarcoatExpr(sugarcoat, { accessorDepth }));
+const read = (sugarcoat: string, accessorDepth?: number): string =>
+  printScheme(readSugarcoatExpr(sugarcoat, { accessorDepth }));
 
 // The whole `c[ad]+r` family, swept — not just the linear car/cdr/cadr/caddr.
 describe("pair-accessor decomposition", () => {
@@ -88,7 +89,10 @@ describe("read: unbounded mode fuses any chain into one word", () => {
 // The guarantee we make: not full textual lensing but CYCLIC idempotence — viewing
 // a sugarcoat form, folding to scheme, and re-rendering returns the SAME sugarcoat text.
 describe("cyclic idempotence: sugarcoat → scheme → sugarcoat", () => {
-  for (const mode of [{ name: "default", depth: undefined }, { name: "unbounded", depth: Infinity }] as const) {
+  for (const mode of [
+    { name: "default", depth: undefined },
+    { name: "unbounded", depth: Infinity },
+  ] as const) {
     for (const sugarcoat of ["x[0]", "x[1:]", "x[0][0]", "x[1][0]", "x[1][1]", "x[0][1][2]", "x[4:]", "x[2][3:]"]) {
       it(`${sugarcoat} (${mode.name})`, () => {
         const classic = read(sugarcoat, mode.depth);

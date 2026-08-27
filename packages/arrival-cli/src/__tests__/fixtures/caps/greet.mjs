@@ -7,6 +7,9 @@ export default EnvCapability.define("fixture/greet", {
   symbols: (symbol, sz) => ({
     // The smallest authorable verb for a plain .mjs fixture: no args, a plain JS
     // string return, crossed to a scheme string by the codec.
-    greet: symbol.rosetta`greet: the smallest authorable verb`({ input: [], output: [sz.string] }, () => "hello, world"),
+    greet: symbol.rosetta`greet: the smallest authorable verb`(
+      { input: [], output: [sz.string] },
+      () => "hello, world",
+    ),
   }),
 });

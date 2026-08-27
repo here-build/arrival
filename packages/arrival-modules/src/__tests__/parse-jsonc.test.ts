@@ -28,7 +28,7 @@ describe("parseJsonc", () => {
   });
 
   it("honors escaped quotes inside strings", () => {
-    expect(parseJsonc(`{"q":"say \\"hi\\" // not a comment"}`)).toEqual({
+    expect(parseJsonc(String.raw`{"q":"say \"hi\" // not a comment"}`)).toEqual({
       q: 'say "hi" // not a comment',
     });
   });

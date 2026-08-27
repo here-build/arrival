@@ -29,7 +29,8 @@ import {
   countCone,
   fieldCone,
   type Classifier,
-  type DeclaredRole } from "../../provenance/lineage.js";
+  type DeclaredRole,
+} from "../../provenance/lineage.js";
 import { classifierFromEnv } from "../../provenance/lineage-classifier-from-env.js";
 import { buildWireframe } from "../../provenance/wireframe/builder.js";
 import * as z from "../../common/scheme-zod/index.js";
@@ -42,7 +43,8 @@ import type {
   RosettaSymbolDef,
   SequenceSymbolDef,
   TaglessGuardSymbolDef,
-  TaglessSymbolDef } from "../../common/symbols/_bake.js";
+  TaglessSymbolDef,
+} from "../../common/symbols/_bake.js";
 
 /** Test-only cast: pull a minted value's `.contract` (typed `unknown` on the class — see
  *  ACallable.ts) back to its known CONTRACT shape. Stage A2: the factories mint the
@@ -66,7 +68,7 @@ import { harvestContracts } from "../../__tests__/_symbols-harvest.js";
 /** Resolved callback roles off a pack's REAL exported def (the data plane Q3/Q8a read) —
  *  same `.spec.symbols` access idiom as the `*-contract-precision.test.ts` files. */
 function rolesOf(pack: { spec: { symbols?: unknown } }, name: string): CallbackRoles | undefined {
-  const d = (harvestContracts(pack.spec.symbols))[name];
+  const d = harvestContracts(pack.spec.symbols)[name];
   if (d === undefined) throw new Error(`pack has no symbol named ${name}`);
   return "callbackRoles" in d ? d.callbackRoles : undefined;
 }
@@ -77,7 +79,6 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       "{pipe, fan, source, sink, transparent, loop, opaque} — pipe default for " +
       "native/sequence/tagless kinds, source default for rosetta",
     async () => {
-
       // KIND DEFAULTS — no `provenance` in the contract; the factory resolves the
       // kind's default before the def is returned (`contract.provenance ?? "pipe"` /
       // `?? "source"` in native.ts/rosetta.ts/sequence.ts; tagless.ts/taglessGuard.ts
@@ -98,13 +99,14 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       ).toBe("source");
       expect(
         contractOf<SequenceSymbolDef>(
-          symbol.sequence`v1-default-sequence: `({ input: [z.schemeValue], output: [z.schemeValue] }, (args) => args[0]),
+          symbol.sequence`v1-default-sequence: `(
+            { input: [z.schemeValue], output: [z.schemeValue] },
+            (args) => args[0],
+          ),
         ).provenance,
       ).toBe("pipe");
       expect(contractOf<TaglessSymbolDef>(symbol.tagless`v1-default-tagless: `).provenance).toBe("pipe");
-      expect(
-        contractOf<TaglessGuardSymbolDef>(symbol.taglessGuard`v1-default-taglessguard: `).provenance,
-      ).toBe("pipe");
+      expect(contractOf<TaglessGuardSymbolDef>(symbol.taglessGuard`v1-default-taglessguard: `).provenance).toBe("pipe");
 
       // THE SEVEN-ROLE VOCABULARY — every member is a real, declarable role;
       // exercised where `assertProvenanceRoleShape` (_bake.ts) constrains the shape
@@ -113,7 +115,10 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       // doesn't (pipe/source/loop/opaque carry no shape constraint at all).
       expect(
         contractOf<NativeSymbolDef>(
-          symbol.native`v1-role-pipe: `({ input: [z.schemeValue], output: [z.schemeValue], provenance: "pipe" }, (v) => v),
+          symbol.native`v1-role-pipe: `(
+            { input: [z.schemeValue], output: [z.schemeValue], provenance: "pipe" },
+            (v) => v,
+          ),
         ).provenance,
       ).toBe("pipe");
       expect(
@@ -126,20 +131,23 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       ).toBe("fan");
       expect(
         contractOf<RosettaSymbolDef>(
-          symbol.rosetta`v1-role-source: `(
-            { input: [z.string], output: [z.string], provenance: "source" },
-            (s) => s,
-          ),
+          symbol.rosetta`v1-role-source: `({ input: [z.string], output: [z.string], provenance: "source" }, (s) => s),
         ).provenance,
       ).toBe("source");
       expect(
         contractOf<NativeSymbolDef>(
-          symbol.native`v1-role-loop: `({ input: [z.schemeValue], output: [z.schemeValue], provenance: "loop" }, (v) => v),
+          symbol.native`v1-role-loop: `(
+            { input: [z.schemeValue], output: [z.schemeValue], provenance: "loop" },
+            (v) => v,
+          ),
         ).provenance,
       ).toBe("loop");
       expect(
         contractOf<NativeSymbolDef>(
-          symbol.native`v1-role-opaque: `({ input: [z.schemeValue], output: [z.schemeValue], provenance: "opaque" }, (v) => v),
+          symbol.native`v1-role-opaque: `(
+            { input: [z.schemeValue], output: [z.schemeValue], provenance: "opaque" },
+            (v) => v,
+          ),
         ).provenance,
       ).toBe("opaque");
       expect(
@@ -206,7 +214,6 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       "declared role — an undeclared symbol is a build-time error, never a silent " +
       "default-to-opaque",
     async () => {
-
       // The baked TYPE makes omission impossible: every callable-kind def
       // (`NativeSymbolDef`/`RosettaSymbolDef`/`SequenceSymbolDef`/`TaglessSymbolDef`/
       // `TaglessGuardSymbolDef`) declares `readonly provenance: ProvenanceRole` —
@@ -222,7 +229,10 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
         contractOf(symbol.native`v1-complete-native: `({ input: [z.schemeValue], output: [z.schemeValue] }, (v) => v)),
         contractOf(symbol.rosetta`v1-complete-rosetta: `({ input: [z.string], output: [z.string] }, (s) => s)),
         contractOf(
-          symbol.sequence`v1-complete-sequence: `({ input: [z.schemeValue], output: [z.schemeValue] }, (args) => args[0]),
+          symbol.sequence`v1-complete-sequence: `(
+            { input: [z.schemeValue], output: [z.schemeValue] },
+            (args) => args[0],
+          ),
         ),
         contractOf(symbol.tagless`v1-complete-tagless: `),
         contractOf(symbol.taglessGuard`v1-complete-taglessguard: `),
@@ -331,7 +341,8 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
               ? "sink"
               : op === "declared-transparent"
                 ? "transparent"
-                : undefined };
+                : undefined,
+      };
 
       const [loopAst] = await parse(`(declared-loop x)`);
       const loopNode = classify(loopAst, C);
@@ -376,7 +387,8 @@ describe("V2 — declaration-driven classifier (§2; PROVENANCE-PLAN.md Q3)", ()
       // classify() still consulted a name list (the retired heuristic) rather than
       // the declared role alone, one of these would misclassify.
       const C: Classifier = {
-        roleOf: (op) => (op === "totally-pure-sounding" ? "source" : op === "clearly-a-mint" ? "pipe" : undefined) };
+        roleOf: (op) => (op === "totally-pure-sounding" ? "source" : op === "clearly-a-mint" ? "pipe" : undefined),
+      };
       const [mintAst] = await parse(`(totally-pure-sounding p)`);
       expect(classify(mintAst, C).kind).toBe("source");
       const [pipeAst] = await parse(`(clearly-a-mint p)`);
@@ -509,7 +521,12 @@ describe("V2-Q4 — callback-role drift door + acc chain + stamp path (§2/§3; 
       expect(
         contractOf<NativeSymbolDef>(
           symbol.native`q4-fan-override: fan default overridden to control`(
-            { input: [z.lambda, z.schemeValue], output: [z.schemeValue], provenance: "fan", callbackRoles: ["control"] },
+            {
+              input: [z.lambda, z.schemeValue],
+              output: [z.schemeValue],
+              provenance: "fan",
+              callbackRoles: ["control"],
+            },
             (f, v) => v,
           ),
         ).callbackRoles,
@@ -563,7 +580,9 @@ describe("V2-Q4 — callback-role drift door + acc chain + stamp path (§2/§3; 
             "q4-stamp": symbol.native`q4-stamp: synthetic fan`(
               { input: [z.lambda, z.schemeValue], output: [z.schemeValue], provenance: "fan" },
               (f, v) => v,
-            ) }) }),
+            ),
+          }),
+        }),
       ]);
       expect(read("q4-stamp")).toEqual(["element-transformer"]);
     },

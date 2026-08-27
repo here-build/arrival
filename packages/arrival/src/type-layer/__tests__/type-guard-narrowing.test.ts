@@ -72,11 +72,7 @@ function narrowedType(opts: { guardSig: string; inputType: string }): string {
   let result: string | undefined;
   const visit = (node: ts.Node) => {
     if (ts.isTypeAliasDeclaration(node) && node.name.text === "__N") {
-      result = checker.typeToString(
-        checker.getTypeFromTypeNode(node.type),
-        node,
-        ts.TypeFormatFlags.NoTruncation,
-      );
+      result = checker.typeToString(checker.getTypeFromTypeNode(node.type), node, ts.TypeFormatFlags.NoTruncation);
     }
     ts.forEachChild(node, visit);
   };
@@ -115,7 +111,8 @@ describe("dual guard control-flow narrowing (lens-critical)", () => {
   it("list?: string | List<number> keeps List<number>", () => {
     const t = narrowedType({
       guardSig: LIST_DUAL,
-      inputType: "string | List<number>" });
+      inputType: "string | List<number>",
+    });
     expect(t).toMatch(/number/);
     expect(t).not.toMatch(/string/);
     expect(t).not.toBe("List<unknown>");
@@ -124,7 +121,8 @@ describe("dual guard control-flow narrowing (lens-critical)", () => {
   it("list?: List<string> | number keeps List<string>", () => {
     const t = narrowedType({
       guardSig: LIST_DUAL,
-      inputType: "List<string> | number" });
+      inputType: "List<string> | number",
+    });
     expect(t).toMatch(/string/);
     expect(t).not.toMatch(/number/);
   });
@@ -132,7 +130,8 @@ describe("dual guard control-flow narrowing (lens-critical)", () => {
   it("vector?: string | readonly number[] keeps number[]", () => {
     const t = narrowedType({
       guardSig: VECTOR_DUAL,
-      inputType: "string | readonly number[]" });
+      inputType: "string | readonly number[]",
+    });
     expect(t).toMatch(/number/);
     expect(t).not.toMatch(/string/);
   });
@@ -140,7 +139,8 @@ describe("dual guard control-flow narrowing (lens-critical)", () => {
   it("pair?: string | NonEmptyList<number> keeps NonEmptyList", () => {
     const t = narrowedType({
       guardSig: PAIR_DUAL,
-      inputType: "string | NonEmptyList<number>" });
+      inputType: "string | NonEmptyList<number>",
+    });
     expect(t).toMatch(/number/);
     expect(t).not.toMatch(/string/);
   });

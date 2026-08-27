@@ -14,45 +14,45 @@
 
 ### 1.1 Live in `scheme/srfi-1` (public)
 
-| Symbol | Kind | Notes |
-|--------|------|--------|
-| `filter` | sequence / tagless | Representation-polymorphic (list **and** vector) — SRFI is list-only |
-| `reduce` | tagless | Left fold dispatcher; SRFI name `reduce` (not bare `fold`) |
-| `find` | native | **Miss → `nil`**, not SRFI `#f` (semantic bug) |
-| `take-while` | tagless | Polymorphic list/vector |
-| `drop-while` | tagless | Polymorphic list/vector |
-| `take` | sequence | Polymorphic; SRFI "any value at n=0" tolerance **deliberately dropped** |
-| `drop` | sequence | Polymorphic; same loud-crash discipline |
-| `span` | define | Returns **`(list prefix rest)`**, not multi-values |
-| `break` | define | Same list product |
-| `partition` | define | Returns **`(list yes no)`** |
-| `find-tail` | define | Miss → `#f` (correct) |
-| `last-pair` | define | Non-empty pair required at contract |
-| `last` | define | |
-| `first` … `tenth` | define | Via private `%list-nth`; empty → teaching `error` |
-| `list-tabulate` | define | |
-| `fold-right` | define | Single-list body (SRFI is n-ary) |
-| `reduce-right` | define | |
-| `concatenate` | define | |
-| `append-reverse` | define | |
-| `delete` | define | No optional `=` comparator |
-| `remove` | define | Delegates to `filter` |
-| `length+` | define | Floyd cycle; `#f` on circular |
-| `iota` | define | |
-| `delete-duplicates` | define | No optional comparator |
-| `filter-map` | define | |
-| `count` | define | |
-| `append-map` | define | |
-| `some` | define | **SRFI name is `any`**; result is `#t`/`#f` only |
-| `every` | define | Result is `#t`/`#f` only (not last-pred-value) |
-| `zip` | define | |
-| `list-index` | define | |
-| `unfold` | define | **Non-SRFI protocol** (see §2.4) |
+| Symbol              | Kind               | Notes                                                                   |
+| ------------------- | ------------------ | ----------------------------------------------------------------------- |
+| `filter`            | sequence / tagless | Representation-polymorphic (list **and** vector) — SRFI is list-only    |
+| `reduce`            | tagless            | Left fold dispatcher; SRFI name `reduce` (not bare `fold`)              |
+| `find`              | native             | **Miss → `nil`**, not SRFI `#f` (semantic bug)                          |
+| `take-while`        | tagless            | Polymorphic list/vector                                                 |
+| `drop-while`        | tagless            | Polymorphic list/vector                                                 |
+| `take`              | sequence           | Polymorphic; SRFI "any value at n=0" tolerance **deliberately dropped** |
+| `drop`              | sequence           | Polymorphic; same loud-crash discipline                                 |
+| `span`              | define             | Returns **`(list prefix rest)`**, not multi-values                      |
+| `break`             | define             | Same list product                                                       |
+| `partition`         | define             | Returns **`(list yes no)`**                                             |
+| `find-tail`         | define             | Miss → `#f` (correct)                                                   |
+| `last-pair`         | define             | Non-empty pair required at contract                                     |
+| `last`              | define             |                                                                         |
+| `first` … `tenth`   | define             | Via private `%list-nth`; empty → teaching `error`                       |
+| `list-tabulate`     | define             |                                                                         |
+| `fold-right`        | define             | Single-list body (SRFI is n-ary)                                        |
+| `reduce-right`      | define             |                                                                         |
+| `concatenate`       | define             |                                                                         |
+| `append-reverse`    | define             |                                                                         |
+| `delete`            | define             | No optional `=` comparator                                              |
+| `remove`            | define             | Delegates to `filter`                                                   |
+| `length+`           | define             | Floyd cycle; `#f` on circular                                           |
+| `iota`              | define             |                                                                         |
+| `delete-duplicates` | define             | No optional comparator                                                  |
+| `filter-map`        | define             |                                                                         |
+| `count`             | define             |                                                                         |
+| `append-map`        | define             |                                                                         |
+| `some`              | define             | **SRFI name is `any`**; result is `#t`/`#f` only                        |
+| `every`             | define             | Result is `#t`/`#f` only (not last-pred-value)                          |
+| `zip`               | define             |                                                                         |
+| `list-index`        | define             |                                                                         |
+| `unfold`            | define             | **Non-SRFI protocol** (see §2.4)                                        |
 
 ### 1.2 Doored in pack today
 
-| Symbol | Door reason (summary) |
-|--------|------------------------|
+| Symbol | Door reason (summary)                                                      |
+| ------ | -------------------------------------------------------------------------- |
 | `fold` | Bare SRFI-1 `fold` not bound under that name — use `reduce` / `fold-right` |
 
 ### 1.3 Private helpers (not SRFI exports)
@@ -61,25 +61,25 @@
 
 ### 1.4 Arrival extras (not official SRFI-1)
 
-| Symbol | Role |
-|--------|------|
-| `first?` | Safe head → `#f` on non-pair (falsy sentinel; twin of SRFI `first`) |
-| `first-or` | Safe head with default |
-| `range` | `(iota stop)` sugar |
+| Symbol     | Role                                                                |
+| ---------- | ------------------------------------------------------------------- |
+| `first?`   | Safe head → `#f` on non-pair (falsy sentinel; twin of SRFI `first`) |
+| `first-or` | Safe head with default                                              |
+| `range`    | `(iota stop)` sugar                                                 |
 
 ### 1.5 Official SRFI-1 names live **outside** this pack
 
 Agents can still call these via R7RS packs; under **pack-local** all-or-nothing they are still **missing from `scheme/srfi-1`** unless re-exported or doored with a "see X" message.
 
-| Cluster | Symbols | Where |
-|---------|---------|--------|
-| Constructors | `cons`, `list`, `make-list`, `list-copy` | `scheme/lists` |
-| Predicates / access | `pair?`, `null?`, `car`/`cdr`/cxr family | equality / kernel cxr |
-| Selectors | `list-ref` (`list-tail` is R7RS rename of `drop` — not SRFI-1 export) | `scheme/lists` |
-| Misc | `length`, `append`, `reverse` | `scheme/lists` |
-| Map | `map`, `for-each` | `scheme/lists` |
-| Search | `member`, `memq`, `memv`, `assoc`, `assq`, `assv` | `scheme/lists` |
-| Mutators | `set-car!`, `set-cdr!`, `append!`, `list-set!` | **doored** in `scheme/lists` (purity) |
+| Cluster             | Symbols                                                               | Where                                 |
+| ------------------- | --------------------------------------------------------------------- | ------------------------------------- |
+| Constructors        | `cons`, `list`, `make-list`, `list-copy`                              | `scheme/lists`                        |
+| Predicates / access | `pair?`, `null?`, `car`/`cdr`/cxr family                              | equality / kernel cxr                 |
+| Selectors           | `list-ref` (`list-tail` is R7RS rename of `drop` — not SRFI-1 export) | `scheme/lists`                        |
+| Misc                | `length`, `append`, `reverse`                                         | `scheme/lists`                        |
+| Map                 | `map`, `for-each`                                                     | `scheme/lists`                        |
+| Search              | `member`, `memq`, `memv`, `assoc`, `assq`, `assv`                     | `scheme/lists`                        |
+| Mutators            | `set-car!`, `set-cdr!`, `append!`, `list-set!`                        | **doored** in `scheme/lists` (purity) |
 
 ---
 
@@ -92,33 +92,33 @@ Complete export inventory from the SRFI-1 procedure index.
 
 Same spirit as `set-car!` / `append!` in `r7rs/lists.ts`: values are frozen; mutation would falsify provenance lineage; use pure constructors / pure twins.
 
-| Export | Status | Suggested door one-liner |
-|--------|--------|--------------------------|
-| `set-car!` | 📦 doored in lists | Mirror purity door (or "already doored in scheme/lists — pairs are frozen") |
-| `set-cdr!` | 📦 doored in lists | Same |
-| `append!` | 📦 doored in lists | Same → use `append` |
-| `take!` | 🔇 | Linear-update; use pure `take` |
-| `drop-right!` | 🔇 | Linear-update; use pure `drop-right` (once live) or rebuild |
-| `split-at!` | 🔇 | Linear-update; use pure `split-at` product |
-| `concatenate!` | 🔇 | Use pure `concatenate` |
-| `reverse!` | 🔇 | Use pure `reverse` |
-| `append-reverse!` | 🔇 | Use pure `append-reverse` |
-| `append-map!` | 🔇 | Use pure `append-map` |
-| `map!` | 🔇 | Use pure `map` |
-| `filter!` | 🔇 | Use pure `filter` |
-| `partition!` | 🔇 | Use pure `partition` → `(list yes no)` |
-| `remove!` | 🔇 | Use pure `remove` |
-| `take-while!` | 🔇 | Use pure `take-while` |
-| `span!` | 🔇 | Use pure `span` |
-| `break!` | 🔇 | Use pure `break` |
-| `delete!` | 🔇 | Use pure `delete` |
-| `delete-duplicates!` | 🔇 | Use pure `delete-duplicates` |
-| `alist-delete!` | 🔇 | Use pure `alist-delete` (once live) |
-| `lset-union!` | 🔇 | Linear-update list-set; pure twin or rebuild |
-| `lset-intersection!` | 🔇 | Same |
-| `lset-difference!` | 🔇 | Same |
-| `lset-xor!` | 🔇 | Same |
-| `lset-diff+intersection!` | 🔇 | Same |
+| Export                    | Status             | Suggested door one-liner                                                    |
+| ------------------------- | ------------------ | --------------------------------------------------------------------------- |
+| `set-car!`                | 📦 doored in lists | Mirror purity door (or "already doored in scheme/lists — pairs are frozen") |
+| `set-cdr!`                | 📦 doored in lists | Same                                                                        |
+| `append!`                 | 📦 doored in lists | Same → use `append`                                                         |
+| `take!`                   | 🔇                 | Linear-update; use pure `take`                                              |
+| `drop-right!`             | 🔇                 | Linear-update; use pure `drop-right` (once live) or rebuild                 |
+| `split-at!`               | 🔇                 | Linear-update; use pure `split-at` product                                  |
+| `concatenate!`            | 🔇                 | Use pure `concatenate`                                                      |
+| `reverse!`                | 🔇                 | Use pure `reverse`                                                          |
+| `append-reverse!`         | 🔇                 | Use pure `append-reverse`                                                   |
+| `append-map!`             | 🔇                 | Use pure `append-map`                                                       |
+| `map!`                    | 🔇                 | Use pure `map`                                                              |
+| `filter!`                 | 🔇                 | Use pure `filter`                                                           |
+| `partition!`              | 🔇                 | Use pure `partition` → `(list yes no)`                                      |
+| `remove!`                 | 🔇                 | Use pure `remove`                                                           |
+| `take-while!`             | 🔇                 | Use pure `take-while`                                                       |
+| `span!`                   | 🔇                 | Use pure `span`                                                             |
+| `break!`                  | 🔇                 | Use pure `break`                                                            |
+| `delete!`                 | 🔇                 | Use pure `delete`                                                           |
+| `delete-duplicates!`      | 🔇                 | Use pure `delete-duplicates`                                                |
+| `alist-delete!`           | 🔇                 | Use pure `alist-delete` (once live)                                         |
+| `lset-union!`             | 🔇                 | Linear-update list-set; pure twin or rebuild                                |
+| `lset-intersection!`      | 🔇                 | Same                                                                        |
+| `lset-difference!`        | 🔇                 | Same                                                                        |
+| `lset-xor!`               | 🔇                 | Same                                                                        |
+| `lset-diff+intersection!` | 🔇                 | Same                                                                        |
 
 **Count:** ~26 purity doors (4 already taught in lists; ~22 still silent in srfi-1).
 
@@ -134,70 +134,70 @@ Reasons are one-liners for door text. Prefer doors over silent absence even when
 
 #### Constructors
 
-| Export | Reason one-liner |
-|--------|------------------|
-| `xcons` | Tiny HOF sugar `(lambda (d a) (cons a d))` — not in agent grain; write `cons` flipped or `λ` |
-| `cons*` | Rest-as-tail constructor; use nested `cons` / `list` + last cdr (candidate to promote — see §2.3) |
-| `circular-list` | Cycle construction is outside the immutable subset (no live spine mutation to close a ring); circular *detection* lives in `length+` |
+| Export          | Reason one-liner                                                                                                                     |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `xcons`         | Tiny HOF sugar `(lambda (d a) (cons a d))` — not in agent grain; write `cons` flipped or `λ`                                         |
+| `cons*`         | Rest-as-tail constructor; use nested `cons` / `list` + last cdr (candidate to promote — see §2.3)                                    |
+| `circular-list` | Cycle construction is outside the immutable subset (no live spine mutation to close a ring); circular _detection_ lives in `length+` |
 
 #### Predicates
 
-| Export | Reason one-liner |
-|--------|------------------|
-| `proper-list?` | Not in shipped subset; use `list?` / pair-walk + `null?` (or promote — small) |
-| `circular-list?` | Not shipped; `length+` → `#f` is the cycle answer we expose |
-| `dotted-list?` | Not shipped; dotted tails are tolerated only where SRFI blesses (`take`/`drop`/`length+`) |
-| `not-pair?` | Sugar for `(not (pair? x))` — door or one-line define |
-| `null-list?` | Termination helper for proper/circular lists; door or alias of careful `null?` |
-| `list=` | Element-wise n-ary list equality with custom `elt=`; use `equal?` or write a fold |
+| Export           | Reason one-liner                                                                          |
+| ---------------- | ----------------------------------------------------------------------------------------- |
+| `proper-list?`   | Not in shipped subset; use `list?` / pair-walk + `null?` (or promote — small)             |
+| `circular-list?` | Not shipped; `length+` → `#f` is the cycle answer we expose                               |
+| `dotted-list?`   | Not shipped; dotted tails are tolerated only where SRFI blesses (`take`/`drop`/`length+`) |
+| `not-pair?`      | Sugar for `(not (pair? x))` — door or one-line define                                     |
+| `null-list?`     | Termination helper for proper/circular lists; door or alias of careful `null?`            |
+| `list=`          | Element-wise n-ary list equality with custom `elt=`; use `equal?` or write a fold         |
 
 #### Selectors
 
-| Export | Reason one-liner |
-|--------|------------------|
-| `car+cdr` | Multi-return deconstructor — multi-return is doored; use `(list (car p) (cdr p))` or `first`+`cdr` |
-| `take-right` | Pure but unshipped; rebuild with `length` + `drop` / reverse-take pattern (high-value candidate) |
-| `drop-right` | Pure but unshipped; same (high-value candidate) |
-| `split-at` | Pure multi-product; ship as `(list (take xs n) (drop xs n))` when promoted |
+| Export       | Reason one-liner                                                                                   |
+| ------------ | -------------------------------------------------------------------------------------------------- |
+| `car+cdr`    | Multi-return deconstructor — multi-return is doored; use `(list (car p) (cdr p))` or `first`+`cdr` |
+| `take-right` | Pure but unshipped; rebuild with `length` + `drop` / reverse-take pattern (high-value candidate)   |
+| `drop-right` | Pure but unshipped; same (high-value candidate)                                                    |
+| `split-at`   | Pure multi-product; ship as `(list (take xs n) (drop xs n))` when promoted                         |
 
 #### Miscellaneous
 
-| Export | Reason one-liner |
-|--------|------------------|
-| `unzip1`…`unzip5` | Transpose inverse of `zip`; multi-return for n>1 — return list-of-lists or door as low grain |
-| `pair-fold` / `pair-fold-right` | Fold over **pairs** (sublists), often used with `set-cdr!`; pure use is rare here |
-| `unfold-right` | Iterative dual of historical/`SRFI` unfold; not in grain |
-| `map-in-order` | Ordered map for effectful procs; arrival `map` order is already deterministic enough for pure code — door "use `map`" or implement as alias |
-| `pair-for-each` | Side-effect walk of pairs; use `for-each` on cars or recurse on `cdr` |
-| `any` | **Name missing** — live under Ramda name `some`; door: `use some` (or rebind — §2.3 / §2.4) |
+| Export                          | Reason one-liner                                                                                                                            |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unzip1`…`unzip5`               | Transpose inverse of `zip`; multi-return for n>1 — return list-of-lists or door as low grain                                                |
+| `pair-fold` / `pair-fold-right` | Fold over **pairs** (sublists), often used with `set-cdr!`; pure use is rare here                                                           |
+| `unfold-right`                  | Iterative dual of historical/`SRFI` unfold; not in grain                                                                                    |
+| `map-in-order`                  | Ordered map for effectful procs; arrival `map` order is already deterministic enough for pure code — door "use `map`" or implement as alias |
+| `pair-for-each`                 | Side-effect walk of pairs; use `for-each` on cars or recurse on `cdr`                                                                       |
+| `any`                           | **Name missing** — live under Ramda name `some`; door: `use some` (or rebind — §2.3 / §2.4)                                                 |
 
 #### Association lists (pure)
 
-| Export | Reason one-liner |
-|--------|------------------|
-| `alist-cons` | `(cons (cons key val) alist)` — trivial; door or implement |
-| `alist-copy` | Spine copy of alist pairs; use `map`/`list-copy` patterns |
+| Export         | Reason one-liner                                           |
+| -------------- | ---------------------------------------------------------- |
+| `alist-cons`   | `(cons (cons key val) alist)` — trivial; door or implement |
+| `alist-copy`   | Spine copy of alist pairs; use `map`/`list-copy` patterns  |
 | `alist-delete` | Filter by key; use `remove`/`filter` with `equal?` on cars |
 
 #### List-sets (pure)
 
-| Export | Reason one-liner |
-|--------|------------------|
-| `lset<=` | List-as-set ⊆ with custom `=` — O(n²) set algebra not in agent grain |
-| `lset=` | List-as-set equality |
-| `lset-adjoin` | Set adjoin |
-| `lset-union` | Set union |
-| `lset-intersection` | Set intersection |
-| `lset-difference` | Set difference |
-| `lset-xor` | Symmetric difference |
+| Export                   | Reason one-liner                                                            |
+| ------------------------ | --------------------------------------------------------------------------- |
+| `lset<=`                 | List-as-set ⊆ with custom `=` — O(n²) set algebra not in agent grain        |
+| `lset=`                  | List-as-set equality                                                        |
+| `lset-adjoin`            | Set adjoin                                                                  |
+| `lset-union`             | Set union                                                                   |
+| `lset-intersection`      | Set intersection                                                            |
+| `lset-difference`        | Set difference                                                              |
+| `lset-xor`               | Symmetric difference                                                        |
 | `lset-diff+intersection` | Multi-product set split — multi-return doored; list product if ever shipped |
 
 **Note:** entire `lset*` pure family can share one reason string ("list-as-set algebra is outside the shipped SRFI-1 subset; use `member`/`delete`/`delete-duplicates`/`filter` compositions").
 
 #### Fold name already handled
 
-| Export | Status |
-|--------|--------|
+| Export | Status                                      |
+| ------ | ------------------------------------------- |
 | `fold` | 🚪 already doored → `reduce` / `fold-right` |
 
 #### R5RS overlaps only outside pack
@@ -210,18 +210,18 @@ Not "not-in-subset" of Arrival — they work — but pack-local completeness sti
 
 Ordered by agent hit-rate × implementation cost (Scheme `symbol.define` unless noted).
 
-| Priority | Export | Why | Sketch |
-|----------|--------|-----|--------|
-| P0 | `any` | Spec name; only `some` bound → silent failure for SRFI code | Alias `(define any some)` **or** door→`some` if boolean-only semantics stay |
-| P0 | `take-right` / `drop-right` | Natural pair with `take`/`drop`; agents reach for them | Length + drop / reverse-take; dotted-tail care per SRFI |
-| P0 | `split-at` | Natural product of take+drop | `(list (take xs n) (drop xs n))` — same product style as span |
-| P1 | `cons*` | Common rest constructor | Nested cons; last arg is tail |
-| P1 | `xcons` | One-liner HOF | `(lambda (d a) (cons a d))` |
-| P1 | `null-list?` / `not-pair?` | Termination idioms in portable SRFI code | Thin wrappers |
-| P1 | `alist-cons` / `alist-delete` | Alist grain without full lset | Cons pair; filter by key |
-| P2 | `proper-list?` / `circular-list?` | Completes the proper/circular/dotted partition with `length+` | Reuse Floyd / existing circular helpers in lists |
-| P2 | `unzip1` | Inverse of single-list zip | `(map car lists)` |
-| P2 | `map-in-order` | Spec synonym when order matters | Alias `map` if map is L→R |
+| Priority | Export                            | Why                                                           | Sketch                                                                      |
+| -------- | --------------------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| P0       | `any`                             | Spec name; only `some` bound → silent failure for SRFI code   | Alias `(define any some)` **or** door→`some` if boolean-only semantics stay |
+| P0       | `take-right` / `drop-right`       | Natural pair with `take`/`drop`; agents reach for them        | Length + drop / reverse-take; dotted-tail care per SRFI                     |
+| P0       | `split-at`                        | Natural product of take+drop                                  | `(list (take xs n) (drop xs n))` — same product style as span               |
+| P1       | `cons*`                           | Common rest constructor                                       | Nested cons; last arg is tail                                               |
+| P1       | `xcons`                           | One-liner HOF                                                 | `(lambda (d a) (cons a d))`                                                 |
+| P1       | `null-list?` / `not-pair?`        | Termination idioms in portable SRFI code                      | Thin wrappers                                                               |
+| P1       | `alist-cons` / `alist-delete`     | Alist grain without full lset                                 | Cons pair; filter by key                                                    |
+| P2       | `proper-list?` / `circular-list?` | Completes the proper/circular/dotted partition with `length+` | Reuse Floyd / existing circular helpers in lists                            |
+| P2       | `unzip1`                          | Inverse of single-list zip                                    | `(map car lists)`                                                           |
+| P2       | `map-in-order`                    | Spec synonym when order matters                               | Alias `map` if map is L→R                                                   |
 
 **Defer implement (door only unless demand spikes):** full `lset*`, `unzip2`–`5`, `pair-fold*`, SRFI-shaped `unfold` under a new name, `circular-list`.
 
@@ -231,20 +231,20 @@ Ordered by agent hit-rate × implementation cost (Scheme `symbol.define` unless 
 
 These are **not** silent absences — they are wrong-or-divergent behavior under the SRFI name. Fix or document-in-header **before** claiming subset honesty.
 
-| # | Symbol | SRFI expectation | Arrival today | Severity | Proposed fix |
-|---|--------|------------------|---------------|----------|--------------|
-| 1 | `find` | Miss → **`#f`** | Miss → **`nil`** (truthy ANil) | **Critical** | Return `#f` on empty/miss; aligns with `find-tail` and with `first?`'s own falsy-on-empty rationale |
-| 2 | `find` pred | Only `#f` is false | Treats **ANil as false** in pred result (`!is_false && !(value instanceof ANil)`) | Medium | Pred truthiness = Scheme (`is_false` only), unless deliberate nil-as-absent policy is documented pack-wide |
-| 3 | `any` vs `some` | Export name **`any`** | Only **`some`** | High | Bind `any` (alias) and keep `some` as arrival/Ramda alias; door alone is incomplete for ported code |
-| 4 | `some` / `every` | Return **last true pred value** (not only boolean) | Always `#t`/`#f` | Medium (documented) | Keep as **named subset deviation** in header; optional later true SRFI return |
-| 5 | `unfold` | `(p f g seed [tail-gen])` | `(fn init)` with `fn` → `(head . next)` or `#f` | **Critical (name collision)** | Either rename historical to e.g. `unfold-pair` / keep under non-SRFI name, door official `unfold`, **or** implement SRFI protocol under `unfold` and move historical |
-| 6 | `fold` / `reduce` | `fold` is the fundamental iterator; `reduce` uses ridentity only on empty | `fold` doored; `reduce` is tagless left-fold | OK if door stays + header honest | Keep door; document that n-ary `fold` is not shipped |
-| 7 | `fold-right` | N-ary parallel lists | Single-list only | Low | Document; door n-ary or extend later |
-| 8 | `delete` / `delete-duplicates` | Optional `=` | Always `equal?` / `member` | Low | Document; optional comparator later |
-| 9 | `take` / `drop` | `(take 5 0)` → `()` | Loud TypeError | Low (deliberate) | Keep; document as strict typing over SRFI tolerance |
-| 10 | `filter` / `take*` / `reduce` | List-only library | Tagless polymorphism (vectors) | Low (arrival extension) | Header: "sequence-generic where tagged" |
-| 11 | `span` / `break` / `partition` | Multi-values | `(list a b)` | Low (deliberate; multi-return doored) | Header must say list products, not values |
-| 12 | Header claim | — | "whole SRFI-1 surface lives here" | **Meta bug** | Retract; see §3 |
+| #   | Symbol                         | SRFI expectation                                                          | Arrival today                                                                     | Severity                              | Proposed fix                                                                                                                                                         |
+| --- | ------------------------------ | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `find`                         | Miss → **`#f`**                                                           | Miss → **`nil`** (truthy ANil)                                                    | **Critical**                          | Return `#f` on empty/miss; aligns with `find-tail` and with `first?`'s own falsy-on-empty rationale                                                                  |
+| 2   | `find` pred                    | Only `#f` is false                                                        | Treats **ANil as false** in pred result (`!is_false && !(value instanceof ANil)`) | Medium                                | Pred truthiness = Scheme (`is_false` only), unless deliberate nil-as-absent policy is documented pack-wide                                                           |
+| 3   | `any` vs `some`                | Export name **`any`**                                                     | Only **`some`**                                                                   | High                                  | Bind `any` (alias) and keep `some` as arrival/Ramda alias; door alone is incomplete for ported code                                                                  |
+| 4   | `some` / `every`               | Return **last true pred value** (not only boolean)                        | Always `#t`/`#f`                                                                  | Medium (documented)                   | Keep as **named subset deviation** in header; optional later true SRFI return                                                                                        |
+| 5   | `unfold`                       | `(p f g seed [tail-gen])`                                                 | `(fn init)` with `fn` → `(head . next)` or `#f`                                   | **Critical (name collision)**         | Either rename historical to e.g. `unfold-pair` / keep under non-SRFI name, door official `unfold`, **or** implement SRFI protocol under `unfold` and move historical |
+| 6   | `fold` / `reduce`              | `fold` is the fundamental iterator; `reduce` uses ridentity only on empty | `fold` doored; `reduce` is tagless left-fold                                      | OK if door stays + header honest      | Keep door; document that n-ary `fold` is not shipped                                                                                                                 |
+| 7   | `fold-right`                   | N-ary parallel lists                                                      | Single-list only                                                                  | Low                                   | Document; door n-ary or extend later                                                                                                                                 |
+| 8   | `delete` / `delete-duplicates` | Optional `=`                                                              | Always `equal?` / `member`                                                        | Low                                   | Document; optional comparator later                                                                                                                                  |
+| 9   | `take` / `drop`                | `(take 5 0)` → `()`                                                       | Loud TypeError                                                                    | Low (deliberate)                      | Keep; document as strict typing over SRFI tolerance                                                                                                                  |
+| 10  | `filter` / `take*` / `reduce`  | List-only library                                                         | Tagless polymorphism (vectors)                                                    | Low (arrival extension)               | Header: "sequence-generic where tagged"                                                                                                                              |
+| 11  | `span` / `break` / `partition` | Multi-values                                                              | `(list a b)`                                                                      | Low (deliberate; multi-return doored) | Header must say list products, not values                                                                                                                            |
+| 12  | Header claim                   | —                                                                         | "whole SRFI-1 surface lives here"                                                 | **Meta bug**                          | Retract; see §3                                                                                                                                                      |
 
 **Already correct / fixed vs older audit notes:**
 
@@ -338,16 +338,16 @@ Replace the current "whole surface" SCOPE blurb with something that cannot lie:
 
 ## 5. Quick inventory counts
 
-| Bucket | Approx count |
-|--------|----------------|
-| Live public in pack | ~45 names (`first`…`tenth` = 10) |
-| Doored in pack today | 1 (`fold`) |
-| Extras + private | 3 extras + 4 private |
-| Official exports (index, excl. 28 cxr compositions) | ~120 procedure names |
-| Silent missing (no live, no door in pack) | **~70+** |
-| Of which purity `!` / mutators | ~26 |
-| Of which pure subset doors | ~40+ |
-| Semantic bugs to fix before "honest subset" | find miss; unfold protocol; any name |
+| Bucket                                              | Approx count                         |
+| --------------------------------------------------- | ------------------------------------ |
+| Live public in pack                                 | ~45 names (`first`…`tenth` = 10)     |
+| Doored in pack today                                | 1 (`fold`)                           |
+| Extras + private                                    | 3 extras + 4 private                 |
+| Official exports (index, excl. 28 cxr compositions) | ~120 procedure names                 |
+| Silent missing (no live, no door in pack)           | **~70+**                             |
+| Of which purity `!` / mutators                      | ~26                                  |
+| Of which pure subset doors                          | ~40+                                 |
+| Semantic bugs to fix before "honest subset"         | find miss; unfold protocol; any name |
 
 ---
 

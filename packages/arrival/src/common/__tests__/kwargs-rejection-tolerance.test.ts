@@ -42,11 +42,7 @@ describe("decodeKwargsStrict — far-unknown-key tolerance (B5)", () => {
   });
 
   it(":response-size (a manifold envelope arg, not a tool param) gets the envelope-routing note, not the generic one", () => {
-    const decoded = decodeKwargsStrict(
-      "search",
-      { query: z.string },
-      { query: str("x"), "response-size": num(500) },
-    );
+    const decoded = decodeKwargsStrict("search", { query: z.string }, { query: str("x"), "response-size": num(500) });
     const notes = drainDroppedKwargNotes(decoded)!;
     expect(notes.some((n) => n.includes("response-size") && /envelope|REPL tool itself/.test(n))).toBe(true);
   });

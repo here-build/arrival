@@ -20,9 +20,7 @@ expectTypeOf(vector(1, 2, 3)).toEqualTypeOf<List<number>>();
 // vector? returns boolean
 expectTypeOf(vector$qmark$(vector(1, 2, 3))).toEqualTypeOf<boolean>();
 // vector-fold threads the accumulator type through kons
-expectTypeOf(
-  vector$dash$fold((acc: number, elt: number): number => acc + elt, 0, [1, 2, 3]),
-).toEqualTypeOf<number>();
+expectTypeOf(vector$dash$fold((acc: number, elt: number): number => acc + elt, 0, [1, 2, 3])).toEqualTypeOf<number>();
 // fold can change the accumulator type relative to elements
 expectTypeOf(
   vector$dash$fold$dash$right((acc: string, elt: number): string => acc + elt, "", [1, 2, 3]),

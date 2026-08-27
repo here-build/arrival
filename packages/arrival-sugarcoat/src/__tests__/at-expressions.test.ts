@@ -4,7 +4,10 @@ import { printScheme, schemeToSugarcoat, parseSexprs } from "../sugarcoat-render
 import { readSugarcoatExpr, readSugarcoat } from "../sugarcoat-read.js";
 
 const read = (sugarcoat: string): string => printScheme(readSugarcoatExpr(sugarcoat));
-const readAll = (sugarcoat: string): string => readSugarcoat(sugarcoat).map((f) => printScheme(f)).join("\n");
+const readAll = (sugarcoat: string): string =>
+  readSugarcoat(sugarcoat)
+    .map((f) => printScheme(f))
+    .join("\n");
 
 // @head{text} → (head <part>…); headless → str; @dedent{…} dissolves to (str <dedented>).
 describe("read: at-expressions → (head part…)", () => {
@@ -19,7 +22,7 @@ describe("read: at-expressions → (head part…)", () => {
     // quotes are literal — no \" escaping in source
     ['@{Say "@x" loud}', '(str "Say \\"" x "\\" loud")'],
     // @(datum) graft — a full parenthesized form
-    ["@{role: @(field lead \"role\")}", '(str "role: " (field lead "role"))'],
+    ['@{role: @(field lead "role")}', '(str "role: " (field lead "role"))'],
     // nested @head{…}
     ["@{outer @inner{deep} end}", '(str "outer " (inner "deep") " end")'],
     // bare interp stops at `.` so the period stays literal prose
@@ -121,7 +124,7 @@ describe("read∘render = id (the moat) for single-line at-expressions", () => {
     '(str "from " (:baseline s))',
   ])
     it(`round-trips ${s}`, () => expect(roundtrip(s)).toBe(canon(s)));
-  it('strict-round-trips (string-append …)', () => {
+  it("strict-round-trips (string-append …)", () => {
     const s = '(string-append "Pitch \\"" product "\\" now")';
     expect(roundtripStrict(s)).toBe(canon(s));
   });

@@ -5,7 +5,7 @@
  * table is FIXED — no runtime add/remove reader-macro verb exists.
  */
 import { ASymbol } from "../values/primitives/ASymbol.js";
-import { LITERAL, SYMBOL } from "../well-known/symbols.js";
+import { LITERAL } from "../well-known/symbols.js";
 
 export function names() {
   return Object.keys(__list__);

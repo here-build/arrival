@@ -18,7 +18,12 @@ import * as z from "../common/scheme-zod/index.js";
 import type { AEntity } from "../common/symbols/_bake.js";
 import { symbol } from "../symbol/index.js";
 import { type NativeSymbolDef } from "../values/primitives/ANativeProcedure.js";
-import { type DecodedArgs, type DecodedArgsWithRest, type DecodedReturn, type SpecInfer } from "../common/symbols/_bake.js";
+import {
+  type DecodedArgs,
+  type DecodedArgsWithRest,
+  type DecodedReturn,
+  type SpecInfer,
+} from "../common/symbols/_bake.js";
 import { type SlotAdopter, buildSlotAdopter } from "../membrane/adopt-spine.js";
 import type { APair } from "../values/primitives/APair.js";
 import type { AString } from "../values/primitives/AString.js";
@@ -158,7 +163,9 @@ describe("symbol contract — inputRest: a fixed head + a separately-typed varia
     // (Native SymbolDef erases the concrete Contract type on its return, so the real bound `apply`
     // export can't be re-inspected at the type level — this synthetic contract IS apply's declared
     // shape, proving the mechanism computes the right decoded-args type for it.)
-    expectTypeOf<DecodedArgsWithRest<[typeof z.schemeValue], typeof z.schemeValue>>().toEqualTypeOf<[SchemeValue, ...SchemeValue[]]>();
+    expectTypeOf<DecodedArgsWithRest<[typeof z.schemeValue], typeof z.schemeValue>>().toEqualTypeOf<
+      [SchemeValue, ...SchemeValue[]]
+    >();
   });
 
   test("wrong-typed rest param must NOT compile", () => {
@@ -226,9 +233,7 @@ describe("symbol contract — 2026-07-05 audit: filter's contract narrows to a f
   test("NEW shape: a bare 2-element array literal decodes to a FIXED [pred, seq] tuple", () => {
     // Mirrors filter's real migrated contract: { input: [z.lambda, z.schemeValue], ... }.
     const predSchema = z.lambda;
-    expectTypeOf<DecodedArgs<[typeof predSchema, typeof z.schemeValue]>>().toEqualTypeOf<
-      [ACallable, SchemeValue]
-    >();
+    expectTypeOf<DecodedArgs<[typeof predSchema, typeof z.schemeValue]>>().toEqualTypeOf<[ACallable, SchemeValue]>();
   });
 });
 

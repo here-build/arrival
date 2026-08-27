@@ -33,17 +33,13 @@ describe("syntax-rules — form-returning + tail-proper", () => {
   // a shallower depth wouldn't reliably re-catch the pre-fix host-stack-overflow regression this
   // test exists to guard against, so widening the clock (not shrinking the depth) is the fix
   // that preserves the invariant.
-  it(
-    "a macro in tail position recurses 50k deep WITHOUT host-stack overflow",
-    async () => {
-      const src = `
+  it("a macro in tail position recurses 50k deep WITHOUT host-stack overflow", async () => {
+    const src = `
       (define-syntax my-if (syntax-rules () ((my-if t a b) (if t a b))))
       (define (loop n) (my-if (= n 0) 'done (loop (- n 1))))
       (loop 50000)`;
-      expect(repr(await exec(src, { env: sandboxedEnv.child("tco1") }))).toBe("done");
-    },
-    60000,
-  );
+    expect(repr(await exec(src, { env: sandboxedEnv.child("tco1") }))).toBe("done");
+  }, 60000);
 
   it("template quoted symbol is restored (no #:gensym leak)", async () => {
     const src = `

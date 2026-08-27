@@ -12,9 +12,4 @@
 
 declare function some<T>(pred: (x: T) => boolean, xs: List<T>): boolean;
 declare function some<A, B>(pred: (a: A, b: B) => boolean, as: List<A>, bs: List<B>): boolean;
-declare function some<A, B, C>(
-  pred: (a: A, b: B, c: C) => boolean,
-  as: List<A>,
-  bs: List<B>,
-  cs: List<C>,
-): boolean;
+declare function some<A, B, C>(pred: (a: A, b: B, c: C) => boolean, as: List<A>, bs: List<B>, cs: List<C>): boolean;

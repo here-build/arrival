@@ -28,584 +28,580 @@ over forms defined in ch. 4–6, and appears only in "also-mentioned-at" columns
 
 ## Chapter map
 
-| § | Title | Symbols introduced here |
-|---|---|---|
-| 1 | Overview of Scheme | 0 |
-| 2 | Lexical conventions | 1 |
-| 3 | Basic concepts | 0 |
-| 4 | Expressions | 45 |
-| 5 | Program structure | 6 |
-| 6 | Standard procedures | 294 |
-| 7 | Formal syntax and semantics | 0 |
-| A | Standard Libraries (export lists) | — (16 libraries · 339 distinct exports) |
-| B | Standard Feature Identifiers | 26 feature ids |
+| §   | Title                             | Symbols introduced here                 |
+| --- | --------------------------------- | --------------------------------------- |
+| 1   | Overview of Scheme                | 0                                       |
+| 2   | Lexical conventions               | 1                                       |
+| 3   | Basic concepts                    | 0                                       |
+| 4   | Expressions                       | 45                                      |
+| 5   | Program structure                 | 6                                       |
+| 6   | Standard procedures               | 294                                     |
+| 7   | Formal syntax and semantics       | 0                                       |
+| A   | Standard Libraries (export lists) | — (16 libraries · 339 distinct exports) |
+| B   | Standard Feature Identifiers      | 26 feature ids                          |
 
 ## Symbols by section
 
 Each table = one section; rows = symbols **introduced** there. Columns: **symbol · kind · also-mentioned-at · exporting library(ies)**.
 
-
 ## 2. Lexical conventions
 
 ### 2.2 Whitespace and comments
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `;` | lexical syntax | — | — |
-
+| Symbol | Kind           | Also mentioned at | Library |
+| ------ | -------------- | ----------------- | ------- |
+| `;`    | lexical syntax | —                 | —       |
 
 ## 4. Expressions
 
 ### 4.1.2 Literal expressions
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `'` | lexical syntax | 6.4 | — |
-| `quote` | syntax | 6.4 | base, r5rs |
+| Symbol  | Kind           | Also mentioned at | Library    |
+| ------- | -------------- | ----------------- | ---------- |
+| `'`     | lexical syntax | 6.4               | —          |
+| `quote` | syntax         | 6.4               | base, r5rs |
 
 ### 4.1.4 Procedures
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `lambda` | syntax | 5.3.2, 7.2.3 | base, r5rs |
+| Symbol   | Kind   | Also mentioned at | Library    |
+| -------- | ------ | ----------------- | ---------- |
+| `lambda` | syntax | 5.3.2, 7.2.3      | base, r5rs |
 
 ### 4.1.5 Conditionals
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `if` | syntax | 7.2.3 | base, r5rs |
+| Symbol | Kind   | Also mentioned at | Library    |
+| ------ | ------ | ----------------- | ---------- |
+| `if`   | syntax | 7.2.3             | base, r5rs |
 
 ### 4.1.6 Assignments
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `set!` | syntax | 5.3.1, 7.2.3 | base, r5rs |
+| Symbol | Kind   | Also mentioned at | Library    |
+| ------ | ------ | ----------------- | ---------- |
+| `set!` | syntax | 5.3.1, 7.2.3      | base, r5rs |
 
 ### 4.1.7 Inclusion
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `include` | syntax | 5.6.1 | base |
-| `include-ci` | syntax | 5.6.1 | base |
+| Symbol       | Kind   | Also mentioned at | Library |
+| ------------ | ------ | ----------------- | ------- |
+| `include`    | syntax | 5.6.1             | base    |
+| `include-ci` | syntax | 5.6.1             | base    |
 
 ### 4.2.1 Conditionals
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `=>` | auxiliary syntax | — | base, r5rs |
-| `and` | syntax | 7.3 | base, r5rs |
-| `case` | syntax | 7.3 | base, r5rs |
-| `cond` | syntax | 4.3.2, 7.3 | base, r5rs |
-| `cond-expand` | syntax | 5.6.1 | base |
-| `else` | auxiliary syntax | — | base, r5rs |
-| `or` | syntax | 7.3 | base, r5rs |
-| `unless` | syntax | 7.3 | base |
-| `when` | syntax | 7.3 | base |
+| Symbol        | Kind             | Also mentioned at | Library    |
+| ------------- | ---------------- | ----------------- | ---------- |
+| `=>`          | auxiliary syntax | —                 | base, r5rs |
+| `and`         | syntax           | 7.3               | base, r5rs |
+| `case`        | syntax           | 7.3               | base, r5rs |
+| `cond`        | syntax           | 4.3.2, 7.3        | base, r5rs |
+| `cond-expand` | syntax           | 5.6.1             | base       |
+| `else`        | auxiliary syntax | —                 | base, r5rs |
+| `or`          | syntax           | 7.3               | base, r5rs |
+| `unless`      | syntax           | 7.3               | base       |
+| `when`        | syntax           | 7.3               | base       |
 
 ### 4.2.2 Binding constructs
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `let` | syntax | 4.2.4, 4.3.2, 5.3.2, 7.3 | base, r5rs |
-| `let-values` | syntax | 5.3.2, 7.3 | base |
-| `let*` | syntax | 5.3.2, 7.3 | base, r5rs |
-| `let*-values` | syntax | 5.3.2, 7.3 | base |
-| `letrec` | syntax | 5.3.2, 7.3 | base, r5rs |
-| `letrec*` | syntax | 5.3.2, 7.3 | base |
+| Symbol        | Kind   | Also mentioned at        | Library    |
+| ------------- | ------ | ------------------------ | ---------- |
+| `let`         | syntax | 4.2.4, 4.3.2, 5.3.2, 7.3 | base, r5rs |
+| `let-values`  | syntax | 5.3.2, 7.3               | base       |
+| `let*`        | syntax | 5.3.2, 7.3               | base, r5rs |
+| `let*-values` | syntax | 5.3.2, 7.3               | base       |
+| `letrec`      | syntax | 5.3.2, 7.3               | base, r5rs |
+| `letrec*`     | syntax | 5.3.2, 7.3               | base       |
 
 ### 4.2.3 Sequencing
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
+| Symbol  | Kind   | Also mentioned at      | Library    |
+| ------- | ------ | ---------------------- | ---------- |
 | `begin` | syntax | 5.1, 5.3.2, 5.6.1, 7.3 | base, r5rs |
 
 ### 4.2.4 Iteration
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `do` | syntax | 7.3 | base, r5rs |
+| Symbol | Kind   | Also mentioned at | Library    |
+| ------ | ------ | ----------------- | ---------- |
+| `do`   | syntax | 7.3               | base, r5rs |
 
 ### 4.2.5 Delayed evaluation
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `delay` | syntax | — | lazy, r5rs |
-| `delay-force` | syntax | — | lazy |
-| `force` | procedure | — | lazy, r5rs |
-| `make-promise` | procedure | — | lazy |
-| `promise?` | procedure | — | lazy |
+| Symbol         | Kind      | Also mentioned at | Library    |
+| -------------- | --------- | ----------------- | ---------- |
+| `delay`        | syntax    | —                 | lazy, r5rs |
+| `delay-force`  | syntax    | —                 | lazy       |
+| `force`        | procedure | —                 | lazy, r5rs |
+| `make-promise` | procedure | —                 | lazy       |
+| `promise?`     | procedure | —                 | lazy       |
 
 ### 4.2.6 Dynamic bindings
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `make-parameter` | procedure | — | base |
-| `parameterize` | syntax | 5.3.2 | base |
+| Symbol           | Kind      | Also mentioned at | Library |
+| ---------------- | --------- | ----------------- | ------- |
+| `make-parameter` | procedure | —                 | base    |
+| `parameterize`   | syntax    | 5.3.2             | base    |
 
 ### 4.2.7 Exception handling
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `guard` | syntax | 5.3.2 | base |
+| Symbol  | Kind   | Also mentioned at | Library |
+| ------- | ------ | ----------------- | ------- |
+| `guard` | syntax | 5.3.2             | base    |
 
 ### 4.2.8 Quasiquotation
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `,` | lexical syntax | 6.4 | — |
-| `,@` | lexical syntax | — | — |
-| `` ` `` | lexical syntax | — | — |
-| `quasiquote` | syntax | 6.4 | base, r5rs |
-| `unquote` _(curated)_ | auxiliary syntax | 6.4 | base |
-| `unquote-splicing` _(curated)_ | auxiliary syntax | 6.4 | base |
+| Symbol                         | Kind             | Also mentioned at | Library    |
+| ------------------------------ | ---------------- | ----------------- | ---------- |
+| `,`                            | lexical syntax   | 6.4               | —          |
+| `,@`                           | lexical syntax   | —                 | —          |
+| `` ` ``                        | lexical syntax   | —                 | —          |
+| `quasiquote`                   | syntax           | 6.4               | base, r5rs |
+| `unquote` _(curated)_          | auxiliary syntax | 6.4               | base       |
+| `unquote-splicing` _(curated)_ | auxiliary syntax | 6.4               | base       |
 
 ### 4.2.9 Case-lambda
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `case-lambda` | syntax | 5.3.2, 7.3 | case-lambda |
+| Symbol        | Kind   | Also mentioned at | Library     |
+| ------------- | ------ | ----------------- | ----------- |
+| `case-lambda` | syntax | 5.3.2, 7.3        | case-lambda |
 
 ### 4.3.1 Binding constructs for syntactic keywords
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `let-syntax` | syntax | 5.3.2 | base, r5rs |
-| `letrec-syntax` | syntax | 5.3.2 | base, r5rs |
+| Symbol          | Kind   | Also mentioned at | Library    |
+| --------------- | ------ | ----------------- | ---------- |
+| `let-syntax`    | syntax | 5.3.2             | base, r5rs |
+| `letrec-syntax` | syntax | 5.3.2             | base, r5rs |
 
 ### 4.3.2 Pattern language
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `_` | auxiliary syntax | — | base, r5rs |
-| `...` _(curated)_ | auxiliary syntax | — | base, r5rs |
-| `syntax-rules` _(curated)_ | syntax | 5.4 | base, r5rs |
+| Symbol                     | Kind             | Also mentioned at | Library    |
+| -------------------------- | ---------------- | ----------------- | ---------- |
+| `_`                        | auxiliary syntax | —                 | base, r5rs |
+| `...` _(curated)_          | auxiliary syntax | —                 | base, r5rs |
+| `syntax-rules` _(curated)_ | syntax           | 5.4               | base, r5rs |
 
 ### 4.3.3 Signaling errors in macro transformers
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `syntax-error` | syntax | — | base |
-
+| Symbol         | Kind   | Also mentioned at | Library |
+| -------------- | ------ | ----------------- | ------- |
+| `syntax-error` | syntax | —                 | base    |
 
 ## 5. Program structure
 
 ### 5.2 Import declarations
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `import` | syntax | 5.6.1 | — |
+| Symbol   | Kind   | Also mentioned at | Library |
+| -------- | ------ | ----------------- | ------- |
+| `import` | syntax | 5.6.1             | —       |
 
 ### 5.3 Variable definitions
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `define` | syntax | — | base, r5rs |
+| Symbol   | Kind   | Also mentioned at | Library    |
+| -------- | ------ | ----------------- | ---------- |
+| `define` | syntax | —                 | base, r5rs |
 
 ### 5.3.3 Multiple-value definitions
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `define-values` | syntax | 7.3 | base |
+| Symbol          | Kind   | Also mentioned at | Library |
+| --------------- | ------ | ----------------- | ------- |
+| `define-values` | syntax | 7.3               | base    |
 
 ### 5.4 Syntax definitions
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `define-syntax` | syntax | — | base, r5rs |
+| Symbol          | Kind   | Also mentioned at | Library    |
+| --------------- | ------ | ----------------- | ---------- |
+| `define-syntax` | syntax | —                 | base, r5rs |
 
 ### 5.5 Record-type definitions
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `define-record-type` | syntax | — | base |
+| Symbol               | Kind   | Also mentioned at | Library |
+| -------------------- | ------ | ----------------- | ------- |
+| `define-record-type` | syntax | —                 | base    |
 
 ### 5.6.1 Library Syntax
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `define-library` | syntax | — | — |
-
+| Symbol           | Kind   | Also mentioned at | Library |
+| ---------------- | ------ | ----------------- | ------- |
+| `define-library` | syntax | —                 | —       |
 
 ## 6. Standard procedures
 
 ### 6.1 Equivalence predicates
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `eq?` | procedure | 4.1.4 | base, r5rs |
-| `equal?` | procedure | — | base, r5rs |
-| `eqv?` | procedure | 3.4, 4.1.4, 7.2.4 | base, r5rs |
+| Symbol   | Kind      | Also mentioned at | Library    |
+| -------- | --------- | ----------------- | ---------- |
+| `eq?`    | procedure | 4.1.4             | base, r5rs |
+| `equal?` | procedure | —                 | base, r5rs |
+| `eqv?`   | procedure | 3.4, 4.1.4, 7.2.4 | base, r5rs |
 
 ### 6.2.6 Numerical operations
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `-` | procedure | — | base, r5rs |
-| `*` | procedure | — | base, r5rs |
-| `/` | procedure | — | base, r5rs |
-| `+` | procedure | 7.2.4 | base, r5rs |
-| `<` | procedure | 7.2.4 | base, r5rs |
-| `<=` | procedure | — | base, r5rs |
-| `=` | procedure | — | base, r5rs |
-| `>` | procedure | — | base, r5rs |
-| `>=` | procedure | — | base, r5rs |
-| `abs` | procedure | — | base, r5rs |
-| `acos` | procedure | — | inexact, r5rs |
-| `angle` | procedure | — | complex, r5rs |
-| `asin` | procedure | — | inexact, r5rs |
-| `atan` | procedure | — | inexact, r5rs |
-| `ceiling` | procedure | — | base, r5rs |
-| `complex?` | procedure | 6.2.1 | base, r5rs |
-| `cos` | procedure | — | inexact, r5rs |
-| `denominator` | procedure | — | base, r5rs |
-| `even?` | procedure | — | base, r5rs |
-| `exact` | procedure | 6.2.2 | base |
-| `exact->inexact` _(curated)_ | procedure | — | r5rs |
-| `exact-integer-sqrt` | procedure | — | base |
-| `exact-integer?` | procedure | — | base |
-| `exact?` | procedure | — | base, r5rs |
-| `exp` | procedure | — | inexact, r5rs |
-| `expt` | procedure | — | base, r5rs |
-| `finite?` | procedure | — | inexact |
-| `floor` | procedure | — | base, r5rs |
-| `floor-quotient` | procedure | — | base |
-| `floor-remainder` | procedure | — | base |
-| `floor/` | procedure | — | base |
-| `gcd` | procedure | — | base, r5rs |
-| `imag-part` | procedure | — | complex, r5rs |
-| `inexact` | procedure | — | base |
-| `inexact->exact` _(curated)_ | procedure | — | r5rs |
-| `inexact?` | procedure | — | base, r5rs |
-| `infinite?` | procedure | — | inexact |
-| `integer?` | procedure | 6.2.1 | base, r5rs |
-| `lcm` | procedure | — | base, r5rs |
-| `log` | procedure | — | inexact, r5rs |
-| `magnitude` | procedure | — | complex, r5rs |
-| `make-polar` | procedure | — | complex, r5rs |
-| `make-rectangular` | procedure | — | complex, r5rs |
-| `max` | procedure | — | base, r5rs |
-| `min` | procedure | — | base, r5rs |
-| `modulo` | procedure | — | base, r5rs |
-| `nan?` | procedure | — | inexact |
-| `negative?` | procedure | — | base, r5rs |
-| `number?` | procedure | 3.2, 6.2.1 | base, r5rs |
-| `numerator` | procedure | — | base, r5rs |
-| `odd?` | procedure | — | base, r5rs |
-| `positive?` | procedure | — | base, r5rs |
-| `quotient` | procedure | — | base, r5rs |
-| `rational?` | procedure | 6.2.1 | base, r5rs |
-| `rationalize` | procedure | — | base, r5rs |
-| `real-part` | procedure | — | complex, r5rs |
-| `real?` | procedure | 6.2.1 | base, r5rs |
-| `remainder` | procedure | — | base, r5rs |
-| `round` | procedure | — | base, r5rs |
-| `sin` | procedure | — | inexact, r5rs |
-| `sqrt` | procedure | — | inexact, r5rs |
-| `square` | procedure | — | base |
-| `tan` | procedure | — | inexact, r5rs |
-| `truncate` | procedure | — | base, r5rs |
-| `truncate-quotient` | procedure | — | base |
-| `truncate-remainder` | procedure | — | base |
-| `truncate/` | procedure | — | base |
-| `zero?` | procedure | — | base, r5rs |
+| Symbol                       | Kind      | Also mentioned at | Library       |
+| ---------------------------- | --------- | ----------------- | ------------- |
+| `-`                          | procedure | —                 | base, r5rs    |
+| `*`                          | procedure | —                 | base, r5rs    |
+| `/`                          | procedure | —                 | base, r5rs    |
+| `+`                          | procedure | 7.2.4             | base, r5rs    |
+| `<`                          | procedure | 7.2.4             | base, r5rs    |
+| `<=`                         | procedure | —                 | base, r5rs    |
+| `=`                          | procedure | —                 | base, r5rs    |
+| `>`                          | procedure | —                 | base, r5rs    |
+| `>=`                         | procedure | —                 | base, r5rs    |
+| `abs`                        | procedure | —                 | base, r5rs    |
+| `acos`                       | procedure | —                 | inexact, r5rs |
+| `angle`                      | procedure | —                 | complex, r5rs |
+| `asin`                       | procedure | —                 | inexact, r5rs |
+| `atan`                       | procedure | —                 | inexact, r5rs |
+| `ceiling`                    | procedure | —                 | base, r5rs    |
+| `complex?`                   | procedure | 6.2.1             | base, r5rs    |
+| `cos`                        | procedure | —                 | inexact, r5rs |
+| `denominator`                | procedure | —                 | base, r5rs    |
+| `even?`                      | procedure | —                 | base, r5rs    |
+| `exact`                      | procedure | 6.2.2             | base          |
+| `exact->inexact` _(curated)_ | procedure | —                 | r5rs          |
+| `exact-integer-sqrt`         | procedure | —                 | base          |
+| `exact-integer?`             | procedure | —                 | base          |
+| `exact?`                     | procedure | —                 | base, r5rs    |
+| `exp`                        | procedure | —                 | inexact, r5rs |
+| `expt`                       | procedure | —                 | base, r5rs    |
+| `finite?`                    | procedure | —                 | inexact       |
+| `floor`                      | procedure | —                 | base, r5rs    |
+| `floor-quotient`             | procedure | —                 | base          |
+| `floor-remainder`            | procedure | —                 | base          |
+| `floor/`                     | procedure | —                 | base          |
+| `gcd`                        | procedure | —                 | base, r5rs    |
+| `imag-part`                  | procedure | —                 | complex, r5rs |
+| `inexact`                    | procedure | —                 | base          |
+| `inexact->exact` _(curated)_ | procedure | —                 | r5rs          |
+| `inexact?`                   | procedure | —                 | base, r5rs    |
+| `infinite?`                  | procedure | —                 | inexact       |
+| `integer?`                   | procedure | 6.2.1             | base, r5rs    |
+| `lcm`                        | procedure | —                 | base, r5rs    |
+| `log`                        | procedure | —                 | inexact, r5rs |
+| `magnitude`                  | procedure | —                 | complex, r5rs |
+| `make-polar`                 | procedure | —                 | complex, r5rs |
+| `make-rectangular`           | procedure | —                 | complex, r5rs |
+| `max`                        | procedure | —                 | base, r5rs    |
+| `min`                        | procedure | —                 | base, r5rs    |
+| `modulo`                     | procedure | —                 | base, r5rs    |
+| `nan?`                       | procedure | —                 | inexact       |
+| `negative?`                  | procedure | —                 | base, r5rs    |
+| `number?`                    | procedure | 3.2, 6.2.1        | base, r5rs    |
+| `numerator`                  | procedure | —                 | base, r5rs    |
+| `odd?`                       | procedure | —                 | base, r5rs    |
+| `positive?`                  | procedure | —                 | base, r5rs    |
+| `quotient`                   | procedure | —                 | base, r5rs    |
+| `rational?`                  | procedure | 6.2.1             | base, r5rs    |
+| `rationalize`                | procedure | —                 | base, r5rs    |
+| `real-part`                  | procedure | —                 | complex, r5rs |
+| `real?`                      | procedure | 6.2.1             | base, r5rs    |
+| `remainder`                  | procedure | —                 | base, r5rs    |
+| `round`                      | procedure | —                 | base, r5rs    |
+| `sin`                        | procedure | —                 | inexact, r5rs |
+| `sqrt`                       | procedure | —                 | inexact, r5rs |
+| `square`                     | procedure | —                 | base          |
+| `tan`                        | procedure | —                 | inexact, r5rs |
+| `truncate`                   | procedure | —                 | base, r5rs    |
+| `truncate-quotient`          | procedure | —                 | base          |
+| `truncate-remainder`         | procedure | —                 | base          |
+| `truncate/`                  | procedure | —                 | base          |
+| `zero?`                      | procedure | —                 | base, r5rs    |
 
 ### 6.2.7 Numerical input and output
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `number->string` | procedure | — | base, r5rs |
-| `string->number` | procedure | — | base, r5rs |
+| Symbol           | Kind      | Also mentioned at | Library    |
+| ---------------- | --------- | ----------------- | ---------- |
+| `number->string` | procedure | —                 | base, r5rs |
+| `string->number` | procedure | —                 | base, r5rs |
 
 ### 6.3 Booleans
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `boolean?` | procedure | 3.2 | base, r5rs |
-| `boolean=?` | procedure | — | base |
-| `not` | procedure | — | base, r5rs |
+| Symbol      | Kind      | Also mentioned at | Library    |
+| ----------- | --------- | ----------------- | ---------- |
+| `boolean?`  | procedure | 3.2               | base, r5rs |
+| `boolean=?` | procedure | —                 | base       |
+| `not`       | procedure | —                 | base, r5rs |
 
 ### 6.4 Pairs and lists
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `append` | procedure | — | base, r5rs |
-| `assoc` | procedure | — | base, r5rs |
-| `assq` | procedure | — | base, r5rs |
-| `assv` | procedure | — | base, r5rs |
-| `caaaar` | procedure | — | cxr, r5rs |
-| `caaadr` | procedure | — | cxr, r5rs |
-| `caaar` | procedure | — | cxr, r5rs |
-| `caadar` | procedure | — | cxr, r5rs |
-| `caaddr` | procedure | — | cxr, r5rs |
-| `caadr` | procedure | — | cxr, r5rs |
-| `caar` | procedure | — | base, r5rs |
-| `cadaar` | procedure | — | cxr, r5rs |
-| `cadadr` | procedure | — | cxr, r5rs |
-| `cadar` | procedure | — | cxr, r5rs |
-| `caddar` | procedure | — | cxr, r5rs |
-| `cadddr` | procedure | — | cxr, r5rs |
-| `caddr` | procedure | — | cxr, r5rs |
-| `cadr` | procedure | — | base, r5rs |
-| `car` | procedure | 7.2.4 | base, r5rs |
-| `cdaaar` | procedure | — | cxr, r5rs |
-| `cdaadr` | procedure | — | cxr, r5rs |
-| `cdaar` | procedure | — | cxr, r5rs |
-| `cdadar` | procedure | — | cxr, r5rs |
-| `cdaddr` | procedure | — | cxr, r5rs |
-| `cdadr` | procedure | — | cxr, r5rs |
-| `cdar` | procedure | — | base, r5rs |
-| `cddaar` | procedure | — | cxr, r5rs |
-| `cddadr` | procedure | — | cxr, r5rs |
-| `cddar` | procedure | — | cxr, r5rs |
-| `cdddar` | procedure | — | cxr, r5rs |
-| `cddddr` | procedure | — | cxr, r5rs |
-| `cdddr` | procedure | — | cxr, r5rs |
-| `cddr` | procedure | — | base, r5rs |
-| `cdr` | procedure | — | base, r5rs |
-| `cons` | procedure | — | base, r5rs |
-| `length` | procedure | 6.2.3 | base, r5rs |
-| `list` | procedure | — | base, r5rs |
-| `list-copy` | procedure | — | base |
-| `list-ref` | procedure | — | base, r5rs |
-| `list-set!` | procedure | — | base |
-| `list-tail` | procedure | — | base, r5rs |
-| `list?` | procedure | — | base, r5rs |
-| `make-list` | procedure | — | base |
-| `member` | procedure | — | base, r5rs |
-| `memq` | procedure | — | base, r5rs |
-| `memv` | procedure | — | base, r5rs |
-| `null?` | procedure | — | base, r5rs |
-| `pair?` | procedure | 3.2 | base, r5rs |
-| `reverse` | procedure | — | base, r5rs |
-| `set-car!` | procedure | — | base, r5rs |
-| `set-cdr!` | procedure | — | base, r5rs |
+| Symbol      | Kind      | Also mentioned at | Library    |
+| ----------- | --------- | ----------------- | ---------- |
+| `append`    | procedure | —                 | base, r5rs |
+| `assoc`     | procedure | —                 | base, r5rs |
+| `assq`      | procedure | —                 | base, r5rs |
+| `assv`      | procedure | —                 | base, r5rs |
+| `caaaar`    | procedure | —                 | cxr, r5rs  |
+| `caaadr`    | procedure | —                 | cxr, r5rs  |
+| `caaar`     | procedure | —                 | cxr, r5rs  |
+| `caadar`    | procedure | —                 | cxr, r5rs  |
+| `caaddr`    | procedure | —                 | cxr, r5rs  |
+| `caadr`     | procedure | —                 | cxr, r5rs  |
+| `caar`      | procedure | —                 | base, r5rs |
+| `cadaar`    | procedure | —                 | cxr, r5rs  |
+| `cadadr`    | procedure | —                 | cxr, r5rs  |
+| `cadar`     | procedure | —                 | cxr, r5rs  |
+| `caddar`    | procedure | —                 | cxr, r5rs  |
+| `cadddr`    | procedure | —                 | cxr, r5rs  |
+| `caddr`     | procedure | —                 | cxr, r5rs  |
+| `cadr`      | procedure | —                 | base, r5rs |
+| `car`       | procedure | 7.2.4             | base, r5rs |
+| `cdaaar`    | procedure | —                 | cxr, r5rs  |
+| `cdaadr`    | procedure | —                 | cxr, r5rs  |
+| `cdaar`     | procedure | —                 | cxr, r5rs  |
+| `cdadar`    | procedure | —                 | cxr, r5rs  |
+| `cdaddr`    | procedure | —                 | cxr, r5rs  |
+| `cdadr`     | procedure | —                 | cxr, r5rs  |
+| `cdar`      | procedure | —                 | base, r5rs |
+| `cddaar`    | procedure | —                 | cxr, r5rs  |
+| `cddadr`    | procedure | —                 | cxr, r5rs  |
+| `cddar`     | procedure | —                 | cxr, r5rs  |
+| `cdddar`    | procedure | —                 | cxr, r5rs  |
+| `cddddr`    | procedure | —                 | cxr, r5rs  |
+| `cdddr`     | procedure | —                 | cxr, r5rs  |
+| `cddr`      | procedure | —                 | base, r5rs |
+| `cdr`       | procedure | —                 | base, r5rs |
+| `cons`      | procedure | —                 | base, r5rs |
+| `length`    | procedure | 6.2.3             | base, r5rs |
+| `list`      | procedure | —                 | base, r5rs |
+| `list-copy` | procedure | —                 | base       |
+| `list-ref`  | procedure | —                 | base, r5rs |
+| `list-set!` | procedure | —                 | base       |
+| `list-tail` | procedure | —                 | base, r5rs |
+| `list?`     | procedure | —                 | base, r5rs |
+| `make-list` | procedure | —                 | base       |
+| `member`    | procedure | —                 | base, r5rs |
+| `memq`      | procedure | —                 | base, r5rs |
+| `memv`      | procedure | —                 | base, r5rs |
+| `null?`     | procedure | —                 | base, r5rs |
+| `pair?`     | procedure | 3.2               | base, r5rs |
+| `reverse`   | procedure | —                 | base, r5rs |
+| `set-car!`  | procedure | —                 | base, r5rs |
+| `set-cdr!`  | procedure | —                 | base, r5rs |
 
 ### 6.5 Symbols
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `string->symbol` | procedure | — | base, r5rs |
-| `symbol->string` | procedure | 3.4 | base, r5rs |
-| `symbol?` | procedure | 3.2 | base, r5rs |
-| `symbol=?` | procedure | — | base |
+| Symbol           | Kind      | Also mentioned at | Library    |
+| ---------------- | --------- | ----------------- | ---------- |
+| `string->symbol` | procedure | —                 | base, r5rs |
+| `symbol->string` | procedure | 3.4               | base, r5rs |
+| `symbol?`        | procedure | 3.2               | base, r5rs |
+| `symbol=?`       | procedure | —                 | base       |
 
 ### 6.6 Characters
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `char->integer` | procedure | — | base, r5rs |
-| `char-alphabetic?` | procedure | — | char, r5rs |
-| `char-ci<?` | procedure | — | char, r5rs |
-| `char-ci<=?` | procedure | — | char, r5rs |
-| `char-ci=?` | procedure | — | char, r5rs |
-| `char-ci>?` | procedure | — | char, r5rs |
-| `char-ci>=?` | procedure | — | char, r5rs |
-| `char-downcase` | procedure | — | char, r5rs |
-| `char-foldcase` | procedure | — | char |
-| `char-lower-case?` | procedure | — | char, r5rs |
-| `char-numeric?` | procedure | — | char, r5rs |
-| `char-upcase` | procedure | — | char, r5rs |
-| `char-upper-case?` | procedure | — | char, r5rs |
-| `char-whitespace?` | procedure | — | char, r5rs |
-| `char?` | procedure | 3.2 | base, r5rs |
-| `char<?` | procedure | — | base, r5rs |
-| `char<=?` | procedure | — | base, r5rs |
-| `char=?` | procedure | — | base, r5rs |
-| `char>?` | procedure | — | base, r5rs |
-| `char>=?` | procedure | — | base, r5rs |
-| `digit-value` | procedure | — | char |
-| `integer->char` | procedure | — | base, r5rs |
+| Symbol             | Kind      | Also mentioned at | Library    |
+| ------------------ | --------- | ----------------- | ---------- |
+| `char->integer`    | procedure | —                 | base, r5rs |
+| `char-alphabetic?` | procedure | —                 | char, r5rs |
+| `char-ci<?`        | procedure | —                 | char, r5rs |
+| `char-ci<=?`       | procedure | —                 | char, r5rs |
+| `char-ci=?`        | procedure | —                 | char, r5rs |
+| `char-ci>?`        | procedure | —                 | char, r5rs |
+| `char-ci>=?`       | procedure | —                 | char, r5rs |
+| `char-downcase`    | procedure | —                 | char, r5rs |
+| `char-foldcase`    | procedure | —                 | char       |
+| `char-lower-case?` | procedure | —                 | char, r5rs |
+| `char-numeric?`    | procedure | —                 | char, r5rs |
+| `char-upcase`      | procedure | —                 | char, r5rs |
+| `char-upper-case?` | procedure | —                 | char, r5rs |
+| `char-whitespace?` | procedure | —                 | char, r5rs |
+| `char?`            | procedure | 3.2               | base, r5rs |
+| `char<?`           | procedure | —                 | base, r5rs |
+| `char<=?`          | procedure | —                 | base, r5rs |
+| `char=?`           | procedure | —                 | base, r5rs |
+| `char>?`           | procedure | —                 | base, r5rs |
+| `char>=?`          | procedure | —                 | base, r5rs |
+| `digit-value`      | procedure | —                 | char       |
+| `integer->char`    | procedure | —                 | base, r5rs |
 
 ### 6.7 Strings
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `list->string` | procedure | — | base, r5rs |
-| `make-string` | procedure | — | base, r5rs |
-| `string` | procedure | — | base, r5rs |
-| `string->list` | procedure | — | base, r5rs |
-| `string-append` | procedure | — | base, r5rs |
-| `string-ci<?` | procedure | — | char, r5rs |
-| `string-ci<=?` | procedure | — | char, r5rs |
-| `string-ci=?` | procedure | — | char, r5rs |
-| `string-ci>?` | procedure | — | char, r5rs |
-| `string-ci>=?` | procedure | — | char, r5rs |
-| `string-copy` | procedure | — | base, r5rs |
-| `string-copy!` | procedure | — | base |
-| `string-downcase` | procedure | — | char |
-| `string-fill!` | procedure | — | base, r5rs |
-| `string-foldcase` | procedure | — | char |
-| `string-length` | procedure | 6.2.3 | base, r5rs |
-| `string-ref` | procedure | — | base, r5rs |
-| `string-set!` | procedure | 6.5 | base, r5rs |
-| `string-upcase` | procedure | — | char |
-| `string?` | procedure | 3.2 | base, r5rs |
-| `string<?` | procedure | — | base, r5rs |
-| `string<=?` | procedure | — | base, r5rs |
-| `string=?` | procedure | — | base, r5rs |
-| `string>?` | procedure | — | base, r5rs |
-| `string>=?` | procedure | — | base, r5rs |
-| `substring` | procedure | — | base, r5rs |
+| Symbol            | Kind      | Also mentioned at | Library    |
+| ----------------- | --------- | ----------------- | ---------- |
+| `list->string`    | procedure | —                 | base, r5rs |
+| `make-string`     | procedure | —                 | base, r5rs |
+| `string`          | procedure | —                 | base, r5rs |
+| `string->list`    | procedure | —                 | base, r5rs |
+| `string-append`   | procedure | —                 | base, r5rs |
+| `string-ci<?`     | procedure | —                 | char, r5rs |
+| `string-ci<=?`    | procedure | —                 | char, r5rs |
+| `string-ci=?`     | procedure | —                 | char, r5rs |
+| `string-ci>?`     | procedure | —                 | char, r5rs |
+| `string-ci>=?`    | procedure | —                 | char, r5rs |
+| `string-copy`     | procedure | —                 | base, r5rs |
+| `string-copy!`    | procedure | —                 | base       |
+| `string-downcase` | procedure | —                 | char       |
+| `string-fill!`    | procedure | —                 | base, r5rs |
+| `string-foldcase` | procedure | —                 | char       |
+| `string-length`   | procedure | 6.2.3             | base, r5rs |
+| `string-ref`      | procedure | —                 | base, r5rs |
+| `string-set!`     | procedure | 6.5               | base, r5rs |
+| `string-upcase`   | procedure | —                 | char       |
+| `string?`         | procedure | 3.2               | base, r5rs |
+| `string<?`        | procedure | —                 | base, r5rs |
+| `string<=?`       | procedure | —                 | base, r5rs |
+| `string=?`        | procedure | —                 | base, r5rs |
+| `string>?`        | procedure | —                 | base, r5rs |
+| `string>=?`       | procedure | —                 | base, r5rs |
+| `substring`       | procedure | —                 | base, r5rs |
 
 ### 6.8 Vectors
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `list->vector` | procedure | — | base, r5rs |
-| `make-vector` | procedure | — | base, r5rs |
-| `string->vector` | procedure | — | base |
-| `vector` | procedure | — | base, r5rs |
-| `vector->list` | procedure | — | base, r5rs |
-| `vector->string` | procedure | — | base |
-| `vector-append` | procedure | — | base |
-| `vector-copy` | procedure | — | base |
-| `vector-copy!` | procedure | — | base |
-| `vector-fill!` | procedure | — | base, r5rs |
-| `vector-length` | procedure | 6.2.3 | base, r5rs |
-| `vector-ref` | procedure | — | base, r5rs |
-| `vector-set!` | procedure | — | base, r5rs |
-| `vector?` | procedure | 3.2 | base, r5rs |
+| Symbol           | Kind      | Also mentioned at | Library    |
+| ---------------- | --------- | ----------------- | ---------- |
+| `list->vector`   | procedure | —                 | base, r5rs |
+| `make-vector`    | procedure | —                 | base, r5rs |
+| `string->vector` | procedure | —                 | base       |
+| `vector`         | procedure | —                 | base, r5rs |
+| `vector->list`   | procedure | —                 | base, r5rs |
+| `vector->string` | procedure | —                 | base       |
+| `vector-append`  | procedure | —                 | base       |
+| `vector-copy`    | procedure | —                 | base       |
+| `vector-copy!`   | procedure | —                 | base       |
+| `vector-fill!`   | procedure | —                 | base, r5rs |
+| `vector-length`  | procedure | 6.2.3             | base, r5rs |
+| `vector-ref`     | procedure | —                 | base, r5rs |
+| `vector-set!`    | procedure | —                 | base, r5rs |
+| `vector?`        | procedure | 3.2               | base, r5rs |
 
 ### 6.9 Bytevectors
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `bytevector` | procedure | — | base |
-| `bytevector-append` | procedure | — | base |
-| `bytevector-copy` | procedure | — | base |
-| `bytevector-copy!` | procedure | — | base |
-| `bytevector-length` | procedure | 6.2.3 | base |
-| `bytevector-u8-ref` | procedure | — | base |
-| `bytevector-u8-set!` | procedure | — | base |
-| `bytevector?` | procedure | 3.2 | base |
-| `make-bytevector` | procedure | — | base |
-| `string->utf8` | procedure | — | base |
-| `utf8->string` | procedure | — | base |
+| Symbol               | Kind      | Also mentioned at | Library |
+| -------------------- | --------- | ----------------- | ------- |
+| `bytevector`         | procedure | —                 | base    |
+| `bytevector-append`  | procedure | —                 | base    |
+| `bytevector-copy`    | procedure | —                 | base    |
+| `bytevector-copy!`   | procedure | —                 | base    |
+| `bytevector-length`  | procedure | 6.2.3             | base    |
+| `bytevector-u8-ref`  | procedure | —                 | base    |
+| `bytevector-u8-set!` | procedure | —                 | base    |
+| `bytevector?`        | procedure | 3.2               | base    |
+| `make-bytevector`    | procedure | —                 | base    |
+| `string->utf8`       | procedure | —                 | base    |
+| `utf8->string`       | procedure | —                 | base    |
 
 ### 6.10 Control features
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `apply` | procedure | 3.5, 7.2.4 | base, r5rs |
-| `call-with-current-continuation` | procedure | 3.5, 7.2.4 | base, r5rs |
-| `call-with-values` | procedure | 3.5, 7.2.4 | base, r5rs |
-| `call/cc` | procedure | — | base |
-| `dynamic-wind` | procedure | — | base, r5rs |
-| `for-each` | procedure | — | base, r5rs |
-| `map` | procedure | — | base, r5rs |
-| `procedure?` | procedure | 3.2 | base, r5rs |
-| `string-for-each` | procedure | — | base |
-| `string-map` | procedure | — | base |
-| `values` | procedure | 4.1.3 | base, r5rs |
-| `vector-for-each` | procedure | — | base |
-| `vector-map` | procedure | — | base |
+| Symbol                           | Kind      | Also mentioned at | Library    |
+| -------------------------------- | --------- | ----------------- | ---------- |
+| `apply`                          | procedure | 3.5, 7.2.4        | base, r5rs |
+| `call-with-current-continuation` | procedure | 3.5, 7.2.4        | base, r5rs |
+| `call-with-values`               | procedure | 3.5, 7.2.4        | base, r5rs |
+| `call/cc`                        | procedure | —                 | base       |
+| `dynamic-wind`                   | procedure | —                 | base, r5rs |
+| `for-each`                       | procedure | —                 | base, r5rs |
+| `map`                            | procedure | —                 | base, r5rs |
+| `procedure?`                     | procedure | 3.2               | base, r5rs |
+| `string-for-each`                | procedure | —                 | base       |
+| `string-map`                     | procedure | —                 | base       |
+| `values`                         | procedure | 4.1.3             | base, r5rs |
+| `vector-for-each`                | procedure | —                 | base       |
+| `vector-map`                     | procedure | —                 | base       |
 
 ### 6.11 Exceptions
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `error` | procedure | — | base |
-| `error-object-irritants` | procedure | — | base |
-| `error-object-message` | procedure | — | base |
-| `error-object?` | procedure | — | base |
-| `file-error?` | procedure | — | base |
-| `raise` | procedure | 4.2.7 | base |
-| `raise-continuable` | procedure | — | base |
-| `read-error?` | procedure | — | base |
-| `with-exception-handler` | procedure | — | base |
+| Symbol                   | Kind      | Also mentioned at | Library |
+| ------------------------ | --------- | ----------------- | ------- |
+| `error`                  | procedure | —                 | base    |
+| `error-object-irritants` | procedure | —                 | base    |
+| `error-object-message`   | procedure | —                 | base    |
+| `error-object?`          | procedure | —                 | base    |
+| `file-error?`            | procedure | —                 | base    |
+| `raise`                  | procedure | 4.2.7             | base    |
+| `raise-continuable`      | procedure | —                 | base    |
+| `read-error?`            | procedure | —                 | base    |
+| `with-exception-handler` | procedure | —                 | base    |
 
 ### 6.12 Environments and evaluation
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `environment` | procedure | — | eval |
-| `eval` | procedure | 3.5 | eval, r5rs |
-| `interaction-environment` | procedure | — | repl, r5rs |
-| `null-environment` | procedure | — | r5rs |
-| `scheme-report-environment` | procedure | — | r5rs |
+| Symbol                      | Kind      | Also mentioned at | Library    |
+| --------------------------- | --------- | ----------------- | ---------- |
+| `environment`               | procedure | —                 | eval       |
+| `eval`                      | procedure | 3.5               | eval, r5rs |
+| `interaction-environment`   | procedure | —                 | repl, r5rs |
+| `null-environment`          | procedure | —                 | r5rs       |
+| `scheme-report-environment` | procedure | —                 | r5rs       |
 
 ### 6.13.1 Ports
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `binary-port?` | procedure | — | base |
-| `call-with-input-file` | procedure | — | file, r5rs |
-| `call-with-output-file` | procedure | — | file, r5rs |
-| `call-with-port` | procedure | — | base |
-| `close-input-port` | procedure | — | base, r5rs |
-| `close-output-port` | procedure | — | base, r5rs |
-| `close-port` | procedure | — | base |
-| `current-error-port` | procedure | — | base |
-| `current-input-port` | procedure | — | base, r5rs |
-| `current-output-port` | procedure | — | base, r5rs |
-| `get-output-bytevector` | procedure | — | base |
-| `get-output-string` | procedure | — | base |
-| `input-port-open?` | procedure | — | base |
-| `input-port?` | procedure | — | base, r5rs |
-| `open-binary-input-file` | procedure | — | file |
-| `open-binary-output-file` | procedure | — | file |
-| `open-input-bytevector` | procedure | — | base |
-| `open-input-file` | procedure | — | file, r5rs |
-| `open-input-string` | procedure | — | base |
-| `open-output-bytevector` | procedure | — | base |
-| `open-output-file` | procedure | — | file, r5rs |
-| `open-output-string` | procedure | — | base |
-| `output-port-open?` | procedure | — | base |
-| `output-port?` | procedure | — | base, r5rs |
-| `port?` | procedure | 3.2 | base |
-| `textual-port?` | procedure | — | base |
-| `with-input-from-file` | procedure | — | file, r5rs |
-| `with-output-to-file` | procedure | — | file, r5rs |
+| Symbol                    | Kind      | Also mentioned at | Library    |
+| ------------------------- | --------- | ----------------- | ---------- |
+| `binary-port?`            | procedure | —                 | base       |
+| `call-with-input-file`    | procedure | —                 | file, r5rs |
+| `call-with-output-file`   | procedure | —                 | file, r5rs |
+| `call-with-port`          | procedure | —                 | base       |
+| `close-input-port`        | procedure | —                 | base, r5rs |
+| `close-output-port`       | procedure | —                 | base, r5rs |
+| `close-port`              | procedure | —                 | base       |
+| `current-error-port`      | procedure | —                 | base       |
+| `current-input-port`      | procedure | —                 | base, r5rs |
+| `current-output-port`     | procedure | —                 | base, r5rs |
+| `get-output-bytevector`   | procedure | —                 | base       |
+| `get-output-string`       | procedure | —                 | base       |
+| `input-port-open?`        | procedure | —                 | base       |
+| `input-port?`             | procedure | —                 | base, r5rs |
+| `open-binary-input-file`  | procedure | —                 | file       |
+| `open-binary-output-file` | procedure | —                 | file       |
+| `open-input-bytevector`   | procedure | —                 | base       |
+| `open-input-file`         | procedure | —                 | file, r5rs |
+| `open-input-string`       | procedure | —                 | base       |
+| `open-output-bytevector`  | procedure | —                 | base       |
+| `open-output-file`        | procedure | —                 | file, r5rs |
+| `open-output-string`      | procedure | —                 | base       |
+| `output-port-open?`       | procedure | —                 | base       |
+| `output-port?`            | procedure | —                 | base, r5rs |
+| `port?`                   | procedure | 3.2               | base       |
+| `textual-port?`           | procedure | —                 | base       |
+| `with-input-from-file`    | procedure | —                 | file, r5rs |
+| `with-output-to-file`     | procedure | —                 | file, r5rs |
 
 ### 6.13.2 Input
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `char-ready?` | procedure | — | base, r5rs |
-| `eof-object` | procedure | — | base |
-| `eof-object?` | procedure | 3.2 | base, r5rs |
-| `peek-char` | procedure | — | base, r5rs |
-| `peek-u8` | procedure | — | base |
-| `read` | procedure | 6.4, 7.1.2 | read, r5rs |
-| `read-bytevector` | procedure | — | base |
-| `read-bytevector!` | procedure | — | base |
-| `read-char` | procedure | — | base, r5rs |
-| `read-line` | procedure | — | base |
-| `read-string` | procedure | — | base |
-| `read-u8` | procedure | — | base |
-| `u8-ready?` | procedure | — | base |
+| Symbol             | Kind      | Also mentioned at | Library    |
+| ------------------ | --------- | ----------------- | ---------- |
+| `char-ready?`      | procedure | —                 | base, r5rs |
+| `eof-object`       | procedure | —                 | base       |
+| `eof-object?`      | procedure | 3.2               | base, r5rs |
+| `peek-char`        | procedure | —                 | base, r5rs |
+| `peek-u8`          | procedure | —                 | base       |
+| `read`             | procedure | 6.4, 7.1.2        | read, r5rs |
+| `read-bytevector`  | procedure | —                 | base       |
+| `read-bytevector!` | procedure | —                 | base       |
+| `read-char`        | procedure | —                 | base, r5rs |
+| `read-line`        | procedure | —                 | base       |
+| `read-string`      | procedure | —                 | base       |
+| `read-u8`          | procedure | —                 | base       |
+| `u8-ready?`        | procedure | —                 | base       |
 
 ### 6.13.3 Output
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `display` | procedure | — | write, r5rs |
-| `flush-output-port` | procedure | — | base |
-| `newline` | procedure | — | base, r5rs |
-| `write` | procedure | 4.2.8 | write, r5rs |
-| `write-bytevector` | procedure | — | base |
-| `write-char` | procedure | — | base, r5rs |
-| `write-shared` | procedure | — | write |
-| `write-simple` | procedure | — | write |
-| `write-string` | procedure | — | base |
-| `write-u8` | procedure | — | base |
+| Symbol              | Kind      | Also mentioned at | Library     |
+| ------------------- | --------- | ----------------- | ----------- |
+| `display`           | procedure | —                 | write, r5rs |
+| `flush-output-port` | procedure | —                 | base        |
+| `newline`           | procedure | —                 | base, r5rs  |
+| `write`             | procedure | 4.2.8             | write, r5rs |
+| `write-bytevector`  | procedure | —                 | base        |
+| `write-char`        | procedure | —                 | base, r5rs  |
+| `write-shared`      | procedure | —                 | write       |
+| `write-simple`      | procedure | —                 | write       |
+| `write-string`      | procedure | —                 | base        |
+| `write-u8`          | procedure | —                 | base        |
 
 ### 6.14 System interface
 
-| Symbol | Kind | Also mentioned at | Library |
-|---|---|---|---|
-| `command-line` | procedure | — | process-context |
-| `current-jiffy` | procedure | — | time |
-| `current-second` | procedure | — | time |
-| `delete-file` | procedure | — | file |
-| `emergency-exit` | procedure | — | process-context |
-| `exit` | procedure | — | process-context |
-| `features` | procedure | — | base |
-| `file-exists?` | procedure | — | file |
-| `get-environment-variable` | procedure | — | process-context |
-| `get-environment-variables` | procedure | — | process-context |
-| `jiffies-per-second` | procedure | — | time |
-| `load` | procedure | — | load, r5rs |
+| Symbol                      | Kind      | Also mentioned at | Library         |
+| --------------------------- | --------- | ----------------- | --------------- |
+| `command-line`              | procedure | —                 | process-context |
+| `current-jiffy`             | procedure | —                 | time            |
+| `current-second`            | procedure | —                 | time            |
+| `delete-file`               | procedure | —                 | file            |
+| `emergency-exit`            | procedure | —                 | process-context |
+| `exit`                      | procedure | —                 | process-context |
+| `features`                  | procedure | —                 | base            |
+| `file-exists?`              | procedure | —                 | file            |
+| `get-environment-variable`  | procedure | —                 | process-context |
+| `get-environment-variables` | procedure | —                 | process-context |
+| `jiffies-per-second`        | procedure | —                 | time            |
+| `load`                      | procedure | —                 | load, r5rs      |
 
 ## Chapter 7 — primitive vs derived (no new symbols)
 

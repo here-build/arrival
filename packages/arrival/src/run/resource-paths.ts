@@ -47,7 +47,7 @@ export type ResourcePathEvent =
  * Return type pins string segments at the type level; authors name decoded slots
  * with concrete param types. Sole home.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- authoring ergonomics; runtime is post-decode
+
 export type ResourcePathFn = (...decodedArgs: any[]) => readonly ResourcePath[];
 
 /**
@@ -317,9 +317,9 @@ function producePaths(
   let raw: unknown;
   try {
     raw = fn(...decodedArgs);
-  } catch (cause) {
-    const detail = cause instanceof Error ? `threw: ${cause.message}` : `threw: ${String(cause)}`;
-    throw new ResourcePathProducerError(verbName, axis, detail, cause);
+  } catch (error) {
+    const detail = error instanceof Error ? `threw: ${error.message}` : `threw: ${String(error)}`;
+    throw new ResourcePathProducerError(verbName, axis, detail, error);
   }
   if (!Array.isArray(raw)) {
     throw new ResourcePathProducerError(
@@ -329,7 +329,7 @@ function producePaths(
     );
   }
   const out: ResourcePath[] = [];
-  // eslint-disable-next-line unicorn/no-for-loop -- index rides the error message (`path at index ${pi}`)
+
   for (let pi = 0; pi < raw.length; pi++) {
     const path = raw[pi];
     if (!Array.isArray(path)) {
@@ -341,7 +341,6 @@ function producePaths(
       );
     }
     if (strictCQSstrings) {
-      // eslint-disable-next-line unicorn/no-for-loop -- index rides the error message (`path[${pi}][${si}]`)
       for (let si = 0; si < path.length; si++) {
         if (typeof path[si] !== "string") {
           throw new ResourcePathProducerError(

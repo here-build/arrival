@@ -12,10 +12,7 @@ import { tf } from "../../tagless-final.js";
 
 // Small domain + edge cases: "" (empty), astral unicode, ASCII collisions.
 const arb = fc
-  .oneof(
-    fc.constantFrom("", "a", "b", "ab", "🦄", "🦄a", "naïve", "Z"),
-    fc.string({ maxLength: 4 }),
-  )
+  .oneof(fc.constantFrom("", "a", "b", "ab", "🦄", "🦄a", "naïve", "Z"), fc.string({ maxLength: 4 }))
   .map((s) => new AString(s));
 
 const equalClone = (s: AString) => new AString(s.valueOf());

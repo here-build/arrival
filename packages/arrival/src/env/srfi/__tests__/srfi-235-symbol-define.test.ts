@@ -128,7 +128,9 @@ describe("scheme/srfi-235 — the §2.1 bake FV law passes for this pack AS MIGR
           symbol.define`bad-complement: reproduces the pre-migration srfi-235 bug (no declared dep on compose/not)`(
             { input: [z.lambda], output: [z.lambda] },
             `(lambda (fn) (compose not fn))`,
-          ) }) });
+          ),
+      }),
+    });
     await expect(buildVocabulary([undeclaredCap], undefined, evalScheme)).rejects.toThrow(DefineLocalityError);
   });
 });

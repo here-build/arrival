@@ -73,9 +73,7 @@ describe("scheme-zod collection functions (Zod style)", () => {
     expect(decoded).toEqual(["a", "b"]);
     expect(Array.isArray(decoded)).toBe(true);
 
-    const back = charList.parse(
-      APair.fromArray(CONSTANT_CTX, [makeChar("x"), makeChar("y")], false),
-    );
+    const back = charList.parse(APair.fromArray(CONSTANT_CTX, [makeChar("x"), makeChar("y")], false));
     expect(back).toEqual(["x", "y"]);
   });
 
@@ -336,7 +334,7 @@ describe("scheme-zod z.dictRecord(key, value) — open homogeneous typed record"
 });
 
 describe("scheme-zod z.foldName — keyword/string name identity", () => {
-  it("folds :foo / foo / \"foo\" to the plain string \"foo\"", () => {
+  it('folds :foo / foo / "foo" to the plain string "foo"', () => {
     expect(z.foldName.parse(new ASymbol(":foo"))).toBe("foo");
     expect(z.foldName.parse(new ASymbol("foo"))).toBe("foo");
     expect(z.foldName.parse(makeString("foo"))).toBe("foo");
@@ -375,7 +373,8 @@ describe("scheme-zod z.procedure — contract-aware marshaling", () => {
       name: "double",
       arity: { min: 1, max: 1 },
       contract: undefined,
-      impl: (args) => new AExact((args[0] as AExact).num * 2) });
+      impl: (args) => new AExact((args[0] as AExact).num * 2),
+    });
     const decoded = z.procedure(z.integer, z.integer).parse(doubleProc);
     await expect(decoded(21)).resolves.toBe(42);
   });
@@ -395,7 +394,8 @@ describe("scheme-zod z.procedure — contract-aware marshaling", () => {
       name: "identity",
       arity: { min: 1, max: 1 },
       contract: undefined,
-      impl: (args) => args[0] });
+      impl: (args) => args[0],
+    });
     const decoded = z.procedure().parse(identityNative);
     const rawArg = makeExact(5);
     // no `input` codec supplied → jsArgs pass straight through as scheme args, untransformed
@@ -420,32 +420,32 @@ describe("scheme-zod z.procedure — contract-aware marshaling", () => {
 // see this file's git history for the retired trio-form pins (the "deprecated z.value alias
 // still functions" tripwire test and the third `trio` row) this describe block used to carry.
 describe("scheme-zod z.schemeValue / z.dynamic — exhaustive predicate, passthrough on both faces", () => {
-  const duo = [
-    ["schemeValue", z.schemeValue] as const,
-    ["dynamic", z.dynamic] as const,
-  ];
+  const duo = [["schemeValue", z.schemeValue] as const, ["dynamic", z.dynamic] as const];
 
-  it.each(duo)("z.%s accepts every concrete scheme value kind (symbol/dict/vector/bytevector included)", (_name, schema) => {
-    const instances: unknown[] = [
-      makeBool(true),
-      makeChar("x"),
-      makeString("s"),
-      makeExact(1),
-      makeInexact(1.5),
-      new ASymbol("sym"),
-      new ANil(),
-      new AVoid(),
-      new ABytevector(new Uint8Array([1, 2, 3])),
-      new AVector([]),
-      new AJSArray([]),
-      new ADict([]),
-      new AJSObject({}),
-      new APair(makeExact(1), nil),
-    ];
-    for (const v of instances) {
-      expect(() => schema.parse(v)).not.toThrow();
-    }
-  });
+  it.each(duo)(
+    "z.%s accepts every concrete scheme value kind (symbol/dict/vector/bytevector included)",
+    (_name, schema) => {
+      const instances: unknown[] = [
+        makeBool(true),
+        makeChar("x"),
+        makeString("s"),
+        makeExact(1),
+        makeInexact(1.5),
+        new ASymbol("sym"),
+        new ANil(),
+        new AVoid(),
+        new ABytevector(new Uint8Array([1, 2, 3])),
+        new AVector([]),
+        new AJSArray([]),
+        new ADict([]),
+        new AJSObject({}),
+        new APair(makeExact(1), nil),
+      ];
+      for (const v of instances) {
+        expect(() => schema.parse(v)).not.toThrow();
+      }
+    },
+  );
 
   it.each(duo)("z.decode(%s, x) === x — passthrough only, never transforms", (_name, schema) => {
     const sym = makeExact(7);

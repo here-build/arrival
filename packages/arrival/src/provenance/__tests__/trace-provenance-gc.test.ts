@@ -29,7 +29,9 @@ function bigTextCapability(size: number) {
       "big-text": symbol.rosetta`big-text: a tool response big enough to matter for byte accounting`(
         { input: [], output: [z.string], provenance: "source" },
         async () => "x".repeat(size),
-      ) }) });
+      ),
+    }),
+  });
 }
 
 describe("EvalTrace.stats() / .points() / .clear() — explicit provenance GC", () => {
@@ -96,7 +98,9 @@ describe("EvalTrace.stats() / .points() / .clear() — explicit provenance GC", 
             }
             return "ok";
           },
-        ) }) });
+        ),
+      }),
+    });
     const { values } = await execState(`(mid-run)`, { capabilities: [guarded], tap: trace });
     expect(toJS(values[0])).toBe("ok");
     expect(threw).toBe(true);

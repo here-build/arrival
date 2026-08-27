@@ -98,18 +98,12 @@ function infer(hofSig: string, bindings: string, call: string): string {
   let result: string | undefined;
   const visit = (node: ts.Node) => {
     if (ts.isTypeAliasDeclaration(node) && node.name.text === "__R") {
-      result = checker.typeToString(
-        checker.getTypeFromTypeNode(node.type),
-        node,
-        ts.TypeFormatFlags.NoTruncation,
-      );
+      result = checker.typeToString(checker.getTypeFromTypeNode(node.type), node, ts.TypeFormatFlags.NoTruncation);
     }
     ts.forEachChild(node, visit);
   };
   visit(sf);
-  const diags = ts
-    .getPreEmitDiagnostics(prog)
-    .filter((d) => d.category === ts.DiagnosticCategory.Error);
+  const diags = ts.getPreEmitDiagnostics(prog).filter((d) => d.category === ts.DiagnosticCategory.Error);
   if (diags.length) {
     const msgs = diags.map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n")).join("; ");
     throw new Error(`infer failed: ${msgs}\n${source}`);
@@ -164,11 +158,7 @@ describe("HOF generic inference (List|vector dual)", () => {
   });
 
   it("filter type-guard keeps refined element", () => {
-    const t = infer(
-      FILTER,
-      "declare const xs: List<number>;",
-      "fn((n: number): n is 0 | 1 => n === 0 || n === 1, xs)",
-    );
+    const t = infer(FILTER, "declare const xs: List<number>;", "fn((n: number): n is 0 | 1 => n === 0 || n === 1, xs)");
     expect(t).toMatch(/0|1/);
   });
 

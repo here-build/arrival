@@ -69,7 +69,8 @@ const fn = new ANativeProcedure({
   name: "fn",
   arity: { min: 0, max: null },
   contract: undefined,
-  impl: () => theVoid });
+  impl: () => theVoid,
+});
 
 describe("scheme/lists Contract precision — genuinely REFINED schemas reject wrongly-shaped values (were z.unknown(), now zod-validated)", () => {
   it("make-list: output is now z.union([z.pair, z.nil]) (a proper list) — a raw non-list value used to slip through the old z.unknown()", () => {
@@ -234,7 +235,7 @@ describe("scheme/lists Contract precision — blanket sweep: genuinely-variadic-
   });
 });
 
-describe("scheme/lists Contract.type overrides — the harvest signature (signatureOf) for the ops whose z.custom callable arg is UNREPRESENTABLE to the printer (it throws `Schemas of type \"custom\" cannot be represented`, degrading the WHOLE signature to the catch-all `(...args: unknown[]) => unknown`)", () => {
+describe('scheme/lists Contract.type overrides — the harvest signature (signatureOf) for the ops whose z.custom callable arg is UNREPRESENTABLE to the printer (it throws `Schemas of type "custom" cannot be represented`, degrading the WHOLE signature to the catch-all `(...args: unknown[]) => unknown`)', () => {
   // These ops carry a z.custom<callable>() in their contract (map/for-each's fn head,
   // member/assoc's optional compare). The printer degrades each to the bare
   // `(...args: unknown[]) => unknown`, throwing away the fn-first structure, the list

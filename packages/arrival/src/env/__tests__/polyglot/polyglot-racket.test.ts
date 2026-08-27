@@ -1,7 +1,11 @@
 // polyglot-racket pack — assemble onto a real env, then RUN the threading-alias
 // macros and the dict accessor family. Split out of polyglot.test.ts (V,
 // 2026-07-10 dialect split — see polyglot.ts's header for the full rationale).
-import { execState as bareExecState, execStateOverFrame, type ExecOptionsOverFrame } from "../../../eval/generator-exec.js";
+import {
+  execState as bareExecState,
+  execStateOverFrame,
+  type ExecOptionsOverFrame,
+} from "../../../eval/generator-exec.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
 import { applyCapability } from "../../../__tests__/_fresh-env.js";
@@ -66,23 +70,23 @@ describe("@inhuman.tools/arrival/polyglot-racket — dict accessor family (Bucke
   const raw = async (src: string) => (await bareExecState(src)).values;
 
   it("dict-ref — reads by keyword, symbol, or string key, identically", async () => {
-    expect(await str('(dict-ref (dict :a 1) :a)')).toBe("1");
-    expect(await str("(dict-ref (dict \"a\" 1) 'a)")).toBe("1");
+    expect(await str("(dict-ref (dict :a 1) :a)")).toBe("1");
+    expect(await str('(dict-ref (dict "a" 1) \'a)')).toBe("1");
     expect(await str('(dict-ref (dict "a" 1) "a")')).toBe("1");
   });
 
   it("dict-ref — optional default, nil when missing and no default (same convention as get-in)", async () => {
-    expect(await str('(dict-ref (dict :a 1) :b 99)')).toBe("99");
-    const missing = await raw('(dict-ref (dict :a 1) :b)');
+    expect(await str("(dict-ref (dict :a 1) :b 99)")).toBe("99");
+    const missing = await raw("(dict-ref (dict :a 1) :b)");
     expect(missing[0]).toEqual((await raw("'()"))[0]);
   });
 
   it("dict-ref — nested dicts", async () => {
-    expect(await str('(dict-ref (dict-ref (dict :a (dict :b 2)) :a) :b)')).toBe("2");
+    expect(await str("(dict-ref (dict-ref (dict :a (dict :b 2)) :a) :b)")).toBe("2");
   });
 
   it("dict-ref — errors with a door (fact + why + action) on a non-dict", async () => {
-    await expect(raw('(dict-ref (list 1 2) :a)')).rejects.toThrow(
+    await expect(raw("(dict-ref (list 1 2) :a)")).rejects.toThrow(
       /dict-ref: expected a dict .* got a pair\/list.*use @ for an origin-agnostic read/,
     );
     await expect(raw('(dict-ref "x" :a)')).rejects.toThrow(/dict-ref: expected a dict .* got a string/);
@@ -95,11 +99,11 @@ describe("@inhuman.tools/arrival/polyglot-racket — dict accessor family (Bucke
   });
 
   it("dict-keys / dict-values — proper scheme lists, composable with map/filter", async () => {
-    expect(await str('(length (dict-keys (dict :a 1 :b 2)))')).toBe("2");
+    expect(await str("(length (dict-keys (dict :a 1 :b 2)))")).toBe("2");
     // dict-keys elements are raw JS strings lifted via array->list (same representation
     // as @keys elsewhere in this pack) — they print unquoted inside a list, same quirk
     // as any other raw-string-in-pair-spine value in this runtime.
-    expect(await str('(map (lambda (k) k) (dict-keys (dict :a 1)))')).toBe("(a)");
+    expect(await str("(map (lambda (k) k) (dict-keys (dict :a 1)))")).toBe("(a)");
     expect(await str("(dict-values (dict :a 1))")).toBe("(1)");
   });
 
@@ -114,19 +118,19 @@ describe("@inhuman.tools/arrival/polyglot-racket — dict accessor family (Bucke
   });
 
   it("dict-set — an immutability DOOR, not a function (a 'set' verb in an immutable env is a silent-mutation trap)", async () => {
-    await expect(raw('(dict-set (dict :a 1) :a 2)')).rejects.toThrow(
+    await expect(raw("(dict-set (dict :a 1) :a 2)")).rejects.toThrow(
       /dict-set is not provided — dicts are immutable here.*assoc-in.*original d is unchanged/s,
     );
   });
 
   it("dict-update — an immutability DOOR pointing at update-in", async () => {
-    await expect(raw('(dict-update (dict :a 1) :a (lambda (x) (+ x 1)))')).rejects.toThrow(
+    await expect(raw("(dict-update (dict :a 1) :a (lambda (x) (+ x 1)))")).rejects.toThrow(
       /dict-update is not provided — dicts are immutable here.*update-in.*original d is unchanged/s,
     );
   });
 
   it("assoc-ref (Guile) — an alias of dict-ref, same key handling and default convention", async () => {
-    expect(await str('(assoc-ref (dict :a 1) :a)')).toBe("1");
-    expect(await str('(assoc-ref (dict :a 1) :b 42)')).toBe("42");
+    expect(await str("(assoc-ref (dict :a 1) :a)")).toBe("1");
+    expect(await str("(assoc-ref (dict :a 1) :b 42)")).toBe("42");
   });
 });

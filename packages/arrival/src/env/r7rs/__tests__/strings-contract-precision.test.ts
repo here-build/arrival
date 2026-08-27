@@ -64,7 +64,6 @@ function nativeDef(name: string) {
   return def;
 }
 
-
 const ch = (c: string): ACharacter => new ACharacter(c);
 const str = (s: string): AString => new AString(s);
 const properList = (): APair<any, any> => new APair(ch("a"), nil);
@@ -118,8 +117,6 @@ describe("scheme/strings Contract precision — 2026-07-05 audit: 8 fixes on the
     expect(def.in.safeParse([nil]).success).toBe(true);
     expect(def.in.safeParse(["not-a-list"]).success).toBe(false);
   });
-
-
 
   // NOTE: no symbol named `split` is bound in this pack. `string-split` lives in scheme/srfi-13.
 

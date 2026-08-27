@@ -27,9 +27,9 @@ import { parseSexprs, type Node } from "@inhuman.tools/arrival-sugarcoat";
 
 import { escapeName, isTsIdentifier } from "./name-escape.js";
 
-const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+const IDENT = /^[A-Z_$][\w$]*$/i;
 /** A plain decimal/integer numeric literal (also covers a leading sign + exponent). */
-const NUMBER = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/;
+const NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i;
 /** A rational literal `p/q` — lowered to a division so its TS type is `number`. */
 const RATIONAL = /^([+-]?\d+)\/(\d+)$/;
 
@@ -367,7 +367,7 @@ function emitQuoteLikeList(items: Node[], emitElem: (n: Node) => string): string
     parts.push(emitElem(node));
   }
   if (!dotSeen) return `list(${parts.join(", ")})`;
-  let acc = parts[parts.length - 1]!;
+  let acc = parts.at(-1)!;
   for (let i = parts.length - 2; i >= 0; i--) acc = `cons(${parts[i]}, ${acc})`;
   return acc;
 }

@@ -24,15 +24,19 @@ const weather = EnvCapability.define("test/weather", {
     "scan-output": symbol.rosetta`scan-output: the scanner's verdict line`(
       { input: [], output: [z.string], provenance: "source" },
       async () => "evil.exe",
-    ) }) });
+    ),
+  }),
+});
 
 describe("EvalTrace.toolNameFor — deepProvenance ordinals resolve to verb names", () => {
   it("a single source crossing: the ordinal names the verb", async () => {
     const trace = new EvalTrace();
     const {
-      values: [line] } = await execState(`(string-append "today: " (forecast-for "berlin"))`, {
+      values: [line],
+    } = await execState(`(string-append "today: " (forecast-for "berlin"))`, {
       capabilities: [weather],
-      tap: trace });
+      tap: trace,
+    });
     expect(toJS(line)).toBe("today: cloudy in berlin");
     const ids = [...deepProvenance(line)];
     expect(ids).toHaveLength(1);
@@ -42,9 +46,11 @@ describe("EvalTrace.toolNameFor — deepProvenance ordinals resolve to verb name
   it("unioned origins: each ordinal resolves to its own verb", async () => {
     const trace = new EvalTrace();
     const {
-      values: [line] } = await execState(`(string-append (forecast-for "berlin") " / " (scan-output))`, {
+      values: [line],
+    } = await execState(`(string-append (forecast-for "berlin") " / " (scan-output))`, {
       capabilities: [weather],
-      tap: trace });
+      tap: trace,
+    });
     const names = [...deepProvenance(line)].map((id) => trace.toolNameFor(id)).toSorted();
     expect(names).toEqual(["forecast-for", "scan-output"]);
   });

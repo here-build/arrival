@@ -24,7 +24,7 @@ import { CARRIERS_TEXT } from "./carriers-text.generated.js";
 // `node:fs` at runtime would break the browser/worker (Vite externalizes `node:fs`).
 let cachedVocabulary: string | undefined;
 function carrierVocabulary(): string {
-  cachedVocabulary ??= CARRIERS_TEXT.replace(/^export /gm, "");
+  cachedVocabulary ??= CARRIERS_TEXT.replaceAll(/^export /gm, "");
   return cachedVocabulary;
 }
 

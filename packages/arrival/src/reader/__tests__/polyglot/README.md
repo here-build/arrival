@@ -6,16 +6,16 @@ which spec pins which section, plus the runner conventions the tables follow.
 
 ## Which spec pins which section
 
-| spec file | grammar.md section |
-|---|---|
-| `curly-braces.spec.ts` | §LITERALS (`{…}` dicts), §COMMA, §SUFFIX-FLIP, §INFIX |
-| `vector-bracket.spec.ts` | §LITERALS (`[…]` vectors), §COMMA |
-| `vector-hash.spec.ts` | §LITERALS (`#(…)` constant vs `[…]` literal — the `evalElements` distinction) |
-| `macro-special-brackets.spec.ts` | §BINDINGS (well-formed let-family bracket bindings) |
-| `let-bracket-binding-door.test.ts` | §BINDINGS (malformed-shape doors, BG4) |
-| `cond-case-do-bracket-clause.test.ts` | §CLAUSES |
-| `member-accessor.spec.ts` | §MEMBER-ACCESS |
-| `reader-baseline.spec.ts` | §COMMA (position-scoping — specials outside `[…]`/`{…}` retain base meaning) |
+| spec file                             | grammar.md section                                                            |
+| ------------------------------------- | ----------------------------------------------------------------------------- |
+| `curly-braces.spec.ts`                | §LITERALS (`{…}` dicts), §COMMA, §SUFFIX-FLIP, §INFIX                         |
+| `vector-bracket.spec.ts`              | §LITERALS (`[…]` vectors), §COMMA                                             |
+| `vector-hash.spec.ts`                 | §LITERALS (`#(…)` constant vs `[…]` literal — the `evalElements` distinction) |
+| `macro-special-brackets.spec.ts`      | §BINDINGS (well-formed let-family bracket bindings)                           |
+| `let-bracket-binding-door.test.ts`    | §BINDINGS (malformed-shape doors, BG4)                                        |
+| `cond-case-do-bracket-clause.test.ts` | §CLAUSES                                                                      |
+| `member-accessor.spec.ts`             | §MEMBER-ACCESS                                                                |
+| `reader-baseline.spec.ts`             | §COMMA (position-scoping — specials outside `[…]`/`{…}` retain base meaning)  |
 
 Error codes asserted in these tables (`E-DICT-INFIX-BANNED`, `E-LET-BRACKET-*`, …) are the
 door taxonomy of `docs/grammar.md §ERRORS`; each spec hard-codes the code it expects, so the

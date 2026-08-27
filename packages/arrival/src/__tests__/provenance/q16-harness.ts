@@ -106,71 +106,74 @@ export class RecordingRegistry {
   async register(env: AmbientRuntime, op: string, shape: RecordingShape): Promise<void> {
     await applyCapability(env, [
       EnvCapability.define(`test/q16-source-${op}`, {
-      symbols: (symbol) => ({
-        [op]: symbol.native`${op}: Q16 harness recording source`(
-          { input: [], inputRest: z.schemeValue, output: [z.schemeValue], provenance: "source" },
-          // `any[]` rest param — a `z.schemeValue` slot hands over the raw SchemeValue, and
-          // `toJS`'s generic constraint (`T extends SchemeValue | null | undefined`) can't be
-          // satisfied by an `unknown`-typed rest param without a cast; `any` here is the SAME
-          // erasure the factory's own impl boundary already performs one layer down.
-          async (...args: any[]): Promise<SchemeValue> => {
-            args = args.map((a) => toJS(a));
-            this.calls.set(op, (this.calls.get(op) ?? 0) + 1);
-            const callSeq = this.calls.get(op) ?? 1;
-            let boxed: unknown;
-            let peeled: unknown;
-            let stampIds: number[];
-            if (shape === "num") {
-              const id = this.mint(op);
-              boxed = stampedNum(id, id);
-              peeled = id;
-              stampIds = [id];
-            } else if (shape === "str") {
-              const id = this.mint(op);
-              peeled = `${op}#${id}`;
-              boxed = stampedStr(`${op}#${id}`, id);
-              stampIds = [id];
-            } else if (shape === "echo") {
-              const id = this.mint(op);
-              const arg = args[0];
-              invariant(typeof arg === "number", `q16 echo source "${op}" expects a numeric argument`);
-              boxed = stampedNum(arg, id);
-              peeled = arg;
-              stampIds = [id];
-            } else if ("dict" in shape) {
-              const out: Record<string, unknown> = {};
-              const peeledOut: Record<string, unknown> = {};
-              stampIds = [];
-              for (const field of shape.dict) {
+        symbols: (symbol) => ({
+          [op]: symbol.native`${op}: Q16 harness recording source`(
+            { input: [], inputRest: z.schemeValue, output: [z.schemeValue], provenance: "source" },
+            // `any[]` rest param — a `z.schemeValue` slot hands over the raw SchemeValue, and
+            // `toJS`'s generic constraint (`T extends SchemeValue | null | undefined`) can't be
+            // satisfied by an `unknown`-typed rest param without a cast; `any` here is the SAME
+            // erasure the factory's own impl boundary already performs one layer down.
+            async (...args: any[]): Promise<SchemeValue> => {
+              args = args.map((a) => toJS(a));
+              this.calls.set(op, (this.calls.get(op) ?? 0) + 1);
+              const callSeq = this.calls.get(op) ?? 1;
+              let boxed: unknown;
+              let peeled: unknown;
+              let stampIds: number[];
+              if (shape === "num") {
                 const id = this.mint(op);
-                out[field] = stampedStr(`${op}.${field}#${id}`, id);
-                peeledOut[field] = `${op}.${field}#${id}`;
-                stampIds.push(id);
+                boxed = stampedNum(id, id);
+                peeled = id;
+                stampIds = [id];
+              } else if (shape === "str") {
+                const id = this.mint(op);
+                peeled = `${op}#${id}`;
+                boxed = stampedStr(`${op}#${id}`, id);
+                stampIds = [id];
+              } else if (shape === "echo") {
+                const id = this.mint(op);
+                const arg = args[0];
+                invariant(typeof arg === "number", `q16 echo source "${op}" expects a numeric argument`);
+                boxed = stampedNum(arg, id);
+                peeled = arg;
+                stampIds = [id];
+              } else if ("dict" in shape) {
+                const out: Record<string, unknown> = {};
+                const peeledOut: Record<string, unknown> = {};
+                stampIds = [];
+                for (const field of shape.dict) {
+                  const id = this.mint(op);
+                  out[field] = stampedStr(`${op}.${field}#${id}`, id);
+                  peeledOut[field] = `${op}.${field}#${id}`;
+                  stampIds.push(id);
+                }
+                // A native returns a scheme value — box the dict payload here (run-neutral
+                // mint; stamped leaves ride jsToScheme's owned pass-through).
+                boxed = jsToScheme(CONSTANT_CTX, out);
+                peeled = peeledOut;
+              } else {
+                const id = this.mint(op);
+                peeled = shape.value(callSeq - 1);
+                boxed = typeof peeled === "number" ? stampedNum(peeled, id) : stampedStr(String(peeled), id);
+                stampIds = [id];
               }
-              // A native returns a scheme value — box the dict payload here (run-neutral
-              // mint; stamped leaves ride jsToScheme's owned pass-through).
-              boxed = jsToScheme(CONSTANT_CTX, out);
-              peeled = peeledOut;
-            } else {
-              const id = this.mint(op);
-              peeled = shape.value(callSeq - 1);
-              boxed = typeof peeled === "number" ? stampedNum(peeled, id) : stampedStr(String(peeled), id);
-              stampIds = [id];
-            }
-            const record = await emitMint({
-              store: this.store,
-              payloads: this.payloads,
-              regionId: this.regionId,
-              id: { templateHash: `q16:${op}`, ordinalPath: [this.ordinal++], regionEpoch: this.regionEpoch },
-              value: peeled,
-              stampIds });
-            invariant(
-              record !== undefined,
-              "q16 harness: emitMint no-oped — setEmissionEnabled(true) must wrap the record run",
-            );
-            return boxed as SchemeValue;
-          },
-        ) }) }),
+              const record = await emitMint({
+                store: this.store,
+                payloads: this.payloads,
+                regionId: this.regionId,
+                id: { templateHash: `q16:${op}`, ordinalPath: [this.ordinal++], regionEpoch: this.regionEpoch },
+                value: peeled,
+                stampIds,
+              });
+              invariant(
+                record !== undefined,
+                "q16 harness: emitMint no-oped — setEmissionEnabled(true) must wrap the record run",
+              );
+              return boxed as SchemeValue;
+            },
+          ),
+        }),
+      }),
     ]);
   }
 }
@@ -257,7 +260,8 @@ export async function recordRun(
     store,
     payloads,
     registry,
-    regionId };
+    regionId,
+  };
 }
 
 /** The replayed cone's ids, off a boxed γ egress — I1/I3's comparison surface. */

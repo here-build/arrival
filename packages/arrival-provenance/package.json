@@ -18,7 +18,7 @@
     "url": "https://github.com/here-build/arrival.git",
     "directory": "packages/arrival-provenance"
   },
-  "license": "FSL-1.1-MIT",
+  "license": "MIT",
   "author": "here.build",
   "publishConfig": {
     "access": "public"

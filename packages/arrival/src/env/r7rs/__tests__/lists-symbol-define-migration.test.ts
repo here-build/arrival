@@ -53,7 +53,12 @@
 import { describe, expect, it } from "vitest";
 import listsPack from "../lists.js";
 import { EXPECTED_FAILURES } from "../../../__tests__/scheme-compliance/chibi/registries.js";
-import { PurityError, DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
+import {
+  PurityError,
+  DefineForwardReferenceError,
+  DefineLocalityError,
+  ProvenanceRoleShapeError,
+} from "../../../errors.js";
 import { DoorProcedure } from "../../../values/primitives/ACallable.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
 import { BASE_PACKS } from "../../base-packs.js";
@@ -239,7 +244,8 @@ describe("ROW 5 — R7RS §6.4 domain boundary: the c[ad]+r accessor family live
 describe("ROW 6 — chibi conformance cross-check: the 4 mutator doors are covered by the shared purity ExpectedFailure row", () => {
   function coveredBySomeRule(name: string): boolean {
     return EXPECTED_FAILURES.some(
-      (rule) => rule.match.kind === "symbols" && rule.match.anyOf.includes(name) && rule.reason.includes("purity invariant"),
+      (rule) =>
+        rule.match.kind === "symbols" && rule.match.anyOf.includes(name) && rule.reason.includes("purity invariant"),
     );
   }
 

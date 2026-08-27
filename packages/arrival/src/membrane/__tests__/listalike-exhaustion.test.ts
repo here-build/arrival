@@ -32,7 +32,11 @@ import { CONSTANT_CTX } from "../../run/RunContext.js";
  *  tool returning a JSON array hands the model. That receiver is the whole point of this file. */
 const run = (code: string, bindings: Record<string, unknown> = {}) =>
   execState(code, {
-    env: inferenceEnv.child("listalike-exhaustion", Object.fromEntries(Object.entries(bindings).map(([k, v]) => [k, jsToScheme(CONSTANT_CTX, v)]))) });
+    env: inferenceEnv.child(
+      "listalike-exhaustion",
+      Object.fromEntries(Object.entries(bindings).map(([k, v]) => [k, jsToScheme(CONSTANT_CTX, v)])),
+    ),
+  });
 
 const out = async (code: string, bindings: Record<string, unknown> = {}) => {
   const { values } = await run(code, bindings);
@@ -51,13 +55,20 @@ describe("listAlike consumers must TERMINATE on an AJSArray receiver — §B3, c
       name: "any? — predicate FALSE for every element (the false-green test matched the LAST element)",
       code: "(any? even? xs)",
       xs: [1, 3, 5],
-      expected: false },
+      expected: false,
+    },
     {
       name: "delete-duplicates — the register's canonical trigger",
       code: "(delete-duplicates xs)",
       xs: [1, 2, 1],
-      expected: [1, 2] },
-    { name: "fold-right — a right fold walks the whole spine", code: "(fold-right + 0 xs)", xs: [1, 2, 3], expected: 6 },
+      expected: [1, 2],
+    },
+    {
+      name: "fold-right — a right fold walks the whole spine",
+      code: "(fold-right + 0 xs)",
+      xs: [1, 2, 3],
+      expected: 6,
+    },
     {
       name: "partition — both arms consume the full spine",
       code: "(partition even? xs)",
@@ -65,18 +76,21 @@ describe("listAlike consumers must TERMINATE on an AJSArray receiver — §B3, c
       expected: [
         [2, 4],
         [1, 3],
-      ] },
+      ],
+    },
     { name: "delete — removes matches, walks the rest", code: "(delete 2 xs)", xs: [1, 2, 3], expected: [1, 3] },
     {
       name: "append-reverse — consumes the head list to exhaustion",
       code: "(append-reverse xs '())",
       xs: [1, 2, 3],
-      expected: [3, 2, 1] },
+      expected: [3, 2, 1],
+    },
     {
       name: "every? — predicate TRUE for all (must reach the end to answer)",
       code: "(every? odd? xs)",
       xs: [1, 3, 5],
-      expected: true },
+      expected: true,
+    },
   ])("$name", HANG_GUARD, async ({ code, xs, expected }) => {
     expect(await out(code, { xs })).toEqual(expected);
   });
@@ -91,8 +105,12 @@ describe("listAlike consumers must TERMINATE on an AJSArray receiver — §B3, c
     expect(await out("(first xs)", { xs: [9, 8] })).toBe(9);
   });
 
-  it("proper pair-lists are unaffected — the fix materializes the RECEIVER, never changes list semantics", HANG_GUARD, async () => {
-    expect(await out("(delete-duplicates '(1 2 1))")).toEqual([1, 2]);
-    expect(await out("(any? even? '(1 3 5))")).toBe(false);
-  });
+  it(
+    "proper pair-lists are unaffected — the fix materializes the RECEIVER, never changes list semantics",
+    HANG_GUARD,
+    async () => {
+      expect(await out("(delete-duplicates '(1 2 1))")).toEqual([1, 2]);
+      expect(await out("(any? even? '(1 3 5))")).toBe(false);
+    },
+  );
 });

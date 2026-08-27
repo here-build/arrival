@@ -34,10 +34,6 @@
     "skipLibCheck": true,
     "rootDir": "."
   },
-  "include": [
-    "src/prelude/types.d.ts",
-    "src/prelude/builtins/**/*.d.ts",
-    "src/prelude/builtins/**/*.cases.ts"
-  ],
+  "include": ["src/prelude/types.d.ts", "src/prelude/builtins/**/*.d.ts", "src/prelude/builtins/**/*.cases.ts"],
   "exclude": ["node_modules", "dist"]
 }

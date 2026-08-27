@@ -107,9 +107,9 @@ describe("circuit — a door, never a fabricated circuit, on EITHER handle shape
     try {
       await circuitOf(untraceableHandle());
       expect.fail("circuitOf should have thrown");
-    } catch (e) {
-      expect(e).toBeInstanceOf(TypeError);
-      const message = e instanceof Error ? e.message : String(e);
+    } catch (error) {
+      expect(error).toBeInstanceOf(TypeError);
+      const message = error instanceof Error ? error.message : String(error);
       // The message NAMES the verb in prose ("(circuit h) — ..."), same convention as every
       // other door in this file (e.g. blastOf's "(blast … …)"). It must never leak a RENDERED
       // circuit node (circuitToSexpr's own shape — ":site N", "(opaque ...)", "(mint ...)") as

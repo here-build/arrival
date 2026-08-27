@@ -23,10 +23,7 @@ export function contourCallback(
   });
 }
 
-export function unaryContour(
-  f: (x: SchemeValue) => SchemeValue | CallResult,
-  name = "unary-cb",
-): ANativeProcedure {
+export function unaryContour(f: (x: SchemeValue) => SchemeValue | CallResult, name = "unary-cb"): ANativeProcedure {
   return contourCallback((args) => f(args[0]), name);
 }
 
@@ -40,9 +37,6 @@ export function filterContour(pred: (x: SchemeValue) => boolean, name = "filter-
 }
 
 /** Reduce callback: scheme convention `fn(element, acc)`. Acc may be a host value. */
-export function reduceContour<Acc>(
-  f: (element: SchemeValue, acc: Acc) => Acc,
-  name = "reduce-cb",
-): ANativeProcedure {
+export function reduceContour<Acc>(f: (element: SchemeValue, acc: Acc) => Acc, name = "reduce-cb"): ANativeProcedure {
   return contourCallback((args) => f(args[0] as SchemeValue, args[1] as Acc) as CallResult, name);
 }

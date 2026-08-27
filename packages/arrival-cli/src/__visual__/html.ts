@@ -9,12 +9,7 @@ function esc(s: string): string {
   return s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
-export function rowsToHtml(
-  rows: Rows,
-  paper: Rgb,
-  ink: Rgb,
-  title = "arrival",
-): string {
+export function rowsToHtml(rows: Rows, paper: Rgb, ink: Rgb, title = "arrival"): string {
   const body = rows
     .map((row) => {
       const cells = row

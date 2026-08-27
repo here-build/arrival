@@ -294,8 +294,8 @@ function lowerBrace(items: Node[], mapChild: (n: Node) => Node): Node {
   if (kids.length % 2 === 0) {
     // Dict: flip suffix keys in key slots (even indices).
     const out: Node[] = [{ atom: "dict" }];
-    for (let i = 0; i < kids.length; i++) {
-      out.push(i % 2 === 0 ? flipSuffixKey(kids[i]!) : kids[i]!);
+    for (const [i, kid] of kids.entries()) {
+      out.push(i % 2 === 0 ? flipSuffixKey(kid!) : kid!);
     }
     return { list: out };
   }
@@ -628,13 +628,7 @@ function flattenAssocOperands(op: string, operands: Node[]): Node[] {
   if (!ASSOC_INFIX.has(op)) return operands;
   const out: Node[] = [];
   for (const x of operands) {
-    if (
-      !isAtom(x) &&
-      x.list.length >= 3 &&
-      isAtom(x.list[0]) &&
-      !x.list[0].str &&
-      x.list[0].atom === op
-    ) {
+    if (!isAtom(x) && x.list.length >= 3 && isAtom(x.list[0]) && !x.list[0].str && x.list[0].atom === op) {
       out.push(...flattenAssocOperands(op, x.list.slice(1)));
     } else {
       out.push(x);
@@ -676,7 +670,7 @@ function mayElideInfixBraces(childOp: string, parentOp: string | undefined, pare
 
 /** Render an operand inside an infix at `parentPrec` / `parentOp`. */
 function infixOperand(nd: Node, parentPrec: number, o: SugarcoatOpts, parentOp?: string): string {
-  const neg = !isAtom(nd) ? negComparison(nd.list, o) : null;
+  const neg = isAtom(nd) ? null : negComparison(nd.list, o);
   if (neg) return 3 <= parentPrec ? `{${negContent(neg, o)}}` : negContent(neg, o);
   if (!isAtom(nd) && nd.list.length >= 3 && isInfix(nd.list, o)) {
     const childOp = atomText(nd.list[0]);
@@ -760,9 +754,9 @@ const isInfix = (items: Node[], o: SugarcoatOpts): boolean =>
 // `(str …)` renders as `@dedent{…}`. `@str{…}` is a read-side alias of headless `@{…}`.
 const AT_TEXT_HEADS = new Set(["str", "string-append"]);
 // a bare `@id` interpolation must FULLY match the reader's restricted class (no `.`).
-const INTERP_ID = /^[A-Za-z0-9!$%&*/:<=>?^_~+-]+$/;
+const INTERP_ID = /^[\w!$%&*/:<=>?^~+-]+$/;
 const unescapeScheme = (s: string): string =>
-  s.replace(/\\(["\\ntr])/g, (_m, c: string) => (c === "n" ? "\n" : c === "t" ? "\t" : c === "r" ? "\r" : c));
+  s.replaceAll(/\\(["\\ntr])/g, (_m, c: string) => (c === "n" ? "\n" : c === "t" ? "\t" : c === "r" ? "\r" : c));
 const isStrNode = (n: Node): n is { atom: string; str: true } => isAtom(n) && !!(n as { str?: boolean }).str;
 
 // String coercions that `str` (the tolerant concatenator) makes redundant — stripped
@@ -771,11 +765,7 @@ const isStrNode = (n: Node): n is { atom: string; str: true } => isAtom(n) && !!
 // meaning.
 const COERCE_STRIP = new Set(["number->string", "symbol->string", "->string"]);
 const stripCoercion = (nd: Node): Node =>
-  !isAtom(nd) &&
-  nd.list.length === 2 &&
-  isAtom(nd.list[0]) &&
-  !nd.list[0].str &&
-  COERCE_STRIP.has(nd.list[0].atom)
+  !isAtom(nd) && nd.list.length === 2 && isAtom(nd.list[0]) && !nd.list[0].str && COERCE_STRIP.has(nd.list[0].atom)
     ? nd.list[1]
     : nd;
 
@@ -844,7 +834,7 @@ function renderAtExpr(items: Node[], o: SugarcoatOpts): string | null {
   // strTolerant: `string-append` is the tolerant `str`; render headless and drop the
   // redundant coercion wrappers (one-way normalization — see COERCE_STRIP / SugarcoatOpts).
   const head = o.strTolerant && items[0].atom === "string-append" ? "str" : items[0].atom;
-  const parts = (o.strTolerant ? items.slice(1).map(stripCoercion) : items.slice(1));
+  const parts = o.strTolerant ? items.slice(1).map(stripCoercion) : items.slice(1);
   if (parts.length === 0) return null;
   let prevWasStr = false;
   let sawLiteral = false; // ≥1 string literal — else it's `(str x y)`, not worth an at-exp
@@ -946,9 +936,12 @@ export function decodeAccessor(head: string): PairStep[] | null {
   const steps: PairStep[] = [];
   let d = 0;
   for (let i = letters.length - 1; i >= 0; i--) {
-    if (letters[i] === "d")
+    if (letters[i] === "d") {
       d++; // skip another element
-    else (steps.push({ pull: d }), (d = 0)); // an `a` closes the pull it caps
+    } else {
+      steps.push({ pull: d });
+      d = 0; // an `a` closes the pull it caps
+    }
   }
   if (d > 0) steps.push({ drop: d }); // innermost bare cdr-run (no `a` after)
   return steps;
@@ -959,10 +952,9 @@ export function decodeAccessor(head: string): PairStep[] | null {
  *  `a dᵏ`, drop k → `dᵏ`. Any chain yields a valid word (so the reader can fuse a
  *  slice-then-pull like `xs[1:][0]` to `cadr` → which re-renders as `xs[1]`). */
 export function encodeAccessor(steps: PairStep[]): string {
-  const letters = steps
-    .slice()
+  const letters = [...steps]
     .reverse()
-    .map((s) => ("pull" in s ? "a" + "d".repeat(s.pull) : "d".repeat(s.drop)))
+    .map((s) => ("pull" in s ? `a${"d".repeat(s.pull)}` : "d".repeat(s.drop)))
     .join("");
   return `c${letters}r`;
 }
@@ -1013,7 +1005,7 @@ export function collectKwargHeads(forms: Node[]): Set<string> {
 // ident-start glyphs (R7RS initial set, minus digits) — mirror of sugarcoat-read's;
 // a `.` is a method-split only before one of these, so escSym escapes exactly the
 // dots rewrite_L would otherwise split. (Producer side of the same rule.)
-const RENDER_IDENT_START = /[A-Za-z!$%&*/:<=>?^_~]/;
+const RENDER_IDENT_START = /[A-Z!$%&*/:<=>?^_~]/i;
 
 /** Re-escape any `.` in a symbol that `rewrite_L` would treat as a method split, so
  *  it reads back as a LITERAL dot in the symbol. No-op for the corpus (0 code dots);
@@ -1023,17 +1015,16 @@ function escSym(s: string): string {
   for (let k = 0; k < s.length; k++) {
     const c = s[k];
     const next = s[k + 1];
-    if (
+    out +=
       c === "." &&
       k > 0 &&
       s[k - 1] !== "." &&
       next !== "." &&
       next !== undefined &&
       RENDER_IDENT_START.test(next) &&
-      !/[0-9]/.test(next)
-    )
-      out += "\\.";
-    else out += c;
+      !/\d/.test(next)
+        ? String.raw`\.`
+        : c;
   }
   return out;
 }
@@ -1132,8 +1123,7 @@ const isPlainMethodOp = (nd: Node): nd is { atom: string; str?: boolean } =>
 // `p.not` reads worse than `(not p)`. The reader folds ANY `x.f` back, so this gate is
 // pure render taste, not a round-trip constraint (§5, narrowed from "never emit").
 const UNARY_METHOD_ALLOW = new Set(["length", "reverse", "abs", "string-length", "string-upcase", "string-downcase"]);
-const shouldFlipUnary = (op: string): boolean =>
-  op.endsWith("?") || op.includes("->") || UNARY_METHOD_ALLOW.has(op);
+const shouldFlipUnary = (op: string): boolean => op.endsWith("?") || op.includes("->") || UNARY_METHOD_ALLOW.has(op);
 
 /** Relational / equality predicates — suffix `=?` `<?` `>?` `<=?` `>=?` (`char=?`,
  *  `string<?`, `boolean=?`, a bare `=?`). A SYMMETRIC or ordering check, not a subject-test:
@@ -1189,8 +1179,7 @@ function formatBracedMethod(
   const params = childList(step.lam)[1];
   const names = childList(params).map((p) => atomText(p));
   const body = childList(step.lam)[2];
-  const argsTxt =
-    step.args && step.args.length > 0 ? `(${step.args.map((a) => inlineSugarcoat(a, o)).join(" ")})` : "";
+  const argsTxt = step.args && step.args.length > 0 ? `(${step.args.map((a) => inlineSugarcoat(a, o)).join(" ")})` : "";
   const opTxt = `.${escSym(step.op)}${argsTxt}`;
   const pad = " ".repeat(col);
   const pad2 = " ".repeat(col + 2);
@@ -1261,7 +1250,7 @@ function asStep(nd: Node, o: SugarcoatOpts): { recv: Node; step: RStep } | null 
     items[0].atom.endsWith("?") &&
     !isRelationalPredicate(items[0].atom)
   )
-    return { recv: items[items.length - 1], step: { op: items[0].atom, args: items.slice(1, -1) } };
+    return { recv: items[items.length - 1]!, step: { op: items[0].atom, args: items.slice(1, -1) } };
   return null;
 }
 
@@ -1318,17 +1307,16 @@ function stepText(s: RStep, o: SugarcoatOpts): string {
 
 /** `(list …)` → free-standing `[…]` (not a tight subscript). */
 const isListLit = (items: Node[]): boolean =>
-  items.length >= 1 && isAtom(items[0]) && !items[0].str && items[0].atom === "list";
+  items.length > 0 && isAtom(items[0]) && !items[0].str && items[0].atom === "list";
 /** Binary `(cons a b)` → same `[a b]` surface as a 2-element list (intent of a
  *  pair-as-data). One-way: reads back as `(list a b)`, not `cons`. */
 const isBinaryCons = (items: Node[]): boolean =>
   items.length === 3 && isAtom(items[0]) && !items[0].str && items[0].atom === "cons";
 /** Elements of a list-shaped view node: args of `list` or the two of `cons`. */
-const listViewElems = (items: Node[]): Node[] =>
-  isBinaryCons(items) || isListLit(items) ? items.slice(1) : [];
+const listViewElems = (items: Node[]): Node[] => (isBinaryCons(items) || isListLit(items) ? items.slice(1) : []);
 /** `(dict …)` → `{…}` even-kv brace form (shared delimiter with n-expr; odd/even on read). */
 const isDictLit = (items: Node[]): boolean =>
-  items.length >= 1 && isAtom(items[0]) && !items[0].str && items[0].atom === "dict";
+  items.length > 0 && isAtom(items[0]) && !items[0].str && items[0].atom === "dict";
 
 /** One-line rendering, no width check. */
 export function inlineSugarcoat(nd: Node, o: SugarcoatOpts): string {
@@ -1462,7 +1450,8 @@ const isLetElidable = (nd: Node): boolean => {
   // Named let `(let loop bindings body)`: the loop symbol is child 1; bindings/body shift +1.
   const named = isAtom(nd.list[1]) && nd.list.length > 2;
   const binds = named ? nd.list[2] : nd.list[1];
-  if (binds === undefined || isAtom(binds) || binds.list.length === 0 || !binds.list.every(isBindingShaped)) return false;
+  if (binds === undefined || isAtom(binds) || binds.list.length === 0 || !binds.list.every(isBindingShaped))
+    return false;
   const body = nd.list.slice(named ? 3 : 2);
   return body.length === 1 || (body.length > 1 && !isBindingShaped(body[0]));
 };
@@ -1506,7 +1495,7 @@ function formatSugarcoatCore(nd: Node, col: number, o: SugarcoatOpts): string {
   // A single-line at-expression stays inline even past the width budget: the generic
   // list-break can't split it (a broken `@{…}` would re-render as the classic
   // string-append staircase, which reads worse), so honour the at-string as one line.
-  const atInline = !isAtom(nd) ? renderAtExpr(nd.list, o) : null;
+  const atInline = isAtom(nd) ? null : renderAtExpr(nd.list, o);
   if (atInline != null) return atInline;
   const flat = inlineSugarcoat(nd, o);
   // Function defines, cond, and elidable let-family always break (uniform shape,
@@ -1537,7 +1526,9 @@ function formatSugarcoatCore(nd: Node, col: number, o: SugarcoatOpts): string {
   // `head (sig)` ⏎ body straight back to the definition.
   if (isFnDefine(nd)) {
     const pad2 = " ".repeat(col + 2);
-    const sig = `(${childList(items[1]).map((a) => atomText(a)).join(" ")})`;
+    const sig = `(${childList(items[1])
+      .map((a) => atomText(a))
+      .join(" ")})`;
     const out = [`${atomText(items[0])} ${sig}`];
     for (const bodyExpr of items.slice(2)) out.push(pad2 + formatSugarcoat(bodyExpr, col + 2, o));
     return out.join("\n");
@@ -1897,7 +1888,7 @@ export function collectNilAllowed(forms: Node[]): boolean {
       if (isAtom(items[1]) && !items[1].str && items[1].atom === "nil") return true; // named `nil`
       if (binds != null && !isAtom(binds))
         for (const b of binds.list)
-          if (!isAtom(b) && b.list.length >= 1 && isAtom(b.list[0]) && !b.list[0].str && b.list[0].atom === "nil")
+          if (!isAtom(b) && b.list.length > 0 && isAtom(b.list[0]) && !b.list[0].str && b.list[0].atom === "nil")
             return true;
     }
     return items.some(bindsNilToNonEmpty);
@@ -1935,11 +1926,11 @@ export function registerSugarcoatReader(fn: (src: string) => Node[]): void {
  */
 export function surfaceNeedsSugarReader(src: string): boolean {
   // At-expressions: @{…} / @word{…} / @word(…)
-  if (/@(?:[A-Za-z!$%&*/:<=>?^_~][\w!$%&*/:<=>?^_~+-]*|[({])/.test(src)) return true;
+  if (/@(?:[A-Z!$%&*/:<=>?^_~][\w!$%&*/:<=>?^~+-]*|[({])/i.test(src)) return true;
   // Arrow lambda or cond/case receiver in a brace/line surface
   if (/=>|↦|=\?>|⇀/.test(src)) return true;
   // Method-dot with tight args/lambda: .map{ / .fold(
-  if (/\.\w+[\({\[]/.test(src)) return true;
+  if (/\.\w+[({[]/.test(src)) return true;
   // I-expression heads: a line whose first non-space is a special-form word (not `(`)
   // — e.g. `let*\n  a\n    1` or `if #t\n  …`. Classic parseSexprs would see top-level atoms.
   if (
@@ -1954,7 +1945,11 @@ export function surfaceNeedsSugarReader(src: string): boolean {
       return t.length > 0 && !t.startsWith(";");
     });
     if (codeLines.some((l) => /^[ \t]+/.test(l))) return true;
-    if (codeLines.some((l) => /^(define|let\*?|letrec\*?|if|cond|case|lambda|begin|do)\b/.test(l.trim()) && !l.trim().startsWith("(")))
+    if (
+      codeLines.some(
+        (l) => /^(define|let\*?|letrec\*?|if|cond|case|lambda|begin|do)\b/.test(l.trim()) && !l.trim().startsWith("("),
+      )
+    )
       return true;
   }
   return false;
@@ -1972,8 +1967,6 @@ export function surfaceNeedsSugarReader(src: string): boolean {
  */
 export function schemeToSugarcoat(src: string, opts: Partial<SugarcoatOpts> = {}): string {
   const forms =
-    sugarcoatReader && surfaceNeedsSugarReader(src)
-      ? sugarcoatReader(src)
-      : normalizePolyglot(parseSexprs(src));
+    sugarcoatReader && surfaceNeedsSugarReader(src) ? sugarcoatReader(src) : normalizePolyglot(parseSexprs(src));
   return renderFormsAsSugarcoat(forms, opts);
 }

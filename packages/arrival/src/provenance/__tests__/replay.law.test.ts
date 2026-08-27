@@ -43,7 +43,8 @@ import {
   boxPayload,
   replayBetweenRecords,
   replayGraphEgress,
-  replayProgramWithPlayback } from "../../provenance/replay.js";
+  replayProgramWithPlayback,
+} from "../../provenance/replay.js";
 import { setEmissionEnabled } from "../../provenance/store/emit.js";
 import { UnboundVariableError } from "../../errors.js";
 import type { Payload } from "../../provenance/store/interfaces.js";
@@ -57,13 +58,15 @@ import {
   CORPUS_ROLES,
   W1_CORPUS,
   genLinearProgram,
-  type CorpusEntry } from "../../__tests__/provenance/w1-corpus.js";
+  type CorpusEntry,
+} from "../../__tests__/provenance/w1-corpus.js";
 import {
   freezeMints,
   recordRun,
   replayedCone,
   type RecordedRun,
-  type RecordingShape } from "../../__tests__/provenance/q16-harness.js";
+  type RecordingShape,
+} from "../../__tests__/provenance/q16-harness.js";
 
 const corpusClassifier: Classifier = { roleOf: (op) => CORPUS_ROLES[op] };
 const corpusIsBaseName = (n: string): boolean => CORPUS_BASE_NAMES.has(n);
@@ -98,8 +101,7 @@ const PER_WIRE_CLASSES = new Set<CorpusEntry["klass"]>([
   "deep-mux-nesting",
 ]);
 
-beforeAll(async () => {
-});
+beforeAll(async () => {});
 
 afterEach(() => {
   setEmissionEnabled(false); // module-global flag; recordRun restores
@@ -168,7 +170,12 @@ describe("wire-γ (§4 CHOSEN: the frame is abstract interpretation, loop-free s
     for (const op of Object.keys(CORPUS_ROLES)) {
       if (CORPUS_ROLES[op] === "source") {
         await expect(
-          execState(op, { capabilities: base.capabilities, config: base.config, scope: base.scope, runCtx: base.runCtx }),
+          execState(op, {
+            capabilities: base.capabilities,
+            config: base.config,
+            scope: base.scope,
+            runCtx: base.runCtx,
+          }),
           `"${op}" must NOT resolve in the hermetic replay env`,
         ).rejects.toThrow(UnboundVariableError);
       }
@@ -219,7 +226,8 @@ describe("replay-nondeterminism (§4 R1 + §7: frozen-payload replay stable unde
   const CODE = `(list (fetch-live) (clock-now) (gensym-id))`;
   const SOURCES: Record<string, RecordingShape> = { "fetch-live": "num", "clock-now": "num", "gensym-id": "num" };
   const MUTATED_ROLES: Classifier = {
-    roleOf: (op) => (op in SOURCES ? "source" : CORPUS_ROLES[op]) };
+    roleOf: (op) => (op in SOURCES ? "source" : CORPUS_ROLES[op]),
+  };
 
   async function wfMutated(code: string) {
     const forms = await parse(code);
@@ -245,7 +253,8 @@ describe("replay-nondeterminism (§4 R1 + §7: frozen-payload replay stable unde
             );
           }
           return symbols;
-        } }),
+        },
+      }),
     ]);
     return env;
   }
@@ -386,7 +395,8 @@ describe("effect-track replay-between-records (§4 CHOSEN, §7 sub-gate)", () =>
       { kind: "slot", name: "acc" },
       { kind: "slot", name: "ev" },
     ],
-    span: "q16-effect-stretch" };
+    span: "q16-effect-stretch",
+  };
 
   /** An accumulator chain whose per-iteration step crosses an EFFECT port
    *  (`emit-step!` observes and echoes) interleaved with pure arithmetic — the
@@ -405,7 +415,8 @@ describe("effect-track replay-between-records (§4 CHOSEN, §7 sub-gate)", () =>
       payloads: run.payloads,
       regionId: run.regionId,
       stretch: { wire: STRETCH, accParam: "acc", eventParam: "ev" },
-      initial: boxPayload({ value: 0, stampIds: [] }) });
+      initial: boxPayload({ value: 0, stampIds: [] }),
+    });
 
     // the interleave: event ↔ pure, strictly alternating, event payloads VERBATIM
     // (the recorded values, in the stream's own seq order), pure values γ-DERIVED
@@ -434,14 +445,17 @@ describe("effect-track replay-between-records (§4 CHOSEN, §7 sub-gate)", () =>
               liveCalls++;
               return x * 100;
             },
-          ) }) }),
+          ),
+        }),
+      }),
     ]);
     const replayAgain = await replayBetweenRecords({
       store: run.store,
       payloads: run.payloads,
       regionId: run.regionId,
       stretch: { wire: STRETCH, accParam: "acc", eventParam: "ev" },
-      initial: boxPayload({ value: 0, stampIds: [] }) });
+      initial: boxPayload({ value: 0, stampIds: [] }),
+    });
     expect(replayAgain.egress).toBe(60);
     expect(liveCalls).toBe(0);
   });
@@ -455,7 +469,8 @@ describe("effect-track replay-between-records (§4 CHOSEN, §7 sub-gate)", () =>
       await emitTrackOpen({
         store: run.store,
         regionId: run.regionId,
-        id: { templateHash: "q16:pending-track", ordinalPath: [99], regionEpoch: "e0" } });
+        id: { templateHash: "q16:pending-track", ordinalPath: [99], regionEpoch: "e0" },
+      });
     } finally {
       setEmissionEnabled(false);
     }
@@ -465,7 +480,8 @@ describe("effect-track replay-between-records (§4 CHOSEN, §7 sub-gate)", () =>
         payloads: run.payloads,
         regionId: run.regionId,
         stretch: { wire: STRETCH, accParam: "acc", eventParam: "ev" },
-        initial: boxPayload({ value: 0, stampIds: [] }) }),
+        initial: boxPayload({ value: 0, stampIds: [] }),
+      }),
     ).rejects.toThrow(/pending track.*only replays COMPLETED regions/s);
   });
 
@@ -483,7 +499,8 @@ describe("effect-track replay-between-records (§4 CHOSEN, §7 sub-gate)", () =>
           payloads: run.payloads,
           regionId: run.regionId,
           stretch: { wire: STRETCH, accParam: "acc", eventParam: "ev" },
-          initial: boxPayload({ value: 0, stampIds: [] }) });
+          initial: boxPayload({ value: 0, stampIds: [] }),
+        });
 
         // interleave order == the stream's seq order, verbatim
         const eventSeqs = steps.flatMap((s) => (s.kind === "port-event" ? [s.record.seq] : []));

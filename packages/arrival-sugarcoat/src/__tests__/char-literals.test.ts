@@ -19,11 +19,11 @@ function atomOf(src: string): string {
 }
 
 describe("parseSexprs — #\\<char> character literals", () => {
-  it("reads #\\\" (the quote character) as one atom, not a broken string", () => {
+  it('reads #\\" (the quote character) as one atom, not a broken string', () => {
     expect(atomOf('#\\"')).toBe('#\\"');
   });
 
-  it("reads #\\\" mid-expression without swallowing the rest of the program", () => {
+  it('reads #\\" mid-expression without swallowing the rest of the program', () => {
     const forms = parseSexprs('(char=? #\\" (car chars))');
     expect(forms).toHaveLength(1);
     const [head, ...rest] = (forms[0] as { list: unknown[] }).list as { atom?: string }[];

@@ -65,10 +65,12 @@ export interface LawEnv {
  *    CONTAINER. A borrowed store holds JS-world values only (V's hygiene law).
  */
 export async function withLawEnv(): Promise<LawEnv> {
-  const env = await freshEnv() as EnvWithInternals<ResolvingAmbient>;
+  const env = (await freshEnv()) as EnvWithInternals<ResolvingAmbient>;
   const mintedIds: number[] = [];
   let seq = 0;
-  env.bind("src", new ANativeProcedure({
+  env.bind(
+    "src",
+    new ANativeProcedure({
       name: "src",
       arity: { min: 1, max: 1 },
       contract: undefined,
@@ -76,7 +78,9 @@ export async function withLawEnv(): Promise<LawEnv> {
         const id = ++seq;
         mintedIds.push(id);
         return stampFresh(args[0], id);
-      } }));
+      },
+    }),
+  );
   // `borrow-array` CROSSES its arguments into the JS world, then borrows the result.
   //
   // It used to hand the raw JS array of ALREADY-BOXED args straight to `fromJS`, producing an
@@ -90,7 +94,9 @@ export async function withLawEnv(): Promise<LawEnv> {
   // themselves land ungrounded (raw JS has no lineage — it acquires the container's on the way back
   // in, which is AJSArray's documented Option-C discipline). So `elementBoxes` answers `null` for
   // this carrier now (see its doc), and the container's own provenance ⊇ {1,2,3} is the signal.
-  env.bind("borrow-array", new ANativeProcedure({
+  env.bind(
+    "borrow-array",
+    new ANativeProcedure({
       name: "borrow-array",
       arity: { min: 0, max: null },
       contract: undefined,
@@ -98,8 +104,9 @@ export async function withLawEnv(): Promise<LawEnv> {
         new AJSArray<readonly unknown[]>(
           args.map((a) => toJS(a, {})),
           collapseProvenance(...args),
-        )
-    }));
+        ),
+    }),
+  );
   return { env, mintedIds };
 }
 

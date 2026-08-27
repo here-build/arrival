@@ -41,7 +41,7 @@ describe("S-Expression Serializer", () => {
       class ComplexObject {
         constructor(
           public data: string,
-          public count: number
+          public count: number,
         ) {}
 
         [Symbol.toSExpr](context: any) {
@@ -51,7 +51,7 @@ describe("S-Expression Serializer", () => {
             context.keyword("count"),
             this.count,
             context.keyword("computed"),
-            context.expr("add", this.count, 10)
+            context.expr("add", this.count, 10),
           ];
         }
       }
@@ -101,8 +101,8 @@ describe("S-Expression Serializer", () => {
       expect(
         toSExprString([
           [1, 2],
-          [3, 4]
-        ])
+          [3, 4],
+        ]),
       ).toBe("[[1 2] [3 4]]");
     });
 
@@ -122,8 +122,8 @@ describe("S-Expression Serializer", () => {
         name: "test",
         config: {
           enabled: true,
-          timeout: 5000
-        }
+          timeout: 5000,
+        },
       };
       expect(toSExprString(obj)).toBe("{:name test :config {:enabled #t :timeout 5000}}"); // AI-readable format
     });
@@ -180,7 +180,7 @@ describe("S-Expression Serializer", () => {
       const obj = {
         name: "test",
         items: [1, 2, 3],
-        meta: { count: 3, active: true }
+        meta: { count: 3, active: true },
       };
 
       expect(toSExpr(obj)).toEqual([
@@ -190,7 +190,7 @@ describe("S-Expression Serializer", () => {
         ":items",
         ["list", 1, 2, 3],
         ":meta",
-        ["dict", ":count", 3, ":active", true]
+        ["dict", ":count", 3, ":active", true],
       ]);
     });
   });
@@ -229,7 +229,7 @@ describe("S-Expression Serializer", () => {
             context.keyword("styles"),
             { background: "blue", padding: 10 },
             context.keyword("children"),
-            [1, 2, 3]
+            [1, 2, 3],
           ];
         }
       }
@@ -283,7 +283,7 @@ describe("S-Expression Serializer", () => {
     it("handles functions in objects", () => {
       const obj = {
         name: "test",
-        fn: () => console.log("hello")
+        fn: () => console.log("hello"),
       };
       // Functions should be skipped or converted to a placeholder
       const result = toSExprString(obj);
@@ -293,11 +293,13 @@ describe("S-Expression Serializer", () => {
   });
 
   describe("tagged literals (#tag)", () => {
-    it("renders #tag \"value\" format", () => {
+    it('renders #tag "value" format', () => {
       class CodeExpr {
         constructor(public code: string) {}
 
-        [Symbol.SExpr]() { return "expr"; }
+        [Symbol.SExpr]() {
+          return "expr";
+        }
         [Symbol.toSExpr](ctx: any) {
           return [ctx.tagged("ts", this.code)];
         }
@@ -309,7 +311,9 @@ describe("S-Expression Serializer", () => {
     it("escapes quotes in tagged values", () => {
       class CodeExpr {
         constructor(public code: string) {}
-        [Symbol.SExpr]() { return "expr"; }
+        [Symbol.SExpr]() {
+          return "expr";
+        }
         [Symbol.toSExpr](ctx: any) {
           return [ctx.tagged("ts", this.code)];
         }
@@ -322,12 +326,17 @@ describe("S-Expression Serializer", () => {
 
     it("works inline in larger structures", () => {
       class PropView {
-        [Symbol.SExpr]() { return "args"; }
+        [Symbol.SExpr]() {
+          return "args";
+        }
         [Symbol.toSExpr](ctx: any) {
           return [
-            ctx.keyword("href"), ctx.tagged("ts", "props.url"),
-            ctx.keyword("title"), ctx.string("Hello"),
-            ctx.keyword("count"), ctx.tagged("ts", "state.items.length"),
+            ctx.keyword("href"),
+            ctx.tagged("ts", "props.url"),
+            ctx.keyword("title"),
+            ctx.string("Hello"),
+            ctx.keyword("count"),
+            ctx.tagged("ts", "state.items.length"),
           ];
         }
       }

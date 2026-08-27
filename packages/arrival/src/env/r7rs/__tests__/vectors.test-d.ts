@@ -48,7 +48,9 @@ describe("scheme/vectors Contract precision — element/return precision (z.cust
   });
 
   test("vector-append: NEW z.array(z.vector(z.schemeValue)) decodes (AVector | AJSArray)[] on the scheme face — matches every OTHER accessor's z.vector convention in this file", () => {
-    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof svec>>, "scheme">>().toEqualTypeOf<(AVector | AJSArray)[]>();
+    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof svec>>, "scheme">>().toEqualTypeOf<
+      (AVector | AJSArray)[]
+    >();
   });
 
   test("vector-ref: NEW input [z.vector(z.schemeValue), z.schemeNumber] decodes [AVector | AJSArray, AExact|AInexact], not [unknown, …]", () => {
@@ -82,6 +84,8 @@ describe("scheme/vectors Contract precision — negative proof", () => {
 
 describe("scheme/vectors Contract precision — regression guard: the shared mechanism stays sound for a non-vector shape", () => {
   test("apply's own declared shape (lists.ts) is untouched by anything added here — same proof symbol.test-d.ts/numeric.test-d.ts already carry", () => {
-    expectTypeOf<DecodedArgsWithRest<[typeof z.schemeValue], typeof z.schemeValue>>().toEqualTypeOf<[SchemeValue, ...SchemeValue[]]>();
+    expectTypeOf<DecodedArgsWithRest<[typeof z.schemeValue], typeof z.schemeValue>>().toEqualTypeOf<
+      [SchemeValue, ...SchemeValue[]]
+    >();
   });
 });

@@ -61,7 +61,8 @@ markInteropPrivate(OtherHandleClass);
  *  `SchemeValue` union (which `AOpaqueHandle` is now a member of), so the cast below is an
  *  ordinary narrowing, not an unrelated-types conversion. */
 function mintHandle(ctx: RunContext, instance: object, provenance?: ReadonlySet<number>): AOpaqueHandle {
-  const boxed = provenance === undefined ? jsToScheme<unknown>(ctx, instance) : jsToScheme<unknown>(ctx, instance, {}, provenance);
+  const boxed =
+    provenance === undefined ? jsToScheme<unknown>(ctx, instance) : jsToScheme<unknown>(ctx, instance, {}, provenance);
   expect(boxed).toBeInstanceOf(AOpaqueHandle);
   return boxed as AOpaqueHandle;
 }
@@ -188,12 +189,15 @@ describe("opaque-crossing contract — rows 2-4: end-to-end through symbol.roset
           return widgets.reduce((total, w) => total + w.id.length, 0);
         },
       ),
-      "widget-id-wrong-class": symbol.rosetta`widget-id-wrong-class: typed instance() rejects a DIFFERENT branded class`(
-        { input: [z.instance(OtherHandleClass)], output: [z.string] },
-        function (): string {
-          return "unreachable";
-        },
-      ) }) });
+      "widget-id-wrong-class":
+        symbol.rosetta`widget-id-wrong-class: typed instance() rejects a DIFFERENT branded class`(
+          { input: [z.instance(OtherHandleClass)], output: [z.string] },
+          function (): string {
+            return "unreachable";
+          },
+        ),
+    }),
+  });
 
   it("row 1+3: make-widget then widget-id-typed round-trips the SAME instance through TWO rosetta calls", async () => {
     const [result] = await exec('(widget-id-typed (make-widget "abc"))', { capabilities: [cap] });
@@ -211,10 +215,9 @@ describe("opaque-crossing contract — rows 2-4: end-to-end through symbol.roset
   });
 
   it("row 2: a typed CONTAINER of handles (z.list(z.instance(Ctor))) unwraps elementwise at the container's own decode", async () => {
-    const [result] = await exec(
-      '(sum-widget-id-lengths (list (make-widget "ab") (make-widget "cde")))',
-      { capabilities: [cap] },
-    );
+    const [result] = await exec('(sum-widget-id-lengths (list (make-widget "ab") (make-widget "cde")))', {
+      capabilities: [cap],
+    });
     expect(Number(result)).toBe(5); // "ab".length + "cde".length
   });
 
@@ -255,7 +258,9 @@ describe("opaque-crossing contract — eq? across two crossings sharing ONE cach
         function () {
           return shared as unknown as SchemeValue;
         },
-      ) }) });
+      ),
+    }),
+  });
 
   it("(eq? (get-shared-widget) (get-shared-widget)) is #t — two mints of the same instance are eq?", async () => {
     const [result] = await exec("(eq? (get-shared-widget) (get-shared-widget))", { capabilities: [cap] });

@@ -90,7 +90,12 @@ describe("LAW 4 — self-hosted stdlib: one chain, no user_env parenting", () =>
   it("a { capabilities } run resolves BOTH its own capability's symbol and base stdlib through one chain", async () => {
     const cap = EnvCapability.define("law/cut2-self-hosting", {
       symbols: (symbol, z) => ({
-        "cut2/double": symbol.rosetta`cut2/double: doubles a number`({ input: [z.number], output: [z.number] }, (n: number) => n * 2) }) });
+        "cut2/double": symbol.rosetta`cut2/double: doubles a number`(
+          { input: [z.number], output: [z.number] },
+          (n: number) => n * 2,
+        ),
+      }),
+    });
     const [own, stdlib] = await exec("(cut2/double 21) (map (lambda (x) x) (list 1))", { capabilities: [cap] });
     expect(own).toBe(42);
     expect(stdlib).toEqual([1]);

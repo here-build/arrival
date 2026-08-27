@@ -19,12 +19,18 @@ get_weather("NYC", "celsius");
 get_route(list("A", "B", "C"), "fast");
 get_route(cons("Z", list("A", "B")), "scenic"); // cons-prepend → List<string>
 sum_readings([1, 2, 3]);
-get_route(map((n: number) => String(n), list(1, 2)), "fast"); // map → List<string> into a list slot
+get_route(
+  map((n: number) => String(n), list(1, 2)),
+  "fast",
+); // map → List<string> into a list slot
 const _r1: number = car(list(1, 2, 3));
 const _comp: number = reduce(
   (a: number, x: number) => a + x,
   0,
-  map((s: string) => s.length, filter((s: string) => s.length > 0, list("a", "bb"))),
+  map(
+    (s: string) => s.length,
+    filter((s: string) => s.length > 0, list("a", "bb")),
+  ),
 );
 configure({ name: "a", age: 30 }); // (dict :name "a" :age 30) → object literal
 

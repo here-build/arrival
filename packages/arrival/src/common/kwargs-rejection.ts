@@ -253,13 +253,13 @@ export function decodeKwargsStrict(qualifiedName: string, shape: ZodRawShape, se
   }
   try {
     return z.decode(z.strictObject(shape) as unknown as ZodType, sent);
-  } catch (e) {
-    if (e instanceof ZodError) {
-      const dropped = tryDropFarUnknownKeys(shape, sent, e);
+  } catch (error) {
+    if (error instanceof ZodError) {
+      const dropped = tryDropFarUnknownKeys(shape, sent, error);
       if (dropped !== undefined) return dropped.value;
-      const problems = e.issues.flatMap((issue) => issueLines(issue, sent, shape));
+      const problems = error.issues.flatMap((issue) => issueLines(issue, sent, shape));
       throw new KwargsRejectionError(qualifiedName, problems);
     }
-    throw e;
+    throw error;
   }
 }

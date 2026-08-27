@@ -286,7 +286,11 @@ function describeElision(items: readonly unknown[]): string {
 
   const kind = uniqueKinds[0]!;
   if (kind === "object") {
-    const keySets = items.map((x) => Object.keys(x as object).sort().join(","));
+    const keySets = items.map((x) =>
+      Object.keys(x as object)
+        .sort()
+        .join(","),
+    );
     const allSame = keySets.every((k) => k === keySets[0]);
     return allSame ? "similar items" : "similar items of varying shape";
   }
@@ -338,7 +342,9 @@ function capWithElision<T>(items: readonly T[], limit: number, render: (item: T)
   }
 
   const descriptor = describeElision(items);
-  const marker = truncatedMarker(`${notRendered} ${descriptor} were not rendered; total ${unitLabel} is ${items.length}`);
+  const marker = truncatedMarker(
+    `${notRendered} ${descriptor} were not rendered; total ${unitLabel} is ${items.length}`,
+  );
   return [...shownHeadItems.map(render), marker, ...shownTailItems.map(render)];
 }
 
@@ -346,7 +352,11 @@ function capWithElision<T>(items: readonly T[], limit: number, render: (item: T)
  *  (`:key`, value), so the head/tail slicing and flattening differ from `capWithElision`.
  *  Dicts/maps use the fixed descriptor word `"entries"` — no shape scan (a key/value pair
  *  doesn't have "a shape" the way array elements do). */
-function capEntriesWithElision<T>(entries: readonly T[], limit: number, renderEntry: (entry: T) => [SExpr, SExpr]): SExpr[] {
+function capEntriesWithElision<T>(
+  entries: readonly T[],
+  limit: number,
+  renderEntry: (entry: T) => [SExpr, SExpr],
+): SExpr[] {
   const head = activeCaps.elideHead;
   const tail = activeCaps.elideTail;
   const elisionOn = Number.isFinite(head) && head + tail > 0;
@@ -386,7 +396,11 @@ const capItems = <T>(arr: readonly T[], render: (item: T) => SExpr): SExpr[] => 
  *  primary-array SELECTION; the walk itself still renders the real root through the normal
  *  dispatch. */
 const unwrapForSelection = (value: unknown): unknown => {
-  if (value !== null && typeof value === "object" && typeof (value as Record<string, unknown>)["arrival/toJS"] === "function") {
+  if (
+    value !== null &&
+    typeof value === "object" &&
+    typeof (value as Record<string, unknown>)["arrival/toJS"] === "function"
+  ) {
     return (value as { "arrival/toJS": () => unknown })["arrival/toJS"]();
   }
   return value;
@@ -429,7 +443,12 @@ const capString = (full: string): string => {
  *  formatSExpr's primitive-string leaf route through it, so every string in the
  *  observation surface re-parses. */
 const escapeSchemeString = (s: string): string =>
-  s.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("\n", "\\n").replaceAll("\t", "\\t").replaceAll("\r", "\\r");
+  s
+    .replaceAll("\\", "\\\\")
+    .replaceAll('"', String.raw`\"`)
+    .replaceAll("\n", String.raw`\n`)
+    .replaceAll("\t", String.raw`\t`)
+    .replaceAll("\r", String.raw`\r`);
 
 /** Options for the public serializer. When any cap is set, truncation is ON for this
  *  call; with none set (or a bare indent number) behaviour is unchanged (no caps). */
@@ -1161,7 +1180,7 @@ function toSExprStringImpl(obj: any, opts: SerializeOpts, format: (sexpr: SExpr)
 
   const maxTotalChars = opts.maxTotalChars ?? DEFAULT_TOTAL;
   let maxItems = opts.maxItems ?? 100;
-  let maxStringChars = opts.maxStringChars ?? 2_000;
+  let maxStringChars = opts.maxStringChars ?? 2000;
 
   // Middle-elision is ON iff either knob is present (opt-in by presence); the other then
   // defaults to 5. `elideHead`/`elideTail` themselves stay FIXED across the shrink-to-fit loop
@@ -1214,7 +1233,8 @@ function toSExprStringImpl(obj: any, opts: SerializeOpts, format: (sexpr: SExpr)
     const factor = Math.min(0.9, maxTotalChars / out.length);
     maxItems = Math.max(arrayLimitFloor, Math.floor(maxItems * factor));
     maxStringChars = Math.max(FLOOR_STRING, Math.floor(maxStringChars * factor));
-    if (topLevelArrayLimit != null) topLevelArrayLimit = Math.max(arrayLimitFloor, Math.floor(topLevelArrayLimit * factor));
+    if (topLevelArrayLimit != null)
+      topLevelArrayLimit = Math.max(arrayLimitFloor, Math.floor(topLevelArrayLimit * factor));
     if (secondLevelArrayLimit != null) {
       secondLevelArrayLimit = Math.max(arrayLimitFloor, Math.floor(secondLevelArrayLimit * factor));
     }

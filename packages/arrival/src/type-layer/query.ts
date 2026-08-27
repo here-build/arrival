@@ -420,10 +420,29 @@ function balance(scheme: string): string {
     else if (c === "#" && scheme[i + 1] === "|") {
       block = 1;
       i++;
-    } else if (c === "(") opens.push(")");
-    else if (c === "[") opens.push("]");
-    else if (c === "{") opens.push("}");
-    else if (c === ")" || c === "]" || c === "}") opens.pop();
+    } else
+      switch (c) {
+        case "(": {
+          opens.push(")");
+          break;
+        }
+        case "[": {
+          opens.push("]");
+          break;
+        }
+        case "{": {
+          opens.push("}");
+          break;
+        }
+        case ")":
+        case "]":
+        case "}":
+          {
+            opens.pop();
+            // No default
+          }
+          break;
+      }
   }
   return scheme + (inStr ? '"' : "") + opens.toReversed().join("");
 }

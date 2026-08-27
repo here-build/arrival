@@ -32,7 +32,6 @@ import { testCallCtx } from "../run/CallCtx.js";
 const source = (impl: () => unknown) =>
   symbol.rosetta`t: test source`({ input: [], output: [z.dynamic] }, () => impl());
 
-
 function fire(proc: { ["arrival/tagless-final/apply"](args: any[], callCtx: any): any }, callCtx: any, ...args: any[]) {
   return proc["arrival/tagless-final/apply"](args, callCtx);
 }
@@ -63,19 +62,33 @@ describe("attestation registry (attest / isAttested / freshIfSingleton)", () => 
 
 describe("bakeRosetta return walk (stamp site 1)", () => {
   it("attests a scalar return; a boolean return is a fresh attested clone, never the flyweight", async () => {
-    expect(isAttested(await fire(source(() => 42), testCallCtx()))).toBe(true);
-    expect(isAttested(await fire(source(() => "hi"), testCallCtx()))).toBe(true);
-    const bool = await fire(source(() => true), testCallCtx());
+    expect(
+      isAttested(
+        await fire(
+          source(() => 42),
+          testCallCtx(),
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      isAttested(
+        await fire(
+          source(() => "hi"),
+          testCallCtx(),
+        ),
+      ),
+    ).toBe(true);
+    const bool = await fire(
+      source(() => true),
+      testCallCtx(),
+    );
     expect(isAttested(bool)).toBe(true);
     expect(bool).not.toBe(schemeTrue);
     expect(isAttested(schemeTrue)).toBe(false); // no program-wide leak
   });
 
   it("a PURE rosetta's return is NOT machine-attested (a transform, not a source)", async () => {
-    const pureDef = symbol.rosetta`p: pure transform`(
-      { input: [], output: [z.number], provenance: "pipe" },
-      () => 42,
-    );
+    const pureDef = symbol.rosetta`p: pure transform`({ input: [], output: [z.number], provenance: "pipe" }, () => 42);
     expect(isAttested(await fire(pureDef, testCallCtx()))).toBe(false);
   });
 
@@ -121,10 +134,9 @@ describe("bakeRosetta return walk (stamp site 1)", () => {
     // World-flip rebaseline: a rosetta can no longer echo a boxed pair through
     // z.dynamic — the impl returns RAW JS and a coded slot (z.list) has the
     // membrane construct the pair spine, which the return walk then deep-attests.
-    const listSource = symbol.rosetta`t-list: pair-spine source`(
-      { input: [], output: [z.list(z.number)] },
-      () => [1, 2, 3],
-    );
+    const listSource = symbol.rosetta`t-list: pair-spine source`({ input: [], output: [z.list(z.number)] }, () => [
+      1, 2, 3,
+    ]);
     const out = (await fire(listSource, testCallCtx())) as APair<any, any>;
     expect(out).toBeInstanceOf(APair);
     expect(isAttested(out)).toBe(true);
@@ -134,10 +146,7 @@ describe("bakeRosetta return walk (stamp site 1)", () => {
   });
 
   it("attests a vector's stored elements", async () => {
-    const vecSource = symbol.rosetta`t-vec: vector source`(
-      { input: [], output: [z.vector(z.number)] },
-      () => [1, 2],
-    );
+    const vecSource = symbol.rosetta`t-vec: vector source`({ input: [], output: [z.vector(z.number)] }, () => [1, 2]);
     const out = (await fire(vecSource, testCallCtx())) as AVector;
     expect(out).toBeInstanceOf(AVector);
     expect(isAttested(out)).toBe(true);

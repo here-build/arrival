@@ -20,7 +20,7 @@ const files = (table: Record<string, string>) =>
   });
 
 describe("arrivalYamlCapability — .yaml/.yml on the vocabulary (default) path", () => {
-  it("(require \"x.yaml\") resolves through THIS run's per-run registry, JSON-shaped", async () => {
+  it('(require "x.yaml") resolves through THIS run\'s per-run registry, JSON-shaped', async () => {
     // `exec` already exits through `toJS` — assert the JS face directly.
     const results = await exec(`(require "personas.yaml")`, {
       capabilities: [arrivalYamlCapability],

@@ -43,6 +43,14 @@ import type { Activation } from "../capability.js";
 import type { EmitRule, RefPolicy } from "../../emit/emit-rule.js";
 import type { MaybePromise } from "../../types/utility.js";
 
+/** Resource-path producer — sole home is run/resource-paths.ts. */
+import {
+  ResourcePathRoleConflictError,
+  ResourcePathShapeError,
+  type ResourcePathFn,
+} from "../../run/resource-paths.js";
+import { AValue } from "../../values/primitives/AValue.js";
+
 // ── 1. Args-vector spec + decoded-type inference ─────────────────────────────
 
 /** Args/return vector: bare tuple of schemas (positional) OR array-ish schema
@@ -143,14 +151,6 @@ export type ProvenanceRole = "pipe" | "fan" | "source" | "sink" | "transparent" 
 
 /** Cache-class vocabulary — explicit declaration, never derived from lineage role. See `Contract.cacheClass`. */
 export type CacheClass = "view" | "pure";
-
-/** Resource-path producer — sole home is run/resource-paths.ts. */
-import {
-  ResourcePathRoleConflictError,
-  ResourcePathShapeError,
-  type ResourcePathFn,
-} from "../../run/resource-paths.js";
-import { AValue } from "../../values/primitives/AValue.js";
 
 /** Per-z.lambda-arm dual of `ProvenanceRole` (host role). Shape extracts where it decides;
  *  `Contract.callbackRoles` declares where underdetermined (`extractCallbackRoles`):
@@ -566,7 +566,7 @@ export type AEntity =
  *  (`char-set:whitespace: …` → `"char-set"`). No `": "` ⇒ whole string is the name. */
 export function parseNameDoc(tpl: TemplateStringsArray, sub: readonly unknown[]): { name: string; doc?: string } {
   let raw = "";
-  // eslint-disable-next-line unicorn/no-for-loop -- tagged-template zip: tpl[i] interleaved with sub[i]
+
   for (let i = 0; i < tpl.length; i++) {
     raw += tpl[i];
     if (i < sub.length) raw += String(sub[i]);

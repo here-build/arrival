@@ -20,7 +20,20 @@ import { describe, expect, it } from "vitest";
 
 import type { AEntity } from "../../../common/symbols/_bake.js";
 import type { EmitCtx } from "../../../emit/emit-rule.js";
-import { ArrayLit, Arrow, Bin, Binding, Call, Index, Lit, Member, Method, Ref, Spread, type R } from "../../../emit/residual-lite.js";
+import {
+  ArrayLit,
+  Arrow,
+  Bin,
+  Binding,
+  Call,
+  Index,
+  Lit,
+  Member,
+  Method,
+  Ref,
+  Spread,
+  type R,
+} from "../../../emit/residual-lite.js";
 import listsPack from "../lists.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
@@ -62,7 +75,8 @@ function testCtx(over: Partial<EmitCtx<R>> = {}): EmitCtx<R> {
     door: (reason) => {
       throw new Error(reason);
     },
-    ...over };
+    ...over,
+  };
 }
 
 const ref = (name: string): R => Ref(Binding(name));

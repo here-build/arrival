@@ -23,7 +23,6 @@ import type { MaybePromise } from "../types/utility.js";
 /** A rosetta (host-fn) contribution config. Defined here, not imported, so this package
  *  needn't depend on the runtime. */
 export interface RosettaSpec {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- variadic host fn
   fn: (...args: any[]) => unknown;
   /** Optional ambient `.d.ts` member-body type fragment, harvested by the type-lens. */
   type?: string;

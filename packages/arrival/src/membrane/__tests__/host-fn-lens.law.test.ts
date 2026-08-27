@@ -167,7 +167,9 @@ describe("LAW — host-function inbound reverse-membrane lens", () => {
             const adder = (n: unknown) => (n as number) + 1;
             // reverse-membrane: host fn is a legal dynamic payload at runtime
             return adder as unknown as import("../../values/types.js").SchemeValue;
-          }) }) });
+          }),
+        }),
+      });
       const result = await lastValue("((make-adder) 41)", { capabilities: [cap], config: {} });
       expect(result).toBeInstanceOf(AExact);
       expect((result as AExact).num).toBe(42);

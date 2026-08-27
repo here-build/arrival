@@ -333,7 +333,8 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
           AJSArray: "append",
           AString: "string-append",
           ADict: "append",
-          ABytevector: "bytevector-append" };
+          ABytevector: "bytevector-append",
+        };
         const verb = concatVerb[carrier.carrier];
         const isString = carrier.carrier === "AString";
         // AJSArray LEFT this set on 2026-07-14 (the AJSArrayList rework). `append` now takes the
@@ -462,7 +463,8 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
           const deep = deepIds(result);
           for (const id of ids) expect(deep.has(id)).toBe(true);
         };
-        const provTitle = "provenance: deep-collapsed result provenance ⊇ union of consumed elements' (conservation, P10)";
+        const provTitle =
+          "provenance: deep-collapsed result provenance ⊇ union of consumed elements' (conservation, P10)";
         const provBody = async () => {
           const { env, value, ids } = await mint3(carrier);
           const result = await run1(env, value, `(equal? c c)`);
@@ -491,7 +493,7 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
         it(`boxes: ${term.boxDiscipline} — the result IS the first element, box intact`, async () => {
           const { env, value, ids } = await mint3(carrier);
           const result = await run1(env, value, `(car c)`);
-          const prov = [...((result as AValue).provenance)].sort((a, b) => a - b);
+          const prov = [...(result as AValue).provenance].sort((a, b) => a - b);
           if (carrier.carrier === "AJSArray") {
             // Borrowed array (hygiene law, V 2026-07-14): car projects index 0 via
             // AJSArray.boxElement, which stamps the CONTAINER's own provenance (the union of
@@ -584,8 +586,14 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
             expect((value as AValue)["arrival/toJS"]()).toBe(source);
           });
         } else {
-          it("boxes: no AValue survives past the toJS egress (P4 — the box's world ends at the membrane; R9 proxies unwrap on read)", boxesBody);
-          it("provenance: toJS egress carries NO provenance by design (P4/P9 — the trace keeps it, the JS value doesn't)", provBody);
+          it(
+            "boxes: no AValue survives past the toJS egress (P4 — the box's world ends at the membrane; R9 proxies unwrap on read)",
+            boxesBody,
+          );
+          it(
+            "provenance: toJS egress carries NO provenance by design (P4/P9 — the trace keeps it, the JS value doesn't)",
+            provBody,
+          );
         }
         break;
       }

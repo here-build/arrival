@@ -182,12 +182,12 @@ export class ResultHandle {
       }
       try {
         this.#teleological = await this.build(signal);
-      } catch (e) {
-        if (signal?.aborted && e instanceof Error && /abort/i.test(e.name + e.message)) {
-          throw e; // upstream cancellation — do NOT poison the handle; the value still stands.
+      } catch (error) {
+        if (signal?.aborted && error instanceof Error && /abort/i.test(error.name + error.message)) {
+          throw error; // upstream cancellation — do NOT poison the handle; the value still stands.
         }
         throw (this.#error = new Error(
-          `provenance unavailable: the run is too large to trace (${e instanceof Error ? e.message : String(e)}).`,
+          `provenance unavailable: the run is too large to trace (${error instanceof Error ? error.message : String(error)}).`,
         ));
       }
     }
@@ -218,12 +218,12 @@ export class ResultHandle {
     try {
       this.#attested = await this.capabilities.attestProvider();
       return this.#attested;
-    } catch (e) {
-      if (signal?.aborted && e instanceof Error && /abort/i.test(e.name + e.message)) {
-        throw e; // upstream cancellation — do NOT poison the handle; a later ask may succeed.
+    } catch (error) {
+      if (signal?.aborted && error instanceof Error && /abort/i.test(error.name + error.message)) {
+        throw error; // upstream cancellation — do NOT poison the handle; a later ask may succeed.
       }
       throw (this.#attestedError = new Error(
-        `attestation unavailable: the live conjunction failed (${e instanceof Error ? e.message : String(e)}).`,
+        `attestation unavailable: the live conjunction failed (${error instanceof Error ? error.message : String(error)}).`,
       ));
     }
   }

@@ -50,7 +50,8 @@ function recorder() {
     },
     exit(inv: TestInv, result: ExitResult): void {
       events.push({ kind: "exit", inv, result });
-    } };
+    },
+  };
   return { events, tap };
 }
 
@@ -134,11 +135,15 @@ describe("evaluation tap", () => {
     });
     const env = userEnv.child("tap-async-test") as EnvWithInternals<ResolvingAmbient>;
     // W8: ANativeProcedure (returns a Promise of a scheme value) — bare fns are doored.
-    env.bind("await-this", new ANativeProcedure({
+    env.bind(
+      "await-this",
+      new ANativeProcedure({
         name: "await-this",
         arity: { min: 0, max: 0 },
         contract: undefined,
-        impl: () => pending.then((v) => new AExact(v as number)) as never }));
+        impl: () => pending.then((v) => new AExact(v as number)) as never,
+      }),
+    );
 
     const { events, tap } = recorder();
     // execState (COMPLEX tier): this test only cares about tap enter/exit accounting.
@@ -202,7 +207,8 @@ describe("evaluation tap", () => {
       },
       exit(inv: TestInv, result: ExitResult): void {
         events.push({ kind: "exit", inv, result });
-      } };
+      },
+    };
     await exec("(+ (* 2 3) (* 4 5))", { tap, nodeFilter: () => false });
     expect(events).toHaveLength(0);
   });

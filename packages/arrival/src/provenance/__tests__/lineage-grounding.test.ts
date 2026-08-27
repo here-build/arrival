@@ -65,7 +65,9 @@ const sources: EnvSetup = async (env) => {
       "source-b": symbol.native`source-b: fake source (B)`(
         { input: [z.schemeValue], output: [z.schemeValue], provenance: "source" },
         () => sStr("SRC-B", MINT_B),
-      ) }) });
+      ),
+    }),
+  });
   await applyCapability(env, [cap]);
 };
 

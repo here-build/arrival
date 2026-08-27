@@ -11,7 +11,15 @@ describe("DEFINITION_KEYWORDS", () => {
   });
 
   it("still includes the existing define-family forms (no regression)", () => {
-    for (const kw of ["define", "define-values", "define-syntax", "define-macro", "defmacro", "define-class", "define-record-type"]) {
+    for (const kw of [
+      "define",
+      "define-values",
+      "define-syntax",
+      "define-macro",
+      "defmacro",
+      "define-class",
+      "define-record-type",
+    ]) {
       expect(DEFINITION_KEYWORDS.has(kw)).toBe(true);
     }
   });

@@ -29,7 +29,8 @@ const declared = (role: DeclaredRole): ANativeProcedure =>
     arity: { min: 0, max: null },
     contract: undefined,
     impl: () => theVoid,
-    provenanceRole: role });
+    provenanceRole: role,
+  });
 
 const node = async (src: string, e: ReturnType<typeof env>): Promise<LineageNode> =>
   classify((await parse(src))[0], classifierFromEnv(e));

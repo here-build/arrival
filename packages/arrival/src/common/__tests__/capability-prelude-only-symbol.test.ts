@@ -58,7 +58,8 @@ describe("buildVocabulary — routing preludeOnly symbols onto Vocabulary.prelud
       (s) => s,
     );
     const cap = EnvCapability.define("test/prelude-only-native", {
-      symbols: () => ({ "prelude-only/native-verb": def }) });
+      symbols: () => ({ "prelude-only/native-verb": def }),
+    });
     const vocabulary = await buildVocabulary([cap], undefined, evalScheme);
 
     expect(vocabulary.map.has("prelude-only/native-verb")).toBe(false);

@@ -199,14 +199,14 @@ export function isInteropBoundary(proto: object | null): boolean {
 
   // Class-level marker via static [INTEROP_BOUNDARY] = true. OWN descriptor only.
   const ctor = Reflect.getOwnPropertyDescriptor(proto, "constructor")?.value;
-  if (ctor && typeof ctor === "function") {
-    if (
-      Object.prototype.hasOwnProperty.call(ctor, INTEROP_BOUNDARY) &&
-      (ctor as unknown as Record<symbol, unknown>)[INTEROP_BOUNDARY] === true
-    ) {
-      boundaryCache.set(proto, true);
-      return true;
-    }
+  if (
+    ctor &&
+    typeof ctor === "function" &&
+    Object.prototype.hasOwnProperty.call(ctor, INTEROP_BOUNDARY) &&
+    (ctor as unknown as Record<symbol, unknown>)[INTEROP_BOUNDARY] === true
+  ) {
+    boundaryCache.set(proto, true);
+    return true;
   }
 
   boundaryCache.set(proto, false);
@@ -365,7 +365,7 @@ export function accessMember(data: unknown, key: string | symbol): AccessResult<
   }
 
   // Box primitives to check properties.
-  const obj = Object(data);
+  const obj = new Object(data);
 
   if (Object.prototype.hasOwnProperty.call(obj, keyStr)) {
     return Reflect.get(obj, keyStr);
@@ -412,7 +412,7 @@ export function accessHas(data: unknown, key: string | symbol): boolean {
     return false;
   }
 
-  const obj = Object(data);
+  const obj = new Object(data);
 
   if (Object.prototype.hasOwnProperty.call(obj, keyStr)) {
     return true;
@@ -445,5 +445,5 @@ export function accessKeys(data: unknown): string[] {
     return [];
   }
 
-  return Object.keys(Object(data));
+  return Object.keys(new Object(data));
 }

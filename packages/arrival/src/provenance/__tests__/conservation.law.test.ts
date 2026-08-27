@@ -132,7 +132,8 @@ function makeRng(seed: number): Rng {
     float: () => rand(),
     int: (min, max) => min + Math.floor(rand() * (max - min + 1)),
     bool: (pTrue) => rand() < pTrue,
-    pick: <T>(arr: readonly T[]): T => arr[Math.floor(rand() * arr.length)] as T };
+    pick: <T>(arr: readonly T[]): T => arr[Math.floor(rand() * arr.length)] as T,
+  };
 }
 
 function shuffle<T>(rng: Rng, arr: readonly T[]): T[] {
@@ -217,7 +218,8 @@ function genPair(rng: Rng, ctx: GenCtx, ty: PairTy, depth: number): Gen {
       code: `(list ${items.map((i) => i.code).join(" ")})`,
       ids: union(...items.map((i) => i.ids)),
       headIds: [...(items[0]?.ids ?? [])],
-      ty };
+      ty,
+    };
   }
   const a = genScalar(rng, ctx, ty.car, depth - 1);
   const b = genScalar(rng, ctx, ty.cdr, depth - 1);
@@ -297,7 +299,8 @@ async function wireRosetta(
       const def = makeDef(symbol, z);
       const name = (def.contract as { name: string }).name;
       return { [name]: def, verb: symbol.alias`${name}` };
-    } });
+    },
+  });
   const { env, verbs } = recordingEnv();
   await applyCapability(env, [cap]);
   expect(verbs.verb).toBeInstanceOf(ARosettaProcedure); // the binder-cut bind shape itself
@@ -312,7 +315,8 @@ function invocationWithId(id: number): { invocation: InvocationLike; marked: () 
     markProvenancePoint() {
       didMark = true;
       this.isProvenancePoint = true;
-    } };
+    },
+  };
   return { invocation, marked: () => didMark };
 }
 
@@ -417,7 +421,9 @@ describe("conservation — every input id survives to the output or the trace", 
       const cmp = contourCallback((args) => {
         const a = args[0] as AString;
         const b = args[1] as AString;
-        return String(a.valueOf()).localeCompare(String(b.valueOf())) as unknown as import("../../values/types.js").SchemeValue;
+        return String(a.valueOf()).localeCompare(
+          String(b.valueOf()),
+        ) as unknown as import("../../values/types.js").SchemeValue;
       }, "locale-cmp");
       const pairOut = mkStampedPair()[tf("sort")](cmp, CONSTANT_CTX);
       const vecOut = mkStampedVector()[tf("sort")](cmp, CONSTANT_CTX);

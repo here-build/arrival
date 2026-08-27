@@ -43,7 +43,7 @@
  * steps. The cost ALGEBRA here is the formally-correct one.
  */
 
-import type { BoxType, CandidateBox, Decision } from "./trace-to-forest.js";
+import type { CandidateBox, Decision } from "./trace-to-forest.js";
 
 export interface CollapseParams {
   /** λ — zoom knob, scales the per-occurrence reference overhead. LOW λ ⇒ cheap

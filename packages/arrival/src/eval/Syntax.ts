@@ -46,7 +46,7 @@ export class Syntax {
     }
   };
 
-  __name__: string;
+  __name__: string = "";
   __fn__: MacroTransformer;
   __defmacro__: boolean;
   __env__: unknown;
@@ -63,7 +63,6 @@ export class Syntax {
   __resolver__: Resolver | undefined;
 
   constructor(fn: MacroTransformer, env: unknown, resolver?: Resolver) {
-    this.__name__ = "";
     this.__fn__ = fn;
     this.__env__ = env;
     this.__resolver__ = resolver;

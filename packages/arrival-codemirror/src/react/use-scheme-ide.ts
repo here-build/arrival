@@ -87,26 +87,23 @@ function publishAudit(): void {
   if (typeof globalThis === "undefined") return;
   const g = globalThis as { __INHUMAN_SCHEME_IDE__?: SchemeIdeAudit };
   g.__INHUMAN_SCHEME_IDE__ = { ...AUDIT, canaries: [...AUDIT.canaries] };
-  console.info(
-    "[inhuman scheme-ide audit]",
-    {
-      transport: AUDIT.transport,
-      hostMembers: AUDIT.hostMembers.length,
-      hostSample: AUDIT.hostMembers.slice(0, 30),
-      schemePreludeChars: AUDIT.schemePreludeChars,
-      loadBeforeHostConfig: AUDIT.loadBeforeHostConfig,
-      hostConfiguredAt: AUDIT.hostConfiguredAt,
-      ideReadyAt: AUDIT.ideReadyAt,
-      projectFileCount: AUDIT.projectFileCount,
-      requireTypeCount: AUDIT.requireTypeCount,
-      openPath: AUDIT.openPath,
-      canaries: AUDIT.canaries.map((c) => ({
-        label: c.label,
-        emitHead: c.emitHead,
-        diags: c.diagnostics.map((d) => d.message),
-      })),
-    },
-  );
+  console.info("[inhuman scheme-ide audit]", {
+    transport: AUDIT.transport,
+    hostMembers: AUDIT.hostMembers.length,
+    hostSample: AUDIT.hostMembers.slice(0, 30),
+    schemePreludeChars: AUDIT.schemePreludeChars,
+    loadBeforeHostConfig: AUDIT.loadBeforeHostConfig,
+    hostConfiguredAt: AUDIT.hostConfiguredAt,
+    ideReadyAt: AUDIT.ideReadyAt,
+    projectFileCount: AUDIT.projectFileCount,
+    requireTypeCount: AUDIT.requireTypeCount,
+    openPath: AUDIT.openPath,
+    canaries: AUDIT.canaries.map((c) => ({
+      label: c.label,
+      emitHead: c.emitHead,
+      diags: c.diagnostics.map((d) => d.message),
+    })),
+  });
 }
 
 /** Read-only snapshot of the last arming (also on `window.__INHUMAN_SCHEME_IDE__`). */
@@ -205,27 +202,24 @@ export function configureSchemeIdeHost(config: {
     ideLoadedGeneration = -1;
   }
   notifyHostConfig();
-  console.info(
-    "[inhuman scheme-ide] configureSchemeIdeHost",
-    {
-      members: AUDIT.hostMembers.length,
-      sample: AUDIT.hostMembers.slice(0, 40),
-      kwargsMembers: config.host?.kwargsMembers?.length ?? 0,
-      schemePreludeChars: AUDIT.schemePreludeChars,
-      schemePreludeHasStr: /\(define str\b/.test(prelude),
-      hostPreludeChars: AUDIT.hostPreludeChars,
-      hostConfigGeneration,
-      // Spot-check names that _util.scm / custdev need
-      has: {
-        require: AUDIT.hostMembers.includes("require"),
-        "values-of": AUDIT.hostMembers.includes("values-of"),
-        append: AUDIT.hostMembers.includes("append"),
-        "+": AUDIT.hostMembers.includes("+"),
-        "number->string": AUDIT.hostMembers.includes("number->string"),
-        join: AUDIT.hostMembers.includes("join"),
-      },
+  console.info("[inhuman scheme-ide] configureSchemeIdeHost", {
+    members: AUDIT.hostMembers.length,
+    sample: AUDIT.hostMembers.slice(0, 40),
+    kwargsMembers: config.host?.kwargsMembers?.length ?? 0,
+    schemePreludeChars: AUDIT.schemePreludeChars,
+    schemePreludeHasStr: /\(define str\b/.test(prelude),
+    hostPreludeChars: AUDIT.hostPreludeChars,
+    hostConfigGeneration,
+    // Spot-check names that _util.scm / custdev need
+    has: {
+      require: AUDIT.hostMembers.includes("require"),
+      "values-of": AUDIT.hostMembers.includes("values-of"),
+      append: AUDIT.hostMembers.includes("append"),
+      "+": AUDIT.hostMembers.includes("+"),
+      "number->string": AUDIT.hostMembers.includes("number->string"),
+      join: AUDIT.hostMembers.includes("join"),
     },
-  );
+  });
   publishAudit();
 }
 
@@ -346,11 +340,11 @@ async function runCanaries(backend: SchemeIdeBackend): Promise<void> {
           message: d.messageText ?? (d as { message?: string }).message ?? String(d),
         })),
       });
-    } catch (e) {
+    } catch (error) {
       out.push({
         label: p.label,
         scheme: p.scheme,
-        emitHead: `(canary error: ${e instanceof Error ? e.message : String(e)})`,
+        emitHead: `(canary error: ${error instanceof Error ? error.message : String(error)})`,
         diagnostics: [],
       });
     }
@@ -371,10 +365,8 @@ function loadIde(): Promise<SchemeIdeBackend | null> {
     // snapshot includes host members + schemePrelude (polyglot `str` for sugarcoat).
     if (!hostConfigSeen) {
       AUDIT.loadBeforeHostConfig = true;
-      console.warn(
-        "[inhuman scheme-ide] loadIde before configureSchemeIdeHost — waiting up to 8s for roster",
-      );
-      await waitForHostConfig(8_000);
+      console.warn("[inhuman scheme-ide] loadIde before configureSchemeIdeHost — waiting up to 8s for roster");
+      await waitForHostConfig(8000);
       if (!hostConfigSeen) {
         console.warn(
           "[inhuman scheme-ide] roster still missing after wait — using FALLBACK_POLYGLOT_PRELUDE (str) + empty host",

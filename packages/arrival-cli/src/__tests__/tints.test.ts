@@ -213,12 +213,13 @@ describe("canvas attunement — ink + paper", () => {
     const painted = paintHex("x", DARCULA.symbol, "truecolor");
     const m = /\x1b\[38;2;(\d+);(\d+);(\d+)m/.exec(painted);
     expect(m).not.toBeNull();
-    const h = oklch({
-      mode: "rgb",
-      r: Number(m![1]) / 255,
-      g: Number(m![2]) / 255,
-      b: Number(m![3]) / 255,
-    })?.h ?? 0;
+    const h =
+      oklch({
+        mode: "rgb",
+        r: Number(m![1]) / 255,
+        g: Number(m![2]) / 255,
+        b: Number(m![3]) / 255,
+      })?.h ?? 0;
     expect(h).toBeGreaterThan(50);
     expect(h).toBeLessThan(130);
   });

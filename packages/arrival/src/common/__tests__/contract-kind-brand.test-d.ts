@@ -36,14 +36,21 @@ describe("Q1 compile-time contract-kind ban — z.schemeValue banned from rosett
         // crosses the membrane, so this slot needs a real codec, z.procedure, or z.dynamic.
         bad: symbol.rosetta`bad: schemeValue in rosetta input`({ input: [z.schemeValue], output: [z.string] }, (v) =>
           String(v),
-        ) }) });
+        ),
+      }),
+    });
   });
 
   test("z.schemeValue in a rosetta output slot must NOT compile", () => {
     EnvCapability.define("test/ban-schemeValue-rosetta-output", {
       symbols: (symbol, z) => ({
-        // @ts-expect-error — same rule, output side.
-        bad: symbol.rosetta`bad: schemeValue in rosetta output`({ input: [z.string], output: [z.schemeValue] }, (s) => s) }) });
+        bad: symbol.rosetta`bad: schemeValue in rosetta output`(
+          // @ts-expect-error — same rule, output side.
+          { input: [z.string], output: [z.schemeValue] },
+          (s) => s,
+        ),
+      }),
+    });
   });
 
   test("z.schemeValue in a rosetta kwargs field must NOT compile", () => {
@@ -54,7 +61,9 @@ describe("Q1 compile-time contract-kind ban — z.schemeValue banned from rosett
           // Error lands on the contract object (poisoned `inputRest`), not the factory call.
           { input: [], inputRest: { v: z.schemeValue }, output: [z.string] },
           (args: { v: unknown }) => String(args.v),
-        ) }) });
+        ),
+      }),
+    });
   });
 
   test("z.dynamic in a native input slot must NOT compile", () => {
@@ -65,7 +74,9 @@ describe("Q1 compile-time contract-kind ban — z.schemeValue banned from rosett
         // choice there.
         bad: symbol.native`bad: dynamic in native input`({ input: [z.dynamic], output: [z.boolean] }, function () {
           return true;
-        }) }) });
+        }),
+      }),
+    });
   });
 
   test("z.dynamic in a native output slot must NOT compile", () => {
@@ -74,7 +85,9 @@ describe("Q1 compile-time contract-kind ban — z.schemeValue banned from rosett
         // @ts-expect-error — same rule, output side.
         bad: symbol.native`bad: dynamic in native output`({ input: [z.string], output: [z.dynamic] }, function (s) {
           return s;
-        }) }) });
+        }),
+      }),
+    });
   });
 
   test("z.dynamic in a symbol.define constant contract must NOT compile", () => {
@@ -82,7 +95,9 @@ describe("Q1 compile-time contract-kind ban — z.schemeValue banned from rosett
       symbols: (symbol, z) => ({
         // @ts-expect-error — z.dynamic constant: symbol.define bodies are contour, never a
         // membrane crossing.
-        bad: symbol.define`bad: dynamic constant`(z.dynamic, `42`) }) });
+        bad: symbol.define`bad: dynamic constant`(z.dynamic, `42`),
+      }),
+    });
   });
 
   test("POSITIVE: z.schemeValue in native/sequence/define compiles clean (the honest top type is home there)", () => {
@@ -94,33 +109,48 @@ describe("Q1 compile-time contract-kind ban — z.schemeValue banned from rosett
             return v;
           },
         ),
-        "ok-define": symbol.define`ok-define: schemeValue constant is legal here`(z.schemeValue, `42`) }) });
+        "ok-define": symbol.define`ok-define: schemeValue constant is legal here`(z.schemeValue, `42`),
+      }),
+    });
   });
 
   test("POSITIVE: z.dynamic in rosetta compiles clean (the escape hatch is home there)", () => {
     EnvCapability.define("test/ok-dynamic-rosetta", {
       symbols: (symbol, z) => ({
-        "ok-rosetta": symbol.rosetta`ok-rosetta: dynamic is legal here`({ input: [z.dynamic], output: [z.dynamic] }, (v) => v) }) });
+        "ok-rosetta": symbol.rosetta`ok-rosetta: dynamic is legal here`(
+          { input: [z.dynamic], output: [z.dynamic] },
+          (v) => v,
+        ),
+      }),
+    });
   });
 
   test("z.instance(Ctor) in a native input slot must NOT compile", () => {
     EnvCapability.define("test/ban-instance-native-input", {
       symbols: (symbol, z) => ({
-        // @ts-expect-error — z.instance(Ctor) is not legal in a native contract's input; a
-        // native contour never crosses the membrane, so z.schemeValue (or a real codec) is
-        // the honest choice there — same rule z.dynamic's own ban above pins.
-        bad: symbol.native`bad: instance in native input`({ input: [z.instance(FixtureHandle)], output: [z.boolean] }, function () {
-          return true;
-        }) }) });
+        bad: symbol.native`bad: instance in native input`(
+          // @ts-expect-error — z.instance(Ctor) is not legal in a native contract's input
+          { input: [z.instance(FixtureHandle)], output: [z.boolean] },
+          function () {
+            return true;
+          },
+        ),
+      }),
+    });
   });
 
   test("z.instance(Ctor) in a native output slot must NOT compile", () => {
     EnvCapability.define("test/ban-instance-native-output", {
       symbols: (symbol, z) => ({
-        // @ts-expect-error — same rule, output side.
-        bad: symbol.native`bad: instance in native output`({ input: [z.string], output: [z.instance(FixtureHandle)] }, function (s) {
-          return s;
-        }) }) });
+        bad: symbol.native`bad: instance in native output`(
+          // @ts-expect-error — same rule, output side.
+          { input: [z.string], output: [z.instance(FixtureHandle)] },
+          function (s) {
+            return s;
+          },
+        ),
+      }),
+    });
   });
 
   test("z.instance(Ctor) in a symbol.define constant contract must NOT compile", () => {
@@ -128,7 +158,9 @@ describe("Q1 compile-time contract-kind ban — z.schemeValue banned from rosett
       symbols: (symbol, z) => ({
         // @ts-expect-error — z.instance(Ctor) constant: symbol.define bodies are contour,
         // never a membrane crossing.
-        bad: symbol.define`bad: instance constant`(z.instance(FixtureHandle), `42`) }) });
+        bad: symbol.define`bad: instance constant`(z.instance(FixtureHandle), `42`),
+      }),
+    });
   });
 
   test("POSITIVE: z.instance(Ctor) in rosetta compiles clean (the semi-opaque handle is home there)", () => {
@@ -137,6 +169,8 @@ describe("Q1 compile-time contract-kind ban — z.schemeValue banned from rosett
         "ok-rosetta": symbol.rosetta`ok-rosetta: instance(Ctor) is legal here`(
           { input: [z.instance(FixtureHandle)], output: [z.instance(FixtureHandle)] },
           (v) => v,
-        ) }) });
+        ),
+      }),
+    });
   });
 });

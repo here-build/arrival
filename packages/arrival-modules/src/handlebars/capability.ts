@@ -44,15 +44,14 @@ export const arrivalHandlebarsCapability = EnvCapability.define("arrival/handleb
       ),
     // Registered scheme verb: contents boxed, return IS the module value — a lambda
     // (CALLABLE RULE). Eval the pretreat here so require does not unwrap a JS bag.
-    "ext/handlebars/resolve":
-      symbol.native`ext/handlebars/resolve: pretreat .hbs to a scheme lambda`(
-        { input: [z.union([z.string, z.bytevector])], output: [z.schemeValue] },
-        async function (contents) {
-          const resolver = runResolverOf(this, "ext/handlebars/resolve");
-          const [form] = await parse(hbsContentsToSchemeSource(contentsToText(contents)));
-          return execExpr(form, { resolver, runCtx: this.runCtx });
-        },
-      ),
+    "ext/handlebars/resolve": symbol.native`ext/handlebars/resolve: pretreat .hbs to a scheme lambda`(
+      { input: [z.union([z.string, z.bytevector])], output: [z.schemeValue] },
+      async function (contents) {
+        const resolver = runResolverOf(this, "ext/handlebars/resolve");
+        const [form] = await parse(hbsContentsToSchemeSource(contentsToText(contents)));
+        return execExpr(form, { resolver, runCtx: this.runCtx });
+      },
+    ),
     "handlebars/parse": symbol.rosetta`handlebars/parse: compiles a handlebars template source once (cached by source)`(
       {
         // TODO(@arrival.private): `CompiledTemplate` is a plain interface (render fn + info),

@@ -28,7 +28,12 @@ import type { Payload } from "../provenance/store/interfaces.js";
 import { PayloadTierMachine } from "../provenance/store/tiering.js";
 import { replayGraphEgress, ReplayScopeError } from "../provenance/replay.js";
 import { answerQuery, ReplayMemo, type ReplayMemoKey } from "../provenance/replay-memo.js";
-import { SameProcessExecutor, type DrillInRequest, type OffloadIngress, type VerificationCandidate } from "../provenance/offload.js";
+import {
+  SameProcessExecutor,
+  type DrillInRequest,
+  type OffloadIngress,
+  type VerificationCandidate,
+} from "../provenance/offload.js";
 import { CORPUS_BASE_NAMES, CORPUS_ROLES } from "../__tests__/provenance/w1-corpus.js";
 import { recordRun, type RecordedMint } from "../__tests__/provenance/q16-harness.js";
 import {
@@ -36,7 +41,8 @@ import {
   readPayloadEnvelope,
   runReferenceWorkload,
   storeMetadataBytes,
-  WORKLOAD_SHAPE } from "./support/provenance-budget-workload.js";
+  WORKLOAD_SHAPE,
+} from "./support/provenance-budget-workload.js";
 
 const corpusClassifier: Classifier = { roleOf: (op) => CORPUS_ROLES[op] };
 const corpusIsBaseName = (n: string): boolean => CORPUS_BASE_NAMES.has(n);
@@ -136,7 +142,7 @@ describe("C1 — reference workload completes with full provenance inside 128MB 
     // workload's exact byte arithmetic is an estimate, not a hard invariant) —
     // comfortably under budget is the claim; exact-to-the-KB is not.
     expect(storeAccountingBytes).toBeLessThan(64 * 1024 * 1024); // ≥2x headroom, generous slack on "~30-40MB"
-    expect(storeAccountingBytes).toBeLessThan(128 * 1024 * 1024 / 3); // the stated "≥3x headroom" claim itself
+    expect(storeAccountingBytes).toBeLessThan((128 * 1024 * 1024) / 3); // the stated "≥3x headroom" claim itself
 
     // The honest ceiling: even with the fakes retaining EVERY payload ever flushed
     // (never actually leaving heap, unlike a real DO/R2-backed deployment), total
@@ -167,7 +173,8 @@ describe("C3 — drill-in answers carry an honest evidence tier (Q18's executor 
       replay: () => replayGraphEgress({ program, frozen: run.frozen, basePacks: [] }),
       fallback: async () => {
         throw new Error("fallback should not run — replay must succeed for the program's own egress wire");
-      } });
+      },
+    });
 
     expect(answer.tier).toBe("replayed");
     expect(answer.value).toEqual(run.egress);
@@ -215,7 +222,8 @@ describe("C3 — drill-in answers carry an honest evidence tier (Q18's executor 
         // claimed scope. This is the teaching door, not a stand-in for a bug.
         throw new ReplayScopeError("mint", "mint-node@0", "a mint's payload is recorded, never re-derived by γ");
       },
-      fallback: () => tierMachine.read(hash) });
+      fallback: () => tierMachine.read(hash),
+    });
 
     expect(answer.tier).toBe("recorded");
     expect(answer.value).toBe(42);
@@ -237,7 +245,8 @@ describe("C3 — drill-in answers carry an honest evidence tier (Q18's executor 
       replay: async () => {
         throw new ReplayScopeError("mint", "mint-node@1", "same door as the recorded case");
       },
-      fallback: () => tierMachine.read(hash) });
+      fallback: () => tierMachine.read(hash),
+    });
 
     expect(answer.tier).toBe("stub");
     expect(answer.value).toBeUndefined();
@@ -255,16 +264,17 @@ describe("C3 — drill-in answers carry an honest evidence tier (Q18's executor 
       templateHash,
       ingress: ingressFromMints(run.mints),
       streamEpoch: "arrival-provenance-v0",
-      regionId: run.regionId };
+      regionId: run.regionId,
+    };
     const response = await executor.drillIn(request);
     expect(response.evidenceTier).toBe("replayed");
     expect(response.trust).toBe("matched");
 
     // Epoch mismatch WITHOUT a verification pool: refuses outright rather than lie
     // — tier honesty's other face (never answer at all rather than answer wrong).
-    await expect(
-      executor.drillIn({ ...request, streamEpoch: "arrival-provenance-v1" }),
-    ).rejects.toThrow(/epoch mismatch/);
+    await expect(executor.drillIn({ ...request, streamEpoch: "arrival-provenance-v1" })).rejects.toThrow(
+      /epoch mismatch/,
+    );
 
     // Epoch mismatch WITH a verification pool that agrees: `trust: "verified"`,
     // still `evidenceTier: "replayed"` — verification changes TRUST, never the tier.
@@ -275,7 +285,8 @@ describe("C3 — drill-in answers carry an honest evidence tier (Q18's executor 
     const verified = await executor2.drillIn({
       ...request,
       streamEpoch: "arrival-provenance-v1",
-      verificationPool: pool });
+      verificationPool: pool,
+    });
     expect(verified.evidenceTier).toBe("replayed");
     expect(verified.trust).toBe("verified");
   });
@@ -292,7 +303,9 @@ describe("break-order probe 1 — DO-storage write volume/cost", () => {
     const { recordBytes, runBytes } = await storeMetadataBytes(h);
     const totalWriteBytes = recordBytes + runBytes + h.flushedBytesTotal; // + durable payload bytes
     const mb = (n: number) => (n / (1024 * 1024)).toFixed(2);
-    console.log(`probe1 DO-write volume: records=${mb(recordBytes)}MB runs=${mb(runBytes)}MB payloads=${mb(h.flushedBytesTotal)}MB total=${mb(totalWriteBytes)}MB (A.2 ceiling: ~30-60MB)`);
+    console.log(
+      `probe1 DO-write volume: records=${mb(recordBytes)}MB runs=${mb(runBytes)}MB payloads=${mb(h.flushedBytesTotal)}MB total=${mb(totalWriteBytes)}MB (A.2 ceiling: ~30-60MB)`,
+    );
     expect(totalWriteBytes).toBeLessThan(60 * 1024 * 1024);
   });
 });
@@ -344,7 +357,8 @@ describe("break-order probe 3 — ring misconfiguration (undersized ring → bac
           kind: "mint",
           id: { templateHash: "probe3", ordinalPath: [i], regionEpoch: "e0" },
           seq,
-          payloadHash: hash });
+          payloadHash: hash,
+        });
         await h.tierMachine.flush(hash); // the backstop: cap=1 byte means every put immediately exceeds it
         hashes.push(hash);
       }
@@ -383,14 +397,17 @@ describe("break-order probe 4 — drill-in CPU (γ per-drill cost vs the interac
         templateHash,
         ingress: ingressFromMints(freshRun.mints),
         streamEpoch: "arrival-provenance-v0",
-        regionId: freshRun.regionId });
+        regionId: freshRun.regionId,
+      });
       timings.push(performance.now() - start);
       expect(response.evidenceTier).toBe("replayed");
     }
 
     const max = Math.max(...timings);
     const avg = timings.reduce((a, b) => a + b, 0) / timings.length;
-    console.log(`probe4 drill-in CPU: avg=${avg.toFixed(2)}ms max=${max.toFixed(2)}ms over ${ITERATIONS} drills (budget: <100ms)`);
+    console.log(
+      `probe4 drill-in CPU: avg=${avg.toFixed(2)}ms max=${max.toFixed(2)}ms over ${ITERATIONS} drills (budget: <100ms)`,
+    );
     expect(max).toBeLessThan(100);
     expect(avg).toBeLessThan(50);
   });

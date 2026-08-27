@@ -153,9 +153,7 @@ describe("write-into-scope + override VALUE-INJECTION parity", () => {
     const declaredResult = declaredValues.at(-1);
     expect(manualResult).toBeInstanceOf(AValue);
     expect(declaredResult).toBeInstanceOf(AValue);
-    expect([...(declaredResult as AValue).provenance].sort()).toEqual(
-      [...(manualResult as AValue).provenance].sort(),
-    );
+    expect([...(declaredResult as AValue).provenance].sort()).toEqual([...(manualResult as AValue).provenance].sort());
     // Both empty — neither path mints a fresh point (CONSTANT_CTX, both sides).
     expect((manualResult as AValue).provenance.size).toBe(0);
   });
@@ -215,7 +213,8 @@ describe("V7 pin — the MONADIC contract (hermetic-Environment ruling, 2026-07-
     const root = LexicalScope.fresh("pin-resolver-boxed");
     root.env.registerResolver({
       id: "boxed-answerer",
-      resolve: (n, ctx) => (n === "greeting" ? jsToScheme(ctx ?? CONSTANT_CTX, "hello", {}) : undefined) });
+      resolve: (n, ctx) => (n === "greeting" ? jsToScheme(ctx ?? CONSTANT_CTX, "hello", {}) : undefined),
+    });
     const [v] = await exec('(string-append greeting "!")', { scope: root });
     expect(v).toBe("hello!");
   });

@@ -207,7 +207,9 @@ describe("F6 doors — declaration completeness drift alarms", () => {
 
   it("every door carries a non-empty declared reason (the redirect doors exist to give)", () => {
     for (const door of DOORS) {
-      expect(door.reason.trim().length, `\`${door.name}\` (${door.pack}) has no substantive reason`).toBeGreaterThan(15);
+      expect(door.reason.trim().length, `\`${door.name}\` (${door.pack}) has no substantive reason`).toBeGreaterThan(
+        15,
+      );
     }
   });
 });

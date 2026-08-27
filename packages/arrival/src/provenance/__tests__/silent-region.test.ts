@@ -39,7 +39,8 @@ import {
   withSilentRegion,
   withTrackCoordinate,
   type TrackCoordinate,
-  type TrackEmissionSink } from "../../membrane/region-scope.js";
+  type TrackEmissionSink,
+} from "../../membrane/region-scope.js";
 import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AExact } from "../../values/primitives/AExact.js";
@@ -65,7 +66,8 @@ function makeEcho(): ANativeProcedure {
     name: "echo",
     arity: { min: 1, max: 1 },
     contract: undefined,
-    impl: (args) => args[0] });
+    impl: (args) => args[0],
+  });
 }
 
 /** Same shape `emission-hooks.test.ts` uses — one rosetta source, a real membrane
@@ -76,7 +78,12 @@ async function registerSource(env: ResolvingAmbient): Promise<void> {
   await applyCapability(env, [
     EnvCapability.define("test/fetch-item", {
       symbols: (symbol, z) => ({
-        "fetch-item": symbol.rosetta`fetch-item: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 42) }) }),
+        "fetch-item": symbol.rosetta`fetch-item: a zero-arg numeric source`(
+          { input: [], output: [z.number] },
+          () => 42,
+        ),
+      }),
+    }),
   ]);
 }
 
@@ -131,7 +138,9 @@ describe("A. silent-region mode suppresses emission, never doors (§4 CHOSEN, ro
     const env = inferenceEnv.child("loud-mint");
     await registerSource(env);
     const trace = new EvalTrace();
-    await withRecordCoordinateAsync(RECORD_COORD, mintSink, () => execStateOverFrame("(fetch-item)", { env, tap: trace }));
+    await withRecordCoordinateAsync(RECORD_COORD, mintSink, () =>
+      execStateOverFrame("(fetch-item)", { env, tap: trace }),
+    );
 
     await Promise.resolve();
     await Promise.resolve();
@@ -281,7 +290,8 @@ describe("B. hermeticApply — γ = apply(wire, ingress) under a silent region (
     source: "(lambda (x) (inc x))",
     params: ["x"],
     paramRefs: [{ kind: "slot", name: "x" }],
-    span: "silent-region-test-wire" };
+    span: "silent-region-test-wire",
+  };
   const PRELUDE = "(define (inc n) (+ n 1))";
 
   it("computes the correct γ result: apply(wire, ingress) against Q7's hermetic env", async () => {
@@ -289,7 +299,8 @@ describe("B. hermeticApply — γ = apply(wire, ingress) under a silent region (
       wire: WIRE,
       ingress: { x: new AExact(41) },
       basePacks: [],
-      prelude: PRELUDE });
+      prelude: PRELUDE,
+    });
     expect(result).toBe(42);
   });
 
@@ -299,7 +310,8 @@ describe("B. hermeticApply — γ = apply(wire, ingress) under a silent region (
       wire: WIRE,
       ingress: { x: new AExact(1) },
       basePacks: [],
-      prelude: PRELUDE });
+      prelude: PRELUDE,
+    });
     // Synchronous continuation, before the returned promise settles — `withSilentRegion`
     // sets the flag BEFORE its first await suspends, so this is already true here.
     expect(isSilentRegion()).toBe(true);
@@ -342,7 +354,9 @@ describe("C. glass whole-program replay — the SAME silent discipline generaliz
     await registerSource(env2);
     const trace2 = new EvalTrace();
     const replayed = await withSilentRegion(() =>
-      withRecordCoordinateAsync(RECORD_COORD, sink, () => execStateOverFrame("(fetch-item)", { env: env2, tap: trace2 })),
+      withRecordCoordinateAsync(RECORD_COORD, sink, () =>
+        execStateOverFrame("(fetch-item)", { env: env2, tap: trace2 }),
+      ),
     );
     expect(toJS(replayed.values[0])).toBe(42); // same behavior…
 

@@ -14,10 +14,4 @@ export {
   runCompiledTemplate,
 } from "./compile.js";
 export { hbsContentsToSchemeSource } from "./scheme.js";
-export {
-  analyzeTemplate,
-  coerceShape,
-  type Shape,
-  type TemplateInfo,
-  validateShape,
-} from "./template-analyze.js";
+export { analyzeTemplate, coerceShape, type Shape, type TemplateInfo, validateShape } from "./template-analyze.js";

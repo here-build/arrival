@@ -17,7 +17,7 @@
 //   alias         duplicate binding under a new name
 //   value         host data constant
 
-export {default as native} from "./native.js"
+export { default as native } from "./native.js";
 export { rosetta } from "./rosetta.js";
 export { tagless } from "./tagless.js";
 export { taglessGuard } from "./taglessGuard.js";

@@ -15,9 +15,7 @@ declare const gte: (a: number, b: number) => boolean;
 declare const scoresA: List<number>;
 declare const scoresB: List<number>;
 expectTypeOf(every(gte, scoresA, scoresB)).toEqualTypeOf<boolean>();
-expectTypeOf(
-  every((a: number, b: number): boolean => a >= b, scoresA, scoresB),
-).toEqualTypeOf<boolean>();
+expectTypeOf(every((a: number, b: number): boolean => a >= b, scoresA, scoresB)).toEqualTypeOf<boolean>();
 
 // @ts-expect-error two-list pred first param mismatches first list
 every((s: string, n: number): boolean => true, scoresA, scoresB);

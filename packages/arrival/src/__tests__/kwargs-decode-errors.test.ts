@@ -29,7 +29,6 @@ function pluck(key: string): unknown {
   return new ASymbol(`:${key}`);
 }
 
-
 function fire(proc: { ["arrival/tagless-final/apply"](args: any[], callCtx: any): any }, callCtx: any, ...args: any[]) {
   return proc["arrival/tagless-final/apply"](args, callCtx);
 }
@@ -75,7 +74,8 @@ describe("kwargs decode rejection — humanized frozen shape (docs/args-error-re
         (args) => `${args.query}:${args.pageSize}`,
       );
       await expect(
-        fire(def, 
+        fire(
+          def,
           testCallCtx(),
           pluck("query"),
           new AString("King Saud University"),

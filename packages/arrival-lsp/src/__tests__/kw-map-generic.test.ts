@@ -3,9 +3,7 @@ import { createSchemeLanguageService } from "../language-service.js";
 
 describe("keyword-as-fn under map — HOF-safe generic", () => {
   it("(map :score xs) — no unknown-x, no unknown↛{score} clash", () => {
-    const scheme =
-      `(define xs (list (dict :score 1) (dict :score 2)))\n` +
-      `(map :score xs)`;
+    const scheme = `(define xs (list (dict :score 1) (dict :score 2)))\n` + `(map :score xs)`;
     const ls = createSchemeLanguageService({ compilerOptions: { noImplicitAny: false, strict: true } });
     const program = ls.getTypelevelProgram(scheme);
     expect(program).toMatch(/A extends \{ score: infer S \}/);

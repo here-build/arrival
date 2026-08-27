@@ -16,9 +16,9 @@ Requires `@inhuman.tools/arrival`.
 import { extractOverridableForms, foldSchemaTag } from "@inhuman.tools/arrival-overridable-lens";
 
 const source = `(define/overridable tagline (s/string) "Build faster")`;
-const forms = await extractOverridableForms(source);   // top-level knobs; [] on parse failure
+const forms = await extractOverridableForms(source); // top-level knobs; [] on parse failure
 for (const f of forms) {
-  const tag = foldSchemaTag(f.typeNode);                // { ok: true, value: "string" }
+  const tag = foldSchemaTag(f.typeNode); // { ok: true, value: "string" }
   // f.defaultNode is the raw default parse node — evaluate or read it per your need
 }
 ```

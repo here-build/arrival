@@ -54,12 +54,14 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
     it("should extend environment with Rosetta functions", async () => {
       await applyCapability(inferenceEnv, [
         EnvCapability.define("test/double-all", {
-        symbols: (symbol, z) => ({
-          "double-all": symbol.rosetta`double-all: doubles every element of a numeric list`(
-            { input: [z.list(z.number)], output: [z.list(z.number)] },
-            (numbers) => numbers.map((x) => x * 2),
-          ) }) }),
-        ]);
+          symbols: (symbol, z) => ({
+            "double-all": symbol.rosetta`double-all: doubles every element of a numeric list`(
+              { input: [z.list(z.number)], output: [z.list(z.number)] },
+              (numbers) => numbers.map((x) => x * 2),
+            ),
+          }),
+        }),
+      ]);
 
       const result = await execOne(`
         (double-all (list 1 2 3 4 5))
@@ -74,16 +76,18 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
     it("should handle multiple Rosetta functions", async () => {
       await applyCapability(inferenceEnv, [
         EnvCapability.define("test/multi-rosetta", {
-        symbols: (symbol, z) => ({
-          "sum-array": symbol.rosetta`sum-array: sums a numeric list`(
-            { input: [z.list(z.number)], output: [z.number] },
-            (numbers) => numbers.reduce((a, b) => a + b, 0),
-          ),
-          "filter-evens": symbol.rosetta`filter-evens: keeps the even elements of a numeric list`(
-            { input: [z.list(z.number)], output: [z.list(z.number)] },
-            (numbers) => numbers.filter((x) => x % 2 === 0),
-          ) }) }),
-        ]);
+          symbols: (symbol, z) => ({
+            "sum-array": symbol.rosetta`sum-array: sums a numeric list`(
+              { input: [z.list(z.number)], output: [z.number] },
+              (numbers) => numbers.reduce((a, b) => a + b, 0),
+            ),
+            "filter-evens": symbol.rosetta`filter-evens: keeps the even elements of a numeric list`(
+              { input: [z.list(z.number)], output: [z.list(z.number)] },
+              (numbers) => numbers.filter((x) => x % 2 === 0),
+            ),
+          }),
+        }),
+      ]);
 
       const result = await execOne(`
         (sum-array (filter-evens (list 1 2 3 4 5 6 7 8)))
@@ -102,16 +106,18 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
       // membrane's job, and an AValue return now doors (`WorldFlipError`).
       await applyCapability(inferenceEnv, [
         EnvCapability.define("test/extract-values", {
-        symbols: (symbol, z) => ({
-          "extract-values": symbol.rosetta`extract-values: plucks .value off every element`(
-            { input: [z.dynamic], output: [z.dynamic] },
-            (rawObjects) => {
-              invariant(rawObjects instanceof AValue, "z.dynamic slot is a boxed scheme value");
-              const objects = toJS(rawObjects) as Array<{ value: unknown }>;
-              return objects.map((obj) => obj.value) as never;
-            },
-          ) }) }),
-        ]);
+          symbols: (symbol, z) => ({
+            "extract-values": symbol.rosetta`extract-values: plucks .value off every element`(
+              { input: [z.dynamic], output: [z.dynamic] },
+              (rawObjects) => {
+                invariant(rawObjects instanceof AValue, "z.dynamic slot is a boxed scheme value");
+                const objects = toJS(rawObjects) as Array<{ value: unknown }>;
+                return objects.map((obj) => obj.value) as never;
+              },
+            ),
+          }),
+        }),
+      ]);
 
       // Create test data (inject via jsToScheme rather than constructing pairs by hand)
       const testData = [
@@ -141,18 +147,20 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
       // This simulates the exact pattern we need for MCP
       await applyCapability(inferenceEnv, [
         EnvCapability.define("test/filter-by-css-property", {
-        symbols: (symbol, z) => ({
-          "filter-by-css-property":
-            symbol.rosetta`filter-by-css-property: filters nodes whose style[property] === value`(
-              { input: [z.dynamic, z.string, z.string], output: [z.dynamic] },
-              (rawNodes, property, value) => {
-                invariant(rawNodes instanceof AValue, "z.dynamic slot is a boxed scheme value");
-                const nodes = toJS(rawNodes) as Array<{ style?: Record<string, string> }>;
-                // Raw JS return — the membrane boxes (world-flip rebaseline, 2026-08-13).
-                return nodes.filter((node) => node.style && node.style[property] === value) as never;
-              },
-            ) }) }),
-        ]);
+          symbols: (symbol, z) => ({
+            "filter-by-css-property":
+              symbol.rosetta`filter-by-css-property: filters nodes whose style[property] === value`(
+                { input: [z.dynamic, z.string, z.string], output: [z.dynamic] },
+                (rawNodes, property, value) => {
+                  invariant(rawNodes instanceof AValue, "z.dynamic slot is a boxed scheme value");
+                  const nodes = toJS(rawNodes) as Array<{ style?: Record<string, string> }>;
+                  // Raw JS return — the membrane boxes (world-flip rebaseline, 2026-08-13).
+                  return nodes.filter((node) => node.style && node.style[property] === value) as never;
+                },
+              ),
+          }),
+        }),
+      ]);
 
       // Create test node data
       const testNodes = [
@@ -184,26 +192,28 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
     it("should create CSS statistics like the MCP server needs", async () => {
       await applyCapability(inferenceEnv, [
         EnvCapability.define("test/css-property-stats", {
-        symbols: (symbol, z) => ({
-          "css-property-stats": symbol.rosetta`css-property-stats: aggregates node style property:value counts`(
-            { input: [z.dynamic], output: [z.dynamic] },
-            (rawNodes) => {
-              invariant(rawNodes instanceof AValue, "z.dynamic slot is a boxed scheme value");
-              const nodes = toJS(rawNodes) as Array<{ style?: Record<string, string> }>;
-              const stats: Record<string, number> = {};
-              nodes.forEach((node) => {
-                if (node.style) {
-                  Object.entries(node.style).forEach(([prop, value]) => {
-                    const key = `${prop}:${value}`;
-                    stats[key] = (stats[key] || 0) + 1;
-                  });
-                }
-              });
-              // Raw JS return — the membrane boxes (world-flip rebaseline, 2026-08-13).
-              return stats as never;
-            },
-          ) }) }),
-        ]);
+          symbols: (symbol, z) => ({
+            "css-property-stats": symbol.rosetta`css-property-stats: aggregates node style property:value counts`(
+              { input: [z.dynamic], output: [z.dynamic] },
+              (rawNodes) => {
+                invariant(rawNodes instanceof AValue, "z.dynamic slot is a boxed scheme value");
+                const nodes = toJS(rawNodes) as Array<{ style?: Record<string, string> }>;
+                const stats: Record<string, number> = {};
+                nodes.forEach((node) => {
+                  if (node.style) {
+                    Object.entries(node.style).forEach(([prop, value]) => {
+                      const key = `${prop}:${value}`;
+                      stats[key] = (stats[key] || 0) + 1;
+                    });
+                  }
+                });
+                // Raw JS return — the membrane boxes (world-flip rebaseline, 2026-08-13).
+                return stats as never;
+              },
+            ),
+          }),
+        }),
+      ]);
 
       const testNodes = [
         { style: { overflow: "hidden", display: "block" } },

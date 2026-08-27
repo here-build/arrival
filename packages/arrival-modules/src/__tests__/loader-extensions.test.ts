@@ -5,7 +5,11 @@
 // per test — no shared table to reset.
 import { describe, expect, it, beforeEach } from "vitest";
 
-import { lookupExtensionResolverIn, registerExtensionIn, type ExtensionResolverRegistry } from "../loader-extensions.js";
+import {
+  lookupExtensionResolverIn,
+  registerExtensionIn,
+  type ExtensionResolverRegistry,
+} from "../loader-extensions.js";
 
 let registry: ExtensionResolverRegistry;
 beforeEach(() => {
@@ -39,7 +43,9 @@ describe("registerExtensionIn / lookupExtensionResolverIn", () => {
 
   it("a CONFLICTING name for an already-claimed suffix throws", () => {
     registerExtensionIn(registry, ".prompt", "prompt/compile");
-    expect(() => registerExtensionIn(registry, ".prompt", "other/compile")).toThrow(/already handled by "prompt\/compile"/);
+    expect(() => registerExtensionIn(registry, ".prompt", "other/compile")).toThrow(
+      /already handled by "prompt\/compile"/,
+    );
   });
 });
 

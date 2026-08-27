@@ -17,9 +17,7 @@ declare const gt: (a: number, b: number) => boolean;
 declare const scoresA: List<number>;
 declare const scoresB: List<number>;
 expectTypeOf(some(gt, scoresA, scoresB)).toEqualTypeOf<boolean>();
-expectTypeOf(
-  some((a: number, b: number): boolean => a > b, scoresA, scoresB),
-).toEqualTypeOf<boolean>();
+expectTypeOf(some((a: number, b: number): boolean => a > b, scoresA, scoresB)).toEqualTypeOf<boolean>();
 
 // @ts-expect-error two-list pred second param mismatches second list
 some((a: number, s: string): boolean => true, scoresA, scoresB);

@@ -131,7 +131,12 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
 
   // A real ALambda passes through jsToScheme by identity — already a scheme value.
   it("a real ALambda passes through jsToScheme by identity (it IS a scheme value)", () => {
-    const lam = new ALambda({ name: "test-lambda", arity: { min: 0, max: 0 }, scope: undefined, runner: () => theVoid });
+    const lam = new ALambda({
+      name: "test-lambda",
+      arity: { min: 0, max: 0 },
+      scope: undefined,
+      runner: () => theVoid,
+    });
     expect(jsToScheme(CONSTANT_CTX, lam)).toBe(lam);
   });
 
@@ -186,8 +191,16 @@ describe("jsToScheme → toJS round-trip", () => {
   });
 
   it("nested array round-trips", () => {
-    const result = toJS(jsToScheme(CONSTANT_CTX, [[1, 2], [3, 4]]));
-    expect(result).toEqual([[1, 2], [3, 4]]);
+    const result = toJS(
+      jsToScheme(CONSTANT_CTX, [
+        [1, 2],
+        [3, 4],
+      ]),
+    );
+    expect(result).toEqual([
+      [1, 2],
+      [3, 4],
+    ]);
   });
 
   // Plain objects are recursed: jsToScheme builds { k: jsToScheme(CONSTANT_CTX, v) }, toJS

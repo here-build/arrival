@@ -40,31 +40,30 @@ at a level no local test names.
 Subsystem → its doc → the source it governs. Modules are named, not linked — search by the
 directory name; names survive `git mv`, links rot.
 
-| Subsystem | Doc | Source |
-|---|---|---|
-| Grammar / reader | `grammar.md` | `src/reader/` |
-| Environments / assembly | `environments.md` | `src/env/`, `src/common/` |
-| Membrane / FFI crossing | `membrane.md` | `src/membrane/` |
-| Execution / run model | `execution.md` | `src/run/`, `src/eval/` |
-| Static-analysis plane | `static-plane.md` | `src/type-layer/`, `src/oracle/`, `src/static-validation/` |
-| Provenance | `PROVENANCE.md` | `src/provenance/` |
-| Loader / modules | `environments.md` §LOADER | `@inhuman.tools/arrival-modules` |
-| Errors / doors | `grammar.md` §ERRORS | `src/errors.ts` |
-| Capability authoring | `writing-capabilities.md` | — (how-to over `src/common/`, `src/membrane/`) |
-| LLM agent card | `llm-agent-card.md` | — (system-prompt surface; custdev-measured) |
-| LLM language inventory | `llm-language-guide.md` | — (preferred vs compat; not the prompt) |
-| Test discipline | `test-suite-architecture.md` | `src/__tests__/` |
+| Subsystem               | Doc                          | Source                                                     |
+| ----------------------- | ---------------------------- | ---------------------------------------------------------- |
+| Grammar / reader        | `grammar.md`                 | `src/reader/`                                              |
+| Environments / assembly | `environments.md`            | `src/env/`, `src/common/`                                  |
+| Membrane / FFI crossing | `membrane.md`                | `src/membrane/`                                            |
+| Execution / run model   | `execution.md`               | `src/run/`, `src/eval/`                                    |
+| Static-analysis plane   | `static-plane.md`            | `src/type-layer/`, `src/oracle/`, `src/static-validation/` |
+| Provenance              | `PROVENANCE.md`              | `src/provenance/`                                          |
+| Loader / modules        | `environments.md` §LOADER    | `@inhuman.tools/arrival-modules`                           |
+| Errors / doors          | `grammar.md` §ERRORS         | `src/errors.ts`                                            |
+| Capability authoring    | `writing-capabilities.md`    | — (how-to over `src/common/`, `src/membrane/`)             |
+| LLM agent card          | `llm-agent-card.md`          | — (system-prompt surface; custdev-measured)                |
+| LLM language inventory  | `llm-language-guide.md`      | — (preferred vs compat; not the prompt)                    |
+| Test discipline         | `test-suite-architecture.md` | `src/__tests__/`                                           |
 
 The ledgers and reference material are not subsystems:
 
-| Doc | Role |
-|---|---|
-| `PRINCIPLES.md` | The constitution — cross-cutting invariants (P-series) every subsystem obeys. |
-| `RULINGS.md` | Numbered, append-only cross-subsystem rulings (R-series) — the shared citation vocabulary. |
-| `strata.md` | The bottom-up dependency-order registry — leaves, the closed-member-list interpreter knot, the one-directional layers above it, and the rules for extending them. The wall registry every subsystem doc's cycle notes should cite INTO. |
-| `GLOSSARY.md` | One-line canonical definition per invented term (box, membrane, egress, wire, …); a reference-canon, mints no ID series. |
-| `reference/` | Exhaustive coverage/mapping tables (r7rs, srfi). Facts only. |
-| `design-history/` | Superseded decisions and rejected-alternative rationale. Living docs link IN; nothing links OUT to a living doc. |
+| Doc             | Role                                                                                                                                                                                                                                    |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PRINCIPLES.md` | The constitution — cross-cutting invariants (P-series) every subsystem obeys.                                                                                                                                                           |
+| `RULINGS.md`    | Numbered, append-only cross-subsystem rulings (R-series) — the shared citation vocabulary.                                                                                                                                              |
+| `strata.md`     | The bottom-up dependency-order registry — leaves, the closed-member-list interpreter knot, the one-directional layers above it, and the rules for extending them. The wall registry every subsystem doc's cycle notes should cite INTO. |
+| `GLOSSARY.md`   | One-line canonical definition per invented term (box, membrane, egress, wire, …); a reference-canon, mints no ID series.                                                                                                                |
+| `reference/`    | Exhaustive coverage/mapping tables (r7rs, srfi). Facts only.                                                                                                                                                                            |
 
 ## Reading paths
 
@@ -75,8 +74,6 @@ The ledgers and reference material are not subsystems:
   `PRINCIPLES.md` as a model system prompt.
 - **Reference lookup** — cite by ID: `RULINGS.md` R#, `PRINCIPLES.md` P#, a
   `reference/` table, or a subsystem doc's `§ANCHOR`. No prose reading needed.
-- **Decision archaeology** — a living doc → its `design-history/` links, where the rejected
-  alternatives and the objections behind each ruling live.
 
 ## Register legend
 
@@ -86,7 +83,7 @@ Filename case is the normative-vs-explanatory signal, readable in `ls`:
   constitution, or is a declared reference-canon: `PRINCIPLES.md` (P-series), `RULINGS.md`
   (R-series), `PROVENANCE.md` (the spec, `§N` + Appendix A), `GLOSSARY.md` (term canon — mints
   no ID series). A citation resolves to a heading here.
-- **`kebab-case.md` = explanation / how-to.** *Cites* P/R IDs and `§ANCHOR`s; mints none:
+- **`kebab-case.md` = explanation / how-to.** _Cites_ P/R IDs and `§ANCHOR`s; mints none:
   `grammar.md`, `environments.md`, `membrane.md`, `execution.md`, `static-plane.md`,
   `writing-capabilities.md`, `test-suite-architecture.md`.
 

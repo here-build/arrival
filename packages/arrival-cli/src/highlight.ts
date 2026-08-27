@@ -10,8 +10,7 @@
  * The tokenizer preserves every character (whitespace, unterminated strings, partial input
  * mid-keystroke) and only wraps whole tokens.
  */
-import { DARCULA, paintHex } from "./tints.js";
-import { colorMode } from "./tints.js";
+import { colorMode, DARCULA, paintHex } from "./tints.js";
 
 type ColorMode = ReturnType<typeof colorMode>;
 
@@ -47,7 +46,8 @@ const DELIM = new Set(["(", ")", "[", "]", "{", "}"]);
  *  purple, numbers/booleans blue, everything else the baseline symbol gray-blue. */
 function atomColor(atom: string): string {
   if (DEFINITION_KEYWORDS.has(atom) || CONTROL_KEYWORDS.has(atom)) return DARCULA.keyword;
-  if (atom === "#t" || atom === "#f" || atom === "#true" || atom === "#false" || atom === "nil") return DARCULA.constant;
+  if (atom === "#t" || atom === "#f" || atom === "#true" || atom === "#false" || atom === "nil")
+    return DARCULA.constant;
   if (atom.length > 1 && atom.startsWith(":")) return DARCULA.property; // :keyword
   if (isNumber(atom)) return DARCULA.number;
   return DARCULA.symbol;

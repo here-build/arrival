@@ -5,11 +5,5 @@
   // The include/exclude here mirror the pre-split build scope exactly.
   "extends": "./tsconfig.json",
   "include": ["src/**/*.ts"],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "src/**/*.test.ts",
-    "src/**/*.test-d.ts",
-    "src/__*__/**/*"
-  ]
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts", "src/**/*.test-d.ts", "src/__*__/**/*"]
 }

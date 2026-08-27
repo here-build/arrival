@@ -90,8 +90,8 @@ export async function emitForms(source: string, opts: FormEmitterOptions): Promi
   let forms: readonly SchemeValue[];
   try {
     forms = await parse(source);
-  } catch (e) {
-    const message = doorText(e);
+  } catch (error) {
+    const message = doorText(error);
     const door = `(error ${JSON.stringify(message)})`;
     // Parse-crash convention (repl-event.ts): empty topology + one synthetic terminal
     // statement at index 0 carrying the reader's door.
@@ -129,8 +129,8 @@ export async function emitForms(source: string, opts: FormEmitterOptions): Promi
           budgetMsRemaining: remaining(),
         },
       });
-    } catch (e) {
-      const message = doorText(e);
+    } catch (error) {
+      const message = doorText(error);
       onEvent({
         kind: "statement",
         index,

@@ -94,7 +94,7 @@ function collectMembers(
   const isThenable = (v: unknown): v is Promise<SchemeValue> =>
     typeof (v as { then?: unknown } | null)?.then === "function";
   if (reads.some(isThenable)) {
-    return Promise.all(reads).then(
+    return Promise.all(reads.map((v) => Promise.resolve(v))).then(
       (settled) => new AVector(settled.map((value, i) => build(names[i]!, value as SchemeValue))),
     );
   }

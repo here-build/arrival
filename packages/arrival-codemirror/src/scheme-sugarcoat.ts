@@ -136,7 +136,7 @@ function forcedNexprCurly(stream: StringStream): boolean {
 export function scanCurlyBody(src: string, from: number): { forms: string[]; closed: boolean } {
   const forms: string[] = [];
   let i = from;
-  let depth = 0; // nested {} () [] relative to body (body itself is depth 0 content)
+  const depth = 0; // nested {} () [] relative to body (body itself is depth 0 content)
   let form = "";
   const flush = () => {
     const t = form.trim();
@@ -149,7 +149,7 @@ export function scanCurlyBody(src: string, from: number): { forms: string[]; clo
       flush();
       return { forms, closed: true };
     }
-    if (c === '"' ) {
+    if (c === '"') {
       form += c;
       i++;
       while (i < src.length) {
@@ -215,7 +215,10 @@ export function scanCurlyBody(src: string, from: number): { forms: string[]; clo
 }
 
 /** Classify flat forms inside `{…}` — pure, unit-tested. Mirrors sugarcoat-read.classifyCurly. */
-export function classifyCurlyForms(forms: string[], opts: { closed: boolean; provisional?: boolean } = { closed: true }): DelimKind {
+export function classifyCurlyForms(
+  forms: string[],
+  opts: { closed: boolean; provisional?: boolean } = { closed: true },
+): DelimKind {
   if (forms.length === 0) return "dict";
   if (forms.length === 1) return "nexpr"; // unwrap / degenerate
   const isOp = (w: string) => INFIX_OPS.has(w);
@@ -286,7 +289,7 @@ function closeBracket(state: SchemeSugarcoatState): string {
 
 // @head{ opener (mirrors arrival-sugarcoat AT_HEAD) + balanced literal {} inside body.
 const AT_OPENER = /^[^\s{}()[\]"@]*\{/;
-const AT_INTERP = /[A-Za-z0-9!$%&*/:<=>?^_~+-]/;
+const AT_INTERP = /[\w!$%&*/:<=>?^~+-]/;
 
 /** @text body tokenizer. atDepth tracks literal braces (close only at 0).
  *  Returns null at EOL for multi-line @dedent bodies. Bare @ (no {) falls
@@ -350,7 +353,7 @@ function tokenizeAtText(stream: StringStream, state: SchemeSugarcoatState): stri
     }
     // Tight method chain `.op` / `.op()` / `.op{}` (mirrors sugarcoat-read;
     // op class excludes `:` so prose separators after unary methods stay prose)
-    const AT_METHOD_OP = /[A-Za-z0-9!$%&*/<=>?^_~+-]/;
+    const AT_METHOD_OP = /[\w!$%&*/<=>?^~+-]/;
     while (stream.peek() === ".") {
       const afterDot = stream.string.slice(stream.pos + 1);
       if (!AT_METHOD_OP.test(afterDot[0] ?? "")) break;

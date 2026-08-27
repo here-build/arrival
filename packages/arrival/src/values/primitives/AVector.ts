@@ -28,7 +28,6 @@ import { deriveSortCompare, withInputProvenance } from "../op-helpers.js";
 import { reStampChild } from "./deep-restamp.js";
 import { APair } from "./APair.js";
 import { ASymbol } from "./ASymbol.js";
-import type { MaybePromise } from "../../types/utility.js";
 
 /** Code-position lowering cache for `[…]` literal nodes — `(vector …)` built once per node. */
 const LOWERED_LITERAL = new WeakMap<AVector, APair<SchemeValue, SchemeValue>>();

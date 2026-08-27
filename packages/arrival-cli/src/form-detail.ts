@@ -15,12 +15,17 @@
  * turns it into lines. A `--form <scope>` flag drives it with no keyboard — the same data
  * a later interactive selection or a `--export json` would carry.
  */
-import { headOf, scopeId, type EvalTrace, type Invocation, type InvocationState } from "@inhuman.tools/arrival/provenance";
+import {
+  headOf,
+  scopeId,
+  type EvalTrace,
+  type Invocation,
+  type InvocationState,
+} from "@inhuman.tools/arrival/provenance";
 import { toSExprString } from "@inhuman.tools/arrival-serializer";
 
 import { fileUrl, hyperlink } from "./osc.js";
-import { paint, type TintName } from "./tints.js";
-import type { colorMode } from "./tints.js";
+import { paint, type TintName, type colorMode } from "./tints.js";
 
 type ColorMode = ReturnType<typeof colorMode>;
 
@@ -80,8 +85,18 @@ export function formDetail(trace: EvalTrace, scope: string): FormDetail {
   }
   if (invs.length === 0) {
     return {
-      scope, head, found: false, count: 0, states: {}, depthMin: 0, depthMax: 0,
-      tailCount: 0, cachedCount: 0, callers: [], samples: [], moreSamples: 0,
+      scope,
+      head,
+      found: false,
+      count: 0,
+      states: {},
+      depthMin: 0,
+      depthMax: 0,
+      tailCount: 0,
+      cachedCount: 0,
+      callers: [],
+      samples: [],
+      moreSamples: 0,
     };
   }
 
@@ -112,9 +127,18 @@ export function formDetail(trace: EvalTrace, scope: string): FormDetail {
   }));
 
   return {
-    scope, head, found: true, count: invs.length, states,
-    depthMin: depthMin === Infinity ? 0 : depthMin, depthMax,
-    tailCount, cachedCount, callers, samples, moreSamples: Math.max(0, invs.length - SAMPLE_CAP),
+    scope,
+    head,
+    found: true,
+    count: invs.length,
+    states,
+    depthMin: depthMin === Infinity ? 0 : depthMin,
+    depthMax,
+    tailCount,
+    cachedCount,
+    callers,
+    samples,
+    moreSamples: Math.max(0, invs.length - SAMPLE_CAP),
   };
 }
 

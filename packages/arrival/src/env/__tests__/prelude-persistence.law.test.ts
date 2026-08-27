@@ -30,7 +30,6 @@ import { exec, execState } from "../../eval/generator-exec.js";
 import { UnboundVariableError } from "../../errors.js";
 import { toJS } from "../../membrane/rosetta.js";
 
-
 const boxed = (v: unknown): unknown => toJS(v as never);
 
 describe("prelude-define persistence (audit B4)", () => {
@@ -41,7 +40,9 @@ describe("prelude-define persistence (audit B4)", () => {
       "prelude-symbol": symbol.rosetta`prelude-symbol: assembly-time-only`(
         { input: [sz.string], output: [sz.string], preludeOnly: true },
         (s) => `secret:${s}`,
-      ) }) });
+      ),
+    }),
+  });
 
   it("P-PRELUDE-DEFINE-INVOKE — a prelude-defined wrapper is callable in the main phase; its body reaches the preludeOnly verb by capture", async () => {
     const results = await exec("(something)", { capabilities: [wrapperCap] });
@@ -52,15 +53,14 @@ describe("prelude-define persistence (audit B4)", () => {
     await expect(exec(`(prelude-symbol "x")`, { capabilities: [wrapperCap] })).rejects.toBeInstanceOf(
       UnboundVariableError,
     );
-    await expect(exec("prelude-symbol", { capabilities: [wrapperCap] })).rejects.toBeInstanceOf(
-      UnboundVariableError,
-    );
+    await expect(exec("prelude-symbol", { capabilities: [wrapperCap] })).rejects.toBeInstanceOf(UnboundVariableError);
   });
 
   it("P-PRELUDE-DEFINE-PERSISTS — a plain prelude define is a main-phase binding (supersedes the discard law)", async () => {
     const cap = EnvCapability.define("test/prelude-persist-plain", {
       prelude: "(define leaked 42)",
-      symbols: () => ({}) });
+      symbols: () => ({}),
+    });
     const results = await exec("leaked", { capabilities: [cap] });
     expect(results[0]).toBe(42);
   });
@@ -68,7 +68,8 @@ describe("prelude-define persistence (audit B4)", () => {
   it("P-PRELUDE-DEFINE-REPL — runCtx reuse keeps the same per-run defines without re-preluding", async () => {
     const cap = EnvCapability.define("test/prelude-persist-repl", {
       prelude: "(define repl-kept 7)",
-      symbols: () => ({}) });
+      symbols: () => ({}),
+    });
     const state = await execState("repl-kept", { capabilities: [cap] });
     expect(boxed(state.values[0])).toBe(7);
     const again = await exec("repl-kept", { capabilities: [cap], runCtx: state.runCtx });
@@ -79,7 +80,9 @@ describe("prelude-define persistence (audit B4)", () => {
     const cap = EnvCapability.define("test/prelude-persist-shadow", {
       prelude: `(define shadowed "prelude")`,
       symbols: (symbol, sz) => ({
-        shadowed: symbol.rosetta`shadowed: vocabulary-bound`({ input: [], output: [sz.string] }, () => "vocabulary") }) });
+        shadowed: symbol.rosetta`shadowed: vocabulary-bound`({ input: [], output: [sz.string] }, () => "vocabulary"),
+      }),
+    });
     // prelude define wins over the vocabulary binding…
     const results = await exec("shadowed", { capabilities: [cap] });
     expect(results[0]).toBe("prelude");
@@ -98,12 +101,17 @@ describe("prelude-define persistence (audit B4)", () => {
         "which-x": symbol.rosetta`which-x: assembly-time twin`(
           { input: [], output: [sz.string], preludeOnly: true },
           () => "assembly",
-        ) }) });
+        ),
+      }),
+    });
     const capB = EnvCapability.define("test/prelude-collide-b", {
       symbols: (symbol, sz) => ({
-        "which-x": symbol.rosetta`which-x: runtime twin`({ input: [], output: [sz.string] }, () => "runtime") }) });
+        "which-x": symbol.rosetta`which-x: runtime twin`({ input: [], output: [sz.string] }, () => "runtime"),
+      }),
+    });
     const results = await exec("(list (from-prelude) (which-x))", {
-      capabilities: [capA, capB] });
+      capabilities: [capA, capB],
+    });
     expect(results[0]).toEqual(["assembly", "runtime"]);
   });
 
@@ -115,7 +123,9 @@ describe("prelude-define persistence (audit B4)", () => {
         "mint-stamp": symbol.rosetta`mint-stamp: per-run stamp`(
           { input: [], output: [sz.number], preludeOnly: true },
           () => ++stamp,
-        ) }) });
+        ),
+      }),
+    });
     const first = await exec("run-stamp", { capabilities: [cap] });
     const second = await exec("run-stamp", { capabilities: [cap] });
     expect(first[0]).toBe(1);

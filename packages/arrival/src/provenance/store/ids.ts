@@ -6,10 +6,6 @@
  * real region-open/epoch minting, and real record emission all build on this
  * file's fixed SHAPE, never the reverse.
  */
-/* eslint-disable sonarjs/redundant-type-aliases -- these aliases ARE the point of the
- * file: each one names a spec identity role (which opaque string/number a signature
- * means), so `allocateSeq(regionId): Promise<RegionSeq>` reads as the spec row it
- * implements. Inlining `string` everywhere would erase exactly that vocabulary. */
 
 /** "template-hash (spans STRIPPED — dedup and store identity...)". Minted by
  *  the wireframe hasher; opaque string here — a record's static node address. */
@@ -69,7 +65,7 @@ export function parentOrdinalPath(path: OrdinalPath): OrdinalPath {
  *  node's path; see `ROOT_ORDINAL_PATH`'s doc). Pairs with `parentOrdinalPath`: every
  *  non-empty path is exactly `appendOrdinal(parentOrdinalPath(p), trailingOrdinal(p))`. */
 export function trailingOrdinal(path: OrdinalPath): number | undefined {
-  return path.length === 0 ? undefined : path[path.length - 1];
+  return path.length === 0 ? undefined : path.at(-1);
 }
 
 /** Deterministic lexicographic order over paths — shorter-is-earlier on a shared

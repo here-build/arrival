@@ -25,7 +25,8 @@ const ROLES: Record<string, DeclaredRole> = {
   dedent: "transparent",
   map: "fan",
   filter: "fan",
-  "black-box": "opaque" };
+  "black-box": "opaque",
+};
 const C: Classifier = { roleOf: (op) => ROLES[op] };
 
 // The hermetic-base predicate — a synthetic subset of base-pack names the test
@@ -58,8 +59,7 @@ async function wf(code: string): Promise<WireframeProgram> {
 const kinds = (g: WireframeGraph): string[] => g.nodes.map((n) => n.kind);
 const wireTo = (g: WireframeGraph, slot: string): Wire | undefined => g.wires.find((w) => w.consumer.slot === slot);
 
-beforeAll(async () => {
-});
+beforeAll(async () => {});
 
 describe("Q8a builder core — the collapse rule (§1: maximal pure subgraphs fold to ONE wire)", () => {
   it("(emit! (+ (* x x) 5)) — the pure interior is ONE wire, param = its FV, sink is the node", async () => {
@@ -90,7 +90,9 @@ describe("Q8a builder core — the collapse rule (§1: maximal pure subgraphs fo
     expect(kinds(p.main).sort()).toEqual(["port", "source"]);
     expect(p.main.egress).not.toBeNull();
     const w = wireTo(p.main, "out");
-    expect(w?.paramRefs).toEqual([{ kind: "node", name: "in0", node: p.main.nodes.findIndex((n) => n.kind === "source") }]);
+    expect(w?.paramRefs).toEqual([
+      { kind: "node", name: "in0", node: p.main.nodes.findIndex((n) => n.kind === "source") },
+    ]);
     expect(w?.source).toBe("(lambda (in0) (+ in0 1))");
   });
 
@@ -115,7 +117,11 @@ describe("Q8a builder core — selector-cone reachability decides mux fate (§1 
     const muxIdx = p.main.nodes.findIndex((n) => n.kind === "mux");
     const sel = p.main.wires.find((w) => w.consumer.node === muxIdx && w.consumer.slot === "selector");
     expect(sel?.source).toBe("(lambda (in0) (positive? in0))");
-    expect(sel?.paramRefs[0]).toEqual({ kind: "node", name: "in0", node: p.main.nodes.findIndex((n) => n.kind === "source") });
+    expect(sel?.paramRefs[0]).toEqual({
+      kind: "node",
+      name: "in0",
+      node: p.main.nodes.findIndex((n) => n.kind === "source"),
+    });
     const arms = p.main.wires.filter((w) => w.consumer.node === muxIdx && w.consumer.slot.startsWith("arm"));
     expect(arms).toHaveLength(2);
   });
@@ -343,15 +349,18 @@ describe("Q8a′ builder core — loop-shaped binders get REAL backedge-wired in
           params: ["x"],
           paramRefs: [{ kind: "node", name: "x", node: 1 }],
           span: "w0",
-          consumer: { node: 0, slot: "arg0" } },
+          consumer: { node: 0, slot: "arg0" },
+        },
         {
           source: "(lambda (x) x)",
           params: ["x"],
           paramRefs: [{ kind: "node", name: "x", node: 0 }],
           span: "w1",
-          consumer: { node: 1, slot: "arg0" } },
+          consumer: { node: 1, slot: "arg0" },
+        },
       ],
-      egress: null };
+      egress: null,
+    };
     expect(reachableNodes(cyclic, 0)).toEqual(new Set([0, 1]));
   });
 });
@@ -399,9 +408,7 @@ describe("Q8a — unevalWire's emission-time door (wire-locality)", () => {
 // never free variables.
 describe("Q8a — freeVars models `try` (evalTry's exact shape; mirrors collect-references.ts's arm)", () => {
   it("catch/finally marker heads never leak into the free-variable set", async () => {
-    const [form] = await parse(
-      "(try (raise-continuable x) (catch (e) (handle e)) (finally (cleanup)))",
-    );
+    const [form] = await parse("(try (raise-continuable x) (catch (e) (handle e)) (finally (cleanup)))");
     const fv = freeVars(form);
     expect(fv.has("try")).toBe(false); // own head — excluded like every other special form
     expect(fv.has("catch")).toBe(false); // structural marker, not a variable
@@ -418,9 +425,7 @@ describe("Q8a — freeVars models `try` (evalTry's exact shape; mirrors collect-
   });
 
   it("the try body, catch handlers, and finally clause all contribute their OWN free variables", async () => {
-    const [form] = await parse(
-      "(try (raise-continuable x) (catch (e) (handle e)) (finally (cleanup)))",
-    );
+    const [form] = await parse("(try (raise-continuable x) (catch (e) (handle e)) (finally (cleanup)))");
     const fv = freeVars(form);
     expect([...fv].sort()).toEqual(["cleanup", "handle", "raise-continuable", "x"].sort());
   });

@@ -25,7 +25,6 @@ import { CallCtx } from "../../run/CallCtx.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { withContractFields } from "../../common/symbols/_bake.js";
 import { AVector } from "../../values/primitives/AVector.js";
-import { AJSArray } from "../../membrane/AJSArray.js";
 import { type AVoid, theVoid } from "../../values/primitives/AVoid.js";
 import { AString } from "../../values/primitives/AString.js";
 import { type SchemeValue } from "../../values/types.js";

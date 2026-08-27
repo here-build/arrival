@@ -24,10 +24,11 @@ export const CARRIERS: readonly CarrierRow[] = [
     // only available verb (`append`, verbs[0]) doesn't door for a non-pair operand — it
     // silently returns the SECOND operand unchanged, discarding the first (a P5 "fails
     // loudly" violation, not a clean unsupported cell). See the grid body's own note there.
-    unsupported: [] },
+    unsupported: [],
+  },
   {
     carrier: "AString",
-    mint3: '(string (src #\\a) (src #\\b) (src #\\c))',
+    mint3: "(string (src #\\a) (src #\\b) (src #\\c))",
     // AString declares NO arrival/tagless-final/{car,cdr,filter,reduce,sort} at all (unlike
     // AVector, which implements car/cdr with a loose-tolerant/strict-throws gate) — every one
     // of these doors UNCONDITIONALLY, in both loose and strict mode (verified empirically: a
@@ -41,13 +42,34 @@ export const CARRIERS: readonly CarrierRow[] = [
     // separate, correctly-shaped verb for this carrier — not exercised by this grid's
     // verbs[0]-only methodology.
     unsupported: [
-      { term: "arrival/tagless-final/car", reason: "no arrival/tagless-final/car on AString (unconditional door, not a loose/strict gate like AVector's)" },
-      { term: "arrival/tagless-final/cdr", reason: "no arrival/tagless-final/cdr on AString (unconditional door, not a loose/strict gate like AVector's)" },
-      { term: "arrival/tagless-final/map", reason: "AString's own map is a private char-mapper (f: (char: string) => string) incompatible with a scheme lambda arg — the generic `map` verb still throws, via a different (uglier) path; R7RS's `string-map` is the real dedicated verb" },
-      { term: "arrival/tagless-final/filter", reason: "no arrival/tagless-final/filter on AString; R7RS has no generic string filter — project through (list->string (filter pred (string->list s)))" },
-      { term: "arrival/tagless-final/reduce", reason: "no arrival/tagless-final/reduce on AString; fold via (reduce fn seed (string->list s))" },
-      { term: "arrival/tagless-final/sort", reason: "no arrival/tagless-final/sort on AString; sort via (list->string (sort (string->list s) less?))" },
-    ] },
+      {
+        term: "arrival/tagless-final/car",
+        reason: "no arrival/tagless-final/car on AString (unconditional door, not a loose/strict gate like AVector's)",
+      },
+      {
+        term: "arrival/tagless-final/cdr",
+        reason: "no arrival/tagless-final/cdr on AString (unconditional door, not a loose/strict gate like AVector's)",
+      },
+      {
+        term: "arrival/tagless-final/map",
+        reason:
+          "AString's own map is a private char-mapper (f: (char: string) => string) incompatible with a scheme lambda arg — the generic `map` verb still throws, via a different (uglier) path; R7RS's `string-map` is the real dedicated verb",
+      },
+      {
+        term: "arrival/tagless-final/filter",
+        reason:
+          "no arrival/tagless-final/filter on AString; R7RS has no generic string filter — project through (list->string (filter pred (string->list s)))",
+      },
+      {
+        term: "arrival/tagless-final/reduce",
+        reason: "no arrival/tagless-final/reduce on AString; fold via (reduce fn seed (string->list s))",
+      },
+      {
+        term: "arrival/tagless-final/sort",
+        reason: "no arrival/tagless-final/sort on AString; sort via (list->string (sort (string->list s) less?))",
+      },
+    ],
+  },
   {
     carrier: "ADict",
     mint3: "(dict :a (src 1) :b (src 2) :c (src 3))",
@@ -62,11 +84,26 @@ export const CARRIERS: readonly CarrierRow[] = [
       { term: "arrival/tagless-final/sort", reason: "dicts are unordered; no total order to sort by" },
       { term: "arrival/tagless-final/car", reason: "not a sequence" },
       { term: "arrival/tagless-final/cdr", reason: "not a sequence" },
-      { term: "arrival/tagless-final/map", reason: "no arrival/tagless-final/map on ADict — dict values are keyed, not positionally sequenced; there is no generic dict-map term" },
-      { term: "arrival/tagless-final/filter", reason: "no arrival/tagless-final/filter on ADict — keys aren't a sequence to filter; no generic dict-filter term" },
-      { term: "arrival/tagless-final/reduce", reason: "no arrival/tagless-final/reduce on ADict — no generic dict-fold term" },
-      { term: "arrival/tagless-final/length", reason: "no arrival/tagless-final/length on ADict — key-cardinality isn't wired through this generic term" },
-    ] },
+      {
+        term: "arrival/tagless-final/map",
+        reason:
+          "no arrival/tagless-final/map on ADict — dict values are keyed, not positionally sequenced; there is no generic dict-map term",
+      },
+      {
+        term: "arrival/tagless-final/filter",
+        reason:
+          "no arrival/tagless-final/filter on ADict — keys aren't a sequence to filter; no generic dict-filter term",
+      },
+      {
+        term: "arrival/tagless-final/reduce",
+        reason: "no arrival/tagless-final/reduce on ADict — no generic dict-fold term",
+      },
+      {
+        term: "arrival/tagless-final/length",
+        reason: "no arrival/tagless-final/length on ADict — key-cardinality isn't wired through this generic term",
+      },
+    ],
+  },
   {
     carrier: "ABytevector",
     mint3: "(bytevector (src 1) (src 2) (src 3))",
@@ -75,9 +112,16 @@ export const CARRIERS: readonly CarrierRow[] = [
     unsupported: [
       { term: "arrival/tagless-final/map", reason: "R7RS has no bytevector-map; construct fresh" },
       { term: "arrival/tagless-final/filter", reason: "no bytevector filter in R7RS" },
-      { term: "arrival/tagless-final/reduce", reason: "no arrival/tagless-final/reduce on ABytevector; R7RS has no generic bytevector fold" },
-      { term: "arrival/tagless-final/sort", reason: "no arrival/tagless-final/sort on ABytevector; R7RS has no bytevector-sort" },
+      {
+        term: "arrival/tagless-final/reduce",
+        reason: "no arrival/tagless-final/reduce on ABytevector; R7RS has no generic bytevector fold",
+      },
+      {
+        term: "arrival/tagless-final/sort",
+        reason: "no arrival/tagless-final/sort on ABytevector; R7RS has no bytevector-sort",
+      },
       { term: "arrival/tagless-final/car", reason: "not a pair" },
       { term: "arrival/tagless-final/cdr", reason: "not a pair" },
-    ] },
+    ],
+  },
 ] as const;

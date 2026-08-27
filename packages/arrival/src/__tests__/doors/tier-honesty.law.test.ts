@@ -37,8 +37,7 @@ function outOfScope(): never {
   throw new ReplayScopeError("fan", "synthetic-span", "outside the replay driver's claimed scope for this row");
 }
 
-beforeAll(async () => {
-});
+beforeAll(async () => {});
 
 /** The four evidence tiers, in the spec's own order (§5 A1 / §7: "the envelope enum
  *  `replayed | replayed-cached | recorded | stub`"). A `readonly EvidenceTier[]` cast
@@ -74,7 +73,8 @@ describe("tier honesty (§7: every drill-in answer carries an honest evidence ti
         memo,
         key: freshKey,
         replay: () => replayGraphEgress({ program, frozen: run.frozen }),
-        fallback: unreachable });
+        fallback: unreachable,
+      });
       expect(EVIDENCE_TIERS).toContain(fresh.tier);
       expect(fresh.tier).toBe("replayed");
 
@@ -82,7 +82,8 @@ describe("tier honesty (§7: every drill-in answer carries an honest evidence ti
         memo,
         key: freshKey,
         replay: () => replayGraphEgress({ program, frozen: run.frozen }),
-        fallback: unreachable });
+        fallback: unreachable,
+      });
       expect(EVIDENCE_TIERS).toContain(cachedAnswer.tier);
       expect(cachedAnswer.tier).toBe("replayed-cached");
 
@@ -93,7 +94,8 @@ describe("tier honesty (§7: every drill-in answer carries an honest evidence ti
         memo,
         key: { templateHash: "th-tier-1-recorded", ordinalPath: [0], demand: "value" },
         replay: outOfScope,
-        fallback: () => machine.read("tier-1-payload") });
+        fallback: () => machine.read("tier-1-payload"),
+      });
       expect(EVIDENCE_TIERS).toContain(recordedAnswer.tier);
       expect(recordedAnswer.tier).toBe("recorded");
 
@@ -102,7 +104,8 @@ describe("tier honesty (§7: every drill-in answer carries an honest evidence ti
         memo,
         key: { templateHash: "th-tier-1-stub", ordinalPath: [0], demand: "value" },
         replay: outOfScope,
-        fallback: () => machine.read("tier-1-payload") });
+        fallback: () => machine.read("tier-1-payload"),
+      });
       expect(EVIDENCE_TIERS).toContain(stubAnswer.tier);
       expect(stubAnswer.tier).toBe("stub");
     },
@@ -112,7 +115,7 @@ describe("tier honesty (§7: every drill-in answer carries an honest evidence ti
   it(
     "a `stub` answer (value evicted, lineage intact) NEVER presents itself as freshly " +
       "`replayed` — a stub or cached answer never claims a fresher tier than it has " +
-      "(§5 A1 EXCLUDED: \"silent degradation... a stub answering as if replayed is a lie\")",
+      '(§5 A1 EXCLUDED: "silent degradation... a stub answering as if replayed is a lie")',
     async () => {
       const memo = new ReplayMemo();
       const store = new PayloadStoreFake();
@@ -156,7 +159,8 @@ describe("tier honesty (§7: every drill-in answer carries an honest evidence ti
         replay: () => replayGraphEgress({ program, frozen: run.frozen }),
         fallback: () => {
           throw new Error("unreachable");
-        } });
+        },
+      });
       expect(cold.tier).toBe("replayed");
 
       // Separately: the SAME logical payload's backing store degrades to stub (a
@@ -179,7 +183,8 @@ describe("tier honesty (§7: every drill-in answer carries an honest evidence ti
         replay: () => replayGraphEgress({ program, frozen: run.frozen }),
         fallback: () => {
           throw new Error("unreachable — the memo must hit before fallback is ever considered");
-        } });
+        },
+      });
       expect(warm.tier).toBe("replayed-cached");
       expect(warm.tier).not.toBe(cold.tier); // never conflated with the live replay that produced it
       expect(warm.value).toBe(cold.value); // same egress value (purity) ...
@@ -204,7 +209,8 @@ describe("tier honesty (§7: every drill-in answer carries an honest evidence ti
         replay: () => replayGraphEgress({ program, frozen: run.frozen }),
         fallback: () => {
           throw new Error("unreachable");
-        } });
+        },
+      });
       // Repeated hits: ALWAYS `replayed-cached` — never regresses to `recorded`/
       // `stub`, and never re-claims a fresh `replayed` (γ never silently re-runs on
       // a memo hit — `answerQuery`'s hit branch short-circuits before `replay` is
@@ -218,7 +224,8 @@ describe("tier honesty (§7: every drill-in answer carries an honest evidence ti
           },
           fallback: () => {
             throw new Error("unreachable");
-          } });
+          },
+        });
         expect(hit.tier).toBe("replayed-cached");
       }
 

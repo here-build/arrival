@@ -21,7 +21,8 @@ const ROLES: Record<string, DeclaredRole> = {
   "fetch-list": "source",
   "emit!": "sink",
   map: "fan",
-  filter: "fan" };
+  filter: "fan",
+};
 const C: Classifier = { roleOf: (op) => ROLES[op] };
 
 const BASE = new Set([
@@ -48,8 +49,7 @@ async function wf(code: string): Promise<WireframeProgram> {
 
 const wireTo = (g: WireframeGraph, slot: string): Wire | undefined => g.wires.find((w) => w.consumer.slot === slot);
 
-beforeAll(async () => {
-});
+beforeAll(async () => {});
 
 describe("factTagOf — the wire fact TAG (§2 A5: one edge species, a tag not a second kind)", () => {
   it("(length (map f xs)) — the out-port's egress wire is tagged fact:length", async () => {
@@ -59,7 +59,7 @@ describe("factTagOf — the wire fact TAG (§2 A5: one edge species, a tag not a
     expect(w?.fact).toEqual({ kind: "fact", verb: "length" });
   });
 
-  it("vector-length and string-length tag the SAME verb (\"length\") — one declared TERM, P8", async () => {
+  it('vector-length and string-length tag the SAME verb ("length") — one declared TERM, P8', async () => {
     const vec = await wf("(vector-length (map f xs))");
     const str = await wf("(string-length (map f xs))");
     expect(wireTo(vec.main, "out")?.fact).toEqual({ kind: "fact", verb: "length" });
@@ -117,7 +117,7 @@ describe("factTagOf — the wire fact TAG (§2 A5: one edge species, a tag not a
 });
 
 describe("reachableNodesForDemand — the count-demand router (§6 demand lattice; R2)", () => {
-  it("\"value\" demand reproduces reachableNodes exactly (byte-stable, every existing caller)", async () => {
+  it('"value" demand reproduces reachableNodes exactly (byte-stable, every existing caller)', async () => {
     const p = await wf("(emit! (length (map (lambda (v) (+ (fetch-item v) 1)) xs)))");
     const sinkIdx = p.main.nodes.findIndex((n) => n.kind === "sink");
     expect(reachableNodesForDemand(p.main, sinkIdx, "value")).toEqual(reachableNodes(p.main, sinkIdx));
@@ -151,7 +151,7 @@ describe("reachableNodesForDemand — the count-demand router (§6 demand lattic
     expect(countCone).toEqual(new Set([sinkIdx, mapFanIdx, sourceIdx]));
   });
 
-  it("V4 termination holds under \"count\" grade too — a synthetic index-level cycle still returns", () => {
+  it('V4 termination holds under "count" grade too — a synthetic index-level cycle still returns', () => {
     const cyclic: WireframeGraph = {
       nodes: [
         { kind: "recur", span: "a" },
@@ -164,15 +164,18 @@ describe("reachableNodesForDemand — the count-demand router (§6 demand lattic
           paramRefs: [{ kind: "node", name: "x", node: 1 }],
           span: "w0",
           consumer: { node: 0, slot: "arg0" },
-          fact: { kind: "fact", verb: "length" } },
+          fact: { kind: "fact", verb: "length" },
+        },
         {
           source: "(lambda (x) x)",
           params: ["x"],
           paramRefs: [{ kind: "node", name: "x", node: 0 }],
           span: "w1",
-          consumer: { node: 1, slot: "arg0" } },
+          consumer: { node: 1, slot: "arg0" },
+        },
       ],
-      egress: null };
+      egress: null,
+    };
     expect(reachableNodesForDemand(cyclic, 0, "value")).toEqual(new Set([0, 1]));
     // node 1's wire (into node 0) is fact-tagged, so count demand reaches node 1 too;
     // node 0's wire (into node 1) is untagged and node 1 is not a fan — pruned, but

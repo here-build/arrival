@@ -45,7 +45,6 @@ function sinkDef(name: string) {
 const ctxWithEffects = (effects: MemoryEffectLog, cache?: MemoryRunCache) =>
   testCallCtx({ runCtx: new RunContext({ effects, cache }) });
 
-
 /** Invoke a baked rosetta procedure via its apply term (the sole membrane spine). */
 function fire(proc: { ["arrival/tagless-final/apply"](args: any[], callCtx: any): any }, callCtx: any, ...args: any[]) {
   return proc["arrival/tagless-final/apply"](args, callCtx);
@@ -125,7 +124,9 @@ describe("EffectLog — the burst arm at the wrapper (W1)", () => {
             fires++;
             return undefined;
           },
-        ) }) });
+        ),
+      }),
+    });
     const effects = new MemoryEffectLog();
     const [result] = await exec("(fire! 1)", { capabilities: [cap], effects });
     expect(result).toBeUndefined(); // exec() unwraps through toJS — void ↔ JS undefined
@@ -202,10 +203,6 @@ describe("burst — the drain (§2.5, minus everything W3+ owns)", () => {
     });
     expect(ran).toEqual(["deferred", "deferred-2"]);
     // fired entry remains in the manifest
-    expect(effects.entries.map((e) => e.verbName)).toEqual([
-      "deferred",
-      "already-fired",
-      "deferred-2",
-    ]);
+    expect(effects.entries.map((e) => e.verbName)).toEqual(["deferred", "already-fired", "deferred-2"]);
   });
 });

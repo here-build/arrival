@@ -81,7 +81,7 @@
   },
   "dependencies": {
     "@inhuman.tools/arrival-internals-types-prelude": "workspace:^",
-    "@inhuman.tools/arrival-mercury": "workspace:^",
+    "@inhuman.tools/arrival-types-bridge": "workspace:^",
     "@inhuman.tools/arrival-sugarcoat": "workspace:^",
     "typescript": "6.0.2"
   },

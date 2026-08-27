@@ -257,24 +257,23 @@ export default EnvCapability.define("scheme/srfi-1", {
       // via tf("filter") term-lookup, representation-agnostic. `symbol.sequence`'s impl signature
       // is always `(args: unknown[], runCtx)` regardless of the contract shape (see
       // SequenceImpl in _bake.ts), so this is a declaration-only fix — the impl is unchanged.
-      filter:
-        symbol.sequence`filter: keep elements matching a pred (or RegExp); term-dispatch, totalic`(
-          // Output is `z.schemeValue` (the representation-BLIND scheme-value identity), NOT a "proper
-          // list" type: `filter` is genuinely polymorphic over the RECEIVER's own representation
-          // (list, vector, …) — it dispatches to whatever `arrival/tagless-final/filter` term the
-          // `seq` operand implements and returns a value in THAT SAME representation, so there is
-          // no single richer scheme-zod collection type honest for every call site.
-          // callbackRoles OVERRIDE: filter's contract is shape-identical to map's (fan
-          // host, lambda + value in, value out), so extraction's fan default would say
-          // element-transformer — but the pred is a SELECTOR: its verdict decides
-          // membership (a length-changing verb), the merged selector+decision role
-          // this codebase calls `control`.
-          {
-            input: [z.lambda, z.schemeValue],
-            output: [z.schemeValue],
-            provenance: "fan",
-            callbackRoles: ["control"],
-            type: dedent`
+      filter: symbol.sequence`filter: keep elements matching a pred (or RegExp); term-dispatch, totalic`(
+        // Output is `z.schemeValue` (the representation-BLIND scheme-value identity), NOT a "proper
+        // list" type: `filter` is genuinely polymorphic over the RECEIVER's own representation
+        // (list, vector, …) — it dispatches to whatever `arrival/tagless-final/filter` term the
+        // `seq` operand implements and returns a value in THAT SAME representation, so there is
+        // no single richer scheme-zod collection type honest for every call site.
+        // callbackRoles OVERRIDE: filter's contract is shape-identical to map's (fan
+        // host, lambda + value in, value out), so extraction's fan default would say
+        // element-transformer — but the pred is a SELECTOR: its verdict decides
+        // membership (a length-changing verb), the merged selector+decision role
+        // this codebase calls `control`.
+        {
+          input: [z.lambda, z.schemeValue],
+          output: [z.schemeValue],
+          provenance: "fan",
+          callbackRoles: ["control"],
+          type: dedent`
           {
             <T, S extends T>(p: (x: T) => x is S, xs: List<T>): List<S>;
             <T>(p: (x: T) => unknown, xs: List<T>): List<T>;
@@ -282,27 +281,27 @@ export default EnvCapability.define("scheme/srfi-1", {
             <T>(p: (x: T) => unknown, xs: readonly T[]): readonly T[];
           }
         `,
-            emit: filterEmitRule,
-          },
-          (args, runCtx) => {
-            const [pred, seq] = args;
-            const m = resolveMethod(seq, tf("filter"));
-            if (m === undefined) {
-              throw attachOffendingValue(
-                new TypeError(
-                  `filter: the ${seq == null ? String(seq) : typeof seq} operand does not support filter (no ${tf("filter")}).`,
-                ),
-                seq,
-              );
-            }
-            // `resolveMethod`'s own return type is `unknown` (it's a bare tagless-final term
-            // lookup, possibly async) — the cast states what the `filter` term contract actually
-            // guarantees (a scheme value, or a promise of one, in the receiver's own
-            // representation), mirroring this file's established "typecheck is not a TS guard;
-            // re-state it" idiom (see `findImpl` above).
-            return m.call(seq, pred, runCtx) as MaybePromise<SchemeValue>;
-          },
-        ),
+          emit: filterEmitRule,
+        },
+        (args, runCtx) => {
+          const [pred, seq] = args;
+          const m = resolveMethod(seq, tf("filter"));
+          if (m === undefined) {
+            throw attachOffendingValue(
+              new TypeError(
+                `filter: the ${seq == null ? String(seq) : typeof seq} operand does not support filter (no ${tf("filter")}).`,
+              ),
+              seq,
+            );
+          }
+          // `resolveMethod`'s own return type is `unknown` (it's a bare tagless-final term
+          // lookup, possibly async) — the cast states what the `filter` term contract actually
+          // guarantees (a scheme value, or a promise of one, in the receiver's own
+          // representation), mirroring this file's established "typecheck is not a TS guard;
+          // re-state it" idiom (see `findImpl` above).
+          return m.call(seq, pred, runCtx) as MaybePromise<SchemeValue>;
+        },
+      ),
       // The DECLARED acc-chain marker ("fold declares acc chain"): reduce's f is the
       // fold-shaped `accumulator` callback,
       // the source of CHAINED track composition (`egress(Tᵢ) → ingress(Tᵢ₊₁)`, the only

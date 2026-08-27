@@ -42,7 +42,7 @@ import type { ACallable } from "../values/primitives/ACallable.js";
  */
 // AJSArray<any>: store type parameter POLICES THE INBOUND CALL and is not part of the
 // value's identity, so a cache keyed on the value accepts every instantiation.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 const pendingCells = new WeakMap<AJSArray<any>, Map<number | string, SchemeValue | Promise<SchemeValue>>>();
 
 /**
@@ -234,9 +234,9 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
       let raw: unknown;
       try {
         raw = accessMember(this.source, name);
-      } catch (e) {
-        if (e instanceof InteropAccessError) return nil;
-        throw e;
+      } catch (error) {
+        if (error instanceof InteropAccessError) return nil;
+        throw error;
       }
       if (raw === NOT_FOUND) return nil;
       if (Array.isArray(raw)) return new AJSArray(raw as readonly unknown[]);
@@ -335,8 +335,8 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
     if (!Object.isFrozen(this.source)) {
       try {
         Object.freeze(this.source);
-      } catch (cause) {
-        throw new ForeignProxyFreezeError(cause);
+      } catch (error) {
+        throw new ForeignProxyFreezeError(error);
       }
     }
   }

@@ -265,7 +265,7 @@ function freeVars(node: Node): Set<string> {
 function collectionFor(call: ListNode): string | undefined {
   const hn = headName(call);
   if (hn === undefined || !ELEMENT_HOFS.has(hn)) return undefined;
-  const last = call.list[call.list.length - 1];
+  const last = call.list.at(-1);
   return isAtom(last) && isPlainRef(last) ? last.atom : undefined;
 }
 
@@ -345,10 +345,12 @@ function analyze(forest: Node[], opts: TidyOptions | undefined): Analysis {
     if (hn === "quote") return [];
     const isApp = hn !== undefined && !SPECIAL_FORMS.has(hn);
     const out: ScopeSpec<Node>[] = [];
-    for (let k = 0; k < items.length; k++) {
-      const child = items[k]!;
+    for (const [k, item] of items.entries()) {
+      const child = item!;
       const param = isApp && k >= 1 ? eligibleParam(child) : null;
-      if (param !== null) {
+      if (param === null) {
+        out.push(...scopesIn(child));
+      } else {
         const lam = child as ListNode;
         const body = lam.list[2]!;
         entityId.set(param, String(counter++));
@@ -369,8 +371,6 @@ function analyze(forest: Node[], opts: TidyOptions | undefined): Analysis {
           entities: [entity],
           children: scopesIn(body),
         });
-      } else {
-        out.push(...scopesIn(child));
       }
     }
     return out;

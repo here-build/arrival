@@ -29,7 +29,8 @@ describe("printType — native identity primitives (scheme primitive → plain-T
     {
       name: "z.pair → Tuple<SchemeValue, SchemeValue> (cons(schemeValue, schemeValue), not a standalone name)",
       schema: z.pair,
-      expected: "Tuple<SchemeValue, SchemeValue>" },
+      expected: "Tuple<SchemeValue, SchemeValue>",
+    },
     { name: "z.string → string", schema: z.string, expected: "string" },
     { name: "z.bigint (exact) → number", schema: z.bigint, expected: "number" },
     { name: "z.inexact → number", schema: z.inexact, expected: "number" },
@@ -49,15 +50,18 @@ describe("printType — native identity primitives (scheme primitive → plain-T
     {
       name: "z.lambda → a callable signature, not degraded to unknown",
       schema: z.lambda,
-      expected: "(...args: unknown[]) => unknown" },
+      expected: "(...args: unknown[]) => unknown",
+    },
     {
       name: "a union of primitives (z.schemeNumber) → 'number | number' (override fires per-member, undeduped)",
       schema: z.schemeNumber,
-      expected: "number | number" },
+      expected: "number | number",
+    },
     {
       name: "the list union z.pair | z.nil → Tuple<SchemeValue, SchemeValue> | null",
       schema: z.union([z.pair, z.nil]),
-      expected: "Tuple<SchemeValue, SchemeValue> | null" },
+      expected: "Tuple<SchemeValue, SchemeValue> | null",
+    },
   ])("prints $name", ({ schema, expected }) => {
     expect(printType(schema)).toBe(expected);
   });
@@ -82,11 +86,13 @@ describe("printType — unregistered custom leaf hardens to unknown, never throw
     {
       name: "a bare unregistered custom leaf degrades to 'unknown'",
       schema: unregisteredLeaf,
-      expected: "unknown" },
+      expected: "unknown",
+    },
     {
       name: "only the unregistered member inside a union degrades to unknown, sibling members unaffected",
       schema: z.union([z.string, unregisteredLeaf]),
-      expected: "string | unknown" },
+      expected: "string | unknown",
+    },
   ])("$name", ({ schema, expected }) => {
     expect(printType(schema)).toBe(expected);
   });
@@ -118,20 +124,24 @@ describe("printType — compounds", () => {
     {
       name: "z.object as a single-line member list (no dangling semicolon)",
       schema: z.object({ k: z.string, n: z.number }),
-      expected: "{ k: string; n: number }" },
+      expected: "{ k: string; n: number }",
+    },
     {
       name: "z.array as variadic 'T[]' (codec element decoded)",
       schema: z.array(z.number),
-      expected: "number[]" },
+      expected: "number[]",
+    },
     {
       name: "z.array of an identity primitive as 'T[]'",
       schema: z.array(z.pair),
-      expected: "Tuple<SchemeValue, SchemeValue>[]" },
+      expected: "Tuple<SchemeValue, SchemeValue>[]",
+    },
     { name: "a tuple as '[A, B]'", schema: z.tuple([z.string, z.number]), expected: "[string, number]" },
     {
       name: "a tuple mixing codec + identity members",
       schema: z.tuple([z.pair, z.string]),
-      expected: "[Tuple<SchemeValue, SchemeValue>, string]" },
+      expected: "[Tuple<SchemeValue, SchemeValue>, string]",
+    },
     { name: "a union as 'A | B'", schema: z.union([z.string, z.number]), expected: "string | number" },
   ])("prints $name", ({ schema, expected }) => {
     expect(printType(schema)).toBe(expected);
@@ -145,23 +155,28 @@ describe("sTagToTsType — the s/* schema-DSL tag → TS type-string bridge", ()
     {
       name: "an object tag's scalar fields",
       tag: ["object", ["title", "string"], ["count", "number"]] as const,
-      expected: "{ title: string; count: number }" },
+      expected: "{ title: string; count: number }",
+    },
     {
       name: "a field description prints as a JSDoc comment (zod-to-ts's own convention)",
       tag: ["object", ["summary", "string", "a one-line summary"]] as const,
-      expected: "{ /** a one-line summary */ summary: string }" },
+      expected: "{ /** a one-line summary */ summary: string }",
+    },
     {
       name: "a nested array field",
       tag: ["object", ["tags", ["array", "string"]]] as const,
-      expected: "{ tags: string[] }" },
+      expected: "{ tags: string[] }",
+    },
     {
       name: "a nested object field (closed-never stripped at every level)",
       tag: ["object", ["author", ["object", ["name", "string"]]]] as const,
-      expected: "{ author: { name: string } }" },
+      expected: "{ author: { name: string } }",
+    },
     {
       name: "an optional field's /optional suffix drops it from `required` — TS marks it `?` (zod's own `?: T | undefined`)",
       tag: ["object", ["title", "string"], ["nickname", "string/optional"]] as const,
-      expected: "{ title: string; nickname?: string | undefined }" },
+      expected: "{ title: string; nickname?: string | undefined }",
+    },
   ])("prints $name", ({ tag, expected }) => {
     expect(sTagToTsType(tag)).toBe(expected);
   });
@@ -182,8 +197,7 @@ describe("signatureOf — the args-vector → function-signature composer", () =
   });
 
   it("honors a dual type-guard `type` on a native type predicate", () => {
-    const dual =
-      "{ (x: unknown): x is string; <T>(x: T): x is Extract<T, string>; }";
+    const dual = "{ (x: unknown): x is string; <T>(x: T): x is Extract<T, string>; }";
     const def = symbol.native`string?: proof`(
       { input: [z.schemeValue], output: [z.boolean], type: dual },
       () => schemeTrue,
@@ -192,17 +206,13 @@ describe("signatureOf — the args-vector → function-signature composer", () =
   });
 
   it("honors a dual type-guard `type` on a taglessGuard type predicate", () => {
-    const dual =
-      "{ (x: unknown): x is readonly unknown[]; <T>(x: T): x is Extract<T, readonly any[]>; }";
+    const dual = "{ (x: unknown): x is readonly unknown[]; <T>(x: T): x is Extract<T, readonly any[]>; }";
     const def = withContractFields(symbol.taglessGuard`vector?: proof`, { type: dual });
     expect(sig(def)).toBe(dual);
   });
 
   it("composes a native def: scheme-value args, sync return, single-value output", () => {
-    const def = symbol.native`cons: build a pair`(
-      { input: [z.pair, z.pair], output: [z.pair] },
-      (a) => a,
-    );
+    const def = symbol.native`cons: build a pair`({ input: [z.pair, z.pair], output: [z.pair] }, (a) => a);
     expect(sig(def)).toBe(
       "(a: Tuple<SchemeValue, SchemeValue>, b: Tuple<SchemeValue, SchemeValue>) => Tuple<SchemeValue, SchemeValue>",
     );
@@ -243,10 +253,7 @@ describe("signatureOf — the args-vector → function-signature composer", () =
   });
 
   it("composes a 0-arg contract as '()'", () => {
-    const def = symbol.rosetta`now: current epoch millis`(
-      { input: [], output: [z.number] },
-      () => Date.now(),
-    );
+    const def = symbol.rosetta`now: current epoch millis`({ input: [], output: [z.number] }, () => Date.now());
     expect(sig(def)).toBe("() => Promise<number>");
   });
 
@@ -262,8 +269,6 @@ describe("signatureOf — the args-vector → function-signature composer", () =
       { input: [], inputRest: { name: z.string, mode: z.enum(["fast", "scenic"]).optional() }, output: [z.string] },
       () => "",
     );
-    expect(sig(def)).toBe(
-      '(a: { name: string; mode?: ("fast" | "scenic") | undefined }) => Promise<string>',
-    );
+    expect(sig(def)).toBe('(a: { name: string; mode?: ("fast" | "scenic") | undefined }) => Promise<string>');
   });
 });

@@ -23,7 +23,6 @@ import type { SchemeValue } from "../../types.js";
 import { functorLaws, semigroupLaws, setoidLaws } from "./algebra-laws.js";
 import { tf } from "../../tagless-final.js";
 
-
 // A vector element is a boxed exact integer (the interpreter is monadic-boxed:
 // `(vector 1 2 3)` mints AExact slots). The reader domain is small ints, so an
 // exact box is the faithful element.
@@ -62,7 +61,8 @@ functorLaws<AVector, number>("SchemeVector", {
   // the mapped structure re-boxes it on access, so no manual re-boxing is needed here.
   f: (x: number) => x + 1,
   g: (x: number) => x * 2,
-  eq: boxedEq });
+  eq: boxedEq,
+});
 
 describe("SchemeVector Setoid/Semigroup/Functor — boundaries", () => {
   it("structural value equality over distinct heap payloads", () => {
@@ -97,7 +97,10 @@ describe("SchemeVector Setoid/Semigroup/Functor — boundaries", () => {
     // The transform returns a boxed element — `map`'s `fn` is honestly typed `SchemeValue →
     // SchemeValue` (a Scheme transform yields a Scheme value). `map` preserves that box
     // directly, rebuilding a fresh AVector (mirrors APair's box-preserving map, P8).
-    const mapped = (await a[tf("map")](unaryContour((x) => box(numOf(x) * 10)), CONSTANT_CTX)) as AVector;
+    const mapped = (await a[tf("map")](
+      unaryContour((x) => box(numOf(x) * 10)),
+      CONSTANT_CTX,
+    )) as AVector;
     expect(mapped).toBeInstanceOf(AVector);
     expect(mapped.__vector__.every((e) => e instanceof AExact)).toBe(true);
     expect(mapped.__vector__.map(numOf)).toEqual([10, 20, 30]);

@@ -106,7 +106,9 @@ function collectFieldNodes(n: LineageNode, out: LineageNode[] = []): LineageNode
     case "opaque":
       n.children.forEach((ch) => collectFieldNodes(ch, out));
       break;
-    // leaf / source / literal carry no pluck.
+    default:
+      // leaf / source / literal / sink / transparent / binder carry no pluck.
+      break;
   }
   return out;
 }

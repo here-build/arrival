@@ -113,7 +113,9 @@ export class SourceRegistry {
               // scheme values; stamped leaves ride jsToScheme's owned pass-through).
               return jsToScheme(this.runCtx, out) as unknown as SchemeValue;
             },
-          ) }) }),
+          ),
+        }),
+      }),
     ]);
   }
 

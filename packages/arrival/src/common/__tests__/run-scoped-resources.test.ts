@@ -38,7 +38,8 @@ describe("Stage 2 — per-RunContext capability resources", () => {
           return port({ tag: "live" }, () => {
             counts.disposed += 1;
           });
-        } };
+        },
+      };
       const capability = new EnvCapability("test/run-scoped-ctor", {
         resources: { port: resource },
         symbols: {
@@ -52,7 +53,9 @@ describe("Stage 2 — per-RunContext capability resources", () => {
               if (res === undefined) return "NO-RESOURCE";
               return (await res.port.get()).tag;
             },
-          ) } });
+          ),
+        },
+      });
       return { capability, counts };
     }
 
@@ -104,7 +107,9 @@ describe("Stage 2 — per-RunContext capability resources", () => {
               // it carries no keys — never a per-RunContext bag this capability never asked for.
               return `plain:${Object.keys(res ?? {}).length}`;
             },
-          ) } });
+          ),
+        },
+      });
       const env = await freshEnv();
       await applyCapability(env, [capability]);
 
@@ -131,7 +136,8 @@ describe("Stage 2 — per-RunContext capability resources", () => {
             set: (k, v) => void store.set(k, v),
             [Symbol.asyncDispose]: async () => {
               counts.disposed += 1;
-            } };
+            },
+          };
         },
         symbols: (symbol, sz) => ({
           "cache/put": symbol.rosetta`cache/put: write a key into this run's cache`(
@@ -146,7 +152,9 @@ describe("Stage 2 — per-RunContext capability resources", () => {
             function (key: string) {
               return this.resources.get(key) ?? "MISS";
             },
-          ) }) });
+          ),
+        }),
+      });
       return { capability, counts };
     }
 

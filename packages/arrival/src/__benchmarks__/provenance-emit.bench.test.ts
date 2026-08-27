@@ -22,7 +22,13 @@
  * emission CORE's own overhead.
  */
 import { describe, it, expect } from "vitest";
-import { emitFanInstantiation, emitIngressBinding, emitMint, emitMuxDecision, setEmissionEnabled } from "../provenance/store/emit.js";
+import {
+  emitFanInstantiation,
+  emitIngressBinding,
+  emitMint,
+  emitMuxDecision,
+  setEmissionEnabled,
+} from "../provenance/store/emit.js";
 import { PayloadStoreFake, ProvenanceStoreFake } from "../provenance/store/fakes.js";
 import type { RecordId } from "../provenance/store/ids.js";
 import { execState } from "../eval/generator-exec.js";
@@ -75,7 +81,8 @@ describe("emission overhead — flag ON (real store/payload work per record)", (
           regionId: REGION,
           id: idAt(i),
           value: { i, note: "a small mint payload" },
-          stampIds: [i, i + 1] });
+          stampIds: [i, i + 1],
+        });
         expect(record).toBeDefined();
       }
       report("emitMint (flag ON)", ITERATIONS, performance.now() - start);
@@ -96,7 +103,11 @@ describe("emission overhead — flag ON (real store/payload work per record)", (
 
       const fanStart = performance.now();
       for (let i = 0; i < ITERATIONS; i++)
-        await emitFanInstantiation({ store, regionId: REGION, id: { templateHash: `fan-${i}`, ordinalPath: [i], regionEpoch: "e0" } });
+        await emitFanInstantiation({
+          store,
+          regionId: REGION,
+          id: { templateHash: `fan-${i}`, ordinalPath: [i], regionEpoch: "e0" },
+        });
       report("emitFanInstantiation (flag ON)", ITERATIONS, performance.now() - fanStart);
 
       const ingressStart = performance.now();
@@ -104,7 +115,8 @@ describe("emission overhead — flag ON (real store/payload work per record)", (
         await emitIngressBinding({
           store,
           regionId: REGION,
-          id: { templateHash: `ingress-${i}`, ordinalPath: [i], regionEpoch: "e0" } });
+          id: { templateHash: `ingress-${i}`, ordinalPath: [i], regionEpoch: "e0" },
+        });
       report("emitIngressBinding (flag ON)", ITERATIONS, performance.now() - ingressStart);
     } finally {
       setEmissionEnabled(false);
@@ -162,7 +174,9 @@ describe("Q20b — eager-oracle accumulation overhead: default-OFF vs forced-ON 
     report("exec, arithmetic+string-append (oracle ON, CI agreement mode)", EXEC_ITERATIONS, onElapsed);
 
     const deltaPct = ((onElapsed - offElapsed) / onElapsed) * 100;
-    console.log(`Q20b demotion delta: OFF is ${deltaPct.toFixed(1)}% faster than ON (${((offElapsed / EXEC_ITERATIONS) * 1000).toFixed(2)}µs vs ${((onElapsed / EXEC_ITERATIONS) * 1000).toFixed(2)}µs per exec() call)`);
+    console.log(
+      `Q20b demotion delta: OFF is ${deltaPct.toFixed(1)}% faster than ON (${((offElapsed / EXEC_ITERATIONS) * 1000).toFixed(2)}µs vs ${((onElapsed / EXEC_ITERATIONS) * 1000).toFixed(2)}µs per exec() call)`,
+    );
   });
 
   // The above, isolated: parse+eval overhead per exec() call (~265µs) dwarfs

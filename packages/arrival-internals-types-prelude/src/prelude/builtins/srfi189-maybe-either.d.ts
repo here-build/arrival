@@ -39,68 +39,59 @@
 // `?`/`>`/`/`-bearing names → bracketed string keys.
 // ─────────────────────────────────────────────────────────────────────────────
 
-  // ── Maybe constructors ──────────────────────────────────────────────────────
+// ── Maybe constructors ──────────────────────────────────────────────────────
 declare function just<T>(x: T): ["just", T];
 declare function nothing(): ["nothing"];
 
-  // ── Either constructors ─────────────────────────────────────────────────────
+// ── Either constructors ─────────────────────────────────────────────────────
 declare function left<L>(x: L): ["left", L];
 declare function right<R>(x: R): ["right", R];
 
-  // ── Tag predicates — accept any value (impl guards with pair?), return boolean ─
-  // Arg typed `unknown`: these are GUARDS, valid to call on a non-Maybe (→ #f).
+// ── Tag predicates — accept any value (impl guards with pair?), return boolean ─
+// Arg typed `unknown`: these are GUARDS, valid to call on a non-Maybe (→ #f).
 declare function just$qmark$(m: unknown): boolean;
 declare function nothing$qmark$(m: unknown): boolean;
 declare function maybe$qmark$(m: unknown): boolean;
 declare function left$qmark$(e: unknown): boolean;
 declare function right$qmark$(e: unknown): boolean;
 
-  // ── Maybe combinators ───────────────────────────────────────────────────────
-  // maybe-bind: Nothing short-circuits (returns the Nothing). Result unions the
-  // bound function's Maybe with the passed-through Nothing — faithful to the impl.
+// ── Maybe combinators ───────────────────────────────────────────────────────
+// maybe-bind: Nothing short-circuits (returns the Nothing). Result unions the
+// bound function's Maybe with the passed-through Nothing — faithful to the impl.
 declare function maybe$dash$bind<T, R extends ["just", unknown] | ["nothing"]>(
-    m: ["just", T] | ["nothing"],
-    f: (x: T) => R,
-  ): R | ["nothing"];
-  // maybe-map: maps the wrapped value, preserving Nothing. NOTE: impl arg order is
-  // (f m) — function FIRST, unlike maybe-bind's (m f).
-declare function maybe$dash$map<T, B>(
-    f: (x: T) => B,
-    m: ["just", T] | ["nothing"],
-  ): ["just", B] | ["nothing"];
-  // maybe-ref: unwrap a Just to its value. (Nothing → calls failure thunk / errors;
-  // statically the success type is the wrapped T.)
+  m: ["just", T] | ["nothing"],
+  f: (x: T) => R,
+): R | ["nothing"];
+// maybe-map: maps the wrapped value, preserving Nothing. NOTE: impl arg order is
+// (f m) — function FIRST, unlike maybe-bind's (m f).
+declare function maybe$dash$map<T, B>(f: (x: T) => B, m: ["just", T] | ["nothing"]): ["just", B] | ["nothing"];
+// maybe-ref: unwrap a Just to its value. (Nothing → calls failure thunk / errors;
+// statically the success type is the wrapped T.)
 declare function maybe$dash$ref<T>(m: ["just", T] | ["nothing"], ...failure: [(() => T)?]): T;
-  // maybe-ref/default: Just value, else the default D — honest union.
+// maybe-ref/default: Just value, else the default D — honest union.
 declare function maybe$dash$ref$slash$default<T, D>(m: ["just", T] | ["nothing"], dflt: D): T | D;
 
-  // ── Maybe ⇄ Either / List coercions ─────────────────────────────────────────
-  // maybe->either: Just x → (right x); Nothing → (left no-just).
-declare function maybe$dash$$greater$either<T, N>(
-    m: ["just", T] | ["nothing"],
-    noJust: N,
-  ): ["right", T] | ["left", N];
-  // maybe->list: Just x → (x); Nothing → ().
+// ── Maybe ⇄ Either / List coercions ─────────────────────────────────────────
+// maybe->either: Just x → (right x); Nothing → (left no-just).
+declare function maybe$dash$$greater$either<T, N>(m: ["just", T] | ["nothing"], noJust: N): ["right", T] | ["left", N];
+// maybe->list: Just x → (x); Nothing → ().
 declare function maybe$dash$$greater$list<T>(m: ["just", T] | ["nothing"]): List<T>;
-  // list->maybe: () → Nothing; (x …) → (just x).
+// list->maybe: () → Nothing; (x …) → (just x).
 declare function list$dash$$greater$maybe<T>(lst: List<T>): ["just", T] | ["nothing"];
 
-  // ── Either combinators ──────────────────────────────────────────────────────
-  // either-bind: Left short-circuits. (e f) — Either FIRST.
+// ── Either combinators ──────────────────────────────────────────────────────
+// either-bind: Left short-circuits. (e f) — Either FIRST.
 declare function either$dash$bind<L, R, O extends ["left", unknown] | ["right", unknown]>(
-    e: ["left", L] | ["right", R],
-    f: (x: R) => O,
-  ): O | ["left", L];
-  // either-map: maps a Right, preserving Left. (f e) — function FIRST.
-declare function either$dash$map<L, R, B>(
-    f: (x: R) => B,
-    e: ["left", L] | ["right", R],
-  ): ["left", L] | ["right", B];
-  // either-ref: unwrap a Right to its value (Left → failure/error).
+  e: ["left", L] | ["right", R],
+  f: (x: R) => O,
+): O | ["left", L];
+// either-map: maps a Right, preserving Left. (f e) — function FIRST.
+declare function either$dash$map<L, R, B>(f: (x: R) => B, e: ["left", L] | ["right", R]): ["left", L] | ["right", B];
+// either-ref: unwrap a Right to its value (Left → failure/error).
 declare function either$dash$ref<L, R>(e: ["left", L] | ["right", R], ...failure: [((l: L) => R)?]): R;
-  // either-ref/default: Right value, else default D.
+// either-ref/default: Right value, else default D.
 declare function either$dash$ref$slash$default<L, R, D>(e: ["left", L] | ["right", R], dflt: D): R | D;
-  // either-swap: (left x) ⇄ (right x) — sides flip, payload types swap roles.
+// either-swap: (left x) ⇄ (right x) — sides flip, payload types swap roles.
 declare function either$dash$swap<L, R>(e: ["left", L] | ["right", R]): ["right", L] | ["left", R];
-  // either->list: Right x → (x); Left → ().
+// either->list: Right x → (x); Left → ().
 declare function either$dash$$greater$list<L, R>(e: ["left", L] | ["right", R]): List<R>;

@@ -191,61 +191,49 @@ describe("r7rs numbers — passing invariants (regression guards, unchanged by t
     expect(truthy(r)).toBe(true);
   });
 
-  it(
-    "(exact 1e-10) does NOT throw and returns an exact rational (simplestInRange approximation, kept from pre-rework)",
-    async () => {
-      // `exact`/`inexact->exact` on a runtime float value use the
-      // simplestInRange (continued-fraction) approximation, same
-      // algorithm as before the rework, just ported bigint→number
-      // (Sweep 1 report: "floatToRational... stays"). This is NOT the
-      // literal IEEE-754 bit-exact fraction (which for most floats would
-      // need a component > 2^53 and would have to throw) — it's the
-      // "reasonably close" exact representation R7RS §6.2.6 permits.
-      const r = await evalScheme("(exact 1e-10)");
-      expect(truthy(r === undefined ? false : await evalScheme("(exact? (exact 1e-10))"))).toBe(true);
-      expect(truthy(await evalScheme("(= (exact 1e-10) 1/10000000000)"))).toBe(true);
-    },
-  );
+  it("(exact 1e-10) does NOT throw and returns an exact rational (simplestInRange approximation, kept from pre-rework)", async () => {
+    // `exact`/`inexact->exact` on a runtime float value use the
+    // simplestInRange (continued-fraction) approximation, same
+    // algorithm as before the rework, just ported bigint→number
+    // (Sweep 1 report: "floatToRational... stays"). This is NOT the
+    // literal IEEE-754 bit-exact fraction (which for most floats would
+    // need a component > 2^53 and would have to throw) — it's the
+    // "reasonably close" exact representation R7RS §6.2.6 permits.
+    const r = await evalScheme("(exact 1e-10)");
+    expect(truthy(r === undefined ? false : await evalScheme("(exact? (exact 1e-10))"))).toBe(true);
+    expect(truthy(await evalScheme("(= (exact 1e-10) 1/10000000000)"))).toBe(true);
+  });
 
-  it(
-    '(number->string 5.0) preserves the inexact mark ("5." or "5.0", not "5")',
-    async () => {
-      const r = await evalScheme("(number->string 5.0)");
-      const s = typeof r === "string" ? r : String((r as { valueOf: () => unknown }).valueOf());
-      expect(["5.", "5.0"]).toContain(s);
-    },
-  );
+  it('(number->string 5.0) preserves the inexact mark ("5." or "5.0", not "5")', async () => {
+    const r = await evalScheme("(number->string 5.0)");
+    const s = typeof r === "string" ? r : String((r as { valueOf: () => unknown }).valueOf());
+    expect(["5.", "5.0"]).toContain(s);
+  });
 
-  it(
-    "exact->inexact is bound (R5RS alias, R7RS-compatible naming)",
-    async () => {
-      const r = await evalScheme("(exact->inexact 1/2)");
-      expect(num(r)).toBe(0.5);
-    },
-  );
+  it("exact->inexact is bound (R5RS alias, R7RS-compatible naming)", async () => {
+    const r = await evalScheme("(exact->inexact 1/2)");
+    expect(num(r)).toBe(0.5);
+  });
 
-  it(
-    "inexact->exact is bound and does NOT throw on a safe-range rational (0.5 → exact 1/2)",
-    async () => {
-      // NOTE for the reader/Gate: docs/design-history/arrival-one-
-      // number-rework.md §2.1 has a line reading "`inexact->exact 0.5` →
-      // error" in its resolved-decisions list. Verified against the
-      // ACTUALLY LANDED implementation (Sweeps 1-4): `(inexact->exact
-      // 0.5)` does not throw — 0.5's simplestInRange approximation is the
-      // small, safe rational 1/2, well within the safe-int component
-      // bound, and this matches R7RS §6.2.6 ("exact" must return AN exact
-      // representation, not necessarily the literal IEEE-754 bit-fraction)
-      // plus the pre-rework passing behavior this row already pinned. The
-      // plan's "error" bullet reads as a leftover from an earlier (pre-
-      // RATIO-ruling) draft where `exact` could only represent integers;
-      // under RATIO it doesn't apply. Flagged in the sweep report rather
-      // than silently reconciled — if this is wrong, the fix belongs in
-      // `env/r7rs/numeric.ts`'s `exactFn`, not here.
-      const r = await evalScheme("(inexact->exact 0.5)");
-      expect(truthy(await evalScheme("(exact? (inexact->exact 0.5))"))).toBe(true);
-      expect(num(r)).toBe(0.5);
-    },
-  );
+  it("inexact->exact is bound and does NOT throw on a safe-range rational (0.5 → exact 1/2)", async () => {
+    // NOTE for the reader/Gate: docs/design-history/arrival-one-
+    // number-rework.md §2.1 has a line reading "`inexact->exact 0.5` →
+    // error" in its resolved-decisions list. Verified against the
+    // ACTUALLY LANDED implementation (Sweeps 1-4): `(inexact->exact
+    // 0.5)` does not throw — 0.5's simplestInRange approximation is the
+    // small, safe rational 1/2, well within the safe-int component
+    // bound, and this matches R7RS §6.2.6 ("exact" must return AN exact
+    // representation, not necessarily the literal IEEE-754 bit-fraction)
+    // plus the pre-rework passing behavior this row already pinned. The
+    // plan's "error" bullet reads as a leftover from an earlier (pre-
+    // RATIO-ruling) draft where `exact` could only represent integers;
+    // under RATIO it doesn't apply. Flagged in the sweep report rather
+    // than silently reconciled — if this is wrong, the fix belongs in
+    // `env/r7rs/numeric.ts`'s `exactFn`, not here.
+    const r = await evalScheme("(inexact->exact 0.5)");
+    expect(truthy(await evalScheme("(exact? (inexact->exact 0.5))"))).toBe(true);
+    expect(num(r)).toBe(0.5);
+  });
 
   it("(inexact->exact +inf.0) and (inexact->exact +nan.0) still throw — no exact representation exists", async () => {
     // §2.1: "`inexact->exact` of NaN/Inf keeps throwing" — unaffected by

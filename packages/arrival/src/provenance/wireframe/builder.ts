@@ -441,7 +441,7 @@ class GraphBuilder {
     const test = rest.car;
     // if: [then, else?]; when/unless: last body form is value.
     const bodyForms = chainOf(rest.cdr);
-    const arms = form === "if" ? bodyForms : bodyForms.length > 0 ? [bodyForms[bodyForms.length - 1]] : [];
+    const arms = form === "if" ? bodyForms : bodyForms.length > 0 ? [bodyForms.at(-1)] : [];
     if (form !== "if") for (const dropped of bodyForms.slice(0, -1)) this.walkForCuts(dropped, env);
     const id = this.addNode({ kind: "mux", op: form, span: scopeId(expr), arms: arms.length });
     this.emitWire(test, { node: id, slot: "selector" }, env);
@@ -461,7 +461,7 @@ class GraphBuilder {
       if (!isElse) this.emitWire(clause.car, { node: id, slot: `selector${sel++}` }, env);
       const body = chainOf(clause.cdr).filter((f) => !(f instanceof ASymbol && opName(f) === "=>"));
       // Last body form is arm; bare `(test)` returns test. deferred: => threading.
-      const arm = body.length > 0 ? body[body.length - 1] : clause.car;
+      const arm = body.length > 0 ? body.at(-1) : clause.car;
       for (const dropped of body.slice(0, -1)) this.walkForCuts(dropped, env);
       this.emitWire(arm, { node: id, slot: `arm${k}` }, env);
     });
@@ -485,7 +485,7 @@ class GraphBuilder {
       const intEnv: WalkEnv = { subst: intSubst, frames: [] };
       const bodyForms = chainOf(fn.cdr.cdr);
       for (const dropped of bodyForms.slice(0, -1)) interior.walkDropped(dropped, intEnv);
-      if (bodyForms.length > 0) interior.emitEgress(bodyForms[bodyForms.length - 1], intEnv);
+      if (bodyForms.length > 0) interior.emitEgress(bodyForms.at(-1), intEnv);
       template = interior.finish();
       elementParams = params;
     } else if (fn instanceof ASymbol) {
@@ -533,7 +533,7 @@ class GraphBuilder {
     for (const p of params) intSubst.set(p, LEAF(p));
     const intEnv: WalkEnv = { subst: intSubst, frames: [], recur: { name: loopName } };
     for (const dropped of bodyForms.slice(0, -1)) interior.walkDropped(dropped, intEnv);
-    if (bodyForms.length > 0) interior.emitEgress(bodyForms[bodyForms.length - 1], intEnv);
+    if (bodyForms.length > 0) interior.emitEgress(bodyForms.at(-1), intEnv);
 
     const id = this.addNode({
       kind: "binder",
@@ -583,7 +583,7 @@ class GraphBuilder {
       };
       const resultEnv: WalkEnv = { subst: intSubst, frames: [resultFrame] };
       for (const dropped of clause.resultForms.slice(0, -1)) interior.walkDropped(dropped, resultEnv);
-      interior.emitEgress(clause.resultForms[clause.resultForms.length - 1], resultEnv);
+      interior.emitEgress(clause.resultForms.at(-1), resultEnv);
     }
 
     const id = this.addNode({
@@ -647,7 +647,7 @@ export function buildWireframe(forms: readonly SchemeValue[], opts: WireframeBui
     const subst = new Map<string, LineageNode>(params.map((p) => [p, LEAF(p)]));
     const env: WalkEnv = { subst, frames: [] };
     for (const dropped of bodyForms.slice(0, -1)) g.walkDropped(dropped, env);
-    if (bodyForms.length > 0) g.emitEgress(bodyForms[bodyForms.length - 1], env);
+    if (bodyForms.length > 0) g.emitEgress(bodyForms.at(-1), env);
     templates.set(name, { params, graph: g.finish() });
   }
 

@@ -130,11 +130,14 @@ export const EXCLUDED: readonly Exclusion[] = [
         "newline",
         "flush-output-port",
         "read",
-      ] },
-    feature: "ports & I/O (R7RS §6.13) — sandbox has no port/file I/O" },
+      ],
+    },
+    feature: "ports & I/O (R7RS §6.13) — sandbox has no port/file I/O",
+  },
   {
     match: { kind: "symbols", anyOf: ["file-exists?", "delete-file", "load"] },
-    feature: "filesystem / load (R7RS §6.14) — sandbox omits (r7rs/host.ts doors)" },
+    feature: "filesystem / load (R7RS §6.14) — sandbox omits (r7rs/host.ts doors)",
+  },
   // Block-member symbol-visibility gap (manifest.ts blockMembers): each of these 5 is a
   // `(let* ((out (open-output-string)) (value …)) (test … (get-output-string out)) (test …
   // value))` block (r7rs-tests.scm §6.11, the SRFI-34 with-exception-handler examples) —
@@ -145,54 +148,68 @@ export const EXCLUDED: readonly Exclusion[] = [
   {
     match: { kind: "form", exact: normalizeText(`(test 65 value)`) },
     feature: "ports & I/O (R7RS §6.13) — sandbox has no port/file I/O",
-    note: "block-member symbol-visibility gap: `out`/`value` come from `open-output-string` in the enclosing `let*`, not this test's own datum" },
+    note: "block-member symbol-visibility gap: `out`/`value` come from `open-output-string` in the enclosing `let*`, not this test's own datum",
+  },
   {
     match: { kind: "form", exact: normalizeText(`(test 'exception value)`) },
     feature: "ports & I/O (R7RS §6.13) — sandbox has no port/file I/O",
-    note: "same block-member symbol-visibility gap as the row above" },
+    note: "same block-member symbol-visibility gap as the row above",
+  },
   {
     match: { kind: "form", exact: normalizeText(`(test 'positive value)`) },
     feature: "ports & I/O (R7RS §6.13) — sandbox has no port/file I/O",
-    note: "same block-member symbol-visibility gap as the row above" },
+    note: "same block-member symbol-visibility gap as the row above",
+  },
   {
     match: { kind: "form", exact: normalizeText(`(test 'negative value)`) },
     feature: "ports & I/O (R7RS §6.13) — sandbox has no port/file I/O",
-    note: "same block-member symbol-visibility gap as the row above" },
+    note: "same block-member symbol-visibility gap as the row above",
+  },
   {
     match: { kind: "form", exact: normalizeText(`(test 'zero value)`) },
     feature: "ports & I/O (R7RS §6.13) — sandbox has no port/file I/O",
-    note: "same block-member symbol-visibility gap as the row above" },
+    note: "same block-member symbol-visibility gap as the row above",
+  },
   {
     match: {
       kind: "symbols",
-      anyOf: ["command-line", "exit", "emergency-exit", "get-environment-variable", "get-environment-variables"] },
-    feature: "process/system (R7RS §6.14) — sandbox omits" },
+      anyOf: ["command-line", "exit", "emergency-exit", "get-environment-variable", "get-environment-variables"],
+    },
+    feature: "process/system (R7RS §6.14) — sandbox omits",
+  },
   {
     match: { kind: "symbols", anyOf: ["call-with-current-continuation", "call/cc", "dynamic-wind"] },
-    feature: "call/cc / dynamic-wind — not implemented (sandbox design decision)" },
+    feature: "call/cc / dynamic-wind — not implemented (sandbox design decision)",
+  },
   {
     match: { kind: "symbols", anyOf: ["list-length"] },
     feature: "uses call/cc internally (list-length's own reference impl) — sandbox omits continuations",
-    note: "the test forms reference `list-length` itself, not call/cc directly — matched by its own name" },
+    note: "the test forms reference `list-length` itself, not call/cc directly — matched by its own name",
+  },
   {
     match: { kind: "symbols", anyOf: ["test-exception-handler-1", "something-went-wrong"] },
-    feature: "helper (test-exception-handler-1) defined via call-with-current-continuation — sandbox omits continuations",
-    note: "sibling test-exception-handler-2 uses `guard` instead and is NOT excluded — matches v1" },
+    feature:
+      "helper (test-exception-handler-1) defined via call-with-current-continuation — sandbox omits continuations",
+    note: "sibling test-exception-handler-2 uses `guard` instead and is NOT excluded — matches v1",
+  },
   // square / exact-integer-sqrt / rationalize are implemented in r7rs/numeric (product pair
   // for isqrt). Cascade form exclusions below still skip chibi rows that bind via let*-values
   // (multi-return binder is purity-doored).
   {
     match: { kind: "form", exact: normalizeText(`(test 35 (* root rem))`) },
     feature: "exact-integer-sqrt product used via let*-values (multi-return binder doored) — cascading",
-    note: "block-member symbol-visibility gap; isqrt itself is implemented as (s . r) pair" },
+    note: "block-member symbol-visibility gap; isqrt itself is implemented as (s . r) pair",
+  },
   {
     match: { kind: "form", exact: normalizeText(`(test 0 rem)`) },
     feature: "exact-integer-sqrt product used via let*-values (multi-return binder doored) — cascading",
-    note: "same block-member gap as the row above" },
+    note: "same block-member gap as the row above",
+  },
   {
     match: { kind: "form", exact: normalizeText(`(test (expt 2 140) (square root))`) },
     feature: "exact-integer-sqrt product used via let*-values (multi-return binder doored) — cascading",
-    note: "2^140 block sibling of (test 0 rem); root unbound when let*-values is doored" },
+    note: "2^140 block sibling of (test 0 rem); root unbound when let*-values is doored",
+  },
   // (means ton) (r7rs-tests.scm:182-198, "4.2 Derived expression types") returns its three
   // Pythagorean-mean-style results via `(values …)`; the immediately-following block
   // (line 199) destructures them with `(let*-values (((a b c) (means …))) (test 27 a) …)`.
@@ -208,20 +225,25 @@ export const EXCLUDED: readonly Exclusion[] = [
   {
     match: { kind: "form", exact: normalizeText(`(test 27 a)`) },
     feature: "means's (values …) result destructured via let*-values (multi-return binder doored) — cascading",
-    note: "block-member symbol-visibility gap; means/values/let*-values are in the block's own head, not this member's datum" },
+    note: "block-member symbol-visibility gap; means/values/let*-values are in the block's own head, not this member's datum",
+  },
   {
     match: { kind: "form", exact: normalizeText(`(test 9.728 b)`) },
     feature: "means's (values …) result destructured via let*-values (multi-return binder doored) — cascading",
-    note: "same block-member gap as (test 27 a) above" },
+    note: "same block-member gap as (test 27 a) above",
+  },
   {
     match: { kind: "form", exact: normalizeText(`(test 1800/497 c)`) },
     feature: "means's (values …) result destructured via let*-values (multi-return binder doored) — cascading",
-    note: "same block-member gap as (test 27 a) above" },
+    note: "same block-member gap as (test 27 a) above",
+  },
   {
     match: {
       kind: "symbols",
-      anyOf: ["let-values", "let*-values", "call-with-values", "values", "define-values", "receive"] },
-    feature: "multiple values (R7RS §6.10 / SRFI-8) — omitted by design (continuation family)" },
+      anyOf: ["let-values", "let*-values", "call-with-values", "values", "define-values", "receive"],
+    },
+    feature: "multiple values (R7RS §6.10 / SRFI-8) — omitted by design (continuation family)",
+  },
   // NOTE: v1 also excluded "define-record-type" — dropped here rather than transcribed. It is
   // structurally DEAD as a symbols-Exclusion: `define-record-type` only ever heads a `setup`
   // step (never a TestStep), so it can never match a manifest.tests row and would permanently
@@ -229,73 +251,87 @@ export const EXCLUDED: readonly Exclusion[] = [
   // r7rs-tests.scm:675-686) use corpus-chosen names not enumerable as a general rule — expected
   // to surface as genuine red, a follow-up triage item, not a harness gap.
   {
-    match: { kind: "symbols", anyOf: ["make-rectangular", "make-polar", "real-part", "imag-part", "magnitude", "angle", "complex?"] },
+    match: {
+      kind: "symbols",
+      anyOf: ["make-rectangular", "make-polar", "real-part", "imag-part", "magnitude", "angle", "complex?"],
+    },
     feature: "complex tower (R7RS §6.2.3 omitted)",
-    note: "the complex LITERAL case doors at read time (an `unreadable` manifest step, handled "
-      + "separately in the spec) — this rule covers the ACCESSOR/constructor calls (door at eval) "
-      + "and complex? (honest always-#f stub; R7RS expects #t for reals)" },
+    note:
+      "the complex LITERAL case doors at read time (an `unreadable` manifest step, handled " +
+      "separately in the spec) — this rule covers the ACCESSOR/constructor calls (door at eval) " +
+      "and complex? (honest always-#f stub; R7RS expects #t for reals)",
+  },
   {
     match: {
       kind: "symbols",
-      anyOf: [
-        "eval",
-        "environment",
-        "null-environment",
-        "scheme-report-environment",
-        "interaction-environment",
-      ] },
-    feature:
-      "eval/environment reification (R7RS §6.12) — doored (sandbox + reification; see r7rs/eval.ts)" },
+      anyOf: ["eval", "environment", "null-environment", "scheme-report-environment", "interaction-environment"],
+    },
+    feature: "eval/environment reification (R7RS §6.12) — doored (sandbox + reification; see r7rs/eval.ts)",
+  },
   {
     match: { kind: "symbols", anyOf: ["delay", "force", "make-promise", "delay-force", "promise?"] },
     feature:
       "delayed evaluation (R7RS §4.2.5) — omitted by design (defers a value's identity to force-time, not " +
-      "construction-site; see r7rs/control.ts's notImplemented doors)" },
+      "construction-site; see r7rs/control.ts's notImplemented doors)",
+  },
   {
     match: { kind: "symbols", anyOf: ["make-parameter", "parameterize"] },
     feature:
       "dynamic bindings (R7RS §4.2.6) — omitted by design (ties identity to call-time extent, not " +
-      "construction-site; see r7rs/control.ts's notImplemented doors)" },
+      "construction-site; see r7rs/control.ts's notImplemented doors)",
+  },
   {
     match: {
       kind: "form",
-      exact: normalizeText(`(test 2 (head (tail (tail integers))))`) },
+      exact: normalizeText(`(test 2 (head (tail (tail integers))))`),
+    },
     feature: "delayed evaluation (R7RS §4.2.5 omitted) — cascading: `integers`'s own definition uses `delay`",
     note:
       "block-member symbol-visibility gap (manifest.ts blockMembers): the SETUP form defining `integers` via " +
       "`delay` is a sibling of this test, not part of its own datum, so the `delay` Exclusion above never sees " +
-      "it — reported as a harness fix design, not editable here" },
+      "it — reported as a harness fix design, not editable here",
+  },
   {
     match: {
       kind: "form",
-      exact: normalizeText(`(test 5 (head (tail (tail (stream-filter odd? integers)))))`) },
-    feature: "delayed evaluation (R7RS §4.2.5 omitted) — cascading: `stream-filter`/`integers` use `delay-force`/`delay`",
-    note: "same block-member symbol-visibility gap as the `integers` row above" },
+      exact: normalizeText(`(test 5 (head (tail (tail (stream-filter odd? integers)))))`),
+    },
+    feature:
+      "delayed evaluation (R7RS §4.2.5 omitted) — cascading: `stream-filter`/`integers` use `delay-force`/`delay`",
+    note: "same block-member symbol-visibility gap as the `integers` row above",
+  },
   {
     match: { kind: "symbols", anyOf: ["any-arity", "rest-arity", "dead-clause"] },
     feature:
       "case-lambda (R7RS §4.2.9) — doored not-yet (r7rs/control.ts); cascading unbound clause names " +
-      "when the setup form's case-lambda head never binds them" },
+      "when the setup form's case-lambda head never binds them",
+  },
   {
     match: { kind: "symbols", anyOf: ["radix"] },
-    feature: "dynamic bindings (R7RS §4.2.6 omitted) — cascading: `radix` is defined via the doored `make-parameter`" },
+    feature: "dynamic bindings (R7RS §4.2.6 omitted) — cascading: `radix` is defined via the doored `make-parameter`",
+  },
   {
     match: { kind: "form", exact: normalizeText(`(test "12" (f 12))`) },
     feature: "dynamic bindings (R7RS §4.2.6 omitted) — cascading: `f` calls the never-defined `radix` parameter",
-    note: "block/setup symbol-visibility gap — `f`'s own definition references `radix`, not this test's datum" },
+    note: "block/setup symbol-visibility gap — `f`'s own definition references `radix`, not this test's datum",
+  },
   {
     match: {
       kind: "symbols",
-      anyOf: ["current-second", "current-jiffy", "jiffies-per-second", "features"] },
-    feature: "process/system (R7RS §6.14) — sandbox omits (extends the command-line/exit/env-var rule above)" },
+      anyOf: ["current-second", "current-jiffy", "jiffies-per-second", "features"],
+    },
+    feature: "process/system (R7RS §6.14) — sandbox omits (extends the command-line/exit/env-var rule above)",
+  },
   {
     match: { kind: "form", exact: normalizeText(`(test #t (list? env))`) },
     feature: "process/system (R7RS §6.14) — sandbox omits `get-environment-variables`",
-    note: "block-member symbol-visibility gap: `env` is bound via `get-environment-variables` in the enclosing `let`, not this test's own datum" },
+    note: "block-member symbol-visibility gap: `env` is bound via `get-environment-variables` in the enclosing `let`, not this test's own datum",
+  },
   {
     match: { kind: "form", exact: normalizeText(`(test #t (all? env-pair? env))`) },
     feature: "process/system (R7RS §6.14) — sandbox omits `get-environment-variables`",
-    note: "same block-member symbol-visibility gap as the row above" },
+    note: "same block-member symbol-visibility gap as the row above",
+  },
   // -----------------------------------------------------------------------
   // `define-record-type` — genuinely UNBOUND (not a notImplemented door; verified via direct
   // exec: "Unbound variable `define-record-type'"), i.e. not implemented at all. As the
@@ -308,23 +344,29 @@ export const EXCLUDED: readonly Exclusion[] = [
   // -----------------------------------------------------------------------
   {
     match: { kind: "form", exact: normalizeText(`(test #t (pare? (kons 1 2)))`) },
-    feature: "define-record-type — not implemented (unbound, R7RS §5.5)" },
+    feature: "define-record-type — not implemented (unbound, R7RS §5.5)",
+  },
   {
     match: { kind: "form", exact: normalizeText(`(test #f (pare? (cons 1 2)))`) },
-    feature: "define-record-type — not implemented (unbound, R7RS §5.5)" },
+    feature: "define-record-type — not implemented (unbound, R7RS §5.5)",
+  },
   {
     match: { kind: "form", exact: normalizeText(`(test 1 (kar (kons 1 2)))`) },
-    feature: "define-record-type — not implemented (unbound, R7RS §5.5)" },
+    feature: "define-record-type — not implemented (unbound, R7RS §5.5)",
+  },
   {
     match: { kind: "form", exact: normalizeText(`(test 2 (kdr (kons 1 2)))`) },
-    feature: "define-record-type — not implemented (unbound, R7RS §5.5)" },
+    feature: "define-record-type — not implemented (unbound, R7RS §5.5)",
+  },
   {
     match: {
       kind: "form",
       exact: normalizeText(`(test 3 (let ((k (kons 1 2)))
           (set-kar! k 3)
-          (kar k)))`) },
-    feature: "define-record-type — not implemented (unbound, R7RS §5.5)" },
+          (kar k)))`),
+    },
+    feature: "define-record-type — not implemented (unbound, R7RS §5.5)",
+  },
 ];
 
 // ── EXPECTED_FAILURES — documented deviations, not bugs (§11.2 point 2). ─────────────────────
@@ -362,7 +404,8 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
       "test-numeric-syntax (line 2297) to use real string ports, which arrival omits by design (R7RS §6.13, " +
       "sandbox has no port/file I/O) — the setup form's `open-input-string` reference isn't visible to this " +
       "test step's own datum, so the general ports EXCLUDED rule can't catch it",
-    gate: "permanent — ports/IO omitted by design, no fix planned (harness-capability.ts prelude's own documented cascade)" },
+    gate: "permanent — ports/IO omitted by design, no fix planned (harness-capability.ts prelude's own documented cascade)",
+  },
   // -----------------------------------------------------------------------
   // FIXED (2026-07-14, one-number rework, docs/design-history/arrival-one-number-rework.md):
   // the row for `(test #f (= 9007199254740992.0 9007199254740993))` is DEAD, not passing —
@@ -375,7 +418,8 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
   {
     match: { kind: "form", exact: "(test #t (if (and (= a b) (= b c)) (= a c) #t))" },
     reason: "Numeric = non-transitivity across exact-bignum vs inexact (2^1000 ± 1) — IEEE/tower edge, known",
-    gate: "permanent — IEEE 754/tower edge, no fix planned" },
+    gate: "permanent — IEEE 754/tower edge, no fix planned",
+  },
   // -----------------------------------------------------------------------
   // One-number rework (RATIO, docs/design-history/arrival-one-number-rework.md §0.3): a
   // genuinely NEW expected failure, not a stale carry-over. The CLtL 12.3 transitivity example
@@ -390,11 +434,13 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
   {
     match: {
       kind: "form",
-      exact: normalizeText(`(test #t (if (and (<= a j) (< j (+ j 1))) (not (<= (+ j 1) a)) #t))`) },
+      exact: normalizeText(`(test #t (if (and (<= a j) (< j (+ j 1))) (not (<= (+ j 1) a)) #t))`),
+    },
     reason:
       "one-number rework (RATIO): (exact a) on a/≈9.007e15 (just past Number.MAX_SAFE_INTEGER) throws by design " +
       "(§0.3 crash-on-overflow) — the corpus's own float epsilon computation lands just past the safe-int ceiling",
-    gate: "permanent — RATIO's safe-int component ceiling (docs/design-history/arrival-one-number-rework.md §0.3), no fix planned" },
+    gate: "permanent — RATIO's safe-int component ceiling (docs/design-history/arrival-one-number-rework.md §0.3), no fix planned",
+  },
   // (The former "One-number rework (RATIO) fallout" block — 13 xfail rules for the
   // env/r7rs/vectors.ts:149 / lists.ts BigInt-mint leftovers — was REMOVED 2026-07-14:
   // the concurrent-WIP protection lifted, the 3-line fix landed (vector-length/length
@@ -421,35 +467,44 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
         "set-cdr!",
         "append!",
         "list-set!",
-      ] },
+      ],
+    },
     reason: "intentional — purity invariant (frozen entities); writing methods are doored",
-    gate: "plan-2026-06-11-purity-pass" },
+    gate: "plan-2026-06-11-purity-pass",
+  },
   {
     match: { kind: "symbols", anyOf: ["set!"] },
     reason: "intentional — purity invariant; lexical set! (variable rebinding) is doored",
-    gate: "plan-2026-06-11-purity-pass (r7rs/binding)" },
+    gate: "plan-2026-06-11-purity-pass (r7rs/binding)",
+  },
   {
     match: { kind: "form", exact: normalizeText(`(test 6 (+ x 1))`) },
-    reason: "intentional — purity invariant; cascading — the enclosing block's sibling `(set! x 5)` doors, aborting before this member runs",
-    gate: "plan-2026-06-11-purity-pass (r7rs/binding); block-member symbol-visibility gap in manifest.ts blockMembers (harness fix design, not editable here)" },
+    reason:
+      "intentional — purity invariant; cascading — the enclosing block's sibling `(set! x 5)` doors, aborting before this member runs",
+    gate: "plan-2026-06-11-purity-pass (r7rs/binding); block-member symbol-visibility gap in manifest.ts blockMembers (harness fix design, not editable here)",
+  },
   {
     match: { kind: "form", exact: normalizeText(`(test 6 (force p))`) },
     reason:
       "intentional — purity invariant; cascading — `(define p (delay (begin (set! count …) …)))` evaluates its " +
       "argument (applicative order) before `delay`'s own door fires, so `set!` throws first",
-    gate: "plan-2026-06-11-purity-pass (r7rs/binding); block-member symbol-visibility gap in manifest.ts blockMembers" },
+    gate: "plan-2026-06-11-purity-pass (r7rs/binding); block-member symbol-visibility gap in manifest.ts blockMembers",
+  },
   {
     match: { kind: "form", exact: normalizeText(`(test #t (eqv? x y))`) },
     reason: "intentional — purity invariant; cascading — the enclosing block's sibling `(set-cdr! x 4)` doors first",
-    gate: "plan-2026-06-11-purity-pass; block-member symbol-visibility gap in manifest.ts blockMembers" },
+    gate: "plan-2026-06-11-purity-pass; block-member symbol-visibility gap in manifest.ts blockMembers",
+  },
   {
     match: { kind: "form", exact: normalizeText(`(test #f (list? y))`) },
     reason: "intentional — purity invariant; cascading — the enclosing block's sibling `(set-cdr! x 4)` doors first",
-    gate: "plan-2026-06-11-purity-pass; block-member symbol-visibility gap in manifest.ts blockMembers" },
+    gate: "plan-2026-06-11-purity-pass; block-member symbol-visibility gap in manifest.ts blockMembers",
+  },
   {
     match: { kind: "form", exact: normalizeText(`(test #f (list? x))`) },
     reason: "intentional — purity invariant; cascading — the enclosing block's sibling `(set-cdr! x 4)` doors first",
-    gate: "plan-2026-06-11-purity-pass; block-member symbol-visibility gap in manifest.ts blockMembers" },
+    gate: "plan-2026-06-11-purity-pass; block-member symbol-visibility gap in manifest.ts blockMembers",
+  },
   // -----------------------------------------------------------------------
   // Macro engine / hygiene gaps — pre-L1, separate from AValue work.
   //
@@ -463,50 +518,62 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
   {
     match: { kind: "symbols", anyOf: ["swap!"] },
     reason: "Local define-syntax + set! inside the rewrite — pre-L1 hygiene gap",
-    gate: "pre-L1 macro engine (hygiene)" },
+    gate: "pre-L1 macro engine (hygiene)",
+  },
   {
     match: { kind: "symbols", anyOf: ["my-or"] },
     reason: "Hygienic shadowing of let/if at the use site — pre-L1 hygiene gap",
-    gate: "pre-L1 hygiene" },
+    gate: "pre-L1 hygiene",
+  },
   {
     match: { kind: "form", exact: "(test 'ok (let ((=> #f)) (cond (#t => 'ok))))" },
     reason: "Hygienic shadowing of cond's => auxiliary keyword — pre-L1 hygiene gap",
-    gate: "pre-L1 hygiene" },
+    gate: "pre-L1 hygiene",
+  },
   {
     match: { kind: "symbols", anyOf: ["sequence1"] },
     reason: "Nested define-syntax defining a macro (be-like-begin) — inner macro unbound — pre-L1 macro engine gap",
-    gate: "pre-L1 macro engine (nested define-syntax)" },
+    gate: "pre-L1 macro engine (nested define-syntax)",
+  },
   {
     match: { kind: "symbols", anyOf: ["sequence2"] },
     reason: "Nested define-syntax defining a macro (be-like-begin) — inner macro unbound — pre-L1 macro engine gap",
-    gate: "pre-L1 macro engine (nested define-syntax)" },
+    gate: "pre-L1 macro engine (nested define-syntax)",
+  },
   {
     match: { kind: "symbols", anyOf: ["sequence3"] },
     reason: "Nested define-syntax defining a macro (be-like-begin) — inner macro unbound — pre-L1 macro engine gap",
-    gate: "pre-L1 macro engine (nested define-syntax)" },
+    gate: "pre-L1 macro engine (nested define-syntax)",
+  },
   {
     match: { kind: "symbols", anyOf: ["mad-hatter"] },
     reason: "Nested define-syntax (jabberwocky → hatter) — inner macro unbound — pre-L1 macro engine gap",
-    gate: "pre-L1 macro engine (nested define-syntax)" },
+    gate: "pre-L1 macro engine (nested define-syntax)",
+  },
   {
     match: { kind: "form", exact: "(test 'x (bar 1))" },
     reason: "Nested define-syntax (foo → bar) — inner macro unbound — pre-L1 macro engine gap",
-    gate: "pre-L1 macro engine (nested define-syntax)" },
+    gate: "pre-L1 macro engine (nested define-syntax)",
+  },
   {
     match: { kind: "form", exact: "(test 100 (ff 10))" },
     reason: "Nested define-syntax (ffoo → ff) — inner macro unbound — pre-L1 macro engine gap",
-    gate: "pre-L1 macro engine (nested define-syntax)" },
+    gate: "pre-L1 macro engine (nested define-syntax)",
+  },
   {
     match: { kind: "symbols", anyOf: ["elli-lit-1"] },
     reason: "Ellipsis used as a literal in the template — pre-L1 macro engine gap",
-    gate: "pre-L1 macro engine (ellipsis handling)" },
+    gate: "pre-L1 macro engine (ellipsis handling)",
+  },
   {
     match: {
       kind: "form",
       exact:
-        '(test \'#((10 43) (31 41 51) (32 42 52) (63 77) ("rest:" . "tail")) (part-2x (10 (+ 21 22) (31 32) (41 42) (51 52) (+ 61 2) 77 . "tail")))' },
+        '(test \'#((10 43) (31 41 51) (32 42 52) (63 77) ("rest:" . "tail")) (part-2x (10 (+ 21 22) (31 32) (41 42) (51 52) (+ 61 2) 77 . "tail")))',
+    },
     reason: "Improper-list (dotted-tail) ellipsis pattern — pre-L1 macro engine gap",
-    gate: "pre-L1 macro engine (ellipsis handling)" },
+    gate: "pre-L1 macro engine (ellipsis handling)",
+  },
   // Ellipsis sub-pattern `(m n) ...` in the MIDDLE of a pattern (followed by a fixed `x y`
   // tail) — verified: `m`/`n` bind to `()` instead of the collected elements (expected
   // `(31 41 51)`/`(32 42 52)`, actual `()`/`()`); the head/tail-only parts (`a b`, `x y`)
@@ -517,29 +584,36 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
       kind: "form",
       exact: normalizeText(
         `(test '#((10 43) (31 41 51) (32 42 52) (63 77)) (part-2 10 (+ 21 22) (31 32) (41 42) (51 52) (+ 61 2) 77))`,
-      ) },
+      ),
+    },
     reason: "Ellipsis sub-pattern `(m n) ...` in the middle of a pattern binds to () instead of the collected elements",
-    gate: "pre-L1 macro engine (ellipsis handling)" },
+    gate: "pre-L1 macro engine (ellipsis handling)",
+  },
   {
     match: {
       kind: "form",
       exact: normalizeText(
         `(test '#((10 43) (31 41 51) (32 42 52) (63 77) ("rest:")) (part-2x (10 (+ 21 22) (31 32) (41 42) (51 52) (+ 61 2) 77)))`,
-      ) },
+      ),
+    },
     reason: "Ellipsis sub-pattern `(m n) ...` in the middle of a pattern binds to () instead of the collected elements",
-    gate: "pre-L1 macro engine (ellipsis handling)" },
+    gate: "pre-L1 macro engine (ellipsis handling)",
+  },
   {
     match: { kind: "symbols", anyOf: ["underscore"] },
     reason: "`_` wildcard in a syntax-rules pattern — pre-L1 macro engine gap",
-    gate: "pre-L1 macro engine" },
+    gate: "pre-L1 macro engine",
+  },
   {
     match: { kind: "symbols", anyOf: ["count-to-2_"] },
     reason: "`_` wildcard counting pattern (count-to-2_) — pre-L1 macro engine gap",
-    gate: "pre-L1 macro engine" },
+    gate: "pre-L1 macro engine",
+  },
   {
     match: { kind: "form", exact: "(test 'bound-identifier=? (m k))" },
     reason: "let-syntax + bound-identifier=? hygiene comparison — pre-L1 hygiene gap",
-    gate: "pre-L1 hygiene (bound-identifier=?)" },
+    gate: "pre-L1 hygiene (bound-identifier=?)",
+  },
   // -----------------------------------------------------------------------
   // Function/lambda identity — evaluating twice through the lookup/eval path yields
   // distinct closures, so `(eq? p p)` sees two objects.
@@ -547,7 +621,8 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
   {
     match: { kind: "form", exact: "(test #t (let ((p (lambda (x) x))) (eq? p p)))" },
     reason: "Lambda identity — lookup/eval yields distinct closures, eq? sees two objects — pre-L1",
-    gate: "pre-L1 (evaluator identity)" },
+    gate: "pre-L1 (evaluator identity)",
+  },
   // NOTE: narrowed from the original symbols:["gen-counter"] (2 matches) — that broad rule
   // ALSO caught `(test #f (eqv? (gen-counter) (gen-counter)))` @713, which now passes:
   // two SEPARATE gen-counter calls legitimately produce non-eqv? closures regardless of the
@@ -557,11 +632,13 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
   {
     match: { kind: "form", exact: normalizeText(`(test #t (let ((g (gen-counter))) (eqv? g g)))`) },
     reason: "Lambda identity — same root cause as the (eq? p p) case above",
-    gate: "pre-L1 (evaluator identity)" },
+    gate: "pre-L1 (evaluator identity)",
+  },
   {
     match: { kind: "symbols", anyOf: ["gen-loser"] },
     reason: "Lambda identity — same root cause as the (eq? p p) case above",
-    gate: "pre-L1 (evaluator identity)" },
+    gate: "pre-L1 (evaluator identity)",
+  },
   // -----------------------------------------------------------------------
   // 6.5 Symbols — symbol->string/string->symbol REMOVED (v1/early-v2 rule). Verified fixed:
   // the described bug ("core.ts uses JS dot-access that no longer resolves") no longer applies
@@ -642,7 +719,8 @@ export function makeRegistry(
     }
     for (const rule of expectedFailures) {
       const n = countMatches(rule.match);
-      if (n === 0) findings.push(`dead ExpectedFailure rule (0 matches): ${describeMatch(rule.match)} — ${rule.reason}`);
+      if (n === 0)
+        findings.push(`dead ExpectedFailure rule (0 matches): ${describeMatch(rule.match)} — ${rule.reason}`);
       if (rule.maxMatches !== undefined && n > rule.maxMatches)
         findings.push(
           `over-match ExpectedFailure rule (${n} > maxMatches ${rule.maxMatches}): ${describeMatch(rule.match)} — ${rule.reason}`,

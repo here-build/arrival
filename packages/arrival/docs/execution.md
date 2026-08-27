@@ -56,7 +56,7 @@ Four homes, by lifetime:
 - **Keyed residency** — a module-housed `WeakMap`/`WeakSet` keyed by a run-scoped object
   (typically `RunContext` itself); lifetime = the KEY's, not the module's. Used when a leaf
   must hold run-associated state without importing the owning layer (a `WeakMap<RunContext,
-  X>` needs no `RunContext` write access, only identity). Four sites, all independently
+X>` needs no `RunContext` write access, only identity). Four sites, all independently
   audit-found: `inFlight` (`run/penetration.ts` — the single-flight in-progress-promise table;
   moved here from `run/run-cache.ts` when `penetrateThroughCache` did, audit P2 — cite
   `penetration.ts`, not `run-cache.ts`),
@@ -76,7 +76,7 @@ import edge to the owning layer (→ keyed residency)?
 comment states the "at most one recording run per isolate" guarantee and names
 keyed-by-runCtx as the upgrade path if that ever stops holding.
 
-*Enforcement sites: `run/RunContext.ts`, `eval/generator-exec.ts`.*
+_Enforcement sites: `run/RunContext.ts`, `eval/generator-exec.ts`._
 
 ## 2. CTX-SPECIES — live, constant
 
@@ -104,7 +104,7 @@ read `origin` or a ctx's `.location`. It is now a plain `loc?: SourceLocation` a
 directly from the Parser through `parse_argument`/`ADict.fromLiteralForms` to the leaf mints,
 landing on the VALUE's own `.location` field (AValue) — no ctx involved, and no third species.
 
-*Enforcement sites: `run/RunContext.ts`.*
+_Enforcement sites: `run/RunContext.ts`._
 
 ## 3. CHANNELS — six independent seams, armed subset-wise
 
@@ -112,14 +112,14 @@ landing on the VALUE's own `.location` field (AValue) — no ctx involved, and n
 seam; `undefined` means that facility is off. A run may carry any subset — they are siblings,
 none a field of another. Five default off; **`resourcePaths` alone defaults ON** (see below).
 
-| Channel | Facility when armed | Off (`undefined`) |
-|---|---|---|
-| `cache` | membrane record/replay interception, per the mode law (§6) | no interception |
-| `effects` | effect-burst gather arm — a `sink` enqueues instead of firing (§7) | a sink fires immediately |
-| `reads` | read-tracking + the read∩write deferral guard (§8) | no tracking, no guard |
-| `notes` | model-facing bookkeeping sink (§9) | notes dropped |
-| `display` | host `(display …)` affordance sink (§9) | no display verb bound |
-| `resourcePaths` | per-run Q/E journal + the temporal-immutability door (§12) | no journal, no door |
+| Channel         | Facility when armed                                                | Off (`undefined`)        |
+| --------------- | ------------------------------------------------------------------ | ------------------------ |
+| `cache`         | membrane record/replay interception, per the mode law (§6)         | no interception          |
+| `effects`       | effect-burst gather arm — a `sink` enqueues instead of firing (§7) | a sink fires immediately |
+| `reads`         | read-tracking + the read∩write deferral guard (§8)                 | no tracking, no guard    |
+| `notes`         | model-facing bookkeeping sink (§9)                                 | notes dropped            |
+| `display`       | host `(display …)` affordance sink (§9)                            | no display verb bound    |
+| `resourcePaths` | per-run Q/E journal + the temporal-immutability door (§12)         | no journal, no door      |
 
 **The one inverted default.** `resourcePaths` is a LAW channel, not an observability channel:
 an ordinary `new RunContext(...)` always mints a fresh `MemoryResourcePathLog`, so the CQS door
@@ -156,8 +156,8 @@ and no `(display …)` a model authored. The drop is correct, but it is currentl
 `notes`/`display` are omitted. Stated here explicitly: **a note or display pushed from inside a
 `require`d module is dropped, because `execExpr` binds no such sink.**
 
-*Enforcement sites: `run/RunContext.ts`, `eval/generator-exec.ts` (`ExecOptions`, `execState`,
-`execExpr`), `env/assemble-run.ts` (`assembleRun`).*
+_Enforcement sites: `run/RunContext.ts`, `eval/generator-exec.ts` (`ExecOptions`, `execState`,
+`execExpr`), `env/assemble-run.ts` (`assembleRun`)._
 
 ## 4. CALLCTX — the fused dispatch `this`
 
@@ -228,8 +228,8 @@ originating `assembleRun` call built — checked by vocabulary IDENTITY on reuse
 (a mismatch throws `RunContextVocabularyMismatchError`) — while a fresh `new RunContext(...)` a
 caller mints by hand outside `assembleRun` (the over-frame seam above) carries none.
 
-*Enforcement sites: `run/CallCtx.ts`, `run/RunContext.ts` (`capabilityConfigurations`),
-`env/assemble-run.ts` (`assembleRun`).*
+_Enforcement sites: `run/CallCtx.ts`, `run/RunContext.ts` (`capabilityConfigurations`),
+`env/assemble-run.ts` (`assembleRun`)._
 
 ## 5. BUDGETS — two bounds, first to fire wins
 
@@ -254,8 +254,8 @@ several forms is still bounded. In `execExpr` the deadline is PER-FORM (one expr
 budget) — a cumulative multi-form bound there would need a shared `RunContext` no `execExpr`
 caller can inject yet.
 
-*Enforcement sites: `eval/evaluator.ts` (TICK check), `eval/generator-exec.ts` (the per-form
-loop, `execExpr`). Consumer view: §14 SESSIONS.*
+_Enforcement sites: `eval/evaluator.ts` (TICK check), `eval/generator-exec.ts` (the per-form
+loop, `execExpr`). Consumer view: §14 SESSIONS._
 
 ## 6. MODE-LAW — record × replay × class
 
@@ -263,12 +263,12 @@ loop, `execExpr`). Consumer view: §14 SESSIONS.*
 storage: `mode: "record"` is a live run (the impl fires, its result is written);
 `mode: "replay"` is a fold (a hit answers WITHOUT firing). The behavior per stamped cache class:
 
-| class | record mode | replay mode |
-|---|---|---|
-| `view` | fire, write/OVERWRITE `{value}` (a settled entry never suppresses a live fire — fresh truth) | hit → serve, never re-fire; miss → fire + write (a NEW program's novel call is fresh) |
-| `sink` | fire, write `{effect}` tombstone (two identical live sinks = TWO effects, always) | tombstone hit → skip (void); miss → fire (new intent, not a repeat) |
-| `pure` | fire | fire — determinism from args is the CONTRACT; recovery = re-call, never stored |
-| undeclared | fire | fire — regenerateable, the SAFE default |
+| class      | record mode                                                                                  | replay mode                                                                           |
+| ---------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `view`     | fire, write/OVERWRITE `{value}` (a settled entry never suppresses a live fire — fresh truth) | hit → serve, never re-fire; miss → fire + write (a NEW program's novel call is fresh) |
+| `sink`     | fire, write `{effect}` tombstone (two identical live sinks = TWO effects, always)            | tombstone hit → skip (void); miss → fire (new intent, not a repeat)                   |
+| `pure`     | fire                                                                                         | fire — determinism from args is the CONTRACT; recovery = re-call, never stored        |
+| undeclared | fire                                                                                         | fire — regenerateable, the SAFE default                                               |
 
 The cache class is an EXPLICIT declaration on the contract, never derived from the lineage role
 (environments.md §AXES: the two axes are orthogonal — `infer` is a provenance SOURCE declaring
@@ -288,9 +288,9 @@ a cache to a run: on mismatch it drops the cache and keeps the log. A rehydratio
 `replay` cache OVER a recorded one's entries; mode is fixed at construction and a live cache is
 never flipped.
 
-*Enforcement sites: `run/run-cache.ts` (`penetrateThroughCache`, the table), `common/symbols/_bake.ts`
+_Enforcement sites: `run/run-cache.ts` (`penetrateThroughCache`, the table), `common/symbols/_bake.ts`
 (`assertCacheClassShape` — the class gate), `common/symbols/rosetta.ts` (the chokepoint that
-applies it).*
+applies it)._
 
 ## 7. BURST — the ordered, non-deduplicating effect arm
 
@@ -338,9 +338,9 @@ re-enters through `this.runCtx.effects` and gathers. The hazard shape and the ba
 that steers `z.value` slots to `z.procedure` (so no callable marshals under a stale scope after
 an `await`) live in membrane.md §REGION — cross-linked, not duplicated.
 
-*Enforcement sites: `run/effect-log.ts` (the log, `burst`, `BurstDrainError`), `run/run-cache.ts`
+_Enforcement sites: `run/effect-log.ts` (the log, `burst`, `BurstDrainError`), `run/run-cache.ts`
 (`penetrateThroughCache` — the gather condition), `common/symbols/rosetta.ts` (the chokepoint +
-the region-scope re-entry). Cross-link: `docs/membrane.md §REGION`.*
+the region-scope re-entry). Cross-link: `docs/membrane.md §REGION`._
 
 ## 8. READ-GUARD — a burst must not read its own deferred write
 
@@ -381,8 +381,8 @@ serializer walk — the eval loop performs no such walk. First violation throws
 read) and routing the caller: put the read in a follow-up call (the effect will be committed by
 then), or drop it.
 
-*Enforcement sites: `run/read-guard.ts` (`ReadEvent`, `checkReadWriteGuard`, the error door),
-`eval/generator-exec.ts` (the per-form region wrap + the post-form check).*
+_Enforcement sites: `run/read-guard.ts` (`ReadEvent`, `checkReadWriteGuard`, the error door),
+`eval/generator-exec.ts` (the per-form region wrap + the post-form check)._
 
 ## 9. SINKS — the return channel must never lie
 
@@ -409,8 +409,8 @@ Every "nothing happened" must name WHICH nothing it is.
   this sink, the value flowing on untouched so composition is unaffected. Intent honored without
   the language acquiring an IO surface.
 
-*Enforcement sites: `run/note-sink.ts`, `common/symbols/rosetta.ts` (the tolerance-note drain),
-`eval/generator-exec.ts` / `eval/exec-phases.ts` (channel arming — and the §3 `execExpr` drop).*
+_Enforcement sites: `run/note-sink.ts`, `common/symbols/rosetta.ts` (the tolerance-note drain),
+`eval/generator-exec.ts` / `eval/exec-phases.ts` (channel arming — and the §3 `execExpr` drop)._
 
 ## 10. CHOKEPOINT — where the run model attaches
 
@@ -440,9 +440,9 @@ assumes are PROVEN at bake, once, off the same normalized schemas:
   args) and an output one breaks the ENTRY. The author's way out is declaring `pure` (recovery =
   re-call, nothing persists) or nothing.
 
-*Enforcement sites: `common/symbols/rosetta.ts` (the `run` wrapper), `common/symbols/_bake.ts`
+_Enforcement sites: `common/symbols/rosetta.ts` (the `run` wrapper), `common/symbols/_bake.ts`
 (`assertCacheClassShape`, the void-family / callable gates), `run/run-cache.ts`
-(`penetrateThroughCache`).*
+(`penetrateThroughCache`)._
 
 ## 11. TWO-REPLAYS — one word, two mechanisms
 
@@ -465,8 +465,8 @@ RE-CALL, because determinism-from-args is the contract. Run-model replay stores 
 it (purity re-derives). One principle, two layers: what is deterministic from its inputs is
 never stored, only recomputed.
 
-*Enforcement sites: `run/run-cache.ts` (run-model replay). γ-replay: `provenance/replay.ts`,
-specified in `docs/PROVENANCE.md §4` — cited, not absorbed.*
+_Enforcement sites: `run/run-cache.ts` (run-model replay). γ-replay: `provenance/replay.ts`,
+specified in `docs/PROVENANCE.md §4` — cited, not absorbed._
 
 ## 12. RESOURCE-PATHS — domain lanes, temporal immutability
 
@@ -522,10 +522,9 @@ effect); and **effects-only must be void-family** — the return of an effectful
 licensed by its Q half (upsert-with-return is the hybrid shape), so a returning writer
 declares the query path or voids its output (`"effects-only-return"`, type-level twin).
 
-*Enforcement sites: `run/resource-paths.ts` (algebra, journal, door, `applyResourcePathCqs`),
+_Enforcement sites: `run/resource-paths.ts` (algebra, journal, door, `applyResourcePathCqs`),
 `common/symbols/rosetta.ts` (the chokepoint call), `run/run-cache.ts` (storage arms),
-`common/symbols/native.ts` / `sequence.ts` (bake door). Design history:
-`docs/design-history/resource-paths-cqs-DRAFT.md`.*
+`common/symbols/native.ts` / `sequence.ts` (bake door)._
 
 ## 13. REACTIVITY — Arrival does not own a reactive runtime
 
@@ -540,18 +539,18 @@ is reentrant — `work()` may itself cross. Reverse-membrane wrappers close over
 run's wrap. `undefined` ⇒ identity. Re-adding a path-keyed subscribe API inside Arrival
 recreates the catalog.
 
-*Enforcement sites: `run/RunContext.ts` (`applyMembraneClosure`), `values/primitives/ACallable.ts`
+_Enforcement sites: `run/RunContext.ts` (`applyMembraneClosure`), `values/primitives/ACallable.ts`
 (host-fn fire + reverse wrap), `common/symbols/rosetta.ts` (baked hostImpl),
 `common/scheme-zod/index.ts` (`z.procedure` both directions), `membrane/AJSObject.ts` /
 `membrane/AJSArray.ts` / `values/primitives/APair.ts` (`AJSArrayList`) (borrowed-store
-terms), `eval/generator-exec.ts` (result egress).*
+terms), `eval/generator-exec.ts` (result egress)._
 
 ---
 
 ## 14. SESSIONS — the consumer surface: sessions, scopes, budgets, the CLI
 
-*(The consumer view of §1–§11: how a host wires sessions, scopes, and budgets over the run
-model. The ontology is above; this is the surface a host holds.)*
+_(The consumer view of §1–§11: how a host wires sessions, scopes, and budgets over the run
+model. The ontology is above; this is the surface a host holds.)_
 
 **`exec` is one-shot; `execState` is session-shaped.** `exec` runs a program and returns plain
 JS values. Everything session-shaped — a REPL, a long agent conversation, a multi-step pipeline
@@ -570,14 +569,14 @@ await execState(`(string-append greeting " world")`, { scope: session }); // "he
 ```
 
 `LexicalScope.fresh()` is an isolated lexical root — a second `fresh()` scope does not see the
-first's names. Isolation is exactly *lexical*, never a crippled stdlib: builtins are not part of the
+first's names. Isolation is exactly _lexical_, never a crippled stdlib: builtins are not part of the
 scope, they resolve through the run's capability base.
 
 **Vocabulary and memory are orthogonal: `capabilities` are per call, `scope` carries.** A session
-can gain or lose tools mid-way without losing its state — `capabilities` decide what verbs *this
-call* may use, `scope` decides what definitions persist.
+can gain or lose tools mid-way without losing its state — `capabilities` decide what verbs _this
+call_ may use, `scope` decides what definitions persist.
 
-**Budgets are per call and compose, first to fire wins.** A budget error ends the *call*, not the
+**Budgets are per call and compose, first to fire wins.** A budget error ends the _call_, not the
 session — the scope and its definitions survive, so a REPL loop catches, reports, and continues. The
 two bounds (`budgetMs`, `signal`) and their edges are §5 BUDGETS.
 
@@ -592,5 +591,5 @@ capability-cell wind-down (readable resources, resource pools). A host never cal
 directly: `disposeRunContext` (exported at the package root, §1) is the host-facing door, and
 running its registered teardowns is what "dispose" means (audit W11).
 
-*Enforcement sites: `eval/generator-exec.ts` (`exec`, `execState`), `eval/LexicalScope.ts`
-(`LexicalScope`), `run/run-lifecycle.ts` (`onRunContextDispose`, `disposeRunContext`).*
+_Enforcement sites: `eval/generator-exec.ts` (`exec`, `execState`), `eval/LexicalScope.ts`
+(`LexicalScope`), `run/run-lifecycle.ts` (`onRunContextDispose`, `disposeRunContext`)._

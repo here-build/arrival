@@ -36,8 +36,10 @@ function makeUpperExtCapability(name: string, suffix: string, resolverName: stri
       [resolverName]: symbol.rosetta`${resolverName}: uppercases module contents`(
         { input: [z.union([z.string, z.bytevector])], output: [z.string] },
         (contents) => contentsToText(contents).toUpperCase(),
-      ) }),
-    prelude: `(require/register-extension "${suffix}" "${resolverName}")` });
+      ),
+    }),
+    prelude: `(require/register-extension "${suffix}" "${resolverName}")`,
+  });
 }
 
 describe("loader extension registry — vocabulary path (Stage B4)", () => {
@@ -45,7 +47,8 @@ describe("loader extension registry — vocabulary path (Stage B4)", () => {
     const ext = makeUpperExtCapability("test/ext-upper-vocab", ".upper", "test/upper-resolve-vocab");
     const results = await exec(`(require "shout.upper")`, {
       capabilities: [ext],
-      config: { loader: files({ "shout.upper": "hello" }) } });
+      config: { loader: files({ "shout.upper": "hello" }) },
+    });
     expect(results.at(-1)).toBe("HELLO");
   });
 
@@ -72,13 +75,17 @@ describe("loader extension registry — vocabulary path (Stage B4)", () => {
     // this process would see ".isolated" the moment `capA`'s prelude registered it anywhere —
     // the per-run resource design makes that structurally impossible.
     const capA = makeUpperExtCapability("test/ext-isolation-a", ".isolated", "test/isolation-resolve-a");
-    await exec(`(require "seen.isolated")`, { capabilities: [capA], config: { loader: files({ "seen.isolated": "x" }) } });
+    await exec(`(require "seen.isolated")`, {
+      capabilities: [capA],
+      config: { loader: files({ "seen.isolated": "x" }) },
+    });
 
     // A SEPARATE run, a capability set that never included capA (only the bare loader).
     await expect(
       exec(`(require "unseen.isolated")`, {
         capabilities: [arrivalLoaderCapability],
-        config: { loader: files({ "unseen.isolated": "x" }) } }),
+        config: { loader: files({ "unseen.isolated": "x" }) },
+      }),
     ).rejects.toThrow(/no-resolver|no resolver/i);
   });
 
@@ -90,7 +97,8 @@ describe("loader extension registry — vocabulary path (Stage B4)", () => {
 
     const { values, runCtx } = await execState(`(require "x.diamond")`, {
       capabilities: [top],
-      config: { loader: files({ "x.diamond": "hi" }) } });
+      config: { loader: files({ "x.diamond": "hi" }) },
+    });
     expect(boxed(values.at(-1)!)).toBe("HI");
 
     const registry = (

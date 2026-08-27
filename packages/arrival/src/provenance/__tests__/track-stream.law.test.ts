@@ -44,7 +44,8 @@ import {
   emitMuxDecision,
   emitTrackClose,
   emitTrackOpen,
-  setEmissionEnabled } from "../../provenance/store/emit.js";
+  setEmissionEnabled,
+} from "../../provenance/store/emit.js";
 import { PayloadStoreFake, ProvenanceStoreFake, ProvenanceWriteFailure } from "../../provenance/store/fakes.js";
 import { foldRegionState, foldRegionStream } from "../../provenance/store/fold.js";
 import { ProvenanceRing } from "../../provenance/store/flush.js";
@@ -57,7 +58,8 @@ import {
   withRegionCall,
   withTrackCoordinate,
   type TrackCoordinate,
-  type TrackEmissionSink } from "../../membrane/region-scope.js";
+  type TrackEmissionSink,
+} from "../../membrane/region-scope.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 
 /** A manually-controlled promise — the "no real timers" idiom `store/fakes.ts` uses
@@ -174,7 +176,7 @@ describe("region events + host-schedule (docs/PROVENANCE.md §5 A6 rows 5-6, D5)
 
   it(
     "a host-schedule record carries its FULL comparator sequence as ONE record — " +
-      "\"the sequence IS the record\" (§5 A6 row 6), never aggregated, never split " +
+      '"the sequence IS the record" (§5 A6 row 6), never aggregated, never split ' +
       "across multiple records for one host invocation",
     async () => {
       setEmissionEnabled(true);
@@ -206,9 +208,9 @@ describe("stream fold + monotonicity + fold-as-recovery (docs/PROVENANCE.md §5 
   const REGION = "q13-fold-region";
 
   it(
-    "fold(events) = final region state — the SAME fold that answers a post-hoc \"what " +
+    'fold(events) = final region state — the SAME fold that answers a post-hoc "what ' +
       "was this region's state\" query also RECONSTRUCTS region state on DO wake after " +
-      "eviction/hibernation (§5 C1: \"the law is the recovery mechanism\")",
+      'eviction/hibernation (§5 C1: "the law is the recovery mechanism")',
     async () => {
       setEmissionEnabled(true);
       try {
@@ -378,7 +380,8 @@ describe("stream fold + monotonicity + fold-as-recovery (docs/PROVENANCE.md §5 
           runCtx: CONSTANT_CTX,
           dynSite: undefined,
           coordinate,
-          sink });
+          sink,
+        });
         await withRegionCall(resumedAgain, () => "recovered");
         await Promise.resolve();
         await Promise.resolve();

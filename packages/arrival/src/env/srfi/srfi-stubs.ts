@@ -51,8 +51,7 @@ const RANDOM_REASON =
   "randomness is omitted from arrival by design — non-deterministic ambient state has no construction-site to root a value's lineage at, and a pure sandbox stays reproducible; pass any needed choice or seed in explicitly, or draw it from a tool result";
 
 // ── 4. SRFI-14 char-sets ──────────────────────────────────────────────────────
-const CHAR_SET_REASON =
-  "char-sets are not implemented — the string library here takes a char or a one-arg predicate instead, e.g. (string-index s char-numeric?) or (string-trim s #\\space)";
+const CHAR_SET_REASON = String.raw`char-sets are not implemented — the string library here takes a char or a one-arg predicate instead, e.g. (string-index s char-numeric?) or (string-trim s #\space)`;
 
 // ── 5. SRFI-19 time / date ────────────────────────────────────────────────────
 // Ambient-clock door (host.ts tone) + the format/parse redirect for the pure verbs.

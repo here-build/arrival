@@ -26,7 +26,7 @@ import {
   type ViewUpdate,
 } from "@codemirror/view";
 
-import { schemeifyTsText } from "@inhuman.tools/arrival-mercury/type-emit";
+import { schemeifyTsText } from "@inhuman.tools/arrival-types-bridge";
 
 import { schemeGhost, type SchemeGhostOptions } from "./ghost.js";
 import { CONTROL_KEYWORDS, DEFINITION_KEYWORDS } from "./scheme-sugarcoat.js";
@@ -232,7 +232,7 @@ const quickInfoTheme = EditorView.baseTheme({
 // reader uses (scheme-sugarcoat.ts SYMBOL_BODY), so `string-upcase`, `+`, `list->vec`
 // complete as ONE token. A single character class under `*` cannot backtrack —
 // the slow-regex flag is a false positive on the `$` anchor.
-// eslint-disable-next-line sonarjs/slow-regex
+
 const SYMBOL_BEFORE = /[\w\-!$%&*+./<=>?@^~]*$/;
 
 // The SPECIAL FORMS are syntax, not bindings — no language service knows them

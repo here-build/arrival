@@ -24,7 +24,9 @@ describe("symbol.alias — resolves to the SAME symbol under a new name", () => 
           shout: symbol.rosetta`shout: upcase a string`({ input: [z.string], output: [z.string] }, (s) =>
             s.toUpperCase(),
           ),
-          yell: symbol.alias`shout` }) }),
+          yell: symbol.alias`shout`,
+        }),
+      }),
     ]);
   });
 
@@ -55,7 +57,9 @@ describe("symbol.alias — numeric args flow through the target's own codecs", (
       EnvCapability.define("test/alias-numeric", {
         symbols: (symbol, z) => ({
           inc: symbol.rosetta`inc: add one`({ input: [z.number], output: [z.number] }, (n) => n + 1),
-          "inc-alias": symbol.alias`inc` }) }),
+          "inc-alias": symbol.alias`inc`,
+        }),
+      }),
     ]);
     const [out] = (await execState(`(inc-alias 41)`, { env: env2 })).values;
     expect((out as AInexact).real).toBe(42);
@@ -66,7 +70,8 @@ describe("symbol.alias — bake/assembly errors (errors-as-doors, teaching text)
   it("a target absent from the SAME capability's own `symbols` record doors at assembly", async () => {
     const env3 = await freshEnv();
     const cap = EnvCapability.define("test/alias-missing-target", {
-      symbols: (symbol) => ({ ghost: symbol.alias`does-not-exist` }) });
+      symbols: (symbol) => ({ ghost: symbol.alias`does-not-exist` }),
+    });
     let caught: unknown;
     try {
       await applyCapability(env3, [cap]);
@@ -84,7 +89,9 @@ describe("symbol.alias — bake/assembly errors (errors-as-doors, teaching text)
       symbols: (symbol, z) => ({
         orig: symbol.rosetta`orig: identity`({ input: [z.string], output: [z.string] }, (s) => s),
         first: symbol.alias`orig`,
-        second: symbol.alias`first` }) });
+        second: symbol.alias`first`,
+      }),
+    });
     await expect(applyCapability(env4, [cap])).rejects.toThrow(/alias chains are not supported/);
   });
 });

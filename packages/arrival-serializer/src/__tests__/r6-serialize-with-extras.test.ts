@@ -18,11 +18,7 @@
 import { parse } from "@inhuman.tools/arrival";
 import { describe, expect, it } from "vitest";
 
-import {
-  initialExtrasState,
-  serializeWithExtras,
-  toSExprString,
-} from "../serializer.js";
+import { initialExtrasState, serializeWithExtras, toSExprString } from "../serializer.js";
 
 const png = (bytes = 64): Blob => new Blob([new Uint8Array(bytes)], { type: "image/png" });
 

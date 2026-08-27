@@ -22,7 +22,7 @@ const files = (table: Record<string, string>) =>
   });
 
 describe("arrivalHandlebarsCapability — .hbs on the vocabulary (default) path", () => {
-  it("(require \"x.hbs\") resolves to a CALLABLE scheme lambda (the CALLABLE RULE)", async () => {
+  it('(require "x.hbs") resolves to a CALLABLE scheme lambda (the CALLABLE RULE)', async () => {
     const results = await exec(`(define greet (require "hi.hbs")) (greet "World")`, {
       capabilities: [arrivalHandlebarsCapability],
       config: { loader: files({ "hi.hbs": "Hi {{name}}!" }) },

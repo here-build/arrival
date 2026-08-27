@@ -65,7 +65,14 @@ const opsOf = (cap: EnvCapability): Record<string, (...a: any[]) => any> =>
       // Stage A2: the CONTRACT (native's raw `.impl`) rides `.contract` on the minted
       // ANativeProcedure now, pulled off via `harvestContracts`/`contractOf` (the shared
       // read-side seam) — same `v.impl ?? v.value` idiom as before, just off the contract.
-      .map(([k, v]) => [k, (v as { impl?: (...a: any[]) => any; value?: (...a: any[]) => any }).impl ?? (v as { value?: (...a: any[]) => any }).value] as const)
+      .map(
+        ([k, v]) =>
+          [
+            k,
+            (v as { impl?: (...a: any[]) => any; value?: (...a: any[]) => any }).impl ??
+              (v as { value?: (...a: any[]) => any }).value,
+          ] as const,
+      )
       // A def may carry neither `impl` nor `value` (a baked bare-`Fn` def) — that's
       // not a callable op for this test's purposes, so drop it rather than admit an
       // `undefined` into the op map (honest narrowing, not a cast over the union).
@@ -104,7 +111,9 @@ const cmp = contourCallback((args) => {
   const a = args[0] as AString;
   const b = args[1] as AString;
   // Host number verdict — deriveSortCompare's number branch (CallResult cast).
-  return String(a.valueOf()).localeCompare(String(b.valueOf())) as unknown as import("../../values/types.js").SchemeValue;
+  return String(a.valueOf()).localeCompare(
+    String(b.valueOf()),
+  ) as unknown as import("../../values/types.js").SchemeValue;
 }, "locale-cmp");
 
 const mkPair = () => new APair(el("a", 100), new APair(el("b", 101), nil)).withProvenance(new Set([7]));

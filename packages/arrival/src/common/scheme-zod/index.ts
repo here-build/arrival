@@ -112,7 +112,8 @@ export {
   codec,
   config,
   toJSONSchema,
-  fromJSONSchema } from "zod";
+  fromJSONSchema,
+} from "zod";
 export type { input, output, infer, ZodType, ZodTypeAny, ZodCustom, ZodRawShape } from "zod";
 
 // ── Name registry ──────────────────────────────────────────────────────────
@@ -254,7 +255,8 @@ export const boolean = named(
   "boolean",
   z.codec(z.instanceof(ABool), z.boolean(), {
     decode: (b) => b["arrival/toJS"](),
-    encode: (b) => new ABool(b) }),
+    encode: (b) => new ABool(b),
+  }),
 );
 
 export const booleanTrue = boolean.refine((v): v is true => v === true);
@@ -264,14 +266,16 @@ export const char = named(
   "char",
   z.codec(z.instanceof(ACharacter), z.string().length(1), {
     decode: (c) => c["arrival/toJS"](),
-    encode: (c) => new ACharacter(c) }),
+    encode: (c) => new ACharacter(c),
+  }),
 );
 
 export const string = named(
   "string",
   z.codec(z.instanceof(AString), z.string(), {
     decode: (s) => s["arrival/toJS"](),
-    encode: (s) => new AString(s) }),
+    encode: (s) => new AString(s),
+  }),
 );
 
 // ASymbol ↔ JS Symbol. Weak key = ASymbol (scheme→js); strong value under weak
@@ -298,7 +302,8 @@ export const symbol = named(
       const s = symbolJsToScheme.get(js);
       Error.invariant(s !== undefined, "symbol codec: encode received a jsSymbol never minted by decode");
       return s;
-    } }),
+    },
+  }),
 );
 
 // Real codecs (not bare instanceof): a union sibling that decodes to raw scheme
@@ -308,7 +313,8 @@ export const nil = named(
   "nil",
   z.codec(z.instanceof(ANil), z.null(), {
     decode: () => null,
-    encode: () => new ANil() }),
+    encode: () => new ANil(),
+  }),
 );
 
 /** Table name `void` is reserved — exported as `undefinedResult`. */
@@ -316,7 +322,8 @@ export const undefinedResult = named(
   "undefinedResult",
   z.codec(z.instanceof(AVoid), z.undefined(), {
     decode: (v) => v["arrival/toJS"](),
-    encode: () => new AVoid() }),
+    encode: () => new AVoid(),
+  }),
 );
 
 export const error = named(
@@ -324,7 +331,8 @@ export const error = named(
   z.codec(z.instanceof(R7RSError), z.instanceof(Error), {
     decode: (e) => new Error(e.message, { cause: e.irritants.length > 0 ? e.irritants : undefined }),
     encode: (e) =>
-      new R7RSError(e.message, ...(Array.isArray(e.cause) ? e.cause : e.cause === undefined ? [] : [e.cause])) }),
+      new R7RSError(e.message, ...(Array.isArray(e.cause) ? e.cause : e.cause === undefined ? [] : [e.cause])),
+  }),
 );
 
 // ── Numbers ────────────────────────────────────────────────────────────────
@@ -348,7 +356,8 @@ export const exact = named(
     encode: (n) => {
       TypeError.invariant(Number.isSafeInteger(n), `exact codec: ${n} is not a safe integer`);
       return new AExact(n);
-    } }),
+    },
+  }),
 );
 
 // Also the AInexact ↔ number cast (no separate `rational` export).
@@ -356,7 +365,8 @@ export const inexact = named(
   "inexact",
   z.codec(z.instanceof(AInexact), z.number(), {
     decode: (n) => n["arrival/toJS"](),
-    encode: (n) => new AInexact(n) }),
+    encode: (n) => new AInexact(n),
+  }),
 );
 
 function exactToJsNumberOrDoor(n: AExact): number {
@@ -387,7 +397,8 @@ export const integer = named(
     encode: (n) => {
       TypeError.invariant(Number.isSafeInteger(n), `integer codec: ${n} is not a safe integer`);
       return new AExact(n);
-    } }),
+    },
+  }),
 );
 
 export const schemeNumber = named("schemeNumber", z.union([exact, inexact]));
@@ -398,13 +409,15 @@ export const number = named(
   z.union([
     z.codec(z.instanceof(AInexact), z.number(), {
       decode: (n) => n["arrival/toJS"](),
-      encode: (n) => new AInexact(n) }),
+      encode: (n) => new AInexact(n),
+    }),
     z.codec(z.instanceof(AExact), z.number(), {
       decode: (n) => exactToJsNumberOrDoor(n),
       encode: (n) => {
         TypeError.invariant(Number.isSafeInteger(n), `number codec: ${n} is not a safe integer`);
         return new AExact(n);
-      } }),
+      },
+    }),
   ]),
 );
 
@@ -426,7 +439,8 @@ export const bigint = named(
           `bigint codec: ${n} exceeds safe-integer range — exact numbers are safe-integer-only post-rework`,
         );
         return new AExact(num);
-      } }),
+      },
+    }),
     z.codec(z.instanceof(AInexact), z.bigint(), {
       decode: (n) => {
         if (!Number.isInteger(n.real)) {
@@ -434,7 +448,8 @@ export const bigint = named(
         }
         return BigInt(n.real);
       },
-      encode: (n) => new AInexact(Number(n)) }),
+      encode: (n) => new AInexact(Number(n)),
+    }),
   ]),
 );
 
@@ -455,7 +470,8 @@ export const looseNumber = named(
     z.custom<number>((v) => typeof v === "number"),
     {
       decode: (n) => (n instanceof AExact ? n.num / n.denom : n.real),
-      encode: (n) => (Number.isSafeInteger(n) ? new AExact(n) : new AInexact(n)) },
+      encode: (n) => (Number.isSafeInteger(n) ? new AExact(n) : new AInexact(n)),
+    },
   ),
 );
 
@@ -477,7 +493,8 @@ export const looseAnyNumber = named(
           return new AExact(num);
         }
         return Number.isSafeInteger(v) ? new AExact(v) : new AInexact(v);
-      } },
+      },
+    },
   ),
 );
 
@@ -485,7 +502,8 @@ export const bytevector = named(
   "bytevector",
   z.codec(z.instanceof(ABytevector), z.instanceof(Uint8Array), {
     decode: (b) => b.__bytevector__ as Uint8Array<ArrayBuffer>,
-    encode: (b) => new ABytevector(b) }),
+    encode: (b) => new ABytevector(b),
+  }),
 );
 
 /** Callable VALUE predicate — `ALambda` / `ANativeProcedure` / `ARosettaProcedure`
@@ -574,7 +592,8 @@ export function cons<C extends z.ZodTypeAny, D extends z.ZodTypeAny>(carE: C, cd
         const carValue = c as SchemeValue;
         const cdrValue = d as SchemeValue;
         return new APair(carValue, cdrValue);
-      } }),
+      },
+    }),
   );
   COLLECTION_ELEMENT.set(schema, [carE, cdrE]);
   return schema;
@@ -633,7 +652,8 @@ export function vector<E extends z.ZodTypeAny = typeof schemeValue>(element: E =
               "`encode` has neither, which is exactly why this direction cannot carry lineage. Encode produces " +
               "an AVector (the canonical first arm of this union).",
           );
-        } }),
+        },
+      }),
     ]),
   );
 }
@@ -743,16 +763,12 @@ export function dictRecord<K extends z.ZodTypeAny, V extends z.ZodTypeAny>(key: 
  */
 export const foldName = named(
   "foldName",
-  z.codec(
-    z.union([z.instanceof(ASymbol), z.instanceof(AString), z.instanceof(ACharacter)]),
-    z.string(),
-    {
-      decode: (k) => foldKeyName(k as DictKey),
-      // Host-minted names re-enter as bare symbols (not re-keyworded). Call sites
-      // that need a keyword on the scheme face mint `new ASymbol(":" + s)` themselves.
-      encode: (s) => new ASymbol(s),
-    },
-  ),
+  z.codec(z.union([z.instanceof(ASymbol), z.instanceof(AString), z.instanceof(ACharacter)]), z.string(), {
+    decode: (k) => foldKeyName(k as DictKey),
+    // Host-minted names re-enter as bare symbols (not re-keyworded). Call sites
+    // that need a keyword on the scheme face mint `new ASymbol(":" + s)` themselves.
+    encode: (s) => new ASymbol(s),
+  }),
 );
 
 // Whole-object UNWRAP, not decomposition (unlike `dict`) — preserves class
@@ -761,7 +777,8 @@ export const box = named(
   "box",
   z.codec(z.instanceof(AJSObject), z.custom<object>(), {
     decode: (o) => o.source,
-    encode: (o) => new AJSObject(o) }),
+    encode: (o) => new AJSObject(o),
+  }),
 );
 
 // ── instance — typed opaque-crossing codec ─────────────────────────────────
@@ -785,17 +802,22 @@ export function instance<T extends object>(Ctor: new (...args: any[]) => T) {
     // Predicate, not `z.instanceof(AOpaqueHandle)`: constructor is private
     // (mint only via `AOpaqueHandle.for`); private ctor fails zod's
     // `new (...args) => T` signature.
-    z.codec(z.custom<AOpaqueHandle>((v) => v instanceof AOpaqueHandle), z.instanceof(Ctor), {
-      decode: (handle) => {
-        if (!(handle.instance instanceof Ctor)) {
-          throw new CodecFidelityError(
-            "instance",
-            `expected an opaque handle wrapping ${Ctor.name}, got #<${handle.className}>`,
-          );
-        }
-        return handle.instance;
+    z.codec(
+      z.custom<AOpaqueHandle>((v) => v instanceof AOpaqueHandle),
+      z.instanceof(Ctor),
+      {
+        decode: (handle) => {
+          if (!(handle.instance instanceof Ctor)) {
+            throw new CodecFidelityError(
+              "instance",
+              `expected an opaque handle wrapping ${Ctor.name}, got #<${handle.className}>`,
+            );
+          }
+          return handle.instance;
+        },
+        encode: (inst) => AOpaqueHandle.for(marshalCtx(), inst),
       },
-      encode: (inst) => AOpaqueHandle.for(marshalCtx(), inst) }),
+    ),
   );
   return schema as CrossingOnly<typeof schema>;
 }
@@ -871,7 +893,8 @@ export function procedure<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(input?
                 const r = await jsFn(...jsArgs);
                 return withMarshalCtx(callCtx.runCtx, () => (output ? z.encode(output, r as never) : r)) as SchemeValue;
               }),
-            }) },
+          }),
+      },
     ),
   );
 }

@@ -59,12 +59,11 @@ tightening `isSchemeValue` call-site by call-site just moves the imprecision aro
 ## R4 — AHalfBaked: removed (VERDICT KILL)
 
 There is no half-baked value primitive and no `{__halfBaked__}` marker shape.
-Speculative half-evaluation as a *value* had zero production reachability, and
+Speculative half-evaluation as a _value_ had zero production reachability, and
 container structural facts (R2) plus the execution-plan wireframe (R5) are the
 principled form of the same idea: deciding `(if (>= (length (filter pred items)) 2) …)`
 early belongs to structural-fact wires, not to a special carrier that every egress
-path must know how to force. Full argument:
-[design-history/halfbaked-existence-review.md](design-history/halfbaked-existence-review.md).
+path must know how to force.
 
 ## R5 — Cones: two queries, one execution-plan wireframe
 
@@ -74,8 +73,7 @@ representation**, not two stores. The representation is a **generalized executio
 plan**: the AST statically evaluated into a base wireframe holding every
 mux/bifurcation, with static wires COLLAPSED into procedural nodes
 (`(+ (* x x) 5)` is ONE provenance edge, not four); runtime provenance wires into
-that abstract flow. Design note:
-[design-history/execution-plan-wireframe.md](design-history/execution-plan-wireframe.md).
+that abstract flow.
 
 Rejected alternative: per-op provenance accumulation. Its log grows with executed
 operations, not with program shape — unbounded memory that no constrained runtime
@@ -136,7 +134,7 @@ into the one `arrival/toJS(exit?)` method, keyed on `exit` presence.
 The singleton/aliasing law holds WITHIN a slot; cross-slot identity is incoherent by
 construction once the projection depends on options and scope. Mechanism (the living
 home — proxy keying, scope-bound caches, the four enforcement sites): membrane.md
-§EGRESS. Full design: [design-history/arrival-egress-membrane-exit.md](design-history/arrival-egress-membrane-exit.md).
+§EGRESS.
 
 Rejected alternative: eager full materialization at egress — pays the whole copy up
 front, loses aliasing (two references to one list become two arrays), and forecloses

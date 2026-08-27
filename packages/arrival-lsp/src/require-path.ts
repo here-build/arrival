@@ -34,7 +34,7 @@ function stripDotSlash(spec: string): string {
 /** dirname of a POSIX project path; "" for a root-level file. */
 export function projectDirname(filePath: string): string {
   const i = filePath.lastIndexOf("/");
-  return i < 0 ? "" : filePath.slice(0, i);
+  return i === -1 ? "" : filePath.slice(0, i);
 }
 
 /** Join project-relative dir + relative segment (no `..` walk-out). */
@@ -100,9 +100,12 @@ export function resolveRequireProjectKey(
       logOnce(`ambig:${specifier}:${opts.fromFile ?? ""}`, () =>
         console.warn(
           `[${opts.logLabel ?? "scheme-require"}] ambiguous ${JSON.stringify(specifier)} — ` +
-            `${suffixHits.length} keys: ${suffixHits.slice(0, 8).map((k) => JSON.stringify(k)).join(", ")}` +
-            (suffixHits.length > 8 ? "…" : "") +
-            (opts.fromFile ? ` (from ${JSON.stringify(opts.fromFile)})` : ""),
+            `${suffixHits.length} keys: ${suffixHits
+              .slice(0, 8)
+              .map((k) => JSON.stringify(k))
+              .join(", ")}${
+              suffixHits.length > 8 ? "…" : ""
+            }${opts.fromFile ? ` (from ${JSON.stringify(opts.fromFile)})` : ""}`,
         ),
       );
     }
@@ -110,13 +113,15 @@ export function resolveRequireProjectKey(
   }
 
   if (opts?.log) {
-    const sample = keys.slice(0, 12).map((k) => JSON.stringify(k)).join(", ");
+    const sample = keys
+      .slice(0, 12)
+      .map((k) => JSON.stringify(k))
+      .join(", ");
     logOnce(`miss:${specifier}:${opts.fromFile ?? ""}`, () =>
       console.warn(
-        `[${opts.logLabel ?? "scheme-require"}] miss ${JSON.stringify(specifier)}` +
-          (opts.fromFile ? ` from ${JSON.stringify(opts.fromFile)}` : "") +
-          ` — ${keys.length} files, sample: ${sample}` +
-          (keys.length > 12 ? "…" : ""),
+        `[${opts.logLabel ?? "scheme-require"}] miss ${JSON.stringify(specifier)}${
+          opts.fromFile ? ` from ${JSON.stringify(opts.fromFile)}` : ""
+        } — ${keys.length} files, sample: ${sample}${keys.length > 12 ? "…" : ""}`,
       ),
     );
   }

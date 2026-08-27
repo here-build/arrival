@@ -19,16 +19,19 @@ expectTypeOf(append([1], [2], [3])).toEqualTypeOf<List<number>>();
 // (apply append (map …)) — args is List<List<T>> (array of lists).
 // Mutable rest `List<T>[]` used to reject this; rest must accept it.
 expectTypeOf(
-  apply(append, map((x: List<number>): List<number> => x, [[1], [2]] as List<List<number>>)),
+  apply(
+    append,
+    map((x: List<number>): List<number> => x, [[1], [2]] as List<List<number>>),
+  ),
 ).toEqualTypeOf<List<number>>();
 // custdev _util shape: map may wrap scalars into singleton lists
 expectTypeOf(
   apply(
     append,
-    map(
-      (x: unknown): List<unknown> => (Array.isArray(x) ? (x as List<unknown>) : list(x)),
-      [1, [2, 3]] as List<unknown>,
-    ),
+    map((x: unknown): List<unknown> => (Array.isArray(x) ? (x as List<unknown>) : list(x)), [
+      1,
+      [2, 3],
+    ] as List<unknown>),
   ),
 ).toEqualTypeOf<List<unknown>>();
 

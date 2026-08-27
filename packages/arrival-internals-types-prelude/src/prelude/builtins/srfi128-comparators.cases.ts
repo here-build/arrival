@@ -69,6 +69,10 @@ const w: boolean = default$dash$comparator();
 // @ts-expect-error =? requires a comparator first; a bare number is not a comparator tuple
 $eq$$qmark$(5, 1, 1);
 // @ts-expect-error make-comparator's type-test must be a 1-arg predicate, not a number
-make$dash$comparator(5, (a: unknown, b: unknown): boolean => true, (a: unknown, b: unknown): boolean => true);
+make$dash$comparator(
+  5,
+  (a: unknown, b: unknown): boolean => true,
+  (a: unknown, b: unknown): boolean => true,
+);
 // @ts-expect-error comparator-equality-predicate requires a comparator, not a list
 comparator$dash$equality$dash$predicate([1, 2, 3]);

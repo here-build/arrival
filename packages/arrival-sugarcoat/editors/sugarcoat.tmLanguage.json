@@ -29,9 +29,7 @@
       "name": "string.quoted.double.sugarcoat",
       "begin": "\"",
       "end": "\"",
-      "patterns": [
-        { "name": "constant.character.escape.sugarcoat", "match": "\\\\." }
-      ]
+      "patterns": [{ "name": "constant.character.escape.sugarcoat", "match": "\\\\." }]
     },
     "char": {
       "name": "constant.character.sugarcoat",

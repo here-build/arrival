@@ -28,7 +28,11 @@ describe("ansiToCells", () => {
 
 describe("rowsToHtml", () => {
   it("emits 1ch×1lh cells and the paper/ink as data attributes", () => {
-    const html = rowsToHtml([[{ ch: "a", fg: { r: 1, g: 2, b: 3 } }]], { r: 0, g: 43, b: 54 }, { r: 131, g: 148, b: 150 });
+    const html = rowsToHtml(
+      [[{ ch: "a", fg: { r: 1, g: 2, b: 3 } }]],
+      { r: 0, g: 43, b: 54 },
+      { r: 131, g: 148, b: 150 },
+    );
     expect(html).toContain("width: 1ch");
     expect(html).toContain("height: 1lh");
     expect(html).toContain('data-paper="#002b36"');

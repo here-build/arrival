@@ -16,18 +16,10 @@
  */
 import { action, observable } from "mobx";
 
-import {
-  EvalTrace as CoreEvalTrace,
-  Invocation,
-  NodeRecord,
-  DEFAULT_TRACE_CAP,
-  type InvocationState,
-} from "@inhuman.tools/arrival/provenance";
+import { EvalTrace as CoreEvalTrace, DEFAULT_TRACE_CAP } from "@inhuman.tools/arrival/provenance";
 
-export { Invocation, NodeRecord, DEFAULT_TRACE_CAP, type InvocationState };
 // The plain (mobx-free) core class, for a consumer that explicitly wants the
 // non-reactive spine (e.g. a benchmark measuring the de-MobXed hot path).
-export { CoreEvalTrace };
 
 /**
  * Mobx-reactive subclass of {@link CoreEvalTrace} with an `observable.box`
@@ -66,3 +58,11 @@ class ObservableEvalTrace extends CoreEvalTrace {
 }
 
 export { ObservableEvalTrace as EvalTrace };
+
+export {
+  Invocation,
+  type InvocationState,
+  EvalTrace as CoreEvalTrace,
+  NodeRecord,
+  DEFAULT_TRACE_CAP,
+} from "@inhuman.tools/arrival/provenance";

@@ -497,11 +497,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
     case "proper list (scheme→JS only)": {
       it.todo(entryTitle); // scheme→JS only — no JS value produces this entry form
       it(exitTitle, () => {
-        const list = APair.fromArray(CONSTANT_CTX, [
-          new AExact(1),
-          new AExact(2),
-          new AExact(3),
-        ]);
+        const list = APair.fromArray(CONSTANT_CTX, [new AExact(1), new AExact(2), new AExact(3)]);
         const out = toJS(list);
         // R9: the proxy is observationally a plain array — deep-equal to the eager
         // projection, native Array.isArray, JSON round-trips.
@@ -572,11 +568,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
     case "native vector (scheme→JS only)": {
       it.todo(entryTitle); // scheme→JS only — enter(array) mints a BORROWED AJSArray, never an AVector
       it(exitTitle, () => {
-        const vec = new AVector([
-          new AExact(1),
-          new AString("two"),
-          new AExact(3),
-        ]);
+        const vec = new AVector([new AExact(1), new AString("two"), new AExact(3)]);
         const out = toJS(vec);
         expect(Array.isArray(out)).toBe(true);
         expect(out).toEqual([1, "two", 3]);
@@ -781,7 +773,8 @@ describe("foreign Proxy at the membrane — freeze failure doors loudly (P5), ne
       getOwnPropertyDescriptor(t, key) {
         if (key === "ghost") return undefined; // disagrees with ownKeys — the invariant break
         return Reflect.getOwnPropertyDescriptor(t, key);
-      } });
+      },
+    });
     const wrapped = new AJSObject(foreign);
     expect(() => wrapped.has("x")).toThrow(/foreign Proxy with a non-standard ownKeys trap/);
   });
@@ -795,7 +788,8 @@ describe("foreign Proxy at the membrane — freeze failure doors loudly (P5), ne
       getOwnPropertyDescriptor(t, key) {
         if (key === "0") return undefined; // disagrees with ownKeys
         return Reflect.getOwnPropertyDescriptor(t, key);
-      } }) as unknown[];
+      },
+    }) as unknown[];
     const wrapped = new AJSArray(foreign);
     expect(() => wrapped.length).toThrow(/foreign Proxy with a non-standard ownKeys trap/);
   });
@@ -903,10 +897,10 @@ describe("egress membrane exit — the two modes and their identity laws", () =>
       name: `test-${tag}`,
       arity: { min: 0, max: null },
       contract: undefined,
-      impl: (_args, runCtx) => new AExact(7) });
+      impl: (_args, runCtx) => new AExact(7),
+    });
   const dictOf = (entries: ReadonlyArray<readonly [string, SchemeValue | Promise<SchemeValue>]>): ADict =>
-    new ADict(entries.map(([k, v]) => [new ASymbol(k), v] as const),
-    );
+    new ADict(entries.map(([k, v]) => [new ASymbol(k), v] as const));
 
   it("nested callable crosses as a host FUNCTION via toJS AND membrane.toJS (the flip, pinned)", async () => {
     const d = dictOf([["f", native("a")]]);

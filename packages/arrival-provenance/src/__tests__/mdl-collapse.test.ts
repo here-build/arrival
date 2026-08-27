@@ -53,7 +53,13 @@ describe("collapseMDL — correctness", () => {
     // Every box single-occurrence (n=1) ⇒ a reference always costs more than
     // inlining ⇒ everything expands ⇒ total must equal the raw cost.
     const forest = [
-      box({ id: "a", type: "loop", n: 1, localBits: 30, children: [box({ id: "b", type: "unfold", n: 1, localBits: 20 })] }),
+      box({
+        id: "a",
+        type: "loop",
+        n: 1,
+        localBits: 30,
+        children: [box({ id: "b", type: "unfold", n: 1, localBits: 20 })],
+      }),
     ];
     const { decisions, totalBits, rawBits } = collapseMDL(forest);
     expect([...decisions.values()].every((d) => d === "expanded")).toBe(true);
@@ -115,7 +121,7 @@ describe("collapseMDL — behavior", () => {
     };
     const counts = [0.1, 0.5, 1, 2, 4, 8, 16, 64].map(countCollapsed);
     for (let i = 1; i < counts.length; i++) expect(counts[i]).toBeLessThanOrEqual(counts[i - 1]!);
-    expect(counts[0]).toBeGreaterThan(counts[counts.length - 1]!);
+    expect(counts[0]).toBeGreaterThan(counts.at(-1)!);
   });
 
   it("nesting composes: inner fan-out expands (high shape variance) while outer loop collapses", () => {
@@ -159,7 +165,7 @@ describe("collapseMDL — force override (suggested vs forced / §5.4 marks)", (
     expect(forced.decisions.get("x")).toBe("collapsed");
   });
 
-  it('FORCE-EXPAND: flattens a box the MDL wanted to collapse (a deliberate human override)', () => {
+  it("FORCE-EXPAND: flattens a box the MDL wanted to collapse (a deliberate human override)", () => {
     // The gepa loop MDL-collapses; force:"expanded" flattens it.
     const forest = gepaForest(50, 3);
     forest[0]!.force = "expanded";

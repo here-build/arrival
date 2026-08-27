@@ -214,7 +214,7 @@ export class ADict extends AValue {
 
   ["arrival/print"](): string {
     const parts = this.keys().map((name) => `:${name} ${String(this.get(name))}`);
-    return `(dict${parts.length ? " " + parts.join(" ") : ""})`;
+    return `(dict${parts.length > 0 ? ` ${parts.join(" ")}` : ""})`;
   }
 
   // Setoid — same fold-names, values `equal?`-recursive. Compares at fold-name level

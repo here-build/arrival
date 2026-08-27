@@ -1,10 +1,4 @@
 import { nodejs } from "@here.build/eslint-configs";
+import { arrivalOverlay } from "../../eslint.arrival.mjs";
 
-export default [
-  ...nodejs,
-  {
-    languageOptions: {
-      parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
-    },
-  },
-];
+export default [...nodejs, ...arrivalOverlay({ tsconfigRootDir: import.meta.dirname })];

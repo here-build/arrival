@@ -215,9 +215,7 @@ export function SchemeEditor({
       ...(structuralEditing === false
         ? []
         : [schemeStructural(structuralEditing === true ? undefined : structuralEditing)]),
-      ...(ide === null
-        ? []
-        : [schemeIde(ide, hasNavigate ? { openFile } : {})]),
+      ...(ide === null ? [] : [schemeIde(ide, hasNavigate ? { openFile } : {})]),
     ],
     [ide, openFile, hasNavigate, structuralEditing, classicExtensions],
   );
@@ -231,9 +229,7 @@ export function SchemeEditor({
       editorFill,
       ideaSearch(),
       paramHintsExtension("sugarcoat"),
-      ...(ide === null
-        ? []
-        : [schemeIde(sugarcoatIdeBackend(ide), hasNavigate ? { openFile } : {})]),
+      ...(ide === null ? [] : [schemeIde(sugarcoatIdeBackend(ide), hasNavigate ? { openFile } : {})]),
     ],
     [ide, openFile, hasNavigate],
   );

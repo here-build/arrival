@@ -70,7 +70,10 @@ export function bannerLines(opts: BannerOpts = {}, mode: ColorMode = colorMode()
 
 /** The one fetch-style line: `arrival 0.1.0 — 2 capabilities armed · sugarcoat lens`. */
 export function identityLine(facts: GreetingFacts, mode: ColorMode = colorMode()): string {
-  const caps = facts.capabilityCount === 0 ? "no capabilities armed" : `${facts.capabilityCount} capabilit${facts.capabilityCount === 1 ? "y" : "ies"} armed`;
+  const caps =
+    facts.capabilityCount === 0
+      ? "no capabilities armed"
+      : `${facts.capabilityCount} capabilit${facts.capabilityCount === 1 ? "y" : "ies"} armed`;
   const lensLabel = facts.lens === "sugarcoat" ? "sugarcoat lens" : "classic lens";
   return paint(`arrival ${facts.version} — ${caps} · ${lensLabel} · ,lens to flip, ? for help`, "gutter", mode);
 }

@@ -176,7 +176,9 @@ describe("scheme/srfi-189 — Either accessors/combinators", () => {
 
   it("either-bind: applies f to the Right value, short-circuits on Left", async () => {
     const env = await freshEnv();
-    const [boundValue] = await execOverFrame("(either-ref (either-bind (right 1) (lambda (x) (right (+ x 1)))))", { env });
+    const [boundValue] = await execOverFrame("(either-ref (either-bind (right 1) (lambda (x) (right (+ x 1)))))", {
+      env,
+    });
     const [shortCircuit] = await execOverFrame("(left? (either-bind (left 'boom) (lambda (x) (right x))))", { env });
     expect(boundValue).toBe(2);
     expect(shortCircuit).toBe(true);
@@ -200,7 +202,9 @@ describe("scheme/srfi-189 — Either accessors/combinators", () => {
     const env = await freshEnv();
     const [swappedToRight] = await execOverFrame("(right? (either-swap (left 'x)))", { env });
     const [swappedToLeft] = await execOverFrame("(left? (either-swap (right 1)))", { env });
-    await expect(execStateOverFrame('(either-swap "not-an-either")', { env })).rejects.toThrow(/either-swap: not an Either/);
+    await expect(execStateOverFrame('(either-swap "not-an-either")', { env })).rejects.toThrow(
+      /either-swap: not an Either/,
+    );
     expect(swappedToRight).toBe(true);
     expect(swappedToLeft).toBe(true);
   });
@@ -243,7 +247,9 @@ describe("scheme/srfi-189 — the §2.1 bake FV law passes for this pack AS MIGR
           symbol.define`bad-just: reproduces the pre-migration srfi-189 bug (no declared dep on scheme/lists' list)`(
             { input: [z.schemeValue], output: [z.schemeValue] },
             `(lambda (x) (list 'just x))`,
-          ) }) });
+          ),
+      }),
+    });
     await expect(buildVocabulary([undeclaredCap], undefined, evalScheme)).rejects.toThrow(DefineLocalityError);
   });
 });

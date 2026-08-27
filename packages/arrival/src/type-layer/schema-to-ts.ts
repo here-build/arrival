@@ -157,18 +157,18 @@ const instanceofOverride: OptionalTypeOverrideFunction = (schema, typescript) =>
  *  semicolon before the close brace). */
 function flatten(printed: string): string {
   return printed
-    .replace(/\s+/g, " ")
-    .replace(/\(\s+/g, "(")
-    .replace(/\s+\)/g, ")")
-    .replace(/\[\s+/g, "[")
-    .replace(/\s+\]/g, "]")
-    .replace(/\{\s+/g, "{ ")
-    .replace(/\s+\}/g, " }")
-    .replace(/\s+;/g, ";")
-    .replace(/\s+,/g, ",")
-    .replace(/;\s*\}/g, " }") // drop the trailing member separator: "; }" → " }"
-    .replace(/\{\s+\}/g, "{}")
-    .replace(/\[\s*\]/g, "[]")
+    .replaceAll(/\s+/g, " ")
+    .replaceAll(/\(\s+/g, "(")
+    .replaceAll(/\s+\)/g, ")")
+    .replaceAll(/\[\s+/g, "[")
+    .replaceAll(/\s+\]/g, "]")
+    .replaceAll(/\{\s+/g, "{ ")
+    .replaceAll(/\s+\}/g, " }")
+    .replaceAll(/\s+;/g, ";")
+    .replaceAll(/\s+,/g, ",")
+    .replaceAll(/;\s*\}/g, " }") // drop the trailing member separator: "; }" → " }"
+    .replaceAll(/\{\s+\}/g, "{}")
+    .replaceAll(/\[\s*\]/g, "[]")
     .trim();
 }
 
@@ -207,9 +207,9 @@ export function printType(schema: z.ZodTypeAny): string {
  */
 function stripClosedNeverIndex(tsType: string): string {
   return tsType
-    .replace(/;\s*\[x: string\]:\s*never/g, "")
-    .replace(/\{\s*\[x: string\]:\s*never;\s*/g, "{ ")
-    .replace(/\[x: string\]:\s*never;\s*/g, "");
+    .replaceAll(/;\s*\[x: string\]:\s*never/g, "")
+    .replaceAll(/\{\s*\[x: string\]:\s*never;\s*/g, "{ ")
+    .replaceAll(/\[x: string\]:\s*never;\s*/g, "");
 }
 
 /**

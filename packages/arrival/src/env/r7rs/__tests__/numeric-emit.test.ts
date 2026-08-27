@@ -7,7 +7,7 @@
 // (§4.5).
 //
 // Byte-parity with the PRE-relocation compiler-side rule is proven on the mercury
-// side (arrival/packages/arrival-mercury): the differential oracle's bug-cell rows
+// side (`@inhuman.tools/arrival-mercury`): the differential oracle's bug-cell rows
 // (quotient-neg, modulo-neg, exact-vs-inexact-eq — arithmetic has no dedicated row of
 // its own; `+`/`-`/`*`/`/` are already exercised pervasively across the existing
 // corpus) and the cross-pass/gate3 goldens exercise these through the REAL harvest +
@@ -52,7 +52,8 @@ function testCtx(over: Partial<EmitCtx<R>> = {}): EmitCtx<R> {
     door: (reason) => {
       throw new Error(reason);
     },
-    ...over };
+    ...over,
+  };
 }
 
 const ref = (name: string): R => Ref(Binding(name));
@@ -148,7 +149,7 @@ describe("numeric Contract.emit — the Phase-2 relocation drill (+ - * /)", () 
 });
 
 describe("numeric Contract.emit — fact-gated relocation (< <= > >=)", () => {
-  it("< : both operands proven numeric, 2-ary → Bin(\"<\", a, b) (Law A soundness: nil is excluded by the numeric fact)", () => {
+  it('< : both operands proven numeric, 2-ary → Bin("<", a, b) (Law A soundness: nil is excluded by the numeric fact)', () => {
     const def = nativeDef("<");
     expect(def.emit).toBeDefined();
     expect(def.narrows).toBeUndefined(); // not a Law-N narrowing leaf
@@ -203,45 +204,45 @@ describe("numeric Contract.emit — fact-gated relocation (< <= > >=)", () => {
     expect(def.emit!.call([ref("a")], testCtx())).toEqual(Lit(true));
   });
 
-  it("<= : proven → Bin(\"<=\", a, b); unproven → the shim", () => {
+  it('<= : proven → Bin("<=", a, b); unproven → the shim', () => {
     const def = nativeDef("<=");
     expect(def.emit).toBeDefined();
     const [a, b] = [ref("a"), ref("b")];
     expect(def.emit!.call([a, b], testCtx({ argFacts: [{ numeric: true }, { numeric: true }] }))).toEqual(
       Bin("<=", a, b),
     );
-    expect(
-      def.emit!.call([a, b], testCtx({ runtime: (name) => Ref(Binding(`__runtime_${name}`)) })),
-    ).toEqual(Call(Ref(Binding("__runtime_<=")), [a, b]));
+    expect(def.emit!.call([a, b], testCtx({ runtime: (name) => Ref(Binding(`__runtime_${name}`)) }))).toEqual(
+      Call(Ref(Binding("__runtime_<=")), [a, b]),
+    );
   });
 
-  it("> : proven → Bin(\">\", a, b); unproven → the shim", () => {
+  it('> : proven → Bin(">", a, b); unproven → the shim', () => {
     const def = nativeDef(">");
     expect(def.emit).toBeDefined();
     const [a, b] = [ref("a"), ref("b")];
     expect(def.emit!.call([a, b], testCtx({ argFacts: [{ numeric: true }, { numeric: true }] }))).toEqual(
       Bin(">", a, b),
     );
-    expect(
-      def.emit!.call([a, b], testCtx({ runtime: (name) => Ref(Binding(`__runtime_${name}`)) })),
-    ).toEqual(Call(Ref(Binding("__runtime_>")), [a, b]));
+    expect(def.emit!.call([a, b], testCtx({ runtime: (name) => Ref(Binding(`__runtime_${name}`)) }))).toEqual(
+      Call(Ref(Binding("__runtime_>")), [a, b]),
+    );
   });
 
-  it(">= : proven → Bin(\">=\", a, b); unproven → the shim", () => {
+  it('>= : proven → Bin(">=", a, b); unproven → the shim', () => {
     const def = nativeDef(">=");
     expect(def.emit).toBeDefined();
     const [a, b] = [ref("a"), ref("b")];
     expect(def.emit!.call([a, b], testCtx({ argFacts: [{ numeric: true }, { numeric: true }] }))).toEqual(
       Bin(">=", a, b),
     );
-    expect(
-      def.emit!.call([a, b], testCtx({ runtime: (name) => Ref(Binding(`__runtime_${name}`)) })),
-    ).toEqual(Call(Ref(Binding("__runtime_>=")), [a, b]));
+    expect(def.emit!.call([a, b], testCtx({ runtime: (name) => Ref(Binding(`__runtime_${name}`)) }))).toEqual(
+      Call(Ref(Binding("__runtime_>=")), [a, b]),
+    );
   });
 });
 
 describe("numeric Contract.emit — fact-gated relocation (zero?)", () => {
-  it("zero?: proven numeric → Bin(\"===\", n, Lit(0))", () => {
+  it('zero?: proven numeric → Bin("===", n, Lit(0))', () => {
     const def = nativeDef("zero?");
     expect(def.emit).toBeDefined();
     expect(def.narrows).toBeUndefined();

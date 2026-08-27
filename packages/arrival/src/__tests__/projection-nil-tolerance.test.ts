@@ -31,8 +31,7 @@ import { ANil } from "../values/primitives/ANil.js";
 // The inference env and a plain exec (user_env) share the unified car/cdr algebra, so both
 // track the run's strict bit identically. `run` exercises the inference env; the final block
 // pins that user_env behaves the same — strict drives it, not the env.
-const run = (code: string, strict: boolean) =>
-  execOverFrame(code, { env: inferenceEnv.child("nil-tol"), strict });
+const run = (code: string, strict: boolean) => execOverFrame(code, { env: inferenceEnv.child("nil-tol"), strict });
 
 // execState (COMPLEX tier): the two `toBeInstanceOf(ANil)` cells below assert box
 // discipline directly (RULINGS.md R1) — `is_false`-based cells stay on the simple
@@ -55,8 +54,8 @@ const TYPE_ERRORS: [string, string][] = [
 
 describe("car/cdr nil-tolerance: absent value '() — the ONLY mode-dependent cell", () => {
   it("default (tolerant): (car '()) and (cdr '()) resolve to nil", async () => {
-    expect(((await runBoxed("(car '())", false))[0])).toBeInstanceOf(ANil);
-    expect(((await runBoxed("(cdr '())", false))[0])).toBeInstanceOf(ANil);
+    expect((await runBoxed("(car '())", false))[0]).toBeInstanceOf(ANil);
+    expect((await runBoxed("(cdr '())", false))[0]).toBeInstanceOf(ANil);
   });
   it("strict: (car '()) and (cdr '()) throw the R7RS pair typecheck", async () => {
     await expect(run("(car '())", true)).rejects.toThrow();
@@ -109,7 +108,7 @@ describe("the default base shares the unified nil-projection — strict drives i
     await expect(exec("(cdr '())", { strict: true })).rejects.toThrow();
   });
   it("default (tolerant): (car '()) and (cdr '()) project to nil — uniform with the inference env", async () => {
-    expect(((await execState("(car '())", { strict: false })).values[0])).toBeInstanceOf(ANil);
-    expect(((await execState("(cdr '())", { strict: false })).values[0])).toBeInstanceOf(ANil);
+    expect((await execState("(car '())", { strict: false })).values[0]).toBeInstanceOf(ANil);
+    expect((await execState("(cdr '())", { strict: false })).values[0]).toBeInstanceOf(ANil);
   });
 });

@@ -78,7 +78,8 @@ const symbols = harvestContracts(syntaxPack.spec.symbols);
 function defineSyntaxDef(name: string): DefineSyntaxSymbolDef {
   const def = symbols[name];
   if (def === undefined) throw new Error(`syntax pack: no symbol named ${name}`);
-  if (def.kind !== "define-syntax") throw new Error(`syntax pack: ${name} is not a define-syntax def (got ${def.kind})`);
+  if (def.kind !== "define-syntax")
+    throw new Error(`syntax pack: ${name} is not a define-syntax def (got ${def.kind})`);
   return def;
 }
 
@@ -172,15 +173,15 @@ describe("ROW 3 — semantic equivalence: unchanged runtime behavior vs. the pre
 
 describe("ROW 4 — the validator's macro-firewall row still holds (binder positions never false-positive)", () => {
   it("define-syntax's `name` does not report unbound under staticValidation: on", async () => {
-    expect(
-      await last("(define-syntax sq (syntax-rules () ((_ x) (* x x)))) (sq 6)", { staticValidation: "on" }),
-    ).toBe(36);
+    expect(await last("(define-syntax sq (syntax-rules () ((_ x) (* x x)))) (sq 6)", { staticValidation: "on" })).toBe(
+      36,
+    );
   });
 
   it("let-syntax's `vars` claw names do not report unbound under staticValidation: on", async () => {
-    expect(
-      await last("(let-syntax ((sq (syntax-rules () ((_ x) (* x x))))) (sq 5))", { staticValidation: "on" }),
-    ).toBe(25);
+    expect(await last("(let-syntax ((sq (syntax-rules () ((_ x) (* x x))))) (sq 5))", { staticValidation: "on" })).toBe(
+      25,
+    );
   });
 
   it("letrec-syntax's `vars` claw names — including the SELF-reference — do not report unbound under staticValidation: on", async () => {
@@ -199,7 +200,8 @@ describe("ROW 4 — the validator's macro-firewall row still holds (binder posit
     try {
       await exec("(let-syntax ((m (syntax-rules () ((_ x) (totally-unbound-name-xyz x))))) (m 5))", {
         env,
-        staticValidation: "on" });
+        staticValidation: "on",
+      });
     } catch (e) {
       caught = e;
     }

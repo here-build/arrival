@@ -121,7 +121,8 @@ export function createChibiHarnessV2(): { capability: EnvCapability; sink: Outco
             }
             return theVoid;
           },
-        ) }),
+        ),
+    }),
 
     prelude: `
     ;; The comparator — chibi's approximate float equality, structurally recursive over
@@ -192,7 +193,8 @@ export function createChibiHarnessV2(): { capability: EnvCapability; sink: Outco
       (syntax-rules ()
         ((test-numeric-syntax str expect strs ...)
          (test str expect (string->number str)))))
-  ` });
+  `,
+  });
 
   return {
     capability,
@@ -201,7 +203,9 @@ export function createChibiHarnessV2(): { capability: EnvCapability; sink: Outco
         const out = queue.slice();
         queue.length = 0;
         return out;
-      } } };
+      },
+    },
+  };
 }
 
 function describeError(e: unknown): string {

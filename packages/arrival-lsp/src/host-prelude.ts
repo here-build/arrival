@@ -26,7 +26,7 @@
 // (`types.d.ts`); host entity types MUST be declared in `preamble` (ambient, no
 // import/export — it shares the global merge scope).
 
-import { encodeSchemeIdent } from "@inhuman.tools/arrival-mercury/type-emit";
+import { encodeSchemeIdent } from "@inhuman.tools/arrival-types-bridge";
 
 export interface HostPrelude {
   /** Ambient `.d.ts` text — the entity preamble + host `declare function`s. */
@@ -68,7 +68,7 @@ export function assembleHostPrelude(
 ): HostPrelude {
   const byName = new Map<string, string>(entries);
   const members = [...byName.keys()];
-  const kwargsSet = new Set(opts?.kwargsMembers ?? []);
+  const kwargsSet = new Set(opts?.kwargsMembers);
   // Only keep kwargs names that are also host members (no orphans).
   const kwargsMembers = members.filter((m) => kwargsSet.has(m));
 

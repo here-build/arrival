@@ -30,7 +30,15 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { parse, execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
-import { classify, fieldCone, fullCone, type Bindings, type Classifier, type DeclaredRole, type PathStep } from "../../provenance/lineage.js";
+import {
+  classify,
+  fieldCone,
+  fullCone,
+  type Bindings,
+  type Classifier,
+  type DeclaredRole,
+  type PathStep,
+} from "../../provenance/lineage.js";
 import { buildWireframe } from "../../provenance/wireframe/builder.js";
 import { reachableNodesForDemand } from "../../provenance/wireframe/loops.js";
 import { FrozenMints, boxPayload, replayBetweenRecords, replayGraphEgress } from "../../provenance/replay.js";
@@ -43,7 +51,8 @@ import {
   recordHostScheduleVerdict,
   withTrackCoordinate,
   type TrackCoordinate,
-  type TrackEmissionSink } from "../../membrane/region-scope.js";
+  type TrackEmissionSink,
+} from "../../membrane/region-scope.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import type { EmittedWire, WireframeGraph } from "../../provenance/wireframe/types.js";
 import type { SchemeValue } from "../../values/types.js";
@@ -54,7 +63,15 @@ import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
 // this helper/execState needs the eager oracle ON
 requireEagerOracle();
 
-const ROLES: Record<string, DeclaredRole> = { "fetch-list": "source", "fetch-item": "source", "src-a": "source", "src-b": "source", "emit!": "sink", map: "fan", filter: "fan" };
+const ROLES: Record<string, DeclaredRole> = {
+  "fetch-list": "source",
+  "fetch-item": "source",
+  "src-a": "source",
+  "src-b": "source",
+  "emit!": "sink",
+  map: "fan",
+  filter: "fan",
+};
 const CLASSIFIER: Classifier = { roleOf: (op) => ROLES[op] };
 const BASE = new Set(["car", "length", "list", "*", "+", "begin"]);
 const isBaseName = (n: string): boolean => BASE.has(n);
@@ -79,7 +96,8 @@ async function replayTrack(run: RecordedRun, template: WireframeGraph, i: number
     program,
     graph: template,
     frozen,
-    slots: { v: boxPayload({ value: i + 1, stampIds: [] }) } });
+    slots: { v: boxPayload({ value: i + 1, stampIds: [] }) },
+  });
 }
 
 async function fanTemplateOf(code: string): Promise<WireframeGraph> {
@@ -90,8 +108,7 @@ async function fanTemplateOf(code: string): Promise<WireframeGraph> {
   return fan.template;
 }
 
-beforeAll(async () => {
-});
+beforeAll(async () => {});
 
 afterEach(() => {
   setEmissionEnabled(false);
@@ -123,7 +140,10 @@ describe("track containment — STAMP arm (§3 I1 vs the eager oracle)", () => {
       const track = tracks.find((t) => t.v === v)!;
       const egressCone = collapseProvenance(track.egress);
       // interior n (the track's own fetch-item mint): cone+(n) ⊆ cone+(egress(Ti)).
-      expect(egressCone.has(track.portStamp), `interior stamp ${track.portStamp} escaped its own track's egress cone`).toBe(true);
+      expect(
+        egressCone.has(track.portStamp),
+        `interior stamp ${track.portStamp} escaped its own track's egress cone`,
+      ).toBe(true);
       // confinement: nothing beyond this track's own stamp reaches the egress.
       expect([...egressCone]).toEqual([track.portStamp]);
     },
@@ -240,7 +260,8 @@ describe("track separation (§3 I3: no spontaneous inter-track edges)", () => {
     const t0Before = await replayTrack(run, template, 0);
     const mutatedRun: RecordedRun = {
       ...run,
-      mints: run.mints.map((m, k) => (k === 1 ? { ...m, payload: { ...m.payload, value: 999 } } : m)) };
+      mints: run.mints.map((m, k) => (k === 1 ? { ...m, payload: { ...m.payload, value: 999 } } : m)),
+    };
     const t0After = await replayTrack(mutatedRun, template, 0);
     const t1After = await replayTrack(mutatedRun, template, 1);
     expect(t0After.value).toBe(t0Before.value);
@@ -259,13 +280,15 @@ describe("track separation (§3 I3: no spontaneous inter-track edges)", () => {
         { kind: "slot", name: "acc" },
         { kind: "slot", name: "ev" },
       ],
-      span: "i3-acc-stretch" };
+      span: "i3-acc-stretch",
+    };
     const { steps, egress } = await replayBetweenRecords({
       store: foldRun.store,
       payloads: foldRun.payloads,
       regionId: foldRun.regionId,
       stretch: { wire: stretch, accParam: "acc", eventParam: "ev" },
-      initial: boxPayload({ value: 0, stampIds: [] }) });
+      initial: boxPayload({ value: 0, stampIds: [] }),
+    });
     expect(egress).toBe(foldRun.egress);
     // the chain: pure value k = pure value k-1 + event k — state flows ONLY through acc
     const pures = steps.flatMap((s) => (s.kind === "pure" ? [s.value as number] : []));
@@ -351,8 +374,18 @@ describe("R2 demand monotonicity (§6 demand lattice: value / count / field-k)",
     { code: "(:foo x)", bindings: { x: [42] }, step: { field: "foo" }, note: "matched field" },
     { code: "(:foo x)", bindings: { x: [42] }, step: { field: "bar" }, note: "pruned sibling — [] ⊆ whole trivially" },
     { code: "(cons (:foo a) (:bar b))", bindings: { a: [1], b: [2] }, step: { field: "foo" }, note: "merge barrier" },
-    { code: "(if p (:foo a) (:foo b))", bindings: { p: [9], a: [1], b: [2] }, step: { field: "foo" }, note: "mux, matches both arms" },
-    { code: "(if p (:foo a) (:foo b))", bindings: { p: [9], a: [1], b: [2] }, step: { field: "zzz" }, note: "mux, prunes both arms" },
+    {
+      code: "(if p (:foo a) (:foo b))",
+      bindings: { p: [9], a: [1], b: [2] },
+      step: { field: "foo" },
+      note: "mux, matches both arms",
+    },
+    {
+      code: "(if p (:foo a) (:foo b))",
+      bindings: { p: [9], a: [1], b: [2] },
+      step: { field: "zzz" },
+      note: "mux, prunes both arms",
+    },
   ];
   it.each(FIELD_CORPUS)(
     "cone(field-k) ⊆ cone(whole) for $code / field $step.field ($note)",
@@ -362,7 +395,9 @@ describe("R2 demand monotonicity (§6 demand lattice: value / count / field-k)",
       const whole = new Set(fullCone(n, bindings));
       const field = new Set(fieldCone(n, bindings, step));
       for (const id of field) {
-        expect(whole.has(id), `field-cone id ${id} escaped the whole cone (${code}, ${JSON.stringify(step)})`).toBe(true);
+        expect(whole.has(id), `field-cone id ${id} escaped the whole cone (${code}, ${JSON.stringify(step)})`).toBe(
+          true,
+        );
       }
     },
   );
@@ -370,7 +405,7 @@ describe("R2 demand monotonicity (§6 demand lattice: value / count / field-k)",
   // roles swapped vs fact-wires corpus: filter is fact-tagged/included, map is untagged/excluded — carve-out is symmetric in lengthPreserving
   it(
     "count-demand traverses fact wires ONLY — touches ZERO element wires (§6: " +
-      "\"struct-fact wires answer count-demand without touching elements\"; the routing " +
+      '"struct-fact wires answer count-demand without touching elements"; the routing ' +
       "machinery lands at Q8c, this law itself flips at Q17 once query maturity lands)",
     async () => {
       const p = await wf("(emit! (length (filter g (fetch-list))) (car (map f xs)))");

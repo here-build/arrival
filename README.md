@@ -1,12 +1,15 @@
 # Arrival
 
+[![CI](https://github.com/here-build/arrival/actions/workflows/ci.yml/badge.svg)](https://github.com/here-build/arrival/actions/workflows/ci.yml)
+
 **A sandboxed R7RS-subset Scheme for LLM agents that need to compute, not just call tools.**
 
 ![Elegant weapons, for a more civilized age.](./assets/xkcd-297-lisp-cycles.png)
 
-Lisp was born in 1958 for AI research — the first language built *for* AI. arrival is a
-Lisp dialect built for AI *as the user*: the agent writes the programs.
-([xkcd 297](https://xkcd.com/297/) by Randall Munroe, [CC BY-NC 2.5](https://creativecommons.org/licenses/by-nc/2.5/).)
+Lisp was born in 1958 for AI research — the first language built _for_ AI. arrival is a
+Lisp dialect built for AI _as the user_: the agent writes the programs.
+Image: [xkcd 297](https://xkcd.com/297/) by Randall Munroe, [CC BY-NC 2.5](https://creativecommons.org/licenses/by-nc/2.5/)
+— the image only; the software is MIT.
 
 This repository is the public home of the `@inhuman.tools/arrival*` family, published by
 [here.build](https://here.build). Shared floor packages (`@here.build/tsconfig`, `collections`,
@@ -68,26 +71,22 @@ All names are `@inhuman.tools/<dir>`.
 **Types / editor**
 
 - [`arrival-lsp`](./packages/arrival-lsp/README.md) — Scheme→TS type lens (not the Language Server Protocol). MIT
+- [`arrival-types-bridge`](./packages/arrival-types-bridge/README.md) — virtual-TS emitter the lens (and Mercury) share. MIT
 - [`arrival-internals-types-prelude`](./packages/arrival-internals-types-prelude/README.md) — shared `.d.ts` leaves so LSP and mercury do not cycle. MIT
 - [`arrival-codemirror`](./packages/arrival-codemirror/README.md) — CodeMirror 6 (classic + sugarcoat). MIT
 
-**Analysis / compiler (FSL-1.1-MIT)**
+**Analysis**
 
-- [`arrival-provenance`](./packages/arrival-provenance/README.md) — forest, slicer, grounding seal over a finished `EvalTrace`
-- [`arrival-mercury`](./packages/arrival-mercury/README.md) — Scheme → TypeScript; host supplies the capability plane
-- [`arrival-mercury-oracle`](./packages/arrival-mercury-oracle/README.md) — interpreter ≡ compiled; owns the `tsx` runtime the compiler must not carry
+- [`arrival-provenance`](./packages/arrival-provenance/README.md) — forest, slicer, grounding seal over a finished `EvalTrace`. MIT
 
 ## Status
 
-0.x. The API surface is still settling. Issues welcome; we are not yet optimizing for external PRs.
+0.x. The API surface is still settling. Issues welcome; we are not yet optimizing for external PRs. See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## License
 
-Dual-licensed by package (see [`LICENSE.md`](./LICENSE.md); each package's `LICENSE.md` is authoritative):
-
-- **MIT** — language core, CLI, sugarcoat, serializer, modules, LSP, types-prelude, overridable-lens, codemirror
-- **FSL-1.1-MIT** — provenance, mercury compiler, mercury oracle (internal use and non-commercial research; not a competing hosted product; MIT after two years)
+[MIT](./LICENSE.md). Each package's `LICENSE.md` is authoritative.
 
 The interpreter is a fork of [LIPS.js](https://github.com/jcubic/lips) (MIT, Jakub T. Jankiewicz).
 The Chibi-scheme vendor tree is BSD-3-Clause (Alex Shinn), tests-only, not in the npm tarball.
-The xkcd 297 image is [CC BY-NC 2.5](https://creativecommons.org/licenses/by-nc/2.5/).
+The xkcd 297 image is [CC BY-NC 2.5](https://creativecommons.org/licenses/by-nc/2.5/) (image only, not the software).

@@ -1,1 +1,0 @@
-(every (lambda (x) x) (list 1 2))

@@ -109,10 +109,10 @@ export class AJSObject extends AValue {
     let raw: unknown;
     try {
       raw = accessMember(this.source, key);
-    } catch (e) {
+    } catch (error) {
       // Boundary violations → nil — same shape as "absent" (no error detail leaks).
-      if (e instanceof InteropAccessError) return nil;
-      throw e;
+      if (error instanceof InteropAccessError) return nil;
+      throw error;
     }
     if (raw === NOT_FOUND) return nil;
 
@@ -221,8 +221,8 @@ export class AJSObject extends AValue {
     if (!Object.isFrozen(this.source)) {
       try {
         Object.freeze(this.source);
-      } catch (cause) {
-        throw new ForeignProxyFreezeError(cause);
+      } catch (error) {
+        throw new ForeignProxyFreezeError(error);
       }
     }
   }

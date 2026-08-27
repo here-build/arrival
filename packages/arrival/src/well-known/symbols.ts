@@ -10,7 +10,7 @@
 // Exceptions keep the historical wire key (LOCATION, INTEROP_BOUNDARY, merge,
 // reader/lexer intern names, ASymbol hidden slots) — renaming severs remints.
 //
-// Dynamic interns stay at the call site: `Symbol.for(token)` (lexer), 
+// Dynamic interns stay at the call site: `Symbol.for(token)` (lexer),
 // `Symbol.for(name)` (hidden_prop), `Symbol.for("arrival/single-load/…")`.
 // The key is data, not a brand. Module-local `Symbol(...)` (NOT_FOUND,
 // OFFENDING_VALUE) is unforgeable on purpose — not this file.

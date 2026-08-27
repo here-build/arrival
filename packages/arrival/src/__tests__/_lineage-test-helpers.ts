@@ -72,8 +72,5 @@ export async function runRaw(
   }
 }
 
-export const run = async (
-  src: string,
-  binds: Record<string, unknown> = {},
-  setup?: EnvSetup,
-): Promise<number[]> => provOf(await runRaw(src, binds, setup));
+export const run = async (src: string, binds: Record<string, unknown> = {}, setup?: EnvSetup): Promise<number[]> =>
+  provOf(await runRaw(src, binds, setup));

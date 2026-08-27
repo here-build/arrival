@@ -665,10 +665,11 @@ function filterDecision(inv: PlainInv, applChildren: PlainInv[], ctx: RegionWalk
   for (const c of applChildren) addOrigins(ctx.liveProvenanceById(c.id));
   // Fallback: eval'd-once args' values, DEEP — covers pred whose comparisons happened
   // outside this subtree.
-  if (origins.size === 0) for (const arg of inv.children) {
-    if (arg.children.length > 0) continue;
-    addOrigins(deepProvenance(ctx.liveValueById(arg.id)));
-  }
+  if (origins.size === 0)
+    for (const arg of inv.children) {
+      if (arg.children.length > 0) continue;
+      addOrigins(deepProvenance(ctx.liveValueById(arg.id)));
+    }
   if (origins.size === 0) return undefined; // static — degenerate, dissolve
   // PER-ELEMENT VERDICTS. Pairing key = ELEMENT's OWN origins (predicate OUTCOME's
   // provenance is wrong — Pareto test folds compared-AGAINST elements). Two reads:
@@ -728,7 +729,9 @@ function predParamOf(node: unknown): string | undefined {
   if (head === null || typeof head !== "object" || head.__name__ !== "lambda") return undefined;
   const params = pred.cdr instanceof APair ? pred.cdr.car : undefined;
   const first = params instanceof APair ? (params.car as { __name__?: unknown } | null) : undefined;
-  return first !== null && first !== undefined && typeof first === "object" && typeof first.__name__ === "string" ? first.__name__ : undefined;
+  return first !== null && first !== undefined && typeof first === "object" && typeof first.__name__ === "string"
+    ? first.__name__
+    : undefined;
 }
 
 /**
@@ -842,7 +845,9 @@ export function regionsAt(inv: PlainInv, ctx: RegionWalkCtx): Region[] {
     // decision (or even inference). It walks as PRECEDING SIBLINGS (the collection was
     // computed before the fan), never as an element: counting it as one is exactly the
     // phantom-11th bug this split fixes.
-    const argRegions = inv.children.filter((c) => c.children.length > 0 && argNodes.has(c.node)).flatMap((c) => regionsAt(c, ctx));
+    const argRegions = inv.children
+      .filter((c) => c.children.length > 0 && argNodes.has(c.node))
+      .flatMap((c) => regionsAt(c, ctx));
     // Degenerate container (mapped/filtered over non-inference data) → drop it; a live
     // gated selection still shows its decision (pure-pred filters have empty bodies).
     if (iterations.length === 0) return decision ? [...argRegions, decision] : argRegions;

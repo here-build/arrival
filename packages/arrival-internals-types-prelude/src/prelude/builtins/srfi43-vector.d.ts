@@ -41,27 +41,31 @@
 // `?`-names → bracketed string keys.
 // ─────────────────────────────────────────────────────────────────────────────
 
-  // Construct a vector from its elements (v1: a List<T>). Variadic in elements.
+// Construct a vector from its elements (v1: a List<T>). Variadic in elements.
 declare function vector<T>(...elems: T[]): List<T>;
-  // Tag/type predicate — accepts any value, returns boolean.
+// Tag/type predicate — accepts any value, returns boolean.
 declare function vector$qmark$(x: unknown): boolean;
 
-  // Folds — kons is (acc, elt) → acc'; the accumulator type A threads through.
+// Folds — kons is (acc, elt) → acc'; the accumulator type A threads through.
 declare function vector$dash$fold<A, T>(kons: (acc: A, elt: T) => A, knil: A, vec: List<T>): A;
 declare function vector$dash$fold$dash$right<A, T>(kons: (acc: A, elt: T) => A, knil: A, vec: List<T>): A;
 
-  // Count of indices where the predicate holds → number.
+// Count of indices where the predicate holds → number.
 declare function vector$dash$count<T>(pred: (elt: T) => unknown, vec: List<T>): number;
-  // First matching index, or #f → number | boolean.
+// First matching index, or #f → number | boolean.
 declare function vector$dash$index<T>(pred: (elt: T) => unknown, vec: List<T>): number | boolean;
 
-  // Short-circuiting search — returns the truthy (pred elt) result, or #f.
+// Short-circuiting search — returns the truthy (pred elt) result, or #f.
 declare function vector$dash$any<T, R>(pred: (elt: T) => R, vec: List<T>): R | boolean;
-  // Returns the last (pred elt) if all truthy, or #f.
+// Returns the last (pred elt) if all truthy, or #f.
 declare function vector$dash$every<T, R>(pred: (elt: T) => R, vec: List<T>): R | boolean;
 
-  // Length-0 test → boolean.
+// Length-0 test → boolean.
 declare function vector$dash$empty$qmark$<T>(vec: List<T>): boolean;
 
-  // Binary search — (vec, value, cmp) where cmp(elt, value) → number sign; index | #f.
-declare function vector$dash$binary$dash$search<T>(vec: List<T>, value: T, cmp: (elt: T, value: T) => number): number | boolean;
+// Binary search — (vec, value, cmp) where cmp(elt, value) → number sign; index | #f.
+declare function vector$dash$binary$dash$search<T>(
+  vec: List<T>,
+  value: T,
+  cmp: (elt: T, value: T) => number,
+): number | boolean;

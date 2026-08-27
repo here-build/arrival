@@ -13,6 +13,6 @@
 // entry arrays unify — no PRE `readonly` keyword needed.
 // ─────────────────────────────────────────────────────────────────────────────
 
-declare function dict<
-  const Pairs extends { length: number; [n: number]: { 0: string; 1: unknown } },
->(entries: Pairs): { [K in Pairs[number] as K[0] & string]: K[1] };
+declare function dict<const Pairs extends { length: number; [n: number]: { 0: string; 1: unknown } }>(
+  entries: Pairs,
+): { [K in Pairs[number] as K[0] & string]: K[1] };

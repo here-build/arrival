@@ -87,7 +87,7 @@ export function vocabularyFromChain(
   chain: CompiledResolutionChain,
   opts: AssembledVocabularyOptions = {},
 ): ProgramVocabulary {
-  const scopeNames = new Set<string | symbol>(opts.scopeNames ?? []);
+  const scopeNames = new Set<string | symbol>(opts.scopeNames);
   const names = new Set<string | symbol>(chain.names);
   for (const n of scopeNames) names.add(n);
   for (const k of KEYWORD_SYNTAX_BASELINE) names.add(k);

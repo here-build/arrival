@@ -67,8 +67,18 @@ const PROXIED = { groupingFact: "PROXIED", lengthFact: "PROXIED" } as const;
 const PROVENANCED = { groupingFact: "PROVENANCED", lengthFact: "PROVENANCED" } as const;
 
 export const TERMS: readonly TermRow[] = [
-  { term: "arrival/tagless-final/map", verbs: ["map", "vector-map", "string-map"], boxDiscipline: "element-preserving", containerBox: PROXIED },
-  { term: "arrival/tagless-final/filter", verbs: ["filter"], boxDiscipline: "element-preserving", containerBox: PROVENANCED },
+  {
+    term: "arrival/tagless-final/map",
+    verbs: ["map", "vector-map", "string-map"],
+    boxDiscipline: "element-preserving",
+    containerBox: PROXIED,
+  },
+  {
+    term: "arrival/tagless-final/filter",
+    verbs: ["filter"],
+    boxDiscipline: "element-preserving",
+    containerBox: PROVENANCED,
+  },
   { term: "arrival/tagless-final/reduce", verbs: ["reduce"], boxDiscipline: "element-unioning", containerBox: NA },
   { term: "arrival/tagless-final/sort", verbs: ["sort"], boxDiscipline: "element-preserving", containerBox: PROXIED },
   // `bytevector-append` completes the verb list — ABytevector genuinely implements this term
@@ -79,10 +89,20 @@ export const TERMS: readonly TermRow[] = [
   // rebuilt head's stamp as the deep-collapsed union of BOTH operands (a stronger, already-
   // correct realization of "union the container stamp with the decision lineage" — the
   // pre-existing H2 conservation-repair fix, unchanged by this batch).
-  { term: "arrival/tagless-final/concat", verbs: ["append", "string-append", "vector-append", "bytevector-append"], boxDiscipline: "element-preserving", containerBox: PROVENANCED },
+  {
+    term: "arrival/tagless-final/concat",
+    verbs: ["append", "string-append", "vector-append", "bytevector-append"],
+    boxDiscipline: "element-preserving",
+    containerBox: PROVENANCED,
+  },
   // "n/a": length is the CONSUMER of the length fact (C4 interim fix — reads the container's
   // own flat stamp via `withInputProvenance([this], count)`), not a producer of a container.
-  { term: "arrival/tagless-final/length", verbs: ["length", "vector-length", "string-length"], boxDiscipline: "element-unioning", containerBox: NA },
+  {
+    term: "arrival/tagless-final/length",
+    verbs: ["length", "vector-length", "string-length"],
+    boxDiscipline: "element-unioning",
+    containerBox: NA,
+  },
   { term: "arrival/tagless-final/equals", verbs: ["equal?"], boxDiscipline: "element-unioning", containerBox: NA },
   { term: "arrival/tagless-final/car", verbs: ["car"], boxDiscipline: "projecting", containerBox: NA },
   // cdr projects a SUB-CONTAINER (the remaining spine), not a scalar — outside R2's named

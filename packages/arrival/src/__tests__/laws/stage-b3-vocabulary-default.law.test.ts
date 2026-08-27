@@ -86,7 +86,9 @@ describe("LAW 2 — runCtx reuse: the run is authoritative", () => {
             bumps++;
             return "ok";
           },
-        ) }) });
+        ),
+      }),
+    });
     const capabilities = [cap];
     const config = {};
 
@@ -99,7 +101,8 @@ describe("LAW 2 — runCtx reuse: the run is authoritative", () => {
       capabilities: [...capabilities, ...BASE_ROSTER],
       config,
       evalScheme: realEvalScheme,
-      evalPrelude: realEvalPrelude });
+      evalPrelude: realEvalPrelude,
+    });
     expect(bumps).toBe(1); // the pre-mint's own prelude pass
 
     try {
@@ -129,7 +132,9 @@ describe("LAW 3 — static validation on the vocabulary path", () => {
         "gated/verb": symbol.native`gated/verb: requires fs`(
           { input: [], output: [sz.schemeValue], requiresConfig: ["fs"] },
           () => nil,
-        ) }) });
+        ),
+      }),
+    });
 
     let caught: unknown;
     try {
@@ -150,7 +155,9 @@ describe("LAW 3 — static validation on the vocabulary path", () => {
         "gated/verb": symbol.native`gated/verb: requires fs`(
           { input: [], output: [sz.schemeValue], requiresConfig: ["fs"] },
           () => nil,
-        ) }) });
+        ),
+      }),
+    });
     await expect(
       exec("(gated/verb)", { capabilities: [cap], config: { fs: { x: 1 } }, staticValidation: "on" }),
     ).resolves.toBeDefined();

@@ -32,4 +32,10 @@ export { decodeAccessor, encodeAccessor, accessorStepLetters, type PairStep } fr
 
 // Lower-level sugarcoat reader utilities (single-expr read; top-form span scan) — used by the
 // classic↔sugarcoat round-trip integration tests over the program corpus.
-export { readSugarcoatExpr, topFormSpans, splitFormsWithBase, R7RS_ACCESSOR_DEPTH, type ReadOpts } from "./sugarcoat-read.js";
+export {
+  readSugarcoatExpr,
+  topFormSpans,
+  splitFormsWithBase,
+  R7RS_ACCESSOR_DEPTH,
+  type ReadOpts,
+} from "./sugarcoat-read.js";

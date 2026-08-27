@@ -74,9 +74,7 @@ describe("scheme/chars Contract precision — the 10 comparison ops reject a wro
       expect(def.in.safeParse([]).success, `${name}: empty array`).toBe(true);
       expect(def.in.safeParse([ch("x")]).success, `${name}: single real char`).toBe(true);
       expect(def.in.safeParse([ch("x"), ch("y"), ch("z")]).success, `${name}: real char array`).toBe(true);
-      expect(def.in.safeParse(["x", "y", "z"]).success, `${name}: raw string array — was true, now false`).toBe(
-        false,
-      );
+      expect(def.in.safeParse(["x", "y", "z"]).success, `${name}: raw string array — was true, now false`).toBe(false);
     }
   });
 

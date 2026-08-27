@@ -51,7 +51,8 @@ const EMPTY_NUM: ReadonlySet<number> = new Set();
 
 const headOf = (inv: PlainInv): string => scopeId(inv.node).split("@")[0] ?? "?";
 /** Snapshot's `errText`, inlined — kept identical so the fold's mirror deep-equals a fresh `snapshotTrace`. */
-const errText = (e: unknown): string | undefined => (e instanceof Error ? e.message : e == null ? undefined : String(e));
+const errText = (e: unknown): string | undefined =>
+  e instanceof Error ? e.message : e == null ? undefined : String(e);
 const hasSelfAncestor = (inv: PlainInv): boolean => {
   for (let p = inv.parent; p; p = p.parent) if (p.node === inv.node) return true;
   return false;
@@ -396,7 +397,10 @@ export class TraceRegionFold {
     };
     // Consumer-slot then producer-output-row attribution — identical to from-scratch build
     // so `current()` deep-equals `traceToRegions` (parity gate).
-    const edges = attributeFromFields(attributeFieldEdges(this.#baseEdges, finalizeCtx), carrierFieldEdges(this.#trace));
+    const edges = attributeFromFields(
+      attributeFieldEdges(this.#baseEdges, finalizeCtx),
+      carrierFieldEdges(this.#trace),
+    );
 
     // Decision wires, then the statement-output terminal (final = last top-level form).
     appendDecisionEdges(edges, knotArm, knotInputs);
@@ -442,11 +446,7 @@ export class TraceRegionFold {
       plain.state = live.state;
       // Match `snapshotTrace`: peel at the plain-mirror boundary (scheme → JS once).
       plain.value =
-        isPoint || isRoot || isBranchChild
-          ? live.value === undefined
-            ? undefined
-            : toJS(live.value)
-          : undefined;
+        isPoint || isRoot || isBranchChild ? (live.value === undefined ? undefined : toJS(live.value)) : undefined;
       plain.metadata = isPoint ? live.metadata : undefined;
       // A leaf parked while `running` may have REJECTED since — re-copy error/cache so the
       // settled mirror matches a fresh snapshot.
@@ -504,12 +504,7 @@ export class TraceRegionFold {
       provenance: inv.parent?.isProvenancePoint || isRoot ? new Set(inv.provenance) : EMPTY_NUM,
       isProvenancePoint: isPoint,
       // Match `snapshotTrace`: peel at the plain-mirror boundary (scheme → JS once).
-      value:
-        isPoint || isRoot || isBranchChild
-          ? inv.value === undefined
-            ? undefined
-            : toJS(inv.value)
-          : undefined,
+      value: isPoint || isRoot || isBranchChild ? (inv.value === undefined ? undefined : toJS(inv.value)) : undefined,
       metadata: isPoint ? inv.metadata : undefined,
       state: inv.state,
       error: isPoint && inv.state === "rejected" ? errText(inv.error) : undefined,

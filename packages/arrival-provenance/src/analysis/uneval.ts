@@ -22,9 +22,6 @@
 // (verified: no shared helpers, no shared imports) and this relocation is the first point they
 // needed genuinely different homes.
 import { execState, parse, toJS, type LexicalScope, type SchemeValue } from "@inhuman.tools/arrival";
-
-/** Same fusion as arrival `LexicalScopeWithInternals` (on `/host-internals` after rebuild). */
-type UnevalWritableScope = LexicalScope & { readonly env: { bind(name: string, value: SchemeValue): void } };
 import {
   buildSlice,
   writeForm,
@@ -33,6 +30,9 @@ import {
   type EvalTrace,
 } from "@inhuman.tools/arrival/provenance";
 import { AValue } from "@inhuman.tools/arrival/reflect-internals";
+
+/** Same fusion as arrival `LexicalScopeWithInternals` (on `/host-internals` after rebuild). */
+type UnevalWritableScope = LexicalScope & { readonly env: { bind(name: string, value: SchemeValue): void } };
 
 /** One reverse-chain answer: the effective value the selector produced, the origin reads it
  *  traces to, and a re-runnable Scheme program that re-derives it. */

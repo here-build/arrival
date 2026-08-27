@@ -46,7 +46,11 @@ function makeAligner(): (sugarcoat: string) => SugarcoatAlignment | null {
 /** Completion anchor: prefer exact token map. Else inject ws after prior
  *  token so `(f |` works (canonical print may glue `)`). Completion has no
  *  spans so patch is invisible to mapping. */
-function completionAnchor(a: SugarcoatAlignment, sugarcoat: string, pos: number): { classic: string; pos: number } | null {
+function completionAnchor(
+  a: SugarcoatAlignment,
+  sugarcoat: string,
+  pos: number,
+): { classic: string; pos: number } | null {
   const direct = a.toClassic(pos);
   if (direct !== null) return { classic: a.classic, pos: direct };
   let k = pos;

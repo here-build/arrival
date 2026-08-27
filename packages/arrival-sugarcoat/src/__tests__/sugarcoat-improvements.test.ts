@@ -10,7 +10,9 @@ const roundtrip = (scheme: string, opts = {}): string => printScheme(readSugarco
 // Multi-line I-expression output (broken if/begin/cond) must round-trip through the
 // whole-program reader (indentation grouping), not the single-expression reader.
 const roundtripAll = (scheme: string, opts = {}): string =>
-  readSugarcoat(render(scheme, opts)).map((f) => printScheme(f)).join("\n");
+  readSugarcoat(render(scheme, opts))
+    .map((f) => printScheme(f))
+    .join("\n");
 
 // ── 1. lone-unary → method dot, gated on `?`-predicates / `->`-conversions / allow ──
 // The §5 gate flipped: a lone unary now surfaces as `x.f` when the head reads well
@@ -26,8 +28,7 @@ describe("lone-unary → method dot (gated)", () => {
     ["(reverse xs)", "xs.reverse"], // curated allow
     ["(string-upcase s)", "s.string-upcase"],
   ];
-  for (const [scheme, sugarcoat] of flips)
-    it(`${scheme} → ${sugarcoat}`, () => expect(render(scheme)).toBe(sugarcoat));
+  for (const [scheme, sugarcoat] of flips) it(`${scheme} → ${sugarcoat}`, () => expect(render(scheme)).toBe(sugarcoat));
 
   const stayPrefix: string[] = [
     "(not p)", // `not` reads worse postfix — kept prefix
@@ -39,7 +40,9 @@ describe("lone-unary → method dot (gated)", () => {
 
   // V's exact example: ok? collapses to the method-chain reading
   it("ok? predicate body collapses (V's example)", () => {
-    expect(render("(and (list? x) (= (length x) 2) (eq? (car x) 'ok))")).toBe("{x.list? and x.length = 2 and x[0] eq? 'ok}");
+    expect(render("(and (list? x) (= (length x) 2) (eq? (car x) 'ok))")).toBe(
+      "{x.list? and x.length = 2 and x[0] eq? 'ok}",
+    );
   });
 
   for (const [scheme] of flips) it(`round-trips ${scheme}`, () => expect(roundtrip(scheme)).toBe(canon(scheme)));
@@ -90,16 +93,27 @@ describe("cond => clause renders as =?> and stays connected", () => {
   it("case receiver clause also renders =?> (same R7RS => receiver form)", () => {
     const s = "(case k ((1 2) => proc) (else (x)))";
     expect(render(s)).toContain("(1 2) =?> proc");
-    expect(readSugarcoat(render(s)).map((f) => printScheme(f)).join("")).toBe(canon(s)); // folds back
+    expect(
+      readSugarcoat(render(s))
+        .map((f) => printScheme(f))
+        .join(""),
+    ).toBe(canon(s)); // folds back
   });
   it("reader folds =?> (and math skins ⇀ / ⇸) back to the => symbol", () => {
     for (const g of ["=?>", "⇀", "⇸"])
-      expect(readSugarcoat(`cond\n  (foo x) ${g} (bar)\n  else\n    (baz)`).map((f) => printScheme(f)).join("")).toBe(
-        canon("(cond ((foo x) => (bar)) (else (baz)))"),
-      );
+      expect(
+        readSugarcoat(`cond\n  (foo x) ${g} (bar)\n  else\n    (baz)`)
+          .map((f) => printScheme(f))
+          .join(""),
+      ).toBe(canon("(cond ((foo x) => (bar)) (else (baz)))"));
   });
   for (const s of ["(cond ((foo x) => (bar)) (else (baz)))"])
-    it(`round-trips ${s}`, () => expect(readSugarcoat(render(s)).map((f) => printScheme(f)).join("\n")).toBe(canon(s)));
+    it(`round-trips ${s}`, () =>
+      expect(
+        readSugarcoat(render(s))
+          .map((f) => printScheme(f))
+          .join("\n"),
+      ).toBe(canon(s)));
 });
 
 // ── 5. `'()` → `nil` surface glyph (sound: reader folds nil back), shadow-guarded ──
@@ -208,8 +222,7 @@ describe("lt/gt/lte/gte prefer n-expr with scheme glyphs", () => {
     expect(roundtrip("(gte p q)")).toBe(canon("(>= p q)"));
   });
   it("native R7RS comparisons still round-trip as themselves", () => {
-    for (const s of ["(< a b)", "(> a b)", "(<= a b)", "(>= a b)"])
-      expect(roundtrip(s)).toBe(canon(s));
+    for (const s of ["(< a b)", "(> a b)", "(<= a b)", "(>= a b)"]) expect(roundtrip(s)).toBe(canon(s));
   });
 });
 

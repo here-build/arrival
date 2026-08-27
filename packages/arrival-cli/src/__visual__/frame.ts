@@ -33,11 +33,11 @@ function block(state: "done" | "error" | "skipped" | "pending" | "running", sour
 export function sampleFrame(paper: Rgb, ink: Rgb): string[] {
   attuneFromProbe({ bg: paper, fg: ink });
   const lines = [
-    ...greetingLines(
-      { version: "0.9.0", capabilityCount: 0, lens: "sugarcoat" },
-      MODE,
-      { kind: "quote", quote: QUOTES[17], width: 72 },
-    ),
+    ...greetingLines({ version: "0.9.0", capabilityCount: 0, lens: "sugarcoat" }, MODE, {
+      kind: "quote",
+      quote: QUOTES[17],
+      width: 72,
+    }),
     "",
     ...block("done", "(define (square n) (* n n))"),
     "",

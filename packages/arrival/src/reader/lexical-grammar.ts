@@ -20,7 +20,7 @@ export function gen_rational_re(mnemonic, range) {
 
 export function gen_complex_re(mnemonic, range) {
   // [+-]i have (?=..) so it don't match +i from +inf.0
-  return `${num_mnemicic_re(mnemonic)}(?:[+-]?(?:${range}+/${range}+|nan.0|inf.0|${range}+))?(?:[+-]i|[+-]?(?:${range}+/${range}+|${range}+|nan.0|inf.0)i)(?=[()[\\]\\s]|$)`;
+  return String.raw`${num_mnemicic_re(mnemonic)}(?:[+-]?(?:${range}+/${range}+|nan.0|inf.0|${range}+))?(?:[+-]i|[+-]?(?:${range}+/${range}+|${range}+|nan.0|inf.0)i)(?=[()[\]\s]|$)`;
 }
 
 export function gen_integer_re(mnemonic, range) {
@@ -32,7 +32,7 @@ const float_stre = String.raw`(?:[-+]?(?:[0-9]+(?:[eE][-+]?[0-9]+)|(?:\.[0-9]+|[
 export const complex_float_stre = `(?:#[ie])?(?:[+-]?(?:[0-9][0-9_]*/[0-9][0-9_]*|nan.0|inf.0|${float_stre}|[+-]?[0-9]+))?(?:${float_stre}|[+-](?:[0-9]+/[0-9]+|[0-9]+|nan.0|inf.0)?)i`;
 export const float_re = new RegExp(`^(#[ie])?${float_stre}$`, "i");
 const character_symbols = Object.keys(characters).join("|");
-const char_sre_re = `#\\\\(?:x[0-9a-f]+|${character_symbols}|[\\s\\S])`;
+const char_sre_re = String.raw`#\\(?:x[0-9a-f]+|${character_symbols}|[\s\S])`;
 export const char_re = new RegExp(`^${char_sre_re}$`, "i"); // regexes with full range but without mnemonics for string->number
 function make_num_stre(fn) {
   const ranges = [

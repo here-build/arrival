@@ -78,13 +78,15 @@ describe("LAW — call-time runCtx: configuration follows the INVOKING run", () 
     // Run A: mint + stash a closure whose body dispatches `read-config`.
     const [captured] = await exec("(capture! (lambda () (read-config)))", {
       capabilities: [cap],
-      config: { greeting: "run-A" } });
+      config: { greeting: "run-A" },
+    });
     expect(captured).toBeDefined();
 
     // Run B: invoke it. The body's `read-config` must see B's config, not A's.
     const [viaB] = await exec("(invoke-held)", {
       capabilities: [cap],
-      config: { greeting: "run-B" } });
+      config: { greeting: "run-B" },
+    });
     expect(viaB).toBe("run-B");
   });
 
@@ -95,11 +97,13 @@ describe("LAW — call-time runCtx: configuration follows the INVOKING run", () 
     // (its def-time ctx is B's substituted bodyCtx) and applies it immediately via `apply-now`.
     await exec("(capture! (lambda () (apply-now (lambda () (read-config)))))", {
       capabilities: [cap],
-      config: { greeting: "run-A" } });
+      config: { greeting: "run-A" },
+    });
 
     const [viaB] = await exec("(invoke-held)", {
       capabilities: [cap],
-      config: { greeting: "run-B" } });
+      config: { greeting: "run-B" },
+    });
     expect(viaB).toBe("run-B");
   });
 });
@@ -112,12 +116,11 @@ describe("LAW — call-time runCtx: strict follows the INVOKING run", () => {
     await exec("(capture! (lambda () (car (quote ()))))", {
       capabilities: [cap],
       config: {},
-      strict: false });
+      strict: false,
+    });
 
     // Invoked under strict B: the body's car-of-nil must throw the R7RS pair typecheck.
-    await expect(
-      exec("(invoke-held)", { capabilities: [cap], config: {}, strict: true }),
-    ).rejects.toThrow();
+    await expect(exec("(invoke-held)", { capabilities: [cap], config: {}, strict: true })).rejects.toThrow();
   });
 
   it("the SAME closure stays tolerant when invoked under tolerant run B (control)", async () => {
@@ -125,10 +128,9 @@ describe("LAW — call-time runCtx: strict follows the INVOKING run", () => {
     await exec("(capture! (lambda () (car (quote ()))))", {
       capabilities: [cap],
       config: {},
-      strict: false });
+      strict: false,
+    });
     // Tolerant B: car-of-nil resolves to nil, no throw.
-    await expect(
-      exec("(invoke-held)", { capabilities: [cap], config: {}, strict: false }),
-    ).resolves.toBeDefined();
+    await expect(exec("(invoke-held)", { capabilities: [cap], config: {}, strict: false })).resolves.toBeDefined();
   });
 });

@@ -88,7 +88,8 @@ const door = (name: string, reason: string, cause?: DoorSymbolDef["cause"]): Doo
 function loaderLike(name: string, onProbe: () => void): EnvCapability<any, any> {
   return EnvCapability.define(name, {
     configuration: {
-      fs: z.custom<{ readFile: (p: string) => Promise<string> }>((v) => v !== null && typeof v === "object").optional() },
+      fs: z.custom<{ readFile: (p: string) => Promise<string> }>((v) => v !== null && typeof v === "object").optional(),
+    },
     symbols: (symbol) => ({
       "probe!": symbol.native`probe!: JS-side effect counter`({ input: [], output: [sz.schemeValue] }, () => {
         onProbe();
@@ -101,7 +102,9 @@ function loaderLike(name: string, onProbe: () => void): EnvCapability<any, any> 
       "require/extension": symbol.native`require/extension: no-op (satisfied fixture)`(
         { input: [sz.schemeValue], output: [sz.schemeValue], requiresConfig: ["fs"] },
         () => nil,
-      ) }) });
+      ),
+    }),
+  });
 }
 
 // ============================================================================
@@ -155,7 +158,9 @@ describe("LAW 1 — flagship: (require …) under a doors-degraded loader-less a
         "run-prompt": nil,
         require: door("require", "loads a file", {
           owner: "arrival/loader",
-          needs: [{ kind: "configuration", key: "fs", hint: "a filesystem" }] }) }),
+          needs: [{ kind: "configuration", key: "fs", hint: "a filesystem" }],
+        }),
+      }),
     );
     const forms = await parse('(run-prompt "summarize" (lambda () (require "file.scm")))');
     const diagnostics = validateProgram(forms, vocab);
@@ -199,7 +204,9 @@ describe("LAW 3 — a program with 3 distinct problems yields 3 diagnostics in O
         list: nil,
         require: door("require", "loads a file", {
           owner: "arrival/loader",
-          needs: [{ kind: "configuration", key: "fs" }] }) }),
+          needs: [{ kind: "configuration", key: "fs" }],
+        }),
+      }),
     );
     const forms = await parse(["(list undefined-a)", '(require "x")', "(undefined-b)"].join("\n"));
     const diagnostics = validateProgram(forms, vocab);
@@ -236,8 +243,11 @@ describe("LAW 4 — macro firewall: binder formals and placeholder tokens never 
     const cap = EnvCapability.define("test/sv-ternary", {
       symbols: (symbol) => ({
         "first-of": symbol.defineSyntax`first-of: expands to its first argument form`("(lambda (a b) a)", {
-          macroAttribute: "expression" }),
-        "first-of-opaque": symbol.defineSyntax`first-of-opaque: same expander, default attribute`("(lambda (a b) a)") }) });
+          macroAttribute: "expression",
+        }),
+        "first-of-opaque": symbol.defineSyntax`first-of-opaque: same expander, default attribute`("(lambda (a b) a)"),
+      }),
+    });
 
     // "expression": the unbound second argument REPORTS at parse phase.
     await expect(exec("(first-of 1 never-bound-arg)", { capabilities: [cap], staticValidation: "on" })).rejects.toThrow(
@@ -349,7 +359,8 @@ describe("LAW 7 — error-tier soundness: strict on dead branches (by design), w
 function requiresConfigCapability(name: string, onRun: () => void): EnvCapability<any, any> {
   return EnvCapability.define(name, {
     configuration: {
-      fs: z.custom<{ readFile: (p: string) => Promise<string> }>((v) => v !== null && typeof v === "object").optional() },
+      fs: z.custom<{ readFile: (p: string) => Promise<string> }>((v) => v !== null && typeof v === "object").optional(),
+    },
     symbols: (symbol) => ({
       "fs/read": symbol.rosetta`fs/read: reads a path via the configured filesystem`(
         { input: [sz.string], output: [sz.string], requiresConfig: ["fs"] },
@@ -357,7 +368,9 @@ function requiresConfigCapability(name: string, onRun: () => void): EnvCapabilit
           onRun();
           return path.toUpperCase();
         },
-      ) }) });
+      ),
+    }),
+  });
 }
 
 describe("LAW 8 — Stage 3: `requiresConfig` auto-mints a cause-carrying door, unconditionally", () => {
@@ -417,7 +430,8 @@ describe("LAW 8 — Stage 3: `requiresConfig` auto-mints a cause-carrying door, 
     const results = await exec(program, {
       capabilities: [cap],
       config: { fs: { readFile: async () => "" } },
-      staticValidation: "on" });
+      staticValidation: "on",
+    });
     expect(results[results.length - 1]).toBe("HI");
     expect(hits).toBe(1);
   });

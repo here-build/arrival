@@ -18,24 +18,7 @@ declare function list<A, B, C>(a: A, b: B, c: C): [A, B, C];
 declare function list<A, B, C, D>(a: A, b: B, c: C, d: D): [A, B, C, D];
 declare function list<A, B, C, D, E>(a: A, b: B, c: C, d: D, e: E): [A, B, C, D, E];
 declare function list<A, B, C, D, E, F>(a: A, b: B, c: C, d: D, e: E, f: F): [A, B, C, D, E, F];
-declare function list<A, B, C, D, E, F, G>(
-  a: A,
-  b: B,
-  c: C,
-  d: D,
-  e: E,
-  f: F,
-  g: G,
-): [A, B, C, D, E, F, G];
-declare function list<A, B, C, D, E, F, G, H>(
-  a: A,
-  b: B,
-  c: C,
-  d: D,
-  e: E,
-  f: F,
-  g: G,
-  h: H,
-): [A, B, C, D, E, F, G, H];
+declare function list<A, B, C, D, E, F, G>(a: A, b: B, c: C, d: D, e: E, f: F, g: G): [A, B, C, D, E, F, G];
+declare function list<A, B, C, D, E, F, G, H>(a: A, b: B, c: C, d: D, e: E, f: F, g: G, h: H): [A, B, C, D, E, F, G, H];
 /** Homogeneous rest (9+ args or un-inferred). */
 declare function list<T>(...xs: T[]): List<T>;

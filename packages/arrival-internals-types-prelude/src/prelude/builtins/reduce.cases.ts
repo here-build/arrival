@@ -11,9 +11,9 @@ expectTypeOf(reduce((x: number, acc: number) => acc + x, 0, [1, 2, 3])).toEqualT
 expectTypeOf(reduce((s: string, acc: number) => acc + s.length, 0, ["a", "bb"])).toEqualTypeOf<number>();
 
 // Empty seed + cons: B inferred from callback return, not never[] from [].
-expectTypeOf(
-  reduce((x: number, acc: List<number>) => cons(x, acc), [], [1, 2, 3] as List<number>),
-).toEqualTypeOf<List<number>>();
+expectTypeOf(reduce((x: number, acc: List<number>) => cons(x, acc), [], [1, 2, 3] as List<number>)).toEqualTypeOf<
+  List<number>
+>();
 
 // @ts-expect-error init type (string) disagrees with the reducer's accumulator/return (number)
 reduce((x: number, acc: number) => acc + x, "seed", [1, 2, 3]);

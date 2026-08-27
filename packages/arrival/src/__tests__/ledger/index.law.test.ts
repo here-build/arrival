@@ -32,7 +32,11 @@ interface LedgerRow {
 }
 
 const GAPS: readonly LedgerRow[] = [
-  { id: "exact/list JSON.stringify throws (BigInt backing)", gate: "numeric-json design", replacedBy: "membrane/crossing" },
+  {
+    id: "exact/list JSON.stringify throws (BigInt backing)",
+    gate: "numeric-json design",
+    replacedBy: "membrane/crossing",
+  },
   { id: "null↔nil round-trip asymmetry", gate: "R1-adjacent ruling", replacedBy: "membrane/crossing null row" },
   { id: "schema-to-ts vector union not deduped", gate: "printer dedup follow-up", replacedBy: "type-layer suite" },
   // ── added by the RULINGS.md R8 mint sweep ─────────────────────────
@@ -48,7 +52,11 @@ const GAPS: readonly LedgerRow[] = [
   // test was building a container production never builds and then ticketing the absence as a code
   // gap. With the fixture crossing its args honestly (V's hygiene law), AJSArray's cells pass on
   // their own merits. ADict's gap is real and stays open.
-  { id: "ADict container carries no grouping-fact provenance", gate: "R2 container-provenance ruling", replacedBy: "laws/term-carrier equals cells (ADict)" },
+  {
+    id: "ADict container carries no grouping-fact provenance",
+    gate: "R2 container-provenance ruling",
+    replacedBy: "laws/term-carrier equals cells (ADict)",
+  },
   // Carried from clone-identity.test.ts (retired in the 2026-07-09 suite
   // consolidation) — the
   // one still-open site of the `=== nil` identity-equality sweep. `toJS`'s entry point special-cases `value === nil` instead
@@ -66,25 +74,41 @@ const GAPS: readonly LedgerRow[] = [
   // this corpus and are NOT conflated with the three documented ones.
   {
     id: "letrec local-closure mux under-designation",
-    gate: "Q8c/Q9-follow-up builder fix (Q8a documented LIMIT, builder.ts header: \"A local closure (letrec-bound lambda) wrapping a port under-designates a mux whose selector calls it\")",
-    replacedBy: "provenance/wireframe-agreement.law.test.ts's letrec-closure-mux row, once selectorReachesPort can see through a letrec-bound closure" },
+    gate: 'Q8c/Q9-follow-up builder fix (Q8a documented LIMIT, builder.ts header: "A local closure (letrec-bound lambda) wrapping a port under-designates a mux whose selector calls it")',
+    replacedBy:
+      "provenance/wireframe-agreement.law.test.ts's letrec-closure-mux row, once selectorReachesPort can see through a letrec-bound closure",
+  },
   {
     id: "non-tail begin sink sequencing over-includes source",
-    gate: "Q8c/Q9-follow-up builder fix (Q8a documented LIMIT, builder.ts header: \"A sink cut in non-tail begin position leaves the wire a sequencing reference to the sink node (D6 territory) — tolerated, not modeled\")",
-    replacedBy: "provenance/wireframe-agreement.law.test.ts's non-tail-begin row, once reachableNodes (or the builder) stops treating a dropped sink's ingress as reachable from the tail value" },
+    gate: 'Q8c/Q9-follow-up builder fix (Q8a documented LIMIT, builder.ts header: "A sink cut in non-tail begin position leaves the wire a sequencing reference to the sink node (D6 territory) — tolerated, not modeled")',
+    replacedBy:
+      "provenance/wireframe-agreement.law.test.ts's non-tail-begin row, once reachableNodes (or the builder) stops treating a dropped sink's ingress as reachable from the tail value",
+  },
   {
     id: "cond => receiver approximation loses test-value dependency",
-    gate: "Q8c/Q9-follow-up builder fix (Q8a documented LIMIT, builder.ts's buildCondMux: \"A `=>` clause's receiver is approximated as the arm — its applied-to-test threading is classifyCond's combine(\\\"=>\\\"), deferred here\")",
-    replacedBy: "provenance/wireframe-agreement.law.test.ts's cond=> row, once the arm wire models applying the receiver to the test's value instead of the raw closure" },
+    gate: 'Q8c/Q9-follow-up builder fix (Q8a documented LIMIT, builder.ts\'s buildCondMux: "A `=>` clause\'s receiver is approximated as the arm — its applied-to-test threading is classifyCond\'s combine(\\"=>\\"), deferred here")',
+    replacedBy:
+      "provenance/wireframe-agreement.law.test.ts's cond=> row, once the arm wire models applying the receiver to the test's value instead of the raw closure",
+  },
   {
     id: "field-shaped pure ops not projection-aware (car/cons sibling leak)",
     gate: "V ruling pending (Q21 audit 2026-07-10: survived the whole Q-track — Q8c built fact wires and Q17 flipped demand-monotonicity WITHOUT a `field` WireframeNode; whether one is added, and where it cuts, is a design ruling. Q9 finding — no `field` WireframeNode is built yet for car/cdr/:field/@ accessors, so a projection's sibling side is NOT pruned from the prospective cone the way the real accessor prunes it from the eager value; distinct from R2 demand-monotonicity, Q8c/Q17's SEPARATE deferred field-DEMAND-lattice concern — this is the ordinary full/flat cone over-including a sibling the runtime provably never touches)",
-    replacedBy: "provenance/wireframe-agreement.law.test.ts's car/cons row, once a `field` node routes the projection the way §1/§2 describe" },
+    replacedBy:
+      "provenance/wireframe-agreement.law.test.ts's car/cons row, once a `field` node routes the projection the way §1/§2 describe",
+  },
 ] as const;
 
 const INVERSIONS: readonly LedgerRow[] = [
-  { id: "forbidden bare-fn authoring form", gate: "McpEnvCapability annotation-lifting", replacedBy: "capability baked-symbol suites" },
-  { id: "bare-fn env.set harness wiring", gate: "W8 ACallable-only env", replacedBy: "ANativeProcedure / hostFnToCallable harnesses" },
+  {
+    id: "forbidden bare-fn authoring form",
+    gate: "McpEnvCapability annotation-lifting",
+    replacedBy: "capability baked-symbol suites",
+  },
+  {
+    id: "bare-fn env.set harness wiring",
+    gate: "W8 ACallable-only env",
+    replacedBy: "ANativeProcedure / hostFnToCallable harnesses",
+  },
 ] as const;
 
 /**
@@ -101,8 +125,9 @@ const INVERSIONS: readonly LedgerRow[] = [
 const STAGED: readonly LedgerRow[] = [
   {
     id: "loop-unroll",
-    gate: "first loop-cone consumer wave — the wireframe-walking driver / P11 drill-in (the row SURVIVED the Q-track completion audit (2026-07-10), never silently dropped. docs/PROVENANCE.md §7: \"widened vs exact-via-count cones\" (finding #19). Both sides' machinery exists since Q16 — widened loop cones refuse per-wire γ with ReplayScopeError and reconstruct via aggregation count + playback — so the law is BODY-able; nobody has staged its body because no consumer demands the widened-vs-exact comparison yet)",
-    replacedBy: "a future `provenance/track-cone.law.test.ts` it.todo row, once its consumer wave stages the body" },
+    gate: 'first loop-cone consumer wave — the wireframe-walking driver / P11 drill-in (the row SURVIVED the Q-track completion audit (2026-07-10), never silently dropped. docs/PROVENANCE.md §7: "widened vs exact-via-count cones" (finding #19). Both sides\' machinery exists since Q16 — widened loop cones refuse per-wire γ with ReplayScopeError and reconstruct via aggregation count + playback — so the law is BODY-able; nobody has staged its body because no consumer demands the widened-vs-exact comparison yet)',
+    replacedBy: "a future `provenance/track-cone.law.test.ts` it.todo row, once its consumer wave stages the body",
+  },
 ] as const;
 
 // The sunrise family dirs this walker governs — mirrors vitest.sunrise.config.ts's
@@ -173,13 +198,10 @@ function findUnledgeredFails(knownIds: ReadonlySet<string>): string[] {
 }
 
 describe("ledger — every gap names its gate", () => {
-  it.each(GAPS.map((g) => [g.id, g] as const))("GAP %s", () => {
-  });
-  it.each(INVERSIONS.map((g) => [g.id, g] as const))("INVERTS %s", () => {
-  });
+  it.each(GAPS.map((g) => [g.id, g] as const))("GAP %s", () => {});
+  it.each(INVERSIONS.map((g) => [g.id, g] as const))("INVERTS %s", () => {});
 
-  it.each(STAGED.map((g) => [g.id, g] as const))("STAGED %s", () => {
-  });
+  it.each(STAGED.map((g) => [g.id, g] as const))("STAGED %s", () => {});
 
   it("meta: no it.fails exists in the suite without a ledger row (walker)", () => {
     const knownIds = new Set([...GAPS, ...INVERSIONS].map((row) => row.id));

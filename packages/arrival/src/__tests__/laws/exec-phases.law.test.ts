@@ -56,8 +56,11 @@ function spyResource(): { resource: Resource<{ tag: string }>; counts: { acquire
           tag: "live",
           [Symbol.asyncDispose]: async () => {
             counts.disposed += 1;
-          } };
-      } } };
+          },
+        };
+      },
+    },
+  };
 }
 
 /** A capability owning ONE spy port + a verb that touches it (spawning it). */
@@ -76,7 +79,9 @@ function spyCapability() {
           await resources.port.get();
           return "touched";
         },
-      ) } });
+      ),
+    },
+  });
   return { capability, counts };
 }
 
@@ -119,7 +124,8 @@ describe("ownership table — phase 5 disposes exactly what the call minted", ()
     const runCtx = await assembleRun({
       capabilities: [capability, ...BASE_ROSTER],
       evalScheme: testEvalScheme,
-      evalPrelude: testEvalPrelude });
+      evalPrelude: testEvalPrelude,
+    });
     const [a] = await exec(`(spy/touch)`, { capabilities: [capability], runCtx });
     const [b] = await exec(`(spy/touch)`, { capabilities: [capability], runCtx });
     expect([a, b]).toEqual(["touched", "touched"]);
@@ -175,7 +181,8 @@ describe("validation without execution (§3.5) — the complete diagnostic list,
     try {
       await execState(`(spy/touch) (definitely-not-bound-anywhere 1)`, {
         capabilities: [capability],
-        staticValidation: "on" });
+        staticValidation: "on",
+      });
     } catch (e) {
       caught = e;
     }

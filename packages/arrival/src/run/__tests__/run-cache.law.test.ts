@@ -31,7 +31,6 @@ import { AExact } from "../../values/primitives/AExact.js";
 const num = (n: number) => new AExact(n);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-
 /** Invoke a baked rosetta procedure via its apply term (the sole membrane spine). */
 function fire(proc: { ["arrival/tagless-final/apply"](args: any[], callCtx: any): any }, callCtx: any, ...args: any[]) {
   return proc["arrival/tagless-final/apply"](args, callCtx);
@@ -192,7 +191,9 @@ function fixture() {
       plain: symbol.rosetta`plain: unclassified`({ input: [z.number], output: [z.number] }, (n: number) => {
         counts.plain++;
         return n - 1;
-      }) }) });
+      }),
+    }),
+  });
   return { cap, counts };
 }
 

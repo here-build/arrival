@@ -27,7 +27,10 @@ async function withStubs(name: string): Promise<(src: string) => Promise<readonl
 }
 
 /** Run `src`; report whether a PurityError door fired (directly or via `.cause`) + its message. */
-async function fire(run: (src: string) => Promise<readonly unknown[]>, src: string): Promise<{ door: boolean; message: string }> {
+async function fire(
+  run: (src: string) => Promise<readonly unknown[]>,
+  src: string,
+): Promise<{ door: boolean; message: string }> {
   try {
     await run(src);
   } catch (e) {
@@ -41,14 +44,22 @@ async function fire(run: (src: string) => Promise<readonly unknown[]>, src: stri
 describe("srfi-stubs — one representative door per family", () => {
   // [family label, source that reaches for a stub, load-bearing redirect substring]
   const cases: ReadonlyArray<readonly [string, string, RegExp]> = [
-    ["hash tables → dicts are native", '(make-hash-table)', /dicts are native/],
+    ["hash tables → dicts are native", "(make-hash-table)", /dicts are native/],
     ["file ports → filesystem tool", '(open-input-file "x.txt")', /filesystem/],
-    ["random → ambient non-determinism", '(random-integer 10)', /ambient/],
-    ["char-sets → char / one-arg predicate", '(char-set-contains? 1 2)', /predicate/],
-    ["time/date → ambient clock", '(current-date)', /ambient/],
-    ["string-filter → filter + string<->list composition", '(string-filter char-numeric? "a1b2")', /list->string \(filter pred \(string->list s\)\)/],
-    ["SRFI-113 sets → no set type, no redirect claimed", '(list->set (list 1 2))', /no set type/],
-    ["string ports → operate on the string directly", '(call-with-input-string "x" (lambda (p) p))', /string ports are omitted/],
+    ["random → ambient non-determinism", "(random-integer 10)", /ambient/],
+    ["char-sets → char / one-arg predicate", "(char-set-contains? 1 2)", /predicate/],
+    ["time/date → ambient clock", "(current-date)", /ambient/],
+    [
+      "string-filter → filter + string<->list composition",
+      '(string-filter char-numeric? "a1b2")',
+      /list->string \(filter pred \(string->list s\)\)/,
+    ],
+    ["SRFI-113 sets → no set type, no redirect claimed", "(list->set (list 1 2))", /no set type/],
+    [
+      "string ports → operate on the string directly",
+      '(call-with-input-string "x" (lambda (p) p))',
+      /string ports are omitted/,
+    ],
   ] as const;
 
   it.each(cases)("%s — fires a door whose message routes to the alternative", async (label, src, redirect) => {
@@ -65,14 +76,14 @@ describe("srfi-stubs — the pack upgrades a WALL into a DOOR", () => {
   // env assembled with NO packs: a bare Unbound variable, the dead end the pack
   // exists to turn into a teaching door.
   const cases = [
-    ["make-hash-table", '(make-hash-table)'],
+    ["make-hash-table", "(make-hash-table)"],
     ["open-input-file", '(open-input-file "x.txt")'],
-    ["random-integer", '(random-integer 10)'],
-    ["char-set-contains?", '(char-set-contains? 1 2)'],
-    ["current-date", '(current-date)'],
+    ["random-integer", "(random-integer 10)"],
+    ["char-set-contains?", "(char-set-contains? 1 2)"],
+    ["current-date", "(current-date)"],
     ["string-filter", '(string-filter char-numeric? "a1b2")'],
-    ["list->set", '(list->set (list 1 2))'],
-    ["set-contains?", '(set-contains? (list 1 2) 1)'],
+    ["list->set", "(list->set (list 1 2))"],
+    ["set-contains?", "(set-contains? (list 1 2) 1)"],
     ["call-with-input-string", '(call-with-input-string "x" (lambda (p) p))'],
   ] as const;
 

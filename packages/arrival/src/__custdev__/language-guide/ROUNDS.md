@@ -10,12 +10,12 @@ Living notes. Metrics are panel-level (4 models × tasks) unless noted.
 
 ## Round 1 — full panel (v0 card)
 
-| Model | exec | oracle | odd | under |
-|---|---:|---:|---:|---:|
-| longcat | 8/10 | 7/10 | 0 | 0 |
-| grok-4.5 | 9/10 | 8/10 | 0 | 0 |
-| fable | 7/10 | 6/10 | 1 | 0 |
-| sonnet | 8/10 | 7/10 | 0 | 0 |
+| Model     |     exec |   oracle |       odd | under |
+| --------- | -------: | -------: | --------: | ----: |
+| longcat   |     8/10 |     7/10 |         0 |     0 |
+| grok-4.5  |     9/10 |     8/10 |         0 |     0 |
+| fable     |     7/10 |     6/10 |         1 |     0 |
+| sonnet    |     8/10 |     7/10 |         0 |     0 |
 | **panel** | **0.80** | **0.70** | **0.025** | **0** |
 
 `invite_hit` = 1.0 on all models (preferred features used when oracle passed).
@@ -34,12 +34,12 @@ Added: `null?` for absence; `(take xs n)` order; `(sort nums >)` + project-then-
 
 ## Round 2 — failed-task retest (v1)
 
-| Task family | Outcome |
-|---|---|
-| group-count | 3/4 models ORACLE_OK; sonnet still reduce-manual |
-| safe-default | 4/4 ORACLE_OK |
-| pipeline-topn | grok+fable OK; longcat+sonnet still lambda-sort |
-| zip-enrich | all OK (fable named-let `loop` false-positive oddity) |
+| Task family   | Outcome                                               |
+| ------------- | ----------------------------------------------------- |
+| group-count   | 3/4 models ORACLE_OK; sonnet still reduce-manual      |
+| safe-default  | 4/4 ORACLE_OK                                         |
+| pipeline-topn | grok+fable OK; longcat+sonnet still lambda-sort       |
+| zip-enrich    | all OK (fable named-let `loop` false-positive oddity) |
 
 ## Patch → v2 card (current)
 
@@ -50,14 +50,14 @@ Dropped `loop` from oddity scanner (named let is legal). Comments stripped befor
 
 `pipeline-topn` + `group-count` × all 4 models: **16/16 ORACLE_OK**, odd=0, under=0.
 
-## Confirmation — full panel (v2 + let* line)
+## Confirmation — full panel (v2 + let\* line)
 
-| Model | exec | oracle | odd | under |
-|---|---:|---:|---:|---:|
-| longcat | 9/10 | 9/10 | 0 | 0 |
-| grok-4.5 | 10/10 | 10/10 | 0 | 0 |
-| fable | 10/10 | 10/10 | 0 | 0 |
-| sonnet | 10/10 | 10/10 | 0 | 0 |
+| Model     |      exec |    oracle |   odd | under |
+| --------- | --------: | --------: | ----: | ----: |
+| longcat   |      9/10 |      9/10 |     0 |     0 |
+| grok-4.5  |     10/10 |     10/10 |     0 |     0 |
+| fable     |     10/10 |     10/10 |     0 |     0 |
+| sonnet    |     10/10 |     10/10 |     0 |     0 |
 | **panel** | **0.975** | **0.975** | **0** | **0** |
 
 `invite_hit` = **1.0**. Acceptance **PASS**.
@@ -66,12 +66,12 @@ Sole residual: longcat `zip-enrich` used parallel `let` where `stat` init refere
 
 ### Delta vs Round 1
 
-| Metric | R1 | Confirm |
-|---|---:|---:|
-| oracle_pass | 0.70 | **0.975** |
-| oddity_rate | 0.025 | **0** |
-| invite_hit | 1.0 | 1.0 |
-| guide size | 56 lines / 1.6 KB | ~70 lines / 2.4 KB |
+| Metric      |                R1 |            Confirm |
+| ----------- | ----------------: | -----------------: |
+| oracle_pass |              0.70 |          **0.975** |
+| oddity_rate |             0.025 |              **0** |
+| invite_hit  |               1.0 |                1.0 |
+| guide size  | 56 lines / 1.6 KB | ~70 lines / 2.4 KB |
 
 ## Minimal redundancy cut (audit ranks 1–3 + inventory hygiene)
 
@@ -79,12 +79,12 @@ Sole residual: longcat `zip-enrich` used parallel `let` where `stat` init refere
 parenthetical; drop ban-list `Clojure (take n xs)` (pipeline line still teaches take).
 **Inventory:** drop Preferred prose re-teach; fix `->` out of “not card-core”.
 
-| Model | exec | oracle | odd | under |
-|---|---:|---:|---:|---:|
-| longcat | 9/10 | 9/10 | 0 | 0 |
-| grok-4.5 | 10/10 | 10/10 | 0 | 0 |
-| fable | 10/10 | 10/10 | 0 | 0 |
-| sonnet | 10/10 | 9/10 | 0 | 0 |
+| Model     |      exec |   oracle |   odd | under |
+| --------- | --------: | -------: | ----: | ----: |
+| longcat   |      9/10 |     9/10 |     0 |     0 |
+| grok-4.5  |     10/10 |    10/10 |     0 |     0 |
+| fable     |     10/10 |    10/10 |     0 |     0 |
+| sonnet    |     10/10 |     9/10 |     0 |     0 |
 | **panel** | **0.975** | **0.95** | **0** | **0** |
 
 `invite_hit` = **1.0**. Acceptance **PASS**. Residual: longcat `pipeline-topn` (sort/lambda
@@ -96,12 +96,12 @@ Vs pre-cut confirm (0.975 oracle): −0.025, still well above 0.70 threshold.
 Card: drop dialect footer; strip map-line comments; drop `-> first-arg` note.
 Keep load-bearing blocks (nil/null?, take/sort/freq examples, ban list, reduce line).
 
-| Model | exec | oracle | odd | under |
-|---|---:|---:|---:|---:|
-| longcat | 10/10 | 10/10 | 0 | 0 |
-| grok-4.5 | 10/10 | 10/10 | 0 | 0 |
-| fable | 10/10 | 10/10 | 0 | 0 |
-| sonnet | 10/10 | 10/10 | 0 | 0 |
+| Model     |    exec |  oracle |   odd | under |
+| --------- | ------: | ------: | ----: | ----: |
+| longcat   |   10/10 |   10/10 |     0 |     0 |
+| grok-4.5  |   10/10 |   10/10 |     0 |     0 |
+| fable     |   10/10 |   10/10 |     0 |     0 |
+| sonnet    |   10/10 |   10/10 |     0 |     0 |
 | **panel** | **1.0** | **1.0** | **0** | **0** |
 
 `invite_hit` = **1.0**. Acceptance **PASS**. Full clean — path B safe.
@@ -114,21 +114,21 @@ Runtime: `str` hoisted to `scheme/polyglot` (native, next to `join`).
 
 ### Full-cut only (no str line) — longcat/grok/sonnet
 
-| Model | oracle |
-|---|---:|
-| longcat | 10/10 |
-| grok-4.5 | 10/10 |
-| sonnet | 8/10 (pipeline-topn lambda-sort; string-report fold-left) |
-| panel | 0.93 |
+| Model    |                                                    oracle |
+| -------- | --------------------------------------------------------: |
+| longcat  |                                                     10/10 |
+| grok-4.5 |                                                     10/10 |
+| sonnet   | 8/10 (pipeline-topn lambda-sort; string-report fold-left) |
+| panel    |                                                      0.93 |
 
 ### After str line + hoist — longcat/grok/sonnet
 
-| Model | oracle | notes |
-|---|---:|---|
-| longcat | 10/10 | |
-| grok-4.5 | 10/10 | |
-| sonnet | 9/10 | group-count still invents fold-left vs frequencies |
-| **panel** | **0.97** | string-report recovered; oddity 0 |
+| Model     |   oracle | notes                                              |
+| --------- | -------: | -------------------------------------------------- |
+| longcat   |    10/10 |                                                    |
+| grok-4.5  |    10/10 |                                                    |
+| sonnet    |     9/10 | group-count still invents fold-left vs frequencies |
+| **panel** | **0.97** | string-report recovered; oddity 0                  |
 
 Card ≈ 46 lines. Residual: frequencies underuse (sonnet only).
 
@@ -140,11 +140,11 @@ Cut: section headers, fat Control section, most ban wall, reduce-for-counts bad 
 Clojure-long glosses. Kept: `(:k d)`, nil/`null?`, take/sort/frequencies/str/join,
 good/bad sort+take, assoc-in, set!/mutators.
 
-| Model | oracle |
-|---|---:|
-| longcat / grok-4.5 | 10/10 |
-| sonnet | 9/10 (group-count alist invent) |
-| **panel** | **0.97** |
+| Model              |                          oracle |
+| ------------------ | ------------------------------: |
+| longcat / grok-4.5 |                           10/10 |
+| sonnet             | 9/10 (group-count alist invent) |
+| **panel**          |                        **0.97** |
 
 ### Loop 2 — further crop (33 → 22 lines) — **regressed**
 

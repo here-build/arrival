@@ -6,11 +6,11 @@ This is the TypeScript type surface for arrival builtins: `sexpr`, `List` / `Tup
 
 ## Exports
 
-| Subpath | Surface |
-| --- | --- |
-| `.` | Node `getPreludeFiles` — reads the shipped `src/` `.d.ts` files via `node:fs`. Also re-exports `PRELUDE_FILE` / `PROGRAM_FILE`. |
-| `./browser` | `getBundledPreludeFiles` — the same map from a vite-inlined `?raw` glob. No `node:fs`. |
-| `./virtual-files` | Path constants (`PRELUDE_FILE`, `PROGRAM_FILE`) for hosts that must not pull `node:fs`. |
+| Subpath           | Surface                                                                                                                         |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `.`               | Node `getPreludeFiles` — reads the shipped `src/` `.d.ts` files via `node:fs`. Also re-exports `PRELUDE_FILE` / `PROGRAM_FILE`. |
+| `./browser`       | `getBundledPreludeFiles` — the same map from a vite-inlined `?raw` glob. No `node:fs`.                                          |
+| `./virtual-files` | Path constants (`PRELUDE_FILE`, `PROGRAM_FILE`) for hosts that must not pull `node:fs`.                                         |
 
 ## Authoring a builtin leaf
 

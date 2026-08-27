@@ -1,8 +1,3 @@
-/* eslint-disable sonarjs/redundant-type-aliases --
-   Ambient prelude `.d.ts`:
-   • `SNum`/`SStr`/`SBool`/`Unit` are RETAINED aliases (each ≡ its primitive) as a
-     COMPAT BRIDGE only — leaf signatures and require shapes use plain TS.
-   • Structural dialect is plain-TS-first: `List`, `Tuple`, `null`, ordinary records. */
 // ─────────────────────────────────────────────────────────────────────────────
 // PRE — the SHARED PRELUDE for the Scheme→TS type lens.
 //

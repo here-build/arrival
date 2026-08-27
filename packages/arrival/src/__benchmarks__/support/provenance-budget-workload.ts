@@ -92,7 +92,8 @@ export const WORKLOAD_SHAPE = {
   nestedInner: 10,
   /** A.2's pure-mux-collapse fix: a SMALL, bounded number of port-coupled
    *  decisions, not the pre-amendment 10⁴–10⁵ (see module doc). */
-  portCoupledMuxDecisions: 128 } as const;
+  portCoupledMuxDecisions: 128,
+} as const;
 
 export const DEFAULT_RING_CAP_BYTES = 6 * 1024 * 1024; // "~4-8MB, configurable" (§4's payload-tiering list, point 1)
 
@@ -170,7 +171,8 @@ export function createWorkloadHarness(
     ringCapBytes,
     ringBytesResident: 0,
     flushedBytesTotal: 0,
-    ringOrder: [] };
+    ringOrder: [],
+  };
 }
 
 /** Land one mint through the ring-first pipeline (§4's payload-tiering list, points 1-2), then enforce
@@ -194,7 +196,8 @@ async function mintThroughRing(
     kind: "mint",
     id: { templateHash, ordinalPath: [ordinal], regionEpoch: "e0" },
     seq,
-    payloadHash: hash };
+    payloadHash: hash,
+  };
   await h.aggregating.append(h.regionId, record);
 
   while (h.ringBytesResident > h.ringCapBytes && h.ringOrder.length > 0) {
@@ -318,13 +321,9 @@ export async function runReferenceWorkload(h: WorkloadHarness): Promise<Workload
     const agentLoopHashes: PayloadHash[] = [];
     const agentTemplateHash = "agent-loop";
     for (let i = 0; i < WORKLOAD_SHAPE.agentLoopIterations; i++) {
-      const hash = await mintThroughRing(
-        h,
-        agentTemplateHash,
-        i,
-        "y".repeat(WORKLOAD_SHAPE.agentLoopPayloadBytes),
-        [1000 + i],
-      );
+      const hash = await mintThroughRing(h, agentTemplateHash, i, "y".repeat(WORKLOAD_SHAPE.agentLoopPayloadBytes), [
+        1000 + i,
+      ]);
       // Sample sparsely (every 500th) — enough for tier-honesty spot checks
       // without retaining a 10⁴-entry hash array of our own.
       if (i % 500 === 0) agentLoopHashes.push(hash);
@@ -346,7 +345,8 @@ export async function runReferenceWorkload(h: WorkloadHarness): Promise<Workload
         store: h.aggregating,
         regionId: h.regionId,
         id: { templateHash: "port-coupled-mux", ordinalPath: [i], regionEpoch: "e0" },
-        arm: i % 2 });
+        arm: i % 2,
+      });
     }
 
     return {
@@ -361,10 +361,12 @@ export async function runReferenceWorkload(h: WorkloadHarness): Promise<Workload
         nestedOuterIterations: WORKLOAD_SHAPE.nestedOuter,
         nestedInnerRawFacts,
         nestedRuns,
-        muxDecisions: WORKLOAD_SHAPE.portCoupledMuxDecisions },
+        muxDecisions: WORKLOAD_SHAPE.portCoupledMuxDecisions,
+      },
       sampleMintHashes: { rosetta: rosettaHashes, agentLoop: agentLoopHashes },
       ringBytesResidentFinal: h.ringBytesResident,
-      flushedBytesTotal: h.flushedBytesTotal };
+      flushedBytesTotal: h.flushedBytesTotal,
+    };
   } finally {
     setEmissionEnabled(false);
   }

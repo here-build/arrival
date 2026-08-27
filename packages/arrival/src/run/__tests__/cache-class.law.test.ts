@@ -66,7 +66,10 @@ describe("cache class — declaration + resolution (never derived, absent = rege
     ).toBe("view");
     expect(
       contractOf<SequenceSymbolDef>(
-        symbol.sequence`cc-seq-view: `({ input: [z.string], output: [z.string], cacheClass: "view" }, (args) => args[0]),
+        symbol.sequence`cc-seq-view: `(
+          { input: [z.string], output: [z.string], cacheClass: "view" },
+          (args) => args[0],
+        ),
       ).cacheClass,
     ).toBe("view");
   });
@@ -203,7 +206,9 @@ describe("stamping — the resolved class rides the provenanceRole rails onto th
         symbols: (symbol, z) => ({
           "cc/view": symbol.rosetta`cc/view: `({ input: [z.string], output: [z.string], cacheClass: "view" }, (s) => s),
           "cc/pure": symbol.rosetta`cc/pure: `({ input: [z.string], output: [z.string], cacheClass: "pure" }, (s) => s),
-          "cc/plain": symbol.rosetta`cc/plain: `({ input: [z.string], output: [z.string] }, (s) => s) }) }),
+          "cc/plain": symbol.rosetta`cc/plain: `({ input: [z.string], output: [z.string] }, (s) => s),
+        }),
+      }),
     ]);
   });
 

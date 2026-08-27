@@ -43,7 +43,9 @@ const greeter = EnvCapability.define("test/define-greeter", {
         void this.configuration.key;
         return this.resources.shout(s);
       },
-    ) }) });
+    ),
+  }),
+});
 
 describe("EnvCapability.define (Stage 1c)", () => {
   it("threads typed configuration + resources onto `this` at real evaluator dispatch", async () => {
@@ -66,7 +68,9 @@ describe("EnvCapability.define (Stage 1c)", () => {
             void this.configuration.wrong;
             return this.resources.shout(s);
           },
-        ) }) });
+        ),
+      }),
+    });
     expect(true).toBe(true);
   });
 });

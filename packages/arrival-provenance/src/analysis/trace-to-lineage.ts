@@ -56,10 +56,7 @@ export interface LineageGraph {
  * The whole op-sequence lineage as a set of wires. The classifier defaults to
  * `classifierFromTrace` — the trace self-describes its sources, so nothing needs wiring in.
  */
-export function traceToLineage(
-  trace: EvalTrace,
-  classifier: Classifier = classifierFromTrace(trace),
-): LineageGraph {
+export function traceToLineage(trace: EvalTrace, classifier: Classifier = classifierFromTrace(trace)): LineageGraph {
   const auto = trace.autoBindings;
   if (!auto) {
     return { wires: [], warnings: ["no AutoBindings sidecar — call trace.withAutoBindings() to surface lineage"] };
@@ -71,8 +68,8 @@ export function traceToLineage(
     const consumer = inv.id;
     const scope = subtreeIds(inv); // ground this consumer's slots only against ITS subtree's bindings
     const args = operandsOf(inv.node);
-    for (let slot = 0; slot < args.length; slot++) {
-      const skeleton = classify(args[slot]!, classifier);
+    for (const [slot, arg] of args.entries()) {
+      const skeleton = classify(arg!, classifier);
       if (skeleton.kind === "literal") continue; // an inert arg carries no lineage to render
       const bindings = scopedBindings(auto, scope, slotsOf(skeleton));
       wires.push({ consumer, slot, skeleton, bindings });
@@ -184,7 +181,9 @@ export function wireOpChains(wire: LineageWire): Map<number, readonly string[]> 
         walk(n.selector, [...acc, n.op]);
         n.arms.forEach((a) => walk(a, [...acc, n.op]));
         break;
-      // literal / opaque carry no renderable transform chain.
+      default:
+        // literal / opaque / sink / transparent / binder carry no renderable transform chain.
+        break;
     }
   };
   walk(wire.skeleton, []);

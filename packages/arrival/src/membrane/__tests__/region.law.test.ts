@@ -46,7 +46,8 @@ function makeEcho(): ANativeProcedure {
     name: "echo",
     arity: { min: 1, max: 1 },
     contract: undefined,
-    impl: (args) => args[0] });
+    impl: (args) => args[0],
+  });
 }
 
 /** A callable whose impl never settles — lets the abort row prove the
@@ -56,7 +57,8 @@ function makeHangingProc(): ANativeProcedure {
     name: "hang",
     arity: { min: 0, max: 0 },
     contract: undefined,
-    impl: () => new Promise<never>(() => {}) });
+    impl: () => new Promise<never>(() => {}),
+  });
 }
 
 describe("a reverse lambda is region-bound to its invocation", () => {
@@ -86,10 +88,7 @@ describe("a reverse lambda is region-bound to its invocation", () => {
     const controller = new AbortController();
     const runCtx = new RunContext({ signal: controller.signal });
     const scope = openRegionScope({ runCtx, dynSite: undefined });
-    const wrapper = withRegionScope(
-      scope,
-      () => toJS(makeHangingProc()) as (...a: unknown[]) => Promise<unknown>,
-    );
+    const wrapper = withRegionScope(scope, () => toJS(makeHangingProc()) as (...a: unknown[]) => Promise<unknown>);
     const call = wrapper();
     controller.abort(new Error("region-law abort probe"));
     await expect(call).rejects.toThrow("region-law abort probe");
@@ -133,7 +132,9 @@ describe("a reverse lambda is region-bound to its invocation", () => {
             result = await capturedWrapper(41);
             return undefined;
           },
-        ) }) });
+        ),
+      }),
+    });
 
     await execState("(region-law-capture (lambda (x) (+ x 1)))", { capabilities: [cap], tap: trace });
     expect(capturedInv).toBeDefined();
@@ -217,7 +218,9 @@ describe("a reverse lambda is region-bound to its invocation", () => {
             await lambdaWrapper();
             return undefined;
           },
-        ) }) });
+        ),
+      }),
+    });
 
     await exec("(call-with-lambda (lambda () (sink! 1)))", { capabilities: [cap], effects });
 

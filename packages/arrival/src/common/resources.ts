@@ -9,6 +9,8 @@
 /** A typed, cyclable boundary to something external — an Erlang port. `kind` is the
  *  driver class ("socket"); H is the handle CONTRACT consumers depend on. Two
  *  drivers (ws / udp) share a kind, differ in `acquire`. */
+import { ResourceNotLiveError } from "../errors.js";
+
 export interface Resource<H> {
   readonly kind: string;
   /** Open the port → a handle carrying its own async teardown. MUST honor
@@ -39,8 +41,6 @@ export interface Ref<H> {
   peek(): H | undefined;
   readonly isLive: boolean;
 }
-
-import { ResourceNotLiveError } from "../errors.js";
 
 /** Wrap a plain `value + close()` into a disposable handle — so a driver author
  *  needn't implement the symbol by hand. `(s) => s.close()` is the usual closer. */

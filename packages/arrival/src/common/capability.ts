@@ -12,9 +12,9 @@
 import { z } from "zod";
 
 import { type Ref, type Resource, ResourceCell, windDownAll } from "./resources.js";
-import type { RestSpec, VectorSpec } from "./symbols/_bake.js";
-import { CallCtx } from "../run/CallCtx.js";
 import {
+  type RestSpec,
+  type VectorSpec,
   type BakeRuntimeOpts,
   type ContourContract,
   type CrossingContract,
@@ -26,6 +26,7 @@ import {
   type MacroSymbolDef,
   type MetadataRecord,
 } from "./symbols/_bake.js";
+import { CallCtx } from "../run/CallCtx.js";
 // Value imports for `EnvCapability.define`'s injected `(symbol, z)` factory pair.
 // No cycle: `./symbols/index.js` and `./scheme-zod.js` sit below this file (capability imports
 // `./symbols/_bake.js` / ACallable; neither imports back up to `capability.ts`).

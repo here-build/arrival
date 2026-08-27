@@ -105,138 +105,182 @@ const T = 30000;
 
 describe("tail-call optimization (R7RS §3.5)", () => {
   describe("positive — O(1) stack at 50k depth (would overflow pre-TCO)", () => {
-    it("self-recursion via define — `if` else arm is in tail position (§3.5)", async () => {
-      // The shipped test covered this at 10k; 50k confirms genuine O(1) space.
-      const r = await run(`(define (loop n) (if (= n 0) 'done (loop (- n 1)))) (loop ${DEPTH})`);
-      expect(String(r)).toBe("done");
-    }, T);
+    it(
+      "self-recursion via define — `if` else arm is in tail position (§3.5)",
+      async () => {
+        // The shipped test covered this at 10k; 50k confirms genuine O(1) space.
+        const r = await run(`(define (loop n) (if (= n 0) 'done (loop (- n 1)))) (loop ${DEPTH})`);
+        expect(String(r)).toBe("done");
+      },
+      T,
+    );
 
-    it("named-let — loop body is tail w.r.t. the (loop …) call site (§3.5; bounce path)", async () => {
-      const r = await run(`(let loop ((i 0)) (if (= i ${DEPTH}) 'done (loop (+ i 1))))`);
-      expect(String(r)).toBe("done");
-    }, T);
+    it(
+      "named-let — loop body is tail w.r.t. the (loop …) call site (§3.5; bounce path)",
+      async () => {
+        const r = await run(`(let loop ((i 0)) (if (= i ${DEPTH}) 'done (loop (+ i 1))))`);
+        expect(String(r)).toBe("done");
+      },
+      T,
+    );
 
-    it("mutual tail recursion — each call sits in the other's `if` tail arm (§3.5)", async () => {
-      const r = await run(
-        `(define (even? n) (if (= n 0) #t (odd? (- n 1))))
+    it(
+      "mutual tail recursion — each call sits in the other's `if` tail arm (§3.5)",
+      async () => {
+        const r = await run(
+          `(define (even? n) (if (= n 0) #t (odd? (- n 1))))
          (define (odd? n) (if (= n 0) #f (even? (- n 1))))
          (even? ${DEPTH})`,
-      );
-      // `even?` returns a boxed SchemeBool (#t), not the JS primitive `true`;
-      // compare via String like the other cases. 50,000 is even.
-      expect(String(r)).toBe("#t");
-    }, T);
+        );
+        // `even?` returns a boxed SchemeBool (#t), not the JS primitive `true`;
+        // compare via String like the other cases. 50,000 is even.
+        expect(String(r)).toBe("#t");
+      },
+      T,
+    );
 
-    it("cond else arm — matched clause body inherits cond's tail flag (§3.5)", async () => {
-      const r = await run(
-        `(define (loop n) (cond ((= n 0) 'done) (else (loop (- n 1))))) (loop ${DEPTH})`,
-      );
-      expect(String(r)).toBe("done");
-    }, T);
+    it(
+      "cond else arm — matched clause body inherits cond's tail flag (§3.5)",
+      async () => {
+        const r = await run(`(define (loop n) (cond ((= n 0) 'done) (else (loop (- n 1))))) (loop ${DEPTH})`);
+        expect(String(r)).toBe("done");
+      },
+      T,
+    );
 
-    it("cond non-else arm — a matched (test body) clause body is also tail (§3.5)", async () => {
-      // Distinct from the else fallthrough: the recursive call sits in a clause
-      // whose TEST matched, exercising evalCond's `evalBegin(exprs, ctx)` tail
-      // path with the controlFlowResolve onResolve attached.
-      const r = await run(
-        `(define (loop n) (cond ((> n 0) (loop (- n 1))) (else 'done))) (loop ${DEPTH})`,
-      );
-      expect(String(r)).toBe("done");
-    }, T);
+    it(
+      "cond non-else arm — a matched (test body) clause body is also tail (§3.5)",
+      async () => {
+        // Distinct from the else fallthrough: the recursive call sits in a clause
+        // whose TEST matched, exercising evalCond's `evalBegin(exprs, ctx)` tail
+        // path with the controlFlowResolve onResolve attached.
+        const r = await run(`(define (loop n) (cond ((> n 0) (loop (- n 1))) (else 'done))) (loop ${DEPTH})`);
+        expect(String(r)).toBe("done");
+      },
+      T,
+    );
 
-    it("case arm — matched clause body inherits case's tail flag (§3.5)", async () => {
-      const r = await run(
-        `(define (loop n) (case n ((0) 'done) (else (loop (- n 1))))) (loop ${DEPTH})`,
-      );
-      expect(String(r)).toBe("done");
-    }, T);
+    it(
+      "case arm — matched clause body inherits case's tail flag (§3.5)",
+      async () => {
+        const r = await run(`(define (loop n) (case n ((0) 'done) (else (loop (- n 1))))) (loop ${DEPTH})`);
+        expect(String(r)).toBe("done");
+      },
+      T,
+    );
 
-    it("cond => arm — the (proc test-value) application is tail (§3.5)", async () => {
-      // R7RS §3.5 puts the `(proc test)` application of a `(test => proc)` clause
-      // in tail position. Previously this evaluator applied proc via a nested
-      // `run()` (host-stack growth → overflow at depth); applyArrowProc now routes
-      // it through the trampoline bounce protocol, so reaching 50k proves the
-      // application collapses. The proc tail-calls `loop`, so BOTH the `=>` apply
-      // and the proc body must stay flat.
-      const r = await run(
-        `(define (loop n) (cond ((> n 0) => (lambda (_) (loop (- n 1)))) (else 'done))) (loop ${DEPTH})`,
-      );
-      expect(String(r)).toBe("done");
-    }, T);
+    it(
+      "cond => arm — the (proc test-value) application is tail (§3.5)",
+      async () => {
+        // R7RS §3.5 puts the `(proc test)` application of a `(test => proc)` clause
+        // in tail position. Previously this evaluator applied proc via a nested
+        // `run()` (host-stack growth → overflow at depth); applyArrowProc now routes
+        // it through the trampoline bounce protocol, so reaching 50k proves the
+        // application collapses. The proc tail-calls `loop`, so BOTH the `=>` apply
+        // and the proc body must stay flat.
+        const r = await run(
+          `(define (loop n) (cond ((> n 0) => (lambda (_) (loop (- n 1)))) (else 'done))) (loop ${DEPTH})`,
+        );
+        expect(String(r)).toBe("done");
+      },
+      T,
+    );
 
-    it("case => arm — the (proc key) application is tail (§3.5; R7RS §6.3)", async () => {
-      // case's `(datums => proc)` mirrors cond's `=>` through the same helper.
-      const r = await run(
-        `(define (loop n) (case (> n 0) ((#t) => (lambda (_) (loop (- n 1)))) (else 'done))) (loop ${DEPTH})`,
-      );
-      expect(String(r)).toBe("done");
-    }, T);
+    it(
+      "case => arm — the (proc key) application is tail (§3.5; R7RS §6.3)",
+      async () => {
+        // case's `(datums => proc)` mirrors cond's `=>` through the same helper.
+        const r = await run(
+          `(define (loop n) (case (> n 0) ((#t) => (lambda (_) (loop (- n 1)))) (else 'done))) (loop ${DEPTH})`,
+        );
+        expect(String(r)).toBe("done");
+      },
+      T,
+    );
 
-    it("when body — last body expr is tail when test passes (§3.5)", async () => {
-      const r = await run(
-        `(define (loop n) (if (= n 0) 'done (when #t (loop (- n 1))))) (loop ${DEPTH})`,
-      );
-      expect(String(r)).toBe("done");
-    }, T);
+    it(
+      "when body — last body expr is tail when test passes (§3.5)",
+      async () => {
+        const r = await run(`(define (loop n) (if (= n 0) 'done (when #t (loop (- n 1))))) (loop ${DEPTH})`);
+        expect(String(r)).toBe("done");
+      },
+      T,
+    );
 
-    it("unless body — last body expr is tail when test fails (§3.5)", async () => {
-      const r = await run(
-        `(define (loop n) (if (= n 0) 'done (unless #f (loop (- n 1))))) (loop ${DEPTH})`,
-      );
-      expect(String(r)).toBe("done");
-    }, T);
+    it(
+      "unless body — last body expr is tail when test fails (§3.5)",
+      async () => {
+        const r = await run(`(define (loop n) (if (= n 0) 'done (unless #f (loop (- n 1))))) (loop ${DEPTH})`);
+        expect(String(r)).toBe("done");
+      },
+      T,
+    );
 
-    it("and last-expr — the final conjunct is in tail position (§3.5)", async () => {
-      const r = await run(
-        `(define (loop n) (if (= n 0) 'done (and #t (loop (- n 1))))) (loop ${DEPTH})`,
-      );
-      expect(String(r)).toBe("done");
-    }, T);
+    it(
+      "and last-expr — the final conjunct is in tail position (§3.5)",
+      async () => {
+        const r = await run(`(define (loop n) (if (= n 0) 'done (and #t (loop (- n 1))))) (loop ${DEPTH})`);
+        expect(String(r)).toBe("done");
+      },
+      T,
+    );
 
-    it("or last-expr — the final disjunct is in tail position (§3.5)", async () => {
-      const r = await run(
-        `(define (loop n) (if (= n 0) 'done (or #f (loop (- n 1))))) (loop ${DEPTH})`,
-      );
-      expect(String(r)).toBe("done");
-    }, T);
+    it(
+      "or last-expr — the final disjunct is in tail position (§3.5)",
+      async () => {
+        const r = await run(`(define (loop n) (if (= n 0) 'done (or #f (loop (- n 1))))) (loop ${DEPTH})`);
+        expect(String(r)).toBe("done");
+      },
+      T,
+    );
 
-    it("begin last-expr — only the final sequence expr is tail (§3.5)", async () => {
-      const r = await run(
-        `(define (loop n) (if (= n 0) 'done (begin 1 (loop (- n 1))))) (loop ${DEPTH})`,
-      );
-      expect(String(r)).toBe("done");
-    }, T);
+    it(
+      "begin last-expr — only the final sequence expr is tail (§3.5)",
+      async () => {
+        const r = await run(`(define (loop n) (if (= n 0) 'done (begin 1 (loop (- n 1))))) (loop ${DEPTH})`);
+        expect(String(r)).toBe("done");
+      },
+      T,
+    );
 
-    it("let body — body inherits the let's tail flag (§3.5)", async () => {
-      const r = await run(
-        `(define (loop n) (if (= n 0) 'done (let ((m (- n 1))) (loop m)))) (loop ${DEPTH})`,
-      );
-      expect(String(r)).toBe("done");
-    }, T);
+    it(
+      "let body — body inherits the let's tail flag (§3.5)",
+      async () => {
+        const r = await run(`(define (loop n) (if (= n 0) 'done (let ((m (- n 1))) (loop m)))) (loop ${DEPTH})`);
+        expect(String(r)).toBe("done");
+      },
+      T,
+    );
 
-    it("let* body — body inherits the let*'s tail flag (§3.5)", async () => {
-      const r = await run(
-        `(define (loop n) (if (= n 0) 'done (let* ((m (- n 1))) (loop m)))) (loop ${DEPTH})`,
-      );
-      expect(String(r)).toBe("done");
-    }, T);
+    it(
+      "let* body — body inherits the let*'s tail flag (§3.5)",
+      async () => {
+        const r = await run(`(define (loop n) (if (= n 0) 'done (let* ((m (- n 1))) (loop m)))) (loop ${DEPTH})`);
+        expect(String(r)).toBe("done");
+      },
+      T,
+    );
 
-    it("letrec body — body inherits the letrec's tail flag (§3.5)", async () => {
-      const r = await run(
-        `(define (loop n) (if (= n 0) 'done (letrec ((m (- n 1))) (loop m)))) (loop ${DEPTH})`,
-      );
-      expect(String(r)).toBe("done");
-    }, T);
+    it(
+      "letrec body — body inherits the letrec's tail flag (§3.5)",
+      async () => {
+        const r = await run(`(define (loop n) (if (= n 0) 'done (letrec ((m (- n 1))) (loop m)))) (loop ${DEPTH})`);
+        expect(String(r)).toBe("done");
+      },
+      T,
+    );
 
-    it("lambda immediately applied in tail position — the application site is tail (§3.5)", async () => {
-      // `((lambda (m) (loop m)) (- n 1))` in the if-arm: the thunk application
-      // is itself a tail call (evaluatePair tailCall path), and the thunk
-      // body's `(loop m)` is tail too — collapse must reach through both.
-      const r = await run(
-        `(define (loop n) (if (= n 0) 'done ((lambda (m) (loop m)) (- n 1)))) (loop ${DEPTH})`,
-      );
-      expect(String(r)).toBe("done");
-    }, T);
+    it(
+      "lambda immediately applied in tail position — the application site is tail (§3.5)",
+      async () => {
+        // `((lambda (m) (loop m)) (- n 1))` in the if-arm: the thunk application
+        // is itself a tail call (evaluatePair tailCall path), and the thunk
+        // body's `(loop m)` is tail too — collapse must reach through both.
+        const r = await run(`(define (loop n) (if (= n 0) 'done ((lambda (m) (loop m)) (- n 1)))) (loop ${DEPTH})`);
+        expect(String(r)).toBe("done");
+      },
+      T,
+    );
   });
 
   describe("negative — NON-tail positions must NOT be over-optimized", () => {
@@ -248,50 +292,66 @@ describe("tail-call optimization (R7RS §3.5)", () => {
     // here are kept at 5000: large enough to exercise many frames, far below
     // any OOM risk.
 
-    it("non-tail argument position — `(+ (sum (- n 1)) 1)` keeps every +1 frame (§3.5: operands are NOT tail)", async () => {
-      // (sum n) === n iff all n stacked `(+ … 1)` frames executed. If the
-      // recursive call had been (wrongly) tail-collapsed, those additions would
-      // be dropped and the result would not equal n.
-      const r = await run("(define (sum n) (if (= n 0) 0 (+ (sum (- n 1)) 1))) (sum 5000)");
-      expect(String(r)).toBe("5000");
-    }, T);
+    it(
+      "non-tail argument position — `(+ (sum (- n 1)) 1)` keeps every +1 frame (§3.5: operands are NOT tail)",
+      async () => {
+        // (sum n) === n iff all n stacked `(+ … 1)` frames executed. If the
+        // recursive call had been (wrongly) tail-collapsed, those additions would
+        // be dropped and the result would not equal n.
+        const r = await run("(define (sum n) (if (= n 0) 0 (+ (sum (- n 1)) 1))) (sum 5000)");
+        expect(String(r)).toBe("5000");
+      },
+      T,
+    );
 
-    it("non-last expr in begin — trailing expr after the recursive call still runs, in order (§3.5: only begin's last is tail)", async () => {
-      // The recursive (f (- n 1)) is the begin's FIRST (non-last ⇒ non-tail) expr;
-      // the trailing (tick) must run after each recursion returns. A wrongly-collapsed
-      // call would replace the frame mid-sequence and lose the 5000 trailing ticks.
-      // Observation is a JS-side counter (the same NO-scheme-set! technique arrival's
-      // own chibi-harness uses for its bookkeeping) — pure dataflow from the guest:
-      // it just calls a bound function; the count lives in JS, not a mutated binding.
-      let ticks = 0;
-      const env = await freshEnv() as EnvWithInternals<ResolvingAmbient>;
-      env.bind("tick", new ANativeProcedure({
-          name: "tick",
-          arity: { min: 0, max: 0 },
-          contract: undefined,
-          impl: () => {
-            ticks += 1;
-            return nil;
-          } }));
-      await execSource(
-        `(define (f n) (if (= n 0) 0 (begin (f (- n 1)) (tick))))
+    it(
+      "non-last expr in begin — trailing expr after the recursive call still runs, in order (§3.5: only begin's last is tail)",
+      async () => {
+        // The recursive (f (- n 1)) is the begin's FIRST (non-last ⇒ non-tail) expr;
+        // the trailing (tick) must run after each recursion returns. A wrongly-collapsed
+        // call would replace the frame mid-sequence and lose the 5000 trailing ticks.
+        // Observation is a JS-side counter (the same NO-scheme-set! technique arrival's
+        // own chibi-harness uses for its bookkeeping) — pure dataflow from the guest:
+        // it just calls a bound function; the count lives in JS, not a mutated binding.
+        let ticks = 0;
+        const env = (await freshEnv()) as EnvWithInternals<ResolvingAmbient>;
+        env.bind(
+          "tick",
+          new ANativeProcedure({
+            name: "tick",
+            arity: { min: 0, max: 0 },
+            contract: undefined,
+            impl: () => {
+              ticks += 1;
+              return nil;
+            },
+          }),
+        );
+        await execSource(
+          `(define (f n) (if (= n 0) 0 (begin (f (- n 1)) (tick))))
          (f 5000)`,
-        { env },
-      );
-      expect(ticks).toBe(5000);
-    }, T);
+          { env },
+        );
+        expect(ticks).toBe(5000);
+      },
+      T,
+    );
 
-    it("non-last begin expr — sequencing intact, trailing expr is the returned value (§3.5)", async () => {
-      // Depth-free sequencing check: if a tail call had replaced the begin slot
-      // at `(side)`, the trailing `'after` would be lost. Asserting the result
-      // is 'after proves the begin resumed past its first expr.
-      const r = await run(
-        `(define (side) 'ignored)
+    it(
+      "non-last begin expr — sequencing intact, trailing expr is the returned value (§3.5)",
+      async () => {
+        // Depth-free sequencing check: if a tail call had replaced the begin slot
+        // at `(side)`, the trailing `'after` would be lost. Asserting the result
+        // is 'after proves the begin resumed past its first expr.
+        const r = await run(
+          `(define (side) 'ignored)
          (define (go) (begin (side) 'after))
          (go)`,
-      );
-      expect(String(r)).toBe("after");
-    }, T);
+        );
+        expect(String(r)).toBe("after");
+      },
+      T,
+    );
 
     // ── cond/case `=>` arm: NOW tail-optimized (was the lone non-tail gap) ──
     //
@@ -307,65 +367,75 @@ describe("tail-call optimization (R7RS §3.5)", () => {
   });
 
   describe("composition", () => {
-    it("TCO + provenance/tap — tap enter/exit stays balanced across a collapsed tail loop (popped frames still fire exit)", async () => {
-      // The full arrival-chain provenance chain ((infer …) → AValue stamping →
-      // lineage) needs the arrival-chain harness — out of scope for the
-      // arrival-scheme slice (per the task's "test the arrival-scheme-only
-      // slice" fallback). What this slice DOES validate is the load-bearing
-      // claim the trampoline's tailCall handler makes: when the tail tower
-      // collapses, each popped slot's `onResolve`/`onReject` (which is how
-      // tap.exit and provenance stamping ride through — see evaluate()'s
-      // pass-through `{ call }` and the controlFlowResolve war story) is
-      // COMPOSED onto the replacement slot so it still fires when the tail
-      // chain finally returns. If a collapsed frame dropped its exit, the tap
-      // would see fewer exits than enters and lineage would break at every
-      // tail step. We attach a counting tap and assert exact balance.
-      let enters = 0;
-      let exits = 0;
-      let errorExits = 0;
-      const tap = {
-        enter(): unknown {
-          enters++;
-          return {};
-        },
-        exit(_inv: unknown, result: { value: unknown } | { error: unknown }): void {
-          exits++;
-          if ("error" in result) errorExits++;
-        } };
-      // A short tail loop so the tap fires a bounded, inspectable count. Each
-      // iteration enters several Pairs ((loop …), (if …), (= …), (- …)); the
-      // exact total is incidental — per-frame balance is the invariant.
-      const results = await execSource(
-        "(define (loop n) (if (= n 0) 'done (loop (- n 1)))) (loop 200)",
-        { tap },
-      );
-      expect(String(results[results.length - 1])).toBe("done");
-      expect(enters).toBeGreaterThan(200); // many frames per iteration, ≥1 per level
-      // The load-bearing assertion: every enter on a (possibly later collapsed)
-      // frame is matched by an exit. A dropped exit on a collapsed frame — the
-      // bug the composed-onResolve machinery guards against — would make
-      // exits < enters.
-      expect(exits).toBe(enters);
-      // The loop completes successfully, so no frame exits via the error path.
-      expect(errorExits).toBe(0);
-    }, T);
+    it(
+      "TCO + provenance/tap — tap enter/exit stays balanced across a collapsed tail loop (popped frames still fire exit)",
+      async () => {
+        // The full arrival-chain provenance chain ((infer …) → AValue stamping →
+        // lineage) needs the arrival-chain harness — out of scope for the
+        // arrival-scheme slice (per the task's "test the arrival-scheme-only
+        // slice" fallback). What this slice DOES validate is the load-bearing
+        // claim the trampoline's tailCall handler makes: when the tail tower
+        // collapses, each popped slot's `onResolve`/`onReject` (which is how
+        // tap.exit and provenance stamping ride through — see evaluate()'s
+        // pass-through `{ call }` and the controlFlowResolve war story) is
+        // COMPOSED onto the replacement slot so it still fires when the tail
+        // chain finally returns. If a collapsed frame dropped its exit, the tap
+        // would see fewer exits than enters and lineage would break at every
+        // tail step. We attach a counting tap and assert exact balance.
+        let enters = 0;
+        let exits = 0;
+        let errorExits = 0;
+        const tap = {
+          enter(): unknown {
+            enters++;
+            return {};
+          },
+          exit(_inv: unknown, result: { value: unknown } | { error: unknown }): void {
+            exits++;
+            if ("error" in result) errorExits++;
+          },
+        };
+        // A short tail loop so the tap fires a bounded, inspectable count. Each
+        // iteration enters several Pairs ((loop …), (if …), (= …), (- …)); the
+        // exact total is incidental — per-frame balance is the invariant.
+        const results = await execSource("(define (loop n) (if (= n 0) 'done (loop (- n 1)))) (loop 200)", { tap });
+        expect(String(results[results.length - 1])).toBe("done");
+        expect(enters).toBeGreaterThan(200); // many frames per iteration, ≥1 per level
+        // The load-bearing assertion: every enter on a (possibly later collapsed)
+        // frame is matched by an exit. A dropped exit on a collapsed frame — the
+        // bug the composed-onResolve machinery guards against — would make
+        // exits < enters.
+        expect(exits).toBe(enters);
+        // The loop completes successfully, so no frame exits via the error path.
+        expect(errorExits).toBe(0);
+      },
+      T,
+    );
 
-    it("return-value correctness — a tail countdown returns the right symbol, not just 'no crash'", async () => {
-      // O(1) space is necessary but not sufficient: the collapsed chain must
-      // still thread the base-case value back to the original consumer (the
-      // onResolve/onReject transfer in the trampoline tailCall handler). A bug
-      // there returned `undefined` — the war story's "value lost in the orphaned
-      // tower". Assert the exact symbol comes back.
-      const r = await run("(define (cd n) (if (= n 0) 'liftoff (cd (- n 1)))) (cd 1000)");
-      expect(String(r)).toBe("liftoff");
-    }, T);
+    it(
+      "return-value correctness — a tail countdown returns the right symbol, not just 'no crash'",
+      async () => {
+        // O(1) space is necessary but not sufficient: the collapsed chain must
+        // still thread the base-case value back to the original consumer (the
+        // onResolve/onReject transfer in the trampoline tailCall handler). A bug
+        // there returned `undefined` — the war story's "value lost in the orphaned
+        // tower". Assert the exact symbol comes back.
+        const r = await run("(define (cd n) (if (= n 0) 'liftoff (cd (- n 1)))) (cd 1000)");
+        expect(String(r)).toBe("liftoff");
+      },
+      T,
+    );
 
-    it("return-value correctness — a computed accumulator threads through a named-let tail loop (§3.5)", async () => {
-      // Factorial-style accumulator proves the collapsed chain carries a
-      // COMPUTED value (not just a constant sentinel). 5! = 120.
-      const r = await run("(let loop ((n 5) (acc 1)) (if (= n 0) acc (loop (- n 1) (* acc n))))");
-      expect(String(r)).toBe("120");
-    }, T);
+    it(
+      "return-value correctness — a computed accumulator threads through a named-let tail loop (§3.5)",
+      async () => {
+        // Factorial-style accumulator proves the collapsed chain carries a
+        // COMPUTED value (not just a constant sentinel). 5! = 120.
+        const r = await run("(let loop ((n 5) (acc 1)) (if (= n 0) acc (loop (- n 1) (* acc n))))");
+        expect(String(r)).toBe("120");
+      },
+      T,
+    );
 
     // ── TCO + abort: covered in abort.test.ts; DELIBERATELY NOT duplicated here ──
     //

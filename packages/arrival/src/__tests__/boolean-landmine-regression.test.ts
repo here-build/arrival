@@ -34,12 +34,14 @@ describe("boolean landmine — find/filter (stdlib, THE documented landmine)", (
     {
       name: "find returns the first match under a SchemeBool predicate",
       src: `(find ${EVEN_SB} '(1 2 3 4))`,
-      expected: "2" },
+      expected: "2",
+    },
     {
       // Was '()' — an arrival deviation, fixed 2026-07-13 (V: "definitely fix").
       name: "find returns #f when the SchemeBool predicate is #f for all (SRFI-1 not-found = #f)",
       src: "(find (lambda (x) #f) '(1 2 3))",
-      expected: "#f" },
+      expected: "#f",
+    },
   ])("$name", async ({ src, expected }) => {
     expect(await run(src)).toBe(expected);
   });
@@ -55,23 +57,28 @@ describe("nil truthiness — R7RS: only #f is false; '() is a TRUTHY verdict eve
     {
       name: "filter keeps every element under a '()-returning predicate",
       src: `(filter ${NIL_PRED} '(1 2 3))`,
-      expected: "(1 2 3)" },
+      expected: "(1 2 3)",
+    },
     {
       name: "find matches the FIRST element under a '()-returning predicate",
       src: `(find ${NIL_PRED} '(1 2 3))`,
-      expected: "1" },
+      expected: "1",
+    },
     {
       name: "some agrees (was already truthy — the reference behavior)",
       src: `(some ${NIL_PRED} '(1 2 3))`,
-      expected: "#t" },
+      expected: "#t",
+    },
     {
       name: "take-while takes everything under a '()-returning predicate",
       src: `(take-while ${NIL_PRED} '(1 2 3))`,
-      expected: "(1 2 3)" },
+      expected: "(1 2 3)",
+    },
     {
       name: "drop-while drops everything under a '()-returning predicate",
       src: `(drop-while ${NIL_PRED} '(1 2 3))`,
-      expected: "()" },
+      expected: "()",
+    },
   ])("$name", async ({ src, expected }) => {
     expect(await run(src)).toBe(expected);
   });
@@ -84,15 +91,18 @@ describe("boolean landmine — complement (bridge): async + boxed-bool", () => {
       // negation (is_false, not `!`). Plain `!fn(...)` returned (), this returns (1 3).
       name: "complement of a SchemeBool scheme-lambda predicate, through filter",
       src: `(filter (complement ${EVEN_SB}) '(1 2 3 4))`,
-      expected: "(1 3)" },
+      expected: "(1 3)",
+    },
     {
       name: "complement still works for a native predicate",
       src: "(filter (complement even?) '(1 2 3 4))",
-      expected: "(1 3)" },
+      expected: "(1 3)",
+    },
     {
       name: "complement applied directly to a SchemeBool predicate is truthy when the inner is #f",
       src: `(if ((complement ${EVEN_SB}) 1) 'odd 'even)`,
-      expected: "odd" },
+      expected: "odd",
+    },
   ])("$name", async ({ src, expected }) => {
     expect(await run(src)).toBe(expected);
   });

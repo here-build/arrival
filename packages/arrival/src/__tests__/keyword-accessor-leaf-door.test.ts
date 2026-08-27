@@ -32,12 +32,12 @@ async function execOneBoxed(expr: string, env = inferenceEnv): Promise<any> {
 
 describe("B2 — :key on a leaf receiver (no member protocol) throws, naming the kind", () => {
   it('(:title "some string") throws, names "string", and routes to (detect-parse s)', async () => {
-    await expect(execOverFrame('(:title "some string")', { env: inferenceEnv.child("kw-leaf-string") })).rejects.toThrow(
-      /string/i,
-    );
-    await expect(execOverFrame('(:title "some string")', { env: inferenceEnv.child("kw-leaf-string-2") })).rejects.toThrow(
-      /detect-parse/i,
-    );
+    await expect(
+      execOverFrame('(:title "some string")', { env: inferenceEnv.child("kw-leaf-string") }),
+    ).rejects.toThrow(/string/i);
+    await expect(
+      execOverFrame('(:title "some string")', { env: inferenceEnv.child("kw-leaf-string-2") }),
+    ).rejects.toThrow(/detect-parse/i);
   });
 
   it("(:title 5) throws — a number has no members either", async () => {
@@ -52,7 +52,8 @@ describe("B2 — :key on a leaf receiver (no member protocol) throws, naming the
 describe("B2 — nil/missing-key tolerance is UNCHANGED (never regress absence)", () => {
   it("(:missing obj) on an object still reads as nil (dict-missing-key stays absence)", async () => {
     const env = inferenceEnv.child("kw-missing-key", {
-      obj: jsToScheme(CONSTANT_CTX, { a: 1 }) });
+      obj: jsToScheme(CONSTANT_CTX, { a: 1 }),
+    });
     const result = await execOneBoxed("(:missing obj)", env);
     expect(result.constructor.name).toBe("ANil");
   });
@@ -64,27 +65,18 @@ describe("B2 — nil/missing-key tolerance is UNCHANGED (never regress absence)"
 });
 
 describe("B2 PLUS — APair answers an alist-shaped key lookup on the read side", () => {
-  it("(:term (list (cons 'term \"cancer\"))) reads the alist entry", async () => {
-    const result = await execOneBoxed(
-      `(:term (list (cons 'term "cancer")))`,
-      inferenceEnv.child("kw-alist-get"),
-    );
+  it('(:term (list (cons \'term "cancer"))) reads the alist entry', async () => {
+    const result = await execOneBoxed(`(:term (list (cons 'term "cancer")))`, inferenceEnv.child("kw-alist-get"));
     expect(result.toString()).toBe("cancer");
   });
 
   it("a non-matching key on an alist still reads as nil (missing key, not a type error)", async () => {
-    const result = await execOneBoxed(
-      `(:other (list (cons 'term "cancer")))`,
-      inferenceEnv.child("kw-alist-miss"),
-    );
+    const result = await execOneBoxed(`(:other (list (cons 'term "cancer")))`, inferenceEnv.child("kw-alist-miss"));
     expect(result.constructor.name).toBe("ANil");
   });
 
   it("car/cdr on the alist pair are UNCHANGED (the pair stays a pair, nothing promoted)", async () => {
-    const result = await execOneBoxed(
-      `(car (car (list (cons 'term "cancer"))))`,
-      inferenceEnv.child("kw-alist-car"),
-    );
+    const result = await execOneBoxed(`(car (car (list (cons 'term "cancer"))))`, inferenceEnv.child("kw-alist-car"));
     expect(result.toString()).toBe("term");
   });
 });

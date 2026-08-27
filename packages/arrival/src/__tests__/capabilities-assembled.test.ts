@@ -21,7 +21,7 @@
  * every base-owned name's `refFrame` resolves to the SAME `globalRoot`.
  */
 import { describe, expect, it } from "vitest";
-import { AmbientRuntime , type EnvWithInternals, type ResolvingAmbient } from "../env/AmbientRuntime.js";
+import { AmbientRuntime, type EnvWithInternals, type ResolvingAmbient } from "../env/AmbientRuntime.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { Capabilities } from "../eval/Capabilities.js";
 import { sealResolutionChain } from "../eval/CompiledResolutionChain.js";

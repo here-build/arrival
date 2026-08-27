@@ -60,7 +60,7 @@ import invariant from "tiny-invariant";
 // instead of a Scheme `ParseError`. O(1) check — `_state.parentheses` IS the live
 // descent depth. Cap sits below the most fragile consumer's overflow floor (a
 // recursive evaluator overflows ~3,500) and far above any real s-expression depth.
-const maxNestingDepth = 2_000;
+const maxNestingDepth = 2000;
 
 export interface TokenMeta {
   token: string;
@@ -436,8 +436,9 @@ export class Parser {
         throw new ParseError(
           `dict literal key must be a :keyword, a "string", or a name with a trailing colon (name:), ` +
             `got ${shown} — write {:name "Ada"}, {name: "Ada"} or {"name" "Ada"}; ` +
-            `for computed keys use (dict …)` +
-            (glued ? ` (${shown} is glued — add a space after the colon: {${shown.replace(":", ": ")}})` : ""),
+            `for computed keys use (dict …)${
+              glued ? ` (${shown} is glued — add a space after the colon: {${shown.replace(":", ": ")}})` : ""
+            }`,
           loc,
           "E-DICT-BAD-KEY",
         );
@@ -503,7 +504,7 @@ export class Parser {
       e.__code__ = [`${String(prev)})`];
     } else {
       e = new Error("Parser: expected parenthesis but eof found");
-      const re = new RegExp(`\\){${count}}$`);
+      const re = new RegExp(String.raw`\){${count}}$`);
       e.__code__ = [String(expr).replace(re, "")];
     }
     throw e;

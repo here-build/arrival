@@ -38,18 +38,14 @@ function fire(proc: { ["arrival/tagless-final/apply"](args: any[], callCtx: any)
   return proc["arrival/tagless-final/apply"](args, callCtx);
 }
 
-
 describe("symbol.native — scheme-identity, no validation", () => {
   it("infers the impl arg+return as SCHEME VALUES from identity schemas", () => {
-    const def = symbol.native`pair-id: identity on a pair`(
-      { input: [z.pair], output: [z.pair] },
-      (p) => {
-        // z.pair is cons(schemeValue, schemeValue); scheme face keeps the APair box.
-        // Element type is SchemeValue (not the abstract AValue base — not a union member).
-        expectTypeOf(p).toEqualTypeOf<APair<SchemeValue, SchemeValue>>();
-        return p;
-      },
-    );
+    const def = symbol.native`pair-id: identity on a pair`({ input: [z.pair], output: [z.pair] }, (p) => {
+      // z.pair is cons(schemeValue, schemeValue); scheme face keeps the APair box.
+      // Element type is SchemeValue (not the abstract AValue base — not a union member).
+      expectTypeOf(p).toEqualTypeOf<APair<SchemeValue, SchemeValue>>();
+      return p;
+    });
     // Stage A2: `symbol.native` mints the ANativeProcedure directly — the CONTRACT
     // (kind/name/doc/impl/…) rides `.contract` on it now.
     expect(contractOf<NativeSymbolDef | RosettaSymbolDef>(def).kind).toBe("native");
@@ -81,22 +77,16 @@ describe("symbol.native — scheme-identity, no validation", () => {
 
 describe("symbol.rosetta — JS-land, codec decode/encode", () => {
   it("infers the impl arg+return as DECODED JS values from codecs", () => {
-    const def = symbol.rosetta`strlen: length of a string`(
-      { input: [z.string], output: [z.number] },
-      (s) => {
-        expectTypeOf(s).toEqualTypeOf<string>();
-        return s.length;
-      },
-    );
+    const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => {
+      expectTypeOf(s).toEqualTypeOf<string>();
+      return s.length;
+    });
     expect(contractOf<NativeSymbolDef | RosettaSymbolDef>(def).kind).toBe("rosetta");
     expect(contractOf<NativeSymbolDef | RosettaSymbolDef>(def).name).toBe("strlen");
   });
 
   it("decodes scheme args → JS, runs impl, encodes return → scheme", async () => {
-    const def = symbol.rosetta`strlen: length of a string`(
-      { input: [z.string], output: [z.number] },
-      (s) => s.length,
-    );
+    const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => s.length);
     const out = await fire(def, testCallCtx(), new AString("hello"));
     // output codec is z.number → encode(number) = SchemeInexact (the chosen float type).
     expect(out).toBeInstanceOf(AInexact);
@@ -104,32 +94,24 @@ describe("symbol.rosetta — JS-land, codec decode/encode", () => {
   });
 
   it("rejects a bad arg via the input codec (errors-as-doors)", async () => {
-    const def = symbol.rosetta`strlen: length of a string`(
-      { input: [z.string], output: [z.number] },
-      (s) => s.length,
-    );
+    const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => s.length);
     await expect(fire(def, testCallCtx(), new AExact(3))).rejects.toThrow();
   });
 
   it("can SKIP validation (trusted call site) but still runs the codec transform", async () => {
-    const def = symbol.rosetta`echo: identity string`(
-      { input: [z.string], output: [z.string] },
-      (s) => s,
-      { validate: false },
-    );
+    const def = symbol.rosetta`echo: identity string`({ input: [z.string], output: [z.string] }, (s) => s, {
+      validate: false,
+    });
     const out = await fire(def, testCallCtx(), new AString("x"));
     expect(out).toBeInstanceOf(AString);
     expect((out as AString)["arrival/toJS"]()).toBe("x");
   });
 
   it("awaits an async impl", async () => {
-    const def = symbol.rosetta`async-up: async uppercase`(
-      { input: [z.string], output: [z.string] },
-      async (s) => {
-        await Promise.resolve();
-        return s.toUpperCase();
-      },
-    );
+    const def = symbol.rosetta`async-up: async uppercase`({ input: [z.string], output: [z.string] }, async (s) => {
+      await Promise.resolve();
+      return s.toUpperCase();
+    });
     const out = await fire(def, testCallCtx(), new AString("hi"));
     expect((out as AString)["arrival/toJS"]()).toBe("HI");
   });
@@ -140,26 +122,17 @@ describe("CallCtx is mandatory on the apply term — misuse THROWS, never silent
   // must throw loudly, never degrade to CONSTANT_CTX (the silent fallback hid the B2-rosetta
   // mint regression until conservation.law caught it).
   it("apply with undefined callCtx throws instead of silently defaulting", async () => {
-    const def = symbol.rosetta`strlen: length of a string`(
-      { input: [z.string], output: [z.number] },
-      (s) => s.length,
-    );
+    const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => s.length);
     await expect(fire(def, undefined as any, new AString("hello"))).rejects.toThrow();
   });
 
   it("apply with an ad hoc `{}` callCtx (missing runCtx/invocation) throws the same way", async () => {
-    const def = symbol.rosetta`strlen: length of a string`(
-      { input: [z.string], output: [z.number] },
-      (s) => s.length,
-    );
+    const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => s.length);
     await expect(fire(def, {} as any, new AString("hello"))).rejects.toThrow();
   });
 
   it("testCallCtx() is a real CallCtx — the sanctioned idiom never doors", async () => {
-    const def = symbol.rosetta`strlen: length of a string`(
-      { input: [z.string], output: [z.number] },
-      (s) => s.length,
-    );
+    const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => s.length);
     const out = await fire(def, testCallCtx(), new AString("hello"));
     expect((out as AInexact).real).toBe(5);
   });
@@ -253,10 +226,7 @@ describe("variadic + multiple values", () => {
   });
 
   it("z.array output → multiple return values (a scheme values vector)", async () => {
-    const def = symbol.rosetta`dup: echo two strings`(
-      { input: [z.string], output: z.array(z.string) },
-      (s) => [s, s],
-    );
+    const def = symbol.rosetta`dup: echo two strings`({ input: [z.string], output: z.array(z.string) }, (s) => [s, s]);
     const out = await fire(def, testCallCtx(), new AString("a"));
     // encode of z.array(z.string) → a JS array of SchemeStrings (the values-vector).
     expect(Array.isArray(out)).toBe(true);
