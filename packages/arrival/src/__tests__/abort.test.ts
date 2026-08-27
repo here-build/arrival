@@ -33,7 +33,6 @@ describe("AbortSignal execution budget", () => {
   it("aborts an infinite loop when AbortSignal fires", async () => {
     const ctrl = new AbortController();
     setTimeout(() => ctrl.abort(), 50);
-    const start = Date.now();
     // Use `(do () (#f))` — a do-loop with a constant-false test runs entirely
     // INSIDE one generator's `while(true)` (see evalDo at evaluator.ts:1558),
     // so iteration cycles through `yield { call: evaluate(test) }` and tail-
@@ -58,27 +57,12 @@ describe("AbortSignal execution budget", () => {
     // flat. `(define (loop) (loop)) (loop)` has the same hazard for the same
     // reason — it goes through evalLambda's `run(...)` wrapper.
     await expect(exec("(do () (#f))", { signal: ctrl.signal })).rejects.toThrow(/abort/i);
-    // Generous upper bound: the trampoline only checks at the 5ms / 1000-iter
-    // cadence, so abort propagates within ~one tick of the 50ms timer. Raised
-    // 2000ms → 10000ms (G3 sunset triage, timing-flake hardening): this is a
-    // WALL-CLOCK assertion racing real system scheduling, not the abort
-    // mechanism itself — under heavy parallel-worker CPU contention the process
-    // can be descheduled well past one 5ms tick without the abort path being
-    // broken. The invariant under test ("abort fires, doesn't hang forever") is
-    // preserved at 10s; a tighter bound only risks flaking on a loaded machine.
-    expect(Date.now() - start).toBeLessThan(10000);
   });
 
   it("throws immediately when signal is already aborted at start", async () => {
     const ctrl = new AbortController();
     ctrl.abort();
-    const start = Date.now();
     await expect(exec("(+ 1 2)", { signal: ctrl.signal })).rejects.toThrow(/abort/i);
-    // Pre-abort fast path: no trampoline state allocated, throw on entry.
-    // This should be effectively instantaneous (sub-millisecond), but we
-    // give a wide margin to allow for parse/import overhead from the lazy
-    // interpreter bootstrap on first invocation in the suite.
-    expect(Date.now() - start).toBeLessThan(500);
   });
 
   it("preserves signal.reason through the throw", async () => {
@@ -103,7 +87,7 @@ describe("AbortSignal execution budget", () => {
   it("runs to completion when signal never aborts", async () => {
     const ctrl = new AbortController();
     const [result] = await exec("(+ 1 2 3)", { signal: ctrl.signal });
-    expect(result).toBeDefined();
+    expect(result).toBe(6);
   });
 
   it("execExpr honors the abort signal", async () => {
@@ -158,12 +142,8 @@ describe("AbortSignal execution budget", () => {
   it("rejects the moment the signal aborts, without awaiting a still-pending value", async () => {
     const d = deferred(); // never settled — models a stuck upstream host promise
     const ctrl = new AbortController();
-    setTimeout(() => ctrl.abort(), 20);
-    const start = Date.now();
+    queueMicrotask(() => ctrl.abort());
     await expect(raceAbort(d.promise, ctrl.signal)).rejects.toThrow(/abort/i);
-    // Rejected promptly on abort — NOT after the (never-settling) value. If the
-    // race waited on the value this would never resolve (suite timeout).
-    expect(Date.now() - start).toBeLessThan(1000);
   });
 
   it("rejects immediately when the signal is already aborted", async () => {
@@ -177,7 +157,7 @@ describe("AbortSignal execution budget", () => {
     const d = deferred();
     const ctrl = new AbortController();
     const reason = new Error("custom parked-await cancellation");
-    setTimeout(() => ctrl.abort(reason), 10);
+    queueMicrotask(() => ctrl.abort(reason));
     await expect(raceAbort(d.promise, ctrl.signal)).rejects.toThrow("custom parked-await cancellation");
   });
 
@@ -193,7 +173,8 @@ describe("AbortSignal execution budget", () => {
       // The abort listener was removed on the happy path, so aborting now is a
       // no-op and produces no stray rejection.
       ctrl.abort();
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await Promise.resolve();
+      await Promise.resolve();
       expect(unhandled).toEqual([]);
     } finally {
       process.off("unhandledRejection", onUnhandled);
@@ -213,7 +194,8 @@ describe("AbortSignal execution budget", () => {
       // The abandoned value rejects only NOW. raceAbort keeps a rejection handler
       // attached to it, so this must never surface as an unhandledRejection.
       d.reject(new Error("upstream failed late"));
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await Promise.resolve();
+      await Promise.resolve();
       expect(unhandled).toEqual([]);
     } finally {
       process.off("unhandledRejection", onUnhandled);

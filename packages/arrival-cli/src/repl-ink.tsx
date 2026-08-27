@@ -188,6 +188,10 @@ export interface ReplAppProps {
   readonly capabilityCount: number;
   readonly version: string;
   readonly mode?: ColorMode;
+  /** Clock for the OSC 9 notify threshold. Tests inject a fake; production uses `Date.now`. */
+  readonly now?: () => number;
+  /** Elapsed-ms after which a settled turn fires OSC 9. Default 4000. */
+  readonly notifyAfterMs?: number;
 }
 
 function ReplApp({
@@ -196,6 +200,8 @@ function ReplApp({
   version,
   capabilityCount,
   mode = colorMode(),
+  now = Date.now,
+  notifyAfterMs = NOTIFY_MS,
 }: ReplAppProps): React.ReactElement {
   const { exit, waitUntilRenderFlush } = useApp();
   // The raw stream Ink itself writes to (the real terminal in production, the fake capture
@@ -236,7 +242,7 @@ function ReplApp({
     async (src: string): Promise<void> => {
       let model = EMPTY_REPL_MODEL;
       setRunning(model);
-      const started = Date.now();
+      const started = now();
       await emitForms(src, {
         capabilities: session.capabilities,
         config: session.config,
@@ -250,8 +256,8 @@ function ReplApp({
       });
       // A slow turn pings the desktop (OSC 9) — you can look away from a long run and get
       // pulled back. One-shot escape via the same side-channel as the marks; no display effect.
-      const elapsed = Date.now() - started;
-      if (elapsed >= NOTIFY_MS) {
+      const elapsed = now() - started;
+      if (elapsed >= notifyAfterMs) {
         const label = src.split("\n")[0]!.slice(0, 60);
         writeStdout(notify(`arrival — done in ${(elapsed / 1000).toFixed(1)}s · ${label}`));
       }
@@ -267,7 +273,7 @@ function ReplApp({
       await waitUntilRenderFlush();
       writeStdout(commandDone(turnExitCode(model.blocks)));
     },
-    [session, budgetMs, writeStdout, waitUntilRenderFlush],
+    [session, budgetMs, writeStdout, waitUntilRenderFlush, now, notifyAfterMs],
   );
 
   const onEnter = useCallback(

@@ -9,9 +9,11 @@ import { EvalTrace } from "@inhuman.tools/arrival/provenance";
 import { formDetail, renderFormDetail } from "../form-detail.js";
 import { stripAnsi } from "./ansi-strip.js";
 
-async function traced(src: string): Promise<EvalTrace> {
+async function traced(src: string, { allowReject = false }: { allowReject?: boolean } = {}): Promise<EvalTrace> {
   const trace = new EvalTrace();
-  await execState(src, { tap: trace, budgetMs: 30_000 }).catch(() => {});
+  const run = execState(src, { tap: trace, budgetMs: 30_000 });
+  if (allowReject) await run.catch(() => {});
+  else await run;
   return trace;
 }
 
@@ -40,7 +42,7 @@ describe("formDetail — aggregate, not dump", () => {
   });
 
   it("a rejected invocation carries its error message as the sample value", async () => {
-    const d = formDetail(await traced("(/ 1 0)"), "/@1:0");
+    const d = formDetail(await traced("(/ 1 0)", { allowReject: true }), "/@1:0");
     expect(d.states.rejected).toBe(1);
     expect(d.samples[0]!.state).toBe("rejected");
     expect(d.samples[0]!.value ?? "").toMatch(/division by zero/i);

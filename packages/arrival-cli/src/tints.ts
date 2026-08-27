@@ -204,7 +204,7 @@ export type ThemeCanvas = {
   readonly fg?: Oklch;
 };
 
-const REFERENCE_CANVAS: ThemeCanvas = { ground: { l: REFERENCE_GROUND, c: 0, h: 0 } };
+export const REFERENCE_CANVAS: ThemeCanvas = { ground: { l: REFERENCE_GROUND, c: 0, h: 0 } };
 
 let canvas: ThemeCanvas = REFERENCE_CANVAS;
 

@@ -1,5 +1,5 @@
 import { CONSTANT_CTX } from "../../run/RunContext.js";
-import type { EnvWithInternals, ResolvingAmbient } from "../../env/AmbientRuntime.js";
+import type { AmbientRuntime } from "../../env/AmbientRuntime.js";
 /**
  * Test the `|...|` bar-quoted SYMBOL-GRAMMAR reader — empty `||`, escaped
  * `\|`, unicode inside bars, special chars, case-sensitivity, and the
@@ -17,7 +17,7 @@ import { execOverFrame as exec } from "../../eval/generator-exec.js";
 import { jsToScheme } from "../../membrane/rosetta.js";
 
 // Helper to execute and get first result
-async function execOne(expr: string, env = inferenceEnv): Promise<any> {
+async function execOne(expr: string, env: AmbientRuntime = inferenceEnv.child("reader-escaped-one")): Promise<any> {
   const results = await exec(expr, { env });
   return results[0];
 }
@@ -41,14 +41,14 @@ describe("Escaped Symbol Resolution", () => {
         "24": "numeric key value",
       };
 
-      (inferenceEnv as EnvWithInternals<ResolvingAmbient>).bind("test-obj", jsToScheme(CONSTANT_CTX, testObj));
+      const env = inferenceEnv.child("reader-escaped-24", { "test-obj": jsToScheme(CONSTANT_CTX, testObj) });
 
       // :24 should be treated as keyword and converted to "24" by @ function
-      const result1 = await execOne(`(@ test-obj :24)`);
+      const result1 = await execOne(`(@ test-obj :24)`, env);
       expect(result1).toBe("numeric key value");
 
       // :|24| should also work (keyword with escaped symbol)
-      const result2 = await execOne(`(@ test-obj :|24|)`);
+      const result2 = await execOne(`(@ test-obj :|24|)`, env);
       expect(result2).toBe("numeric key value");
     });
   });

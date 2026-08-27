@@ -40,8 +40,10 @@ function pack(name: string, deps: EnvPack<Stub>[] = [], extra: Partial<EnvPack<S
   };
 }
 
+const prevAssemblePackTimeout = process.env.ASSEMBLE_PACK_TIMEOUT_MS;
 afterEach(() => {
-  delete process.env.ASSEMBLE_PACK_TIMEOUT_MS;
+  if (prevAssemblePackTimeout === undefined) delete process.env.ASSEMBLE_PACK_TIMEOUT_MS;
+  else process.env.ASSEMBLE_PACK_TIMEOUT_MS = prevAssemblePackTimeout;
 });
 
 describe("env-pack assembly core (P0), over createRuntimeAssembler", () => {

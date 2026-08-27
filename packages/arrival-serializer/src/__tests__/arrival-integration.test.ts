@@ -1,154 +1,34 @@
 import { describe, expect, it } from "vitest";
 import { toSExprString } from "../serializer";
-// Arrival evaluator + value types
 import { exec, execState, EnvCapability, toJS, ANil, LexicalScope } from "@inhuman.tools/arrival";
 import { AExact, AString, ASymbol, APair } from "@inhuman.tools/arrival/reflect-internals";
-// Import custom matchers
-import "@inhuman.tools/arrival";
 
-describe("Arrival Integration", () => {
-  it("should handle simple evaluation results", async () => {
-    // Test basic evaluation
-    const result = await exec("(+ 1 2)");
-    console.log("result:", result);
-    console.log("result type:", typeof result);
-    console.log("result constructor:", result?.constructor?.name);
+async function serializeForm(expr: string): Promise<string> {
+  // Raw scheme values (execState), not exec's toJS-collapsed ones — nil must stay ANil
+  // for the serializer's isNil check to render `[nil]` instead of a plain `[]`.
+  const { values } = await execState(expr);
+  return toSExprString(values[0]);
+}
 
-    // Try to serialize the result
-    const serialized = toSExprString(result);
-    console.log("serialized:", serialized);
-
-    // Should get a clean representation, not verbose object dump
-    expect(serialized).toBeDefined();
-    expect(serialized).not.toContain(":__value__"); // Should not expose internals
-  });
-
-  it("should handle list results", async () => {
-    // Test list evaluation
-    const result = await exec("(list 1 2 3)");
-    console.log("list result:", result);
-    console.log("list result type:", typeof result);
-    console.log("list result constructor:", result?.constructor?.name);
-
-    // Try to serialize the result
-    const serialized = toSExprString(result);
-    console.log("list serialized:", serialized);
-    expect(serialized).toBeDefined();
-  });
-
-  it("should handle symbol results", async () => {
-    // Test symbol evaluation
-    const result = await exec("'hello");
-    console.log("symbol result:", result);
-    console.log("symbol result type:", typeof result);
-    console.log("symbol result constructor:", result?.constructor?.name);
-
-    // Try to serialize the result
-    const serialized = toSExprString(result);
-    console.log("symbol serialized:", serialized);
-    expect(serialized).toBeDefined();
-  });
-
-  it("should handle complex results", async () => {
-    // Test more complex evaluation
-    const result = await exec("(map (lambda (x) (* x 2)) (list 1 2 3))");
-    console.log("complex result:", result);
-    console.log("complex result type:", typeof result);
-    console.log("complex result constructor:", result?.constructor?.name);
-
-    // Try to serialize the result
-    const serialized = toSExprString(result);
-    console.log("complex serialized:", serialized);
-
-    // Should get a clean representation of the mapped results
-    expect(serialized).toBeDefined();
-    expect(serialized).not.toContain(":car"); // Should not expose Pair internals
-    expect(serialized).toContain("2"); // 1 * 2
-    expect(serialized).toContain("4"); // 2 * 2
-    expect(serialized).toContain("6"); // 3 * 2
-  });
-
-  it("should handle various scheme types", async () => {
-    // Test different types the evaluator can return
-    const tests = [
-      { expr: "42", expected: "42" },
-      { expr: "3.14", expected: "3.14" }, // LNumber float
-      { expr: "#t", expected: "#t" },
-      { expr: "#f", expected: "#f" },
-      { expr: '"hello world"', expected: `"hello world"` }, // R7RS double quotes — re-parses
-      { expr: "'symbol-name", expected: "symbol-name" }, // Should be bare symbol
-      { expr: "()", expected: "[nil]" }, // edge case - keeping like that for now
-    ];
-
-    for (const { expr, expected } of tests) {
-      // Raw scheme values (execState), not exec's toJS-collapsed ones — nil must stay ANil
-      // for the serializer's isNil check to render `nil` instead of a plain `[]`.
-      const { values } = await execState(expr);
-      const serialized = toSExprString(values);
-      console.log(`${expr} -> ${serialized}`);
-      expect(serialized).toContain(expected);
-    }
-  });
-
-  it("should research keyword vs symbol distinction", async () => {
-    const tests = [
-      { expr: "'hello", desc: "quoted symbol" },
-      { expr: ":hello", desc: "colon syntax (keyword?)" },
-      { expr: "hello", desc: "bare symbol (probably undefined variable)" },
-      { expr: "'hello-world", desc: "quoted symbol with dash" },
-      { expr: "':hello", desc: "quoted colon symbol" },
-      { expr: "(define hello 42) hello", desc: "defined symbol reference" },
-      { expr: "(quote :hello)", desc: "quoted colon syntax" },
-      { expr: "123456789012345678901234567890", desc: "very large number (bigint?)" },
-      { expr: '"simple string"', desc: "simple string" },
-      { expr: '"string with \\"quotes\\""', desc: "string with quotes" },
-    ];
-
-    for (const { expr, desc } of tests) {
-      try {
-        const result = await exec(expr);
-        console.log(`\\n=== ${desc} ===`);
-        console.log(`Expression: ${expr}`);
-        console.log(`Result:`, result);
-        console.log(`Constructor:`, result[0]?.constructor?.name);
-        console.log(`Properties:`, Object.getOwnPropertyNames(result[0] || {}));
-        console.log(`Serialized:`, toSExprString(result));
-      } catch (error) {
-        console.log(`\\n=== ${desc} ===`);
-        console.log(`Expression: ${expr}`);
-        console.log(`ERROR:`, error.message);
-      }
-    }
-  });
-
-  it("should handle special scheme types", async () => {
-    // Test special scheme types
-    const specialTests = [
-      { expr: "#\\a", desc: "character" }, // LCharacter
-      { expr: "(values 1 2 3)", desc: "multiple values" }, // Values
-    ];
-
-    for (const { expr, desc } of specialTests) {
-      try {
-        const result = await exec(expr);
-        const serialized = toSExprString(result);
-        console.log(`${desc}: ${expr} -> ${serialized}`);
-        console.log(`${desc} result type:`, result?.constructor?.name);
-
-        // Debug - can remove this later
-        // if (desc === "multiple values") {
-        //   console.log("Values debug - keys:", Object.getOwnPropertyNames(result[0]));
-        //   console.log("Values debug - has __values__:", "__values__" in result[0]);
-        //   console.log("Values debug - has values:", "values" in result[0]);
-        //   console.log("Values debug - constructor:", result[0]?.constructor?.name);
-        // }
-
-        expect(serialized).toBeDefined();
-      } catch (error) {
-        console.log(`${desc} failed:`, error);
-        // Some might not be supported, that's ok for now
-      }
-    }
+describe("serialize exec results", () => {
+  it.each([
+    { expr: "(+ 1 2)", expected: "3" },
+    { expr: "(list 1 2 3)", expected: "[1 2 3]" },
+    { expr: "'hello", expected: "hello" },
+    { expr: "(map (lambda (x) (* x 2)) (list 1 2 3))", expected: "[2 4 6]" },
+    { expr: "42", expected: "42" },
+    { expr: "3.14", expected: "3.14" },
+    { expr: "#t", expected: "#t" },
+    { expr: "#f", expected: "#f" },
+    { expr: '"hello world"', expected: `"hello world"` },
+    { expr: "'symbol-name", expected: "symbol-name" },
+    { expr: "()", expected: "nil" },
+    { expr: "#\\a", expected: "#\\a" },
+  ] as const)("$expr serializes as $expected", async ({ expr, expected }) => {
+    const serialized = await serializeForm(expr);
+    expect(serialized).toBe(expected);
+    expect(serialized).not.toContain(":__value__");
+    expect(serialized).not.toContain(":car");
   });
 });
 

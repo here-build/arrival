@@ -32,9 +32,7 @@ import { registryCoherenceFindings, verdictFor } from "../chibi/registries-srfi1
 import { CorpusRunner } from "../chibi/runner.js";
 
 if (!fs.existsSync(SRFI1_TEST_PATH)) {
-  describe("Chibi SRFI-1", () => {
-    it.skip("srfi/1/test.sld — submodule not initialized (run: git submodule update --init)", () => {});
-  });
+  throw new Error("srfi/1/test.sld — submodule not initialized (run: git submodule update --init)");
 } else {
   const manifest: Manifest = await buildSrfi1Manifest();
   // Pass A: R7RS-strict so car/cdr-of-empty test-error forms ride chibi goldens.

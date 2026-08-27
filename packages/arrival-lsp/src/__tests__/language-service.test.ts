@@ -9,12 +9,15 @@
 //
 // Per `.claude/rules/tests.md` this is a `__tests__/` verdict (boolean pass/fail).
 
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { assembleHostPrelude } from "../host-prelude.js";
 import { createSchemeLanguageService } from "../language-service.js";
 
-const ls = createSchemeLanguageService();
+let ls: ReturnType<typeof createSchemeLanguageService>;
+beforeEach(() => {
+  ls = createSchemeLanguageService();
+});
 
 describe("getSemanticDiagnostics — bites in Scheme coordinates", () => {
   it("(car 5) → one diagnostic covering the `5` in the SCHEME source", () => {

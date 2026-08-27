@@ -134,6 +134,10 @@ describe("evaluation tap", () => {
       resolveAsync = r;
     });
     const env = userEnv.child("tap-async-test") as EnvWithInternals<ResolvingAmbient>;
+    let parked!: () => void;
+    const atPark = new Promise<void>((res) => {
+      parked = res;
+    });
     // W8: ANativeProcedure (returns a Promise of a scheme value) — bare fns are doored.
     env.bind(
       "await-this",
@@ -141,7 +145,10 @@ describe("evaluation tap", () => {
         name: "await-this",
         arity: { min: 0, max: 0 },
         contract: undefined,
-        impl: () => pending.then((v) => new AExact(v as number)) as never,
+        impl: () => {
+          parked();
+          return pending.then((v) => new AExact(v as number)) as never;
+        },
       }),
     );
 
@@ -149,9 +156,7 @@ describe("evaluation tap", () => {
     // execState (COMPLEX tier): this test only cares about tap enter/exit accounting.
     const finished = execStateOverFrame("(await-this)", { env, tap });
 
-    // Wait for the evaluator to reach the pending promise.
-    await new Promise((r) => setTimeout(r, 20));
-
+    await atPark;
     expect(enters(events)).toHaveLength(1);
     expect(exits(events)).toHaveLength(0);
 

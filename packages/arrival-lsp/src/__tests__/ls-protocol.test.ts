@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { connectSchemeLs, serveSchemeLs, type LsPort } from "../ls-protocol.js";
+import { connectSchemeLs, peekSharedService, serveSchemeLs, type LsPort } from "../ls-protocol.js";
 
 function pair(): { server: LsPort; client: LsPort } {
   const ch = new MessageChannel();
@@ -81,17 +81,16 @@ describe("scheme-ls over a message port", () => {
   });
 
   it("two connections with the same options share one service (memoized)", async () => {
+    const opts = { compilerOptions: { noImplicitAny: false } };
     const a = pair();
     const b = pair();
     serveSchemeLs(a.server);
     serveSchemeLs(b.server);
-    const lsA = await connectSchemeLs(a.client, { compilerOptions: { noImplicitAny: false } });
-    const lsB = await connectSchemeLs(b.client, { compilerOptions: { noImplicitAny: false } });
-    // Observable proxy for sharing: both answer identically and quickly after
-    // either one has warmed the shared compilation.
-    await lsA.getSemanticDiagnostics(`(define x 1)`);
-    const t0 = Date.now();
-    await lsB.getSemanticDiagnostics(`(define y 2)`);
-    expect(Date.now() - t0).toBeLessThan(2000); // warm path, not a cold prelude parse
+    const lsA = await connectSchemeLs(a.client, opts);
+    const first = peekSharedService(opts);
+    const lsB = await connectSchemeLs(b.client, opts);
+    expect(peekSharedService(opts)).toBe(first);
+    expect(await lsA.getSemanticDiagnostics(`(define x 1)`)).toHaveLength(0);
+    expect(await lsB.getSemanticDiagnostics(`(define y 2)`)).toHaveLength(0);
   });
 });

@@ -107,9 +107,10 @@ describe("F6 doors — non-mutating copies still WORK (the sibling positive asse
   // Kept alongside the negative grid above — a suite that only ever asserts
   // "this throws" can't distinguish "purity is enforced" from "everything here is broken."
   it("vector-copy returns a fresh vector", async () => {
-    expect(await exec("(vector->list (vector-copy (vector 1 2 3)))")).toBeDefined();
+    expect(await exec("(vector->list (vector-copy (vector 1 2 3)))")).toEqual([[1, 2, 3]]);
   });
   it("bytevector-copy returns a fresh bytevector", async () => {
-    expect(await exec("(bytevector-copy (bytevector 1 2 3))")).toBeDefined();
+    const [v] = await exec("(bytevector-copy (bytevector 1 2 3))");
+    expect(Array.from(v as Iterable<number>)).toEqual([1, 2, 3]);
   });
 });

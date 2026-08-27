@@ -79,6 +79,8 @@ describe("TraceRegionFold — late point promotion (streaming-host marking race)
     // "unmarked" and the next tick has nothing to promote).
     await entered.promise;
     fold.applyDelta();
+    expect(trace.invocationLog.length).toBeGreaterThan(0);
+    expect(trace.invocationLog.some((inv) => inv.isProvenancePoint)).toBe(false);
     expect(leavesOf(fold.current().roots).filter((l) => l.label === "slow-infer")).toHaveLength(0);
 
     // Crossing: the host marks the point while the call is still in flight.

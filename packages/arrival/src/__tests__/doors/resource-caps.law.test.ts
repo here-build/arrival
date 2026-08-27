@@ -26,25 +26,17 @@ describe("F6 doors — resource caps teach (allocation limit)", () => {
   // exercises OUR policy door, not the engine's accidental one (see
   // sandbox-escape.test.ts's original audit comment for why 1e8 is the right probe
   // value: below V8's cap, above ours).
-  it("(make-string 1e8 ...) errors fast with the allocation-cap teaching message, not an engine leak", async () => {
-    const start = Date.now();
+  it("(make-string 1e8 ...) errors with the allocation-cap teaching message, not an engine leak", async () => {
     await expect(exec("(make-string 100000000 #\\x)")).rejects.toThrow(
       /make-string: requested length \d+ exceeds allocation limit \d+/,
     );
-    // The wall-clock bound is a secondary O(1) proof (an allocate-first regression
-    // takes seconds/OOMs); the teaching-message regex is the primary invariant — an
-    // engine leak (V8's "Invalid string length") names no allocation limit and fails
-    // it. Bounded loosely so full-suite parallel load can't flake it.
-    expect(Date.now() - start).toBeLessThan(5000);
   });
 
-  it("(make-vector 1e8 ...) errors fast with the allocation-cap teaching message, not an engine leak", async () => {
-    const start = Date.now();
+  it("(make-vector 1e8 ...) errors with the allocation-cap teaching message, not an engine leak", async () => {
     await expect(exec("(make-vector 100000000 #f)")).rejects.toThrow(
       /make-vector: requested length \d+ exceeds allocation limit \d+/,
     );
-    expect(Date.now() - start).toBeLessThan(5000);
-  }, 15000);
+  });
 });
 
 describe("F6 doors — resource caps teach (parser nesting depth)", () => {
@@ -71,13 +63,10 @@ describe("F6 doors — resource caps teach (wall-clock execution budget)", () =>
   // is flat under TCO (task #46), so the budget check is what stops it, not a stack
   // overflow racing it.
   it("infinite loop is bounded by a wall-clock budget with a named teaching message", async () => {
-    const start = Date.now();
     // `budgetMs` in the message is `performance.now() - deadline` arithmetic, so it
     // prints as a float (e.g. "149.9999...ms"), not an integer — match either shape.
     await expect(exec("(let loop () (loop))", { budgetMs: 150 })).rejects.toThrow(
       /execution budget exceeded \([\d.]+ms\)/,
     );
-    // Bounded to ~one yield cadence past the 150ms deadline.
-    expect(Date.now() - start).toBeLessThan(2000);
   }, 10000);
 });

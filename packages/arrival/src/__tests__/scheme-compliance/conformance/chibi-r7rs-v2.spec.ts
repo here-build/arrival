@@ -29,9 +29,7 @@ import { CorpusRunner } from "../chibi/runner.js";
 const CHIBI_TESTS_PATH = path.resolve(import.meta.dirname, "../../../../vendor/chibi-scheme/tests/r7rs-tests.scm");
 
 if (!fs.existsSync(CHIBI_TESTS_PATH)) {
-  describe("Chibi R7RS v2", () => {
-    it.skip("r7rs-tests.scm — submodule not initialized (run: git submodule update --init)", () => {});
-  });
+  throw new Error("r7rs-tests.scm — submodule not initialized (run: git submodule update --init)");
 } else {
   const manifest: Manifest = await buildManifest(CHIBI_TESTS_PATH);
   const runner = await CorpusRunner.create(manifest);

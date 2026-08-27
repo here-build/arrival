@@ -93,8 +93,8 @@ describe("single-flight (D1) + eviction — at the wrapper", () => {
     const ctx = ctxWith(cache);
     const [a, b] = await Promise.all([fire(def, ctx, num(21)), fire(def, ctx, num(21))]);
     expect(fires()).toBe(1); // ONE rosetta call, two consumers
-    expect(a).toBeDefined();
-    expect(b).toBeDefined();
+    expect(Number(a)).toBe(42);
+    expect(Number(b)).toBe(42);
     expect(cache.entries.size).toBe(1); // the settled {value} entry
   });
 

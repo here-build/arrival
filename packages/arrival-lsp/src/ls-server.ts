@@ -55,6 +55,10 @@ const resolveThroughActiveRequireTypes = (path: string): string | null =>
 
 /** Service per options-profile — THE sharing point. */
 const sharedServices = new Map<string, SchemeLanguageService>();
+/** Test seam: identity of the memo slot, not wall-clock. */
+export function peekSharedService(options: SchemeLsWorkerOptions): SchemeLanguageService | undefined {
+  return sharedServices.get(JSON.stringify(options));
+}
 function serviceFor(options: SchemeLsWorkerOptions): SchemeLanguageService {
   const key = JSON.stringify(options);
   let svc = sharedServices.get(key);

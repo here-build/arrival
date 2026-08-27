@@ -12,4 +12,4 @@ export {
   type LsPort,
   type SchemeLsWorkerOptions,
 } from "./ls-client.js";
-export { serveSchemeLs } from "./ls-server.js";
+export { peekSharedService, serveSchemeLs } from "./ls-server.js";

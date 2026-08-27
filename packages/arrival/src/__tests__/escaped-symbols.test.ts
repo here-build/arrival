@@ -1,5 +1,5 @@
 import { CONSTANT_CTX } from "../run/RunContext.js";
-import type { EnvWithInternals, ResolvingAmbient } from "../env/AmbientRuntime.js";
+import type { AmbientRuntime } from "../env/AmbientRuntime.js";
 /**
  * Test escaped symbols and edge cases in arrival
  *
@@ -19,7 +19,7 @@ import { jsToScheme } from "../membrane/rosetta.js";
 import { EnvCapability } from "../common/capability.js";
 import { applyCapability } from "./_fresh-env.js";
 
-async function execOne(expr: string, env = inferenceEnv): Promise<any> {
+async function execOne(expr: string, env: AmbientRuntime = inferenceEnv.child("escaped-one")): Promise<any> {
   const results = await exec(expr, { env });
   return results[0];
 }
@@ -71,7 +71,8 @@ describe("Escaped Symbol Resolution", () => {
       // Test-local EnvCapability with `symbol.rosetta`. The bound verb's KEY is the
       // exact scheme-facing name — a space or leading digit is an ordinary JS property
       // string; the binder doesn't care that the reader only reaches it via `|escaped|`.
-      await applyCapability(inferenceEnv, [
+      const env = inferenceEnv.child("escaped-get-24");
+      await applyCapability(env, [
         EnvCapability.define("test/get-24", {
           symbols: (symbol, z) => ({
             "get-24": symbol.rosetta`get-24: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 24),
@@ -79,12 +80,13 @@ describe("Escaped Symbol Resolution", () => {
         }),
       ]);
 
-      const result = await execOne(`(|get-24|)`);
+      const result = await execOne(`(|get-24|)`, env);
       expect(result).toBe(24);
     });
 
     it("should define functions with space-containing names", async () => {
-      await applyCapability(inferenceEnv, [
+      const env = inferenceEnv.child("escaped-my-function");
+      await applyCapability(env, [
         EnvCapability.define("test/my-function", {
           symbols: (symbol, z) => ({
             "my function": symbol.rosetta`my function: doubles its argument`(
@@ -95,7 +97,7 @@ describe("Escaped Symbol Resolution", () => {
         }),
       ]);
 
-      const result = await execOne(`(|my function| 21)`);
+      const result = await execOne(`(|my function| 21)`, env);
       expect(result).toBe(42);
     });
   });
@@ -107,13 +109,16 @@ describe("Escaped Symbol Resolution", () => {
         foo_bar: "underscored",
       };
 
-      (inferenceEnv as EnvWithInternals<ResolvingAmbient>).bind("test-obj", jsToScheme(CONSTANT_CTX, testObj));
+      const env = inferenceEnv.child("escaped-kw", { "test-obj": jsToScheme(CONSTANT_CTX, testObj) });
 
-      const result = await execOne(`
+      const result = await execOne(
+        `
         (list
           (@ test-obj :foo-bar)
           (@ test-obj :foo_bar))
-      `);
+      `,
+        env,
+      );
 
       expect(result).toEqual(["hyphenated", "underscored"]);
     });
@@ -128,11 +133,14 @@ describe("Escaped Symbol Resolution", () => {
         },
       };
 
-      (inferenceEnv as EnvWithInternals<ResolvingAmbient>).bind("components", jsToScheme(CONSTANT_CTX, component));
+      const env = inferenceEnv.child("escaped-uuid", { components: jsToScheme(CONSTANT_CTX, component) });
 
-      const result = await execOne(`
+      const result = await execOne(
+        `
         (@ components :|794f1e9c-5726-4a0c-a8b6-c0ae5f31f4e4|)
-      `);
+      `,
+        env,
+      );
 
       expect(result).toMatchObject({ name: "Button" });
     });
@@ -148,16 +156,19 @@ describe("Escaped Symbol Resolution", () => {
         ],
       };
 
-      (inferenceEnv as EnvWithInternals<ResolvingAmbient>).bind("data", jsToScheme(CONSTANT_CTX, data));
+      const env = inferenceEnv.child("escaped-chain", { data: jsToScheme(CONSTANT_CTX, data) });
 
-      const result = await execOne(`
+      const result = await execOne(
+        `
         (begin
           (define project (car (@ data :projects)))
           (list
             (@ project :id)
             (@ project :name)
             (@ project :|24|)))
-      `);
+      `,
+        env,
+      );
 
       expect(result).toEqual(["794f1e9c-5726-4a0c-a8b6-c0ae5f31f4e4", "My Project", "numeric property value"]);
     });
@@ -170,15 +181,18 @@ describe("Escaped Symbol Resolution", () => {
       ];
 
       // Convert to scheme list — scheme filter expects pair chains, not JS arrays
-      (inferenceEnv as EnvWithInternals<ResolvingAmbient>).bind("items", jsToScheme(CONSTANT_CTX, items));
+      const env = inferenceEnv.child("escaped-filter", { items: jsToScheme(CONSTANT_CTX, items) });
 
       // Use `string=?` for string comparison — `eq?` is reference identity (R7RS § 6.1)
       // and post-eq?/eqv?-split returns #f for two distinct heap string instances.
-      const result = await execOne(`
+      const result = await execOne(
+        `
         (filter
           (lambda (item) (string=? (@ item :|24|) "first"))
           items)
-      `);
+      `,
+        env,
+      );
 
       expect(result).toHaveLength(2);
       expect(result[0]["item-id"]).toBe("1");

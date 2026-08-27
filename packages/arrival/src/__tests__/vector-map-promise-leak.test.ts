@@ -56,11 +56,27 @@ describe("vector/string map+for-each await async procs (no raw Promise leak)", (
     );
     const out = await run(`(string-map async-char "abc")`);
     expect(out).not.toMatch(/\[object Promise\]/);
+    expect(out).toBe("abc");
   });
 
   it("vector-for-each with an async proc completes (awaits) before returning", async () => {
     // for-each returns void; the point is it must AWAIT the async proc rather than
-    // returning while promises are still outstanding.
-    await expect(run(`(vector-for-each async-noop (vector 1 2 3))`)).resolves.toBeDefined();
+    // returning while promises are still outstanding. A tick counter is the witness —
+    // `toBeDefined()` is true if the host returns immediately and drops the promises.
+    let ticks = 0;
+    env.bind(
+      "async-tick",
+      new ANativeProcedure({
+        name: "async-tick",
+        arity: { min: 0, max: null },
+        contract: undefined,
+        impl: async () => {
+          ticks++;
+          return theVoid;
+        },
+      }),
+    );
+    await run(`(vector-for-each async-tick (vector 1 2 3))`);
+    expect(ticks).toBe(3);
   });
 });

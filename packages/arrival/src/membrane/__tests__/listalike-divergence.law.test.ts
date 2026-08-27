@@ -165,6 +165,10 @@ describe("LAW: no list verb may distinguish a tool array from a pair-list", () =
     { timeout: DEADLINE_MS * 3 },
     async ({ verb, program, fixture }) => {
       const { viaToolArray, viaPairList } = await bothCharts(program, fixture);
+      // A hang is a failure of THAT arm, never a comparable value — two HANG strings
+      // would otherwise equal and the row would go green under load.
+      expect(viaToolArray.startsWith("HANG"), `${verb} tool-array hung`).toBe(false);
+      expect(viaPairList.startsWith("HANG"), `${verb} pair-list hung`).toBe(false);
       // The pair-list arm is the ORACLE. Asserting equality (rather than asserting some property
       // of the array arm) is what makes this test unable to go falsely green: there is no
       // "reasonable-looking" wrong answer that can satisfy it.

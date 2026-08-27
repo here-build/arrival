@@ -15,7 +15,9 @@
  * elements (P10).
  */
 import { describe, it, expect } from "vitest";
-import { sStr, sNum, run } from "../../__tests__/_lineage-test-helpers.js";
+import { sStr, sNum, run, runRaw } from "../../__tests__/_lineage-test-helpers.js";
+import { provOf } from "../lineage.js";
+import { toJS } from "../../membrane/rosetta.js";
 
 // Standard stamped fixtures, fresh per call (AValues are immutable, but a fresh
 // object keeps each test independent and the intent readable at the call site).
@@ -28,19 +30,27 @@ const nums = () => ({ a: sNum(10, 100), b: sNum(20, 200), c: sNum(30, 300) });
 // ─────────────────────────────────────────────────────────────────────────────
 describe("GOLDEN — pure ops over literals mint NOTHING (empty provenance)", () => {
   it("(+ 1 2) — addition of two literals", async () => {
-    expect(await run(`(+ 1 2)`)).toMatchInlineSnapshot(`[]`);
+    const v = await runRaw(`(+ 1 2)`);
+    expect(toJS(v)).toBe(3);
+    expect(provOf(v)).toEqual([]);
   });
 
   it("(* 2 3) — multiplication of two literals", async () => {
-    expect(await run(`(* 2 3)`)).toMatchInlineSnapshot(`[]`);
+    const v = await runRaw(`(* 2 3)`);
+    expect(toJS(v)).toBe(6);
+    expect(provOf(v)).toEqual([]);
   });
 
   it("(- 10 (* 2 3)) — a nested all-literal arithmetic tree", async () => {
-    expect(await run(`(- 10 (* 2 3))`)).toMatchInlineSnapshot(`[]`);
+    const v = await runRaw(`(- 10 (* 2 3))`);
+    expect(toJS(v)).toBe(4);
+    expect(provOf(v)).toEqual([]);
   });
 
   it("(< 1 2) — a literal comparison", async () => {
-    expect(await run(`(< 1 2)`)).toMatchInlineSnapshot(`[]`);
+    const v = await runRaw(`(< 1 2)`);
+    expect(toJS(v)).toBe(true);
+    expect(provOf(v)).toEqual([]);
   });
 });
 

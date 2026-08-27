@@ -10,6 +10,7 @@ import {
   hueFactor,
   paint,
   paintHex,
+  REFERENCE_CANVAS,
   REFERENCE_GROUND,
   setThemeCanvas,
   setThemeGround,
@@ -29,6 +30,7 @@ function lightness(r: number, g: number, b: number): number {
 
 afterEach(() => {
   setThemeGround(REFERENCE_GROUND);
+  setThemeCanvas(REFERENCE_CANVAS);
 });
 
 describe("colorMode", () => {

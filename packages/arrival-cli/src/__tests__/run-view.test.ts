@@ -72,7 +72,9 @@ describe("runView — real traces expose the 1:N multiplicity", () => {
     // kernel owns nil-tolerance; division-by-zero is a genuine fault). The run throws, but
     // the trace up to the fault is captured, and the aggregate over that template is error.
     const trace = new EvalTrace();
-    await execState("(/ 1 0)", { tap: trace, budgetMs: 30_000 }).catch(() => {});
+    await execState("(/ 1 0)", { tap: trace, budgetMs: 30_000 }).catch((err: unknown) => {
+      expect(err).toBeInstanceOf(Error);
+    });
     const nodes = runView(trace);
     const div = nodes.find((n) => n.head === "/");
     expect(div?.state).toBe("error");

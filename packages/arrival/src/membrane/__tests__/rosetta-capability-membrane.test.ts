@@ -17,6 +17,7 @@ import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { AString } from "../../values/primitives/AString.js";
 import { inferenceEnv } from "../../env/inference-env.js";
+import type { AmbientRuntime } from "../../env/AmbientRuntime.js";
 import { jsToScheme, toJS } from "../rosetta.js";
 import { execOverFrame } from "../../eval/generator-exec.js";
 import { testCallCtx } from "../../run/CallCtx.js";
@@ -27,9 +28,15 @@ import { withDynamicCallSite } from "../../eval/dynamic-call-site.js";
 import { tf } from "../../values/tagless-final.js";
 import type { SchemeValue } from "../../values/types.js";
 
-// Helper to unwrap exec results
-async function execOne(expr: string): Promise<any> {
-  const results = await execOverFrame(expr, { env: inferenceEnv });
+let capSeq = 0;
+async function withCap(caps: Parameters<typeof applyCapability>[1]): Promise<AmbientRuntime> {
+  const env = inferenceEnv.child(`rosetta-cap-${++capSeq}`);
+  await applyCapability(env, caps);
+  return env;
+}
+
+async function execOne(expr: string, env: AmbientRuntime): Promise<any> {
+  const results = await execOverFrame(expr, { env });
   return results[0];
 }
 
@@ -52,7 +59,7 @@ function invoke(verb: ARosettaProcedure, ...args: unknown[]): unknown {
 describe("Rosetta AmbientRuntime (capability-authored)", () => {
   describe("EnvCapability-bound rosetta verbs", () => {
     it("should extend environment with Rosetta functions", async () => {
-      await applyCapability(inferenceEnv, [
+      const env = await withCap([
         EnvCapability.define("test/double-all", {
           symbols: (symbol, z) => ({
             "double-all": symbol.rosetta`double-all: doubles every element of a numeric list`(
@@ -63,18 +70,14 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
         }),
       ]);
 
-      const result = await execOne(`
-        (double-all (list 1 2 3 4 5))
-      `);
-
-      console.log("AmbientRuntime Rosetta result:", result);
+      const result = await execOne(`(double-all (list 1 2 3 4 5))`, env);
 
       // exec already unwraps via toJS — do not re-cross the JS face.
       expect(Array.from(result as Iterable<unknown>)).toEqual([2, 4, 6, 8, 10]);
     });
 
     it("should handle multiple Rosetta functions", async () => {
-      await applyCapability(inferenceEnv, [
+      const env = await withCap([
         EnvCapability.define("test/multi-rosetta", {
           symbols: (symbol, z) => ({
             "sum-array": symbol.rosetta`sum-array: sums a numeric list`(
@@ -89,11 +92,7 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
         }),
       ]);
 
-      const result = await execOne(`
-        (sum-array (filter-evens (list 1 2 3 4 5 6 7 8)))
-      `);
-
-      console.log("Chained Rosetta result:", result);
+      const result = await execOne(`(sum-array (filter-evens (list 1 2 3 4 5 6 7 8)))`, env);
 
       // exec already unwraps via toJS — do not re-cross the JS face.
       expect(result).toBe(20);
@@ -104,7 +103,7 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
       // `z.dynamic`. WORLD-FLIP REBASELINE (ruling 2026-08-13): the impl converts its
       // boxed INPUT itself (`toJS`) but returns RAW JS — boxing the return is the
       // membrane's job, and an AValue return now doors (`WorldFlipError`).
-      await applyCapability(inferenceEnv, [
+      const env = await withCap([
         EnvCapability.define("test/extract-values", {
           symbols: (symbol, z) => ({
             "extract-values": symbol.rosetta`extract-values: plucks .value off every element`(
@@ -128,11 +127,9 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
 
       // Convert to scheme and call function
       const schemeData = jsToScheme(CONSTANT_CTX, testData, {});
-      const verb = inferenceEnv.get("extract-values");
+      const verb = env.get("extract-values");
       invariant(isRosettaVerb(verb), "extract-values must resolve to a bound rosetta verb");
       const result = await invoke(verb, schemeData);
-
-      console.log("Complex data result:", result);
 
       invariant(result instanceof AValue, "invoke returns a boxed scheme value");
       const jsResult = toJS(result as SchemeValue);
@@ -145,7 +142,7 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
     // style property and results round-trip correctly
     it("should handle the MCP CSS filtering pattern", async () => {
       // This simulates the exact pattern we need for MCP
-      await applyCapability(inferenceEnv, [
+      const env = await withCap([
         EnvCapability.define("test/filter-by-css-property", {
           symbols: (symbol, z) => ({
             "filter-by-css-property":
@@ -172,13 +169,11 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
 
       // Convert to scheme and filter
       const schemeNodes = jsToScheme(CONSTANT_CTX, testNodes, {});
-      const verb = inferenceEnv.get("filter-by-css-property");
+      const verb = env.get("filter-by-css-property");
       invariant(isRosettaVerb(verb), "filter-by-css-property must resolve to a bound rosetta verb");
       // The string args cross the membrane as real scheme values — the `z.string`
       // codec decodes them the same way a scheme-level call would.
       const result = await invoke(verb, schemeNodes, new AString("overflow"), new AString("hidden"));
-
-      console.log("CSS filtering result:", result);
 
       invariant(result instanceof AValue, "invoke returns a boxed scheme value");
       const jsResult = toJS(result as SchemeValue) as Array<{ name: string }>;
@@ -190,7 +185,7 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
     // INVARIANT: a rosetta verb can aggregate scheme-converted JS objects into a stats object
     // that round-trips correctly
     it("should create CSS statistics like the MCP server needs", async () => {
-      await applyCapability(inferenceEnv, [
+      const env = await withCap([
         EnvCapability.define("test/css-property-stats", {
           symbols: (symbol, z) => ({
             "css-property-stats": symbol.rosetta`css-property-stats: aggregates node style property:value counts`(
@@ -222,11 +217,9 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
       ];
 
       const schemeNodes = jsToScheme(CONSTANT_CTX, testNodes, {});
-      const verb = inferenceEnv.get("css-property-stats");
+      const verb = env.get("css-property-stats");
       invariant(isRosettaVerb(verb), "css-property-stats must resolve to a bound rosetta verb");
       const result = await invoke(verb, schemeNodes);
-
-      console.log("CSS stats result:", result);
 
       invariant(result instanceof AValue, "invoke returns a boxed scheme value");
       const jsResult = toJS(result as SchemeValue) as Record<string, number>;

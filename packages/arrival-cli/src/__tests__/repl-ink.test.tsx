@@ -5,7 +5,7 @@
 import { disposeRunContext } from "@inhuman.tools/arrival";
 import { render } from "ink-testing-library";
 import React from "react";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ReplApp } from "../repl-ink.js";
 import { clipboardSet, COMMAND_START, commandDone } from "../osc.js";
@@ -29,25 +29,27 @@ function promptLine(frame: string | undefined): string {
 
 let session: LoaderSession;
 
-beforeAll(async () => {
+beforeEach(async () => {
   session = await loaderSession(process.cwd(), "test-repl-ink");
 });
-afterAll(async () => {
+afterEach(async () => {
   await disposeRunContext(session.runCtx);
 });
 
-function mount() {
-  return render(<ReplApp session={session} budgetMs={30_000} capabilityCount={0} version="test" mode="none" />);
+function mount(extra: { now?: () => number; notifyAfterMs?: number } = {}) {
+  return render(
+    <ReplApp session={session} budgetMs={30_000} capabilityCount={0} version="test" mode="none" {...extra} />,
+  );
 }
 
-async function waitUntil(get: () => string | undefined, pred: (s: string) => boolean, ms = 3000): Promise<string> {
+async function waitUntil(get: () => string | undefined, pred: (s: string) => boolean, ms = 30_000): Promise<string> {
   const start = Date.now();
   while (Date.now() - start < ms) {
     const frame = get() ?? "";
     if (pred(frame)) return frame;
     await new Promise((r) => setTimeout(r, 20));
   }
-  return get() ?? "";
+  throw new Error(`waitUntil timed out after ${ms}ms; last frame:\n${get() ?? ""}`);
 }
 
 describe("replInk", () => {
@@ -227,10 +229,28 @@ describe("replInk OSC 133 command blocks", () => {
 
 describe("replInk long-run notify (OSC 9)", () => {
   it("a fast turn does NOT fire a desktop notification", async () => {
-    const { stdin, lastFrame, frames, unmount } = mount();
+    const { stdin, lastFrame, frames, unmount } = mount({ now: () => 0, notifyAfterMs: 4000 });
     stdin.write("(+ 1 2)\r");
-    await waitUntil(lastFrame, (f) => /\b3\b/.test(f)); // settled well under the 4s threshold
-    expect(frames.join("")).not.toContain("]9;"); // no OSC 9
+    await waitUntil(lastFrame, (f) => /\b3\b/.test(f));
+    expect(frames.join("")).not.toContain("]9;");
+    unmount();
+  });
+
+  it("a turn that crosses notifyAfterMs fires OSC 9", async () => {
+    let calls = 0;
+    const { stdin, lastFrame, frames, unmount } = mount({
+      now: () => {
+        calls++;
+        return calls === 1 ? 0 : 5000;
+      },
+      notifyAfterMs: 4000,
+    });
+    stdin.write("(+ 1 2)\r");
+    await waitUntil(
+      () => frames.join(""),
+      (s) => s.includes("]9;"),
+    );
+    expect(stripAnsi(lastFrame() ?? "")).toMatch(/\b3\b/);
     unmount();
   });
 });
@@ -242,24 +262,30 @@ describe("replInk ,copy", () => {
     await waitUntil(lastFrame, (f) => /\b3\b/.test(f));
 
     const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
-    stdin.write(",copy\r");
-    await waitUntil(
-      () => (writeSpy.mock.calls.length > 0 ? "done" : ""),
-      (s) => s === "done",
-    );
-    expect(writeSpy.mock.calls.some((call) => String(call[0]).includes(clipboardSet("3")))).toBe(true);
-    writeSpy.mockRestore();
-    unmount();
+    try {
+      stdin.write(",copy\r");
+      await waitUntil(
+        () => (writeSpy.mock.calls.length > 0 ? "done" : ""),
+        (s) => s === "done",
+      );
+      expect(writeSpy.mock.calls.some((call) => String(call[0]).includes(clipboardSet("3")))).toBe(true);
+    } finally {
+      writeSpy.mockRestore();
+      unmount();
+    }
   });
 
   it("is a no-op with no settled turn yet", async () => {
     const { stdin, lastFrame, unmount } = mount();
     const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
-    stdin.write(",copy\r");
-    await waitUntil(lastFrame, (f) => promptLine(f).startsWith(">")); // back to a fresh prompt
-    expect(writeSpy).not.toHaveBeenCalled();
-    writeSpy.mockRestore();
-    unmount();
+    try {
+      stdin.write(",copy\r");
+      await waitUntil(lastFrame, (f) => !promptLine(f).includes(",copy") && promptLine(f).startsWith(">"));
+      expect(writeSpy).not.toHaveBeenCalled();
+    } finally {
+      writeSpy.mockRestore();
+      unmount();
+    }
   });
 });
 
