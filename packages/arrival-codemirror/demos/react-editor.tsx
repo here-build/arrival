@@ -32,7 +32,7 @@ export function Demo(): React.ReactElement {
           onChange={setScheme}
           view={view}
           onSugarcoatError={setParseError}
-          structuralEditing // paredit on the classic lens (off by default)
+          structuralEditing // paredit on the Scheme lens (off by default)
         />
       </div>
     </div>

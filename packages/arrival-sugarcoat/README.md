@@ -42,14 +42,14 @@ sugarcoatToScheme("xs.map{ it * 2 }", scheme); // → "(map (lambda (it) (* it 2
 
 ## API
 
-| Export                                     | Role                                                                                                                                                                                                                        |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`schemeToSugarcoat(text)`**              | Canonical Scheme → Sugarcoat view.                                                                                                                                                                                          |
-| **`sugarcoatToScheme(text, prevClassic)`** | Fold an edited view back. The second argument is the previous stored classic — unchanged top-level forms splice byte-for-byte; only changed forms reprint. Malformed Sugarcoat **throws** (keep the buffer; skip the save). |
-| **`readSugarcoat(text)`**                  | Sugarcoat → classic AST nodes (the reader half of the lens).                                                                                                                                                                |
-| **`alignSugarcoatClassic(text)`**          | Sugarcoat ↔ classic span pairing for IDE features on the sweet face.                                                                                                                                                        |
-| **`paramHints` / `paramHintsSugarcoat`**   | Parameter-name inlay hints over classic / Sugarcoat text.                                                                                                                                                                   |
-| **`tidyBoundNames`**                       | Bound-name recovery (`it` / singular noun). Import from the names subpath: `import { tidyBoundNames } from "@inhuman.tools/arrival-sugarcoat/names"`.                                                                       |
+| Export                                    | Role                                                                                                                                                                                                                       |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`schemeToSugarcoat(text)`**             | Canonical Scheme → Sugarcoat view.                                                                                                                                                                                         |
+| **`sugarcoatToScheme(text, prevScheme)`** | Fold an edited view back. The second argument is the previous stored Scheme — unchanged top-level forms splice byte-for-byte; only changed forms reprint. Malformed Sugarcoat **throws** (keep the buffer; skip the save). |
+| **`readSugarcoat(text)`**                 | Sugarcoat → Scheme AST nodes (the reader half of the lens).                                                                                                                                                                |
+| **`alignSugarcoatScheme(text)`**          | Sugarcoat ↔ Scheme span pairing for IDE features on the sweet face.                                                                                                                                                        |
+| **`paramHints` / `paramHintsSugarcoat`**  | Parameter-name inlay hints over Scheme / Sugarcoat text.                                                                                                                                                                   |
+| **`tidyBoundNames`**                      | Bound-name recovery (`it` / singular noun). Import from the names subpath: `import { tidyBoundNames } from "@inhuman.tools/arrival-sugarcoat/names"`.                                                                      |
 
 ## The guarantee
 
@@ -62,9 +62,9 @@ sugarcoatToScheme("xs.map{ it * 2 }", scheme); // → "(map (lambda (it) (* it 2
 ## Two things in one package
 
 1. **The lens** — `schemeToSugarcoat` / `sugarcoatToScheme`, everything above.
-2. **The runtime-free reader** — `parseSexprs` / `printScheme`, a standalone s-expression parser with comment and span tracking.
+2. **Re-export of the syntax forest** — `parseSexprs` / `Node` from `@inhuman.tools/arrival-syntax`, plus `printScheme` (the Scheme printer the lens uses to write a changed form back).
 
-The second is why half the toolchain depends on a "syntax skin": anything that must _parse_ Scheme without _evaluating_ it — the Mercury code generator, the type-lens LSP services, structural editing — imports the reader and never pulls the interpreter. The main entry tree-shakes to `tiny-invariant`. The package still depends on `@here.build/lexical-namer` and `pluralize` for the `./names` subpath (`tidyBoundNames`); consumers of `.` do not pull those.
+The forest is a separate package so the interpreter type-layer and the type-lens emitter can parse Scheme without depending on this formatter — and so this package never depends on the eval engine. The main entry tree-shakes to `arrival-syntax` + `tiny-invariant`. The package still depends on `@here.build/lexical-namer` and `pluralize` for the `./names` subpath (`tidyBoundNames`); consumers of `.` do not pull those.
 
 ## Going deeper
 

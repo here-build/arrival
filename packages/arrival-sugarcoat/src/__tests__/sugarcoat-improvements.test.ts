@@ -167,7 +167,7 @@ describe("string-append → @{…} (default: strip coercions, headless str)", ()
 
 // ── KWARGS LAW: known-kwargs never n-expr / never neoteric; unknown heads keep shape ──
 describe("kwargs law (known head: no n-expr/neoteric; unknown: no pair lines)", () => {
-  it("unknown head keeps classic call shape (no k:v pair inventing)", () => {
+  it("unknown head keeps scheme call shape (no k:v pair inventing)", () => {
     // fits or breaks — never colon-pair lines under a non-kwarg head
     expect(render("(foo :a 1 :b 2)")).toBe("(foo :a 1 :b 2)");
     expect(render("(foo :a 1 :b 2)", { width: 8 })).toContain(":a");
@@ -178,7 +178,7 @@ describe("kwargs law (known head: no n-expr/neoteric; unknown: no pair lines)", 
     // Without the law, (gt :lo 1 :hi 9) would become {:lo > 1 > :hi > 9}.
     const src = `(define gt (require "bounds.prompt"))\n(gt :lo 1 :hi 9)`;
     const inline = schemeToSugarcoat(src);
-    expect(inline).toContain("(gt :lo 1 :hi 9)"); // classic kwargs call, not n-expr
+    expect(inline).toContain("(gt :lo 1 :hi 9)"); // scheme kwargs call, not n-expr
     expect(inline).not.toMatch(/\{[^}]*\}/); // no curly n-expr
     expect(inline).not.toMatch(/\s>\s/); // no comparison glyph rewrite
     // When broken for width, pair lines — still not n-expr.

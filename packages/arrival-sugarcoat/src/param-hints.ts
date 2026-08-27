@@ -10,7 +10,7 @@ import { type Node, parseSexprs } from "./sugarcoat-render.js";
  *
  * Pure function of the text → `{pos, name}[]`, where `pos` is the arg's start offset
  * (the hint renders just before it). Lens-agnostic in spirit; this entry parses
- * CLASSIC scheme (`parseSexprs`). The sugarcoat lens reuses the same resolver over a
+ * Scheme (`parseSexprs`). The sugarcoat lens reuses the same resolver over a
  * span-bearing sugarcoat parse — a follow-up. Returns `[]` on a parse error so a
  * mid-edit buffer shows no hints rather than throwing.
  *
@@ -74,7 +74,7 @@ function defOf(nd: Node): { name: string; params: string[] } | null {
 /** A `:keyword` arg means the call is self-labeling (a kwarg call) — skip hints. */
 const hasKwarg = (args: Node[]): boolean => args.some((a) => isAtom(a) && a.atom.startsWith(":"));
 
-/** Classic lens: hints over the classic `.scm` parse. */
+/** Scheme lens: hints over the Scheme `.scm` parse. */
 export function paramHints(src: string): ParamHint[] {
   try {
     return hintsFromForms(parseSexprs(src));

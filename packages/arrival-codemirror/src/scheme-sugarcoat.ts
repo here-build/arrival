@@ -2,7 +2,7 @@ import { LanguageSupport, StreamLanguage, type StreamParser, type StringStream }
 import { tags as t } from "@lezer/highlight";
 
 /**
- * StreamLanguage for classic Scheme + sugarcoat superset (readable lens).
+ * StreamLanguage for Scheme + sugarcoat superset (readable lens).
  *
  * Covers s-exprs + curly-infix, dict `{}` / list `[]`, `k:` / `:key`, `=>`, `==`.
  * Delimiters discriminate at the opener (same odd/even + tight rules as the
@@ -749,7 +749,7 @@ export const parser: StreamParser<SchemeSugarcoatState> = {
   },
 };
 
-/** `LanguageSupport` for `.scm` (classic + sugarcoat). Tags only — no theme. */
+/** `LanguageSupport` for `.scm` (Scheme + sugarcoat). Tags only — no theme. */
 export function schemeSugarcoat(): LanguageSupport {
   return new LanguageSupport(StreamLanguage.define(parser));
 }

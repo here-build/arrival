@@ -2,8 +2,8 @@
  * COPY-AS-CHUNK (constitution §4.5 — greenfield package, never shared imports).
  * Source: arrival/packages/mercury/src/types-emit.ts (already carrying
  * Adaptations from the source chunk:
- *   - imports re-homed: parse/desugar/nodes/names/scheme-scope → `../front/` (this
- *     package's copies; `parseSexprs` no longer imports `@inhuman.tools/arrival-sugarcoat`),
+ *   - imports re-homed: parse/desugar/nodes/names/scheme-scope → `../front/`
+ *     (`parseSexprs` is `@inhuman.tools/arrival-syntax`, re-exported from `../front/parse`),
  *     stdlib → `./builtins.js` (roster-only reduction).
  *   - Law T: narrowing forms emit native `!`/`&&`/`||`/bare-call; other conditions
  *     coerce with `(expr !== false)` — Scheme truth (only `#f` is false).

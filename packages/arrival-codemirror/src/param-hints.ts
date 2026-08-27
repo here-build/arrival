@@ -5,7 +5,7 @@ import { paramHints, paramHintsSugarcoat, type ParamHint } from "@inhuman.tools/
 /**
  * Parameter inlay hints (view-only widgets, no doc range).
  * `param:foo` before args of local defines. Pure analysis (arrival-sugarcoat).
- * Per-lens: "scheme" (classic) or "sugarcoat". Never in buffer text.
+ * Per-lens: "scheme" or "sugarcoat". Never in buffer text.
  *
  * **Hanging labels.** A hint may pull left into free whitespace so the *value*
  * stays put when there's room:
@@ -111,7 +111,7 @@ const hintTheme = EditorView.theme({
 
 /** The CodeMirror extension: a ViewPlugin that recomputes the hint widgets when the
  *  document changes, plus their styling. `lens` selects the resolver — `"scheme"`
- *  reads the classic buffer, `"sugarcoat"` the sugarcoat buffer. */
+ *  reads the Scheme buffer, `"sugarcoat"` the sugarcoat buffer. */
 export function paramHintsExtension(lens: "scheme" | "sugarcoat" = "scheme"): Extension {
   const resolve = lens === "sugarcoat" ? paramHintsSugarcoat : paramHints;
   return [

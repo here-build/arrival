@@ -2,9 +2,8 @@
 //
 // Each extension is wired to exactly one backend method. The seam is structural
 // (sync or Promise) so in-process and worker backends are interchangeable.
-// Coordinates are always CLASSIC scheme; sugarcoat buffers must go through
-// sugarcoatIdeBackend for translation. No sugarcoat↔classic mapping yet → do not mount
-// full IDE on sugarcoat without it.
+// Coordinates are always Scheme; sugarcoat buffers must go through
+// sugarcoatIdeBackend for translation. Do not mount full IDE on sugarcoat without it.
 
 import {
   autocompletion,

@@ -13,10 +13,10 @@ describe("identityLine", () => {
     expect(line).toBe("arrival 0.1.0 — no capabilities armed · sugarcoat lens · ,lens to flip, ? for help");
   });
 
-  it("pluralizes capability count and reflects the classic lens", () => {
+  it("pluralizes capability count and reflects the scheme lens", () => {
     const one = stripAnsi(identityLine({ version: "0.1.0", capabilityCount: 1, lens: "scheme" }, "none"));
     expect(one).toContain("1 capability armed");
-    expect(one).toContain("classic lens");
+    expect(one).toContain("scheme lens");
 
     const many = stripAnsi(identityLine({ version: "0.1.0", capabilityCount: 3, lens: "scheme" }, "none"));
     expect(many).toContain("3 capabilities armed");

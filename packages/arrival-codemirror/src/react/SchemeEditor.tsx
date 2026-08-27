@@ -54,15 +54,15 @@ export interface SchemeEditorProps {
   /** Cross-file goto-def: Cmd/Ctrl-click on a `require`d name lands here —
    *  `(path, span-in-that-file)`. The studio wires its file switcher. */
   onNavigate?: (path: string, span: { start: number; length: number }) => void;
-  /** Host extensions mounted on the CLASSIC lens only (the saas shell's run
+  /** Host extensions mounted on the Scheme lens only (the saas shell's run
    *  plumbing: cost-bar decorations, focus/blur run triggers, cursor tracking).
-   *  Classic-only because they anchor to classic source offsets — the sugarcoat
+   *  Scheme-only because they anchor to Scheme source offsets — the sugarcoat
    *  lens moves them. */
-  classicExtensions?: Extension[];
-  /** The classic lens's EditorView, for hosts that dispatch into it (cost-bar
+  schemeExtensions?: Extension[];
+  /** The Scheme lens's EditorView, for hosts that dispatch into it (cost-bar
    *  decoration refresh). Called with the view on mount, null on unmount. */
   onCreateEditor?: (view: EditorView | null) => void;
-  /** Paredit-style structural editing on the CLASSIC lens (expand/contract
+  /** Paredit-style structural editing on the Scheme lens (expand/contract
    *  selection, slurp/barf, splice, kill-sexp, strict delete protection,
    *  structural indent) — OFF by default. It reassigns several muscle-memory
    *  chords (Alt-↑/↓ shadows Move Line, Mod-Shift-K shadows Delete Line) and
@@ -73,7 +73,7 @@ export interface SchemeEditorProps {
 }
 
 /**
- * Classic + sugarcoat lenses over canonical `.scm`.
+ * Scheme + sugarcoat lenses over canonical `.scm`.
  *
  * Controlled `view` prop. Sugarcoat = readable surface; canonical scheme is
  * always the persisted truth.
@@ -82,11 +82,11 @@ export interface SchemeEditorProps {
  * - Enter sugarcoat: derive once via schemeToSugarcoat (user formatting preserved).
  * - While in sugarcoat: sugarcoat buffer is authoritative; edits forward via
  *   sugarcoatToScheme (per-form splice + canonical reprint fallback).
- * - Never reflow sugarcoat from classic (would clobber formatting).
- * - Unparseable sugarcoat: hold last good classic, surface error.
+ * - Never reflow sugarcoat from Scheme (would clobber formatting).
+ * - Unparseable sugarcoat: hold last good Scheme, surface error.
  * - External value change (not our echo) re-seeds.
  *
- * Structural/parens hints only on classic. IDE uses sugarcoatIdeBackend on sugarcoat.
+ * Structural/parens hints only on Scheme. IDE uses sugarcoatIdeBackend on sugarcoat.
  */
 export function SchemeEditor({
   value,
@@ -96,7 +96,7 @@ export function SchemeEditor({
   view = "scheme",
   onSugarcoatError,
   onNavigate,
-  classicExtensions,
+  schemeExtensions,
   onCreateEditor,
   structuralEditing = false,
 }: SchemeEditorProps): React.ReactElement {
@@ -110,10 +110,10 @@ export function SchemeEditor({
     };
   }, [path]);
 
-  // The classic scheme is canonical truth (mirrors File.body).
+  // The Scheme buffer is canonical truth (mirrors File.body).
   const [text, setText] = useState(value);
   // The sugarcoat buffer: the truth WHILE the sugarcoat view is open. Seeded from the
-  // classic on entering sugarcoat and thereafter one-directional (sugarcoat → classic).
+  // Scheme on entering sugarcoat and thereafter one-directional (sugarcoat → Scheme).
   const [sugarcoat, setSugarcoat] = useState("");
   const [sugarcoatErr, setSugarcoatErr] = useState<string | null>(null);
 
@@ -153,7 +153,7 @@ export function SchemeEditor({
     onSugarcoatErrorRef.current?.(view === "sugarcoat" ? sugarcoatErr : null);
   }, [sugarcoatErr, view]);
 
-  // The classic view handle goes null whenever the classic editor unmounts —
+  // The Scheme view handle goes null whenever the Scheme editor unmounts —
   // switching to the sugarcoat lens or unmounting entirely — so a host never
   // dispatches into a destroyed view.
   useEffect(() => {
@@ -172,12 +172,12 @@ export function SchemeEditor({
     setSugarcoat(v); // never reflow user's sugarcoat formatting
     try {
       // Forward: unchanged top forms keep exact bytes; edited ones reprint.
-      const classic = sugarcoatToScheme(v, textRef.current);
-      setText(classic);
-      onChangeRef.current?.(classic);
+      const scheme = sugarcoatToScheme(v, textRef.current);
+      setText(scheme);
+      onChangeRef.current?.(scheme);
       setSugarcoatErr(null);
     } catch (error) {
-      setSugarcoatErr(errMsg(error)); // hold last good classic
+      setSugarcoatErr(errMsg(error)); // hold last good Scheme
     }
   }, []);
 
@@ -190,38 +190,38 @@ export function SchemeEditor({
 
   // The IDE backend (type-checked diagnostics / hover / completion / goto-def)
   // loads lazily and lands when ready; until then the editor is plain. The
-  // backend answers in classic scheme coordinates; the sugarcoat lens mounts the
-  // SAME backend through `sugarcoatIdeBackend` (the sugarcoat↔classic span aligner).
+  // backend answers in Scheme coordinates; the sugarcoat lens mounts the
+  // SAME backend through `sugarcoatIdeBackend` (the sugarcoat↔Scheme span aligner).
   const ide = useSchemeIde(true);
 
-  // Stable openFile for schemeIde so classicExt/sugarcoatExt don't rebuild on
+  // Stable openFile for schemeIde so schemeExt/sugarcoatExt don't rebuild on
   // every parent identity of onNavigate.
   const openFile = useCallback((path: string, span: { start: number; length: number }) => {
     onNavigateRef.current?.(path, span);
   }, []);
   const hasNavigate = onNavigate !== undefined;
 
-  const classicExt = useMemo<Extension[]>(
+  const schemeExt = useMemo<Extension[]>(
     // Parameter inlay hints + structural (paredit) editing are .scm-only, and
-    // CLASSIC-lens-only — the sugarcoat lens's indentation is semantic, so
+    // Scheme-lens-only — the sugarcoat lens's indentation is semantic, so
     // structural ops there would be wrong, not just unmapped.
     () => [
       schemeSugarcoat(),
       theme,
       editorFill,
       ideaSearch(),
-      ...(classicExtensions ?? []),
+      ...(schemeExtensions ?? []),
       paramHintsExtension("scheme"),
       ...(structuralEditing === false
         ? []
         : [schemeStructural(structuralEditing === true ? undefined : structuralEditing)]),
       ...(ide === null ? [] : [schemeIde(ide, hasNavigate ? { openFile } : {})]),
     ],
-    [ide, openFile, hasNavigate, structuralEditing, classicExtensions],
+    [ide, openFile, hasNavigate, structuralEditing, schemeExtensions],
   );
   // The sugarcoat lens always shows a .scm, so it always gets the (sugarcoat) hints —
-  // plus the full IDE through the sugarcoat↔classic aligner. (Structural ops stay
-  // classic-only — sugarcoat indentation is semantic.)
+  // plus the full IDE through the sugarcoat↔Scheme aligner. (Structural ops stay
+  // Scheme-only — sugarcoat indentation is semantic.)
   const sugarcoatExt = useMemo<Extension[]>(
     () => [
       schemeSugarcoat(),
@@ -253,7 +253,7 @@ export function SchemeEditor({
           <CodeMirror
             key="scheme"
             value={text}
-            extensions={classicExt}
+            extensions={schemeExt}
             editable={!readOnly}
             onChange={onSchemeChange}
             onCreateEditor={handleCreateEditor}

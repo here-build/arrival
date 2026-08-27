@@ -77,7 +77,7 @@ const AUDIT: SchemeIdeAudit = {
 
 /**
  * Minimal polyglot defines the sugarcoat lens needs even if env harvest is late.
- * Sugarcoat modernizes `string-append` → `str` (`@{…}`); classic R7RS still has
+ * Sugarcoat modernizes `string-append` → `str` (`@{…}`); R7RS still has
  * string-append as a PRE leaf — so missing prelude only breaks the sugarcoat path.
  * Body matches polyglot-clojure (repr for non-strings).
  */

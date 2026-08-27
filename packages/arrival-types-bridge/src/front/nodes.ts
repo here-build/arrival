@@ -3,7 +3,7 @@
  * inspection over the parse forest — no emit, no naming. `Atom`/`ListNode`
  * carry `lead`/`trail` honestly (CoreForm comment carriage).
  */
-import type { Node } from "./parse.js";
+import type { ListOpen, Node } from "./parse.js";
 
 /** An atom node: a symbol, keyword, number, string (`str:true`), or `#t`/`#f`. */
 export type Atom = {
@@ -13,9 +13,11 @@ export type Atom = {
   trail?: string[];
   span?: readonly [number, number];
 };
-/** A list node `(…)`. Quote/quasiquote desugar to `(quote x)` lists in the parser. */
+/** A list node `(…)`. Quote/quasiquote desugar to `(quote x)` lists in the parser.
+ *  `open` is present when parseSexprs minted the list from `[]` or `{}`. */
 export type ListNode = {
   list: Node[];
+  open?: ListOpen;
   lead?: string[];
   trail?: string[];
   span?: readonly [number, number];

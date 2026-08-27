@@ -191,7 +191,7 @@ Lowering: headless `@{…}` ⇒ `(str part…)`; `@head{…}` ⇒ `(head part…
 common indent then lowers to `(str …)` (dedent never exists in canonical form). Adjacent string
 literals coalesce on read — which is exactly the render-side representability gate.
 
-The graft body is **classic prefix context**: the parens are the grafted form's own parens
+The graft body is **prefix Scheme context**: the parens are the grafted form's own parens
 (`@(+ x 1)` grafts `(+ x 1)`), so `@(x + 1)` grafts a _call of `x`_ and `@({x + 1})` grafts a
 call of the sum — no infix, no postfix steps attach to a bare `@id` interp (`@s[:k]` leaves
 `[:k]` as literal prose; write `@(:k s)`).
@@ -205,7 +205,7 @@ span physical lines (§1.2).
 **head-aware**, not lexical: only kwarg-taking heads (`dict`, and names bound to `.prompt`
 requires) inflate `name: v` back to `:name v` on read. Under an unknown head, `name:` stays the
 literal symbol it is in R7RS. (Symmetrically the render only emits `k: v` pair lines under those
-same heads — unknown heads keep the classic call shape.) An editor grammar can safely highlight
+same heads — unknown heads keep the Scheme call shape.) An editor grammar can safely highlight
 every `name:`/`:name` as a keyword — the distinction is semantic, not lexical.
 
 ### KWARGS LAW
@@ -248,7 +248,7 @@ the CodeMirror mode emit):
 | constant   | numbers, `#t` `#f`, `#\char`                                      |
 
 Fidelity beyond coloring (fold ranges, structural selection, hover, rename) should not be
-re-derived from this grammar — align spans via `alignSugarcoatClassic` and drive the canonical
+re-derived from this grammar — align spans via `alignSugarcoatScheme` and drive the canonical
 tooling through the lens, the way `arrival-codemirror` does.
 
 ## Conformance

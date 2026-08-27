@@ -432,7 +432,7 @@ function renameBoundRefs(body: Node, oldName: string, newName: string): void {
  *  NOT for auto-save: this renames author-chosen names. Right home is the generation
  *  pipeline (normalise machine output before store) and an explicit "tidy" command.
  *
- *  Comments are not preserved (printScheme is the canonical-classic writer) — fine for
+ *  Comments are not preserved (printScheme is the canonical Scheme writer) — fine for
  *  generated output; hand-authored / foreign code should use {@link boundNameHints}. */
 export function tidyBoundNames(scheme: string, opts?: TidyOptions): string {
   const forest = parseSexprs(scheme);

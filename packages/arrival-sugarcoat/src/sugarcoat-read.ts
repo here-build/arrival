@@ -1,13 +1,13 @@
 /**
- * Sugarcoat → classic READER. Inverts sugarcoat-render.ts so a live sugarcoat view can be
+ * Sugarcoat → Scheme READER. Inverts sugarcoat-render.ts so a live sugarcoat view can be
  * saved back to canonical scm losslessly (stored entities are ALWAYS raw scm;
- * sugarcoat is a lens). The law: read(render(x)) ≡ x on classic.
+ * sugarcoat is a lens). The law: read(render(x)) ≡ x on Scheme.
  *
  * Two layers:
  *   1. I-expressions (indentation): a line + its more-indented descendants form a
  *      list. `define (f x)` ⏎ body → (define (f x) body). A 1-token line with no
  *      children is just that token; multi-token / has-children becomes a list.
- *   2. delimited sub-exprs: `(…)` classic lists, free `[…]` → `(list …)`, and `{…}`
+ *   2. delimited sub-exprs: `(…)` Scheme lists, free `[…]` → `(list …)`, and `{…}`
  *      which is ODD/EVEN-split: even-arity kv pairs → `(dict …)`; odd operand·op·operand
  *      alternation → curly-infix n-expr (precedence ladder + arrow → lambda + glyphs).
  *      Bracket mode overrides indentation — a `{…}`/`[…]` may span physical lines, so
@@ -675,7 +675,7 @@ const atom = (w: string, str?: boolean): Node => (str ? { atom: w, str: true } :
 const isColonKey = (t: Tok): t is Extract<Tok, { t: "word" }> =>
   t.t === "word" && !t.str && t.v.length > 1 && t.v.endsWith(":") && !t.v.slice(0, -1).includes(":");
 
-/** Parse a token array into a SEQUENCE of classic elements: `(…)` lists, `{…}`
+/** Parse a token array into a SEQUENCE of Scheme elements: `(…)` lists, `{…}`
  *  curlies, quoted data, and atoms. Colon-keys are NOT handled here — parseNode
  *  strips a line-leading `key:` first, so trailing-colon tokens never reach this. */
 function parseElements(toks: Tok[], accessorDepth: number = R7RS_ACCESSOR_DEPTH): Node[] {
@@ -812,9 +812,9 @@ function parseElements(toks: Tok[], accessorDepth: number = R7RS_ACCESSOR_DEPTH)
   // is its own align/hover target), then the subscript-wrapped whole (so the
   // sugared (car 5) node spans `5[0]`) — spanned() only fills empty spans, so
   // the two stamps never fight.
-  const datum = (): Node => spanned(() => withSubscripts(spanned(() => quoted(classicDatum))));
+  const datum = (): Node => spanned(() => withSubscripts(spanned(() => quoted(schemeDatum))));
 
-  function classicList(): Node {
+  function schemeList(): Node {
     const items: Node[] = [];
     while (peek() && peek()!.t !== ")") items.push(datum());
     invariant(!!peek(), "unbalanced (");
@@ -830,9 +830,9 @@ function parseElements(toks: Tok[], accessorDepth: number = R7RS_ACCESSOR_DEPTH)
     next();
     return { list: [atom("list"), ...items] };
   }
-  function classicDatum(): Node {
+  function schemeDatum(): Node {
     const t = next();
-    if (t.t === "(") return classicList();
+    if (t.t === "(") return schemeList();
     if (t.t === "[") return freeList();
     if (t.t === "{") return curly();
     if (t.t === "at") return t.node;
@@ -845,7 +845,7 @@ function parseElements(toks: Tok[], accessorDepth: number = R7RS_ACCESSOR_DEPTH)
     invariant(!!t, "unexpected end in curly");
     if (t.t === "(") {
       next();
-      return classicList();
+      return schemeList();
     }
     if (t.t === "[") {
       next();
@@ -876,7 +876,7 @@ function parseElements(toks: Tok[], accessorDepth: number = R7RS_ACCESSOR_DEPTH)
             invariant(!!t, "unexpected end in curly");
             if (t.t === "(") {
               next();
-              return classicList();
+              return schemeList();
             }
             if (t.t === "[") {
               next();
@@ -901,7 +901,7 @@ function parseElements(toks: Tok[], accessorDepth: number = R7RS_ACCESSOR_DEPTH)
     );
   }
   function curlyOperand(): Node {
-    // double-spanned like `datum`: infix operands are read OUTSIDE classicList's
+    // double-spanned like `datum`: infix operands are read OUTSIDE schemeList's
     // item loop, so they need their own stamps (atoms in `{n - 1}` are
     // hover/align targets; the inner stamp covers a subscripted base).
     return spanned(() => withSubscripts(spanned(() => quoted(curlyAtomic))));
@@ -1183,7 +1183,7 @@ function parseNode(lines: LogLine[], idx: number, accessorDepth?: number): { ele
   const node = regroupLetFamily({ list: [...head, ...childElems] });
   // Span the composite from its line extents (when both endpoints are on
   // un-coalesced lines) — the whole-form span a definition/diagnostic lift
-  // lands on when its classic span covers the entire form.
+  // lands on when its Scheme span covers the entire form.
   const last = lines[j - 1];
   if (node.span == null && line.base != null && last.base != null) {
     node.span = [line.base, last.base + last.content.length];
@@ -1192,7 +1192,7 @@ function parseNode(lines: LogLine[], idx: number, accessorDepth?: number): { ele
 }
 
 /** Blank a `;`-line-comment (to end of line) to SPACES, string-aware — they're
- *  trivia in the sugarcoat view (sugarcoat-render re-emits them from the classic AST's
+ *  trivia in the sugarcoat view (sugarcoat-render re-emits them from the Scheme AST's
  *  lead/trail). Length-PRESERVING (comment → spaces, not removed) so every other
  *  char keeps its offset: that's what lets sugarcoat-text spans (for the parameter
  *  hints) stay valid in the editor's comment-bearing buffer. tokenize skips the
@@ -1318,7 +1318,7 @@ export function splitFormsWithBase(text: string): { text: string; base: number }
   return out;
 }
 
-/** Full reader: sugarcoat text → classic forms. */
+/** Full reader: sugarcoat text → Scheme forms. */
 export function readSugarcoat(text: string, opts: ReadOpts = {}): Node[] {
   // Split into top-level forms by blank line FIRST: in the render, blank lines
   // appear ONLY between top-level forms (a comment is contiguous with its node),
@@ -1344,9 +1344,9 @@ export function readSugarcoat(text: string, opts: ReadOpts = {}): Node[] {
     });
 }
 
-// ── save-back: sugarcoat → classic, preserving unchanged forms ──────────────────────
+// ── save-back: sugarcoat → Scheme, preserving unchanged forms ──────────────────────
 
-/** Byte spans of the top-level forms in classic source, in order. Inter-form
+/** Byte spans of the top-level forms in Scheme source, in order. Inter-form
  *  whitespace and `;` line-comments are NOT part of any span (preserved verbatim
  *  on splice). String- and comment-aware so brackets inside them don't miscount. */
 export function topFormSpans(src: string): Array<{ start: number; end: number }> {
@@ -1405,7 +1405,7 @@ export function topFormSpans(src: string): Array<{ start: number; end: number }>
 }
 
 /**
- * Fold an edited sugarcoat view back into canonical classic. Every UNCHANGED top-level
+ * Fold an edited sugarcoat view back into canonical Scheme. Every UNCHANGED top-level
  * form is preserved byte-for-byte (its comments + hand-formatting intact); only
  * forms whose AST changed are reprinted (canonical, via printScheme). Falls back to
  * a whole-file canonical reprint when the form correspondence is uncertain — the
@@ -1414,19 +1414,19 @@ export function topFormSpans(src: string): Array<{ start: number; end: number }>
  * buffer and skips the save). The law: `sugarcoatToScheme(schemeToSugarcoat(c), c) === c`
  * byte-for-byte — viewing-then-saving an UNEDITED sugarcoat view never touches storage.
  */
-export function sugarcoatToScheme(sugarcoatText: string, prevClassic: string, opts: ReadOpts = {}): string {
+export function sugarcoatToScheme(sugarcoatText: string, prevScheme: string, opts: ReadOpts = {}): string {
   const sugarcoatForms = readSugarcoat(sugarcoatText, opts); // throws on malformed sugarcoat → caller handles
   const reprintAll = (): string => `${sugarcoatForms.map((f) => printScheme(f)).join("\n\n")}\n`;
 
-  const spans = topFormSpans(prevClassic);
+  const spans = topFormSpans(prevScheme);
   if (spans.length !== sugarcoatForms.length) return reprintAll(); // form added/removed → uncertain
 
-  const prevParsed = spans.map((s) => parseSexprs(prevClassic.slice(s.start, s.end)));
+  const prevParsed = spans.map((s) => parseSexprs(prevScheme.slice(s.start, s.end)));
   if (prevParsed.some((forms) => forms.length !== 1)) return reprintAll(); // ambiguous split → uncertain
 
   // Certain: 1:1 correspondence. Splice changed forms in from the end so earlier
   // spans' offsets stay valid; unchanged forms (and all inter-form bytes) survive.
-  let out = prevClassic;
+  let out = prevScheme;
   for (let i = spans.length - 1; i >= 0; i--) {
     if (nodeEq(sugarcoatForms[i], prevParsed[i][0])) continue; // unchanged → keep original bytes
     out = out.slice(0, spans[i].start) + printScheme(sugarcoatForms[i]) + out.slice(spans[i].end);
@@ -1435,6 +1435,6 @@ export function sugarcoatToScheme(sugarcoatText: string, prevClassic: string, op
 }
 
 // Wire the dual-path schemeToSugarcoat: sweet orthography (I-expr, @{}, =>, …)
-// re-enters via this reader instead of the classic spine. Import of this module
+// re-enters via this reader instead of the Scheme spine. Import of this module
 // (via sugarcoat.ts / any test that pulls readSugarcoat) installs the hook.
 registerSugarcoatReader(readSugarcoat);

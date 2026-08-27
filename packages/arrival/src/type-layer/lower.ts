@@ -1,7 +1,7 @@
 // lower — scheme → TypeScript LOWERING for the type-layer.
 //
 // "Scheme is a TS subset except lists and pairs." Walks the s-expr forest (`parseSexprs`
-// from @inhuman.tools/arrival-sugarcoat) and emits a TS *string* the lens compiles against
+// from @inhuman.tools/arrival-syntax) and emits a TS *string* the lens compiles against
 // the harvested prelude (carriers.ts + a `declare const` per tool). Emitted TS NEVER RUNS —
 // exists only so the type-checker can narrow a lowered call against its tool signature
 // (Σ∩T). Fidelity is about TYPES, not runtime: string-escape exactness, numeric precision
@@ -23,7 +23,7 @@
 // diagnostic's TS offset to the errored statement's scheme span; nothing reads
 // sub-expression offsets. `{ ts }` is stable — callers that destructure `.ts` only keep working.
 
-import { parseSexprs, type Node } from "@inhuman.tools/arrival-sugarcoat";
+import { parseSexprs, type Node } from "@inhuman.tools/arrival-syntax";
 
 import { escapeName, isTsIdentifier } from "./name-escape.js";
 
@@ -33,9 +33,9 @@ const NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i;
 /** A rational literal `p/q` — lowered to a division so its TS type is `number`. */
 const RATIONAL = /^([+-]?\d+)\/(\d+)$/;
 
-// arrival-sugarcoat's `Node` is `{ atom; str? } | { list }` (+ inert lead/trail/span). The
-// package keeps `isAtom`/`isKeyword` private, so we re-declare the few guards we need —
-// anchored on the same structural shape, never a cast.
+// arrival-syntax's `Node` is `{ atom; str? } | { list }` (+ inert lead/trail/span/open).
+// The package keeps `isAtom`/`isKeyword` out of the public surface, so we re-declare the
+// few guards we need — anchored on the same structural shape, never a cast.
 type AtomNode = { atom: string; str?: boolean };
 type ListNode = { list: Node[] };
 

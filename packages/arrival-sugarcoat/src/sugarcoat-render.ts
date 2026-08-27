@@ -1,8 +1,8 @@
 /**
- * Classic Scheme → sugarcoat-expression RENDERER.
+ * Scheme → sugarcoat-expression RENDERER.
  *
- * The choice-laden half of the classic↔sugarcoat bifunctor: sugarcoat→classic is a
- * deterministic reader (sugarcoat-read.ts), but classic→sugarcoat is a *choice* of
+ * The choice-laden half of the Scheme↔sugarcoat bifunctor: sugarcoat→Scheme is a
+ * deterministic reader (sugarcoat-read.ts), but Scheme→sugarcoat is a *choice* of
  * layout. This renderer is heuristic (width-budget + a fixed "pull first arg if it
  * fits" head-line rule), not MDL-optimal — soundness comes from the round-trip law
  * (read ∘ render preserves the AST, enforced by the corpus tests in arrival-chain),
@@ -25,11 +25,11 @@
  *   • head-line rule is fixed, not optimized (an MDL layout-cost pass would replace it).
  *   • dangling comments before a `)` (own line, no datum after) are dropped, and
  *     comments on inline-rendered operands aren't shown (only at formatSugarcoat seams).
- *   • no $ / \\ group markers, no vector (#(…)) rendering (use `(vector …)` for classic).
+ *   • no $ / \\ group markers, no vector (#(…)) rendering (use `(vector …)` for Scheme).
  *
  * POLYGLOT + FREE-SURFACE NORMALIZE (schemeToSugarcoat):
  *   Arrival's reader accepts named supersets (docs/grammar.md §BINDINGS / §CLAUSES /
- *   §LITERALS). The classic spine here stamps the opener on each container (`open`),
+ *   §LITERALS). The Scheme spine here stamps the opener on each container (`open`),
  *   then `normalizePolyglot` lowers them to the R7RS paren image **before** render:
  *     • BG2a whole-list `(let [a 1 b 2] …)` → `(let ((a 1) (b 2)) …)`
  *     • BG2b per-element `(let* ([a 1] [b 2]) …)` → same paren pairs (already list-shaped)
@@ -40,22 +40,11 @@
  *   collection kind list/dict) is preserved. See `__tests__/polyglot-normalize.test.ts`.
  */
 
+import { parseSexprs, type Node } from "@inhuman.tools/arrival-syntax";
 import invariant from "tiny-invariant";
 
-/** Opener that minted a list node. Stamped by parseSexprs; stripped by normalizePolyglot.
- *  Absent/`"("` means a plain paren list. Used only to recover polyglot/sugar free surfaces
- *  that classic R7RS would not write with `[]`/`{}`. */
-export type ListOpen = "(" | "[" | "{";
-
-export type Node =
-  | { atom: string; str?: boolean; lead?: string[]; trail?: string[]; span?: readonly [start: number, end: number] }
-  | {
-      list: Node[];
-      open?: ListOpen;
-      lead?: string[];
-      trail?: string[];
-      span?: readonly [start: number, end: number];
-    };
+export { parseSexprs, type Node } from "@inhuman.tools/arrival-syntax";
+export type { ListOpen } from "@inhuman.tools/arrival-syntax";
 
 // null-safe: items[0] of an empty list `()` is undefined; isAtom(undefined) must
 // be false, not throw ('in' on undefined). Empty lists come from `'()` folds.
@@ -76,197 +65,10 @@ const childList = (nd: Node): Node[] => {
   return nd.list;
 };
 
-// ── parser: source text → plain tree, capturing comments ──────────────────────
-//
-// A `;`-line-comment on its OWN line(s) before a datum becomes that datum's
-// `lead`; one on the SAME line just after a datum is its `trail`. (A dangling
-// comment before a `)` with no following datum is dropped.) Comments are trivia
-// to the sugarcoat READER, and `nodeEq` ignores lead/trail, so carrying them in the
-// render keeps `sugarcoatToScheme` form-matching — hence the round-trip — intact.
-export function parseSexprs(src: string): Node[] {
-  let i = 0;
-  const n = src.length;
-  // `{`/`}` are delimiters so free dict/n-expr surfaces parse as containers (not atom glue).
-  const isDelim = (c: string | undefined) =>
-    c === undefined ||
-    /\s/.test(c) ||
-    c === "(" ||
-    c === ")" ||
-    c === "[" ||
-    c === "]" ||
-    c === "{" ||
-    c === "}" ||
-    c === '"' ||
-    c === ";";
-
-  let pendingLead: string[] = [];
-  let lastNode: Node | null = null;
-  let sawNewlineSinceNode = false;
-
-  const skipWs = () => {
-    while (i < n) {
-      const c = src[i];
-      if (c === "\n") {
-        sawNewlineSinceNode = true;
-        i++;
-        continue;
-      }
-      if (/\s/.test(c)) {
-        i++;
-        continue;
-      }
-      if (c === ";") {
-        const start = i;
-        while (i < n && src[i] !== "\n") i++;
-        const text = src.slice(start, i).replace(/\s+$/, "");
-        // same line as the just-read datum → its trailing comment; else leading.
-        if (!sawNewlineSinceNode && lastNode) (lastNode.trail ??= []).push(text);
-        else pendingLead.push(text);
-        continue;
-      }
-      break;
-    }
-  };
-
-  const readString = (): Node => {
-    i++; // opening quote
-    let out = "";
-    while (i < n) {
-      const c = src[i];
-      if (c === "\\") {
-        out += src[i] + (src[i + 1] ?? "");
-        i += 2;
-        continue;
-      }
-      if (c === '"') {
-        i++;
-        return { atom: out, str: true };
-      }
-      out += c;
-      i++;
-    }
-    invariant(false, "unterminated string");
-  };
-
-  const readDatum = (): Node => {
-    skipWs();
-    const lead = pendingLead;
-    pendingLead = [];
-    const start = i; // datum's first char (after lead-comment/whitespace skip)
-    const c = src[i];
-    invariant(c !== undefined, "unexpected EOF");
-    let node: Node;
-    if (c === "#" && src[i + 1] === "\\") {
-      // `#\<char>` character literal (R7RS 7.1.1): self-delimiting — a single
-      // non-alphabetic payload (`#\"`, `#\\`, `#\(`, `#\;`, `#\ `, ...) always
-      // consumes EXACTLY one more character regardless of what follows; an
-      // alphabetic payload can extend into a named literal (`#\space`,
-      // `#\newline`, `#\x41`, ...), so consume the whole run. Without this,
-      // the payload char falls through to the generic atom scan below, which
-      // stops at `"`/`(`/`)`/`[`/`]`/`;` — e.g. `#\"` reads as the 2-char atom
-      // `#\` and then hands the bare `"` to `readString`, which then swallows
-      // everything up to the NEXT quote in the source (or to EOF, throwing
-      // "unterminated string") instead of the one intended character literal.
-      const charStart = i;
-      i += 2;
-      if (i < n && /[a-z]/i.test(src[i])) {
-        while (i < n && /[a-z0-9]/i.test(src[i])) i++;
-      } else if (i < n) {
-        i++;
-      }
-      node = { atom: src.slice(charStart, i) };
-      if (lead.length > 0) node.lead = lead;
-      node.span = [start, i];
-      lastNode = node;
-      sawNewlineSinceNode = false;
-      return node;
-    }
-    switch (c) {
-      case "(":
-      case "[":
-      case "{": {
-        const close = c === "(" ? ")" : c === "[" ? "]" : "}";
-        node = readList(c, close);
-        break;
-      }
-      case ")":
-      case "]":
-      case "}": {
-        invariant(false, () => `unexpected ${c} at ${i}`);
-        break;
-      }
-      case '"': {
-        node = readString();
-        break;
-      }
-      case "'": {
-        i++;
-        node = { list: [{ atom: "quote" }, readDatum()] };
-        break;
-      }
-      case "`": {
-        i++;
-        node = { list: [{ atom: "quasiquote" }, readDatum()] };
-        break;
-      }
-      case ",": {
-        i++;
-        if (src[i] === "@") {
-          i++;
-          node = { list: [{ atom: "unquote-splicing" }, readDatum()] };
-        } else node = { list: [{ atom: "unquote" }, readDatum()] };
-
-        break;
-      }
-      default: {
-        const start = i;
-        while (i < n && !isDelim(src[i])) i++;
-        // Racket `#:limit` ≡ arrival `:limit` (same mint as ASymbol keywords).
-        let name = src.slice(start, i);
-        if (name.length > 2 && name.startsWith("#:")) name = `:${name.slice(2)}`;
-        node = { atom: name };
-      }
-    }
-    if (lead.length > 0) node.lead = lead;
-    // Source span [start, end) in `src` — inert metadata (like lead/trail, ignored
-    // by nodeEq), consumed by the editor's parameter-hint placement.
-    node.span = [start, i];
-    lastNode = node;
-    sawNewlineSinceNode = false;
-    return node;
-  };
-
-  function readList(open: ListOpen, close: ")" | "]" | "}"): Node {
-    i++; // open
-    const items: Node[] = [];
-    for (;;) {
-      skipWs();
-      const c = src[i];
-      invariant(c !== undefined, "unbalanced list");
-      if (c === ")" || c === "]" || c === "}") {
-        // Mismatched closer still consumes (classic was permissive on ) vs ]); keep that.
-        i++;
-        break;
-      }
-      items.push(readDatum());
-    }
-    // Only stamp non-paren openers — paren is the default classic list.
-    return open === "(" ? { list: items } : { list: items, open };
-  }
-
-  const forms: Node[] = [];
-  for (;;) {
-    skipWs();
-    if (i >= n) break;
-    forms.push(readDatum());
-  }
-  return forms;
-}
-
-// ── polyglot / free-surface → classic image ───────────────────────────────────
+// ── polyglot / free-surface → Scheme image ───────────────────────────────────
 //
 // Arrival grammar.md supersets + sugarcoat free `[]`/`{}` lower here once, so the
-// renderer only ever sees pure classic heads (`list`/`dict`/paren bindings). Intent
+// renderer only ever sees pure Scheme heads (`list`/`dict`/paren bindings). Intent
 // (names, values, clause structure, collection kind) is preserved; tolerant spellings
 // are not.
 
@@ -363,7 +165,7 @@ function lowerBindings(binds: Node, form: string, mapChild: (n: Node) => Node): 
 }
 
 /**
- * Lower arrival polyglot supersets + sugar free `[]`/`{}` to classic R7RS-shaped nodes.
+ * Lower arrival polyglot supersets + sugar free `[]`/`{}` to Scheme R7RS-shaped nodes.
  * Pure tree rewrite; comments/spans on atoms are preserved via map of children only.
  */
 export function normalizePolyglot(forms: Node[]): Node[] {
@@ -454,7 +256,7 @@ export interface SugarcoatOpts {
   curly: boolean;
   /** Heads whose args are key→value pairs: `dict` + every name bound to a
    *  `(require "….prompt")` callable. Under these, a `:keyword value` run is
-   *  rendered as a pair line (unknown heads keep classic call shape). KWARGS LAW:
+   *  rendered as a pair line (unknown heads keep Scheme call shape). KWARGS LAW:
    *  known-kwargs calls never n-expr and never neoteric. Homoiconic: the pair is a
    *  view-only tree that collapses back to flat `… k v …` on read. */
   kwargHeads: Set<string>;
@@ -683,7 +485,7 @@ function infixOperand(nd: Node, parentPrec: number, o: SugarcoatOpts, parentOp?:
 /** `(lambda (params…) single-body)` — rendered as an arrow `{(params) => body}`.
  *  Curly-wrapped so it's self-delimiting (drops in anywhere) AND shares the infix
  *  zone (the body composes: `{(x) => x * 2}`). Only single-body, list-param
- *  lambdas; multi-body or rest-param lambdas stay classic `lambda` form. */
+ *  lambdas; multi-body or rest-param lambdas stay Scheme `lambda` form. */
 const isArrowLambda = (items: Node[]): boolean =>
   items.length === 3 && isAtom(items[0]) && !items[0].str && items[0].atom === "lambda" && !isAtom(items[1]);
 
@@ -713,7 +515,7 @@ const hasDot = (items: Node[]): boolean => items.some((it) => isAtom(it) && !it.
 const isKeyword = (nd: Node): boolean => isAtom(nd) && !nd.str && nd.atom.startsWith(":") && nd.atom.length > 1;
 
 // ── KWARGS LAW ──────────────────────────────────────────────────────────────
-// 1. Unknown head → never invent k:v pair lines; keep the classic call shape.
+// 1. Unknown head → never invent k:v pair lines; keep the Scheme call shape.
 // 2. Known kwarg head (dict, .prompt requires, collected kwargHeads) → the call's
 //    inputRest is kwargs. NEVER n-expr (curly-infix) and NEVER neoteric f(…),
 //    even when the head is also an INFIX op (e.g. a .prompt bound to `gt`).
@@ -800,7 +602,7 @@ const bareAtInterpSurface = (sugar: string): boolean =>
  *  - nested `(str …)` / `(string-append …)` → nested `@{…}` (full at-expr, already `@`-led)
  *  - other sugarcoat surfaces that start with a name (method chains `hints.map{…}`)
  *    → bare `@hints.map{…}` (reader takes id + tight postfix)
- *  - else → `@(…)` classic graft (paren envelope is the graft, not a sugar list wrap)
+ *  - else → `@(…)` Scheme graft (paren envelope is the graft, not a sugar list wrap)
  */
 function interpPiece(p: Node, next: Node | undefined, o: SugarcoatOpts): string | null {
   if (isAtom(p)) {
@@ -820,12 +622,12 @@ function interpPiece(p: Node, next: Node | undefined, o: SugarcoatOpts): string 
   // accessors/methods (`@(join "," h[:reached])`). Avoids double-wrapping
   // postfix forms (those take the bare path above).
   if (sugar.startsWith("(") && sugar.endsWith(")")) return `@${sugar}`;
-  // Classic graft fallback.
+  // Scheme graft fallback.
   return `@${inlineScheme(p)}`;
 }
 
 /** Render `(str …)`/`(string-append …)` as a SINGLE-LINE at-expression, or null when
- *  not safely round-trippable (caller falls back to classic). Soundness gates: no
+ *  not safely round-trippable (caller falls back to Scheme). Soundness gates: no
  *  adjacent string literals (the reader coalesces), no `@`/brace/newline in literal
  *  text (no in-body escape for those; newline ⇒ the deferred multi-line path), and
  *  at least one prose literal (preference — don't at-exp `(str x y)`). */
@@ -860,7 +662,7 @@ function renderAtExpr(items: Node[], o: SugarcoatOpts): string | null {
     }
   }
   // Worth an at-exp iff there's real text AND it's more than a bare word — either prose
-  // or a hole. `(str "hello")` (lone wordless literal) and `(str x y)` (no literal) stay classic.
+  // or a hole. `(str "hello")` (lone wordless literal) and `(str x y)` (no literal) stay Scheme.
   if (!sawLiteral || (!sawProse && !sawInterp)) return null;
   return head === "str" ? `@{${body}}` : `@${head}{${body}}`;
 }
@@ -868,8 +670,8 @@ function renderAtExpr(items: Node[], o: SugarcoatOpts): string | null {
 /** Multi-line render for a `(str …)` whose prose carries a newline: `@dedent{…}` with
  *  cosmetic indent the reader strips back (round-trips) when the value has no intrinsic
  *  common indent, else `@{…}` verbatim. Only `str` (string-append multi-line stays
- *  classic — one escaped line reads cleaner than a flush-left block). Returns null when
- *  not a newline-bearing representable str (single-line/classic handled elsewhere). */
+ *  Scheme — one escaped line reads cleaner than a flush-left block). Returns null when
+ *  not a newline-bearing representable str (single-line/Scheme handled elsewhere). */
 function renderAtDedentBlock(nd: Node, col: number, o: SugarcoatOpts): string | null {
   if (!o.curly || isAtom(nd)) return null;
   const items = nd.list;
@@ -898,14 +700,14 @@ function renderAtDedentBlock(nd: Node, col: number, o: SugarcoatOpts): string | 
       pieces.push(piece);
     }
   }
-  if (!hasNewline) return null; // single-line → renderAtExpr / classic
+  if (!hasNewline) return null; // single-line → renderAtExpr / Scheme
   const lines = pieces.join("").split("\n");
   let vmin = Infinity; // value's intrinsic common indent (non-first, non-blank lines)
   for (let k = 1; k < lines.length; k++) {
     if (lines[k].trim() === "") continue;
     vmin = Math.min(vmin, /^[ \t]*/.exec(lines[k])![0].length);
   }
-  if (vmin === Infinity) return null; // all continuation lines blank → let classic handle
+  if (vmin === Infinity) return null; // all continuation lines blank → let Scheme handle
   if (vmin > 0) return `@{${lines.join("\n")}}`; // intrinsic indent → verbatim, no dedent
   const pad = " ".repeat(col + 2); // dedent strips exactly this back on read (fixed point)
   const body = lines.map((ln, k) => (k === 0 || ln.trim() === "" ? ln : pad + ln)).join("\n");
@@ -1009,7 +811,7 @@ const RENDER_IDENT_START = /[A-Z!$%&*/:<=>?^_~]/i;
 
 /** Re-escape any `.` in a symbol that `rewrite_L` would treat as a method split, so
  *  it reads back as a LITERAL dot in the symbol. No-op for the corpus (0 code dots);
- *  applied only to sugarcoat bare-atom / method-op emission, never to classic output. */
+ *  applied only to sugarcoat bare-atom / method-op emission, never to Scheme output. */
 function escSym(s: string): string {
   let out = "";
   for (let k = 0; k < s.length; k++) {
@@ -1150,7 +952,7 @@ function renderTrailingLambda(lam: Node, o: SugarcoatOpts): string {
  * Body of a braced method — must stay fully parenthesized when multi-line.
  * Coalesce flattens multi-line `{…}` to one token stream (indentation forms do
  * NOT group inside braces; see trailingLambda's door). Short → inlineSugarcoat;
- * long → classic skeleton with sugarcoat leaves (accessors, nested methods).
+ * long → Scheme skeleton with sugarcoat leaves (accessors, nested methods).
  */
 function formatBraceBody(nd: Node, col: number, o: SugarcoatOpts): string {
   const flat = inlineSugarcoat(nd, o);
@@ -1493,7 +1295,7 @@ function formatSugarcoatCore(nd: Node, col: number, o: SugarcoatOpts): string {
   const atBlock = renderAtDedentBlock(nd, col, o);
   if (atBlock != null) return atBlock; // multi-line @dedent{…}/@{…} for newline-bearing str
   // A single-line at-expression stays inline even past the width budget: the generic
-  // list-break can't split it (a broken `@{…}` would re-render as the classic
+  // list-break can't split it (a broken `@{…}` would re-render as the Scheme
   // string-append staircase, which reads worse), so honour the at-string as one line.
   const atInline = isAtom(nd) ? null : renderAtExpr(nd.list, o);
   if (atInline != null) return atInline;
@@ -1522,7 +1324,7 @@ function formatSugarcoatCore(nd: Node, col: number, o: SugarcoatOpts): string {
   // Function define — `head (name args…)` ⏎ body. The SIGNATURE is a BINDING target, not a
   // call: render it as a literal paren group, NEVER method-dotted. `define (hand-value? x)`,
   // not `define x.hand-value?` (which reads as assigning to a method). The body renders
-  // normally — its own predicate calls DO flip (`x.dict?`). Reader folds the classic
+  // normally — its own predicate calls DO flip (`x.dict?`). Reader folds the Scheme
   // `head (sig)` ⏎ body straight back to the definition.
   if (isFnDefine(nd)) {
     const pad2 = " ".repeat(col + 2);
@@ -1827,7 +1629,7 @@ export function nodeEq(a: Node, b: Node): boolean {
   return false;
 }
 
-/** Single-line classic serialization of a Node — the trivial inverse of
+/** Single-line Scheme serialization of a Node — the trivial inverse of
  *  parseSexprs at the atom level. String atoms wrap RAW (`"${atom}"`), exactly
  *  as inlineSugarcoat does and as parseSexprs decodes them, so the AST round-trips. */
 export function inlineScheme(nd: Node): string {
@@ -1835,10 +1637,10 @@ export function inlineScheme(nd: Node): string {
   return `(${nd.list.map(inlineScheme).join(" ")})`;
 }
 
-/** Pretty classic (prefix-only) serialization of a Node: inline when it fits the
+/** Pretty Scheme (prefix-only) serialization of a Node: inline when it fits the
  *  width, else break — the head (and, when the head is a bare symbol and the pair
  *  still fits, the first operand) stay on the open-paren line; the rest indent at
- *  col+2. Pure s-expressions, NO sugarcoat transforms — this is the canonical-classic
+ *  col+2. Pure s-expressions, NO sugarcoat transforms — this is the canonical-Scheme
  *  writer the sugarcoat save-back emits for a CHANGED form. It only adds whitespace
  *  over inlineScheme, so parseSexprs(printScheme(f)) ≡ f. */
 export function printScheme(nd: Node, col = 0, width = DEFAULT_OPTS.width): string {
@@ -1896,8 +1698,8 @@ export function collectNilAllowed(forms: Node[]): boolean {
   return !forms.some(bindsNilToNonEmpty);
 }
 
-/** Format already-classic Node forms as sugarcoat (blank-line separated). Shared by
- *  the classic+normalize path and the sugar-reader re-entry path. */
+/** Format already-parsed Scheme Node forms as sugarcoat (blank-line separated). Shared by
+ *  the parseSexprs+normalize path and the sugar-reader re-entry path. */
 export function renderFormsAsSugarcoat(forms: Node[], opts: Partial<SugarcoatOpts> = {}): string {
   const o = {
     ...DEFAULT_OPTS,
@@ -1919,7 +1721,7 @@ export function registerSugarcoatReader(fn: (src: string) => Node[]): void {
 }
 
 /**
- * True when `src` uses orthography the classic spine cannot recover even with
+ * True when `src` uses orthography the Scheme spine cannot recover even with
  * opener stamps + normalizePolyglot: I-expressions, at-expressions, arrow-lambda
  * braces, method-dot neoteric, cond receiver arrows. Free `[]`/`{}` alone do NOT
  * force this — normalize handles those.
@@ -1932,14 +1734,14 @@ export function surfaceNeedsSugarReader(src: string): boolean {
   // Method-dot with tight args/lambda: .map{ / .fold(
   if (/\.\w+[({[]/.test(src)) return true;
   // I-expression heads: a line whose first non-space is a special-form word (not `(`)
-  // — e.g. `let*\n  a\n    1` or `if #t\n  …`. Classic parseSexprs would see top-level atoms.
+  // — e.g. `let*\n  a\n    1` or `if #t\n  …`. Scheme parseSexprs would see top-level atoms.
   if (
     /(?:^|\n)[ \t]*(?:define|let\*?|letrec\*?|if|cond|case|lambda|begin|do|when|unless|and|or)\b(?![^\n]*\))/.test(
       src,
     ) &&
     !/^\s*;/.test(src)
   ) {
-    // Only when there's real indent structure or a head-only first line (not a classic `(define …)`).
+    // Only when there's real indent structure or a head-only first line (not a Scheme `(define …)`).
     const codeLines = src.split("\n").filter((l) => {
       const t = l.trim();
       return t.length > 0 && !t.startsWith(";");
@@ -1958,7 +1760,7 @@ export function surfaceNeedsSugarReader(src: string): boolean {
 /** Render a whole source file's top-level forms as sugarcoat, blank-line separated.
  *
  *  Input domain:
- *    1. **Classic + arrival polyglot supersets** — parse stamps openers, normalizePolyglot
+ *    1. **Scheme + arrival polyglot supersets** — parse stamps openers, normalizePolyglot
  *       lowers BG2/BG9 + free `[]`/`{}` to R7RS heads, then layout.
  *    2. **Already-sweet buffers** (I-expr / `@{}` / `=>` / method-dot) — when the sugar
  *       reader is registered, fold through it first so re-entry preserves intent

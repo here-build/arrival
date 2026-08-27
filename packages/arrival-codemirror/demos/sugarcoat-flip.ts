@@ -2,9 +2,9 @@
 //
 // The left editor shows canonical Scheme; the right shows the Sugarcoat
 // rendering of the same program (derived once via schemeToSugarcoat). The
-// classic editor mounts the IDE directly; the Sugarcoat editor mounts the SAME
-// backend through sugarcoatIdeBackend, the sugarcoat↔classic span aligner —
-// hover/lint/completion answers travel sugarcoat → classic → TypeScript.
+// Scheme editor mounts the IDE directly; the Sugarcoat editor mounts the SAME
+// backend through sugarcoatIdeBackend, the sugarcoat↔Scheme span aligner —
+// hover/lint/completion answers travel sugarcoat → Scheme → TypeScript.
 
 import { EditorView, lineNumbers } from "@codemirror/view";
 import { schemeToSugarcoat } from "@inhuman.tools/arrival-sugarcoat";
@@ -25,8 +25,8 @@ const canonical = `(define (loud-names names)
 
 const backend = createBrowserSchemeLanguageService();
 
-export const classicView = new EditorView({
-  parent: document.querySelector("#classic")!,
+export const schemeView = new EditorView({
+  parent: document.querySelector("#scheme")!,
   doc: canonical,
   extensions: [lineNumbers(), schemeSugarcoat(), paramHintsExtension("scheme"), schemeIde(backend)],
 });

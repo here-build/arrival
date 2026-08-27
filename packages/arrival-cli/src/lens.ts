@@ -8,7 +8,7 @@
  * value→Node quotation step. Reusing the printer directly means zero new budget/
  * truncation logic.
  *
- * INPUT stays classic scheme — and §8's "In — already true: the reader accepts both
+ * INPUT stays Scheme — and §8's "In — already true: the reader accepts both
  * surfaces" is WRONG for the core reader: `parse("{n * n}")` rejects curly-infix with
  * a teaching door ("this reader has no curly-infix mode … lives in arrival-sugarcoat,
  * not core arrival"). Sugarcoat-surface INPUT would need a lowering pass

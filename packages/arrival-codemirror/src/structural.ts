@@ -1,4 +1,4 @@
-// structural — paredit ops for classic Scheme (expand/contract, slurp/barf,
+// structural — paredit ops for Scheme (expand/contract, slurp/barf,
 // splice, kill-sexp, strict delete, depth indent).
 //
 // TRUE structure comes from `parseSexprs` (spans on every node), not the
@@ -6,7 +6,7 @@
 // op is a no-op. Corruption is structurally impossible.
 //
 // Protection self-suspends on unbalanced buffers (you can always hand-repair);
-// resumes when balanced. Classic lens only — sugarcoat indentation is semantic.
+// resumes when balanced. Scheme lens only — sugarcoat indentation is semantic.
 //
 // v1 set = community core (Calva/Cursive/etc). No wrap command (closeBrackets).
 
@@ -431,7 +431,7 @@ export interface SchemeStructuralOptions {
   indent?: boolean;
 }
 
-/** Structural editing for the CLASSIC scheme lens: selection ladder, slurp/
+/** Structural editing for the Scheme lens: selection ladder, slurp/
  *  barf, splice, kill-sexp, strict delete protection, depth-based indent. */
 export function schemeStructural(options?: SchemeStructuralOptions): Extension {
   const ext: Extension[] = [expandStack];

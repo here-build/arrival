@@ -1,13 +1,13 @@
 // sugarcoatIdeBackend — SchemeIdeBackend wrapper for sugarcoat buffers.
 //
-// Derives classic via alignSugarcoatClassic, translates all positions/spans.
-// Same seam in/out. Three lenses end-to-end: sugarcoat → classic → TS.
+// Derives Scheme via alignSugarcoatScheme, translates all positions/spans.
+// Same seam in/out. Three lenses end-to-end: sugarcoat → Scheme → TS.
 //
 // Degradation: unparseable sugarcoat → null alignment → all answers empty
-// (editor keeps last good). Sugar positions have no classic token → empty.
+// (editor keeps last good). Sugar positions have no Scheme token → empty.
 // Diagnostics inside sugar lift to enclosing paired node.
 
-import { alignSugarcoatClassic, type SugarcoatAlignment } from "@inhuman.tools/arrival-sugarcoat";
+import { alignSugarcoatScheme, type SugarcoatAlignment } from "@inhuman.tools/arrival-sugarcoat";
 
 import type {
   SchemeIdeBackend,
@@ -24,7 +24,7 @@ import type {
  *
  * Tight `@id[…]` is the CANONICAL keyed-access surface inside at-bodies
  * (reads as `(:key id)` / `(@ id key)`), so it is not linted. Hook reserved for
- * future face-only warnings that don't need classic projection.
+ * future face-only warnings that don't need Scheme projection.
  */
 export function sugarcoatSurfaceLints(_sugarcoat: string): SchemeIdeDiagnostic[] {
   return [];
@@ -37,7 +37,7 @@ function makeAligner(): (sugarcoat: string) => SugarcoatAlignment | null {
   return (sugarcoat) => {
     if (sugarcoat !== lastText) {
       lastText = sugarcoat;
-      lastAlignment = alignSugarcoatClassic(sugarcoat);
+      lastAlignment = alignSugarcoatScheme(sugarcoat);
     }
     return lastAlignment;
   };
@@ -50,19 +50,19 @@ function completionAnchor(
   a: SugarcoatAlignment,
   sugarcoat: string,
   pos: number,
-): { classic: string; pos: number } | null {
-  const direct = a.toClassic(pos);
-  if (direct !== null) return { classic: a.classic, pos: direct };
+): { scheme: string; pos: number } | null {
+  const direct = a.toScheme(pos);
+  if (direct !== null) return { scheme: a.scheme, pos: direct };
   let k = pos;
   while (k > 0 && /[ \t]/.test(sugarcoat[k - 1])) k--;
   if (k === pos || k === 0) return null;
-  const end = a.toClassic(k); // inclusive end of the preceding token
+  const end = a.toScheme(k); // inclusive end of the preceding token
   if (end === null) return null;
-  return { classic: `${a.classic.slice(0, end)} ${a.classic.slice(end)}`, pos: end + 1 };
+  return { scheme: `${a.scheme.slice(0, end)} ${a.scheme.slice(end)}`, pos: end + 1 };
 }
 
 /**
- * Wrap a classic-coordinate backend for a SWEET buffer. Same seam in, same
+ * Wrap a Scheme-coordinate backend for a SWEET buffer. Same seam in, same
  * seam out — `schemeIde(sugarcoatIdeBackend(backend))` mounts the full IDE on the
  * sugarcoat lens. Optional capabilities are forwarded only when the inner backend
  * has them (presence-gated, like the seam itself).
@@ -73,11 +73,11 @@ export function sugarcoatIdeBackend(backend: SchemeIdeBackend): SchemeIdeBackend
   const wrapped: SchemeIdeBackend = {
     async getSemanticDiagnostics(sugarcoat: string): Promise<SchemeIdeDiagnostic[]> {
       // Surface lints are face-only (sugarcoat coordinates already) — they fire even
-      // when alignment degrades, since they need no classic projection.
+      // when alignment degrades, since they need no Scheme projection.
       const out: SchemeIdeDiagnostic[] = sugarcoatSurfaceLints(sugarcoat);
       const a = align(sugarcoat);
       if (a === null) return out;
-      const diags = await backend.getSemanticDiagnostics(a.classic);
+      const diags = await backend.getSemanticDiagnostics(a.scheme);
       for (const d of diags) {
         const span = a.toSugarcoat(d.start, d.length);
         if (span !== null) out.push({ ...d, start: span.start, length: span.length });
@@ -88,9 +88,9 @@ export function sugarcoatIdeBackend(backend: SchemeIdeBackend): SchemeIdeBackend
     async getQuickInfoAtPosition(sugarcoat: string, pos: number): Promise<SchemeIdeQuickInfo | null> {
       const a = align(sugarcoat);
       if (a === null) return null;
-      const cPos = a.toClassic(pos);
-      if (cPos === null) return null;
-      const info = await backend.getQuickInfoAtPosition(a.classic, cPos);
+      const sPos = a.toScheme(pos);
+      if (sPos === null) return null;
+      const info = await backend.getQuickInfoAtPosition(a.scheme, sPos);
       if (info === null) return null;
       const span = info.span === null ? null : a.toSugarcoat(info.span.start, info.span.length);
       return { ...info, span };
@@ -101,18 +101,18 @@ export function sugarcoatIdeBackend(backend: SchemeIdeBackend): SchemeIdeBackend
       if (a === null) return [];
       const anchor = completionAnchor(a, sugarcoat, pos);
       if (anchor === null) return [];
-      return backend.getCompletionsAtPosition(anchor.classic, anchor.pos);
+      return backend.getCompletionsAtPosition(anchor.scheme, anchor.pos);
     },
 
     async getDefinitionAtPosition(sugarcoat: string, pos: number): Promise<SchemeIdeDefinition[]> {
       const a = align(sugarcoat);
       if (a === null) return [];
-      const cPos = a.toClassic(pos);
-      if (cPos === null) return [];
-      const defs = await backend.getDefinitionAtPosition(a.classic, cPos);
+      const sPos = a.toScheme(pos);
+      if (sPos === null) return [];
+      const defs = await backend.getDefinitionAtPosition(a.scheme, sPos);
       return defs.map((d) => {
-        // A cross-file definition's span is in THAT file's (classic) coordinates
-        // — leave it; the studio opens required files in the classic lens.
+        // A cross-file definition's span is in THAT file's Scheme coordinates
+        // — leave it; the studio opens required files in the Scheme lens.
         if (d.file !== undefined || d.span === null) return d;
         return { ...d, span: a.toSugarcoat(d.span.start, d.span.length) };
       });
@@ -125,7 +125,7 @@ export function sugarcoatIdeBackend(backend: SchemeIdeBackend): SchemeIdeBackend
     wrapped.getSemanticClassifications = async (sugarcoat: string) => {
       const a = align(sugarcoat);
       if (a === null) return [];
-      const spans = await backend.getSemanticClassifications!(a.classic);
+      const spans = await backend.getSemanticClassifications!(a.scheme);
       const out: typeof spans = [];
       for (const s of spans) {
         const span = a.toSugarcoat(s.start, s.length);
@@ -140,7 +140,7 @@ export function sugarcoatIdeBackend(backend: SchemeIdeBackend): SchemeIdeBackend
       const a = align(sugarcoat);
       const anchor = a === null ? null : completionAnchor(a, sugarcoat, pos);
       if (anchor === null) return { position: "top", entries: [] };
-      return backend.getCompletionContext!(anchor.classic, anchor.pos);
+      return backend.getCompletionContext!(anchor.scheme, anchor.pos);
     };
   }
 

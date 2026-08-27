@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { toLens } from "../lens.js";
 
 describe("toLens", () => {
-  it("scheme lens is the identity — the stored text IS classic scheme", () => {
+  it("scheme lens is the identity — the stored text IS Scheme", () => {
     expect(toLens("(define (f x) (* x 2))", "scheme")).toBe("(define (f x) (* x 2))");
   });
 

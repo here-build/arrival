@@ -3,7 +3,7 @@
   "name": "Sugarcoat",
   "scopeName": "source.sugarcoat",
   "fileTypes": ["sugarcoat"],
-  "comment": "Derived from GRAMMAR.md §8 (token classes). Basic-fidelity highlighting only — structural features should go through the lens (alignSugarcoatClassic), see @inhuman.tools/arrival-codemirror for the reference integration.",
+  "comment": "Derived from GRAMMAR.md §8 (token classes). Basic-fidelity highlighting only — structural features should go through the lens (alignSugarcoatScheme), see @inhuman.tools/arrival-codemirror for the reference integration.",
   "patterns": [
     { "include": "#comment" },
     { "include": "#at-expression" },

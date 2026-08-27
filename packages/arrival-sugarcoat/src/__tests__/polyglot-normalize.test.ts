@@ -34,7 +34,7 @@ const roundtrip = (src: string): string =>
 const astEq = (a: string, b: string): boolean => {
   const fa = parseSexprs(a);
   const fb = parseSexprs(b);
-  // After normalize, both sides are pure classic (no open stamps needed).
+  // After normalize, both sides are pure scheme (no open stamps needed).
   if (fa.length !== fb.length) return false;
   return fa.every((n, i) => nodeEq(n, fb[i]!));
 };
@@ -173,14 +173,14 @@ describe("free [] / {} lower to list/dict heads (sugarcoat surface)", () => {
     expect(astEq(roundtrip(poly), image)).toBe(true);
   });
 
-  it("classic (list)/(dict) unchanged", () => {
+  it("scheme (list)/(dict) unchanged", () => {
     expect(astEq(norm("(list 1 2)"), "(list 1 2)")).toBe(true);
     expect(astEq(norm("(dict :a 1)"), "(dict :a 1)")).toBe(true);
   });
 
   it("(vector …) stays vector — free [] is NOT vector sugar here", () => {
     // Arrival free [1 2 3] is a vector at eval; the sugarcoat lens claims free []
-    // as list. Classic vector constructors are the honest vector spelling.
+    // as list. Scheme vector constructors are the honest vector spelling.
     expect(astEq(norm("(vector 1 2 3)"), "(vector 1 2 3)")).toBe(true);
     expect(schemeToSugarcoat("(vector 1 2 3)").trim()).toBe("(vector 1 2 3)");
   });
@@ -191,20 +191,20 @@ describe("free [] / {} lower to list/dict heads (sugarcoat surface)", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe("mode-override list-of-dict intent", () => {
-  const classic = '(list (dict :form (quote notify) :level (quote error) :message "hi"))';
+  const scheme = '(list (dict :form (quote notify) :level (quote error) :message "hi"))';
 
-  it("classic → sugar → re-schemeToSugarcoat preserves AST", () => {
-    const once = schemeToSugarcoat(classic).trim();
+  it("scheme → sugar → re-schemeToSugarcoat preserves AST", () => {
+    const once = schemeToSugarcoat(scheme).trim();
     expect(once).toMatch(/^\[\{/);
     const twice = schemeToSugarcoat(once).trim();
     expect(twice).not.toMatch(/^\(\{:form/);
-    expect(astEq(roundtrip(once), classic)).toBe(true);
-    expect(astEq(roundtrip(twice), classic)).toBe(true);
+    expect(astEq(roundtrip(once), scheme)).toBe(true);
+    expect(astEq(roundtrip(twice), scheme)).toBe(true);
   });
 
   it("sweet source [{…}] normalizes to list-of-dict, not bare call", () => {
     const sweet = "[{:form 'notify :level 'error :message \"hi\"}]";
-    expect(astEq(norm(sweet), classic)).toBe(true);
-    expect(astEq(roundtrip(sweet), classic)).toBe(true);
+    expect(astEq(norm(sweet), scheme)).toBe(true);
+    expect(astEq(roundtrip(sweet), scheme)).toBe(true);
   });
 });

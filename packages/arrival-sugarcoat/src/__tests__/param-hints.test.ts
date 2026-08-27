@@ -1,5 +1,5 @@
 /**
- * Parameter inlay hints over classic scheme: a call to a `(define (f …)…)` gets a
+ * Parameter inlay hints over Scheme: a call to a `(define (f …)…)` gets a
  * hint before each positional arg naming its formal. Pins the resolver — the define
  * shapes it reads, the binding sites it skips, and the edges (builtins, arity,
  * kwargs, rest, parse error).
@@ -118,10 +118,10 @@ describe("paramHints — built-in control forms", () => {
 
 describe("paramHintsSugarcoat — the sugarcoat lens", () => {
   it("hints over RENDERED sugarcoat, at sugarcoat-text offsets pointing to each arg", () => {
-    const classic = `(define (evolve pool budget rng iter) (list pool budget rng iter))
+    const scheme = `(define (evolve pool budget rng iter) (list pool budget rng iter))
 
 (evolve (list seed) (- BUDGET (length paretoset)) SEED-RNG 0)`;
-    const sugarcoat = schemeToSugarcoat(classic); // what the sugarcoat editor buffer shows
+    const sugarcoat = schemeToSugarcoat(scheme); // what the sugarcoat editor buffer shows
     const hints = paramHintsSugarcoat(sugarcoat);
     expect(hints.map((h) => h.name)).toEqual(["pool", "budget", "rng", "iter"]);
     // Each pos is in-bounds, ascending, and lands on a non-whitespace char (an arg start).
@@ -160,9 +160,9 @@ evolve (list seed) {BUDGET - (length paretoset)} SEED-RNG 0`;
   it("resolves through modulo/quotient/remainder infix (the gepa LCG case)", () => {
     // `(modulo (* state 16807) n)` renders to `{{state * 16807} modulo n}`; read
     // must recognise `modulo` as infix or it throws "unbalanced {" → 0 hints.
-    const classic = `(define (rng-next state) (modulo (* state 16807) 2147483647))\n\n(define (step s) (rng-next s))`;
-    const sugarcoat = schemeToSugarcoat(classic);
-    expect(() => sugarcoatToScheme(sugarcoat, classic)).not.toThrow(); // round-trip is restored
+    const scheme = `(define (rng-next state) (modulo (* state 16807) 2147483647))\n\n(define (step s) (rng-next s))`;
+    const sugarcoat = schemeToSugarcoat(scheme);
+    expect(() => sugarcoatToScheme(sugarcoat, scheme)).not.toThrow(); // round-trip is restored
     expect(paramHintsSugarcoat(sugarcoat).map((h) => h.name)).toEqual(["state"]); // (rng-next s) → [state]
   });
 
@@ -174,8 +174,8 @@ evolve (list seed) {BUDGET - (length paretoset)} SEED-RNG 0`;
   it("let* control hints survive the sugarcoat I-EXPRESSION reshape (span-less synthesized bindings)", () => {
     // A multi-line let* renders as an I-expression whose `(a v)` binding-lists carry NO span
     // of their own — the hint must fall back to the binding's symbol start, not vanish.
-    const classic = `(let* ((a (spark "seed" :topic "a calmer morning routine")) (b (refine "sharpen" :idea (field a "idea")))) (digest a b))`;
-    const sugarcoat = schemeToSugarcoat(classic);
+    const scheme = `(let* ((a (spark "seed" :topic "a calmer morning routine")) (b (refine "sharpen" :idea (field a "idea")))) (digest a b))`;
+    const sugarcoat = schemeToSugarcoat(scheme);
     const hints = paramHintsSugarcoat(sugarcoat);
     expect(hints.map((h) => h.name)).toEqual(["let", "let", "return"]);
     for (const h of hints) expect(/\S/.test(sugarcoat[h.pos])).toBe(true); // lands on a binding start, not whitespace

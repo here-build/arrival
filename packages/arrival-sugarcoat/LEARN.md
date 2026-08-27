@@ -150,7 +150,7 @@ lowers them to the paren image first; the view never keeps the tolerant spelling
 Intent (names + values) is preserved:
 
 ```scheme
-;; classic or polyglot input — same sugar face
+;; Scheme or polyglot input — same sugar face
 (let* ([a 1] [b 2]) (+ a b))
 (let  [a 1 b 2] (+ a b))
 (let* ((a 1) (b 2)) (+ a b))
@@ -250,7 +250,7 @@ prose glues to the name:
 @{hello, @|name|!}          ;; ≡ (str "hello, " name "!")
 @str{hello, @|name|!}       ;; ≡ same — explicit alias of headless @{}
 
-;; classic (string-append …) with scalar casts projects as @{…}:
+;; Scheme (string-append …) with scalar casts projects as @{…}:
 ;;   (string-append "a " (number->string x) " b")  →  @{a @x b}
 ;; (str already coerces; number->string / symbol->string / ->string drop)
 ;; Strict surface (opt-out): @string-append{a @x b} ≡ (string-append "a " x " b")
@@ -264,7 +264,7 @@ prose glues to the name:
 **Inside a body, `@x` interpolates a bare name.** A tight trailing subscript chain
 rides along — `@s[:baseline]` / `@xs[0]` — the same accessor surface as code context.
 For calls and anything richer, graft a form with `@(…)`; inside the graft you are
-writing **classic prefix Scheme** (the parens are the form's own envelope, not a
+writing **prefix Scheme** (the parens are the form's own envelope, not a
 wrapper — so postfix sugar like `persona[:id]` must stay bare, not `@(persona[:id])`):
 
 ```scheme
@@ -282,5 +282,5 @@ is the ancestor.
 ---
 
 That's the surface. The machinery behind it — the round-trip law, span alignment for
-editors (`alignSugarcoatClassic`), parameter hints, the runtime-free `parseSexprs` reader —
-is in the [README](./README.md).
+editors (`alignSugarcoatScheme`), parameter hints, the `parseSexprs` forest
+(`@inhuman.tools/arrival-syntax`, re-exported here) — is in the [README](./README.md).

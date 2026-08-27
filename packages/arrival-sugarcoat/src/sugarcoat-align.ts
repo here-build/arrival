@@ -1,17 +1,17 @@
 /**
- * Sugarcoat ↔ classic SPAN ALIGNMENT — the coordinate half of the bifunctor.
+ * Sugarcoat ↔ Scheme SPAN ALIGNMENT — the coordinate half of the bifunctor.
  *
- * sugarcoat-render stamps classic spans on parsed nodes (parseSexprs); sugarcoat-read
+ * sugarcoat-render stamps Scheme spans on parsed nodes (parseSexprs); sugarcoat-read
  * stamps sugarcoat spans on the nodes it reads (for the parameter hints). Both
  * trees are STRUCTURALLY EQUAL by the round-trip law (read(render(x)) ≡ x), so
  * a lockstep walk pairs every node that carries a span on both sides — and
- * that pairing IS the sugarcoat↔classic position mapping, recovered entirely from
+ * that pairing IS the sugarcoat↔Scheme position mapping, recovered entirely from
  * metadata the two transforms already produce. Nothing here re-derives layout.
  *
- * The classic text aligned against is the CANONICAL REPRINT of the sugarcoat
- * buffer (readSugarcoat → printScheme), not the studio's stored classic — the two
+ * The Scheme text aligned against is the CANONICAL REPRINT of the sugarcoat
+ * buffer (readSugarcoat → printScheme), not the studio's stored Scheme — the two
  * may differ in formatting bytes, but a consumer that round-trips spans
- * through THIS classic (e.g. an IDE backend that takes the text per call)
+ * through THIS reprint (e.g. an IDE backend that takes the text per call)
  * never sees the difference.
  *
  * Coverage is honest, not total: sugarcoat spans exist only where sugarcoat-read
@@ -30,25 +30,25 @@ import { parseSexprs, printScheme, type Node } from "./sugarcoat-render.js";
 export interface SugarcoatSpanPair {
   sugarcoatStart: number;
   sugarcoatEnd: number;
-  classicStart: number;
-  classicEnd: number;
+  schemeStart: number;
+  schemeEnd: number;
   exact: boolean;
 }
 
 export interface SugarcoatAlignment {
-  /** Canonical classic reprint of the sugarcoat buffer — the text to hand to any
-   *  classic-coordinate consumer (language service, runtime, …). */
-  classic: string;
+  /** Canonical Scheme reprint of the sugarcoat buffer — the text to hand to any
+   *  Scheme-coordinate consumer (language service, runtime, …). */
+  scheme: string;
   pairs: SugarcoatSpanPair[];
-  /** Sugarcoat position → classic position, through EXACT atom pairs only —
+  /** Sugarcoat position → Scheme position, through EXACT atom pairs only —
    *  token precision or nothing (inclusive of the atom's end, where a typing
    *  cursor sits). A position on sugar (glyphs, elided parens, whitespace)
    *  returns null; position consumers (hover/completion/goto) should degrade
    *  rather than answer about the wrong token. */
-  toClassic(sugarcoatPos: number): number | null;
-  /** Classic span → sugarcoat span. Offset-exact within an exact atom; otherwise
+  toScheme(sugarcoatPos: number): number | null;
+  /** Scheme span → sugarcoat span. Offset-exact within an exact atom; otherwise
    *  the innermost containing pair's whole sugarcoat span; null when uncovered. */
-  toSugarcoat(classicStart: number, classicLength: number): { start: number; length: number } | null;
+  toSugarcoat(schemeStart: number, schemeLength: number): { start: number; length: number } | null;
 }
 
 const isAtomNode = (n: Node): n is { atom: string; str?: boolean; span?: readonly [number, number] } => "atom" in n;
@@ -56,23 +56,23 @@ const isAtomNode = (n: Node): n is { atom: string; str?: boolean; span?: readonl
 /** Lockstep walk: pair spans wherever BOTH trees carry one. The trees are
  *  equal by construction; a shape mismatch (defensive) just stops descending
  *  that branch rather than failing the whole alignment. */
-function collectPairs(sugarcoat: Node, classic: Node, out: SugarcoatSpanPair[]): void {
+function collectPairs(sugarcoat: Node, scheme: Node, out: SugarcoatSpanPair[]): void {
   const sAtom = isAtomNode(sugarcoat);
-  const cAtom = isAtomNode(classic);
+  const cAtom = isAtomNode(scheme);
   if (sAtom !== cAtom) return;
-  if (sugarcoat.span && classic.span) {
-    const exact = sAtom && cAtom && sugarcoat.atom === classic.atom && !!sugarcoat.str === !!classic.str;
+  if (sugarcoat.span && scheme.span) {
+    const exact = sAtom && cAtom && sugarcoat.atom === scheme.atom && !!sugarcoat.str === !!scheme.str;
     out.push({
       sugarcoatStart: sugarcoat.span[0],
       sugarcoatEnd: sugarcoat.span[1],
-      classicStart: classic.span[0],
-      classicEnd: classic.span[1],
+      schemeStart: scheme.span[0],
+      schemeEnd: scheme.span[1],
       exact,
     });
   }
   if (sAtom || cAtom) return;
   const a = sugarcoat.list;
-  const b = classic.list;
+  const b = scheme.list;
   if (a.length !== b.length) return;
   for (let i = 0; i < a.length; i++) collectPairs(a[i], b[i], out);
 }
@@ -92,25 +92,25 @@ function innermost(
 }
 
 /**
- * Align a sugarcoat buffer against its own canonical classic reprint. Returns null
+ * Align a sugarcoat buffer against its own canonical Scheme reprint. Returns null
  * when the sugarcoat text doesn't parse (mid-edit) — the consumer keeps its last
- * good answers, exactly like the save-back path keeps its last good classic.
+ * good answers, exactly like the save-back path keeps its last good Scheme.
  */
-export function alignSugarcoatClassic(sugarcoatText: string): SugarcoatAlignment | null {
+export function alignSugarcoatScheme(sugarcoatText: string): SugarcoatAlignment | null {
   let sugarcoatForms: Node[];
   try {
     sugarcoatForms = readSugarcoat(sugarcoatText);
   } catch {
     return null;
   }
-  const classic = sugarcoatForms.map((f) => printScheme(f)).join("\n\n");
-  const classicForms = parseSexprs(classic);
-  if (classicForms.length !== sugarcoatForms.length) return null;
+  const scheme = sugarcoatForms.map((f) => printScheme(f)).join("\n\n");
+  const schemeForms = parseSexprs(scheme);
+  if (schemeForms.length !== sugarcoatForms.length) return null;
 
   const pairs: SugarcoatSpanPair[] = [];
-  for (let i = 0; i < sugarcoatForms.length; i++) collectPairs(sugarcoatForms[i], classicForms[i], pairs);
+  for (let i = 0; i < sugarcoatForms.length; i++) collectPairs(sugarcoatForms[i], schemeForms[i], pairs);
 
-  const toClassic = (sugarcoatPos: number): number | null => {
+  const toScheme = (sugarcoatPos: number): number | null => {
     // Inclusive end: a typing cursor at an atom's end still belongs to it.
     const p = innermost(
       pairs,
@@ -118,20 +118,20 @@ export function alignSugarcoatClassic(sugarcoatText: string): SugarcoatAlignment
       (q) => q.sugarcoatEnd - q.sugarcoatStart,
     );
     if (p === null) return null;
-    return p.classicStart + Math.min(sugarcoatPos - p.sugarcoatStart, p.classicEnd - p.classicStart);
+    return p.schemeStart + Math.min(sugarcoatPos - p.sugarcoatStart, p.schemeEnd - p.schemeStart);
   };
 
-  const toSugarcoat = (classicStart: number, classicLength: number): { start: number; length: number } | null => {
-    const end = classicStart + classicLength;
+  const toSugarcoat = (schemeStart: number, schemeLength: number): { start: number; length: number } | null => {
+    const end = schemeStart + schemeLength;
     const p = innermost(
       pairs,
-      (q) => q.classicStart <= classicStart && end <= q.classicEnd,
-      (q) => q.classicEnd - q.classicStart,
+      (q) => q.schemeStart <= schemeStart && end <= q.schemeEnd,
+      (q) => q.schemeEnd - q.schemeStart,
     );
     if (p === null) return null;
-    if (p.exact) return { start: p.sugarcoatStart + (classicStart - p.classicStart), length: classicLength };
+    if (p.exact) return { start: p.sugarcoatStart + (schemeStart - p.schemeStart), length: schemeLength };
     return { start: p.sugarcoatStart, length: p.sugarcoatEnd - p.sugarcoatStart };
   };
 
-  return { classic, pairs, toClassic, toSugarcoat };
+  return { scheme, pairs, toScheme, toSugarcoat };
 }

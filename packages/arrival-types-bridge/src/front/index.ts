@@ -16,5 +16,5 @@ export {
   type ListNode,
   type Node,
 } from "./nodes.js";
-export { parseSexprs } from "./parse.js";
+export { parseSexprs, type ListOpen } from "./parse.js";
 export { resolveNames } from "./scheme-scope.js";

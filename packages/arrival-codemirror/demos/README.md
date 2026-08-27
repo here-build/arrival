@@ -6,7 +6,7 @@ source (`pnpm typecheck` at the package root covers them); the first two run in 
 | File                                       | Shows                                                                                                                                                    |
 | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`vanilla-ide.ts`](./vanilla-ide.ts)       | Vanilla CM6: language + paredit + inlay hints + the full tsc-backed IDE (in-process browser service). The seeded `(greet 42)` carries a real type error. |
-| [`sugarcoat-flip.ts`](./sugarcoat-flip.ts) | One program, two faces: classic and Sugarcoat side by side, the _same_ backend mounted on both — Sugarcoat through `sugarcoatIdeBackend`.                |
+| [`sugarcoat-flip.ts`](./sugarcoat-flip.ts) | One program, two faces: Scheme and Sugarcoat side by side, the _same_ backend mounted on both — Sugarcoat through `sugarcoatIdeBackend`.                 |
 | [`react-editor.tsx`](./react-editor.tsx)   | `<SchemeEditor>` with the scheme/sugarcoat lens switch, parse-state reporting, structural editing, and the self-loading worker-ladder IDE.               |
 
 ## Run

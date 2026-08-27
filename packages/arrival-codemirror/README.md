@@ -1,6 +1,6 @@
 # @inhuman.tools/arrival-codemirror
 
-CodeMirror 6 for `@inhuman.tools/arrival` Scheme (classic + sugarcoat).
+CodeMirror 6 for `@inhuman.tools/arrival` Scheme (Scheme + sugarcoat).
 
 Two mounts — vanilla CM6 extensions, or `<SchemeEditor>` from `./react`.
 
@@ -57,14 +57,14 @@ export function App() {
 
 ## What's in the box
 
-| Export                                         |                                                                                       |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `schemeSugarcoat()`                            | Language mode: classic Scheme _and_ Sugarcoat. Highlight _tags_ only — bring a theme. |
-| `schemeStructural()`                           | Paredit on the classic lens. Real reader + verify-reparse net.                        |
-| `schemeIde(backend)`                           | Lint, hover, completion, goto, semantic highlight, **and ghost**.                     |
-| `paramHintsExtension("scheme" \| "sugarcoat")` | Inlay parameter-name hints.                                                           |
-| `sugarcoatIdeBackend(backend)`                 | Same IDE on the Sugarcoat face.                                                       |
-| `/react`                                       | `<SchemeEditor>` + `useSchemeIde()` (SharedWorker → Worker → in-thread).              |
+| Export                                         |                                                                               |
+| ---------------------------------------------- | ----------------------------------------------------------------------------- |
+| `schemeSugarcoat()`                            | Language mode: Scheme _and_ Sugarcoat. Highlight _tags_ only — bring a theme. |
+| `schemeStructural()`                           | Paredit on the Scheme lens. Real reader + verify-reparse net.                 |
+| `schemeIde(backend)`                           | Lint, hover, completion, goto, semantic highlight, **and ghost**.             |
+| `paramHintsExtension("scheme" \| "sugarcoat")` | Inlay parameter-name hints.                                                   |
+| `sugarcoatIdeBackend(backend)`                 | Same IDE on the Sugarcoat face.                                               |
+| `/react`                                       | `<SchemeEditor>` + `useSchemeIde()` (SharedWorker → Worker → in-thread).      |
 
 ## The seam
 
@@ -85,7 +85,7 @@ Methods may answer sync or with a Promise, so an in-process service and a worker
 message port satisfy the _same_ seam — `@inhuman.tools/arrival-lsp` fits directly, in either
 mode. The optional methods are presence-gated feature unlocks: `getSemanticClassifications`
 turns on semantic highlighting, `getCompletionContext` upgrades completion and the ghost to the
-Σ∩T-ranked pipeline. Coordinates are always classic Scheme; Sugarcoat buffers translate through
+Σ∩T-ranked pipeline. Coordinates are always Scheme; Sugarcoat buffers translate through
 `sugarcoatIdeBackend`.
 
 ## Structural keymap
@@ -110,10 +110,10 @@ buffer — the caret steps over the delimiter instead, paredit-style.
 
 ## Honest edges
 
-- **Structural ops are classic-lens-only, by design.** Sugarcoat's indentation is semantic —
+- **Structural ops are Scheme-lens-only, by design.** Sugarcoat's indentation is semantic —
   slurp/barf there would be wrong, not just unmapped.
 - **The IDE on Sugarcoat goes through span alignment.** A position inside sugar that has no
-  classic token answers empty; diagnostics inside sugar lift to the enclosing paired node.
+  Scheme token answers empty; diagnostics inside sugar lift to the enclosing paired node.
   Unparseable Sugarcoat degrades to no answers (the editor keeps its last good state).
 - **`#\…` char literals and `#|…|#` block comments are outside the structural reader's
   vocabulary** — their presence suspends structure (conservative: they would _mis_-parse rather

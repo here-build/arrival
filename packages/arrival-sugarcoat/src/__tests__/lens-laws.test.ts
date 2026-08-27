@@ -9,22 +9,22 @@
  *   render(printScheme(read(s))) reaches a stable sugar representative of s
  *
  * Domain isolation:
- *   schemeToSugarcoat accepts classic + polyglot supersets + free `[]`/`{}`,
+ *   schemeToSugarcoat accepts scheme + polyglot supersets + free `[]`/`{}`,
  *   and re-enters already-sweet buffers via the sugar reader when needed
  *   (I-expr / `@{}` / `=>`). Never a quiet list/dict → bare-list zombie.
  *
  * What the pre-existing suite actually covered (and why the mode-override
  * corruption shipped green):
- *   ✓  GetPut AST via `printScheme(readSugarcoat(render(classic)))` — many files
+ *   ✓  GetPut AST via `printScheme(readSugarcoat(render(scheme)))` — many files
  *   ✓  PutGet cyclic for method-dot + accessor subscripts ONLY
  *   ✗  GetPut BYTE (`sugarcoatToScheme`) — one "does not throw", zero identity
  *   ✗  PutGet cyclic for free `[]` / even `{}` (dict/list surface)
- *   ✗  Double-render / classic-parser-on-sugar isolation
+ *   ✗  Double-render / scheme-parser-on-sugar isolation
  *   ✗  The promised "program corpus" (README / index.ts) — no corpus exists
  *
  * Composition diagram of the hole:
- *   classic ─render→ sugar ─readSugarcoat→ classic     ✓ tested
- *   classic ─render→ sugar ─schemeToSugarcoat→ zombie  ✗ untested until here
+ *   scheme ─render→ sugar ─readSugarcoat→ scheme     ✓ tested
+ *   scheme ─render→ sugar ─schemeToSugarcoat→ zombie  ✗ untested until here
  *                                    ↑
  *                     parseSexprs treats `[`≡`(`, `{`/`} ` as atom glue
  */
@@ -42,7 +42,7 @@ const readAst = (sugar: string): string =>
     .map((f) => printScheme(f))
     .join("\n");
 
-/** Structural equality of classic trees (print-normalized). */
+/** Structural equality of scheme trees (print-normalized). */
 const astEq = (a: string, b: string): boolean => {
   const fa = parseSexprs(a);
   const fb = parseSexprs(b);
@@ -122,13 +122,13 @@ describe("lens law GetPut BYTE: sugarcoatToScheme(render(c), c) === c", () => {
 describe("lens law PutGet cyclic: render(read(s)) is a stable sugar for list/dict", () => {
   for (const s of SUGAR_LIST_DICT_SURFACES) {
     it(s, () => {
-      // Correct composition: sugar → sugarcoat reader → classic print → re-render.
-      const classic = printScheme(readSugarcoatExpr(s));
-      const again = render(classic).trim();
-      // Re-reading the re-render recovers the same classic AST (intent preserved).
-      expect(astEq(readAst(again), classic)).toBe(true);
+      // Correct composition: sugar → sugarcoat reader → scheme print → re-render.
+      const scheme = printScheme(readSugarcoatExpr(s));
+      const again = render(scheme).trim();
+      // Re-reading the re-render recovers the same scheme AST (intent preserved).
+      expect(astEq(readAst(again), scheme)).toBe(true);
       // And a second cycle is fixed: render∘read is idempotent on the AST.
-      expect(astEq(readAst(render(printScheme(readSugarcoatExpr(again)))), classic)).toBe(true);
+      expect(astEq(readAst(render(printScheme(readSugarcoatExpr(again)))), scheme)).toBe(true);
     });
   }
 });
@@ -136,9 +136,9 @@ describe("lens law PutGet cyclic: render(read(s)) is a stable sugar for list/dic
 // ═══════════════════════════════════════════════════════════════════════════
 // Law 4 — Domain isolation: schemeToSugarcoat is NOT a sugar pretty-printer
 //
-// THIS is the structural hole. Every other test starts from classic and
+// THIS is the structural hole. Every other test starts from scheme and
 // re-enters sugar only via readSugarcoat. Nothing asserted that feeding the
-// sweet surface back into schemeToSugarcoat (classic parseSexprs) preserves
+// sweet surface back into schemeToSugarcoat (scheme parseSexprs) preserves
 // intent. parseSexprs treats `[` ≡ `(`, and `{`/`}` as atom characters, so
 // `[{:a 1}]` becomes a bare list of the atoms `{:a`, `1`, `}` — then re-emits
 // as the zombie `({:a 1 })`. Intent flips: (list (dict …)) → ((dict …)).
@@ -147,7 +147,7 @@ describe("lens law PutGet cyclic: render(read(s)) is a stable sugar for list/dic
 /**
  * Domain isolation — fixed by parse opener stamps + normalizePolyglot:
  * free `[]`/`{}` lower to `(list …)` / `(dict …)` before render, so re-feeding
- * a sweet buffer recovers the same classic AST (no `({:form … })` zombie).
+ * a sweet buffer recovers the same scheme AST (no `({:form … })` zombie).
  */
 describe("lens law domain isolation: re-render of sugar must not corrupt intent", () => {
   for (const c of [LIST_OF_DICT, LIST_OF_DICTS, NESTED, IF_ARMS]) {
@@ -162,13 +162,13 @@ describe("lens law domain isolation: re-render of sugar must not corrupt intent"
     // harness/design/slash/mode-override.scm — sweet source re-entered via schemeToSugarcoat.
     // Uses `str` (not string-append): strTolerant modernizes string-append→str on the
     // first render; domain isolation cares about list/dict structure, not that rename.
-    const classic = `(list (dict :form (quote notify) :level (quote error) :message (str "unknown mode axis: " (format #f "~a" axis))))`;
-    const once = render(classic).trim();
+    const scheme = `(list (dict :form (quote notify) :level (quote error) :message (str "unknown mode axis: " (format #f "~a" axis))))`;
+    const once = render(scheme).trim();
     expect(once).toMatch(/^\[\{/); // sweet list-of-dict surface
     const twice = schemeToSugarcoat(once).trim();
     // Zombie signature we must never emit: bare parens + glued `{:form` atom.
     expect(twice).not.toMatch(/^\(\{:form/);
-    expect(astEq(readAst(twice), classic)).toBe(true);
+    expect(astEq(readAst(twice), scheme)).toBe(true);
     // Re-render is a fixed point on the recovered AST.
     expect(astEq(readAst(twice), readAst(once))).toBe(true);
   });

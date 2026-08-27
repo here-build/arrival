@@ -95,8 +95,8 @@ describe("cyclic idempotence: sugarcoat → scheme → sugarcoat", () => {
   ] as const) {
     for (const sugarcoat of ["x[0]", "x[1:]", "x[0][0]", "x[1][0]", "x[1][1]", "x[0][1][2]", "x[4:]", "x[2][3:]"]) {
       it(`${sugarcoat} (${mode.name})`, () => {
-        const classic = read(sugarcoat, mode.depth);
-        expect(render(classic)).toBe(sugarcoat);
+        const scheme = read(sugarcoat, mode.depth);
+        expect(render(scheme)).toBe(sugarcoat);
       });
     }
   }

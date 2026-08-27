@@ -1,5 +1,5 @@
 // sugarcoat-ide — the sugarcoat-lens backend compositor against the REAL type lens.
-// Three lenses end-to-end: sugarcoat ↔ classic (alignSugarcoatClassic) ↔ virtual TS ↔
+// Three lenses end-to-end: sugarcoat ↔ Scheme (alignSugarcoatScheme) ↔ virtual TS ↔
 // tsc. Diagnostics, hover, completion, and goto-def all answered for a SWEET
 // buffer in SWEET coordinates.
 //
@@ -87,7 +87,7 @@ describe("sugarcoatIdeBackend — completion in sugarcoat coordinates", () => {
   it("the whitespace-after-callee anchor completes the empty argument slot", async () => {
     if (!backend.getCompletionContext) throw new Error("rich completion missing on seam");
     // `(string-upcase |)` — empty slot; the cursor sits on sugarcoat whitespace
-    // with no classic twin, so the anchor injects the seam after the callee.
+    // with no Scheme twin, so the anchor injects the seam after the callee.
     const sugarcoat = "define (f s)\n  (string-upcase )";
     const ctx = await backend.getCompletionContext(sugarcoat, sugarcoat.length - 1);
     expect(ctx.position).toBe("argument");
@@ -103,7 +103,7 @@ describe("sugarcoatIdeBackend — goto-definition in sugarcoat coordinates", () 
     expect(defs.length).toBeGreaterThan(0);
     const d = defs[0]!;
     expect(d.span).not.toBeNull();
-    // The backend's definition span covers the whole define FORM (classic-lens
+    // The backend's definition span covers the whole define FORM (Scheme-lens
     // parity); lifted to sugarcoat it's the form's sugarcoat extent — the jump target.
     const target = sugarcoat.slice(d.span!.start, d.span!.start + d.span!.length);
     expect(target).toContain("define (helper x)");

@@ -74,7 +74,7 @@ export function identityLine(facts: GreetingFacts, mode: ColorMode = colorMode()
     facts.capabilityCount === 0
       ? "no capabilities armed"
       : `${facts.capabilityCount} capabilit${facts.capabilityCount === 1 ? "y" : "ies"} armed`;
-  const lensLabel = facts.lens === "sugarcoat" ? "sugarcoat lens" : "classic lens";
+  const lensLabel = facts.lens === "sugarcoat" ? "sugarcoat lens" : "scheme lens";
   return paint(`arrival ${facts.version} — ${caps} · ${lensLabel} · ,lens to flip, ? for help`, "gutter", mode);
 }
 

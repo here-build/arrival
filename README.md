@@ -63,7 +63,8 @@ All names are `@inhuman.tools/<dir>`.
 
 - [`arrival`](./packages/arrival/README.md) — interpreter, capability environments, JS membrane. MIT
 - [`arrival-cli`](./packages/arrival-cli/README.md) — `arrival run`, REPL, `arrival check`. MIT
-- [`arrival-sugarcoat`](./packages/arrival-sugarcoat/README.md) — reversible classic ↔ sugarcoat view. MIT
+- [`arrival-syntax`](./packages/arrival-syntax/README.md) — span-preserving Scheme s-expression forest (`parseSexprs`). MIT
+- [`arrival-sugarcoat`](./packages/arrival-sugarcoat/README.md) — reversible Scheme ↔ sugarcoat view. MIT
 - [`arrival-modules`](./packages/arrival-modules/README.md) — `(require …)`; yaml/toml/handlebars are optional subpaths. MIT
 - [`arrival-serializer`](./packages/arrival-serializer/README.md) — JS → compact s-expressions. MIT
 - [`arrival-overridable-lens`](./packages/arrival-overridable-lens/README.md) — static read of `(define/overridable …)`. MIT
@@ -73,7 +74,7 @@ All names are `@inhuman.tools/<dir>`.
 - [`arrival-lsp`](./packages/arrival-lsp/README.md) — Scheme→TS type lens (not the Language Server Protocol). MIT
 - [`arrival-types-bridge`](./packages/arrival-types-bridge/README.md) — virtual-TS emitter the lens (and Mercury) share. MIT
 - [`arrival-internals-types-prelude`](./packages/arrival-internals-types-prelude/README.md) — shared `.d.ts` leaves so LSP and mercury do not cycle. MIT
-- [`arrival-codemirror`](./packages/arrival-codemirror/README.md) — CodeMirror 6 (classic + sugarcoat). MIT
+- [`arrival-codemirror`](./packages/arrival-codemirror/README.md) — CodeMirror 6 (Scheme + sugarcoat). MIT
 
 **Analysis**
 

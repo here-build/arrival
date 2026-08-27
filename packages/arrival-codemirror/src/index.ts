@@ -1,9 +1,9 @@
-// @inhuman.tools/arrival-codemirror — CodeMirror 6 for arrival Scheme (classic + sugarcoat).
+// @inhuman.tools/arrival-codemirror — CodeMirror 6 for arrival Scheme (Scheme + sugarcoat).
 //
 // Exports the language (schemeSugarcoat), param hints, structural editing, ghost,
 // and IDE surface (linter/hover/completion/goto/sem-highlight) over a
 // `SchemeIdeBackend` seam. The backend may be sync or async; arrival-lsp
-// (browser or worker) fits directly. All coordinates are classic Scheme.
+// (browser or worker) fits directly. All coordinates are Scheme.
 
 export { schemeSugarcoat } from "./scheme-sugarcoat.js";
 export { paramHintsExtension } from "./param-hints.js";

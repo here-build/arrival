@@ -1,14 +1,14 @@
 // `parseSexprs`'s handling of `#\<char>` character literals — a real crash found via a live
-// MCP-Atlas run: a model wrote `(char=? #\" (car chars))` while hand-rolling a CSV parser, which
-// `analyzeStatement` (statement-facts.ts, itself calling `parseSexprs`) fed straight into this
-// parser and got an uncaught "unterminated string" invariant, crashing the whole manifold call
-// mid-eval. Root cause: `#\` had no dedicated case — the payload character fell through to the
-// generic atom scan, which stops at delimiters including `"`, so `#\"` split into the 2-char atom
-// `#\` plus a bare `"` that `readString` then read as OPENING a new (often unterminated) string.
+// MCP-Atlas run: a model wrote `(char=? #\" (car chars))` while hand-rolling a CSV parser,
+// which fed straight into this parser and got an uncaught "unterminated string" invariant.
+// Root cause: `#\` had no dedicated case — the payload character fell through to the
+// generic atom scan, which stops at delimiters including `"`, so `#\"` split into the 2-char
+// atom `#\` plus a bare `"` that `readString` then read as OPENING a new (often unterminated)
+// string.
 
 import { describe, expect, it } from "vitest";
 
-import { parseSexprs } from "../sugarcoat-render.js";
+import { parseSexprs } from "../parse.js";
 
 function atomOf(src: string): string {
   const forms = parseSexprs(src);

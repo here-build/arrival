@@ -23,9 +23,9 @@ importers:
       '@here.build/error-invariant':
         specifier: 0.9.0
         version: 0.9.0
-      '@inhuman.tools/arrival-sugarcoat':
+      '@inhuman.tools/arrival-syntax':
         specifier: workspace:^
-        version: link:../arrival-sugarcoat
+        version: link:../arrival-syntax
       dedent:
         specifier: 1.7.2
         version: 1.7.2
@@ -439,6 +439,9 @@ importers:
       '@here.build/lexical-namer':
         specifier: 0.9.0
         version: 0.9.0
+      '@inhuman.tools/arrival-syntax':
+        specifier: workspace:^
+        version: link:../arrival-syntax
       pluralize:
         specifier: 8.0.0
         version: 8.0.0
@@ -474,6 +477,37 @@ importers:
         specifier: 4.1.0
         version: 4.1.0(@types/node@24.0.0)(yaml@2.9.0)
 
+  packages/arrival-syntax:
+    dependencies:
+      tiny-invariant:
+        specifier: 1.3.3
+        version: 1.3.3
+    devDependencies:
+      '@here.build/eslint-configs':
+        specifier: 0.9.0
+        version: 0.9.0(@typescript-eslint/eslint-plugin@8.55.0(@typescript-eslint/parser@8.55.0(eslint@9.39.2)(typescript@6.0.2))(eslint@9.39.2)(typescript@6.0.2))(@typescript-eslint/utils@8.68.0(eslint@9.39.2)(typescript@6.0.2))(eslint@9.39.2)(typescript@6.0.2)
+      '@here.build/tsconfig':
+        specifier: 0.9.0
+        version: 0.9.0
+      '@types/node':
+        specifier: 24.0.0
+        version: 24.0.0
+      eslint:
+        specifier: 9.39.2
+        version: 9.39.2
+      globals:
+        specifier: 17.3.0
+        version: 17.3.0
+      prettier:
+        specifier: 3.8.1
+        version: 3.8.1
+      typescript:
+        specifier: 6.0.2
+        version: 6.0.2
+      vitest:
+        specifier: 4.1.0
+        version: 4.1.0(@types/node@24.0.0)(yaml@2.9.0)
+
   packages/arrival-types-bridge:
     dependencies:
       '@here.build/lexical-namer':
@@ -482,6 +516,9 @@ importers:
       '@inhuman.tools/arrival-modules':
         specifier: workspace:^
         version: link:../arrival-modules
+      '@inhuman.tools/arrival-syntax':
+        specifier: workspace:^
+        version: link:../arrival-syntax
     devDependencies:
       '@here.build/eslint-configs':
         specifier: 0.9.0
@@ -5011,8 +5048,8 @@ snapshots:
 
   '@typescript-eslint/project-service@8.55.0(typescript@6.0.2)':
     dependencies:
-      '@typescript-eslint/tsconfig-utils': 8.55.0(typescript@6.0.2)
-      '@typescript-eslint/types': 8.55.0
+      '@typescript-eslint/tsconfig-utils': 8.68.0(typescript@6.0.2)
+      '@typescript-eslint/types': 8.68.0
       debug: 4.4.3
       typescript: 6.0.2
     transitivePeerDependencies:

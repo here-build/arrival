@@ -82,7 +82,7 @@ describe("render: (str …) / (string-append …) → single-line at-expression"
     ['(string-append "a " x " b")', "@{a @x b}"],
     ['(str "Say \\"" x "\\" loud")', '@{Say "@x" loud}'],
     ['(str "role: " (field lead "role"))', '@{role: @(field lead "role")}'],
-    // keyword / pair accessors surface as bare @recv[:k], not classic @(:k recv)
+    // keyword / pair accessors surface as bare @recv[:k], not scheme @(:k recv)
     ['(str "/" config/hero-id (:id persona) replay-idx)', "@{/@config/hero-id@persona[:id]@replay-idx}"],
     ['(str "x" (:id persona) "y")', "@{x@persona[:id]y}"],
     ['(str "from " (:baseline s))', "@{from @s[:baseline]}"],
@@ -102,13 +102,13 @@ describe("render: (str …) / (string-append …) → single-line at-expression"
     );
   });
 
-  // preference / soundness — these stay classic
-  const classic: string[] = [
+  // preference / soundness — these stay scheme
+  const scheme: string[] = [
     "(str x y)", // no prose literal
     '(str "a" "b")', // adjacent literals coalesce → not representable
     '(str "hello")', // single bare word, no space/quote
   ];
-  for (const s of classic) it(`${s} stays classic`, () => expect(render(s)).toBe(s));
+  for (const s of scheme) it(`${s} stays scheme`, () => expect(render(s)).toBe(s));
 });
 
 describe("read∘render = id (the moat) for single-line at-expressions", () => {
