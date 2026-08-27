@@ -8,8 +8,6 @@
 
 Lisp was born in 1958 for AI research — the first language built _for_ AI. arrival is a
 Lisp dialect built for AI _as the user_: the agent writes the programs.
-Image: [xkcd 297](https://xkcd.com/297/) by Randall Munroe, [CC BY-NC 2.5](https://creativecommons.org/licenses/by-nc/2.5/)
-— the image only; the software is MIT.
 
 This repository is the public home of the `@inhuman.tools/arrival*` family, published by
 [here.build](https://here.build). Shared floor packages (`@here.build/tsconfig`, `collections`,
