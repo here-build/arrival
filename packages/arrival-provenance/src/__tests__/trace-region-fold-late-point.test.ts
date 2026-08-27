@@ -39,12 +39,11 @@ function gate(): { promise: Promise<void>; open: () => void } {
   return { promise, open };
 }
 
-/** A few macrotask turns — lets the parked rosetta body advance past an opened gate. */
-const settle = (): Promise<void> => new Promise((res) => setTimeout(res, 0));
-
 describe("TraceRegionFold — late point promotion (streaming-host marking race)", () => {
   it("a point marked after ingest still becomes a leaf, first as running, then at parity", async () => {
+    const entered = gate();
     const preCrossing = gate();
+    const marked = gate();
     const streaming = gate();
     const trace = new EvalTrace();
 
@@ -53,11 +52,14 @@ describe("TraceRegionFold — late point promotion (streaming-host marking race)
         "slow-infer": symbol.rosetta`slow-infer: parks pre-crossing, marks at the crossing, parks streaming`(
           { input: [z.string], output: [z.string] },
           async function (q) {
+            // Host body is past membrane enter — invocation is on the log, still unmarked.
+            entered.open();
             // The enter→crossing window (arg eval / tool resolution in the real plane).
             await preCrossing.promise;
             // The provider crossing — exactly the studio hook's marking.
             const inv = (this as { invocation?: { currentInvocation?: Invocation } })?.invocation?.currentInvocation;
             if (inv) trace.markProvenancePoint(inv);
+            marked.open();
             // The model streams…
             await streaming.promise;
             return `SRC:${q}`;
@@ -72,13 +74,16 @@ describe("TraceRegionFold — late point promotion (streaming-host marking race)
     run.catch(() => {}); // surfaced via the awaited `run` below; never unhandled mid-test
 
     // Tick 1 — INSIDE the race window: the invocation entered, is running, unmarked.
-    await settle();
+    // First execState pays BASE_ROSTER vocabulary + prelude; a 0-timer is not a stage
+    // barrier and on CI fires while bootstrap is still running (0 leaves looks like
+    // "unmarked" and the next tick has nothing to promote).
+    await entered.promise;
     fold.applyDelta();
     expect(leavesOf(fold.current().roots).filter((l) => l.label === "slow-infer")).toHaveLength(0);
 
     // Crossing: the host marks the point while the call is still in flight.
     preCrossing.open();
-    await settle();
+    await marked.promise;
     fold.applyDelta();
     const midFlight = leavesOf(fold.current().roots).filter((l) => l.label === "slow-infer");
     expect(midFlight).toHaveLength(1);
