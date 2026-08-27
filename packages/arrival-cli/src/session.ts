@@ -1,6 +1,6 @@
 /**
- * The ONE run posture every CLI verb shares: the entry-point budgets (100M heap /
- * 300s wall, env-tunable — the same knobs runner-capability's budget.ts reads), the loader-armed
+ * The ONE run posture every CLI verb shares: the entry-point wall-clock budget
+ * (300s, env-tunable — the same knob runner-capability's budget.ts reads), the loader-armed
  * (runCtx, scope) WARM PAIR for require-using programs (the CUT, capability-refined:
  * `arrivalLoaderCapability` minted once via {@link execState}, jailed to a root dir, paired
  * with a {@link LexicalScope.fresh} session scope), and the two output surfaces — values
@@ -40,25 +40,18 @@ import type { OutputMode } from "./output-mode.js";
 import { colorizeSexpr } from "./sexpr-color.js";
 import { paint, streamColorMode, type ColorMode } from "./tints.js";
 
-/** Per-run ALLOCATION cap — same default + env var as runner-capability's entry defaults. */
-function heapDefault(): number {
-  const raw = Number(process.env.ARRIVAL_HEAP_MAX);
-  return Number.isFinite(raw) && raw > 0 ? raw : 100_000_000;
-}
-
 /** Wall-clock budget — the 5-minute program class, same env var as runner-capability. */
 function wallDefault(): number {
   const raw = Number(process.env.ARRIVAL_RUN_BUDGET_MS);
   return Number.isFinite(raw) && raw > 0 ? raw : 300_000;
 }
 
-/** The entry-point budgets, shared by every verb and both env paths. Both fields are
- *  ALWAYS concrete numbers here (never `undefined` — unlike `ExecOptions`' own optional
- *  `budgetMs`/`heapBudget`, which this satisfies structurally): callers that need a
- *  guaranteed-present budget pair (the REPL's per-form emitter, form-emitter.ts) can
- *  use this return type directly instead of re-asserting non-undefined at every call site. */
-export function budgets(): { budgetMs: number; heapBudget: number } {
-  return { budgetMs: wallDefault(), heapBudget: heapDefault() };
+/** The entry-point wall-clock budget, shared by every verb and both env paths. Always a
+ *  concrete number (never `undefined` — unlike `ExecOptions.budgetMs`): callers that need a
+ *  guaranteed-present budget (the REPL's per-form emitter, form-emitter.ts) can use this
+ *  return type directly instead of re-asserting non-undefined at every call site. */
+export function budgets(): { budgetMs: number } {
+  return { budgetMs: wallDefault() };
 }
 
 /** The session handles a loader-armed run continues on: `capabilities`/`config` (the SAME

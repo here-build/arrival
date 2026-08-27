@@ -97,9 +97,9 @@ function BlockView({
   const src = block.source === "" ? "" : highlightScheme(toLens(block.source, lens), mode);
   const srcLines = src.split("\n");
   // Execution time rides the FAR RIGHT of the source line (space-between, like the prompt
-  // row's status) — heap is dropped (noise; the wall-clock is the number that reads). A
-  // settled block lives in <Static>, whose items size to CONTENT not terminal width — so the
-  // row needs an explicit `width` for space-between to have room to push the time right.
+  // row's status). A settled block lives in <Static>, whose items size to CONTENT not
+  // terminal width — so the row needs an explicit `width` for space-between to have room
+  // to push the time right.
   const elapsed =
     block.counters !== undefined && (block.state === "done" || block.state === "error")
       ? paint(`${block.counters.elapsedMs}ms`, "gutter", mode)
@@ -185,7 +185,6 @@ interface InputBuffer {
 export interface ReplAppProps {
   readonly session: LoaderSession;
   readonly budgetMs: number;
-  readonly heapBudget: number;
   readonly capabilityCount: number;
   readonly version: string;
   readonly mode?: ColorMode;
@@ -194,7 +193,6 @@ export interface ReplAppProps {
 function ReplApp({
   session,
   budgetMs,
-  heapBudget,
   version,
   capabilityCount,
   mode = colorMode(),
@@ -245,7 +243,6 @@ function ReplApp({
         runCtx: session.runCtx,
         scope: session.scope,
         budgetMs,
-        heapBudget,
         onEvent: (event) => {
           model = foldReplEvent(model, event);
           setRunning(model);
@@ -270,7 +267,7 @@ function ReplApp({
       await waitUntilRenderFlush();
       writeStdout(commandDone(turnExitCode(model.blocks)));
     },
-    [session, budgetMs, heapBudget, writeStdout, waitUntilRenderFlush],
+    [session, budgetMs, writeStdout, waitUntilRenderFlush],
   );
 
   const onEnter = useCallback(

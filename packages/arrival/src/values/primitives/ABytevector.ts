@@ -132,8 +132,7 @@ export class ABytevector extends AValue {
   // element-union), bytes carry NO element ids, so this carries the BYTEVECTOR's OWN
   // provenance via `withInputProvenance([this], count)` — always a fresh boxed AExact post
   // bare-value purge (A4/P4): stamped when non-empty, the empty-provenance flyweight-free
-  // fresh box otherwise (numbers have no flyweight, only ABool does). No heap-charge / no
-  // strict-gating.
+  // fresh box otherwise (numbers have no flyweight, only ABool does). No strict-gating.
   ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
     return withInputProvenance([this], this.__bytevector__.byteLength);
   }

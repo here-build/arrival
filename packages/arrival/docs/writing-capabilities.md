@@ -31,15 +31,19 @@ scheme-shaped leaks in. One contract has four readers that must agree — the fo
 `environments.md` §CONTRACT; the authoring rule is: **declare the codec that matches what the impl
 reads and returns.** "Take the raw value and sort it out inside" is a debt, not a shortcut.
 
-`z.dynamic` is the declared no-transform escape hatch for a **rosetta** (crossing) slot
-**genuinely untypeable at the boundary** — the impl receives/returns the raw scheme value and does
-its own `schemeToJs`/`jsToScheme` (`env/overridable/overridable.ts`'s `overridable/resolve` is the
-one production case). A **contour** slot (native/define/sequence/tagless) reaches instead for
-`z.schemeValue`, the honest top type for "any boxed scheme value" — the two are compile-time banned
-from each other's slot kind. Either way the slot is invisible to the type lens, unvalidated at the
-boundary, and barred from `cacheClass: "view"` (a raw crossing doesn't serialize — the bake gate
-refuses it). Declare the codec whenever one exists; `grep schemeToJsUntyped` is the audit list of
-every place the untyped crossing was reached for.
+`z.dynamic` is a special kind, never a default fallback: it is legal only for a **rosetta**
+(crossing) slot that is **fully generic** — ∀-quantified, the verb polymorphic in that slot,
+passing the value through whole without reading its shape — where the impl does its own
+`schemeToJs`/`jsToScheme` (`env/overridable/overridable.ts`'s `overridable/resolve` is the one
+production case). A shape that is merely awkward or open-ended is NOT generic — it has an honest
+codec (`z.union`, `z.dict`, `z.box`, `z.instance`); reaching for `z.dynamic` because the codec is
+tedious desyncs the four readers the same way an undeclared codec does. A **contour** slot
+(native/define/sequence/tagless) reaches instead for `z.schemeValue`, the honest top type for "any
+boxed scheme value" — the two are compile-time banned from each other's slot kind. Either way the
+slot is invisible to the type lens, unvalidated at the boundary, and barred from
+`cacheClass: "view"` (a raw crossing doesn't serialize — the bake gate refuses it). Declare the
+codec whenever one exists; `grep schemeToJsUntyped` is the audit list of every place the untyped
+crossing was reached for.
 
 ## Parametric ops are tagless by construction
 

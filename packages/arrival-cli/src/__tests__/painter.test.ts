@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import { paintRegion, renderBlock, renderTurn, type Writer } from "../painter.js";
 import { stripAnsi } from "./ansi-strip.js";
 
-const counters = { heapUsed: 128, heapMax: 100_000_000, elapsedMs: 3 };
+const counters = { elapsedMs: 3 };
 
 describe("renderBlock", () => {
   it("pending: source line only, no content, no gutter", () => {
@@ -23,7 +23,7 @@ describe("renderBlock", () => {
     expect(renderBlock(block, "scheme").map(stripAnsi)).toEqual(["▸ (slow-thing)"]);
   });
 
-  it("done: source, value content, and the meters gutter (row 6)", () => {
+  it("done: source, value content, and the elapsed gutter", () => {
     const block: ReplBlock = {
       index: 1,
       source: "(+ x 1)",
@@ -31,7 +31,7 @@ describe("renderBlock", () => {
       content: [{ type: "text", text: "2" }],
       counters,
     };
-    expect(renderBlock(block, "scheme").map(stripAnsi)).toEqual(["✓ (+ x 1)", "  2", "  heap 128 · 3ms"]);
+    expect(renderBlock(block, "scheme").map(stripAnsi)).toEqual(["✓ (+ x 1)", "  2", "  3ms"]);
   });
 
   it("error: source, the door text as body, gutter — same shape as done, distinct tint", () => {
@@ -40,10 +40,10 @@ describe("renderBlock", () => {
       source: "(nope)",
       state: "error",
       content: [{ type: "text", text: '(error "unbound symbol nope")' }],
-      counters: { heapUsed: 0, heapMax: 100_000_000, elapsedMs: 0 },
+      counters: { elapsedMs: 0 },
       error: "unbound symbol nope",
     };
-    expect(renderBlock(block, "scheme").map(stripAnsi)).toEqual(["✗ (nope)", '  (error "unbound symbol nope")', "  heap 0 · 0ms"]);
+    expect(renderBlock(block, "scheme").map(stripAnsi)).toEqual(["✗ (nope)", '  (error "unbound symbol nope")', "  0ms"]);
   });
 
   it("skipped: distinct body text, no gutter — 'queued but never reached' vs 'still queued'", () => {
@@ -74,7 +74,7 @@ describe("renderTurn", () => {
       { index: 1, source: "(+ x 1)", state: "done", content: [{ type: "text", text: "2" }], counters },
     ];
     const lines = renderTurn(blocks, "scheme").map(stripAnsi);
-    expect(lines).toEqual(["✓ (define x 1)", "", "✓ (+ x 1)", "  2", "  heap 128 · 3ms"]);
+    expect(lines).toEqual(["✓ (define x 1)", "", "✓ (+ x 1)", "  2", "  3ms"]);
   });
 });
 

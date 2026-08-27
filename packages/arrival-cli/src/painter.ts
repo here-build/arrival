@@ -44,13 +44,6 @@ const TINT: Record<ReplBlockState, TintName> = {
   skipped: "skipped",
 };
 
-/** `12345` heap cells → `"1.2K"`; `0` → `"0"`. Cells, not bytes — the meter's own unit. */
-function formatCells(n: number): string {
-  if (n < 1000) return String(n);
-  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}K`;
-  return `${(n / 1_000_000).toFixed(1)}M`;
-}
-
 /** One block's lines, through `lens`. The source line always renders (even `pending` —
  *  §5's "immediately paint every form as a block" so perceived latency collapses before
  *  any output exists); content/counters only once the statement event has landed. */
@@ -72,8 +65,8 @@ export function renderBlock(block: ReplBlock, lens: Lens): string[] {
     }
   }
   if (block.counters !== undefined && (block.state === "done" || block.state === "error")) {
-    const { heapUsed, elapsedMs } = block.counters;
-    lines.push(paint(`  heap ${formatCells(heapUsed)} · ${elapsedMs}ms`, "gutter"));
+    const { elapsedMs } = block.counters;
+    lines.push(paint(`  ${elapsedMs}ms`, "gutter"));
   }
   return lines;
 }

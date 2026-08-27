@@ -68,7 +68,7 @@
  *
  * ── RUN STATE ───────────────────────────────────────────────────────────────
  * `ctx.runCtx` (RunContext, minted by exec) carries run-CONSTANT state — strict
- * mode, heap meter — threaded as data through every `{ ...ctx }` spread.
+ * mode, channels, signal — threaded as data through every `{ ...ctx }` spread.
  * `ctx.resolver` is the sole binding/resolution + frame channel (there is no
  * `ctx.env`; the frame env is `resolver.env`). Evaluator apply copies that
  * resolver onto `CallCtx.resolver` so a native verb (`require`) reads it off
@@ -222,7 +222,7 @@ export interface EvalContext {
   strict?: boolean;
   /**
    * Per-run context (minted by exec(); see run/RunContext). Hermetic run-state
-   * — strict mode, heap meter — as DATA. REQUIRED: both mint sites always set
+   * — strict mode, channels, signal — as DATA. REQUIRED: both mint sites always set
    * it, and every derived EvalContext is a `{ ...ctx }` spread. Required rather
    * than `ctx.runCtx ?? CONSTANT_CTX` because that default silently drops live
    * run-state on any path that forgets to thread ctx.
@@ -2319,7 +2319,7 @@ function* evalTry(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
 // term (AVector.ts / ADict.ts) lowers ONCE (cached on the term, keyed by node
 // identity) to the equivalent `(vector …)` / `(dict …)` application, which is then
 // evaluated — so the semantics are BY CONSTRUCTION the documented equivalences
-// (`{:k v}` ≡ `(dict :k v)`), including membrane marshaling, heap charging and
+// (`{:k v}` ≡ `(dict :k v)`), including membrane marshaling and
 // provenance. `#(…)` literals carry no flag and a non-literal ADict has no
 // `literalForms`; both answer null from `lower()` and keep self-evaluating semantics.
 

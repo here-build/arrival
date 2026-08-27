@@ -11,7 +11,7 @@ import { stripAnsi } from "./ansi-strip.js";
 
 async function traced(src: string): Promise<EvalTrace> {
   const trace = new EvalTrace();
-  await execState(src, { tap: trace, budgetMs: 30_000, heapBudget: 100_000_000 }).catch(() => {});
+  await execState(src, { tap: trace, budgetMs: 30_000 }).catch(() => {});
   return trace;
 }
 

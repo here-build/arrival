@@ -10,7 +10,7 @@ import { exportRun, RUN_EXPORT_VERSION } from "../run-export.js";
 
 async function traced(src: string): Promise<EvalTrace> {
   const trace = new EvalTrace();
-  await execState(src, { tap: trace, budgetMs: 30_000, heapBudget: 100_000_000 });
+  await execState(src, { tap: trace, budgetMs: 30_000 });
   return trace;
 }
 

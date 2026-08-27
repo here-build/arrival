@@ -19,7 +19,7 @@
  *       covered (it rode the ctx alone, which the mirror-agreement law never
  *       verified past APair's own `[LOCATION]` slot).
  *   (c) [RETIRED] — the old "parse ctxs carry no run state" / `isParseCtx`
- *       boundary pins pinned a run-CONTEXT species (heap meter, cache, effects,
+ *       boundary pins pinned a run-CONTEXT species (cache, effects,
  *       signal — all `undefined` on the parse family). `.location` is not a run
  *       context at all — it is plain per-value data, so it has none of those facets
  *       to assert; there is nothing left to retire INTO, the whole species is gone

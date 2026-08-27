@@ -10,8 +10,8 @@
 //
 // THE DISPATCH CONVENTION (symbol.tagless): a call `(op ...args tail)` lowers to
 // `tail["arrival/tagless-final/op"](...args, runCtx)` — the LAST operand is the receiver (it
-// carries the algebra), the leading operands are the args, the run's RunContext threads last.
-// Option A: the materializing ops take runCtx so the TERM charges its OWN heap.
+// carries the algebra), the leading operands are the args, the run's RunContext threads last
+// so the term can apply callbacks, read strict, and honor signal through the live run.
 
 import type { AValue } from "./primitives/AValue.js";
 

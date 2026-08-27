@@ -46,12 +46,6 @@ export type CapabilityResourceStore = WeakMap<object, unknown>;
  *  per-assembly config on a value-keyed map would clobber (docs/execution.md §CALLCTX). */
 export type CapabilityConfigurationTable = ReadonlyMap<object, unknown>;
 
-/** Per-run allocation meter. Reference fixed for the run; `used` increments in place. */
-export interface HeapMeter {
-  used: number;
-  max: number;
-}
-
 /**
  * Host wrap around one membrane interaction. `undefined` on the run ⇒ identity
  * (facility off). `T` may be a `Promise` — reverse-membrane wrappers are async.
@@ -76,8 +70,6 @@ export function applyMembraneClosure<T>(runCtx: RunContext | undefined, work: ()
 export class RunContext {
   /** R7RS-strict nil-projection (`car`/`cdr` of nil throws) vs tolerant (yields nil). */
   readonly strict: boolean;
-  /** Per-run allocation bound; `undefined` ⇒ unbounded (default). */
-  readonly heapMeter: HeapMeter | undefined;
   /** Execution-budget signal — same AbortSignal the trampoline reads. */
   readonly signal: AbortSignal | undefined;
   /** Run cache; `undefined` ⇒ no interception. Armed ⇒ gates record/replay by cache class
@@ -131,7 +123,6 @@ export class RunContext {
   constructor(
     opts: {
       strict?: boolean;
-      heapBudget?: number;
       signal?: AbortSignal;
       cache?: RunCache;
       effects?: EffectLog;
@@ -161,7 +152,6 @@ export class RunContext {
     _noResourceStore = false,
   ) {
     this.strict = opts.strict ?? false;
-    this.heapMeter = opts.heapBudget === undefined ? undefined : { used: 0, max: opts.heapBudget };
     this.signal = opts.signal;
     this.cache = opts.cache;
     this.effects = opts.effects;
@@ -193,7 +183,7 @@ export class RunContext {
 /**
  * Run-NEUTRAL context (docs/execution.md §CTX-SPECIES). Carried by values that outlive
  * any single run: singletons, quoted-literal AST nodes, bootstrap-time construction.
- * Frozen, strict=false, no meter, all channels undefined — a value minted here cannot
+ * Frozen, strict=false, all channels undefined — a value minted here cannot
  * carry one run's state into another.
  */
 export const CONSTANT_CTX: RunContext = Object.freeze(new RunContext({}, true));

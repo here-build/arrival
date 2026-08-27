@@ -3,8 +3,8 @@
 Distilled from `POST-MIGRATION.md` (deleted; see git history). Re-verified against HEAD.
 
 Resolved since the ledger was written (no action):
-- `installHeapMeter` imports — both cited sites (`arrival-run/run-program.ts`,
-  `inhuman/saas/studio .../run-traced.ts`) now pass `heapBudget` per exec; only comments remain.
+- `installHeapMeter` / `heapBudget` — allocation metering was removed; `budgetMs` + `signal`
+  are the run bounds. Cited sites no longer pass a heap cap.
 - `@inhuman.tools/arrival-lsp-tsgo` module-not-found — `tsgo-lens.worker.ts` no longer
   exists; zero references outside docs.
 - `classifierFromEnv(env, SOURCES)` 2-arg call sites — gone; 1-arg form everywhere.

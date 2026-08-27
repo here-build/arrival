@@ -258,7 +258,7 @@ export default EnvCapability.define("scheme/srfi-1", {
       // is always `(args: unknown[], runCtx)` regardless of the contract shape (see
       // SequenceImpl in _bake.ts), so this is a declaration-only fix — the impl is unchanged.
       filter:
-        symbol.sequence`filter: keep elements matching a pred (or RegExp); term-dispatch, totalic — the term charges its own heap`(
+        symbol.sequence`filter: keep elements matching a pred (or RegExp); term-dispatch, totalic`(
           // Output is `z.schemeValue` (the representation-BLIND scheme-value identity), NOT a "proper
           // list" type: `filter` is genuinely polymorphic over the RECEIVER's own representation
           // (list, vector, …) — it dispatches to whatever `arrival/tagless-final/filter` term the

@@ -1,7 +1,6 @@
 import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import type { CallCtx } from "../../run/CallCtx.js";
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
-import { chargeHeap } from "../../heap-budget.js";
 import { isSchemeString, isString, type SchemeStringLike, type SchemeValue } from "../types.js";
 import { nil } from "./ANil.js";
 import type { CallResult } from "./ACallable.js";
@@ -98,9 +97,6 @@ export class ASymbol extends AValue {
       if (hit !== undefined) {
         return hit;
       }
-      // MISS: charge heap so a mint-loop hits budget. CONSTANT_CTX no-ops chargeHeap
-      // today — deferred until ambient run ctx restores a real meter.
-      chargeHeap(CONSTANT_CTX, 1);
       this.__name__ = unwrapped;
       table.set(unwrapped, this);
       return;

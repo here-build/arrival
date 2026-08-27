@@ -42,7 +42,7 @@ pending-at-return throws, abort cancels, per-scope wrapper identity) in
 
 **F6 — Doors (P5/errors-as-doors).** Registry-driven: `it.each(WELL_KNOWN_SYMBOLS)` asserts
 every stubbed/famous name doors with a message naming its alternative; every resource cap
-(heap, budget, nesting) doors with the policy message, not an engine error. The registry IS
+(allocation, budget, nesting) doors with the policy message, not an engine error. The registry IS
 the test input — a door added without a registry row fails the completeness floor.
 
 **F7 — Static-interpretation agreement (P0's N-interpreter clause).** The existing strong

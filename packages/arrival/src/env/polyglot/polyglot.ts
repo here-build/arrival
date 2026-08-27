@@ -39,7 +39,6 @@ import { ADict, foldKeyName, type DictKey } from "../../values/primitives/ADict.
 import { ANil, nil } from "../../values/primitives/ANil.js";
 import { AVector } from "../../values/primitives/AVector.js";
 import { APair } from "../../values/primitives/APair.js";
-import { chargeHeap } from "../../heap-budget.js";
 import { type SchemeValue } from "../../values/types.js";
 import { type AValue } from "../../values/primitives/AValue.js";
 import { printValue } from "../../values/print.js";
@@ -91,7 +90,6 @@ function collectMembers(
   const getter = obj == null ? undefined : (obj as Partial<AValue>)["arrival/tagless-final/get"];
   if (typeof keysTerm !== "function" || typeof getter !== "function") return new AVector([]);
   const names = keysTerm.call(obj, ctx.runCtx);
-  chargeHeap(ctx.runCtx, names.length);
   const reads = names.map((key) => getter.call(obj, key, ctx.runCtx));
   const isThenable = (v: unknown): v is Promise<SchemeValue> =>
     typeof (v as { then?: unknown } | null)?.then === "function";
@@ -177,7 +175,7 @@ export default EnvCapability.define("scheme/polyglot", {
           // Mint each key string under the live invocation ctx — `this.runCtx`,
           // carried by `this: CallCtx` (dispatch's `hostImpl.apply(makeCallCtx(runCtx),
           // args)`, common/capability.ts). Under CONSTANT_CTX the result strings mint
-          // run-invisible: outside the run's heap meter, cache, and effect tracking.
+          // run-invisible: outside the run's cache and effect tracking.
           return new AVector(names.map((k) => new AString(k)));
         },
       ),
@@ -224,9 +222,7 @@ export default EnvCapability.define("scheme/polyglot", {
         // ctx via `this: CallCtx` (common/capability.ts's `hostImpl.apply(makeCallCtx(
         // runCtx), args)`), and an arrow-fn impl structurally cannot read `this` — every
         // `(dict …)` call would mint its ADict + every key's ASymbol run-invisible,
-        // outside the run's ctx. Heap-charge the fresh ADict off `this.runCtx`: an
-        // unbounded interleaved arg list is the same unmetered-spine shape
-        // `scheme-zod.ts`'s container codecs close (mirrors `to_array`'s rule).
+        // outside the run's ctx.
         function (this: CallCtx, ...args: unknown[]): ADict {
           const byName = new Map<string, [DictKey, SchemeValue]>();
           for (let i = 0; i + 1 < args.length; i += 2) {
@@ -237,7 +233,6 @@ export default EnvCapability.define("scheme/polyglot", {
                 : new AString(String(raw).replace(/^:/, ""));
             byName.set(foldKeyName(key), [key, args[i + 1] as SchemeValue]);
           }
-          chargeHeap(this.runCtx, byName.size);
           return new ADict([...byName.values()]);
         } as unknown as (...args: SchemeValue[]) => ADict,
       ),

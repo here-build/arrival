@@ -56,7 +56,6 @@ export interface AssembleRunOptions {
    *  C3 closure has at least one `.spec.prelude` (runtime fact of the closure). */
   readonly evalPrelude?: EvalPreludeInto;
   readonly strict?: boolean;
-  readonly heapBudget?: number;
   readonly signal?: AbortSignal;
   readonly cache?: RunCache;
   readonly effects?: EffectLog;
@@ -118,7 +117,6 @@ export async function assembleRun(opts: AssembleRunOptions): Promise<RunContext>
   // Mint first: prelude pass dispatches through THIS run's runCtx.
   const runCtx = new RunContext({
     strict: opts.strict,
-    heapBudget: opts.heapBudget,
     signal: opts.signal,
     cache: opts.cache,
     effects: opts.effects,

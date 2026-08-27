@@ -38,7 +38,7 @@ afterAll(async () => {
 
 function mount() {
   return render(
-    <ReplApp session={session} budgetMs={30_000} heapBudget={100_000_000} capabilityCount={0} version="test" mode="none" />,
+    <ReplApp session={session} budgetMs={30_000} capabilityCount={0} version="test" mode="none" />,
   );
 }
 
@@ -132,12 +132,11 @@ const CTRL_W = "";
 const ALT_F = "f";
 
 describe("replInk block render", () => {
-  it("shows execution time on the right, and no heap", async () => {
+  it("shows execution time on the right", async () => {
     const { stdin, lastFrame, unmount } = mount();
     stdin.write("(+ 1 2)\r");
     const frame = await waitUntil(lastFrame, (f) => /\b3\b/.test(f));
-    expect(stripAnsi(frame)).toMatch(/\dms/); // elapsed time present
-    expect(stripAnsi(frame)).not.toContain("heap"); // heap dropped
+    expect(stripAnsi(frame)).toMatch(/\dms/);
     unmount();
   });
 });

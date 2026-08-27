@@ -69,7 +69,7 @@ so it behaves correctly in all three contexts:
 
 - **CODE position** — the evaluator lowers the node ONCE, cached, to the equivalent
   application: `{:k v}` ≡ `(dict :k v)`, `[a b]` ≡ `(vector a b)`. Evaluation, membrane
-  marshaling, heap charging, and provenance all ride the normal apply path — the literal
+  marshaling and provenance all ride the normal apply path — the literal
   invents no second evaluation route.
 - **`quote` context** — `evalQuote` returns the node itself: a first-class readable
   `ADict`/`AVector` whose values are the raw forms. `(@ '{:a (f x)} :a)` reads back the

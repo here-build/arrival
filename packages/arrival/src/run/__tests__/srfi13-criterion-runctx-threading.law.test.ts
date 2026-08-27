@@ -27,9 +27,8 @@ const opsOf = (cap: EnvCapability): Record<string, (...a: any[]) => any> =>
   );
 const SRFI13_OPS = opsOf(srfi13);
 
-/** A live, real run's ctx — `heapMeter` is DEFINED, unlike CONSTANT_CTX's permanent
- *  `undefined`. Distinguishing the two is the whole law. */
-const liveCtx: RunContext = new RunContext({ heapBudget: 1_000_000 });
+/** A live, real run's ctx — identity-distinct from CONSTANT_CTX. Distinguishing the two is the whole law. */
+const liveCtx: RunContext = new RunContext();
 
 /** Records the `callCtx.runCtx` an ANativeProcedure criterion observes. W8. */
 function makeProbe(): { fn: ANativeProcedure; observed: RunContext[] } {
@@ -54,7 +53,6 @@ describe("W1 srfi-13 criterion ctx threading — a user predicate observes the i
     await stringIndex.call(testCallCtx({ runCtx: liveCtx }), str, probe.fn);
     expect(probe.observed).toHaveLength(3);
     for (const ctx of probe.observed) {
-      expect(ctx.heapMeter).toBeDefined();
       expect(ctx).toBe(liveCtx);
       expect(ctx).not.toBe(CONSTANT_CTX);
     }
@@ -67,7 +65,6 @@ describe("W1 srfi-13 criterion ctx threading — a user predicate observes the i
     await stringCount.call(testCallCtx({ runCtx: liveCtx }), str, probe.fn);
     expect(probe.observed).toHaveLength(2);
     for (const ctx of probe.observed) {
-      expect(ctx.heapMeter).toBeDefined();
       expect(ctx).toBe(liveCtx);
     }
   });

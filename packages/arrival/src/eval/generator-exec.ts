@@ -153,13 +153,6 @@ export interface ExecOptions {
    */
   budgetMs?: number;
   /**
-   * Per-run ALLOCATION budget — memory analogue of budgetMs
-   * (docs/execution.md §BUDGETS). Caps cumulative list cells a run materializes;
-   * checked INSIDE the native collection loop the wall-clock budget can't
-   * interrupt. Undefined ⇒ unbounded. Composable with budgetMs/signal.
-   */
-  heapBudget?: number;
-  /**
    * THE RUN CACHE (run/run-cache.ts). When set, rides onto RunContext.cache and
    * every baked rosetta penetration is intercepted per the mode law
    * (docs/execution.md §MODE-LAW). Unset ⇒ no interception. Session identity
@@ -338,7 +331,6 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     nodeFilter,
     signal,
     budgetMs,
-    heapBudget,
     cache,
     effects,
     reads,
@@ -384,7 +376,6 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     evalPrelude: preludeEvalScheme,
     runCtx: passedRunCtx,
     strict,
-    heapBudget,
     signal,
     cache,
     effects,
@@ -546,7 +537,6 @@ export async function execExpr(
     nodeFilter,
     signal,
     budgetMs,
-    heapBudget,
     cache,
     effects,
     reads,
@@ -566,7 +556,6 @@ export async function execExpr(
       capabilities: BASE_ROSTER,
       evalScheme: capabilityEvalScheme,
       evalPrelude: preludeEvalScheme,
-      heapBudget,
       signal,
       cache,
       effects,
@@ -653,7 +642,6 @@ export async function execStateOverFrame(
     nodeFilter,
     signal,
     budgetMs,
-    heapBudget,
     cache,
     effects,
     reads,
@@ -675,7 +663,6 @@ export async function execStateOverFrame(
     passedRunCtx ??
     new RunContext({
       strict: strict ?? false,
-      heapBudget,
       signal,
       cache,
       effects,
@@ -744,7 +731,6 @@ export async function execExprOverFrame(
     nodeFilter,
     signal,
     budgetMs,
-    heapBudget,
     cache,
     effects,
     reads,
@@ -762,7 +748,6 @@ export async function execExprOverFrame(
     passedRunCtx ??
     new RunContext({
       signal,
-      heapBudget,
       cache,
       effects,
       reads,

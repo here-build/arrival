@@ -1,7 +1,7 @@
 /**
  * LAW — THE NEXT CUT (docs/plans/stage-b-runcontext-absorbs-assembly.md §"THE NEXT CUT"):
  * a closure's LEXICAL axis is definition-time (that is what a closure IS), but its RUN axis
- * — `runCtx` (meter, strict, channels, capabilityConfigurations/Resources, signal, cache) —
+ * — `runCtx` (strict, channels, capabilityConfigurations/Resources, signal, cache) —
  * swaps to the CALLING run at invocation. tf/apply is the sole meeting point of immutable
  * description and run state, and it must hand over the PRESENT: a closure minted in run A and
  * invoked in run B evaluates its body's DISPATCHES under B's run, while still resolving names
@@ -19,14 +19,13 @@
  * genuinely crosses runs.
  *
  * Before this cut the body ran under A's minting run — `read-config` read A's config, `car`
- * doored under A's tolerance, allocations charged A's meter. This suite pins that each now
- * follows B.
+ * doored under A's tolerance. This suite pins that each now follows B.
  */
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
 import { EnvCapability } from "../../common/capability.js";
-import { exec, execState } from "../../eval/generator-exec.js";
+import { exec } from "../../eval/generator-exec.js";
 import { ACallable, applyCallback } from "../../values/primitives/ACallable.js";
 import type { CallCtx } from "../../run/CallCtx.js";
 
@@ -131,33 +130,5 @@ describe("LAW — call-time runCtx: strict follows the INVOKING run", () => {
     await expect(
       exec("(invoke-held)", { capabilities: [cap], config: {}, strict: false }),
     ).resolves.toBeDefined();
-  });
-});
-
-describe("LAW — call-time runCtx: allocation charges the INVOKING run's meter", () => {
-  it("a closure minted in un-metered run A charges run B's meter when invoked in B", async () => {
-    const cap = crossRunCapability();
-
-    // Run A carries no heapBudget → no meter; minting the closure charges nothing.
-    await exec("(capture! (lambda () (map (lambda (x) x) (quote (0 1 2 3 4 5 6 7 8 9)))))", {
-      capabilities: [cap],
-      config: {} });
-
-    // Run B: generous budget so the run completes; assert B's meter absorbed the body's charge.
-    const stateB = await execState("(invoke-held)", {
-      capabilities: [cap],
-      config: {},
-      heapBudget: 1_000_000 });
-    expect(stateB.runCtx.heapMeter?.used ?? 0).toBeGreaterThan(0);
-  });
-
-  it("a TIGHT budget on run B trips on the body's allocation (B's meter, not A's)", async () => {
-    const cap = crossRunCapability();
-    await exec("(capture! (lambda () (map (lambda (x) x) (quote (0 1 2 3 4 5 6 7 8 9)))))", {
-      capabilities: [cap],
-      config: {} });
-    await expect(
-      exec("(invoke-held)", { capabilities: [cap], config: {}, heapBudget: 2 }),
-    ).rejects.toThrow(/heap budget exceeded/);
   });
 });

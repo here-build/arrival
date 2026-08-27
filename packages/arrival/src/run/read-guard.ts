@@ -40,7 +40,7 @@ export interface ReadEvent {
  * duration; arrival core never inspects HOW a read is observed, only reads `log` afterward.
  *
  * Async-shaped (`Promise<T>`), not sync, because form evaluation is async (the generator
- * trampoline yields at budget/heap boundaries): a host tracking substrate must survive an
+ * trampoline yields at budget TICK boundaries): a host tracking substrate must survive an
  * `await`. Mobx's own stack-based `Reaction` does NOT, by construction — a host arming this
  * seam owns that constraint (e.g. an `AsyncLocalStorage`-scoped or per-run ambient swapped at
  * region entry/exit).

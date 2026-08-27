@@ -10,7 +10,7 @@
 //   3. `AVector["arrival/tagless-final/cdr"]` returns `new AVector(slice(1))` — on an EMPTY vector it
 //      returns ANOTHER EMPTY VECTOR, never ANil. And `null?` is `is_nil`/ANil-only.
 //   4. Therefore every body shaped `(if (null? xs) <base> (loop (cdr xs)))` NEVER TERMINATES on a
-//      vector — it spins on the empty-vector fixpoint until the allocation budget kills the call.
+//      vector — it spins on the empty-vector fixpoint until the test timeout kills the call.
 //
 // TRIGGER: `(delete-duplicates (any-tool-returning-a-json-array))` — the most ordinary
 // compose-in-program idiom there is, over EVERY MCP tool that returns a JSON array. STRICTLY WORSE

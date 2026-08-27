@@ -10,13 +10,9 @@
 // identity) and the per-run ctx — the syntax-rules caller threads them.
 //
 // MINT DOOR: every cell the matcher/expander constructs goes through
-// consCell/listFromArray, which charge the allocation meter (chargeHeap) via the
-// explicitly threaded `ctx` PARAMETER — not a per-value stamp. The charge lives
-// at the mint, not on a post-hoc walk of the output (a walk cannot tell fresh cells
-// from call-site fragments shared by reference). Expansion is a native op in
-// synchronous walks with no trampoline TICK; a recursive macro's re-copied
-// accumulation is exactly the O(K²) churn the meter contains. Meter-less ctx
-// makes chargeHeap a no-op.
+// consCell/listFromArray via the explicitly threaded `ctx` PARAMETER — not a
+// per-value stamp. A walk of the output cannot tell fresh cells from call-site
+// fragments shared by reference, so minting goes through this door.
 //
 // SPAN PROPAGATION: expansion-built pairs carry the TEMPLATE's span (same template
 // node → same span on every instantiation); pattern-variable substitutions are
@@ -33,7 +29,6 @@
 // ----------------------------------------------------------------------
 import invariant from "tiny-invariant";
 import type { RunContext } from "../run/RunContext.js";
-import { chargeHeap } from "../heap-budget.js";
 import type { Resolver } from "./Resolver.js";
 import type { LexicalScopeWithInternals } from "./LexicalScope.js";
 import type { Capabilities } from "./Capabilities.js";
@@ -80,14 +75,13 @@ function same_atom(a, b) {
 // a bare scalar, so the tail feeding these can be an arbitrary SchemeValue, not a list. Same
 // cons-loop as `concatPair` (values/primitives/APair.ts), typed for that wider arbitrary-tail
 // domain instead of forcing a scalar into AListAlike.
-function concatPairLoose(ctx: RunContext, a: SchemeValue, b: SchemeValue): SchemeValue {
+function concatPairLoose(_ctx: RunContext, a: SchemeValue, b: SchemeValue): SchemeValue {
   const cars: SchemeValue[] = [];
   let node: unknown = a;
   while (node instanceof APair) {
     cars.push(node.car);
     node = node.cdr;
   }
-  chargeHeap(ctx, cars.length);
   let result: SchemeValue = b;
   for (let i = cars.length; i--; ) {
     result = new APair(cars[i], result);
@@ -95,19 +89,17 @@ function concatPairLoose(ctx: RunContext, a: SchemeValue, b: SchemeValue): Schem
   return result;
 }
 
-// The MINT DOOR (see file preamble): stamps ctx identity + charges one heap cell.
+// The MINT DOOR (see file preamble).
 function consCell<Car extends SchemeValue, Cdr extends SchemeValue>(
-  ctx: RunContext,
+  _ctx: RunContext,
   car: Car,
   cdr: Cdr,
 ): APair<Car, Cdr> {
-  chargeHeap(ctx, 1);
   return new APair(car, cdr);
 }
 
 /** `APair.fromArray` through the mint door — n elements ⇒ n fresh spine cells. */
 function listFromArray<T extends SchemeValue>(ctx: RunContext, array: readonly T[], deep = false): AListAlike<T> {
-  chargeHeap(ctx, array.length);
   return APair.fromArray(ctx, array, deep);
 }
 

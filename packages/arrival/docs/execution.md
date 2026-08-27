@@ -28,7 +28,7 @@ the SECOND meaning of "replay" — γ over frozen ingress).
 **One isolate runs concurrent runs; run-state that bled through a module-level holder would
 cross between them.** A Cloudflare Durable Object shares one JS isolate across every request
 it serves. Two `exec()` calls interleaved on that isolate must not see each other's strict
-mode, allocation meter, cache, or effect log. The charter: **run-state is DATA-LOCAL** —
+mode, cache, or effect log. The charter: **run-state is DATA-LOCAL** —
 minted once per `exec()` by `new RunContext(...)`, threaded explicitly as the `runCtx` parameter
 through every op that needs it (no value carries it — `AValue` dropped its per-value `.ctx`
 field; `run/RunContext.ts`'s own header names the removal), read off the threaded context at the
@@ -37,7 +37,7 @@ one hermetic point, never off an ambient singleton.
 Four homes, by lifetime:
 
 - **RunContext** — state CONSTANT for one run yet DIFFERING between concurrent runs: strict
-  mode, the heap meter, the abort signal, the channels (§3). This is the run's identity.
+  mode, the abort signal, the channels (§3). This is the run's identity.
 - **Global singletons** — state constant across ALL runs: `nil`/`#t`/`#f`/`eof`. These bear
   no run-state, so they can be shared by reference. `car`-of-nil reads its strict projection
   from the THREADED context, not from the constant `nil`, so a constant carries nothing
@@ -76,20 +76,19 @@ import edge to the owning layer (→ keyed residency)?
 comment states the "at most one recording run per isolate" guarantee and names
 keyed-by-runCtx as the upgrade path if that ever stops holding.
 
-*Enforcement sites: `run/RunContext.ts`, `heap-budget.ts`, `eval/generator-exec.ts`.*
+*Enforcement sites: `run/RunContext.ts`, `eval/generator-exec.ts`.*
 
 ## 2. CTX-SPECIES — live, constant
 
 Two `RunContext` species exist; only the first bears run-state, and the charter (§1) rests
 on the other being run-NEUTRAL.
 
-- **Live-run** — minted by `new RunContext(...)` per `exec()`. Carries strict/meter/signal and any
+- **Live-run** — minted by `new RunContext(...)` per `exec()`. Carries strict/signal and any
   armed subset of the channels (§3, plus the default-armed `resourcePaths`). This is the only
-  species a run mutates through (the meter's `used`) and the only one whose channels are
-  non-`undefined`.
+  species whose channels are non-`undefined`.
 - **`CONSTANT_CTX`** — the frozen, run-neutral context carried by values that OUTLIVE any run:
   the singletons, quoted-literal AST nodes (`evalQuote` returns them by reference across runs),
-  everything constructed at bootstrap before a run exists. `strict=false`, no meter, **every
+  everything constructed at bootstrap before a run exists. `strict=false`, **every
   channel `undefined`** (`resourcePaths` included — the one default-armed channel, §12, stays
   off here) — and that is correct, not a gap: a note or effect is addressed to ONE run, so a
   context outliving every run has nowhere to put one. **Nobody is listening.**
@@ -148,7 +147,7 @@ channel is the landing. There is no third landing and no transformation between 
 door, different readers (the membrane sites, not the rosetta/eval-loop pair above).
 
 **`execExpr` deliberately drops the model-facing channels.** The single-form entry
-(`require`, prelude eval) mints its `RunContext` with `{ signal, heapBudget, cache, effects,
+(`require`, prelude eval) mints its `RunContext` with `{ signal, cache, effects,
 reads }` — **`notes` and `display` are absent by construction.** Those two are the
 model-facing channels (§9); `execExpr`'s callers are sub-program plumbing (a required module,
 a bootstrap prelude), not a top-level model turn, so there is no renderer to drain a note into
@@ -232,41 +231,31 @@ caller mints by hand outside `assembleRun` (the over-frame seam above) carries n
 *Enforcement sites: `run/CallCtx.ts`, `run/RunContext.ts` (`capabilityConfigurations`),
 `env/assemble-run.ts` (`assembleRun`).*
 
-## 5. BUDGETS — three bounds, first to fire wins
+## 5. BUDGETS — two bounds, first to fire wins
 
-Three independent bounds cap a run; all three compose, and whichever fires first ends the
+Two independent bounds cap a run; they compose, and whichever fires first ends the
 **call** (never the session — the scope and its definitions survive, so a REPL loop catches and
 continues). The CONSUMER view — how a host arms them per call — is §14 SESSIONS; this section
 states the mechanism they share.
 
-- **`heapBudget` → `HeapMeter`** (allocation). The meter lives on `RunContext.heapMeter` ONLY,
-  minted once per run. It **mints, it does not borrow**: it charges cells a capability
-  MATERIALIZES (`filter`/`map`/`reduce`/`append`/`join`, at the `to_array` and sequence-op
-  choke points, counted by input element BEFORE the op runs), never cells it BORROWS (a
-  zero-copy read of a host container is not materialization). The rationale is the **TICK blind
-  spot**: the wall-clock budget is checked at trampoline TICKs (loop-step / tail-call
-  boundaries), but a native collection op runs its whole reduction in ONE synchronous JS loop
-  that emits no TICK — so an O(K²)-churn loop (`(append acc x)` re-copying a growing list) runs
-  uninterruptibly until it stack-overflows. Counting reductions can't see inside that loop;
-  counting allocations can. String building and bigint growth allocate no list cells and pass
-  under any cap by construction — bound what your capabilities mint, and reach for `signal` when
-  a bound must also cover a slow native call.
 - **`budgetMs`** (wall-clock). An INTERNAL bound — the trampoline itself throws once the deadline
-  elapses, no external controller needed. Checked at the same TICK boundary, so it bounds
-  interpretation time and cannot interrupt a run parked inside one native call (a 50ms budget
-  over a native 200ms sleep returns at 200ms).
+  elapses, no external controller needed. Checked at TICK boundaries (loop-step / tail-call), so
+  it bounds interpretation time and cannot interrupt a run parked inside one native call (a 50ms
+  budget over a native 200ms sleep returns at 200ms). A native collection walk (`map` / `append`
+  / macro expansion) is one such parked call: it emits no TICK, so `budgetMs` fires only after
+  that walk returns. Reach for `signal` when a bound must also cover a slow native call.
 - **`signal`** (`AbortSignal`). The one bound that reaches into native calls, and the SAME
   reference the trampoline reads — so every consumer observes abort state off one handle that
   cannot drift.
 
-**Meter span differs by entry, deliberately.** In `execState`/`exec` the meter spans the WHOLE
-call — all top-level forms share one deadline and one allocation budget, so a sandbox program
-that splits a hang across several forms is still bounded. In `execExpr` the meter is PER-FORM
-(one expression, one meter) — a cumulative multi-form bound there would need a shared
-`RunContext` no `execExpr` caller can inject yet.
+**Span differs by entry, deliberately.** In `execState`/`exec` the deadline spans the WHOLE
+call — all top-level forms share one budget, so a sandbox program that splits a hang across
+several forms is still bounded. In `execExpr` the deadline is PER-FORM (one expression, one
+budget) — a cumulative multi-form bound there would need a shared `RunContext` no `execExpr`
+caller can inject yet.
 
-*Enforcement sites: `heap-budget.ts`, `run/RunContext.ts` (`HeapMeter`), `eval/generator-exec.ts`
-(the per-form loop, `execExpr`). Consumer view: §14 SESSIONS.*
+*Enforcement sites: `eval/evaluator.ts` (TICK check), `eval/generator-exec.ts` (the per-form
+loop, `execExpr`). Consumer view: §14 SESSIONS.*
 
 ## 6. MODE-LAW — record × replay × class
 
@@ -590,7 +579,7 @@ call* may use, `scope` decides what definitions persist.
 
 **Budgets are per call and compose, first to fire wins.** A budget error ends the *call*, not the
 session — the scope and its definitions survive, so a REPL loop catches, reports, and continues. The
-three bounds (`heapBudget`, `budgetMs`, `signal`) and their edges are §5 BUDGETS.
+two bounds (`budgetMs`, `signal`) and their edges are §5 BUDGETS.
 
 **The CLI over this surface.** `@inhuman.tools/arrival-cli` is a REPL over exactly this
 scope/capability surface — one `LexicalScope` per session, budgets per form, capabilities armed per

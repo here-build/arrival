@@ -38,18 +38,11 @@ import type { ContentBlock } from "./content-block.js";
 
 /**
  * Per-form execution counters, riding every statement event. At HEAD each
- * top-level form runs under its own fresh runCtx, so `heapUsed` is that form's
- * meter read (once, at the end) and `budgetMsRemaining` is what remained of THAT
- * form's own wall-clock budget at that point. The wire shape is stable even if a
- * future execution model reads both counters off one shared meter instead of a
- * fresh one per form.
+ * top-level form runs under its own fresh runCtx, so `elapsedMs` is that form's
+ * wall-clock and `budgetMsRemaining` is what remained of THAT form's own
+ * wall-clock budget at that point.
  */
 export interface StatementCounters {
-  /** This form's allocation-meter read (cells). A crashed form's allocations are
-   *  unobservable at HEAD (the exec throws before returning its state) — it reads 0. */
-  heapUsed: number;
-  /** The allocation bound — 100M class. Always set: the heap default is on. */
-  heapMax: number;
   elapsedMs: number;
   /** What remained of this form's wall-clock budget at the meter read (clamped ≥ 0). */
   budgetMsRemaining?: number;

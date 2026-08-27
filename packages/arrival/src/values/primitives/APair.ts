@@ -35,7 +35,6 @@ import { AExact } from "./AExact.js";
 import { AInexact } from "./AInexact.js";
 import { ANil, nil } from "./ANil.js";
 import { printValue } from "../print.js";
-import { chargeHeap } from "../../heap-budget.js";
 import { tf } from "../tagless-final.js";
 import type { MaybePromise } from "../../types/utility.js";
 
@@ -591,7 +590,6 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // mint ANativeProcedure / hostFnToCallable. RegExp is a host-side filter sugar
   // evaluated without applyCallback.
   ["arrival/tagless-final/map"](fn: ACallable, runCtx: RunContext): MaybePromise<AListAlike> {
-    chargeHeap(runCtx, countPairElements(this));
     const elements: SchemeValue[] = [];
     let node: unknown = this;
     while (node instanceof APair) {
@@ -611,7 +609,6 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // Filterable — preserves kept boxes. LENGTH-CHANGING — PROVENANCED fresh
   // (container stamp ∪ survivors). R7RS: only #f is false.
   ["arrival/tagless-final/filter"](arg: ACallable | RegExp, runCtx: RunContext): MaybePromise<AListAlike> {
-    chargeHeap(runCtx, countPairElements(this));
     const elements: SchemeValue[] = [];
     let node: unknown = this;
     while (node instanceof APair) {
@@ -640,7 +637,6 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // Async-aware reduce, SRFI fold `fn(element, acc)`, left fold.
   // `(reduce - 100 '(1 2 3 4 5))` = -97, NOT the FL acc-first 85.
   async ["arrival/tagless-final/reduce"]<Acc>(fn: ACallable, initial: Acc, runCtx: RunContext): Promise<Acc> {
-    chargeHeap(runCtx, countPairElements(this));
     let acc = initial;
     let node: unknown = this;
     while (node instanceof APair) {
@@ -655,7 +651,6 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // Structure-preserving sort — LENGTH-PRESERVING, PROXIED stamp (must agree with AVector).
   // Comparator is ACallable when supplied — bare host less? mints via contourCallback in tests.
   ["arrival/tagless-final/sort"](comparator: ACallable | undefined, runCtx: RunContext): AListAlike {
-    chargeHeap(runCtx, countPairElements(this));
     const out: SchemeValue[] = [];
     let node: unknown = this;
     while (node instanceof APair) {
@@ -670,7 +665,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   }
 
   // SRFI-1 take — FRESH list, dotted-tail tolerant. LENGTH-CHANGING (PROVENANCED fresh).
-  ["arrival/tagless-final/take"](n: number, runCtx: RunContext): AListAlike {
+  ["arrival/tagless-final/take"](n: number, _runCtx: RunContext): AListAlike {
     const out: SchemeValue[] = [];
     let node: unknown = this;
     let k = n;
@@ -680,7 +675,6 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
       node = node.cdr;
       k--;
     }
-    chargeHeap(runCtx, out.length);
     return withInputProvenance([this, ...out], APair.fromArray(CONSTANT_CTX, out, false));
   }
 
@@ -707,7 +701,6 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
       out.push(node.car);
       node = node.cdr;
     }
-    chargeHeap(runCtx, out.length);
     return withInputProvenance([this, ...out], APair.fromArray(CONSTANT_CTX, out, false));
   }
 
@@ -823,18 +816,6 @@ export function concatPair<Car extends SchemeValue, Cdr extends AListAlike>(a: C
 /** Empty-pair sentinel: `car === undefined && cdr is nil`. A nil car is a legitimate element. */
 function isEmptyPairSentinel(node: { readonly car: unknown; readonly cdr: unknown }): boolean {
   return node.car === undefined && node.cdr instanceof ANil;
-}
-
-/** Element count of a pair's cdr-spine — heap-charge basis. No provenance (unlike length). */
-function countPairElements(head: APair<any, any> | ANil): number {
-  let n = 0;
-  let node: unknown = head;
-  while (node instanceof APair) {
-    if (isEmptyPairSentinel(node)) break;
-    n++;
-    node = node.cdr;
-  }
-  return n;
 }
 
 // AJSArrayList — SPINE reading of a borrowed JS array. Zero-copy, O(1) per step.

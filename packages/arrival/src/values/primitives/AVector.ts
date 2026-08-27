@@ -13,7 +13,6 @@
 import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import { makeCallCtx } from "../../run/CallCtx.js";
 import { applyCallback, type ACallable } from "./ACallable.js";
-import { chargeHeap } from "../../heap-budget.js";
 import { is_false, is_promise } from "../../values/value-guards.js";
 import { promise_all } from "../../utils/promises.js";
 import { AValue, EMPTY_PROVENANCE, mergeProvenance } from "./AValue.js";
@@ -183,7 +182,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
       rule: "R7RS `map` operates on lists; a vector is not a list",
       alternative: "use `vector-map` for vectors",
     });
-    chargeHeap(runCtx, this.__vector__.length);
+
     const results = this.__vector__.map((v) => applyCallback(fn, [v], makeCallCtx(runCtx)));
     if (results.some(is_promise)) {
       return (promise_all(results) as Promise<SchemeValue[]>).then(
@@ -201,7 +200,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
       rule: "`filter` (SRFI-1) operates on lists; a vector is not a list",
       alternative: "filter the list form: (list->vector (filter pred (vector->list v)))",
     });
-    chargeHeap(runCtx, this.__vector__.length);
+
     const out: SchemeValue[] = [];
     if (arg instanceof RegExp) {
       const re = arg;
@@ -228,7 +227,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
       rule: "`reduce` (SRFI-1) operates on lists; a vector is not a list",
       alternative: "reduce the list form via (vector->list v)",
     });
-    chargeHeap(runCtx, this.__vector__.length);
+
     let acc = initial;
     for (const v of this.__vector__) acc = (await applyCallback(fn, [v, acc], makeCallCtx(runCtx))) as Acc;
     return acc;
@@ -237,7 +236,6 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   // Structure-preserving sort — LENGTH-PRESERVING, PROXIED stamp (must agree with APair).
   // Comparator is ACallable when supplied.
   ["arrival/tagless-final/sort"](comparator: ACallable | undefined, runCtx: RunContext): AVector {
-    chargeHeap(runCtx, this.__vector__.length);
     const out = [...this.__vector__];
     out.sort(deriveSortCompare(comparator, runCtx));
     return withInputProvenance([this], new AVector(out));
@@ -251,7 +249,6 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
       alternative: "take the list form: (list->vector (take (vector->list v) n))",
     });
     const k = Math.max(0, Math.min(n, this.__vector__.length));
-    chargeHeap(runCtx, k);
     const out = this.__vector__.slice(0, k);
     return withInputProvenance([this, ...out], new AVector(out));
   }
@@ -264,7 +261,6 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     });
     const k = Math.max(0, Math.min(n, this.__vector__.length));
     const out = this.__vector__.slice(k);
-    chargeHeap(runCtx, out.length);
     return withInputProvenance([this, ...out], new AVector(out));
   }
 
@@ -281,7 +277,6 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
       if (is_false(verdict)) break;
       out.push(v);
     }
-    chargeHeap(runCtx, out.length);
     return withInputProvenance([this, ...out], new AVector(out));
   }
 
@@ -297,7 +292,6 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
       if (is_false(verdict)) break;
     }
     const out = this.__vector__.slice(i);
-    chargeHeap(runCtx, out.length);
     return withInputProvenance([this, ...out], new AVector(out));
   }
 

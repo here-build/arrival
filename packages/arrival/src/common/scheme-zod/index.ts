@@ -54,9 +54,11 @@ import type { AListAlike, SchemeValue } from "../../values/types.js";
  * - `schemeValue` (`ContourOnly`) — honest top type for native/contour/define/
  *   sequence/tagless. Compile-banned from rosetta (`CrossingSlot` in `_bake.ts`).
  *   Prints `SchemeValue`.
- * - `dynamic` (`CrossingOnly`) — identity escape hatch for a rosetta slot whose
- *   shape cannot be known statically. Compile-banned from contour
- *   (`ContourSlot`). Prints `unknown`.
+ * - `dynamic` (`CrossingOnly`) — special kind for a FULLY-GENERIC rosetta slot
+ *   (∀-quantified: the verb is polymorphic in the slot, the value passes through
+ *   whole), never a default fallback — an awkward shape has an honest codec
+ *   (union/dict/box/instance). Compile-banned from contour (`ContourSlot`).
+ *   Prints `unknown`.
  * Every other schema in this vocabulary carries NEITHER brand (legal in both
  * kinds). Rejected alternative: positive double-tagging of every codec — would
  * force re-typing zod combinator re-exports to propagate the tag, for the same
@@ -193,7 +195,8 @@ export type CrossingOnly<S> = S & { readonly [CROSSING_ONLY]: true };
 const schemeValueSchema = named("schemeValue", z.custom<SchemeValue>(isSchemeValue));
 export const schemeValue = schemeValueSchema as ContourOnly<typeof schemeValueSchema>;
 
-// Rosetta identity hatch. Runtime door keys off the registered name `"dynamic"`
+// Fully-generic rosetta slot kind (∀ pass-through, never a default fallback — see
+// the vocabulary table). Runtime door keys off the registered name `"dynamic"`
 // specifically (`common/symbols/rosetta.ts`); `instance(Ctor)` is a separate real
 // codec and never reaches those dynamic-only paths.
 // DIRECTION ASYMMETRY (world-flip ruling 2026-08-13): as INPUT, decode is identity —
@@ -214,7 +217,7 @@ export const dynamic = dynamicSchema as CrossingOnly<typeof dynamicSchema> & Dyn
 // ── Marshal ctx ────────────────────────────────────────────────────────────
 //
 // Scalar `encode` receives a bare JS primitive — no per-value run-context to read.
-// Minting under CONSTANT_CTX drops the crossing off the run's heap meter /
+// Minting under CONSTANT_CTX drops the crossing off the run's
 // cache / effects / reads / signal; everything built from that value inherits
 // the wrong run.
 //
@@ -505,10 +508,7 @@ export const lambda = named(
 const listContainer = z.custom<AListAlike>((x) => x instanceof APair || x instanceof ANil);
 
 // Walk pair spine → car array; reject cycles and improper lists. Out-schema
-// validates elements/arity. Heap-metering is INERT: AValue carries no per-value ctx,
-// so the charge resolves to CONSTANT_CTX.heapMeter === undefined (no meter). Restoring
-// metering is a deliberate phase (workboard D1) — it needs the crossing's RunContext
-// threaded here, not a silent swap to marshalCtx() mid-cleanup.
+// validates elements/arity.
 function spineToArray(l: AListAlike): unknown[] {
   const out: unknown[] = [];
   let node: unknown = l;
@@ -570,7 +570,6 @@ export function cons<C extends z.ZodTypeAny, D extends z.ZodTypeAny>(carE: C, cd
     z.codec(z.instanceof(APair), z.tuple([carE, cdrE]), {
       // `as never`: zod tuple input is a variadic conditional (generic boundary).
       decode: (p) => [p.car, p.cdr] as never,
-      // Fixed 2-arity — no heap charge (unlike unbounded list/vector/dict).
       encode: ([c, d]) => {
         const carValue = c as SchemeValue;
         const cdrValue = d as SchemeValue;

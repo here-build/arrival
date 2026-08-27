@@ -7,7 +7,7 @@
  * the empty options object let `runCtx` come through as `undefined`, and
  * `call_function` used to paper over that with `runCtx ?? CONSTANT_CTX`
  * (eval/call-function.ts). Every callback therefore ran under CONSTANT_CTX
- * (`strict: false`, no heap meter, no abort signal, invisible to cache/effects) —
+ * (`strict: false`, no abort signal, invisible to cache/effects) —
  * regardless of what the enclosing run actually configured. `call_function`'s `runCtx`
  * is now a REQUIRED option, and `for-each`/`member`/`assoc` are `function(this: CallCtx,
  * …)` (not arrows) threading `this.runCtx` through explicitly.

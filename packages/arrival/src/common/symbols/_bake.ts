@@ -242,7 +242,7 @@ export type NoContourBrand<T> = HasBrand<T, z.ContourOnly<unknown>> extends true
 export type NoCrossingBrand<T> = HasBrand<T, z.CrossingOnly<unknown>> extends true ? never : T;
 
 type ContourMsgIn =
-  "z.schemeValue is not legal in a rosetta contract's input — rosetta crosses the membrane, so this slot needs a real codec, z.procedure (callables), or z.dynamic (genuinely-runtime-shaped data)";
+  "z.schemeValue is not legal in a rosetta contract's input — rosetta crosses the membrane, so this slot needs a real codec, z.procedure (callables), or z.dynamic (fully-generic pass-through slots only)";
 type ContourMsgRest =
   "z.schemeValue is not legal in a rosetta contract's inputRest — same rule as input, see z.schemeValue's own doc";
 type ContourMsgOut =
@@ -421,8 +421,7 @@ export interface TaglessGuardSymbolDef {
   readonly metadata?: MetadataRecord;
 }
 
-/** Ctx-aware op: scheme args + RunContext (dual of ctx-free native). Kernel-logic ops
- *  (map/filter charge heapMeter, then dispatch to term algebra). */
+/** Ctx-aware op: scheme args + RunContext (dual of ctx-free native). */
 export interface SequenceSymbolDef {
   readonly kind: "sequence";
   readonly name: string;

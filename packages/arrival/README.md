@@ -270,8 +270,8 @@ consumers skip the pass for such programs (the runtime doors remain the backstop
   capabilities read — also where `define/overridable` parameter values ride, alongside the
   `overridable` capability), `scope` (a `LexicalScope`; `.fresh()` mints an isolated session),
   `runCtx` (reuse an existing `RunContext` for REPL continuity), `staticValidation: "on" | "off"`
-  (default `"off"`), `signal`, `budgetMs` / `heapBudget` (opt-in wall-clock / allocation bounds;
-  `signal` is the one that reaches into native calls), `strict` (turns off nil-tolerance,
+  (default `"off"`), `signal`, `budgetMs` (opt-in wall-clock bound; `signal` is the one that
+  reaches into native calls), `strict` (turns off nil-tolerance,
   caller-scoped), `tap` (trace recording).
 - `parse(code)` — the reader, standalone (`tokenize` lives on `/lsp-internals`).
 

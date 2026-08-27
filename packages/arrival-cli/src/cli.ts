@@ -77,7 +77,6 @@ options:
                             is the env equivalent.
 
 environment:
-  ARRIVAL_HEAP_MAX          per-run allocation budget (default 100000000 cells)
   ARRIVAL_RUN_BUDGET_MS     wall-clock budget in ms   (default 300000)
   ARRIVAL_BANNER            quote (default) | wordmark | off
 `;

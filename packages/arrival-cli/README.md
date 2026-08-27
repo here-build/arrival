@@ -234,7 +234,6 @@ Every verb runs bounded, tunable by environment variable:
 
 | var | default | meaning |
 |---|---|---|
-| `ARRIVAL_HEAP_MAX` | `100000000` | per-run allocation budget, in interpreter allocation cells (charged at collection-op choke points — the bound a churn loop actually hits) |
 | `ARRIVAL_RUN_BUDGET_MS` | `300000` | per-run wall-clock budget (5 minutes) |
 
 A breach is a plain error (exit 1), e.g. `execution budget exceeded (49.97ms)`.

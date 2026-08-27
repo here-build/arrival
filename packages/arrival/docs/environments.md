@@ -162,7 +162,7 @@ namespace — and one-file-per-kind lets the bundler tree-shake to only the acce
 | `rosetta` | impl in JS-land behind a codec membrane | first-class `ARosettaProcedure` | decode → validate → impl → encode → mint. The one membrane chokepoint (§MEMBRANE-SEAM). |
 | `tagless` | no impl — dispatch to the operand's own term | `ANativeProcedure` wrapping a term dispatcher | receiver is the last scheme arg; a missing method THROWS. |
 | `tagless-guard` | tagless dispatch, graceful | `ANativeProcedure` wrapping a guard dispatcher | a receiver with no method answers `#f` (predicate form: `vector?`, `pair?`), never an `instanceof` reach-around. Mints its verdict here (R8). |
-| `sequence` | ctx-aware op: `(schemeArgs, runCtx)` | `ANativeProcedure` | for kernel-logic-bearing ops (heap-charge, then dispatch to the term algebra) — map/filter/reduce. |
+| `sequence` | ctx-aware op: `(schemeArgs, runCtx)` | `ANativeProcedure` | dual of ctx-free native: threads the live run (callback apply / strict / signal), then dispatches to the term algebra — map/filter/reduce. |
 | `notImplemented` | a teaching reason, no impl | `DoorProcedure` | errors-as-doors: an OMITTED verb throws a `PurityError` carrying the reason and the alternative bound in *this* env. |
 | `keyword` | `name: doc`, no impl | a `Keyword` marker value | a special form made first-class: the evaluator resolves a call head through the env and dispatches `SPECIAL_FORMS[name]` on the marker — aliasable + lexically shadowable. |
 | `macro` | a raw JS `Macro`/`Syntax` transformer | the `Macro` itself, bound as-is | not arg-evaluating (native/rosetta) nor evaluator-dispatched (keyword); the generic `is_macro` hook expands it. |
@@ -232,16 +232,18 @@ layer down, as the governing law: **the chart is chosen by the contract; the con
 the thing that performs the crossing.**
 
 **`z.value` is retired, split by structural brand into `z.schemeValue` (the contour top type)
-and `z.dynamic` (the crossing escape hatch).** Both are a bare `instanceof AValue` predicate,
-never a transform — but each is legal on only one side of the membrane, enforced at COMPILE
-TIME: a `symbol.rosetta` contract slot's bound (`CrossingSlot`) rejects `z.schemeValue`, and a
-native/sequence/tagless/define contract slot's bound (`ContourSlot`) symmetrically rejects
-`z.dynamic`. `z.dynamic` is the declared no-transform escape hatch for a rosetta slot
-genuinely untypeable at the boundary — a value that must keep its scheme identity, an opaque
-handle, arbitrary-shaped data no codec names. Every such slot is invisible to the type lens,
-unvalidated at the boundary, and barred from `cacheClass: "view"` (a raw crossing does not
-serialize — the bake gate refuses it). Declare the codec whenever one exists; `grep
-schemeToJsUntyped` is the audit list of every place the untyped crossing was reached for.
+and `z.dynamic` (the crossing's fully-generic slot kind).** Both are a bare `instanceof AValue`
+predicate, never a transform — but each is legal on only one side of the membrane, enforced at
+COMPILE TIME: a `symbol.rosetta` contract slot's bound (`CrossingSlot`) rejects `z.schemeValue`,
+and a native/sequence/tagless/define contract slot's bound (`ContourSlot`) symmetrically rejects
+`z.dynamic`. `z.dynamic` is a special kind, never a default fallback: legal only for a slot
+that is fully generic — ∀-quantified, the verb polymorphic in the slot, the value passed
+through whole, keeping its scheme identity. A shape that is merely awkward or open-ended is
+not generic — it has an honest codec (`z.union`/`z.dict`/`z.box`/`z.instance`). Every
+`z.dynamic` slot is invisible to the type lens, unvalidated at the boundary, and barred from
+`cacheClass: "view"` (a raw crossing does not serialize — the bake gate refuses it). Declare
+the codec whenever one exists; `grep schemeToJsUntyped` is the audit list of every place the
+untyped crossing was reached for.
 
 **Enforcement sites:** `common/symbols/_bake.ts`, `common/scheme-zod.ts`,
 `common/spine-adoption.ts`, `membrane/adopt-spine.ts`, `common/schema-tag.ts`.

@@ -13,7 +13,7 @@ import { APair, isCircularList } from "../values/primitives/APair.js";
 import { ANil } from "../values/primitives/ANil.js";
 import type { SchemeValue } from "../values/types.js";
 
-/** Reject circular/improper lists (the iterator folds tails). Heap-metering is inert without CallCtx. */
+/** Reject circular/improper lists (the iterator folds tails). */
 export function to_array(name: string): (list: SchemeValue) => SchemeValue[] {
   return function (list: SchemeValue): SchemeValue[] {
     if (list instanceof ANil) {

@@ -23,15 +23,10 @@
  *   capability set that never registered the suffix) cannot see a suffix a DIFFERENT run's
  *   nested require resolved — same per-run-bag guarantee Stage B4 established at the top level,
  *   now confirmed one require-frame deeper.
- *
- * LAW 3 (meter continuity): a nested require's allocations charge the OUTER run's heap meter —
- *   the reused `runCtx` (not a private, per-form one) is what a required module's code actually
- *   runs against, so its own list-cell allocations are bounded by (and visible on) the SAME
- *   `RunContext.heapMeter` the top-level program shares.
  */
 import { describe, expect, it } from "vitest";
 
-import { EnvCapability, exec, execState } from "@inhuman.tools/arrival";
+import { EnvCapability, exec } from "@inhuman.tools/arrival";
 
 import { arrivalLoaderCapability } from "../loader-capability.js";
 import { contentsToText, loaderFromResolver } from "../loader.js";
@@ -99,23 +94,5 @@ describe("LAW 2 — cross-run isolation holds one require-frame deeper", () => {
             "outer-iso-b.scm": `(require "unseen-iso-b.nestediso")`,
             "unseen-iso-b.nestediso": "unreachable" }) } }),
     ).rejects.toThrow(/no-resolver|no resolver/i);
-  });
-});
-
-describe("LAW 3 — a nested require's allocations charge the OUTER run's heap meter", () => {
-  it("the reused runCtx observes list-cell allocations a required .scm module's own code makes", async () => {
-    const ext = makeUpperExtCapability("test/ext-upper-nested-meter", ".nestedmeter", "test/upper-resolve-nested-meter");
-
-    // The required module's OWN code does real list work (`map` charges the meter per element —
-    // heap-budget.ts's sequence-op dispatch chokepoint) — its allocations must land on the
-    // requiring program's meter, not a private one execExpr would otherwise mint per nested call.
-    const { runCtx } = await execState(`(require "outer-meter.scm")`, {
-      capabilities: [ext],
-      heapBudget: 1000,
-      config: {
-        loader: files({
-          "outer-meter.scm": `(map (lambda (x) x) (list 1 2 3 4 5 6 7 8 9 10))` }) } });
-
-    expect(runCtx.heapMeter?.used).toBeGreaterThan(0);
   });
 });

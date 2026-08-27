@@ -1,5 +1,5 @@
 // Every arrival callable is an AValue with an EXPLICIT `run(args, callCtx)` surface.
-// `callCtx` is the ONLY threaded context — wraps run-level state (strict / heapMeter,
+// `callCtx` is the ONLY threaded context — wraps run-level state (strict, channels,
 // via `callCtx.runCtx`) with the per-call invocation (provenance minting), built ONCE
 // at dispatch and threaded whole. Provenance is NOT threaded separately: it rides
 // the values and is minted only at the rosetta membrane, as `union(args)`.

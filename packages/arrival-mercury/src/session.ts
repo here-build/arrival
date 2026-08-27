@@ -15,7 +15,7 @@
 import { disposeRunContext, execState, LexicalScope, type EnvCapability, type RunContext, type SessionScope } from "@inhuman.tools/arrival";
 
 export interface MercurySession {
-  /** Per-run hermetic handle (identity / heap meter / strict / cache). Stable for
+  /** Per-run hermetic handle (identity / strict / cache). Stable for
    *  the session's whole life — thread it on every later `execState` call. */
   readonly runCtx: RunContext;
   /** The session's define-accumulation frame — `SessionScope`, so `scope.env`

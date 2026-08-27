@@ -206,8 +206,8 @@ export function formatRunError(error: unknown): string {
 }
 
 // -------------------------------------------------------------------------
-// :: BudgetExceededError — run containment (wall-clock or heap), never a fault.
-// One class for both; call sites build their own full message.
+// :: BudgetExceededError — run containment (wall-clock), never a fault.
+// Call sites build their own full message.
 // -------------------------------------------------------------------------
 export class BudgetExceededError extends ArrivalError {
   public readonly name = "BudgetExceededError";
@@ -340,7 +340,7 @@ export class ContractSlotKindError extends ArrivalError {
       kind === "rosetta"
         ? `${op}: z.${slotName} is not legal in a rosetta contract's ${side} — rosetta crosses the ` +
             `membrane, so this slot needs a real codec, z.procedure (callables), or z.dynamic ` +
-            `(genuinely-runtime-shaped data)`
+            `(fully-generic pass-through slots only — an awkward shape wants a real codec)`
         : `${op}: z.${slotName} is not legal in a ${kind} contract's ${side} — this contour never ` +
             `crosses the membrane, so z.schemeValue (the honest top type) or a real codec is always ` +
             `the honest choice`,

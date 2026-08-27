@@ -17,9 +17,8 @@ import { RunContext, CONSTANT_CTX } from "../../run/RunContext.js";
 import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
 import type { SchemeValue } from "../../values/types.js";
 
-/** A live, real run's ctx — `heapMeter` is DEFINED (`{ used, max }`), unlike CONSTANT_CTX's
- *  permanent `undefined`. Distinguishing the two is the whole law. */
-const liveCtx: RunContext = new RunContext({ heapBudget: 1_000_000 });
+/** A live, real run's ctx — identity-distinct from CONSTANT_CTX. Distinguishing the two is the whole law. */
+const liveCtx: RunContext = new RunContext();
 
 /** Records the `callCtx.runCtx` an ANativeProcedure callback observes. W8. */
 function makeProbe(): { fn: ANativeProcedure; observed: RunContext[] } {
@@ -46,7 +45,6 @@ describe("W1 seq-op ctx threading — APair map/filter/reduce thread the invocat
     await list["arrival/tagless-final/map"](probe.fn, liveCtx);
     expect(probe.observed).toHaveLength(2);
     for (const ctx of probe.observed) {
-      expect(ctx.heapMeter).toBeDefined();
       expect(ctx).toBe(liveCtx);
       expect(ctx).not.toBe(CONSTANT_CTX);
     }
@@ -58,7 +56,6 @@ describe("W1 seq-op ctx threading — APair map/filter/reduce thread the invocat
     await list["arrival/tagless-final/filter"](probe.fn, liveCtx);
     expect(probe.observed).toHaveLength(2);
     for (const ctx of probe.observed) {
-      expect(ctx.heapMeter).toBeDefined();
       expect(ctx).toBe(liveCtx);
     }
   });
@@ -69,7 +66,6 @@ describe("W1 seq-op ctx threading — APair map/filter/reduce thread the invocat
     await list["arrival/tagless-final/reduce"](probe.fn, 0, liveCtx);
     expect(probe.observed).toHaveLength(2);
     for (const ctx of probe.observed) {
-      expect(ctx.heapMeter).toBeDefined();
       expect(ctx).toBe(liveCtx);
     }
   });
@@ -86,7 +82,6 @@ describe("W1 seq-op ctx threading — AVector map/filter/reduce thread the invoc
     await vec["arrival/tagless-final/map"](probe.fn, liveCtx);
     expect(probe.observed).toHaveLength(2);
     for (const ctx of probe.observed) {
-      expect(ctx.heapMeter).toBeDefined();
       expect(ctx).toBe(liveCtx);
     }
   });
@@ -97,7 +92,6 @@ describe("W1 seq-op ctx threading — AVector map/filter/reduce thread the invoc
     await vec["arrival/tagless-final/filter"](probe.fn, liveCtx);
     expect(probe.observed).toHaveLength(2);
     for (const ctx of probe.observed) {
-      expect(ctx.heapMeter).toBeDefined();
       expect(ctx).toBe(liveCtx);
     }
   });
@@ -108,7 +102,6 @@ describe("W1 seq-op ctx threading — AVector map/filter/reduce thread the invoc
     await vec["arrival/tagless-final/reduce"](probe.fn, new AExact(0), liveCtx);
     expect(probe.observed).toHaveLength(2);
     for (const ctx of probe.observed) {
-      expect(ctx.heapMeter).toBeDefined();
       expect(ctx).toBe(liveCtx);
     }
   });

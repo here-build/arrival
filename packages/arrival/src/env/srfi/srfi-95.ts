@@ -4,11 +4,11 @@
 // tagless ops (map/filter place the collection last). So sort can't be a pure
 // `symbol.tagless` (whose convention is "the last operand is the receiver") — it's a thin
 // ctx-aware `symbol.sequence` that dispatches to the SEQUENCE's own
-// `arrival/tagless-final/sort`. The per-primitive sort (APair → a sorted LIST, AVector → a
-// sorted VECTOR; container-preserving by each term returning its own shape; default order is
-// the elements' own `arrival/tagless-final/lte`, a comparator is a SRFI-95 `less?`) and the
-// heap-charge both live ON the term (Option A). TOTALIC: a receiver with no sort algebra is a
-// type error, never a silent coercion.
+// `arrival/tagless-final/sort`. The per-primitive sort lives ON the term (APair → a sorted
+// LIST, AVector → a sorted VECTOR; container-preserving by each term returning its own
+// shape; default order is the elements' own `arrival/tagless-final/lte`, a comparator is a
+// SRFI-95 `less?`). TOTALIC: a receiver with no sort algebra is a type error, never a
+// silent coercion.
 //
 // SINGLE SOURCE: `srfi/index.ts` adds this to `allSrfi`, so `base-packs.ts` assembles it.
 import dedent from "dedent";

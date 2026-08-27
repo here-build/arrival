@@ -24,9 +24,7 @@
  * status entry): the realm-default `ExecState.ambient` row (`ExecState` carries no `ambient`
  * field at all anymore — ownership of "the shared default" was the retired realm singleton's own
  * concept, and the cornerstone rules that hermetic violation out); the glass "`ExecState.ambient` is
- * absent" row (glass itself is gone — `ExecOptions` has no `env`); `assembleAmbient({ heapBudget
- * })`'s AMBIENT-LEVEL default heapBudget policy (only the per-call `ExecOptions.heapBudget`
- * survives — there is no ambient object left to carry a policy default on).
+ * absent" row (glass itself is gone — `ExecOptions` has no `env`).
  */
 import { describe, expect, it } from "vitest";
 

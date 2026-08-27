@@ -36,7 +36,7 @@ export { type ExecOptions } from "./eval/generator-exec.js";
 // chain-env's `ChainEnv`).
 export { LexicalScope, type SessionScope } from "./eval/LexicalScope.js";
 
-// Run identity: `CONSTANT_CTX`/`HeapMeter` and the run cache/effect-log/read-guard
+// Run identity: `CONSTANT_CTX` and the run cache/effect-log/read-guard
 // families live on `/host-internals` (host-integration machinery). `RunContext` and its
 // teardown door stay here — `exec({ runCtx })` reuse is an eval concern every host needs.
 export { RunContext, type MembraneClosure } from "./run/RunContext.js";

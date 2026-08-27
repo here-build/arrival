@@ -40,7 +40,6 @@ export interface FormEmitterOptions {
   readonly runCtx: RunContext;
   readonly scope: LexicalScope;
   readonly budgetMs: number;
-  readonly heapBudget: number;
   readonly onEvent: (event: ReplEvent) => void;
 }
 
@@ -84,7 +83,7 @@ function doorText(e: unknown): string {
  *  or a form's runtime error both resolve as a terminal statement event, matching the
  *  aggregate law (the block model IS the result). */
 export async function emitForms(source: string, opts: FormEmitterOptions): Promise<void> {
-  const { capabilities, config, runCtx, scope, budgetMs, heapBudget, onEvent } = opts;
+  const { capabilities, config, runCtx, scope, budgetMs, onEvent } = opts;
   const started = Date.now();
   const remaining = (): number => Math.max(0, budgetMs - (Date.now() - started));
 
@@ -101,7 +100,7 @@ export async function emitForms(source: string, opts: FormEmitterOptions): Promi
       kind: "statement",
       index: 0,
       content: [{ type: "text", text: door }],
-      counters: { heapUsed: 0, heapMax: heapBudget, elapsedMs: Date.now() - started, budgetMsRemaining: remaining() },
+      counters: { elapsedMs: Date.now() - started, budgetMsRemaining: remaining() },
       error: message,
     });
     return;
@@ -113,8 +112,7 @@ export async function emitForms(source: string, opts: FormEmitterOptions): Promi
   for (const [index, form] of forms.entries()) {
     const formStarted = Date.now();
     try {
-      const state = await execState(form, { capabilities, config, runCtx, scope, budgetMs, heapBudget });
-      const meter = state.runCtx.heapMeter;
+      const state = await execState(form, { capabilities, config, runCtx, scope, budgetMs });
       const texts: string[] = [];
       for (const boxed of state.values) {
         const value = toJS(boxed);
@@ -127,8 +125,6 @@ export async function emitForms(source: string, opts: FormEmitterOptions): Promi
         index,
         content,
         counters: {
-          heapUsed: meter?.used ?? 0,
-          heapMax: meter?.max ?? heapBudget,
           elapsedMs: Date.now() - formStarted,
           budgetMsRemaining: remaining(),
         },
@@ -140,8 +136,6 @@ export async function emitForms(source: string, opts: FormEmitterOptions): Promi
         index,
         content: [{ type: "text", text: `(error ${JSON.stringify(message)})` }],
         counters: {
-          heapUsed: 0,
-          heapMax: heapBudget,
           elapsedMs: Date.now() - formStarted,
           budgetMsRemaining: remaining(),
         },
