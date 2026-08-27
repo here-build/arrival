@@ -97,7 +97,7 @@ describe("Parser — #attachment tagged literal (serializer extras)", () => {
     expect(payload.valueOf()).toBe("att-1 (image/png, 34kB)");
   });
 
-  it("fills a dict value slot so {:k #attachment \"…\"} has even arity", async () => {
+  it('fills a dict value slot so {:k #attachment "…"} has even arity', async () => {
     const forms = await readAll('{:img #attachment "att-1 (image/png, 64B)"}');
     expect(forms).toHaveLength(1);
     expect(forms[0]).toBeInstanceOf(ADict);
