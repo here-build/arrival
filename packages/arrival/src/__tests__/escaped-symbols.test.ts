@@ -1,5 +1,5 @@
 import { CONSTANT_CTX } from "../run/RunContext.js";
-import type { AmbientRuntime } from "../env/AmbientRuntime.js";
+import type { ResolvingAmbient } from "../env/AmbientRuntime.js";
 /**
  * Test escaped symbols and edge cases in arrival
  *
@@ -19,7 +19,7 @@ import { jsToScheme } from "../membrane/rosetta.js";
 import { EnvCapability } from "../common/capability.js";
 import { applyCapability } from "./_fresh-env.js";
 
-async function execOne(expr: string, env: AmbientRuntime = inferenceEnv.child("escaped-one")): Promise<any> {
+async function execOne(expr: string, env: ResolvingAmbient = inferenceEnv.child("escaped-one")): Promise<any> {
   const results = await exec(expr, { env });
   return results[0];
 }

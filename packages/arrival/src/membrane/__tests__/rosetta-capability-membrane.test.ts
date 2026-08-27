@@ -17,7 +17,7 @@ import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { AString } from "../../values/primitives/AString.js";
 import { inferenceEnv } from "../../env/inference-env.js";
-import type { AmbientRuntime } from "../../env/AmbientRuntime.js";
+import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { jsToScheme, toJS } from "../rosetta.js";
 import { execOverFrame } from "../../eval/generator-exec.js";
 import { testCallCtx } from "../../run/CallCtx.js";
@@ -29,13 +29,13 @@ import { tf } from "../../values/tagless-final.js";
 import type { SchemeValue } from "../../values/types.js";
 
 let capSeq = 0;
-async function withCap(caps: Parameters<typeof applyCapability>[1]): Promise<AmbientRuntime> {
+async function withCap(caps: Parameters<typeof applyCapability>[1]): Promise<ResolvingAmbient> {
   const env = inferenceEnv.child(`rosetta-cap-${++capSeq}`);
   await applyCapability(env, caps);
   return env;
 }
 
-async function execOne(expr: string, env: AmbientRuntime): Promise<any> {
+async function execOne(expr: string, env: ResolvingAmbient): Promise<any> {
   const results = await execOverFrame(expr, { env });
   return results[0];
 }

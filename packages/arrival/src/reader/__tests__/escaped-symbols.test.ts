@@ -1,5 +1,5 @@
 import { CONSTANT_CTX } from "../../run/RunContext.js";
-import type { AmbientRuntime } from "../../env/AmbientRuntime.js";
+import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 /**
  * Test the `|...|` bar-quoted SYMBOL-GRAMMAR reader — empty `||`, escaped
  * `\|`, unicode inside bars, special chars, case-sensitivity, and the
@@ -17,7 +17,7 @@ import { execOverFrame as exec } from "../../eval/generator-exec.js";
 import { jsToScheme } from "../../membrane/rosetta.js";
 
 // Helper to execute and get first result
-async function execOne(expr: string, env: AmbientRuntime = inferenceEnv.child("reader-escaped-one")): Promise<any> {
+async function execOne(expr: string, env: ResolvingAmbient = inferenceEnv.child("reader-escaped-one")): Promise<any> {
   const results = await exec(expr, { env });
   return results[0];
 }

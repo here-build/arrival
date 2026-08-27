@@ -31,25 +31,29 @@ const nums = () => ({ a: sNum(10, 100), b: sNum(20, 200), c: sNum(30, 300) });
 describe("GOLDEN — pure ops over literals mint NOTHING (empty provenance)", () => {
   it("(+ 1 2) — addition of two literals", async () => {
     const v = await runRaw(`(+ 1 2)`);
-    expect(toJS(v)).toBe(3);
+    expect(v).toBeDefined();
+    expect(toJS(v!)).toBe(3);
     expect(provOf(v)).toEqual([]);
   });
 
   it("(* 2 3) — multiplication of two literals", async () => {
     const v = await runRaw(`(* 2 3)`);
-    expect(toJS(v)).toBe(6);
+    expect(v).toBeDefined();
+    expect(toJS(v!)).toBe(6);
     expect(provOf(v)).toEqual([]);
   });
 
   it("(- 10 (* 2 3)) — a nested all-literal arithmetic tree", async () => {
     const v = await runRaw(`(- 10 (* 2 3))`);
-    expect(toJS(v)).toBe(4);
+    expect(v).toBeDefined();
+    expect(toJS(v!)).toBe(4);
     expect(provOf(v)).toEqual([]);
   });
 
   it("(< 1 2) — a literal comparison", async () => {
     const v = await runRaw(`(< 1 2)`);
-    expect(toJS(v)).toBe(true);
+    expect(v).toBeDefined();
+    expect(toJS(v!)).toBe(true);
     expect(provOf(v)).toEqual([]);
   });
 });
