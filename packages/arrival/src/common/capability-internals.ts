@@ -172,8 +172,10 @@ export function collectPrelude(caps: readonly EnvCapability[], seen: Set<EnvCapa
  *  source. Deps FIRST (a dependent body may reference a base define — `s/field/string`
  *  calls `s/field`), deduped by the shared `seen` set like `collectPrelude`.
  *
- *  Only `kind: "define"` entries emit; every other kind is a JS impl with no scheme body or
- *  a keyword/macro the lens models elsewhere.
+ *  `kind: "define"` entries emit their real body. Polyglot `symbol.native`s that carry an
+ *  authored `type` (`str`, `join`) have no scheme body — they stay native at runtime to
+ *  avoid a strings/srfi-13 dep — so the lens gets a rest-lambda stub. Restricted to
+ *  `scheme/polyglot*` so R7RS natives with `type` do not shadow the TS builtin prelude.
  *
  *  NOT for runtime prelude eval: bind loop already binds these via `bindCapabilityDefines`;
  *  re-running as prelude would double-bind. Feeds a type-lens `schemePrelude` only. */
@@ -188,9 +190,15 @@ export function collectSymbolDefines(caps: readonly EnvCapability[], seen: Set<E
     }
     const symbols = cap.spec.symbols;
     if (symbols === undefined) continue;
+    const polyglotNatives = cap.name.startsWith("scheme/polyglot");
     for (const [key, def] of Object.entries(symbols)) {
       if (def !== null && typeof def === "object" && "kind" in def && def.kind === "define") {
         parts.push(`(define ${key} ${(def as DefineSymbolDef).body})`);
+        continue;
+      }
+      if (polyglotNatives && def instanceof ANativeProcedure) {
+        const type = def.contract && "type" in def.contract ? def.contract.type : undefined;
+        if (typeof type === "string") parts.push(`(define ${key} (lambda args ""))`);
       }
     }
   }

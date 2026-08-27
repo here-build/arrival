@@ -6,7 +6,9 @@
 // because the caller named two capabilities' preludes by hand instead of walking the set).
 import { describe, expect, it } from "vitest";
 import { EnvCapability } from "../capability.js";
-import { collectPrelude } from "../capability-internals.js";
+import { collectPrelude, collectSymbolDefines } from "../capability-internals.js";
+import polyglot from "../../env/polyglot/polyglot.js";
+import { BASE_ROSTER } from "../../env/base-roster.js";
 
 describe("collectPrelude", () => {
   it("returns a single capability's own prelude", () => {
@@ -41,5 +43,22 @@ describe("collectPrelude", () => {
 
   it("empty input yields an empty string", () => {
     expect(collectPrelude([])).toBe("");
+  });
+});
+
+describe("collectSymbolDefines — polyglot natives with authored `type`", () => {
+  it("emits a type-lens stub for polyglot `str` (native, no scheme body)", () => {
+    expect(collectSymbolDefines([polyglot])).toMatch(/\(define str \(lambda args ""\)\)/);
+  });
+
+  it("emits `join` the same way; does not emit R7RS natives from other packs", () => {
+    const harvested = collectSymbolDefines([polyglot]);
+    expect(harvested).toMatch(/\(define join \(lambda args ""\)\)/);
+    expect(harvested).not.toMatch(/\(define car\b/);
+    expect(harvested).not.toMatch(/\(define \+\b/);
+  });
+
+  it("BASE_ROSTER harvest includes polyglot `str`", () => {
+    expect(collectSymbolDefines(BASE_ROSTER)).toMatch(/\(define str \(lambda args ""\)\)/);
   });
 });
