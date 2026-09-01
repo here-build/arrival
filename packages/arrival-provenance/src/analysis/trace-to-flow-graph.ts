@@ -1,8 +1,8 @@
 /**
  * trace → unified flow-graph: a render-ready model for an industrial flowchart
  * (React Flow + elkjs style). No studio view consumes it today — the trace views
- * render `traceToRegions`/`TraceRegionFold`; this builder and its naive sibling
- * are exercised by arrival-chain's tests and benchmarks.
+ * render `traceToRegions`/`TraceRegionFold`; this builder is exercised by
+ * arrival-chain's tests and benchmarks.
  *
  * The approved causal-statechart mockup is NOT a containment treemap — it is
  * MDL regions (loop / parallel / branch) *wrapping* Lamport-layered infer nodes,

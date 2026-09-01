@@ -44,7 +44,6 @@ export {
   type FlowGraphEdge,
   type FlowNodeKind,
 } from "./analysis/flow-graph.js";
-export { traceToFlowGraphNaive } from "./analysis/trace-to-flow-graph-naive.js";
 export { traceToChain, type ProvenanceChain, type ChainNode, type ChainEdge } from "./analysis/trace-to-chain.js";
 export { regionBoundaries, type RegionBoundary } from "./analysis/region-boundaries.js";
 export {

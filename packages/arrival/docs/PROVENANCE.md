@@ -381,7 +381,7 @@ Two artifacts share the word "provenance" and must not be conflated:
 **The door is exactly four subpaths**, verified by grepping every `@inhuman.tools/arrival*`
 import in `arrival-provenance/src/`: the package root (`ANil`/`ArrivalError`/`deepProvenance`/
 `toJS`/`execState`/`parse`/`LexicalScope`/`SchemeValue`), `/provenance` (`scopeId`,
-`snapshotTrace`, `headOf`, `userCallSite`, `extractDefines`, `EvalTrace`/`PlainInv`/`PlainTrace`
+`snapshotTrace`, `headOf`, `userCallSite`, `EvalTrace`/`PlainInv`/`PlainTrace`
 types), `/reflect-internals` (the value-class hierarchy: `AValue`/`APair`/`AVoid`/`ABool`/
 `AString`/`AVector`/`ADict`/`ASymbol`), and `/attestation` — one import, `isAttested`.
 `buildUneval` binds the run's output through `scope.env.bind("result", …)` on the live

@@ -51,7 +51,9 @@ pnpm test
 ```
 
 `--recurse-submodules` is required for the Chibi-scheme R7RS conformance corpus
-(`packages/arrival/vendor/chibi-scheme`). A clone without it still builds; those tests skip.
+(`packages/arrival/vendor/chibi-scheme`, gitlink-pinned to a chibi SHA). `pnpm install`
+sparse-checkouts that working tree to `tests/r7rs-tests.scm` and `lib/srfi/1/test.sld`.
+A clone without the submodule still builds; those tests skip.
 
 ## Packages
 

@@ -16,7 +16,7 @@ export { snapshotTrace, type PlainTrace, type PlainInv } from "./trace-snapshot.
 export { headOf, scopeId, userCallSite } from "./scope-id.js";
 
 // ── Primitive layer (re-exported by arrival-provenance's default entry) ──
-export { extractDefines, type DefineInfo, type SourceLocation } from "../reader/extract-defines.js";
+export type { SourceLocation } from "../errors.js";
 export {
   buildSlice,
   writeForm,

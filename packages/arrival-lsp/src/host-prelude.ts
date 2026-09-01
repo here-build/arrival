@@ -17,16 +17,15 @@
 //
 // The result plugs straight into `createSchemeLanguageService({ host })`.
 //
-// CONTRACT: each `type` is a function TAIL — a parameter list + return
-// annotation, e.g. `"(ip: SchemeIP): boolean"` or `"(): List<Connection>"`. The
-// name is encoded and prepended as `declare function <encoded>`, so `"ip/x?"` +
-// `"(ip: SchemeIP): boolean"` becomes
-// `declare function ip$slash$x$qmark$(ip: SchemeIP): boolean;`. Base types
-// (`List`, plain scalars, `Tuple`) are in scope from the lens prelude
-// (`types.d.ts`); host entity types MUST be declared in `preamble` (ambient, no
-// import/export — it shares the global merge scope).
+// CONTRACT: each `type` is either
+//   • a function TAIL `"(ip: SchemeIP): boolean"` → `declare function encoded(…): R`
+//   • an arrow `"(list: List<string>) => string"` or overload object `{ <T>(…): R; }`
+//     → `declare const encoded: <sig>` (authored `type:` / `signatureOf` harvest)
+// The name is encoded (`"ip/x?"` → `ip$slash$x$qmark$`). Base types (`List`,
+// scalars, `Tuple`) are in scope from the lens prelude (`types.d.ts`); host
+// entity types MUST be declared in `preamble` (ambient, no import/export).
 
-import { encodeSchemeIdent } from "@inhuman.tools/arrival-types-bridge";
+import { decodeSchemeIdent, encodeSchemeIdent } from "@inhuman.tools/arrival-types-bridge";
 
 export interface HostPrelude {
   /** Ambient `.d.ts` text — the entity preamble + host `declare function`s. */
@@ -58,6 +57,46 @@ export interface AssembleHostPreludeOptions {
 }
 
 /**
+ * True when `sig` is a function TAIL (`(args): R`) rather than an arrow or
+ * overload object. Callback params may contain inner `=>`; the top-level return
+ * is still `: R` after the last `):`.
+ */
+export function isFunctionTailSignature(sig: string): boolean {
+  const s = sig.trim();
+  if (s.startsWith("{")) return false;
+  const lastArrow = s.lastIndexOf("=>");
+  const lastColonParen = s.lastIndexOf("):");
+  if (lastArrow === -1) return true;
+  if (lastColonParen === -1) return false;
+  return lastColonParen > lastArrow;
+}
+
+function hostDeclare(name: string, type: string): string {
+  const enc = encodeSchemeIdent(name);
+  const sig = type.trim();
+  if (isFunctionTailSignature(sig)) return `declare function ${enc}${sig};`;
+  return `declare const ${enc}: ${sig};`;
+}
+
+/** Scheme names of ambient `declare function` leaves in prelude file texts. */
+export function leafNamesFromPreludeFiles(files: Iterable<string>): Set<string> {
+  const names = new Set<string>();
+  const re = /\bdeclare\s+function\s+([A-Za-z_$][\w$]*)/g;
+  for (const text of files) {
+    for (const m of text.matchAll(re)) {
+      const enc = m[1]!;
+      if (enc === "sexpr" || enc.startsWith("__")) continue;
+      try {
+        names.add(decodeSchemeIdent(enc));
+      } catch {
+        names.add(enc);
+      }
+    }
+  }
+  return names;
+}
+
+/**
  * Build the `{ prelude, members, kwargsMembers }` host option from `[name, type]`
  * rosetta entries (e.g. `[...rosettaTypesOf(env)]`). Order-independent; duplicate
  * names keep the last entry (a re-registration overrides).
@@ -76,7 +115,7 @@ export function assembleHostPrelude(
     prelude: [
       "// Host-injected ambient prelude (assembled from the rosetta type registry).",
       opts?.preamble ?? "",
-      ...members.map((name) => `declare function ${encodeSchemeIdent(name)}${byName.get(name)!};`),
+      ...members.map((name) => hostDeclare(name, byName.get(name)!)),
       "",
     ].join("\n"),
     members,

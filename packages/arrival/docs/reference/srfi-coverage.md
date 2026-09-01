@@ -7,11 +7,12 @@ We do **not** aim for full mutable R7RS/SRFI. Mutators / multi-return / dynamics
 **Aside:** record types / `define-record-type` — separate stream, not scored here.
 
 **Score rubric:**
-| Score | Meaning |
-|-------|---------|
-| **COMPLETE** | Every official export is live **or** doored in this pack (or fully provided by a documented peer pack that the SRFI pack claims as coverage). |
-| **PARTIAL** | Some official exports live/doored; others missing silently. Header may document a subset ("excuse") — still scored PARTIAL under policy. |
-| **STUBS-ONLY** | Pack is deliberately doors-only for _non-shipped_ libraries (scored separately). |
+
+| Score          | Meaning                                                                                                                                       |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| **COMPLETE**   | Every official export is live **or** doored in this pack (or fully provided by a documented peer pack that the SRFI pack claims as coverage). |
+| **PARTIAL**    | Some official exports live/doored; others missing silently. Header may document a subset ("excuse") — still scored PARTIAL under policy.      |
+| **STUBS-ONLY** | Pack is deliberately doors-only for _non-shipped_ libraries (scored separately).                                                              |
 
 **Multi-return:** surface doors on binding; `receive` door on SRFI-8; span/break/partition return `(list a b)`; floor/truncate return pair products. No live free `(values …)` consumers remaining.
 

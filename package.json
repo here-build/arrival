@@ -4,6 +4,7 @@
   "private": true,
   "description": "The arrival language — an R7RS-subset Scheme for AI-agent constraint-based execution: interpreter, capability environments, provenance, and the CLI",
   "scripts": {
+    "prepare": "node packages/arrival/scripts/sparse-chibi.mjs",
     "build": "turbo build",
     "test": "turbo test",
     "typecheck": "turbo typecheck",

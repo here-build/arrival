@@ -57,7 +57,7 @@ stamp on the programs where the static cone coincides with the taken run; the va
 lens reads the same zod schema the runtime membrane decodes, so a divergence is a printer
 bug, not a policy choice. The direction of safe disagreement is the subject of §2.
 
-**Enforcement sites:** `type-layer/query.ts`, `oracle/scanner.ts`, `oracle/sigma.ts`,
+**Enforcement sites:** `arrival-lsp` `getTypeValidCandidates` / `typed-scanner.ts`, `oracle/scanner.ts`, `oracle/sigma.ts`,
 `static-validation/validate-program.ts`, `provenance/lineage.ts`.
 
 ---
@@ -77,9 +77,9 @@ answer is "the safe side" is fixed by what the reader would break if it tightene
 1. **Type lens — DROPS-ONLY.** An axis narrows ONLY when it can PROVE the constraint (a
    candidate PROVABLY ill-typed at a slot that is provably not `any`/`unknown`/`never`/
    out-of-range). On ANY uncertainty it returns the unresolved value — the candidate list
-   unchanged, or `null`. Stated in `type-layer/query.ts` as **THE GOVERNING INVARIANT**:
-   "a wrongly-dropped valid candidate is a DEFECT, never a tradeoff." A false drop would
-   forbid a token the runtime would have accepted.
+   unchanged, or `null`. Stated in `arrival-lsp` `typed-scanner.ts` as conservative by
+   construction: `getTypeValidCandidates` keeps any candidate it can't prove ill-typed.
+   A false drop would forbid a token the runtime would have accepted.
 2. **Oracle Σ — NEVER DROP A LEGAL SYMBOL.** The scope walk is a decoder-sound
    over-approximation: a binder joins scope the instant its atom completes and stays for
    the whole frame; with no env, Σ returns `null` (graceful degradation — "Σ not modelled,
@@ -102,7 +102,7 @@ runtime would also accept.** Keep-the-candidate, keep-the-symbol, suppress-the-e
 widen-the-cone are the same move — refuse to tighten past the proof — because each reader's
 untightened answer is the one that stays TRUE when the runtime finally executes.
 
-**Enforcement sites:** `type-layer/query.ts` (drops-only), `oracle/sigma.ts` (Σ never
+**Enforcement sites:** `arrival-lsp` `typed-scanner.ts` (drops-only), `oracle/sigma.ts` (Σ never
 drops), `static-validation/validate-program.ts` (degrade-to-warning soundness contract),
 `provenance/lineage.ts` (conservative cone).
 
@@ -117,8 +117,8 @@ drops a legal symbol (§2.2), T never drops a valid candidate (§2.1), so the in
 itself a sound over-approximation — it forbids a token only when BOTH readers would.
 
 **The thesis that makes T tractable: "Scheme is a TS subset except lists and pairs."** The
-type lens lowers a scheme prefix to TypeScript (`type-layer/lower.ts`), compiles it against
-the harvested prelude (`type-layer/prelude.ts`), and reads the type at the cursor's argument
+language service emits a scheme prefix to TypeScript (`arrival-types-bridge` `emitTypes`),
+compiles it against the harvested prelude, and reads the type at the cursor's argument
 slot back off the checker. Because scheme code (minus its list/pair spine) maps onto a TS
 expression, `Parameters<typeof callee>[i]` IS the slot's expected type, and TS's own
 assignability answers "does this candidate fit here." The half that handles the exception —
@@ -127,43 +127,42 @@ lists and pairs — is the carrier vocabulary (`List<T>`, `ElemOf`, `SlotKind`,
 
 **Where each half lives.** Σ is `oracle/sigma.ts` — `scanScope` (the pure lexical-binder
 walk) plus `computeValidSymbols` (position-filtered union of the discovery env's
-`boundSymbols()` and the prefix's own lexical locals). T is `type-layer/query.ts` —
-`getTypeValidCandidates` takes the sampler's Σ candidates and returns the type-valid subset,
-plus the four slot-shape probes (`getSlotArrayKind`, `getSlotElementType`,
-`getSlotAcceptsBareWord`, `getSlotIsStringTyped`). The mask the sampler applies is their
-intersection; neither half is complete alone — Σ knows the symbol is BOUND, T knows it
-FITS.
+`boundSymbols()` and the prefix's own lexical locals). T is `arrival-lsp`
+`getTypeValidCandidates` — it takes the sampler's Σ candidates and returns the type-valid
+subset, plus the slot-shape probes (`getSlotIsArray`, `getSlotElementType`,
+`getSlotAcceptsBareWord`). `typed-scanner.ts` intersects them. Neither half is complete
+alone — Σ knows the symbol is BOUND, T knows it FITS.
 
-**Enforcement sites:** `oracle/sigma.ts` (Σ), `type-layer/query.ts` (T),
-`type-layer/lower.ts`, `type-layer/prelude.ts`, `type-layer/carriers.ts`.
+**Enforcement sites:** `oracle/sigma.ts` (Σ), `arrival-lsp` `service-core.ts` /
+`typed-scanner.ts` (T), `type-layer/schema-to-ts.ts`, `type-layer/prelude.ts`,
+`type-layer/carriers.ts`.
 
 ---
 
 ## 4. THE FOUR READERS
 
-### 4.1 TYPE LENS — the harvested-prelude query lens
+### 4.1 TYPE LENS — harvested prelude + language service
 
-**One compile per query: insert a sentinel at the cursor, balance the mid-edit prefix,
-lower to TS, walk to the enclosing call, then read the slot type and each candidate off ONE
-`TypeChecker`.** Never a compile-per-candidate. The `probeSlot` uncertainty gate — the slot
-type is not `any`/`unknown`/`never`/`undefined` — is the single choke-point that makes all
-axes drops-only (§2.1): an unresolved slot returns the superset-safe no-op for every caller.
-`candidateFits` keeps a candidate when its value OR (used as a sub-call head) its awaited
-RETURN type is assignable, so a list-returning symbol survives at a list slot.
+**One compile per probe: insert a sentinel at the cursor, balance the mid-edit prefix,
+emit to TS, walk to the enclosing call, then read the slot type and each candidate off ONE
+`TypeChecker`.** Never a compile-per-candidate. Constrained-decode T lives on the language
+service (`arrival-lsp` `getTypeValidCandidates`); an unresolved slot returns the
+superset-safe no-op. A candidate is kept when its value OR (used as a sub-call head) its
+awaited RETURN type is assignable, so a list-returning symbol survives at a list slot.
 
 **The type lens is the ONE static reader that carries a real `typescript` dependency, and
-that dependency is quarantined by the emit/index.ts layering rule.** The `LanguageService`
-machinery lives behind `type-layer`; the compiler-facing `emit` subpath stays deliberately
-`typescript`-free so a Contract can carry emit rules without dragging the checker into
-arrival core — the "type-layer anti-pattern" that barrel names and refuses. The lens's other
-face, the `.d.ts` printer (`type-layer/schema-to-ts.ts`), is the harvest reader of
+that dependency is quarantined by the emit/index.ts layering rule.** T and the LanguageService
+live in `arrival-lsp`; diagnose and the harvest printer stay in `type-layer`. The
+compiler-facing `emit` subpath stays `typescript`-free so a Contract can carry emit rules
+without dragging the checker into arrival core — the "type-layer anti-pattern" that barrel
+names and refuses. The `.d.ts` printer (`type-layer/schema-to-ts.ts`) is the harvest reader of
 `§CONTRACT`'s four-reader agreement: it reads the SAME zod schema the runtime membrane
 decodes, so the type it prints and the type the membrane enforces cannot diverge without a
 printer bug.
 
-**Enforcement sites:** `type-layer/query.ts`, `type-layer/schema-to-ts.ts`,
-`type-layer/lower.ts`, `type-layer/prelude.ts`, `type-layer/index.ts`, `emit/index.ts`
-(the layering rule).
+**Enforcement sites:** `arrival-lsp` `service-core.ts` / `typed-scanner.ts`,
+`type-layer/schema-to-ts.ts`, `type-layer/diagnose.ts`, `type-layer/prelude.ts`,
+`type-layer/index.ts`, `emit/index.ts` (the layering rule).
 
 ### 4.2 ORACLE S/Σ — the constrained-decoding structural + scope walk
 
@@ -253,7 +252,7 @@ between two interpretations, not a point assertion.
 | **oracle S/Σ**         | O0 conformance corpus (`src/__tests__/oracle-contract.spec.ts`)                                                   | arrival's structural reader AGREES with the inlined canonical reference reader on every shared structural field, over every prefix of a scout-program corpus (valid / truncated / misnested / mid-token); `feasible()` matches; the resumable session and from-scratch `analyze` agree                                                                                                       |
 | **lineage classifier** | checkpoint law (`provenance/__tests__/lineage-checkpoint.test.ts`)                                                | `fullCone(skeleton, bindings)` equals the eager interpreter's `provOf` stamp (both now read straight off `provenance/lineage.ts`); the golden-prov and conservation law suites read the same `provOf` reader independently. A new `LineageNode` kind without a walker arm is a COMPILE error (`assertNever` exhaustiveness in `walk()`), converting a silent under-cone into a build failure |
 | **static validator**   | the static-validation law suite (`src/__tests__/laws/static-validation.law.test.ts`, `oracle-optout.law.test.ts`) | the six named laws — cascade fusion, suggestion soundness (no door suggested), all-at-once (no crash-on-first), the macro firewall (no false positives), SPECIAL_FORMS no-FP, internal-define letrec\* scoping — plus the dead-branch reachability opt-out knob                                                                                                                              |
-| **type lens**          | the drops-only law (`type-layer/__tests__/query.test.ts`) + the printer suites (`schema-to-ts.test.ts`)           | across a list / string / number / top slot, NO valid-or-uncertain candidate is ever dropped; the `.d.ts` printer reproduces the contract codec (`§CONTRACT`'s four-reader agreement)                                                                                                                                                                                                         |
+| **type lens**          | the drops-only law (`arrival-lsp` `typed-scanner.test.ts`) + the printer suites (`schema-to-ts.test.ts`)          | across a list / string / number / top slot, NO valid-or-uncertain candidate is ever dropped; the `.d.ts` printer reproduces the contract codec (`§CONTRACT`'s four-reader agreement)                                                                                                                                                                                                         |
 
 **The corpus is the single-sourced bridge, and the drift protocol is explicit.** The oracle
 contract and its reference reader are re-declared, not imported (the dependency arrow
@@ -264,5 +263,5 @@ kind without a walker arm is a COMPILE error before it can under-collect a cone 
 
 **Enforcement sites:** `src/__tests__/oracle-contract.spec.ts`,
 `provenance/__tests__/lineage-checkpoint.test.ts`, `src/__tests__/laws/static-validation.law.test.ts`,
-`src/__tests__/laws/oracle-optout.law.test.ts`, `type-layer/__tests__/query.test.ts`,
+`src/__tests__/laws/oracle-optout.law.test.ts`, `arrival-lsp` `typed-scanner.test.ts`,
 `type-layer/__tests__/schema-to-ts.test.ts`.

@@ -1,14 +1,11 @@
 // diagnose — type-hint DIAGNOSE primitive: whole-program semantic diagnostics over a
 // harvested prelude, mapped back to scheme coordinates.
 //
-// Sibling to query.ts (Σ∩T narrow). `createQueryLens` reads TYPES off the checker and
-// IGNORES diagnostics (intentionally-erroring probes); `createDiagnoseLens` reads
-// `getSemanticDiagnostics` off the SAME single-compile host, filters to the current-
-// program region, maps each TS offset through lower.ts's per-statement span-map, and
-// extracts a structured payload (expected/actual/propertyName/candidates/signature).
-//
-// SEPARATE export (not a QueryLens method) so the decode gate's five methods stay a
-// pure type-narrow surface — diagnose is a whole-program probe, a different shape.
+// `createDiagnoseLens` reads `getSemanticDiagnostics` off the single-compile host
+// (compile-host.ts), filters to the current-program region, maps each TS offset
+// through lower.ts's per-statement span-map, and extracts a structured payload
+// (expected/actual/propertyName/candidates/signature). Constrained-decode T
+// (getTypeValidCandidates) lives on arrival-lsp, not here.
 //
 // ADVISORY, NOT BLOCKING: WARNINGS only. Telemetry-first; never gates execution —
 // `diagnose` OBSERVES a throwaway program; never rejects or changes what runs.
@@ -55,9 +52,8 @@ export interface DiagnoseLens {
   ): { unit: DiagnoseUnit; diagnostics: readonly RawMappedDiagnostic[] };
 }
 
-/** Build a diagnose lens over a harvested prelude (the SAME `HarvestedPrelude`
- *  `createQueryLens` consumes). The prelude text is captured once; each `diagnose` builds one
- *  fresh, private `ts.Program` (stateless per call, like every query probe). */
+/** Build a diagnose lens over a harvested prelude. The prelude text is captured
+ *  once; each `diagnose` builds one fresh, private `ts.Program` (stateless per call). */
 export function createDiagnoseLens(harvested: HarvestedPrelude): DiagnoseLens {
   const preludeText = harvested.prelude;
 

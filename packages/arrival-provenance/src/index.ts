@@ -17,8 +17,7 @@
 // a mobx dependency.
 
 export { EvalTrace, Invocation, NodeRecord, type InvocationState } from "./trace.js";
-export { extractDefines, type DefineInfo, type SourceLocation } from "@inhuman.tools/arrival/provenance";
-export { scopeId } from "@inhuman.tools/arrival/provenance";
+export { scopeId, type SourceLocation } from "@inhuman.tools/arrival/provenance";
 export {
   traceToForest,
   type ForestOptions,

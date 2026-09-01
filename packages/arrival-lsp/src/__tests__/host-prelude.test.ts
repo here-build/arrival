@@ -31,6 +31,26 @@ describe("assembleHostPrelude — registry → { prelude, members }", () => {
     expect(prelude).toContain(ENTITIES.trim().split("\n")[1]); // the preamble is included
   });
 
+  it("arrows and overload objects become declare const, tails stay declare function", () => {
+    const { prelude, members } = assembleHostPrelude([
+      ["string-split", "(str: string, delimiter: string) => List<string>"],
+      ["member", "{ <T>(obj: T, list: List<T>): List<T> | false; }"],
+      ["ip/version", "(ip: SchemeIP): SNum"],
+      ["map-tail", "(f: (x: T) => B, xs: List<T>): List<B>"],
+    ]);
+    expect(members).toContain("string-split");
+    expect(prelude).toContain(
+      `declare const ${encodeSchemeIdent("string-split")}: (str: string, delimiter: string) => List<string>;`,
+    );
+    expect(prelude).toContain(
+      `declare const ${encodeSchemeIdent("member")}: { <T>(obj: T, list: List<T>): List<T> | false; };`,
+    );
+    expect(prelude).toContain(`declare function ${encodeSchemeIdent("ip/version")}(ip: SchemeIP): SNum;`);
+    expect(prelude).toContain(
+      `declare function ${encodeSchemeIdent("map-tail")}(f: (x: T) => B, xs: List<T>): List<B>;`,
+    );
+  });
+
   it("a later duplicate name overrides the earlier type", () => {
     const { members } = assembleHostPrelude([
       ["t", "(): SNum"],

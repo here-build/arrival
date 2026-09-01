@@ -35,6 +35,7 @@ export { BASE_ROSTER } from "../env/base-roster.js";
 // identically to a harvested signature), the diagnose lens, and the harvested-prelude
 // assembly-from-signatures path (also reachable via `/type-layer` — additive, granular).
 export { sTagToTsType } from "../type-layer/schema-to-ts.js";
+export { harvestPlaneHost, type HarvestedPlaneHost } from "../type-layer/harvest-plane-host.js";
 export { createDiagnoseLens, type DiagnoseLens, type RawMappedDiagnostic } from "../type-layer/diagnose.js";
 export { assemblePreludeFromSignatures, type HarvestedPrelude } from "../type-layer/prelude.js";
 

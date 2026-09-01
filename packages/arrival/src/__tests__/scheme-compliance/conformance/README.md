@@ -1,8 +1,10 @@
 # Conformance suite — chibi corpus harness
 
 One vitest row per Scheme test form from the chibi-scheme corpora
-(`vendor/chibi-scheme/tests/r7rs-tests.scm`, ~1087 forms; SRFI-1 corpus beside it). This is
-the value layer's coherence law against the spec (F4, `docs/test-suite-architecture.md`).
+(`vendor/chibi-scheme/tests/r7rs-tests.scm`, ~1087 forms; SRFI-1 corpus beside it). The
+submodule gitlink is the full chibi tree (alignment); `pnpm install` sparse-checkouts the
+working tree to those two files. This is the value layer's coherence law against the spec
+(F4, `docs/test-suite-architecture.md`).
 
 ## Dual pass (strict / golden-loose)
 

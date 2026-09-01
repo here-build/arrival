@@ -60,10 +60,11 @@ sugarcoat (pleasing) or sweet (neutral) or scheme (the metal). **sweet is the sh
 both can read without anyone's opinion.
 
 **Every feature gets a home:**
-| rung pair | features |
-|---|---|
+
+| rung pair                         | features                                                                     |
+| --------------------------------- | ---------------------------------------------------------------------------- |
 | **scheme ⟷ sweet** (mechanical δ) | curly-infix · precedence-elision · accessor `[]` · colon-pairs · `%{}` dicts |
-| **sweet ⟷ sugarcoat** (cognitive) | dot-method pipelines · `it` / anaphora · trailing lambdas |
+| **sweet ⟷ sugarcoat** (cognitive) | dot-method pipelines · `it` / anaphora · trailing lambdas                    |
 
 **Why three, not two** (the Rhombus lesson): separating _mechanical-structural_ (sweet) from
 _cognitive-ergonomic_ (sugarcoat) is the frozen-grouping / extensible-operator split. It keeps the
@@ -83,21 +84,23 @@ badly.** Each cited standard is cognitive load we don't carry.
 numeric tower, identifier syntax. Zero delta.
 
 **sweet — SRFI-105 base + a small owned delta.**
-| feature | offload to | owned delta |
-|---|---|---|
-| curly-infix `{a + b}` | **SRFI-105** (the reader) | only the precedence-elision licenses |
-| neoteric `f(x)` | SRFI-105 tier-2 | **REJECT** — collides with `[]` / trailing-lambda (zero-maintenance divergence) |
-| precedence | shape: Swift/Fortress · **declaration: Haskell fixity `infixl/r N`** (or Prolog `op/3`) | the elision-canonizer hook + which ops get a license (arithmetic) |
-| `%{}` dict | glyph: **Elixir** | the reader rule (needed badly) |
-| colon-pairs `name:` | — | own (the kv/kwarg notation; ties to dicts) |
-| accessor `[a][b]`→`caar` | — | own — **MARGINAL**: `(caar x)` already works; cut candidate |
+
+| feature                  | offload to                                                                              | owned delta                                                                     |
+| ------------------------ | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| curly-infix `{a + b}`    | **SRFI-105** (the reader)                                                               | only the precedence-elision licenses                                            |
+| neoteric `f(x)`          | SRFI-105 tier-2                                                                         | **REJECT** — collides with `[]` / trailing-lambda (zero-maintenance divergence) |
+| precedence               | shape: Swift/Fortress · **declaration: Haskell fixity `infixl/r N`** (or Prolog `op/3`) | the elision-canonizer hook + which ops get a license (arithmetic)               |
+| `%{}` dict               | glyph: **Elixir**                                                                       | the reader rule (needed badly)                                                  |
+| colon-pairs `name:`      | —                                                                                       | own (the kv/kwarg notation; ties to dicts)                                      |
+| accessor `[a][b]`→`caar` | —                                                                                       | own — **MARGINAL**: `(caar x)` already works; cut candidate                     |
 
 **sugarcoat — the cognitive layer; concepts borrowed, no reusable standard.**
-| feature | concept from | owned delta |
-|---|---|---|
-| `it` anaphora | Graham `aif` / Kotlin `it` | reader form only — forced-by-anaphora, minimal |
-| trailing lambda | Ruby/Kotlin/Swift blocks | reader form only |
-| dot-method pipeline | (none) | **OWN — the heaviest delta**; sugarcoat's reason to exist; confirm it earns its maintenance |
+
+| feature             | concept from               | owned delta                                                                                 |
+| ------------------- | -------------------------- | ------------------------------------------------------------------------------------------- |
+| `it` anaphora       | Graham `aif` / Kotlin `it` | reader form only — forced-by-anaphora, minimal                                              |
+| trailing lambda     | Ruby/Kotlin/Swift blocks   | reader form only                                                                            |
+| dot-method pipeline | (none)                     | **OWN — the heaviest delta**; sugarcoat's reason to exist; confirm it earns its maintenance |
 
 **Meta-level offloads (the spec and the machinery itself):**
 
@@ -204,12 +207,13 @@ mapping is tight, and the divergences are the design surface.
   canonical silent-reinterpretation bug.)
 
 **Diverged (each a live decision, not an accident):**
-| # | sweet | arrival-sugarcoat | status |
-|---|---|---|---|
-| **DV1** | curly-infix is **precedence-FREE**; mixed ops → undefined `$nfx$`, deferred to the app | precedence = **elision licenses** in the δ-canonizer | ✅ decided 2026-06-15 — Swift's partial-order shape via our quotient lens; arithmetic + type-lens license, boolean licenseless; see §5.2 |
-| **DV2** | **no `sweet-write`** — read-only, can't canonically print (the adoption killer) | the **bifunctor render** (`render∘⟦⟧ = id`) is the whole thesis | ✅ our structural advantage — _we are the sweet that round-trips_ |
-| **DV3** | stops at infix + neoteric + indentation | adds **method-dot, colon-pairs, dict-sigil** | the net-new surface this doc scopes |
-| **DV4** | targets **human** adoption (stalled on cultural inertia) | targets an internal **two-face (human ⇄ AI)** bifunctor | ✅ adoption is moot; payoff = machine-verifiable wins (purity, round-trip, replay) |
+
+| #       | sweet                                                                                  | arrival-sugarcoat                                               | status                                                                                                                                   |
+| ------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **DV1** | curly-infix is **precedence-FREE**; mixed ops → undefined `$nfx$`, deferred to the app | precedence = **elision licenses** in the δ-canonizer            | ✅ decided 2026-06-15 — Swift's partial-order shape via our quotient lens; arithmetic + type-lens license, boolean licenseless; see §5.2 |
+| **DV2** | **no `sweet-write`** — read-only, can't canonically print (the adoption killer)        | the **bifunctor render** (`render∘⟦⟧ = id`) is the whole thesis | ✅ our structural advantage — _we are the sweet that round-trips_                                                                        |
+| **DV3** | stops at infix + neoteric + indentation                                                | adds **method-dot, colon-pairs, dict-sigil**                    | the net-new surface this doc scopes                                                                                                      |
+| **DV4** | targets **human** adoption (stalled on cultural inertia)                               | targets an internal **two-face (human ⇄ AI)** bifunctor         | ✅ adoption is moot; payoff = machine-verifiable wins (purity, round-trip, replay)                                                       |
 
 **The isomorphism's punchline:** the _constraints_ are identical (generic · homoiconic · pre-macro ·
 backwards-compatible); only the _targets_ differ. DV2 is the one that matters most — sweet died in

@@ -1,6 +1,6 @@
 {
   "name": "@inhuman.tools/arrival-serializer",
-  "version": "0.9.0",
+  "version": "0.9.7",
   "description": "S-expression serializer for Arrival - converts JavaScript objects to Scheme/Lisp representations",
   "keywords": [
     "arrival",
@@ -60,10 +60,10 @@
     "@here.build/eslint-configs": "0.9.0",
     "@here.build/tsconfig": "0.9.0",
     "@types/node": "24.0.0",
-    "eslint": "9.39.2",
-    "globals": "17.3.0",
+    "eslint": "9.39.5",
+    "globals": "17.12.0",
     "prettier": "3.8.1",
-    "typescript": "6.0.2",
-    "vitest": "4.1.0"
+    "typescript": "6.0.3",
+    "vitest": "4.1.11"
   }
 }

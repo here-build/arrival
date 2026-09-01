@@ -16,7 +16,7 @@ pnpm build
 pnpm test
 ```
 
-`--recurse-submodules` is required for the Chibi-scheme R7RS conformance corpus. A clone without it still builds; those tests skip.
+`--recurse-submodules` is required for the Chibi-scheme R7RS conformance corpus (gitlink-pinned; `pnpm install` sparse-checkouts the working tree to the two files the harness reads). A clone without it still builds; those tests skip.
 
 This repository is a pnpm workspace of `@inhuman.tools/arrival*` packages. `pnpm build` / `pnpm test` / `pnpm typecheck` / `pnpm lint` / `pnpm format:check` run the turbo pipeline (and Prettier) across them. CI on `main` and pull requests runs format, lint, typecheck, and test against a frozen lockfile.
 

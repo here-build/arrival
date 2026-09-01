@@ -4,7 +4,7 @@
 // degradation.ts's "doors" mode is the only mode now), which the static pass reports
 // as the causal "provide `greeting`" diagnostic (bucket c, missing-configuration).
 import { EnvCapability } from "@inhuman.tools/arrival/capability";
-import * as z from "zod";
+import { z } from "zod";
 
 export const configGreetCapability = EnvCapability.define("fixture/config-greet", {
   configuration: {
