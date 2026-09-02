@@ -304,7 +304,8 @@ consumers skip the pass for such programs (the runtime doors remain the backstop
 authoritative list): `/reflect-internals`, `/lsp-internals`, `/host-internals`, `/capability`,
 `/capabilities`, `/capabilities/overridable`, `/capabilities/schema`,
 `/resources`, `/emit`, `/schema-tag`, `/attestation`, `/provenance`, `/provenance/store`,
-`/type-layer`. `(require …)` lives in `@inhuman.tools/arrival-modules`.
+`/type-layer`. `/grammar.ebnf` is the reader eBNF (raw text, not JS). `(require …)` lives in
+`@inhuman.tools/arrival-modules`.
 
 **Decomposed processing** — for cases the three declared doors (`capabilities` / `config` /
 `scope`) don't cover: the self-hosted `Vocabulary` a capability tuple builds into is memoized by

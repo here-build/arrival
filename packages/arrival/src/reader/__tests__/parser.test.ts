@@ -52,6 +52,8 @@ describe("Parser — atoms", () => {
   it("reads booleans", async () => {
     expect(await readOne("#t")).toBe("#t");
     expect(await readOne("#f")).toBe("#f");
+    expect(await readOne("#true")).toBe("#t");
+    expect(await readOne("#false")).toBe("#f");
   });
 });
 
@@ -70,6 +72,12 @@ describe("Parser — lists", () => {
 
   it("reads a dotted pair", async () => {
     expect(await readOne("(a . b)")).toBe("(a . b)");
+  });
+
+  it("doors a second dot and a dotted hash-vector", async () => {
+    await expect(readOne("(a . b . c)")).rejects.toMatchObject({ code: "E-DOT-EXTRA-ELEMENT" });
+    await expect(readOne("#(a . b)")).rejects.toMatchObject({ code: "E-LITERAL-DOT" });
+    await expect(readOne("#u8(1 . 2)")).rejects.toMatchObject({ code: "E-LITERAL-DOT" });
   });
 });
 

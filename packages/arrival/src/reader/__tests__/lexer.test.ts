@@ -32,6 +32,8 @@ describe("Lexer — atoms & numbers", () => {
     { name: "negative integer", input: "-7", tokens: ["-7"] },
     { name: "whitespace-separated atoms", input: "a b c", tokens: ["a", "b", "c"] },
     { name: "booleans", input: "#t #f", tokens: ["#t", "#f"] },
+    { name: "boolean long spellings", input: "#true #false", tokens: ["#true", "#false"] },
+    { name: "boolean long spelling in a list", input: "(#true)", tokens: ["(", "#true", ")"] },
     { name: "char literal", input: "#\\a", tokens: ["#\\a"] },
   ])("tokenizes $name", ({ input, tokens }) => {
     expect(lex(input)).toEqual(tokens);

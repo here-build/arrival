@@ -15,8 +15,9 @@
  * LITERAL GRAMMAR: `[…]` vector / `{…}` dict inline literals (§LITERALS), their
  * position-scoped comma/colon separators (§COMMA), the suffix-keyword flip (§SUFFIX-FLIP),
  * the curly-infix ban (§INFIX), and the E-DICT-* / E-BRACKET-* / E-LITERAL-* door taxonomy
- * (§ERRORS) are the model of `docs/grammar.md`. Bodies here point there rather than restate
- * it; E-DICT-INFIX-BANNED (§INFIX) is detected in `make_dict_literal`.
+ * (§ERRORS) are the model of `docs/grammar.md`. Formal productions:
+ * `grammar.ebnf` (`@inhuman.tools/arrival/grammar.ebnf`). Bodies here point there
+ * rather than restate it; E-DICT-INFIX-BANNED (§INFIX) is detected in `make_dict_literal`.
  *
  * NESTING CAP: `_enterNesting` bounds native-stack descent so pathological input throws
  * `ParseError`, not a host `RangeError` (see `maxNestingDepth`). STRICT PAIRING: a close
@@ -282,7 +283,7 @@ export class Parser {
     return token === "}";
   }
 
-  async read_list(openLoc?: SourceLocation): Promise<AListAlike> {
+  async read_list(openLoc?: SourceLocation, { dotted = true }: { dotted?: boolean } = {}): Promise<AListAlike> {
     // ACCUMULATE-THEN-CONSTRUCT (readonly-slot contract): collect the elements (+ each cell's
     // location) left-to-right, then build the spine in ONE right fold — no in-place tail
     // append. The improper dot-tail seeds the fold. An element may be a DatumReference
@@ -308,8 +309,15 @@ export class Parser {
       // Capture location BEFORE reading the object
       const loc = this._getLocation();
       if (token === "." && items.length > 0) {
+        if (!dotted) {
+          throw new ParseError("'.' not allowed in a vector", loc ?? undefined, "E-LITERAL-DOT");
+        }
+        if (dot) throw new ParseError("more than one element after dot", loc ?? undefined, "E-DOT-EXTRA-ELEMENT");
         this.skip();
         tail = await this._read_object();
+        if (tail === eof) {
+          throw new Unterminated("Expecting expression, eof found");
+        }
         dot = true;
       } else {
         if (dot) throw new ParseError("more than one element after dot", loc ?? undefined, "E-DOT-EXTRA-ELEMENT");
@@ -555,7 +563,7 @@ export class Parser {
       if (is_vector_literal(token)) {
         this.skip();
         this._enterNesting(")");
-        const list = await this.read_list();
+        const list = await this.read_list(undefined, { dotted: false });
         // R7RS literals are immutable — AVector itself has no mutation surface
         // (vector-set!/fill! are notImplemented stubs), so no freeze is needed. Shallow
         // cdr-walk collects elements as the honest `SchemeValue[]` the vector holds —
@@ -570,7 +578,7 @@ export class Parser {
       if (is_bytevector_literal(token)) {
         this.skip();
         this._enterNesting(")");
-        const list = await this.read_list();
+        const list = await this.read_list(undefined, { dotted: false });
         // Immutable, same rationale as the vector literal case above.
         if (list instanceof ANil) {
           return new ABytevector(new Uint8Array(0), EMPTY_PROVENANCE, loc);

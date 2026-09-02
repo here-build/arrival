@@ -69,4 +69,5 @@ export const parsable_contants = {
   "#void": theVoid,
 };
 export const directives = ["#!fold-case", "#!no-fold-case"];
-export const hash_literals = ["#t", "#f"];
+// Longest-first in Lexer.rules so `#true`/`#false` win over `#t`/`#f`.
+export const hash_literals = ["#true", "#false", "#t", "#f"];

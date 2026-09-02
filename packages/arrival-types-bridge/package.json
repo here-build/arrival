@@ -1,6 +1,6 @@
 {
   "name": "@inhuman.tools/arrival-types-bridge",
-  "version": "0.9.7",
+  "version": "0.9.8",
   "description": "Scheme→virtual-TypeScript type-lens emitter (emitTypes, ident serde) and the parse/desugar/scope front it runs on. Shared by the editor lens and the Mercury compiler.",
   "keywords": [
     "arrival",

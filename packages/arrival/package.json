@@ -1,6 +1,6 @@
 {
   "name": "@inhuman.tools/arrival",
-  "version": "0.9.7",
+  "version": "0.9.8",
   "description": "R7RS-subset Scheme interpreter for AI-agent constraint-based execution — transparent provenance, capability sandbox, JS membrane",
   "keywords": [
     "scheme",

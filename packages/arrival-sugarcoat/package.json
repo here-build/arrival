@@ -1,6 +1,6 @@
 {
   "name": "@inhuman.tools/arrival-sugarcoat",
-  "version": "0.9.7",
+  "version": "0.9.8",
   "description": "Sugarcoat lens for Arrival — Scheme↔sugarcoat source rendering (indentation I-expressions, curly-infix, => lambda, method-dot, accessor subscripts, colon kwargs, at-expressions). Leaf relative to the interpreter; parseSexprs lives in @inhuman.tools/arrival-syntax. Consumed by the studio editor, codemirror, the chain-view compiler, and provenance rendering.",
   "keywords": [
     "arrival",

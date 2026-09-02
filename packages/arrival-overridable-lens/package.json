@@ -1,6 +1,6 @@
 {
   "name": "@inhuman.tools/arrival-overridable-lens",
-  "version": "0.9.7",
+  "version": "0.9.8",
   "description": "Static (pre-eval) substrate for reading a program's `(define/overridable …)` surface: the canonical top-level parse-tree walk plus `foldSchemaTag`, the pre-eval dual of core's post-eval `tagToJsonSchema`. Consumed one-way by the out-of-core overridable lenses — studio form fields, the API `:input` schema, the CLI argv mapper.",
   "keywords": [
     "arrival",

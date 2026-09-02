@@ -4,12 +4,19 @@
 > speak R7RS Scheme faithfully, and add a small, named set of **compile-erased
 > supersets** where the platform's own grain leaves a symmetry unfinished: `[…]` and
 > `{…}` collection literals, a position-scoped comma separator, a suffix-keyword flip,
-> bracket bindings and bracket clauses for the let/cond families, and a member-access
-> protocol. Every one lowers to plain R7RS with zero non-spec residue — the surface is
-> wider, the emitted meaning is stock Scheme. This document says what each superset IS,
-> where its grammar lives, and why the door it closes is the only globally consistent
-> shape. It is the model; the `*.spec.ts` files under
-> `src/reader/__tests__/polyglot/` are its executable pins.
+> bracket bindings and bracket clauses for the let/cond families, a member-access
+> protocol, and the serializer prefix `#attachment`. Every one lowers to plain R7RS with
+> zero non-spec residue — the surface is wider, the emitted meaning is stock Scheme. This
+> document says what each superset IS, where its grammar lives, and why the door it
+> closes is the only globally consistent shape. It is the model;
+> [`grammar.ebnf`](../src/reader/grammar.ebnf) (`@inhuman.tools/arrival/grammar.ebnf`) is
+> the formal productions of that model (R7RS §7.1 plus the supersets below); the
+> `*.spec.ts` / `*.test.ts` files under `src/reader/__tests__/polyglot/` and
+> `src/reader/__tests__/grammar-ebnf/` are its executable pins. Parser success on a
+> string and eBNF rejection of that string is a bug in the eBNF — unless the Parser is
+> a silent-loss quirk (a second `.` in a list, a dotted `#(` / `#u8(`), which is a
+> Parser door. The eBNF is the structural membership floor; doors teach why a
+> CFG-legal string is still not a program.
 
 Section anchors are CAPS so code comments can cite `docs/grammar.md §<ANCHOR>`. Each
 section closes with its enforcement sites (files, no line numbers — those rot). Every
@@ -84,7 +91,8 @@ Dict keys are read-time-static (`:keyword` / `"string"`, both folding to one str
 or an `(unquote …)` form (a quasiquote-substituted key, validated post-substitution).
 
 **Enforcement sites:** `reader/dict-grammar.ts`, `reader/Parser.ts`,
-`values/primitives/ADict.ts`, `values/primitives/AVector.ts`.
+`values/primitives/ADict.ts`, `values/primitives/AVector.ts`,
+[`grammar.ebnf`](../src/reader/grammar.ebnf) (`vec-lit` / `dict-lit`).
 
 ---
 
@@ -337,7 +345,8 @@ stay free to teach; the specs match ONLY the class.
 | `E-DICT-BAD-KEY`              | `{…}` key is not a `:keyword` / `"string"` / trailing-colon `key:` / unquote form (read time), or a substituted key folded to a non-string (eval time) |
 | `E-DICT-DUP-KEY`              | duplicate `{…}` key (read-time static, or post-quasiquote-substitution)                                                                                |
 | `E-DICT-INFIX-BANNED`         | `{…}` is infix-shaped (`{a * b}`) — the SRFI-105 curly-infix ban (§INFIX); steers to the prefix `(op …)` form                                          |
-| `E-LITERAL-DOT`               | `.` inside a `[…]`/`{…}` literal                                                                                                                       |
+| `E-LITERAL-DOT`               | `.` inside a `[…]`/`{…}` literal, or a dotted tail on `#(` / `#u8(`                                                                                     |
+| `E-DOT-EXTRA-ELEMENT`         | more than one datum after `.` in a paren list (`(a . b c)`, `(a . b . c)`)                                                                              |
 | `E-EXPECTING-DATUM`           | quote-family prefix (`'`, `` ` ``, `,`, `,@`) dangling against a close delimiter                                                                       |
 | `E-UNTERMINATED`              | EOF inside an open string/list/literal                                                                                                                 |
 | `E-BRACKET-MISMATCH`          | close delimiter does not pair its opener (`(a]`)                                                                                                       |

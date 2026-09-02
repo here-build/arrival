@@ -1,6 +1,6 @@
 {
   "name": "@inhuman.tools/arrival-serializer",
-  "version": "0.9.7",
+  "version": "0.9.8",
   "description": "S-expression serializer for Arrival - converts JavaScript objects to Scheme/Lisp representations",
   "keywords": [
     "arrival",
