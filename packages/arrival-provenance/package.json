@@ -1,6 +1,6 @@
 {
   "name": "@inhuman.tools/arrival-provenance",
-  "version": "0.9.8",
+  "version": "0.9.9",
   "description": "The trace-capture substrate (re-exported from @inhuman.tools/arrival's `/provenance` subpath) plus the full render-model analysis stack — forest, statechart, region tree, flow graph, reverse-chain slicer — owned natively here (provenance analysis-stack relocation; core keeps only the capture spine + static wireframe plane). `./reflect` is the query layer over a finished run (ResultHandle + why/where/how/dag/blast + arrival/reflect capability). The one non-passthrough export is EvalTrace: this package's is the mobx-reactive ObservableEvalTrace, kept here so studio/UI consumers keep byte-identical reactive semantics without core taking on a mobx dependency.",
   "keywords": [
     "arrival",

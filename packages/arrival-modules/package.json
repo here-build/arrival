@@ -1,6 +1,6 @@
 {
   "name": "@inhuman.tools/arrival-modules",
-  "version": "0.9.8",
+  "version": "0.9.9",
   "description": "(require …) for Arrival — the loader capability, path jail, and builtin .scm/.json/.ndjson/.txt resolvers. File-type extension packs export from ./yaml, ./toml, and ./handlebars (plus ./handlebars/runtime); their parsers are optional peerDependencies.",
   "keywords": [
     "arrival",

@@ -1,6 +1,6 @@
 {
   "name": "@inhuman.tools/arrival-syntax",
-  "version": "0.9.8",
+  "version": "0.9.9",
   "description": "Span-preserving Scheme s-expression forest for Arrival — parseSexprs, not the evaluator reader",
   "keywords": [
     "arrival",

@@ -1,6 +1,6 @@
 {
   "name": "@inhuman.tools/arrival-codemirror",
-  "version": "0.9.8",
+  "version": "0.9.9",
   "description": "CodeMirror 6 for arrival Scheme (Scheme + sugarcoat). Language, structural editing, ghost, param hints, and full IDE surface (lint/hover/completion/goto) over a SchemeIdeBackend seam.",
   "license": "MIT",
   "author": "here.build",

@@ -1,6 +1,6 @@
 {
   "name": "@inhuman.tools/arrival-internals-types-prelude",
-  "version": "0.9.8",
+  "version": "0.9.9",
   "description": "The TypeScript type vocabulary for arrival builtins — the PRE prelude plus per-builtin ambient `declare function` leaves (encodeSchemeIdent names: `car`, `string$dash$append`, `null$qmark$`, …) over `sexpr`, `List`/`Tuple`, and list/string/math ops. The shared type surface both the interactive LSP and the batch typefacts extractor stand on; loaded via fs (Node) or a vite-inlined `?raw` glob (browser).",
   "homepage": "https://github.com/here-build/arrival#readme",
   "bugs": {
