@@ -35,6 +35,27 @@ describe("Lexer — atoms & numbers", () => {
     { name: "boolean long spellings", input: "#true #false", tokens: ["#true", "#false"] },
     { name: "boolean long spelling in a list", input: "(#true)", tokens: ["(", "#true", ")"] },
     { name: "char literal", input: "#\\a", tokens: ["#\\a"] },
+    { name: "apostrophe char", input: "#\\'", tokens: ["#\\'"] },
+    { name: "double-quote char", input: '#\\"', tokens: ['#\\"'] },
+  ])("tokenizes $name", ({ input, tokens }) => {
+    expect(lex(input)).toEqual(tokens);
+  });
+});
+
+describe("Lexer — character payloads that are also delimiters", () => {
+  it.each([
+    {
+      name: "apostrophe in a list (must not become a quote)",
+      input: "(char=? x #\\')",
+      tokens: ["(", "char=?", "x", "#\\'", ")"],
+    },
+    {
+      name: "double-quote in a list (must not open a string)",
+      input: '(char=? x #\\")',
+      tokens: ["(", "char=?", "x", '#\\"', ")"],
+    },
+    { name: "comma char", input: "#\\,", tokens: ["#\\,"] },
+    { name: "open-paren char", input: "#\\(", tokens: ["#\\("] },
   ])("tokenizes $name", ({ input, tokens }) => {
     expect(lex(input)).toEqual(tokens);
   });

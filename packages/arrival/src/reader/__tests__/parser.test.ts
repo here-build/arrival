@@ -18,6 +18,7 @@ import { AVector } from "../../values/primitives/AVector.js";
 import { APair } from "../../values/primitives/APair.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { AString } from "../../values/primitives/AString.js";
+import { ACharacter } from "../../values/primitives/ACharacter.js";
 import { ADict } from "../../values/primitives/ADict.js";
 import { Parser } from "../Parser.js";
 import type { SchemeValue } from "../../values/types.js";
@@ -54,6 +55,21 @@ describe("Parser — atoms", () => {
     expect(await readOne("#f")).toBe("#f");
     expect(await readOne("#true")).toBe("#t");
     expect(await readOne("#false")).toBe("#f");
+  });
+
+  it("reads #\\' as the apostrophe character, not a quote", async () => {
+    expect(await readOne("#\\'")).toBe("#\\'");
+  });
+
+  it('reads #\\" as the double-quote character, not a string opener', async () => {
+    expect(await readOne('#\\"')).toBe('#\\"');
+  });
+
+  it("reads #\\' inside a list as a character, not a quote", async () => {
+    const [form] = await readAll("(char=? x #\\')");
+    const items = (form as APair<any, any>).to_array(false);
+    expect(items[2]).toBeInstanceOf(ACharacter);
+    expect((items[2] as ACharacter).valueOf()).toBe("'");
   });
 });
 

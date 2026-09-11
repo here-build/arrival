@@ -141,9 +141,9 @@ export class Lexer {
     // characters
     [/#/, null, /\\/, null, Lexer.character],
     [/\\/, /#/, /\s/, Lexer.character, Lexer.character],
-    // `,` is in the boundary class (see `boundary` above), so `#\,` needs the same
-    // escaped-delimiter continuation as bracket chars, else `\` completes the token early.
-    [/\\/, /#/, /[()[\]{},]/, Lexer.character, Lexer.character],
+    // Boundary chars (and `"`) as `#\` payload must not terminate at `\`.
+    // Else `#\'` lexes as `#\` plus a quote with no datum.
+    [/\\/, /#/, /[()[\]{}'",]/, Lexer.character, Lexer.character],
     [/\s/, /\\/, null, Lexer.character, null],
     [/\S/, null, Lexer.boundary, Lexer.character, null],
 

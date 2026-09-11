@@ -88,6 +88,10 @@ export const ACCEPT: ReadonlyArray<{ readonly name: string; readonly input: stri
   { name: "char-hex", input: "#\\x41" },
   { name: "char-paren", input: "#\\(" },
   { name: "char-semicolon", input: "#\\;" },
+  { name: "char-apostrophe", input: "#\\'" },
+  { name: "char-dquote", input: '#\\"' },
+  { name: "char-apostrophe-in-list", input: "(char=? x #\\')" },
+  { name: "char-dquote-in-list", input: '(char=? x #\\")' },
   { name: "char-paren-then-run", input: "#\\(x" },
 
   { name: "bar-simple", input: "|foo|" },
