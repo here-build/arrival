@@ -45,16 +45,15 @@ binary translation, runs as-if-native — not the Stone.
 
 ## THE CALLABLE LENS — the reverse membrane completes the bifunctor
 
-**A borrowed JS function crosses into Scheme as a genuine callable (V's ruling,
-2026-07-24, verbatim): "host fn crosses into scheme as a callable; when scheme calls
-it, args cross scheme→js, result crosses js→scheme. SAME logic for functions RETURNED
-from symbol.rosetta impls."** This retired the void-and-warn tolerance the function
-row carried through the 2026-07-23 binary-membrane restructure (§INBOUND) — that
-ruling settled every OTHER shape but left the bare-function row a documented,
-unresolved fork (lens-to-callable vs door); this is the fork resolved. A host function
+**A borrowed JS function crosses into Scheme as a genuine callable.** When Scheme
+calls it, args cross scheme→js, the result crosses js→scheme. The same logic applies
+to functions returned from `symbol.rosetta` impls. The alternative — void-and-warn
+on the bare-function row — left a documented fork (lens-to-callable vs door); the
+lens is the only globally consistent rule, because a door would make host functions
+a second interpreter the provenance reading cannot enter (P1). A host function
 reaching the generic membrane (`jsToScheme`, `boxing.ts`'s `fromJs`) mints
 (or reuses, per-run) an `ARosettaProcedure` whose apply term IS the reverse membrane:
-scheme args cross scheme→js (default-options `schemeToJs`), the host fn runs, and its
+scheme args cross scheme→js (default-options `toJS`), the host fn runs, and its
 result — awaited first if it's a `Promise` — crosses js→scheme under the CALLING
 invocation's run (`ACallable.ts`'s `hostFnToCallable`). This is the _inbound_ mirror of
 `hostProjectionOf` (§REGION), which already gives the _outbound_ leg (a scheme callable
@@ -91,7 +90,7 @@ A TYPED output slot (a real codec, not `z.dynamic`) has no function codec and st
 out of scope — a fn-returning verb declares `z.dynamic` output (or a future
 `z.callback` codec, not yet built).
 
-**`undefined` is a LENS, not a warn (V's ruling, 2026-07-23).** It has no faithful
+**`undefined` is a LENS, not a warn.** It has no faithful
 Scheme representation any more than `null` does, but it IS a familiar host concept —
 the other host bottom, alongside `null → nil` (§HYGIENE/§INBOUND never collapse the
 two). It materializes to `#void` silently, same as any other declared crossing.
@@ -112,22 +111,22 @@ per-parameter vs default-options), never in whether a function crosses at all.
 
 **Enforcement sites:** `membrane/boxing.ts`, `membrane/rosetta.ts` (`INBOUND_CLAIMS`
 function row), `membrane/membrane.ts`, `values/primitives/ACallable.ts`
-(`hostFnToCallable`, `originalCallableOf`), `common/scheme-zod.ts` (`procedure`),
+(`hostFnToCallable`, `originalCallableOf`), `common/scheme-zod/` (`procedure`),
 `common/symbols/rosetta.ts`.
 
 ---
 
 ## BIFUNCTOR — total conversion, round-trip on owned values
 
-**`schemeToJs` and `jsToScheme` are the two total conversions of one bifunctor:
-`schemeToJs ∘ jsToScheme = id` and `jsToScheme ∘ schemeToJs = id`, each on the values
+**`toJS` and `jsToScheme` are the two total conversions of one bifunctor:
+`toJS ∘ jsToScheme = id` and `jsToScheme ∘ toJS = id`, each on the values
 its own side owns.** This is the mechanical form of P4's "one representation per side":
 because the conversion is total and uniform in both directions for every type, a boxed
 value inside and a plain value outside are the same datum read by the two interpreters,
 never two representations competing.
 
 Totality is carried at the type level, not just at runtime. `jsToScheme<T>` returns
-`AWrap<T>` and `schemeToJs<T>` returns `AUnwrap<T>` (`values/types.ts`) — conditional
+`AWrap<T>` and `toJS<T>` returns `AUnwrap<T>` (`values/types.ts`) — conditional
 types that mirror the runtime routers arm-for-arm, so a new crossing arm that the type
 forgets stops the type from telling the truth (P3), a compile-time debt not a silent
 one. The two public wrappers each perform the _one_ sanctioned narrowing in the
@@ -187,7 +186,7 @@ symbol and a host `bigint` have no lens at all and door (§INBOUND).
 (`Object.freeze`) on the _first Scheme read_ of its wrapper, so a `pure` rosetta — one
 that declares it only transforms its inputs and forwards their provenance — _physically
 cannot_ mutate what it borrowed: prevention by construction. The freeze is idempotent
-and lazy (a borrowed array's whole contract is that `.length` and `schemeToJs` never
+and lazy (a borrowed array's whole contract is that `.length` and `toJS` never
 touch elements, so an eager scan would pay the cost the class exists to avoid), and
 unconditional — there is no per-run opt-out. The contract has one home here; its code
 sites are pointers: `AJSArray.freezeSource`, `AJSObject.freezeSource`, and
@@ -257,9 +256,10 @@ outbound dispatch lands on _our_ classes (the term lives on the receiver, P7), i
 dispatch faces JS shapes with no receiver yet — so each claim pairs a predicate with a
 constructor, and the router is the fold.
 
-**THE BINARY MEMBRANE (V's ruling, 2026-07-23, verbatim): "the js > scheme membrane is
-pretty simple — it's always either having the proper lens or not, all the concepts are
-either familiar or explicitly incompatible."** `INBOUND_CLAIMS` is the concatenation of
+**THE BINARY MEMBRANE.** The JS→Scheme crossing is binary: a shape either has a proper
+lens, or it does not. Concepts are either familiar or explicitly incompatible. A middle
+tier that warns and degrades invents a third representation the rest of the membrane
+cannot agree with. `INBOUND_CLAIMS` is the concatenation of
 three phases — `OWNED_ARTIFACT_CLAIMS` then `FOREIGN_LENS_CLAIMS` then
 `INCOMPATIBILITY_DOOR_CLAIMS` — and the phase boundary is itself semantic (phase 1 runs
 to completion before phase 2, phase 2 before phase 3's catch-all doors):
@@ -293,8 +293,7 @@ to completion before phase 2, phase 2 before phase 3's catch-all doors):
    own-class stamp stays phase 1's opaque handle); scalars to the
    `boxing.ts` boxer table (`bigint` deliberately excluded — it is phase 3's door,
    not a silent AExact mint); a REGISTERED symbol to the keyword `:x`; the DECLARED
-   raw-identity lane (binary FFI); and — the row the 2026-07-23 ruling left open,
-   RESOLVED 2026-07-24 (§CALLABLE-LENS) — a bare host function mints/reuses a genuine
+   raw-identity lane (binary FFI); and a bare host function, which mints/reuses a genuine
    scheme-callable `ARosettaProcedure` (the reverse-membrane lens), completing the
    callable bifunctor `hostProjectionOf` already gave the other direction.
 3. **PHASE 3 — the incompatibility door.** Reached only when phases 1-2 both miss.
@@ -374,7 +373,7 @@ no reader hunts them:
   scope's cache (`membraneSlot`);
 - `membrane/rosetta.ts` **hands the pinned scope's cache in** (`egressAValue`) and keys
   the callable wrapper (`callableToHostFn`, by `EgressMode`);
-- `common/scheme-zod.ts` keys the _typed_ callable wrapper (`z.procedure`, by
+- `common/scheme-zod/` keys the _typed_ callable wrapper (`z.procedure`, by
   `"typed"`) into the same scope cache.
 
 Why scope-bound and not (box, mode)-forever: a forever cache would resurrect a proxy
@@ -412,7 +411,7 @@ registers the value's provenance before `jsToScheme` materializes it, so the tra
 records what crossed even as the value projects lazily.
 
 **Enforcement sites:** `values/types.ts`, `membrane/egress-proxy.ts`,
-`membrane/region-scope.ts`, `membrane/rosetta.ts`, `common/scheme-zod.ts`,
+`membrane/region-scope.ts`, `membrane/rosetta.ts`, `common/scheme-zod/`,
 `values/primitives/pending-entry.ts`.
 
 ---
@@ -451,7 +450,7 @@ seals nothing.
 
 ## REGION — reverse-crossed callables are bound to their exporting invocation
 
-A reverse lambda — a Scheme callable handed to host JS via `schemeToJs`'s `ACallable`
+A reverse lambda — a Scheme callable handed to host JS via `toJS`'s `ACallable`
 branch or `z.procedure`'s typed decode — carries the ability to _re-enter_ the two-layer
 execution. P6 requires it to re-enter inside a real frame; the mechanism is the
 `RegionScope` token.
@@ -488,7 +487,7 @@ _absence_ of a real scope (a trace/display projection, or a unit test calling
 
 **Why an ambient holder.** `z.procedure`'s decode is a plain zod-codec transform with
 no side channel for "which invocation is this a reverse crossing of." Rather than invent
-two plumbing conventions, both the codec path and `schemeToJs` read the SAME
+two plumbing conventions, both the codec path and `toJS` read the SAME
 module-local "current region scope" — the module-holder idiom `dynamic-call-site.ts`
 already uses, safe under single-threaded JS with save/restore around the owning call. A
 second evaluation of `membrane/region-scope.ts` in the same isolate throws
@@ -529,7 +528,7 @@ walk container element schemas; until then, a `z.dynamic` callable arriving insi
 container is undetected by this door (audit D2).
 
 **Enforcement sites:** `membrane/region-scope.ts`, `membrane/rosetta.ts`,
-`common/scheme-zod.ts`, `common/symbols/rosetta.ts`.
+`common/scheme-zod/`, `common/symbols/rosetta.ts`.
 
 ---
 
@@ -542,7 +541,7 @@ doors, by crossing:
 | Door                                            | Fires when                                                                                                                                                                                         | Class                                         |
 | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
 | Redundant crossing (strict one-way)             | a raw JS value reaches `toJS` — the caller is confused about which side it stands on                                                                                                               | `RedundantCrossingError`                      |
-| Unrecognized (P5 terminal)                      | `schemeToJs` reaches a boxed shape with no `arrival/toJS` branch — a silent return would leak internal representation                                                                              | `UnrecognizedCrossingError`                   |
+| Unrecognized (P5 terminal)                      | `toJS` reaches a boxed shape with no `arrival/toJS` branch — a silent return would leak internal representation                                                                                    | `UnrecognizedCrossingError`                   |
 | Async                                           | a _bare_ `Promise` reaches `jsToScheme` directly (every sanctioned path settles first; a Promise inside a structure settles lazily)                                                                | `AsyncCrossingError`                          |
 | No lens (the binary membrane, §INBOUND phase 3) | a unique JS symbol, or an unbranded/exotic class instance, has no defined crossing into the algebra — names its cure (register the symbol; brand the class `@arrival.private`, or hand plain data) | `NoLensError`                                 |
 | Region escape / incomplete                      | a reverse lambda outlives its invocation, or an invocation returns with calls in flight (§REGION)                                                                                                  | `RegionEscapeError` / `RegionIncompleteError` |
@@ -554,7 +553,7 @@ doors, by crossing:
 same-class host `Error`: message preserved, original stack carried over, **irritants
 crossed elementwise** through the caller's own exit fn. `R7RSError` is deliberately a
 host `Error` subclass, NOT an `AValue` box, so the strict-exit gate cannot carry it —
-this arm is its crossing, shared by `schemeToJsImpl` and `membrane.toJS` so the two
+this arm is its crossing — the same `toJS` path every other exit uses, so the
 exits cannot drift. A _raised_ error never reaches this arm; it takes the throw path.
 
 **Membrane-warn is bounded, per-crossing not per-value.** A non-portable host value
@@ -564,14 +563,13 @@ RUN, not to each value that crosses: a large payload whose values all trip the s
 warning would otherwise emit hundreds of thousands of identical lines and OOM the
 process, turning an O(1) diagnostic into an O(n) one on the hot path. Bounded by the
 handful of distinct warning shapes, never by the size of the data crossing — the
-same reasoning the note-sink exists for. The 2026-07-23/24 rulings retired every LIVE
-producer on the `jsToScheme` inbound path itself (`undefined` is a plain
-lens, a unique symbol doors, a bare function is now §CALLABLE-LENS's callable — none
-warn); the mechanism survives for ONE remaining caller, unrelated to a fresh inbound
-crossing: `values/primitives/deep-restamp.ts`'s re-stamp of a bare host-fn
-`AProcedure` already living in a scheme spine (`SchemeValue`'s pre-`ACallable`
-survivor arm) — a shape this document's §CALLABLE-LENS does not cover, since it is
-never a JS→scheme crossing, only a re-stamp of something already inside the algebra.
+same reasoning the note-sink exists for. The inbound `jsToScheme` path itself does not
+warn: `undefined` is a plain lens, a unique symbol doors, a bare function is
+§CALLABLE-LENS's callable. The warn mechanism survives for ONE remaining caller,
+unrelated to a fresh inbound crossing: `values/primitives/deep-restamp.ts`'s re-stamp of
+a bare host-fn already living in a scheme spine — a shape this document's §CALLABLE-LENS
+does not cover, since it is never a JS→scheme crossing, only a re-stamp of something
+already inside the algebra.
 
 **Enforcement sites:** `errors.ts`, `membrane/membrane.ts`, `membrane/rosetta.ts`,
 `membrane/membrane-warn.ts`.
@@ -581,7 +579,7 @@ never a JS→scheme crossing, only a re-stamp of something already inside the al
 ## SPINES — two families, one crossing skeleton
 
 **There are two rosetta spines and one crossing skeleton
-(`schemeToJs → fn → jsToScheme`).** The inbound host-fn lens (`hostFnToCallable`
+(`toJS → fn → jsToScheme`).** The inbound host-fn lens (`hostFnToCallable`
 in `ACallable.ts`) uses the generic conversions directly; the codec-driven baked
 `run` (`common/symbols/rosetta.ts`) substitutes the contract's per-argument codecs for
 those generic conversions and lets zod do the gated validation. Both collect input

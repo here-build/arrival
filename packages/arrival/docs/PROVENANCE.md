@@ -391,7 +391,7 @@ used anywhere in the package. `arrival-provenance/src/analysis/uneval.ts`'s own 
 the split with core's `provenance/uneval.ts` explicitly: "the two halves shared a file only
 because both start from 'a closed re-derivation of a value'; they have zero code in common …
 and this relocation is the first point they needed genuinely different homes" — the disclaimer
-this section formalizes at the package level (hermeticity audit D5).
+this section formalizes at the package level.
 
 ## 6. Queries — the three surfaces
 

@@ -5,7 +5,7 @@ tests cite them by ID ("RULINGS.md R2"); the IDs are stable anchors.
 
 ## R1 — Exit convention: uniform plain-JS, two-tier API
 
-Egress (`toJS`/`schemeToJs`/`exec`) always fully unwraps — outside the membrane only
+Egress (`toJS`/`exec`) always fully unwraps — outside the membrane only
 plain JS exists; provenance stays in the trace. The API splits into two tiers:
 
 - **SIMPLE tier** (`exec`): "run, get JS" — the default surface, plain-JS values only;
@@ -142,7 +142,7 @@ provenance reach-back on deep reads.
 
 ## R10 — World flip: a rosetta impl's return is JS-world, always
 
-(2026-08-13, hermeticity audit B2b.) The scheme<>js membrane flips worlds exactly once
+The scheme<>js membrane flips worlds exactly once
 per direction. A rosetta impl returning an already-boxed `AValue` — bare or nested in the
 plain arrays/objects `jsToScheme` recurses — is an ILLEGAL MOVE: it would ride the
 owned-artifact pass-through and skip the membrane's mint/attest. The `assertNoWorldFlip`
@@ -154,22 +154,22 @@ scheme values belongs on the contour (`symbol.native` + `z.schemeValue`).
 
 Rejected alternative: keeping the v2 "impl boxes its own return via jsToScheme" contract —
 it let JS-world code smuggle scheme values past provenance minting, and made the boxing
-site (and its ctx) the impl author's problem instead of the membrane's.
+site the impl author's problem instead of the membrane's.
 
 ## R11 — Contract seal: frozen at symbol instantiation
 
-(2026-08-13, hermeticity audit B3.) A contract is the declaration of record; it freezes
+A contract is the declaration of record; it freezes
 the moment it gets inside the symbol instance (`ANativeProcedure`/`ARosettaProcedure`
 ctors). The only post-factory declaration channels — `withContractFields`
 (type/emit/narrows/refPolicy) and `withCallbackRoles` (role vocabulary) — RE-MINT a new
 instance around the same impl with a new frozen contract, with runtime whitelists
 (`ContractSealError`). The slot-kind walls also gained their runtime twin
-(`assertSlotKinds`/`ContractSlotKindError` in every factory — audit B2a): rosetta refuses
+(`assertSlotKinds`/`ContractSlotKindError` in every factory): rosetta refuses
 `z.schemeValue`; native/sequence/define refuse `z.dynamic`/`z.instance`.
 
 ## R12 — Prelude persistence: invocation survives, reference does not
 
-(2026-08-13, hermeticity audit B4.) A prelude `(define …)` PERSISTS into the main phase —
+A prelude `(define …)` PERSISTS into the main phase —
 per-run, in the prelude-define frame between the user scope and the vocabulary chain —
 while preludeOnly NAMES stay unresolvable (their seed frame is never in a main-phase
 walk; closures reach them by lexical capture). Holds for bootstrap preludes AND mid-run

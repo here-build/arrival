@@ -19,8 +19,9 @@ egresses back to that source identity. A container is re-presented, never copied
 membrane.md §BOXING vs BORROWING)_
 
 **box** — the execution unit of the second (provenance) interpreter: an `AValue` carrying
-ctx + provenance. Not a monadic container — the admission ticket to the second interpreter.
+provenance. Not a monadic container — the admission ticket to the second interpreter.
 Every value is boxed because an unboxed value is a term the provenance reading cannot execute.
+Run identity is `RunContext` on the call, not a field on the value.
 _(owner: PRINCIPLES.md P0/P1)_
 
 **burst** — the deferred-effect arm: when `effects` is armed, a `sink` verb enqueues
@@ -73,7 +74,7 @@ lineage graph (`egress(Tᵢ)`, `cone(egress)`, "a sink is a port with no egress 
 value crossing out; the other is a graph node. _(owner: membrane.md §EGRESS and §NOT-A-CROSSING;
 provenance sense PROVENANCE.md §3)_
 
-**EnvPack** — post Stage-C-Cut-4, a MID-RUN-ONLY shape: a host-registered extension pack
+**EnvPack** — a MID-RUN-ONLY shape: a host-registered extension pack
 (`(require/extension :name)`, wired through `arrivalLoaderCapability`'s `extensionRegistry`)
 applied onto an ALREADY-LIVE env by `createRuntimeAssembler`, C3-linearized and applied once.
 Bootstrap assembly mints no `EnvPack`s at all — `env/vocabulary.ts`'s `buildVocabulary` bakes a
@@ -126,7 +127,7 @@ class. _(owner: membrane.md §SPINES; environments.md §AXES)_
 
 **mode law** — the record × replay × cache-class table governing the membrane: in `record` mode
 the impl fires and its result is written; in `replay` mode a hit answers WITHOUT firing. Behavior
-per cache class (`view`/`sink`/`pure`/undeclared) is fixed here — the single home for the
+per cache class (`view`/`pure`/undeclared) plus the `sink` provenance role is fixed here — the single home for the
 record/replay table. _(owner: execution.md §MODE-LAW)_
 
 **prelude-define frame** — the per-run frame holding every prelude `(define …)` (bootstrap pass
@@ -137,12 +138,12 @@ RunContext (`assemble-run.ts` `preludeDefinesOf`). _(owner: environments.md §7a
 
 **prelude-only** — a symbol bound only into the prelude pass's discarded SEED frame, never any
 main-phase walk: its NAME is a plain unbound variable from user code, while a closure a prelude
-defined still reaches it by lexical capture — "invocation survives, reference does not" (ruling
-2026-08-13, RULINGS.md R12). During the prelude pass a preludeOnly binding shadows a same-named
+defined still reaches it by lexical capture — "invocation survives, reference does not"
+(RULINGS.md R12). During the prelude pass a preludeOnly binding shadows a same-named
 main-map symbol; main-phase code sees only the main one. _(owner: environments.md §PRELUDE/§7a)_
 
 **provenance box** — the box seen from the second interpreter: the same `AValue` unit, named to
-emphasize the ctx + lineage it carries so the box layer can execute the program. See _box_.
+emphasize the lineage it carries so the box layer can execute the program. See _box_.
 _(owner: PRINCIPLES.md P0)_
 
 **region** — a `RegionScope`: a token `{open, pending, signal}` minted for ONE symbol invocation
@@ -172,7 +173,7 @@ meanings environments.md §AXES)_
 **spine** — the cons-cell backbone of a list/pair value (the car/cdr chain). _Spine adoption_
 projects a borrowed JS array onto an `AJSArrayList` — an `APair` view over the same store, O(1),
 same provenance — before an impl that field-reads `.car`/`.cdr` runs; it is a chart choice, not a
-crossing. (Distinct: the _rosetta spine_ is the `schemeToJs → fn → jsToScheme` crossing skeleton.)
+crossing. (Distinct: the _rosetta spine_ is the `toJS → fn → jsToScheme` crossing skeleton.)
 _(owner: membrane.md §NOT-A-CROSSING; rosetta-spine sense §SPINES)_
 
 **tagless term** — an `arrival/tagless-final/*` method on a value class: one instruction of the

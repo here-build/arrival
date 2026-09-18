@@ -261,14 +261,16 @@ loop, `execExpr`). Consumer view: §14 SESSIONS._
 
 **THE single home for the record/replay table.** The mode law governs the membrane, not
 storage: `mode: "record"` is a live run (the impl fires, its result is written);
-`mode: "replay"` is a fold (a hit answers WITHOUT firing). The behavior per stamped cache class:
+`mode: "replay"` is a fold (a hit answers WITHOUT firing). Rows mix the two orthogonal
+axes: `cacheClass` (`view` / `pure` / undeclared) and the `sink` **provenance role**
+(there is no `cacheClass: "sink"`).
 
-| class      | record mode                                                                                  | replay mode                                                                           |
-| ---------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `view`     | fire, write/OVERWRITE `{value}` (a settled entry never suppresses a live fire — fresh truth) | hit → serve, never re-fire; miss → fire + write (a NEW program's novel call is fresh) |
-| `sink`     | fire, write `{effect}` tombstone (two identical live sinks = TWO effects, always)            | tombstone hit → skip (void); miss → fire (new intent, not a repeat)                   |
-| `pure`     | fire                                                                                         | fire — determinism from args is the CONTRACT; recovery = re-call, never stored        |
-| undeclared | fire                                                                                         | fire — regenerateable, the SAFE default                                               |
+| declaration              | record mode                                                                                  | replay mode                                                                           |
+| ------------------------ | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `view` (cache class)     | fire, write/OVERWRITE `{value}` (a settled entry never suppresses a live fire — fresh truth) | hit → serve, never re-fire; miss → fire + write (a NEW program's novel call is fresh) |
+| `sink` (provenance role) | fire, write `{effect}` tombstone (two identical live sinks = TWO effects, always)            | tombstone hit → skip (void); miss → fire (new intent, not a repeat)                   |
+| `pure` (cache class)     | fire                                                                                         | fire — determinism from args is the CONTRACT; recovery = re-call, never stored        |
+| undeclared               | fire                                                                                         | fire — regenerateable, the SAFE default                                               |
 
 The cache class is an EXPLICIT declaration on the contract, never derived from the lineage role
 (environments.md §AXES: the two axes are orthogonal — `infer` is a provenance SOURCE declaring

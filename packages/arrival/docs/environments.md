@@ -3,8 +3,8 @@
 > The mental model, stated once, ahead of the code. Every environment arrival runs is
 > **assembled** — built from `EnvCapability` contributions linearized over a dependency
 > DAG. This document says what a capability _is_, what it lowers to, and why the laws the
-> code enforces (`preludeOnly` is assembly-time-only; a `pipe` that mints is a bug; `require`
-> is bundled but inert without `fs`) _fall out of_ the machine's shape rather than being
+> code enforces (`preludeOnly` is assembly-time-only; a `pipe` that mints is a bug; `(require …)`
+> lives in `@inhuman.tools/arrival-modules` and is a configuration door without a loader) _fall out of_ the machine's shape rather than being
 > bolted onto it. `writing-capabilities.md` is the author's HOW-TO — "here is the law you
 > obey"; this is the ontology under it — "here is what the machine IS, so the law is the
 > only shape it could take."
@@ -29,8 +29,8 @@ is built from it.** The R7RS base, every SRFI, every dialect pack, the loader, a
 tool catalog are all `EnvCapability` instances. There is no second registration mechanism:
 if the stdlib is expressible as capabilities, a consumer's tools are too.
 
-**A capability is a MODULE SINGLETON.** `export default new EnvCapability(name, spec)`, one
-`new` per package. It is **inheritance-free** — the contribution surface is a _closed
+**A capability is a MODULE SINGLETON.** `export default EnvCapability.define(name, spec)`, one
+define per package. It is **inheritance-free** — the contribution surface is a _closed
 taxonomy_ of five spec keys (`configuration`, `resources`, `prelude`, `symbols`, `deps`),
 configured by composition, never subclassed. A capability is a value, not a class hierarchy.
 
@@ -40,7 +40,7 @@ authoring form. `env/vocabulary.ts`'s `buildVocabulary` walks a capability set d
 each resource declaration into a ref-counted `ResourceCell`, reads the (always literal — the
 builder arm is retired) `symbols` record, and mints every symbol (membrane-wrapped) straight
 into a frozen `Vocabulary` map — never producing an `EnvPack` (`EnvCapability.lower()` /
-`LoweredPack` are retired, Stage C Cut 4). `env/assemble-run.ts`'s `assembleRun` then mints
+`LoweredPack` are retired). `env/assemble-run.ts`'s `assembleRun` then mints
 the per-run `RunContext` off that Vocabulary and runs the per-run prelude pass (§7a). The DAG
 is the authoring form; the Vocabulary is the flat, run-agnostic static form; the `RunContext`
 is the per-run instantiation. `EnvPack` itself survives only as the mid-run extension-pack
@@ -115,15 +115,15 @@ bytevectors, errorObjects]`) is the array actually folded into a run's tuple —
 are the only former `NATIVE_PACKS` members with no `BASE_PACKS`-side `deps` reaching them
 already (see next).
 
-**Bootstrap is a SINGLE self-hosting fold, not a two-root sequence — the retired split is
-retired.** The pre-Stage-C bootstrap assembled `NATIVE_PACKS` (the JS-implemented R7RS
+**Bootstrap is a SINGLE self-hosting fold, not a two-root sequence.** The retired split
+assembled `NATIVE_PACKS` (the JS-implemented R7RS
 domains — numeric, strings, vectors, equality, …) onto a `global_env` root and `BASE_PACKS`
 (the `.scm`-defined stdlib — core, macros, polyglot, r7rs, srfi preludes) onto a child
 `user_env`, because a base prelude calling `+`/`string-length` had to resolve child→parent
 into an already-live native root. `BASE_ROSTER` dissolves the split instead: every base
 symbol — `+`, `map`, `car`, the whole scheme surface — becomes an ordinary member of ONE
 tuple's own C3 closure (`buildVocabulary([...capabilities, ...BASE_ROSTER], config)`,
-`generator-exec.ts`'s `execStateViaVocabulary`), baked deps-first in the SAME loop as every
+`generator-exec.ts`'s `execState`), baked deps-first in the SAME loop as every
 user capability, never via a parent-chain fallback. `global_env`/`user_env` name no live
 binding anywhere in the package today — they survive only as the retired mechanism's own
 name, kept in comments for lineage.
@@ -131,7 +131,7 @@ name, kept in comments for lineage.
 **Mid-run assembly is a distinct, single-flight path.** Bootstrap (`buildVocabulary`) builds a
 _fresh_ Vocabulary once per capability-set tuple (memoized by identity — a repeat call
 sharing the same capability/config objects reuses it rather than re-assembling; the retired
-`assembleEnv` played this one-shot role pre Stage C Cut 4). `RuntimeAssembler.require` applies
+`assembleEnv` played this one-shot role). `RuntimeAssembler.require` applies
 registered packs onto an
 _already-live_ env mid-run — idempotently and single-flight: a second `require` of the same
 pack, or a concurrent one from a parallel HOF arm, awaits the one in-flight apply and never
@@ -164,7 +164,7 @@ namespace — and one-file-per-kind lets the bundler tree-shake to only the acce
 | `tagless-guard`  | tagless dispatch, graceful                        | `ANativeProcedure` wrapping a guard dispatcher                                 | a receiver with no method answers `#f` (predicate form: `vector?`, `pair?`), never an `instanceof` reach-around. Mints its verdict here (R8).                                                                                                                                                           |
 | `sequence`       | ctx-aware op: `(schemeArgs, runCtx)`              | `ANativeProcedure`                                                             | dual of ctx-free native: threads the live run (callback apply / strict / signal), then dispatches to the term algebra — map/filter/reduce.                                                                                                                                                              |
 | `notImplemented` | a teaching reason, no impl                        | `DoorProcedure`                                                                | errors-as-doors: an OMITTED verb throws a `PurityError` carrying the reason and the alternative bound in _this_ env.                                                                                                                                                                                    |
-| `keyword`        | `name: doc`, no impl                              | a `Keyword` marker value                                                       | a special form made first-class: the evaluator resolves a call head through the env and dispatches `SPECIAL_FORMS[name]` on the marker — aliasable + lexically shadowable.                                                                                                                              |
+| `keyword`        | `name: doc`, no impl                              | an `AKernelKeyword`                                                            | a special form made first-class: the evaluator resolves a call head through the env and dispatches `SPECIAL_FORMS[name]` on the marker — aliasable + lexically shadowable.                                                                                                                              |
 | `macro`          | a raw JS `Macro`/`Syntax` transformer             | the `Macro` itself, bound as-is                                                | not arg-evaluating (native/rosetta) nor evaluator-dispatched (keyword); the generic `is_macro` hook expands it.                                                                                                                                                                                         |
 | `define`         | a scheme-bodied value/procedure + a real contract | a validating `ANativeProcedure` (procedure) or the bare boxed value (constant) | decomposes a prelude blob into individually-declared, contract-bearing, FV-checked defines.                                                                                                                                                                                                             |
 | `defineSyntax`   | a scheme-bodied macro/expander                    | a `Macro` fexpr transformer                                                    | `define`'s sibling; contract-free, carries a `macroAttribute` walk hint.                                                                                                                                                                                                                                |
@@ -174,13 +174,14 @@ namespace — and one-file-per-kind lets the bundler tree-shake to only the acce
 **Every run-kind is a first-class callable, never a bare JS function** (P1: a bare function
 is a value the provenance interpreter cannot enter). `native`/`rosetta`/`tagless`/
 `tagless-guard`/`sequence` all bind `ANativeProcedure`/`ARosettaProcedure` subclasses invoked
-through the `arrival/tagless-final/apply` term; `door`/`keyword`/`macro` bind their own plain
-objects. The one exception is `symbol.value` — a raw DATA binding (never callable), the
+through the `arrival/tagless-final/apply` term; `door`/`keyword` bind `DoorProcedure` /
+`AKernelKeyword` (both `AValue`); `macro` binds the transformer. The one exception is `symbol.value` — a raw DATA binding (never callable), the
 discriminated successor of the retired untagged `{ value }` `SymbolDeclaration` arm. `require`/
 `require/extension` are NOT this kind — they bind `symbol.native` procedures whose call resolves
 the module payload (§LOADER).
 
-**`apply()` dispatches by `kind` and stamps three static facts onto the bound value:** the
+**Bind stamps three static facts onto the bound value** — `instanceof` dispatch in
+`apply()` and the vocabulary bind loop, not a `kind` tag on the live object — \*\*the
 resolved `provenanceRole`, the optional `cacheClass`, and the resolved `callbackRoles`
 (§AXES). Every static interpreter — the lineage classifier, the wireframe builder — reads
 these _off the bound value_ via `env.get(op)`, never a duck-read of an ad-hoc property (P7:
@@ -245,7 +246,7 @@ not generic — it has an honest codec (`z.union`/`z.dict`/`z.box`/`z.instance`)
 the codec whenever one exists; `grep schemeToJsUntyped` is the audit list of every place the
 untyped crossing was reached for.
 
-**Enforcement sites:** `common/symbols/_bake.ts`, `common/scheme-zod.ts`,
+**Enforcement sites:** `common/symbols/_bake.ts`, `common/scheme-zod/`,
 `common/spine-adoption.ts`, `membrane/adopt-spine.ts`, `common/schema-tag.ts`.
 
 ---
@@ -258,7 +259,7 @@ has its own document. This section states only the seam a baked verb crosses; §
 
 **The codec IS the crossing, stated once to end the double-framing.** There is one crossing
 spine described from two sides: the `symbol.rosetta` bake wrapper (`common/symbols/rosetta.ts`)
-and the inbound host-fn lens (`hostFnToCallable`) share `schemeToJs → fn →
+and the inbound host-fn lens (`hostFnToCallable`) share `toJS → fn →
 jsToScheme`, with the contract codecs standing in for the generic conversions. A rosetta
 verb's `run` decodes the scheme args to JS (the input codecs), calls the ctx-free impl,
 awaits, encodes the return (the output codecs), then deep-stamps provenance. A _callable_
@@ -318,15 +319,15 @@ DECLARATION channels, not a single combined enum: declaring one never implies or
 declaring another. What keeps the product of all three from being "anything goes" is that
 every legal REGION is bounded by a named door — six pairwise-axis gates plus the slot-kind
 walls (contour/crossing brand bans), consolidated behind one call site per factory,
-`assertContractAxes` (`common/symbols/_bake.ts`; hermeticity audit E1, 2026-08-13). The
+`assertContractAxes` (`common/symbols/_bake.ts`). The
 legal-region table is below, after the axes are introduced individually. The word `pure` is
 also overloaded across axes with different meanings — the standing trap for migrators, named
 explicitly further down (§ "the `pure` naming hazard").
 
 **The lineage axis — provenance role.** One declared role per symbol, data in string-key
 space (P7), from the vocabulary `pipe · fan · source · sink · transparent · loop · opaque`
-(the full PROVENANCE.md set; `pipe`/`fan`/`source` are live declaration defaults today, the
-rest are graph-layer targets no declaration marks yet). The three live meanings:
+(the full PROVENANCE.md set; `pipe`/`fan`/`source`/`sink` are live declarations;
+`transparent`/`loop`/`opaque` are graph-layer targets with no declaration mark yet). The live meanings:
 
 - **`source`** mints a fresh origin — external data crosses in (a rosetta reading the world).
 - **`pipe`** forwards its inputs' lineage — a pure transform that mints nothing.
@@ -509,8 +510,8 @@ against an ALREADY-assembled run's `runCtx` must hit the door, because the run's
 already holds that entry.
 
 **The prelude pass runs over TWO frames: a discarded NULL-ROOTED seed, and an eval child
-whose defines persist** (ruling 2026-08-13, audit B4). The SEED — a fresh
-`ResolvingAmbient.root("assemble-run-prelude-seed")`, no parent at all (Stage C Cut 2's
+whose defines persist** (RULINGS.md R12). The SEED — a fresh
+`ResolvingAmbient.root("assemble-run-prelude-seed")`, no parent at all (a
 self-contained posture, matching `vocabulary.ts`'s own `bakeEnv`), never reused, never
 returned, discarded once the pass completes — holds the main map (`Vocabulary.map`) THEN the
 preludeOnly overlay (`Vocabulary.preludeOnly`). On a cross-capability name collision between
@@ -518,12 +519,12 @@ the two maps, **preludeOnly SHADOWS the main symbol DURING the prelude pass** �
 rule (P-PRELUDE-PHASE-SHADOW), not an accident; main-phase code sees only the main symbol.
 A prelude can still call a base-pack primitive (`+`, `string-length`, …) because `BASE_ROSTER`
 is an ordinary member of THIS tuple's own `Vocabulary.map` (the caller folds it in —
-`generator-exec.ts`'s `execStateViaVocabulary`), bound directly into the seed — never via a
+`generator-exec.ts`'s `execState`), bound directly into the seed — never via a
 parent-chain fallback onto a `user_env` realm, which this path never mints. The prelude TEXT
 evaluates against the EVAL child, so its `(define …)`s land apart from the seed bindings.
 
 **Prelude `(define …)` PERSISTS into the main phase — "invocation survives, reference does
-not"** (ruling 2026-08-13, superseding the earlier discard contract). After the pass, the eval
+not"** (RULINGS.md R12). After the pass, the eval
 child's own defines are copied into the run's PER-RUN PRELUDE-DEFINE FRAME
 (`assemble-run.ts`'s `preludeDefinesOf`), and the exec entry roots each fresh user scope at
 it: session frame → prelude defines → the shared Vocabulary chain. Consequences, all

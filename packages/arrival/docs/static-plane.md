@@ -26,9 +26,9 @@ document owns only the pre-execution lens FACE of it. `environments.md §CONTRAC
 lens is the harvested-`.d.ts` reader — one of the contract's four codec-readers that must
 agree) and `§AXES` (the provenance role the classifier reads off each bound value, P7).
 `grammar.md` (the reader surface the oracle scans). The constraint-kernel contract the
-oracle implements is CROSS-PACKAGE — `sift/docs/CONSTRAINT-KERNEL-SPEC.md`, its interfaces
-`sift/src/sampler/oracle-contract.ts`, its reference reader `sift/src/sampler/prefix-oracle.ts`;
-this document points at that spec, it does not fork the model.
+oracle implements is a cross-package mirror in `src/oracle/contract.ts` (the sift package
+that owns the canonical copy is out of this repo). This document points at that mirror;
+it does not fork the model.
 
 ---
 
@@ -178,12 +178,12 @@ quote ⇒ unconstrained. Σ is live only when given an env — the grant boundar
 binding set enforces for free.
 
 **The contract is a DRIFT-ALARM mirror of a cross-package canonical, not a local invention
-— SATELLITE POINTER.** `oracle/contract.ts` re-declares `sift/src/sampler/oracle-contract.ts`
-verbatim rather than importing it, because arrival-scheme is a foundation package sift
+— SATELLITE POINTER.** `oracle/contract.ts` re-declares the sift sampler contract
+verbatim rather than importing it, because this package is a foundation sift
 depends on; importing sift types would invert the dependency arrow. The two copies must stay
 type-identical, and the **O0 conformance corpus** is the executable proof they do (§5). Do
-not fork the constraint-kernel model here; the spec lives in
-`sift/docs/CONSTRAINT-KERNEL-SPEC.md`.
+not fork the constraint-kernel model here; the canonical spec lives with sift (out of this
+repo).
 
 **Enforcement sites:** `oracle/scanner.ts`, `oracle/sigma.ts`, `oracle/contract.ts`,
 `oracle/env.ts`, `oracle/index.ts`.
@@ -229,7 +229,7 @@ the shadow skips them as macro-heads.
 lineage** — the eager stamp, the trace-tap, the region/track/wire graph, γ-replay. The
 classifier is a whole future interpreter, present in the tree and gated (P14) by the G1–G7
 ledger: its `fullCone` is proven directly against the eager stamp (the old shadow-mode
-`irLineage` flag and `provenance/lineage-shadow.ts` are retired, Stage C Cut 3b — `provOf`
+`irLineage` flag and `provenance/lineage-shadow.ts` are retired — `provOf`
 now lives in `provenance/lineage.ts` itself and the golden-prov/checkpoint/conservation law
 suites read it straight), the graph-layer node kinds (`sink`, `transparent`, `binder`) are
 reachable by `classify` but wired to no live declaration yet. Cross-link, don't

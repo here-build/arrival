@@ -20,9 +20,9 @@ Four things arrival does NOT have. Each is invisible in the code — a contribut
 them before touching any subsystem, because a change that reintroduces one breaks the machine
 at a level no local test names.
 
-- **No continuations.** `call/cc`/`dynamic-wind` are deliberately absent — the classical
-  region-escape channel, closed on purpose (`PRINCIPLES.md` P0; `PROVENANCE.md`
-  constitutional ground).
+- **No continuations.** `call/cc`/`dynamic-wind` are teaching-doored (`notImplemented` /
+  `PurityError`) — the classical region-escape channel, closed on purpose (`PRINCIPLES.md`
+  P0; `PROVENANCE.md` constitutional ground). They resolve in the env; applying them throws.
 - **No mutation.** Values are frozen at construction; the mutator family is teaching-doored.
   The only writes are two named doors — cycle knot-tying and phase-gated assembly binding
   that dies at phase close. Mutation is the classical isolation-escape channel (`PRINCIPLES.md`

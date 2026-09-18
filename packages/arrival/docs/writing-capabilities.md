@@ -11,8 +11,8 @@ with each law it rests on cited to its home in `environments.md`.**
 
 The per-API mechanics (the `symbol.*` factory roster, tagged-template syntax, exact bake-gate
 error texts) live in the JSDoc of the entry points: `common/symbol.ts`, `common/capability.ts`,
-`rosetta.ts`, `common/scheme-zod.ts`, and `@inhuman.tools/arrival-mcp`'s `McpEnvCapability` /
-`tool`.
+`rosetta.ts`, `common/scheme-zod/`, and (out of this repository)
+`@inhuman.tools/arrival-mcp`'s `McpEnvCapability` / `tool`.
 
 The one law under everything below: **dependencies point down, only down** — a capability
 declares a `deps` edge and uses the granted names, never reaching sideways into another
@@ -34,7 +34,7 @@ reads and returns.** "Take the raw value and sort it out inside" is a debt, not 
 `z.dynamic` is a special kind, never a default fallback: it is legal only for a **rosetta**
 (crossing) slot that is **fully generic** — ∀-quantified, the verb polymorphic in that slot,
 passing the value through whole without reading its shape — where the impl does its own
-`schemeToJs`/`jsToScheme` (`env/overridable/overridable.ts`'s `overridable/resolve` is the one
+`toJS`/`jsToScheme` (`env/overridable/overridable.ts`'s `overridable/resolve` is the one
 production case). A shape that is merely awkward or open-ended is NOT generic — it has an honest
 codec (`z.union`, `z.dict`, `z.box`, `z.instance`); reaching for `z.dynamic` because the codec is
 tedious desyncs the four readers the same way an undeclared codec does. A **contour** slot
@@ -137,8 +137,8 @@ so the assembly's `degraded` list enumerates it (`environments.md` §DEGRADATION
 
 ## Exposing a capability to agents (MCP)
 
-`@inhuman.tools/arrival-mcp` turns a capability DAG into one MCP tool whose argument is an arrival
-program. MCP wraps **intent, not impact**: expose verbs an actor means (`create-widget`, `anchor-to`),
+`@inhuman.tools/arrival-mcp` (out of this repository) turns a capability DAG into one MCP
+tool whose argument is an arrival program. MCP wraps **intent, not impact**: expose verbs an actor means (`create-widget`, `anchor-to`),
 never materialization knobs — danger, cacheability, and lineage are facts the verb declares about
 itself, not levers a caller holds. The catalog aggregates across the whole `deps` closure, deps-first
 and self-last, matching assembly's own precedence; a plain `EnvCapability` dep still grants live verbs,

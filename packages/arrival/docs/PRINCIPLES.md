@@ -58,16 +58,14 @@ the keystone's own origin story, the audit that revealed the principle in the fi
 
 **P1. A value is a term both interpreters can execute.**
 The box is the admission ticket to the second interpreter: a SchemeValue is a boxed AValue
-carrying ctx + provenance (or an honest peer like the raw ES6 symbol inside ASymbol — carried
+carrying provenance (or an honest peer like the raw ES6 symbol inside ASymbol — carried
 BY a box). Callables included: an ACallable is executable on both layers — apply on the value
 layer, runCtx threading and mint/propagate classification on the box layer. A bare JS
 function is a value-layer-only term: the moment it enters value space, the program has a
 region the second interpreter cannot enter.
-_Revealed by:_ the AProcedure arm, the LAMBDA brand passthrough, curry's bare-arrow leak —
-every one a JS artifact living in value space without lineage. (The forbidden bare `{ fn }` `SymbolDeclaration` shape
-bare-fn bind arm this used to also cite — capability.ts, wired through `AmbientRuntime.ts`'s
-internal `bindRosetta` — is retired: every capability now binds first-class ANativeProcedures
-instead, per capability.ts's own retirement note.)
+_Revealed by:_ `z.schemeValue` still admits `typeof === "function"` as a value-space
+callability test — a remaining hole against this principle. Retired producers (a bare
+`{ fn }` bind arm, curry as a JS arrow) are closed; do not re-open them.
 _Forbids:_ new bare-fn producers; `typeof === "function"` as a value-space callability test;
 env bindings whose stored value has no class.
 
@@ -112,9 +110,10 @@ COMPLEX flow ("run, get reusable state") deliberately hands boxed state to JS-si
 and is not a crossing, it is a session handle into the inside. And "plain JS" means
 plain-JS-OBSERVABLE: container egress may be a lazy ref-tracking proxy that materializes on
 demand — observationally plain, no AValue ever readable through it.
-_Revealed by:_ strings crossing out boxed while booleans cross raw (two invariants pinning
-opposite exit contracts); representation-blind `equal?` and `boolean=?`'s deliberate
-`z.schemeValue` input — tolerance machinery that exists only because bare values leak inward.
+_Revealed by:_ (fixed) strings once crossed out boxed while booleans crossed raw — two
+invariants pinning opposite exit contracts; the public exit is now uniform `toJS`. Live:
+representation-blind `equal?` and `boolean=?`'s deliberate `z.schemeValue` input —
+tolerance machinery that exists only because bare values leak inward.
 _Forbids:_ representation-blind comparisons (once the bare-value purge completes, blindness
 INVERTS to a strict-door throw); "accepts boxed or raw" contracts; any instanceof-chain
 converter competing with the protocol (P7).
@@ -124,8 +123,8 @@ A violation is refused where it happens — type-level `never` where expressible
 always, message that teaches (errors-as-doors). Never tolerated inward to fail three calls
 later as a weird problem: a value smuggled past the door is precisely a term one interpreter
 will choke on far from the crossing that admitted it.
-_Revealed by:_ `fromJS`'s old already-boxed pass-through masking which-side-am-I-on confusion;
-`isLipsPair` duck-typing patching a hole the loud door would have exposed.
+_Revealed by:_ (fixed) `fromJS`'s already-boxed pass-through masking which-side-am-I-on
+confusion; duck-typed pair sniffing at the boundary that a loud door would have exposed.
 _Forbids:_ silent pass-throughs "for robustness"; duck-typed structural sniffing at
 boundaries; catch-and-continue on a crossing violation.
 
@@ -154,7 +153,7 @@ equality (`equals`), and every other term live ON the value — splitting the au
 the choreography, and the two readings drift apart in whichever copy forgets one of them.
 Consumers — membrane, rosetta, zod codecs — dispatch the protocol; a codec is a guard + a
 contract refinement + a protocol call, never a competing description of the conversion.
-_Revealed by:_ (fixed) `schemeToJs`'s instanceof chain once carried a duck-typed hole where
+_Revealed by:_ (fixed) `toJS`'s instanceof chain once carried a duck-typed hole where
 APair should be — closed by the `arrival/toJS(exit)` collapse (every boxed shape dispatches
 through `egressAValue`, one protocol, no per-carrier special case); codec encode/decode arms
 re-describing what classes already know remain the live half of this citation.
@@ -177,7 +176,7 @@ mixed:
   The string-forgery hazard (a borrowed JSON object carrying a literal `arrival/*` key) is the
   membrane's duty: a foreign value's own data key is DATA, never protocol — an F3 law row.
 
-**Syntax dispatches by CLASS, semantics by TERM** (hermeticity audit D7). These are two
+**Syntax dispatches by CLASS, semantics by TERM.** These are two
 different questions at two different points, and the taxonomy above answers only the
 second. Reader SHAPE is decided once, at the boundary between reader output and the
 algebra, by `instanceof` on the value's class — `eval/evaluator.ts`'s `evaluate()`
@@ -269,7 +268,8 @@ Every capability is reachable from a production entry, or it is explicitly STAGE
 meticulous test suite, is the codebase lying to itself about what it ships. (The static
 lineage classifier is the model of staging done right: a whole future interpreter, present in
 the tree, gated by the G1–G7 ledger, wired to nothing until its coherence laws pass.)
-_Revealed by:_ ~40 curly-infix invariants enforcing a feature `ExecOptions` cannot enable.
+_Revealed by:_ (fixed) curly-infix as an `ExecOptions` flag with a live test suite and no
+production entry — the reader now doors infix; there is no shadow enable.
 _Forbids:_ dead flags with live test suites; "we'll wire it later" without the gate ledger.
 
 ## VI. Test discipline
