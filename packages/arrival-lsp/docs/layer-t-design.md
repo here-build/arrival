@@ -4,6 +4,10 @@ Layer T narrows a scope-valid (Σ) completion mask by TypeScript type validity, 
 surviving set at an argument slot is Σ∩T: a candidate must be both bound-in-scope and
 type-valid for that argument to remain a completion.
 
+The conservative-narrowing law and the four-reader static plane live in
+[`packages/arrival/docs/static-plane.md`](../../arrival/docs/static-plane.md). This note
+is the implementation pointer.
+
 The check is a batched conditional-type probe: emit a sentinel form at the cursor, find
 the enclosing call (callee + argument index) via the AST, ask the checker in one pass
 whether each candidate's type satisfies the argument's declared type. It is conservative —

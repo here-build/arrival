@@ -61,7 +61,8 @@ Advanced (host wiring, incomplete prefixes, Scheme↔TS spans, `(require …)`):
 - [`@inhuman.tools/arrival-internals-types-prelude`](../arrival-internals-types-prelude) —
   builtin `.d.ts` the lens declaration-merges so Scheme programs type-check under tsc.
 - [`@inhuman.tools/arrival-types-bridge`](../arrival-types-bridge) — lowering
-  (Scheme → virtual TS).
+  (Scheme → virtual TS). See also [`docs/layer-t-design.md`](./docs/layer-t-design.md)
+  (Σ∩T masking; law at `arrival/docs/static-plane.md`).
 - [`@inhuman.tools/arrival-codemirror`](../arrival-codemirror) — CodeMirror 6
   editor that consumes this service.
 

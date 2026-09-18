@@ -121,9 +121,11 @@ single construction site), the **full R7RS exception tower**, an **exact numeric
 (safe-integer `AExact` — num/denom are JS safe integers; arithmetic that overflows
 throws; host `bigint` is not a Scheme number — `(+ (/ 1 3) (/ 2 3))` is exactly `1`),
 **datum labels**. Twelve SRFIs
-assemble by default (1, 2, 8, 13, 26, 28, 43, 95, 128, 151, 189, 235 — `src/env/srfi/`); the
-deliberately-absent ones (hash tables, random, time/date, …) are doored stubs naming why they're
-out and what to use instead — exactly the symbols an LLM agent predictably reaches for.
+assemble by default (1, 2, 8, 13, 26, 28, 43, 95, 128, 151, 189, 235 — `src/env/srfi/`);
+SRFI-8 (`receive`) is a teaching door — user-facing multiple-value binders are omitted by
+design. The other deliberately-absent families (hash tables, random, time/date, …) are
+doored stubs naming why they're out and what to use instead — exactly the symbols an LLM
+agent predictably reaches for.
 
 The language stance — an R7RS-small sandboxed base, a forgiving superset layered _under_ strict
 (never beside it), the reserved-zone rule keeping it non-conflicting with any SRFI — is the charter;
@@ -169,8 +171,9 @@ trace.toolNameFor(1); // "forecast-for"
 ```
 
 `buildUneval` reverse-slices a traced run into a minimal re-runnable program that re-derives a
-chosen value. It lives in `@inhuman.tools/arrival-provenance`. That
-package also owns `groundingVerdict` and the `whyOf` / `whereOf` / `howOf` queries; this package
+chosen value. It lives in `@inhuman.tools/arrival-provenance/analysis`. That package also
+owns `groundingVerdict` (`@inhuman.tools/arrival-provenance/verdict`) and the `whyOf` /
+`whereOf` / `howOf` queries (`@inhuman.tools/arrival-provenance/reflect`); this package
 keeps the capture spine (`EvalTrace`, stamping) and `deepProvenance`. The `/attestation` subpath
 brands values so provenance unions forward while attestation _drops on compute_.
 
@@ -273,8 +276,9 @@ consumers skip the pass for such programs (the runtime doors remain the backstop
   `runCtx` (reuse an existing `RunContext` for REPL continuity), `staticValidation: "on" | "off"`
   (default `"off"`), `signal`, `budgetMs` (opt-in wall-clock bound; `signal` is the one that
   reaches into native calls), `strict` (turns off nil-tolerance,
-  caller-scoped), `tap` (trace recording).
-- `parse(code)` — the reader, standalone (`tokenize` lives on `/lsp-internals`).
+  caller-scoped), `tap` (trace recording). Full field list (effects, cache/replay, `program`,
+  `resolver`, …): [`docs/execution.md`](./docs/execution.md).
+- `parse(code)` — the reader, standalone; `async`, returns `Promise<SchemeValue[]>` (`tokenize` lives on `/lsp-internals`).
 
 **Declaration**
 
@@ -326,8 +330,8 @@ host globals (`window` / `global` / `process` / `require`). But at 0.x, sandbox 
 feasible — at least via property access and some rosetta-layer aspects — so do not yet treat the
 isolation as a hard security boundary for untrusted input.
 
-Bare `exec` / `execState` calls (no explicit `scope`) mint a fresh scope per call —
-`scope ?? LexicalScope.fresh()` — so top-level `define`s do **not** accumulate across bare calls.
+Bare `exec` / `execState` calls (no explicit `scope`) mint a fresh isolated scope per
+call, so top-level `define`s do **not** accumulate across bare calls.
 Cross-call accumulation is opt-in: pass the same `LexicalScope` (minted once via
 `LexicalScope.fresh()`) on every call that should share bindings, as the Sessions section shows.
 Multi-tenant hosts that want isolation get it by default; multi-turn sessions opt into a shared
@@ -336,7 +340,7 @@ scope deliberately.
 **Do not**: expose to untrusted user input without additional isolation; use in security-critical
 contexts; deploy without containerization; trust sandbox isolation.
 
-Responsible disclosure and collaboration on improvements: security@here.build
+Responsible disclosure: [SECURITY.md](../../SECURITY.md) / security@here.build
 
 ## Performance
 
@@ -352,6 +356,7 @@ the _target's_ concern and interpretation cost stays an authoring-time property,
   keystone, the value plane, the membrane, provenance, the surface rules.
 - [`docs/PROVENANCE.md`](./docs/PROVENANCE.md) — the provenance substrate in full.
 - [`docs/writing-capabilities.md`](./docs/writing-capabilities.md) — authoring your own capabilities.
+- [`docs/README.md`](./docs/README.md) — implementer codemap (grammar, membrane, environments, …).
 
 ## Why Scheme for AI Agents?
 

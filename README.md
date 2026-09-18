@@ -82,7 +82,7 @@ All names are `@inhuman.tools/<dir>`.
 
 ## Status
 
-0.x. The API surface is still settling. Issues welcome; we are not yet optimizing for external PRs. See [CONTRIBUTING.md](./CONTRIBUTING.md).
+0.x. The API surface is still settling. Issues welcome; we are not yet optimizing for external PRs. See [CONTRIBUTING.md](./CONTRIBUTING.md). Security reports: [SECURITY.md](./SECURITY.md). Interpreter ontology: [`packages/arrival/docs/README.md`](./packages/arrival/docs/README.md).
 
 ## License
 
