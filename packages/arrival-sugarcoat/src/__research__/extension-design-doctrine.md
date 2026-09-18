@@ -1,7 +1,7 @@
 # arrival-sugarcoat — extension-design ideation (grammar · lexer · risks · alternates)
 
 **Status:** ideation only · **Date:** 2026-06-15 · zero execution, zero interpreter detail.
-Companion to the method-dot spec, since absorbed into [`../GRAMMAR.md`](../GRAMMAR.md). The governing question: **how do we add
+Companion to the method-dot spec, since absorbed into [`../../GRAMMAR.md`](../../GRAMMAR.md). The governing question: **how do we add
 surface to arrival-sugarcoat (dicts now, more later) without the edit-stability knife-edge** — grounded
 in how grammars/lexers are actually built and what sweet-expressions learned the hard way. This
 deliberately ignores "alist vs map" and every execution concern; those are solved one layer down.
@@ -19,7 +19,7 @@ Across PEG theory, the JS spec, sweet-expressions, Clojure, Elixir, Julia, and R
 
 Every **graveyard** case (M-expressions, Dylan-as-fork, CGOL, IACL2, sweet's own stalled adoption)
 violated one clause — extended the reader itself, forked surface from core, inferred category from
-content/context, or shipped no print side. V already re-derived the load-bearing half ("the type
+content/context, or shipped no print side. The load-bearing half is already the rule ("the type
 lives in the delimiter, not the contents"). The research says: that is _exactly_ the rule, and there
 are three more clauses bolted to it.
 
@@ -114,8 +114,8 @@ numeric tower, identifier syntax. Zero delta.
 1. **precedence-elision licenses** — needed badly (arithmetic ergonomics); minimal (arithmetic + type-lens; shape _and_ declaration both borrowed).
 2. **`%{}` dict reader** — needed badly (dicts ubiquitous; edit-stable sigil decided).
 3. **colon-pairs** — needed (kv/kwarg notation).
-4. **accessor `[]`** — KEEP (how people think about indexing; pure δ to c[ad]r). [V, 2026-06-15]
-5. **dot-pipeline + `it` + trailing-lambda** — KEEP; the sugarcoat core (how people think). [V, 2026-06-15]
+4. **accessor `[]`** — KEEP (how people think about indexing; pure δ to c[ad]r).
+5. **dot-pipeline + `it` + trailing-lambda** — KEEP; the sugarcoat core (how people think).
 
 Both kept (2026-06-15): the discipline was never "cut human-ergonomics" — it's "don't _own_ what a
 standard covers." Accessor and the pipeline are owned precisely because no standard covers _how people
@@ -234,7 +234,7 @@ vs `() => ({})`), `}` `/` regex-vs-division, `async`/`yield` contextual keywords
 ([V8 cover grammars](https://v8.dev/blog/understanding-ecmascript-part-4) ·
 [jsparagus js-quirks](https://github.com/mozilla/gecko-dev/blob/master/third_party/rust/jsparagus/js-quirks.md))
 
-This is exactly V's parity catch generalized: **valid curly-infix is an odd element count
+This is the parity catch generalized: **valid curly-infix is an odd element count
 (operand·op·operand…); a kv-set is even (pairs); a single-token edit flips parity by one, so the
 category boundary sits one keystroke away in every body.** Content/position discrimination is
 _unstable by construction_ — any content-based binary classification has a boundary in content-space
@@ -248,7 +248,7 @@ single _trailing discriminator_ (`=>`) plus an **early-error** backstop. This re
 without unbounded lookahead. Keep it in the toolbox for any case where the leading marker genuinely
 can't fix the category.
 
-**Parity grammars are doubly fragile** (precedence + associativity + V's operand/operator parity).
+**Parity grammars are doubly fragile** (precedence + associativity + operand/operator parity).
 Never write naive `E ::= E op E`; use **Pratt / precedence-climbing**. Structure editors counter the
 parity-edit by inserting an _operator hole_ to preserve alternation across the edit. **Our analogue
 is deeper and free:** in the two-face model the _AI edits the canonical s-expr_ (structure, no
@@ -301,7 +301,7 @@ But weigh §5.4 first — significant whitespace buys readability and _sells_ fr
 
 ## 4. The dict decision, grounded
 
-The research converges hard on V's landing: **a paired-delimiter sigil that fixes the category at the
+The research converges hard on the landing: **a paired-delimiter sigil that fixes the category at the
 opener.** Elixir's `%{name: "x", age: y}` is the exact prior art — map literal, category in the
 delimiter (`%{` vs `{`), values evaluated (no quote/inert baggage), edit-invariant by construction.
 It beats both rejected options for _named_ reasons:
@@ -464,7 +464,7 @@ and it's why the parity knife-edge was correctly fatal, not a nitpick.
 
 ---
 
-## 7. Open design questions (for V — decisions, not defaults)
+## 7. Open design questions (undecided — not defaults)
 
 1. **Bare `{}`: infix or dict?** Frequency + migration call. Both edit-stable (category in delimiter).
 2. ~~**The precedence ladder (DV1)**~~ — **RESOLVED 2026-06-15: precedence = elision licenses** (§5.2).

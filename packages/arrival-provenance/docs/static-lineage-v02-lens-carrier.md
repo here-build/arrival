@@ -320,7 +320,7 @@ id-monotonic — strictly harder), and the looped/HOF z-axis (fan×lens).
 
 ### The viz constraint — fan × lens = a single parametric wire (z-stack × lens)
 
-V's load-bearing requirement: the inhuman flowchart renders a projection _through_ an iteration as ONE
+Load-bearing constraint: the inhuman flowchart renders a projection _through_ an iteration as ONE
 wire over the generalized shape, not N unrolled wires. For
 `another = provenanced.map{ (dict :foo it[:bar]) }`, the wire from `provenanced` to `another` is the
 parametric path **`source[number][:bar] → result[number][:foo]`** — `[number]` is the **z-stack** (the
@@ -518,7 +518,7 @@ positional/keyed split, and "positional → transparent / keyed → pin," is the
 - **The carrier _syntax_ keeps two step-kinds** (JSONPath `[i]` vs `.field`; Clojure's `Indexed` vs
   `Associative`). So `PathStep = {field}|{car}|{index}` straddles both layers: two kinds in the node
   (viz), one unified path with positional transparent (cone).
-- **"Honest crash > unstable lie"** (V) = Clojure's own rationale: `(first a-map)` → an _entry_ is honest;
+- **"Honest crash > unstable lie"** = Clojure's own rationale: `(first a-map)` → an _entry_ is honest;
   `(nth a-map 0)` _throws_ because a position the map lacks would be a lie — and a _sorted_ map still isn't
   `Indexed` (Python `OrderedDict` refuses `od[0]` for the same reason). Arrival stays in this camp
   _because it has cons_. The runtimes that dropped `car`/`cdr` (Hy #909, Janet, Fennel) did so _because_
@@ -541,11 +541,10 @@ positional/keyed split, and "positional → transparent / keyed → pin," is the
 cite the `golden-prov-special-forms.test.ts` block by name (the line citation drifted); qualify
 cross-package `trace.ts` cites as `arrival-provenance/trace.ts`.
 
-### D. Stage B pre-mortem — VERDICT: NOT YET, and the reframe (15-agent max-fanout audit, 2026-06-20)
+### D. Stage B pre-mortem — VERDICT: NOT YET, and the reframe
 
 Before the **irreversible** Stage B (delete `computeProvenance` + flip `AValue.provenance` + migrate
-consumers), a 15-agent pre-mortem (10 blast-radius lenses + 5 adversarial refuters). **All 5 refuters
-REFUTED the flip; all 10 lenses said DO NOT FLIP.** The big-bang Stage B as framed is **unsafe**. It
+consumers), a pre-mortem of the flip. **The big-bang Stage B as framed is unsafe.** It
 independently re-derives the v0.1 doc's own recorded verdict ("Path B is not a clean flip; G1 is
 v0.2-gated") — and sharpens it with concrete witnesses. This produced §1's reframe.
 

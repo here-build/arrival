@@ -1,6 +1,6 @@
 # Optional, zero-cost-when-off provenance in the arrival run plane
 
-2026-06-14 · design recommendation (no code changes) · author: Claude
+2026-06-14 · design recommendation (no code changes)
 
 ## The ask
 
@@ -17,7 +17,7 @@ We want two run modes:
   calls). The common case: caller wants the result.
 - **provenance / teleological** — full trace, for `why` / `where` / `how` / `dag`.
 
-V's working names: `.runCasual` vs `.runTeleological`. Naming treated as open below.
+Candidate names: `.runCasual` vs `.runTeleological`. Naming treated as open below.
 
 ---
 

@@ -1,9 +1,9 @@
 # Minimal provenance across non-strict observations — prior art & v0.2 cookbook
 
-**Status:** research findings (2026-06-19). Produced by an 11-agent web-research run (7 survey lenses →
-3 verifiers: citation-integrity, applicability-to-arrival, cookbook-extraction → synthesis), all Opus.
-Load-bearing citations were fetched from primary PDFs by ≥2 independent verifiers; the headline new
-citation (Atkey & Perera 2025) was additionally re-confirmed by hand against `arxiv.org/abs/2511.09203`.
+**Status:** research findings (2026-06-19). Prior-art survey assembled so the recipes can be
+named rather than reinvented. Load-bearing citations were fetched from primary PDFs; the
+headline new citation (Atkey & Perera 2025) was additionally confirmed against
+`arxiv.org/abs/2511.09203`.
 
 **Why this exists:** to answer "is minimal (neededness-respecting) dynamic provenance across non-strict
 observations a solved problem, or are we inventing?" — so we **assemble named recipes** rather than

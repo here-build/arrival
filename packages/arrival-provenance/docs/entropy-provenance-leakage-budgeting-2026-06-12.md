@@ -143,7 +143,7 @@ scalar instance** — `N` is a bit-budget in disguise.
 3. **Shannon vs min-entropy** → propagate the **additive Shannon / range-cap** bound on the handle
    (cheap, composes); compute the sharper **min-entropy** number only at declassification exits.
 
-### The real fork (UNRESOLVED — needs V)
+### The real fork (UNRESOLVED)
 
 The range cap `log|range(g)|` is static for most builtins (bool = 2, count over n = n+1, a field =
 field domain). For a **user-composed lambda** the image isn't known statically:

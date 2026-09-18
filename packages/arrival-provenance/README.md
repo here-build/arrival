@@ -30,6 +30,10 @@ import { traceToStatechart, buildSlice, buildUneval } from "@inhuman.tools/arriv
 const statechart = traceToStatechart(trace);
 ```
 
+Constitutional provenance law (roles, conservation, ports) lives in
+[`@inhuman.tools/arrival`'s `docs/PROVENANCE.md`](../arrival/docs/PROVENANCE.md).
+Notes under [`docs/`](./docs/) in this package are research, not living law.
+
 The surface, in four subpaths:
 
 - **`.`** — capture + region-model primitives: `EvalTrace` (this package's export is the mobx-reactive `ObservableEvalTrace`; core stays mobx-free), `Invocation` (each carries its own computed `.provenance`; dataflow minted at boundaries), `traceToForest`, `traceToRegions` with an incremental `TraceRegionFold`. Plus `trace-snapshot` / `trace-artifact` serialization.

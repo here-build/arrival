@@ -13,7 +13,7 @@ Companion to `arrival-machine-lineage.md`. That doc names how execution _runs_
 (one log, three readings). This one names what the _language_ became — and why
 the six places it departs from honest R7RS are **not** six unrelated indulgences.
 
-The worry being answered (V's words): _"despite my best efforts at an honest
+The worry being answered: _"despite my best efforts at an honest
 R7RS sandbox-subset, I tilted toward absolute madness — catchall, envpacks with
 JS resources, a seamless rosetta membrane, a teleological environment, inference
 integration, and a scheme-sweet superset bifunctor that looks more like
