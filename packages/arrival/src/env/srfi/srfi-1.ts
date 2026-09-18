@@ -242,8 +242,8 @@ export default EnvCapability.define("scheme/srfi-1", {
     // (scheme-zod.ts), not a local union. It is spine-ADOPTING: a slot declared with it
     // takes the SPINE READING of its argument, so a borrowed JS array (every MCP tool's JSON
     // array arrives as one, `kind="vector"`) is projected onto an `AJSArrayList` view — same
-    // backing store, same provenance, O(1) — before any body or impl sees it, and an EMPTY
-    // array becomes `nil`.
+    // backing store, same provenance, O(1) — and a boxed AVector is copied onto a shallow
+    // pair spine, before any body or impl sees it. An EMPTY array or vector becomes `nil`.
     const listAlike = z.listAlike;
     // Sole inventory for silent→door coverage of the rest of SRFI-1 (see DOORS).
     const DOOR_SYMBOLS = Object.fromEntries(

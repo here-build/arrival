@@ -7,7 +7,7 @@
  *   1. I-expressions (indentation): a line + its more-indented descendants form a
  *      list. `define (f x)` ⏎ body → (define (f x) body). A 1-token line with no
  *      children is just that token; multi-token / has-children becomes a list.
- *   2. delimited sub-exprs: `(…)` Scheme lists, free `[…]` → `(list …)`, and `{…}`
+ *   2. delimited sub-exprs: `(…)` Scheme lists, free `[…]` → `(vector …)`, and `{…}`
  *      which is ODD/EVEN-split: even-arity kv pairs → `(dict …)`; odd operand·op·operand
  *      alternation → curly-infix n-expr (precedence ladder + arrow → lambda + glyphs).
  *      Bracket mode overrides indentation — a `{…}`/`[…]` may span physical lines, so
@@ -713,7 +713,7 @@ function parseElements(toks: Tok[], accessorDepth: number = R7RS_ACCESSOR_DEPTH)
       pairs = [];
       letters = 0;
     };
-    // Tight `[` only — a spaced `[…]` is a free list literal (`(f [1 2])`), not a
+    // Tight `[` only — a spaced `[…]` is a free vector literal (`(f [1 2])`), not a
     // subscript. Same adjacency rule as method-arg `(` / trailing-lambda `{`.
     for (;;) {
       const p = peek();
@@ -821,14 +821,15 @@ function parseElements(toks: Tok[], accessorDepth: number = R7RS_ACCESSOR_DEPTH)
     next();
     return { list: items };
   }
-  /** Free-standing `[…]` → `(list …)`. Tight postfix `xs[0]` never reaches here
-   *  (withSubscripts peels those after the base datum is read). */
+  /** Free-standing `[…]` → `(vector …)`. Tight postfix `xs[0]` never reaches here
+   *  (withSubscripts peels those after the base datum is read). Same glyph as
+   *  arrival-scheme's evaluating vector literal. */
   function freeList(): Node {
     const items: Node[] = [];
     while (peek() && peek()!.t !== "]") items.push(datum());
     invariant(peek()?.t === "]", "unbalanced [");
     next();
-    return { list: [atom("list"), ...items] };
+    return { list: [atom("vector"), ...items] };
   }
   function schemeDatum(): Node {
     const t = next();

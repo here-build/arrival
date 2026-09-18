@@ -18,7 +18,7 @@
  *   ✓  GetPut AST via `printScheme(readSugarcoat(render(scheme)))` — many files
  *   ✓  PutGet cyclic for method-dot + accessor subscripts ONLY
  *   ✗  GetPut BYTE (`sugarcoatToScheme`) — one "does not throw", zero identity
- *   ✗  PutGet cyclic for free `[]` / even `{}` (dict/list surface)
+ *   ✗  PutGet cyclic for free `[]` / even `{}` (dict/vector surface)
  *   ✗  Double-render / scheme-parser-on-sugar isolation
  *   ✗  The promised "program corpus" (README / index.ts) — no corpus exists
  *
@@ -52,21 +52,23 @@ const astEq = (a: string, b: string): boolean => {
 
 // ── fixtures that exercise free-[] + even-{} together (the mode-override shape) ──
 
-const LIST_OF_DICT = `(list (dict :form (quote notify) :level (quote error) :message "hi"))`;
-const LIST_OF_DICTS = `(list (dict :a 1) (dict :b 2))`;
-const NESTED = `(define f (lambda (x) (list (dict :a x :b (list 1 2)))))`;
-const IF_ARMS = `(if #t (list (dict :k 1)) (list))`;
+const VECTOR_OF_DICT = `(vector (dict :form (quote notify) :level (quote error) :message "hi"))`;
+const VECTOR_OF_DICTS = `(vector (dict :a 1) (dict :b 2))`;
+const NESTED = `(define f (lambda (x) (vector (dict :a x :b (vector 1 2)))))`;
+const IF_ARMS = `(if #t (vector (dict :k 1)) (vector))`;
 
 const CLASSIC_CORPUS = [
-  LIST_OF_DICT,
-  LIST_OF_DICTS,
+  VECTOR_OF_DICT,
+  VECTOR_OF_DICTS,
   NESTED,
   IF_ARMS,
+  `(vector)`,
   `(list)`,
+  `(list 1 2 3)`,
   `(dict)`,
   `(dict :a 1 :b 2)`,
-  `(list 1 2 3)`,
-  `(map f (list (dict :k v)))`,
+  `(vector 1 2 3)`,
+  `(map f (vector (dict :k v)))`,
   `(+ a b)`,
   `(and p q r)`,
   `(lambda (x) (* x 2))`,
@@ -108,7 +110,7 @@ describe("lens law GetPut BYTE: sugarcoatToScheme(render(c), c) === c", () => {
   }
 
   it("preserves surrounding comments and hand formatting on unedited view", () => {
-    const c = `;;; header\n\n(list (dict :a 1))\n\n;;; trailer\n`;
+    const c = `;;; header\n\n(vector (dict :a 1))\n\n;;; trailer\n`;
     const sugar = render(c);
     expect(sugarcoatToScheme(sugar, c)).toBe(c);
   });
@@ -119,7 +121,7 @@ describe("lens law GetPut BYTE: sugarcoatToScheme(render(c), c) === c", () => {
 //          (method-dot + accessors already have this; dict/list did NOT)
 // ═══════════════════════════════════════════════════════════════════════════
 
-describe("lens law PutGet cyclic: render(read(s)) is a stable sugar for list/dict", () => {
+describe("lens law PutGet cyclic: render(read(s)) is a stable sugar for vector/dict", () => {
   for (const s of SUGAR_LIST_DICT_SURFACES) {
     it(s, () => {
       // Correct composition: sugar → sugarcoat reader → scheme print → re-render.
@@ -146,11 +148,11 @@ describe("lens law PutGet cyclic: render(read(s)) is a stable sugar for list/dic
 
 /**
  * Domain isolation — fixed by parse opener stamps + normalizePolyglot:
- * free `[]`/`{}` lower to `(list …)` / `(dict …)` before render, so re-feeding
+ * free `[]`/`{}` lower to `(vector …)` / `(dict …)` before render, so re-feeding
  * a sweet buffer recovers the same scheme AST (no `({:form … })` zombie).
  */
 describe("lens law domain isolation: re-render of sugar must not corrupt intent", () => {
-  for (const c of [LIST_OF_DICT, LIST_OF_DICTS, NESTED, IF_ARMS]) {
+  for (const c of [VECTOR_OF_DICT, VECTOR_OF_DICTS, NESTED, IF_ARMS]) {
     it(`double-render preserves AST of ${c}`, () => {
       const once = render(c);
       const twice = schemeToSugarcoat(once);
@@ -158,13 +160,13 @@ describe("lens law domain isolation: re-render of sugar must not corrupt intent"
     });
   }
 
-  it("mode-override shape: list-of-notify-dict survives a re-render pass", () => {
+  it("mode-override shape: vector-of-notify-dict survives a re-render pass", () => {
     // harness/design/slash/mode-override.scm — sweet source re-entered via schemeToSugarcoat.
     // Uses `str` (not string-append): strTolerant modernizes string-append→str on the
-    // first render; domain isolation cares about list/dict structure, not that rename.
-    const scheme = `(list (dict :form (quote notify) :level (quote error) :message (str "unknown mode axis: " (format #f "~a" axis))))`;
+    // first render; domain isolation cares about vector/dict structure, not that rename.
+    const scheme = `(vector (dict :form (quote notify) :level (quote error) :message (str "unknown mode axis: " (format #f "~a" axis))))`;
     const once = render(scheme).trim();
-    expect(once).toMatch(/^\[\{/); // sweet list-of-dict surface
+    expect(once).toMatch(/^\[\{/); // sweet vector-of-dict surface
     const twice = schemeToSugarcoat(once).trim();
     // Zombie signature we must never emit: bare parens + glued `{:form` atom.
     expect(twice).not.toMatch(/^\(\{:form/);
@@ -178,12 +180,12 @@ describe("lens law domain isolation: re-render of sugar must not corrupt intent"
 // Law 5 — After normalize, free sugar delimiters agree with the sugar reader
 //
 // Raw parseSexprs still stamps `open` on free `[]`/`{}` (a bare container, not
-// yet `(list …)`/`(dict …)`). Intent agreement is at the normalize boundary —
+// yet `(vector …)`/`(dict …)`). Intent agreement is at the normalize boundary —
 // the same path schemeToSugarcoat takes.
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe("normalizePolyglot free []/{} agrees with sugarcoat reader", () => {
-  it("free [] → (list …)", () => {
+  it("free [] → (vector …)", () => {
     const sugar = "[1 2 3]";
     const normalized = printScheme(normalizePolyglot(parseSexprs(sugar))[0]!);
     const sugarTree = printScheme(readSugarcoatExpr(sugar));

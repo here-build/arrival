@@ -614,13 +614,16 @@ Three mechanisms sit near the membrane and must be kept off it:
 
 1. **Spine adoption is an in-plane representation choice.** Projecting a borrowed
    `AJSArray` onto its list spine (`AJSArrayList` via `adoptSpine`) is `AValue` in,
-   `AValue` out — the SAME backing store, the SAME provenance, O(1). It honors a
-   `z.listAlike` contract slot by handing the impl a real `APair` subclass _before_ the
-   impl runs (several native impls field-read `.car`/`.cdr` directly). It must never be
-   routed through `z.decode`, the _plane_ crossing (scheme → JS): three earlier attempts
-   died on exactly that confusion — a `z.codec` on the list schema computed an eager
-   `APair` copy on every call and discarded it while the raw array sailed through and
-   hung the body. Adoption is a chart choice on the Scheme plane, not a crossing.
+   `AValue` out — the SAME backing store, the SAME provenance, O(1). A boxed `AVector`
+   on the same slot is a shallow pair copy of already-boxed elements (empty → `nil`) —
+   not an `AJSArrayList` view, whose owner protocol boxes raw JS and would trip
+   hygiene if pointed at `__vector__`. It honors a `z.listAlike` contract slot by
+   handing the impl a real `APair` subclass _before_ the impl runs (several native
+   impls field-read `.car`/`.cdr` directly). It must never be routed through
+   `z.decode`, the _plane_ crossing (scheme → JS): three earlier attempts died on
+   exactly that confusion — a `z.codec` on the list schema computed an eager `APair`
+   copy on every call and discarded it while the raw array sailed through and hung
+   the body. Adoption is a chart choice on the Scheme plane, not a crossing.
 
 2. **`transparent` is a provenance-transparent role, not a stamped crossing.** In the
    provenance-role vocabulary (`PROVENANCE.md §2`), `transparent` names a membrane

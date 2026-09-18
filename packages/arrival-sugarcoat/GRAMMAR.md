@@ -86,7 +86,10 @@ is the kwarg spelling — see §6.
 
 ## 3. Surface forms
 
-`List`, `Quote`, `String`, `Word` datums are R7RS §7.1.2, unchanged. Non-R7RS productions:
+`Quote`, `String`, `Word` datums are R7RS §7.1.2, unchanged. `(` `)` lists are R7RS lists.
+`[]` and `{}` are sugarcoat primaries — **vector** literal and dict/n-expr — the same
+glyphs as arrival-scheme. Tightness against the preceding token is the discriminator
+(same rule as method-arg `(`):
 
 ```
 Form           ← ColonPair / Expr
@@ -94,22 +97,49 @@ ColonPair      ← KWSUFFIX Expr                    ; leading `name:` — kwarg 
 Expr           ← Postfix
 Postfix        ← Primary Step*                    ; steps bind tighter than infix & application
 Step           ← Subscript / Method
-Subscript      ← '[' Index ']'                    ; NOT tight-gated (x[0] ≡ x [0])
+Subscript      ← TIGHT '[' Index ']'              ; spaced `[…]` is FreeList, not a subscript
 Method         ← DOT Word Args? TrailingLambda?
 Args           ← TIGHT '(' Expr* ')'              ; extra positionals: fold(knil)
 TrailingLambda ← TIGHT '{' (ArrowLambda / Form) '}'
-Primary        ← List / Quote / Curly / AtExpr / String / Word
-Curly          ← '{' Infix⟨0⟩ '}'
+Primary        ← ParenList / FreeVector / Curly / Quote / AtExpr / String / Word
+ParenList      ← '(' Expr* ')'
+FreeVector     ← '[' Expr* ']'                    ; loose `[` only → (vector …)
+Curly          ← '{' CurlyBody '}'                ; dict / unwrap / n-expr — §4
 StepLine       ← INDENT DOT Word Args? TrailingLambda?   ; child line starting with DOT (§1.4)
 ```
+
+`x[0]` is a subscript; `x [0]` is two datums (`x` and `(vector 0)`). `{body}` tight after a
+method is a trailing lambda; a spaced `{…}` is a sibling Curly.
 
 **Method lowering — receiver-last fold.** `recv.op(a₁ … aₖ){Λ}` ⇒ `(op Λ a₁ … aₖ recv)` — the
 receiver seats in the _last_ argument slot; a trailing lambda seats first. Chains fold left:
 `x.f.g` ⇒ `(g (f x))`. StepLines produce the identical CST — layout only.
 
-**Render gate.** Read is unconditional; render emits a dot/subscript chain iff it peels **≥ 2
-steps**, or the single step is an accessor, key, or braced method. A lone bare unary `(op recv)`
-stays prefix — `(not p)` is never `p.not`, but `x.f.g` and `xs.map{…}` both surface.
+**Render gate.** Read is unconditional. Render peels nested single-receiver calls (receiver
+last) into `base + [step…]`.
+
+Dedicated surface outranks peel. A node that already has a sugarcoat face is not a step:
+
+| node | face |
+| --- | --- |
+| `(vector …)` | `[…]` |
+| `(dict …)` | `{…}` |
+| `(str …)` / `(string-append …)` | `@{…}` |
+| `(list …)` / `(cons a b)` | stay prefix — constructors, not `[]` |
+
+Peel is the residual after those faces. Without this cut, `(f (vector x))` launders through
+the ≥2-step gate as `x.vector.f`. `(map f (vector x y))` still peels `map` onto the vector
+node and renders `[x y].map(f)` — the vector is the receiver, not a step.
+
+Emit iff **≥ 2 remaining steps**, or a **single** step that is an accessor, key, braced
+method, flippable unary (`?` / `->` / curated), or a method with extra args (`xs.map(f)`).
+A lone generic unary stays prefix — `(not p)` is never `p.not`; `x.f.g` and `xs.map{…}`
+both surface.
+
+A raw scalar (`7`, `#t`, `#\a`) is never a method-dot receiver. Special forms, infix ops,
+and `not` are never method ops (`NEVER_METHOD`). Collection-last HOFs (`map`/`filter`/…)
+flip with a named function (`xs.map(f)`) as well as a trailing lambda. Relational
+predicates (`char=?`, `string<?`) stay prefix even though they end in `?`.
 
 **Index classification** (inside `Subscript`):
 
@@ -166,14 +196,17 @@ survives; binary nesting does not — that is an intentional sugarcoat quotient,
 even though `and` binds tighter — render emits `{{a and b} or c}`, never `{a and b or c}`.
 A human-typed bare mix is a reader door ("brace each group"). Same-operator runs stay flat.
 
-### 4.2 Free lists `[…]`
+### 4.2 Free vectors `[…]`
 
-A free-standing `[…]` (not tight against a preceding value) folds to `(list …)`. Tight postfix
-`xs[0]` / `f[:k]` remains subscript access (§3). Adjacency is the discriminator — same rule as
-method-arg `(` and trailing-lambda `{`.
+A free-standing `[…]` (Primary `FreeVector` in §3) folds to `(vector …)` — the same glyph as
+arrival-scheme's evaluating vector literal. Tight postfix `xs[0]` / `f[:k]` remains
+subscript access. Adjacency is the discriminator — same rule as method-arg `(` and
+trailing-lambda `{`. Lists stay `(list …)`. R7RS `#(…)` is the *constant* vector and is
+not a token on this forest (§7).
 
-**Arrow lambda.** At level 0, `{(p₁ … pₖ) => body}` ⇒ `(lambda (p₁ … pₖ) body)`. A TrailingLambda
-body without a top-level `=>` is the implicit-`it` form: `{body}` ⇒ `(lambda (it) body)`.
+**Arrow lambda.** At n-expr level 0, `{(p₁ … pₖ) => body}` ⇒ `(lambda (p₁ … pₖ) body)`. A
+TrailingLambda body without a top-level `=>` is the implicit-`it` form: `{body}` ⇒
+`(lambda (it) body)`.
 
 ## 5. At-expressions
 
@@ -181,9 +214,10 @@ body without a top-level `=>` is the implicit-`it` form: `{body}` ⇒ `(lambda (
 AtExpr    ← '@' Head? '{' Body '}'
 Head      ← Word                                 ; @dedent is a reader special-case, not a binding
 Body      ← (Literal / Interp)*
-Interp    ← '@' Ident                            ; stops at '.' — prose periods stay literal
+Interp    ← '@' Ident TightSub*                  ; ident stops at '.' — prose periods stay literal
           / '@' '|' Ident '|'                    ; explicit boundary: @|name|!
           / '@' '(' Datum ')'                    ; graft a full form
+TightSub  ← '[' Index ']'                        ; same subscript as §3; space → prose
 Literal   ← any char except '@'                  ; quotes & newlines are literal, no escaping
 ```
 
@@ -193,8 +227,10 @@ literals coalesce on read — which is exactly the render-side representability 
 
 The graft body is **prefix Scheme context**: the parens are the grafted form's own parens
 (`@(+ x 1)` grafts `(+ x 1)`), so `@(x + 1)` grafts a _call of `x`_ and `@({x + 1})` grafts a
-call of the sum — no infix, no postfix steps attach to a bare `@id` interp (`@s[:k]` leaves
-`[:k]` as literal prose; write `@(:k s)`).
+call of the sum. A tight trailing subscript chain on a bare `@id` interp rides along —
+`@s[:baseline]` / `@xs[0]` — the same accessor surface as code context. A space breaks it
+(`@s [:k]` leaves `[:k]` as prose). Richer holes use `@(…)`: postfix sugar inside a graft
+must stay bare (`@(:k s)`, not `@(s[:k])`).
 
 Inside a body, brace depth is tracked (a balanced `{…}` inside prose is literal); the body may
 span physical lines (§1.2).
@@ -221,6 +257,11 @@ territory:
 
 ## 7. What is deliberately NOT in the grammar
 
+- **No `#(` constant-vector token.** The Arrival evaluator reads `#(1 2 3)` as a constant
+  vector (`evalElements = false`). This forest does not: `#` is a word and `(` opens a
+  list, so `#(1 2 3)` splits (`parseSexprs` → two forms; sugarcoat-read I-expr →
+  `(# (1 2 3))`). Same split for `#u8(…)`. The evaluating vector on both faces is free
+  `[…]` ≡ `(vector …)`.
 - **No neoteric** `f(x)`/`f[x]` glue-calls (SRFI-105 tier 2) — collides with subscripts and
   trailing lambdas. A tight `(` binds only after a method-DOT word.
 - **No `$nfx$` / `$bracket-apply$`** — the precedence ladder (§4) and index classification (§3)

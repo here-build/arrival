@@ -114,3 +114,19 @@ describe("listAlike consumers must TERMINATE on an AJSArray receiver — §B3, c
     },
   );
 });
+
+describe("listAlike consumers must TERMINATE on a boxed AVector — same hang as the borrowed array", () => {
+  // AVector.cdr of #() is another #(), never ANil. Widening listAlike without
+  // converting at adoptSpine reintroduces the infinite walk on the literal the
+  // sugarcoat `[]` now reads as. Walk-to-exhaustion only.
+  it.each([
+    { name: "every? ALL match", code: "(every? odd? #(1 3 5))", expected: true },
+    { name: "any? NO match", code: "(any? even? #(1 3 5))", expected: false },
+    { name: "every empty vector is vacuously true", code: "(every even? #())", expected: true },
+    { name: "delete-duplicates", code: "(delete-duplicates #(1 2 1))", expected: [1, 2] },
+    { name: "count", code: "(count even? #(1 2 3 4))", expected: 2 },
+    { name: "first", code: "(first #(9 8))", expected: 9 },
+  ])("$name", HANG_GUARD, async ({ code, expected }) => {
+    expect(await out(code)).toEqual(expected);
+  });
+});

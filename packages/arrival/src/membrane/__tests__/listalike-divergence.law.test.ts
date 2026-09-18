@@ -235,6 +235,33 @@ const VECTOR_CASES: readonly (readonly [string, string, readonly unknown[]])[] =
 /** The oracle arm: the same elements as an R7RS vector LITERAL. */
 const asVectorLiteral = (xs: readonly unknown[]): string => `#(${xs.map(String).join(" ")})`;
 
+describe("LAW: no list verb may distinguish a #(…) literal from a pair-list", () => {
+  // Spine adoption copies a boxed AVector onto a pair spine. The pair-list arm is
+  // the oracle; a hang or a contract door on the vector arm is a seam.
+  const LIST_ON_VECTOR: readonly (readonly [string, string, readonly unknown[]])[] = [
+    ["every? (ALL match — must walk to exhaustion)", "(every? odd? xs)", [1, 3, 5]],
+    ["any? (NO match — must walk to exhaustion)", "(any? even? xs)", [1, 3, 5]],
+    ["every (value-returning)", "(every (lambda (x) (* x 2)) xs)", [1, 2]],
+    ["first", "(first xs)", [9, 8]],
+    ["delete-duplicates", "(delete-duplicates xs)", [1, 2, 1]],
+    ["count", "(count even? xs)", [1, 2, 3, 4]],
+    ["find-tail (MATCH — returns a tail)", "(find-tail even? xs)", [1, 2, 3]],
+    ["last", "(last xs)", [1, 2, 3]],
+  ];
+
+  it.each(LIST_ON_VECTOR.map(([verb, program, fixture]) => ({ verb, program, fixture })))(
+    "$verb — $program",
+    { timeout: DEADLINE_MS * 3 },
+    async ({ verb, program, fixture }) => {
+      const viaVector = await runOne(program.replace(/\bxs\b/g, asVectorLiteral(fixture)), {});
+      const viaPairList = await runOne(program.replace(/\bxs\b/g, asPairListLiteral(fixture)), {});
+      expect(viaVector.startsWith("HANG"), `${verb} vector hung`).toBe(false);
+      expect(viaPairList.startsWith("HANG"), `${verb} pair-list hung`).toBe(false);
+      expect({ verb, viaVector }).toEqual({ verb, viaVector: viaPairList });
+    },
+  );
+});
+
 describe("LAW: no vector verb may distinguish a tool array from a #(…) literal", () => {
   it.each(VECTOR_CASES.map(([verb, program, fixture]) => ({ verb, program, fixture })))(
     "$verb — $program",

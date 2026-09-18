@@ -38,7 +38,7 @@ sugarcoatToScheme("xs.map{ it * 2 }", scheme); // → "(map (lambda (it) (* it 2
 
 `@inhuman.tools/arrival-codemirror` wires this into an editor: you type Sugarcoat, the buffer stores Scheme, live.
 
-**The full syntax — indentation, infix, subscripts, method chains, `it`, dicts, at-expressions — is a 5-minute read: [LEARN.md](./LEARN.md).**
+**The full syntax — indentation, infix, `[]` vectors / `{}` dicts, subscripts, method chains, `it`, at-expressions — is a 5-minute read: [LEARN.md](./LEARN.md).**
 
 ## API
 

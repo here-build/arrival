@@ -607,17 +607,20 @@ export const pair = markSpineAdopting(cons(schemeValue, schemeValue));
 
 /**
  * Spine-chart list identity (twin of `vector` as indexed chart). Bake adopts:
- * borrowed AJSArray → AJSArrayList (same array/provenance, O(1)); empty → nil
- * so `(null? xs)` is honest (`instanceof ANil`).
+ * borrowed AJSArray → AJSArrayList (same array/provenance, O(1)); boxed AVector →
+ * shallow pair copy of already-boxed elements; empty → nil so `(null? xs)` is
+ * honest (`instanceof ANil`).
  *
  * INPUT ONLY — fresh-list output is `z.union([z.pair, z.nil])`.
- * Runtime admits AJSArray (pre-adoption); TS type is AListAlike post-adoption.
+ * Runtime admits AJSArray / AVector (pre-adoption); TS type is AListAlike post-adoption.
  * Scheme face only (not a codec; ban on symbol.rosetta). native/define consumers.
  */
 export const listAlike = markSpineAdopting(
   named(
     "listAlike",
-    z.custom<AListAlike>((v) => v instanceof APair || v instanceof ANil || v instanceof AJSArray),
+    z.custom<AListAlike>(
+      (v) => v instanceof APair || v instanceof ANil || v instanceof AJSArray || v instanceof AVector,
+    ),
   ),
 );
 

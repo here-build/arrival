@@ -352,23 +352,16 @@ describe("math skin: (not (relop …)) ↔ ≠ / ≢ / ≉ / ≄", () => {
   });
 });
 
-// ── binary cons → [a b] (list surface; one-way to list on save) ──
-describe("binary cons prefers list surface [a b]", () => {
-  it("(cons a b) → [a b] (ascii and math)", () => {
-    expect(render("(cons a b)")).toBe("[a b]");
-    expect(render("(cons a b)", math)).toBe("[a b]");
-    expect(render("(cons car cdr)")).toBe("[car cdr]");
+// ── binary cons is not [] (that's a vector); math ∷ still reads as cons ──
+describe("binary cons stays prefix; [] is vector", () => {
+  it("(cons a b) does not steal the vector surface", () => {
+    expect(render("(cons a b)")).toBe("(cons a b)");
+    expect(render("(cons a b)", math)).toBe("(cons a b)");
   });
-  it("one-way: reads back as list, not cons", () => {
-    expect(roundtrip("(cons a b)")).toBe(canon("(list a b)"));
+  it("[a b] is a 2-element vector, not a pair", () => {
+    expect(read1("[a b]")).toBe("(vector a b)");
+    expect(roundtrip("(cons a b)")).toBe(canon("(cons a b)"));
   });
-  it("nested cons containerizes as nested lists", () => {
-    expect(render("(cons a (cons b xs))")).toBe("[a [b xs]]");
-  });
-  it("cons of a compound keeps the element sugared", () => {
-    expect(render("(cons (+ x 1) xs)")).toBe("[{x + 1} xs]");
-  });
-  // Hand-typed math ∷ still reads as cons (legacy / explicit pair intent).
   it("math ∷ still folds to cons on read", () => {
     expect(read1("{a ∷ b}")).toBe("(cons a b)");
     expect(read1("{x + 1 ∷ xs}")).toBe(canon("(cons (+ x 1) xs)"));

@@ -11,8 +11,8 @@
  * Layers rendered:
  *   • curly-infix     (- n 1)            → {n - 1}        ; n-expr (odd operand·op·operand)
  *   • dict literal    (dict :k v …)      → {:k v …}       ; even kv pairs share `{}` with n-expr
- *   • list literal    (list a b …)       → [a b …]        ; free `[]` (tight `xs[0]` is subscript)
- *   • binary cons     (cons a b)         → [a b]          ; same surface; save → (list a b)
+ *   • vector literal  (vector a b …)     → [a b …]        ; free `[]` (tight `xs[0]` is subscript)
+ *   • list stays prefix `(list …)` — `[]` is arrival-scheme's vector, not a list
  *   • neoteric        (f x y)            → f(x y)         ; optional (reads odd for data/pairs)
  *   • indentation     big forms          → head on a line, children indented
  *   • at-expressions  (str "a " x)       → @{a @x}        ; prose/template heads
@@ -25,7 +25,9 @@
  *   • head-line rule is fixed, not optimized (an MDL layout-cost pass would replace it).
  *   • dangling comments before a `)` (own line, no datum after) are dropped, and
  *     comments on inline-rendered operands aren't shown (only at formatSugarcoat seams).
- *   • no $ / \\ group markers, no vector (#(…)) rendering (use `(vector …)` for Scheme).
+ *   • no $ / \\ group markers. No `#(…)` constant-vector token on this forest: `#`
+ *     is a word and `(` opens a list, so `#(1 2 3)` splits. The evaluating vector
+ *     is free `[…]` ≡ `(vector …)`, same glyph as arrival-scheme.
  *
  * POLYGLOT + FREE-SURFACE NORMALIZE (schemeToSugarcoat):
  *   Arrival's reader accepts named supersets (docs/grammar.md §BINDINGS / §CLAUSES /
@@ -34,10 +36,10 @@
  *     • BG2a whole-list `(let [a 1 b 2] …)` → `(let ((a 1) (b 2)) …)`
  *     • BG2b per-element `(let* ([a 1] [b 2]) …)` → same paren pairs (already list-shaped)
  *     • BG9 cond/case/do clauses `[test …]` → `(test …)`
- *     • free `[…]` → `(list …)`  (sugarcoat list surface; use `(vector …)` for vectors)
+ *     • free `[…]` → `(vector …)`  (same glyph as arrival-scheme; lists stay `(list …)`)
  *     • free even `{…}` → `(dict …)`; free odd `{a op b…}` → n-expr `(op a b…)`
  *   Tolerant surface is erased; **intent** (binding names/values, clause structure,
- *   collection kind list/dict) is preserved. See `__tests__/polyglot-normalize.test.ts`.
+ *   collection kind vector/dict) is preserved. See `__tests__/polyglot-normalize.test.ts`.
  */
 
 import { parseSexprs, type Node } from "@inhuman.tools/arrival-syntax";
@@ -136,13 +138,13 @@ function lowerBindings(binds: Node, form: string, mapChild: (n: Node) => Node): 
   // BG2a whole-list: bindings container is `[…]` and elements are NOT already pairs.
   if (open === "[" && (els.length === 0 || !els.every(isPairBinding))) {
     if (form === "do") {
-      // Leave vector-shaped whole-list on `do` as a free list so the shape stays
-      // visible (eval would door). Prefer list head over silent wrong pairing.
-      return { list: [{ atom: "list" }, ...els.map(mapChild)] };
+      // Leave vector-shaped whole-list on `do` as a free vector so the glyph stays
+      // visible (eval would door). Prefer vector head over silent wrong pairing.
+      return { list: [{ atom: "vector" }, ...els.map(mapChild)] };
     }
     if (els.length % 2 !== 0) {
-      // Odd whole-list — leave as free list (malformed; don't invent a value).
-      return { list: [{ atom: "list" }, ...els.map(mapChild)] };
+      // Odd whole-list — leave as free vector (malformed; don't invent a value).
+      return { list: [{ atom: "vector" }, ...els.map(mapChild)] };
     }
     const pairs: Node[] = [];
     for (let i = 0; i < els.length; i += 2) {
@@ -177,9 +179,9 @@ export function normalizePolyglot(forms: Node[]): Node[] {
     const items = nd.list;
 
     // Under quote/quasiquote: still lower free []/{} so sweet data round-trips as
-    // list/dict, but do not special-case let/cond heads (they're data).
+    // vector/dict, but do not special-case let/cond heads (they're data).
     if (ctx === "quote") {
-      if (open === "[") return { list: [{ atom: "list" }, ...items.map((c) => mapNode(c, "quote"))] };
+      if (open === "[") return { list: [{ atom: "vector" }, ...items.map((c) => mapNode(c, "quote"))] };
       if (open === "{") return lowerBrace(items, (c) => mapNode(c, "quote"));
       if (items.length > 0 && isAtom(items[0]) && !items[0].str && POLY_QUOTE_HEADS.has(items[0].atom)) {
         return {
@@ -206,8 +208,8 @@ export function normalizePolyglot(forms: Node[]): Node[] {
           if (named) out.push(items[1]!);
           out.push(lowerBindings(items[bindIdx]!, h, mapExpr));
           for (const rest of items.slice(bindIdx + 1)) {
-            // do's test clause may be a bracket vector — lower as free list→list head, or
-            // if it's a clause-shaped bracket of length≥1, as a plain list (BG9).
+            // do's test clause may be a bracket vector — lower as a plain clause
+            // list (BG9), not a collection literal.
             if (h === "do" && rest === items[bindIdx + 1] && !isAtom(rest) && rest.open === "[") {
               out.push({ list: rest.list.map(mapExpr) });
             } else {
@@ -236,7 +238,7 @@ export function normalizePolyglot(forms: Node[]): Node[] {
 
     // Free surface containers at expression position.
     if (open === "[") {
-      return { list: [{ atom: "list" }, ...items.map(mapExpr)] };
+      return { list: [{ atom: "vector" }, ...items.map(mapExpr)] };
     }
     if (open === "{") {
       return lowerBrace(items, mapExpr);
@@ -342,8 +344,8 @@ const INFIX_GLYPH: Record<string, string> = {
 // The math skin (Agda-style). `∧`/`∨` for logicals, `≡` structural-equal, wavy
 // `≈`/`≃` for the identity pair (eq?/eqv?), `≤`/`≥`. Numeric `=`, `<`, `>`,
 // arithmetic stay themselves. Reader accepts both skins.
-// Binary `cons` is NOT math-infix anymore — it prefers the list surface `[a b]`
-// (same as `(list a b)`); hand-typed `{a ∷ b}` still reads as `(cons a b)`.
+// Binary `cons` is not math-infix on render (`[]` is vector, not pair-as-data).
+// Hand-typed `{a ∷ b}` still reads as `(cons a b)`.
 const MATH_GLYPH: Record<string, string> = {
   "equal?": "≡",
   and: "∧",
@@ -354,13 +356,13 @@ const MATH_GLYPH: Record<string, string> = {
   ">=": "≥",
   // heads that become infix ONLY in the math skin (see MATH_INFIX):
   // `(member x xs)` → `{x ∈ xs}`, `(compose f g)` → `{f ∘ g}`.
-  // (`cons` prefers `[a b]` list surface — hand-typed `{a ∷ b}` still reads as cons.)
+  // (`cons` stays prefix — `[a b]` is a 2-element vector; `{a ∷ b}` still reads as cons.)
   member: "∈",
   compose: "∘",
 };
-// Heads promoted to infix under the math skin only. `cons` left out — list surface
-// `[a b]` is the preferred view. member returns the tail/#f, not a bool — `∈` reads
-// it as membership intent.
+// Heads promoted to infix under the math skin only. `cons` left out — `[a b]` is a
+// vector, not a pair; `{a ∷ b}` still reads as cons. member returns the tail/#f,
+// not a bool — `∈` reads it as membership intent.
 const MATH_INFIX = new Set(["member", "compose"]);
 const glyphOf = (op: string, o: SugarcoatOpts): string =>
   (o.skin === "math" ? MATH_GLYPH[op] : undefined) ?? INFIX_GLYPH[op] ?? op;
@@ -1012,6 +1014,15 @@ type RStep = { sub: string } | { op: string; lam?: Node; args?: Node[] };
 function asStep(nd: Node, o: SugarcoatOpts): { recv: Node; step: RStep } | null {
   if (isAtom(nd)) return null;
   const items = nd.list;
+  // Dedicated surface outranks peel. A node that already has a sugarcoat face
+  // (`[]`/`{}`/`@{}`) — or a constructor with no method reading (`list`/`cons`) —
+  // is not a step. Otherwise `(f (vector x))` launders through the ≥2-step gate as
+  // `x.vector.f`. Peel is the residual after those faces. `list` as a *value*
+  // (`(map list xs)` → `xs.map(list)`) is untouched: this node isn't a list call.
+  if (items.length > 0 && isAtom(items[0]) && !items[0].str) {
+    const h = items[0].atom;
+    if (h === "list" || h === "dict" || h === "cons" || h === "vector" || AT_TEXT_HEADS.has(h)) return null;
+  }
   // accessor `(c[ad]+r recv)` → subscript run; static key `(:k recv)` → `[:k]`.
   if (items.length === 2 && isAtom(items[0]) && !items[0].str) {
     const sub = accessorSubscript(items[0].atom);
@@ -1107,15 +1118,10 @@ function stepText(s: RStep, o: SugarcoatOpts): string {
   return `.${escSym(s.op)}${args}${lam}`;
 }
 
-/** `(list …)` → free-standing `[…]` (not a tight subscript). */
-const isListLit = (items: Node[]): boolean =>
-  items.length > 0 && isAtom(items[0]) && !items[0].str && items[0].atom === "list";
-/** Binary `(cons a b)` → same `[a b]` surface as a 2-element list (intent of a
- *  pair-as-data). One-way: reads back as `(list a b)`, not `cons`. */
-const isBinaryCons = (items: Node[]): boolean =>
-  items.length === 3 && isAtom(items[0]) && !items[0].str && items[0].atom === "cons";
-/** Elements of a list-shaped view node: args of `list` or the two of `cons`. */
-const listViewElems = (items: Node[]): Node[] => (isBinaryCons(items) || isListLit(items) ? items.slice(1) : []);
+/** `(vector …)` → free-standing `[…]` (not a tight subscript). Arrival-scheme's
+ *  evaluating vector literal; lists stay prefix `(list …)`. */
+const isVectorLit = (items: Node[]): boolean =>
+  items.length > 0 && isAtom(items[0]) && !items[0].str && items[0].atom === "vector";
 /** `(dict …)` → `{…}` even-kv brace form (shared delimiter with n-expr; odd/even on read). */
 const isDictLit = (items: Node[]): boolean =>
   items.length > 0 && isAtom(items[0]) && !items[0].str && items[0].atom === "dict";
@@ -1131,10 +1137,11 @@ export function inlineSugarcoat(nd: Node, o: SugarcoatOpts): string {
   if (items.length === 0) return "()";
   if (o.nilGlyph && isEmptyQuote(items)) return "nil";
   if (isQuoteForm(items)) return QUOTE_PREFIX[atomText(items[0])] + inlineSugarcoat(items[1], o);
-  // Collection literals first — before neoteric/prefix/math-cons-infix.
-  // `(list …)` and binary `(cons a b)` share the free `[…]` surface.
-  if (isListLit(items) || isBinaryCons(items)) {
-    return `[${listViewElems(items)
+  // Collection literals first — before neoteric/prefix.
+  // `(vector …)` is the free `[…]` surface (arrival-scheme's evaluating vector).
+  if (isVectorLit(items)) {
+    return `[${items
+      .slice(1)
       .map((it) => inlineSugarcoat(it, o))
       .join(" ")}]`;
   }
@@ -1501,11 +1508,11 @@ function formatSugarcoatCore(nd: Node, col: number, o: SugarcoatOpts): string {
     out.push(`${" ".repeat(col)}}`);
     return out.join("\n");
   }
-  // Free list / binary-cons — broken form keeps the `[]` envelope.
-  if (isListLit(items) || isBinaryCons(items)) {
+  // Free vector — broken form keeps the `[]` envelope.
+  if (isVectorLit(items)) {
     const pad = " ".repeat(col + 2);
     const out = ["["];
-    for (const el of listViewElems(items)) out.push(pad + formatSugarcoat(el, col + 2, o));
+    for (const el of items.slice(1)) out.push(pad + formatSugarcoat(el, col + 2, o));
     out.push(`${" ".repeat(col)}]`);
     return out.join("\n");
   }

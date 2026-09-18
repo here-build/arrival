@@ -223,7 +223,9 @@ the face split is strictly additive.
 
 **The contract picks the chart.** A slot marked `z.listAlike` takes the _spine_ reading of
 its argument: a borrowed JS array is projected onto an `AJSArrayList` view — O(1), same
-backing store, same provenance — _before_ the impl sees it, and an empty array becomes `nil`.
+backing store, same provenance — and a boxed `AVector` is copied onto a shallow pair spine
+of already-boxed elements — _before_ the impl sees it. An empty array or vector becomes
+`nil`.
 This is spine adoption, and it runs where it must — in the bind path, before the impl —
 because a native's contract is type-only with no runtime validation, and several impls
 field-read their list argument (`.car`). The mark is _data_ (a `WeakSet` in

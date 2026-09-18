@@ -156,16 +156,16 @@ describe("§CLAUSES BG9 bracket clauses → paren clauses", () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Free surfaces — sugarcoat list/dict (aligned with the view, not arrival vectors)
+// Free surfaces — sugarcoat vector/dict (same glyphs as arrival-scheme)
 // ═══════════════════════════════════════════════════════════════════════════
 
-describe("free [] / {} lower to list/dict heads (sugarcoat surface)", () => {
+describe("free [] / {} lower to vector/dict heads (sugarcoat surface)", () => {
   it.each([
-    { poly: "[1 2 3]", image: "(list 1 2 3)" },
-    { poly: "[]", image: "(list)" },
+    { poly: "[1 2 3]", image: "(vector 1 2 3)" },
+    { poly: "[]", image: "(vector)" },
     { poly: "{:a 1 :b 2}", image: "(dict :a 1 :b 2)" },
     { poly: "{}", image: "(dict)" },
-    { poly: "[{:form 'notify}]", image: "(list (dict :form (quote notify)))" },
+    { poly: "[{:form 'notify}]", image: "(vector (dict :form (quote notify)))" },
     { poly: "{a + b}", image: "(+ a b)" },
     { poly: "{flight_number: 1}", image: "(dict :flight_number 1)" },
   ])("$poly → $image", ({ poly, image }) => {
@@ -173,16 +173,15 @@ describe("free [] / {} lower to list/dict heads (sugarcoat surface)", () => {
     expect(astEq(roundtrip(poly), image)).toBe(true);
   });
 
-  it("scheme (list)/(dict) unchanged", () => {
+  it("scheme (list)/(dict)/(vector) unchanged as heads", () => {
     expect(astEq(norm("(list 1 2)"), "(list 1 2)")).toBe(true);
     expect(astEq(norm("(dict :a 1)"), "(dict :a 1)")).toBe(true);
+    expect(astEq(norm("(vector 1 2 3)"), "(vector 1 2 3)")).toBe(true);
   });
 
-  it("(vector …) stays vector — free [] is NOT vector sugar here", () => {
-    // Arrival free [1 2 3] is a vector at eval; the sugarcoat lens claims free []
-    // as list. Scheme vector constructors are the honest vector spelling.
-    expect(astEq(norm("(vector 1 2 3)"), "(vector 1 2 3)")).toBe(true);
-    expect(schemeToSugarcoat("(vector 1 2 3)").trim()).toBe("(vector 1 2 3)");
+  it("(vector …) renders as free []", () => {
+    expect(schemeToSugarcoat("(vector 1 2 3)").trim()).toBe("[1 2 3]");
+    expect(schemeToSugarcoat("(list 1 2 3)").trim()).toBe("(list 1 2 3)");
   });
 });
 
@@ -190,8 +189,8 @@ describe("free [] / {} lower to list/dict heads (sugarcoat surface)", () => {
 // Mode-override shape — the regression that shipped green before domain isolation
 // ═══════════════════════════════════════════════════════════════════════════
 
-describe("mode-override list-of-dict intent", () => {
-  const scheme = '(list (dict :form (quote notify) :level (quote error) :message "hi"))';
+describe("mode-override vector-of-dict intent", () => {
+  const scheme = '(vector (dict :form (quote notify) :level (quote error) :message "hi"))';
 
   it("scheme → sugar → re-schemeToSugarcoat preserves AST", () => {
     const once = schemeToSugarcoat(scheme).trim();
@@ -202,7 +201,7 @@ describe("mode-override list-of-dict intent", () => {
     expect(astEq(roundtrip(twice), scheme)).toBe(true);
   });
 
-  it("sweet source [{…}] normalizes to list-of-dict, not bare call", () => {
+  it("sweet source [{…}] normalizes to vector-of-dict, not bare call", () => {
     const sweet = "[{:form 'notify :level 'error :message \"hi\"}]";
     expect(astEq(norm(sweet), scheme)).toBe(true);
     expect(astEq(roundtrip(sweet), scheme)).toBe(true);

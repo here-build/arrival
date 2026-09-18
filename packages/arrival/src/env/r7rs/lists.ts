@@ -765,8 +765,9 @@ export default EnvCapability.define("scheme/lists", {
         const is_list = isProperList;
         // Spine adoption HERE: contract is z.array(z.schemeValue) (last arg may be
         // non-list — R7RS improper-tail form), so no per-slot schema. EVERY arg adopts,
-        // including the last — a borrowed JS array read as spine splices as a list;
-        // adoptSpine only touches AJSArray, so `(append '(1 2) 3)` still builds `(1 2 . 3)`.
+        // including the last — a borrowed JS array or boxed vector read as spine splices
+        // as a list; a non-sequence last arg is untouched, so `(append '(1 2) 3)` still
+        // builds `(1 2 . 3)`.
         items = items.map((item) => adoptSpine(item) as SchemeValue);
         const cloned = items.map((item) => (item instanceof APair ? item.clone() : item));
         return cloned.reduce((acc, item, idx) => {

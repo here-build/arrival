@@ -163,6 +163,27 @@ describe("scheme/srfi-1 — behavior equivalence (§4.2 gate), weighted toward t
     expect(await printed(env, "(any (lambda (x) '()) '(1))")).toBe("()");
   });
 
+  it("listAlike verbs accept a boxed vector — spine adoption, not a contract door", async () => {
+    const env = await freshEnv();
+    // every / every? / any walk to exhaustion (or short-circuit) on a pair spine.
+    // AVector.cdr of #() is another #(), never ANil — without adoption these hang.
+    const [everyVec] = await execOverFrame("(every even? #(2 4 6))", { env });
+    const [everyQVec] = await execOverFrame("(every? odd? #(1 3 5))", { env });
+    const [everyQMiss] = await execOverFrame("(every? odd? #(1 3 4))", { env });
+    const [everyEmpty] = await execOverFrame("(every even? #())", { env });
+    const [anyVec] = await execOverFrame("(any odd? #(2 4 5))", { env });
+    const [firstVec] = await execOverFrame("(first #(9 8))", { env });
+    expect(everyVec).toBe(true);
+    expect(everyQVec).toBe(true);
+    expect(everyQMiss).toBe(false);
+    expect(everyEmpty).toBe(true);
+    expect(anyVec).toBe(true);
+    expect(firstVec).toBe(9);
+    // Rebuilders return a LIST (the spine chart), not a vector — same as a tool array.
+    expect(await printed(env, "(delete-duplicates #(1 2 1))")).toBe("(1 2)");
+    expect(await printed(env, "(count even? #(1 2 3 4))")).toBe("2");
+  });
+
   it("zip (named-let normalized) — transpose, stops at the shortest, () on empty", async () => {
     const env = await freshEnv();
     expect(await printed(env, "(zip '(1 2 3) '(a b))")).toBe("((1 a) (2 b))");

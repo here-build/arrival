@@ -50,31 +50,70 @@ describe("dict {} (even kv) vs n-expr {} (odd operand·op·operand)", () => {
   });
 });
 
-describe("list [] free-standing vs tight subscript", () => {
-  it("free [] is list", () => {
-    expect(read1("[]")).toBe("(list)");
-    expect(read1("[1 2 3]")).toBe("(list 1 2 3)");
-    expect(read1("[:a :b]")).toBe("(list :a :b)");
+describe("vector [] free-standing vs tight subscript", () => {
+  it("free [] is vector", () => {
+    expect(read1("[]")).toBe("(vector)");
+    expect(read1("[1 2 3]")).toBe("(vector 1 2 3)");
+    expect(read1("[:a :b]")).toBe("(vector :a :b)");
   });
-  it("renders list as brackets", () => {
-    expect(render("(list)")).toBe("[]");
-    expect(render("(list 1 2 3)")).toBe("[1 2 3]");
+  it("renders vector as brackets", () => {
+    expect(render("(vector)")).toBe("[]");
+    expect(render("(vector 1 2 3)")).toBe("[1 2 3]");
+  });
+  it("lists stay prefix — [] is not a list", () => {
+    expect(render("(list)")).toBe("(list)");
+    expect(render("(list 1 2 3)")).toBe("(list 1 2 3)");
+    expect(read1("[1 2 3]")).not.toBe("(list 1 2 3)");
   });
   it("tight subscript still peels", () => {
     expect(read1("xs[0]")).toBe("(car xs)");
     expect(read1("f[:verdict]")).toBe("(:verdict f)");
     expect(render("(car xs)")).toBe("xs[0]");
   });
-  it("list as an argument is free, not a subscript", () => {
-    expect(read1("(f [1 2])")).toBe("(f (list 1 2))");
-    expect(render("(f (list 1 2))")).toBe("(f [1 2])");
+  it("vector as an argument is free, not a subscript", () => {
+    expect(read1("(f [1 2])")).toBe("(f (vector 1 2))");
+    expect(render("(f (vector 1 2))")).toBe("(f [1 2])");
   });
-  it("list of dicts", () => {
-    expect(read1("[{:a 1} {:b 2}]")).toBe("(list (dict :a 1) (dict :b 2))");
-    expect(render("(list (dict :a 1) (dict :b 2))")).toBe("[{:a 1} {:b 2}]");
+  it("vector of dicts", () => {
+    expect(read1("[{:a 1} {:b 2}]")).toBe("(vector (dict :a 1) (dict :b 2))");
+    expect(render("(vector (dict :a 1) (dict :b 2))")).toBe("[{:a 1} {:b 2}]");
   });
   it("round-trips", () => {
-    for (const s of ["(list)", "(list 1 2 3)", "(list (dict :a 1))", "(map f (list 1 2))"])
+    for (const s of ["(vector)", "(vector 1 2 3)", "(vector (dict :a 1))", "(map f (vector 1 2))"])
       expect(roundtrip(s)).toBe(canon(s));
+  });
+});
+
+describe("dedicated surface outranks peel (vector/dict/list/str are not method steps)", () => {
+  it("(f (vector x)) stays prefix-on-literal, not x.vector.f", () => {
+    expect(render('(compile-skill (vector (dict :path "SKILL.md" :content markdown)))')).toBe(
+      '(compile-skill [{:path "SKILL.md" :content markdown}])',
+    );
+    expect(render("(g (vector x))")).toBe("(g [x])");
+  });
+  it("(vector (f x)) is still a vector literal, not x.f.vector", () => {
+    expect(render("(vector (f x))")).toBe("[(f x)]");
+  });
+  it("HOF on a vector literal still peels: [x].map(f)", () => {
+    expect(render("(map f (vector 1 2))")).toBe("[1 2].map(f)");
+  });
+  it("(list …) stays prefix; not a method on its element", () => {
+    expect(render("(list 1 2 3)")).toBe("(list 1 2 3)");
+    expect(render("(compile-skill (list x))")).toBe("(compile-skill (list x))");
+  });
+  it("(foo (str x)) does not become x.str.foo", () => {
+    expect(render("(foo (str x))")).toBe("(foo (str x))");
+  });
+});
+
+describe("R7RS #(…) is not a constant-vector datum on this forest", () => {
+  it("parseSexprs splits # from the parens", () => {
+    expect(parseSexprs("#(1 2 3)").map((n) => printScheme(n))).toEqual(["#", "(1 2 3)"]);
+  });
+  it("sugarcoat-read I-expr groups them as a call of #", () => {
+    expect(readSugarcoat("#(1 2 3)").map((n) => printScheme(n))).toEqual(["(# (1 2 3))"]);
+  });
+  it("the evaluating-vector spelling is […]", () => {
+    expect(render("(vector 1 2 3)")).toBe("[1 2 3]");
   });
 });

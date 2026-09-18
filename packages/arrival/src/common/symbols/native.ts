@@ -41,8 +41,9 @@ function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
       cacheClass,
       declaredCallbackRoles: contract.callbackRoles,
     });
-    // Spine adoption (docs/environments.md §CONTRACT): z.listAlike borrowed arrays projected
-    // before impl runs — native has no validation, and .car on a raw array reads undefined.
+    // Spine adoption (docs/environments.md §CONTRACT): z.listAlike borrowed arrays / boxed
+    // vectors projected before impl runs — native has no validation, and .car on a raw
+    // array reads undefined.
     // Computed once; undefined when no slot adopts.
     const adoptArgs = buildSlotAdopter(contract.input, contract.inputRest);
     // Interpreter args are untyped SchemeValues; impl wants the contract tuple.
