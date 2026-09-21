@@ -335,7 +335,9 @@ _installRosettaMembraneApply(async (proc, args, callCtx) => {
         return [...decodedHead, decodeKw(collectKwargsObject(kwArgs))];
       }
       try {
-        return z.decode(m.inSchema, args) as readonly unknown[];
+        const { head, kwArgs } = splitAtFirstKeyword(args);
+        const sent = kwArgs.length === 0 ? args : [...head, collectKwargsObject(kwArgs)];
+        return z.decode(m.inSchema, sent) as readonly unknown[];
       } catch (error) {
         if (error instanceof ZodError) throw new Error(formatPositionalRejection(name, error, args, m.inSchema));
         throw error;

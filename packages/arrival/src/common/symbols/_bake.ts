@@ -50,7 +50,6 @@ import {
   type ResourcePathFn,
 } from "../../run/resource-paths.js";
 import { AValue } from "../../values/primitives/AValue.js";
-import { ASymbol } from "../../values/primitives/ASymbol.js";
 
 // ── 1. Args-vector spec + decoded-type inference ─────────────────────────────
 
@@ -603,11 +602,18 @@ export function collectKwargsObject(args: readonly unknown[]): Record<string, un
   return obj;
 }
 
-/** A self-evaluating `:key` / `#:key` ASymbol — the same cut `emitCallArgs` uses. */
+/** A self-evaluating `:key` / `#:key` — the same cut `emitCallArgs` uses.
+ *  Name is `__name__` when present (ASymbol / AKeywordSymbol); `String(arg)` otherwise,
+ *  so a second isolate's keyword still splits. */
 export function isKwargKeyword(arg: unknown): boolean {
-  if (!(arg instanceof ASymbol)) return false;
-  const name = arg.__name__;
-  return typeof name === "string" && name.length > 1 && name.startsWith(":") && !name.startsWith("::");
+  const named = arg as { __name__?: unknown } | null;
+  const name =
+    named !== null && typeof named === "object" && typeof named.__name__ === "string"
+      ? named.__name__
+      : typeof arg === "string"
+        ? arg
+        : String(arg);
+  return name.length > 1 && name.startsWith(":") && !name.startsWith("::");
 }
 
 /** Split `(tool a b :k v …)` at the first keyword. Leading non-keywords are the positional

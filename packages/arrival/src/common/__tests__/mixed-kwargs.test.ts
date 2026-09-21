@@ -82,6 +82,33 @@ describe("mixed kwargs — UNIT (rosetta)", () => {
     await expect(fire(def, testCallCtx(), pluck("offset"), new AExact(1))).rejects.toThrow();
   });
 
+  it("trailing keywords fold into an optional last dict (no inputRest)", async () => {
+    const seen: unknown[] = [];
+    const def = symbol.rosetta`mcp-call: optional last dict`(
+      {
+        input: [z.string, z.string, z.object({ q: z.string.optional() }).optional()],
+        output: [z.string],
+      },
+      (connection, tool, args) => {
+        seen.push([connection, tool, args]);
+        return `${connection}:${tool}:${args?.q}`;
+      },
+    );
+    expect(
+      jsOf(
+        await fire(
+          def,
+          testCallCtx(),
+          new AString("mail"),
+          new AString("search"),
+          pluck("q"),
+          new AString("inbox"),
+        ),
+      ),
+    ).toBe("mail:search:inbox");
+    expect(seen[0]).toEqual(["mail", "search", { q: "inbox" }]);
+  });
+
   it("optional positional omitted then kwargs", async () => {
     const seen: unknown[] = [];
     const def = symbol.rosetta`ask: mixed ask`(
@@ -142,6 +169,21 @@ describe("mixed kwargs — INTEGRATION", () => {
 
   it("pure kwargs regression: (kw-greet :a \"Ada\" :b 5)", async () => {
     expect(jsOf((await execState(`(kw-greet :a "Ada" :b 5)`, { env })).values[0])).toBe("Ada:5");
+  });
+
+  it("exec: trailing keywords fold into an optional last dict (no inputRest)", async () => {
+    const mcpEnv = await freshEnv();
+    const call = symbol.rosetta`mcp-call: optional last dict`(
+      {
+        input: [z.string, z.string, z.object({ q: z.string.optional() }).optional()],
+        output: [z.string],
+      },
+      (connection, tool, args) => `${connection}:${tool}:${args?.q}`,
+    );
+    await applyCapability(mcpEnv, [EnvCapability.define("test/mcp-fold", { symbols: () => ({ "mcp-call": call }) })]);
+    expect(jsOf((await execState(`(mcp-call "mail" "search" :q "inbox")`, { env: mcpEnv })).values[0])).toBe(
+      "mail:search:inbox",
+    );
   });
 
   it("variadic Zod inputRest is still a tuple rest, not kwargs", async () => {
