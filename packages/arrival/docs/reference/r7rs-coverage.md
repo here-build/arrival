@@ -20,6 +20,7 @@
 | Eval §6.12                                                                                        | **Doors** (`r7rs/eval`)                                                  |
 | Library / inclusion / feature-expand                                                              | **Doors** (`r7rs/syntax`)                                                |
 | Numeric S2 (`square`, `exact-integer-sqrt`, `rationalize`)                                        | **Impl** (`exact-integer-sqrt` → pair product)                           |
+| Procedure call arity §4.1.4                                                                       | **Impl** — `ArityMismatchError` at `(f …)` / `apply` / `=>`              |
 | Still silent                                                                                      | `define-record-type` (records — out of scope); complex tower (separate)  |
 
 ---

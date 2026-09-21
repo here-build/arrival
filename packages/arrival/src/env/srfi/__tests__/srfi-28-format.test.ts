@@ -191,7 +191,11 @@ describe("format — directive and arity errors are clear", () => {
       input: '(format "~d" "not-a-number")',
       error: /~d directive expects a number/,
     },
-    { name: "no arguments at all is an error", input: "(format)", error: /expected a format string/ },
+    {
+      name: "no arguments at all is an arity error",
+      input: "(format)",
+      error: /format: expected at least 1 argument, got 0/,
+    },
   ])("$name", async ({ input, error }) => {
     await expect(run(input)).rejects.toThrow(error);
   });

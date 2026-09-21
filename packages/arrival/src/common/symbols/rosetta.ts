@@ -47,6 +47,7 @@ import {
   type RosettaSymbolDef,
   topLevelSchemas,
   type VectorSpec,
+  arityOfContract,
 } from "./_bake.js";
 import { WorldFlipError } from "../../errors.js";
 
@@ -241,7 +242,7 @@ export function rosetta(tpl: TemplateStringsArray, ...sub: (string | number)[]) 
 
     return new ARosettaProcedure({
       name,
-      arity: { min: 0, max: null },
+      arity: arityOfContract(contract.input, contract.inputRest),
       contract: {
         kind: "rosetta",
         name,

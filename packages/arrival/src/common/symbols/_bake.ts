@@ -614,6 +614,28 @@ function isSchemaTuple(spec: VectorSpec): spec is readonly z.ZodTypeAny[] {
 
 /** Input side + optional rest → one VectorSchema. Rest as plain record = kwargs object schema;
  *  rest as ZodType = `z.tuple(fixed, rest)`. Single-schema input + rest throws. */
+/** Arity bounds a contract declares. Positional tuple ⇒ `min` = required slots (a trailing
+ *  `.optional()` slot lowers it), `max` = slot count; any `inputRest` (positional rest OR
+ *  kwargs) lifts `max` to `null`; a non-tuple input spec is opaque ⇒ `{0, null}` (unknown,
+ *  never enforced). Read by the evaluator's arity check and by introspection. */
+export function arityOfContract(input: VectorSpec, inputRest: RestSpec): { min: number; max: number | null } {
+  if (!isSchemaTuple(input)) return { min: 0, max: null };
+  let min = 0;
+  for (const slot of input) {
+    if (isOptionalSlot(slot)) break;
+    min++;
+  }
+  return { min, max: inputRest === undefined ? input.length : null };
+}
+
+/** zod 4: `.optional()` wraps in a schema whose `def.type === "optional"`; `isOptional()` is the
+ *  public probe and stays authoritative when present. */
+function isOptionalSlot(slot: z.ZodTypeAny): boolean {
+  const probe = (slot as { isOptional?: () => boolean }).isOptional;
+  if (typeof probe === "function") return probe.call(slot);
+  return (slot as { def?: { type?: string } }).def?.type === "optional";
+}
+
 export function normalizeInputVector(input: VectorSpec, inputRest: RestSpec): VectorSchema {
   if (inputRest === undefined) return normalizeVector(input);
   // kwargs: container is not ZodType — instanceof is the discriminator.
