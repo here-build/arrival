@@ -26,6 +26,7 @@
 // Installs the global \`TypeError.invariant\` assertion helper used by the
 // list-bounds and circular-list guards below (side-effect import).
 import "@here.build/error-invariant";
+import { assertArity } from "../../eval/arity.js";
 import { adoptSpine } from "../../membrane/adopt-spine.js";
 import dedent from "dedent";
 import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
@@ -476,8 +477,11 @@ export default EnvCapability.define("scheme/lists", {
       function (this: CallCtx, fn, ...rest) {
         invariant(rest.length > 0, "apply: requires an argument list as the final argument");
         const spread = listToArray(rest.at(-1) as AListAlike);
+        const args = [...rest.slice(0, -1), ...spread];
+        // `apply` is Scheme-side application (R7RS §6.10) — same arity law as `(f …)`.
+        assertArity(fn, args.length);
         // Thread whole CallCtx (not just runCtx) so invocation provenance reaches fn.
-        return applyCallback(fn, [...rest.slice(0, -1), ...spread], this) as SchemeValue | Promise<SchemeValue>;
+        return applyCallback(fn, args, this) as SchemeValue | Promise<SchemeValue>;
       },
     ),
 

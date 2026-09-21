@@ -18,6 +18,7 @@ import {
   type MetadataRecord,
   type RestSpec,
   type VectorSpec,
+  arityOfContract,
 } from "./_bake.js";
 import { assertNoResourcePathProducers } from "../../run/resource-paths.js";
 
@@ -59,7 +60,7 @@ function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
           };
     return new ANativeProcedure({
       name,
-      arity: { min: 0, max: null },
+      arity: arityOfContract(contract.input, contract.inputRest),
       contract: {
         kind: "native",
         name,

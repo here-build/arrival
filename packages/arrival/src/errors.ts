@@ -215,6 +215,50 @@ export class BudgetExceededError extends ArrivalError {
 }
 
 // -------------------------------------------------------------------------
+// :: ArityMismatchError — a procedure applied to the wrong number of arguments
+// (R7RS §4.1.4 "it is an error"). Raised at every SCHEME-SIDE application:
+// `(f …)`, `(apply f …)`, and `=>`. Host→Scheme callbacks (`applyCallback`) are
+// exempt on purpose — a JS HOF passes its own conventions (`(value, index, array)`)
+// and the lambda keeps R7RS's right to ignore what it did not name there.
+// -------------------------------------------------------------------------
+export interface ArityBounds {
+  readonly min: number;
+  readonly max: number | null;
+}
+
+export class ArityMismatchError extends ArrivalError {
+  public readonly name = "ArityMismatchError";
+  readonly "arrival/error-category": ErrorClass = "arity-mismatch";
+
+  constructor(
+    /** Procedure display name, e.g. "string-index" or "lambda". */
+    public readonly procedure: string,
+    public readonly bounds: ArityBounds,
+    public readonly received: number,
+    /** Parameter list in Scheme-facing spelling when known, e.g. "(s criterion)". */
+    public readonly parameters?: string,
+  ) {
+    super(ArityMismatchError.describe(procedure, bounds, received, parameters));
+  }
+
+  static expects({ min, max }: ArityBounds): string {
+    const n = (k: number) => `${k} argument${k === 1 ? "" : "s"}`;
+    if (max === null) return `at least ${n(min)}`;
+    if (min === max) return `exactly ${n(min)}`;
+    return `${min} to ${n(max)}`;
+  }
+
+  static describe(procedure: string, bounds: ArityBounds, received: number, parameters?: string): string {
+    const surplus = bounds.max !== null && received > bounds.max;
+    const where = parameters === undefined ? "" : ` — the parameters are ${parameters}`;
+    const why = surplus
+      ? "Surplus arguments are not ignored: an optional start/end or a positional flag this procedure does not take is a bug in the call, not a no-op."
+      : "Missing arguments do not default: bind every parameter or pass a rest-taking procedure.";
+    return `${procedure}: expected ${ArityMismatchError.expects(bounds)}, got ${received}${where}.\n  Why: ${why}`;
+  }
+}
+
+// -------------------------------------------------------------------------
 // :: PurityError — deliberately-omitted feature (PURE DATAFLOW: mutation and
 // dynamics omitted by design — they'd falsify lineage). symbol.notImplemented doors throw this.
 // -------------------------------------------------------------------------
