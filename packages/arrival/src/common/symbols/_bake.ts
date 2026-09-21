@@ -138,9 +138,14 @@ export type DecodedArgsWithRest<
       : never
     : never
   : Rest extends Record<string, z.ZodTypeAny>
-    ? // kwargs: ONE trailing object param (face-projected fields), not a spread.
-      // Mirrors runtime `[z.decode(z.object(inputRest), fold(args))]`. `I` is `[]` at kwargs sites.
-      [{ [K in keyof Rest]: ProjectFace<Rest[K] & z.ZodTypeAny, F> }]
+    ? I extends readonly z.ZodTypeAny[]
+      ? SpecInfer<I, F> extends infer Head extends readonly ("js" extends F ? unknown : AValue)[]
+        ? // kwargs: ONE trailing object after the positional head. Empty `input` ⇒ `[kwargs]`
+          // (the whole call is the object). Nonempty ⇒ `[...Head, kwargs]`. Same walk as
+          // type-layer `emitCallArgs`: `(f x :a 1)` → `f(x, { a: 1 })`.
+          [...Head, { [K in keyof Rest]: ProjectFace<Rest[K] & z.ZodTypeAny, F> }]
+        : never
+      : never
     : DecodedArgs<I, F>;
 
 /** Declared-role vocabulary (P7: data in string key space; class/def is representation authority).
@@ -597,6 +602,31 @@ export function collectKwargsObject(args: readonly unknown[]): Record<string, un
   return obj;
 }
 
+/** A self-evaluating `:key` / `#:key` — the same cut `emitCallArgs` uses.
+ *  Name is `__name__` when present (ASymbol / AKeywordSymbol); `String(arg)` otherwise,
+ *  so a second isolate's keyword still splits. */
+export function isKwargKeyword(arg: unknown): boolean {
+  const named = arg as { __name__?: unknown } | null;
+  const name =
+    named !== null && typeof named === "object" && typeof named.__name__ === "string"
+      ? named.__name__
+      : typeof arg === "string"
+        ? arg
+        : String(arg);
+  return name.length > 1 && name.startsWith(":") && !name.startsWith("::");
+}
+
+/** Split `(tool a b :k v …)` at the first keyword. Leading non-keywords are the positional
+ *  head; the rest is interleaved kwargs (possibly empty). */
+export function splitAtFirstKeyword(args: readonly unknown[]): {
+  readonly head: readonly unknown[];
+  readonly kwArgs: readonly unknown[];
+} {
+  const cut = args.findIndex((arg) => isKwargKeyword(arg));
+  if (cut === -1) return { head: args, kwArgs: [] };
+  return { head: args.slice(0, cut), kwArgs: args.slice(cut) };
+}
+
 /** VectorSpec → one VectorSchema: bare tuple → `z.tuple`; array-ish schema → itself.
  *  Kwargs never reach here (`input: []` + plain-record `inputRest` → `normalizeInputVector`). */
 export function normalizeVector(spec: VectorSpec): VectorSchema {
@@ -617,7 +647,15 @@ function isSchemaTuple(spec: VectorSpec): spec is readonly z.ZodTypeAny[] {
 export function normalizeInputVector(input: VectorSpec, inputRest: RestSpec): VectorSchema {
   if (inputRest === undefined) return normalizeVector(input);
   // kwargs: container is not ZodType — instanceof is the discriminator.
-  if (!(inputRest instanceof ZodType)) return z.object(inputRest) as unknown as VectorSchema;
+  if (!(inputRest instanceof ZodType)) {
+    if (!isSchemaTuple(input)) {
+      throw new KeywordPairingError("input-rest-needs-tuple");
+    }
+    // Empty input: the whole call is the kwargs object (inSchema stays the object).
+    // Nonempty: inSchema is the positional tuple; kwargsShape lives on the membrane.
+    if (input.length === 0) return z.object(inputRest) as unknown as VectorSchema;
+    return normalizeVector(input);
+  }
   if (!isSchemaTuple(input)) {
     throw new KeywordPairingError("input-rest-needs-tuple");
   }
