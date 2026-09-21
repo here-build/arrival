@@ -217,6 +217,20 @@ function sliceImpl(name: string, pick: (chars: string[], k: number) => string[])
   };
 }
 
+/** SRFI-13 optional `[start end]` bounds over a code-point array: absent ⇒ whole string;
+ * present ⇒ exact integers with 0 ≤ start ≤ end ≤ length, else a door naming the range.
+ * Returns the half-open pair; callers add `start` back to any index they report. */
+function boundsOf(name: string, chars: readonly string[], start: unknown, end: unknown, which = ""): [number, number] {
+  const s = start === undefined ? 0 : toIndex(start);
+  const e = end === undefined ? chars.length : toIndex(end);
+  const label = which === "" ? "" : ` (${which})`;
+  invariant(
+    Number.isInteger(s) && Number.isInteger(e) && s >= 0 && s <= e && e <= chars.length,
+    `${name}: range [${s}, ${e})${label} out of range for a string of length ${chars.length} (need 0 ≤ start ≤ end ≤ length)`,
+  );
+  return [s, e];
+}
+
 export default EnvCapability.define("scheme/srfi-13", {
   symbols: (symbol, z) => ({
     "string-null?": symbol.native`string-null?: #t iff the string is empty (SRFI-13)`(
@@ -243,21 +257,23 @@ export default EnvCapability.define("scheme/srfi-13", {
 
     // Index-or-#f, like string-contains (#f is the ONLY false value — index 0 is truthy).
     "string-index":
-      symbol.native`string-index: index of the first char matching a char or one-arg predicate, or #f (SRFI-13; no charsets)`(
+      symbol.native`string-index: index of the first char matching a char or one-arg predicate within [start end), or #f (SRFI-13; no charsets)`(
         {
-          input: [z.string, z.lambda],
+          input: [z.string, z.lambda, z.schemeNumber.optional(), z.schemeNumber.optional()],
           output: [z.union([z.exact, z.boolean])],
           type: dedent`
           {
-            (s: string, criterion: string | ((c: string) => unknown)): number | false;
+            (s: string, criterion: string | ((c: string) => unknown), start?: number, end?: number): number | false;
           }
         `,
         },
-        function (this: CallCtx, str, criterion): AExact | ABool | Promise<AExact | ABool> {
+        function (this: CallCtx, str, criterion, start, end): AExact | ABool | Promise<AExact | ABool> {
           const chars = [...stringValue(str)];
-          return afterFlags(criterionFlags(criterion, chars, this.runCtx), (f) => {
+          const [from, to] = boundsOf("string-index", chars, start, end);
+          // The index reported is absolute (into `s`), per SRFI-13 — not relative to `start`.
+          return afterFlags(criterionFlags(criterion, chars.slice(from, to), this.runCtx), (f) => {
             const i = f.indexOf(true);
-            return withInputProvenance([str, criterion], i === -1 ? schemeBool(false) : new AExact(i));
+            return withInputProvenance([str, criterion], i === -1 ? schemeBool(false) : new AExact(from + i));
           });
         },
       ),
@@ -404,13 +420,45 @@ export default EnvCapability.define("scheme/srfi-13", {
     // so index 0 is truthy and `(if (string-contains h n) …)` reads naturally.
     // `string-contains?` is the boolean-predicate twin. Both stamp the lineage of
     // the strings they searched.
-    "string-contains": symbol.native`string-contains: index of the first occurrence of sub, or #f (SRFI-13)`(
-      { input: [z.string, z.string], output: [z.union([z.exact, z.boolean])] },
-      function (this: CallCtx, str, sub) {
-        const i = stringValue(str).indexOf(stringValue(sub));
-        return withInputProvenance([str, sub], i === -1 ? schemeBool(false) : new AExact(i));
-      },
-    ),
+    "string-contains":
+      symbol.native`string-contains: index in s1 of the first occurrence of s2, searching s1[start1 end1) for s2[start2 end2); #f if none (SRFI-13)`(
+        {
+          input: [
+            z.string,
+            z.string,
+            z.schemeNumber.optional(),
+            z.schemeNumber.optional(),
+            z.schemeNumber.optional(),
+            z.schemeNumber.optional(),
+          ],
+          output: [z.union([z.exact, z.boolean])],
+          type: dedent`
+          {
+            (s1: string, s2: string, start1?: number, end1?: number, start2?: number, end2?: number): number | false;
+          }
+        `,
+        },
+        function (this: CallCtx, str, sub, start1, end1, start2, end2) {
+          // Code-point indices throughout (same unit as string-length / string-index / the slices),
+          // so an astral character counts once here too.
+          const hay = [...stringValue(str)];
+          const needle = [...stringValue(sub)];
+          const [h0, h1] = boundsOf("string-contains", hay, start1, end1, "s1");
+          const [n0, n1] = boundsOf("string-contains", needle, start2, end2, "s2");
+          const m = n1 - n0;
+          let found = -1;
+          // SRFI-13: an empty needle is found at start1.
+          for (let i = h0; i + m <= h1; i++) {
+            let j = 0;
+            while (j < m && hay[i + j] === needle[n0 + j]) j++;
+            if (j === m) {
+              found = i;
+              break;
+            }
+          }
+          return withInputProvenance([str, sub], found === -1 ? schemeBool(false) : new AExact(found));
+        },
+      ),
 
     "string-contains?": symbol.native`string-contains?: #t iff str contains sub (SRFI-13)`(
       { input: [z.string, z.string], output: [z.boolean] },

@@ -44,11 +44,14 @@ describe("arity — user lambdas", () => {
 });
 
 describe("arity — natives and rosetta symbols (contract-derived bounds)", () => {
-  it("SRFI-13 start/end are not silently ignored: string-index is 2-ary", () =>
-    rejectsArity('(string-index "abcdefd" #\\d 4)', /string-index: expected exactly 2 arguments, got 3/));
+  it("SRFI-13 optional bounds widen max, not past it: string-index is 2 to 4", () =>
+    rejectsArity('(string-index "abcdefd" #\\d 4 7 0)', /string-index: expected 2 to 4 arguments, got 5/));
 
-  it("string-contains is 2-ary", () =>
-    rejectsArity('(string-contains "abcabc" "abc" 1)', /string-contains: expected exactly 2 arguments, got 3/));
+  it("string-contains is 2 to 6", () =>
+    rejectsArity('(string-contains "abcabc" "abc" 1 6 0 3 9)', /string-contains: expected 2 to 6 arguments, got 7/));
+
+  it("a genuinely fixed-arity SRFI-13 predicate refuses a third argument", () =>
+    rejectsArity('(string-prefix? "a" "ab" 0)', /string-prefix\?: expected exactly 2 arguments, got 3/));
 
   it("substring takes 2 to 3 (end is optional here), never 4", () =>
     rejectsArity('(substring "abcdefg" 1 3 99)', /substring: expected 2 to 3 arguments, got 4/));
@@ -73,7 +76,7 @@ describe("arity — natives and rosetta symbols (contract-derived bounds)", () =
   });
 
   it("the surplus message says why", () =>
-    rejectsArity('(string-index "a" #\\a 0)', /Surplus arguments are not ignored/));
+    rejectsArity('(string-prefix? "a" "ab" 0)', /Surplus arguments are not ignored/));
 
   it("the missing message says why", () => rejectsArity('(substring "abc")', /Missing arguments do not default/));
 });

@@ -61,7 +61,7 @@ describe("scheme/srfi-13 Contract harvest precision — already-precise ops stay
     // the override prose: the membrane genuinely accepts a char OR a one-arg predicate, and a
     // char's TS image (`string`) would misread as "a whole string".
     expect(signatureOf(def("string-index"))).toBe(
-      "{\n  (s: string, criterion: string | ((c: string) => unknown)): number | false;\n}",
+      "{\n  (s: string, criterion: string | ((c: string) => unknown), start?: number, end?: number): number | false;\n}",
     );
     expect(signatureOf(def("string-count"))).toBe(
       "{\n  (s: string, criterion: string | ((c: string) => unknown)): number;\n}",

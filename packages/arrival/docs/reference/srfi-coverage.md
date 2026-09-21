@@ -126,7 +126,7 @@ Linear-update (`!`) family could honestly door with the same purity reason as `a
 | `string-null?`                                                            | nat   | Live                                                                |
 | `string-prefix?`                                                          | nat   | Live (no `-ci`, no start/end)                                       |
 | `string-suffix?`                                                          | nat   | Live                                                                |
-| `string-index`                                                            | nat   | Live (char or 1-arg pred; no char-set; start/end door as arity)     |
+| `string-index`                                                            | nat   | Live (char or 1-arg pred; no char-set; optional start/end)          |
 | `string-count`                                                            | nat   | Live (same criterion limits)                                        |
 | `string-take` / `string-drop` / `string-take-right` / `string-drop-right` | nat   | Live                                                                |
 | `string-trim`                                                             | nat   | **Official left-only**                                              |
