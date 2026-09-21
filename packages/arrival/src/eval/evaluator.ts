@@ -84,6 +84,7 @@
  * src/reader/__tests__/polyglot/macro-special-brackets.spec.ts.
  */
 import invariant from "tiny-invariant";
+import { assertArity } from "./arity.js";
 import { theVoid } from "../values/primitives/AVoid.js";
 import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
 import { AValue, unionProvenance } from "../values/primitives/AValue.js";
@@ -1765,6 +1766,7 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
   // is_applyable subsumes is_callable_value here (every ACallable declares the
   // apply term). Bare host fns are doored by the is_callable gate above.
   SpecialFormShapeError.invariant(is_applyable(proc), "=>", "requires a procedure");
+  assertArity(proc, 1);
   const __savedDynamicCallSite = currentDynamicCallSite();
   setDynamicCallSite(dynSite);
   let r: CallResult;
@@ -2634,6 +2636,9 @@ function* evaluatePair(code: APair<SchemeValue, SchemeValue>, ctx: EvalContext):
     const argsResult = yield { call: evaluateArgs(rest, nonTailCtx) };
     invariant(Array.isArray(argsResult), "evaluateArgs must return array");
     const args = argsResult;
+    // R7RS §4.1.4: wrong argument count is an error — surplus is not dropped, missing is
+    // not `undefined`. Enforced here (Scheme-side application), not in the apply term.
+    assertArity(fn, args.length);
 
     // Thread the dynamic call site so user lambdas invoked from native JS
     // (map/filter) pick up THIS Pair's invocation as parent. Two-pronged:
