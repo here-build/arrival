@@ -142,6 +142,13 @@ describe("symbol contract — inputRest: a fixed head + a separately-typed varia
     expectTypeOf<DecodedArgsWithRest<[typeof z.string], typeof z.number>>().toEqualTypeOf<[string, ...number[]]>();
   });
 
+  test("record inputRest: empty input is [kwargs]; nonempty input is [...Head, kwargs]", () => {
+    expectTypeOf<DecodedArgsWithRest<[], { a: typeof z.string }>>().toEqualTypeOf<[{ a: string }]>();
+    expectTypeOf<DecodedArgsWithRest<[typeof z.string], { offset: typeof z.number }>>().toEqualTypeOf<
+      [string, { offset: number }]
+    >();
+  });
+
   test("native-identity flavored: a Pair head + a SchemeValue (z.schemeValue) rest", () => {
     // "scheme" face — z.pair scheme face is APair; rest is SchemeValue.
     expectTypeOf<DecodedArgsWithRest<[typeof z.pair], typeof z.schemeValue, "scheme">>().toEqualTypeOf<

@@ -4,16 +4,20 @@
 // Tagged template carries `name: doc`; returns a generic so TS infers contract then checks
 // the impl against decoded types — wrong-typed impl is a compile error.
 
+import { ZodType } from "zod";
 import { buildSlotAdopter } from "../../membrane/adopt-spine.js";
 import { ANativeProcedure, type NativeSymbolDef } from "../../values/primitives/ANativeProcedure.js";
 import { type SchemeValue } from "../../values/types.js";
 import { type CallCtx } from "../../run/CallCtx.js";
+import { decodeKwargsStrict } from "../kwargs-rejection.js";
 import {
   assertContractAxes,
+  collectKwargsObject,
   type ContourContract,
   normalizeInputVector,
   normalizeVector,
   parseNameDoc,
+  splitAtFirstKeyword,
   type Impl,
   type MetadataRecord,
   type RestSpec,
@@ -45,18 +49,29 @@ function native(tpl: TemplateStringsArray, ...sub: unknown[]) {
     // before impl runs — native has no validation, and .car on a raw array reads undefined.
     // Computed once; undefined when no slot adopts.
     const adoptArgs = buildSlotAdopter(contract.input, contract.inputRest);
+    const kwargsShape: Record<string, import("zod").ZodTypeAny> | undefined =
+      contract.inputRest !== undefined && !(contract.inputRest instanceof ZodType) ? contract.inputRest : undefined;
+    const applyImpl = impl as (this: CallCtx, ...a: unknown[]) => unknown;
     // Interpreter args are untyped SchemeValues; impl wants the contract tuple.
     // Passthrough (no list slot) is the same widening — adoption is the typed path.
-    const hostImpl: (this: CallCtx, ...a: readonly SchemeValue[]) => unknown =
-      adoptArgs === undefined
-        ? (impl as (this: CallCtx, ...a: readonly SchemeValue[]) => unknown)
-        : function (this: CallCtx, ...args: readonly SchemeValue[]) {
-            // apply demands a mutable array; the adopter's tuple is one.
-            return (impl as (this: CallCtx, ...a: SchemeValue[]) => ReturnType<typeof impl>).apply(
-              this,
-              adoptArgs(args),
-            );
-          };
+    const hostImpl: (this: CallCtx, ...a: readonly SchemeValue[]) => unknown = function (
+      this: CallCtx,
+      ...args: readonly SchemeValue[]
+    ) {
+      if (kwargsShape !== undefined) {
+        const items = Array.isArray(contract.input) ? contract.input : [];
+        if (items.length === 0) {
+          return applyImpl.apply(this, [decodeKwargsStrict(name, kwargsShape, collectKwargsObject(args))]);
+        }
+        const { head, kwArgs } = splitAtFirstKeyword(args);
+        const adopted = [...(adoptArgs === undefined ? head : adoptArgs(head as SchemeValue[]))];
+        while (adopted.length < items.length) adopted.push(undefined);
+        const kwargs = decodeKwargsStrict(name, kwargsShape, collectKwargsObject(kwArgs));
+        return applyImpl.apply(this, [...adopted, kwargs]);
+      }
+      const adopted = adoptArgs === undefined ? args : adoptArgs(args);
+      return applyImpl.apply(this, adopted as unknown[]);
+    };
     return new ANativeProcedure({
       name,
       arity: { min: 0, max: null },

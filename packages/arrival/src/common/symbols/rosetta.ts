@@ -37,6 +37,7 @@ import {
   type BakeRuntimeOpts,
   collectKwargsObject,
   contractMayCarryCallable,
+  splitAtFirstKeyword,
   type CrossingContract,
   type Impl,
   isSingleOutput,
@@ -80,7 +81,15 @@ function dynamicSlotPositions(
     const keys = Object.entries(kwargsShape)
       .filter(([, slot]) => z.lookupName(slot) === "dynamic")
       .map(([key]) => key);
-    return keys.length === 0 ? undefined : { kind: "kwargs", keys };
+    const items = topLevelSchemas(inSchema);
+    const indices =
+      items === undefined || items.length === 0
+        ? []
+        : items.flatMap((item, i) => (z.lookupName(item) === "dynamic" ? [i] : []));
+    if (keys.length === 0 && indices.length === 0) return undefined;
+    if (indices.length === 0) return { kind: "kwargs", keys };
+    if (keys.length === 0) return { kind: "indices", indices };
+    return { kind: "kwargs", keys };
   }
   const items = topLevelSchemas(inSchema);
   if (items === undefined) return undefined;
@@ -101,7 +110,7 @@ function buildDynamicSlotCheck(
   switch (positions.kind) {
     case "kwargs":
       return (decodedArgs) => {
-        const obj = decodedArgs[0] as Record<string, unknown>;
+        const obj = decodedArgs[decodedArgs.length - 1] as Record<string, unknown>;
         invariant(
           positions.keys.every((key) => !isBareCallable(obj[key])),
           () => {
@@ -301,13 +310,29 @@ _installRosettaMembraneApply(async (proc, args, callCtx) => {
   try {
     const decode = (): readonly unknown[] => {
       if (m.kwargsShape) {
-        const decoded = decodeKwargsStrict(name, m.kwargsShape, collectKwargsObject(args));
-        const dropped = drainDroppedKwargNotes(decoded);
-        if (dropped !== undefined) {
-          const sink = callCtx.runCtx.notes;
-          for (const line of dropped) sink?.push(`${name}: ${line}`);
+        const decodeKw = (raw: Record<string, unknown>): unknown => {
+          const decoded = decodeKwargsStrict(name, m.kwargsShape!, raw);
+          const dropped = drainDroppedKwargNotes(decoded);
+          if (dropped !== undefined) {
+            const sink = callCtx.runCtx.notes;
+            for (const line of dropped) sink?.push(`${name}: ${line}`);
+          }
+          return decoded;
+        };
+        const items = topLevelSchemas(m.inSchema);
+        if (items === undefined || items.length === 0) {
+          return [decodeKw(collectKwargsObject(args))];
         }
-        return [decoded];
+        const { head, kwArgs } = splitAtFirstKeyword(args);
+        let decodedHead: unknown[];
+        try {
+          decodedHead = [...(z.decode(m.inSchema, head) as readonly unknown[])];
+        } catch (error) {
+          if (error instanceof ZodError) throw new Error(formatPositionalRejection(name, error, head, m.inSchema));
+          throw error;
+        }
+        while (decodedHead.length < items.length) decodedHead.push(undefined);
+        return [...decodedHead, decodeKw(collectKwargsObject(kwArgs))];
       }
       try {
         return z.decode(m.inSchema, args) as readonly unknown[];
