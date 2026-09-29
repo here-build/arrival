@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { testCallCtx } from "@inhuman.tools/arrival";
+import { testCallCtx } from "@here.build/arrival";
 
 import { RunResolverUnreachableError } from "../errors.js";
 import { runResolverOf } from "../loader.js";

@@ -1,16 +1,16 @@
-# @inhuman.tools/arrival-cli
+# @here.build/arrival-cli
 
-**The `arrival` command** — run, static-check, and REPL [arrival](https://www.npmjs.com/package/@inhuman.tools/arrival)
+**The `arrival` command** — run, static-check, and REPL [arrival](https://www.npmjs.com/package/@here.build/arrival)
 programs from the terminal. This page documents the CLI's process surface — argv, stdin, stdout/stderr,
-exit codes; the language itself (the membrane, provenance, capabilities) is `@inhuman.tools/arrival`'s README.
+exit codes; the language itself (the membrane, provenance, capabilities) is `@here.build/arrival`'s README.
 
 ## Install
 
 ```sh
-npm install -g @inhuman.tools/arrival-cli   # installs the `arrival` bin
+npm install -g @here.build/arrival-cli   # installs the `arrival` bin
 arrival --help
 
-npx @inhuman.tools/arrival-cli --help       # same surface, no global install
+npx @here.build/arrival-cli --help       # same surface, no global install
 ```
 
 ## Running programs — values ARE the output
@@ -43,7 +43,7 @@ your dataflow instead of streaming it out. Referenced at 1:0 — this program wo
 
 (exit 1, and — because validation runs before execution — nothing was evaluated.)
 
-**Rendering.** Values print as s-expression text through `@inhuman.tools/arrival-serializer`, budget-bounded
+**Rendering.** Values print as s-expression text through `@here.build/arrival-serializer`, budget-bounded
 (long structures shrink fairly, never tail-cut): `(filter (lambda (x) (> x 5)) (list 1 3 7 9 2))` prints
 `[7 9]`. Quoting is serializer rules (spaces and specials), not computed-vs-literal: `"hello, world"`
 is quoted because of the space and comma; a simple token like `done` is not. Don't parse quoting as a
@@ -134,7 +134,7 @@ any ES module exporting `EnvCapability` instance(s):
 
 ```js
 // jira.mjs
-import { EnvCapability } from "@inhuman.tools/arrival/capability";
+import { EnvCapability } from "@here.build/arrival/capability";
 
 export default EnvCapability.define("demo/jira", {
   symbols: (symbol, z) => ({
@@ -177,7 +177,7 @@ Two sharp edges, stated plainly:
   `--with jira.mjs` is a _bare npm specifier_ and fails with `cannot load … Cannot find package`. Paths
   resolve from the **cwd you invoke from**, not the script's directory.
 - **The module resolves its own imports from its own location** — `jira.mjs` must be able to resolve
-  `@inhuman.tools/arrival` from where it sits (a project with the dependency installed). A stray file in a
+  `@here.build/arrival` from where it sits (a project with the dependency installed). A stray file in a
   bare directory fails with `cannot load`.
 
 **The config file** replaces repeated flags: `arrival.config.ts` / `arrival.config.json` auto-discovers
@@ -193,7 +193,7 @@ node's native type-stripping (node ≥ 23.6; older node gets a teaching error po
 
 ## Passing data in
 
-Parameterized data is not a CLI flag yet; use the `@inhuman.tools/arrival` API.
+Parameterized data is not a CLI flag yet; use the `@here.build/arrival` API.
 
 ## REPL
 

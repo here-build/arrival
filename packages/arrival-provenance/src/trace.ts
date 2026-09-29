@@ -1,10 +1,10 @@
 /**
- * Thin facade over `@inhuman.tools/arrival`'s (core) mobx-free tracing spine.
+ * Thin facade over `@here.build/arrival`'s (core) mobx-free tracing spine.
  *
  * `EvalTrace`/`Invocation`/`NodeRecord`/`computeProvenance` live in
- * `@inhuman.tools/arrival/src/provenance/trace.ts` (core), which must not depend
+ * `@here.build/arrival/src/provenance/trace.ts` (core), which must not depend
  * on mobx. This file exists so every sibling analysis file here (and every
- * external consumer importing `@inhuman.tools/arrival-provenance`) keeps
+ * external consumer importing `@here.build/arrival-provenance`) keeps
  * importing "./trace.js" / `{ EvalTrace }` unchanged.
  *
  * The one thing this shim does NOT just pass through: `EvalTrace`. Studio
@@ -16,7 +16,7 @@
  */
 import { action, observable } from "mobx";
 
-import { EvalTrace as CoreEvalTrace, DEFAULT_TRACE_CAP } from "@inhuman.tools/arrival/provenance";
+import { EvalTrace as CoreEvalTrace, DEFAULT_TRACE_CAP } from "@here.build/arrival/provenance";
 
 // The plain (mobx-free) core class, for a consumer that explicitly wants the
 // non-reactive spine (e.g. a benchmark measuring the de-MobXed hot path).
@@ -65,4 +65,4 @@ export {
   EvalTrace as CoreEvalTrace,
   NodeRecord,
   DEFAULT_TRACE_CAP,
-} from "@inhuman.tools/arrival/provenance";
+} from "@here.build/arrival/provenance";

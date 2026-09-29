@@ -1,4 +1,4 @@
-// `@inhuman.tools/arrival/reflect-internals` — the value-CLASS reflection tier: every
+// `@here.build/arrival/reflect-internals` — the value-CLASS reflection tier: every
 // concrete `AValue` subclass + its singletons, the box/quote leaves, the offending-value
 // teaching read, deep attestation, and numeric parsing. The `-internals` name is the
 // no-stability-contract signal: a SIBLING CONTRACT between arrival core and packages that

@@ -1,4 +1,4 @@
-// `@inhuman.tools/arrival-modules` — `(require …)` as a sibling package.
+// `@here.build/arrival-modules` — `(require …)` as a sibling package.
 //
 // THIS BARREL is the require system: the EnvCapability, the Loader / fs seam,
 // builtin dep-free resolvers (`.scm` / `.json` / `.ndjson` / `.txt`), and the

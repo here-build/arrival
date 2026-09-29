@@ -25,7 +25,7 @@ import {
   type ViewUpdate,
 } from "@codemirror/view";
 
-import { schemeifyTsText } from "@inhuman.tools/arrival-types-bridge";
+import { schemeifyTsText } from "@here.build/arrival-types-bridge";
 
 import { schemeGhost, type SchemeGhostOptions } from "./ghost.js";
 import { CONTROL_KEYWORDS, DEFINITION_KEYWORDS } from "./scheme-sugarcoat.js";

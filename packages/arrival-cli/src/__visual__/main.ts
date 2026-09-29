@@ -1,7 +1,7 @@
 /**
  * bg/fg → HTML (1ch×1lh cells) + SVG twin + optional PNG.
  *
- *   pnpm --filter @inhuman.tools/arrival-cli shot
+ *   pnpm --filter @here.build/arrival-cli shot
  *
  * Writes src/__visual__/out/<theme>.{html,svg,png} and an index.html gallery.
  */

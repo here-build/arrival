@@ -1,4 +1,4 @@
-// `@inhuman.tools/arrival/host-internals` — the HOST-INTEGRATION tier: run-observability
+// `@here.build/arrival/host-internals` — the HOST-INTEGRATION tier: run-observability
 // (effect log, run cache, read guard), burst/note/display sinks, the membrane's
 // callable-crossing seam, the mid-run assembly kernel (`createRuntimeAssembler`, for a
 // host-armed `configuration.extensionRegistry`), the structural `SchemeEnv` contract a

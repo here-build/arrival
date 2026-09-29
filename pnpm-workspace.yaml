@@ -6,7 +6,6 @@ packages:
 # versions were live on npm for ~3 hours before removal).
 minimumReleaseAge: 10080 # 7 days, in minutes
 
-# Fresh @here.build / @inhuman.tools publishes may be <7d old during dual-mode.
+# Fresh @here.build publishes may be <7d old.
 minimumReleaseAgeExclude:
   - "@here.build/*"
-  - "@inhuman.tools/*"

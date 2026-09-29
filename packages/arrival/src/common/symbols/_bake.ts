@@ -1,7 +1,7 @@
 // _bake: shared machinery behind the `symbol.*` factories — contract/decoded-type layer,
 // baked AEntity union, and helpers each per-tag factory (./native.ts, ./rosetta.ts, …)
 // builds from. Factories live one-per-file, re-assembled into `symbol` by ./index.ts;
-// package entry is `src/symbol/index.ts` (`@inhuman.tools/arrival`). Acyclic: factories
+// package entry is `src/symbol/index.ts` (`@here.build/arrival`). Acyclic: factories
 // import from here; nothing imports back through the namespace.
 //
 // docs/environments.md §CONTRACT — one zod contract, four readers (runtime validation,

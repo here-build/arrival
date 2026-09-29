@@ -1,4 +1,4 @@
-// @inhuman.tools/arrival/polyglot — shared core of the cross-dialect idiom family.
+// @here.build/arrival/polyglot — shared core of the cross-dialect idiom family.
 //
 // Four sibling packs:
 //   scheme/polyglot          (this file) — shared core every dialect stands on

@@ -1,4 +1,4 @@
-# @inhuman.tools/arrival-lsp
+# @here.build/arrival-lsp
 
 Scheme→TS type lens: lower Scheme to virtual TypeScript, type-check it with
 tsc's `LanguageService` (never execute), and lift diagnostics, hover,
@@ -10,7 +10,7 @@ browser, and worker entries.
 ## Install
 
 ```bash
-pnpm add @inhuman.tools/arrival-lsp
+pnpm add @here.build/arrival-lsp
 ```
 
 Depends on TypeScript 6.
@@ -18,7 +18,7 @@ Depends on TypeScript 6.
 ## Usage (Node)
 
 ```ts
-import { createSchemeLanguageService } from "@inhuman.tools/arrival-lsp";
+import { createSchemeLanguageService } from "@here.build/arrival-lsp";
 
 const ls = createSchemeLanguageService();
 const diags = ls.getSemanticDiagnostics(`(define z (car 5))`);
@@ -58,12 +58,12 @@ Advanced (host wiring, incomplete prefixes, Scheme↔TS spans, `(require …)`):
 
 ## Related
 
-- [`@inhuman.tools/arrival-internals-types-prelude`](../arrival-internals-types-prelude) —
+- [`@here.build/arrival-internals-types-prelude`](../arrival-internals-types-prelude) —
   builtin `.d.ts` the lens declaration-merges so Scheme programs type-check under tsc.
-- [`@inhuman.tools/arrival-types-bridge`](../arrival-types-bridge) — lowering
+- [`@here.build/arrival-types-bridge`](../arrival-types-bridge) — lowering
   (Scheme → virtual TS). See also [`docs/layer-t-design.md`](./docs/layer-t-design.md)
   (Σ∩T masking; law at `arrival/docs/static-plane.md`).
-- [`@inhuman.tools/arrival-codemirror`](../arrival-codemirror) — CodeMirror 6
+- [`@here.build/arrival-codemirror`](../arrival-codemirror) — CodeMirror 6
   editor that consumes this service.
 
 ## Develop

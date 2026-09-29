@@ -1,4 +1,4 @@
-// `@inhuman.tools/arrival/provenance` — P12 capture spine + prospective wireframe.
+// `@here.build/arrival/provenance` — P12 capture spine + prospective wireframe.
 // MobX-free: captures a finished trace; never drives the evaluator.
 //
 // Surfaces:
@@ -7,7 +7,7 @@
 //   - Wireframe plane — `buildWireframe`, slice/defines, `hermeticApply` (γ)
 //   - Lineage classifier — `classify` / `fieldResolve` (static plane + analysis consumers)
 //
-// Reactive `ObservableEvalTrace` lives in `@inhuman.tools/arrival-provenance`
+// Reactive `ObservableEvalTrace` lives in `@here.build/arrival-provenance`
 // (overrides `bumpEntries`/`entries`; see `trace.ts`). Forest/region/flow-graph
 // analysis lives there under `/analysis`, not here.
 

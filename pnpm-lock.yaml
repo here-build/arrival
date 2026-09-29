@@ -20,7 +20,7 @@ importers:
       '@here.build/error-invariant':
         specifier: 0.9.0
         version: 0.9.0
-      '@inhuman.tools/arrival-syntax':
+      '@here.build/arrival-syntax':
         specifier: workspace:^
         version: link:../arrival-syntax
       dedent:
@@ -84,16 +84,16 @@ importers:
 
   packages/arrival-cli:
     dependencies:
-      '@inhuman.tools/arrival':
+      '@here.build/arrival':
         specifier: workspace:^
         version: link:../arrival
-      '@inhuman.tools/arrival-modules':
+      '@here.build/arrival-modules':
         specifier: workspace:^
         version: link:../arrival-modules
-      '@inhuman.tools/arrival-serializer':
+      '@here.build/arrival-serializer':
         specifier: workspace:^
         version: link:../arrival-serializer
-      '@inhuman.tools/arrival-sugarcoat':
+      '@here.build/arrival-sugarcoat':
         specifier: workspace:^
         version: link:../arrival-sugarcoat
       chalk:
@@ -160,13 +160,13 @@ importers:
       '@here.build/editor-theme':
         specifier: 0.9.0
         version: 0.9.0
-      '@inhuman.tools/arrival-lsp':
+      '@here.build/arrival-lsp':
         specifier: workspace:^
         version: link:../arrival-lsp
-      '@inhuman.tools/arrival-sugarcoat':
+      '@here.build/arrival-sugarcoat':
         specifier: workspace:^
         version: link:../arrival-sugarcoat
-      '@inhuman.tools/arrival-types-bridge':
+      '@here.build/arrival-types-bridge':
         specifier: workspace:^
         version: link:../arrival-types-bridge
       '@lezer/highlight':
@@ -242,13 +242,13 @@ importers:
 
   packages/arrival-lsp:
     dependencies:
-      '@inhuman.tools/arrival-internals-types-prelude':
+      '@here.build/arrival-internals-types-prelude':
         specifier: workspace:^
         version: link:../arrival-internals-types-prelude
-      '@inhuman.tools/arrival-sugarcoat':
+      '@here.build/arrival-sugarcoat':
         specifier: workspace:^
         version: link:../arrival-sugarcoat
-      '@inhuman.tools/arrival-types-bridge':
+      '@here.build/arrival-types-bridge':
         specifier: workspace:^
         version: link:../arrival-types-bridge
       typescript:
@@ -261,10 +261,10 @@ importers:
       '@here.build/tsconfig':
         specifier: 0.9.0
         version: 0.9.0
-      '@inhuman.tools/arrival':
+      '@here.build/arrival':
         specifier: workspace:^
         version: link:../arrival
-      '@inhuman.tools/arrival-modules':
+      '@here.build/arrival-modules':
         specifier: workspace:^
         version: link:../arrival-modules
       '@types/node':
@@ -285,7 +285,7 @@ importers:
 
   packages/arrival-modules:
     dependencies:
-      '@inhuman.tools/arrival':
+      '@here.build/arrival':
         specifier: workspace:^
         version: link:../arrival
       tiny-invariant:
@@ -322,7 +322,7 @@ importers:
 
   packages/arrival-overridable-lens:
     dependencies:
-      '@inhuman.tools/arrival':
+      '@here.build/arrival':
         specifier: workspace:^
         version: link:../arrival
       tslib:
@@ -356,10 +356,10 @@ importers:
 
   packages/arrival-provenance:
     dependencies:
-      '@inhuman.tools/arrival':
+      '@here.build/arrival':
         specifier: workspace:^
         version: link:../arrival
-      '@inhuman.tools/arrival-sugarcoat':
+      '@here.build/arrival-sugarcoat':
         specifier: workspace:^
         version: link:../arrival-sugarcoat
       mobx:
@@ -406,7 +406,7 @@ importers:
       '@here.build/tsconfig':
         specifier: 0.9.0
         version: 0.9.0
-      '@inhuman.tools/arrival':
+      '@here.build/arrival':
         specifier: workspace:^
         version: link:../arrival
       '@types/node':
@@ -433,7 +433,7 @@ importers:
       '@here.build/lexical-namer':
         specifier: 0.9.0
         version: 0.9.0
-      '@inhuman.tools/arrival-syntax':
+      '@here.build/arrival-syntax':
         specifier: workspace:^
         version: link:../arrival-syntax
       pluralize:
@@ -507,10 +507,10 @@ importers:
       '@here.build/lexical-namer':
         specifier: 0.9.0
         version: 0.9.0
-      '@inhuman.tools/arrival-modules':
+      '@here.build/arrival-modules':
         specifier: workspace:^
         version: link:../arrival-modules
-      '@inhuman.tools/arrival-syntax':
+      '@here.build/arrival-syntax':
         specifier: workspace:^
         version: link:../arrival-syntax
     devDependencies:

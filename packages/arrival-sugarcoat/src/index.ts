@@ -1,7 +1,7 @@
-// @inhuman.tools/arrival-sugarcoat — the sugarcoat-expression lens over scheme source.
+// @here.build/arrival-sugarcoat — the sugarcoat-expression lens over scheme source.
 //
 // A leaf relative to the interpreter: Scheme s-expr parse lives in
-// `@inhuman.tools/arrival-syntax` (re-exported here). The Scheme↔sugarcoat view:
+// `@here.build/arrival-syntax` (re-exported here). The Scheme↔sugarcoat view:
 // `schemeToSugarcoat` renders stored canonical scheme as a readable "sugarcoat" form (curly-infix, `=>`
 // lambda, colon kwargs); `sugarcoatToScheme`/`readSugarcoat` fold an edited sugarcoat view back.
 // Consumed by the studio editor toggle, codemirror, the chain-view compiler, sift's lowering, and

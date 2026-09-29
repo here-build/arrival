@@ -12,7 +12,7 @@
  * with the loader capability's warm pair + a session scope (the path the loader's
  * production consumers use) — a required module's forms evaluate through the
  * requiring run's COMPOSED resolver (`execExpr({ resolver })` —
- * `@inhuman.tools/arrival-modules`), so `(require …)` sees the stdlib too. The split stays because the
+ * `@here.build/arrival-modules`), so `(require …)` sees the stdlib too. The split stays because the
  * static pass cannot see require-spilled bindings (module-graph awareness is an LSP
  * problem, not v1's — see {@link usesRequire}), not because of any seal asymmetry —
  * and because the once-minted runCtx + scope keep defines + the require cache
@@ -30,10 +30,10 @@ import {
   type SessionScope,
   type SchemeValue,
   toJS,
-} from "@inhuman.tools/arrival";
-import { StaticValidationError, tokenize, type Diagnostic } from "@inhuman.tools/arrival/lsp-internals";
-import { arrivalLoaderCapability } from "@inhuman.tools/arrival-modules";
-import { toSExprString } from "@inhuman.tools/arrival-serializer";
+} from "@here.build/arrival";
+import { StaticValidationError, tokenize, type Diagnostic } from "@here.build/arrival/lsp-internals";
+import { arrivalLoaderCapability } from "@here.build/arrival-modules";
+import { toSExprString } from "@here.build/arrival-serializer";
 
 import type { ArmedCapabilities } from "./capabilities.js";
 import type { OutputMode } from "./output-mode.js";

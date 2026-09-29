@@ -14,7 +14,7 @@
  * fold ticks between every stage; the leaf must appear at stage 2 with state "running",
  * and the settled graph must deep-equal the from-scratch build.
  */
-import { EnvCapability, execState, LexicalScope } from "@inhuman.tools/arrival";
+import { EnvCapability, execState, LexicalScope } from "@here.build/arrival";
 import { describe, expect, it } from "vitest";
 
 import { EvalTrace, TraceRegionFold, traceToRegions, type Invocation, type Region } from "../index.js";

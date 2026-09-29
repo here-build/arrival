@@ -1,11 +1,11 @@
-# @inhuman.tools/arrival-provenance
+# @here.build/arrival-provenance
 
-After an `@inhuman.tools/arrival` eval, this package turns a finished `EvalTrace` into a forest, graph, or slice. It **never drives the evaluator**. Core `@inhuman.tools/arrival/provenance` is capture only (`EvalTrace`, stamping at the membrane); this package re-exports that capture and owns the analysis stack — forest, statechart, region tree, flow graph, reverse-chain slicer (`buildUneval`), grounding seal.
+After an `@here.build/arrival` eval, this package turns a finished `EvalTrace` into a forest, graph, or slice. It **never drives the evaluator**. Core `@here.build/arrival/provenance` is capture only (`EvalTrace`, stamping at the membrane); this package re-exports that capture and owns the analysis stack — forest, statechart, region tree, flow graph, reverse-chain slicer (`buildUneval`), grounding seal.
 
 ## Install
 
 ```bash
-pnpm add @inhuman.tools/arrival-provenance
+pnpm add @here.build/arrival-provenance
 ```
 
 ## Usage
@@ -13,8 +13,8 @@ pnpm add @inhuman.tools/arrival-provenance
 Hand the evaluator a tap; analysis runs on the finished trace:
 
 ```ts
-import { exec } from "@inhuman.tools/arrival";
-import { EvalTrace, traceToForest } from "@inhuman.tools/arrival-provenance";
+import { exec } from "@here.build/arrival";
+import { EvalTrace, traceToForest } from "@here.build/arrival-provenance";
 
 const trace = new EvalTrace();
 await exec(`(filter (lambda (x) (> x 5)) (list 1 3 7 9 2))`, { tap: trace });
@@ -25,13 +25,13 @@ const forest = traceToForest(trace);
 The heavier analysis stack lives at the `./analysis` subpath:
 
 ```ts
-import { traceToStatechart, buildSlice, buildUneval } from "@inhuman.tools/arrival-provenance/analysis";
+import { traceToStatechart, buildSlice, buildUneval } from "@here.build/arrival-provenance/analysis";
 
 const statechart = traceToStatechart(trace);
 ```
 
 Constitutional provenance law (roles, conservation, ports) lives in
-[`@inhuman.tools/arrival`'s `docs/PROVENANCE.md`](../arrival/docs/PROVENANCE.md).
+[`@here.build/arrival`'s `docs/PROVENANCE.md`](../arrival/docs/PROVENANCE.md).
 Notes under [`docs/`](./docs/) in this package are research, not living law.
 
 The surface, in four subpaths:

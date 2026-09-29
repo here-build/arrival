@@ -1,4 +1,4 @@
-import { alignSugarcoatScheme, schemeToSugarcoat } from "@inhuman.tools/arrival-sugarcoat";
+import { alignSugarcoatScheme, schemeToSugarcoat } from "@here.build/arrival-sugarcoat";
 import { describe, expect, it } from "vitest";
 
 import { createSchemeLanguageService } from "../language-service.js";

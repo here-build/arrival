@@ -1,5 +1,5 @@
 {
-  "name": "@inhuman.tools/arrival-workspace",
+  "name": "@here.build/arrival-workspace",
   "version": "0.0.0",
   "private": true,
   "description": "The arrival language — an R7RS-subset Scheme for AI-agent constraint-based execution: interpreter, capability environments, provenance, and the CLI",

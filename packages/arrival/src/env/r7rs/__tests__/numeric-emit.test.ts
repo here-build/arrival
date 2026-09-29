@@ -7,7 +7,7 @@
 // (§4.5).
 //
 // Byte-parity with the PRE-relocation compiler-side rule is proven on the mercury
-// side (`@inhuman.tools/arrival-mercury`): the differential oracle's bug-cell rows
+// side (`@here.build/arrival-mercury`): the differential oracle's bug-cell rows
 // (quotient-neg, modulo-neg, exact-vs-inexact-eq — arithmetic has no dedicated row of
 // its own; `+`/`-`/`*`/`/` are already exercised pervasively across the existing
 // corpus) and the cross-pass/gate3 goldens exercise these through the REAL harvest +

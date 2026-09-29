@@ -14,7 +14,7 @@
  * line/cursor — a terminal editor cannot afford React's async-state lag mid-word.
  */
 import React, { useCallback, useReducer, useRef, useState } from "react";
-import { scan } from "@inhuman.tools/arrival/lsp-internals";
+import { scan } from "@here.build/arrival/lsp-internals";
 import {
   EMPTY_REPL_MODEL,
   foldReplEvent,

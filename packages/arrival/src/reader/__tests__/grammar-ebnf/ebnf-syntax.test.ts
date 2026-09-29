@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest";
 import { arrivalGrammar, ebnfHref, ebnfSource, GRAMMAR_EXPORT } from "./load.js";
 import { referencedNames, ruleNames } from "./match.js";
 
-describe("@inhuman.tools/arrival/grammar.ebnf", () => {
+describe("@here.build/arrival/grammar.ebnf", () => {
   it("resolves the public package export", () => {
-    expect(GRAMMAR_EXPORT).toBe("@inhuman.tools/arrival/grammar.ebnf");
+    expect(GRAMMAR_EXPORT).toBe("@here.build/arrival/grammar.ebnf");
     expect(ebnfHref()).toMatch(/grammar\.ebnf$/);
     expect(ebnfSource().length).toBeGreaterThan(0);
   });

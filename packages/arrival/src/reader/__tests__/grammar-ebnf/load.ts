@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { parseEbnf, type Grammar } from "./match.js";
 
 /** Public specifier — the test load path IS the package export. */
-export const GRAMMAR_EXPORT = "@inhuman.tools/arrival/grammar.ebnf";
+export const GRAMMAR_EXPORT = "@here.build/arrival/grammar.ebnf";
 
 let cached: Grammar | undefined;
 

@@ -17,7 +17,7 @@
 // Config consumed by `buildVocabulary` directly. Slice mirrors loader-facing fields of
 // the session builder so the ONE shared config bag feeds this capability with no adapter
 // (real structural zod checks; ignores the rest of the bag).
-import { EnvCapability, execExpr, type EvalTap, type RunContext, type SchemeValue, z } from "@inhuman.tools/arrival";
+import { EnvCapability, execExpr, type EvalTap, type RunContext, type SchemeValue, z } from "@here.build/arrival";
 import {
   AmbientRuntime,
   type AmbientValue,
@@ -31,8 +31,8 @@ import {
   isAmbientRuntime,
   type ResolvingAmbient,
   type RuntimeAssembler,
-} from "@inhuman.tools/arrival/host-internals";
-import { ABytevector, AString, theVoid } from "@inhuman.tools/arrival/reflect-internals";
+} from "@here.build/arrival/host-internals";
+import { ABytevector, AString, theVoid } from "@here.build/arrival/reflect-internals";
 import invariant from "tiny-invariant";
 
 import { RequireCycleError, RequireResolverError } from "./errors.js";

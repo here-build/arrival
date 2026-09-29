@@ -1,13 +1,13 @@
-# @inhuman.tools/arrival-codemirror
+# @here.build/arrival-codemirror
 
-CodeMirror 6 for `@inhuman.tools/arrival` Scheme (Scheme + sugarcoat).
+CodeMirror 6 for `@here.build/arrival` Scheme (Scheme + sugarcoat).
 
 Two mounts — vanilla CM6 extensions, or `<SchemeEditor>` from `./react`.
 
 ## Install
 
 ```bash
-npm i @inhuman.tools/arrival-codemirror
+npm i @here.build/arrival-codemirror
 ```
 
 - **Vanilla:** align `@codemirror/*` with this package's pins.
@@ -18,8 +18,8 @@ npm i @inhuman.tools/arrival-codemirror
 ```ts
 import { defaultHighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { EditorView, lineNumbers } from "@codemirror/view";
-import { createBrowserSchemeLanguageService } from "@inhuman.tools/arrival-lsp/browser";
-import { schemeIde, schemeStructural, schemeSugarcoat } from "@inhuman.tools/arrival-codemirror";
+import { createBrowserSchemeLanguageService } from "@here.build/arrival-lsp/browser";
+import { schemeIde, schemeStructural, schemeSugarcoat } from "@here.build/arrival-codemirror";
 
 new EditorView({
   parent: document.querySelector("#editor")!,
@@ -46,7 +46,7 @@ new EditorView({
 
 ```tsx
 import { useState } from "react";
-import { SchemeEditor } from "@inhuman.tools/arrival-codemirror/react";
+import { SchemeEditor } from "@here.build/arrival-codemirror/react";
 
 export function App() {
   const [value, setValue] = useState(`(define (greet name)\n  (string-append "hello, " name))\n`);
@@ -82,7 +82,7 @@ interface SchemeIdeBackend {
 ```
 
 Methods may answer sync or with a Promise, so an in-process service and a worker behind a
-message port satisfy the _same_ seam — `@inhuman.tools/arrival-lsp` fits directly, in either
+message port satisfy the _same_ seam — `@here.build/arrival-lsp` fits directly, in either
 mode. The optional methods are presence-gated feature unlocks: `getSemanticClassifications`
 turns on semantic highlighting, `getCompletionContext` upgrades completion and the ghost to the
 Σ∩T-ranked pipeline. Coordinates are always Scheme; Sugarcoat buffers translate through

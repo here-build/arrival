@@ -368,17 +368,17 @@ and break order in Appendix A.
 
 Two artifacts share the word "provenance" and must not be conflated:
 
-- **core** (this package, `@inhuman.tools/arrival`) owns the PROSPECTIVE half: the capture
+- **core** (this package, `@here.build/arrival`) owns the PROSPECTIVE half: the capture
   spine (§1–§3 above), the wireframe builder (`provenance/wireframe/`, incl.
   `unevalWire`/`WireEmission` in `provenance/uneval.ts` — a wireframe-BUILD-time production
   dependency, not analysis), and γ-replay (`gamma.ts`/`hermetic-env.ts`, `strata.md` §5's
   `env ⇄ provenance` charter).
-- **`@inhuman.tools/arrival-provenance`** (a separate package) owns the RETROSPECTIVE half:
+- **`@here.build/arrival-provenance`** (a separate package) owns the RETROSPECTIVE half:
   analysis of a FINISHED trace — `ObservableEvalTrace`, `buildUneval`/`Uneval`/
   `UnevalContainer` (`analysis/uneval.ts`), and the rest of `analysis/*` (flow graphs, region
   folding, statecharts, lineage).
 
-**The door is exactly four subpaths**, verified by grepping every `@inhuman.tools/arrival*`
+**The door is exactly four subpaths**, verified by grepping every `@here.build/arrival*`
 import in `arrival-provenance/src/`: the package root (`ANil`/`ArrivalError`/`deepProvenance`/
 `toJS`/`execState`/`parse`/`LexicalScope`/`SchemeValue`), `/provenance` (`scopeId`,
 `snapshotTrace`, `headOf`, `userCallSite`, `EvalTrace`/`PlainInv`/`PlainTrace`

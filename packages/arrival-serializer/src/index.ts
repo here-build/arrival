@@ -1,5 +1,5 @@
 /**
- * @inhuman.tools/arrival-serializer
+ * @here.build/arrival-serializer
  *
  * S-expression serializer for Arrival
  */

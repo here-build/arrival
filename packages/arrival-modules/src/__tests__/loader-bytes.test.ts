@@ -12,7 +12,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { exec } from "@inhuman.tools/arrival";
+import { exec } from "@here.build/arrival";
 
 import { arrivalLoaderCapability } from "../loader-capability.js";
 import { makeFsLoader } from "../loader.js";

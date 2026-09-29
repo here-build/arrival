@@ -1,4 +1,4 @@
-// emit — `@inhuman.tools/arrival/emit`: pure-data types a rule author writes against
+// emit — `@here.build/arrival/emit`: pure-data types a rule author writes against
 // (`Contract.emit: EmitRule<R>`, residual builders `Bin`/`Call`/`Member`/…).
 // Transitive closure of this barrel stays `typescript`-free so a Contract can carry emit
 // rules without dragging the LanguageService into arrival core.

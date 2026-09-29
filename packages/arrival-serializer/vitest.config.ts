@@ -7,7 +7,7 @@ export default defineConfig({
     include: ["src/__tests__/**/*.test.ts"],
     // First `exec` / `parse` pays BASE_ROSTER vocabulary + prelude. Locally that's
     // hundreds of ms; on a contended CI runner it exceeds vitest's 5s default.
-    // Same bound as `@inhuman.tools/arrival`.
+    // Same bound as `@here.build/arrival`.
     testTimeout: 20_000,
     hookTimeout: 20_000,
   },

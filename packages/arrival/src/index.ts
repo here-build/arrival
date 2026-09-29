@@ -1,4 +1,4 @@
-// `@inhuman.tools/arrival` — the package root. TWO TIERS:
+// `@here.build/arrival` — the package root. TWO TIERS:
 //
 //   1. THIS BARREL is the PUBLIC surface — small on purpose, closed to three concerns:
 //        • EVAL — `exec`/`execState`/`parse` + options/state, scope continuity
@@ -79,7 +79,7 @@ export type { CallCtx } from "./run/CallCtx.js";
 // only when a real consumer constructs it from outside this package — not because it is
 // "dispatch machinery" or "the one construction site" in the abstract. `testCallCtx` is
 // exactly that case: `arrival-mcp`'s tool-factory tests (`packages/arrival-mcp/src/__tests__/
-// tool-factories.test.ts`) import it from `@inhuman.tools/arrival` (the root, not
+// tool-factories.test.ts`) import it from `@here.build/arrival` (the root, not
 // `/host-internals`) to drive a bare `fire(def, testCallCtx(), …)` call outside a real run.
 // Demoting it would break that consumer; `makeCallCtx` ships alongside it rather than
 // splitting one construction pair across two tiers. Every OTHER dispatch-machinery symbol

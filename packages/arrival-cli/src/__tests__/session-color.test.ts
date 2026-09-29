@@ -2,7 +2,7 @@
 // adds a severity tint only when a color mode is on.
 import { describe, expect, it } from "vitest";
 
-import type { Diagnostic } from "@inhuman.tools/arrival/lsp-internals";
+import type { Diagnostic } from "@here.build/arrival/lsp-internals";
 
 import { formatDiagnostic, paintDiagnostic } from "../session.js";
 import { stripAnsi } from "./ansi-strip.js";

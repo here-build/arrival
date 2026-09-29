@@ -1,5 +1,5 @@
 {
-  "name": "@inhuman.tools/arrival-lsp",
+  "name": "@here.build/arrival-lsp",
   "version": "0.9.9",
   "description": "Scheme language service (type lens over TypeScript LS) — browser worker + node. PRE prelude, virtual-TS emit host, diagnostics/completions/hover lifted to Scheme spans.",
   "homepage": "https://github.com/here-build/arrival#readme",
@@ -80,14 +80,14 @@
     "research": "vitest run --config vitest.research.config.ts"
   },
   "dependencies": {
-    "@inhuman.tools/arrival-internals-types-prelude": "workspace:^",
-    "@inhuman.tools/arrival-types-bridge": "workspace:^",
-    "@inhuman.tools/arrival-sugarcoat": "workspace:^",
+    "@here.build/arrival-internals-types-prelude": "workspace:^",
+    "@here.build/arrival-types-bridge": "workspace:^",
+    "@here.build/arrival-sugarcoat": "workspace:^",
     "typescript": "6.0.3"
   },
   "devDependencies": {
-    "@inhuman.tools/arrival": "workspace:^",
-    "@inhuman.tools/arrival-modules": "workspace:^",
+    "@here.build/arrival": "workspace:^",
+    "@here.build/arrival-modules": "workspace:^",
     "@here.build/eslint-configs": "0.9.0",
     "@here.build/tsconfig": "0.9.0",
     "@types/node": "24.0.0",

@@ -11,16 +11,16 @@
 
 // The dep-free virtual-file name constants (no node:fs — service-core runs in the
 // browser too).
-import { PROGRAM_FILE } from "@inhuman.tools/arrival-internals-types-prelude/virtual-files";
+import { PROGRAM_FILE } from "@here.build/arrival-internals-types-prelude/virtual-files";
 // The runtime-free reader (spans on every node) — the require scanner's truth.
-import { parseSexprs, type Node } from "@inhuman.tools/arrival-sugarcoat";
+import { parseSexprs, type Node } from "@here.build/arrival-sugarcoat";
 import {
   emitRequireFaceModule,
   emitTypes,
   encodeSchemeIdent,
   decodeSchemeIdent,
   schemeifyTsText,
-} from "@inhuman.tools/arrival-types-bridge";
+} from "@here.build/arrival-types-bridge";
 import ts from "typescript";
 
 import { balancePrefix, stringLiteralType } from "./balance.js";
@@ -484,7 +484,7 @@ function expectedRestElementTypesFromCallSites(
   return blocked ? null : expected;
 }
 
-export { schemeifyTsText } from "@inhuman.tools/arrival-types-bridge";
+export { schemeifyTsText } from "@here.build/arrival-types-bridge";
 
 // An atom character (arrival's lexer: not whitespace/bracket/string/quote/comment) —
 // the same class the sampler's typed-scanner uses for partial-atom stripping.

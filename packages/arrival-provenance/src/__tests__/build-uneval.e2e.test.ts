@@ -12,7 +12,7 @@
  * selector `(car result)` → scan path only; chatter pruned; re-exec matches.
  *
  * API truth (README drift is separate W1):
- *   - import from `@inhuman.tools/arrival-provenance/analysis`
+ *   - import from `@here.build/arrival-provenance/analysis`
  *   - opts: `{ scope, result, trace, source, forms }` — NOT `env`
  *   - `forms: []` → output form is `lastTopLevelForm(trace)` (identity-safe)
  *   - re-parse of `source` for forms is an identity pitfall (points/outputNode ===)
@@ -21,7 +21,7 @@
  * Residual honesty: re-exec re-invokes live Rosetta ports. Deterministic fixtures match;
  * non-deterministic sources would diverge without frozen-ingress (Phase 3, out of scope).
  */
-import { EnvCapability, exec, execState, LexicalScope } from "@inhuman.tools/arrival";
+import { EnvCapability, exec, execState, LexicalScope } from "@here.build/arrival";
 import { describe, expect, it } from "vitest";
 import { buildUneval, lastTopLevelForm } from "../analysis.js";
 import { EvalTrace } from "../index.js";

@@ -7,15 +7,15 @@
 // hover/lint/completion answers travel sugarcoat → Scheme → TypeScript.
 
 import { EditorView, lineNumbers } from "@codemirror/view";
-import { schemeToSugarcoat } from "@inhuman.tools/arrival-sugarcoat";
-import { createBrowserSchemeLanguageService } from "@inhuman.tools/arrival-lsp/browser";
+import { schemeToSugarcoat } from "@here.build/arrival-sugarcoat";
+import { createBrowserSchemeLanguageService } from "@here.build/arrival-lsp/browser";
 
 import {
   paramHintsExtension,
   schemeIde,
   schemeSugarcoat,
   sugarcoatIdeBackend,
-} from "@inhuman.tools/arrival-codemirror";
+} from "@here.build/arrival-codemirror";
 
 const canonical = `(define (loud-names names)
   (map string-upcase names))

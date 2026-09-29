@@ -1,4 +1,4 @@
-# @inhuman.tools/arrival-internals-types-prelude
+# @here.build/arrival-internals-types-prelude
 
 PRE (`prelude/types.d.ts`) plus per-builtin ambient `declare function` leaves so `arrival-lsp` and `arrival-mercury/typefacts` share one type vocabulary without cycling.
 

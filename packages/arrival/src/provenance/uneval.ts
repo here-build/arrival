@@ -8,7 +8,7 @@
 // calls `unevalWire` directly), not analysis of a finished trace — it belongs to the static
 // plane alongside the rest of `wireframe/`. The retrospective sibling (`buildUneval`/
 // `Uneval`/`UnevalContainer` — reverse-slices a FINISHED trace) lives in
-// `@inhuman.tools/arrival-provenance`'s `analysis/uneval.ts`; the two share no code, helpers,
+// `@here.build/arrival-provenance`'s `analysis/uneval.ts`; the two share no code, helpers,
 // or imports.
 
 import { WireLocalityError } from "../errors.js";

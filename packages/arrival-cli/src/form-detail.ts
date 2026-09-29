@@ -21,8 +21,8 @@ import {
   type EvalTrace,
   type Invocation,
   type InvocationState,
-} from "@inhuman.tools/arrival/provenance";
-import { toSExprString } from "@inhuman.tools/arrival-serializer";
+} from "@here.build/arrival/provenance";
+import { toSExprString } from "@here.build/arrival-serializer";
 
 import { fileUrl, hyperlink } from "./osc.js";
 import { paint, type TintName, type colorMode } from "./tints.js";

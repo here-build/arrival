@@ -8,7 +8,7 @@
  * every other path is a typed default-export stub from the host `reqType`.
  * Domain filetypes (`.prompt`) synthesize that string outside mercury.
  */
-import { hbsContentsToSchemeSource } from "@inhuman.tools/arrival-modules/handlebars";
+import { hbsContentsToSchemeSource } from "@here.build/arrival-modules/handlebars";
 
 import { emitTypes, type EmitTypesOptions } from "./emit.js";
 

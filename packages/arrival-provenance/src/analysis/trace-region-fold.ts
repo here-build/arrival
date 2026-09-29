@@ -16,11 +16,11 @@
  * value/provenance via `valueById` / `liveValueById`. Live reads into the snapshot
  * mirror deferred to Phase-2 (worker boundary); see `trace-snapshot.ts`.
  */
-import type { APair } from "@inhuman.tools/arrival/reflect-internals";
-import { toJS, type SchemeValue } from "@inhuman.tools/arrival";
+import type { APair } from "@here.build/arrival/reflect-internals";
+import { toJS, type SchemeValue } from "@here.build/arrival";
 
 import { carrierFieldEdges, scopedBindings, subtreeIds } from "./carrier-fields.js";
-import { scopeId, type PlainInv, type EvalTrace, type Invocation } from "@inhuman.tools/arrival/provenance";
+import { scopeId, type PlainInv, type EvalTrace, type Invocation } from "@here.build/arrival/provenance";
 import { staticLoopBodyScopes, staticRecursiveHeads, STRUCTURAL_FORMS } from "./trace-to-forest.js";
 import {
   addPointToHasse,

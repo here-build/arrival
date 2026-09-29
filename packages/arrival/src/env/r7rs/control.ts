@@ -1,4 +1,4 @@
-// @inhuman.tools/arrival/r7rs/control — doors-only for control/dynamics omissions.
+// @here.build/arrival/r7rs/control — doors-only for control/dynamics omissions.
 // R7RS-small §6.10 (call/cc, dynamic-wind), §4.2.6 (parameters), §4.2.5 (delay/force).
 //
 // Pure dataflow: every value carries construction-site lineage. Continuations,

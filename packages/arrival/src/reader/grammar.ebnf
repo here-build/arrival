@@ -4,7 +4,7 @@
   This is the formal production of docs/grammar.md: R7RS §7.1 <datum> plus the
   named supersets ([…] / {…} / comma / suffix-colon symbols / #null #void /
   #attachment). The executable reader is Parser.ts (this directory). Published
-  as `@inhuman.tools/arrival/grammar.ebnf`. When Parser and this file disagree
+  as `@here.build/arrival/grammar.ebnf`. When Parser and this file disagree
   on a string the loose reader ACCEPTS, this file is the bug — unless the
   Parser is a silent-loss quirk (a second `.` in a list, a dotted `#(` / `#u8(`),
   in which case the Parser gains a door and this file stays.

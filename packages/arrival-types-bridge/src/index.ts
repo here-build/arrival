@@ -1,4 +1,4 @@
-// @inhuman.tools/arrival-types-bridge — the type-lens Scheme→virtual-TS emitter
+// @here.build/arrival-types-bridge — the type-lens Scheme→virtual-TS emitter
 // plus the parse/desugar/scope front it runs on. Consumed by arrival-lsp /
 // arrival-codemirror (MIT) and re-exported by arrival-mercury (the run compiler).
 export {

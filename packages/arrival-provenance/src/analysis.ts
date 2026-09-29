@@ -1,4 +1,4 @@
-// @inhuman.tools/arrival-provenance/analysis — the opt-in full-build analysis
+// @here.build/arrival-provenance/analysis — the opt-in full-build analysis
 // surface: render-models (statechart / flow graph / forest-collapse) plus
 // the reverse-chain slicer (uneval/slice). The default `.` entry (see
 // `index.ts`) stays the capture + region-model primitives (trace, forest,
@@ -54,5 +54,5 @@ export {
   lastTopLevelForm,
   resolveReadIds,
   type Slice,
-} from "@inhuman.tools/arrival/provenance";
+} from "@here.build/arrival/provenance";
 export { buildUneval, type Uneval, type UnevalContainer } from "./analysis/uneval.js";

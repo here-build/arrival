@@ -1,6 +1,6 @@
 // circuit-verb.test.ts — T6b: `(circuit h)` after `extract` landed; #23: live via host injection.
 //
-// `extract` (CoreForm → StaticProv) shipped in @inhuman.tools/arrival-mercury, and that package's
+// `extract` (CoreForm → StaticProv) shipped in @here.build/arrival-mercury, and that package's
 // own circuitToSexpr renders a StaticProv as homoiconic sexpr — tested over there
 // (arrival-mercury/src/__tests__/model/circuit-sexpr.test.ts) against every StaticProv kind.
 //
@@ -23,7 +23,7 @@
 // provider is architectural, not per-handle.
 //
 // Handle-construction idiom copied from grounding-verbs.test.ts (same fixtures, not re-derived).
-import { EnvCapability, LexicalScope, execState } from "@inhuman.tools/arrival";
+import { EnvCapability, LexicalScope, execState } from "@here.build/arrival";
 import { lastTopLevelForm } from "../analysis.js";
 import { EvalTrace } from "../index.js";
 import { describe, expect, it } from "vitest";

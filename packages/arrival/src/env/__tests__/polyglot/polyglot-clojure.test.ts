@@ -16,7 +16,7 @@ async function exec(code: string, options: ExecOptionsOverFrame) {
   return (await execStateOverFrame(code, options)).values.slice();
 }
 
-describe("@inhuman.tools/arrival/polyglot-clojure", () => {
+describe("@here.build/arrival/polyglot-clojure", () => {
   it("installs the threading macros and comp; they run correctly assembled STANDALONE", async () => {
     const env = sandboxedEnv.child("polyglot-clojure-test");
     // Assembling JUST polyglot-clojure pulls in scheme/polyglot (core), srfi-1,
@@ -66,7 +66,7 @@ describe("@inhuman.tools/arrival/polyglot-clojure", () => {
 // env), since polyglot-clojure ships in BASE_PACKS in production — the same
 // surface a model actually reaches. Sibling to env/polyglot/polyglot-stubs.ts, which doors
 // the symbols that genuinely can't be pure (IO/mutation/macro-only — println here).
-describe("@inhuman.tools/arrival/polyglot-clojure — stdlib completion (Bucket A)", () => {
+describe("@here.build/arrival/polyglot-clojure — stdlib completion (Bucket A)", () => {
   const str = async (src: string) => String((await bareExecState(src)).values[0]);
 
   it("str — concatenates the display form of every arg", async () => {

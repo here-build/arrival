@@ -251,7 +251,7 @@ function renderAttestedLeaves(leaves: readonly AttestedLeaf[]): string {
  * Static attribution circuit — the compile-time attribution PLANE (as opposed to `dag`'s RUNTIME
  * computation DAG). T6b's finding: the SEAM this needs is real and traceable — `h.teleological()`
  * gives `{trace, outputNode}`, `buildSlice(trace, outputNode).program` is the SAME re-derivation
- * slice `(how h)` returns (real Scheme source text), and `@inhuman.tools/arrival-mercury` owns the
+ * slice `(how h)` returns (real Scheme source text), and `@here.build/arrival-mercury` owns the
  * rest of the pipeline that source needs to become a circuit: `parseSexprs` → `desugar` →
  * `classify` → `extractProgram(forms, registry)` → `StaticProv` → `circuitToSexpr`.
  *
@@ -278,7 +278,7 @@ export async function circuitOf(h: ResultHandle, signal?: AbortSignal, path?: Fi
   const provider = h.capabilities?.circuitProvider;
   if (provider) return provider(path);
   throw new TypeError(
-    "(circuit h) — the static attribution circuit is produced by @inhuman.tools/arrival-mercury's " +
+    "(circuit h) — the static attribution circuit is produced by @here.build/arrival-mercury's " +
       "extract + circuitToSexpr. This analysis plane does not import the compiler; a host that " +
       "already depends on both injects circuitProvider at handle construction. This handle carries " +
       "no host-injected circuitProvider capability, so there is no live circuit to render. " +

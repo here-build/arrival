@@ -7,9 +7,9 @@
 // Twin of yaml's `ext-yaml.test.ts` — same laws, same idioms.
 
 import { describe, expect, it } from "vitest";
-import { exec, execState } from "@inhuman.tools/arrival";
-import { loaderFromResolver } from "@inhuman.tools/arrival-modules";
-import { EnvCapability } from "@inhuman.tools/arrival/capability";
+import { exec, execState } from "@here.build/arrival";
+import { loaderFromResolver } from "@here.build/arrival-modules";
+import { EnvCapability } from "@here.build/arrival/capability";
 
 import { arrivalTomlCapability } from "../ext-toml.js";
 
@@ -31,7 +31,7 @@ describe("arrivalTomlCapability — .toml on the vocabulary (default) path", () 
   });
 
   it("a SEPARATE run that never roots arrivalTomlCapability cannot resolve .toml at all (per-run isolation)", async () => {
-    const { arrivalLoaderCapability } = await import("@inhuman.tools/arrival-modules");
+    const { arrivalLoaderCapability } = await import("@here.build/arrival-modules");
     await expect(
       exec(`(require "unseen.toml")`, {
         capabilities: [arrivalLoaderCapability],

@@ -15,8 +15,8 @@
  * Rosetta-IN point, so under a trace tap its return mints real provenance — no live
  * tools, fully deterministic.
  */
-import { deepProvenance, EnvCapability, execState, LexicalScope } from "@inhuman.tools/arrival";
-import { APair, AString, attestDeep, nil } from "@inhuman.tools/arrival/reflect-internals";
+import { deepProvenance, EnvCapability, execState, LexicalScope } from "@here.build/arrival";
+import { APair, AString, attestDeep, nil } from "@here.build/arrival/reflect-internals";
 import { describe, expect, it } from "vitest";
 
 import { EvalTrace } from "../index.js";

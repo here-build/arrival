@@ -21,10 +21,10 @@ import {
   type LexicalScope,
   type RunContext,
   type SchemeValue,
-} from "@inhuman.tools/arrival";
-import { StaticValidationError } from "@inhuman.tools/arrival/lsp-internals";
-import { APair } from "@inhuman.tools/arrival/reflect-internals";
-import { toSExprString } from "@inhuman.tools/arrival-serializer";
+} from "@here.build/arrival";
+import { StaticValidationError } from "@here.build/arrival/lsp-internals";
+import { APair } from "@here.build/arrival/reflect-internals";
+import { toSExprString } from "@here.build/arrival-serializer";
 import type { ContentBlock } from "./repl-model/content-block.js";
 import type { ReplEvent } from "./repl-model/repl-event.js";
 

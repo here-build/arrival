@@ -16,7 +16,7 @@
  * position-scoped comma/colon separators (§COMMA), the suffix-keyword flip (§SUFFIX-FLIP),
  * the curly-infix ban (§INFIX), and the E-DICT-* / E-BRACKET-* / E-LITERAL-* door taxonomy
  * (§ERRORS) are the model of `docs/grammar.md`. Formal productions:
- * `grammar.ebnf` (`@inhuman.tools/arrival/grammar.ebnf`). Bodies here point there
+ * `grammar.ebnf` (`@here.build/arrival/grammar.ebnf`). Bodies here point there
  * rather than restate it; E-DICT-INFIX-BANNED (§INFIX) is detected in `make_dict_literal`.
  *
  * NESTING CAP: `_enterNesting` bounds native-stack descent so pathological input throws

@@ -21,10 +21,10 @@
  * version-gating here; downstream consumers take `{ graph }` and never branch on
  * the wire shape.
  */
-import { ArrivalError, type ErrorClass } from "@inhuman.tools/arrival";
+import { ArrivalError, type ErrorClass } from "@here.build/arrival";
 
 import { traceToRegions, type Region, type RegionGraph } from "./trace-to-regions.js";
-import type { EvalTrace } from "@inhuman.tools/arrival/provenance";
+import type { EvalTrace } from "@here.build/arrival/provenance";
 
 /**
  * A `TraceArtifact` was produced by a newer protocol version than this

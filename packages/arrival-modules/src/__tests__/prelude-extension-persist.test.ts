@@ -6,8 +6,8 @@
 
 import { describe, expect, it } from "vitest";
 import invariant from "tiny-invariant";
-import { exec } from "@inhuman.tools/arrival";
-import { AmbientRuntime, execInFrame, type EnvPack } from "@inhuman.tools/arrival/host-internals";
+import { exec } from "@here.build/arrival";
+import { AmbientRuntime, execInFrame, type EnvPack } from "@here.build/arrival/host-internals";
 
 import { arrivalLoaderCapability } from "../loader-capability.js";
 import { loaderFromResolver, type RunEnv } from "../loader.js";

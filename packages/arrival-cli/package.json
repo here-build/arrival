@@ -1,5 +1,5 @@
 {
-  "name": "@inhuman.tools/arrival-cli",
+  "name": "@here.build/arrival-cli",
   "version": "0.9.9",
   "description": "The arrival command — run programs, REPL, and static-check from the terminal. `arrival run file.scm` (whole-program diagnostics, then execute with (require …) rooted at the file's dir), `arrival repl` (persistent-scope session, teaching-door errors), `arrival check file.scm` (the eslint-style pass, no execution).",
   "keywords": [
@@ -52,10 +52,10 @@
     "shot": "tsx src/__visual__/main.ts"
   },
   "dependencies": {
-    "@inhuman.tools/arrival": "workspace:^",
-    "@inhuman.tools/arrival-modules": "workspace:^",
-    "@inhuman.tools/arrival-serializer": "workspace:^",
-    "@inhuman.tools/arrival-sugarcoat": "workspace:^",
+    "@here.build/arrival": "workspace:^",
+    "@here.build/arrival-modules": "workspace:^",
+    "@here.build/arrival-serializer": "workspace:^",
+    "@here.build/arrival-sugarcoat": "workspace:^",
     "chalk": "5.6.2",
     "culori": "4.0.2",
     "ink": "7.1.1",

@@ -3,8 +3,8 @@
 
 import { describe, expect, it } from "vitest";
 
-import { execState } from "@inhuman.tools/arrival";
-import { symbolsOwnedBy } from "@inhuman.tools/arrival/host-internals";
+import { execState } from "@here.build/arrival";
+import { symbolsOwnedBy } from "@here.build/arrival/host-internals";
 import { arrivalReflectCapability } from "../reflect/capability.js";
 
 describe("arrivalReflectCapability", () => {

@@ -9,7 +9,7 @@
 Lisp was born in 1958 for AI research — the first language built _for_ AI. arrival is a
 Lisp dialect built for AI _as the user_: the agent writes the programs.
 
-This repository is the public home of the `@inhuman.tools/arrival*` family, published by
+This repository is the public home of the `@here.build/arrival*` family, published by
 [here.build](https://here.build). Shared floor packages (`@here.build/tsconfig`, `collections`,
 `editor-theme`, …) live in [here-build/commons](https://github.com/here-build/commons).
 
@@ -24,11 +24,11 @@ classified diagnostic that names the intended form. Language, `exec` API, and ca
 From npm (interpreter):
 
 ```bash
-npm install @inhuman.tools/arrival
+npm install @here.build/arrival
 ```
 
 ```typescript
-import { exec } from "@inhuman.tools/arrival";
+import { exec } from "@here.build/arrival";
 const [result] = await exec(`(filter (lambda (x) (> x 5)) (list 1 3 7 9 2))`);
 // [7, 9]
 ```
@@ -36,8 +36,8 @@ const [result] = await exec(`(filter (lambda (x) (> x 5)) (list 1 3 7 9 2))`);
 CLI:
 
 ```bash
-npx @inhuman.tools/arrival-cli --help
-# or: npm install -g @inhuman.tools/arrival-cli   # installs the `arrival` bin
+npx @here.build/arrival-cli --help
+# or: npm install -g @here.build/arrival-cli   # installs the `arrival` bin
 ```
 
 From this repository (Node `>=22`, pnpm `10.3.0`):
@@ -57,7 +57,7 @@ A clone without the submodule still builds; those tests skip.
 
 ## Packages
 
-All names are `@inhuman.tools/<dir>`.
+All names are `@here.build/<dir>`.
 
 **Language**
 

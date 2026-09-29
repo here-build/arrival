@@ -14,8 +14,8 @@
 //   4. `Vocabulary.degraded` enumerates the missing keys (design doc
 //      symbol-define-static-program-validation.md §3.7).
 import { describe, expect, it } from "vitest";
-import { EnvCapability, exec, execState, toJS, type SchemeValue } from "@inhuman.tools/arrival";
-import { AmbientRuntime, execInFrame, type EnvPack } from "@inhuman.tools/arrival/host-internals";
+import { EnvCapability, exec, execState, toJS, type SchemeValue } from "@here.build/arrival";
+import { AmbientRuntime, execInFrame, type EnvPack } from "@here.build/arrival/host-internals";
 import invariant from "tiny-invariant";
 
 import { arrivalLoaderCapability } from "../loader-capability.js";

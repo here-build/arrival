@@ -1,7 +1,7 @@
 /**
  * `foldSchemaTag` — fold a PARSE-TREE node of an s/* schema-DSL form into its canonical
  * tagged-list JSON value, with ZERO evaluation. The pre-eval dual of core's `tagToJsonSchema`
- * (`@inhuman.tools/arrival/schema-tag`, which folds an ALREADY-evaluated JS tagged-list): this
+ * (`@here.build/arrival/schema-tag`, which folds an ALREADY-evaluated JS tagged-list): this
  * one reads the raw parse node before any env exists. That's why it lives OUT of core — core
  * only ever has evaluated values in hand; only the out-of-core static lenses (studio's form
  * lens, the API's `derive` endpoint, the CLI's argv mapper) ever hold parse nodes.
@@ -12,10 +12,10 @@
  * `reader/extract-defines.ts` and the API's `derive.ts` take. The `__location__` symbol is a
  * registry symbol (`Symbol.for("__location__")`) read off Pairs without importing primitives.
  */
-import type { SourceLocation } from "@inhuman.tools/arrival/provenance";
-import { toJS, type SchemeValue } from "@inhuman.tools/arrival";
+import type { SourceLocation } from "@here.build/arrival/provenance";
+import { toJS, type SchemeValue } from "@here.build/arrival";
 
-export type { SourceLocation } from "@inhuman.tools/arrival/provenance";
+export type { SourceLocation } from "@here.build/arrival/provenance";
 
 export const LOCATION_KEY = Symbol.for("__location__");
 

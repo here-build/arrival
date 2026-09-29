@@ -1,6 +1,6 @@
 /**
  * Pure JS runtime surface for mercury emit — no scheme membrane, no EnvCapability.
- * Emitted modules import from `@inhuman.tools/arrival-modules/handlebars/runtime`.
+ * Emitted modules import from `@here.build/arrival-modules/handlebars/runtime`.
  *
  * Matches RUNTIME_MANIFEST rows (source: "pkg") for:
  *   template/handlebars → templateHandlebars

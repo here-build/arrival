@@ -35,7 +35,7 @@ async function withCap(cap: EnvCapability, name: string) {
   return async (src: string) => Number((await execOverFrame(src, { env }))[0]);
 }
 
-describe("@inhuman.tools/arrival/srfi", () => {
+describe("@here.build/arrival/srfi", () => {
   it("SRFI-1 list library", async () => {
     const num = await withCap(srfi1, "s1");
     expect(await num("(length+ (list 1 2 3 4))")).toBe(4);
@@ -93,7 +93,7 @@ describe("@inhuman.tools/arrival/srfi", () => {
 // `last-pair` already lived in the pack, so they are exercised here only for
 // completeness (1-element + improper/dotted list) — the new symbols are first…tenth.
 // Assembles srfi-1 EXPLICITLY (the accessors are not registered globally this round).
-describe("@inhuman.tools/arrival/srfi-1 — positional accessors", () => {
+describe("@here.build/arrival/srfi-1 — positional accessors", () => {
   async function accEnv() {
     const env = sandboxedEnv.child(`s1acc-${Math.random().toString(36).slice(2)}`);
     await applyCapability(env, [srfi1]);

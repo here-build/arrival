@@ -1,4 +1,4 @@
-// `@inhuman.tools/arrival/lsp-internals` — the STATIC-analysis tier: everything an editor
+// `@here.build/arrival/lsp-internals` — the STATIC-analysis tier: everything an editor
 // service (arrival-lsp, mcp-typescript-lsp) or a discovery/roster reader needs to lex,
 // validate, and type a program WITHOUT evaluating it. The `-internals` name is the
 // no-stability-contract signal — a sibling contract between arrival core and its

@@ -26,7 +26,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { EnvCapability, exec } from "@inhuman.tools/arrival";
+import { EnvCapability, exec } from "@here.build/arrival";
 
 import { arrivalLoaderCapability } from "../loader-capability.js";
 import { contentsToText, loaderFromResolver } from "../loader.js";

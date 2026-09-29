@@ -13,7 +13,7 @@ import {
   valueToTsType,
   type ExtensionHandler,
   type Loader,
-} from "@inhuman.tools/arrival-modules";
+} from "@here.build/arrival-modules";
 import { describe, expect, it } from "vitest";
 
 import { assembleHostPrelude } from "../host-prelude.js";

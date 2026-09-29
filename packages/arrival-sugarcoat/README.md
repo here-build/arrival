@@ -1,4 +1,4 @@
-# @inhuman.tools/arrival-sugarcoat
+# @here.build/arrival-sugarcoat
 
 **Sugarcoat** is the reversible view of Scheme.
 
@@ -23,20 +23,20 @@ The original driver is AI–human collaboration: the LLM writes canonical Scheme
 ## Install
 
 ```bash
-pnpm add @inhuman.tools/arrival-sugarcoat
+pnpm add @here.build/arrival-sugarcoat
 ```
 
 ## Quick start
 
 ```ts
-import { schemeToSugarcoat, sugarcoatToScheme } from "@inhuman.tools/arrival-sugarcoat";
+import { schemeToSugarcoat, sugarcoatToScheme } from "@here.build/arrival-sugarcoat";
 
 const scheme = "(map (lambda (it) (* it 2)) xs)";
 schemeToSugarcoat(scheme); // → "xs.map{ it * 2 }"
 sugarcoatToScheme("xs.map{ it * 2 }", scheme); // → "(map (lambda (it) (* it 2)) xs)"
 ```
 
-`@inhuman.tools/arrival-codemirror` wires this into an editor: you type Sugarcoat, the buffer stores Scheme, live.
+`@here.build/arrival-codemirror` wires this into an editor: you type Sugarcoat, the buffer stores Scheme, live.
 
 **The full syntax — indentation, infix, `[]` vectors / `{}` dicts, subscripts, method chains, `it`, at-expressions — is a 5-minute read: [LEARN.md](./LEARN.md).**
 
@@ -49,7 +49,7 @@ sugarcoatToScheme("xs.map{ it * 2 }", scheme); // → "(map (lambda (it) (* it 2
 | **`readSugarcoat(text)`**                 | Sugarcoat → Scheme AST nodes (the reader half of the lens).                                                                                                                                                                |
 | **`alignSugarcoatScheme(text)`**          | Sugarcoat ↔ Scheme span pairing for IDE features on the sweet face.                                                                                                                                                        |
 | **`paramHints` / `paramHintsSugarcoat`**  | Parameter-name inlay hints over Scheme / Sugarcoat text.                                                                                                                                                                   |
-| **`tidyBoundNames`**                      | Bound-name recovery (`it` / singular noun). Import from the names subpath: `import { tidyBoundNames } from "@inhuman.tools/arrival-sugarcoat/names"`.                                                                      |
+| **`tidyBoundNames`**                      | Bound-name recovery (`it` / singular noun). Import from the names subpath: `import { tidyBoundNames } from "@here.build/arrival-sugarcoat/names"`.                                                                      |
 
 ## The guarantee
 
@@ -62,7 +62,7 @@ sugarcoatToScheme("xs.map{ it * 2 }", scheme); // → "(map (lambda (it) (* it 2
 ## Two things in one package
 
 1. **The lens** — `schemeToSugarcoat` / `sugarcoatToScheme`, everything above.
-2. **Re-export of the syntax forest** — `parseSexprs` / `Node` from `@inhuman.tools/arrival-syntax`, plus `printScheme` (the Scheme printer the lens uses to write a changed form back).
+2. **Re-export of the syntax forest** — `parseSexprs` / `Node` from `@here.build/arrival-syntax`, plus `printScheme` (the Scheme printer the lens uses to write a changed form back).
 
 The forest is a separate package so the interpreter type-layer and the type-lens emitter can parse Scheme without depending on this formatter — and so this package never depends on the eval engine. The main entry tree-shakes to `arrival-syntax` + `tiny-invariant`. The package still depends on `@here.build/lexical-namer` and `pluralize` for the `./names` subpath (`tidyBoundNames`); consumers of `.` do not pull those.
 

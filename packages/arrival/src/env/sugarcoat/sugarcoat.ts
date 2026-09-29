@@ -1,6 +1,6 @@
 // scheme/sugarcoat — JS-shaped sugar bindings for the sugarcoat authoring surface.
 //
-// The sugarcoat *syntax* lens lives in `@inhuman.tools/arrival-sugarcoat` (curly-infix,
+// The sugarcoat *syntax* lens lives in `@here.build/arrival-sugarcoat` (curly-infix,
 // method-dot, etc.). This pack is the matching *runtime* vocabulary: short names models
 // reach for from JS/Python that are NOT R7RS, NOT an SRFI, and NOT a Lisp dialect idiom.
 // Each binding is a thin alias of a canonical core (or a door that points there).

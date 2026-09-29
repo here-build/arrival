@@ -190,7 +190,7 @@ export function isHostRuntimeBug(e: unknown): boolean {
 
 /** Render a thrown error into a display-ready message for a host's run-error surface. A
  *  non-empty `schemeStack` contributes form-by-form frames (`toString()` — form +
- *  file:line + procedure); a `requireChain` (annotated by `@inhuman.tools/arrival-modules`
+ *  file:line + procedure); a `requireChain` (annotated by `@here.build/arrival-modules`
  *  when a throw escapes a required module — entry → failing module) is appended. Plain
  *  errors fall back to `.message`. `requireChain` stays duck-typed: the loader annotates
  *  it best-effort onto whatever error escapes, frozen targets included. */
@@ -1247,7 +1247,7 @@ export class TypeTagError extends ArrivalError {
       kind === "unrecognized-tag"
         ? `define/overridable ${bindingName}: unrecognized type tag ${expectedOrReason} — expected an s/* ` +
             `expression: (s/string)/(s/number)/(s/integer)/(s/boolean), (s/enum value...), ` +
-            `(s/object (s/field ...)...) or (s/array tag) (see @inhuman.tools/arrival/capabilities/schema), optionally ` +
+            `(s/object (s/field ...)...) or (s/array tag) (see @here.build/arrival/capabilities/schema), optionally ` +
             `wrapped in (s/optional ...)`
         : `define/overridable ${bindingName}: expected ${expectedOrReason}, got ${got} (from ${source}) — ` +
             `${

@@ -17,7 +17,7 @@ import {
   type SchemeLanguageService,
   type SchemeLanguageServiceOptions,
 } from "./service-core.js";
-import { getBundledPreludeFiles } from "@inhuman.tools/arrival-internals-types-prelude/browser";
+import { getBundledPreludeFiles } from "@here.build/arrival-internals-types-prelude/browser";
 
 import { stripLibFiles } from "./ts-lib-strip.js";
 import { TS_LIB_RAW } from "./ts-libs-raw.generated.js";

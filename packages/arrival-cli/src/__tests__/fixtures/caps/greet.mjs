@@ -1,7 +1,7 @@
 // Fixture capability — the SIMPLE arm: one verb, zero configuration. Loaded by the
 // suite through the REAL channel (`--with <path>` on the built CLI), so it exercises
 // specifier resolution + the instanceof identity check end-to-end.
-import { EnvCapability } from "@inhuman.tools/arrival/capability";
+import { EnvCapability } from "@here.build/arrival/capability";
 
 export default EnvCapability.define("fixture/greet", {
   symbols: (symbol, sz) => ({

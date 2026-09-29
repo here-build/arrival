@@ -31,7 +31,7 @@ import {
   type Classifier,
   type LineageNode,
   type EvalTrace,
-} from "@inhuman.tools/arrival/provenance";
+} from "@here.build/arrival/provenance";
 
 import { classifierFromTrace, operandsOf, scopedBindings, subtreeIds } from "./carrier-fields.js";
 

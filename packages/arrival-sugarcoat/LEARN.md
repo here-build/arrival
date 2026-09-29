@@ -137,7 +137,7 @@ users.filter{(u) => u[:age] < 30}
 
 The lens never renames _your_ parameters — `u` stays `u`. When you want `it`-ification
 (or `items` → `item` recovery), that's the explicit opt-in `tidyBoundNames` pass from
-`@inhuman.tools/arrival-sugarcoat/names`, or its no-touch twin `boundNameHints` for editor
+`@here.build/arrival-sugarcoat/names`, or its no-touch twin `boundNameHints` for editor
 inlays.
 
 `=>` is just an alias of `lambda` — `(=> (y) y)` is legal — but `{(y) => y}` is the face.
@@ -287,4 +287,4 @@ is the ancestor.
 
 That's the surface. The machinery behind it — the round-trip law, span alignment for
 editors (`alignSugarcoatScheme`), parameter hints, the `parseSexprs` forest
-(`@inhuman.tools/arrival-syntax`, re-exported here) — is in the [README](./README.md).
+(`@here.build/arrival-syntax`, re-exported here) — is in the [README](./README.md).

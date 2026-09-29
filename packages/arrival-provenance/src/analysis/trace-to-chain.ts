@@ -20,7 +20,7 @@
  * the structure, not the scaled production path (that's the statechart's job, once
  * its O(n²) build is addressed).
  */
-import { userCallSite, snapshotTrace, type EvalTrace } from "@inhuman.tools/arrival/provenance";
+import { userCallSite, snapshotTrace, type EvalTrace } from "@here.build/arrival/provenance";
 
 export interface ChainNode {
   /** The invocation id (one node per actual call — not collapsed by scope). */

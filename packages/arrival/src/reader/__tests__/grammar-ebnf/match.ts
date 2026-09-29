@@ -1,5 +1,5 @@
 /**
- * Packrat matcher for `@inhuman.tools/arrival/grammar.ebnf`.
+ * Packrat matcher for `@here.build/arrival/grammar.ebnf`.
  *
  * Interprets the ISO 14977 subset documented in that file's header: named
  * rules, ordered `|`, concatenation `,`, optional `[ ]`, greedy `{ }`, quoted

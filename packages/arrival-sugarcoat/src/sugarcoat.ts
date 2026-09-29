@@ -1,6 +1,6 @@
 // Pure Scheme↔sugarcoat syntax lens — the readable "sugarcoat" view over canonical
 // `.scm` source and the fold back to Scheme. This subpath carries ONLY the
-// reader + renderer: `sugarcoat-render` imports `@inhuman.tools/arrival-syntax` for
+// reader + renderer: `sugarcoat-render` imports `@here.build/arrival-syntax` for
 // `parseSexprs`, `sugarcoat-read` imports only `sugarcoat-render`, so neither pulls
 // a line of the eval engine.
 //

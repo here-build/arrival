@@ -2,7 +2,7 @@
  * Compile + run Handlebars templates (JS plane). Shared by the capability verbs
  * and the pure `/handlebars/runtime` export mercury emits against.
  */
-import { ANil } from "@inhuman.tools/arrival";
+import { ANil } from "@here.build/arrival";
 import Handlebars from "handlebars";
 import invariant from "tiny-invariant";
 

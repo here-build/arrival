@@ -8,7 +8,7 @@
 
 import { CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
 import { EditorState } from "@codemirror/state";
-import { createSchemeLanguageService } from "@inhuman.tools/arrival-lsp";
+import { createSchemeLanguageService } from "@here.build/arrival-lsp";
 import { describe, expect, it } from "vitest";
 
 import { schemeCompletionSource } from "../ide.js";

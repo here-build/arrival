@@ -1,4 +1,4 @@
-// @inhuman.tools/arrival/env/polyglot-stubs — cross-dialect teaching stubs.
+// @here.build/arrival/env/polyglot-stubs — cross-dialect teaching stubs.
 // Sibling spirit to srfi-stubs, different population:
 //   srfi-stubs   — SRFI symbols the spec defines that arrival omits
 //   r7rs/host    — R7RS §6.13/§6.14 host-interface doors

@@ -1,4 +1,4 @@
-// @inhuman.tools/arrival/r7rs/syntax — R7RS §4.3.1 / §5.3 macro-binding forms.
+// @here.build/arrival/r7rs/syntax — R7RS §4.3.1 / §5.3 macro-binding forms.
 //
 // Traditional Scheme: macros live in a separate expansion-time namespace → three
 // forms for top / local / recursive-local placement. Arrival collapsed that split:

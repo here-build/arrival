@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import type { LsPort } from "@inhuman.tools/arrival-lsp/ls-client";
-import { lookupProjectFile, lookupProjectRequireType } from "@inhuman.tools/arrival-lsp/require-path";
+import type { LsPort } from "@here.build/arrival-lsp/ls-client";
+import { lookupProjectFile, lookupProjectRequireType } from "@here.build/arrival-lsp/require-path";
 
 import type { SchemeIdeBackend } from "../index.js";
 
@@ -226,7 +226,7 @@ export function configureSchemeIdeHost(config: {
 let idePromise: Promise<SchemeIdeBackend | null> | null = null;
 
 async function workerBackend(shared: boolean): Promise<SchemeIdeBackend> {
-  const { connectSchemeLs } = await import("@inhuman.tools/arrival-lsp/ls-client");
+  const { connectSchemeLs } = await import("@here.build/arrival-lsp/ls-client");
   const connectOptions = connectOptionsFromHost();
   // Inline new URL(...) — bundlers only recognize this exact pattern for
   // worker bundling. Hoisting the URL breaks it.
@@ -425,7 +425,7 @@ function loadIde(): Promise<SchemeIdeBackend | null> {
       }
     }
     try {
-      const m = await import("@inhuman.tools/arrival-lsp/browser");
+      const m = await import("@here.build/arrival-lsp/browser");
       // In-thread rung: resolve via shared lookup (relative + unique basename).
       const backend = m.createBrowserSchemeLanguageService({
         ...connectWith,

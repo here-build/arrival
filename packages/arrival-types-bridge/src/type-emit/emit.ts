@@ -3,7 +3,7 @@
  * Source: arrival/packages/mercury/src/types-emit.ts (already carrying
  * Adaptations from the source chunk:
  *   - imports re-homed: parse/desugar/nodes/names/scheme-scope → `../front/`
- *     (`parseSexprs` is `@inhuman.tools/arrival-syntax`, re-exported from `../front/parse`),
+ *     (`parseSexprs` is `@here.build/arrival-syntax`, re-exported from `../front/parse`),
  *     stdlib → `./builtins.js` (roster-only reduction).
  *   - Law T: narrowing forms emit native `!`/`&&`/`||`/bare-call; other conditions
  *     coerce with `(expr !== false)` — Scheme truth (only `#f` is false).
@@ -15,7 +15,7 @@
  *
  * Distinct from the RUN-faithful idiomatic emitters: this one emits virtual TS
  * that is *type-checked, never run*, against the
- * `@inhuman.tools/arrival-internals-types-prelude` prelude (`PRE`). Every builtin
+ * `@here.build/arrival-internals-types-prelude` prelude (`PRE`). Every builtin
  * (and host) application lowers to a bare ambient call
  * `encodeSchemeIdent(name)(…)` — e.g. `string$dash$append(…)`,
  * `null$qmark$(…)` — so TS checks it against a global `declare function`.
@@ -1682,7 +1682,7 @@ function decodeString(raw: string): string {
 /**
  * Emit type-faithful virtual TS for an arrival Scheme program, with a span lens
  * back to the source. The emitted module references the
- * `@inhuman.tools/arrival-internals-types-prelude` prelude globals
+ * `@here.build/arrival-internals-types-prelude` prelude globals
  * (`declare function car…`, `sexpr`, `List`, …) — prepend PRE (unmapped)
  * before type-checking; nothing is declared here.
  *

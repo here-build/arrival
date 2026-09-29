@@ -9,7 +9,7 @@
 > zero non-spec residue — the surface is wider, the emitted meaning is stock Scheme. This
 > document says what each superset IS, where its grammar lives, and why the door it
 > closes is the only globally consistent shape. It is the model;
-> [`grammar.ebnf`](../src/reader/grammar.ebnf) (`@inhuman.tools/arrival/grammar.ebnf`) is
+> [`grammar.ebnf`](../src/reader/grammar.ebnf) (`@here.build/arrival/grammar.ebnf`) is
 > the formal productions of that model (R7RS §7.1 plus the supersets below); the
 > `*.spec.ts` / `*.test.ts` files under `src/reader/__tests__/polyglot/` and
 > `src/reader/__tests__/grammar-ebnf/` are its executable pins. Parser success on a

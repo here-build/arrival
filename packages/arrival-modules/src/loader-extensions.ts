@@ -19,8 +19,8 @@
 // Shared primitives (`registerExtensionIn` / `lookupExtensionResolverIn`) keep the
 // conflict door and longest-suffix match in one place.
 
-import type { RunContext, SchemeValue } from "@inhuman.tools/arrival";
-import { ANil, APair, AString, ASymbol, nil } from "@inhuman.tools/arrival/reflect-internals";
+import type { RunContext, SchemeValue } from "@here.build/arrival";
+import { ANil, APair, AString, ASymbol, nil } from "@here.build/arrival/reflect-internals";
 import invariant from "tiny-invariant";
 
 import { ExtensionSuffixConflictError } from "./errors.js";

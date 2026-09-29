@@ -1,4 +1,4 @@
-# @inhuman.tools/arrival-serializer
+# @here.build/arrival-serializer
 
 Standalone JavaScript → s-expression serializer for LLM-facing text. It is **not** a lossless round-trip.
 
@@ -7,7 +7,7 @@ Serialization is two stages: `toSExpr` builds an s-expression (a plain JS array 
 ## Installation
 
 ```bash
-pnpm add @inhuman.tools/arrival-serializer
+pnpm add @here.build/arrival-serializer
 ```
 
 `@here.build/arrival-env` is a runtime dependency (installed with this package). Import it wherever you implement `Symbol.toSExpr` / `Symbol.SExpr`.
@@ -15,7 +15,7 @@ pnpm add @inhuman.tools/arrival-serializer
 ## Quick Start
 
 ```typescript
-import { toSExpr, formatSExpr, toSExprString } from "@inhuman.tools/arrival-serializer";
+import { toSExpr, formatSExpr, toSExprString } from "@here.build/arrival-serializer";
 
 toSExprString(42); // 42
 toSExprString("hello"); // hello
@@ -28,7 +28,7 @@ Quoting is lexical: strings with spaces or special characters get quotes; identi
 
 ```typescript
 import "@here.build/arrival-env"; // Symbol.toSExpr / Symbol.SExpr
-import { toSExprString } from "@inhuman.tools/arrival-serializer";
+import { toSExprString } from "@here.build/arrival-serializer";
 
 class Point {
   constructor(
@@ -105,7 +105,7 @@ Whether these forms also improve AI _consumption_ (not just density) is unvalida
 
 ## Scheme Integration
 
-Built-in support for `@inhuman.tools/arrival`'s Scheme runtime types (duck-typed by constructor name, exposed from `@inhuman.tools/arrival/reflect-internals`):
+Built-in support for `@here.build/arrival`'s Scheme runtime types (duck-typed by constructor name, exposed from `@here.build/arrival/reflect-internals`):
 
 - `AExact` (exact integers / rationals) → Numbers or `num/denom`
 - `AInexact` (floats / complex) → Numbers or `real+imagi`
@@ -119,7 +119,7 @@ Built-in support for `@inhuman.tools/arrival`'s Scheme runtime types (duck-typed
 ## Related
 
 - **@here.build/arrival-env** — `Symbol.toSExpr` / `Symbol.SExpr` protocol (runtime dependency of this package)
-- **@inhuman.tools/arrival** — the Scheme interpreter, exposing runtime types (e.g. via `/reflect-internals`)
+- **@here.build/arrival** — the Scheme interpreter, exposing runtime types (e.g. via `/reflect-internals`)
 
 ## License
 

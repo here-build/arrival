@@ -1,4 +1,4 @@
-// @inhuman.tools/arrival-codemirror — CodeMirror 6 for arrival Scheme (Scheme + sugarcoat).
+// @here.build/arrival-codemirror — CodeMirror 6 for arrival Scheme (Scheme + sugarcoat).
 //
 // Exports the language (schemeSugarcoat), param hints, structural editing, ghost,
 // and IDE surface (linter/hover/completion/goto/sem-highlight) over a

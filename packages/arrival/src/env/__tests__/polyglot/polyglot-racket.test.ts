@@ -16,7 +16,7 @@ async function exec(code: string, options: ExecOptionsOverFrame) {
   return (await execStateOverFrame(code, options)).values.slice();
 }
 
-describe("@inhuman.tools/arrival/polyglot-racket", () => {
+describe("@here.build/arrival/polyglot-racket", () => {
   it("installs ~>/~>> (aliasing Clojure's ->/->>) and dict-count, assembled STANDALONE", async () => {
     const env = sandboxedEnv.child("polyglot-racket-test");
     // Assembling JUST polyglot-racket pulls in scheme/polyglot-clojure (for the
@@ -65,7 +65,7 @@ describe("@inhuman.tools/arrival/polyglot-racket", () => {
 // result and getting stranded (Unbound variable). These are dict-SPECIFIC (guard
 // the dict shape, unlike @'s origin-agnostic read) real bindings, not stubs.
 // Default assembled env — polyglot-racket ships in BASE_PACKS in production.
-describe("@inhuman.tools/arrival/polyglot-racket — dict accessor family (Bucket A)", () => {
+describe("@here.build/arrival/polyglot-racket — dict accessor family (Bucket A)", () => {
   const str = async (src: string) => String((await bareExecState(src)).values[0]);
   const raw = async (src: string) => (await bareExecState(src)).values;
 

@@ -5,7 +5,7 @@
 // OWNS the `smol-toml` parser (optional peer), registers `.toml` by name at
 // bootstrap, and returns the parse as a dict so a `.toml` require yields the
 // same shape as its `.json` twin.
-import { EnvCapability } from "@inhuman.tools/arrival/capability";
+import { EnvCapability } from "@here.build/arrival/capability";
 import { parse as parseToml } from "smol-toml";
 
 import { arrivalLoaderCapability } from "../loader-capability.js";

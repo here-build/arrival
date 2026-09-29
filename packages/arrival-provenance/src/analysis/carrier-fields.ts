@@ -36,7 +36,7 @@ import {
   type AutoBindings,
   type EvalTrace,
   type Invocation,
-} from "@inhuman.tools/arrival/provenance";
+} from "@here.build/arrival/provenance";
 
 // The AST type `classify` actually accepts — derived from its own signature (via indexed
 // access) rather than named, so this file never needs to import the value union directly.

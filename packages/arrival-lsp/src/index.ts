@@ -15,7 +15,7 @@ export {
 
 // The prelude vocabulary (`getPreludeFiles`, `PRELUDE_FILE`, `PROGRAM_FILE`) and
 // the `.d.ts` builtin surface now live in
-// `@inhuman.tools/arrival-internals-types-prelude` — import them from there.
+// `@here.build/arrival-internals-types-prelude` — import them from there.
 export { Mapper, type Mapping, type Span, type LineCol } from "./span-map.js";
 export { narrowByType, type Scanner, type ScannerState, type TypeLens } from "./typed-scanner.js";
 export {

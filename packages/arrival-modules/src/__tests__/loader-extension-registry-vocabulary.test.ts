@@ -12,8 +12,8 @@
 //     detector — "cannot register .yaml twice".
 
 import { describe, expect, it } from "vitest";
-import { EnvCapability, exec, execState, toJS, type SchemeValue } from "@inhuman.tools/arrival";
-import { getCapabilityResources } from "@inhuman.tools/arrival/host-internals";
+import { EnvCapability, exec, execState, toJS, type SchemeValue } from "@here.build/arrival";
+import { getCapabilityResources } from "@here.build/arrival/host-internals";
 
 import { arrivalLoaderCapability } from "../loader-capability.js";
 import { contentsToText, loaderFromResolver } from "../loader.js";

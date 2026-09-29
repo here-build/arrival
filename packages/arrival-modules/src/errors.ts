@@ -1,7 +1,7 @@
 // Require doors — each names a distinct way `(require …)` refuses.
 // Extend ArrivalError so host `formatRunError` / `instanceof ArrivalError` still classify them.
 
-import { ArrivalError, type ErrorClass } from "@inhuman.tools/arrival";
+import { ArrivalError, type ErrorClass } from "@here.build/arrival";
 
 /** A require verb ran outside evaluator dispatch, so `this.resolver` is missing. */
 export class RunResolverUnreachableError extends ArrivalError {

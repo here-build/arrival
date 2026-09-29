@@ -1,13 +1,13 @@
 // yaml — the `.yaml`/`.yml` file-type resolver as an opt-in capability.
 //
-// The dep-bearing data formats are not on `@inhuman.tools/arrival-modules`'
+// The dep-bearing data formats are not on `@here.build/arrival-modules`'
 // builtin table so the loader barrel carries no parser deps (per
 // .claude/rules/env-quasi-packages.md — split to isolate an external
 // dependency): this capability OWNS the `yaml` parser (optional peer) and
 // registers its resolver by name at bootstrap; `require`'s by-name overlay
 // resolves it. The value so `(require "personas.yaml")` yields a dict the
 // same shape a `.json` require would.
-import { EnvCapability } from "@inhuman.tools/arrival/capability";
+import { EnvCapability } from "@here.build/arrival/capability";
 import { parse as parseYaml } from "yaml";
 
 import { arrivalLoaderCapability } from "../loader-capability.js";

@@ -26,27 +26,27 @@
 // hand this handle wiring `/reflect` must not build for itself:
 //   - `circuitProvider` lets `circuitOf` (handle-provenance.ts) render a REAL static attribution
 //     circuit instead of its architectural door — see that function's doc for exactly why
-//     this subpath does not import `@inhuman.tools/arrival-mercury`.
+//     this subpath does not import `@here.build/arrival-mercury`.
 //   - `boxedValue` is the RAW pre-`toJS`-peel AValue behind `value` (`RunHandle.result`,
 //     `run-program.ts`'s own doc), which lets `leafRows` enumerate a container's real leaves
 //     instead of treating a peeled JS blob as one atomic leaf.
 //   - `attestProvider` (T6c) is the live static∧probe conjunction, per leaf — see `attested()`'s
 //     own doc below. Its verdict shape (`AttestedLeafVerdict`) is a LOCAL, duck-typed mirror of
-//     `@inhuman.tools/arrival-mercury/seal.ts`'s `SealVerdict` — never imported (same cycle
+//     `@here.build/arrival-mercury/seal.ts`'s `SealVerdict` — never imported (same cycle
 //     `circuitProvider` avoids by returning a plain `string`; this returns plain data instead).
 // All three are ADDITIVE: absent capabilities leave every existing fail-closed behavior —
 // `circuitOf`'s door, `leafRows`' single-peeled-leaf fallback, `attested()`'s throw — exactly as
 // it was before this wave.
 
 import type { EvalTrace } from "../trace.js";
-import { arrival } from "@inhuman.tools/arrival/host-internals";
+import { arrival } from "@here.build/arrival/host-internals";
 
 const RESULT_HANDLE = Symbol.for("arrival.ResultHandle");
 
 /**
  * A field's address inside a (possibly nested) VALUE: an object key or an array index,
  * root-to-field. `[]` addresses the root value itself. Structurally identical to
- * `@inhuman.tools/arrival-mercury`'s `FieldPath` (verdict/field-prov.ts) and mcp-worker's
+ * `@here.build/arrival-mercury`'s `FieldPath` (verdict/field-prov.ts) and mcp-worker's
  * `attest-provider.ts`'s `LeafPath` — re-declared, not imported (this analysis plane does not
  * import the compiler, see `circuitOf`'s doc): a deliberate Nth non-declaration of the
  * SAME grammar, not a new one (field-prov.ts's own header already lists three; this is the
@@ -55,7 +55,7 @@ const RESULT_HANDLE = Symbol.for("arrival.ResultHandle");
 export type FieldPath = readonly (string | number)[];
 
 /**
- * One leaf's sealed verdict — structurally identical to `@inhuman.tools/arrival-mercury`'s
+ * One leaf's sealed verdict — structurally identical to `@here.build/arrival-mercury`'s
  * `SealVerdict` (seal.ts), duck-typed here rather than imported (this analysis plane does not
  * import the compiler — see this file's header). `content-attested`/`selection-attested` are the only
  * two POSITIVE kinds; everything else is `not-attestable` (the seal never distinguishes "provably

@@ -22,9 +22,9 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
 
-import { disposeRunContext, exec, execState, LexicalScope } from "@inhuman.tools/arrival";
-import { StaticValidationError } from "@inhuman.tools/arrival/lsp-internals";
-import { EvalTrace } from "@inhuman.tools/arrival/provenance";
+import { disposeRunContext, exec, execState, LexicalScope } from "@here.build/arrival";
+import { StaticValidationError } from "@here.build/arrival/lsp-internals";
+import { EvalTrace } from "@here.build/arrival/provenance";
 
 import { armCapabilities, type ArmedCapabilities } from "./capabilities.js";
 import { resolveOutputMode, type OutputMode } from "./output-mode.js";

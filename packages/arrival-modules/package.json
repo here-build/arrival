@@ -1,5 +1,5 @@
 {
-  "name": "@inhuman.tools/arrival-modules",
+  "name": "@here.build/arrival-modules",
   "version": "0.9.9",
   "description": "(require …) for Arrival — the loader capability, path jail, and builtin .scm/.json/.ndjson/.txt resolvers. File-type extension packs export from ./yaml, ./toml, and ./handlebars (plus ./handlebars/runtime); their parsers are optional peerDependencies.",
   "keywords": [
@@ -65,11 +65,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@inhuman.tools/arrival": "workspace:^",
+    "@here.build/arrival": "workspace:^",
     "tiny-invariant": "1.3.3"
   },
   "peerDependencies": {
-    "@inhuman.tools/arrival": "workspace:^",
+    "@here.build/arrival": "workspace:^",
     "handlebars": "^4.7.9",
     "smol-toml": "^1.6.1",
     "yaml": "^2.8.0"

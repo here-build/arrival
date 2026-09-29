@@ -1,4 +1,4 @@
-# @inhuman.tools/arrival
+# @here.build/arrival
 
 Sandboxed R7RS-subset Scheme for LLM agents. `exec` runs a string and returns
 plain JS — transparent provenance, a capability sandbox, a JS membrane.
@@ -16,11 +16,11 @@ translate English-reasoning into a tool-call, this is for you.
 ## Quick Start
 
 ```bash
-npm install @inhuman.tools/arrival
+npm install @here.build/arrival
 ```
 
 ```typescript
-import { exec } from "@inhuman.tools/arrival";
+import { exec } from "@here.build/arrival";
 
 // One plain JS value per top-level form; the base assembles lazily on first call.
 const [result] = await exec(`(filter (lambda (x) (> x 5)) (list 1 3 7 9 2))`);
@@ -36,7 +36,7 @@ implementation. `exec` always assembles `BASE_ROSTER` and then the caller's `cap
 returns plain JS values — one per top-level form.
 
 ```typescript
-import { exec, EnvCapability } from "@inhuman.tools/arrival";
+import { exec, EnvCapability } from "@here.build/arrival";
 
 const weather = EnvCapability.define("demo/weather", {
   symbols: (symbol, z) => ({
@@ -64,8 +64,8 @@ gives it an `s/*` type and a default; the host supplies the value through the `o
 capability's shared config bag, validated against the declared type at the membrane.
 
 ```typescript
-import { exec } from "@inhuman.tools/arrival";
-import { overridableCapability } from "@inhuman.tools/arrival/capabilities/overridable";
+import { exec } from "@here.build/arrival";
+import { overridableCapability } from "@here.build/arrival/capabilities/overridable";
 
 const users = [
   { id: "alice", priority: 15 },
@@ -92,7 +92,7 @@ Multi-turn agent sessions need no framework and no hidden layer: mint a scope, r
 top-level `define`s accumulate across calls.
 
 ```typescript
-import { execState, toJS, LexicalScope } from "@inhuman.tools/arrival";
+import { execState, toJS, LexicalScope } from "@here.build/arrival";
 
 const scope = LexicalScope.fresh("agent-session"); // the session's mutable frame
 await execState(`(define (sq x) (* x x))`, { scope }); // turn 1 — defines land on the scope
@@ -149,8 +149,8 @@ role (`source` / `pipe` / `fan` / `sink` / `transparent` / `loop` / `opaque`).
 [`docs/PROVENANCE.md`](./docs/PROVENANCE.md).
 
 ```typescript
-import { execState, deepProvenance, EnvCapability } from "@inhuman.tools/arrival";
-import { EvalTrace } from "@inhuman.tools/arrival/provenance";
+import { execState, deepProvenance, EnvCapability } from "@here.build/arrival";
+import { EvalTrace } from "@here.build/arrival/provenance";
 
 const weather = EnvCapability.define("demo/weather", {
   symbols: (symbol, z) => ({
@@ -171,16 +171,16 @@ trace.toolNameFor(1); // "forecast-for"
 ```
 
 `buildUneval` reverse-slices a traced run into a minimal re-runnable program that re-derives a
-chosen value. It lives in `@inhuman.tools/arrival-provenance/analysis`. That package also
-owns `groundingVerdict` (`@inhuman.tools/arrival-provenance/verdict`) and the `whyOf` /
-`whereOf` / `howOf` queries (`@inhuman.tools/arrival-provenance/reflect`); this package
+chosen value. It lives in `@here.build/arrival-provenance/analysis`. That package also
+owns `groundingVerdict` (`@here.build/arrival-provenance/verdict`) and the `whyOf` /
+`whereOf` / `howOf` queries (`@here.build/arrival-provenance/reflect`); this package
 keeps the capture spine (`EvalTrace`, stamping) and `deepProvenance`. The `/attestation` subpath
 brands values so provenance unions forward while attestation _drops on compute_.
 
 ```typescript
-import { execState, EnvCapability } from "@inhuman.tools/arrival";
-import { EvalTrace } from "@inhuman.tools/arrival/provenance";
-import { buildUneval } from "@inhuman.tools/arrival-provenance/analysis";
+import { execState, EnvCapability } from "@here.build/arrival";
+import { EvalTrace } from "@here.build/arrival/provenance";
+import { buildUneval } from "@here.build/arrival-provenance/analysis";
 
 const scanner = EnvCapability.define("demo/scanner", {
   symbols: (symbol, z) => ({
@@ -295,13 +295,13 @@ consumers skip the pass for such programs (the runtime doors remain the backstop
 
 - `validateProgram` / `vocabularyFromChain` (from `/lsp-internals`) — the complete-diagnostic-list
   validation pass.
-- `forwardCone`, `backwardCone` (from `@inhuman.tools/arrival-provenance/analysis`) — the traced
+- `forwardCone`, `backwardCone` (from `@here.build/arrival-provenance/analysis`) — the traced
   lineage cone; `deepProvenance` (from this package) — the deep provenance read; `toJS` —
   the boxed→plain exit read.
 - `EvalTrace` (from `/provenance`) — the traced-run recorder (capture spine lives in core);
   `trace.toolNameFor(id)` / `trace.invocationById(id)` resolve a `deepProvenance` ordinal to the
   verb / invocation that minted it.
-- `buildUneval` (from `@inhuman.tools/arrival-provenance/analysis`) — reverse
+- `buildUneval` (from `@here.build/arrival-provenance/analysis`) — reverse
   slicer over a finished traced run; options take `scope: state.scope` (not `env`).
 
 **Subpath exports** — granular, tree-shaken entries (see `package.json` `exports` for the
@@ -309,7 +309,7 @@ authoritative list): `/reflect-internals`, `/lsp-internals`, `/host-internals`, 
 `/capabilities`, `/capabilities/overridable`, `/capabilities/schema`,
 `/resources`, `/emit`, `/schema-tag`, `/attestation`, `/provenance`, `/provenance/store`,
 `/type-layer`. `/grammar.ebnf` is the reader eBNF (raw text, not JS). `(require …)` lives in
-`@inhuman.tools/arrival-modules`.
+`@here.build/arrival-modules`.
 
 **Decomposed processing** — for cases the three declared doors (`capabilities` / `config` /
 `scope`) don't cover: the self-hosted `Vocabulary` a capability tuple builds into is memoized by

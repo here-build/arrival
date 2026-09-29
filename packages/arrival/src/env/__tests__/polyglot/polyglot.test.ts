@@ -22,7 +22,7 @@ async function exec(code: string, options: ExecOptionsOverFrame) {
   return (await execStateOverFrame(code, options)).values.slice();
 }
 
-describe("@inhuman.tools/arrival/polyglot (shared core)", () => {
+describe("@here.build/arrival/polyglot (shared core)", () => {
   it("installs @/@?/@keys/dict and compose/pipe run correctly standalone", async () => {
     const env = sandboxedEnv.child("polyglot-core-test");
     await applyCapability(env, [polyglot]);
@@ -67,7 +67,7 @@ describe("@inhuman.tools/arrival/polyglot (shared core)", () => {
   });
 });
 
-describe("@inhuman.tools/arrival/polyglot — nil (polyglot empty-list alias, shared)", () => {
+describe("@here.build/arrival/polyglot — nil (polyglot empty-list alias, shared)", () => {
   it("nil is the empty list", async () => {
     // `(if …)` normalizes over the boxed-ABool representation (same convention
     // the sibling dialect test files use for boolean-verdict assertions).

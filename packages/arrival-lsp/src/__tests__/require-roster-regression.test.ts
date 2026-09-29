@@ -18,9 +18,9 @@
 //
 // Per `.claude/rules/tests.md` this is a `__tests__/` verdict (boolean pass/fail).
 
-import { disposeRunContext, execState, LexicalScope } from "@inhuman.tools/arrival";
-import { rosettaTypesOf } from "@inhuman.tools/arrival/lsp-internals";
-import { arrivalLoaderCapability, loaderFromResolver, resolveRequireType } from "@inhuman.tools/arrival-modules";
+import { disposeRunContext, execState, LexicalScope } from "@here.build/arrival";
+import { rosettaTypesOf } from "@here.build/arrival/lsp-internals";
+import { arrivalLoaderCapability, loaderFromResolver, resolveRequireType } from "@here.build/arrival-modules";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { assembleHostPrelude } from "../host-prelude.js";

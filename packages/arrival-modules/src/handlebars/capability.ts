@@ -7,10 +7,10 @@
  *   • verbs: template/handlebars, handlebars/parse, handlebars/run
  *
  * Compiler: Contract.emit → RuntimeRef; RUNTIME_MANIFEST maps those symbols to
- * `@inhuman.tools/arrival-modules/handlebars/runtime` (the mercury reference example).
+ * `@here.build/arrival-modules/handlebars/runtime` (the mercury reference example).
  */
-import { EnvCapability, execExpr, parse, toJS, type SchemeValue } from "@inhuman.tools/arrival";
-import { Call, type EmitRule, type R } from "@inhuman.tools/arrival/emit";
+import { EnvCapability, execExpr, parse, toJS, type SchemeValue } from "@here.build/arrival";
+import { Call, type EmitRule, type R } from "@here.build/arrival/emit";
 
 import { arrivalLoaderCapability } from "../loader-capability.js";
 import { contentsToText, runResolverOf } from "../loader.js";

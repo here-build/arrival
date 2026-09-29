@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { toSExprString } from "../serializer";
-import { exec, execState, EnvCapability, toJS, ANil, LexicalScope } from "@inhuman.tools/arrival";
-import { AExact, AString, ASymbol, APair } from "@inhuman.tools/arrival/reflect-internals";
+import { exec, execState, EnvCapability, toJS, ANil, LexicalScope } from "@here.build/arrival";
+import { AExact, AString, ASymbol, APair } from "@here.build/arrival/reflect-internals";
 
 async function serializeForm(expr: string): Promise<string> {
   // Raw scheme values (execState), not exec's toJS-collapsed ones — nil must stay ANil

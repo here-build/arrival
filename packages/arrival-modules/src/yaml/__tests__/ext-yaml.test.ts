@@ -6,9 +6,9 @@
 // resolves through it end-to-end — plus the re-registration door and the per-run freshness law.
 
 import { describe, expect, it } from "vitest";
-import { exec, execState } from "@inhuman.tools/arrival";
-import { loaderFromResolver } from "@inhuman.tools/arrival-modules";
-import { EnvCapability } from "@inhuman.tools/arrival/capability";
+import { exec, execState } from "@here.build/arrival";
+import { loaderFromResolver } from "@here.build/arrival-modules";
+import { EnvCapability } from "@here.build/arrival/capability";
 
 import { arrivalYamlCapability } from "../ext-yaml.js";
 
@@ -38,7 +38,7 @@ describe("arrivalYamlCapability — .yaml/.yml on the vocabulary (default) path"
   });
 
   it("a SEPARATE run that never roots arrivalYamlCapability cannot resolve .yaml at all (per-run isolation)", async () => {
-    const { arrivalLoaderCapability } = await import("@inhuman.tools/arrival-modules");
+    const { arrivalLoaderCapability } = await import("@here.build/arrival-modules");
     await expect(
       exec(`(require "unseen.yaml")`, {
         capabilities: [arrivalLoaderCapability],

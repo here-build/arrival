@@ -16,7 +16,7 @@ async function exec(code: string, options: ExecOptionsOverFrame) {
   return (await execStateOverFrame(code, options)).values.slice();
 }
 
-describe("@inhuman.tools/arrival/polyglot-lisp", () => {
+describe("@here.build/arrival/polyglot-lisp", () => {
   it("mapcar / remove-if / remove-if-not run correctly assembled STANDALONE (no core dep needed)", async () => {
     const env = sandboxedEnv.child("polyglot-lisp-test");
     // Unlike its Clojure/Racket siblings, polyglot-lisp needs no dep on
@@ -46,7 +46,7 @@ describe("@inhuman.tools/arrival/polyglot-lisp", () => {
 
 // Cross-dialect stdlib completion, default assembled env — polyglot-lisp ships
 // in BASE_PACKS in production, the same surface a model actually reaches.
-describe("@inhuman.tools/arrival/polyglot-lisp — stdlib completion (Bucket A)", () => {
+describe("@here.build/arrival/polyglot-lisp — stdlib completion (Bucket A)", () => {
   const str = async (src: string) => String((await bareExecState(src)).values[0]);
 
   it("mapcar (Common Lisp) — same arg order as R7RS map", async () => {

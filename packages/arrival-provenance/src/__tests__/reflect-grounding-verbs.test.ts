@@ -12,8 +12,8 @@
 // Fixture idiom mirrors arrival-provenance's own verdict.test.ts: a deterministic Rosetta-IN
 // source (`evidence-read`) under a real traced `execState`, so leaves are genuinely grounded
 // (real provenance), not hand-waved.
-import { EnvCapability, LexicalScope, execState } from "@inhuman.tools/arrival";
-import { APair, AString } from "@inhuman.tools/arrival/reflect-internals";
+import { EnvCapability, LexicalScope, execState } from "@here.build/arrival";
+import { APair, AString } from "@here.build/arrival/reflect-internals";
 import { lastTopLevelForm } from "../analysis.js";
 import { EvalTrace } from "../index.js";
 import { describe, expect, it } from "vitest";

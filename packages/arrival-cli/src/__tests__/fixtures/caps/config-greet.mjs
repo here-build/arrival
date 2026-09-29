@@ -3,7 +3,7 @@
 // contract's `requiresConfig` auto-mints a cause-carrying door (D2, unconditional —
 // degradation.ts's "doors" mode is the only mode now), which the static pass reports
 // as the causal "provide `greeting`" diagnostic (bucket c, missing-configuration).
-import { EnvCapability } from "@inhuman.tools/arrival/capability";
+import { EnvCapability } from "@here.build/arrival/capability";
 import { z } from "zod";
 
 export const configGreetCapability = EnvCapability.define("fixture/config-greet", {

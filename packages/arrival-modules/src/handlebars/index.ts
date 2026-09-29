@@ -1,4 +1,4 @@
-// `@inhuman.tools/arrival-modules/handlebars`
+// `@here.build/arrival-modules/handlebars`
 //
 // Opt-in EnvCapability: owns the handlebars dep (optional peer), teaches
 // `.hbs` require (import-executable pretreat → scheme lambda), and exposes

@@ -1,4 +1,4 @@
-// @inhuman.tools/arrival-provenance — the trace-capture substrate + the
+// @here.build/arrival-provenance — the trace-capture substrate + the
 // render-model ANALYSIS stack (forest, region tree, statechart, flow graph,
 // MDL forest-collapse, reverse-chain slicer) that turns a finished trace
 // into diagrams. Reads finished traces; never drives the evaluator.
@@ -6,7 +6,7 @@
 // Per the provenance analysis-stack relocation, this package now OWNS the
 // analysis stack natively (`./analysis/*`) instead of re-exporting it from
 // core's `/provenance` subpath — core keeps only the capture spine + static
-// wireframe plane (`@inhuman.tools/arrival/provenance`), which this default
+// wireframe plane (`@here.build/arrival/provenance`), which this default
 // entry still draws its capture-primitive re-exports from. Subpaths:
 // default / `/analysis` / `/verdict` / `/reflect`. `/reflect` is not
 // re-exported from here — opt in at the subpath.
@@ -17,7 +17,7 @@
 // a mobx dependency.
 
 export { EvalTrace, Invocation, NodeRecord, type InvocationState } from "./trace.js";
-export { scopeId, type SourceLocation } from "@inhuman.tools/arrival/provenance";
+export { scopeId, type SourceLocation } from "@here.build/arrival/provenance";
 export {
   traceToForest,
   type ForestOptions,
@@ -38,4 +38,4 @@ export {
 // tooling and tests that round-trip a trace without the mobx-reactive class.
 // (`snapshotTrace` accepts core's plain `EvalTrace`; this package's
 // `ObservableEvalTrace` is a subclass, so passing either works.)
-export { snapshotTrace, type PlainTrace, type PlainInv } from "@inhuman.tools/arrival/provenance";
+export { snapshotTrace, type PlainTrace, type PlainInv } from "@here.build/arrival/provenance";

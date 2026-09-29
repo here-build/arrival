@@ -12,7 +12,7 @@ with each law it rests on cited to its home in `environments.md`.**
 The per-API mechanics (the `symbol.*` factory roster, tagged-template syntax, exact bake-gate
 error texts) live in the JSDoc of the entry points: `common/symbol.ts`, `common/capability.ts`,
 `rosetta.ts`, `common/scheme-zod/`, and (out of this repository)
-`@inhuman.tools/arrival-mcp`'s `McpEnvCapability` / `tool`.
+`@here.build/arrival-mcp`'s `McpEnvCapability` / `tool`.
 
 The one law under everything below: **dependencies point down, only down** — a capability
 declares a `deps` edge and uses the granted names, never reaching sideways into another
@@ -137,7 +137,7 @@ so the assembly's `degraded` list enumerates it (`environments.md` §DEGRADATION
 
 ## Exposing a capability to agents (MCP)
 
-`@inhuman.tools/arrival-mcp` (out of this repository) turns a capability DAG into one MCP
+`@here.build/arrival-mcp` (out of this repository) turns a capability DAG into one MCP
 tool whose argument is an arrival program. MCP wraps **intent, not impact**: expose verbs an actor means (`create-widget`, `anchor-to`),
 never materialization knobs — danger, cacheability, and lineage are facts the verb declares about
 itself, not levers a caller holds. The catalog aggregates across the whole `deps` closure, deps-first

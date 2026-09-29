@@ -8,9 +8,9 @@
 // shape); `.hbs` is the CALLABLE-shape sibling.
 
 import { describe, expect, it } from "vitest";
-import { exec } from "@inhuman.tools/arrival";
-import { loaderFromResolver } from "@inhuman.tools/arrival-modules";
-import { EnvCapability } from "@inhuman.tools/arrival/capability";
+import { exec } from "@here.build/arrival";
+import { loaderFromResolver } from "@here.build/arrival-modules";
+import { EnvCapability } from "@here.build/arrival/capability";
 
 import { arrivalHandlebarsCapability } from "../capability.js";
 
@@ -31,7 +31,7 @@ describe("arrivalHandlebarsCapability — .hbs on the vocabulary (default) path"
   });
 
   it("a SEPARATE run that never roots arrivalHandlebarsCapability cannot resolve .hbs at all (per-run isolation)", async () => {
-    const { arrivalLoaderCapability } = await import("@inhuman.tools/arrival-modules");
+    const { arrivalLoaderCapability } = await import("@here.build/arrival-modules");
     await expect(
       exec(`(require "unseen.hbs")`, {
         capabilities: [arrivalLoaderCapability],

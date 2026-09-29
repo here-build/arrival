@@ -9,7 +9,7 @@
 //
 // Per `.claude/rules/tests.md` this is a `__tests__/` verdict (boolean pass/fail).
 
-import { getPreludeFiles, PROGRAM_FILE } from "@inhuman.tools/arrival-internals-types-prelude";
+import { getPreludeFiles, PROGRAM_FILE } from "@here.build/arrival-internals-types-prelude";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 

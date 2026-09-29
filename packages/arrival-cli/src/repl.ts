@@ -20,8 +20,8 @@
  */
 import readline from "node:readline";
 
-import { disposeRunContext, execState } from "@inhuman.tools/arrival";
-import { scan } from "@inhuman.tools/arrival/lsp-internals";
+import { disposeRunContext, execState } from "@here.build/arrival";
+import { scan } from "@here.build/arrival/lsp-internals";
 import { EMPTY_REPL_MODEL, foldReplEvent, type ReplBlock, type ReplFoldModel } from "./repl-model/repl-fold.js";
 
 import { CLEAR_SCREEN, CURSOR_HOME } from "./ansi.js";

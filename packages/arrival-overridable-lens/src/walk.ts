@@ -15,7 +15,7 @@
  * the node directly. (A prior slice-and-re-parse layer existed only because the form lens ran
  * before this walk was shared; with nodes in hand it is unnecessary.)
  */
-import { parse, type SchemeValue } from "@inhuman.tools/arrival";
+import { parse, type SchemeValue } from "@here.build/arrival";
 
 import { isPair, isSymbol, symName, locationOf, type SourceLocation } from "./schema-fold.js";
 

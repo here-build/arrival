@@ -16,14 +16,14 @@
 //
 // Run: cd arrival/packages/arrival-lsp && node_modules/.bin/tsx scripts/spike-kwargs-completions.ts
 
-import { emitTypes } from "@inhuman.tools/arrival-types-bridge";
+import { emitTypes } from "@here.build/arrival-types-bridge";
 import ts from "typescript";
 
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 
-import { getPreludeFiles } from "@inhuman.tools/arrival-internals-types-prelude";
+import { getPreludeFiles } from "@here.build/arrival-internals-types-prelude";
 
 import { assembleHostPrelude } from "../src/host-prelude.js";
 import { createSchemeLanguageService } from "../src/language-service.js";

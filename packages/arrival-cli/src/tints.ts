@@ -24,7 +24,7 @@
  *   • Fallback without a probe: COLORFGBG, then the dark reference (L=0.2).
  * Never paint a default cell background — unpainted bg is the terminal through.
  *
- * Not imported: `@inhuman.tools/quickdraw`. The H-K solver, env heuristics, and ANSI16
+ * Not imported: `@here.build/quickdraw`. The H-K solver, env heuristics, and ANSI16
  * hue pins are the lessons; the TUI substrate is not. Color conversion is culori.
  */
 // Named `Chalk` constructor — the default export is a process-env instance we

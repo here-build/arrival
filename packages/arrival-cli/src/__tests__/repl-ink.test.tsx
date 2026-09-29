@@ -2,7 +2,7 @@
 // write keystrokes to the mock stdin, assert the rendered frames. `mode="none"` keeps
 // frames uncolored so assertions read the plain text. A real loader session backs it, so
 // `(+ 1 2)` genuinely evaluates through emitForms/foldReplEvent.
-import { disposeRunContext } from "@inhuman.tools/arrival";
+import { disposeRunContext } from "@here.build/arrival";
 import { render } from "ink-testing-library";
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

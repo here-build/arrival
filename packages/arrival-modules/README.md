@@ -1,8 +1,8 @@
-# @inhuman.tools/arrival-modules
+# @here.build/arrival-modules
 
 `(require …)` as an `EnvCapability` — path jail, cycle / resolver doors, and builtin `.scm` / `.json` / `.ndjson` / `.txt` resolvers.
 
-This package is a sibling of `@inhuman.tools/arrival` so parsers stay out of the interpreter. Root `arrivalLoaderCapability` (or an extension pack that depends on it) and pass `fs` or a pre-built `loader` in the shared config bag.
+This package is a sibling of `@here.build/arrival` so parsers stay out of the interpreter. Root `arrivalLoaderCapability` (or an extension pack that depends on it) and pass `fs` or a pre-built `loader` in the shared config bag.
 
 ## Main export (`.`)
 
@@ -28,9 +28,9 @@ Yaml, toml, and handlebars are **not** on this barrel.
 ```ts
 import fs from "node:fs/promises";
 import path from "node:path";
-import { exec } from "@inhuman.tools/arrival";
-import { makeFsLoader } from "@inhuman.tools/arrival-modules";
-import { arrivalYamlCapability } from "@inhuman.tools/arrival-modules/yaml";
+import { exec } from "@here.build/arrival";
+import { makeFsLoader } from "@here.build/arrival-modules";
+import { arrivalYamlCapability } from "@here.build/arrival-modules/yaml";
 
 const root = "/project";
 await exec(`(require "x.yaml")`, {

@@ -42,11 +42,11 @@
  *   collection kind vector/dict) is preserved. See `__tests__/polyglot-normalize.test.ts`.
  */
 
-import { parseSexprs, type Node } from "@inhuman.tools/arrival-syntax";
+import { parseSexprs, type Node } from "@here.build/arrival-syntax";
 import invariant from "tiny-invariant";
 
-export { parseSexprs, type Node } from "@inhuman.tools/arrival-syntax";
-export type { ListOpen } from "@inhuman.tools/arrival-syntax";
+export { parseSexprs, type Node } from "@here.build/arrival-syntax";
+export type { ListOpen } from "@here.build/arrival-syntax";
 
 // null-safe: items[0] of an empty list `()` is undefined; isAtom(undefined) must
 // be false, not throw ('in' on undefined). Empty lists come from `'()` folds.

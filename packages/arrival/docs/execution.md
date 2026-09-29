@@ -582,7 +582,7 @@ call_ may use, `scope` decides what definitions persist.
 session — the scope and its definitions survive, so a REPL loop catches, reports, and continues. The
 two bounds (`budgetMs`, `signal`) and their edges are §5 BUDGETS.
 
-**The CLI over this surface.** `@inhuman.tools/arrival-cli` is a REPL over exactly this
+**The CLI over this surface.** `@here.build/arrival-cli` is a REPL over exactly this
 scope/capability surface — one `LexicalScope` per session, budgets per form, capabilities armed per
 call. It is this library API's first consumer, not a different model.
 

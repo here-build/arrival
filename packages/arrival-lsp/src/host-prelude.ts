@@ -25,7 +25,7 @@
 // scalars, `Tuple`) are in scope from the lens prelude (`types.d.ts`); host
 // entity types MUST be declared in `preamble` (ambient, no import/export).
 
-import { decodeSchemeIdent, encodeSchemeIdent } from "@inhuman.tools/arrival-types-bridge";
+import { decodeSchemeIdent, encodeSchemeIdent } from "@here.build/arrival-types-bridge";
 
 export interface HostPrelude {
   /** Ambient `.d.ts` text — the entity preamble + host `declare function`s. */

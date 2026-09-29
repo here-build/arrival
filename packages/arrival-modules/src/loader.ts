@@ -8,9 +8,9 @@
  * per-RunContext resources bag. `runResolverOf`/`runEnvOf` read the composed
  * resolver off `this: CallCtx` (evaluator dispatch puts it there).
  */
-import { execExpr, parse, jsToScheme, type CallCtx, type SchemeValue } from "@inhuman.tools/arrival";
-import { CONSTANT_CTX, type SchemeEnv } from "@inhuman.tools/arrival/host-internals";
-import { ABytevector, ADict, APair, AString, ASymbol, nil } from "@inhuman.tools/arrival/reflect-internals";
+import { execExpr, parse, jsToScheme, type CallCtx, type SchemeValue } from "@here.build/arrival";
+import { CONSTANT_CTX, type SchemeEnv } from "@here.build/arrival/host-internals";
+import { ABytevector, ADict, APair, AString, ASymbol, nil } from "@here.build/arrival/reflect-internals";
 import { RunResolverUnreachableError, RequirePathError } from "./errors.js";
 import { parseJsonc } from "./parse-jsonc.js";
 

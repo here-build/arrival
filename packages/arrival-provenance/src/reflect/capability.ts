@@ -12,8 +12,8 @@
 // z.dynamic` — genuinely variable shape per verb. The `REFLECT_VERBS` list lives only for fn
 // impls + metadata consumed by host dispatchReflect (mcp wire-safe path in discovery-run).
 
-import { EnvCapability } from "@inhuman.tools/arrival";
-import type { ImplThis } from "@inhuman.tools/arrival/capability";
+import { EnvCapability } from "@here.build/arrival";
+import type { ImplThis } from "@here.build/arrival/capability";
 
 import { attestOf, blastOf, circuitOf, dagOf, groundedOf, howOf, whereOf, whyOf } from "./handle-provenance.js";
 import { is_result_handle, ResultHandle } from "./result-handle.js";

@@ -15,9 +15,9 @@
  * `TraceRegionFold` (`trace-region-fold.ts`) maintains incrementally O(Δ). Parity: strict
  * deep-equal test over EXPORTED pure helpers (`leafFor`, `conditionOf`, `regionsAt`, …).
  */
-import { deepProvenance, toJS, type SchemeValue } from "@inhuman.tools/arrival";
-import { APair } from "@inhuman.tools/arrival/reflect-internals";
-import { schemeToSugarcoat } from "@inhuman.tools/arrival-sugarcoat";
+import { deepProvenance, toJS, type SchemeValue } from "@here.build/arrival";
+import { APair } from "@here.build/arrival/reflect-internals";
+import { schemeToSugarcoat } from "@here.build/arrival-sugarcoat";
 
 import { carrierFieldEdges, scopedBindings, subtreeIds } from "./carrier-fields.js";
 import {
@@ -28,7 +28,7 @@ import {
   type PlainTrace,
   type EvalTrace,
   type Invocation,
-} from "@inhuman.tools/arrival/provenance";
+} from "@here.build/arrival/provenance";
 import { staticLoopBodyScopes, staticRecursiveHeads, STRUCTURAL_FORMS } from "./trace-to-forest.js";
 
 /** A producer crossing a region's boundary — the region-model's first-class PORT.

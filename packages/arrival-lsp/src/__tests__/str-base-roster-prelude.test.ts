@@ -1,4 +1,4 @@
-import { BASE_ROSTER, collectPrelude, collectSymbolDefines } from "@inhuman.tools/arrival/lsp-internals";
+import { BASE_ROSTER, collectPrelude, collectSymbolDefines } from "@here.build/arrival/lsp-internals";
 import { describe, expect, it } from "vitest";
 
 import { createSchemeLanguageService } from "../language-service.js";
