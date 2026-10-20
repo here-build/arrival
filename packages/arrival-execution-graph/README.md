@@ -54,6 +54,10 @@ Layout runs ELK (`elkjs/lib/elk.bundled.js`) on the main thread, loaded on first
 off the main thread, pass `engine={createWorkerEngine(workerUrl)}` with the URL your bundler serves
 for `elkjs/lib/elk-worker.min.js` (Vite: `import workerUrl from "elkjs/lib/elk-worker.min.js?url"`).
 
+The graph scrolls natively and zooms from 20% to 400% (Ctrl/Meta+wheel or a pinch around the
+cursor, or the corner control: −, the percentage to reset, +, fit). Zoom is view-only: nothing
+relayouts.
+
 ## Contract
 
 - **One program text, one parse.** `program` is exactly the text the traced run executes: plan and
@@ -82,6 +86,7 @@ defaults following `prefers-color-scheme`. The defaults sit in `:where()`, so an
 |----------|------|
 | `--eg-fg`, `--eg-muted` | Primary and supporting text; edges. |
 | `--eg-bg`, `--eg-border` | Canvas and step fill; box borders. |
+| `--eg-dot`, `--eg-dot-strength` | The canvas dot grid's colour (defaults to `--eg-fg`) and a multiplier on its opacity. |
 | `--eg-accent` | Running. |
 | `--eg-danger` | Rejected, `✕ message`, errors. |
 | `--eg-warning` | Cancelled, diagnostics badge, dataflow banner. |

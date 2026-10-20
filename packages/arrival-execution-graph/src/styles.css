@@ -23,7 +23,11 @@
   --eg-bg: oklch(1 0 0);
   --eg-surface: oklch(1 0 0);
   --eg-wash: oklch(0.967 0.005 286);
-  --eg-grid: oklch(0.905 0.005 286);
+  /* The dot grid: its colour, and a multiplier on its zoom-faded level opacities. At strength 1
+     the minor dots match the old 20px grid's contrast (ΔL* ≈ 10); dark needs less (bright dots
+     on a dark ground read stronger at the same opacity). */
+  --eg-dot: var(--eg-fg);
+  --eg-dot-strength: 1;
   /* lines */
   --eg-border: oklch(0.905 0.005 286);
   --eg-wire: oklch(0.62 0.005 286);
@@ -68,7 +72,7 @@
     --eg-bg: oklch(0.18 0.005 286);
     --eg-surface: oklch(0.27 0.005 286);
     --eg-wash: oklch(0.225 0.005 286);
-    --eg-grid: oklch(0.31 0.005 286);
+    --eg-dot-strength: 0.8;
     --eg-border: oklch(0.31 0.005 286);
     --eg-wire: oklch(0.535 0.005 286);
     --eg-fg: oklch(0.93 0.004 286);
@@ -84,7 +88,7 @@
   --eg-bg: oklch(0.18 0.005 286);
   --eg-surface: oklch(0.27 0.005 286);
   --eg-wash: oklch(0.225 0.005 286);
-  --eg-grid: oklch(0.31 0.005 286);
+  --eg-dot-strength: 0.8;
   --eg-border: oklch(0.31 0.005 286);
   --eg-wire: oklch(0.535 0.005 286);
   --eg-fg: oklch(0.93 0.004 286);
@@ -99,20 +103,49 @@
 
 .eg-graph {
   position: relative;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   height: 100%;
   box-sizing: border-box;
-  padding: 24px;
+  overflow: hidden;
   background-color: var(--eg-bg);
-  background-image: radial-gradient(var(--eg-grid) 1px, transparent 1px);
-  background-size: 20px 20px;
-  background-attachment: local;
   color: var(--eg-subtle);
   font-family: var(--eg-font);
   font-size: var(--eg-font-size);
   line-height: var(--eg-line);
   font-synthesis: none;
+}
+
+/* The scroll area: native scroll is the pan. Messages sit above it and never scroll. */
+.eg-viewport {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* Covers the viewport at least, so the dot grid does too; the padding is the graph's margin. */
+.eg-scroll {
+  position: relative;
+  width: max-content;
+  min-width: 100%;
+  min-height: 100%;
+  padding: 24px;
+}
+
+/* No `will-change`: Safari would build a layer the size of the scroll area. */
+.eg-dot-grid {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  fill: var(--eg-dot);
+  pointer-events: none;
+}
+
+/* The spacer: `layout × scale`, so the scroll extents follow the zoom. */
+.eg-extent {
+  position: relative;
 }
 
 .eg-graph *,
@@ -121,8 +154,12 @@
   box-sizing: border-box;
 }
 
+/* The scaler. Out of flow, so only its scaled box counts toward the spacer's overflow. */
 .eg-canvas {
-  position: relative;
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
 }
 
 /* Natural-size layout without painting or adding scroll area. */
@@ -629,6 +666,33 @@
   cursor: default;
 }
 
+/* ── Zoom control: −, the percentage (resets), +, fit ─────────────────────── */
+
+.eg-zoom {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--eg-border);
+  border-radius: 6px;
+  background: var(--eg-surface);
+}
+
+.eg-zoom .eg-step-btn {
+  justify-content: center;
+  min-inline-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sized for "400%", so the control never shifts. */
+.eg-zoom-readout {
+  min-inline-size: calc(4ch + 12px);
+}
+
 .eg-stepper-text {
   font-family: var(--eg-font-mono);
   color: var(--eg-fg);
@@ -767,10 +831,7 @@
 
 .eg-badge,
 .eg-banner {
-  position: sticky;
-  top: 0;
-  left: 0;
-  z-index: 1;
+  flex: none;
   background: var(--eg-bg);
 }
 

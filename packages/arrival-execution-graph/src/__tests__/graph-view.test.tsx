@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FIXTURES } from "../__fixtures__/render-graphs.js";
 import type { ElkEngine, ElkNode } from "../elk-engine.js";
-import { GraphView, structureOf, TAB_CAP } from "../GraphView.js";
+import { GraphView, SCALE_MAX, structureOf, TAB_CAP } from "../GraphView.js";
 import type { RenderFrame, RenderGraph, RenderInstance, RenderState } from "../types.js";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -253,27 +253,29 @@ function zGraph(n: number, selected: number, pinned = false): RenderGraph {
   };
 }
 
+/** Gives every node a box so the positioned layer renders. */
+const placingEngine: ElkEngine = {
+  layout: async (g: ElkNode) => {
+    const place = (n: ElkNode): ElkNode => ({
+      ...n,
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 50,
+      children: n.children?.map(place) ?? [],
+      edges: (n.edges ?? []).map((e) => ({
+        ...e,
+        sections: [{ id: `${e.id}:s`, startPoint: { x: 0, y: 0 }, endPoint: { x: 40, y: 0 } }],
+      })),
+    });
+    return place(g);
+  },
+};
+
 describe("picker", () => {
   let container: HTMLDivElement;
   let root: Root;
-  const engine: ElkEngine = {
-    // Gives every node a box so the positioned layer renders.
-    layout: async (g: ElkNode) => {
-      const place = (n: ElkNode): ElkNode => ({
-        ...n,
-        x: 0,
-        y: 0,
-        width: 100,
-        height: 50,
-        children: n.children?.map(place) ?? [],
-        edges: (n.edges ?? []).map((e) => ({
-          ...e,
-          sections: [{ id: `${e.id}:s`, startPoint: { x: 0, y: 0 }, endPoint: { x: 40, y: 0 } }],
-        })),
-      });
-      return place(g);
-    },
-  };
+  const engine = placingEngine;
 
   beforeEach(() => {
     container = document.createElement("div");
@@ -444,5 +446,57 @@ describe("structureOf", () => {
     expect(
       structureOf({ ...g, nodes: [g.nodes[0]!, { ...frame, caption: "in series" }, g.nodes[2]!] }, "actual"),
     ).not.toBe(structureOf(g, "actual"));
+  });
+});
+
+describe("zoom", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+  beforeEach(() => {
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+  });
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  const boxes = () =>
+    [...container.querySelectorAll<HTMLElement>(".eg-canvas > [data-state]")].map((el) => el.getAttribute("style"));
+  const button = (label: string) => container.querySelector<HTMLButtonElement>(`.eg-zoom [aria-label="${label}"]`)!;
+
+  it("is view-only: the canvas scales and the spacer follows, the boxes and the layout stay", async () => {
+    const engine = { calls: 0, layout: (g: ElkNode) => (engine.calls++, placingEngine.layout(g)) };
+    act(() => root.render(<GraphView graph={FIXTURES.planMapFetchActual} mode="actual" engine={engine} />));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 120));
+    });
+    const [before, calls] = [boxes(), engine.calls];
+    const canvas = container.querySelector<HTMLElement>(".eg-canvas")!;
+    const extent = container.querySelector<HTMLElement>(".eg-extent")!;
+    expect(button("reset zoom to 100%").textContent).toBe("100%");
+    expect(canvas.style.transform).toBe("scale(1)");
+    const width = Number.parseFloat(extent.style.width);
+
+    act(() => button("zoom in").click());
+    expect(button("reset zoom to 100%").textContent).toBe("125%");
+    expect(canvas.style.transform).toBe("scale(1.25)");
+    expect(Number.parseFloat(extent.style.width)).toBeCloseTo(width * 1.25);
+    // The measuring layer is outside the scaler, so it keeps measuring at scale 1.
+    expect(canvas.querySelector(".eg-measure-layer")).toBeNull();
+    for (let i = 0; i < 20; i++) act(() => button("zoom in").click());
+    expect(canvas.style.transform).toBe(`scale(${SCALE_MAX})`);
+    expect(button("zoom in").disabled).toBe(true);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 120));
+    });
+    expect(boxes()).toEqual(before);
+    expect(engine.calls).toBe(calls);
+
+    act(() => button("reset zoom to 100%").click());
+    expect(canvas.style.transform).toBe("scale(1)");
+    expect(button("zoom out")).not.toBeNull();
+    expect(button("fit to view")).not.toBeNull();
   });
 });

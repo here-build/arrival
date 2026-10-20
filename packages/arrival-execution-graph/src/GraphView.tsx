@@ -16,6 +16,12 @@
  * areas (outer → inner, the graph's parents-first order), then the wire layer, then wire labels,
  * transforms and step cards — a wire deep inside an area never vanishes under a shallower area,
  * and cards sit above the wires that dock on them.
+ *
+ * ZOOM is view-only: the laid-out canvas sits in a scaler (`transform: scale(s)`) inside a spacer
+ * sized `layout × s`, so the scroll extents follow the zoom and nothing relayouts. The measuring
+ * layer stays outside the scaler and measures at scale 1. Ctrl/Meta+wheel and Safari's pinch zoom
+ * around the cursor; a plain wheel scrolls. The dot grid sits behind everything, covering the
+ * scroll area, with its origin on the graph's (0,0).
  */
 import {
   type KeyboardEvent,
@@ -28,6 +34,7 @@ import {
   useState,
 } from "react";
 
+import { DotGrid } from "./DotGrid.js";
 import { isPair, kindOf, listItems, listLength } from "./datum.js";
 import { defaultEngine, type ElkEngine } from "./elk-engine.js";
 import { edgeLabel, edgeText, FRAME_RADIUS, isPage, isStub, layout } from "./layout.js";
@@ -84,6 +91,15 @@ const RELAYOUT_DEBOUNCE_MS = 50;
 const RELAYOUT_MAX_WAIT_MS = 250;
 /** Past this many instances the picker is a stepper `‹ k/N ›`. */
 export const TAB_CAP = 16;
+/** The zoom range. */
+export const SCALE_MIN = 0.2;
+export const SCALE_MAX = 4;
+/** One −/+ click. */
+const SCALE_STEP = 1.25;
+/** Ctrl/Meta+wheel: scale change per pixel of `deltaY` (here.build's canvas rate). */
+const WHEEL_ZOOM_RATE = 0.005;
+
+const clampScale = (s: number): number => Math.min(SCALE_MAX, Math.max(SCALE_MIN, s));
 
 // ── Values ───────────────────────────────────────────────────────────────────
 
@@ -767,6 +783,163 @@ function Skeleton({
  *  arm's lane title, a stub pill. */
 const MEASURED = ".eg-step, .eg-transform, .eg-frame[data-collapsed], .eg-frame-head, .eg-lane-title";
 
+// ── Zoom ─────────────────────────────────────────────────────────────────────
+
+/** A viewport point (from the scroll area's top-left) and the canvas point, in layout units,
+ *  that must land under it once the new scale commits. */
+interface ZoomAnchor {
+  at: Point;
+  canvas: Point;
+}
+
+/**
+ * View-only zoom over the scroll area `viewport` holding the scaled `extent` (both refs are the
+ * hook's own, for the caller to attach). A change keeps the
+ * canvas point under the cursor (or the viewport's centre) fixed by adjusting the scroll once the
+ * new extent commits. Several changes before a commit keep the first one's canvas point.
+ */
+function useZoom(size: Size | undefined) {
+  const viewport = useRef<HTMLDivElement>(null);
+  const extent = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  const current = useRef(1);
+  const anchor = useRef<ZoomAnchor | null>(null);
+
+  const scrollTo = useCallback(
+    (a: ZoomAnchor, s: number) => {
+      const v = viewport.current;
+      const e = extent.current;
+      if (!v || !e) return;
+      v.scrollLeft = e.offsetLeft + a.canvas.x * s - a.at.x;
+      v.scrollTop = e.offsetTop + a.canvas.y * s - a.at.y;
+    },
+    [viewport, extent],
+  );
+
+  const commit = useCallback(
+    (next: number, a: ZoomAnchor) => {
+      const s = clampScale(next);
+      if (s === current.current) {
+        if (!anchor.current) scrollTo(a, s);
+        return;
+      }
+      anchor.current = a;
+      current.current = s;
+      setScale(s);
+    },
+    [scrollTo],
+  );
+
+  /** Zoom to `next` around the client point `client`, else the viewport's centre. */
+  const zoomTo = useCallback(
+    (next: number, client?: Point) => {
+      const v = viewport.current;
+      const e = extent.current;
+      if (!v || !e) return;
+      const vr = v.getBoundingClientRect();
+      const at = client
+        ? { x: client.x - vr.left, y: client.y - vr.top }
+        : { x: v.clientWidth / 2, y: v.clientHeight / 2 };
+      const s = current.current;
+      const canvas = anchor.current?.canvas ?? {
+        x: (v.scrollLeft + at.x - e.offsetLeft) / s,
+        y: (v.scrollTop + at.y - e.offsetTop) / s,
+      };
+      commit(next, { at, canvas });
+    },
+    [viewport, extent, commit],
+  );
+
+  /** The whole graph in the viewport (within the zoom range), scrolled to its top-left. */
+  const fit = useCallback(() => {
+    const v = viewport.current;
+    const e = extent.current;
+    if (!v || !e || !size) return;
+    const width = v.clientWidth - 2 * e.offsetLeft;
+    const height = v.clientHeight - e.offsetTop - e.offsetLeft;
+    const at = { x: e.offsetLeft, y: e.offsetTop };
+    commit(Math.min(width / size.width, height / size.height), { at, canvas: { x: 0, y: 0 } });
+  }, [viewport, extent, size, commit]);
+
+  useLayoutEffect(() => {
+    const a = anchor.current;
+    anchor.current = null;
+    if (a) scrollTo(a, scale);
+  }, [scale, scrollTo]);
+
+  // Ctrl/Meta+wheel and Safari's pinch; both must cancel the page zoom, so neither is passive.
+  useEffect(() => {
+    const v = viewport.current;
+    if (!v) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      zoomTo(current.current * (1 - e.deltaY * WHEEL_ZOOM_RATE), { x: e.clientX, y: e.clientY });
+    };
+    let start = 1;
+    type Gesture = Event & { scale: number; clientX: number; clientY: number };
+    const onGestureStart = (e: Event) => {
+      e.preventDefault();
+      start = current.current;
+    };
+    const onGestureChange = (e: Event) => {
+      e.preventDefault();
+      const g = e as Gesture;
+      zoomTo(start * g.scale, { x: g.clientX, y: g.clientY });
+    };
+    const onGestureEnd = (e: Event) => e.preventDefault();
+    v.addEventListener("wheel", onWheel, { passive: false });
+    v.addEventListener("gesturestart", onGestureStart);
+    v.addEventListener("gesturechange", onGestureChange);
+    v.addEventListener("gestureend", onGestureEnd);
+    return () => {
+      v.removeEventListener("wheel", onWheel);
+      v.removeEventListener("gesturestart", onGestureStart);
+      v.removeEventListener("gesturechange", onGestureChange);
+      v.removeEventListener("gestureend", onGestureEnd);
+    };
+  }, [viewport, zoomTo]);
+
+  return { viewport, extent, scale, zoomTo, fit };
+}
+
+/** −, the percentage (click: back to 100%), +, fit. */
+function ZoomControl({ scale, zoomTo, fit }: Pick<ReturnType<typeof useZoom>, "scale" | "zoomTo" | "fit">) {
+  return (
+    <div className="eg-zoom" role="group" aria-label="zoom">
+      <button
+        type="button"
+        className="eg-step-btn"
+        aria-label="zoom out"
+        disabled={scale <= SCALE_MIN}
+        onClick={() => zoomTo(scale / SCALE_STEP)}
+      >
+        −
+      </button>
+      <button
+        type="button"
+        className="eg-step-btn eg-zoom-readout"
+        aria-label="reset zoom to 100%"
+        onClick={() => zoomTo(1)}
+      >
+        {Math.round(scale * 100)}%
+      </button>
+      <button
+        type="button"
+        className="eg-step-btn"
+        aria-label="zoom in"
+        disabled={scale >= SCALE_MAX}
+        onClick={() => zoomTo(scale * SCALE_STEP)}
+      >
+        +
+      </button>
+      <button type="button" className="eg-step-btn" aria-label="fit to view" onClick={fit}>
+        fit
+      </button>
+    </div>
+  );
+}
+
 export function GraphView({
   graph,
   mode,
@@ -897,6 +1070,16 @@ export function GraphView({
     );
   }, [structural, mode, renderNode]);
 
+  const zoom = useZoom(laid ?? undefined);
+  const { viewport, extent } = zoom;
+  // Where the graph's (0,0) sits in the scroll area — the scroll area's padding: the dot grid's origin.
+  const [origin, setOrigin] = useState<Point>({ x: 0, y: 0 });
+  useLayoutEffect(() => {
+    const e = extent.current;
+    // A layout measurement, read once the spacer is in the DOM.
+    if (e) setOrigin({ x: e.offsetLeft, y: e.offsetTop });
+  }, [extent]);
+
   const { unplacedInvocations, droppedEdges, notes, dataflow } = graph.diagnostics;
   const frames = graph.nodes.filter((n): n is RenderFrame => n.kind === "frame");
   // The first arm of each condition: the lane without a divider above it.
@@ -913,7 +1096,6 @@ export function GraphView({
 
   return (
     <div className="eg-graph" data-mode={mode}>
-      {skeletons}
       {(unplacedInvocations > 0 || droppedEdges > 0) && (
         <div className="eg-message eg-badge" data-tone="warning" title={notes.join("\n")}>
           {unplacedInvocations > 0 && `${unplacedInvocations} unplaced`}{" "}
@@ -937,45 +1119,61 @@ export function GraphView({
           layout failed: {error}
         </div>
       )}
-      {laid && (
-        // Until a new layout lands the previous one stays up; ids it lacks simply don't render.
-        <div className="eg-canvas" style={{ width: laid.width, height: laid.height }}>
-          {frames.map((f) => {
-            const b = laid.boxes.get(f.id);
-            return (
-              b && (
-                <FrameBox
-                  key={f.id}
-                  frame={f}
-                  mode={mode}
-                  first={firstArms.has(f.id)}
-                  {...(onSelect ? { onSelect } : {})}
-                  style={boxStyle(b)}
-                />
-              )
-            );
-          })}
-          <EdgeLayer graph={graph} laid={laid} obstacles={obstacles} />
-          {graph.edges.map((e) => {
-            const pts = laid.edges.get(e.id);
-            if (!pts || pts.length < 2 || edgeText(e) === undefined) return null;
-            // A routed wire's label has its room reserved by ELK; a loop return's sits on the
-            // contour's rising left run. Either way the pill is centred on the wire.
-            if (e.kind !== "recur" && !laid.labels.has(e.id)) return null;
-            const c = e.kind === "recur" ? midpoint(pts.at(-3)!, pts.at(-2)!) : labelCentre(pts, obstacles);
-            return <EdgeLabel key={e.id} edge={e} style={{ left: c.x, top: c.y, translate: "-50% -50%" }} />;
-          })}
-          {leaves.map((n) => {
-            const b = laid.boxes.get(n.id);
-            if (!b) return null;
-            return n.kind === "step" ? (
-              <StepBox key={n.id} step={n} mode={mode} renderNode={renderNode} style={boxStyle(b)} />
-            ) : (
-              <TransformBox key={n.id} t={n} mode={mode} style={boxStyle(b)} />
-            );
-          })}
+      <div ref={viewport} className="eg-viewport">
+        <div className="eg-scroll">
+          <DotGrid scale={zoom.scale} origin={origin} />
+          {skeletons}
+          <div
+            ref={extent}
+            className="eg-extent"
+            style={laid ? { width: laid.width * zoom.scale, height: laid.height * zoom.scale } : undefined}
+          >
+            {laid && (
+              // Until a new layout lands the previous one stays up; ids it lacks simply don't render.
+              <div
+                className="eg-canvas"
+                style={{ width: laid.width, height: laid.height, transform: `scale(${zoom.scale})` }}
+              >
+                {frames.map((f) => {
+                  const b = laid.boxes.get(f.id);
+                  return (
+                    b && (
+                      <FrameBox
+                        key={f.id}
+                        frame={f}
+                        mode={mode}
+                        first={firstArms.has(f.id)}
+                        {...(onSelect ? { onSelect } : {})}
+                        style={boxStyle(b)}
+                      />
+                    )
+                  );
+                })}
+                <EdgeLayer graph={graph} laid={laid} obstacles={obstacles} />
+                {graph.edges.map((e) => {
+                  const pts = laid.edges.get(e.id);
+                  if (!pts || pts.length < 2 || edgeText(e) === undefined) return null;
+                  // A routed wire's label has its room reserved by ELK; a loop return's sits on the
+                  // contour's rising left run. Either way the pill is centred on the wire.
+                  if (e.kind !== "recur" && !laid.labels.has(e.id)) return null;
+                  const c = e.kind === "recur" ? midpoint(pts.at(-3)!, pts.at(-2)!) : labelCentre(pts, obstacles);
+                  return <EdgeLabel key={e.id} edge={e} style={{ left: c.x, top: c.y, translate: "-50% -50%" }} />;
+                })}
+                {leaves.map((n) => {
+                  const b = laid.boxes.get(n.id);
+                  if (!b) return null;
+                  return n.kind === "step" ? (
+                    <StepBox key={n.id} step={n} mode={mode} renderNode={renderNode} style={boxStyle(b)} />
+                  ) : (
+                    <TransformBox key={n.id} t={n} mode={mode} style={boxStyle(b)} />
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
-      )}
+      </div>
+      {laid && <ZoomControl scale={zoom.scale} zoomTo={zoom.zoomTo} fit={zoom.fit} />}
     </div>
   );
 }
