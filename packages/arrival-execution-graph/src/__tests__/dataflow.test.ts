@@ -589,3 +589,39 @@ describe("attachDataflow — a do exit clause runs after the loop", () => {
     expect([...next.keys()].some((k) => cyclic(k))).toBe(false);
   });
 });
+
+describe("attachDataflow — only the last body form is the value", () => {
+  // Every program runs `(fetch "EFFECT")` before the value form of some body; that step runs for
+  // effect and must feed no frame's `out`.
+  const E = `(fetch "EFFECT")`;
+  const bodies = [
+    `(map (lambda (s) ${E} (ask s)) (list "a" "b"))`,
+    `(map (lambda (s) (let* ((a (ask s))) ${E} (cond ((pred a) (ask "y")) (else (fetch "n"))))) (list "a"))`,
+    `(map (lambda (s) (let ((a (ask s))) ${E} (fetch a))) (list "a"))`,
+    `(map (lambda (s) (letrec ((a (ask s))) ${E} (fetch a))) (list "a"))`,
+    `(filter (lambda (s) ${E} (pred s)) (list "a"))`,
+    `(for-each (lambda (s) ${E} (ask s)) (list "a"))`,
+    `(let loop ((i 0) (acc "")) ${E} (if (< i 2) (loop (+ i 1) (ask acc)) acc))`,
+    `(do ((i 0 (+ i 1)) (acc "" (ask acc))) ((= i 2) acc) ${E})`,
+    `(when (pred "n") ${E} (ask "w"))`,
+    `(unless (pred "n") ${E} (ask "w"))`,
+    `(cond ((pred (fetch "k")) ${E} (ask "1")) (else ${E} (ask "2")))`,
+    `(case (fetch "k") (("F:k") ${E} (ask "1")) (else ${E} (ask "2")))`,
+    `(guard (e (#t ${E} (ask "h"))) ${E} (fetch "b"))`,
+    `(define (f x) ${E} (ask x))\n(f "a")`,
+    `(let* ((a (ask "1"))) ${E} (ask a))`,
+  ];
+  for (const src of bodies) {
+    it(src, async () => {
+      const p = await joined(src);
+      const effects = new Set(
+        [...p.byKey.values()]
+          .filter((i) => i.kind === "step" && i.args.some((a) => a.source === `"EFFECT"`))
+          .map((i) => i.key),
+      );
+      expect(effects.size).toBeGreaterThan(0);
+      const bad = p.edges.filter((e) => effects.has(e.from.key) && e.to.port === "out");
+      expect(bad, edges(p)).toEqual([]);
+    });
+  }
+});

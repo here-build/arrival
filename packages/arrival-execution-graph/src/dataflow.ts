@@ -832,6 +832,12 @@ class Join {
     let surface = this.surfaceOf(wire.span);
     let span = wire.span;
     const node = ctx.graph.nodes.at(wire.consumer.node);
+    if (body && body.exprs.length > 1 && !(node?.kind === "guard" && wire.consumer.slot === "body")) {
+      // A body of several forms (a lambda, `let`-family, `do` or handler body): the last form is
+      // the value, the ones before it run for effect and feed nothing here.
+      body = { ...body, exprs: [body.exprs.at(-1)] };
+      refs = this.refsIn(wire, body, body.exprs, NO_CUTS);
+    }
     if (body && node?.kind === "guard" && wire.consumer.slot === "body") {
       // The protected body's value is its last form; the forms before it run for effect.
       surface = this.protectedValue(node.span);
