@@ -78,6 +78,19 @@
  * forks, and entries into areas deeper still). A branch's polyline is outer trunk + entry + inner
  * trunk + fork, under its own id. The port sits on the area's border (an arm's is moved to the
  * condition's border when the arms tile it) and is exposed as `crossings`, for a ring.
+ *
+ * ROWS: a page wider than `ROW_TARGET` (as laid out in one row) is cut into rows stacked top to
+ * bottom, each its own ELK pass, strictly left to right. A cut falls only BETWEEN two consecutive
+ * top-level forms (the page's children that are not transforms; a transform belongs to the form it
+ * feeds) and only where it is clean: every wire across it runs from the last form above to the
+ * first form below, with at most ONE `order` wire and at most ONE other wire (and those end on the
+ * forms themselves, at an `in` / `out` or order port). A cut that is not clean is not taken, so a
+ * page with no clean cut stays one long row. The wires across a cut are not ELK's: each is drawn
+ * as one channel of its own — out of the right end of the upper row, down, back left in the gap
+ * between the rows, down the left margin, into the lower row — under its original id (two wires
+ * across one cut take lanes that do not cross). A connector that would still touch a card voids
+ * its cut, and the rows are laid out again without it. Only structure and measured skeleton sizes
+ * decide any of it.
  */
 import type { ElkEngine, ElkNode } from "./elk-engine.js";
 import {
@@ -169,11 +182,12 @@ export const edgeText = (e: RenderEdge): string | undefined => edgeLabel(e)?.tex
 /** The program's own top-level frame: it is the page, not an area — no box, no ports. */
 export const isPage = (n: RenderNode | undefined): boolean => n?.kind === "frame" && n.parent === null;
 
-export async function layout(
+/** One row, or the whole graph when it needs no breaking: a single ELK pass (see COLUMNS .. BUS). */
+async function layoutRow(
   graph: RenderGraph,
   sizes: ReadonlyMap<string, Size>,
   engine: ElkEngine,
-  anchors: ReadonlyMap<string, number> = new Map(),
+  anchors: ReadonlyMap<string, number>,
 ): Promise<LaidOutGraph> {
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   const childrenOf = new Map<string | null, RenderNode[]>();
@@ -403,6 +417,304 @@ export async function layout(
     }
   }
   return laid;
+}
+
+/** A page laid out wider than this (layout units, one row) is cut into rows where a clean cut exists. */
+export const ROW_TARGET = 1600;
+/** Room added between two rows' page boxes, beyond their own padding: the connectors' channel. */
+const ROW_GAP = 24;
+/** Distance between two connectors' parallel lanes, and the first lane's distance outside the page border
+ *  (the canvas keeps a FRAME_PAD margin around the page, room for two lanes). */
+const LANE = 4;
+
+export async function layout(
+  graph: RenderGraph,
+  sizes: ReadonlyMap<string, Size>,
+  engine: ElkEngine,
+  anchors: ReadonlyMap<string, number> = new Map(),
+): Promise<LaidOutGraph> {
+  const whole = await layoutRow(graph, sizes, engine, anchors);
+  if (whole.width <= ROW_TARGET) return whole;
+  const split = splitOf(graph);
+  if (!split) return whole;
+  const banned = new Set<number>();
+  for (;;) {
+    const cuts = chooseCuts(split, whole, banned);
+    if (cuts.length === 0) return whole;
+    const stacked = await stackRows(graph, split, cuts, sizes, engine, anchors);
+    if (stacked.bad.size === 0) return stacked.laid;
+    for (const c of stacked.bad) banned.add(c);
+  }
+}
+
+/** The page's top-level forms and where every node sits among them. */
+interface Split {
+  page: string;
+  byId: ReadonlyMap<string, RenderNode>;
+  /** Form count. */
+  forms: number;
+  /** Form index of a node: its top-level ancestor's (a transform: that of the form it feeds). */
+  formOf: (id: string) => number | undefined;
+  /** The wires between nodes of different forms, as form indices (never page ends or recur). */
+  wires: { edge: RenderEdge; a: number; b: number }[];
+  /** Cut `c` (after form c) is clean, apart from the cuts in `banned`. */
+  clean: (c: number) => boolean;
+  /** The top-level children (forms and transforms) per form index. */
+  members: string[][];
+}
+
+function splitOf(graph: RenderGraph): Split | undefined {
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const pages = graph.nodes.filter((n) => n.parent === null);
+  const page = pages[0];
+  if (pages.length !== 1 || page?.kind !== "frame") return undefined;
+  const kids = graph.nodes.filter((n) => n.parent === page.id);
+  const forms = kids.filter((k) => k.kind !== "transform");
+  if (forms.length < 2) return undefined;
+  const index = new Map(forms.map((f, i) => [f.id, i]));
+  const edges = graph.edges.filter(
+    (e) =>
+      e.kind !== "recur" &&
+      byId.has(e.from.node) &&
+      byId.has(e.to.node) &&
+      !isPage(byId.get(e.from.node)) &&
+      !isPage(byId.get(e.to.node)),
+  );
+  const top = (id: string): string | undefined => chainOf(byId, id)[1];
+  // A transform sits with the form it feeds (the earliest one), else the last form feeding it.
+  const placed = new Map<string, number>();
+  const resolve = (id: string, seen: ReadonlySet<string>): number => {
+    const known = index.get(id) ?? placed.get(id);
+    if (known !== undefined) return known;
+    if (seen.has(id)) return 0;
+    const next = new Set(seen).add(id);
+    const around = (outgoing: boolean): number[] =>
+      edges
+        .filter((e) => (outgoing ? e.from.node === id : e.to.node === id))
+        .map((e) => top(outgoing ? e.to.node : e.from.node))
+        .filter((t): t is string => t !== undefined && t !== id)
+        .map((t) => resolve(t, next));
+    const [feeds, fed] = [around(true), around(false)];
+    const at = feeds.length > 0 ? Math.min(...feeds) : fed.length > 0 ? Math.max(...fed) : 0;
+    placed.set(id, at);
+    return at;
+  };
+  const formOf = (id: string): number | undefined => {
+    const t = top(id);
+    return t === undefined ? undefined : resolve(t, new Set());
+  };
+  const wires = edges.flatMap((edge) => {
+    const [a, b] = [formOf(edge.from.node), formOf(edge.to.node)];
+    return a === undefined || b === undefined || a === b ? [] : [{ edge, a, b }];
+  });
+  const members: string[][] = Array.from({ length: forms.length }, () => []);
+  for (const k of kids) members[formOf(k.id) ?? 0]!.push(k.id);
+
+  const endOk = (end: RenderEdge["from"], side: "in" | "out"): boolean => {
+    if (chainOf(byId, end.node).length !== 2) return false;
+    if (end.port === portIds.order) return true;
+    const port = byId.get(end.node)!.ports.find((p) => p.id === end.port);
+    return port === undefined || port.side === side;
+  };
+  const clean = (c: number): boolean => {
+    const across = wires.filter((w) => Math.min(w.a, w.b) <= c && c < Math.max(w.a, w.b));
+    if (across.some((w) => w.a !== c || w.b !== c + 1 || !endOk(w.edge.from, "out") || !endOk(w.edge.to, "in")))
+      return false;
+    const order = across.filter((w) => w.edge.kind === "order").length;
+    return order <= 1 && across.length - order <= 1;
+  };
+  return { page: page.id, byId, forms: forms.length, formOf, wires, clean, members };
+}
+
+/**
+ * The cuts: walking the forms in order, a row that would stand wider than `ROW_TARGET` (by the
+ * one-row layout's own boxes) ends at the latest clean cut before the overflow, else at the first
+ * clean one after it; no clean cut, no break.
+ */
+function chooseCuts(split: Split, whole: LaidOutGraph, banned: ReadonlySet<number>): number[] {
+  const span = split.members.map((ids) => {
+    const boxes = ids.flatMap((id) => whole.boxes.get(id) ?? []);
+    return { lo: Math.min(...boxes.map((b) => b.x)), hi: Math.max(...boxes.map((b) => b.x + b.width)) };
+  });
+  const width = (s: number, e: number): number =>
+    Math.max(...span.slice(s, e + 1).map((x) => x.hi)) -
+    Math.min(...span.slice(s, e + 1).map((x) => x.lo)) +
+    2 * FRAME_PAD;
+  const ok = (c: number): boolean => c < split.forms - 1 && !banned.has(c) && split.clean(c);
+  const cuts: number[] = [];
+  let s = 0;
+  for (;;) {
+    let e = s;
+    while (e < split.forms && width(s, e) <= ROW_TARGET) e++;
+    if (e >= split.forms) return cuts;
+    const before = Array.from({ length: e - s }, (_, i) => e - 1 - i).find(ok);
+    const after = Array.from({ length: split.forms - 1 - e }, (_, i) => e + i).find(ok);
+    const cut = before ?? after;
+    if (cut === undefined) return cuts;
+    cuts.push(cut);
+    s = cut + 1;
+  }
+}
+
+const shiftBox = (b: Box, dy: number): Box => ({ ...b, y: b.y + dy });
+const shiftPt = (p: Point, dy: number): Point => ({ x: p.x, y: p.y + dy });
+
+/** Whether two orthogonal polylines touch anywhere (a segment's box meets the other's). */
+function polylinesTouch(a: readonly Point[], b: readonly Point[]): boolean {
+  const seg = (p: Point, q: Point): Box => ({
+    x: Math.min(p.x, q.x),
+    y: Math.min(p.y, q.y),
+    width: Math.abs(p.x - q.x),
+    height: Math.abs(p.y - q.y),
+  });
+  return a.slice(1).some((q, i) => {
+    const s = seg(a[i]!, q);
+    return b.slice(1).some((r, j) => {
+      const t = seg(b[j]!, r);
+      return s.x <= t.x + t.width && t.x <= s.x + s.width && s.y <= t.y + t.height && t.y <= s.y + s.height;
+    });
+  });
+}
+
+/** Every permutation of 0..n-1, in a fixed order. */
+const permutations = (n: number): number[][] =>
+  n === 0
+    ? [[]]
+    : permutations(n - 1).flatMap((p) => Array.from({ length: n }, (_, k) => [...p.slice(0, k), n - 1, ...p.slice(k)]));
+
+/**
+ * Lays each row out on its own, stacks them, and draws the wires across the cuts (see ROWS).
+ * `bad` holds the cuts whose connectors would touch a card: nothing is stacked then.
+ */
+async function stackRows(
+  graph: RenderGraph,
+  split: Split,
+  cuts: readonly number[],
+  sizes: ReadonlyMap<string, Size>,
+  engine: ElkEngine,
+  anchors: ReadonlyMap<string, number>,
+): Promise<{ laid: LaidOutGraph; bad: Set<number> }> {
+  const last = [...cuts, split.forms - 1];
+  const rowOf = (id: string): number | undefined => {
+    const f = split.formOf(id);
+    return f === undefined ? undefined : last.findIndex((end) => f <= end);
+  };
+  const rowGraphs: RenderGraph[] = last.map(() => ({ nodes: [], edges: [], diagnostics: graph.diagnostics }));
+  for (const n of graph.nodes) {
+    const r = n.id === split.page ? undefined : rowOf(n.id);
+    for (const [k, g] of rowGraphs.entries()) if (r === undefined || r === k) g.nodes.push(n);
+  }
+  const links: { edge: RenderEdge; cut: number; upper: number }[] = [];
+  for (const e of graph.edges) {
+    const [ra, rb] = [rowOf(e.from.node), rowOf(e.to.node)];
+    if (ra !== undefined && rb !== undefined && ra !== rb) {
+      links.push({ edge: e, cut: last[Math.min(ra, rb)]!, upper: Math.min(ra, rb) });
+      continue;
+    }
+    rowGraphs[ra ?? rb ?? 0]!.edges.push(e);
+  }
+
+  const rows: LaidOutGraph[] = [];
+  for (const g of rowGraphs) rows.push(await layoutRow(g, sizes, engine, anchors));
+
+  const out: LaidOutGraph = {
+    width: 0,
+    height: 0,
+    boxes: new Map(),
+    ports: new Map(),
+    edges: new Map(),
+    labels: new Map(),
+    forks: [],
+    bus: new Map(),
+    crossings: [],
+  };
+  const pages: Box[] = [];
+  let y = 0;
+  for (const l of rows) {
+    for (const [k, b] of l.boxes) out.boxes.set(k, shiftBox(b, y));
+    for (const [k, p] of l.ports) out.ports.set(k, shiftPt(p, y));
+    for (const [k, pts] of l.edges)
+      out.edges.set(
+        k,
+        pts.map((p) => shiftPt(p, y)),
+      );
+    for (const [k, b] of l.labels) out.labels.set(k, shiftBox(b, y));
+    for (const [k, pts] of l.bus)
+      out.bus.set(
+        k,
+        pts.map((p) => shiftPt(p, y)),
+      );
+    out.forks.push(...l.forks.map((p) => shiftPt(p, y)));
+    out.crossings.push(...l.crossings.map((p) => shiftPt(p, y)));
+    pages.push(shiftBox(l.boxes.get(split.page)!, y));
+    out.width = Math.max(out.width, l.width);
+    y += l.height + ROW_GAP;
+  }
+  out.height = y - ROW_GAP;
+  const [first, bottom] = [pages[0]!, pages.at(-1)!];
+  out.boxes.set(split.page, {
+    x: Math.min(...pages.map((p) => p.x)),
+    y: first.y,
+    width: Math.max(...pages.map((p) => p.x + p.width)) - Math.min(...pages.map((p) => p.x)),
+    height: bottom.y + bottom.height - first.y,
+  });
+
+  const bad = new Set<number>();
+  const blockers = graph.nodes.flatMap((n) => (n.id === split.page ? [] : (out.boxes.get(n.id) ?? [])));
+  for (const [upper, group] of Map.groupBy(links, (l) => l.upper)) {
+    const [hi, lo] = [pages[upper]!, pages[upper + 1]!];
+    const centre = (hi.y + hi.height + lo.y) / 2;
+    const ends = group.map((l) => ({
+      from: endpoint(out, split.byId, l.edge.from, "out"),
+      to: endpoint(out, split.byId, l.edge.to, "in"),
+    }));
+    // lanes: which line each connector takes at the right margin, in the gap, at the left margin
+    const route = (lx: number[], lc: number[], ll: number[]): Point[][] =>
+      ends.map(({ from, to }, k) => {
+        const xr = hi.x + hi.width + LANE + LANE * lx[k]!;
+        const xl = lo.x - LANE - LANE * ll[k]!;
+        const ch = centre + 2 * LANE * (lc[k]! - (group.length - 1) / 2);
+        return [from, { x: xr, y: from.y }, { x: xr, y: ch }, { x: xl, y: ch }, { x: xl, y: to.y }, to];
+      });
+    const options = permutations(group.length).flatMap((lx) =>
+      permutations(group.length).flatMap((lc) => permutations(group.length).map((ll) => route(lx, lc, ll))),
+    );
+    // the first set of lanes where the fewest connectors touch (none, unless the ends swap order)
+    const touching = (r: Point[][]): number =>
+      r.reduce((n, a, i) => n + r.slice(i + 1).filter((b) => polylinesTouch(a, b)).length, 0);
+    const scored = options.map((r) => ({ r, n: touching(r) }));
+    const routes = scored.find((o) => o.n === Math.min(...scored.map((x) => x.n)))!.r;
+    for (const [k, l] of group.entries()) {
+      const pts = routes[k]!;
+      if (crossesBox(pts, blockers)) bad.add(l.cut);
+      out.edges.set(l.edge.id, pts);
+      const text = edgeText(l.edge);
+      if (text === undefined) continue;
+      const size = sizes.get(edgeLabelKey(l.edge.id)) ?? fallbackLabel(text);
+      const [a, b] = [pts[2]!, pts[3]!];
+      out.labels.set(l.edge.id, {
+        x: (a.x + b.x) / 2 - size.width / 2,
+        y: a.y - size.height / 2,
+        width: size.width,
+        height: size.height,
+      });
+    }
+  }
+  return { laid: out, bad };
+}
+
+/** Where a wire across a cut meets a node: its port, else the middle of the node's side. */
+function endpoint(
+  laid: LaidOutGraph,
+  byId: ReadonlyMap<string, RenderNode>,
+  end: RenderEdge["from"],
+  side: OrderSide,
+): Point {
+  const box = laid.boxes.get(end.node)!;
+  const key = portKey(end.node, end.port === portIds.order ? ORDER[side] : end.port);
+  const declared = byId.get(end.node)!.ports.some((p) => p.id === end.port) || end.port === portIds.order;
+  const port = declared ? laid.ports.get(key) : undefined;
+  return port ?? { x: side === "out" ? box.x + box.width : box.x, y: box.y + box.height / 2 };
 }
 
 /** One fan-out: 2+ consumers of one source port and kind, all under one container. */

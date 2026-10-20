@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { EASK, FIXTURES } from "../__fixtures__/render-graphs.js";
 import { defaultEngine as engine } from "../elk-engine.js";
-import { FRAME_PAD, layout, pathText } from "../layout.js";
+import { FRAME_PAD, layout, pathText, ROW_TARGET } from "../layout.js";
 import {
   type Box,
   edgeLabelKey,
@@ -39,6 +39,21 @@ const segDist = (p: { x: number; y: number }, a: { x: number; y: number }, b: { 
 
 const near = (a: { x: number; y: number }, b: { x: number; y: number }): boolean =>
   Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5;
+
+/** Whether an orthogonal polyline runs through the inside of any box. */
+const crossesCard = (pts: readonly Point[], boxes: readonly Box[]): boolean =>
+  pts.slice(1).some((q, k) => {
+    const p = pts[k]!;
+    const [x0, x1, y0, y1] = [Math.min(p.x, q.x), Math.max(p.x, q.x), Math.min(p.y, q.y), Math.max(p.y, q.y)];
+    return boxes.some((b) => x0 < b.x + b.width - 0.5 && x1 > b.x + 0.5 && y0 < b.y + b.height - 0.5 && y1 > b.y + 0.5);
+  });
+
+/** Whether two orthogonal segments share a point. */
+const touches = ([a, b]: [Point, Point], [c, d]: [Point, Point]): boolean =>
+  Math.min(a.x, b.x) <= Math.max(c.x, d.x) &&
+  Math.min(c.x, d.x) <= Math.max(a.x, b.x) &&
+  Math.min(a.y, b.y) <= Math.max(c.y, d.y) &&
+  Math.min(c.y, d.y) <= Math.max(a.y, b.y);
 
 describe.each(Object.entries(FIXTURES))("layout(%s)", (_name, graph) => {
   let laid: LaidOutGraph;
@@ -205,8 +220,8 @@ describe("columns", () => {
     diagnostics: { unplacedInvocations: 0, droppedEdges: 0, notes: [] },
   });
 
-  it("lays a long seq chain out as one row, left to right", async () => {
-    const n = 30;
+  // A chain this long cannot be one row (see ROWS): it breaks at clean cuts, each row left to right.
+  const chain = (n: number): RenderGraph => {
     const g = seq(n);
     g.edges = Array.from({ length: n - 1 }, (_, i) => ({
       id: `o${i}`,
@@ -214,13 +229,136 @@ describe("columns", () => {
       to: { node: `s${i + 1}`, port: portIds.arg(0) },
       kind: "order" as const,
     }));
+    return g;
+  };
+
+  it("lays a long seq chain out left to right in rows (it was one 6000-unit row before ROWS)", async () => {
+    const n = 30;
+    const g = chain(n);
     const laid = await layout(g, sizesOf(g), engine);
+    const rowOf = (i: number): number => laid.boxes.get(`s${i}`)!.y;
+    const starts = Array.from({ length: n }, (_, i) => i).filter((i) => i === 0 || rowOf(i) > rowOf(i - 1) + 1);
+    expect(starts.length).toBeGreaterThan(1);
     for (let i = 0; i < n - 1; i++) {
       const [a, b] = [laid.boxes.get(`s${i}`)!, laid.boxes.get(`s${i + 1}`)!];
-      expect(b.x, `s${i + 1}`).toBeGreaterThan(a.x + a.width);
-      expect(Math.abs(b.y - a.y), `s${i + 1} row`).toBeLessThan(a.height);
+      if (starts.includes(i + 1)) {
+        // a new row starts at the left edge, below the previous one
+        expect(b.x, `s${i + 1} row start`).toBeLessThan(a.x);
+        expect(b.y, `s${i + 1} below`).toBeGreaterThan(a.y + a.height);
+      } else {
+        expect(b.x, `s${i + 1}`).toBeGreaterThan(a.x + a.width);
+        expect(Math.abs(b.y - a.y), `s${i + 1} row`).toBeLessThan(a.height);
+      }
     }
-    expect(laid.width).toBeGreaterThan(laid.height * 4);
+    // each row stays within the target, plus the one card that overflowed it
+    for (const [k, first] of starts.entries()) {
+      const end = starts[k + 1] ?? n;
+      const row = Array.from({ length: end - first }, (_, i) => laid.boxes.get(`s${first + i}`)!);
+      const width = Math.max(...row.map((b) => b.x + b.width)) - row[0]!.x;
+      expect(width, `row ${k}`).toBeLessThanOrEqual(ROW_TARGET + 140);
+    }
+    expect(laid.width).toBeLessThanOrEqual(ROW_TARGET + 140);
+    expect(laid.height).toBeGreaterThan(laid.boxes.get("s0")!.height * starts.length);
+  });
+
+  it("draws a cut's wire as one channel: right of the upper row, back left in the gap, into the lower row", async () => {
+    const g = chain(30);
+    const laid = await layout(g, sizesOf(g), engine);
+    const boxes = [...laid.boxes].filter(([id]) => id !== "seq").map(([, b]) => b);
+    let connectors = 0;
+    for (const e of g.edges) {
+      const pts = laid.edges.get(e.id)!;
+      const [a, z] = [pts[0]!, pts.at(-1)!];
+      const from = laid.boxes.get(e.from.node)!;
+      const to = laid.boxes.get(e.to.node)!;
+      expect(a.x, `${e.id} leaves the east side`).toBeCloseTo(from.x + from.width, 0);
+      expect(z.x, `${e.id} enters the west side`).toBeCloseTo(to.x, 0);
+      if (z.x >= a.x) continue; // a wire inside a row
+      connectors++;
+      expect(pts.length, e.id).toBe(6);
+      const [out, down, gap, back] = pts.slice(1, 5) as [Point, Point, Point, Point];
+      expect(out.x).toBeGreaterThan(from.x + from.width);
+      expect(down.x).toBe(out.x);
+      expect(down.y).toBe(gap.y);
+      expect(gap.y).toBeGreaterThan(from.y + from.height);
+      expect(gap.y).toBeLessThan(to.y);
+      expect(back.x).toBeLessThan(to.x);
+      expect(back.x).toBe(gap.x);
+      expect(crossesCard(pts, boxes), `${e.id} through a card`).toBe(false);
+    }
+    expect(connectors).toBeGreaterThan(0);
+    // a wire inside a row runs strictly left to right
+    for (const e of g.edges) {
+      const pts = laid.edges.get(e.id)!;
+      if (pts.at(-1)!.x >= pts[0]!.x)
+        for (let k = 1; k < pts.length; k++) expect(pts[k]!.x).toBeGreaterThanOrEqual(pts[k - 1]!.x);
+    }
+  });
+
+  it("is deterministic when it breaks into rows", async () => {
+    const g = chain(30);
+    const [a, b] = [await layout(g, sizesOf(g), engine), await layout(g, sizesOf(g), engine)];
+    expect([...b.boxes]).toEqual([...a.boxes]);
+    expect([...b.edges]).toEqual([...a.edges]);
+    expect([a.width, a.height]).toEqual([b.width, b.height]);
+  });
+
+  it("does not break where every cut carries two data wires", async () => {
+    const n = 30;
+    const g = chain(n);
+    for (const s of g.nodes) if (s.kind === "step") s.ports.push({ id: portIds.arg(1), side: "in" });
+    g.edges = Array.from({ length: n - 1 }, (_, i) =>
+      [0, 1].map((k) => ({
+        id: `d${i}.${k}`,
+        from: { node: `s${i}`, port: portIds.out },
+        to: { node: `s${i + 1}`, port: portIds.arg(k) },
+        kind: "data" as const,
+      })),
+    ).flat();
+    const laid = await layout(g, sizesOf(g), engine);
+    expect(laid.width).toBeGreaterThan(ROW_TARGET * 3);
+    for (let i = 0; i < n; i++)
+      expect(laid.boxes.get(`s${i}`)!.x, `s${i} same row`).toBe(
+        laid.boxes.get("s0")!.x + i * (laid.boxes.get("s1")!.x - laid.boxes.get("s0")!.x),
+      );
+  });
+
+  it("breaks where a cut carries the order wire and one data wire, on lanes that do not touch", async () => {
+    const n = 30;
+    const g = chain(n);
+    for (const s of g.nodes) if (s.kind === "step") s.ports.push({ id: portIds.arg(1), side: "in" });
+    g.edges = Array.from({ length: n - 1 }, (_, i) => [
+      { ...g.edges[i]!, from: { node: `s${i}`, port: portIds.order }, to: { node: `s${i + 1}`, port: portIds.order } },
+      {
+        id: `d${i}`,
+        from: { node: `s${i}`, port: portIds.out },
+        to: { node: `s${i + 1}`, port: portIds.arg(1) },
+        kind: "data" as const,
+      },
+    ]).flat();
+    // dock rows apart (the data wire above the order wire's middle at both ends), so the two start from different points and can nest
+    const anchors = new Map(
+      g.nodes.flatMap((x) => [
+        [portKey(x.id, portIds.arg(0)), 12] as const,
+        [portKey(x.id, portIds.arg(1)), 6] as const,
+        [portKey(x.id, portIds.out), 12] as const,
+      ]),
+    );
+    const laid = await layout(g, sizesOf(g), engine, anchors);
+    const boxes = [...laid.boxes].filter(([id]) => id !== "seq").map(([, b]) => b);
+    const cuts = Array.from({ length: n - 1 }, (_, i) => i).filter(
+      (i) => laid.boxes.get(`s${i + 1}`)!.y > laid.boxes.get(`s${i}`)!.y + 1,
+    );
+    expect(cuts.length).toBeGreaterThan(0);
+    for (const i of cuts) {
+      const [o, d] = [laid.edges.get(g.edges[2 * i]!.id)!, laid.edges.get(`d${i}`)!];
+      expect(crossesCard(o, boxes)).toBe(false);
+      expect(crossesCard(d, boxes)).toBe(false);
+      for (const [k, a] of o.entries())
+        if (k > 0)
+          for (const [m, b] of d.entries())
+            if (m > 0) expect(touches([o[k - 1]!, a], [d[m - 1]!, b]), `cut ${i}`).toBe(false);
+    }
   });
 
   it("puts the successor of an order edge between independent steps in a later column", async () => {
