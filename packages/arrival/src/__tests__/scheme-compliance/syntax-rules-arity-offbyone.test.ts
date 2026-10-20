@@ -11,10 +11,9 @@
 // answer either way), which is why the suite stays green via exclusions.
 //
 // FIXED 2026-06-11 (`is_syntax(fn) ? code : rest` at evaluator.ts macro dispatch):
-// the first block (fixed-arity + arity-discrimination + ellipsis) now passes and
-// is plain `it`. The vector-pattern block below stays `it.fails` — those are the
-// SEPARATE expander defect (boxing-track S9: needs a SchemeVector unwrap in the
-// matcher/expander, not just the off-by-one). docs/plan-2026-06-10-boxing-track.md.
+// fixed-arity + arity-discrimination + ellipsis pass. The vector-pattern block below
+// passes since the syntax-rules matcher/transcriber rewrite (R7RS §4.3.2 binding-tree
+// engine, eval/syntax-rules/); the full conformance table is syntax-rules-ellipsis-r7rs.test.ts.
 import { describe, expect, it } from "vitest";
 import { freshEnv } from "../_fresh-env.js";
 import { AVector } from "../../values/primitives/AVector.js";
@@ -58,18 +57,18 @@ describe("syntax-rules matcher off-by-one (PRE-EXISTING pre-L1 gap — drops fir
   });
 });
 
-describe("syntax-rules VECTOR patterns (boxing S9 — needs the matcher fix AND a SchemeVector unwrap)", () => {
-  it.fails("fixed vector pattern: ((_ #(a b)) (+ a b)) on (m #(7 8)) → 15", async () => {
+describe("syntax-rules VECTOR patterns and templates", () => {
+  it("fixed vector pattern: ((_ #(a b)) (+ a b)) on (m #(7 8)) → 15", async () => {
     const out = await run(`(let-syntax ((m (syntax-rules () ((_ #(a b)) (+ a b))))) (m #(7 8)))`);
     expect(String(out)).toBe("15");
   });
 
-  it.fails("vector pattern with ellipsis: ((_ #(a ...)) (+ a ...)) on (m #(1 2 3 4)) → 10", async () => {
+  it("vector pattern with ellipsis: ((_ #(a ...)) (+ a ...)) on (m #(1 2 3 4)) → 10", async () => {
     const out = await run(`(let-syntax ((m (syntax-rules () ((_ #(a ...)) (+ a ...))))) (m #(1 2 3 4)))`);
     expect(String(out)).toBe("10");
   });
 
-  it.fails("vector template emits a vector: ((_ a b) #(a b)) on (m 5 6) → #(5 6)", async () => {
+  it("vector template emits a vector: ((_ a b) #(a b)) on (m 5 6) → #(5 6)", async () => {
     const out = await run(`(let-syntax ((m (syntax-rules () ((_ a b) #(a b))))) (m 5 6))`);
     expect(out).toBeInstanceOf(AVector);
     expect((out as AVector).__vector__.map(String)).toEqual(["5", "6"]);

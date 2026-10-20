@@ -13,7 +13,9 @@
 import { describe, expect, it } from "vitest";
 import { freshEnv } from "../_fresh-env.js";
 import { execStateOverFrame as execState, parse } from "../../eval/generator-exec.js";
-import { extract_patterns, restore_data_gensyms, transform_syntax } from "../../eval/syntax-rules.js";
+import { restore_data_gensyms } from "../../eval/syntax-rules.js";
+import { extract_patterns } from "../../eval/syntax-rules/match.js";
+import { transform_syntax } from "../../eval/syntax-rules/transcribe.js";
 import { Resolver } from "../../eval/Resolver.js";
 import { RunContext } from "../../run/RunContext.js";
 import { SchemeValue } from "../../values/types.js";
@@ -133,7 +135,6 @@ async function probeParsed(pattern: SchemeValue, template: SchemeValue, useSite:
     useResolver,
     defResolver,
     capabilities: defResolver.capabilities,
-    ctx: runCtx,
   });
   if (!bindings) return { bindings: false };
   const names = [];

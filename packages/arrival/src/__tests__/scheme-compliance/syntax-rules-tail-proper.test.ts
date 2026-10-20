@@ -20,8 +20,7 @@ import type { SchemeValue } from "../../values/types.js";
 // (Scheme print format, e.g. list "(alpha beta gamma)", bare symbol "pos") —
 // a boxed-state read, not the SIMPLE tier's plain-JS exit (whose symbol/list
 // unwrap shapes would make these assertions unreadable — RULINGS.md R1).
-const exec = async (src: string, options: ExecOptionsOverFrame) =>
-  (await execStateOverFrame(src, options)).values.slice();
+const exec = async (src: string, options: ExecOptionsOverFrame) => [...(await execStateOverFrame(src, options)).values];
 const val = (rs: SchemeValue[]) => toJS(rs[rs.length - 1]);
 const repr = (rs: unknown[]) => String(rs[rs.length - 1]);
 
@@ -39,7 +38,7 @@ describe("syntax-rules — form-returning + tail-proper", () => {
       (define (loop n) (my-if (= n 0) 'done (loop (- n 1))))
       (loop 50000)`;
     expect(repr(await exec(src, { env: sandboxedEnv.child("tco1") }))).toBe("done");
-  }, 60000);
+  }, 60_000);
 
   it("template quoted symbol is restored (no #:gensym leak)", async () => {
     const src = `
