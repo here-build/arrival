@@ -37,15 +37,17 @@ import {
 import { DotGrid } from "./DotGrid.js";
 import { isPair, kindOf, listItems, listLength } from "./datum.js";
 import { defaultEngine, type ElkEngine } from "./elk-engine.js";
-import { edgeLabel, edgeText, FRAME_RADIUS, isPage, isStub, layout } from "./layout.js";
+import { edgeLabel, edgeText, FRAME_RADIUS, isPage, isStub, layout, PORT_CHAR } from "./layout.js";
 import {
   type Box,
   edgeLabelKey,
   type GraphMode,
   type InstanceRef,
   type LaidOutGraph,
+  paintedState,
   type Point,
   portBase,
+  portIds,
   portKey,
   type RenderFrame,
   type RenderEdge,
@@ -653,19 +655,66 @@ function wirePath(pts: Point[], obstacles: readonly Box[]): string {
 
 const midpoint = (a: Point, b: Point): Point => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
 
+/** Where `p` lies along the route, as a distance from its start; undefined when off it. */
+function alongRoute(pts: Point[], p: Point): number | undefined {
+  let run = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const [a, b] = [pts[i - 1]!, pts[i]!];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    const t = Math.max(0, Math.min(1, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / (len * len || 1)));
+    if (Math.hypot(p.x - (a.x + t * (b.x - a.x)), p.y - (a.y + t * (b.y - a.y))) < 0.75) return run + t * len;
+    run += len;
+  }
+  return undefined;
+}
+
+/** The part of a route after `from` (a distance along it). */
+function routeAfter(pts: Point[], from: number): Point[] {
+  const out: Point[] = [];
+  let run = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const [a, b] = [pts[i - 1]!, pts[i]!];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (run + len > from) {
+      if (out.length === 0) out.push(toward(a, b, from - run));
+      out.push(b);
+    }
+    run += len;
+  }
+  return out.length >= 2 ? out : pts;
+}
+
 /** Where a wire's label pill sits: on the wire — the curve's midpoint for a simple S-curve,
- *  else the middle of the route's longest segment. ELK's label box only reserves the room. */
-function labelCentre(pts: Point[], obstacles: readonly Box[]): Point {
+ *  else the middle of the route's longest segment. ELK's label box only reserves the room. A
+ *  branch of a bus (`forks`: the bus's fork points) carries it on its own part, after the last
+ *  fork, never on the trunk it shares. */
+function labelCentre(pts: Point[], obstacles: readonly Box[], forks?: readonly Point[]): Point {
   const [a, b] = [pts[0]!, pts.at(-1)!];
-  if (isSimple(pts) && !curveHitsBox(pts, obstacles)) return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  if (!forks && isSimple(pts) && !curveHitsBox(pts, obstacles)) return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  const last = Math.max(0, ...(forks ?? []).map((f) => alongRoute(pts, f) ?? 0));
+  const own = forks ? routeAfter(pts, last) : pts;
+  const len = (i: number): number => Math.hypot(own[i + 1]!.x - own[i]!.x, own[i + 1]!.y - own[i]!.y);
   let best = 0;
-  for (let i = 1; i < pts.length - 1; i++)
-    if (
-      Math.hypot(pts[i + 1]!.x - pts[i]!.x, pts[i + 1]!.y - pts[i]!.y) >
-      Math.hypot(pts[best + 1]!.x - pts[best]!.x, pts[best + 1]!.y - pts[best]!.y)
-    )
-      best = i;
-  return { x: (pts[best]!.x + pts[best + 1]!.x) / 2, y: (pts[best]!.y + pts[best + 1]!.y) / 2 };
+  for (let i = 1; i < own.length - 1; i++) if (len(i) > len(best)) best = i;
+  // The pill rides a horizontal run when there is a roomy one: a vertical run hugs the cards.
+  if (!horizontal(own[best]!, own[best + 1]!)) {
+    for (let i = 0; i < own.length - 1; i++)
+      if (
+        horizontal(own[i]!, own[i + 1]!) &&
+        len(i) >= 56 &&
+        (!horizontal(own[best]!, own[best + 1]!) || len(i) > len(best))
+      )
+        best = i;
+  }
+  return { x: (own[best]!.x + own[best + 1]!.x) / 2, y: (own[best]!.y + own[best + 1]!.y) / 2 };
+}
+
+/** Where an edge's label pill is centred: a loop return's where the layout put it (on the contour's
+ *  bottom run), any other wire's on the wire. */
+function labelAnchor(e: RenderEdge, pts: Point[], laid: LaidOutGraph, obstacles: readonly Box[]): Point {
+  if (e.kind !== "recur") return labelCentre(pts, obstacles, laid.bus.get(e.id));
+  const box = laid.labels.get(e.id);
+  return box ? { x: box.x + box.width / 2, y: box.y + box.height / 2 } : midpoint(pts.at(-3)!, pts.at(-2)!);
 }
 
 function arrowHead(pts: Point[]): string {
@@ -677,44 +726,116 @@ function arrowHead(pts: Point[]): string {
   return `M${tip.x},${tip.y} L${bx - uy * 3},${by + ux * 3} L${bx + uy * 3},${by - ux * 3} Z`;
 }
 
+/** Where a port label lands, as its x and anchor: outside the area by default (so it never
+ *  overprints a child's content), inside the border when the outside would leave the canvas. */
+function portLabelAt(
+  pt: Point,
+  side: "in" | "out",
+  text: string,
+  width: number,
+): { x: number; anchor: "start" | "end" } {
+  const room = text.length * PORT_CHAR + 5;
+  const outwards = side === "out" ? pt.x + room <= width : pt.x - room >= 0;
+  return outwards === (side === "out") ? { x: pt.x + 5, anchor: "start" } : { x: pt.x - 5, anchor: "end" };
+}
+
+const RESULT_STUB = 14;
+
+/** Where the nodes feeding the page's own `out` (the program's result) end: the stub starts there. */
+function resultEnds(graph: RenderGraph, laid: LaidOutGraph): Map<string, Point> {
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const result = new Map<string, Point>();
+  for (const e of graph.edges) {
+    if (!isPage(byId.get(e.to.node)) || e.to.port !== portIds.out || isPage(byId.get(e.from.node))) continue;
+    const key = portKey(e.from.node, e.from.port);
+    const box = laid.boxes.get(e.from.node);
+    const at = laid.ports.get(key) ?? (box && { x: box.x + box.width, y: box.y + box.height / 2 });
+    if (at && !result.has(key)) result.set(key, at);
+  }
+  return result;
+}
+
+/** The right edge of the result terminals (stub, cap and word), 0 when there are none. */
+const resultReach = (result: ReadonlyMap<string, Point>): number =>
+  Math.max(0, ...[...result.values()].map((at) => at.x + RESULT_STUB + 7 + 6 * PORT_CHAR + 2));
+
+/** The canvas as drawn: the layout plus the result terminal that hangs past its right edge. This
+ *  is what the scroll extent and "fit" measure. */
+export const canvasSize = (graph: RenderGraph, laid: LaidOutGraph): Size => ({
+  width: Math.max(laid.width, resultReach(resultEnds(graph, laid))),
+  height: laid.height,
+});
+
 /** Wires carry `data-kind` and `data-state`; styles.css dims the not-yet-real ones. Area ports
- *  that a wire crosses get a hollow ring. Only the loop return has an arrowhead. */
+ *  that a wire crosses and continues past get a hollow ring. The node feeding the page's own
+ *  `out` (the program's result; that wire is not routed) ends in a short stub and a "result" cap.
+ *  Only the loop return has an arrowhead. */
 function EdgeLayer({ graph, laid, obstacles }: { graph: RenderGraph; laid: LaidOutGraph; obstacles: readonly Box[] }) {
-  const wired = new Set(
-    graph.edges
-      .filter((e) => laid.edges.has(e.id))
-      .flatMap((e) => [portKey(e.from.node, e.from.port), portKey(e.to.node, e.to.port)]),
-  );
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const routed = graph.edges.filter((e) => laid.edges.has(e.id));
+  const wired = new Set(routed.flatMap((e) => [portKey(e.from.node, e.from.port), portKey(e.to.node, e.to.port)]));
+  // a wire that leaves an out port: the ring says "the value crosses here and goes on"
+  const leaving = new Set(routed.map((e) => portKey(e.from.node, e.from.port)));
+  const result = resultEnds(graph, laid);
+  // the cap and its word may reach into the canvas's right margin: the svg grows to hold them
+  const reach = resultReach(result);
+  // crossings: where a bus enters an area through a layout-only port (absent in older layouts)
+  const crossings = (laid as { crossings?: readonly Point[] }).crossings ?? [];
   return (
-    <svg className="eg-edges" width={laid.width} height={laid.height}>
+    <svg className="eg-edges" width={Math.max(laid.width, reach)} height={laid.height}>
       {graph.edges.map((e) => {
         const pts = laid.edges.get(e.id);
         if (!pts || pts.length < 2) return null;
         const recur = e.kind === "recur";
+        // A branch of a bus stays orthogonal (a curve would leave the trunk it shares) and dots
+        // every fork on its route.
+        const forks = laid.bus.get(e.id);
+        let d = wirePath(pts, obstacles);
+        if (recur) d = roundedPath(pts, FRAME_RADIUS);
+        else if (forks) d = roundedPath(pts, 10);
+        const state = paintedState(e, byId);
         return (
-          <g key={e.id} className="eg-edge" data-kind={e.kind} {...(e.state ? { "data-state": e.state } : {})}>
-            <path className="eg-edge-line" d={recur ? roundedPath(pts, FRAME_RADIUS) : wirePath(pts, obstacles)} />
+          <g key={e.id} className="eg-edge" data-kind={e.kind} {...(state ? { "data-state": state } : {})}>
+            <path className="eg-edge-line" d={d} />
             {recur && <path className="eg-arrow" d={arrowHead(pts)} />}
+            {forks
+              ?.filter((f) => alongRoute(pts, f) !== undefined)
+              .map((f) => (
+                <circle key={`${f.x},${f.y}`} className="eg-fork" cx={f.x} cy={f.y} r={2.5} />
+              ))}
+          </g>
+        );
+      })}
+      {crossings.map((c) => (
+        <circle key={`${c.x},${c.y}`} className="eg-port" cx={c.x} cy={c.y} r={2.5} />
+      ))}
+      {[...result].map(([key, at]) => {
+        const end = at.x + RESULT_STUB;
+        return (
+          <g key={key} className="eg-final">
+            <path className="eg-final-line" d={`M${at.x},${at.y} L${end},${at.y}`} />
+            <circle className="eg-final-cap" cx={end} cy={at.y} r={3} />
+            <text className="eg-final-label" x={end + 7} y={at.y + 4}>
+              result
+            </text>
           </g>
         );
       })}
       {graph.nodes.flatMap((n) => {
         if (n.kind !== "frame" || isPage(n)) return [];
         return n.ports.map((p) => {
-          const pt = laid.ports.get(portKey(n.id, p.id));
-          if (!pt || !wired.has(portKey(n.id, p.id))) return null;
+          const k = portKey(n.id, p.id);
+          const pt = laid.ports.get(k);
+          if (!pt || !wired.has(k) || (p.side === "out" && !leaving.has(k))) return null;
+          const at =
+            p.label && (p.side === "in" || p.side === "out") ? portLabelAt(pt, p.side, p.label, laid.width) : undefined;
           return (
-            <g key={portKey(n.id, p.id)}>
+            <g key={k}>
               <circle className="eg-port" cx={pt.x} cy={pt.y} r={2.5} />
-              {/* outside the area, so it never overprints a child's content; a call's tab
+              {/* beside the ring, so it never overprints a child's content; a call's tab
                   already names its params */}
-              {p.label && n.frame !== "call" && p.side !== "control" && (
-                <text
-                  className="eg-port-label"
-                  x={pt.x + (p.side === "out" ? 5 : -5)}
-                  y={pt.y - 5}
-                  textAnchor={p.side === "out" ? "start" : "end"}
-                >
+              {at && p.label && n.frame !== "call" && (
+                <text className="eg-port-label" x={at.x} y={pt.y - 5} textAnchor={at.anchor}>
                   {p.label}
                 </text>
               )}
@@ -1070,7 +1191,8 @@ export function GraphView({
     );
   }, [structural, mode, renderNode]);
 
-  const zoom = useZoom(laid ?? undefined);
+  const drawn = useMemo(() => (laid ? canvasSize(graph, laid) : undefined), [graph, laid]);
+  const zoom = useZoom(drawn);
   const { viewport, extent } = zoom;
   // Where the graph's (0,0) sits in the scroll area — the scroll area's padding: the dot grid's origin.
   const [origin, setOrigin] = useState<Point>({ x: 0, y: 0 });
@@ -1126,7 +1248,7 @@ export function GraphView({
           <div
             ref={extent}
             className="eg-extent"
-            style={laid ? { width: laid.width * zoom.scale, height: laid.height * zoom.scale } : undefined}
+            style={drawn ? { width: drawn.width * zoom.scale, height: drawn.height * zoom.scale } : undefined}
           >
             {laid && (
               // Until a new layout lands the previous one stays up; ids it lacks simply don't render.
@@ -1153,11 +1275,14 @@ export function GraphView({
                 {graph.edges.map((e) => {
                   const pts = laid.edges.get(e.id);
                   if (!pts || pts.length < 2 || edgeText(e) === undefined) return null;
-                  // A routed wire's label has its room reserved by ELK; a loop return's sits on the
-                  // contour's rising left run. Either way the pill is centred on the wire.
-                  if (e.kind !== "recur" && !laid.labels.has(e.id)) return null;
-                  const c = e.kind === "recur" ? midpoint(pts.at(-3)!, pts.at(-2)!) : labelCentre(pts, obstacles);
-                  return <EdgeLabel key={e.id} edge={e} style={{ left: c.x, top: c.y, translate: "-50% -50%" }} />;
+                  // A routed wire's label has its room reserved by ELK; a loop return's pill sits where
+                  // the layout put it, on the contour's bottom run. Either way it is centred on the wire.
+                  if (!laid.labels.has(e.id) && e.kind !== "recur") return null;
+                  const c = labelAnchor(e, pts, laid, obstacles);
+                  // never half off the canvas: a pill on a run at the edge is pulled inside
+                  const half = (laid.labels.get(e.id)?.width ?? Math.min(edgeText(e)!.length, 34) * PORT_CHAR + 10) / 2;
+                  const left = Math.max(half, Math.min(c.x, laid.width - half));
+                  return <EdgeLabel key={e.id} edge={e} style={{ left, top: c.y, translate: "-50% -50%" }} />;
                 })}
                 {leaves.map((n) => {
                   const b = laid.boxes.get(n.id);

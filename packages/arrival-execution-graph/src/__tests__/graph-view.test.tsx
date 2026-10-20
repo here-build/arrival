@@ -365,6 +365,76 @@ describe("picker", () => {
     expect(container.querySelector(".eg-canvas .eg-transform .eg-value-line")?.textContent).toBe("—");
   });
 
+  /** zGraph's par frame gets an `out` port, fed from inside; its value is the page's result. */
+  const resultGraph = (also?: RenderGraph["edges"][number]): RenderGraph => {
+    const g = zGraph(3, 0);
+    return {
+      ...g,
+      nodes: g.nodes.map((n) =>
+        n.id === "par" ? { ...n, ports: [...n.ports, { id: "out", side: "out" as const, label: "found" }] } : n,
+      ),
+      edges: [
+        ...g.edges,
+        { id: "in", from: { node: "s", port: "out" }, to: { node: "par", port: "out" }, kind: "data" },
+        { id: "res", from: { node: "par", port: "out" }, to: { node: "root", port: "out" }, kind: "data" },
+        ...(also ? [also] : []),
+      ],
+    };
+  };
+
+  it("ends the program's result in a stub and a cap that says so", async () => {
+    await show(resultGraph());
+    expect(container.querySelectorAll(".eg-final").length).toBe(1);
+    expect(container.querySelector(".eg-final .eg-final-cap")).not.toBeNull();
+    expect(container.querySelector(".eg-final .eg-final-label")?.textContent).toBe("result");
+    await show(zGraph(3, 0));
+    expect(container.querySelector(".eg-final")).toBeNull(); // no wire into the page's out
+  });
+
+  it("the scroll extent (and so fit) includes the result terminal that hangs past the layout", async () => {
+    // the placing engine leaves every port at x 0; the par's `out` sits on its east border
+    const eastPorts: ElkEngine = {
+      layout: async (g) => {
+        const placed = await placingEngine.layout(g);
+        const east = (n: ElkNode): ElkNode => ({
+          ...n,
+          ports: n.ports?.map((p) => ({ ...p, x: p.id.endsWith("out") ? 100 : 0, y: 10 })),
+          children: n.children?.map(east),
+        });
+        return east(placed);
+      },
+    };
+    act(() => root.render(<GraphView graph={resultGraph()} mode="actual" engine={eastPorts} />));
+    await settle();
+    const svg = container.querySelector<SVGElement>("svg.eg-edges")!;
+    const canvas = container.querySelector<HTMLElement>(".eg-canvas")!;
+    const extent = container.querySelector<HTMLElement>(".eg-extent")!;
+    expect(container.querySelector(".eg-final")).not.toBeNull();
+    const [drawn, laidWidth] = [Number(svg.getAttribute("width")), Number.parseFloat(canvas.style.width)];
+    expect(drawn).toBeGreaterThan(laidWidth);
+    expect(Number.parseFloat(extent.style.width)).toBeCloseTo(drawn);
+  });
+
+  it("draws no ring on an out port whose only continuation is the page's result", async () => {
+    await show(resultGraph());
+    expect(container.querySelectorAll(".eg-port").length).toBe(1); // only par's in:x
+    await show(
+      resultGraph({ id: "on", from: { node: "par", port: "out" }, to: { node: "s", port: "in:arg0" }, kind: "data" }),
+    );
+    expect(container.querySelectorAll(".eg-port").length).toBe(2); // the out port goes on to a consumer
+    expect(container.querySelectorAll(".eg-final").length).toBe(1);
+  });
+
+  it("never clips a port label at the canvas's left edge: it goes inside the border", async () => {
+    await show(resultGraph());
+    const xs = [...container.querySelectorAll<SVGTextElement>(".eg-port-label")].map((t) =>
+      Number(t.getAttribute("x")),
+    );
+    expect(xs.length).toBeGreaterThan(0);
+    for (const x of xs) expect(x).toBeGreaterThanOrEqual(0);
+    expect(container.querySelector(".eg-port-label")!.getAttribute("text-anchor")).toBe("start");
+  });
+
   it("labels a plain wire with its compact expression, in a mono pill", async () => {
     const g = zGraph(3, 0);
     await show({ ...g, edges: g.edges.map((e) => ({ ...e, expr: "(+ i 1)" })) });

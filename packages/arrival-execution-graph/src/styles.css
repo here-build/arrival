@@ -769,6 +769,12 @@
   stroke-dasharray: 1 3.5;
 }
 
+/* Where a branch leaves the trunk it shares with the other consumers of the same value. */
+.eg-fork {
+  fill: currentColor;
+  stroke: none;
+}
+
 /* The loop return: the area's own contour, heavier, the only arrowhead. */
 .eg-edge[data-kind="recur"] {
   color: var(--eg-recur);
@@ -796,6 +802,23 @@
   font-size: var(--eg-font-size-small);
 }
 
+/* The program's result: the last wire's stub and its end-cap, past the area's right edge. */
+.eg-final-line {
+  fill: none;
+  stroke: var(--eg-wire);
+  stroke-width: 1.5;
+}
+
+.eg-final-cap {
+  fill: var(--eg-wire);
+}
+
+.eg-final-label {
+  fill: var(--eg-subtle);
+  font-family: var(--eg-font-mono);
+  font-size: var(--eg-font-size-small);
+}
+
 /* A projection's path: a pill of the canvas, so the wire passes behind it. */
 .eg-edge-label {
   display: inline-flex;
@@ -814,7 +837,7 @@
 /* A compact computation on a plain wire (`(+ i 1)`): mono, one line, clamped — a fixed box. */
 .eg-edge-label[data-label="expr"] {
   display: inline-block;
-  max-inline-size: 16ch;
+  max-inline-size: 34ch;
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--eg-muted);
