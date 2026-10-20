@@ -12,3 +12,14 @@ storybook-static/
 .env.*
 .wrangler/
 .dev.vars
+
+# Astro generated state
+.astro/
+
+# Starlight pages generated from docs/site/mounts.mjs
+docs/site/src/content/docs/internals/
+docs/site/src/content/docs/packages/
+docs/site/src/content/docs/reference/
+docs/site/src/content/docs/agents/
+docs/site/src/content/docs/language/
+docs/site/src/content/docs/capabilities/

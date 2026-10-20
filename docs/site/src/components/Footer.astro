@@ -1,0 +1,11 @@
+---
+import Default from "@astrojs/starlight/components/Footer.astro";
+import "@here.build/editor-theme/fonts.css";
+import "../styles/scheme-samples.css";
+---
+
+<Default />
+<script>
+  import { mountSchemeSamples } from "../scripts/scheme-samples";
+  void mountSchemeSamples();
+</script>

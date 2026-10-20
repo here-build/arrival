@@ -10,7 +10,10 @@
     "typecheck": "turbo typecheck",
     "lint": "turbo lint",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "docs:dev": "pnpm --filter @here.build/arrival-docs dev",
+    "docs:build": "pnpm --filter @here.build/arrival-docs build",
+    "docs:preview": "pnpm --filter @here.build/arrival-docs preview"
   },
   "devDependencies": {
     "prettier": "3.8.1",

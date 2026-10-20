@@ -1,0 +1,19 @@
+.scheme-sample {
+  margin-block: 1.5rem;
+}
+
+.scheme-sample-source {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  overflow: auto;
+}
+
+.scheme-sample.is-live > .scheme-sample-source {
+  display: none;
+}
+
+.scheme-sample .cm-editor {
+  max-width: 100%;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 2px;
+}

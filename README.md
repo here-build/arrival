@@ -55,6 +55,13 @@ pnpm test
 sparse-checkouts that working tree to `tests/r7rs-tests.scm` and `lib/srfi/1/test.sld`.
 A clone without the submodule still builds; those tests skip.
 
+## Documentation
+
+The Starlight site lives in [`docs/site`](./docs/site/README.md). `pnpm docs:dev` serves it
+locally; pushing `main` publishes [here-build.github.io/arrival](https://here-build.github.io/arrival/).
+Package documents stay next to the code and are mounted into the site at build time.
+Editorial notes live in [`docs/site-draft`](./docs/site-draft/README.md).
+
 ## Packages
 
 All names are `@here.build/<dir>`.

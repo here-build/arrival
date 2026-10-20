@@ -13,3 +13,6 @@ pnpm-lock.yaml
 **/*.png
 **/*.svg
 **/*.woff2
+
+# Astro generated state
+.astro/
