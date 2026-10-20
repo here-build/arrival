@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { EASK, FIXTURES } from "../__fixtures__/render-graphs.js";
 import { defaultEngine as engine } from "../elk-engine.js";
-import { FRAME_PAD, layout, pathText, ROW_TARGET } from "../layout.js";
+import { FRAME_PAD, layout, pathText, ROW_MIN, ROW_TARGET } from "../layout.js";
 import {
   type Box,
   edgeLabelKey,
@@ -301,6 +301,28 @@ describe("columns", () => {
     expect([...b.boxes]).toEqual([...a.boxes]);
     expect([...b.edges]).toEqual([...a.edges]);
     expect([a.width, a.height]).toEqual([b.width, b.height]);
+  });
+
+  it("does not break where the only clean cuts leave a row narrower than ROW_MIN", async () => {
+    // every cut but the first and the last carries two data wires: those two cuts would make a one-card row
+    const n = 30;
+    const g = chain(n);
+    for (const s of g.nodes) if (s.kind === "step") s.ports.push({ id: portIds.arg(1), side: "in" });
+    g.edges = Array.from({ length: n - 1 }, (_, i) =>
+      i === 0 || i === n - 2
+        ? [g.edges[i]!]
+        : [0, 1].map((k) => ({
+            id: `d${i}.${k}`,
+            from: { node: `s${i}`, port: portIds.out },
+            to: { node: `s${i + 1}`, port: portIds.arg(k) },
+            kind: "data" as const,
+          })),
+    ).flat();
+    const laid = await layout(g, sizesOf(g), engine);
+    expect(ROW_MIN).toBeGreaterThan(140 + 2 * FRAME_PAD);
+    expect(laid.width).toBeGreaterThan(ROW_TARGET * 3);
+    for (let i = 1; i < n; i++)
+      expect(laid.boxes.get(`s${i}`)!.x, `s${i} right of s${i - 1}`).toBeGreaterThan(laid.boxes.get(`s${i - 1}`)!.x);
   });
 
   it("does not break where every cut carries two data wires", async () => {

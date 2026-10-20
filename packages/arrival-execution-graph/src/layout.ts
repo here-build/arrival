@@ -90,7 +90,7 @@
  * between the rows, down the left margin, into the lower row — under its original id (two wires
  * across one cut take lanes that do not cross). A connector that would still touch a card voids
  * its cut, and the rows are laid out again without it. Only structure and measured skeleton sizes
- * decide any of it.
+ * decide any of it. No row is narrower than `ROW_MIN`: a cut leaving one is skipped.
  */
 import type { ElkEngine, ElkNode } from "./elk-engine.js";
 import {
@@ -329,8 +329,9 @@ async function layoutRow(
     for (const m of members) {
       const u = unitOf(m);
       const group = u === undefined ? undefined : into.get(m.chain[u]);
-      const from = tap.get(colOf(m))?.out ?? source;
-      const prefix = [...m.pieces, ...(tap.get(colOf(m))?.trunk ?? [])];
+      const at = tap.get(colOf(m));
+      const from = at?.out ?? source;
+      const prefix = [...m.pieces, ...(at?.trunk ?? [])];
       if (u === undefined || group === undefined || group.length < 2) {
         const id = `${m.edge.id}~fork`;
         if (top && prefix.length === 0) continue; // straight off the source port: a plain edge
@@ -395,6 +396,7 @@ async function layoutRow(
   laid.crossings.push(...crossings);
   dockOut(graph, routed, byId, childrenOf, laid);
   dockOrder(routed, childrenOf, laid);
+  joinTrunks(buses, laid);
   markForks(buses, laid);
   const returns = new Map<string, RenderEdge[]>();
   for (const e of graph.edges.filter((x) => x.kind === "recur")) {
@@ -421,6 +423,8 @@ async function layoutRow(
 
 /** A page laid out wider than this (layout units, one row) is cut into rows where a clean cut exists. */
 export const ROW_TARGET = 1600;
+/** No row is narrower than this (a break that only makes a sliver costs a connector and height for nothing). */
+export const ROW_MIN = ROW_TARGET * 0.4;
 /** Room added between two rows' page boxes, beyond their own padding: the connectors' channel. */
 const ROW_GAP = 24;
 /** Distance between two connectors' parallel lanes, and the first lane's distance outside the page border
@@ -529,7 +533,8 @@ function splitOf(graph: RenderGraph): Split | undefined {
 /**
  * The cuts: walking the forms in order, a row that would stand wider than `ROW_TARGET` (by the
  * one-row layout's own boxes) ends at the latest clean cut before the overflow, else at the first
- * clean one after it; no clean cut, no break.
+ * clean one after it; no clean cut, no break. A cut that would leave a row narrower than `ROW_MIN`
+ * (above it, or the whole remainder below it) is skipped for the next clean one.
  */
 function chooseCuts(split: Split, whole: LaidOutGraph, banned: ReadonlySet<number>): number[] {
   const span = split.members.map((ids) => {
@@ -540,10 +545,16 @@ function chooseCuts(split: Split, whole: LaidOutGraph, banned: ReadonlySet<numbe
     Math.max(...span.slice(s, e + 1).map((x) => x.hi)) -
     Math.min(...span.slice(s, e + 1).map((x) => x.lo)) +
     2 * FRAME_PAD;
-  const ok = (c: number): boolean => c < split.forms - 1 && !banned.has(c) && split.clean(c);
   const cuts: number[] = [];
   let s = 0;
   for (;;) {
+    // A cut also needs a row of at least ROW_MIN above it (from this row's start) and below it (the rest).
+    const ok = (c: number): boolean =>
+      c < split.forms - 1 &&
+      !banned.has(c) &&
+      split.clean(c) &&
+      width(s, c) >= ROW_MIN &&
+      width(c + 1, split.forms - 1) >= ROW_MIN;
     let e = s;
     while (e < split.forms && width(s, e) <= ROW_TARGET) e++;
     if (e >= split.forms) return cuts;
@@ -893,6 +904,45 @@ function leavesAt(p: readonly Point[], q: readonly Point[]): Point {
     break;
   }
   return at;
+}
+
+/** Least distance between a branch's early rise and the trunk's own vertical beside it. */
+const TRUNK_APART = 8;
+
+/**
+ * A branch that leaves its bus's trunk early and runs alongside it: ELK lays a labelled branch
+ * straight off the source port a few units off the trunk's level (room for its label), and the
+ * branch rises well before the point where its siblings' shared trunk does. It is redrawn to share
+ * the trunk up to that drop point (the siblings' common first vertical) and leave there (or just
+ * before it, if its label pill needs the run into its card to be longer). Only a 4-point wire (out, up, along, in) that
+ * ends right of the drop point is moved.
+ */
+function joinTrunks(buses: readonly Bus[], laid: LaidOutGraph): void {
+  for (const bus of buses) {
+    const ids = bus.members.map((m) => m.edge.id).filter((id) => (laid.edges.get(id)?.length ?? 0) >= 3);
+    const drops = ids.flatMap((id) => {
+      const [a, b, c] = laid.edges.get(id)!;
+      return a!.y === b!.y && b!.x === c!.x && c!.y !== b!.y ? [{ id, x: b!.x }] : [];
+    });
+    const shared = Map.groupBy(drops, (d) => d.x)
+      .entries()
+      .filter(([, g]) => g.length >= 2)
+      .map(([x]) => x)
+      .toArray();
+    if (shared.length === 0) continue;
+    const drop = Math.max(...shared);
+    for (const { id, x } of drops) {
+      const pts = laid.edges.get(id)!;
+      const [a, , c, d] = pts;
+      if (x >= drop || pts.length !== 4 || d!.x <= drop || c!.y !== d!.y) continue;
+      // the label pill is centred on the run into the card: the run is at least as long as the pill
+      const room = Math.min(drop, d!.x - (laid.labels.get(id)?.width ?? 0) - 4);
+      // never a hair beside the trunk's own vertical: leave clearly before it, or at it
+      const at = room < drop && drop - room < TRUNK_APART ? drop - TRUNK_APART : room;
+      if (at <= x) continue;
+      laid.edges.set(id, [a!, { x: at, y: a!.y }, { x: at, y: c!.y }, d!]);
+    }
+  }
 }
 
 /** `forks` and `bus` of the laid-out graph: for every pair of branches of a bus, the point where
