@@ -1,5 +1,5 @@
 // Rolldown renames the expressive-code stylesheet (`ec.w36nc.css` → `ec.[hash].css`)
-// and leaves the link in the page pointing at the original name.
+// and leaves links in some pages pointing at the original name.
 import fs from "node:fs";
 import path from "node:path";
 
@@ -23,12 +23,12 @@ function walk(dir) {
 walk(dist);
 const emitted = fs.readdirSync(assets).filter((name) => /^ec\..+\.css$/.test(name));
 if (wanted.size === 0 && emitted.length === 0) process.exit(0);
-if (wanted.size !== 1 || emitted.length !== 1) {
+// Pages built in different chunks can link both names, so every missing name gets a copy.
+if (emitted.length !== 1) {
   console.error("expressive-code css names diverged", { wanted: [...wanted], emitted });
   process.exit(1);
 }
 const [from] = emitted;
-const [to] = wanted;
-if (from === to) process.exit(0);
-fs.copyFileSync(path.join(assets, from), path.join(assets, to));
-fs.unlinkSync(path.join(assets, from));
+for (const to of wanted) {
+  if (to !== from) fs.copyFileSync(path.join(assets, from), path.join(assets, to));
+}
