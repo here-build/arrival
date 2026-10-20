@@ -506,8 +506,9 @@
   color: var(--eg-subtle);
 }
 
-/* sequence — no box: the reading direction is the sequence. */
-.eg-frame[data-frame="seq"] {
+/* The page (the program's own top-level sequence) — no box: the reading direction is the
+   sequence. Every other sequence (a guard's protected body, an and/or) is a headed area, boxed. */
+.eg-frame[data-frame="seq"][data-page] {
   border-color: transparent;
 }
 
@@ -572,7 +573,7 @@
 }
 
 /* A skipped or not-yet-entered area keeps its outline, dashed. */
-.eg-frame:not([data-frame="seq"], [data-frame="arm"]):is([data-state="skipped"], [data-state="pending"]) {
+.eg-frame:not([data-page], [data-frame="arm"]):is([data-state="skipped"], [data-state="pending"]) {
   border-style: dashed;
 }
 

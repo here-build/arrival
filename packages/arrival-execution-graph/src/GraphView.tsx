@@ -506,6 +506,7 @@ function FrameBox({ frame, mode, first, onSelect, style }: FrameBoxProps) {
     "data-state": frame.state,
     "data-frame": frame.frame,
     ...(isStub(frame) ? { "data-collapsed": "" } : {}),
+    ...(isPage(frame) ? { "data-page": "" } : {}),
     ...(first ? { "data-first": "" } : {}),
   };
   if (frame.frame === "arm") {
