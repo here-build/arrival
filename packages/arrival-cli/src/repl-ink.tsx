@@ -222,6 +222,10 @@ function ReplApp({
   const nav = useRef<NavState | null>(null);
   /** The last SETTLED turn's plain value text — `,copy`'s source. `null` until one exists. */
   const lastValueText = useRef<string | null>(null);
+  /** Turns run one at a time, in submission order: the warm runCtx carries one call's
+   *  budget + signal at a time (a concurrent call doors), and a pasted batch must see
+   *  each prior form's defines. */
+  const turnQueue = useRef<Promise<void>>(Promise.resolve());
   const [, redraw] = useReducer((x: number) => x + 1, 0);
 
   const reset = useCallback((): void => {
@@ -306,7 +310,13 @@ function ReplApp({
       cmdHistory.current = pushHistory(cmdHistory.current, full);
       reset();
       redraw();
-      void submit(full);
+      const turn = (): Promise<void> => submit(full);
+      turnQueue.current = turnQueue.current.then(turn, turn);
+      // emitForms already folds eval/parse faults into the turn; this is the host-side
+      // residue (render flush, stdout) — surfaced, never an unhandled rejection.
+      turnQueue.current.catch((error: unknown) => {
+        process.stderr.write(`arrival repl: turn failed: ${String(error)}\n`);
+      });
     },
     [reset, submit],
   );
