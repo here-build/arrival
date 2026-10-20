@@ -73,7 +73,7 @@ describe("per-array limit selection", () => {
   });
 
   it("two big arrays (ambiguous) → NOT exactly one, both elide at the plain maxItems", () => {
-    const { text, elisions } = toSExprStringWithElisions(
+    const { elisions } = toSExprStringWithElisions(
       {
         a: Array.from({ length: 30 }, (_, i) => i),
         b: Array.from({ length: 30 }, (_, i) => i),

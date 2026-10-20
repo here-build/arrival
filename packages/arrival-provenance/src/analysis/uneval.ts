@@ -22,13 +22,7 @@
 // (verified: no shared helpers, no shared imports) and this relocation is the first point they
 // needed genuinely different homes.
 import { execState, parse, toJS, type LexicalScope, type SchemeValue } from "@here.build/arrival";
-import {
-  buildSlice,
-  writeForm,
-  defineNameOf,
-  lastTopLevelForm,
-  type EvalTrace,
-} from "@here.build/arrival/provenance";
+import { buildSlice, writeForm, defineNameOf, lastTopLevelForm, type EvalTrace } from "@here.build/arrival/provenance";
 import { AValue } from "@here.build/arrival/reflect-internals";
 
 /** Same fusion as arrival `LexicalScopeWithInternals` (on `/host-internals` after rebuild). */

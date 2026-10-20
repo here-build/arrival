@@ -165,7 +165,7 @@ function rawProbe(label: string, tsBody: string, marker: string): void {
   );
   console.log(`\n[${label}]`);
   console.log(`  total native entries: ${names.length}`);
-  console.log(`  RELEVANT entries present: ${JSON.stringify(interesting.sort())}`);
+  console.log(`  RELEVANT entries present: ${JSON.stringify(interesting.toSorted())}`);
 }
 
 // (a) positional slot — cursor at the `cuisine` (2nd positional) value position.

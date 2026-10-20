@@ -40,8 +40,7 @@ export type Classified = {
   idempotent?: boolean | string;
 };
 
-const show = (n: Node): string =>
-  "atom" in n ? (n.str ? `"${n.atom}"` : n.atom) : "(" + n.list.map(show).join(" ") + ")";
+const show = (n: Node): string => ("atom" in n ? (n.str ? `"${n.atom}"` : n.atom) : `(${n.list.map(show).join(" ")})`);
 
 const forestEq = (a: Node[], b: Node[]): boolean => a.length === b.length && a.every((n, i) => nodeEq(n, b[i]!));
 
@@ -82,7 +81,7 @@ export function classify(harvest: HarvestProgram[]): { counts: Record<string, nu
       const reread = readSugarcoat(rerender);
       r.idempotent = forestEq(reread, gotForest);
     } catch (error) {
-      r.idempotent = "render/reread threw: " + String((error as Error).message).slice(0, 120);
+      r.idempotent = `render/reread threw: ${String((error as Error).message).slice(0, 120)}`;
     }
     results.push(r);
   }

@@ -26,6 +26,7 @@ const OUT_DIR = path.resolve(import.meta.dirname, "__custdev-output__");
 
 const grokAvailable = (() => {
   try {
+    // eslint-disable-next-line sonarjs/no-os-command-from-path -- probes for the optional `grok` CLI on the developer PATH by design
     execSync("command -v grok", { stdio: "pipe" });
     return true;
   } catch {
@@ -40,6 +41,7 @@ describe.skipIf(!grokAvailable)("LEARN.md teaches the grammar to a foreign model
   it("one round: ≥8/10 programs read back exactly as the model intended", () => {
     const prompt = fs.readFileSync(path.resolve(import.meta.dirname, "prompt.txt"), "utf8");
     const out = execFileSync(
+      // eslint-disable-next-line sonarjs/no-os-command-from-path -- invokes the optional `grok` CLI from the developer PATH by design
       "grok",
       ["-p", prompt, "-m", MODEL, "--output-format", "json", "--max-turns", "8", "--always-approve"],
       { timeout: 560_000, cwd: PKG_ROOT, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 },
@@ -54,7 +56,7 @@ describe.skipIf(!grokAvailable)("LEARN.md teaches the grammar to a foreign model
 
     const { counts, results } = classify(harvest);
     fs.mkdirSync(OUT_DIR, { recursive: true });
-    const trace = path.join(OUT_DIR, `round-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
+    const trace = path.join(OUT_DIR, `round-${new Date().toISOString().replaceAll(/[:.]/g, "-")}.json`);
     fs.writeFileSync(trace, JSON.stringify({ model: MODEL, counts, results, harvest }, null, 2));
     console.log(`[custdev] ${JSON.stringify(counts)} — trace: ${trace}`);
 

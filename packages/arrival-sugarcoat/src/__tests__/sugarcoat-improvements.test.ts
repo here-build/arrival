@@ -145,7 +145,9 @@ describe("string-append → @{…} (default: strip coercions, headless str)", ()
     );
   });
   it("modernize is one-way: reads back as str, not string-append", () => {
-    const back = readSugarcoat(render(matchstate)).map(printScheme).join("\n");
+    const back = readSugarcoat(render(matchstate))
+      .map((nd) => printScheme(nd))
+      .join("\n");
     expect(back).toContain("(str");
     expect(back).toContain("view");
     expect(back).not.toContain("number->string");

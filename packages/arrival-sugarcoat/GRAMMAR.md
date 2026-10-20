@@ -120,12 +120,12 @@ last) into `base + [step…]`.
 
 Dedicated surface outranks peel. A node that already has a sugarcoat face is not a step:
 
-| node | face |
-| --- | --- |
-| `(vector …)` | `[…]` |
-| `(dict …)` | `{…}` |
-| `(str …)` / `(string-append …)` | `@{…}` |
-| `(list …)` / `(cons a b)` | stay prefix — constructors, not `[]` |
+| node                            | face                                 |
+| ------------------------------- | ------------------------------------ |
+| `(vector …)`                    | `[…]`                                |
+| `(dict …)`                      | `{…}`                                |
+| `(str …)` / `(string-append …)` | `@{…}`                               |
+| `(list …)` / `(cons a b)`       | stay prefix — constructors, not `[]` |
 
 Peel is the residual after those faces. Without this cut, `(f (vector x))` launders through
 the ≥2-step gate as `x.vector.f`. `(map f (vector x y))` still peels `map` onto the vector
@@ -201,7 +201,7 @@ A human-typed bare mix is a reader door ("brace each group"). Same-operator runs
 A free-standing `[…]` (Primary `FreeVector` in §3) folds to `(vector …)` — the same glyph as
 arrival-scheme's evaluating vector literal. Tight postfix `xs[0]` / `f[:k]` remains
 subscript access. Adjacency is the discriminator — same rule as method-arg `(` and
-trailing-lambda `{`. Lists stay `(list …)`. R7RS `#(…)` is the *constant* vector and is
+trailing-lambda `{`. Lists stay `(list …)`. R7RS `#(…)` is the _constant_ vector and is
 not a token on this forest (§7).
 
 **Arrow lambda.** At n-expr level 0, `{(p₁ … pₖ) => body}` ⇒ `(lambda (p₁ … pₖ) body)`. A

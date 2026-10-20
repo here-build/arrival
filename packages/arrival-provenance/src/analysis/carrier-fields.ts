@@ -66,6 +66,8 @@ function hasKeywordField(n: LineageNode): boolean {
       return "field" in n.step || hasKeywordField(n.child);
     case "pipe":
       return hasKeywordField(n.child);
+    case "closure":
+      return hasKeywordField(n.body);
     case "fan":
       return hasKeywordField(n.source) || (n.template ? hasKeywordField(n.template) : false);
     case "mux":
@@ -93,6 +95,9 @@ function collectFieldNodes(n: LineageNode, out: LineageNode[] = []): LineageNode
       break;
     case "pipe":
       collectFieldNodes(n.child, out);
+      break;
+    case "closure":
+      collectFieldNodes(n.body, out);
       break;
     case "fan":
       collectFieldNodes(n.source, out);

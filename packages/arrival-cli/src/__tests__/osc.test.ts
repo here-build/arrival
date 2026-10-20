@@ -18,7 +18,7 @@ import {
   PROMPT_START,
 } from "../osc.js";
 
-const E = "\x1b";
+const E = "\u001B";
 
 describe("hyperlink (OSC 8)", () => {
   it("wraps text in the OSC-8 open/close, carrying the url", () => {
@@ -27,7 +27,8 @@ describe("hyperlink (OSC 8)", () => {
   });
   it("the visible text is exactly the payload (terminals without OSC-8 show it bare)", () => {
     // strip the OSC-8 wrappers → the plain text remains
-    const bare = hyperlink("u", "the-text").replace(/\x1b\]8;[^\x1b]*\x1b\\/g, "");
+    // eslint-disable-next-line no-control-regex, sonarjs/no-control-regex -- asserts on raw ANSI/OSC escape sequences, so the pattern must contain ESC
+    const bare = hyperlink("u", "the-text").replaceAll(/\u001B\]8;[^\u001B]*\u001B\\/g, "");
     expect(bare).toBe("the-text");
   });
   it("id groups a multi-run link", () => {
@@ -63,7 +64,7 @@ describe("clipboardSet (OSC 52)", () => {
 
 describe("notify (OSC 9)", () => {
   it("wraps the message, BEL-terminated", () => {
-    expect(notify("done")).toBe(`${E}]9;done\x07`);
+    expect(notify("done")).toBe(`${E}]9;done\u0007`);
   });
 });
 
@@ -76,8 +77,8 @@ describe("curlyUnderline (SGR 4:3)", () => {
 
 describe("OSC 10/11 canvas payload", () => {
   it("emits the BEL-terminated queries", () => {
-    expect(OSC11_QUERY).toBe(`${E}]11;?\x07`);
-    expect(OSC10_QUERY).toBe(`${E}]10;?\x07`);
+    expect(OSC11_QUERY).toBe(`${E}]11;?\u0007`);
+    expect(OSC10_QUERY).toBe(`${E}]10;?\u0007`);
   });
 
   it("parses XParseColor rgb:rrrr/gggg/bbbb (4-digit and 2-digit)", () => {
@@ -100,10 +101,10 @@ describe("OSC 10/11 canvas payload", () => {
   });
 
   it("extracts a BEL- or ST-terminated payload and refuses an unterminated fragment", () => {
-    expect(extractOsc11FromBuffer(`${E}]11;rgb:0000/0000/0000\x07`)).toBe("rgb:0000/0000/0000");
+    expect(extractOsc11FromBuffer(`${E}]11;rgb:0000/0000/0000\u0007`)).toBe("rgb:0000/0000/0000");
     expect(extractOsc11FromBuffer(`${E}]11;rgb:1111/2222/3333${E}\\`)).toBe("rgb:1111/2222/3333");
     expect(extractOsc11FromBuffer(`${E}]11;rgb:1`)).toBeNull();
-    expect(extractOsc10FromBuffer(`${E}]10;rgb:eeee/eeee/eeee\x07`)).toBe("rgb:eeee/eeee/eeee");
-    expect(extractOsc10FromBuffer(`${E}]11;rgb:eeee/eeee/eeee\x07`)).toBeNull();
+    expect(extractOsc10FromBuffer(`${E}]10;rgb:eeee/eeee/eeee\u0007`)).toBe("rgb:eeee/eeee/eeee");
+    expect(extractOsc10FromBuffer(`${E}]11;rgb:eeee/eeee/eeee\u0007`)).toBeNull();
   });
 });

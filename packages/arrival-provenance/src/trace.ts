@@ -46,8 +46,8 @@ class ObservableEvalTrace extends CoreEvalTrace {
     return this.#entriesBox.get();
   }
 
-  constructor(maxEntries: number = DEFAULT_TRACE_CAP) {
-    super(maxEntries);
+  constructor(maxEntries: number = DEFAULT_TRACE_CAP, startId = 0) {
+    super(maxEntries, startId);
     // Capture the core's plain `enter` (already an instance-field arrow
     // function bound to `this`), then replace `this.enter` with an
     // `action`-wrapped call to that same function (see the preamble bullet on

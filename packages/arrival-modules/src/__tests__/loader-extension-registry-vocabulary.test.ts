@@ -118,6 +118,6 @@ describe("loader extension registry — vocabulary path (Stage B4)", () => {
     // the OTHER doors, never silent last-write-wins.
     await expect(
       exec(`(require "x.conflict")`, { capabilities: [top], config: { loader: files({ "x.conflict": "hi" }) } }),
-    ).rejects.toThrow(/already handled by "test\/conflict-resolve-(a|b)"/);
+    ).rejects.toThrow(/already handled by "test\/conflict-resolve-[ab]"/);
   });
 });

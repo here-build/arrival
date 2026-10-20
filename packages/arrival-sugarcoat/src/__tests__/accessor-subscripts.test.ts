@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { decodeAccessor, encodeAccessor, accessorStepLetters, type PairStep } from "../sugarcoat-render.js";
-import { schemeToSugarcoat } from "../sugarcoat-render.js";
+import {
+  decodeAccessor,
+  encodeAccessor,
+  accessorStepLetters,
+  type PairStep,
+  schemeToSugarcoat,
+  printScheme,
+} from "../sugarcoat-render.js";
 import { readSugarcoatExpr, R7RS_ACCESSOR_DEPTH } from "../sugarcoat-read.js";
-import { printScheme } from "../sugarcoat-render.js";
 
 const render = (scheme: string): string => schemeToSugarcoat(scheme).trim();
 const read = (sugarcoat: string, accessorDepth?: number): string =>

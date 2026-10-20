@@ -7,7 +7,7 @@ import { stripAnsi } from "./ansi-strip.js";
 
 const SAMPLES = [
   "(1 2 3)",
-  '(list "hello" "wo\\"rld" 42)',
+  String.raw`(list "hello" "wo\"rld" 42)`,
   "(:verdict (car reactions))",
   "((a . b) [1 2] {x y})",
   "(define (f x) (* x x)) ; a comment\n(f 3)",
@@ -41,7 +41,7 @@ describe("colorizeSexpr — actually colors the structure", () => {
     const out = colorizeSexpr("(a b)", "truecolor");
     expect(out).not.toBe("(a b)");
     // eslint-disable-next-line no-control-regex -- asserting an escape IS present
-    expect(out).toMatch(/\x1b\[/);
+    expect(out).toMatch(/\u001B\[/);
   });
 
   it("tints a keyword differently from a plain symbol", () => {
@@ -70,7 +70,8 @@ describe("colorizeSexpr — darcula type coloring (each leaf type distinct)", ()
     // symbol: baseline gray-blue (every leaf gets a color now)
     expect(sym).not.toBe("foo");
     // all colored (escapes present)
-    for (const c of [num, str, kw, bool, sym]) expect(c).toMatch(/\x1b\[/);
+    // eslint-disable-next-line no-control-regex -- asserts on raw ANSI/OSC escape sequences, so the pattern must contain ESC
+    for (const c of [num, str, kw, bool, sym]) expect(c).toMatch(/\u001B\[/);
     // and by distinct classes: number ≠ keyword ≠ string colors
     expect(num).not.toBe("42");
     expect(num.match(/38;2;[\d;]+/)?.[0]).not.toBe(kw.match(/38;2;[\d;]+/)?.[0]); // blue ≠ purple

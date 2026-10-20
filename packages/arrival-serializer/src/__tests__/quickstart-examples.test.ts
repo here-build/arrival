@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { toSExprString } from "../serializer";
+import { toSExprString } from "../serializer.js";
 import "@here.build/arrival-env";
 
 describe("Quick Start Examples", () => {

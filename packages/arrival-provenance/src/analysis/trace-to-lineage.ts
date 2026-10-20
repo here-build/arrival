@@ -170,6 +170,9 @@ export function wireOpChains(wire: LineageWire): Map<number, readonly string[]> 
       case "pipe":
         walk(n.child, [...acc, n.op]);
         break;
+      case "closure":
+        walk(n.body, acc);
+        break;
       case "merge":
         n.children.forEach((ch) => walk(ch, [...acc, n.op]));
         break;

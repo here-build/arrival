@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const CLI = fileURLToPath(new URL("../../dist/cli.js", import.meta.url));
-const fixture = (name: string): string => fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url));
+const fixture = (name: string): string => fileURLToPath(new URL(`fixtures/${name}`, import.meta.url));
 
 function arrival(args: string[], stdin?: string): { code: number | null; stdout: string; stderr: string } {
   const res = spawnSync(process.execPath, [CLI, ...args], {

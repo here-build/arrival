@@ -31,14 +31,7 @@ expectTypeOf(fold((x: number, a: List<number>): List<number> => a, [], [1, 2, 3]
 expectTypeOf(nth(1, [10, 20, 30])).toEqualTypeOf<number | undefined>();
 
 // for-each — void return; callback param bound to element type
-expectTypeOf(
-  for$dash$each(
-    (x: number): void => {
-      x;
-    },
-    [1, 2, 3],
-  ),
-).toEqualTypeOf<void>();
+expectTypeOf(for$dash$each((_x: number): void => undefined, [1, 2, 3])).toEqualTypeOf<void>();
 
 // count — number result; pred param bound to element type
 expectTypeOf(count((x: number): boolean => x > 1, [1, 2, 3])).toEqualTypeOf<number>();
@@ -61,9 +54,7 @@ nth([10, 20], 1);
 // @ts-expect-error nth — wrong element type threaded out
 const n: string | undefined = nth(1, [10, 20, 30]);
 for$dash$each(
-  (x: string): void => {
-    x;
-  },
+  (_x: string): void => undefined,
   // @ts-expect-error for-each — callback param type mismatches the element type
   [1, 2, 3],
 );

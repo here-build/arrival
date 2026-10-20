@@ -12,8 +12,7 @@ import { stripAnsi } from "./ansi-strip.js";
 async function traced(src: string, { allowReject = false }: { allowReject?: boolean } = {}): Promise<EvalTrace> {
   const trace = new EvalTrace();
   const run = execState(src, { tap: trace, budgetMs: 30_000 });
-  if (allowReject) await run.catch(() => {});
-  else await run;
+  await (allowReject ? run.catch(() => {}) : run);
   return trace;
 }
 

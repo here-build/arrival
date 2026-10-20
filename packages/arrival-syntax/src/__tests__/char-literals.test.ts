@@ -18,61 +18,61 @@ function atomOf(src: string): string {
   return (form as { atom: string }).atom;
 }
 
-describe("parseSexprs — #\\<char> character literals", () => {
-  it('reads #\\" (the quote character) as one atom, not a broken string', () => {
-    expect(atomOf('#\\"')).toBe('#\\"');
+describe(String.raw`parseSexprs — #\<char> character literals`, () => {
+  it(String.raw`reads #\" (the quote character) as one atom, not a broken string`, () => {
+    expect(atomOf(String.raw`#\"`)).toBe(String.raw`#\"`);
   });
 
-  it('reads #\\" mid-expression without swallowing the rest of the program', () => {
-    const forms = parseSexprs('(char=? #\\" (car chars))');
+  it(String.raw`reads #\" mid-expression without swallowing the rest of the program`, () => {
+    const forms = parseSexprs(String.raw`(char=? #\" (car chars))`);
     expect(forms).toHaveLength(1);
     const [head, ...rest] = (forms[0] as { list: unknown[] }).list as { atom?: string }[];
     expect(head?.atom).toBe("char=?");
-    expect(rest[0]?.atom).toBe('#\\"');
+    expect(rest[0]?.atom).toBe(String.raw`#\"`);
   });
 
   it("reproduces the exact real-world crash shape (CSV quote-toggle parser) without throwing", () => {
-    const src = `
+    const src = String.raw`
       (let loop ((chars (string->list line)) (current '()) (fields '()) (in-quotes? #f))
         (cond ((null? chars) (reverse (cons (list->string (reverse current)) fields)))
-              ((and (char=? #\\" (car chars)) (not in-quotes?)) (loop (cdr chars) current fields #t))
-              ((and (char=? #\\" (car chars)) in-quotes?) (loop (cdr chars) current fields #f))
+              ((and (char=? #\" (car chars)) (not in-quotes?)) (loop (cdr chars) current fields #t))
+              ((and (char=? #\" (car chars)) in-quotes?) (loop (cdr chars) current fields #f))
               (else (loop (cdr chars) (cons (car chars) current) fields in-quotes?))))
     `;
     expect(() => parseSexprs(src)).not.toThrow();
   });
 
-  it("reads #\\\\ (the backslash character) as one atom", () => {
+  it(String.raw`reads #\\ (the backslash character) as one atom`, () => {
     expect(atomOf("#\\\\")).toBe("#\\\\");
   });
 
-  it("reads #\\( and #\\) (bracket payloads) as one atom each, not list-openers", () => {
-    expect(atomOf("#\\(")).toBe("#\\(");
-    expect(atomOf("#\\)")).toBe("#\\)");
+  it(String.raw`reads #\( and #\) (bracket payloads) as one atom each, not list-openers`, () => {
+    expect(atomOf(String.raw`#\(`)).toBe(String.raw`#\(`);
+    expect(atomOf(String.raw`#\)`)).toBe(String.raw`#\)`);
   });
 
-  it("reads #\\; (semicolon payload) as one atom, not a comment starting", () => {
-    expect(atomOf("#\\;")).toBe("#\\;");
+  it(String.raw`reads #\; (semicolon payload) as one atom, not a comment starting`, () => {
+    expect(atomOf(String.raw`#\;`)).toBe(String.raw`#\;`);
   });
 
-  it("reads #\\, (comma payload) as one atom", () => {
-    expect(atomOf("#\\,")).toBe("#\\,");
+  it(String.raw`reads #\, (comma payload) as one atom`, () => {
+    expect(atomOf(String.raw`#\,`)).toBe(String.raw`#\,`);
   });
 
-  it("reads #\\space and #\\newline as one named-literal atom each", () => {
-    expect(atomOf("#\\space")).toBe("#\\space");
-    expect(atomOf("#\\newline")).toBe("#\\newline");
+  it(String.raw`reads #\space and #\newline as one named-literal atom each`, () => {
+    expect(atomOf(String.raw`#\space`)).toBe(String.raw`#\space`);
+    expect(atomOf(String.raw`#\newline`)).toBe(String.raw`#\newline`);
   });
 
-  it("reads a bare single-letter literal (#\\a) without over-consuming a following symbol", () => {
-    const forms = parseSexprs("(list #\\a foo)");
+  it(String.raw`reads a bare single-letter literal (#\a) without over-consuming a following symbol`, () => {
+    const forms = parseSexprs(String.raw`(list #\a foo)`);
     const [, charNode, symNode] = (forms[0] as { list: { atom?: string }[] }).list;
-    expect(charNode?.atom).toBe("#\\a");
+    expect(charNode?.atom).toBe(String.raw`#\a`);
     expect(symNode?.atom).toBe("foo");
   });
 
-  it("reads #\\x41 (hex escape) as one atom", () => {
-    expect(atomOf("#\\x41")).toBe("#\\x41");
+  it(String.raw`reads #\x41 (hex escape) as one atom`, () => {
+    expect(atomOf(String.raw`#\x41`)).toBe(String.raw`#\x41`);
   });
 
   it("still reads a normal string literal correctly (no regression)", () => {
@@ -82,8 +82,8 @@ describe("parseSexprs — #\\<char> character literals", () => {
   });
 
   it("still reads a string containing an escaped quote correctly (no regression)", () => {
-    const forms = parseSexprs('"a\\"b"');
+    const forms = parseSexprs(String.raw`"a\"b"`);
     expect(forms).toHaveLength(1);
-    expect((forms[0] as { atom: string }).atom).toBe('a\\"b');
+    expect((forms[0] as { atom: string }).atom).toBe(String.raw`a\"b`);
   });
 });

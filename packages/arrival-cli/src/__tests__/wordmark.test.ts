@@ -28,24 +28,25 @@ describe("wordmark", () => {
     expect(rows.map(stripAnsi)).toEqual(PLAIN);
     // At least one row actually carries color codes — a silently-uncolored wordmark
     // would still pass the stripped-text check above, so this is the load-bearing half.
-    expect(rows.some((r) => r.includes("\x1b[38;2;"))).toBe(true);
+    expect(rows.some((r) => r.includes("\u001B[38;2;"))).toBe(true);
   });
 
   it("256 mode also round-trips to the same plain art, via the nearest-256 fallback (D4)", () => {
     const rows = wordmark("256");
     expect(rows.map(stripAnsi)).toEqual(PLAIN);
-    expect(rows.some((r) => r.includes("\x1b[38;5;"))).toBe(true);
+    expect(rows.some((r) => r.includes("\u001B[38;5;"))).toBe(true);
   });
 
   it("16 mode round-trips to the same plain art through chalk's basic rung", () => {
     const rows = wordmark("16");
     expect(rows.map(stripAnsi)).toEqual(PLAIN);
-    expect(rows.some((r) => r.includes("\x1b["))).toBe(true);
+    expect(rows.some((r) => r.includes("\u001B["))).toBe(true);
   });
 
   it("the gradient sweeps hue left→right — first and last painted glyph differ in color", () => {
     const [row] = wordmark("truecolor");
-    const codes = [...(row ?? "").matchAll(/\x1b\[38;2;(\d+);(\d+);(\d+)m/g)];
+    // eslint-disable-next-line no-control-regex -- asserts on raw ANSI/OSC escape sequences, so the pattern must contain ESC
+    const codes = [...(row ?? "").matchAll(/\u001B\[38;2;(\d+);(\d+);(\d+)m/g)];
     expect(codes.length).toBeGreaterThan(1);
     expect(codes[0]?.[0]).not.toBe(codes.at(-1)?.[0]);
   });

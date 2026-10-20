@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { toSExprString } from "../serializer";
+import { toSExprString } from "../serializer.js";
 import { exec, execState, EnvCapability, toJS, ANil, LexicalScope } from "@here.build/arrival";
 import { AExact, AString, ASymbol, APair } from "@here.build/arrival/reflect-internals";
+
+type Val = Awaited<ReturnType<typeof execState>>["values"][number];
 
 async function serializeForm(expr: string): Promise<string> {
   // Raw scheme values (execState), not exec's toJS-collapsed ones — nil must stay ANil
@@ -23,7 +25,7 @@ describe("serialize exec results", () => {
     { expr: '"hello world"', expected: `"hello world"` },
     { expr: "'symbol-name", expected: "symbol-name" },
     { expr: "()", expected: "nil" },
-    { expr: "#\\a", expected: "#\\a" },
+    { expr: String.raw`#\a`, expected: String.raw`#\a` },
   ] as const)("$expr serializes as $expected", async ({ expr, expected }) => {
     const serialized = await serializeForm(expr);
     expect(serialized).toBe(expected);
@@ -51,25 +53,25 @@ describe("exec with proper environment", () => {
     expect(results[1]).toBe(12); // Second result
     // Symbol needs special handling
     expect(rawResults[2]).toBeInstanceOf(ASymbol);
-    expect(rawResults[2].__name__).toBe("hello");
+    expect((rawResults[2] as ASymbol).__name__).toBe("hello");
   });
 
   it("should handle lists (returns Pair)", async () => {
     const result = (await execState("(list 1 2 3)")).values[0];
     expect(result).toBeInstanceOf(APair);
-    expect(result.car).toBeInstanceOf(AExact);
+    expect((result as APair<Val, Val>).car).toBeInstanceOf(AExact);
   });
 
   it("should handle symbols (returns SchemeSymbol)", async () => {
     const result = (await execState("'symbol-name")).values[0];
     expect(result).toBeInstanceOf(ASymbol);
-    expect(result.__name__).toBe("symbol-name");
+    expect((result as ASymbol).__name__).toBe("symbol-name");
   });
 
   it("should handle strings (returns SchemeString)", async () => {
     const result = (await execState('"hello world"')).values[0];
     expect(result).toBeInstanceOf(AString);
-    expect(result.__string__).toBe("hello world");
+    expect((result as AString).__string__).toBe("hello world");
   });
 
   it("should handle booleans", async () => {
@@ -81,9 +83,10 @@ describe("exec with proper environment", () => {
     const result = (await execState("(map (lambda (x) (* x 2)) (list 1 2 3))")).values[0];
     expect(result).toBeInstanceOf(APair);
     // Result is Pair with SchemeExact values
-    expect(result.car).toBeInstanceOf(AExact);
-    expect(result.car.num).toBe(2);
-    expect(result.cdr.car.num).toBe(4);
+    const pair = result as APair<Val, Val>;
+    expect(pair.car).toBeInstanceOf(AExact);
+    expect((pair.car as AExact).num).toBe(2);
+    expect(((pair.cdr as APair<Val, Val>).car as AExact).num).toBe(4);
   });
 
   it("should handle empty expressions (returns Nil)", async () => {

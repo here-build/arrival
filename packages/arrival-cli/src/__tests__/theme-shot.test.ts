@@ -20,7 +20,7 @@ describe("ansiToCells", () => {
   });
 
   it("attaches chalk truecolor SGR to the following run", () => {
-    const cells = ansiToCells("\x1b[38;2;10;20;30mX\x1b[39mY");
+    const cells = ansiToCells("\u001B[38;2;10;20;30mX\u001B[39mY");
     expect(cells[0]).toEqual({ ch: "X", fg: { r: 10, g: 20, b: 30 } });
     expect(cells[1]).toEqual({ ch: "Y", fg: undefined });
   });
@@ -42,7 +42,8 @@ describe("rowsToHtml", () => {
 
 describe("sampleFrame", () => {
   it("paints a non-empty frame whose stripped text still contains arrival + an error door", () => {
-    const { stripAnsi } = { stripAnsi: (s: string) => s.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "") };
+    // eslint-disable-next-line no-control-regex -- asserts on raw ANSI/OSC escape sequences, so the pattern must contain ESC
+    const { stripAnsi } = { stripAnsi: (s: string) => s.replaceAll(/\u001B\[[0-9;?]*[a-z]/gi, "") };
     const theme = THEMES[1]!; // solarized-dark
     const text = sampleFrame(theme.bg, theme.fg).map(stripAnsi).join("\n");
     expect(text).toContain("arrival");
@@ -54,7 +55,7 @@ describe("sampleFrame", () => {
     const dark = sampleFrame(THEMES[0]!.bg, THEMES[0]!.fg).join("\n");
     const light = sampleFrame(THEMES[2]!.bg, THEMES[2]!.fg).join("\n");
     expect(dark).not.toBe(light);
-    expect(dark).toContain("\x1b[38;2;");
+    expect(dark).toContain("\u001B[38;2;");
     expect(ansiLinesToRows(sampleFrame(THEMES[0]!.bg, THEMES[0]!.fg)).length).toBeGreaterThan(8);
   });
 });

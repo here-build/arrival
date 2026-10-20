@@ -6,5 +6,5 @@
 // color mode is active (tints.test.ts).
 export function stripAnsi(s: string): string {
   // eslint-disable-next-line no-control-regex -- ANSI escape codes ARE control chars
-  return s.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "");
+  return s.replaceAll(/\u001B\[[0-9;?]*[a-z]/gi, "");
 }

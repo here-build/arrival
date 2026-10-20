@@ -20,7 +20,7 @@ describe("read: at-expressions → (head part…)", () => {
     // explicit non-str head, general reader (strict surface still readable)
     ["@string-append{a @x b}", '(string-append "a " x " b")'],
     // quotes are literal — no \" escaping in source
-    ['@{Say "@x" loud}', '(str "Say \\"" x "\\" loud")'],
+    ['@{Say "@x" loud}', String.raw`(str "Say \"" x "\" loud")`],
     // @(datum) graft — a full parenthesized form
     ['@{role: @(field lead "role")}', '(str "role: " (field lead "role"))'],
     // nested @head{…}
@@ -53,11 +53,11 @@ describe("read: @dedent dissolves to str with indentation stripped", () => {
   // inline first line + indented continuations (the common shape)
   it("strips common indent off continuation lines, keeps first inline line", () => {
     const src = "@dedent{Pitch it.\n      Line two.\n      Line three.}";
-    expect(read(src)).toBe('(str "Pitch it.\\nLine two.\\nLine three.")');
+    expect(read(src)).toBe(String.raw`(str "Pitch it.\nLine two.\nLine three.")`);
   });
   it("interpolations survive the dedent", () => {
     const src = "@dedent{Hi @name.\n    You are @(role x).}";
-    expect(read(src)).toBe('(str "Hi " name ".\\nYou are " (role x) ".")');
+    expect(read(src)).toBe(String.raw`(str "Hi " name ".\nYou are " (role x) ".")`);
   });
 });
 
@@ -69,7 +69,7 @@ describe("read: backwards-compat — bare @ stays a symbol", () => {
 describe("read: multi-line at-body through the I-expression coalescer", () => {
   it("an indented @dedent under a head coalesces and reads", () => {
     const src = "call\n  @dedent{first\n    second}";
-    expect(readAll(src)).toBe('(call (str "first\\nsecond"))');
+    expect(readAll(src)).toBe(String.raw`(call (str "first\nsecond"))`);
   });
 });
 
@@ -80,7 +80,7 @@ describe("render: (str …) / (string-append …) → single-line at-expression"
     ['(str "a " x " b")', "@{a @x b}"],
     // default strTolerant: string-append modernizes to headless @{…} (not @string-append)
     ['(string-append "a " x " b")', "@{a @x b}"],
-    ['(str "Say \\"" x "\\" loud")', '@{Say "@x" loud}'],
+    [String.raw`(str "Say \"" x "\" loud")`, '@{Say "@x" loud}'],
     ['(str "role: " (field lead "role"))', '@{role: @(field lead "role")}'],
     // keyword / pair accessors surface as bare @recv[:k], not scheme @(:k recv)
     ['(str "/" config/hero-id (:id persona) replay-idx)', "@{/@config/hero-id@persona[:id]@replay-idx}"],
@@ -125,7 +125,7 @@ describe("read∘render = id (the moat) for single-line at-expressions", () => {
   ])
     it(`round-trips ${s}`, () => expect(roundtrip(s)).toBe(canon(s)));
   it("strict-round-trips (string-append …)", () => {
-    const s = '(string-append "Pitch \\"" product "\\" now")';
+    const s = String.raw`(string-append "Pitch \"" product "\" now")`;
     expect(roundtripStrict(s)).toBe(canon(s));
   });
   it("default modernize: string-append → str (one-way)", () => {
@@ -135,15 +135,15 @@ describe("read∘render = id (the moat) for single-line at-expressions", () => {
 
 describe("render: multi-line (str …) → @dedent{…} (the pretty projection)", () => {
   it("newline-bearing str renders as an indented @dedent block", () => {
-    const scheme = '(str "Pitch\\nThis one\\nOne sentence")';
+    const scheme = String.raw`(str "Pitch\nThis one\nOne sentence")`;
     expect(render(scheme)).toBe("@dedent{Pitch\n  This one\n  One sentence}");
   });
   it("interpolations ride along the dedent block (guarded when a symbol-char follows)", () => {
-    const scheme = '(str "Hi " name "!\\nBye " x)';
+    const scheme = String.raw`(str "Hi " name "!\nBye " x)`;
     expect(render(scheme)).toBe("@dedent{Hi @|name|!\n  Bye @x}");
   });
   it("a value with intrinsic indent falls back to verbatim @{…} (dedent would eat it)", () => {
-    const scheme = '(str "head\\n    indented body")';
+    const scheme = String.raw`(str "head\n    indented body")`;
     expect(render(scheme)).toBe("@{head\n    indented body}");
   });
 });
@@ -152,11 +152,11 @@ describe("read∘render = id (the moat) for multi-line at-expressions", () => {
   const canon = (s: string): string => printScheme(parseSexprs(s)[0]);
   const roundtrip = (s: string): string => printScheme(readSugarcoatExpr(render(s)));
   for (const s of [
-    '(str "Pitch\\nThis one\\nOne sentence")',
-    '(str "Hi " name "!\\nBye " x)',
-    '(str "head\\n    indented body")', // vmin>0 verbatim path
+    String.raw`(str "Pitch\nThis one\nOne sentence")`,
+    String.raw`(str "Hi " name "!\nBye " x)`,
+    String.raw`(str "head\n    indented body")`, // vmin>0 verbatim path
     // V's example, canonical
-    '(str "Pitch \\"" product "\\" to " audience ".\\nThis one is a " (field lead "role") ".\\nMake it land.")',
+    String.raw`(str "Pitch \"" product "\" to " audience ".\nThis one is a " (field lead "role") ".\nMake it land.")`,
   ])
     it(`round-trips ${s}`, () => expect(roundtrip(s)).toBe(canon(s)));
 });

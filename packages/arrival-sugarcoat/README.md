@@ -49,7 +49,7 @@ sugarcoatToScheme("xs.map{ it * 2 }", scheme); // → "(map (lambda (it) (* it 2
 | **`readSugarcoat(text)`**                 | Sugarcoat → Scheme AST nodes (the reader half of the lens).                                                                                                                                                                |
 | **`alignSugarcoatScheme(text)`**          | Sugarcoat ↔ Scheme span pairing for IDE features on the sweet face.                                                                                                                                                        |
 | **`paramHints` / `paramHintsSugarcoat`**  | Parameter-name inlay hints over Scheme / Sugarcoat text.                                                                                                                                                                   |
-| **`tidyBoundNames`**                      | Bound-name recovery (`it` / singular noun). Import from the names subpath: `import { tidyBoundNames } from "@here.build/arrival-sugarcoat/names"`.                                                                      |
+| **`tidyBoundNames`**                      | Bound-name recovery (`it` / singular noun). Import from the names subpath: `import { tidyBoundNames } from "@here.build/arrival-sugarcoat/names"`.                                                                         |
 
 ## The guarantee
 

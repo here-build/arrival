@@ -47,16 +47,7 @@
  */
 
 import { ANil } from "@here.build/arrival";
-import {
-  AValue,
-  APair,
-  AVoid,
-  ABool,
-  AString,
-  AVector,
-  ADict,
-  ASymbol,
-} from "@here.build/arrival/reflect-internals";
+import { AValue, APair, AVoid, ABool, AString, AVector, ADict, ASymbol } from "@here.build/arrival/reflect-internals";
 import { isAttested } from "@here.build/arrival/attestation";
 
 import { buildSlice, writeForm, defineNameOf, lastTopLevelForm, resolveReadIds } from "./analysis.js";

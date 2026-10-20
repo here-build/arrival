@@ -13,6 +13,14 @@ export interface CompiledTemplate {
   info: TemplateInfo;
 }
 
+/**
+ * Pure memo: `source` → compiled template. A compiled template is a function of its source
+ * text alone (no run state, no capability config), and `compileTemplate` is also reached from
+ * the pure `/handlebars/runtime` export with no RunContext in sight — so a per-run resource
+ * is unavailable on that path. The memo is therefore a BOUNDED LRU (insertion-ordered Map,
+ * oldest evicted), not an unbounded process-lifetime table.
+ */
+const TEMPLATE_CACHE_LIMIT = 256;
 const TEMPLATE_CACHE = new Map<string, CompiledTemplate>();
 
 /** Structural re-recognition after a scheme round-trip (borrowed box unwrap). */
@@ -29,12 +37,20 @@ export function asCompiledTemplate(v: unknown): CompiledTemplate {
 
 export function compileTemplate(source: string): CompiledTemplate {
   let tm = TEMPLATE_CACHE.get(source);
-  if (!tm) {
-    tm = {
-      render: Handlebars.compile(source, { noEscape: true }),
-      info: analyzeTemplate(source),
-    };
+  if (tm) {
+    // LRU touch: re-insert so the entry becomes the newest.
+    TEMPLATE_CACHE.delete(source);
     TEMPLATE_CACHE.set(source, tm);
+    return tm;
+  }
+  tm = {
+    render: Handlebars.compile(source, { noEscape: true }),
+    info: analyzeTemplate(source),
+  };
+  TEMPLATE_CACHE.set(source, tm);
+  if (TEMPLATE_CACHE.size > TEMPLATE_CACHE_LIMIT) {
+    const oldest = TEMPLATE_CACHE.keys().next();
+    if (!oldest.done) TEMPLATE_CACHE.delete(oldest.value);
   }
   return tm;
 }

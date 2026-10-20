@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sexpr, toSExpr, toSExprString } from "../serializer";
+import { sexpr, toSExpr, toSExprString } from "../serializer.js";
 
 describe("S-Expression Serializer", () => {
   describe("new interface with Symbol.toSExpr", () => {
@@ -20,7 +20,7 @@ describe("S-Expression Serializer", () => {
 
     it("falls back to displayName, name, or constructor.name", () => {
       class NamedClass {
-        static displayName = "DisplayedClass";
+        static readonly displayName = "DisplayedClass";
 
         [Symbol.toSExpr]() {
           return [];
@@ -142,7 +142,7 @@ describe("S-Expression Serializer", () => {
       expect(toSExprString(false)).toBe("#f");
       expect(toSExprString(null)).toBe("nil");
       expect(toSExprString(undefined)).toBe("undefined");
-      expect(toSExprString(BigInt(9007199254740991))).toBe("9007199254740991");
+      expect(toSExprString(9_007_199_254_740_991n)).toBe("9007199254740991");
     });
 
     it("handles symbols as keywords", () => {
@@ -320,7 +320,7 @@ describe("S-Expression Serializer", () => {
       }
 
       expect(toSExprString(new CodeExpr('items.filter(i => i.name === "active")'))).toBe(
-        '(expr #ts "items.filter(i => i.name === \\"active\\")")',
+        String.raw`(expr #ts "items.filter(i => i.name === \"active\")")`,
       );
     });
 

@@ -9,7 +9,7 @@ function tokens(src: string): Array<[string, string]> {
   const out: Array<[string, string]> = [];
   const state = parser.startState!(2);
   for (const line of src.split("\n")) {
-    const s = new StringStream(line, 2, 2, () => 0);
+    const s = new StringStream(line, 2, 2, 0);
     while (!s.eol()) {
       s.start = s.pos;
       const tag = parser.token(s, state);

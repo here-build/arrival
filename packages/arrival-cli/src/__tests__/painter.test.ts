@@ -88,7 +88,7 @@ describe("paintRegion", () => {
     const fakeOut: Writer = { write: (s: string) => writes.push(s) };
     const n = paintRegion(["a", "b", "c"], 2, fakeOut);
     expect(n).toBe(3);
-    expect(writes[0]).toContain("\x1b[2A"); // cursor up 2 (the PREVIOUS line count)
+    expect(writes[0]).toContain("\u001B[2A"); // cursor up 2 (the PREVIOUS line count)
     expect(writes[1]).toBe("a\nb\nc\n");
   });
 

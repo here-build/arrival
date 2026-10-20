@@ -230,7 +230,7 @@ xs[0]                     ;; ≡ (car xs)            — tight subscript
 (f [1 2])                 ;; ≡ (f (vector 1 2))    — spaced free vector
 ```
 
-R7RS `#(1 2 3)` is the *constant* vector (elements do not evaluate). It is not a
+R7RS `#(1 2 3)` is the _constant_ vector (elements do not evaluate). It is not a
 sugarcoat/syntax-forest datum: `#` is a word and `(` opens a list, so the lens
 splits them. Write `[…]` / `(vector …)` for the evaluating vector both faces share.
 

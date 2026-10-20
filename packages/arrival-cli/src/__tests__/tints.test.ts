@@ -99,20 +99,23 @@ describe("paint", () => {
 
   it("emits a truecolor SGR open (chalk-rendered), stripping back to the original text", () => {
     const painted = paint("hello", "done", "truecolor");
-    expect(painted).toMatch(/\x1b\[38;2;\d+;\d+;\d+mhello/); // chalk resets with \x1b[39m
+    // eslint-disable-next-line no-control-regex -- asserts on raw ANSI/OSC escape sequences, so the pattern must contain ESC
+    expect(painted).toMatch(/\u001B\[38;2;\d+;\d+;\d+mhello/); // chalk resets with \x1b[39m
     expect(stripAnsi(painted)).toBe("hello");
   });
 
   it("256 mode downsamples to the nearest-256 SGR form", () => {
     const painted = paint("hello", "done", "256");
-    expect(painted).toMatch(/\x1b\[38;5;\d+mhello/);
+    // eslint-disable-next-line no-control-regex -- asserts on raw ANSI/OSC escape sequences, so the pattern must contain ESC
+    expect(painted).toMatch(/\u001B\[38;5;\d+mhello/);
     expect(stripAnsi(painted)).toBe("hello");
   });
 
   it("16 mode emits a basic/bright ANSI pin (hue-preserving, not nearest-RGB)", () => {
     const painted = paint("hello", "error", "16");
     // Bright red (91) on dark ground — NOT a yellow collapse of hue 35.
-    expect(painted).toMatch(/\x1b\[91mhello/);
+    // eslint-disable-next-line no-control-regex -- asserts on raw ANSI/OSC escape sequences, so the pattern must contain ESC
+    expect(painted).toMatch(/\u001B\[91mhello/);
     expect(stripAnsi(painted)).toBe("hello");
   });
 
@@ -146,7 +149,7 @@ describe("H-K salience", () => {
 
   it("light ground solves tints darker than dark ground (polarity auto)", () => {
     setThemeCanvas({ ground: { l: 0.2, c: 0, h: 0 } });
-    const [, , bDark] = solveRgb(0.15, 35, "alarm");
+    const bDark = solveRgb(0.15, 35, "alarm")[2];
     const darkL = lightness(...solveRgb(0.15, 35, "alarm"));
     setThemeCanvas({ ground: { l: 0.85, c: 0, h: 0 } });
     const lightL = lightness(...solveRgb(0.15, 35, "alarm"));
@@ -213,7 +216,8 @@ describe("canvas attunement — ink + paper", () => {
       fg: { l: 0.8, c: 0.03, h: 90 },
     });
     const painted = paintHex("x", DARCULA.symbol, "truecolor");
-    const m = /\x1b\[38;2;(\d+);(\d+);(\d+)m/.exec(painted);
+    // eslint-disable-next-line no-control-regex -- asserts on raw ANSI/OSC escape sequences, so the pattern must contain ESC
+    const m = /\u001B\[38;2;(\d+);(\d+);(\d+)m/.exec(painted);
     expect(m).not.toBeNull();
     const h =
       oklch({

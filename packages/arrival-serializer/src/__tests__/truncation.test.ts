@@ -47,7 +47,7 @@ describe("streaming truncation (opt-in)", () => {
 
   it("a single large string is shown fine — not squeezed by structure", () => {
     // one big string, generous per-string cap, total budget it fits under → no shrink
-    const out = toSExprString("z".repeat(10000), { maxTotalChars: 5000, maxStringChars: 3000 });
+    const out = toSExprString("z".repeat(10_000), { maxTotalChars: 5000, maxStringChars: 3000 });
     expect(out).toContain("…(+7000 chars)");
   });
 

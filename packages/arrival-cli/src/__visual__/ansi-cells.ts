@@ -35,7 +35,7 @@ export function ansiToCells(line: string): Cell[] {
   let i = 0;
   let fg: Rgb | undefined;
   while (i < line.length) {
-    if (line[i] === "\x1b" && line[i + 1] === "[") {
+    if (line[i] === "\u001B" && line[i + 1] === "[") {
       const end = line.indexOf("m", i + 2);
       if (end === -1) break;
       fg = applySgr(line.slice(i + 2, end), fg);

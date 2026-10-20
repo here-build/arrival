@@ -130,8 +130,8 @@ describe("R6 — shrink-to-fit re-renders never duplicate extras or re-burn quot
     };
     const state = initialExtrasState(5);
     // A tight total budget forces multiple shrink passes over the SAME value.
-    const { core, extras, overflow } = serializeWithExtras(heavy, { extrasState: state, maxTotalChars: 1_500 });
-    expect(core.length).toBeLessThanOrEqual(1_500 + 100);
+    const { core, extras, overflow } = serializeWithExtras(heavy, { extrasState: state, maxTotalChars: 1500 });
+    expect(core.length).toBeLessThanOrEqual(1500 + 100);
     expect(extras).toEqual([{ id: "att-1", blob }]); // ONE extra — not one per shrink pass
     expect(overflow).toBe(0);
     expect(state.next).toBe(2); // numbering advanced exactly once

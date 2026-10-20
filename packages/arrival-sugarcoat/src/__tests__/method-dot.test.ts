@@ -115,9 +115,9 @@ describe("newline method chains (⏎.op)", () => {
 // §1 rewrite_L — a `\.` is a LITERAL dot in the symbol (unescaped on read, re-escaped
 // on render); a `.` before a digit (`0.5`) or a double dot (`...`) never splits.
 describe("dot-split edge cases", () => {
-  it("escaped \\. is a literal-dot symbol, round-tripping", () => {
-    expect(read("a\\.b")).toBe("a.b"); // one symbol "a.b", not (b a)
-    expect(render("a.b")).toBe("a\\.b"); // re-escaped on the way back
+  it(String.raw`escaped \. is a literal-dot symbol, round-tripping`, () => {
+    expect(read(String.raw`a\.b`)).toBe("a.b"); // one symbol "a.b", not (b a)
+    expect(render("a.b")).toBe(String.raw`a\.b`); // re-escaped on the way back
   });
   it("decimals and ellipsis are never split", () => {
     expect(read("0.5")).toBe("0.5");
@@ -171,7 +171,7 @@ describe("render: predicate method-dot with args (receiver-last)", () => {
 // ordering checks, not subject-tests — `#\2.char=?(x)` mis-reads an equality guard, so they
 // stay prefix despite ending in `?`.
 describe("render: relational predicates stay prefix (not method dots)", () => {
-  for (const s of ["(char=? #\\2 x)", "(string=? a b)", "(char<? a b)", "(char<=? a b)", "(symbol=? a b)"]) {
+  for (const s of [String.raw`(char=? #\2 x)`, "(string=? a b)", "(char<? a b)", "(char<=? a b)", "(symbol=? a b)"]) {
     it(`${s} stays prefix`, () => expect(render(s)).toBe(s));
   }
 });

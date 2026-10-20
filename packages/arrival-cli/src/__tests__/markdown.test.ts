@@ -8,8 +8,8 @@ import { stripAnsi } from "./ansi-strip.js";
 describe("topLevelString", () => {
   it("extracts + unescapes a single top-level string literal", () => {
     expect(topLevelString('"hi"')).toBe("hi");
-    expect(topLevelString('"a\\nb"')).toBe("a\nb"); // \n unescaped to a real newline
-    expect(topLevelString('"a\\tb\\"c"')).toBe('a\tb"c');
+    expect(topLevelString(String.raw`"a\nb"`)).toBe("a\nb"); // \n unescaped to a real newline
+    expect(topLevelString(String.raw`"a\tb\"c"`)).toBe('a\tb"c');
   });
   it("is null for non-strings and non-top-level", () => {
     expect(topLevelString("42")).toBeNull();
@@ -48,7 +48,8 @@ describe("renderMarkdown", () => {
   });
   it("inline bold / code emit escapes; a link becomes an OSC 8 hyperlink", () => {
     const bold = renderMarkdown("**hi**", "truecolor")[0]!;
-    expect(bold).toMatch(/\x1b\[1m/); // SGR bold
+    // eslint-disable-next-line no-control-regex -- asserts on raw ANSI/OSC escape sequences, so the pattern must contain ESC
+    expect(bold).toMatch(/\u001B\[1m/); // SGR bold
     expect(stripAnsi(bold)).toBe("hi");
     const link = renderMarkdown("[docs](https://x.test)", "truecolor")[0]!;
     expect(link).toContain("]8;;https://x.test"); // OSC 8

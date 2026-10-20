@@ -11,7 +11,7 @@ const SAMPLES = [
   '(let ((x 1) (y "two")) (+ x 3)) ; comment',
   "(cond (#t :yes) (else :no))",
   "#| block |# (require x)",
-  '(string-append "a\\"b" 42 -5)',
+  String.raw`(string-append "a\"b" 42 -5)`,
   "",
   "   \n\t ",
   "(define incomplete", // partial input mid-keystroke

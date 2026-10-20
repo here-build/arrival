@@ -19,7 +19,7 @@ import type { SchemeIdeBackend } from "../index.js";
  */
 const LS_OPTIONS = { compilerOptions: { noImplicitAny: false } };
 
-/** Boot-time audit of what the lens actually armed (DevTools: `window.__INHUMAN_SCHEME_IDE__`). */
+/** Boot-time audit of what the lens actually armed (DevTools: `window.__ARRIVAL_SCHEME_IDE__`). */
 export interface SchemeIdeAudit {
   /** When hostConfig was last written by configureSchemeIdeHost. */
   hostConfiguredAt: string | null;
@@ -85,9 +85,9 @@ const FALLBACK_POLYGLOT_PRELUDE = `(define str (lambda args (apply string-append
 
 function publishAudit(): void {
   if (typeof globalThis === "undefined") return;
-  const g = globalThis as { __INHUMAN_SCHEME_IDE__?: SchemeIdeAudit };
-  g.__INHUMAN_SCHEME_IDE__ = { ...AUDIT, canaries: [...AUDIT.canaries] };
-  console.info("[inhuman scheme-ide audit]", {
+  const g = globalThis as { __ARRIVAL_SCHEME_IDE__?: SchemeIdeAudit };
+  g.__ARRIVAL_SCHEME_IDE__ = { ...AUDIT, canaries: [...AUDIT.canaries] };
+  console.info("[arrival scheme-ide audit]", {
     transport: AUDIT.transport,
     hostMembers: AUDIT.hostMembers.length,
     hostSample: AUDIT.hostMembers.slice(0, 30),
@@ -106,7 +106,7 @@ function publishAudit(): void {
   });
 }
 
-/** Read-only snapshot of the last arming (also on `window.__INHUMAN_SCHEME_IDE__`). */
+/** Read-only snapshot of the last arming (also on `window.__ARRIVAL_SCHEME_IDE__`). */
 export function getSchemeIdeAudit(): Readonly<SchemeIdeAudit> {
   return { ...AUDIT, canaries: [...AUDIT.canaries] };
 }
@@ -192,7 +192,7 @@ export function configureSchemeIdeHost(config: {
   // Drop a backend that was started with an empty/stale roster so the next
   // useSchemeIde/loadIde reconnects with full schemePrelude (str / polyglot).
   if (idePromise !== null && ideLoadedGeneration !== hostConfigGeneration) {
-    console.info("[inhuman scheme-ide] configureSchemeIdeHost — invalidating IDE started without current roster", {
+    console.info("[arrival scheme-ide] configureSchemeIdeHost — invalidating IDE started without current roster", {
       ideLoadedGeneration,
       hostConfigGeneration,
       schemePreludeChars: prelude.length,
@@ -202,7 +202,7 @@ export function configureSchemeIdeHost(config: {
     ideLoadedGeneration = -1;
   }
   notifyHostConfig();
-  console.info("[inhuman scheme-ide] configureSchemeIdeHost", {
+  console.info("[arrival scheme-ide] configureSchemeIdeHost", {
     members: AUDIT.hostMembers.length,
     sample: AUDIT.hostMembers.slice(0, 40),
     kwargsMembers: config.host?.kwargsMembers?.length ?? 0,
@@ -274,7 +274,7 @@ export function setSchemeIdeFiles(files: Record<string, string>): void {
   projectFiles = files;
   AUDIT.projectFileCount = Object.keys(files).length;
   pushFiles?.(files);
-  console.info("[inhuman scheme-ide] project files", {
+  console.info("[arrival scheme-ide] project files", {
     count: AUDIT.projectFileCount,
     sample: Object.keys(files).slice(0, 16),
   });
@@ -300,7 +300,7 @@ export function setSchemeIdeOpenPath(path: string | null): void {
   AUDIT.openPath = path;
   pushOpenPath?.(path);
   if (path !== null) {
-    console.info("[inhuman scheme-ide] open path for require", path);
+    console.info("[arrival scheme-ide] open path for require", path);
   }
 }
 
@@ -365,11 +365,11 @@ function loadIde(): Promise<SchemeIdeBackend | null> {
     // snapshot includes host members + schemePrelude (polyglot `str` for sugarcoat).
     if (!hostConfigSeen) {
       AUDIT.loadBeforeHostConfig = true;
-      console.warn("[inhuman scheme-ide] loadIde before configureSchemeIdeHost — waiting up to 8s for roster");
+      console.warn("[arrival scheme-ide] loadIde before configureSchemeIdeHost — waiting up to 8s for roster");
       await waitForHostConfig(8000);
       if (!hostConfigSeen) {
         console.warn(
-          "[inhuman scheme-ide] roster still missing after wait — using FALLBACK_POLYGLOT_PRELUDE (str) + empty host",
+          "[arrival scheme-ide] roster still missing after wait — using FALLBACK_POLYGLOT_PRELUDE (str) + empty host",
         );
       }
     }
@@ -389,7 +389,7 @@ function loadIde(): Promise<SchemeIdeBackend | null> {
     AUDIT.schemePreludeHead = connectWith.schemePrelude.slice(0, 500);
     AUDIT.hostMembers = [...(connectWith.host?.members ?? [])];
     AUDIT.hostPreludeChars = connectWith.host?.prelude?.length ?? 0;
-    console.info("[inhuman scheme-ide] loadIde connecting", {
+    console.info("[arrival scheme-ide] loadIde connecting", {
       hostMembers: connectWith.host?.members?.length ?? 0,
       schemePreludeChars: connectWith.schemePrelude?.length ?? 0,
       schemePreludeHasStr: /\(define str\b/.test(connectWith.schemePrelude),

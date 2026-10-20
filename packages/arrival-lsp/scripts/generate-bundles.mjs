@@ -49,6 +49,7 @@ const seen = new Set();
 const queue = [ROOT_LIB];
 while (queue.length > 0) {
   const name = queue.shift();
+  if (name === undefined) break;
   if (seen.has(name)) continue;
   seen.add(name);
   libNamesInOrder.push(name);
@@ -60,10 +61,9 @@ while (queue.length > 0) {
 
 writeFileSync(
   path.join(srcDir, "ts-libs.generated.ts"),
-  HEADER(
+  `${HEADER(
     `The ${ROOT_LIB} reference-chain closure of the workspace's pinned typescript (${require("typescript").version}). Contents are loaded directly from the typescript package (Node: fs; browser: Vite ?raw) and stripped of JS globals. Regenerate if you change the root lib or the TS version.`,
-  ) +
-    `export const TS_DEFAULT_LIB = ${JSON.stringify(ROOT_LIB)};\n\n` +
+  )}export const TS_DEFAULT_LIB = ${JSON.stringify(ROOT_LIB)};\n\n` +
     `export const TS_LIB_FILE_NAMES: readonly string[] = [\n${libNamesInOrder.map((n) => `  ${JSON.stringify(n)},`).join("\n")}\n];\n`,
 );
 
@@ -72,15 +72,15 @@ writeFileSync(
 // One import per closure file. Vite resolves each through node resolution and
 // (because this package's own `vite build` bundles the browser/worker entries)
 // inlines the content — dist ships strings, no `?raw` specifiers, no glob.
-const ident = (name) => `raw_${name.replaceAll(/[^a-zA-Z0-9]+/g, "_")}`;
+const ident = (name) => `raw_${name.replaceAll(/[^a-z0-9]+/gi, "_")}`;
 
 writeFileSync(
   path.join(srcDir, "ts-libs-raw.generated.ts"),
-  HEADER(
-    `Explicit \`typescript/lib/*?raw\` imports for the ${ROOT_LIB} closure (Vite 7 bans bare-package GLOBS everywhere; bare ?raw IMPORTS stay legal). Inlined by this package's vite build — consumers see plain strings.`,
-  ) +
-    libNamesInOrder.map((n) => `import ${ident(n)} from "typescript/lib/${n}?raw";`).join("\n") +
-    "\n\n" +
+  `${
+    HEADER(
+      `Explicit \`typescript/lib/*?raw\` imports for the ${ROOT_LIB} closure (Vite 7 bans bare-package GLOBS everywhere; bare ?raw IMPORTS stay legal). Inlined by this package's vite build — consumers see plain strings.`,
+    ) + libNamesInOrder.map((n) => `import ${ident(n)} from "typescript/lib/${n}?raw";`).join("\n")
+  }\n\n` +
     `export const TS_LIB_RAW: Readonly<Record<string, string>> = {\n${libNamesInOrder
       .map((n) => `  ${JSON.stringify(n)}: ${ident(n)},`)
       .join("\n")}\n};\n`,

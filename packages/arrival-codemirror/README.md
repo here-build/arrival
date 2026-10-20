@@ -60,6 +60,7 @@ export function App() {
 | Export                                         |                                                                               |
 | ---------------------------------------------- | ----------------------------------------------------------------------------- |
 | `schemeSugarcoat()`                            | Language mode: Scheme _and_ Sugarcoat. Highlight _tags_ only — bring a theme. |
+| `./language`                                   | That mode alone, without the IDE barrel.                                      |
 | `schemeStructural()`                           | Paredit on the Scheme lens. Real reader + verify-reparse net.                 |
 | `schemeIde(backend)`                           | Lint, hover, completion, goto, semantic highlight, **and ghost**.             |
 | `paramHintsExtension("scheme" \| "sugarcoat")` | Inlay parameter-name hints.                                                   |

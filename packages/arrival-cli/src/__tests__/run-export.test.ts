@@ -26,6 +26,7 @@ describe("exportRun", () => {
 
   it("is plain JSON — round-trips through stringify/parse unchanged", async () => {
     const out = exportRun(await traced("(+ 40 2)"));
+    // eslint-disable-next-line unicorn/prefer-structured-clone -- the test is precisely that the value survives a JSON round-trip (structuredClone would not prove it)
     expect(JSON.parse(JSON.stringify(out))).toEqual(out);
   });
 
