@@ -8,7 +8,9 @@ import {
   edgeLabelKey,
   type LaidOutGraph,
   portIds,
+  type Point,
   portKey,
+  type RenderEdge,
   type RenderFrame,
   type RenderGraph,
   type RenderNode,
@@ -139,51 +141,108 @@ describe("layout edge cases", () => {
   });
 });
 
-describe("layout wrapping", () => {
-  it("wraps a long seq chain instead of laying it out as one row", async () => {
+/** The siblings under the lowest common ancestor of an edge's endpoints; undefined when one holds the other. */
+const lifted = (g: RenderGraph, e: RenderGraph["edges"][number]): [RenderNode, RenderNode] | undefined => {
+  const byId = new Map(g.nodes.map((n) => [n.id, n]));
+  const chain = (id: string): RenderNode[] => {
+    const out: RenderNode[] = [];
+    for (let cur = byId.get(id); cur; cur = cur.parent === null ? undefined : byId.get(cur.parent)) out.unshift(cur);
+    return out;
+  };
+  const [a, b] = [chain(e.from.node), chain(e.to.node)];
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  return i === a.length || i === b.length ? undefined : [a[i]!, b[i]!];
+};
+
+describe.each(Object.entries(FIXTURES))("columns(%s)", (_name, graph) => {
+  it("sends every routed wire left to right: strictly across siblings, never back at a frame's own port", async () => {
+    const laid = await layout(graph, sizesOf(graph), engine);
+    const page = new Set(graph.nodes.filter((n) => n.kind === "frame" && n.parent === null).map((n) => n.id));
+    for (const e of graph.edges.filter((x) => x.kind !== "recur")) {
+      if (page.has(e.from.node) || page.has(e.to.node)) continue;
+      const pts = laid.edges.get(e.id)!;
+      expect(pts.at(-1)!.x, `${e.id} ends left of its start`).toBeGreaterThanOrEqual(pts[0]!.x);
+      const sibs = lifted(graph, e);
+      if (!sibs) continue;
+      const [from, to] = sibs.map((n) => laid.boxes.get(n.id)!) as [Box, Box];
+      expect(to.x, `${e.id}: ${sibs[1].id} not after ${sibs[0].id}`).toBeGreaterThanOrEqual(from.x + from.width);
+    }
+  });
+});
+
+describe("columns", () => {
+  const step = (id: string, parent: string, i: number): RenderStep => ({
+    kind: "step",
+    id,
+    parent,
+    span: `s@${i + 1}:1`,
+    symbol: "s",
+    instance: { key: `s@${i + 1}:1`, ordinals: [], span: `s@${i + 1}:1` },
+    input: [],
+    output: { hasValue: false },
+    state: "potential",
+    ports: [
+      { id: portIds.arg(0), side: "in" },
+      { id: portIds.out, side: "out" },
+    ],
+  });
+  const seq = (n: number): RenderGraph => ({
+    nodes: [
+      {
+        kind: "frame",
+        id: "seq",
+        parent: null,
+        span: "seq",
+        frame: "seq",
+        label: "program",
+        state: "potential",
+        ports: [],
+      },
+      ...Array.from({ length: n }, (_, i) => step(`s${i}`, "seq", i)),
+    ],
+    edges: [],
+    diagnostics: { unplacedInvocations: 0, droppedEdges: 0, notes: [] },
+  });
+
+  it("lays a long seq chain out as one row, left to right", async () => {
     const n = 30;
-    const g: RenderGraph = {
-      nodes: [
-        {
-          kind: "frame",
-          id: "seq",
-          parent: null,
-          span: "seq",
-          frame: "seq",
-          label: "program",
-          state: "potential",
-          ports: [],
-        },
-        ...Array.from({ length: n }, (_, i) => ({
-          kind: "step" as const,
-          id: `s${i}`,
-          parent: "seq",
-          span: `s@${i + 1}:1`,
-          symbol: "s",
-          instance: { key: `s@${i + 1}:1`, ordinals: [], span: `s@${i + 1}:1` },
-          input: [],
-          output: { hasValue: false },
-          state: "potential" as const,
-          ports: [
-            { id: portIds.arg(0), side: "in" as const },
-            { id: portIds.out, side: "out" as const },
-          ],
-        })),
-      ],
-      edges: Array.from({ length: n - 1 }, (_, i) => ({
-        id: `o${i}`,
-        from: { node: `s${i}`, port: portIds.out },
-        to: { node: `s${i + 1}`, port: portIds.arg(0) },
-        kind: "order" as const,
-      })),
-      diagnostics: { unplacedInvocations: 0, droppedEdges: 0, notes: [] },
-    };
+    const g = seq(n);
+    g.edges = Array.from({ length: n - 1 }, (_, i) => ({
+      id: `o${i}`,
+      from: { node: `s${i}`, port: portIds.out },
+      to: { node: `s${i + 1}`, port: portIds.arg(0) },
+      kind: "order" as const,
+    }));
     const laid = await layout(g, sizesOf(g), engine);
-    expect(Number.isFinite(laid.width) && Number.isFinite(laid.height)).toBe(true);
-    expect(laid.width).toBeLessThan(2 * laid.height);
-    for (const b of laid.boxes.values()) expect([b.x, b.y, b.width, b.height].every(Number.isFinite)).toBe(true);
-    for (const pts of laid.edges.values())
-      expect(pts.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))).toBe(true);
+    for (let i = 0; i < n - 1; i++) {
+      const [a, b] = [laid.boxes.get(`s${i}`)!, laid.boxes.get(`s${i + 1}`)!];
+      expect(b.x, `s${i + 1}`).toBeGreaterThan(a.x + a.width);
+      expect(Math.abs(b.y - a.y), `s${i + 1} row`).toBeLessThan(a.height);
+    }
+    expect(laid.width).toBeGreaterThan(laid.height * 4);
+  });
+
+  it("puts the successor of an order edge between independent steps in a later column", async () => {
+    const g = seq(3);
+    g.edges = [
+      { id: "o", from: { node: "s0", port: portIds.order }, to: { node: "s2", port: portIds.order }, kind: "order" },
+    ];
+    const laid = await layout(g, sizesOf(g), engine);
+    const [a, b, c] = ["s0", "s1", "s2"].map((id) => laid.boxes.get(id)!) as [Box, Box, Box];
+    expect(c.x).toBeGreaterThan(a.x + a.width);
+    // the unrelated middle step has no predecessor: it shares the first column
+    expect(b.x).toBeCloseTo(a.x, 0);
+  });
+
+  it("does not crash on a cycle among non-recur edges", async () => {
+    const g = seq(2);
+    g.edges = [
+      { id: "ab", from: { node: "s0", port: portIds.out }, to: { node: "s1", port: portIds.arg(0) }, kind: "data" },
+      { id: "ba", from: { node: "s1", port: portIds.out }, to: { node: "s0", port: portIds.arg(0) }, kind: "data" },
+    ];
+    const laid = await layout(g, sizesOf(g), engine);
+    expect(laid.boxes.size).toBe(3);
   });
 });
 
@@ -453,6 +512,139 @@ describe("the loop return", () => {
   });
 });
 
+describe("a loop return's label", () => {
+  const g: RenderGraph = {
+    nodes: [
+      area("root", null, "seq"),
+      area("L", "root", "loop", {
+        ports: [
+          { id: portIds.param("attempt"), side: "in", label: "attempt" },
+          { id: portIds.param("suspects"), side: "in", label: "suspects" },
+          OUT,
+        ],
+      }),
+      leafStep("step", "L", 2),
+    ],
+    edges: [
+      {
+        id: "count",
+        from: { node: "L", port: portIds.param("attempt") },
+        to: { node: "L", port: portIds.param("attempt") },
+        kind: "recur",
+        expr: "(+ attempt 1)",
+      },
+      {
+        id: "again",
+        from: { node: "step", port: "out" },
+        to: { node: "L", port: portIds.param("suspects") },
+        kind: "recur",
+        expr: "(rest suspects)",
+      },
+    ],
+    diagnostics: CLEAN,
+  };
+  const sizes = (stepWidth = 320): Map<string, Size> =>
+    new Map([
+      ...[...sized(g)].map(([id, s]): [string, Size] => [id, id === "step" ? { ...s, width: stepWidth } : s]),
+      ...g.edges.map((e): [string, Size] => [edgeLabelKey(e.id), { width: 96, height: 18 }]),
+    ]);
+
+  it("sits on the contour's bottom run, clear of every port label and ring, and of its sibling return", async () => {
+    const laid = await layout(g, sizes(), engine);
+    const L = laid.boxes.get("L")!;
+    const pills = ["count", "again"].map((id) => laid.labels.get(id)!);
+    const portLabels = g.nodes
+      .flatMap((n) => (n.kind === "frame" ? n.ports.map((p) => ({ n, p })) : []))
+      .filter(({ p }) => p.label !== undefined)
+      .map(({ n, p }) => ({ at: laid.ports.get(portKey(n.id, p.id))!, room: p.label!.length * 6.7 + 5 }));
+    for (const pill of pills) {
+      expect(pill.x, "inside the border").toBeGreaterThan(L.x);
+      expect(pill.x + pill.width, "inside the border").toBeLessThan(L.x + L.width);
+      expect(Math.abs(pill.y + pill.height / 2 - (L.y + L.height)), "on the bottom run").toBeLessThan(10);
+      for (const { at, room } of portLabels) {
+        const clear =
+          pill.y + pill.height < at.y - 12 ||
+          pill.y > at.y + 4 ||
+          pill.x + pill.width < at.x - room ||
+          pill.x > at.x + room;
+        expect(clear, "a port label's room").toBe(true);
+      }
+      for (const p of laid.ports.values()) {
+        const hit = p.x > pill.x && p.x < pill.x + pill.width && p.y > pill.y && p.y < pill.y + pill.height;
+        expect(hit, "a ring").toBe(false);
+      }
+    }
+    const [a, b] = pills as [Box, Box];
+    const apart = a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
+    expect(apart, "the two returns' pills").toBe(true);
+  });
+
+  it("hangs under a run too short for both pills rather than overlap", async () => {
+    const laid = await layout(g, sizes(140), engine);
+    const [a, b] = ["count", "again"].map((id) => laid.labels.get(id)!) as [Box, Box];
+    const apart = a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
+    expect(apart).toBe(true);
+  });
+
+  it("steps aside along the run for whatever is in the way, the same way every time", async () => {
+    const [x, y] = [await layout(g, sizes(), engine), await layout(g, sizes(), engine)];
+    expect(x.labels.get("count")).toEqual(y.labels.get("count"));
+    expect(x.labels.get("again")).toEqual(y.labels.get("again"));
+  });
+});
+
+describe("a frame's out port", () => {
+  // `top` is a chain that feeds nothing, above the chain `a → b` whose `b` feeds `M`'s out.
+  const g: RenderGraph = {
+    nodes: [
+      area("root", null, "seq"),
+      area("M", "root", "par", { ports: [OUT] }),
+      leafStep("top1", "M", 0),
+      leafStep("top2", "M"),
+      leafStep("a", "M", 0),
+      leafStep("b", "M"),
+      leafStep("after", "root"),
+    ],
+    edges: [
+      { id: "t", from: { node: "top1", port: "out" }, to: { node: "top2", port: portIds.arg(0) }, kind: "data" },
+      { id: "ab", from: { node: "a", port: "out" }, to: { node: "b", port: portIds.arg(0) }, kind: "data" },
+      { id: "feed", from: { node: "b", port: "out" }, to: { node: "M", port: "out" }, kind: "data" },
+      { id: "next", from: { node: "M", port: "out" }, to: { node: "after", port: portIds.arg(0) }, kind: "data" },
+    ],
+    diagnostics: CLEAN,
+  };
+
+  it("sits at the height of the wire that feeds it, not at a corner of the border", async () => {
+    const laid = await layout(g, sized(g), engine);
+    const port = laid.ports.get(portKey("M", "out"))!;
+    const feed = laid.edges.get("feed")!;
+    const M = laid.boxes.get("M")!;
+    expect(port.x).toBeCloseTo(M.x + M.width);
+    expect(port.y).toBeCloseTo(feed[0]!.y);
+    expect(port.y).toBeGreaterThanOrEqual(Math.min(...feed.map((p) => p.y)));
+    expect(port.y).toBeLessThanOrEqual(Math.max(...feed.map((p) => p.y)));
+    expect(feed.at(-1)).toEqual(port);
+    // and the wire out of it starts there
+    expect(laid.edges.get("next")![0]).toEqual(port);
+  });
+
+  it("with several feeders sits within the span of their rows", async () => {
+    const two: RenderGraph = {
+      ...g,
+      edges: [
+        ...g.edges,
+        { id: "feed2", from: { node: "top2", port: "out" }, to: { node: "M", port: "out" }, kind: "data" },
+      ],
+    };
+    const laid = await layout(two, sized(two), engine);
+    const port = laid.ports.get(portKey("M", "out"))!;
+    const rows = ["feed", "feed2"].map((id) => laid.edges.get(id)![0]!.y);
+    expect(port.y).toBeGreaterThanOrEqual(Math.min(...rows) - 0.5);
+    expect(port.y).toBeLessThanOrEqual(Math.max(...rows) + 0.5);
+    for (const id of ["feed", "feed2"]) expect(laid.edges.get(id)!.at(-1)).toEqual(port);
+  });
+});
+
 describe("lanes at depth", () => {
   it("keeps authored lane order in a condition inside a loop body, an empty lane included", async () => {
     const g: RenderGraph = {
@@ -542,5 +734,541 @@ describe("pathText", () => {
   it("prints a projection path the way the program reads it", () => {
     expect(pathText([{ field: ":url" }])).toBe(".url");
     expect(pathText([{ field: "items" }, { index: 2 }, { car: true }])).toBe(".items[2][0]");
+  });
+});
+
+describe("a bus: one value feeding several consumers is one line that forks", () => {
+  const edge = (id: string, from: string, to: string, arg: number, extra: Partial<RenderEdge> = {}): RenderEdge => ({
+    id,
+    from: { node: from, port: portIds.out },
+    to: { node: to, port: portIds.arg(arg) },
+    kind: "data",
+    ...extra,
+  });
+  // `s` feeds a (column 1), b (column 2) and c (column 3); a → b → c is the ladder that makes the columns.
+  const ladder: RenderGraph = {
+    nodes: [
+      area("root", null, "seq"),
+      leafStep("s", "root", 0),
+      leafStep("a", "root"),
+      leafStep("b", "root", 2),
+      leafStep("c", "root", 2),
+    ],
+    edges: [
+      edge("s-a", "s", "a", 0),
+      edge("a-b", "a", "b", 0),
+      edge("b-c", "b", "c", 0),
+      edge("s-b", "s", "b", 1, { path: [{ field: ":subject" }] }),
+      edge("s-c", "s", "c", 1, { path: [{ field: ":id" }] }),
+    ],
+    diagnostics: CLEAN,
+  };
+  const withLabels = (g: RenderGraph): Map<string, Size> =>
+    new Map([
+      ...sized(g),
+      ...g.edges.filter((e) => e.path).map((e): [string, Size] => [edgeLabelKey(e.id), { width: 60, height: 14 }]),
+    ]);
+  const forked = ["s-a", "s-b", "s-c"];
+  const alongTo = (pts: readonly Point[], p: Point): number => {
+    let run = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const len = Math.hypot(pts[i]!.x - pts[i - 1]!.x, pts[i]!.y - pts[i - 1]!.y);
+      if (segDist(p, pts[i - 1]!, pts[i]!) < 0.75) return run + Math.hypot(p.x - pts[i - 1]!.x, p.y - pts[i - 1]!.y);
+      run += len;
+    }
+    return Number.NaN;
+  };
+
+  it("draws ONE trunk: the polylines share their prefix, one horizontal track between the first and the last fork", async () => {
+    const laid = await layout(ladder, withLabels(ladder), engine);
+    const [a, b, c] = forked.map((id) => laid.edges.get(id)!) as [Point[], Point[], Point[]];
+    const start = laid.ports.get(portKey("s", portIds.out))!;
+    for (const pts of [a, b, c]) expect(near(pts[0]!, start)).toBe(true);
+    // the branch to the farthest consumer runs along the trunk at least as far as every other fork
+    const forks = laid.bus.get("s-c")!;
+    expect(forks.length).toBeGreaterThanOrEqual(2);
+    for (const f of forks) {
+      const on = [a, b, c].filter((pts) => !Number.isNaN(alongTo(pts, f)));
+      expect(on.length, `fork ${f.x},${f.y} sits on at least two branches`).toBeGreaterThanOrEqual(2);
+    }
+    const [x0, x1] = [Math.min(...forks.map((f) => f.x)), Math.max(...forks.map((f) => f.x))];
+    const tracks = new Set<number>();
+    for (const pts of [a, b, c])
+      for (let i = 1; i < pts.length - 1; i++) {
+        const [p, q] = [pts[i - 1]!, pts[i]!];
+        if (Math.abs(p.y - q.y) < 0.5 && Math.max(p.x, q.x) > x0 + 1 && Math.min(p.x, q.x) < x1 - 1)
+          tracks.add(Math.round(p.y));
+      }
+    expect(tracks.size).toBe(1);
+  });
+
+  it("exposes the fork points, and tells each edge which bus it is a branch of", async () => {
+    const laid = await layout(ladder, withLabels(ladder), engine);
+    expect(laid.forks.length).toBeGreaterThanOrEqual(2);
+    for (const id of forked) expect(laid.bus.get(id), id).toBeDefined();
+    expect(laid.bus.has("a-b")).toBe(false);
+    for (const f of laid.bus.get("s-a")!) expect(laid.forks.some((g) => near(f, g))).toBe(true);
+  });
+
+  it("hangs a label on its own branch, after the fork, never the shared trunk", async () => {
+    const laid = await layout(ladder, withLabels(ladder), engine);
+    for (const id of ["s-b", "s-c"]) {
+      const box = laid.labels.get(id);
+      expect(box, id).toMatchObject({ width: 60, height: 14 });
+      const [pts, forks] = [laid.edges.get(id)!, laid.bus.get(id)!];
+      const centre = { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 };
+      const dist = Math.min(...pts.slice(1).map((q, i) => segDist(centre, pts[i]!, q)));
+      expect(dist, `${id} label beside its route`).toBeLessThan(box!.width / 2 + 16);
+      // not left of the first fork: the part of the route before it belongs to every branch
+      expect(centre.x + box!.width / 2, id).toBeGreaterThan(Math.min(...forks.map((f) => f.x)));
+    }
+    expect(laid.labels.has("s-a")).toBe(false);
+  });
+
+  it("keeps the junctions out of the result", async () => {
+    const laid = await layout(ladder, withLabels(ladder), engine);
+    const ids = new Set(ladder.nodes.map((n) => n.id));
+    expect([...laid.boxes.keys()].filter((k) => !ids.has(k))).toEqual([]);
+    expect([...laid.ports.keys()].filter((k) => !ids.has(k.split("::")[0]!))).toEqual([]);
+    expect([...laid.edges.keys()].filter((k) => !ladder.edges.some((e) => e.id === k))).toEqual([]);
+    expect([...laid.labels.keys()].filter((k) => !ladder.edges.some((e) => e.id === k))).toEqual([]);
+  });
+
+  it("costs no column: the junctions sit in the columns the chain already has", async () => {
+    const chain: RenderGraph = { ...ladder, edges: ladder.edges.filter((e) => !["s-b", "s-c"].includes(e.id)) };
+    const [bus, plain] = await Promise.all([
+      layout(ladder, sized(ladder), engine),
+      layout(chain, sized(chain), engine),
+    ]);
+    expect(bus.width).toBeLessThanOrEqual(plain.width + 1);
+  });
+
+  it("is deterministic: two layouts agree on every route and fork", async () => {
+    const [x, y] = await Promise.all([
+      layout(ladder, withLabels(ladder), engine),
+      layout(ladder, withLabels(ladder), engine),
+    ]);
+    expect([...y.edges]).toEqual([...x.edges]);
+    expect(y.forks).toEqual(x.forks);
+  });
+
+  it("leaves a single-consumer wire out of every bus", async () => {
+    const g: RenderGraph = { ...ladder, edges: ladder.edges.slice(0, 3) };
+    const laid = await layout(g, sized(g), engine);
+    expect(laid.forks).toEqual([]);
+    expect(laid.bus.size).toBe(0);
+  });
+
+  it("forks off a frame's own port: a param feeding several children is one line", async () => {
+    const g: RenderGraph = {
+      nodes: [
+        area("root", null, "seq"),
+        leafStep("src", "root", 0),
+        area("map", "root", "par", { ports: [{ id: portIds.param("x"), side: "in", label: "x" }] }),
+        leafStep("p", "map"),
+        leafStep("q", "map", 2),
+        leafStep("r", "map", 2),
+      ],
+      edges: [
+        { id: "in", from: { node: "src", port: "out" }, to: { node: "map", port: portIds.param("x") }, kind: "data" },
+        {
+          id: "x-p",
+          from: { node: "map", port: portIds.param("x") },
+          to: { node: "p", port: portIds.arg(0) },
+          kind: "data",
+        },
+        edge("p-q", "p", "q", 0),
+        edge("q-r", "q", "r", 0),
+        {
+          id: "x-q",
+          from: { node: "map", port: portIds.param("x") },
+          to: { node: "q", port: portIds.arg(1) },
+          kind: "data",
+        },
+        {
+          id: "x-r",
+          from: { node: "map", port: portIds.param("x") },
+          to: { node: "r", port: portIds.arg(1) },
+          kind: "data",
+        },
+      ],
+      diagnostics: CLEAN,
+    };
+    const laid = await layout(g, sized(g), engine);
+    for (const id of ["x-p", "x-q", "x-r"]) expect(laid.bus.has(id), id).toBe(true);
+    const ids = new Set(g.nodes.map((n) => n.id));
+    expect([...laid.boxes.keys()].filter((k) => !ids.has(k))).toEqual([]);
+    for (const id of ["x-p", "x-q", "x-r"]) {
+      const pts = laid.edges.get(id)!;
+      expect(near(pts[0]!, laid.ports.get(portKey("map", portIds.param("x")))!), id).toBe(true);
+      expect(near(pts.at(-1)!, laid.ports.get(portKey(id.slice(2), portIds.arg(id === "x-p" ? 0 : 1)))!), id).toBe(
+        true,
+      );
+    }
+  });
+});
+
+describe("a transform sits as late as it can", () => {
+  const transform = (id: string, parent: string, ins: number): RenderNode => ({
+    kind: "transform",
+    id,
+    parent,
+    op: "list",
+    text: `(${id})`,
+    state: "potential",
+    hasValue: false,
+    ports: [...Array.from({ length: ins }, (_, k): RenderPort => ({ id: `in:${k}`, side: "in" })), OUT],
+  });
+  const data = (id: string, from: [string, string], to: [string, string]): RenderEdge => ({
+    id,
+    from: { node: from[0], port: from[1] },
+    to: { node: to[0], port: to[1] },
+    kind: "data",
+  });
+
+  it("is the column just before its consumer, not right after its inputs", async () => {
+    const g: RenderGraph = {
+      nodes: [
+        area("root", null, "seq"),
+        leafStep("a", "root", 0),
+        leafStep("b", "root"),
+        leafStep("c", "root"),
+        transform("t", "root", 1),
+        leafStep("d", "root", 2),
+      ],
+      edges: [
+        data("a-b", ["a", "out"], ["b", portIds.arg(0)]),
+        data("b-c", ["b", "out"], ["c", portIds.arg(0)]),
+        data("c-d", ["c", "out"], ["d", portIds.arg(0)]),
+        data("a-t", ["a", "out"], ["t", "in:0"]),
+        data("t-d", ["t", "out"], ["d", portIds.arg(1)]),
+      ],
+      diagnostics: CLEAN,
+    };
+    const laid = await layout(g, sized(g), engine);
+    const [a, b, c, t, d] = ["a", "b", "c", "t", "d"].map((id) => laid.boxes.get(id)!) as [Box, Box, Box, Box, Box];
+    expect(t.x).toBeGreaterThanOrEqual(c.x - 1);
+    expect(t.x).toBeGreaterThan(b.x + b.width);
+    expect(d.x).toBeGreaterThan(t.x + t.width);
+    expect(a.x + a.width).toBeLessThan(t.x);
+  });
+
+  it("settles a chain: a transform feeding a transform waits for the latter", async () => {
+    const g: RenderGraph = {
+      nodes: [
+        area("root", null, "seq"),
+        leafStep("a", "root", 0),
+        leafStep("b", "root"),
+        leafStep("c", "root"),
+        transform("t1", "root", 1),
+        transform("t2", "root", 1),
+        leafStep("d", "root", 2),
+      ],
+      edges: [
+        data("a-b", ["a", "out"], ["b", portIds.arg(0)]),
+        data("b-c", ["b", "out"], ["c", portIds.arg(0)]),
+        data("c-d", ["c", "out"], ["d", portIds.arg(0)]),
+        data("a-t1", ["a", "out"], ["t1", "in:0"]),
+        data("t1-t2", ["t1", "out"], ["t2", "in:0"]),
+        data("t2-d", ["t2", "out"], ["d", portIds.arg(1)]),
+      ],
+      diagnostics: CLEAN,
+    };
+    const laid = await layout(g, sized(g), engine);
+    const [b, c, t1, t2, d] = ["b", "c", "t1", "t2", "d"].map((id) => laid.boxes.get(id)!) as [Box, Box, Box, Box, Box];
+    expect(t2.x).toBeGreaterThanOrEqual(c.x - 1);
+    expect(t1.x).toBeGreaterThan(b.x - 1);
+    expect(t2.x).toBeGreaterThan(t1.x + t1.width);
+    expect(d.x).toBeGreaterThan(t2.x + t2.width);
+  });
+});
+
+/** Collinear overlap of two polylines, in px: how far a segment of `a` lies on a segment of `b`. */
+const overlapLen = (a: readonly Point[], b: readonly Point[]): number => {
+  let sum = 0;
+  for (let i = 1; i < a.length; i++)
+    for (let j = 1; j < b.length; j++) {
+      const [p, q, r, s] = [a[i - 1]!, a[i]!, b[j - 1]!, b[j]!];
+      if (Math.abs(p.y - q.y) < 0.5 && Math.abs(r.y - s.y) < 0.5 && Math.abs(p.y - r.y) < 0.5)
+        sum += Math.max(
+          0,
+          Math.min(Math.max(p.x, q.x), Math.max(r.x, s.x)) - Math.max(Math.min(p.x, q.x), Math.min(r.x, s.x)),
+        );
+      if (Math.abs(p.x - q.x) < 0.5 && Math.abs(r.x - s.x) < 0.5 && Math.abs(p.x - r.x) < 0.5)
+        sum += Math.max(
+          0,
+          Math.min(Math.max(p.y, q.y), Math.max(r.y, s.y)) - Math.max(Math.min(p.y, q.y), Math.min(r.y, s.y)),
+        );
+    }
+  return sum;
+};
+
+/** The part of `a` after it first leaves `b`: its polyline from the first segment not lying on `b`. */
+const afterLeaving = (a: readonly Point[], b: readonly Point[]): Point[] => {
+  const onB = (p: Point): boolean => b.some((q, k) => k > 0 && segDist(p, b[k - 1]!, q) < 0.75);
+  for (let i = 1; i < a.length; i++)
+    if (!onB(a[i]!) || !onB({ x: (a[i]!.x + a[i - 1]!.x) / 2, y: (a[i]!.y + a[i - 1]!.y) / 2 })) return a.slice(i - 1);
+  return [];
+};
+
+describe("a bus enters a child area once", () => {
+  const data = (id: string, from: string, to: string, arg: number): RenderEdge => ({
+    id,
+    from: { node: from, port: portIds.out },
+    to: { node: to, port: portIds.arg(arg) },
+    kind: "data",
+  });
+  // `s` feeds x1 (column 1) and p, q, r inside `F`, which `x2 → p` pushes to column 3: the consumers in
+  // `F` all lift to F's one column.
+  const g: RenderGraph = {
+    nodes: [
+      area("root", null, "seq"),
+      leafStep("s", "root", 0),
+      leafStep("x1", "root"),
+      leafStep("x2", "root"),
+      area("F", "root", "par"),
+      leafStep("p", "F", 2),
+      leafStep("q", "F"),
+      leafStep("r", "F"),
+    ],
+    edges: [
+      data("s-x1", "s", "x1", 0),
+      data("x1-x2", "x1", "x2", 0),
+      data("x2-p", "x2", "p", 0),
+      data("s-p", "s", "p", 1),
+      data("s-q", "s", "q", 0),
+      data("s-r", "s", "r", 0),
+    ],
+    diagnostics: CLEAN,
+  };
+
+  it("crosses the area's west border ONCE for all its consumers, and forks inside", async () => {
+    const laid = await layout(g, sized(g), engine);
+    const F = laid.boxes.get("F")!;
+    expect(laid.crossings).toHaveLength(1);
+    const ring = laid.crossings[0]!;
+    expect(ring.x).toBeCloseTo(F.x);
+    expect(ring.y).toBeGreaterThan(F.y);
+    expect(ring.y).toBeLessThan(F.y + F.height);
+    for (const id of ["s-p", "s-q", "s-r"]) {
+      const pts = laid.edges.get(id)!;
+      expect(
+        pts.slice(1).some((q, i) => segDist(ring, pts[i]!, q) < 0.75),
+        `${id} passes the ring`,
+      ).toBe(true);
+      expect(near(pts.at(-1)!, laid.ports.get(portKey(id.slice(2), portIds.arg(id === "s-p" ? 1 : 0)))!), id).toBe(
+        true,
+      );
+    }
+    // only the junction-free ports of the real graph remain
+    const ids = new Set(g.nodes.map((n) => n.id));
+    expect([...laid.ports.keys()].filter((k) => !ids.has(k.split("::")[0]!))).toEqual([]);
+    expect([...laid.boxes.keys()].filter((k) => !ids.has(k))).toEqual([]);
+  });
+
+  it("runs into the ring along one line: the branches share the whole run before it", async () => {
+    const laid = await layout(g, sized(g), engine);
+    const ring = laid.crossings[0]!;
+    // every branch to F runs through the ring on the same horizontal line
+    const runs = ["s-p", "s-q", "s-r"].map((id) => {
+      const pts = laid.edges.get(id)!;
+      const k = pts.findIndex((p, i) => i > 0 && segDist(ring, pts[i - 1]!, p) < 0.75);
+      return pts.slice(0, k + 1).at(-2)!.y;
+    });
+    expect(new Set(runs.map((y) => Math.round(y))).size).toBe(1);
+  });
+
+  it("enters a condition per lane: a ring on each arm that holds 2+ consumers, none on the others", async () => {
+    const c: RenderGraph = {
+      nodes: [
+        area("root", null, "seq"),
+        leafStep("s", "root", 0),
+        leafStep("x", "root"),
+        area("B", "root", "branch", { ports: [{ id: portIds.control, side: "control" }, OUT] }),
+        area("A0", "B", "arm"),
+        leafStep("p", "A0", 2),
+        leafStep("q", "A0"),
+        area("A1", "B", "arm"),
+        leafStep("r", "A1"),
+      ],
+      edges: [
+        data("s-x", "s", "x", 0),
+        { id: "c", from: { node: "x", port: "out" }, to: { node: "B", port: "control" }, kind: "control" },
+        data("s-p", "s", "p", 0),
+        data("s-q", "s", "q", 0),
+        data("s-r", "s", "r", 0),
+      ],
+      diagnostics: CLEAN,
+    };
+    const laid = await layout(c, sized(c), engine);
+    expect(laid.crossings).toHaveLength(1);
+    const A0 = laid.boxes.get("A0")!;
+    expect(laid.crossings[0]!.x).toBeCloseTo(A0.x);
+    expect(laid.crossings[0]!.y).toBeGreaterThanOrEqual(A0.y);
+    expect(laid.crossings[0]!.y).toBeLessThanOrEqual(A0.y + A0.height);
+  });
+
+  it("is deterministic", async () => {
+    const [x, y] = await Promise.all([layout(g, sized(g), engine), layout(g, sized(g), engine)]);
+    expect(y.crossings).toEqual(x.crossings);
+    expect([...y.edges]).toEqual([...x.edges]);
+  });
+});
+
+describe.each(Object.entries(FIXTURES))("the branches of a bus(%s)", (_name, graph) => {
+  it("never overlap or run in parallel once they have left each other", async () => {
+    const laid = await layout(graph, sizesOf(graph), engine);
+    const groups = new Set(laid.bus.values());
+    for (const forks of groups) {
+      const ids = [...laid.bus].filter(([, f]) => f === forks).map(([id]) => id);
+      for (const a of ids)
+        for (const b of ids) {
+          if (a >= b) continue;
+          const [pa, pb] = [laid.edges.get(a)!, laid.edges.get(b)!];
+          const [ra, rb] = [afterLeaving(pa, pb), afterLeaving(pb, pa)];
+          expect(overlapLen(ra, rb), `${a} and ${b}`).toBeLessThan(1);
+        }
+    }
+  });
+});
+
+describe("a bus (targeted): consumers lifted into one later frame leave the trunk at one junction", () => {
+  it("leave together, before the frame: no branch drops early and rejoins a shared run", async () => {
+    // `s` is in column 0; the frame is four columns on. Its three consumers lift to it.
+    const e = (id: string, to: string, arg: number): RenderEdge => ({
+      id,
+      from: { node: "s", port: portIds.out },
+      to: { node: to, port: portIds.arg(arg) },
+      kind: "data",
+    });
+    const chain = (id: string, from: string, to: string): RenderEdge => ({
+      id,
+      from: { node: from, port: portIds.out },
+      to: { node: to, port: portIds.arg(0) },
+      kind: "data",
+    });
+    const g: RenderGraph = {
+      nodes: [
+        area("root", null, "seq"),
+        leafStep("s", "root", 0),
+        leafStep("a", "root"),
+        leafStep("b", "root"),
+        leafStep("c", "root"),
+        area("B", "root", "branch", { ports: [{ id: portIds.control, side: "control" }, OUT] }),
+        area("A0", "B", "arm"),
+        leafStep("p", "A0", 2),
+        area("A1", "B", "arm"),
+        leafStep("q", "A1", 2),
+        area("A2", "B", "arm"),
+        leafStep("r", "A2", 2),
+      ],
+      edges: [
+        chain("s-a", "s", "a"),
+        chain("a-b", "a", "b"),
+        chain("b-c", "b", "c"),
+        { id: "c-B", from: { node: "c", port: "out" }, to: { node: "B", port: "control" }, kind: "control" },
+        e("s-p", "p", 1),
+        e("s-q", "q", 1),
+        e("s-r", "r", 1),
+      ],
+      diagnostics: CLEAN,
+    };
+    const laid = await layout(g, sized(g), engine);
+    const B = laid.boxes.get("B")!;
+    // the branches part only in the gap just before B (after the last step before it), never early
+    const c = laid.boxes.get("c")!;
+    const src = laid.boxes.get("s")!;
+    // (the jog off the source port itself, a few px right of it, is not a fork of interest)
+    const forks = laid.bus.get("s-p")!.filter((f) => f.x > src.x + src.width + 20);
+    expect(forks.length).toBeGreaterThanOrEqual(1);
+    for (const f of forks) {
+      expect(f.x, "fork after c").toBeGreaterThan(c.x + c.width);
+      expect(f.x, "fork before B").toBeLessThan(B.x);
+    }
+    // ... and the branches that left share no run
+    const [p, q, r] = ["s-p", "s-q", "s-r"].map((id) => laid.edges.get(id)!) as [Point[], Point[], Point[]];
+    for (const [x, y] of [
+      [p, q],
+      [p, r],
+      [q, r],
+    ] as const)
+      expect(overlapLen(afterLeaving(x, y), afterLeaving(y, x))).toBeLessThan(1);
+  });
+});
+
+describe("loop returns nest", () => {
+  const param = (name: string): RenderPort => ({ id: portIds.param(name), side: "in", label: name });
+  const g: RenderGraph = {
+    nodes: [
+      area("root", null, "seq"),
+      leafStep("seed", "root", 0),
+      area("L", "root", "loop", { ports: [param("a"), param("b"), OUT] }),
+      leafStep("s1", "L"),
+      leafStep("s2", "L"),
+    ],
+    edges: [
+      { id: "ina", from: { node: "seed", port: "out" }, to: { node: "L", port: portIds.param("a") }, kind: "data" },
+      { id: "inb", from: { node: "seed", port: "out" }, to: { node: "L", port: portIds.param("b") }, kind: "data" },
+      {
+        id: "ua",
+        from: { node: "L", port: portIds.param("a") },
+        to: { node: "s1", port: portIds.arg(0) },
+        kind: "data",
+      },
+      {
+        id: "ub",
+        from: { node: "L", port: portIds.param("b") },
+        to: { node: "s2", port: portIds.arg(0) },
+        kind: "data",
+      },
+      // authored the other way round: the nesting follows the params, not the edges' order
+      { id: "rb", from: { node: "s2", port: "out" }, to: { node: "L", port: portIds.param("b") }, kind: "recur" },
+      { id: "ra", from: { node: "s1", port: "out" }, to: { node: "L", port: portIds.param("a") }, kind: "recur" },
+    ],
+    diagnostics: CLEAN,
+  };
+
+  it("share no segment: each loop variable's return is its own line", async () => {
+    const laid = await layout(g, sized(g), engine);
+    const [ra, rb] = [laid.edges.get("ra")!, laid.edges.get("rb")!];
+    expect(overlapLen(ra, rb)).toBe(0);
+    const L = laid.boxes.get("L")!;
+    // the first param's return is outermost: on the border; the second steps in
+    expect(ra.some((p) => Math.abs(p.x - L.x) < 0.5)).toBe(true);
+    expect(rb.every((p) => p.x > L.x + 1 || p.y < L.y)).toBe(true);
+    expect(Math.max(...rb.map((p) => p.y))).toBeLessThan(Math.max(...ra.map((p) => p.y)));
+    expect(Math.max(...rb.map((p) => p.x))).toBeLessThan(Math.max(...ra.map((p) => p.x)));
+  });
+
+  it("do not cross: the topmost param's return is outermost, every hop goes inward past all the rising runs", async () => {
+    const laid = await layout(g, sized(g), engine);
+    const [ra, rb] = [laid.edges.get("ra")!, laid.edges.get("rb")!];
+    const crossings = (p: readonly Point[], q: readonly Point[]): number => {
+      let n = 0;
+      for (let i = 1; i < p.length; i++)
+        for (let j = 1; j < q.length; j++) {
+          const [a, b, c, d] = [p[i - 1]!, p[i]!, q[j - 1]!, q[j]!];
+          const [ah, ch] = [Math.abs(a.y - b.y) < 0.5, Math.abs(c.y - d.y) < 0.5];
+          if (ah === ch) continue;
+          const [h0, h1, v0, v1] = ah ? [a, b, c, d] : [c, d, a, b];
+          if (
+            v0.x > Math.min(h0.x, h1.x) + 0.5 &&
+            v0.x < Math.max(h0.x, h1.x) - 0.5 &&
+            h0.y > Math.min(v0.y, v1.y) + 0.5 &&
+            h0.y < Math.max(v0.y, v1.y) - 0.5
+          )
+            n++;
+        }
+      return n;
+    };
+    // the producers' rows are in authored order too (s1 above s2), so the whole nest is crossing-free
+    expect(crossings(ra, rb)).toBe(0);
+    const [into1, into2] = [
+      laid.ports.get(portKey("L", portIds.param("a")))!,
+      laid.ports.get(portKey("L", portIds.param("b")))!,
+    ];
+    expect(into1.y).toBeLessThan(into2.y);
+    expect(ra.at(-1)!.y).toBeCloseTo(into1.y);
+    expect(rb.at(-1)!.y).toBeCloseTo(into2.y);
   });
 });

@@ -7,7 +7,7 @@ import { attachDataflow } from "../dataflow.js";
 import type { Plan, Vocabulary } from "../plan.js";
 import { type Progress, ProgressProjector } from "../progress.js";
 import { followed, retainedSpans, toRenderGraph } from "../render-graph.js";
-import { type RenderFrame, type RenderGraph, type RenderStep, type RenderTransform } from "../types.js";
+import { paintedState, type RenderFrame, type RenderGraph, type RenderStep, type RenderTransform } from "../types.js";
 import { Gate, ioCapability, run, start, until } from "./program-harness.js";
 
 // Designated functions are program-defined; `io` is the async host port the gate can hold.
@@ -492,6 +492,22 @@ describe("toRenderGraph — actual, completed run", () => {
     expect(step(first, "ask@4:28").state).toBe("resolved");
     expect(text(step(first, "ask@4:28").input[0]!.value)).toBe("x");
     expect(step(first, "fetch@4:37")).toMatchObject({ state: "skipped", skippedBecause: "not-taken" });
+  });
+
+  it("a wire into a step that was not taken is painted skipped, whatever its source's state", async () => {
+    const { g } = await completed(LOOP);
+    const byId = new Map(g.nodes.map((n) => [n.id, n]));
+    expect(step(g, "ask@4:28").state).toBe("skipped");
+    const into = g.edges.find((e) => e.id === "let@3:0:in:d->ask@4:28:in:arg0")!;
+    expect(paintedState(into, byId)).toBe("skipped");
+    // the edge keeps its producer's state: only the painting dims
+    expect(into.state).toBe(byId.get(into.from.node)!.state);
+    for (const e of g.edges.filter((x) => x.kind !== "recur")) {
+      if (byId.get(e.to.node)!.state === "skipped") expect(paintedState(e, byId), e.id).toBe("skipped");
+      else expect(paintedState(e, byId), e.id).toBe(e.state);
+    }
+    const recur = g.edges.find((e) => e.kind === "recur")!;
+    expect(paintedState(recur, byId)).toBe(recur.state);
   });
 
   it("branch: arms are always lanes — taken arm painted, the other skipped (not collapsed)", async () => {

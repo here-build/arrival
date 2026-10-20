@@ -168,8 +168,29 @@ export interface LaidOutGraph {
   ports: Map<string, Point>;
   /** edge id → absolute polyline (start at the source port, end at the target port). */
   edges: Map<string, Point[]>;
-  /** edge id → absolute box ELK reserved for the edge's label (edges with a measured label only). */
+  /** edge id → absolute box ELK reserved for the edge's label (edges with a measured label only); a loop
+   *  return's is the box its pill is centred in, on the contour's bottom run. */
   labels: Map<string, Box>;
+  /** Every fork point: where a branch of a fan-out leaves the trunk it shares with its siblings
+   *  (at the source when two or more leave it there). One value feeding several consumers is one
+   *  line, forking. */
+  forks: Point[];
+  /** edge id → the fork points of the bus the edge belongs to (a bus: 2+ consumers of one source
+   *  port and kind). A bus edge is a branch: it shares its prefix with its siblings. */
+  bus: Map<string, Point[]>;
+  /** Where a bus enters an area once for all its branches inside (a layout-only port on the area's
+   *  west border): the point the view draws as a hollow ring. A branch's polyline passes through
+   *  it. Structure alone decides them, like everything else here. */
+  crossings: Point[];
+}
+
+/**
+ * How a wire is painted: its own state (the producer's), except that a data / control / order wire
+ * into a node that was not taken is `skipped` — the branch dims with the consumer that never ran.
+ * Kept apart from `RenderEdge.state`, which stays the producer's (the regression gate's I10).
+ */
+export function paintedState(e: RenderEdge, byId: ReadonlyMap<string, RenderNode>): RenderState | undefined {
+  return e.kind !== "recur" && byId.get(e.to.node)?.state === "skipped" ? "skipped" : e.state;
 }
 
 export const portKey = (node: string, port: string): string => `${node}::${port}`;
