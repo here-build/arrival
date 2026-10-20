@@ -1,12 +1,17 @@
 {
   "extends": ["@here.build/tsconfig/purpose/lib", "@here.build/tsconfig/env/node"],
+  // TYPECHECK program: every TS file in the package (src incl. tests, root configs, scripts).
+  // Emit is the separate src-only `tsconfig.build.json` (`build: tsc -p tsconfig.build.json`).
   "compilerOptions": {
-    "rootDir": "./src",
+    // noEmit program: rootDir spans the repo so the shared ../../eslint.arrival.mjs (imported by eslint.config.mjs) is in-bounds.
+    "rootDir": "../..",
     "outDir": "./dist",
+    "noEmit": true,
+    // JS (eslint configs, scripts, fixtures) is part of the program: parsed for typed lint and type-checked.
+    "allowJs": true,
+    "checkJs": true,
     "types": ["node"]
   },
-  // INCLUDES `src/__tests__/` so `typecheck` (tsc --noEmit) and the eslint project
-  // service cover test files. Emit is the separate src-only `tsconfig.build.json`.
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*", "*.ts", "*.mts", "scripts/**/*", "*.mjs"],
   "exclude": ["node_modules", "dist"]
 }

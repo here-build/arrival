@@ -3,26 +3,17 @@
  * Preset stays in the package (`nodejs` vs CLI `shared`); this is the domain floor
  * (interpreter / parser / compiler) plus projectService + ignores.
  */
+/**
+ * Paths that are genuinely not source: dependencies, build output, vendored third-party code,
+ * generated files. EVERYTHING else — tests, specs, type-tests, configs, scripts, benchmarks,
+ * experiments, custdev, research, visual harnesses, storybook, demos — is linted.
+ */
 export const arrivalIgnores = [
   "**/node_modules/**",
   "**/dist/**",
   "**/dist-cases/**",
-  "**/*.config.*",
   "**/vendor/**",
-  "**/__tests__/**",
-  "**/*.test.ts",
-  "**/*.spec.ts",
-  "**/*.test-d.ts",
-  "**/__visual__/**",
-  "**/__benchmarks__/**",
-  "**/__experiments__/**",
-  "**/__custdev__/**",
-  "**/__research__/**",
-  "**/.storybook/**",
-  "**/scripts/**",
   "**/*.generated.ts",
-  "**/demos/**",
-  "**/vitest.global-setup.ts",
 ];
 
 /** Rules the shared preset marks error that are false positives in this domain. */
@@ -99,6 +90,9 @@ export const arrivalDomainRules = {
   "react-hooks/refs": "off",
 };
 
+/**
+ * @param {{ tsconfigRootDir?: string, extraRules?: Record<string, unknown>, extraIgnores?: string[], extraConfigs?: object[] }} [options]
+ */
 export function arrivalOverlay({ tsconfigRootDir, extraRules = {}, extraIgnores = [], extraConfigs = [] } = {}) {
   return [
     {
@@ -111,6 +105,7 @@ export function arrivalOverlay({ tsconfigRootDir, extraRules = {}, extraIgnores 
     },
     { rules: { ...arrivalDomainRules, ...extraRules } },
     ...extraConfigs,
-    { ignores: [...arrivalIgnores, ...extraIgnores] },
+    // `!eslint.config.mjs` re-includes the package config, which the shared preset ignores by default.
+    { ignores: [...arrivalIgnores, ...extraIgnores, "!eslint.config.mjs"] },
   ];
 }

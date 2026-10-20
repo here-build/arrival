@@ -1,8 +1,8 @@
 import { defineConfig } from "vitest/config";
 
 // `__experiments__/` — proof-of-concept spikes, opt-in (`pnpm experiments`), NEVER a
-// CI gate (rule: .claude/rules/tests.md). Current contents: the walking-driver
-// emission-seam spike (docs/working-proposals/arrival-walking-driver-design-2026-07-11.md).
+// CI gate. Current contents: the walking-driver
+// emission-seam spike.
 export default defineConfig({
   test: {
     globals: true,

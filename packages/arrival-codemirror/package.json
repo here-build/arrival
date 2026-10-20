@@ -22,6 +22,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./language": {
+      "types": "./dist/scheme-sugarcoat.d.ts",
+      "import": "./dist/scheme-sugarcoat.js"
+    },
     "./react": {
       "types": "./dist/react/index.d.ts",
       "import": "./dist/react/index.js"
@@ -41,16 +45,16 @@
     "!**/*.stories.*"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "build-storybook": "storybook build",
     "demo": "vite demos",
-    "dev": "tsc --watch",
+    "dev": "tsc -p tsconfig.build.json --watch",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "storybook": "storybook dev -p 6011",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -p tsconfig.test.json --noEmit && tsc -p demos/tsconfig.json --noEmit"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@codemirror/autocomplete": "6.20.3",
@@ -78,7 +82,6 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "storybook": "10.5.10",
-    "tslib": "2.8.1",
     "typescript": "6.0.3",
     "vite": "7.3.6",
     "vitest": "4.1.11"

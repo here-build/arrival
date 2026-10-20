@@ -1,14 +1,14 @@
 /**
- * vitest.workerd.config.ts — Q19 conjunct C2's OPT-IN suite (docs/PROVENANCE-PLAN.md
- * Q19; .claude/rules/tests.md's "browser/runtime-tooling signal" carve-out). Real
+ * vitest.workerd.config.ts — the provenance store's conjunct C2 OPT-IN suite (the
+ * browser/runtime-tooling carve-out from the default gate). Real
  * workerd via `@cloudflare/vitest-pool-workers` (miniflare) — local, cloud-free, no
  * deployment. NEVER part of the default `pnpm test`/`pnpm benchmarks` runs (see
  * `vitest.benchmarks.config.ts`'s own exclude for why the workerd file can't
  * silently ride along in that config) — invoked explicitly via `pnpm workerd`.
  *
- * MERGE BLOCKER, not routine CI noise: docs/PROVENANCE-PLAN.md Q19 states conjunct 2
- * "runs on workerd as a MERGE BLOCKER (fakes prove the fold logic; only workerd
- * proves real hibernation/output-gate behavior)." If this suite cannot run (the
+ * MERGE BLOCKER, not routine CI noise: conjunct 2 of the provenance-store acceptance
+ * runs on workerd as a MERGE BLOCKER (fakes prove the fold logic; only workerd
+ * proves real hibernation/output-gate behavior). If this suite cannot run (the
  * pool fails to start — missing workerd binary, unsupported platform, no network
  * during postinstall), THAT is the correct failure mode: a hard, unmissable crash
  * at pool-startup time, not a graceful skip. A `describe.skipIf` guard would need a

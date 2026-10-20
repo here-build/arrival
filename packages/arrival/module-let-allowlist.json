@@ -1,0 +1,27 @@
+[
+  {
+    "path": "src/run/current-run.ts",
+    "class": "sync-window ambient",
+    "why": "currentRun(): the first sanctioned sync-window pointer (docs/execution.md §1); withCurrentRun throws AmbientWindowError if the body returns a thenable."
+  },
+  {
+    "path": "src/membrane/region-scope.ts",
+    "class": "sync-window ambient + lazy immutable singleton",
+    "why": "constantWindowScope: the CONSTANT_CTX leg of the sync window (second sanctioned sync-window ambient, §1), set/restored inside withCurrentRun so a thenable body throws AmbientWindowError; _neverAborts: lazily-minted never-firing AbortSignal (new AbortController is disallowed at workerd module-init scope), immutable once built."
+  },
+  {
+    "path": "src/values/primitives/ANativeProcedure.ts",
+    "class": "load-time wiring seam",
+    "why": "hostProjectionOf: assigned once at module init to break an import cycle; no run data."
+  },
+  {
+    "path": "src/values/primitives/ARosettaProcedure.ts",
+    "class": "load-time wiring seam",
+    "why": "hostProjectionOf / membraneApply: assigned once at module init to break an import cycle; no run data."
+  },
+  {
+    "path": "src/env/AmbientRuntime.ts",
+    "class": "load-time wiring seam",
+    "why": "mintPlainFrame / mintResolvingFrame: assigned once at module init to break an import cycle; no run data."
+  }
+]

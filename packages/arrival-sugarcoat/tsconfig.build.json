@@ -1,0 +1,7 @@
+{
+  // EMIT config — src only, tests excluded. `tsconfig.json` is the all-files typecheck program.
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "rootDir": "./src", "noEmit": false },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts", "src/__tests__/**/*"]
+}

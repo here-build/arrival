@@ -1,0 +1,8 @@
+{
+  // EMIT config — src only; tests and `*.cases.ts` bite-guard fixtures are never compiled to dist.
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "rootDir": "./src", "noEmit": false },
+  "include": ["src/**/*.ts", "src/**/*.d.ts"],
+  "exclude": ["node_modules", "dist", "src/__tests__/**/*", "src/**/*.cases.ts"],
+  "references": []
+}

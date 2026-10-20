@@ -26,6 +26,7 @@
     // harness type-checks via the TS API without emitting. So `dist-cases/` is, in
     // practice, never written during normal build/test — it exists only to satisfy
     // the composite-reference contract.
+    "noEmit": false, // inherited noEmit:true from tsconfig.json would trip TS6310 on the reference
     "composite": true,
     "outDir": "./dist-cases",
     "tsBuildInfoFile": "./dist-cases/.tsbuildinfo",

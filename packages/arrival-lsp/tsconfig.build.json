@@ -1,0 +1,7 @@
+{
+  // EMIT config — src only, tests excluded.
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "rootDir": "./src", "noEmit": false },
+  "include": ["src/**/*.ts", "src/**/*.d.ts"],
+  "exclude": ["node_modules", "dist", "src/__tests__/**/*"]
+}
