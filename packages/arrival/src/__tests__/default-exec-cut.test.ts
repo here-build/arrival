@@ -1,7 +1,7 @@
 /**
  * Ejection P3 3b.3 step 5 — the FLIP witnesses for the DEFAULT (no-env) exec path.
  *
- * Stage C Cut 2 (docs/plans/stage-c-corpse-deletion.md, "THE LINCHPIN") supersedes this file's
+ * Stage C Cut 2 supersedes this file's
  * ORIGINAL premise: a bare `exec(code)` no longer resolves through `new Resolver(lexicalRoot,
  * Capabilities.assembled(user_env))` (the realm-parented ambient) — it rides the SELF-HOSTED
  * vocabulary path (`execStateViaVocabulary`, `eval/generator-exec.ts`), the degenerate tuple

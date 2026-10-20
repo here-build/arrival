@@ -9,7 +9,7 @@ import * as ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 import * as z from "../../common/scheme-zod/index.js";
-import { symbol } from "../../symbol/index.js";
+import * as symbol from "../../common/symbols/index.js";
 import { lower } from "../lower.js";
 import { assembleHarvestedPrelude } from "../prelude.js";
 import { theVoid } from "../../values/primitives/AVoid.js";
@@ -282,14 +282,18 @@ describe("lower — integration: lowered call ∩ harvested prelude", () => {
   // proper-list constructor (prints List<unknown> via the named-generic pre-check).
   const getRoute = symbol.rosetta`get-route: route between stops`(
     { input: [z.list(), z.string], output: [z.string] },
-    () => "",
+    function () {
+      return "";
+    },
   );
   const setTimer = symbol.native`set-timer: start a timer`(
     { input: [z.number], output: [z.undefinedResult] },
     // `symbol.native` runs in SCHEME space — z.undefinedResult decodes to `AVoid`, so the
     // impl returns the boxed `theVoid` singleton, never a raw JS `undefined` (matches every
     // production z.undefinedResult native, e.g. env/r7rs/strings.ts's string-for-each).
-    () => theVoid,
+    function () {
+      return theVoid;
+    },
   );
   const entries = [
     ["get_route", getRoute],

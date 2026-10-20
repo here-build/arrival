@@ -3,7 +3,7 @@
 // The load-bearing inference of the symbol API: a contract's zod tuple drives BOTH the
 // decoded impl-arg types (`DecodedArgs`) and the decoded return type (`DecodedReturn`), so
 // a wrong-typed impl is a COMPILE error. These assertions used to live inline in
-// `src/common/symbol.ts` as a `type _Assert = …` block, because both package tsconfigs
+// `src/common/symbols/index.ts` as a `type _Assert = …` block, because both package tsconfigs
 // EXCLUDE the test dirs (`src/**/*.test.ts`, `src/__*__/**/*`) — so a plain `*.test.ts`
 // would never be typechecked. This file is a `*.test-d.ts` run under `vitest --typecheck`
 // (see `vitest.typecheck.config.ts` + `tsconfig.typecheck.json`, which un-exclude it), so
@@ -15,24 +15,23 @@
 
 import { describe, expectTypeOf, test } from "vitest";
 import * as z from "../common/scheme-zod/index.js";
-import type { AEntity } from "../common/symbols/_bake.js";
-import { symbol } from "../symbol/index.js";
-import { type NativeSymbolDef } from "../values/primitives/ANativeProcedure.js";
 import {
+  type AEntity,
   type DecodedArgs,
   type DecodedArgsWithRest,
   type DecodedReturn,
   type SpecInfer,
 } from "../common/symbols/_bake.js";
+import * as symbol from "../common/symbols/index.js";
+import { type NativeSymbolDef } from "../values/primitives/ANativeProcedure.js";
 import { type SlotAdopter, buildSlotAdopter } from "../membrane/adopt-spine.js";
 import type { APair } from "../values/primitives/APair.js";
 import type { AString } from "../values/primitives/AString.js";
-import type { ANil } from "../values/primitives/ANil.js";
 import type { ACallable } from "../values/primitives/ACallable.js";
-import type { AList, AListAlike, SchemeValue } from "../values/types.js";
+import type { AListAlike, SchemeValue } from "../values/types.js";
+import type { CallCtx } from "../run/CallCtx.js";
 
 type PairScheme = APair<SchemeValue, SchemeValue>;
-type ListOrNilScheme = PairScheme | ANil;
 
 describe("SpecInfer — the shared VectorSpec → z.output traversal DecodedArgs/DecodedReturn build on", () => {
   test("tuple spec: element-wise z.output, as a mutable tuple", () => {
@@ -93,7 +92,9 @@ describe("symbol contract — wrong-typed impls must NOT compile", () => {
       symbol.native`p: proof`(
         { input: [z.pair], output: [z.pair] },
         // @ts-expect-error — arg is Pair, annotating it string is wrong
-        (p: string) => p as unknown as APair,
+        function (this: CallCtx, p: string) {
+          return p as unknown as APair<SchemeValue, SchemeValue>;
+        },
       );
     }
     expectTypeOf<true>().toEqualTypeOf<true>();
@@ -104,7 +105,9 @@ describe("symbol contract — wrong-typed impls must NOT compile", () => {
       symbol.rosetta`r: proof`(
         { input: [z.string], output: [z.number] },
         // @ts-expect-error — arg is string, annotating it Pair is wrong
-        (s: APair) => 1,
+        function (this: CallCtx, _s: APair) {
+          return 1;
+        },
       );
     }
     expectTypeOf<true>().toEqualTypeOf<true>();
@@ -115,7 +118,9 @@ describe("symbol contract — wrong-typed impls must NOT compile", () => {
       symbol.rosetta`rr: proof`(
         { input: [z.string], output: [z.number] },
         // @ts-expect-error — return must be number, not string
-        (s) => s,
+        function (this: CallCtx, s) {
+          return s;
+        },
       );
     }
     expectTypeOf<true>().toEqualTypeOf<true>();
@@ -174,7 +179,9 @@ describe("symbol contract — inputRest: a fixed head + a separately-typed varia
       symbol.rosetta`headtail: proof`(
         { input: [z.string], inputRest: z.number, output: [z.string] },
         // @ts-expect-error — rest args decode via z.number (JS number), annotating them string is wrong
-        (head: string, ...rest: string[]) => head,
+        function (this: CallCtx, head: string, ..._rest: string[]) {
+          return head;
+        },
       );
     }
     expectTypeOf<true>().toEqualTypeOf<true>();
@@ -199,31 +206,31 @@ describe("symbol contract — inputRest: a fixed head + a separately-typed varia
 // `typecheck(...,"function")` + narrowing rather than leaning on the schema for shape.
 // ─────────────────────────────────────────────────────────────────────────────
 describe("symbol contract — 2026-07-05 audit: for-each / string-map / string-for-each head+rest precision", () => {
-  const forEachHead = z.lambda;
-  const listRest = z.union([z.pair, z.nil]);
+  const _forEachHead = z.lambda;
+  const _listRest = z.union([z.pair, z.nil]);
 
   test("NEW for-each shape: [callable, ...list[]] — a Pair|Nil rest, not a flat array", () => {
     // Mirrors for-each's real migrated contract: { input: [z.custom<...>()], inputRest: z.union([z.pair, z.nil]), output: [z.undefinedResult] }.
     // Both members of the rest union are real codecs now: nil's JS face is null (not ANil),
     // and pair's JS face is [SchemeValue, SchemeValue] (cons(value,value), not bare APair) —
     // AList (APair|ANil) is the SCHEME face, this is the JS one.
-    // Head return is `unknown`, not `SchemeValue` — forEachHead is z.lambda, whose declared
+    // Head return is `unknown`, not `SchemeValue` — _forEachHead is z.lambda, whose declared
     // return type is (...args: unknown[]) => unknown (matches the sibling string-map/
     // string-for-each test below, same z.lambda). Pre-existing mismatch here, unrelated to nil.
     // z.lambda → ACallable (W8: scheme callables only, not bare host fns).
-    // listRest JS face: pair→tuple, nil→null.
-    expectTypeOf<DecodedArgsWithRest<[typeof forEachHead], typeof listRest>>().toEqualTypeOf<
+    // _listRest JS face: pair→tuple, nil→null.
+    expectTypeOf<DecodedArgsWithRest<[typeof _forEachHead], typeof _listRest>>().toEqualTypeOf<
       [ACallable, ...([SchemeValue, SchemeValue] | null)[]]
     >();
   });
 
-  const stringHOFHead = z.lambda;
+  const _stringHOFHead = z.lambda;
 
   test("NEW string-map/string-for-each shape: [callable, ...string[]], not flat unknown[]", () => {
     // Default (js) face of z.string is bare `string`; z.lambda → ACallable (W8).
     // (Scheme-face rest would be AString[] — native contour; these HOFs use the js face
     // when authored as rosetta-style synthetic mirrors in this proof.)
-    expectTypeOf<DecodedArgsWithRest<[typeof stringHOFHead], typeof z.string>>().toEqualTypeOf<
+    expectTypeOf<DecodedArgsWithRest<[typeof _stringHOFHead], typeof z.string>>().toEqualTypeOf<
       [ACallable, ...string[]]
     >();
   });
@@ -232,8 +239,8 @@ describe("symbol contract — 2026-07-05 audit: for-each / string-map / string-f
 describe("symbol contract — 2026-07-05 audit: filter's contract narrows to a fixed 2-tuple", () => {
   test("NEW shape: a bare 2-element array literal decodes to a FIXED [pred, seq] tuple", () => {
     // Mirrors filter's real migrated contract: { input: [z.lambda, z.schemeValue], ... }.
-    const predSchema = z.lambda;
-    expectTypeOf<DecodedArgs<[typeof predSchema, typeof z.schemeValue]>>().toEqualTypeOf<[ACallable, SchemeValue]>();
+    const _predSchema = z.lambda;
+    expectTypeOf<DecodedArgs<[typeof _predSchema, typeof z.schemeValue]>>().toEqualTypeOf<[ACallable, SchemeValue]>();
   });
 });
 
@@ -260,7 +267,7 @@ describe("symbol contract — 2026-07-05 audit: find's predicate + return precis
       symbol.native`find: proof`(
         { input: [z.lambda, listOrNil], output: [z.schemeValue] },
         // @ts-expect-error — output decodes to SchemeValue; a bare string literal is not a member of that union
-        (pred, list) => {
+        function (this: CallCtx, pred, list) {
           void pred;
           void list;
           return "not-a-scheme-value";
@@ -289,7 +296,7 @@ describe("symbol contract — 2026-07-05 audit: typecheck's contract narrows to 
       symbol.native`tc: proof`(
         { input: [s1, z.schemeValue, s3, s4], output: [z.undefinedResult] },
         // @ts-expect-error — the contract is a fixed 4-tuple; a 5th param has no corresponding decoded arg
-        (a, b, c, d, e) => {
+        function (this: CallCtx, a, b, c, d, e) {
           void a;
           void b;
           void c;
@@ -309,7 +316,7 @@ describe("symbol contract — 2026-07-05 audit: negative proofs", () => {
       symbol.native`sm: proof`(
         { input: [z.lambda], inputRest: z.string, output: [z.string] },
         // @ts-expect-error — rest args decode via z.schemeString (AString), annotating them number is wrong
-        (proc: (...args: unknown[]) => unknown, ...strings: number[]): string => {
+        function (this: CallCtx, proc: (...args: unknown[]) => unknown, ...strings: number[]): string {
           void proc;
           void strings;
           return "";
@@ -353,7 +360,9 @@ describe("symbol contract — 2026-07-05 audit: curry's contract narrows the lea
       symbol.native`curry2: proof`(
         { input: [curryHead], inputRest: z.schemeValue, output: [curryHead] },
         // @ts-expect-error — rest args decode via z.schemeValue (SchemeValue), annotating them string is wrong
-        (fn: ACallable, ...args: string[]) => fn,
+        function (this: CallCtx, fn: ACallable, ..._args: string[]) {
+          return fn;
+        },
       );
     }
     expectTypeOf<true>().toEqualTypeOf<true>();
@@ -366,7 +375,7 @@ describe("symbol.sequence — impl args/return typed via SpecInfer-built Decoded
       // symbol.sequence always projects the "scheme" face (SequenceImpl, _bake.ts) — z.string's
       // scheme face is AString, not the js-face `string`.
       { input: [z.pair, z.string], output: [z.string] },
-      (args: [AListAlike, AString], runCtx) => {
+      (args: [AListAlike, AString], _runCtx) => {
         expectTypeOf(args).toEqualTypeOf<[AListAlike, AString]>();
         return args[1];
       },
@@ -384,7 +393,50 @@ describe("symbol.sequence — impl args/return typed via SpecInfer-built Decoded
       symbol.sequence`seqproof2: proof`(
         { input: [z.pair], output: [z.pair] },
         // @ts-expect-error — args is [APair], annotating it [string] is wrong
-        (args: [string], runCtx) => args[0] as unknown as AListAlike,
+        (args: [string], _runCtx) => args[0] as unknown as AListAlike,
+      );
+    }
+    expectTypeOf<true>().toEqualTypeOf<true>();
+  });
+});
+
+describe("symbol contract — wrong-typed impls are compile errors", () => {
+  const RUN = false as boolean;
+
+  test("a wrong-typed native impl is a compile error", () => {
+    if (RUN) {
+      symbol.native`bad-native: wrong impl`(
+        { input: [z.pair], output: [z.pair] },
+        // @ts-expect-error — native reads the scheme face (APair); `string` is wrong
+        function (this: CallCtx, p: string) {
+          return p as unknown as APair<SchemeValue, SchemeValue>;
+        },
+      );
+    }
+    expectTypeOf<true>().toEqualTypeOf<true>();
+  });
+
+  test("a wrong-typed rosetta impl is a compile error", () => {
+    if (RUN) {
+      symbol.rosetta`bad-rosetta: wrong impl`(
+        { input: [z.string], output: [z.number] },
+        // @ts-expect-error — impl receives a decoded string, not a Pair
+        function (this: CallCtx, s: APair<any, any>) {
+          return s as unknown as number;
+        },
+      );
+    }
+    expectTypeOf<true>().toEqualTypeOf<true>();
+  });
+
+  test("a wrong-typed rosetta RETURN is a compile error", () => {
+    if (RUN) {
+      symbol.rosetta`bad-return: wrong return`(
+        { input: [z.string], output: [z.number] },
+        // @ts-expect-error — output codec wants a number, impl returns a string
+        function (this: CallCtx, s) {
+          return s;
+        },
       );
     }
     expectTypeOf<true>().toEqualTypeOf<true>();

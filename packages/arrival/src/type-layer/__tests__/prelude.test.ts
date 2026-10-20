@@ -4,7 +4,7 @@ import * as ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 import * as z from "../../common/scheme-zod/index.js";
-import { symbol } from "../../symbol/index.js";
+import * as symbol from "../../common/symbols/index.js";
 import { lower } from "../lower.js";
 import { assembleHarvestedPrelude } from "../prelude.js";
 
@@ -38,11 +38,15 @@ describe("assembleHarvestedPrelude — grant tool defs → lens prelude", () => 
   // is not "a proper list."
   const getRoute = symbol.rosetta`get-route: route between stops`(
     { input: [z.list(), z.string], output: [z.string] },
-    () => "",
+    function () {
+      return "";
+    },
   );
   const setTimer = symbol.rosetta`set-timer: start a timer`(
     { input: [z.number], output: [z.undefinedResult] },
-    () => undefined,
+    function () {
+      return undefined;
+    },
   );
   const entries = [
     ["get_route", getRoute],
@@ -73,7 +77,9 @@ describe("assembleHarvestedPrelude — grant tool defs → lens prelude", () => 
     // create_user takes a kwargs object: required name:string + optional mode:"fast"|"scenic".
     const createUser = symbol.rosetta`create_user: make a user`(
       { input: [], inputRest: { name: z.string, mode: z.enum(["fast", "scenic"]).optional() }, output: [z.string] },
-      () => "",
+      function () {
+        return "";
+      },
     );
     const { prelude } = assembleHarvestedPrelude([["create_user", createUser]]);
     const check = (scheme: string): number => compileErrors(`${prelude}\n${lower(scheme).ts};\n`).length;

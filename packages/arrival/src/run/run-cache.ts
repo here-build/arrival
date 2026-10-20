@@ -22,6 +22,7 @@
  *              |                                      | never stored
  *   undeclared | fire                                 | fire — regenerateable default
  */
+import { contentHash } from "../provenance/store/hash.js";
 
 export type RunCacheEntry =
   | { kind: "value"; value: unknown } // a `view` result — the decoded-face JS value,
@@ -107,27 +108,12 @@ export function canonicalJson(value: unknown): string {
   return `{${parts.join(",")}}`;
 }
 
-/** FNV-1a over a prefixed canonical string — the codebase's content-hash idiom (prefix tag +
- *  `|`-joined canonical parts, FNV-1a, zero-padded hex). A local copy, deliberately NOT
- *  imported from the sibling hash sites (`hashSteps`, wireframe hash): different domains (a
- *  sealed env chain, a wireframe graph, this one a membrane penetration) that must be free to
- *  drift independently. */
-function fnv1a(prefix: string, canonical: string): string {
-  const tagged = `${prefix}|${canonical}`;
-  let h = 0x81_1c_9d_c5;
-  for (let i = 0; i < tagged.length; i++) {
-    h ^= tagged.codePointAt(i) ?? 0;
-    h = Math.imul(h, 0x01_00_01_93);
-  }
-  return (h >>> 0).toString(16).padStart(8, "0");
-}
-
 /** The content key: `hash(symbolName ‖ canonicalJson(decodedArgs))` — keyed by PENETRATION
  *  CONTENT, not by position: a NEW program shares no positions with the recorded one; only
  *  (node, args) survives program edits. Throws whatever `canonicalJson` throws — the caller
  *  owns the fallback. */
 export function runCacheKey(symbolName: string, decodedArgs: readonly unknown[]): string {
-  return fnv1a("runcache-v0", `${symbolName}|${canonicalJson(decodedArgs)}`);
+  return contentHash("runcache-v1", `${symbolName}|${canonicalJson(decodedArgs)}`);
 }
 
 /** The stamped cache class, as this module needs it — structurally identical to `_bake.ts`'s

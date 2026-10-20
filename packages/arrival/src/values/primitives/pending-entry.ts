@@ -55,3 +55,15 @@ export function settleEntry(
   chains.add(chain);
   return chain;
 }
+
+/** `settleEntry` + the cache write every container does with it: the chain itself lands in the
+ *  slot (concurrent readers share ONE settlement), then `write` overwrites it with the settled box. */
+export function pendEntry(
+  raw: unknown,
+  box: (settled: unknown) => SchemeValue,
+  write: (cell: SchemeValue | Promise<SchemeValue>) => void,
+): SchemeValue | Promise<SchemeValue> {
+  const cell = settleEntry(raw, box, write);
+  write(cell);
+  return cell;
+}

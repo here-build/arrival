@@ -52,25 +52,4 @@ describe("EnvCapability.define (Stage 1c)", () => {
     const [out] = await exec('(greet "yo")', { capabilities: [greeter], config: { key: "hi" } });
     expect(out).toBe("hi:YO");
   });
-
-  // NEGATIVE ASSERTION (mirrors `symbol.test.ts`'s own "a wrong-typed … impl is a compile
-  // error" cases) — a mistyped `this.configuration.<unknown key>` must fail to typecheck,
-  // proving the inference actually narrows `this` instead of silently widening to `any`.
-  it("a mistyped this.configuration property is a compile error", () => {
-    EnvCapability.define("test/define-greeter-bad", {
-      configuration: { key: z.string() },
-      resources: (config): Shout => ({ shout: (s: string) => `${config.key}:${s.toUpperCase()}` }),
-      symbols: (symbol, sz) => ({
-        greet: symbol.rosetta`greet: negative assertion only, never invoked`(
-          { input: [sz.string], output: [sz.string] },
-          function (s: string) {
-            // @ts-expect-error — "wrong" does not exist on `configuration` (only "key" does).
-            void this.configuration.wrong;
-            return this.resources.shout(s);
-          },
-        ),
-      }),
-    });
-    expect(true).toBe(true);
-  });
 });

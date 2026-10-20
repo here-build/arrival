@@ -38,18 +38,11 @@ export function reStampChild(
   p: ReadonlySet<number>,
   seen: WeakSet<object>,
 ): SchemeValue {
-  // The two host bottoms. `undefined` is REACHABLE — the empty-pair sentinel carries
-  // `car === undefined` at runtime (APair's iterator documents it) — and takes the same
-  // warn+#void crossing every inbound undefined does; `null` (type-impossible,
-  // runtime-defensive) maps to nil.
-  if (child === undefined) {
-    warnMembrane("a JS `undefined`");
-    return theVoid;
-  }
+  // `null` is type-impossible, runtime-defensive: maps to nil.
   if (child === null) return p === EMPTY_PROVENANCE ? nil : new ANil(p);
   // Residual bare-fn already in a spine — re-stamp, not a fresh js→scheme crossing.
   if (typeof child === "function") {
-    warnMembrane("a JS function");
+    warnMembrane(ctx, "a JS function");
     return theVoid;
   }
   if (seen.has(child)) return child;

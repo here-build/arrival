@@ -1,8 +1,8 @@
 // scanner.ts — Layer S: the structural validity oracle.
-// The oracle S reader in the static plane: docs/static-plane.md §THE FOUR READERS 4.2.
+// The oracle S reader in the static plane: docs/static-plane.md §4.2 ORACLE S/Σ.
 //
 // Implementation of the constraint-kernel oracle's STATIC/STRUCTURAL half
-// (sift/src/sampler/oracle-contract.ts). Reports the parse state at the end of an ACCEPTED
+// (mirroring the external sift sampler oracle contract). Reports the parse state at the end of an ACCEPTED
 // PREFIX — paren depth, string/comment, operator-vs-argument position, form kind, whether the
 // program is COMPLETE-ABLE here — and the structural next-token classes. Every method is a PURE
 // FUNCTION OF THE PREFIX: no lookahead, no backtracking, aligning the constraint with
@@ -18,7 +18,7 @@
 //
 // A bare paren inside an unterminated string is data, not structure — the oracle must KNOW that,
 // and the Lexer can't tell us because it crashes before yielding the state. So Layer S ports the
-// single-pass semantics of sift's `prefix-oracle.ts` (the S-only reference) directly. Shared,
+// single-pass semantics of the external sift S-only reference oracle (`prefix-oracle`) directly. Shared,
 // non-crashing machinery from arrival is `specials.names()` — the reader-macro set
 // ('  ` ,@ , #( …) — which the scanner consults to classify quote/quasiquote prefixes.
 //
@@ -190,6 +190,15 @@ export function scan(src: string): ScanResult {
 
     // any other char (including the reader-macro prefixes '  `  , @) is atom content — exactly
     // as the reference reader treats it. We classify a lone quote prefix at the next `(` instead.
+    // A character literal `#\x` is ONE atom: its payload char (`(`, `)`, `"`, `;`, whitespace…) is
+    // data, never structure — exactly as the reader takes it. A name run (`#\space`) is plain atom content.
+    if (c === "#" && src[i + 1] === "\\") {
+      midToken = true;
+      cur += src.slice(i, i + 3);
+      i = Math.min(i + 2, src.length - 1);
+      continue;
+    }
+
     midToken = true;
     cur += c;
   }
@@ -255,7 +264,7 @@ function classifyForm(
 }
 
 /** The structural next-token classes valid after this state — the model-free Layer-S mask. */
-export function validNextClasses(s: ScanResult): Set<TokenClass> {
+function validNextClasses(s: ScanResult): Set<TokenClass> {
   if (s.inString || s.inComment) return new Set<TokenClass>(["atom"]); // inside text: keep typing it
   const out = new Set<TokenClass>(["open", "atom", "string"]);
   if (s.depth > 0) out.add("close");

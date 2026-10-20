@@ -9,22 +9,16 @@
 // AValue has a class prototype), so the only live callers ever hand these utilities
 // boxed SchemeValues (or promises thereof), never a structure to walk.
 //
-// Cross-cutting leaf (hermeticity audit P5): consumed by values/primitives
-// (APair/AVector/pending-entry), env/*, and eval/call-function.ts alike, so it
-// stays in utils/ rather than moving into any one layer — moving it into eval/
-// (its pre-P3 import origin for is_promise) would reintroduce exactly the
-// values→eval edge P3 closed. `is_promise` now imports from the true
-// value-kernel leaf (values/value-guards.ts), so this module's only dependency
-// is a value-type predicate — no eval or membrane edge remains.
+// Cross-cutting leaf: consumed by values/primitives (APair/AVector/pending-entry),
+// env/*, and eval/call-function.ts alike, so it stays in utils/ rather than inside
+// any one layer (living in eval/ would reintroduce a values→eval edge). Its only
+// dependency is the value-kernel predicate `is_promise` (values/value-guards.ts).
 
 import { is_promise } from "../values/value-guards.js";
 
 /** HOF result-collection awaits one level when the whole collection is needed. */
-export function promise_all(arg: unknown[]): Promise<unknown[]> | unknown[] {
-  if (Array.isArray(arg)) {
-    return Promise.all(arg);
-  }
-  return arg;
+export function promise_all(arg: unknown[]): Promise<unknown[]> {
+  return Promise.all(arg);
 }
 
 /** Sync-fast-path `then`: apply `fn` to a maybe-promise WITHOUT taxing the sync

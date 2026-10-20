@@ -30,7 +30,15 @@
 // Installs global Error.invariant / TypeError.invariant (side-effect import).
 import "@here.build/error-invariant";
 
-import { InteropAccessError, ArrivalError, Unterminated, ParseError, EvalError, R7RSError } from "../errors.js";
+import {
+  ForeignProxyFreezeError,
+  InteropAccessError,
+  ArrivalError,
+  Unterminated,
+  ParseError,
+  EvalError,
+  R7RSError,
+} from "../errors.js";
 // Nominal families the boundary walk recognizes in one shot: every AValue subclass
 // and every ArrivalError subclass. InteropAccessError already came from errors.ts.
 import { AValue } from "../values/primitives/AValue.js";
@@ -52,7 +60,7 @@ import { INTEROP_BOUNDARY } from "../well-known/symbols.js";
  * Built-in prototypes that are ALWAYS interop boundaries — standard JS built-ins
  * Scheme code should never access through inheritance.
  */
-const BUILTIN_BOUNDARY_PROTOTYPES: Set<object | null> = new Set([
+const BUILTIN_BOUNDARY_PROTOTYPES: ReadonlySet<object | null> = new Set([
   Object.prototype,
   Array.prototype,
   Function.prototype,
@@ -90,7 +98,7 @@ const BUILTIN_BOUNDARY_PROTOTYPES: Set<object | null> = new Set([
 ]);
 
 /** Property names always blocked, regardless of definition site. */
-const BLOCKED_PROPERTY_NAMES: Set<string> = new Set([
+const BLOCKED_PROPERTY_NAMES: ReadonlySet<string> = new Set([
   "__proto__",
   "__defineGetter__",
   "__defineSetter__",
@@ -105,7 +113,7 @@ const BLOCKED_PROPERTY_NAMES: Set<string> = new Set([
  * behaviors (coercion, iteration, instance checks) that could execute arbitrary
  * code or leak internal state.
  */
-const BLOCKED_WELL_KNOWN_SYMBOLS: Set<symbol> = new Set([
+const BLOCKED_WELL_KNOWN_SYMBOLS: ReadonlySet<symbol> = new Set([
   Symbol.toPrimitive,
   Symbol.hasInstance,
   Symbol.species,
@@ -323,6 +331,18 @@ export function hasInheritedInteropStamp(value: object): boolean {
     proto = Reflect.getPrototypeOf(proto);
   }
   return false;
+}
+
+/** Freeze a borrowed source on first Scheme read — idempotent (Object.isFrozen). A source that
+ *  refuses (e.g. a foreign Proxy) surfaces as ForeignProxyFreezeError. Shared by AJSObject/AJSArray. */
+export function freezeBorrowedSource(source: object): void {
+  if (!Object.isFrozen(source)) {
+    try {
+      Object.freeze(source);
+    } catch (error) {
+      throw new ForeignProxyFreezeError(error);
+    }
+  }
 }
 
 /**

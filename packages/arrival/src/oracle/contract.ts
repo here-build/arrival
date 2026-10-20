@@ -1,6 +1,6 @@
 // contract.ts — arrival's local, type-identical copy of the constraint-kernel oracle boundary.
 //
-// DRIFT ALARM. Canonical source: `sift/src/sampler/oracle-contract.ts`. Interfaces are
+// DRIFT ALARM. Canonical source: the external sift sampler's oracle contract. Interfaces are
 // re-declared here, NOT imported: arrival-scheme is a FOUNDATION package sift depends on,
 // so importing sift types (even type-only) would invert the dependency arrow. The two
 // copies MUST stay type-identical; the agreement corpus is the executable proof

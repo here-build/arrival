@@ -1,4 +1,4 @@
-// idiom-routing — B8 + Tier-C "doors we owe" (benchmark-defect-register.md). A model
+// idiom-routing — B8 + Tier-C "doors we owe". A model
 // reaching for a capability that sounds standard but isn't bound here (`require`,
 // `read-all`) hits a bare "Unbound variable" and burns a round rediscovering the
 // native form. This is a DISJOINT, name-exact gate from `suggestFromVocabulary`'s
@@ -74,11 +74,11 @@ describe("unboundVariableError — idiom routing (Tier C: require / file IO dead
     try {
       await exec("(with-input-from-file)");
       throw new Error("expected with-input-from-file to throw");
-    } catch (e) {
-      const direct = e instanceof PurityError;
-      const viaCause = (e as { cause?: unknown })?.cause instanceof PurityError;
+    } catch (error) {
+      const direct = error instanceof PurityError;
+      const viaCause = (error as { cause?: unknown })?.cause instanceof PurityError;
       expect(direct || viaCause).toBe(true);
-      const message = (e as Error)?.message ?? String(e);
+      const message = (error as Error)?.message ?? String(error);
       expect(message).toMatch(/with-input-from-file/);
       expect(message).toMatch(/no file ports|filesystem tool|is not available/i);
       expect(message).not.toMatch(/Unbound variable/);
@@ -108,8 +108,8 @@ describe("unboundVariableError — idiom routing (free unquote / JS-comma footgu
     try {
       await exec("(unquote 59)");
       throw new Error("expected throw");
-    } catch (e) {
-      const err = e as Error & { schemeStack?: { code: unknown }[] };
+    } catch (error) {
+      const err = error as Error & { schemeStack?: { code: unknown }[] };
       expect(err.message).toMatch(/unquote/);
       expect(Array.isArray(err.schemeStack) && err.schemeStack.length > 0).toBe(true);
       // Innermost frame is the applied form — hosts print this in the run-error strip.

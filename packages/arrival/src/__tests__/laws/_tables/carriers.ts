@@ -28,7 +28,7 @@ export const CARRIERS: readonly CarrierRow[] = [
   },
   {
     carrier: "AString",
-    mint3: "(string (src #\\a) (src #\\b) (src #\\c))",
+    mint3: String.raw`(string (src #\a) (src #\b) (src #\c))`,
     // AString declares NO arrival/tagless-final/{car,cdr,filter,reduce,sort} at all (unlike
     // AVector, which implements car/cdr with a loose-tolerant/strict-throws gate) — every one
     // of these doors UNCONDITIONALLY, in both loose and strict mode (verified empirically: a

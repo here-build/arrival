@@ -1,5 +1,6 @@
+/* eslint-disable sonarjs/assertions-in-tests -- fc.assert throws on a failed property; it is the assertion */
 // Property-based Fantasy Land algebra law suites — the safety harness (A2) for
-// the algebras-in-entities migration (plan-2026-06-10-algebras-in-entities.md).
+// the algebras-in-entities migration.
 //
 // Each value type's instance cell calls these with an `fc.Arbitrary` that
 // produces instances of that type. A wrong instance = a violated law = a red

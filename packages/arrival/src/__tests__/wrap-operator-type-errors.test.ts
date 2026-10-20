@@ -20,8 +20,8 @@ describe("wrapOperator: type-error provenance (audit #42)", () => {
     let caught: Error | undefined;
     try {
       await exec('(* 0 "")');
-    } catch (e) {
-      caught = e as Error;
+    } catch (error) {
+      caught = error as Error;
     }
     expect(caught).toBeInstanceOf(TypeError);
     expect(caught!.message).toMatch(/cannot apply \*/i);
@@ -36,8 +36,8 @@ describe("wrapOperator: type-error provenance (audit #42)", () => {
     let caught: Error | undefined;
     try {
       await exec('(- (* 0 "") (- (- 0 0) 0))');
-    } catch (e) {
-      caught = e as Error;
+    } catch (error) {
+      caught = error as Error;
     }
     expect(caught).toBeInstanceOf(TypeError);
     expect(caught!.message).toMatch(/cannot apply \*/i);
@@ -50,8 +50,8 @@ describe("wrapOperator: type-error provenance (audit #42)", () => {
     let caught: Error | undefined;
     try {
       await exec("(+ 1 'foo)");
-    } catch (e) {
-      caught = e as Error;
+    } catch (error) {
+      caught = error as Error;
     }
     expect(caught).toBeInstanceOf(TypeError);
     expect(caught!.message).toMatch(/cannot apply \+/i);
@@ -61,8 +61,8 @@ describe("wrapOperator: type-error provenance (audit #42)", () => {
     let caught: Error | undefined;
     try {
       await exec('(* "a" "b")');
-    } catch (e) {
-      caught = e as Error;
+    } catch (error) {
+      caught = error as Error;
     }
     // Cause must be the membrane's original "Cannot convert to SchemeNumeric"
     // invariant — that's the frame sandbox-boundary.ts threw from. Losing it

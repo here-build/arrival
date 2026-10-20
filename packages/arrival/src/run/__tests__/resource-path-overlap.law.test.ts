@@ -4,8 +4,8 @@
  * Zone identity is segment-wise path prefix, not string-join, not the whole run.
  * Door fuel is any-pair overlap of prior effect paths × this query paths.
  *
- * Pure functions only — no RunContext, no rosetta. See
- * docs/working-proposals/cqs-reactivity/test-suite-design/SUITE.md (S0).
+ * Pure functions only — no RunContext, no rosetta. Law:
+ * docs/execution.md §12 RESOURCE-PATHS.
  */
 import { describe, it, expect } from "vitest";
 import {

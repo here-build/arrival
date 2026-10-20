@@ -7,13 +7,9 @@
 //
 // The residual Pair ↔ value-guards 2-cycle is intentional and harmless: both live
 // inside the values package; ESM resolves it because instanceof is call-time only.
-import { AString } from "./primitives/AString.js";
-import { AExact } from "./primitives/AExact.js";
-import { AInexact } from "./primitives/AInexact.js";
 import { ABool } from "./primitives/ABool.js";
 import { APair } from "./primitives/APair.js";
 import { ANil } from "./primitives/ANil.js";
-import { ACharacter } from "./primitives/ACharacter.js";
 import { ALambda, DoorProcedure, type ACallable } from "./primitives/ACallable.js";
 import { ANativeProcedure } from "./primitives/ANativeProcedure.js";
 import { ARosettaProcedure } from "./primitives/ARosettaProcedure.js";
@@ -48,9 +44,6 @@ export function is_pair(o: unknown): o is APair<any, any> {
 export function is_false(o: unknown): o is false | null | ABool {
   return o === false || o === null || (o instanceof ABool && o.value === false);
 }
-
-export const is_native = (obj: unknown): obj is AString | ACharacter | AExact | AInexact =>
-  obj instanceof AString || obj instanceof ACharacter || obj instanceof AExact || obj instanceof AInexact;
 
 /**
  * Macro/Syntax detection without an import edge into the evaluator. Macro / Syntax /
@@ -95,15 +88,4 @@ export function is_callable_value(o: unknown): o is ACallable {
  *  recognize such values; consumers relying on `ACallable`'s `.arity` stay on `is_callable_value`. */
 export function is_applyable(o: unknown): o is ACallable {
   return typeof (o as Record<PropertyKey, unknown> | null | undefined)?.[tf("apply")] === "function";
-}
-
-export const has_own_symbol = (obj: unknown, symbol: symbol): boolean =>
-  obj !== null && typeof obj === "object" ? Object.hasOwn(obj, symbol) : false;
-
-export function is_iterator(obj: unknown, symbol: symbol): boolean {
-  if (obj === null || typeof obj !== "object") return false;
-  if (has_own_symbol(obj, symbol) || has_own_symbol(Object.getPrototypeOf(obj), symbol)) {
-    return is_function((obj as Record<symbol, unknown>)[symbol]);
-  }
-  return false;
 }

@@ -8,6 +8,17 @@ import { AOpaqueHandle } from "./primitives/AOpaqueHandle.js";
 import { tf } from "./tagless-final.js";
 
 /**
+ * The co-induction visited set threaded through a single `equal?` walk. Maps each
+ * visited `a`-reference to the SET of `b`-partners it has been compared against on
+ * the current path; a re-encountered `(a, b)` short-circuits to true. Shared by the
+ * harness AND by each term's `arrival/tagless-final/equals` (Pair/Vector recurse
+ * through `structuralEqual` threading this map), so mutually-cyclic structures
+ * terminate. Exported so AValue's abstract Setoid can type its optional `seen`
+ * parameter identically.
+ */
+export type SeenMap = Map<object, Set<object>>;
+
+/**
  * Cycle-safe structural deep-equality for Scheme values — the ONE `equal?`
  * implementation (R7RS-small §6.1). Routed to by every surface (`env/r7rs/equality.ts`'s
  * `equal?`, `env/r7rs/lists.ts`'s `member`/`assoc`, and each term's own Setoid recursion)
@@ -22,21 +33,43 @@ import { tf } from "./tagless-final.js";
  * Equality dispatches through each value's Fantasy Land Setoid
  * (`arrival/tagless-final/equals`).
  */
-/**
- * The co-induction visited set threaded through a single `equal?` walk. Maps each
- * visited `a`-reference to the SET of `b`-partners it has been compared against on
- * the current path; a re-encountered `(a, b)` short-circuits to true. Shared by the
- * harness AND by each term's `arrival/tagless-final/equals` (Pair/Vector recurse
- * through `structuralEqual` threading this map), so mutually-cyclic structures
- * terminate. Exported so AValue's abstract Setoid can type its optional `seen`
- * parameter identically.
- */
-export type SeenMap = Map<object, Set<object>>;
-
 export function structuralEqual(a: unknown, b: unknown, seen: SeenMap = new Map()): boolean {
   // Fast paths: identity, then valueOf-equality (covers SchemeExact/Inexact,
   // boxed primitives, SchemeCharacter's __char__ via valueOf) and SchemeString's
   // `__string__`.
+  if (a === b) return true;
+  if (a == null || b == null) return a === b;
+
+  // Re-entrant call from inside a Setoid / container step of a walk already draining on this
+  // `seen`: DEFER the pair to that walk's worklist instead of recursing natively. Every
+  // recursion site (Pair car, Vector/Dict/array/object element) is a conjunction, so "true now,
+  // verified when drained" is exact — and a 100k-deep car-nested list costs heap, not host stack.
+  const pending = WALKS.get(seen);
+  if (pending !== undefined) {
+    pending.push(a, b);
+    return true;
+  }
+  const work: unknown[] = [a, b];
+  WALKS.set(seen, work);
+  try {
+    while (work.length > 0) {
+      const y = work.pop();
+      const x = work.pop();
+      if (!structuralEqualStep(x, y, seen)) return false;
+    }
+    return true;
+  } finally {
+    WALKS.delete(seen);
+  }
+}
+
+/** Active worklists, keyed by the walk's `seen` map (per-walk state, never global): a Setoid that
+ *  recurses through `structuralEqual(…, seen)` finds its walk here and enqueues. */
+const WALKS = new WeakMap<SeenMap, unknown[]>();
+
+/** One node of the walk: identity / co-induction bookkeeping, then the type's own comparison,
+ *  whose child comparisons re-enter `structuralEqual` and land on the worklist. */
+function structuralEqualStep(a: unknown, b: unknown, seen: SeenMap): boolean {
   if (a === b) return true;
   if (a == null || b == null) return a === b;
 

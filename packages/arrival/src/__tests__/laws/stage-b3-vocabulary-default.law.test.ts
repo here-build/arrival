@@ -1,8 +1,7 @@
 /**
- * LAW — Stage B3 (docs/plans/stage-b-runcontext-absorbs-assembly.md, §Sub-stages "B3 —
- * consumers migrate") introduced the self-hosted vocabulary path as `exec`'s DEFAULT, alongside
+ * LAW — Stage B3 (consumers migrate) introduced the self-hosted vocabulary path as `exec`'s DEFAULT, alongside
  * a `{ ambient }` retired ambient escape hatch to the old `lower()`/`assembleEnv`/`instantiate`
- * ambient. STAGE C CUT 3b (docs/plans/stage-c-corpse-deletion.md, "the massacre") retired that
+ * ambient. STAGE C CUT 3b retired that
  * escape hatch along with the ambient path itself — the vocabulary path is now the ONLY path,
  * so this file's original LAW 1 ("default-path equivalence: vocabulary vs ambient") and the
  * router pin's retired ambient row have no surviving counterpart (there is nothing left to be
@@ -34,6 +33,7 @@ import { disposeRunContext } from "../../run/run-lifecycle.js";
 import { RunContext } from "../../run/RunContext.js";
 import { StaticValidationError } from "../../static-validation/validate-program.js";
 import { nil } from "../../values/primitives/ANil.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 
 // The internal bake seam (Stage C Cut 3b) — never the public exec surface.
 const realEvalScheme: EvalSchemeInto = (env, src) => {
@@ -125,13 +125,18 @@ describe("LAW 3 — static validation on the vocabulary path", () => {
     const cap = EnvCapability.define("law/b3-static-validation", {
       configuration: { fs: z.custom<{ x: number }>(() => true).optional() },
       symbols: (symbol, sz) => ({
-        "probe!": symbol.native`probe!: JS-side effect marker`({ input: [], output: [sz.schemeValue] }, () => {
-          ran = true;
-          return nil;
-        }),
+        "probe!": symbol.native`probe!: JS-side effect marker`(
+          { input: [], output: [sz.schemeValue] },
+          function (this: CallCtx) {
+            ran = true;
+            return nil;
+          },
+        ),
         "gated/verb": symbol.native`gated/verb: requires fs`(
           { input: [], output: [sz.schemeValue], requiresConfig: ["fs"] },
-          () => nil,
+          function (this: CallCtx) {
+            return nil;
+          },
         ),
       }),
     });
@@ -139,8 +144,8 @@ describe("LAW 3 — static validation on the vocabulary path", () => {
     let caught: unknown;
     try {
       await exec("(probe!) (gated/verb)", { capabilities: [cap], config: {}, staticValidation: "on" });
-    } catch (e) {
-      caught = e;
+    } catch (error) {
+      caught = error;
     }
     expect(caught).toBeInstanceOf(StaticValidationError);
     expect(ran).toBe(false); // the FIRST form's own side effect never fired either
@@ -154,7 +159,9 @@ describe("LAW 3 — static validation on the vocabulary path", () => {
       symbols: (symbol, sz) => ({
         "gated/verb": symbol.native`gated/verb: requires fs`(
           { input: [], output: [sz.schemeValue], requiresConfig: ["fs"] },
-          () => nil,
+          function (this: CallCtx) {
+            return nil;
+          },
         ),
       }),
     });

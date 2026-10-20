@@ -1,4 +1,4 @@
-// symbol.alias — dissolution-semantics duplicate binding (arrival-mcp-extended-capability.md
+// symbol.alias — dissolution-semantics duplicate binding (MCP extended-capability
 // ruling 4). Two planes, mirroring input-rest-runtime.test.ts's convention:
 //   • INTEGRATION (`exec` over a real capability-assembled env) — proves an alias resolves to
 //     the SAME baked symbol under a new name, end to end.
@@ -13,6 +13,7 @@ import { applyCapability, freshEnv } from "../../__tests__/_fresh-env.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
 import { EnvCapability } from "../capability.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 
 describe("symbol.alias — resolves to the SAME symbol under a new name", () => {
   let env: ResolvingAmbient;
@@ -21,8 +22,11 @@ describe("symbol.alias — resolves to the SAME symbol under a new name", () => 
     await applyCapability(env, [
       EnvCapability.define("test/alias-basic", {
         symbols: (symbol, z) => ({
-          shout: symbol.rosetta`shout: upcase a string`({ input: [z.string], output: [z.string] }, (s) =>
-            s.toUpperCase(),
+          shout: symbol.rosetta`shout: upcase a string`(
+            { input: [z.string], output: [z.string] },
+            function (this: CallCtx, s) {
+              return s.toUpperCase();
+            },
           ),
           yell: symbol.alias`shout`,
         }),
@@ -56,7 +60,9 @@ describe("symbol.alias — numeric args flow through the target's own codecs", (
     await applyCapability(env2, [
       EnvCapability.define("test/alias-numeric", {
         symbols: (symbol, z) => ({
-          inc: symbol.rosetta`inc: add one`({ input: [z.number], output: [z.number] }, (n) => n + 1),
+          inc: symbol.rosetta`inc: add one`({ input: [z.number], output: [z.number] }, function (this: CallCtx, n) {
+            return n + 1;
+          }),
           "inc-alias": symbol.alias`inc`,
         }),
       }),
@@ -75,8 +81,8 @@ describe("symbol.alias — bake/assembly errors (errors-as-doors, teaching text)
     let caught: unknown;
     try {
       await applyCapability(env3, [cap]);
-    } catch (e) {
-      caught = e;
+    } catch (error) {
+      caught = error;
     }
     expect(caught).toBeInstanceOf(Error);
     expect((caught as Error).message).toMatch(/does-not-exist/);
@@ -87,7 +93,9 @@ describe("symbol.alias — bake/assembly errors (errors-as-doors, teaching text)
     const env4 = await freshEnv();
     const cap = EnvCapability.define("test/alias-chain", {
       symbols: (symbol, z) => ({
-        orig: symbol.rosetta`orig: identity`({ input: [z.string], output: [z.string] }, (s) => s),
+        orig: symbol.rosetta`orig: identity`({ input: [z.string], output: [z.string] }, function (this: CallCtx, s) {
+          return s;
+        }),
         first: symbol.alias`orig`,
         second: symbol.alias`first`,
       }),

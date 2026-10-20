@@ -2,8 +2,12 @@
 // type it. The write face is LexicalScopeWithInternals / EnvWithInternals —
 // an extension of the declaration, fused at the definition that intends to write.
 import { describe, expectTypeOf, test } from "vitest";
-import type { EnvWithInternals, LexicalScopeInternals } from "../env/AmbientRuntime.js";
-import { AmbientRuntime, ResolvingAmbient } from "../env/AmbientRuntime.js";
+import {
+  type EnvWithInternals,
+  type LexicalScopeInternals,
+  AmbientRuntime,
+  ResolvingAmbient,
+} from "../env/AmbientRuntime.js";
 import { LexicalScope, type LexicalScopeWithInternals } from "../eval/LexicalScope.js";
 import type { Resolver } from "../eval/Resolver.js";
 

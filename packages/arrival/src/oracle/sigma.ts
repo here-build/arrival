@@ -2,7 +2,7 @@
 //
 // Layer S (scanner.ts) reports the STRUCTURAL parse state at the end of an accepted prefix. Σ
 // refines the `atom` class into the SET OF BOUND IDENTIFIERS legal at the cursor — the contract's
-// "validSymbols, position-filtered" (sift/src/sampler/oracle-contract.ts OracleState.validSymbols).
+// "validSymbols, position-filtered" (the external sift sampler contract's OracleState.validSymbols).
 //
 // Σ = boundSymbols() ∪ scope-locals, position-filtered:
 //   - operator position ⇒ CALLABLES only (a non-callable head is a guaranteed apply-error);
@@ -88,7 +88,7 @@ export interface ScopeState {
  * over-approximation (Σ never drops a legal symbol). Closed sibling `define`s stay visible to
  * following forms at the same or shallower depth.
  */
-export function scanScope(src: string): ScopeState {
+function scanScope(src: string): ScopeState {
   const stack: ScopeFrame[] = [];
   // `define`d names whose form has already CLOSED but stay visible to later siblings, keyed by the
   // stack-depth at which the define lived (a top-level define is visible to all later top forms).
@@ -243,6 +243,15 @@ export function scanScope(src: string): ScopeState {
     }
     if (/\s/.test(c)) {
       finishToken();
+      continue;
+    }
+
+    // A character literal `#\x` is ONE atom: its payload char (`(`, `)`, `"`, `;`, whitespace…) is
+    // data, never structure — exactly as the reader takes it. A name run (`#\space`) is plain atom content.
+    if (c === "#" && src[i + 1] === "\\") {
+      midToken = true;
+      cur += src.slice(i, i + 3);
+      i = Math.min(i + 2, src.length - 1);
       continue;
     }
 

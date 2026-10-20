@@ -15,7 +15,7 @@
 // the capability bake loop); detected by the evaluator via `instanceof AKernelKeyword`.
 //
 // It is an AValue (not a bare class) so it survives the JS↔scheme membrane intact:
-// `AValue.fromJs` returns an already-AValue as-is, where a plain object would be
+// `fromJs` (membrane/boxing.ts) returns an already-AValue as-is, where a plain object would be
 // boxed to AJSObject (losing the marker identity, and with it the dispatch). A
 // constant syntactic marker — CONSTANT_CTX, provenance-free, identity equality.
 //
@@ -49,9 +49,8 @@ export class AKernelKeyword extends AValue {
     return `#<keyword:${this.name}>`;
   }
 
-  // The printer renders this via its generic constructor-name branch (`#<AKernelKeyword>`),
-  // NOT this toString (`#<keyword:name>`): the printer's own-toString shortcut needs
-  // `hasOwnProperty("toString")`, false for a prototype method.
+  // The printer renders through this term — the generic constructor-name form
+  // (`#<AKernelKeyword>`) — NOT toString's `#<keyword:name>`.
   ["arrival/print"](): string {
     return `#<${this.constructor.name}>`;
   }

@@ -140,12 +140,12 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
   {
     match: { kind: "symbols", anyOf: ["take!", "append!", "append-map!", "vector-set!"] },
     reason: "intentional — purity invariant (frozen entities); writing/linear-update methods are doored",
-    gate: "plan-2026-06-11-purity-pass",
+    gate: "purity invariant",
   },
   {
     match: { kind: "symbols", anyOf: ["set!"] },
     reason: "intentional — purity invariant; lexical set! (variable rebinding) is doored",
-    gate: "plan-2026-06-11-purity-pass (r7rs/binding)",
+    gate: "purity invariant (r7rs/binding)",
   },
   // `(car '())` / `(cdr '())` — MIGRATED to dual pass (M5). Pass A runs this corpus with
   // `strict: true` so chibi's `(test-error …)` forms are real green rows; Pass B pins loose
@@ -177,7 +177,3 @@ export const STAGED: readonly Staged[] = [];
 const registry = makeRegistry(EXCLUDED, EXPECTED_FAILURES, STAGED);
 export const verdictFor = registry.verdictFor;
 export const registryCoherenceFindings = registry.registryCoherenceFindings;
-
-// Re-exported so a consumer (chibi-srfi1.spec.ts) needing to build a `form`-exact matcher
-// doesn't need its own import of manifest.ts just for this.
-export { normalizeText };

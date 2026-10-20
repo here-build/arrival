@@ -124,8 +124,8 @@ describe("LIVE enrichment at the arrival throw site (default assembled env)", ()
   const causeEnriched = async (src: string): Promise<boolean | undefined> => {
     try {
       await exec(src);
-    } catch (e) {
-      const err = e as Error & { enriched?: boolean; cause?: { enriched?: boolean } };
+    } catch (error) {
+      const err = error as Error & { enriched?: boolean; cause?: { enriched?: boolean } };
       return err.enriched ?? err.cause?.enriched;
     }
     throw new Error(`expected exec to reject for: ${src}`);

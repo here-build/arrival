@@ -33,11 +33,11 @@ export { AVector } from "../values/primitives/AVector.js";
 export { ADict, type DictLiteralNode } from "../values/primitives/ADict.js";
 export { EOF } from "../values/primitives/EOF.js";
 
-// Number system: AExact (rationals) and AInexact (floats/complex), plus the parser both
-// root through (`parseNumber` in `values/numbers.js`; no `Number(str)` re-implementation).
+// Number system: AExact (rationals) and AInexact (floats/complex). Number literals are read
+// by the reader (`parse`), which owns the literal grammar — there is no separate host parser.
 export { AExact } from "../values/primitives/AExact.js";
 export { AInexact } from "../values/primitives/AInexact.js";
-export { type ANumeric, parseNumber } from "../values/numbers.js";
+export { type ANumeric } from "../values/numbers.js";
 
 // Value-representation leaves — box/quote/patch_value (unbox-a-literal, quote a form,
 // patch a boxed value's contents in place).

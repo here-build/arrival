@@ -215,6 +215,21 @@ export class BudgetExceededError extends ArrivalError {
 }
 
 // -------------------------------------------------------------------------
+// :: RunContextBusyError — door: two calls armed on one reused run handle at once.
+// -------------------------------------------------------------------------
+export class RunContextBusyError extends ArrivalError {
+  public readonly name = "RunContextBusyError";
+  readonly "arrival/error-category": ErrorClass = "other";
+
+  constructor() {
+    super(
+      "this run handle is already executing a call. A reused runCtx carries one call's budget and signal at a time; concurrent calls on it are illegal — await the previous call, or mint a separate run for parallel work.",
+      [],
+    );
+  }
+}
+
+// -------------------------------------------------------------------------
 // :: PurityError — deliberately-omitted feature (PURE DATAFLOW: mutation and
 // dynamics omitted by design — they'd falsify lineage). symbol.notImplemented doors throw this.
 // -------------------------------------------------------------------------
@@ -845,7 +860,7 @@ export class UnboundVariableError extends ArrivalError {
      *  prose, rendered in place of (never alongside) a "did you mean" suggestion list. This
      *  is a DISJOINT gate from `suggestions`: an idiom match is a name-exact hit against a
      *  small hardcoded table (unbound-variable.ts's idiom routes), not a fuzzy vocabulary
-     *  near-miss — the two never fire on the same name. See benchmark-defect-register.md B8. */
+     *  near-miss — the two never fire on the same name. (Benchmark defect B8.) */
     routingHint?: string,
   ) {
     const hint =
@@ -883,6 +898,60 @@ export class NotCallableError extends ArrivalError {
             `Drop the quotes and call the symbol directly: (${content} …).`
         : `Not callable: a ${typeName} sits in operator/call-head position, and a ${typeName} is not a function` +
             ` — common cause: extra parentheses — ((f x)) calls f's RESULT, not f; write (f x).`,
+    );
+  }
+}
+
+/** A user lambda (or named-let loop) was called with the wrong number of arguments.
+ *  Before this door, too FEW leaked the membrane's internal "bind: raw JS undefined
+ *  refused" and too MANY were silently dropped — a model that miscounts an argument gets
+ *  a wrong answer with no signal. The message names the arity and the way out: supply the
+ *  missing argument, or declare the parameter list to accept it (`(a . rest)`). */
+export class ArityMismatchError extends ArrivalError {
+  public readonly name = "ArityMismatchError";
+  readonly "arrival/error-category": ErrorClass = "arity-mismatch";
+
+  constructor(
+    /** The procedure's name; `undefined` for an anonymous lambda. */
+    public readonly procedure: string | undefined,
+    /** Positional parameter names, in order. */
+    public readonly params: readonly string[],
+    /** True when the parameter list ends in a rest parameter `(a b . rest)`. */
+    public readonly variadic: boolean,
+    public readonly got: number,
+  ) {
+    const who = procedure === undefined ? "this lambda" : `\`${procedure}\``;
+    const n = params.length;
+    const plural = (k: number) => `${k} argument${k === 1 ? "" : "s"}`;
+    const list = `(${params.join(" ")}${variadic ? ` . rest` : ""})`;
+    const takes = `${who} takes ${variadic ? "at least" : "exactly"} ${plural(n)} ${list}, got ${got}`;
+    const withRest = (ps: readonly string[]) => (ps.length === 0 ? "rest" : `(${ps.join(" ")} . rest)`);
+    const supply = `supply ${params
+      .slice(got)
+      .map((p) => `\`${p}\``)
+      .join(", ")}`;
+    super(
+      got < n
+        ? variadic
+          ? `${takes} — ${supply}`
+          : `${takes} — ${supply}, or accept optional args with \`${withRest(params.slice(0, got))}\``
+        : `${takes} — drop the extras or accept them with \`${withRest(params)}\``,
+    );
+  }
+}
+
+/** A `letrec` binding was READ before its initializer ran (`(letrec ((a b) (b 1)) a)`). R7RS §4.2.2
+ *  makes this an error; before this door the slot read as void and the program silently went on
+ *  with a wrong value. The message names both cures: read it inside a lambda (which defers the
+ *  read until every binding is initialized), or order the bindings sequentially with `let*`. */
+export class LetrecUnassignedError extends ArrivalError {
+  public readonly name = "LetrecUnassignedError";
+  readonly "arrival/error-category": ErrorClass = "other";
+
+  constructor(public readonly variable: string) {
+    super(
+      `letrec binding \`${variable}' read before initialization — reference it inside a lambda ` +
+        `(read late, after every binding is set), or order the bindings with let*`,
     );
   }
 }
@@ -1008,7 +1077,7 @@ export class SchemaFieldShapeError extends ArrivalError {
  *  an inexact outside JS's safe-integer range or with a fractional part, a
  *  circular or improper list. Model-reachable (a program's own value reaching a
  *  native's arg decode), so these are doors, not invariants — every decode-side
- *  throw in `common/scheme-zod.ts` self-documents that; this class gives them
+ *  throw in `common/scheme-zod/index.ts` self-documents that; this class gives them
  *  one shared identity instead of ad hoc `Error`/`TypeError`. */
 export class CodecFidelityError extends ArrivalError {
   public readonly name = "CodecFidelityError";

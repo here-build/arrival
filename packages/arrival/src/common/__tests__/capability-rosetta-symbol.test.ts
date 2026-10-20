@@ -15,7 +15,7 @@ import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX, RunContext } from "../../run/RunContext.js";
 import { EnvCapability } from "../capability.js";
 import { applyCapability } from "../../__tests__/_fresh-env.js";
-import { symbol } from "../../symbol/index.js";
+import * as symbol from "../../common/symbols/index.js";
 import { makeCallCtx, type CallCtx } from "../../run/CallCtx.js";
 import * as z from "../scheme-zod/index.js";
 import { ResolvingAmbient } from "../../env/AmbientRuntime.js";
@@ -71,8 +71,8 @@ async function wireRosetta(def: ARosettaProcedure): Promise<ARosettaProcedure> {
 
 /** Invoke a bound verb the way the REAL evaluator does post-binder-cut: build the whole
  *  `CallCtx` (runCtx + invocation) ONCE and thread it through the apply term — the binder
- *  adapter no longer reconstructs it from ambient state (reverse-membrane-for-callables.md
- *  §9, option (c) is retired; Stage 1a threads the invocation explicitly instead). Still
+ *  adapter no longer reconstructs it from ambient state (the ambient-reconstruction
+ *  option is retired; Stage 1a threads the invocation explicitly instead). Still
  *  publishes the invocation on the evaluator-owned ambient dynamic call site too, matching
  *  what a real dispatch does for nested lambda re-entry. */
 function invoke(
@@ -80,14 +80,20 @@ function invoke(
   opts: { runCtx?: RunContext; currentInvocation?: InvocationLike } | undefined,
   ...args: unknown[]
 ): unknown {
-  return withDynamicCallSite(opts?.currentInvocation, () =>
-    verb[tf("apply")](args as SchemeValue[], makeCallCtx(opts?.runCtx ?? CONSTANT_CTX, opts?.currentInvocation)),
+  const runCtx = opts?.runCtx ?? CONSTANT_CTX;
+  return withDynamicCallSite(runCtx, opts?.currentInvocation, () =>
+    verb[tf("apply")](args as SchemeValue[], makeCallCtx(runCtx, opts?.currentInvocation)),
   );
 }
 
 describe("the rosetta SymbolDef arm — bound via the vocabulary build", () => {
   it("decodes scheme→JS, runs impl, encodes JS→scheme through the bound verb", async () => {
-    const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => s.length);
+    const def = symbol.rosetta`strlen: length of a string`(
+      { input: [z.string], output: [z.number] },
+      function (this: CallCtx, s) {
+        return s.length;
+      },
+    );
     const verb = await wireRosetta(def);
     // No ctx (a direct/test call) — proves the codec membrane in isolation.
     const out = await invoke(verb, undefined, new AString("hello"));
@@ -96,14 +102,24 @@ describe("the rosetta SymbolDef arm — bound via the vocabulary build", () => {
   });
 
   it("rejects a bad arg via the input codec (errors-as-doors) through the bound verb", async () => {
-    const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => s.length);
+    const def = symbol.rosetta`strlen: length of a string`(
+      { input: [z.string], output: [z.number] },
+      function (this: CallCtx, s) {
+        return s.length;
+      },
+    );
     const verb = await wireRosetta(def);
     // A SchemeExact is not a SchemeString → the z.string codec's instanceof guard doors.
     await expect(invoke(verb, undefined, new AExact(3))).rejects.toThrow();
   });
 
   it("MINTS provenance off ctx.currentInvocation — marks the point + stamps the output", async () => {
-    const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => s.length);
+    const def = symbol.rosetta`strlen: length of a string`(
+      { input: [z.string], output: [z.number] },
+      function (this: CallCtx, s) {
+        return s.length;
+      },
+    );
     const verb = await wireRosetta(def);
 
     const { invocation, marked } = invocationWithId(42);
@@ -119,9 +135,12 @@ describe("the rosetta SymbolDef arm — bound via the vocabulary build", () => {
   it("DEEP-STAMPS a structured (list) output — every element carries the minted origin", async () => {
     // A rosetta returning a JS array → a scheme list (Pair-chain). The mint must reach every
     // element (spec §5.3: element-only lineage), exactly like jsToScheme's deep stamp.
-    const def = symbol.rosetta`split: chars of a string`({ input: [z.string], output: [z.array(z.string)] }, (s) => [
-      ...s,
-    ]);
+    const def = symbol.rosetta`split: chars of a string`(
+      { input: [z.string], output: [z.array(z.string)] },
+      function (this: CallCtx, s) {
+        return [...s];
+      },
+    );
     const verb = await wireRosetta(def);
 
     const { invocation } = invocationWithId(7);
@@ -143,7 +162,12 @@ describe("the rosetta SymbolDef arm — bound via the vocabulary build", () => {
   });
 
   it("WITHOUT a ctx invocation, forwards the inputs' provenance (mint is ctx-gated, not unconditional)", async () => {
-    const def = symbol.rosetta`echo: identity string`({ input: [z.string], output: [z.string] }, (s) => s);
+    const def = symbol.rosetta`echo: identity string`(
+      { input: [z.string], output: [z.string] },
+      function (this: CallCtx, s) {
+        return s;
+      },
+    );
     const verb = await wireRosetta(def);
 
     // An input string carrying a known origin; no ctx → resultProvenance falls back to the input union.
@@ -180,7 +204,12 @@ describe("the rosetta SymbolDef arm — bound via the vocabulary build", () => {
   it("invocation-`this`: a pure ARROW impl is unaffected — `this` is ignored, run behavior byte-identical", async () => {
     // The 50+ pure verbs are arrows: they ignore `this` entirely, so `impl.call(this, …)` is
     // exactly `impl(…)`. Proven both WITH a runCtx (signal present) and direct-JS (no ctx).
-    const def = symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s) => s.length);
+    const def = symbol.rosetta`strlen: length of a string`(
+      { input: [z.string], output: [z.number] },
+      function (this: CallCtx, s) {
+        return s.length;
+      },
+    );
     const verb = await wireRosetta(def);
 
     // direct-JS (no ctx → CallCtx defaults to CONSTANT_CTX; the arrow never looks)
@@ -205,7 +234,9 @@ describe("the rosetta SymbolDef arm — bound via the vocabulary build", () => {
     // fabricate a fresh origin — the seal-laundering class of bug `pure` exists to prevent.)
     const def = symbol.rosetta`echo: identity string`(
       { input: [z.string], output: [z.string], provenance: "pipe" },
-      (s) => s,
+      function (this: CallCtx, s) {
+        return s;
+      },
     );
     const verb = await wireRosetta(def);
 

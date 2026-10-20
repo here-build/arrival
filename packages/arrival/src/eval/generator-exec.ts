@@ -20,7 +20,7 @@ import type { EnvCapability } from "../common/capability.js";
 import type { EvalPreludeInto, EvalSchemeInto, SchemeEnv } from "../common/scheme-env.js";
 import { parse as readerParse } from "../reader/parse.js";
 import { parseProgram, validateAgainstResolution, type ParsedProgram } from "./exec-phases.js";
-import { applyMembraneClosure, RunContext, type MembraneClosure } from "../run/RunContext.js";
+import { applyMembraneClosure, RunContext, type MembraneClosure, type RunEmission } from "../run/RunContext.js";
 import { disposeRunContext } from "../run/run-lifecycle.js";
 import type { DisplaySink, NoteSink } from "../run/note-sink.js";
 import type { RunCache } from "../run/run-cache.js";
@@ -31,6 +31,76 @@ import type { ResourcePathLog } from "../run/resource-paths.js";
 import type { output as ZodOutputOf, ZodType } from "../common/scheme-zod/index.js";
 import type { AListAlike, SchemeValue } from "../values/types.js";
 import { toJS } from "../membrane/rosetta.js";
+
+// ── CALL BOUND ARMING ───────────────────────────────────────────────────────
+// Bounds are per CALL (docs/execution.md §5). Each entry computes the absolute deadline ONCE,
+// arms it on the run handle (`runCtx.bound`) for the call's extent, and releases in `finally`;
+// every nested trampoline reads the same holder, so the whole call is bounded at every depth.
+
+/** Arm this call's bound on `runCtx`. Public entries (`inherit` false) throw
+ *  RunContextBusyError on an already-armed run. Internal sub-program entries (`inherit` true:
+ *  `require`, prelude eval) INHERIT an armed bound untouched only when genuinely nested — the
+ *  caller supplied neither its own signal nor budgetMs; supplying either on an armed run is a
+ *  concurrent call and a door (never silently dropped). A call passing no signal falls back to
+ *  the mint-time seed signal. */
+function armCall(
+  runCtx: RunContext,
+  signal: AbortSignal | undefined,
+  budgetMs: number | undefined,
+  inherit = false,
+): { release(): void; fail(): void } {
+  const bound = runCtx.bound;
+  // Inherited (nested) arm: the OWNING call decides failure — a nested failure a `try` catches
+  // must not cancel the rest of the call.
+  if (inherit && bound.armed && signal === undefined && budgetMs === undefined) {
+    return { release() {}, fail() {} };
+  }
+  const deadline = budgetMs === undefined ? undefined : performance.now() + budgetMs;
+  const token = bound.arm({ signal: signal ?? bound.seedSignal, deadline, budgetMs });
+  return { release: () => bound.disarm(token), fail: () => bound.abortCall() };
+}
+
+/** Evaluate ONE top-level form under the armed call bound. Host TypeErrors unwrap to the
+ *  original (user-facing) error; host-runtime BUGS keep their internal-error wrapper. */
+async function runOne(
+  expr: SchemeValue,
+  resolver: Resolver,
+  runCtx: RunContext,
+  tap: EvalTap | undefined,
+  nodeFilter: ((node: AListAlike) => boolean) | undefined,
+  tracked: boolean,
+): Promise<SchemeValue> {
+  const runForm = () =>
+    run(evaluate(expr, { resolver, tap, nodeFilter, signal: runCtx.bound.signal, runCtx }), runCtx.bound);
+  // Call-time observation: closures defined under another run's tap read THIS one (RunObservation).
+  const observation = runCtx.observation.arm(tap, nodeFilter);
+  try {
+    return expectValue(await (tracked && runCtx.reads ? runCtx.reads.tracker.region(runForm) : runForm()));
+  } catch (error) {
+    if (error instanceof ArrivalError && error.cause instanceof TypeError && !isHostRuntimeBug(error.cause))
+      throw error.cause;
+    throw error;
+  } finally {
+    runCtx.observation.disarm(observation);
+  }
+}
+
+/** The per-form loop shared by {@link execState} and {@link execStateOverFrame}. */
+async function runForms(
+  forms: readonly SchemeValue[],
+  resolver: Resolver,
+  runCtx: RunContext,
+  { tap, nodeFilter }: { tap: EvalTap | undefined; nodeFilter: ((node: AListAlike) => boolean) | undefined },
+): Promise<SchemeValue[]> {
+  const results: SchemeValue[] = [];
+  for (const expr of forms) {
+    results.push(await runOne(expr, resolver, runCtx, tap, nodeFilter, true));
+    if (runCtx.reads !== undefined && runCtx.effects !== undefined && runCtx.cache?.mode !== "replay") {
+      checkReadWriteGuard(runCtx.effects.entries, runCtx.reads.tracker.log, runCtx.reads.writeSetOf);
+    }
+  }
+  return results;
+}
 
 /**
  * INTERNAL BAKE SEAM — not reachable through public ExecOptions. Evaluate parsed
@@ -52,16 +122,18 @@ export async function execInFrame(source: string, frame: AmbientRuntime, runCtx?
   const runResolver = new Resolver(frame);
   const ownRunCtx = runCtx === undefined;
   const actualRunCtx = runCtx ?? new RunContext({ strict: false });
+  const callBound = armCall(actualRunCtx, undefined, undefined, true);
   try {
     const results: SchemeValue[] = [];
     for (const expr of program.forms) {
-      const result = expectValue(
-        await run(evaluate(expr, { resolver: runResolver, strict: false, runCtx: actualRunCtx }), {}),
-      );
-      results.push(result);
+      results.push(await runOne(expr, runResolver, actualRunCtx, undefined, undefined, false));
     }
     return results.map((v) => applyMembraneClosure(actualRunCtx, () => toJS(v)));
+  } catch (error) {
+    callBound.fail();
+    throw error;
   } finally {
+    callBound.release();
     if (ownRunCtx) await disposeRunContext(actualRunCtx);
   }
 }
@@ -194,6 +266,15 @@ export interface ExecOptions {
    */
   membraneClosure?: MembraneClosure;
   /**
+   * Channel 7 — where this run's provenance records land (docs/execution.md §3). Rides onto
+   * RunContext.emission. Unset ⇒ emission off.
+   */
+  emission?: RunEmission;
+  /** Region-silent run (hermetic replay). Rides onto RunContext.silent. Default false. */
+  silent?: boolean;
+  /** Eager value-plane stamps (hermetic replay). Rides onto RunContext.eagerStamps. Default false. */
+  eagerStamps?: boolean;
+  /**
    * THE EXIT CONTRACT. When supplied, the LAST form's result is validated
    * against this schema at the exit boundary — AFTER toJS unwrap, so the schema
    * describes the plain-JS value exec hands back. A mismatch throws a teaching
@@ -207,9 +288,8 @@ export interface ExecOptions {
    * Interpreter-level NIL-TOLERANCE mode. When true, projection ops
    * (car/cdr and friends) applied to null/nil THROW instead of resolving
    * tolerantly to nil. Default false is TOLERANT. Threaded through
-   * EvalContext.strict; inference-plane car/cdr (env/fl-interop.ts) read it off
-   * ctx.runCtx.strict. A wrong-TYPE arg throws in BOTH modes — tolerance is
-   * scoped to absence.
+   * RunContext.strict; the inference-plane car/cdr read it off ctx.runCtx.strict.
+   * A wrong-TYPE arg throws in BOTH modes — tolerance is scoped to absence.
    */
   strict?: boolean;
   /**
@@ -339,6 +419,9 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     notes,
     display,
     membraneClosure,
+    emission,
+    silent,
+    eagerStamps,
     strict,
     staticValidation,
   } = options;
@@ -385,6 +468,9 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
     notes,
     display,
     membraneClosure,
+    emission,
+    silent,
+    eagerStamps,
   });
 
   // Fresh scope per call unless the caller opts into continuity. Fresh root is
@@ -392,40 +478,15 @@ export async function execState(code: string | SchemeValue, options: ExecOptions
   const lexicalScope = scope ?? runRootedScope(runCtx);
   const runResolver = new Resolver(lexicalScope.env, new Capabilities(chainFrame, chain));
 
+  const callBound = armCall(runCtx, signal, budgetMs);
   try {
-    const results: SchemeValue[] = [];
-    const forms = program.forms;
-    const start = budgetMs === undefined ? 0 : performance.now();
-    for (const expr of forms) {
-      const remaining = budgetMs === undefined ? undefined : budgetMs - (performance.now() - start);
-      let result: SchemeValue;
-      const runForm = () =>
-        run(
-          evaluate(expr, {
-            resolver: runResolver,
-            tap,
-            nodeFilter,
-            signal,
-            strict: strict ?? false,
-            runCtx,
-          }),
-          { signal, budgetMs: remaining },
-        );
-      try {
-        result = expectValue(await (runCtx.reads ? runCtx.reads.tracker.region(runForm) : runForm()));
-      } catch (error) {
-        if (error instanceof ArrivalError && error.cause instanceof TypeError && !isHostRuntimeBug(error.cause))
-          throw error.cause;
-        throw error;
-      }
-      results.push(result);
-
-      if (runCtx.reads !== undefined && runCtx.effects !== undefined && runCtx.cache?.mode !== "replay") {
-        checkReadWriteGuard(runCtx.effects.entries, runCtx.reads.tracker.log, runCtx.reads.writeSetOf);
-      }
-    }
+    const results = await runForms(program.forms, runResolver, runCtx, { tap, nodeFilter });
     return { values: results, scope: runResolver.scope, runCtx };
+  } catch (error) {
+    callBound.fail();
+    throw error;
   } finally {
+    callBound.release();
     // Only THIS call's own (freshly-minted) RunContext is disposed here.
     if (runCtxOwned) await disposeRunContext(runCtx);
   }
@@ -544,6 +605,9 @@ export async function execExpr(
     strictCQSstrings,
     resourcePaths,
     membraneClosure,
+    emission,
+    silent,
+    eagerStamps,
     runCtx: passedRunCtx,
   }: ExecOptions = {},
 ): Promise<SchemeValue> {
@@ -564,6 +628,9 @@ export async function execExpr(
       strictCQSstrings,
       resourcePaths,
       membraneClosure,
+      emission,
+      silent,
+      eagerStamps,
     }));
   let runResolver = resolver;
   if (runResolver === undefined) {
@@ -571,29 +638,17 @@ export async function execExpr(
     const { chainFrame, chain } = sealedVocabularyChain(vocabulary);
     runResolver = new Resolver(runRootedScope(runCtx).env, new Capabilities(chainFrame, chain));
   }
-  // Run axis is SOURCE OF TRUTH once a runCtx exists (mirrors evaluator.ts
-  // lambda runner — bodyCtx.signal = callCtx.runCtx.signal).
-  const runSignal = runCtx.signal;
+  // Nested (require) calls INHERIT the armed bound; a standalone call arms its own.
+  const callBound = armCall(runCtx, signal, budgetMs, true);
 
   try {
     // Top-level form evaluates to a value, never a bare expander — seal it.
-    const value = expectValue(
-      await run(
-        evaluate(expr, {
-          resolver: runResolver,
-          tap,
-          nodeFilter,
-          signal: runSignal,
-          runCtx,
-        }),
-        { signal: runSignal, budgetMs },
-      ),
-    );
-    return value;
+    return await runOne(expr, runResolver, runCtx, tap, nodeFilter, false);
   } catch (error) {
-    if (error instanceof ArrivalError && error.cause instanceof TypeError) throw error.cause;
+    callBound.fail();
     throw error;
   } finally {
+    callBound.release();
     // A passed-in runCtx is CALLER-owned — only a runCtx THIS call minted is torn down.
     if (runCtxOwned) await disposeRunContext(runCtx);
   }
@@ -616,13 +671,19 @@ export type ExecOptionsOverFrame = ExecOptions & { readonly env: SchemeEnv };
  * {@link inferenceEnv}, once (memoized). Idempotent-cheap to call unconditionally
  * (every *OverFrame entry does): a frame unrelated to inferenceEnv is unaffected.
  */
-let _inferenceEnvPopulated: Promise<void> | undefined;
+// Keyed residency: the population promise lives with the env it populates (one env today).
+const inferenceEnvPopulation = new WeakMap<object, Promise<void>>();
 export function ensureInferenceEnvPopulated(): Promise<void> {
-  return (_inferenceEnvPopulated ??= (async () => {
-    const vocabulary = await buildVocabulary(BASE_ROSTER, undefined, capabilityEvalScheme);
-    const env = inferenceEnv as EnvWithInternals<typeof inferenceEnv>;
-    for (const [name, value] of vocabulary.map) env.bind(name, value);
-  })());
+  let populated = inferenceEnvPopulation.get(inferenceEnv);
+  if (populated === undefined) {
+    populated = (async () => {
+      const vocabulary = await buildVocabulary(BASE_ROSTER, undefined, capabilityEvalScheme);
+      const env = inferenceEnv as EnvWithInternals<typeof inferenceEnv>;
+      for (const [name, value] of vocabulary.map) env.bind(name, value);
+    })();
+    inferenceEnvPopulation.set(inferenceEnv, populated);
+  }
+  return populated;
 }
 
 /**
@@ -651,6 +712,9 @@ export async function execStateOverFrame(
     notes,
     display,
     membraneClosure,
+    emission,
+    silent,
+    eagerStamps,
     strict,
   } = options;
   if (!isAmbientRuntime(env)) throw new AmbientShapeError("execStateOverFrame", "expected a concrete AmbientRuntime");
@@ -673,42 +737,20 @@ export async function execStateOverFrame(
       notes,
       display,
       membraneClosure,
+      emission,
+      silent,
+      eagerStamps,
     });
 
+  const callBound = armCall(runCtx, signal, budgetMs);
   try {
-    const results: SchemeValue[] = [];
-    const forms = program.forms;
-    const start = budgetMs === undefined ? 0 : performance.now();
-    for (const expr of forms) {
-      const remaining = budgetMs === undefined ? undefined : budgetMs - (performance.now() - start);
-      let result: SchemeValue;
-      const runForm = () =>
-        run(
-          evaluate(expr, {
-            resolver: runResolver,
-            tap,
-            nodeFilter,
-            signal,
-            strict: strict ?? false,
-            runCtx,
-          }),
-          { signal, budgetMs: remaining },
-        );
-      try {
-        result = expectValue(await (runCtx.reads ? runCtx.reads.tracker.region(runForm) : runForm()));
-      } catch (error) {
-        if (error instanceof ArrivalError && error.cause instanceof TypeError && !isHostRuntimeBug(error.cause))
-          throw error.cause;
-        throw error;
-      }
-      results.push(result);
-
-      if (runCtx.reads !== undefined && runCtx.effects !== undefined && runCtx.cache?.mode !== "replay") {
-        checkReadWriteGuard(runCtx.effects.entries, runCtx.reads.tracker.log, runCtx.reads.writeSetOf);
-      }
-    }
+    const results = await runForms(program.forms, runResolver, runCtx, { tap, nodeFilter });
     return { values: results, scope: runResolver.scope, runCtx };
+  } catch (error) {
+    callBound.fail();
+    throw error;
   } finally {
+    callBound.release();
     if (runCtxOwned) await disposeRunContext(runCtx);
   }
 }
@@ -739,6 +781,9 @@ export async function execExprOverFrame(
     strictCQSstrings,
     resourcePaths,
     membraneClosure,
+    emission,
+    silent,
+    eagerStamps,
     runCtx: passedRunCtx,
   }: ExecOptionsOverFrame,
 ): Promise<SchemeValue> {
@@ -756,20 +801,18 @@ export async function execExprOverFrame(
       strictCQSstrings,
       resourcePaths,
       membraneClosure,
+      emission,
+      silent,
+      eagerStamps,
     });
-  const runSignal = runCtx.signal;
+  const callBound = armCall(runCtx, signal, budgetMs, true);
   try {
-    const value = expectValue(
-      await run(evaluate(expr, { resolver: runResolver, tap, nodeFilter, signal: runSignal, runCtx }), {
-        signal: runSignal,
-        budgetMs,
-      }),
-    );
-    return value;
+    return await runOne(expr, runResolver, runCtx, tap, nodeFilter, false);
   } catch (error) {
-    if (error instanceof ArrivalError && error.cause instanceof TypeError) throw error.cause;
+    callBound.fail();
     throw error;
   } finally {
+    callBound.release();
     if (runCtxOwned) await disposeRunContext(runCtx);
   }
 }

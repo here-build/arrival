@@ -1,6 +1,6 @@
 // contract-kind-brand — TYPE-LEVEL PROOFS for the Q1 split's compile-time contract-kind ban
 // (V ruling, mid-Phase-A — supersedes an earlier bake-time teaching-door draft of this same
-// law; docs/plans/stage-c-corpse-deletion.md §"z.value retirement campaign").
+// law; part of the z.value retirement campaign).
 //
 // LAW (a): `z.schemeValue` banned from rosetta slots; `z.dynamic`/`z.instance` banned from
 // native/sequence/define slots. Phantom brands (ContourOnly/CrossingOnly). Mechanism:
@@ -22,6 +22,7 @@
 
 import { describe, test } from "vitest";
 import { EnvCapability } from "../capability.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 
 // A plain fixture class — `z.instance(Ctor)`'s type-level ban doesn't need a REAL
 // `@arrival.private` brand (that's a runtime-only fact); any constructor shape suffices to
@@ -32,10 +33,13 @@ describe("Q1 compile-time contract-kind ban — z.schemeValue banned from rosett
   test("z.schemeValue in a rosetta input slot must NOT compile", () => {
     EnvCapability.define("test/ban-schemeValue-rosetta-input", {
       symbols: (symbol, z) => ({
-        // @ts-expect-error — z.schemeValue is not legal in a rosetta contract's input; rosetta
-        // crosses the membrane, so this slot needs a real codec, z.procedure, or z.dynamic.
-        bad: symbol.rosetta`bad: schemeValue in rosetta input`({ input: [z.schemeValue], output: [z.string] }, (v) =>
-          String(v),
+        bad: symbol.rosetta`bad: schemeValue in rosetta input`(
+          // @ts-expect-error — z.schemeValue is not legal in a rosetta contract's input; rosetta
+          // crosses the membrane, so this slot needs a real codec, z.procedure, or z.dynamic.
+          { input: [z.schemeValue], output: [z.string] },
+          function (this: CallCtx, v) {
+            return String(v);
+          },
         ),
       }),
     });
@@ -47,7 +51,9 @@ describe("Q1 compile-time contract-kind ban — z.schemeValue banned from rosett
         bad: symbol.rosetta`bad: schemeValue in rosetta output`(
           // @ts-expect-error — same rule, output side.
           { input: [z.string], output: [z.schemeValue] },
-          (s) => s,
+          function (this: CallCtx, s) {
+            return s;
+          },
         ),
       }),
     });
@@ -60,7 +66,9 @@ describe("Q1 compile-time contract-kind ban — z.schemeValue banned from rosett
           // @ts-expect-error — same rule, a kwargs (inputRest shape-record) field.
           // Error lands on the contract object (poisoned `inputRest`), not the factory call.
           { input: [], inputRest: { v: z.schemeValue }, output: [z.string] },
-          (args: { v: unknown }) => String(args.v),
+          function (this: CallCtx, args: { v: unknown }) {
+            return String(args.v);
+          },
         ),
       }),
     });
@@ -119,7 +127,9 @@ describe("Q1 compile-time contract-kind ban — z.schemeValue banned from rosett
       symbols: (symbol, z) => ({
         "ok-rosetta": symbol.rosetta`ok-rosetta: dynamic is legal here`(
           { input: [z.dynamic], output: [z.dynamic] },
-          (v) => v,
+          function (this: CallCtx, v) {
+            return v;
+          },
         ),
       }),
     });
@@ -168,7 +178,9 @@ describe("Q1 compile-time contract-kind ban — z.schemeValue banned from rosett
       symbols: (symbol, z) => ({
         "ok-rosetta": symbol.rosetta`ok-rosetta: instance(Ctor) is legal here`(
           { input: [z.instance(FixtureHandle)], output: [z.instance(FixtureHandle)] },
-          (v) => v,
+          function (this: CallCtx, v) {
+            return v;
+          },
         ),
       }),
     });

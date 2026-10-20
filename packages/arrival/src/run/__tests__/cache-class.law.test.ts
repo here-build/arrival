@@ -1,6 +1,6 @@
 /**
- * LAW — the EXPLICIT cache class on `Contract` (R1, arrival-mcp-rework-over-phases.md
- * §2.3, Rulings A + B; the D-ledger's D2-superseding declaration).
+ * LAW — the EXPLICIT cache class on `Contract` (R1, Rulings A + B; supersedes the earlier
+ * D2 declaration).
  *
  * The vocabulary is Solidity's, declared, never derived from the lineage role:
  *   - `view`  = cacheable ACROSS runs (a boundary snapshot worth persisting) — demands a
@@ -19,14 +19,14 @@
  */
 import { describe, it, expect, beforeAll } from "vitest";
 import * as z from "../../common/scheme-zod/index.js";
-import { symbol } from "../../symbol/index.js";
-import type { CacheClass } from "../../common/symbols/_bake.js";
+import * as symbol from "../../common/symbols/index.js";
+import { type CacheClass, type RosettaSymbolDef, type SequenceSymbolDef } from "../../common/symbols/_bake.js";
 import { type NativeSymbolDef } from "../../values/primitives/ANativeProcedure.js";
-import { type RosettaSymbolDef, type SequenceSymbolDef } from "../../common/symbols/_bake.js";
 import { EnvCapability } from "../../common/capability.js";
 import { CacheClassShapeError, ProvenanceRoleShapeError } from "../../errors.js";
 import { applyCapability, freshEnv } from "../../__tests__/_fresh-env.js";
 import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
+import type { CallCtx } from "../CallCtx.js";
 
 /** Test-only cast: pull a minted value's `.contract` (typed `unknown` on the class — see
  *  ACallable.ts) back to its known CONTRACT shape, for direct introspection. Stage A2:
@@ -40,7 +40,9 @@ describe("cache class — declaration + resolution (never derived, absent = rege
   it("a declared `view` on a serializable contract resolves onto the baked def", () => {
     const def = symbol.rosetta`cc-view: a boundary snapshot`(
       { input: [z.string], output: [z.string], cacheClass: "view" },
-      (s) => s.toUpperCase(),
+      function (this: CallCtx, s) {
+        return s.toUpperCase();
+      },
     );
     expect(contractOf<RosettaSymbolDef>(def).cacheClass).toBe("view");
   });
@@ -48,20 +50,29 @@ describe("cache class — declaration + resolution (never derived, absent = rege
   it("a declared `pure` resolves onto the baked def — ungated (z.dynamic slots allowed)", () => {
     const def = symbol.rosetta`cc-pure: contractually deterministic`(
       { input: z.array(z.dynamic), output: [z.dynamic], cacheClass: "pure" },
-      (v) => v,
+      function (this: CallCtx, v) {
+        return v;
+      },
     );
     expect(contractOf<RosettaSymbolDef>(def).cacheClass).toBe("pure");
   });
 
   it("an undeclared verb carries NO cache class — regenerateable is the safe default, never a resolved kind-default", () => {
-    const def = symbol.rosetta`cc-undeclared: `({ input: [z.string], output: [z.string] }, (s) => s);
+    const def = symbol.rosetta`cc-undeclared: `({ input: [z.string], output: [z.string] }, function (this: CallCtx, s) {
+      return s;
+    });
     expect(contractOf<RosettaSymbolDef>(def).cacheClass).toBeUndefined();
   });
 
   it("native/sequence carry the same declaration channel (the field rides every Contract-bearing kind)", () => {
     expect(
       contractOf<NativeSymbolDef>(
-        symbol.native`cc-native-view: `({ input: [z.string], output: [z.string], cacheClass: "view" }, (s) => s),
+        symbol.native`cc-native-view: `(
+          { input: [z.string], output: [z.string], cacheClass: "view" },
+          function (this: CallCtx, s) {
+            return s;
+          },
+        ),
       ).cacheClass,
     ).toBe("view");
     expect(
@@ -80,12 +91,14 @@ describe("the `view` shape gate — a cache entry must serialize (bake-time door
     try {
       symbol.rosetta`cc-view-cat: `(
         { input: [z.lambda, z.string], output: [z.string], cacheClass: "view" },
-        (_f, s) => s,
+        function (this: CallCtx, _f, s) {
+          return s;
+        },
       );
       expect.unreachable();
-    } catch (err) {
-      expect(err).toBeInstanceOf(CacheClassShapeError);
-      expect((err as CacheClassShapeError)["arrival/error-category"]).toBe("contract-shape");
+    } catch (error) {
+      expect(error).toBeInstanceOf(CacheClassShapeError);
+      expect((error as CacheClassShapeError)["arrival/error-category"]).toBe("contract-shape");
     }
   });
 
@@ -93,23 +106,31 @@ describe("the `view` shape gate — a cache entry must serialize (bake-time door
     expect(() =>
       symbol.rosetta`cc-view-lambda: `(
         { input: [z.lambda, z.string], output: [z.string], cacheClass: "view" },
-        (_f, s) => s,
+        function (this: CallCtx, _f, s) {
+          return s;
+        },
       ),
     ).toThrow(CacheClassShapeError);
   });
 
   it("a `view` with a z.dynamic OUTPUT slot throws at bake — the raw escape hatch doesn't serialize", () => {
     expect(() =>
-      symbol.rosetta`cc-view-value-out: `({ input: [z.string], output: [z.dynamic], cacheClass: "view" }, (): never => {
-        throw new Error("unreachable — the bake-time gate throws before any impl can run");
-      }),
+      symbol.rosetta`cc-view-value-out: `(
+        { input: [z.string], output: [z.dynamic], cacheClass: "view" },
+        function (this: CallCtx): never {
+          throw new Error("unreachable — the bake-time gate throws before any impl can run");
+        },
+      ),
     ).toThrow(CacheClassShapeError);
   });
 
   it("a `view` with a z.dynamic INPUT slot throws at bake — the cache KEY must canonicalize too", () => {
     expect(() =>
-      symbol.rosetta`cc-view-value-in: `({ input: [z.dynamic], output: [z.string], cacheClass: "view" }, (v) =>
-        String(v),
+      symbol.rosetta`cc-view-value-in: `(
+        { input: [z.dynamic], output: [z.string], cacheClass: "view" },
+        function (this: CallCtx, v) {
+          return String(v);
+        },
       ),
     ).toThrow(CacheClassShapeError);
   });
@@ -118,7 +139,9 @@ describe("the `view` shape gate — a cache entry must serialize (bake-time door
     expect(() =>
       symbol.rosetta`cc-view-kwargs-value: `(
         { input: [], inputRest: { raw: z.dynamic }, output: [z.string], cacheClass: "view" },
-        (kw: { raw: unknown }) => String(kw.raw),
+        function (this: CallCtx, kw: { raw: unknown }) {
+          return String(kw.raw);
+        },
       ),
     ).toThrow(CacheClassShapeError);
     // The serializable-kwargs counterpart passes.
@@ -126,7 +149,9 @@ describe("the `view` shape gate — a cache entry must serialize (bake-time door
       contractOf<RosettaSymbolDef>(
         symbol.rosetta`cc-view-kwargs-ok: `(
           { input: [], inputRest: { name: z.string }, output: [z.string], cacheClass: "view" },
-          (kw: { name: string }) => kw.name,
+          function (this: CallCtx, kw: { name: string }) {
+            return kw.name;
+          },
         ),
       ).cacheClass,
     ).toBe("view");
@@ -137,7 +162,9 @@ describe("the `view` shape gate — a cache entry must serialize (bake-time door
       contractOf<RosettaSymbolDef>(
         symbol.rosetta`cc-pure-ungated: `(
           { input: [z.lambda, z.dynamic], output: [z.dynamic], cacheClass: "pure" },
-          (_f, v) => v,
+          function (this: CallCtx, _f, v) {
+            return v;
+          },
         ),
       ).cacheClass,
     ).toBe("pure");
@@ -147,7 +174,12 @@ describe("the `view` shape gate — a cache entry must serialize (bake-time door
 describe("the `sink` gate — void-family output (the tombstone-skip's soundness floor)", () => {
   it("a `sink` with a real value output throws (the pre-existing egress gate, unchanged)", () => {
     expect(() =>
-      symbol.rosetta`cc-sink-egress: `({ input: [z.string], output: [z.string], provenance: "sink" }, (s) => s),
+      symbol.rosetta`cc-sink-egress: `(
+        { input: [z.string], output: [z.string], provenance: "sink" },
+        function (this: CallCtx, s) {
+          return s;
+        },
+      ),
     ).toThrow(ProvenanceRoleShapeError);
   });
 
@@ -156,13 +188,20 @@ describe("the `sink` gate — void-family output (the tombstone-skip's soundness
       contractOf<RosettaSymbolDef>(
         symbol.rosetta`cc-sink-void: `(
           { input: [z.string], output: [z.undefinedResult], provenance: "sink" },
-          () => undefined,
+          function (this: CallCtx) {
+            return undefined;
+          },
         ),
       ).provenance,
     ).toBe("sink");
     expect(
       contractOf<NativeSymbolDef>(
-        symbol.native`cc-sink-empty: `({ input: [z.schemeValue], output: [], provenance: "sink" }, (): [] => []),
+        symbol.native`cc-sink-empty: `(
+          { input: [z.schemeValue], output: [], provenance: "sink" },
+          function (this: CallCtx): [] {
+            return [];
+          },
+        ),
       ).provenance,
     ).toBe("sink");
   });
@@ -172,7 +211,9 @@ describe("lineage ⊥ cache — the infer coexistence law (Ruling B)", () => {
   it("a `pure` cache class coexists with the `source` lineage default — neither axis moves the other", () => {
     const def = symbol.rosetta`cc-infer-shaped: source that declares pure`(
       { input: z.array(z.dynamic), output: [z.dynamic], cacheClass: "pure" },
-      (v) => v,
+      function (this: CallCtx, v) {
+        return v;
+      },
     );
     expect(contractOf<RosettaSymbolDef>(def).provenance).toBe("source"); // lineage: mints (the result is new information)
     expect(contractOf<RosettaSymbolDef>(def).cacheClass).toBe("pure"); // cache: regenerateable by contractual determinism
@@ -181,7 +222,9 @@ describe("lineage ⊥ cache — the infer coexistence law (Ruling B)", () => {
   it("a `view` cache class leaves a DECLARED lineage role untouched", () => {
     const def = symbol.rosetta`cc-view-pipe: `(
       { input: [z.string], output: [z.string], provenance: "pipe", cacheClass: "view" },
-      (s) => s,
+      function (this: CallCtx, s) {
+        return s;
+      },
     );
     expect(contractOf<RosettaSymbolDef>(def).provenance).toBe("pipe");
     expect(contractOf<RosettaSymbolDef>(def).cacheClass).toBe("view");
@@ -190,7 +233,9 @@ describe("lineage ⊥ cache — the infer coexistence law (Ruling B)", () => {
   it('the pipe-without-cacheClass row: a `provenance: "pipe"` rosetta with NO cache class stays exactly that — the new field never rewrites the `pure: true` → pipe mapping (removed API)', () => {
     const def = symbol.rosetta`cc-pipe-no-cache: `(
       { input: [z.string], output: [z.string], provenance: "pipe" },
-      (s) => s,
+      function (this: CallCtx, s) {
+        return s;
+      },
     );
     expect(contractOf<RosettaSymbolDef>(def).provenance).toBe("pipe");
     expect(contractOf<RosettaSymbolDef>(def).cacheClass).toBeUndefined();
@@ -204,9 +249,24 @@ describe("stamping — the resolved class rides the provenanceRole rails onto th
     await applyCapability(env, [
       EnvCapability.define("test/cache-class-stamp", {
         symbols: (symbol, z) => ({
-          "cc/view": symbol.rosetta`cc/view: `({ input: [z.string], output: [z.string], cacheClass: "view" }, (s) => s),
-          "cc/pure": symbol.rosetta`cc/pure: `({ input: [z.string], output: [z.string], cacheClass: "pure" }, (s) => s),
-          "cc/plain": symbol.rosetta`cc/plain: `({ input: [z.string], output: [z.string] }, (s) => s),
+          "cc/view": symbol.rosetta`cc/view: `(
+            { input: [z.string], output: [z.string], cacheClass: "view" },
+            function (this: CallCtx, s) {
+              return s;
+            },
+          ),
+          "cc/pure": symbol.rosetta`cc/pure: `(
+            { input: [z.string], output: [z.string], cacheClass: "pure" },
+            function (this: CallCtx, s) {
+              return s;
+            },
+          ),
+          "cc/plain": symbol.rosetta`cc/plain: `(
+            { input: [z.string], output: [z.string] },
+            function (this: CallCtx, s) {
+              return s;
+            },
+          ),
         }),
       }),
     ]);

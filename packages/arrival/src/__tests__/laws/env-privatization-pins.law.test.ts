@@ -1,10 +1,9 @@
 /**
  * LAW (V0→V5) — the environment-privatization design.
  * Pinned surface, updated at the V5 atomic cut (D5 hard delete executed); re-pinned at
- * STAGE C CUT 3b (docs/plans/stage-c-corpse-deletion.md, "the massacre"), which retired the
+ * STAGE C CUT 3b, which retired the
  * PUBLIC glass option (`ExecOptions.env`) and the `override` sugar ENTIRELY; re-pinned AGAIN
- * at the STAGE C EXPORT RESTRUCTURE (same doc, §"Export restructure" — V's minimal-surface
- * ruling), which is the SANCTIONED place this restructure records itself: the pin below IS the
+ * at the STAGE C EXPORT RESTRUCTURE (V's minimal-surface ruling), which is the SANCTIONED place this restructure records itself: the pin below IS the
  * root barrel's contract documentation now, not just a regression check.
  *
  *   1. Barrel surface pin — `global_env`/`env` are GONE (V1's zero-consumer cut);

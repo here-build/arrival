@@ -8,7 +8,6 @@
 // readonly slots" — the tests just quietly weren't using it, and nothing could tell. The getters
 // made the fence real.
 import { describe, expect, it } from "vitest";
-import { CONSTANT_CTX } from "../../../run/RunContext.js";
 
 import { AValue } from "../AValue.js";
 import { __tieKnot, APair } from "../APair.js";
@@ -25,7 +24,7 @@ import { ACharacter } from "../ACharacter.js";
 import { eq, eqv, structuralEqual } from "../../structural-equal.js";
 import listsCap from "../../../env/r7rs/lists.js";
 import type { EnvCapability } from "../../../common/capability.js";
-import type { AList, AListAlike, SchemeValue } from "../../types.js";
+import type { AListAlike, SchemeValue } from "../../types.js";
 import { tf } from "../../tagless-final.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 

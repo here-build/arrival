@@ -1,5 +1,5 @@
 // mint-numeric.ts — the ONE choke point for minting a checked `AExact` under the
-// safe-operand invariant (docs/design-history/arrival-one-number-rework.md §0.2/§0.3,
+// safe-operand invariant (one-number rework, §0.2/§0.3,
 // §2.1: "RATIO with crash-on-overflow"). Every exact-producing op should route its final
 // num/denom (or a bare integral result) through `mintExact` rather than
 // calling `new AExact(...)` directly, so the crash-on-overflow law and the DEBUG
@@ -96,7 +96,7 @@ export function isNumericDebugEnabled(): boolean {
   return typeof process !== "undefined" && !!process.env?.ARRIVAL_NUMERIC_DEBUG;
 }
 
-export type RationalOp = "add" | "sub" | "mul" | "div";
+type RationalOp = "add" | "sub" | "mul" | "div";
 
 function bigIntGcd(a: bigint, b: bigint): bigint {
   a = a < 0n ? -a : a;

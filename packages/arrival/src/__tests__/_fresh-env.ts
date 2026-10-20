@@ -1,6 +1,6 @@
 // Per-test capability-assembled environments.
 //
-// STAGE C CUT 3b (docs/plans/stage-c-corpse-deletion.md) retired the realm-singleton
+// STAGE C CUT 3b retired the realm-singleton
 // `global_env`/`user_env` (env-roots.ts) and the ambient bootstrap (`ensureBaseAssembled`/
 // `initBridge`) this file used to ride. STAGE C CUT 4 retired `lower()`/`assembleEnv`
 // themselves — `envFromCapabilities` (below) is the replacement idiom: `buildVocabulary` a

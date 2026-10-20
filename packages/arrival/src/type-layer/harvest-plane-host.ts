@@ -4,9 +4,14 @@
  * Skip is by name (`skipNames` = PRE `declare function` leaves), not pack
  * prefix (`scheme/*`). Defines stay schemePrelude bodies. Signature: authored
  * `type:` else `signatureOf`, Promise stripped (lens is sync).
+ *
+ * `symbol.alias` dissolves to the target's contract under the alias name (same
+ * as the bind loop). Skipping the marker left `string-trim-left` / `nil?`
+ * untyped in the prelude. Aliases of `symbol.define` still skip — defines stay
+ * schemePrelude bodies (`some` → `any?`).
  */
 import type { EnvCapability, SymbolDeclaration } from "../common/capability.js";
-import { contractOf } from "../common/capability-internals.js";
+import { contractOf, isAliasDef } from "../common/capability-internals.js";
 import { signatureOf } from "./schema-to-ts.js";
 
 export interface HarvestedPlaneHost {
@@ -54,11 +59,14 @@ export function harvestPlaneHost(caps: readonly EnvCapability[], skipNames: Read
     const symbols = cap.spec.symbols;
     if (symbols === undefined || typeof symbols === "function") return;
 
-    for (const [name, def] of Object.entries(symbols as Record<string, SymbolDeclaration>)) {
+    const record = symbols as Record<string, SymbolDeclaration>;
+    for (const [name, def] of Object.entries(record)) {
       if (skipNames.has(name) || byName.has(name)) continue;
-      if (SKIP_KINDS.has(defKind(def))) continue;
+      const resolved = isAliasDef(def) ? record[def.target] : def;
+      if (resolved === undefined) continue;
+      if (SKIP_KINDS.has(defKind(resolved))) continue;
 
-      const entity = contractOf(def);
+      const entity = contractOf(resolved);
       if (entity === undefined) continue;
       if (SKIP_KINDS.has(entity.kind)) continue;
 

@@ -1,6 +1,6 @@
 /**
- * LAW — the exec PHASE PRODUCTS (exec-phases-and-dynamic-metadata.md Part III).
- * STAGE C CUT 3b (docs/plans/stage-c-corpse-deletion.md) retired the ambient-phase products
+ * LAW — the exec PHASE PRODUCTS (Part III of the exec-phases design).
+ * STAGE C CUT 3b retired the ambient-phase products
  * (`assembleAmbient`/`AssembledAmbient`/`validateAgainstAmbient`/glass) along with the ambient
  * path itself; this file re-pins what survives on the self-hosted vocabulary path
  * (`exec`/`execState`, both routing through `env/vocabulary.ts`/`env/assemble-run.ts`) and drops
@@ -20,8 +20,7 @@
  *     (carrying the complete diagnostic list) before the first form ever evaluates — zero side
  *     effects fired.
  *
- * DROPPED (no vocabulary-path equivalent — see docs/plans/stage-c-corpse-deletion.md's Cut 3b
- * status entry): the realm-default `ExecState.ambient` row (`ExecState` carries no `ambient`
+ * DROPPED (no vocabulary-path equivalent — retired with Stage C Cut 3b): the realm-default `ExecState.ambient` row (`ExecState` carries no `ambient`
  * field at all anymore — ownership of "the shared default" was the retired realm singleton's own
  * concept, and the cornerstone rules that hermetic violation out); the glass "`ExecState.ambient` is
  * absent" row (glass itself is gone — `ExecOptions` has no `env`).
@@ -31,7 +30,7 @@ import { describe, expect, it } from "vitest";
 import { EnvCapability } from "../../common/capability.js";
 import type { Resource } from "../../common/resources.js";
 import * as z from "../../common/scheme-zod/index.js";
-import { symbol } from "../../symbol/index.js";
+import * as symbol from "../../common/symbols/index.js";
 import type { CallCtx } from "../../run/CallCtx.js";
 import { LexicalScope } from "../../eval/LexicalScope.js";
 import { parseProgram } from "../../eval/exec-phases.js";
@@ -40,7 +39,6 @@ import { assembleRun } from "../../env/assemble-run.js";
 import { BASE_ROSTER } from "../../env/base-roster.js";
 import { isAmbientRuntime } from "../../env/AmbientRuntime.js";
 import { StaticValidationError } from "../../static-validation/validate-program.js";
-import { RunContext } from "../../run/RunContext.js";
 import { disposeRunContext } from "../../run/run-lifecycle.js";
 
 /** A spy-instrumented port: counts acquisitions + teardowns. */
@@ -183,8 +181,8 @@ describe("validation without execution (§3.5) — the complete diagnostic list,
         capabilities: [capability],
         staticValidation: "on",
       });
-    } catch (e) {
-      caught = e;
+    } catch (error) {
+      caught = error;
     }
     expect(caught).toBeInstanceOf(StaticValidationError);
     const diagnostics = (caught as StaticValidationError).diagnostics;

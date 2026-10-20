@@ -1,13 +1,12 @@
 /**
  * LAW — the host-function INBOUND reverse-membrane lens.
  *
- * V's ruling (2026-07-24, verbatim, stage-c-corpse-deletion.md §"V rulings batch"):
+ * V's ruling (2026-07-24, verbatim):
  * "Host fn — reverse membrane, yes. And we should also support function returns
  * inside symbol.rosetta with same logic — we pass fn into scheme, args gets
  * scheme→js when passed, result goes js→scheme when returned." A bare host function
- * crossing js→scheme (jsToScheme's FOREIGN_LENS_CLAIMS function row, boxing.ts's
- * `fromJs` function arm, and a `symbol.rosetta` impl RETURNING a function — one
- * mechanism, three entry points) becomes a genuine scheme-callable
+ * crossing js→scheme (jsToScheme's FOREIGN_LENS_CLAIMS function row and a
+ * `symbol.rosetta` impl RETURNING a function — one mechanism, two entry points) becomes a genuine scheme-callable
  * `ARosettaProcedure` (`ACallable.ts`'s `hostFnToCallable`): when scheme applies it,
  * args cross scheme→js (default-options `toJS`), the host fn runs, and its
  * result crosses js→scheme (under the CALLING invocation's run) — promise-tolerant.
@@ -20,8 +19,7 @@
  *  1. MARSHAL — applying the minted callable crosses scheme args→js, calls the host
  *     fn, crosses its result (sync or Promise) back js→scheme.
  *  2. IDENTITY — the SAME host fn crossing IN twice within one run answers the SAME
- *     callable (`eq?`); a DIFFERENT run mints its own; `jsToScheme` and `fromJs`
- *     share the one cache (one mechanism, two entry points).
+ *     callable (`eq?`); a DIFFERENT run mints its own.
  *  3. REVERSE-THEN-FORWARD — a callable's own `hostProjectionOf` wrapper crossing
  *     back IN re-admits as the ORIGINAL callable (`eq?`), never re-wrapped — the
  *     function-shaped sibling of R9's container re-admission.
@@ -33,10 +31,9 @@
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX, RunContext } from "../../run/RunContext.js";
 import { jsToScheme } from "../rosetta.js";
-import { fromJs } from "../boxing.js";
 import { ALambda, applyCallback } from "../../values/primitives/ACallable.js";
 import { ARosettaProcedure } from "../../values/primitives/ARosettaProcedure.js";
-import { testCallCtx } from "../../run/CallCtx.js";
+import { type CallCtx, testCallCtx } from "../../run/CallCtx.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AString } from "../../values/primitives/AString.js";
 import { APair } from "../../values/primitives/APair.js";
@@ -119,13 +116,6 @@ describe("LAW — host-function inbound reverse-membrane lens", () => {
       expect(a).not.toBe(b);
     });
 
-    it("fromJs's function arm and jsToScheme's function row share the ONE run-scoped cache", () => {
-      const hostFn = () => 1;
-      const viaJsToScheme = jsToScheme(CONSTANT_CTX, hostFn);
-      const viaFromJs = fromJs(CONSTANT_CTX, hostFn);
-      expect(viaFromJs).toBe(viaJsToScheme);
-    });
-
     it("provenance stamps ONLY at first mint — a procedure's identity is load-bearing, so a later crossing with different provenance does not fork it", () => {
       const hostFn = () => 1;
       const prov = new Set<number>([99]);
@@ -144,12 +134,6 @@ describe("LAW — host-function inbound reverse-membrane lens", () => {
       expect(jsToScheme(CONSTANT_CTX, wrapper)).toBe(lam);
     });
 
-    it("the SAME re-admission holds crossing back IN via fromJs", async () => {
-      const lam = (await lastValue("(lambda (x) x)")) as ALambda;
-      const wrapper = lam["arrival/toJS"]() as (...args: unknown[]) => unknown;
-      expect(fromJs(CONSTANT_CTX, wrapper)).toBe(lam);
-    });
-
     it("an ARosettaProcedure minted BY the inbound lens itself round-trips the same way once exported", async () => {
       const hostFn = () => 1;
       const proc = jsToScheme(CONSTANT_CTX, hostFn);
@@ -163,11 +147,14 @@ describe("LAW — host-function inbound reverse-membrane lens", () => {
     it("scheme receives a callable and applying it marshals both legs correctly", async () => {
       const cap = EnvCapability.define("law/host-fn-lens-rosetta-return", {
         symbols: (symbol, sz) => ({
-          "make-adder": symbol.rosetta`make-adder: returns a bare host fn`({ input: [], output: [sz.dynamic] }, () => {
-            const adder = (n: unknown) => (n as number) + 1;
-            // reverse-membrane: host fn is a legal dynamic payload at runtime
-            return adder as unknown as import("../../values/types.js").SchemeValue;
-          }),
+          "make-adder": symbol.rosetta`make-adder: returns a bare host fn`(
+            { input: [], output: [sz.dynamic] },
+            function (this: CallCtx) {
+              const adder = (n: unknown) => (n as number) + 1;
+              // reverse-membrane: host fn is a legal dynamic payload at runtime
+              return adder as unknown as import("../../values/types.js").SchemeValue;
+            },
+          ),
         }),
       });
       const result = await lastValue("((make-adder) 41)", { capabilities: [cap], config: {} });

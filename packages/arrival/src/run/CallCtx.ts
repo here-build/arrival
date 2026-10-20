@@ -8,6 +8,7 @@ import { CONSTANT_CTX, type RunContext } from "./RunContext.js";
 import { type InvocationLike } from "../membrane/rosetta.js";
 // TYPE-ONLY: Resolver lives in eval/, above this leaf. Runtime stays run → (nothing in eval).
 import type { Resolver } from "../eval/Resolver.js";
+import type { ClosureCallWindow } from "../eval/provenance-hooks.js";
 
 /**
  * The ONE `this` every callable body sees (docs/execution.md §CALLCTX) — dispatch-level
@@ -35,8 +36,16 @@ export interface CallCtx {
   readonly invocation: { currentInvocation: InvocationLike | undefined };
   readonly argProvenance?: readonly ReadonlySet<number>[];
   readonly resolver?: Resolver;
+  /** The closure-call window (track) the apply site lives in, when the run windows closure calls
+   *  (`RunEmission.closureSites`). Lets a recording or playback host address its crossing by
+   *  TRACK coordinate instead of call order (P18: order among a fan's tracks is not observable). */
+  readonly closureCall?: ClosureCallWindow;
   readonly configuration?: unknown;
   readonly resources?: unknown;
+  /** The evaluator grants this call permission to return a bounce token (its callee's body
+   *  generator) instead of running it — set ONLY by the apply term when `canBounce` is true,
+   *  and read only by `apply` (tail-call forwarding). Absent ⇒ run the callee to completion. */
+  readonly canBounce?: boolean;
 }
 
 /** Value → owning-capability association. Bind loop calls {@link associateCapability} once
@@ -109,6 +118,7 @@ export function makeCallCtx(
   argProvenance?: readonly ReadonlySet<number>[],
   resolvedValue?: unknown,
   resolver?: Resolver,
+  closureCall?: ClosureCallWindow,
 ): CallCtx {
   const owner =
     typeof resolvedValue === "object" && resolvedValue !== null ? capabilityByValue.get(resolvedValue) : undefined;
@@ -117,6 +127,7 @@ export function makeCallCtx(
     invocation: { currentInvocation },
     argProvenance,
     ...(resolver === undefined ? {} : { resolver }),
+    ...(closureCall === undefined ? {} : { closureCall }),
     // eslint-disable-next-line unicorn/no-negated-condition -- include configuration/resources only when the value has an owner
     ...(owner !== undefined
       ? {

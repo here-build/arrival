@@ -20,11 +20,10 @@ import { describe, expect, it, beforeAll } from "vitest";
 import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { applyCapability, freshEnv } from "../../__tests__/_fresh-env.js";
-import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
-import { symbol } from "../../symbol/index.js";
-import { testCallCtx } from "../../run/CallCtx.js";
+import * as symbol from "../../common/symbols/index.js";
+import { type CallCtx, testCallCtx } from "../../run/CallCtx.js";
 import { normalizeInputVector } from "../symbols/_bake.js";
 import * as z from "../scheme-zod/index.js";
 import { EnvCapability } from "../capability.js";
@@ -38,7 +37,9 @@ describe("Contract.inputRest runtime — UNIT (direct def.run): a fixed head + v
   it("decodes a FIXED head + a 0-length variadic tail", async () => {
     const def = symbol.rosetta`headtail0: report head + tail`(
       { input: [z.string], inputRest: z.number, output: [z.string] },
-      (head: string, ...rest: number[]) => `${head}:${rest.length}:${rest.join(",")}`,
+      function (this: CallCtx, head: string, ...rest: number[]) {
+        return `${head}:${rest.length}:${rest.join(",")}`;
+      },
     );
     const out = await fire(def, testCallCtx(), new AString("h"));
     expect((out as AString)["arrival/toJS"]()).toBe("h:0:");
@@ -47,7 +48,9 @@ describe("Contract.inputRest runtime — UNIT (direct def.run): a fixed head + v
   it("decodes a FIXED head + a 2-element variadic tail, each element through inputRest's OWN codec", async () => {
     const def = symbol.rosetta`headtail2: report head + tail`(
       { input: [z.string], inputRest: z.number, output: [z.string] },
-      (head: string, ...rest: number[]) => `${head}:${rest.length}:${rest.join(",")}`,
+      function (this: CallCtx, head: string, ...rest: number[]) {
+        return `${head}:${rest.length}:${rest.join(",")}`;
+      },
     );
     const out = await fire(def, testCallCtx(), new AString("h"), new AInexact(1), new AInexact(2));
     expect((out as AString)["arrival/toJS"]()).toBe("h:2:1,2");
@@ -56,7 +59,9 @@ describe("Contract.inputRest runtime — UNIT (direct def.run): a fixed head + v
   it("a DIFFERENT arity again (3-element tail) — proves the split is genuinely variadic, not a fixed 2-slot", async () => {
     const def = symbol.rosetta`headtail3: report head + tail`(
       { input: [z.string], inputRest: z.number, output: [z.string] },
-      (head: string, ...rest: number[]) => `${head}:${rest.length}:${rest.join(",")}`,
+      function (this: CallCtx, head: string, ...rest: number[]) {
+        return `${head}:${rest.length}:${rest.join(",")}`;
+      },
     );
     const out = await fire(def, testCallCtx(), new AString("h"), new AInexact(1), new AInexact(2), new AInexact(3));
     expect((out as AString)["arrival/toJS"]()).toBe("h:3:1,2,3");
@@ -69,7 +74,9 @@ describe("Contract.inputRest runtime — INTEGRATION ((tool head r1 r2 …) thro
     env = await freshEnv();
     const headtail = symbol.rosetta`headtail: report head + tail`(
       { input: [z.string], inputRest: z.number, output: [z.string] },
-      (head: string, ...rest: number[]) => `${head}:${rest.length}:${rest.join(",")}`,
+      function (this: CallCtx, head: string, ...rest: number[]) {
+        return `${head}:${rest.length}:${rest.join(",")}`;
+      },
     );
     // Wired through the REAL EnvCapability binder (post-B2 binder cut: the "rosetta" kind
     // binds an ARosettaProcedure, not a bare fn) rather than a raw `env.set(name, def.run)`

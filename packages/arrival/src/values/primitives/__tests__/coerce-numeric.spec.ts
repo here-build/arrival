@@ -8,9 +8,9 @@
  * numbers.spec / r7rs-numbers. bridge.ts itself is deleted (lineage:
  * env/r7rs/error-objects.ts header).
  *
- * RE-PINNED (one-number rework, RATIO — docs/design-history/arrival-one-number-rework.md
- * §2.3): `AExact`'s payload is a safe-int `number` now, not `bigint` — every `.num`/`.denom`
- * assertion below dropped the trailing `n`. More substantively, §2.3 makes a raw host
+ * RE-PINNED (one-number rework, RATIO): `AExact`'s payload is a safe-int `number` now,
+ * not `bigint` — every `.num`/`.denom`
+ * assertion below dropped the trailing `n`. More substantively, the rework makes a raw host
  * `bigint` a membrane NoLensError door, never a scheme number — `coerceNumeric` (verified
  * directly against `values/op-helpers.ts`) THROWS a TypeError on both the bare-bigint
  * and the `valueOf() → bigint` arms if one still reaches arithmetic, pointing the caller
@@ -20,7 +20,6 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { AExact } from "../AExact.js";
 import { AInexact } from "../AInexact.js";
 import { coerceNumeric } from "../../op-helpers.js";
@@ -58,7 +57,7 @@ describe("coerceNumeric", () => {
 
   describe("objects with valueOf", () => {
     it("DOORS on an object whose valueOf() returns a bigint — same opaque-host law as the bare case", () => {
-      const obj = { valueOf: () => 12345678901234567890n };
+      const obj = { valueOf: () => 12_345_678_901_234_567_890n };
       expect(() => coerceNumeric(obj)).toThrow(/host bigint is not a scheme number/);
     });
 

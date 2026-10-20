@@ -14,6 +14,7 @@
  * `hash` = sorted vocabulary names (provenance baked-env slot). deferred: binding-value
  * hashing for cross-deploy reuse (same shape currently shares a hash).
  */
+import { contentHash } from "../provenance/store/hash.js";
 import invariant from "tiny-invariant";
 import { type AmbientRuntime, type AmbientValue, ResolvingAmbient } from "../env/AmbientRuntime.js";
 import type { RunContext } from "../run/RunContext.js";
@@ -60,15 +61,10 @@ function byCodeUnit(a: string, b: string): number {
   return 0;
 }
 
-/** FNV-1a over the canonical, sorted vocabulary — deterministic, realm-independent. */
+/** SHA-256/128 over the canonical, sorted vocabulary — deterministic, realm-independent (a
+ *  collision would let one sealed chain stand in for another). */
 function hashFlatMap(flat: ReadonlyMap<string | symbol, AmbientValue>): string {
-  const canonical = ["crc-v0", [...flat.keys()].map(canonicalName).toSorted(byCodeUnit).join(",")].join("|");
-  let h = 0x81_1c_9d_c5;
-  for (let i = 0; i < canonical.length; i++) {
-    h ^= canonical.codePointAt(i) ?? 0;
-    h = Math.imul(h, 0x01_00_01_93);
-  }
-  return (h >>> 0).toString(16).padStart(8, "0");
+  return contentHash("crc-v1", [...flat.keys()].map(canonicalName).toSorted(byCodeUnit).join(","));
 }
 
 /**

@@ -1,6 +1,6 @@
 // schema-tag — the schema DSL's ONE canonical lowering: a tagged-list type tag (the shape
 // `s/object`/`s/array`/`s/enum`/`s/optional`/`s/field*` build — see `env/schema/schema.ts`) → JSON
-// Schema. Lives here (not in arrival-inference) because a CORE capability (`arrival/overridable`,
+// Schema. Lives here (not in the inference package) because a CORE capability (`arrival/overridable`,
 // `env/overridable/overridable.ts`) needs this exact lowering and cannot depend on `@here.build/llm-plane`
 // without inverting the package DAG (core is upstream of inference, never the reverse) — this is
 // the one place both core and inference can reach it. Three consumers — the OpenAI/Anthropic wire

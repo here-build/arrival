@@ -23,10 +23,10 @@ import type { OracleEnvΣ } from "./sigma.js";
  *  runtime edge into the evaluator:
  *    1. a callable-as-value class (`is_applyable`, a values/value-guards.ts leaf — the tagless-
  *       final procedures a capability's `symbol.rosetta`/`symbol.native` declarations bind);
- *    2. a bare host function — the callability MARKER on a flat grant map
- *       (`oracleEnvFromBindings`). Grant envs are never executed; they only answer Σ's
- *       "is this name an admissible operator?" bit. Production AmbientRuntime frames do not
- *       host bare fns (the membrane only admits is_applyable), so this arm is grant-only.
+ *    2. a bare host function — the callability MARKER on a flat grant map.
+ *       Grant envs are never executed; they only answer Σ's "is this name an admissible
+ *       operator?" bit. Production AmbientRuntime frames do not host bare fns (the membrane
+ *       only admits is_applyable), so this arm is grant-only.
  *    3. a Macro / Syntax special-form head (`if`, `let`, `quote`, syntax-rules macros),
  *       matched by walking the prototype chain's constructor NAMES (not by importing the
  *       class — a Syntax-extends-Macro subclass is caught too).
@@ -98,30 +98,6 @@ export function makeOracleEnv(env: AmbientRuntime): OracleEnvΣ {
     }
     return false;
   };
-
-  const signatureOf: OracleEnv["signatureOf"] = (_id: string) => null;
-
-  return { boundSymbols, isCallable, signatureOf };
-}
-
-/**
- * Build an {@link OracleEnvΣ} straight off a flat record of grant bindings — the scope-node-
- * free form of `makeOracleEnv(new AmbientRuntime(_, bindings, null))`. A grant ("these symbols
- * are callable") is never inherited, set, or looked up through — only enumerated and probed for
- * callability — so it needs the Σ INTERFACE, not a runtime scope-node.
- *
- * Equivalent, field for field, to the single-frame `AmbientRuntime` path (that env's `__env__`
- * IS the record, parent `null`): `boundSymbols()` = the record's own string keys; `isCallable(id)`
- * = the same {@link isCallableValue} predicate over `bindings[id]`; `signatureOf` is T, null
- * per the contract. The two paths MUST agree.
- *
- * The grant boundary is enforced for free — an unbound name is ungeneratable — exactly as the
- * AmbientRuntime-backed path enforces it.
- */
-export function oracleEnvFromBindings(bindings: Record<string, unknown>): OracleEnvΣ {
-  const boundSymbols = (): ReadonlySet<string> => new Set(Object.keys(bindings));
-
-  const isCallable = (id: string): boolean => (Object.hasOwn(bindings, id) ? isCallableValue(bindings[id]) : false);
 
   const signatureOf: OracleEnv["signatureOf"] = (_id: string) => null;
 

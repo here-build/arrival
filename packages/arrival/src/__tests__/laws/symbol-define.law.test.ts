@@ -1,6 +1,5 @@
 /**
- * LAW — `symbol.define` / `symbol.defineSyntax` (docs/design-history/symbol-define-
- * static-program-validation.md §1/§2, wave W1). Pins the kind shapes, the bake
+ * LAW — `symbol.define` / `symbol.defineSyntax` (wave W1). Pins the kind shapes, the bake
  * mechanics (parse/FV/derived-role), the two-phase binding order, and defineSyntax's
  * macro binds+expands — the exact law rows the wave's own spec names:
  *
@@ -15,13 +14,14 @@
  * No pack migrates in this wave — every capability here is test-local.
  */
 import { describe, expect, it } from "vitest";
-import { symbol } from "../../symbol/index.js";
+import * as symbol from "../../common/symbols/index.js";
 import { EnvCapability } from "../../common/capability.js";
 import { execInFrame, execOverFrame, execStateOverFrame } from "../../eval/generator-exec.js";
 import { applyCapability, freshEnv } from "../_fresh-env.js";
 import { buildVocabulary } from "../../env/vocabulary.js";
 import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../errors.js";
 import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 
 const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
 
@@ -33,7 +33,12 @@ describe("symbol.define — bake round-trip, two-phase order, sequential-RHS, co
     // reference below only resolves if two-phase order actually holds.
     const cap = EnvCapability.define("test/define-round-trip", {
       symbols: (symbol, z) => {
-        const bump = symbol.rosetta`bump: adds one`({ input: [z.number], output: [z.number] }, (n: number) => n + 1);
+        const bump = symbol.rosetta`bump: adds one`(
+          { input: [z.number], output: [z.number] },
+          function (this: CallCtx, n: number) {
+            return n + 1;
+          },
+        );
         const useBump = symbol.define`use-bump: calls the same-capability rosetta sibling`(
           { input: [z.number], output: [z.number] },
           `(lambda (n) (bump n))`,
@@ -125,7 +130,7 @@ describe("symbol.define — the §2.1 bake FV locality law (the drift door)", ()
     await expect(applyCapability(env, [cap])).rejects.toThrow(DefineLocalityError);
   });
 
-  // Canonical NEG for migration PRE-FIX pins (test-redundancy receipts §2):
+  // Canonical NEG for migration PRE-FIX pins:
   // pack-shaped define body free on stdlib names (`not`) with NO deps → bake door.
   // Retires N copy-paste "LOCAL reproduction of the PRE-FIX shape" rows once packs
   // are harvested for positive bake-clean.
@@ -145,7 +150,12 @@ describe("symbol.define — the §2.1 bake FV locality law (the drift door)", ()
     const env = await freshEnv();
     const cap = EnvCapability.define("test/define-fv-ok", {
       symbols: (symbol, z) => {
-        const helper = symbol.rosetta`fv-helper: identity`({ input: [z.number], output: [z.number] }, (n: number) => n);
+        const helper = symbol.rosetta`fv-helper: identity`(
+          { input: [z.number], output: [z.number] },
+          function (this: CallCtx, n: number) {
+            return n;
+          },
+        );
         const uses = symbol.define`fv-uses: calls its own capability's sibling`(
           { input: [z.number], output: [z.number] },
           `(lambda (n) (fv-helper n))`,
@@ -274,7 +284,12 @@ describe("symbol.define — §1.4 derived provenance role + its drift door", () 
     // rosetta defaults to "source" (mints) — the port this define's body reaches.
     const cap = EnvCapability.define("test/define-derived-opaque", {
       symbols: (symbol, z) => {
-        const mint = symbol.rosetta`mint-source: a source rosetta`({ input: [], output: [z.number] }, () => 99);
+        const mint = symbol.rosetta`mint-source: a source rosetta`(
+          { input: [], output: [z.number] },
+          function (this: CallCtx) {
+            return 99;
+          },
+        );
         const wraps = symbol.define`wraps-source: reaches a port through mint-source`(
           { input: [], output: [z.number] },
           `(lambda () (mint-source))`,
@@ -291,7 +306,12 @@ describe("symbol.define — §1.4 derived provenance role + its drift door", () 
     const env = await freshEnv();
     const cap = EnvCapability.define("test/define-role-drift", {
       symbols: (symbol, z) => {
-        const mint = symbol.rosetta`mint-source-2: a source rosetta`({ input: [], output: [z.number] }, () => 1);
+        const mint = symbol.rosetta`mint-source-2: a source rosetta`(
+          { input: [], output: [z.number] },
+          function (this: CallCtx) {
+            return 1;
+          },
+        );
         const liar = symbol.define`liar-pipe: declares "pipe" but its body reaches a port`(
           { input: [], output: [z.number], provenance: "pipe" },
           `(lambda () (mint-source-2))`,
@@ -327,7 +347,12 @@ describe("symbol.defineSyntax — macro binds + expands (§1.5)", () => {
     let calls = 0;
     const cap = EnvCapability.define("test/define-syntax-basic", {
       symbols: (symbol, z) => {
-        const bump = symbol.rosetta`bump!: JS-side call counter`({ input: [], output: [z.number] }, () => ++calls);
+        const bump = symbol.rosetta`bump!: JS-side call counter`(
+          { input: [], output: [z.number] },
+          function (this: CallCtx) {
+            return ++calls;
+          },
+        );
         const myTwice = symbol.defineSyntax`my-twice: expands to (begin expr expr)`(
           "(lambda (expr) `(begin ,expr ,expr))",
         );

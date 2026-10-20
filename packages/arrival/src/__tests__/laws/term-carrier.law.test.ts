@@ -74,16 +74,11 @@ import { describe, it, expect } from "vitest";
 import { TERMS } from "./_tables/terms.js";
 import { CARRIERS, type CarrierRow } from "./_tables/carriers.js";
 import { mint3, mint3Pair, elementBoxes, deepIds, containerProv, toPlain } from "./_tables/fixtures.js";
-import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
+import { execStateOverFrameEager as execState } from "../_require-eager-oracle.js";
 import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import type { SchemeValue } from "../../values/types.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { AJSArray } from "../../membrane/AJSArray.js";
-import { requireEagerOracle } from "../_require-eager-oracle.js";
-
-// Q20b: the container-box law rows run real programs through execState and assert
-// accumulated provenance — force the oracle ON for this file's lifetime.
-requireEagerOracle();
 
 /** Runs `src` against a law env with one container bound as `c`. Boxed-result tier
  *  (execState) — this file asserts box discipline/provenance on the return, a
@@ -169,10 +164,7 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
           const result = await run1(env, value, `(map (lambda (x) x) c)`);
           const before = elementBoxes(value);
           const after = elementBoxes(result);
-          if (before !== null) {
-            expect(before).toEqual([[ids[0]], [ids[1]], [ids[2]]]);
-            expect(after).toEqual(before);
-          } else {
+          if (before === null) {
             // AJSArray (borrowed, hygiene law V 2026-07-14): `elementBoxes` answers null —
             // the raw source has no per-element boxes to preserve, mirroring AString/
             // ABytevector (fixtures.ts's doc). map materializes through `vec()`, so every
@@ -181,6 +173,9 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
             // concat's boxesBody below.
             const deep = deepIds(result);
             for (const id of ids) expect(deep.has(id)).toBe(true);
+          } else {
+            expect(before).toEqual([[ids[0]], [ids[1]], [ids[2]]]);
+            expect(after).toEqual(before);
           }
         };
         const provBody = async () => {
@@ -218,15 +213,15 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
           // The INPUT's own per-element capability is the branch signal, not the (always
           // materialized-AVector, so never-null) result's — mirrors AString/ABytevector's
           // "no per-element boxes on this carrier" reading (fixtures.ts's elementBoxes doc).
-          if (elementBoxes(value) !== null) {
-            expect(elementBoxes(result)).toEqual([[ids[0]], [ids[1]], [ids[2]]]);
-          } else {
+          if (elementBoxes(value) === null) {
             // AJSArray (borrowed, hygiene law V 2026-07-14): the SOURCE has no per-element
             // boxes to keep — filter materializes through `vec()`, whose elements all
             // inherit the CONTAINER's stamp instead of a distinct per-index id; the deep
             // conservation signal (P10) is the honest check.
             const deep = deepIds(result);
             for (const id of ids) expect(deep.has(id)).toBe(true);
+          } else {
+            expect(elementBoxes(result)).toEqual([[ids[0]], [ids[1]], [ids[2]]]);
           }
         });
 
@@ -293,15 +288,15 @@ describe.each(TERMS.map((t) => [t.term, t] as const))("term %s", (_name, term) =
           // The INPUT's own per-element capability is the branch signal, not the (always
           // materialized-AVector, so never-null) result's — mirrors AString/ABytevector's
           // "no per-element boxes on this carrier" reading (fixtures.ts's elementBoxes doc).
-          if (elementBoxes(value) !== null) {
-            expect(elementBoxes(result)).toEqual([[ids[2]], [ids[1]], [ids[0]]]);
-          } else {
+          if (elementBoxes(value) === null) {
             // AJSArray (borrowed, hygiene law V 2026-07-14): the SOURCE has no per-element
             // boxes to reorder — sort materializes through `vec()` first, so "reordered,
             // not rebuilt" has no per-element identity to distinguish at this carrier; the
             // deep conservation signal (P10) is the honest check.
             const deep = deepIds(result);
             for (const id of ids) expect(deep.has(id)).toBe(true);
+          } else {
+            expect(elementBoxes(result)).toEqual([[ids[2]], [ids[1]], [ids[0]]]);
           }
         });
 

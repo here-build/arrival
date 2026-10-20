@@ -134,7 +134,8 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   }
 
   ["arrival/tagless-final/concat"](other: AVector): AVector {
-    return new AVector([...this.__vector__, ...other.__vector__]);
+    // Container provenance is the union of both operands' (elements keep their own stamps).
+    return new AVector([...this.__vector__, ...other.__vector__], mergeProvenance(this.provenance, other.provenance));
   }
 
   // STRICT divergence: car/cdr are PAIR ops — a vector is not a pair. STRICT flags
@@ -185,10 +186,10 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     const results = this.__vector__.map((v) => applyCallback(fn, [v], makeCallCtx(runCtx)));
     if (results.some(is_promise)) {
       return (promise_all(results) as Promise<SchemeValue[]>).then(
-        (resolved): AVector => withInputProvenance([this], new AVector(resolved)),
+        (resolved): AVector => withInputProvenance(runCtx, [this], new AVector(resolved)),
       );
     }
-    return withInputProvenance([this], new AVector(results as SchemeValue[]));
+    return withInputProvenance(runCtx, [this], new AVector(results as SchemeValue[]));
   }
 
   // Filterable — keeps matching elements, PRESERVING boxes. LENGTH-CHANGING —
@@ -206,13 +207,13 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
       for (const v of this.__vector__) {
         if (!is_false(String(v).match(re))) out.push(v);
       }
-      return withInputProvenance([this, ...out], new AVector(out));
+      return withInputProvenance(runCtx, [this, ...out], new AVector(out));
     }
     for (const v of this.__vector__) {
       const verdict = await applyCallback(arg, [v], makeCallCtx(runCtx));
       if (!is_false(verdict)) out.push(v); // R7RS: only #f is false
     }
-    return withInputProvenance([this, ...out], new AVector(out));
+    return withInputProvenance(runCtx, [this, ...out], new AVector(out));
   }
 
   // Async-aware reduce, SRFI fold `fn(element, acc)`, left fold.
@@ -237,7 +238,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
   ["arrival/tagless-final/sort"](comparator: ACallable | undefined, runCtx: RunContext): AVector {
     const out = [...this.__vector__];
     out.sort(deriveSortCompare(comparator, runCtx));
-    return withInputProvenance([this], new AVector(out));
+    return withInputProvenance(runCtx, [this], new AVector(out));
   }
 
   // Prefix — SAME-KIND, LENGTH-CHANGING (PROVENANCED fresh). `n` clamped into [0, length].
@@ -249,7 +250,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     });
     const k = Math.max(0, Math.min(n, this.__vector__.length));
     const out = this.__vector__.slice(0, k);
-    return withInputProvenance([this, ...out], new AVector(out));
+    return withInputProvenance(runCtx, [this, ...out], new AVector(out));
   }
 
   ["arrival/tagless-final/drop"](n: number, runCtx: RunContext): AVector {
@@ -260,7 +261,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
     });
     const k = Math.max(0, Math.min(n, this.__vector__.length));
     const out = this.__vector__.slice(k);
-    return withInputProvenance([this, ...out], new AVector(out));
+    return withInputProvenance(runCtx, [this, ...out], new AVector(out));
   }
 
   // Longest satisfying prefix — SEQUENTIAL walk (stop at first falsy is the semantics).
@@ -276,7 +277,7 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
       if (is_false(verdict)) break;
       out.push(v);
     }
-    return withInputProvenance([this, ...out], new AVector(out));
+    return withInputProvenance(runCtx, [this, ...out], new AVector(out));
   }
 
   async ["arrival/tagless-final/drop-while"](pred: ACallable, runCtx: RunContext): Promise<AVector> {
@@ -291,12 +292,12 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
       if (is_false(verdict)) break;
     }
     const out = this.__vector__.slice(i);
-    return withInputProvenance([this, ...out], new AVector(out));
+    return withInputProvenance(runCtx, [this, ...out], new AVector(out));
   }
 
   // Element-count — container's OWN flat stamp, never elements' deep union.
-  ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
-    return withInputProvenance([this], this.__vector__.length);
+  ["arrival/tagless-final/length"](runCtx: RunContext): AValue | number {
+    return withInputProvenance(runCtx, [this], this.__vector__.length);
   }
 
   ["arrival/tagless-final/vector?"](): boolean {

@@ -18,6 +18,8 @@ import type { SchemeValue } from "./types.js";
 import { ABool } from "./primitives/ABool.js";
 import { ANil } from "./primitives/ANil.js";
 import { APair } from "./primitives/APair.js";
+import { AValue } from "./primitives/AValue.js";
+import { NoLensError, R7RSError } from "../errors.js";
 
 // The symbol-NAME surface these helpers operate on: the pre-boxing JS layer —
 // exactly what ASymbol's constructor accepts as a name (`SchemeSymbolName`) — NOT
@@ -26,8 +28,7 @@ import { APair } from "./primitives/APair.js";
 type SymbolName = string | symbol | number;
 
 /** Non-enumerable, non-writable Symbol-keyed slot — used for metadata that must
- *  not surface in enumeration or be clobbered (e.g. a gensym's `__literal__` name,
- *  or the `__object__` dotted-path array). The stored `value` is arbitrary hidden
+ *  not surface in enumeration or be clobbered (e.g. a gensym's `__literal__` name). The stored `value` is arbitrary hidden
  *  metadata, not a boxed Scheme value — hence `unknown`. */
 export function hidden_prop(obj: SchemeValue, name: string, value: unknown): void {
   Object.defineProperty(obj, Symbol.for(name), {
@@ -119,9 +120,11 @@ function isPendingDatum(value: SchemeValue | PromiseLike<SchemeValue>): value is
   return is_promise(value);
 }
 
-// Lift raw JS string/number to Scheme. Bigint is host-only (no case → identity);
-// objects/arrays box at the membrane. AmbientRuntime.get doors on raw storage
-// scalars — does not call this. Callers: reader/parse, pending-entry, public barrel.
+// Lift raw JS string/number to Scheme; an already-Scheme value (AValue / R7RSError) passes
+// through. Everything else DOORS (NoLensError) — raw host objects/arrays/functions/bigints
+// never enter Scheme typed as SchemeValue; they cross via the membrane's `jsToScheme`
+// (docs/membrane.md §INBOUND), which pending-entry's container callbacks already use.
+// AmbientRuntime.get doors on raw storage scalars — does not call this.
 // `ctx` = mint identity claim; CONSTANT_CTX when no live run.
 export function box(object: unknown, _ctx: RunContext = CONSTANT_CTX): SchemeValue {
   switch (typeof object) {
@@ -133,10 +136,20 @@ export function box(object: unknown, _ctx: RunContext = CONSTANT_CTX): SchemeVal
         return new AExact(object);
       }
       return new AInexact(object);
+    case "bigint":
+      throw new NoLensError("bigint");
+    case "symbol":
+      throw new NoLensError("unique-symbol");
     default:
-      return object as SchemeValue;
+      if (object instanceof AValue || object instanceof R7RSError) return object as SchemeValue;
+      throw new NoLensError("unbranded-class", hostClassName(object));
   }
 }
+
+const hostClassName = (object: unknown): string =>
+  object === null || object === undefined
+    ? String(object)
+    : ((object as { constructor?: { name?: string } }).constructor?.name ?? "anonymous object");
 
 // ----------------------------------------------------------------------
 // Settles a value read out of a binding/member before handing back to Scheme:

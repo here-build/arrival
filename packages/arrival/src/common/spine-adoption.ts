@@ -1,8 +1,8 @@
 // The spine-adoption REGISTRY — deliberately a LEAF (zero imports).
 //
 // It records which contract schemas mean "I want the SPINE reading of my argument". That is all it
-// does. The adopter that acts on the mark lives in `values/adopt-spine.ts`, because acting requires
-// the value classes, and this module must be importable from `scheme-zod.ts` — which `AValue`
+// does. The adopter that acts on the mark lives in `membrane/adopt-spine.ts`, because acting requires
+// the value classes, and this module must be importable from `scheme-zod/index.ts` — which `AValue`
 // itself imports. Fusing the two would close the cycle
 // (scheme-zod → adopt → AJSArrayList → APair → AValue → scheme-zod) and nothing would load.
 //

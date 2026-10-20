@@ -1,9 +1,9 @@
 // kwargs-decode-errors — pins the kwargs zod-decode humanizer's frozen shape (coordinates
-// with arrival-manifold docs/args-error-reporting-v2.md §2.5 — those strings must change
-// only together with the manifold's own re-freeze; do not edit one side alone).
+// with the manifold's error-contract freeze — those strings must change only together
+// with the manifold's own re-freeze; do not edit one side alone).
 //
 // A rejected kwargs decode (rosetta.ts's `z.decode(kwargsSchema, collectKwargsObject(args))`)
-// humanizes to the frozen shape design doc §2.5 defines:
+// humanizes to the frozen shape:
 //
 //   <name>: arguments rejected — <n> problem(s):
 //     :<path> — <humanized issue>
@@ -16,15 +16,13 @@
 // no evaluator round trip needed to reach the decode chokepoint.
 
 import { describe, expect, it } from "vitest";
-import { CONSTANT_CTX } from "../run/RunContext.js";
 import { AString } from "../values/primitives/AString.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
-import { symbol } from "../symbol/index.js";
-import { testCallCtx } from "../run/CallCtx.js";
+import * as symbol from "../common/symbols/index.js";
+import { testCallCtx, type CallCtx } from "../run/CallCtx.js";
 import * as z from "../common/scheme-zod/index.js";
 
-/** Build a keyword `ASymbol` exactly as evaluating `:key` now does (self-evaluating —
- *  keyword-tagless-apply.md) — the SAME helper kwargs-runtime.test.ts's UNIT plane uses. */
+/** Build a keyword `ASymbol` exactly as evaluating `:key` now does (self-evaluating) — the SAME helper kwargs-runtime.test.ts's UNIT plane uses. */
 function pluck(key: string): unknown {
   return new ASymbol(`:${key}`);
 }
@@ -33,7 +31,7 @@ function fire(proc: { ["arrival/tagless-final/apply"](args: any[], callCtx: any)
   return proc["arrival/tagless-final/apply"](args, callCtx);
 }
 
-describe("kwargs decode rejection — humanized frozen shape (docs/args-error-reporting-v2.md §2.5)", () => {
+describe("kwargs decode rejection — humanized frozen shape", () => {
   // R1: a single value-mismatch issue (a scalar sent where the kwargs field declares an
   // object) humanizes to the frozen head + one per-issue line, instead of a raw ZodError
   // issues dump.
@@ -44,13 +42,15 @@ describe("kwargs decode rejection — humanized frozen shape (docs/args-error-re
     async () => {
       const def = symbol.rosetta`greet: kwargs greeting`(
         { input: [], inputRest: { query: z.object({ term: z.string.optional() }) }, output: [z.string] },
-        (args) => JSON.stringify(args.query),
+        function (this: CallCtx, args) {
+          return JSON.stringify(args.query);
+        },
       );
       let caught: unknown;
       try {
         await fire(def, testCallCtx(), pluck("query"), new AString("King Saud University"));
-      } catch (e) {
-        caught = e;
+      } catch (error) {
+        caught = error;
       }
       expect(caught).toBeInstanceOf(Error);
       expect((caught as Error).message).toBe(
@@ -71,7 +71,9 @@ describe("kwargs decode rejection — humanized frozen shape (docs/args-error-re
     async () => {
       const def = symbol.rosetta`search: kwargs search`(
         { input: [], inputRest: { query: z.string, pageSize: z.number.optional() }, output: [z.string] },
-        (args) => `${args.query}:${args.pageSize}`,
+        function (this: CallCtx, args) {
+          return `${args.query}:${args.pageSize}`;
+        },
       );
       await expect(
         fire(
@@ -97,13 +99,15 @@ describe("kwargs decode rejection — humanized frozen shape (docs/args-error-re
     async () => {
       const def = symbol.rosetta`search: kwargs search two-required`(
         { input: [], inputRest: { query: z.string, pageSize: z.number }, output: [z.string] },
-        (args) => `${args.query}:${args.pageSize}`,
+        function (this: CallCtx, args) {
+          return `${args.query}:${args.pageSize}`;
+        },
       );
       let caught: unknown;
       try {
         await fire(def, testCallCtx());
-      } catch (e) {
-        caught = e;
+      } catch (error) {
+        caught = error;
       }
       expect(caught).toBeInstanceOf(Error);
       expect((caught as Error).message).toBe(

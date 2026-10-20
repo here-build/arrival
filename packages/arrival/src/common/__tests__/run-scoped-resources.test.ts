@@ -18,7 +18,7 @@
 import { describe, expect, it } from "vitest";
 
 import { EnvCapability } from "../capability.js";
-import { symbol } from "../../symbol/index.js";
+import * as symbol from "../../common/symbols/index.js";
 import * as sz from "../scheme-zod/index.js";
 import { port, type Resource } from "../resources.js";
 import { execOverFrame } from "../../eval/generator-exec.js";

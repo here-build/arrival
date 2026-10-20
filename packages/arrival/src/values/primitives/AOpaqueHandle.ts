@@ -13,7 +13,7 @@
  *     UNWRAPS back to the raw instance at the next rosetta penetration — `arrival/toJS`
  *     below IS that unwrap, for every membrane exit uniformly (membrane/rosetta.ts for
  *     the scheme-ward mint; `z.instance`-codec / dynamic-slot-unwrap sibling in
- *     common/scheme-zod.ts / common/symbols/rosetta.ts for the host-ward direction);
+ *     common/scheme-zod/index.ts / common/symbols/rosetta.ts for the host-ward direction);
  *   - round-trip: out then in is the SAME instance (`===`, never a copy — `.instance` is
  *     held by reference, never cloned).
  *
@@ -54,7 +54,7 @@ export class AOpaqueHandle extends AValue {
    *  own B2 rule for any receiver that isn't nil-shaped and declares no member protocol —
    *  rather than silently answering nil, which would look like "a real field that happens
    *  to be absent" instead of "this value has no fields at all"). Read only by the
-   *  membrane's own host-ward unwrap (`arrival/toJS` below) and by `scheme-zod.ts`'s
+   *  membrane's own host-ward unwrap (`arrival/toJS` below) and by `scheme-zod/index.ts`'s
    *  `instance(Ctor)` codec decode. */
   readonly instance: object;
 

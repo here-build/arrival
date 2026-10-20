@@ -36,6 +36,7 @@ import { AInexact } from "./AInexact.js";
 import { ANil, nil } from "./ANil.js";
 import { printValue } from "../print.js";
 import { tf } from "../tagless-final.js";
+import { foldMemberName } from "../key-name.js";
 import type { MaybePromise } from "../../types/utility.js";
 
 // Trampoline thunk: `mark_cycles` walks arbitrarily deep lists, so it bounces
@@ -79,16 +80,6 @@ export function isCircularList(head: APair<any, any>): boolean {
     if (slow === fast) return true;
   }
   return false;
-}
-
-function is_cycle(pair: unknown): boolean {
-  if (!(pair instanceof APair)) {
-    return false;
-  }
-  if (pair.have_cycles()) {
-    return true;
-  }
-  return is_cycle(pair.car) || is_cycle(pair.cdr);
 }
 
 function mark_cycles(pair: APair<any, any>): void {
@@ -174,19 +165,11 @@ export function __tieKnot(pair: AListAlike, slot: "car" | "cdr", v: SchemeValue)
   (pair as unknown as { _car: SchemeValue; _cdr: SchemeValue })[slot === "car" ? "_car" : "_cdr"] = v;
 }
 
-// Local fold helpers for tagless-final/get — duplicated on purpose to avoid
-// APair → AJSObject → rosetta import cycle (APair already on rosetta's build path).
-function foldAlistKeyName(key: SchemeValue | string): string {
-  const raw =
-    typeof key === "string" ? key : String((key as { valueOf?: () => unknown } | null | undefined)?.valueOf?.() ?? key);
-  return raw.startsWith(":") ? raw.slice(1) : raw;
-}
-
 /** An alist entry's key name, iff `entryCar` is itself a symbol/keyword-symbol or
  *  string (the only key shapes `:key` can ever be asked to match) — `undefined` for
  *  anything else (a numeric or pair key means this entry is never a `:key` candidate). */
 function alistEntryKeyName(entryCar: SchemeValue): string | undefined {
-  if (entryCar instanceof ASymbol) return foldAlistKeyName(entryCar.valueOf() as string);
+  if (entryCar instanceof ASymbol) return foldMemberName(entryCar.valueOf() as string);
   if (entryCar instanceof AString) return entryCar.valueOf();
   return undefined;
 }
@@ -293,20 +276,6 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     return result as AListAlike<T>;
   }
 
-  static fromPairs(ctx: RunContext, array: [string, SchemeValue][]): AListAlike {
-    return this.fromArray(
-      ctx,
-      array.map(([left, right]) => new APair(new ASymbol(left), right)),
-    );
-  }
-
-  static fromObject(ctx: RunContext, obj: Record<string, SchemeValue>): AListAlike {
-    return APair.fromPairs(
-      ctx,
-      Object.keys(obj).map((key) => [key, obj[key]] as const),
-    );
-  }
-
   static ["arrival/tagless-final/empty"](): ANil {
     return nil;
   }
@@ -314,10 +283,6 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // Applicative — single-element list. No-arg static has no crossing to derive a live ctx from.
   static ["arrival/tagless-final/of"](value: SchemeValue): AListAlike {
     return new APair(value, nil);
-  }
-
-  flatten(): AListAlike | unknown[] {
-    return APair.fromArray(CONSTANT_CTX, this.to_array().flat(Infinity));
   }
 
   length(): number {
@@ -415,10 +380,6 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     return !!this[CYCLES]?.[name];
   }
 
-  is_cycle(): boolean {
-    return is_cycle(this);
-  }
-
   // Print: toString → arrival/print (SOLE pair renderer). mark_cycles then cdr-walk;
   // cyclic repr is a known gap.
   toString(): string {
@@ -475,10 +436,6 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     return parts.join("");
   }
 
-  serialize(): [unknown, unknown] {
-    return [this.car, this.cdr];
-  }
-
   // R9 lazy egress — ONE method, keyed on `exit`. Spine snapshots once at proxy creation
   // (O(n) pointer copy); elements stay lazy. Improper tail folds in as last element.
   // Cyclic SPINE throws (no finite projection). Bare: per-box identity. Membrane: full
@@ -498,20 +455,35 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     ) as unknown[];
   }
 
-  // Setoid — structural car/cdr equality, threading shared `seen`. NO cycle bookkeeping
-  // here: structuralEqual records (this, other) BEFORE dispatch, so cyclic lists short-
-  // circuit in the harness. Non-Pair other → false.
-  ["arrival/tagless-final/equals"](other: unknown, seen?: SeenMap): boolean {
-    return (
-      other instanceof APair && structuralEqual(this.car, other.car, seen) && structuralEqual(this.cdr, other.cdr, seen)
-    );
+  // Setoid — structural car/cdr equality, threading shared `seen`. structuralEqual records
+  // (this, other) BEFORE dispatch, so cyclic lists short-circuit in the harness. The cdr
+  // spine is walked by ITERATION (recursing only on car) so a long list costs O(1) stack;
+  // each cdr pair-pair step repeats the harness's identity + `seen` bookkeeping inline.
+  // Any non-pair/pair mix falls through to structuralEqual. Non-Pair other → false.
+  ["arrival/tagless-final/equals"](other: unknown, seen: SeenMap = new Map()): boolean {
+    if (!(other instanceof APair)) return false;
+    let a: APair<any, any> = this;
+    let b: APair<any, any> = other;
+    for (;;) {
+      if (!structuralEqual(a.car, b.car, seen)) return false;
+      const ad = a.cdr;
+      const bd = b.cdr;
+      if (ad === bd) return true;
+      if (!(ad instanceof APair) || !(bd instanceof APair)) return structuralEqual(ad, bd, seen);
+      const partners = seen.get(ad);
+      if (partners?.has(bd)) return true;
+      if (partners) partners.add(bd);
+      else seen.set(ad, new Set([bd]));
+      a = ad;
+      b = bd;
+    }
   }
 
   // READ-side alist tolerance: `:key` finds an entry when spine is alist-shaped
   // (`((a . 1) …)`). FIRST match wins (assq/assoc shadowing). No match → nil; never throws.
   // LOAD-BEARING: nothing converted or promoted — pair stays a pair; only when asked via `:key`.
   ["arrival/tagless-final/get"](key: SchemeValue | string): SchemeValue {
-    const wanted = foldAlistKeyName(key);
+    const wanted = foldMemberName(key);
     let node: SchemeValue = this;
     while (node instanceof APair) {
       const entry = node.car;
@@ -576,7 +548,6 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
         "APair[Symbol.iterator]: list cycle detected — cannot iterate a cyclic list",
       );
       seen.add(node);
-      if (isEmptyPairSentinel(node)) return;
       yield node.car;
       node = node.cdr;
     }
@@ -590,48 +561,36 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // mint ANativeProcedure / hostFnToCallable. RegExp is a host-side filter sugar
   // evaluated without applyCallback.
   ["arrival/tagless-final/map"](fn: ACallable, runCtx: RunContext): MaybePromise<AListAlike> {
-    const elements: SchemeValue[] = [];
-    let node: unknown = this;
-    while (node instanceof APair) {
-      if (isEmptyPairSentinel(node)) break;
-      elements.push(node.car);
-      node = node.cdr;
-    }
+    const elements = spineElements(this);
     const results = elements.map((x) => applyCallback(fn, [x], makeCallCtx(runCtx)));
     if (results.some(is_promise)) {
       return (promise_all(results) as Promise<unknown[]>).then((resolved) =>
-        withInputProvenance([this], APair.fromArray(CONSTANT_CTX, resolved as SchemeValue[], false)),
+        withInputProvenance(runCtx, [this], APair.fromArray(CONSTANT_CTX, resolved as SchemeValue[], false)),
       );
     }
-    return withInputProvenance([this], APair.fromArray(CONSTANT_CTX, results as SchemeValue[], false));
+    return withInputProvenance(runCtx, [this], APair.fromArray(CONSTANT_CTX, results as SchemeValue[], false));
   }
 
   // Filterable — preserves kept boxes. LENGTH-CHANGING — PROVENANCED fresh
   // (container stamp ∪ survivors). R7RS: only #f is false.
   ["arrival/tagless-final/filter"](arg: ACallable | RegExp, runCtx: RunContext): MaybePromise<AListAlike> {
-    const elements: SchemeValue[] = [];
-    let node: unknown = this;
-    while (node instanceof APair) {
-      if (isEmptyPairSentinel(node)) break;
-      elements.push(node.car);
-      node = node.cdr;
-    }
+    const elements = spineElements(this);
     const kept = (verdict: unknown): boolean => !is_false(verdict);
     if (arg instanceof RegExp) {
       // Host-side sugar — not a scheme callable; never route through applyCallback.
       const re = arg;
       const survivors = elements.filter((x) => kept(String(x).match(re)));
-      return withInputProvenance([this, ...survivors], APair.fromArray(CONSTANT_CTX, survivors, false));
+      return withInputProvenance(runCtx, [this, ...survivors], APair.fromArray(CONSTANT_CTX, survivors, false));
     }
     const verdicts = elements.map((x) => applyCallback(arg, [x], makeCallCtx(runCtx)));
     if (verdicts.some(is_promise)) {
       return (promise_all(verdicts) as Promise<unknown[]>).then((results) => {
         const survivors = elements.filter((_, i) => kept(results[i]));
-        return withInputProvenance([this, ...survivors], APair.fromArray(CONSTANT_CTX, survivors, false));
+        return withInputProvenance(runCtx, [this, ...survivors], APair.fromArray(CONSTANT_CTX, survivors, false));
       });
     }
     const survivors = elements.filter((_, i) => kept(verdicts[i]));
-    return withInputProvenance([this, ...survivors], APair.fromArray(CONSTANT_CTX, survivors, false));
+    return withInputProvenance(runCtx, [this, ...survivors], APair.fromArray(CONSTANT_CTX, survivors, false));
   }
 
   // Async-aware reduce, SRFI fold `fn(element, acc)`, left fold.
@@ -641,7 +600,6 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     let node: unknown = this;
     while (node instanceof APair) {
       const p = node;
-      if (isEmptyPairSentinel(p)) break;
       acc = (await applyCallback(fn, [p.car, acc], makeCallCtx(runCtx))) as Acc;
       node = p.cdr;
     }
@@ -651,31 +609,22 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // Structure-preserving sort — LENGTH-PRESERVING, PROXIED stamp (must agree with AVector).
   // Comparator is ACallable when supplied — bare host less? mints via contourCallback in tests.
   ["arrival/tagless-final/sort"](comparator: ACallable | undefined, runCtx: RunContext): AListAlike {
-    const out: SchemeValue[] = [];
-    let node: unknown = this;
-    while (node instanceof APair) {
-      const p = node;
-      if (isEmptyPairSentinel(p)) break;
-      out.push(p.car);
-      node = p.cdr;
-    }
+    const out = spineElements(this);
     // runCtx threaded for ctx-honesty. Host-schedule/RegionScope wiring is a separate concern.
     out.sort(deriveSortCompare(comparator, runCtx));
-    return withInputProvenance([this], APair.fromArray(CONSTANT_CTX, out, false));
+    return withInputProvenance(runCtx, [this], APair.fromArray(CONSTANT_CTX, out, false));
   }
 
   // SRFI-1 take — FRESH list, dotted-tail tolerant. LENGTH-CHANGING (PROVENANCED fresh).
-  ["arrival/tagless-final/take"](n: number, _runCtx: RunContext): AListAlike {
-    const out: SchemeValue[] = [];
-    let node: unknown = this;
-    let k = n;
-    while (k > 0 && node instanceof APair) {
-      if (isEmptyPairSentinel(node)) break;
-      out.push(node.car);
-      node = node.cdr;
-      k--;
-    }
-    return withInputProvenance([this, ...out], APair.fromArray(CONSTANT_CTX, out, false));
+  // n past the end CLAMPS silently (and drop below yields the tail/'()), while `string-take`
+  // doors out-of-range n. Polyglot by observation: arrival is a full R7RS sandbox that behaves
+  // like what models expect Scheme to be, drawn from general programming intuition and many
+  // dialects — take/drop on a list read as slicing (Clojure/Haskell/JS `slice`: over-asking
+  // returns what exists), whereas `string-take` is a SRFI-13 verb whose range error is its
+  // documented contract. Do not "fix" the asymmetry in either direction.
+  ["arrival/tagless-final/take"](n: number, runCtx: RunContext): AListAlike {
+    const out = spineElements(this, n);
+    return withInputProvenance(runCtx, [this, ...out], APair.fromArray(CONSTANT_CTX, out, false));
   }
 
   // SRFI-1 drop — the n-th cdr ITSELF (shared structure, pure projection).
@@ -683,7 +632,6 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     let node: SchemeValue = this;
     let k = n;
     while (k > 0 && node instanceof APair) {
-      if (isEmptyPairSentinel(node)) return node.cdr;
       node = node.cdr as SchemeValue;
       k--;
     }
@@ -695,20 +643,18 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
     const out: SchemeValue[] = [];
     let node: unknown = this;
     while (node instanceof APair) {
-      if (isEmptyPairSentinel(node)) break;
       const verdict = await applyCallback(pred, [node.car], makeCallCtx(runCtx));
       if (is_false(verdict)) break; // R7RS: only #f is false
       out.push(node.car);
       node = node.cdr;
     }
-    return withInputProvenance([this, ...out], APair.fromArray(CONSTANT_CTX, out, false));
+    return withInputProvenance(runCtx, [this, ...out], APair.fromArray(CONSTANT_CTX, out, false));
   }
 
   // SRFI-1 drop-while — SHARED tail, sequential pred.
   async ["arrival/tagless-final/drop-while"](pred: ACallable, runCtx: RunContext): Promise<SchemeValue> {
     let node: SchemeValue = this;
     while (node instanceof APair) {
-      if (isEmptyPairSentinel(node)) return node.cdr;
       const verdict = await applyCallback(pred, [node.car], makeCallCtx(runCtx));
       if (is_false(verdict)) return node; // R7RS: only #f is false
       node = node.cdr as SchemeValue;
@@ -718,24 +664,23 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
 
   // Element-count — container's OWN flat stamp, never elements' deep union.
   // Throws "length: circular list" on a cycle.
-  ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
+  ["arrival/tagless-final/length"](runCtx: RunContext): AValue | number {
     if (isCircularList(this)) throw new TypeError("length: circular list");
     let count = 0;
     let node: SchemeValue = this;
     while (node instanceof APair) {
-      if (isEmptyPairSentinel(node)) break;
       count++;
       node = node.cdr;
     }
-    return withInputProvenance([this], count);
+    return withInputProvenance(runCtx, [this], count);
   }
 
   // car/cdr on the term. Result inherits ONLY the element's own provenance, never the container's.
-  ["arrival/tagless-final/car"](): Car {
-    return withInputProvenance([this.car], this.car);
+  ["arrival/tagless-final/car"](runCtx: RunContext): Car {
+    return withInputProvenance(runCtx, [this.car], this.car);
   }
 
-  ["arrival/tagless-final/cdr"](): Cdr {
+  ["arrival/tagless-final/cdr"](runCtx: RunContext): Cdr {
     const cdr = this.cdr;
     // Projected sub-spine is a REBUILD boundary: only the OUTER head got stamped at
     // construction, so bare withInputProvenance finds nothing. Stamp with DEEP union of
@@ -746,7 +691,7 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
       const merged = cdr.provenance.size === 0 ? deep : new Set([...cdr.provenance, ...deep]);
       return cdr.withProvenance(merged) as Cdr;
     }
-    return withInputProvenance([cdr], cdr);
+    return withInputProvenance(runCtx, [cdr], cdr);
   }
 
   ["arrival/tagless-final/pair?"](): boolean {
@@ -813,9 +758,16 @@ export function concatPair<Car extends SchemeValue, Cdr extends AListAlike>(a: C
   return result as AConcatPair<Car, Cdr>;
 }
 
-/** Empty-pair sentinel: `car === undefined && cdr is nil`. A nil car is a legitimate element. */
-function isEmptyPairSentinel(node: { readonly car: unknown; readonly cdr: unknown }): boolean {
-  return node.car === undefined && node.cdr instanceof ANil;
+/** Collect up to `limit` cars along the cdr spine, stopping at a non-pair
+ *  tail (an improper tail is NOT collected). */
+function spineElements(head: unknown, limit = Infinity): SchemeValue[] {
+  const out: SchemeValue[] = [];
+  let node = head;
+  while (out.length < limit && node instanceof APair) {
+    out.push(node.car);
+    node = node.cdr;
+  }
+  return out;
 }
 
 // AJSArrayList — SPINE reading of a borrowed JS array. Zero-copy, O(1) per step.
@@ -843,7 +795,7 @@ export interface BorrowedArray {
   readonly provenance: ReadonlySet<number>;
   readonly source: readonly unknown[];
   /** THE declared membrane penetration for this container's elements — view ASKS, never reimplements. */
-  elementAt(i: number): SchemeValue;
+  elementAt(i: number, runCtx?: RunContext): SchemeValue;
   /** Re-stamp the OWNER and re-project — stamp lives on the shared store. */
   withProvenance(p: ReadonlySet<number>): BorrowedArray;
 }
@@ -882,7 +834,12 @@ export class AJSArrayList extends APair<SchemeValue, SchemeValue> {
   // The two accessors that ARE the chart. Memoized; total by construction (at() guarantees live index).
 
   override get car(): SchemeValue {
-    return (this.carBox ??= this.owner.elementAt(this.offset));
+    return this.carAt();
+  }
+
+  /** Memoized element crossing; a run-aware caller threads its ctx so the first mint stamps under it. */
+  carAt(runCtx?: RunContext): SchemeValue {
+    return (this.carBox ??= this.owner.elementAt(this.offset, runCtx));
   }
 
   override get cdr(): AJSArrayList | ANil {
@@ -892,10 +849,10 @@ export class AJSArrayList extends APair<SchemeValue, SchemeValue> {
   // Everything NOT overridden is inherited from APair (reads this.car/this.cdr accessors).
   // map/filter/… re-cons genuine spines — views never propagate virally into results.
 
-  override ["arrival/tagless-final/car"](runCtx?: RunContext): SchemeValue {
+  override ["arrival/tagless-final/car"](runCtx: RunContext): SchemeValue {
     return applyMembraneClosure(runCtx, () => {
-      const car = this.car;
-      return withInputProvenance([car], car);
+      const car = this.carAt(runCtx);
+      return withInputProvenance(runCtx, [car], car);
     });
   }
 
@@ -910,8 +867,10 @@ export class AJSArrayList extends APair<SchemeValue, SchemeValue> {
   }
 
   /** O(1) — length - offset. View cannot cycle (offset strictly increases). */
-  override ["arrival/tagless-final/length"](runCtx?: RunContext): AValue | number {
-    return applyMembraneClosure(runCtx, () => withInputProvenance([this], this.owner.source.length - this.offset));
+  override ["arrival/tagless-final/length"](runCtx: RunContext): AValue | number {
+    return applyMembraneClosure(runCtx, () =>
+      withInputProvenance(runCtx, [this], this.owner.source.length - this.offset),
+    );
   }
 
   override ["arrival/tagless-final/get"](key: SchemeValue | string, runCtx?: RunContext): SchemeValue {

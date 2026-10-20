@@ -29,6 +29,7 @@ import type { AKernelKeyword } from "./AKernelKeyword.js";
 // `import type` keeps the mutual edge with errors.ts compile-time only.
 import type { R7RSError } from "../errors.js";
 import type { ACallable } from "./primitives/ACallable.js";
+import type { RegionScope } from "../membrane/region-scope.js";
 import type { ARosettaProcedure } from "./primitives/ARosettaProcedure.js";
 import { AValue } from "./primitives/AValue.js";
 import type { IsAny } from "../types/utility.js";
@@ -95,15 +96,12 @@ export type SchemeValue =
 // Same tuple-wrapped conditional discipline as AListAlike. Both directions
 // short-circuit on the WIDEST possible input first (unknown / SchemeValue).
 
-// ── JSWorldValue / JSWorldArray — JS side of the membrane AT THE TYPE LEVEL.
+// ── JSWorldArray — JS side of the membrane AT THE TYPE LEVEL.
 //
 // HYGIENE LAW (docs/membrane.md §HYGIENE): a borrowed store holds JS-world values only.
 // Stated as a type so every violator fails at tsc. Limit is honest: bare `unknown[]`
 // still passes; what fails is a caller that statically knows it holds scheme values
 // and buries them in a JS store. Penetration-point invariant is AJSArray.boxElement.
-
-/** `never` iff T is known to carry a boxed scheme value; T otherwise. */
-export type JSWorldValue<T> = IsAny<T> extends true ? T : [Extract<T, AValue>] extends [never] ? T : never;
 
 /** Store that may back a borrowed container: element type carries no boxed scheme value.
  *  `SchemeValue[]` / `AValue[]` collapse to `never` — those are the real violators. */
@@ -208,7 +206,6 @@ export type AList<Car extends SchemeValue = any, Cdr extends Car extends ANil ? 
  *  projection-affecting RosettaOptions field REQUIRES a new member here —
  *  rosetta.ts's `_modeKeyExhaustive` makes forgetting a compile error. */
 export type EgressMode = "bare" | "mem";
-export const BARE_MODE: EgressMode = "bare";
 
 /** Region wrapper cache's inner key — NOT EgressMode: `"typed"` is scheme-zod's
  *  z.procedure family; `"bare"` never mints wrappers. Live domain: {"mem","typed"}. */
@@ -225,4 +222,7 @@ export interface MembraneExit {
   modeKey: EgressMode;
   /** Pinned scope's own membrane-proxy cache. Membrane proxy identity = (box, mode, SCOPE). */
   cache: WeakMap<AValue, Map<EgressMode, object>>;
+  /** The PINNED exporting region scope itself — callables reached anywhere in this egress mint
+   *  their wrapper on it, so element recursion never re-reads ambient state. */
+  scope: RegionScope;
 }

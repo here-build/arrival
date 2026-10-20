@@ -1,9 +1,8 @@
-// kwargs-rejection — the kwargs zod-decode humanizer + strict decode door
-// (arrival-manifold docs/args-error-reporting-v2.md §2.5).
+// kwargs-rejection — the kwargs zod-decode humanizer + strict decode door.
 //
 // This file OWNS the frozen rejection strings — the manifold's error-contract freezes
 // line HEADS against them; mcp-substrate's own-decode clue family parses `:<param> —`
-// line heads off them. Change them only with the design doc + the manifold re-freeze
+// line heads off them. Change them only together with the manifold re-freeze
 // in the same motion.
 //
 // Grammar:
@@ -12,7 +11,7 @@
 //
 // Two silent-strip hazards close here:
 //   - key level: `z.object`'s default strip mode drops a misspelled OPTIONAL key with
-//     no rejection at all → `z.strictObject` closes it (design doc §2.5);
+//     no rejection at all → `z.strictObject` closes it;
 //   - value level: `z.object` accepts ANY typeof-object input — a boxed AValue sent
 //     where a field declares a plain-JS shape "passes" by stripping to `{}` → the
 //     scheme-face guard below rejects it (an AValue can only be consumed by a schema
@@ -26,7 +25,7 @@ import { is_callable_value } from "../values/value-guards.js";
 import { ArrivalError, type ErrorClass } from "../errors.js";
 import { suggestFromVocabulary } from "../unbound-variable.js";
 
-/** Same convention as arrival-manifold bind.ts's `previewOf` (design doc §2.5). */
+/** Same preview convention as the manifold's arg binder (`previewOf`). */
 const PREVIEW_MAX = 60;
 
 function previewOf(v: unknown): string {
@@ -174,9 +173,9 @@ function schemaFaceProblems(shape: ZodRawShape, sent: Record<string, unknown>): 
 // real issue (missing required, invalid_type, a scheme-face mismatch), still hard-rejects
 // with every problem listed.
 
-/** The manifold's per-call envelope args (mirrors arrival-manifold/src/names.ts's
+/** The manifold's per-call envelope args (mirrors the manifold's
  *  RESPONSE_SIZE_ARG_NAME / RESPONSE_ATTACHMENTS_ARG_NAME / EVAL_TIMEOUT_ARG_NAME) —
- *  duplicated as leaf string literals, not imported: arrival-manifold depends on this
+ *  duplicated as leaf string literals, not imported: the manifold depends on this
  *  package, never the reverse, so this core module cannot reach up to name theirs.
  *  Both benchmark models independently invented `:response-size` on an INNER tool call,
  *  meaning "cap this result" — it's a real arg, just one level up (the REPL tool's own

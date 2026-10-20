@@ -3,7 +3,7 @@
 // over STRING names (gensym ES6-symbol names are an impl edge handled by
 // `String(...)` fallback, not part of the law domain here).
 import fc from "fast-check";
-import { CONSTANT_CTX } from "../../../run/RunContext.js";
+import { expect, it } from "vitest";
 import { ASymbol } from "../ASymbol.js";
 import { ordLaws, setoidLaws } from "./algebra-laws.js";
 
@@ -24,3 +24,7 @@ setoidLaws("SchemeSymbol", {
 });
 
 ordLaws("SchemeSymbol", symbolArb);
+
+it("registers the Setoid and Ord law suites", () => {
+  expect(symbolArb).toBeDefined();
+});

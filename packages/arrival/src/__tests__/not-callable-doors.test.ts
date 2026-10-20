@@ -24,8 +24,8 @@ import { exec } from "../eval/generator-exec.js";
 const doorMessage = async (src: string): Promise<string> => {
   try {
     await exec(src);
-  } catch (e) {
-    return (e as Error)?.message ?? String(e);
+  } catch (error) {
+    return (error as Error)?.message ?? String(error);
   }
   throw new Error(`expected a not-callable door for: ${src}`);
 };

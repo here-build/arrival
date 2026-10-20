@@ -24,6 +24,7 @@
 import { AValue } from "../values/primitives/AValue.js";
 import { ANativeProcedure } from "../values/primitives/ANativeProcedure.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
+import { AString } from "../values/primitives/AString.js";
 import { type BindingName, AmbientRuntime, type AmbientValue } from "../env/AmbientRuntime.js";
 import type { RunContext } from "../run/RunContext.js";
 import type { SchemeValue } from "../values/types.js";
@@ -230,8 +231,24 @@ export class Resolver {
    * Used by hygiene's gensym rename to copy a bound value onto its gensym;
    * distinct from {@link resolve} (which synthesizes c[ad]+r and throws on miss).
    */
-  lookupSettled(name: BindingName): AmbientValue | undefined {
-    return this.env.get(name, { throwError: false });
+  lookupSettled(name: BindingName, ctx?: RunContext): AmbientValue | undefined {
+    // Scope first so a user's lexical shadowing wins; the capability base
+    // second so a macro template naming a builtin (`list`, `if`) finds it.
+    let key: string | symbol;
+    if (name instanceof ASymbol) key = name.__name__;
+    else if (name instanceof AString) key = name.valueOf();
+    else key = name;
+    return this.env.get(name, { throwError: false }) ?? this.capabilities.lookup(key, ctx);
+  }
+
+  /**
+   * The SYNTHESIZED binding for `name` (c[ad]+r composition) or `undefined` — the non-throwing
+   * half of {@link resolveSynth}. Hygiene's gensym rename uses it: a synthesized name has no
+   * binding to copy ({@link lookupSettled} misses), yet a template naming `car`/`cadr` must
+   * still carry that procedure under its gensym.
+   */
+  synthesize(name: string | symbol): AmbientValue | undefined {
+    return typeof name === "string" ? cxrUnfold(name) : undefined;
   }
 
   /**

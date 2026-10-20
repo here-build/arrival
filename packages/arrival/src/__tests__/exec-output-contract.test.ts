@@ -1,5 +1,5 @@
 /**
- * `exec`'s EXIT CONTRACT (B2, arrival-type-hardening-ladder.md §1.2 — RULED: generic
+ * `exec`'s EXIT CONTRACT (B2 — RULED: generic
  * per-form tuple + zod `output` option). The LAST form's unwrapped result validates
  * against the declared schema at the exit boundary; a mismatch throws a teaching door
  * naming expected vs got — the outbound twin of `define/overridable`'s validation.

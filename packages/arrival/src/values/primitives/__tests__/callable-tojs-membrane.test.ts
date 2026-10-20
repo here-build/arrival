@@ -10,11 +10,12 @@
  * REGION-DISCIPLINED (toJS-protocol collapse, ACallable.ts's `hostProjectionOf`): the former
  * CONSTANT_CTX-only, sync-when-possible bare path is GONE — every host projection, reached
  * through this same protocol whether bare or under a real membrane exit, closes over
- * `currentRegionScope() ?? DETACHED_SCOPE` and resolves through `withRegionCall`, so calling
+ * `currentRegionScope() ?? detachedScope()` and resolves through `withRegionCall`, so calling
  * the returned host fn always answers a Promise (never a bare synchronous value or throw).
  * Identity is stable per (callable, scope): toJS twice under the SAME scope answers the same
  * host fn (mirroring the callable's own load-bearing reference identity) — never across scopes.
  */
+import type { CallCtx } from "../../../run/CallCtx.js";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
@@ -50,8 +51,11 @@ describe("LAW — callable arrival/toJS is the reverse membrane", () => {
   it("ARosettaProcedure: toJS crosses through the FULL rosetta marshal (contract stays live)", async () => {
     const cap = EnvCapability.define("law/tojs-rosetta", {
       symbols: (symbol, sz) => ({
-        shout: symbol.rosetta`shout: upper-case a string`({ input: [sz.string], output: [sz.string] }, (s) =>
-          (s as string).toUpperCase(),
+        shout: symbol.rosetta`shout: upper-case a string`(
+          { input: [sz.string], output: [sz.string] },
+          function (this: CallCtx, s) {
+            return (s as string).toUpperCase();
+          },
         ),
       }),
     });

@@ -410,7 +410,7 @@ describe("scheme-zod z.procedure — contract-aware marshaling", () => {
   });
 });
 
-// Q1 SPLIT (docs/plans/stage-c-corpse-deletion.md §"z.value retirement campaign"): the ONE
+// Q1 SPLIT: the ONE
 // `isSchemeValue` predicate mints under TWO names — `z.schemeValue` (the honest top type,
 // native/contour contracts) and `z.dynamic` (the rosetta escape hatch) — each its OWN schema
 // instance (distinct object identity), so `z.lookupName` resolves each to its OWN registered
@@ -510,8 +510,7 @@ describe("scheme-zod z.undefinedResult / z.error — real codecs", () => {
   });
 });
 
-// RE-PINNED (one-number rework, RATIO — docs/design-history/arrival-one-number-rework.md
-// §2.3): AExact's payload is a safe-int `number` now, not `bigint` (§0.2). The whole codec
+// RE-PINNED (one-number rework, RATIO): AExact's payload is a safe-int `number` now, not `bigint`. The whole codec
 // family below flipped its JS face from `bigint`/`bigint | number` to plain `number` —
 // `z.exact`/`z.integer`/`z.number`/`z.schemeNumber` no longer accept or produce a raw JS
 // bigint at all (a bigint is now an opaque host value, never a scheme number). `z.bigint`

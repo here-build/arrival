@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { isComplex } from "../../numbers.js";
 import { AExact } from "../AExact.js";
 import { AInexact } from "../AInexact.js";
@@ -77,7 +76,7 @@ describe("InexactNumber", () => {
   // omitted, R7RS § 6.2.3). SchemeInexact has no imaginary axis.
 
   it("has tower predicates", () => {
-    const real = new AInexact(3.0);
+    const real = new AInexact(3);
     expect(real.isInteger).toBe(true);
     expect(real.isRational).toBe(true); // R7RS: finite reals are rational
     expect(real.isReal).toBe(true);
@@ -93,6 +92,6 @@ describe("InexactNumber", () => {
   it("handles special values", () => {
     expect(new AInexact(Infinity).toString()).toBe("+inf.0");
     expect(new AInexact(-Infinity).toString()).toBe("-inf.0");
-    expect(new AInexact(NaN).toString()).toBe("+nan.0");
+    expect(new AInexact(Number.NaN).toString()).toBe("+nan.0");
   });
 });

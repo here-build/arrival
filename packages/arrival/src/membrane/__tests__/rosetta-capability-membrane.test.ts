@@ -8,8 +8,8 @@
  * constructed by the apply term — no Reflect.apply misuse vector to defend.
  *
  * Public `AmbientRuntime.defineRosetta` is gone (see env-privatization-pins).
- * Forbidden bare `{ fn }` authoring remains a separate open migration for external
- * packs (ledger GAPS: "forbidden bare-fn authoring form").
+ * The forbidden bare `{ fn }` authoring form is banned at the type level
+ * (common/__tests__/capability.test-d.ts).
  */
 import invariant from "tiny-invariant";
 import { describe, expect, it } from "vitest";
@@ -20,7 +20,7 @@ import { inferenceEnv } from "../../env/inference-env.js";
 import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { jsToScheme, toJS } from "../rosetta.js";
 import { execOverFrame } from "../../eval/generator-exec.js";
-import { testCallCtx } from "../../run/CallCtx.js";
+import { type CallCtx, testCallCtx } from "../../run/CallCtx.js";
 import { EnvCapability } from "../../common/capability.js";
 import { applyCapability } from "../../__tests__/_fresh-env.js";
 import { ARosettaProcedure } from "../../values/primitives/ARosettaProcedure.js";
@@ -53,7 +53,8 @@ function isRosettaVerb(value: unknown): value is ARosettaProcedure {
  *  dynamic call site (empty here — a direct/test call, no evaluator invocation) — same
  *  pattern `capability-rosetta-symbol.test.ts`'s own `invoke` helper uses. */
 function invoke(verb: ARosettaProcedure, ...args: unknown[]): unknown {
-  return withDynamicCallSite(undefined, () => verb[tf("apply")](args as SchemeValue[], testCallCtx()));
+  const callCtx = testCallCtx();
+  return withDynamicCallSite(callCtx.runCtx, undefined, () => verb[tf("apply")](args as SchemeValue[], callCtx));
 }
 
 describe("Rosetta AmbientRuntime (capability-authored)", () => {
@@ -64,7 +65,9 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
           symbols: (symbol, z) => ({
             "double-all": symbol.rosetta`double-all: doubles every element of a numeric list`(
               { input: [z.list(z.number)], output: [z.list(z.number)] },
-              (numbers) => numbers.map((x) => x * 2),
+              function (this: CallCtx, numbers) {
+                return numbers.map((x) => x * 2);
+              },
             ),
           }),
         }),
@@ -73,7 +76,7 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
       const result = await execOne(`(double-all (list 1 2 3 4 5))`, env);
 
       // exec already unwraps via toJS — do not re-cross the JS face.
-      expect(Array.from(result as Iterable<unknown>)).toEqual([2, 4, 6, 8, 10]);
+      expect([...(result as Iterable<unknown>)]).toEqual([2, 4, 6, 8, 10]);
     });
 
     it("should handle multiple Rosetta functions", async () => {
@@ -82,11 +85,15 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
           symbols: (symbol, z) => ({
             "sum-array": symbol.rosetta`sum-array: sums a numeric list`(
               { input: [z.list(z.number)], output: [z.number] },
-              (numbers) => numbers.reduce((a, b) => a + b, 0),
+              function (this: CallCtx, numbers) {
+                return numbers.reduce((a, b) => a + b, 0);
+              },
             ),
             "filter-evens": symbol.rosetta`filter-evens: keeps the even elements of a numeric list`(
               { input: [z.list(z.number)], output: [z.list(z.number)] },
-              (numbers) => numbers.filter((x) => x % 2 === 0),
+              function (this: CallCtx, numbers) {
+                return numbers.filter((x) => x % 2 === 0);
+              },
             ),
           }),
         }),
@@ -108,7 +115,7 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
           symbols: (symbol, z) => ({
             "extract-values": symbol.rosetta`extract-values: plucks .value off every element`(
               { input: [z.dynamic], output: [z.dynamic] },
-              (rawObjects) => {
+              function (this: CallCtx, rawObjects) {
                 invariant(rawObjects instanceof AValue, "z.dynamic slot is a boxed scheme value");
                 const objects = toJS(rawObjects) as Array<{ value: unknown }>;
                 return objects.map((obj) => obj.value) as never;
@@ -148,7 +155,7 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
             "filter-by-css-property":
               symbol.rosetta`filter-by-css-property: filters nodes whose style[property] === value`(
                 { input: [z.dynamic, z.string, z.string], output: [z.dynamic] },
-                (rawNodes, property, value) => {
+                function (this: CallCtx, rawNodes, property, value) {
                   invariant(rawNodes instanceof AValue, "z.dynamic slot is a boxed scheme value");
                   const nodes = toJS(rawNodes) as Array<{ style?: Record<string, string> }>;
                   // Raw JS return — the membrane boxes (world-flip rebaseline, 2026-08-13).
@@ -190,7 +197,7 @@ describe("Rosetta AmbientRuntime (capability-authored)", () => {
           symbols: (symbol, z) => ({
             "css-property-stats": symbol.rosetta`css-property-stats: aggregates node style property:value counts`(
               { input: [z.dynamic], output: [z.dynamic] },
-              (rawNodes) => {
+              function (this: CallCtx, rawNodes) {
                 invariant(rawNodes instanceof AValue, "z.dynamic slot is a boxed scheme value");
                 const nodes = toJS(rawNodes) as Array<{ style?: Record<string, string> }>;
                 const stats: Record<string, number> = {};

@@ -7,6 +7,7 @@ import { describe, test } from "vitest";
 import { EnvCapability } from "../capability.js";
 import type { Contract, ContourContract, CrossingContract } from "../symbols/_bake.js";
 import * as z from "../scheme-zod/index.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 
 describe("resource-path producers — type placement", () => {
   test("queries on native must NOT compile", () => {
@@ -19,7 +20,9 @@ describe("resource-path producers — type placement", () => {
             // @ts-expect-error — queries?/effects? are rosetta-only (CrossingContract)
             queries: () => [["x"]],
           },
-          (v) => v,
+          function (this: CallCtx, v) {
+            return v;
+          },
         ),
       }),
     });
@@ -52,7 +55,9 @@ describe("resource-path producers — type placement", () => {
             provenance: "sink",
             queries: (s: string) => [["d", s]],
           },
-          () => undefined,
+          function (this: CallCtx) {
+            return undefined;
+          },
         ),
       }),
     });
@@ -68,7 +73,9 @@ describe("resource-path producers — type placement", () => {
             output: [z.string],
             effects: (s: string) => [["d", s]],
           },
-          (s) => s,
+          function (this: CallCtx, s) {
+            return s;
+          },
         ),
       }),
     });
@@ -83,7 +90,9 @@ describe("resource-path producers — type placement", () => {
             output: [z.undefinedResult],
             effects: (s: string) => [["d", s]],
           },
-          () => undefined,
+          function (this: CallCtx) {
+            return undefined;
+          },
         ),
         upsert: symbol.rosetta`ok-h-ret: `(
           {
@@ -92,7 +101,9 @@ describe("resource-path producers — type placement", () => {
             queries: (s: string) => [["d", s]],
             effects: (s: string) => [["d", s]],
           },
-          (s) => s,
+          function (this: CallCtx, s) {
+            return s;
+          },
         ),
       }),
     });
@@ -108,7 +119,9 @@ describe("resource-path producers — type placement", () => {
             provenance: "sink",
             effects: (s: string) => [["d", s]],
           },
-          () => undefined,
+          function (this: CallCtx) {
+            return undefined;
+          },
         ),
       }),
     });
@@ -124,7 +137,9 @@ describe("resource-path producers — type placement", () => {
             queries: (s: string) => [["d", s]],
             effects: (s: string) => [["d", s]],
           },
-          (s) => s,
+          function (this: CallCtx, s) {
+            return s;
+          },
         ),
       }),
     });

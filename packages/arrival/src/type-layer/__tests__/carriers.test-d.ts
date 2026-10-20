@@ -2,15 +2,26 @@
 // Runs via `vitest --typecheck`. Proves the 3-way slot probes, empty-list covariance,
 // list ≠ vector, deep algebra composition, dict → object — and that wrong programs bite.
 import { describe, expectTypeOf, test } from "vitest";
-import type { List, SlotKind, ElemOf, AcceptsBareWord, IsStringTyped } from "../carriers.js";
-import { car, cons, filter, list, map, reduce } from "../carriers.js";
+import {
+  type List,
+  type SlotKind,
+  type ElemOf,
+  type AcceptsBareWord,
+  type IsStringTyped,
+  car,
+  cons,
+  filter,
+  list,
+  map,
+  reduce,
+} from "../carriers.js";
 
 // harvested tools (what schema-to-ts emits)
 declare function set_timer(seconds: number): void;
 declare function get_weather(city: string, unit: "celsius" | "fahrenheit"): void;
 declare function get_route(stops: List<string>, mode: "fast" | "scenic"): void;
 declare function sum_readings(readings: readonly number[]): number;
-declare function note(text: string): void;
+declare function _note(text: string): void;
 declare function configure(opts: { name: string; age: number }): void;
 
 // lowered programs (must type-check)
@@ -51,7 +62,7 @@ describe("carriers — 3-way slot probes", () => {
   });
 
   test("bare-word / string-typed probes", () => {
-    expectTypeOf<AcceptsBareWord<Parameters<typeof note>[0]>>().toEqualTypeOf<true>();
+    expectTypeOf<AcceptsBareWord<Parameters<typeof _note>[0]>>().toEqualTypeOf<true>();
     expectTypeOf<AcceptsBareWord<Parameters<typeof get_route>[0]>>().toEqualTypeOf<false>();
     expectTypeOf<IsStringTyped<Parameters<typeof get_weather>[1]>>().toEqualTypeOf<true>();
   });

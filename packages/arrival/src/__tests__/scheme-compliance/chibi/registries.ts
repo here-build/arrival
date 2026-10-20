@@ -1,7 +1,6 @@
 // Chibi harness v2 — registries.ts (docs/test-suite-architecture.md F4).
 //
-// Typed rule tables replacing v1's substring/regex matching over stringified test names
-// (`chibi-r7rs.spec.ts:80-338`). A rule matches a `TestStep` by:
+// Typed rule tables replacing the earlier substring/regex matching over stringified test names. A rule matches a `TestStep` by:
 //   - `symbols`  — the step's datum references ANY of the given identifiers, ANYWHERE in its
 //                  tree (recursive; see `datumSymbols`). Exact string membership, never a
 //                  substring/regex — a hyphenated compound (`list-tail`) never collides with a
@@ -31,8 +30,7 @@
 //   - v1's `"(define-syntax swap!"` IS real (line 660-670: a `(test '(2 1) (let (…) (define-syntax
 //     swap! …) (swap! x y) (list x y)))` standalone test) — transcribed via the `swap!`
 //     identifier (verified unique to this one test).
-import type { Manifest, TestStep } from "./manifest.js";
-import { normalizeText } from "./manifest.js";
+import { normalizeText, type Manifest, type TestStep } from "./manifest.js";
 
 export type Matcher =
   | { kind: "symbols"; anyOf: readonly string[] }
@@ -407,7 +405,7 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
     gate: "permanent — ports/IO omitted by design, no fix planned (harness-capability.ts prelude's own documented cascade)",
   },
   // -----------------------------------------------------------------------
-  // FIXED (2026-07-14, one-number rework, docs/design-history/arrival-one-number-rework.md):
+  // FIXED (2026-07-14, one-number rework):
   // the row for `(test #f (= 9007199254740992.0 9007199254740993))` is DEAD, not passing —
   // `9007199254740993` (2^53 + 1) now ParseErrors at read time (RATIO's safe-int-only exact
   // literal gate, §0.3), so the form never reaches a `TestStep` at all; it's a `registerUnreadable`
@@ -421,7 +419,7 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
     gate: "permanent — IEEE 754/tower edge, no fix planned",
   },
   // -----------------------------------------------------------------------
-  // One-number rework (RATIO, docs/design-history/arrival-one-number-rework.md §0.3): a
+  // One-number rework (RATIO): a
   // genuinely NEW expected failure, not a stale carry-over. The CLtL 12.3 transitivity example
   // (r7rs-tests.scm:838-841) computes `a = (/ 10.0 single-float-epsilon)` — JS's OWN double
   // epsilon (~2.22e-16), not a real single-float one, so `a` lands near 9e15, just past
@@ -438,8 +436,8 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
     },
     reason:
       "one-number rework (RATIO): (exact a) on a/≈9.007e15 (just past Number.MAX_SAFE_INTEGER) throws by design " +
-      "(§0.3 crash-on-overflow) — the corpus's own float epsilon computation lands just past the safe-int ceiling",
-    gate: "permanent — RATIO's safe-int component ceiling (docs/design-history/arrival-one-number-rework.md §0.3), no fix planned",
+      "(crash-on-overflow) — the corpus's own float epsilon computation lands just past the safe-int ceiling",
+    gate: "permanent — RATIO's safe-int component ceiling, no fix planned",
   },
   // (The former "One-number rework (RATIO) fallout" block — 13 xfail rules for the
   // env/r7rs/vectors.ts:149 / lists.ts BigInt-mint leftovers — was REMOVED 2026-07-14:
@@ -470,40 +468,40 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
       ],
     },
     reason: "intentional — purity invariant (frozen entities); writing methods are doored",
-    gate: "plan-2026-06-11-purity-pass",
+    gate: "purity invariant",
   },
   {
     match: { kind: "symbols", anyOf: ["set!"] },
     reason: "intentional — purity invariant; lexical set! (variable rebinding) is doored",
-    gate: "plan-2026-06-11-purity-pass (r7rs/binding)",
+    gate: "purity invariant (r7rs/binding)",
   },
   {
     match: { kind: "form", exact: normalizeText(`(test 6 (+ x 1))`) },
     reason:
       "intentional — purity invariant; cascading — the enclosing block's sibling `(set! x 5)` doors, aborting before this member runs",
-    gate: "plan-2026-06-11-purity-pass (r7rs/binding); block-member symbol-visibility gap in manifest.ts blockMembers (harness fix design, not editable here)",
+    gate: "purity invariant (r7rs/binding); block-member symbol-visibility gap in manifest.ts blockMembers (harness fix design, not editable here)",
   },
   {
     match: { kind: "form", exact: normalizeText(`(test 6 (force p))`) },
     reason:
       "intentional — purity invariant; cascading — `(define p (delay (begin (set! count …) …)))` evaluates its " +
       "argument (applicative order) before `delay`'s own door fires, so `set!` throws first",
-    gate: "plan-2026-06-11-purity-pass (r7rs/binding); block-member symbol-visibility gap in manifest.ts blockMembers",
+    gate: "purity invariant (r7rs/binding); block-member symbol-visibility gap in manifest.ts blockMembers",
   },
   {
     match: { kind: "form", exact: normalizeText(`(test #t (eqv? x y))`) },
     reason: "intentional — purity invariant; cascading — the enclosing block's sibling `(set-cdr! x 4)` doors first",
-    gate: "plan-2026-06-11-purity-pass; block-member symbol-visibility gap in manifest.ts blockMembers",
+    gate: "purity invariant; block-member symbol-visibility gap in manifest.ts blockMembers",
   },
   {
     match: { kind: "form", exact: normalizeText(`(test #f (list? y))`) },
     reason: "intentional — purity invariant; cascading — the enclosing block's sibling `(set-cdr! x 4)` doors first",
-    gate: "plan-2026-06-11-purity-pass; block-member symbol-visibility gap in manifest.ts blockMembers",
+    gate: "purity invariant; block-member symbol-visibility gap in manifest.ts blockMembers",
   },
   {
     match: { kind: "form", exact: normalizeText(`(test #f (list? x))`) },
     reason: "intentional — purity invariant; cascading — the enclosing block's sibling `(set-cdr! x 4)` doors first",
-    gate: "plan-2026-06-11-purity-pass; block-member symbol-visibility gap in manifest.ts blockMembers",
+    gate: "purity invariant; block-member symbol-visibility gap in manifest.ts blockMembers",
   },
   // -----------------------------------------------------------------------
   // Macro engine / hygiene gaps — pre-L1, separate from AValue work.
@@ -529,85 +527,6 @@ export const EXPECTED_FAILURES: readonly ExpectedFailure[] = [
     match: { kind: "form", exact: "(test 'ok (let ((=> #f)) (cond (#t => 'ok))))" },
     reason: "Hygienic shadowing of cond's => auxiliary keyword — pre-L1 hygiene gap",
     gate: "pre-L1 hygiene",
-  },
-  {
-    match: { kind: "symbols", anyOf: ["sequence1"] },
-    reason: "Nested define-syntax defining a macro (be-like-begin) — inner macro unbound — pre-L1 macro engine gap",
-    gate: "pre-L1 macro engine (nested define-syntax)",
-  },
-  {
-    match: { kind: "symbols", anyOf: ["sequence2"] },
-    reason: "Nested define-syntax defining a macro (be-like-begin) — inner macro unbound — pre-L1 macro engine gap",
-    gate: "pre-L1 macro engine (nested define-syntax)",
-  },
-  {
-    match: { kind: "symbols", anyOf: ["sequence3"] },
-    reason: "Nested define-syntax defining a macro (be-like-begin) — inner macro unbound — pre-L1 macro engine gap",
-    gate: "pre-L1 macro engine (nested define-syntax)",
-  },
-  {
-    match: { kind: "symbols", anyOf: ["mad-hatter"] },
-    reason: "Nested define-syntax (jabberwocky → hatter) — inner macro unbound — pre-L1 macro engine gap",
-    gate: "pre-L1 macro engine (nested define-syntax)",
-  },
-  {
-    match: { kind: "form", exact: "(test 'x (bar 1))" },
-    reason: "Nested define-syntax (foo → bar) — inner macro unbound — pre-L1 macro engine gap",
-    gate: "pre-L1 macro engine (nested define-syntax)",
-  },
-  {
-    match: { kind: "form", exact: "(test 100 (ff 10))" },
-    reason: "Nested define-syntax (ffoo → ff) — inner macro unbound — pre-L1 macro engine gap",
-    gate: "pre-L1 macro engine (nested define-syntax)",
-  },
-  {
-    match: { kind: "symbols", anyOf: ["elli-lit-1"] },
-    reason: "Ellipsis used as a literal in the template — pre-L1 macro engine gap",
-    gate: "pre-L1 macro engine (ellipsis handling)",
-  },
-  {
-    match: {
-      kind: "form",
-      exact:
-        '(test \'#((10 43) (31 41 51) (32 42 52) (63 77) ("rest:" . "tail")) (part-2x (10 (+ 21 22) (31 32) (41 42) (51 52) (+ 61 2) 77 . "tail")))',
-    },
-    reason: "Improper-list (dotted-tail) ellipsis pattern — pre-L1 macro engine gap",
-    gate: "pre-L1 macro engine (ellipsis handling)",
-  },
-  // Ellipsis sub-pattern `(m n) ...` in the MIDDLE of a pattern (followed by a fixed `x y`
-  // tail) — verified: `m`/`n` bind to `()` instead of the collected elements (expected
-  // `(31 41 51)`/`(32 42 52)`, actual `()`/`()`); the head/tail-only parts (`a b`, `x y`)
-  // bind fine. A middle-ellipsis-sub-pattern capture gap, same family as the other pre-L1
-  // ellipsis-handling rows above.
-  {
-    match: {
-      kind: "form",
-      exact: normalizeText(
-        `(test '#((10 43) (31 41 51) (32 42 52) (63 77)) (part-2 10 (+ 21 22) (31 32) (41 42) (51 52) (+ 61 2) 77))`,
-      ),
-    },
-    reason: "Ellipsis sub-pattern `(m n) ...` in the middle of a pattern binds to () instead of the collected elements",
-    gate: "pre-L1 macro engine (ellipsis handling)",
-  },
-  {
-    match: {
-      kind: "form",
-      exact: normalizeText(
-        `(test '#((10 43) (31 41 51) (32 42 52) (63 77) ("rest:")) (part-2x (10 (+ 21 22) (31 32) (41 42) (51 52) (+ 61 2) 77)))`,
-      ),
-    },
-    reason: "Ellipsis sub-pattern `(m n) ...` in the middle of a pattern binds to () instead of the collected elements",
-    gate: "pre-L1 macro engine (ellipsis handling)",
-  },
-  {
-    match: { kind: "symbols", anyOf: ["underscore"] },
-    reason: "`_` wildcard in a syntax-rules pattern — pre-L1 macro engine gap",
-    gate: "pre-L1 macro engine",
-  },
-  {
-    match: { kind: "symbols", anyOf: ["count-to-2_"] },
-    reason: "`_` wildcard counting pattern (count-to-2_) — pre-L1 macro engine gap",
-    gate: "pre-L1 macro engine",
   },
   {
     match: { kind: "form", exact: "(test 'bound-identifier=? (m k))" },

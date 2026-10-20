@@ -1,5 +1,5 @@
 /**
- * LAW — THE NEXT CUT (docs/plans/stage-b-runcontext-absorbs-assembly.md §"THE NEXT CUT"):
+ * LAW — THE NEXT CUT (Stage B):
  * a closure's LEXICAL axis is definition-time (that is what a closure IS), but its RUN axis
  * — `runCtx` (strict, channels, capabilityConfigurations/Resources, signal, cache) —
  * swaps to the CALLING run at invocation. tf/apply is the sole meeting point of immutable

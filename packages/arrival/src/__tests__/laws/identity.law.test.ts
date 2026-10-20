@@ -37,7 +37,7 @@ import { APair } from "../../values/primitives/APair.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
 import { tf } from "../../values/tagless-final.js";
 import { AExact } from "../../values/primitives/AExact.js";
-import { unaryContour, filterContour, reduceContour, keepAllContour } from "../_contour-callback.js";
+import { unaryContour, filterContour, reduceContour } from "../_contour-callback.js";
 import { harvestContracts } from "../_symbols-harvest.js";
 
 // A nil clone carrying non-empty provenance — exactly what
@@ -106,7 +106,7 @@ describe("rosetta.ts — `=== nil` identity-equality sites", () => {
 describe("list-copy (env/r7rs/lists.ts) — `=== nil` identity-equality sites", () => {
   it("list-copy(nil-clone) — does NOT alias the input by reference (env/r7rs/lists.ts)", () => {
     // `list-copy`'s impl is `function(this: CallCtx, …)` (the ctx-honesty rework,
-    // arrival-constant-ctx-audit-2026-07-11.md §2.4) — bind the sanctioned test
+    // docs/execution.md §4 CALLCTX) — bind the sanctioned test
     // door (CallCtx.ts) rather than calling the raw fn bare.
     const listCopy = LIST_OPS["list-copy"] as (this: unknown, l: unknown) => unknown;
     const input = cloneNil();

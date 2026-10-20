@@ -24,9 +24,7 @@
 
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
-import { AValue } from "../../values/primitives/AValue.js";
 import { fromJs } from "../boxing.js";
-import { is_nil } from "../../values/value-guards.js";
 import { isSchemeValue } from "../membrane.js";
 import { toJS, jsToScheme } from "../rosetta.js";
 import { AJSObject } from "../AJSObject.js";
@@ -106,27 +104,29 @@ describe("AValue.fromJs — boxer dispatch produces the expected subtype per typ
     expect(result).toBeInstanceOf(AVoid);
   });
 
-  // the "object" boxer. A JS array IS an R7RS vector → a borrowed AJSArray (no more list
-  // coercion); a plain object wraps as SchemeJSObject.
-  it("array → borrowed AJSArray vector (boxes lazily on access)", () => {
-    const result = fromJs(CONSTANT_CTX, [1, 2, 3]);
+  // Containers and functions are not scalars: they cross via jsToScheme, and fromJs refuses them.
+  it("array → borrowed AJSArray vector via jsToScheme (boxes lazily on access)", () => {
+    const result = jsToScheme(CONSTANT_CTX, [1, 2, 3]);
     expect(result).toBeInstanceOf(AJSArray);
     expect((result as { kind: string }).kind).toBe("vector");
     expect((result as unknown as { __vector__: AExact[] }).__vector__[0].num).toBe(1);
   });
 
-  it("plain object → SchemeJSObject wrapper", () => {
+  it("plain object → AJSObject borrow via jsToScheme", () => {
     const obj = { foo: 1 };
-    const result = fromJs(CONSTANT_CTX, obj);
+    const result = jsToScheme(CONSTANT_CTX, obj);
     expect(result).toBeInstanceOf(AJSObject);
     expect((result as AJSObject).source).toBe(obj);
   });
 
-  // INVARIANT: function → callable — V's ruling (2026-07-24) retired the void tier;
-  // the boxer registry now mints the SAME reverse-membrane lens jsToScheme's
-  // FOREIGN_LENS_CLAIMS function row does (ACallable.ts's `hostFnToCallable`).
-  it("function → ARosettaProcedure (the boxer registry mints the reverse-membrane lens)", () => {
-    expect(fromJs(CONSTANT_CTX, () => 42)).toBeInstanceOf(ARosettaProcedure);
+  it("function → ARosettaProcedure via jsToScheme (the reverse-membrane lens)", () => {
+    expect(jsToScheme(CONSTANT_CTX, () => 42)).toBeInstanceOf(ARosettaProcedure);
+  });
+
+  it("fromJs is the scalar boxer — containers/functions throw", () => {
+    expect(() => fromJs(CONSTANT_CTX, [1])).toThrow(/scalar boxer/);
+    expect(() => fromJs(CONSTANT_CTX, { a: 1 })).toThrow(/scalar boxer/);
+    expect(() => fromJs(CONSTANT_CTX, () => 1)).toThrow(/scalar boxer/);
   });
 
   // A real ALambda passes through jsToScheme by identity — already a scheme value.

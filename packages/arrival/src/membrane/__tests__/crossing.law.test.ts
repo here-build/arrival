@@ -21,7 +21,6 @@ import { toJS, jsToScheme, modeKeyOf } from "../rosetta.js";
 import { isSchemeValue } from "../membrane.js";
 
 import { exec } from "../../eval/generator-exec.js";
-import { setMembraneWarnings } from "../membrane-warn.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { ABool } from "../../values/primitives/ABool.js";
 import { AExact } from "../../values/primitives/AExact.js";
@@ -154,7 +153,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
       // exitForm: "n/a" — no exit cell (the crossing doors before any box exists).
       it(roundTripTitle, () => {
         expect(() => enter(10n)).toThrow(/no lens for a host bigint/);
-        expect(() => jsToScheme(CONSTANT_CTX, 12345678901234567890n)).toThrow(/no lens for a host bigint/);
+        expect(() => jsToScheme(CONSTANT_CTX, 12_345_678_901_234_567_890n)).toThrow(/no lens for a host bigint/);
       });
       it(provenanceTitle, () => {
         // No carrier to stamp: the crossing doors BEFORE any box could carry a
@@ -347,8 +346,7 @@ describe.each(CROSSINGS.map((r) => [r.type, r] as const))("crossing: %s", (_t, r
       // String keys must be unchanged; symbol-keyed slots must survive the round-trip.
       it(`${roundTripTitle} — symbol-keyed properties survive alongside string keys`, () => {
         const SECRET = Symbol("secret");
-        const original: Record<string | symbol, unknown> = { visible: 1 };
-        original[SECRET] = [4, 5, 6];
+        const original: Record<string | symbol, unknown> = { visible: 1, [SECRET]: [4, 5, 6] };
         const roundTripped = exitJS(enter(original)) as Record<string | symbol, unknown>;
         expect(roundTripped.visible).toBe(1);
         expect(roundTripped[SECRET]).toEqual([4, 5, 6]);
@@ -690,6 +688,7 @@ describe("R9 lazy egress laws — containers exit as ref-tracking proxies (RULIN
       arr[0] = 99;
     }).toThrow(/writes are banned/);
     expect(() => {
+      // eslint-disable-next-line sonarjs/no-array-delete -- deliberately exercising the membrane's delete trap
       delete arr[0];
     }).toThrow(/mutations are banned/);
     expect(() => Object.defineProperty(arr, "0", { value: 99 })).toThrow(/mutations are banned/);
@@ -715,7 +714,7 @@ describe("R9 RE-ADMISSION — jsToScheme∘toJS = id on containers (the bifuncto
     const out = toJS(list);
     const back = jsToScheme(CONSTANT_CTX, out);
     expect(back).toBe(list);
-    expect(back["arrival/tagless-final/car"]()).toBe(list.car);
+    expect(back["arrival/tagless-final/car"](CONSTANT_CTX)).toBe(list.car);
   });
 
   it("vector: round-trips to the SAME box", () => {
@@ -806,6 +805,7 @@ describe.each(VIOLATIONS.map((v) => [v.name, v] as const))("forbidden crossing: 
         // only a PLAIN-prototype thenable stays a dict-shaped borrow (registry order:
         // the plain-object claim precedes the promise claim).
         class Deferred {
+          // eslint-disable-next-line unicorn/no-thenable -- a non-plain thenable is the case under test
           then(res: (x: number) => void): void {
             res(1);
           }
@@ -886,7 +886,7 @@ describe("forgery guard: a borrowed object's own arrival/*-named key is DATA, ne
   });
 });
 
-// ── Egress membrane exit laws (docs/design-history/arrival-egress-membrane-exit.md) ──
+// ── Egress membrane exit laws ──
 // ONE crossing protocol `arrival/toJS(exit?)`, keyed on `exit`: no exit = SERIALIZATION
 // (callables stringify — a law, not an accident), exit present = MEMBRANE crossing
 // (options + reverse-membrane wrappers reach every depth). Identity: bare=(box);
@@ -897,7 +897,7 @@ describe("egress membrane exit — the two modes and their identity laws", () =>
       name: `test-${tag}`,
       arity: { min: 0, max: null },
       contract: undefined,
-      impl: (_args, runCtx) => new AExact(7),
+      impl: (_args, _runCtx) => new AExact(7),
     });
   const dictOf = (entries: ReadonlyArray<readonly [string, SchemeValue | Promise<SchemeValue>]>): ADict =>
     new ADict(entries.map(([k, v]) => [new ASymbol(k), v] as const));

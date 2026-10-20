@@ -14,6 +14,7 @@
  */
 import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import { withInputProvenance } from "../op-helpers.js";
+import type { RunContext } from "../../run/RunContext.js";
 import type { SourceLocation } from "../../errors.js";
 
 type BytevectorSource = Uint8Array | ArrayBuffer | DataView | ABytevector | readonly number[];
@@ -130,11 +131,11 @@ export class ABytevector extends AValue {
 
   // Element-count over a bytevector (byte length). Like AString (and UNLIKE the Pair/Vector
   // element-union), bytes carry NO element ids, so this carries the BYTEVECTOR's OWN
-  // provenance via `withInputProvenance([this], count)` — always a fresh boxed AExact post
+  // provenance via `withInputProvenance(runCtx, [this], count)` — always a fresh boxed AExact post
   // bare-value purge (A4/P4): stamped when non-empty, the empty-provenance flyweight-free
   // fresh box otherwise (numbers have no flyweight, only ABool does). No strict-gating.
-  ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
-    return withInputProvenance([this], this.__bytevector__.byteLength);
+  ["arrival/tagless-final/length"](runCtx: RunContext): AValue | number {
+    return withInputProvenance(runCtx, [this], this.__bytevector__.byteLength);
   }
 }
 

@@ -14,7 +14,7 @@
 import invariant from "tiny-invariant";
 import { AExact } from "./primitives/AExact.js";
 import { AInexact } from "./primitives/AInexact.js";
-import { ComplexNumberError, ParseError } from "../errors.js";
+import { ComplexNumberError } from "../errors.js";
 
 /**
  * Complex tower omitted (R7RS §6.2.3). Door recognizes the omitted feature and
@@ -68,97 +68,6 @@ export function schemeCompare(a: ANumeric, b: ANumeric): number {
   if (ar > br) return 1;
   if (ar === br) return 0;
   return Number.NaN;
-}
-
-const PARSE_SAFE_MAX = BigInt(Number.MAX_SAFE_INTEGER);
-const PARSE_SAFE_MIN = BigInt(Number.MIN_SAFE_INTEGER);
-
-/** Parse magnitude via BigInt (exact digits past 2^53) then gate against safe-integer
- *  range: too large THROWS `ParseError` ("write it inexact"), never truncates. */
-function parseSafeIntLiteral(magnitude: bigint, original: string): number {
-  if (magnitude > PARSE_SAFE_MAX || magnitude < PARSE_SAFE_MIN) {
-    throw new ParseError(
-      `exact literal ${original} exceeds safe-integer range — write it inexact (e.g. append a decimal point, or use #i) if approximation is acceptable`,
-    );
-  }
-  return Number(magnitude);
-}
-
-// Host-facing string→number utility (re-exported off `index.ts`). Mints under CONSTANT_CTX;
-// a live rosetta/MCP caller should pass the crossing's own ctx rather than this default.
-export function parseNumber(str: string): ANumeric {
-  str = str.trim();
-
-  let forceExact = false;
-  let forceInexact = false;
-
-  if (str.startsWith("#e") || str.startsWith("#E")) {
-    forceExact = true;
-    str = str.slice(2);
-  } else if (str.startsWith("#i") || str.startsWith("#I")) {
-    forceInexact = true;
-    str = str.slice(2);
-  }
-
-  let radix = 10;
-  if (str.startsWith("#b") || str.startsWith("#B")) {
-    radix = 2;
-    str = str.slice(2);
-  } else if (str.startsWith("#o") || str.startsWith("#O")) {
-    radix = 8;
-    str = str.slice(2);
-  } else if (str.startsWith("#d") || str.startsWith("#D")) {
-    radix = 10;
-    str = str.slice(2);
-  } else if (str.startsWith("#x") || str.startsWith("#X")) {
-    radix = 16;
-    str = str.slice(2);
-  }
-
-  if (str === "+inf.0") return new AInexact(Infinity);
-  if (str === "-inf.0") return new AInexact(-Infinity);
-  if (str === "+nan.0" || str === "-nan.0") return new AInexact(Number.NaN);
-
-  const complexMatch = str.match(/^([+-]?[\d.]+)?([+-][\d.]*)?i$/);
-  if (complexMatch) {
-    const imag = complexMatch[2] === undefined ? 1 : Number.parseFloat(complexMatch[2] || "+1");
-    if (imag === 0) {
-      const real = complexMatch[1] ? Number.parseFloat(complexMatch[1]) : 0;
-      return new AInexact(real);
-    }
-    return complexDoor();
-  }
-
-  const rationalMatch = str.match(/^([+-]?\d+)\/(\d+)$/);
-  if (rationalMatch) {
-    const num = parseSafeIntLiteral(BigInt(rationalMatch[1]), str);
-    const denom = parseSafeIntLiteral(BigInt(rationalMatch[2]), str);
-    const result = new AExact(num, denom);
-    if (forceInexact) {
-      return result.toInexact();
-    }
-    return result;
-  }
-
-  if (str.includes(".") || str.includes("e") || str.includes("E")) {
-    const value = Number.parseFloat(str);
-    if (forceExact) {
-      return new AInexact(value).toExact();
-    }
-    return new AInexact(value);
-  }
-
-  // Integer: BigInt so digits beyond 2^53 are exact; parseSafeIntLiteral throws if over range.
-  const neg = str.startsWith("-");
-  const digits = neg || str.startsWith("+") ? str.slice(1) : str;
-  const prefix = radix === 16 ? "0x" : radix === 8 ? "0o" : radix === 2 ? "0b" : "";
-  const magnitudeBig = BigInt(prefix + digits);
-  const exactNum = parseSafeIntLiteral(neg ? -magnitudeBig : magnitudeBig, str);
-  const exact = new AExact(exactNum);
-  if (forceInexact) {
-    return exact.toInexact();
-  }
-  return exact;
 }
 
 /** Honest stub — complex tower omitted (R7RS §6.2.3). Always #f. */

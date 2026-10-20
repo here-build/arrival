@@ -40,7 +40,7 @@ export { createDiagnoseLens, type DiagnoseLens, type RawMappedDiagnostic } from 
 export { assemblePreludeFromSignatures, type HarvestedPrelude } from "../type-layer/prelude.js";
 
 // Oracle doors — the constraint-kernel oracle's Layer-S structural reader
-// (sift/docs/CONSTRAINT-KERNEL-SPEC.md).
+// (the external constraint-kernel spec).
 export { scan, type ScanResult } from "../oracle/scanner.js";
 export { makeOracle } from "../oracle/index.js";
 export type {

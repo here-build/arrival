@@ -5,7 +5,7 @@
 // misnested / mid-token) and asserts:
 //
 //   1. arrival's structural reader (src/oracle/scanner.ts) AGREES with the canonical S-only
-//      reference reader (sift/src/sampler/prefix-oracle.ts) on every shared structural field;
+//      reference reader (the external sift sampler's prefix-oracle) on every shared structural field;
 //   2. feasible() matches the reference's structural feasibility (no over-close);
 //   3. the resumable session and from-scratch analyze AGREE on every prefix (the property the
 //      integration plan §A1 names as the acceptance gate for Layer S);
@@ -15,15 +15,15 @@
 // === Why the reference reader is INLINED here, not imported from sift ===
 //
 // arrival-scheme is a FOUNDATION package; sift (`@sift/membrane`) depends on it, not vice versa.
-// `@sift/membrane` is not resolvable from this package, and a relative `../../../../../sift/...`
-// import would couple a foundation's test suite to a sibling app's source tree (a layering
+// `@sift/membrane` is not resolvable from this package, and a relative import into sift's tree
+// would couple a foundation's test suite to a sibling app's source tree (a layering
 // violation). So the canonical S-only reference (`analyzePrefix` from sift's prefix-oracle.ts) is
 // reproduced here VERBATIM, attributed below. The corpus is the single-sourced bridge: if sift's
 // reference and this inlined copy ever drift, the fix is to re-sync this block from prefix-oracle.ts.
 import { ANativeProcedure } from "../values/primitives/ANativeProcedure.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { scan, structuralScanner } from "../oracle/scanner.js";
 import { makeOracle } from "../oracle/index.js";
@@ -31,7 +31,7 @@ import { makeOracleEnv } from "../oracle/env.js";
 import { AmbientRuntime, type AmbientValue } from "../env/AmbientRuntime.js";
 
 // ---------------------------------------------------------------------------------------------
-// CANONICAL REFERENCE — verbatim copy of sift/src/sampler/prefix-oracle.ts `analyzePrefix`.
+// CANONICAL REFERENCE — verbatim copy of the external sift sampler's prefix-oracle `analyzePrefix`.
 // Do not edit independently; re-sync from prefix-oracle.ts if that file changes.
 // ---------------------------------------------------------------------------------------------
 interface RefState {
@@ -144,8 +144,8 @@ function prefixesOf(s: string): string[] {
 }
 
 function loadCorpus(): string[] {
-  const here = dirname(fileURLToPath(import.meta.url));
-  const text = readFileSync(join(here, "fixtures", "scout-corpus.scm"), "utf8");
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const text = readFileSync(path.join(here, "fixtures", "scout-corpus.scm"), "utf8");
   return text
     .split("\n")
     .map((l) => l.replace(/\s+$/, ""))

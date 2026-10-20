@@ -12,8 +12,8 @@
 //      anything. A parseable form is classified by its head symbol:
 //        - `test-begin`/`test-end` → section markers (never executed; the manifest already
 //          carries the nesting, so the runner doesn't need to interpret these at all).
-//        - `import` → DROPPED. arrival has no scheme-level `import` special form (see
-//          `reference-import-deleted-require-is-the-loader.md`); the corpus's one occurrence
+//        - `import` → DROPPED. arrival has no scheme-level `import` special form (`require` is
+//          the loader's door); the corpus's one occurrence
 //          (line 3) would otherwise become a poisoned "setup" step. This is head-symbol
 //          matched — the same mechanism as every other classification here — not a content
 //          regex, so it stays within the "reader/structure, never content" discipline.
@@ -34,8 +34,7 @@
 // elements), collecting every `ASymbol.__name__` string it finds — this is what the
 // registries (registries.ts) match on, replacing v1's substring matching over stringified
 // names.
-import fs from "fs";
-import { ANil } from "../../../values/primitives/ANil.js";
+import fs from "node:fs";
 import { APair } from "../../../values/primitives/APair.js";
 import { ASymbol } from "../../../values/primitives/ASymbol.js";
 import { AString } from "../../../values/primitives/AString.js";
@@ -140,7 +139,7 @@ const BLOCK_HEADS: ReadonlySet<string> = new Set([
 ]);
 
 export function normalizeText(s: string): string {
-  return s.replace(/\s+/g, " ").trim();
+  return s.replaceAll(/\s+/g, " ").trim();
 }
 
 // ── datum helpers (raw APair/ASymbol walks — no unboxing, no to_array normalization) ────────
@@ -345,7 +344,7 @@ function skipBlockComment(text: string, i: number): number {
 function skipCharLiteral(text: string, i: number): number {
   const len = text.length;
   let j = i + 3;
-  while (j < len && /[A-Za-z0-9-]/.test(text[j])) j++;
+  while (j < len && /[A-Z0-9-]/i.test(text[j])) j++;
   return j;
 }
 
@@ -497,7 +496,7 @@ export function splitTopLevelForms(text: string): RawForm[] {
 /** Whole-file corpus (r7rs-tests.scm): read + structurally split at the top level, then
  *  delegate to the shared classifier below. */
 export async function buildManifest(corpusPath: string): Promise<Manifest> {
-  const text = fs.readFileSync(corpusPath, "utf-8");
+  const text = fs.readFileSync(corpusPath, "utf8");
   const rawForms = splitTopLevelForms(text);
   return buildManifestFromForms(corpusPath, rawForms);
 }
@@ -521,7 +520,7 @@ export async function buildManifestFromForms(corpusPath: string, rawForms: reado
     let parsed: SchemeValue[];
     try {
       parsed = await readerParse(raw.text);
-    } catch (e) {
+    } catch (error) {
       steps.push({
         kind: "unreadable",
         index: takeIndex(),
@@ -529,7 +528,7 @@ export async function buildManifestFromForms(corpusPath: string, rawForms: reado
         sectionPath: [...sectionStack],
         text: raw.text,
         line: raw.line,
-        readerError: e instanceof Error ? e.message : String(e),
+        readerError: error instanceof Error ? error.message : String(error),
       });
       continue;
     }

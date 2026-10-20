@@ -55,7 +55,11 @@ export function adoptSpine(v: AVector): AListAlike;
 export function adoptSpine<T>(v: T): T;
 export function adoptSpine(v: unknown): unknown {
   if (v instanceof AJSArray) return AJSArrayList.at(v, 0);
-  if (v instanceof AVector) return APair.fromArray(CONSTANT_CTX, v.__vector__, false);
+  if (v instanceof AVector) {
+    // The vector's own (container) provenance rides onto the spine head, as AJSArrayList.at does for the owner.
+    const spine = APair.fromArray(CONSTANT_CTX, v.__vector__, false);
+    return spine instanceof APair && v.provenance.size > 0 ? spine.withProvenance(v.provenance) : spine;
+  }
   return v;
 }
 
@@ -78,7 +82,7 @@ export function adoptSpine(v: unknown): unknown {
  * back to `SchemeValue[]` when `I`/`Rest` are still the wide VectorSpec bounds
  * (define's erased factory body).
  */
-export type AdoptedArgs<I extends VectorSpec, Rest extends RestSpec = undefined> =
+type AdoptedArgs<I extends VectorSpec, Rest extends RestSpec = undefined> =
   DecodedArgsWithRest<I, Rest, "scheme"> extends infer T
     ? T extends readonly SchemeValue[]
       ? T

@@ -183,6 +183,7 @@ describe("Sandbox Boundary", () => {
     });
 
     it("returns true for marked class prototype", () => {
+      // eslint-disable-next-line unicorn/no-static-only-class -- needs a real class: the test reads SecureClass.prototype
       class SecureClass {
         static [INTEROP_BOUNDARY] = true;
       }
@@ -237,7 +238,7 @@ describe("Sandbox Boundary", () => {
 
     it("blocks Symbol.iterator access", () => {
       const obj = {
-        [Symbol.iterator]: function* () {
+        *[Symbol.iterator]() {
           yield 1;
         },
       };
@@ -246,7 +247,7 @@ describe("Sandbox Boundary", () => {
 
     it("blocks Symbol.asyncIterator access", () => {
       const obj = {
-        [Symbol.asyncIterator]: async function* () {
+        async *[Symbol.asyncIterator]() {
           yield 1;
         },
       };
@@ -357,6 +358,7 @@ describe("Sandbox Boundary", () => {
 
     it("is identity-checked: spoofing constructor.name = 'Object' is not a boundary", () => {
       // ctor.name === "Object" but globalThis.Object !== this impostor → not flagged.
+      // eslint-disable-next-line sonarjs/no-globals-shadowing -- the impostor must be named "Object" to spoof constructor.name
       const impostor = { constructor: function Object() {} };
       expect(isInteropBoundary(impostor)).toBe(false);
     });

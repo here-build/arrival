@@ -10,9 +10,7 @@
  * of Q and E batches; door scan is intervening-E (see `findInterveningDoor`).
  * Holding prior query results is fine; outer-world sync is not promised.
  *
- * Design: docs/working-proposals/cqs-reactivity/
- * Suite:  docs/working-proposals/cqs-reactivity/test-suite-design/SUITE.md
- * Law:    docs/working-proposals/cqs-reactivity/test-suite-design/law-identity/
+ * Law: docs/execution.md §12 RESOURCE-PATHS; reactivity stance: §13 REACTIVITY.
  *
  * THIS MODULE is the resourcePaths CHANNEL — run log + door error + CQS apply.
  * The channel-neutral pure algebra (`ResourcePath`, `pathsOverlap`,

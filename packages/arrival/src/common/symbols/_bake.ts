@@ -1,7 +1,7 @@
 // _bake: shared machinery behind the `symbol.*` factories — contract/decoded-type layer,
 // baked AEntity union, and helpers each per-tag factory (./native.ts, ./rosetta.ts, …)
 // builds from. Factories live one-per-file, re-assembled into `symbol` by ./index.ts;
-// package entry is `src/symbol/index.ts` (`@here.build/arrival`). Acyclic: factories
+// package entry is `src/index.ts` (`@here.build/arrival`, `symbol` namespace). Acyclic: factories
 // import from here; nothing imports back through the namespace.
 //
 // docs/environments.md §CONTRACT — one zod contract, four readers (runtime validation,
@@ -266,7 +266,7 @@ export type CrossingContract<I extends VectorSpec, O extends VectorSpec, Rest ex
   /**
    * Query path producer — domains this penetration READs (decoded args → path list).
    * Rosetta-only. Non-empty Q arms the CQS check against prior effect paths this run.
-   * See run/resource-paths.ts; docs/working-proposals/cqs-reactivity/.
+   * See run/resource-paths.ts; docs/execution.md §12 RESOURCE-PATHS.
    */
   readonly queries?: ResourcePathFn;
   /**
@@ -691,7 +691,7 @@ function cacheGateSlots(schema: z.ZodTypeAny): readonly z.ZodTypeAny[] {
 
 /** REGION-SCOPE GATE: does normalized INPUT carry a live-callable slot?
  *  - `z.procedure` — decode wraps into a host fn on ambient scope; without a real scope the
- *    wrapper binds DETACHED_SCOPE/CONSTANT_CTX — the burst-bypass hole (lambda → sink fires
+ *    wrapper binds detachedScope()/CONSTANT_CTX — the burst-bypass hole (lambda → sink fires
  *    inline instead of enqueueing under live `effects`).
  *  - `z.dynamic` — raw escape hatch; impl may reverse-cross a callable on the same ambient scope.
  *    Included deliberately: shape cannot see whether a dynamic value is callable — under-gating

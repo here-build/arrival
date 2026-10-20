@@ -15,12 +15,15 @@
 import { describe, expect, it } from "vitest";
 import { exec } from "../eval/generator-exec.js";
 import { EnvCapability } from "../common/capability.js";
+import type { CallCtx } from "../run/CallCtx.js";
 
 const probe = EnvCapability.define("test/positional-decode-probe", {
   symbols: (symbol, z) => ({
     "probe-join": symbol.rosetta`probe-join: concatenate two strings (test probe for positional decode humanization)`(
       { input: [z.string, z.string], output: [z.string] },
-      (a: string, b: string) => a + b,
+      function (this: CallCtx, a: string, b: string) {
+        return a + b;
+      },
     ),
   }),
 });
@@ -37,8 +40,8 @@ describe("B4 — a positional decode rejection is humanized, not a raw ZodError 
     try {
       await run('(probe-join "a" 5)');
       throw new Error("expected probe-join to throw, it didn't");
-    } catch (e) {
-      const message = (e as Error).message;
+    } catch (error) {
+      const message = (error as Error).message;
       expect(message).not.toMatch(/"code"/);
       expect(message).not.toMatch(/invalid_union/);
       expect(message).not.toMatch(/invalid_type/);

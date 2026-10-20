@@ -30,7 +30,7 @@ import { hostFnToCallable, originalCallableOf, type ACallable } from "../values/
 
 import { type AUnwrap, type AWrap, type EgressMode, type SchemeValue } from "../values/types.js";
 import invariant from "tiny-invariant";
-import { currentRegionScope, DETACHED_SCOPE, withRegionScope } from "./region-scope.js";
+import { currentRegionScope, detachedScope, withRegionScopeCall } from "./region-scope.js";
 import { originalBoxOf } from "./egress-proxy.js";
 import { tf } from "../values/tagless-final.js";
 
@@ -66,13 +66,15 @@ const _modeKeyExhaustive: _ModeKeyHandles = true;
 void _modeKeyExhaustive;
 
 /**
- * Duck-typed EvalContext.currentInvocation — avoids circular import to
- * arrival-chain/trace.ts. Exported so common/symbol.ts reuses the shape for
+ * Duck-typed EvalContext.currentInvocation — avoids a circular import to
+ * the chain plane's trace module. Exported so common/symbol.ts reuses the shape for
  * provenance mint rather than re-spelling the cast.
  */
 export interface InvocationLike {
   id: number;
   isProvenancePoint?: boolean;
+  /** Replay-mode RunCache served this call (penetrateThroughCache `onServed`). */
+  cached?: boolean;
   /** MobX-action setter (strict-mode forbids raw field write). Plain test POJO may omit. */
   markProvenancePoint?(): void;
   /** Trace-side only — binds node metadata at call time; never crosses to scheme. */
@@ -105,15 +107,17 @@ export function callableToHostFn(value: ACallable, options: RosettaOptions): (..
  * Scope is pinned ONCE here (both rosetta crossings run inside the live
  * `withRegionScope` window); every lazy element materialization re-enters via
  * `withRegionScope(pinned, …)` — `docs/membrane.md` §EGRESS / §REGION. Unpinned, a
- * nested callable would mint under DETACHED_SCOPE/CONSTANT_CTX (discipline bypass).
- * Paths with no ambient scope (exec simple tier, trace/display) pin DETACHED_SCOPE.
+ * nested callable would mint under a detached scope/CONSTANT_CTX (discipline bypass).
+ * Paths with no current scope (exec simple tier, trace/display) pin ONE fresh `detachedScope()`
+ * per egress and thread it on `MembraneExit.scope`.
  */
 export function egressAValue(value: AValue, options: RosettaOptions): unknown {
-  const pinned = currentRegionScope() ?? DETACHED_SCOPE;
+  const pinned = currentRegionScope() ?? detachedScope();
   return value["arrival/toJS"]({
-    element: (el: unknown) => withRegionScope(pinned, () => egressUnknown(el, options)),
+    element: (el: unknown) => withRegionScopeCall(pinned, () => egressUnknown(el, options)),
     modeKey: modeKeyOf(options),
     cache: pinned.egressProxies,
+    scope: pinned,
   });
 }
 
@@ -576,7 +580,7 @@ export function bigintToNumber(value: bigint): number {
   if (value > BigInt(Number.MAX_SAFE_INTEGER) || value < BigInt(Number.MIN_SAFE_INTEGER)) {
     throw new TypeError(
       `bigint->number: ${value} exceeds safe-integer range — arrival's exact numbers are safe-integer ` +
-        "ratios (docs/design-history/arrival-one-number-rework.md), so this host bigint cannot convert " +
+        "ratios, so this host bigint cannot convert " +
         "without precision loss",
     );
   }

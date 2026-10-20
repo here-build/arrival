@@ -2,7 +2,7 @@
 // provenance} object shape across the Scheme→JS boundary (the MCP/trace
 // serialization path), and provenance must propagate through a vector's elements
 // (the whole point of boxing — goal (b)). Locks the rosetta toJS/jsToScheme +
-// deepProvenance vector handling. (docs/plan-2026-06-10-boxing-track.md.)
+// deepProvenance vector handling.
 import { describe, expect, it } from "vitest";
 import { CONSTANT_CTX } from "../run/RunContext.js";
 import { AValue } from "../values/primitives/AValue.js";

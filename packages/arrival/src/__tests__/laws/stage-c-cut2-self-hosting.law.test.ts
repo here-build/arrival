@@ -1,5 +1,5 @@
 /**
- * LAW — Stage C, Cut 2 (docs archaeology: stage-c-corpse-deletion.md, "THE LINCHPIN"): the
+ * LAW — Stage C, Cut 2 ("THE LINCHPIN"): the
  * vocabulary path becomes SELF-HOSTING. THE CORNERSTONE: ambient and global/lexical scope are
  * separate SPECIES — ambient = "exists before program start, static, not attributed to any run"
  * (the frozen `Vocabulary` map); global/top-level scope = an ordinary LEXICAL scope with no
@@ -43,6 +43,7 @@ import { EnvCapability } from "../../common/capability.js";
 import { exec, execState } from "../../eval/generator-exec.js";
 import { LexicalScope } from "../../eval/LexicalScope.js";
 import { toJS } from "../../membrane/rosetta.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 
 describe("LAW 1 — bare exec rides the self-hosted vocabulary path", () => {
   it("execState(code) with no options has runCtx.vocabulary defined and resolves a base symbol", async () => {
@@ -92,7 +93,9 @@ describe("LAW 4 — self-hosted stdlib: one chain, no user_env parenting", () =>
       symbols: (symbol, z) => ({
         "cut2/double": symbol.rosetta`cut2/double: doubles a number`(
           { input: [z.number], output: [z.number] },
-          (n: number) => n * 2,
+          function (this: CallCtx, n: number) {
+            return n * 2;
+          },
         ),
       }),
     });

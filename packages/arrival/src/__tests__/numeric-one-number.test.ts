@@ -1,8 +1,19 @@
 // One-Number Rework (RATIO, crash-on-overflow).
 //
-// Pins docs/design-history/arrival-one-number-rework.md §0 (invariants) and
-// §2 (design) at the SCHEME surface. Every row named in the doc's §3 behavior-row list
-// becomes one assertion here.
+// THE NUMERIC MODEL, as this file pins it at the SCHEME surface (the prose statement of it
+// lives in docs/numbers.md; this header is its test-side summary):
+//   - There is one number representation: `AExact` is a gcd-normalized (num, denom)
+//     rational whose components are plain JS `number`s that stay `Number.isSafeInteger`
+//     at all times (`denom > 0`). Exact integers are safe-range JS numbers; there are no
+//     bigints anywhere in the scheme numeric tower, and a raw host `bigint` is a
+//     membrane NoLensError door, never a scheme number.
+//   - Crash-on-overflow: exact arithmetic on safe operands is exact, but the moment a
+//     result's numerator or denominator would leave safe-integer range the operation
+//     THROWS a teaching error — it never silently widens to bigint or rounds to a float.
+//     An exact integer literal beyond safe range is a read-time ParseError.
+//   - `AInexact` is the IEEE double; exactness is visible in the box ("1/3" vs "0.333…")
+//     and collapses only on egress to plain JS (`toJS` divides).
+// Every behavior row of that model becomes one assertion here.
 //
 // Harness: `run()` uses execState (COMPLEX tier) plus the boxed result's OWN
 // `.toString()` — deliberately NOT `exec()`'s plain-JS exit. `exec()` goes through
@@ -96,7 +107,7 @@ describe("encode-edge exactness law — codec encode must not re-derive exactnes
   // All four rows RED until the atom lands: `looseNumber`/`looseAnyNumber`/`z.bigint`'s
   // `encode` currently keys off `Number.isSafeInteger(result)` alone — an
   // integer-valued RESULT mints AExact regardless of whether either OPERAND was
-  // inexact (common/scheme-zod.ts's encode arms). The fix (plan §2.2) threads
+  // inexact (common/scheme-zod/index.ts's encode arms). The fix threads
   // `wantExact` from the coerced operands' boxes instead of re-deriving it.
   it.each([
     { name: "(exact? (floor 2.5)) is #f — floor of an inexact stays inexact", input: "(exact? (floor 2.5))" },

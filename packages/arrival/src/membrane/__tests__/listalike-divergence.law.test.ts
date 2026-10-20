@@ -89,8 +89,8 @@ const runOne = async (code: string, bindings: Record<string, unknown>): Promise<
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error("__DEADLINE__")), DEADLINE_MS)),
     ]);
     return `OK ${JSON.stringify(toJS(values[0], {}))}`;
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     // Errors are normalized to their FIRST LINE: the two charts may legitimately word a door
     // differently, but a verb that succeeds on one chart and throws on the other is a seam
     // regardless of the wording — and that is what the assertion below compares.
@@ -107,7 +107,7 @@ const asPairListLiteral = (xs: readonly unknown[]): string =>
  *  and only what an MCP tool returning a JSON array hands the model. That receiver is the point. */
 const bothCharts = async (code: string, fixture: readonly unknown[]) => ({
   viaToolArray: await runOne(code, { xs: fixture }),
-  viaPairList: await runOne(code.replace(/\bxs\b/g, asPairListLiteral(fixture)), {}),
+  viaPairList: await runOne(code.replaceAll(/\bxs\b/g, asPairListLiteral(fixture)), {}),
 });
 
 /** [verb, program over `xs`, fixture] — the fixture is chosen so the verb WALKS TO EXHAUSTION or
@@ -194,7 +194,7 @@ describe("LAW: a coercion helper refuses, it never invents (charValue — B1's s
   });
 
   it("a genuine character list still works", { timeout: DEADLINE_MS }, async () => {
-    expect(await runOne("(list->string (list #\\a #\\b))", {})).toBe('OK "ab"');
+    expect(await runOne(String.raw`(list->string (list #\a #\b))`, {})).toBe('OK "ab"');
   });
 });
 
@@ -253,8 +253,8 @@ describe("LAW: no list verb may distinguish a #(…) literal from a pair-list", 
     "$verb — $program",
     { timeout: DEADLINE_MS * 3 },
     async ({ verb, program, fixture }) => {
-      const viaVector = await runOne(program.replace(/\bxs\b/g, asVectorLiteral(fixture)), {});
-      const viaPairList = await runOne(program.replace(/\bxs\b/g, asPairListLiteral(fixture)), {});
+      const viaVector = await runOne(program.replaceAll(/\bxs\b/g, asVectorLiteral(fixture)), {});
+      const viaPairList = await runOne(program.replaceAll(/\bxs\b/g, asPairListLiteral(fixture)), {});
       expect(viaVector.startsWith("HANG"), `${verb} vector hung`).toBe(false);
       expect(viaPairList.startsWith("HANG"), `${verb} pair-list hung`).toBe(false);
       expect({ verb, viaVector }).toEqual({ verb, viaVector: viaPairList });
@@ -268,7 +268,7 @@ describe("LAW: no vector verb may distinguish a tool array from a #(…) literal
     { timeout: DEADLINE_MS * 3 },
     async ({ verb, program, fixture }) => {
       const viaToolArray = await runOne(program, { xs: fixture });
-      const viaLiteral = await runOne(program.replace(/\bxs\b/g, asVectorLiteral(fixture)), {});
+      const viaLiteral = await runOne(program.replaceAll(/\bxs\b/g, asVectorLiteral(fixture)), {});
       expect({ verb, viaToolArray }).toEqual({ verb, viaToolArray: viaLiteral });
     },
   );

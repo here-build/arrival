@@ -62,7 +62,7 @@ export class CorpusRunner {
   // Live forensic context (§7) — valid at the moment the most recently processed step ran;
   // an `it()` body reads it immediately after `outcomeFor` resolves, before any later test's
   // `outcomeFor` can advance it further (strict corpus-order execution, §2).
-  private sectionPath: string[] = [];
+  private readonly sectionPath: string[] = [];
   private setupsInSection = 0;
   private lastSetup: { text: string; line: number } | undefined;
   private lastSetupFailure: { line: number; message: string } | undefined;
@@ -132,7 +132,7 @@ export class CorpusRunner {
       lines.push(`  expected: ${outcome.expectedRepr}`);
       lines.push(`  actual:   ${outcome.actualRepr}`);
     } else if (outcome.kind === "error") {
-      const atLine = outcome.atLine !== undefined ? ` @ ${this.manifest.corpusPath}:${outcome.atLine}` : "";
+      const atLine = outcome.atLine === undefined ? "" : ` @ ${this.manifest.corpusPath}:${outcome.atLine}`;
       lines.push(`  error (${outcome.phase}): ${outcome.message}${atLine}`);
     }
     const setupNote =
@@ -181,8 +181,8 @@ export class CorpusRunner {
     try {
       await execOverFrame(step.text, this.frameOpts());
       this.lastSetupFailure = undefined;
-    } catch (e) {
-      this.lastSetupFailure = { line: step.line, message: describeError(e) };
+    } catch (error) {
+      this.lastSetupFailure = { line: step.line, message: describeError(error) };
     }
     this.lastSetup = { text: step.text, line: step.line };
     this.setupsInSection++;
@@ -191,8 +191,8 @@ export class CorpusRunner {
   private async execStandaloneTest(step: TestStep): Promise<void> {
     try {
       await execOverFrame(step.text, this.frameOpts());
-    } catch (e) {
-      this.settled.set(step.index, this.classifyFormLevelThrow(e));
+    } catch (error) {
+      this.settled.set(step.index, this.classifyFormLevelThrow(error));
       return;
     }
     const drained = this.sink.drain();
@@ -208,8 +208,8 @@ export class CorpusRunner {
     let abortedMessage: string | undefined;
     try {
       await execOverFrame(step.text, this.frameOpts());
-    } catch (e) {
-      abortedMessage = describeError(e);
+    } catch (error) {
+      abortedMessage = describeError(error);
     }
     const drained = this.sink.drain();
     const outcomes: StepOutcome[] = step.members.map(

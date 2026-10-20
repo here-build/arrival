@@ -8,12 +8,12 @@ import dedent from "dedent";
 import { signatureOf } from "../schema-to-ts.js";
 import equality from "../../env/r7rs/equality.js";
 import vectors from "../../env/r7rs/vectors.js";
-import { symbol } from "../../symbol/index.js";
+import * as symbol from "../../common/symbols/index.js";
 import { contractOf } from "../../common/capability-internals.js";
 import { harvestContracts } from "../../__tests__/_symbols-harvest.js";
 import * as z from "../../common/scheme-zod/index.js";
 
-const norm = (s: string) => s.replace(/\s+/g, " ").trim();
+const norm = (s: string) => s.replaceAll(/\s+/g, " ").trim();
 
 const LIST_DUAL = dedent`
   {
@@ -79,7 +79,7 @@ function narrowedType(opts: { guardSig: string; inputType: string }): string {
   visit(sf);
 
   const diags = ts.getPreEmitDiagnostics(prog).filter((d) => d.category === ts.DiagnosticCategory.Error);
-  if (diags.length) {
+  if (diags.length > 0) {
     const msgs = diags.map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n")).join("; ");
     throw new Error(`probe failed for input ${opts.inputType}: ${msgs}`);
   }
@@ -148,7 +148,9 @@ describe("dual guard control-flow narrowing (lens-critical)", () => {
   it("signatureOf passes dual type: through unchanged", () => {
     const def = symbol.native`list?: pin`(
       { input: [z.schemeValue], output: [z.boolean], type: LIST_DUAL },
-      () => schemeTrue,
+      function () {
+        return schemeTrue;
+      },
     );
     expect(norm(signatureOf(contractOf(def)!))).toBe(norm(LIST_DUAL));
   });

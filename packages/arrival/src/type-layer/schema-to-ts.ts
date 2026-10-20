@@ -78,7 +78,7 @@ const IMAGE_BY_NAME: ReadonlyMap<string, NodeBuilder> = new Map<string, NodeBuil
   ["inexact", numberNode],
   // number/exact/bigint are UNIONS of two same-output codecs; without an image they'd
   // print `number | number`. Image is the carrier, once. `bigint`'s face is `number` too
-  // (docs/design-history/arrival-one-number-rework.md §2.3: exact is a safe-integer ratio
+  // (exact is a safe-integer ratio
   // of `number`s; z.bigint is retired and never decodes to a real JS bigint).
   ["number", numberNode],
   ["bigint", numberNode],

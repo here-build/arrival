@@ -11,7 +11,7 @@
 // `map(id) ≡ id` holds under the BOXED Setoid: `boxedEq` compares the two structures'
 // materialized boxes element-wise via `structuralEqual` (which dispatches each
 // element's AExact Setoid).
-// (Boxing track S5 — docs/plan-2026-06-10-boxing-track.md.)
+// (Boxing track S5.)
 import fc from "fast-check";
 import { unaryContour } from "../../../__tests__/_contour-callback.js";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
@@ -49,7 +49,7 @@ const arb = fc
   )
   .map(vec);
 
-const equalClone = (v: AVector) => new AVector(v.__vector__.slice());
+const equalClone = (v: AVector) => new AVector([...v.__vector__]);
 
 setoidLaws("SchemeVector", { arb, equalClone });
 semigroupLaws("SchemeVector", arb);

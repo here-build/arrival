@@ -39,7 +39,7 @@ describe("LOOSE: universal ordering (the friendly superset over R7RS-typed compa
   it("orders strings / chars / symbols via their own lte — no string<? needed", async () => {
     expect(await truthy('(< "apple" "banana")', false)).toBe(true);
     expect(await truthy('(>= "z" "a")', false)).toBe(true);
-    expect(await truthy("(< #\\a #\\b)", false)).toBe(true);
+    expect(await truthy(String.raw`(< #\a #\b)`, false)).toBe(true);
     expect(await truthy("(< 'apple 'banana)", false)).toBe(true);
   });
 });
@@ -60,7 +60,7 @@ describe("LOOSE: nil-as-bottom (F2) — nil is the floor of the order", () => {
 });
 
 describe("LOOSE: cross-type throws (V: crashes on incompatible types, NOT the JS '' > [] coercion)", () => {
-  it.each(['(< "a" 5)', '(< 5 "a")', "(> #\\a 5)", "(<= 'sym 3)"])("%s throws", async (expr) => {
+  it.each(['(< "a" 5)', '(< 5 "a")', String.raw`(> #\a 5)`, "(<= 'sym 3)"])("%s throws", async (expr) => {
     await expect(run(expr, false)).rejects.toThrow();
   });
 });
@@ -75,7 +75,7 @@ describe("STRICT = R7RS divergence probe — loose answers, strict throws", () =
   // Each expression: loose gives a verdict (above); strict rejects it as non-R7RS-numeric.
   const DIVERGENT = [
     '(< "a" "b")',
-    "(< #\\a #\\b)",
+    String.raw`(< #\a #\b)`,
     "(< 'apple 'banana)",
     "(< (quote ()) 5)",
     "(= (quote ()) (quote ()))",

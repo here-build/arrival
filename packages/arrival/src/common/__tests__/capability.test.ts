@@ -1,7 +1,7 @@
 // EnvCapability — config validation, the one piece of `lower()`'s behavior with a direct
 // vocabulary-path successor.
 //
-// STAGE C CUT 4 (docs/plans/stage-c-corpse-deletion.md) retired `lower()`/`LoweredPack`
+// STAGE C CUT 4 retired `lower()`/`LoweredPack`
 // entirely, and with them this file's OWN pre-cut coverage:
 //   - the forbidden `{ fn }`-record arm (capability.ts's `isSymbolSpec`/`bindRosetta` bind path) —
 //     DIED with the arm itself (dropped from `SymbolDeclaration`, see capability.ts's own doc);

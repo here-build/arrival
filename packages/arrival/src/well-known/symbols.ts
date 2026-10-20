@@ -42,26 +42,16 @@ export const LOCATION = Symbol.for("__location__");
 
 /**
  * Opt-in interop-boundary stamp on a host class / prototype.
- * Wire key is `"scheme:interop-boundary"` (historical). Re-exported from
+ * Module-local `Symbol(...)`, deliberately NOT in the global registry: a host class cannot
+ * forge the brand with `Symbol.for("scheme:interop-boundary")`. Re-exported from
  * `membrane/interop-access.ts` as the stamp consumers already import.
  */
-export const INTEROP_BOUNDARY = Symbol.for("scheme:interop-boundary");
+export const INTEROP_BOUNDARY = Symbol("scheme:interop-boundary");
 
 // ── hygiene / frames ────────────────────────────────────────────────────────
 
 /** Merge-frame identity. `Syntax.__merge_env__` and `LexicalScope.kind` compare this. */
 export const MERGE = Symbol.for("merge");
-
-// ── reader specials ─────────────────────────────────────────────────────────
-
-/** Prefix expands to a single quoted/wrapped datum (`'x` → `(quote x)`). */
-export const LITERAL = Symbol.for("literal");
-
-/** Symbol token / lexer symbol-state. Reader specials and `Lexer.symbol` use this. */
-export const SYMBOL = Symbol.for("symbol");
-
-/** Kleene-star intern (`*`). */
-export const GLOB = Symbol.for("*");
 
 // ── ASymbol hidden slots ────────────────────────────────────────────────────
 // `unique symbol` annotation so `declare [ASymbol.literal]` is a typed field
@@ -71,17 +61,14 @@ export const GLOB = Symbol.for("*");
 /** Gensym literal name slot. Written by `hidden_prop(..., "__literal__", name)`. */
 export const ASYMBOL_LITERAL: unique symbol = Symbol.for("__literal__");
 
-/** Gensym dotted-path slot. Written by `hidden_prop(..., "__object__", path)`. */
-export const ASYMBOL_OBJECT = Symbol.for("__object__");
-
 // ── lexer FSM ───────────────────────────────────────────────────────────────
 // Interned so a syntax-extension (or a second Lexer evaluation) can name the
-// same states. `symbol` is {@link SYMBOL} — one registry key, two faces.
+// same states.
 
 export const LexerState = {
   string: Symbol.for("string"),
   string_escape: Symbol.for("string_escape"),
-  symbol: SYMBOL,
+  symbol: Symbol.for("symbol"),
   comment: Symbol.for("comment"),
   character: Symbol.for("character"),
   bracket: Symbol.for("bracket"),

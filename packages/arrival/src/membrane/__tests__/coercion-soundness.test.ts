@@ -33,7 +33,7 @@
 
 import { describe, it, expect } from "vitest";
 import { idContour, keepAllContour, reduceContour, contourCallback } from "../../__tests__/_contour-callback.js";
-import { CONSTANT_CTX, RunContext } from "../../run/RunContext.js";
+import { RunContext } from "../../run/RunContext.js";
 import { PortabilityError } from "../../errors.js";
 import { APair } from "../../values/primitives/APair.js";
 import { ABool } from "../../values/primitives/ABool.js";
@@ -47,14 +47,9 @@ import type { EnvCapability } from "../../common/capability.js";
 import { nil } from "../../values/primitives/ANil.js";
 import { provOf } from "../../provenance/lineage.js";
 import { tf } from "../../values/tagless-final.js";
-import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
+import { eagerCallCtx, eagerRunCtx } from "../../__tests__/_require-eager-oracle.js";
 import { harvestContracts } from "../../__tests__/_symbols-harvest.js";
 import { AExact } from "../../values/primitives/AExact.js";
-
-// Q20b: this file calls carrier ops (map/filter/length/sort) directly against
-// pre-stamped fixtures, which route through op-helpers.ts's accumulation — force
-// the oracle ON for the file's lifetime.
-requireEagerOracle();
 
 // Source op fns FROM THE CAPABILITY's inlined `symbols` (the bare *_OPS map was
 // inlined into the constructor; the capability default export is the single
@@ -104,7 +99,8 @@ const elemProvs = (r: unknown): number[][] => {
   return out;
 };
 /** Awaits the FL-interop result (live ops may return a Promise). */
-const force = async (r: unknown): Promise<unknown> => (r && typeof (r as any).then === "function" ? await r : r);
+const force = async (r: unknown): Promise<unknown> =>
+  r && typeof (r as any).then === "function" ? await (r as Promise<unknown>) : r;
 
 // idContour / keepAllContour imported from _contour-callback (W8 ACallable callbacks).
 const cmp = contourCallback((args) => {
@@ -137,19 +133,19 @@ const mkArr = () => new AJSArray(["a", "b"], new Set([ARR_ORIGIN]));
 // ════════════════════════════════════════════════════════════════════════════
 describe("G6 sound — element provenance survives map/filter/sort", () => {
   it("Pair · map preserves every element's box", async () => {
-    expect(elemProvs(await force(mkPair()[tf("map")](idContour, CONSTANT_CTX)))).toEqual([[100], [101]]);
+    expect(elemProvs(await force(mkPair()[tf("map")](idContour, eagerRunCtx)))).toEqual([[100], [101]]);
   });
   it("Pair · filter preserves every kept element's box", async () => {
-    expect(elemProvs(await force(mkPair()[tf("filter")](keepAllContour, CONSTANT_CTX)))).toEqual([[100], [101]]);
+    expect(elemProvs(await force(mkPair()[tf("filter")](keepAllContour, eagerRunCtx)))).toEqual([[100], [101]]);
   });
   it("Pair · sort preserves every element's box (only reorders)", async () => {
     // sort dissolved onto the term: call it directly (the fl-interop sort is now a
     // symbol.sequence dispatcher with no .impl). The term takes the optional comparator.
-    expect(elemProvs(await force(mkPair()[tf("sort")](cmp, CONSTANT_CTX)))).toEqual([[100], [101]]);
+    expect(elemProvs(await force(mkPair()[tf("sort")](cmp, eagerRunCtx)))).toEqual([[100], [101]]);
   });
 
   it("SchemeVector · filter preserves every element's box", async () => {
-    expect(elemProvs(await force(mkVec()[tf("filter")](keepAllContour, CONSTANT_CTX)))).toEqual([[100], [101]]);
+    expect(elemProvs(await force(mkVec()[tf("filter")](keepAllContour, eagerRunCtx)))).toEqual([[100], [101]]);
   });
 });
 
@@ -172,7 +168,7 @@ describe("G6 sound — element provenance survives map/filter/sort", () => {
 // ════════════════════════════════════════════════════════════════════════════
 describe("G6 sound — collectElements over a SchemeVector (repaired)", () => {
   it("length(vector) counts every element (not 0) and carries the CONTAINER's own grounding", async () => {
-    const r = await force(listOps.length(mkVec()));
+    const r = await force(listOps.length.call(eagerCallCtx(), mkVec()));
     expect(Number((r as { valueOf(): unknown }).valueOf())).toBe(2);
     // C4: the CONTAINER's own stamp (mkVec's {7}), NOT a deep union of the elements' own
     // {100,101} — the old over-attributing design the A13 golden documented.
@@ -180,7 +176,7 @@ describe("G6 sound — collectElements over a SchemeVector (repaired)", () => {
   });
 
   it("length(AJSArray) reads the CONTAINER's own stamp — mkArr's borrowed container carries {7} (the crossing's provenance), so C4's flat read surfaces it", async () => {
-    const r = await force(listOps.length(mkArr()));
+    const r = await force(listOps.length.call(eagerCallCtx(), mkArr()));
     expect(Number((r as { valueOf(): unknown }).valueOf())).toBe(2);
     // Hygiene law (V, 2026-07-14): mkArr() is minted `new AJSArray(["a","b"], new
     // Set([ARR_ORIGIN]))` — the CONTAINER's own top-level provenance is no longer empty (unlike
@@ -208,7 +204,7 @@ describe("G6 sound — collectElements over a SchemeVector (repaired)", () => {
 // ════════════════════════════════════════════════════════════════════════════
 describe("G6 RULED (R2) — container-grouping is PROXIED (map/sort) / PROVENANCED (filter), never silently dropped", () => {
   it("Pair · length reads the CONTAINER's own grouping-fact stamp {7}, NOT the elements' union {100,101}", async () => {
-    const r = await force(listOps.length(mkPair()));
+    const r = await force(listOps.length.call(eagerCallCtx(), mkPair()));
     expect(provOf(r)).toEqual([7]); // C4: the container's own MINTED stamp, not a deep element union
   });
 
@@ -217,15 +213,15 @@ describe("G6 RULED (R2) — container-grouping is PROXIED (map/sort) / PROVENANC
     // threads `withInputProvenance([this], …)` (C2) — the container's own {7} stamp survives
     // the rebuild, agreeing with AVector's sort below (P8 — ONE answer, the old divergence
     // this row used to pin is gone).
-    expect(provOf(await force(mkPair()[tf("sort")](cmp, CONSTANT_CTX)))).toEqual([7]);
+    expect(provOf(await force(mkPair()[tf("sort")](cmp, eagerRunCtx)))).toEqual([7]);
   });
 
   it("Pair · map is LENGTH-PRESERVING (PROXIES {7} through); filter is LENGTH-CHANGING (PROVENANCES a fresh union)", async () => {
     // map: the container's own {7} stamp threads through unchanged (PROXIED).
-    expect(provOf(await force(mkPair()[tf("map")](idContour, CONSTANT_CTX)))).toEqual([7]);
+    expect(provOf(await force(mkPair()[tf("map")](idContour, eagerRunCtx)))).toEqual([7]);
     // filter (keepAll — nothing dropped): PROVENANCED mints union(container's own {7},
     // survivors' own {100,101}) — a fresh derived fact, not a bare passthrough of {7} alone.
-    expect(provOf(await force(mkPair()[tf("filter")](keepAllContour, CONSTANT_CTX)))).toEqual([7, 100, 101]);
+    expect(provOf(await force(mkPair()[tf("filter")](keepAllContour, eagerRunCtx)))).toEqual([7, 100, 101]);
   });
 
   it("SchemeVector · map PRESERVES every element's box, rebuilding a fresh AVector [FIXED: DR4]", async () => {
@@ -236,7 +232,7 @@ describe("G6 RULED (R2) — container-grouping is PROXIED (map/sort) / PROVENANC
     // element boxes, so map's cross-out was the outlier. Now map mirrors APair's box-preserving
     // map: it returns a FRESH AVector holding the SAME element boxes (scheme-vector-algebra.
     // test.ts pins the Functor identity law over this box-preserving behavior).
-    const r = await force(mkVec()[tf("map")](idContour, CONSTANT_CTX));
+    const r = await force(mkVec()[tf("map")](idContour, eagerRunCtx));
 
     // (a) a fresh AVector, not a cross-out impersonator.
     expect(r).toBeInstanceOf(AVector);
@@ -263,14 +259,14 @@ describe("G6 sound — sort over a SchemeVector (DR4 fix: container-preserving, 
   // (R2/C2) the container's own grouping-fact stamp PROXIES through too (the claim this
   // describe's title always made, now actually asserted, not just documented).
   it("sort(vector) returns a sorted VECTOR (boxes preserved, container preserved)", async () => {
-    const r = await force(mkVec()[tf("sort")](cmp, CONSTANT_CTX));
+    const r = await force(mkVec()[tf("sort")](cmp, eagerRunCtx));
     expect(r).toBeInstanceOf(AVector);
     expect(elemProvs(r)).toEqual([[100], [101]]); // element boxes survive the reorder
     expect(provOf(r)).toEqual([7]); // R2/C2: container's own grouping-fact stamp PROXIES through
   });
   it("sort(vector) actually REORDERS (not a passthrough): reversed input comes back sorted", async () => {
     const reversed = new AVector([el("b", 101), el("a", 100)], new Set([7]));
-    const r = (await force(reversed[tf("sort")](cmp, CONSTANT_CTX))) as AVector;
+    const r = (await force(reversed[tf("sort")](cmp, eagerRunCtx))) as AVector;
     expect(r.__vector__.map((e) => String((e as AString).valueOf()))).toEqual(["a", "b"]);
     expect(elemProvs(r)).toEqual([[100], [101]]); // boxes ride along through the reorder
     expect(provOf(r)).toEqual([7]); // container stamp proxies through the reorder too
@@ -284,7 +280,7 @@ describe("G6 sound — sort over a SchemeVector (DR4 fix: container-preserving, 
   // identical to `map` over a native vector above.
   it("map(AJSArray) delegates to the box-preserving Functor — a borrowed array answers map [RESOLVED]", async () => {
     expect(tf("map") in mkArr()).toBe(true);
-    const r = await force(mkArr()[tf("map")](idContour, CONSTANT_CTX));
+    const r = await force(mkArr()[tf("map")](idContour, eagerRunCtx));
     expect(r).toBeInstanceOf(AVector); // box-preserving, not the cross-out impersonator
     expect((r as AVector).length).toBe(2);
     expect((r as AVector).__vector__.every((e) => e instanceof AString)).toBe(true);
@@ -302,24 +298,24 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
   // car/cdr project ONE element — its box must survive (this IS §5.3 element
   // provenance; the golden-prov-arithmetic car/cons goldens depend on it).
   it("car(Pair) projects the head element WITH its box", async () => {
-    expect(provOf(await force(mkPair()[tf("car")]()))).toEqual([100]);
+    expect(provOf(await force(mkPair()[tf("car")](eagerRunCtx)))).toEqual([100]);
   });
   it("car(AJSArray): loose projects index 0 WITH its box; strict throws (a vector is not a pair)", async () => {
     expect(tf("car") in mkArr()).toBe(true);
-    expect(provOf(await force(mkArr()[tf("car")](CONSTANT_CTX)))).toEqual([ARR_ORIGIN]);
-    expect(() => mkArr()[tf("car")](new RunContext({ strict: true }))).toThrow(PortabilityError);
+    expect(provOf(await force(mkArr()[tf("car")](eagerRunCtx)))).toEqual([ARR_ORIGIN]);
+    expect(() => mkArr()[tf("car")](new RunContext({ strict: true, eagerStamps: true }))).toThrow(PortabilityError);
   });
   it("cdr(Pair): the tail spine carries the remaining element's box", async () => {
-    expect(elemProvs(await force(mkPair()[tf("cdr")]()))).toEqual([[101]]);
+    expect(elemProvs(await force(mkPair()[tf("cdr")](eagerRunCtx)))).toEqual([[101]]);
   });
   it("cdr(AJSArray): loose returns the rest as a vector (boxes preserved); strict throws", async () => {
     expect(tf("cdr") in mkArr()).toBe(true);
-    expect(elemProvs(await force(mkArr()[tf("cdr")](CONSTANT_CTX)))).toEqual([[ARR_ORIGIN]]);
-    expect(() => mkArr()[tf("cdr")](new RunContext({ strict: true }))).toThrow(PortabilityError);
+    expect(elemProvs(await force(mkArr()[tf("cdr")](eagerRunCtx)))).toEqual([[ARR_ORIGIN]]);
+    expect(() => mkArr()[tf("cdr")](new RunContext({ strict: true, eagerStamps: true }))).toThrow(PortabilityError);
   });
   it("assoc(key, alist): the matched pair's key + value boxes both survive", async () => {
     const alist = new APair(new APair(el("k", 100), el("v", 101)), nil);
-    const found = (await force(listOps.assoc(el("k", 200), alist))) as APair<any, any>;
+    const found = (await force(listOps.assoc.call(eagerCallCtx(), el("k", 200), alist))) as APair<any, any>;
     expect(provOf(found.car)).toEqual([100]);
     expect(provOf(found.cdr)).toEqual([101]);
   });
@@ -329,8 +325,8 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
   // (a vector is not a pair → vector-ref) — the DR4 errors-as-doors surface, now mode-gated.
   it("car(SchemeVector): loose projects index 0 WITH its box; strict throws [DR4 — not a pair]", () => {
     expect(tf("car") in mkVec()).toBe(true);
-    expect(provOf(mkVec()[tf("car")](CONSTANT_CTX))).toEqual([100]);
-    expect(() => mkVec()[tf("car")](new RunContext({ strict: true }))).toThrow(PortabilityError);
+    expect(provOf(mkVec()[tf("car")](eagerRunCtx))).toEqual([100]);
+    expect(() => mkVec()[tf("car")](new RunContext({ strict: true, eagerStamps: true }))).toThrow(PortabilityError);
   });
   it("reduce(AJSArray) folds the borrowed elements via a vector [RESOLVED]", async () => {
     expect(tf("reduce") in mkArr()).toBe(true);
@@ -338,7 +334,7 @@ describe("G6 — element-projection (car/cdr/assoc) + reduce across carriers", (
       mkArr()[tf("reduce")](
         reduceContour((_e, acc: number) => acc + 1),
         new AExact(0),
-        CONSTANT_CTX,
+        eagerRunCtx,
       ),
     );
     expect(n).toBe(2);
@@ -361,31 +357,36 @@ describe("vector? / vector-ref dispatch via the tagless protocol (no instanceof 
   // out: z.schemeValue skips any generic codec crossing here, so this WAS the one raw-boolean
   // escape hatch a taglessGuard predicate had; `.valueOf()` reads the boxed truth.
   it("vector? (taglessGuard): a SchemeVector and a borrowed AJSArray both answer #t", async () => {
-    expect(((await vectorSymbols["vector?"].run!(mkVec())) as ABool).valueOf()).toBe(true);
-    expect(((await vectorSymbols["vector?"].run!(mkArr())) as ABool).valueOf()).toBe(true);
+    expect(((await vectorSymbols["vector?"].run!.call(eagerCallCtx(), mkVec())) as ABool).valueOf()).toBe(true);
+    expect(((await vectorSymbols["vector?"].run!.call(eagerCallCtx(), mkArr())) as ABool).valueOf()).toBe(true);
   });
   it("vector? (taglessGuard): a non-vector declares no method → graceful #f, NOT a throw", async () => {
-    expect(((await vectorSymbols["vector?"].run!(mkPair())) as ABool).valueOf()).toBe(false);
-    expect(((await vectorSymbols["vector?"].run!(el("x", 1))) as ABool).valueOf()).toBe(false);
+    expect(((await vectorSymbols["vector?"].run!.call(eagerCallCtx(), mkPair())) as ABool).valueOf()).toBe(false);
+    expect(((await vectorSymbols["vector?"].run!.call(eagerCallCtx(), el("x", 1))) as ABool).valueOf()).toBe(false);
   });
   it("vector-ref dispatches to the operand's method — borrowed array's element inherits the CONTAINER's provenance (no per-element id survives the raw store)", () => {
     // Hygiene law (V, 2026-07-14): mkArr()'s source is raw JS ("a","b") with no lineage of its
     // own — AJSArray.boxElement stamps every lazy read with the CONTAINER's own provenance
     // ({ARR_ORIGIN}), not a distinct per-index id. mkVec's elements are individually boxed (an
     // OWNED carrier), so index 0 still projects its own minted id.
-    expect(provOf(vectorSymbols["vector-ref"].impl!(mkArr(), 1))).toEqual([ARR_ORIGIN]);
-    expect(provOf(vectorSymbols["vector-ref"].impl!(mkVec(), 0))).toEqual([100]);
+    expect(provOf(vectorSymbols["vector-ref"].impl!.call(eagerCallCtx(), mkArr(), 1))).toEqual([ARR_ORIGIN]);
+    expect(provOf(vectorSymbols["vector-ref"].impl!.call(eagerCallCtx(), mkVec(), 0))).toEqual([100]);
   });
   it("vector-ref on a non-vector throws (the operation form — unlike vector?'s #f)", () => {
-    expect(() => vectorSymbols["vector-ref"].impl!(mkPair(), 0)).toThrow(/not a vector/i);
+    expect(() => vectorSymbols["vector-ref"].impl!.call(eagerCallCtx(), mkPair(), 0)).toThrow(/not a vector/i);
   });
   it("the whole vector family works on a borrowed array via asVector's protocol dispatch", () => {
     // vector-length boxes its count now (AExact — the scheme face of z.number's output).
-    expect(Number((vectorSymbols["vector-length"].impl!(mkArr()) as { valueOf(): unknown }).valueOf())).toBe(2);
+    expect(
+      Number((vectorSymbols["vector-length"].impl!.call(eagerCallCtx(), mkArr()) as { valueOf(): unknown }).valueOf()),
+    ).toBe(2);
     // Hygiene law: every element materialized off a borrowed array inherits the CONTAINER's own
     // provenance ({ARR_ORIGIN}) — there is no per-element id left to carry (raw JS never had one).
-    expect(elemProvs(vectorSymbols["vector->list"].impl!(mkArr()))).toEqual([[ARR_ORIGIN], [ARR_ORIGIN]]);
-    expect(vectorSymbols["vector-copy"].impl!(mkArr())).toBeInstanceOf(AVector);
+    expect(elemProvs(vectorSymbols["vector->list"].impl!.call(eagerCallCtx(), mkArr()))).toEqual([
+      [ARR_ORIGIN],
+      [ARR_ORIGIN],
+    ]);
+    expect(vectorSymbols["vector-copy"].impl!.call(eagerCallCtx(), mkArr())).toBeInstanceOf(AVector);
   });
   it("z.vector accepts a borrowed AJSArray as well as a boxed AVector (the union codec), rejects a pair", () => {
     // This assertion is the one that surfaced a LIVE, PRE-EXISTING BUG — worth recording, because it
@@ -421,11 +422,11 @@ describe("vector? / vector-ref dispatch via the tagless protocol (no instanceof 
 // (SRFI-132 accepts vectors). Generalizes ANil's car/cdr nil-tolerance.
 // ════════════════════════════════════════════════════════════════════════════
 describe("strict mode gates generic list-ops on a vector (loose tolerates, strict explains)", () => {
-  const strict = new RunContext({ strict: true });
+  const strict = new RunContext({ strict: true, eagerStamps: true });
   it("map(vector): loose works; strict throws PortabilityError pointing at vector-map", async () => {
     // loose tolerates: the box-preserving Functor returns a fresh AVector — getting a value
     // back at all is the "loose works" signal.
-    expect(await force(mkVec()[tf("map")](idContour, CONSTANT_CTX))).toBeInstanceOf(AVector);
+    expect(await force(mkVec()[tf("map")](idContour, eagerRunCtx))).toBeInstanceOf(AVector);
     // map is sync up to the gate → it throws synchronously, not a rejected promise
     expect(() => mkVec()[tf("map")](idContour, strict)).toThrow(PortabilityError);
     expect(() => mkVec()[tf("map")](idContour, strict)).toThrow(/vector-map/);

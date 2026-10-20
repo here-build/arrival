@@ -102,7 +102,7 @@ describe("CompiledResolutionChain — LAW 4: content address", () => {
 });
 
 describe("CompiledResolutionChain — LAW 5: the bake seal leaves zero resolver residue", () => {
-  // STAGE C CUT 4 (docs/plans/stage-c-corpse-deletion.md) retired `assembleEnv` — the kernel's
+  // STAGE C CUT 4 retired `assembleEnv` — the kernel's
   // OWN bake-scoped `preludeOnly` resolver overlay (`ctx.preludeScope` auto-registering a
   // resolver on the base, dropped at seal) this row proved was THAT mechanism's own plumbing,
   // and it died with `assembleEnv` itself. Bootstrap's `preludeOnly` routing lives in

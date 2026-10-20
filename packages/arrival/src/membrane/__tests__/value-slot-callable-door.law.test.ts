@@ -1,12 +1,12 @@
 /**
- * LAW — the z.dynamic-callable door (Ruling A; retargeted off `z.value` at the Q1 split —
- * docs/plans/stage-c-corpse-deletion.md §"z.value retirement campaign").
+ * LAW — the z.dynamic-callable door (Ruling A; retargeted off `z.value` at the Q1 split of
+ * the z.value retirement campaign).
  *
  * The hole this closes: a `z.dynamic` slot is the declared raw escape hatch — its decode
  * performs NO transform, so an impl receiving a raw callable through it does its OWN
  * toJS/applyCallback marshaling, possibly AFTER its own first `await`. By then
  * `withRegionScope`'s synchronous save/restore (region-scope.ts) has already reverted the
- * ambient scope, so a reverse call minted from that stale marshal binds `DETACHED_SCOPE`/
+ * ambient scope, so a reverse call minted from that stale marshal binds `detachedScope()`/
  * `CONSTANT_CTX` instead of the live run — reopening the burst-bypass hole the region-scope
  * gate (see `region.law.test.ts`'s "BURST-BYPASS CLOSED" row) exists to close. `z.procedure`
  * is safe because its wrapper is minted SYNCHRONOUSLY at decode, under the live scope.

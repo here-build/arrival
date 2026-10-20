@@ -1,6 +1,5 @@
 /**
  * attestation — branded-value registry behind the manifold's `s/*` family
- * (design: arrival-manifold/docs/attestation-design.md).
  *
  * PROVENANCE/TAINT-FLOW, NOT TYPING — and deliberately not the provenance set.
  * Provenance has union/forward algebra (survives computation via
@@ -16,7 +15,7 @@
  *      attest boxes iff the container is attested;
  *   3. manifold `s/*` validators — explicit model-authored assertion.
  *
- * Enforcement lives in arrival-manifold's tool boundary; core only carries the
+ * Enforcement lives in the manifold's tool boundary; core only carries the
  * registry + stamps.
  */
 

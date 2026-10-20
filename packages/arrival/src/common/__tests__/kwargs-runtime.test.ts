@@ -6,7 +6,7 @@
 // representation is honest, not guessed):
 //   • the READER does NOT special-case `:` at all — `:a` lexes as a plain SYMBOL atom via
 //     Lexer.ts's generic `_symbol_rules` (no keyword token class exists).
-//   • a `:`-prefixed symbol is SELF-EVALUATING (keyword-tagless-apply.md): `Resolver.resolve`/
+//   • a `:`-prefixed symbol is SELF-EVALUATING: `Resolver.resolve`/
 //     `env_get` (eval/Resolver.ts) return the `ASymbol` itself, no synthesized accessor.
 //   • so by the time a call's ARGS reach a rosetta `run` wrapper, `(tool :a "x" :b 5)` has
 //     ALREADY evaluated to `[:a, AString("x"), :b, AExact(5)]` (real `ASymbol`s) — the EXACT
@@ -24,17 +24,15 @@ import { describe, expect, it, beforeAll } from "vitest";
 import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { execOverFrame as exec, execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { applyCapability, freshEnv } from "../../__tests__/_fresh-env.js";
-import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
-import { symbol } from "../../symbol/index.js";
-import { testCallCtx } from "../../run/CallCtx.js";
+import * as symbol from "../../common/symbols/index.js";
+import { type CallCtx, testCallCtx } from "../../run/CallCtx.js";
 import * as z from "../scheme-zod/index.js";
 import { EnvCapability } from "../capability.js";
 
-/** Build a keyword `ASymbol` exactly as evaluating `:key` now does (self-evaluating —
- *  keyword-tagless-apply.md), for the UNIT plane (no evaluator round trip). */
+/** Build a keyword `ASymbol` exactly as evaluating `:key` now does (self-evaluating), for the UNIT plane (no evaluator round trip). */
 function pluck(key: string): unknown {
   return new ASymbol(`:${key}`);
 }
@@ -48,7 +46,9 @@ describe("z.kwargs runtime — UNIT (direct def.run, manually-built pluck pairs)
   it("decodes interleaved :key/value pairs into ONE constructed object arg", async () => {
     const def = symbol.rosetta`greet: kwargs greeting`(
       { input: [], inputRest: { a: z.string, b: z.number.optional() }, output: [z.string] },
-      (args) => `${args.a}:${args.b}`,
+      function (this: CallCtx, args) {
+        return `${args.a}:${args.b}`;
+      },
     );
     const out = await fire(def, testCallCtx(), pluck("a"), new AString("Ada"), pluck("b"), new AExact(5));
     expect((out as AString)["arrival/toJS"]()).toBe("Ada:5");
@@ -57,7 +57,9 @@ describe("z.kwargs runtime — UNIT (direct def.run, manually-built pluck pairs)
   it("keyword ORDER is independent of the shape's declared order", async () => {
     const def = symbol.rosetta`greet: kwargs greeting`(
       { input: [], inputRest: { a: z.string, b: z.number.optional() }, output: [z.string] },
-      (args) => `${args.a}:${args.b}`,
+      function (this: CallCtx, args) {
+        return `${args.a}:${args.b}`;
+      },
     );
     const out = await fire(def, testCallCtx(), pluck("b"), new AExact(5), pluck("a"), new AString("Ada"));
     // NOTE: pairs must stay `:key value` (key first) — this call shows the TWO PAIRS in
@@ -74,7 +76,9 @@ describe("z.kwargs runtime — INTEGRATION ((tool :k v …) through a real env +
     // SymbolKeyMismatchError, common/capability.ts) — "kw-greet" both ways.
     const greet = symbol.rosetta`kw-greet: kwargs greeting`(
       { input: [], inputRest: { a: z.string, b: z.number.optional() }, output: [z.string] },
-      (args) => `${args.a}:${args.b}`,
+      function (this: CallCtx, args) {
+        return `${args.a}:${args.b}`;
+      },
     );
     // Wired through the REAL EnvCapability binder (post-B2 binder cut: the "rosetta" kind
     // binds an ARosettaProcedure, not a bare fn) rather than a raw `env.set(name, def.run)`
@@ -107,7 +111,7 @@ describe("z.kwargs runtime — INTEGRATION ((tool :k v …) through a real env +
       'pre-fix cryptic "expected object, received array" mismatch',
     async () => {
       // A missing required kwarg must name the field (kwargs humanizer,
-      // common/kwargs-rejection.ts, args-error-reporting-v2.md §2.5).
+      // common/kwargs-rejection.ts).
       await expect(exec(`(kw-greet)`, { env })).rejects.toThrow(/:a — missing \(required\)/);
     },
   );

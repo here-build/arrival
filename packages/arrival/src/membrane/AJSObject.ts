@@ -17,15 +17,17 @@
 import { applyMembraneClosure, CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
 import { AValue, EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
 import { nil } from "../values/primitives/ANil.js";
-import { accessHas, accessKeys, accessMember, NOT_FOUND } from "./interop-access.js";
-import { ForeignProxyFreezeError, InteropAccessError } from "../errors.js";
+import { accessHas, accessKeys, accessMember, freezeBorrowedSource, NOT_FOUND } from "./interop-access.js";
+import { InteropAccessError } from "../errors.js";
 import { attestDeep, freshIfSingleton, isAttested } from "../values/attestation.js";
 import { type SchemeValue } from "../values/types.js";
+import { foldMemberName } from "../values/key-name.js";
 // Runtime import cycle (benign — see header): jsToScheme is a hoisted export function,
 // called only inside get() at runtime.
 import { jsToScheme } from "./rosetta.js";
+import { hostFnToCallable, originalCallableOf } from "../values/primitives/ACallable.js";
 import { is_promise } from "../values/value-guards.js";
-import { settleEntry } from "../values/primitives/pending-entry.js";
+import { pendEntry } from "../values/primitives/pending-entry.js";
 
 /**
  * Entry cache keyed by wrapper identity. WeakMap, not an instance field: keeps the
@@ -34,16 +36,6 @@ import { settleEntry } from "../values/primitives/pending-entry.js";
  * GC-correct — cache entry disappears with the wrapper.
  */
 const entryCaches = new WeakMap<AJSObject, Map<string, SchemeValue | Promise<SchemeValue>>>();
-
-/** Borrowed-wrapper member-name fold: face-normalized string passes through; a
- *  SchemeValue key (keyword symbol, boxed string) unwraps via valueOf with the `:`
- *  accessor sigil stripped. Shared by AJSObject and AJSArray member terms. */
-export function foldMemberName(key: SchemeValue | string): string {
-  let name =
-    typeof key === "string" ? key : String((key as { valueOf?: () => unknown } | null | undefined)?.valueOf?.() ?? key);
-  if (name.startsWith(":")) name = name.slice(1);
-  return name;
-}
 
 /**
  * Thin wrapper for JS objects. Property access is lazy — entries box on demand through
@@ -87,7 +79,7 @@ export class AJSObject extends AValue {
    *
    * Cycle protection is in jsToScheme's WeakSet.
    */
-  get(key: string | symbol): SchemeValue | Promise<SchemeValue> {
+  get(key: string | symbol, runCtx?: RunContext): SchemeValue | Promise<SchemeValue> {
     this.freezeSource();
     if (this.isHostErrorStackKey(key)) return nil;
     // Symbol keys skip the cache (sandbox already blocks most symbol access).
@@ -116,27 +108,33 @@ export class AJSObject extends AValue {
     }
     if (raw === NOT_FOUND) return nil;
 
-    // Function-valued property boxes through jsToScheme to a genuine reverse-membrane
-    // callable (docs/membrane.md §CALLABLE-LENS). Getter reads already resolved above.
+    // Function-valued property boxes to a genuine reverse-membrane callable
+    // (docs/membrane.md §CALLABLE-LENS), minted under the READING run's ctx with this
+    // wrapper's source as the method receiver. Getter reads already resolved above.
+    // CONSTANT_CTX only where no ctx is reachable (direct `.get` without a run).
+    const ctx = runCtx ?? CONSTANT_CTX;
 
     // Box through jsToScheme so primitives become AValue subtypes stamped with this
     // wrapper's provenance; attestation inherits from container (attestation.ts stamp
     // site 2). freshIfSingleton first: raw boolean boxes to shared #t/#f flyweight on
     // empty-provenance path, and singletons never attest — the clone does.
     const boxEntry = (settled: unknown): SchemeValue => {
-      const b: SchemeValue = jsToScheme(CONSTANT_CTX, settled, {}, this.provenance);
+      const b: SchemeValue =
+        typeof settled === "function" && originalCallableOf(settled) === undefined
+          ? hostFnToCallable(ctx, settled as (...args: unknown[]) => unknown, this.provenance, this.source)
+          : jsToScheme(ctx, settled, {}, this.provenance);
       return isAttested(this) ? attestDeep(freshIfSingleton(b)) : b;
     };
 
     // Pending cell: cache the settle chain itself, then overwrite with the settled box.
     if (is_promise(raw)) {
-      const cell = settleEntry(raw, boxEntry, writeCache);
-      writeCache(cell);
-      return cell;
+      return pendEntry(raw, boxEntry, writeCache);
     }
 
     const boxed = boxEntry(raw);
-    if (boxed instanceof AValue) writeCache(boxed);
+    // A callable is run-scoped (hostFnToCallable's cache owns its identity); the wrapper's
+    // per-instance slot would pin run A's mint for a later run reading the same wrapper.
+    if (boxed instanceof AValue && typeof raw !== "function") writeCache(boxed);
     return boxed;
   }
 
@@ -191,7 +189,7 @@ export class AJSObject extends AValue {
   // @ / dict-ref / :key are one protocol over the same .get. :-strip is the receiver's
   // own fold. Promise-valued entry surfaces as its pending cell.
   ["arrival/tagless-final/get"](key: SchemeValue | string, runCtx?: RunContext): SchemeValue | Promise<SchemeValue> {
-    return applyMembraneClosure(runCtx, () => this.get(foldMemberName(key)));
+    return applyMembraneClosure(runCtx, () => this.get(foldMemberName(key), runCtx));
   }
 
   ["arrival/tagless-final/has"](key: SchemeValue | string, runCtx?: RunContext): boolean {
@@ -218,12 +216,6 @@ export class AJSObject extends AValue {
   // Freeze contract — docs/membrane.md §BOXING. Idempotent (Object.isFrozen).
   // Always freezes on first read.
   private freezeSource(): void {
-    if (!Object.isFrozen(this.source)) {
-      try {
-        Object.freeze(this.source);
-      } catch (error) {
-        throw new ForeignProxyFreezeError(error);
-      }
-    }
+    freezeBorrowedSource(this.source);
   }
 }

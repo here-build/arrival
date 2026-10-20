@@ -19,7 +19,7 @@ import { AVector } from "../../values/primitives/AVector.js";
 import { APair } from "../../values/primitives/APair.js";
 import { freshEnv } from "../_fresh-env.js";
 
-describe("dict-literal true shape — the P-table probes (dict-literal-true-shape.md)", () => {
+describe("dict-literal true shape — the P-table probes", () => {
   let env: ResolvingAmbient;
   beforeAll(async () => {
     env = await freshEnv();

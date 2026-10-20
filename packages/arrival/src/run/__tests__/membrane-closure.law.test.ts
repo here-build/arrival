@@ -12,7 +12,7 @@ import { exec, execState } from "../../eval/generator-exec.js";
 import { applyMembraneClosure, CONSTANT_CTX, RunContext } from "../RunContext.js";
 import { jsToScheme, toJS } from "../../membrane/rosetta.js";
 import { openRegionScope, withRegionScope } from "../../membrane/region-scope.js";
-import { testCallCtx } from "../CallCtx.js";
+import { type CallCtx, testCallCtx } from "../CallCtx.js";
 import { ALambda, applyCallback } from "../../values/primitives/ACallable.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AJSObject } from "../../membrane/AJSObject.js";
@@ -68,7 +68,9 @@ describe("borrowed-store terms", () => {
     const obj = { x: 1, y: 2 };
     const cap = EnvCapability.define("test/membrane-closure-obj", {
       symbols: (symbol, z) => ({
-        obj: symbol.rosetta`obj: the host object`({ input: [], output: [z.dynamic] }, () => obj),
+        obj: symbol.rosetta`obj: the host object`({ input: [], output: [z.dynamic] }, function (this: CallCtx) {
+          return obj;
+        }),
       }),
     });
     const before = count();
@@ -84,7 +86,9 @@ describe("borrowed-store terms", () => {
     const { wrap, count } = countingWrap();
     const cap = EnvCapability.define("test/membrane-closure-arr", {
       symbols: (symbol, z) => ({
-        arr: symbol.rosetta`arr: the host array`({ input: [], output: [z.dynamic] }, () => [10, 20, 30]),
+        arr: symbol.rosetta`arr: the host array`({ input: [], output: [z.dynamic] }, function (this: CallCtx) {
+          return [10, 20, 30];
+        }),
       }),
     });
     const before = count();
@@ -103,7 +107,7 @@ describe("borrowed-store terms", () => {
     expect(boxed[tf("get")]("a", runCtx)).toBeInstanceOf(Object);
     const afterLive = count();
     expect(afterLive).toBeGreaterThan(0);
-    boxed[tf("get")]("a", CONSTANT_CTX);
+    void boxed[tf("get")]("a", CONSTANT_CTX);
     expect(count()).toBe(afterLive);
   });
 });
@@ -113,10 +117,9 @@ describe("host-fn fire + reverse-membrane re-entry", () => {
     const { wrap, count } = countingWrap();
     const cap = EnvCapability.define("test/membrane-closure-fn", {
       symbols: (symbol, z) => ({
-        "host-add": symbol.rosetta`host-add: a host fn`(
-          { input: [], output: [z.dynamic] },
-          () => (a: number, b: number) => a + b,
-        ),
+        "host-add": symbol.rosetta`host-add: a host fn`({ input: [], output: [z.dynamic] }, function (this: CallCtx) {
+          return (a: number, b: number) => a + b;
+        }),
       }),
     });
     const before = count();
@@ -150,10 +153,13 @@ describe("host-fn fire + reverse-membrane re-entry", () => {
     let impls = 0;
     const cap = EnvCapability.define("test/membrane-closure-rosetta", {
       symbols: (symbol, z) => ({
-        inc: symbol.rosetta`inc: add one`({ input: [z.number], output: [z.number] }, (n: number) => {
-          impls++;
-          return n + 1;
-        }),
+        inc: symbol.rosetta`inc: add one`(
+          { input: [z.number], output: [z.number] },
+          function (this: CallCtx, n: number) {
+            impls++;
+            return n + 1;
+          },
+        ),
       }),
     });
     const before = count();

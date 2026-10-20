@@ -30,7 +30,6 @@ import { AString } from "../../values/primitives/AString.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { jsToScheme } from "../rosetta.js";
-import { tf } from "../../values/tagless-final.js";
 
 // ============================================================================
 // CRITICAL: sandbox escape vectors
@@ -152,7 +151,7 @@ describe("CRITICAL: sandbox escape vectors", () => {
 // boundary-crossing inherited props collapse to nil/undefined.
 // ============================================================================
 
-// Since benchmark-defect-register.md's B2, a receiver with no `arrival/tagless-final/get`
+// Since the B2 benchmark-defect fix, a receiver with no `arrival/tagless-final/get`
 // term (a lambda declares none) THROWS instead of silently returning nil
 // (ASymbol.ts's AKeywordSymbol — see keyword-accessor-leaf-door.test.ts). Both outcomes
 // are equally SAFE for this security invariant: neither a thrown error nor a boxed nil
@@ -163,8 +162,8 @@ async function pluck(src: string): Promise<unknown> {
   try {
     const [v] = await execOverFrame(src, { env: inferenceEnv });
     return v;
-  } catch (e) {
-    return e; // a throw is a safe, non-leaking outcome too
+  } catch (error) {
+    return error; // a throw is a safe, non-leaking outcome too
   }
 }
 
@@ -235,7 +234,7 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
    */
   // Cap-policy door (`assertAllocatable`): message names the op, requested length, and cap — not an engine RangeError.
   it("(make-string 1e8 ...) errors with the cap-policy TAUGHT message, not an engine RangeError", async () => {
-    await expect(execOverFrame("(make-string 100000000 #\\x)", { env: inferenceEnv })).rejects.toThrow(
+    await expect(execOverFrame(String.raw`(make-string 100000000 #\x)`, { env: inferenceEnv })).rejects.toThrow(
       /make-string: requested length \d+ exceeds allocation limit \d+/,
     );
   });
@@ -283,7 +282,7 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
     // `(let loop () (loop))` is now flat under TCO (task #46), so the budget
     // fires cleanly instead of the loop blowing the JS stack first.
     await expect(gexec("(let loop () (loop))", { env: inferenceEnv, budgetMs: 150 })).rejects.toThrow(/budget/i);
-  }, 10000);
+  }, 10_000);
 
   /**
    * Audit finding: `SchemeSymbol.ts:23` — `static readonly list: Record<string, SchemeSymbol> = {}`.
@@ -314,12 +313,12 @@ describe("CRITICAL: resource exhaustion (DoS vectors)", () => {
    */
   // Parse door names the nesting-depth cap and position, not a native stack overflow.
   it("deeply-nested input throws a graceful parse error naming the nesting-depth cap, not stack overflow", async () => {
-    const deep = "(".repeat(10000) + "1" + ")".repeat(10000);
+    const deep = `${"(".repeat(10_000)}1${")".repeat(10_000)}`;
     let err: Error | undefined;
     try {
       await execOverFrame(deep, { env: inferenceEnv });
-    } catch (e) {
-      err = e as Error;
+    } catch (error) {
+      err = error as Error;
     }
     expect(err).toBeDefined();
     expect(err?.message).not.toMatch(/Maximum call stack/i);
@@ -419,7 +418,7 @@ describe("CRITICAL: write-side prototype pollution (S6)", () => {
     // Minting symbols named after dangerous keys must touch only the intern
     // table as own keys — never reach Object.prototype.
     for (const name of ["__proto__", "constructor", "prototype"]) {
-      // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+      // eslint-disable-next-line sonarjs/constructor-for-side-effects -- construction (interning) is the side effect under test
       new ASymbol(name);
     }
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
@@ -431,8 +430,19 @@ describe("CRITICAL: write-side prototype pollution (S6)", () => {
     expect(String(new ASymbol("__proto__"))).toBe("__proto__");
   });
 
-  it("SANDBOX_BOUNDARY sentinel is not forgeable from the global Symbol registry", async () => {
+  it("INTEROP_BOUNDARY is not forgeable from the global Symbol registry", async () => {
     // A module-local Symbol() is never equal to a registry symbol of any key.
-    expect(INTEROP_BOUNDARY).not.toBe(Symbol.for("scheme:sandbox-boundary"));
+    expect(Symbol.for("scheme:interop-boundary")).not.toBe(INTEROP_BOUNDARY);
+    // Behavioral half: branding with the registry symbol does not make a boundary.
+    const FORGED: unique symbol = Symbol.for("scheme:interop-boundary");
+    class Forged {
+      static [FORGED] = true;
+      [FORGED] = true;
+      secret() {
+        return 1;
+      }
+    }
+    expect(isInteropBoundary(Forged.prototype)).toBe(false);
+    expect(isInteropBoundary(Object.getPrototypeOf(new Forged()))).toBe(false);
   });
 });

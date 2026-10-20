@@ -1,4 +1,4 @@
-// DoorCause + DoorProcedure — door metadata (docs/design-history/symbol-define-static-program-validation.md §3.3). Pins the causal-chain UX's FIRST
+// DoorCause + DoorProcedure — door metadata. Pins the causal-chain UX's FIRST
 // link: a bound door is not an anonymous throwing closure
 // (`env.set(verb, () => { throw … })`) — it's an introspectable `DoorProcedure` carrying
 // its baked `DoorSymbolDef` (`.door`), whose `cause` (owning capability + `needs`, both
@@ -12,7 +12,7 @@
 // The DECLARATION-DRIVEN law over the ~100 production doors (every BASE_PACKS door gets
 // `cause.owner` = its pack) is pinned in the sibling `declared-doors.law.test.ts`.
 import { describe, expect, it } from "vitest";
-import { symbol } from "../../symbol/index.js";
+import * as symbol from "../../common/symbols/index.js";
 import { DoorProcedure } from "../../values/primitives/ACallable.js";
 import { is_callable_value } from "../../values/value-guards.js";
 import { PurityError } from "../../errors.js";
@@ -45,8 +45,8 @@ describe("DoorProcedure — the introspectable door binding (unit, no capability
     let caught: unknown;
     try {
       proc["arrival/tagless-final/apply"]();
-    } catch (e) {
-      caught = e;
+    } catch (error) {
+      caught = error;
     }
     expect(caught).toBeInstanceOf(PurityError);
     const err = caught as PurityError;
@@ -63,8 +63,8 @@ describe("DoorProcedure — the introspectable door binding (unit, no capability
     let caught: unknown;
     try {
       proc["arrival/tagless-final/apply"]();
-    } catch (e) {
-      caught = e;
+    } catch (error) {
+      caught = error;
     }
     expect(caught).toBeInstanceOf(PurityError);
     const err = caught as PurityError;
@@ -117,8 +117,8 @@ describe("common/capability.ts's door bind arm — cause DERIVED from the owning
     let caught: unknown;
     try {
       proc["arrival/tagless-final/apply"]();
-    } catch (e) {
-      caught = e;
+    } catch (error) {
+      caught = error;
     }
     expect(caught).toBeInstanceOf(PurityError);
     expect((caught as PurityError).message).toBe("stub @ test/door-cap-2 is not available.\n  Why: a teaching stub");

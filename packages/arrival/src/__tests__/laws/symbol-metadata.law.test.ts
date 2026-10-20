@@ -1,5 +1,5 @@
 /**
- * LAW — dynamic symbol METADATA (exec-phases-and-dynamic-metadata.md Part II).
+ * LAW — dynamic symbol METADATA (Part II of the exec-phases design).
  * The per-FIELD static-or-dynamic union + the three §2.3 resolution rulings:
  *
  *   1. LAZY AT READ — `lower()`/`assembleAmbient()` NEVER invoke a metadata fn (not to
@@ -17,14 +17,13 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { z as hostZod } from "zod";
-
 import * as z from "../../common/scheme-zod/index.js";
-import { symbol } from "../../symbol/index.js";
+import * as symbol from "../../common/symbols/index.js";
 import { resolveMetadata, staticMetadata } from "../../common/symbols/metadata.js";
 import type { NativeSymbolDef } from "../../values/primitives/ANativeProcedure.js";
 import type { RosettaSymbolDef } from "../../common/symbols/_bake.js";
 import type { Activation } from "../../common/capability.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 
 const zz = { string: z.string, number: z.number };
 
@@ -38,24 +37,36 @@ function contractOf<T>(v: { contract: unknown }): T {
 describe("factory stamping — the metadata bag reaches the def (the closed drop)", () => {
   it("symbol.rosetta stamps opts.metadata onto the def; dynamic fields stay UN-invoked at bake", () => {
     let fired = 0;
-    const def = symbol.rosetta`law/meta: doc line`({ input: [], output: [zz.string] }, () => "v", {
-      metadata: {
-        description: "static text",
-        dynamicDescription: function () {
-          fired += 1;
-          return "live";
+    const def = symbol.rosetta`law/meta: doc line`(
+      { input: [], output: [zz.string] },
+      function (this: CallCtx) {
+        return "v";
+      },
+      {
+        metadata: {
+          description: "static text",
+          dynamicDescription() {
+            fired += 1;
+            return "live";
+          },
         },
       },
-    });
+    );
     expect(contractOf<RosettaSymbolDef>(def).metadata?.description).toBe("static text");
     expect(typeof contractOf<RosettaSymbolDef>(def).metadata?.dynamicDescription).toBe("function"); // the discriminant
     expect(fired).toBe(0); // bake resolved NOTHING
   });
 
   it("symbol.native carries the same optional bag", () => {
-    const def = symbol.native`law/meta-native: doc`({ input: [zz.number], output: [zz.number] }, (n) => n, {
-      metadata: { docUrl: "https://example.test" },
-    });
+    const def = symbol.native`law/meta-native: doc`(
+      { input: [zz.number], output: [zz.number] },
+      function (this: CallCtx, n) {
+        return n;
+      },
+      {
+        metadata: { docUrl: "https://example.test" },
+      },
+    );
     expect(contractOf<NativeSymbolDef>(def).metadata?.docUrl).toBe("https://example.test");
   });
 
@@ -76,7 +87,7 @@ describe("resolveMetadata — the unit surface (fake activation, no assembly)", 
     const { resolved, dynamicKeys } = await resolveMetadata(
       {
         description: "static",
-        endpoint: function (this: { configuration: { url: string } }) {
+        endpoint(this: { configuration: { url: string } }) {
           return this.configuration.url;
         },
       },
@@ -97,7 +108,7 @@ describe("resolveMetadata — the unit surface (fake activation, no assembly)", 
   });
 });
 
-// STAGE C CUT 3b (docs/plans/stage-c-corpse-deletion.md) retired `AssembledAmbient` — the
+// STAGE C CUT 3b retired `AssembledAmbient` — the
 // `describeSymbol`/`catalog()` READ CHANNEL this describe block pinned (exec-phases.ts's
 // `rosterEntries`/`describeEntry` machinery) died with it, with no self-hosted-vocabulary-path
 // equivalent built in this cut. The `resolveMetadata`/`staticMetadata` UNIT surface above (which

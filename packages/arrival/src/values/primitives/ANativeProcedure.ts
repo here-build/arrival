@@ -141,8 +141,10 @@ export class ANativeProcedure extends AValue {
   withProvenance(): SchemeValue {
     return this;
   }
-  ["arrival/tagless-final/apply"](args: readonly SchemeValue[], callCtx: CallCtx): CallResult {
-    return this.#impl(args, callCtx);
+  ["arrival/tagless-final/apply"](args: readonly SchemeValue[], callCtx: CallCtx, canBounce = false): CallResult {
+    // The bounce permission rides THIS call's ctx only (a fresh object), never the shared one:
+    // a HOF's `this` reused for its callbacks must not leak the grant to them.
+    return this.#impl(args, canBounce ? { ...callCtx, canBounce } : callCtx);
   }
   ["arrival/tagless-final/equals"](other: unknown): boolean {
     return callableEquals(this, other);

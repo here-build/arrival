@@ -2,7 +2,7 @@
 // (design doc §1.3) against the self-hosted vocabulary path (`buildVocabulary` +
 // `env/assemble-run.ts`'s per-run prelude pass) — via `exec`/`execState({capabilities})`.
 //
-// STAGE C CUT 4 (docs/plans/stage-c-corpse-deletion.md) retired `lower()`/`assembleEnv`; this
+// STAGE C CUT 4 retired `lower()`/`assembleEnv`; this
 // file's OWN mechanism (a bespoke `assembleEnv(base, [cap.lower({evalScheme})])` fixture) went
 // with it. Re-authored against the sanctioned path: `exec`/`execState({capabilities})` builds
 // the `Vocabulary` and runs the tuple's per-run prelude pass (`env/assemble-run.ts`'s
@@ -27,6 +27,7 @@
 import { describe, expect, it } from "vitest";
 import { exec, execState } from "../../eval/generator-exec.js";
 import { EnvCapability } from "../capability.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 
 describe("preludeOnly — the phase-gated per-run prelude pass (design §1.3, over the vocabulary path)", () => {
   it("a preludeOnly verb is UNBOUND at runtime, but a LATER capability's prelude that calls it during the prelude pass works", async () => {
@@ -37,7 +38,9 @@ describe("preludeOnly — the phase-gated per-run prelude pass (design §1.3, ov
       symbols: (symbol, z) => ({
         "overlay/greet": symbol.rosetta`overlay/greet: prelude-only greeting verb`(
           { input: [z.string], output: [z.string], preludeOnly: true },
-          (name) => `hello ${name}`,
+          function (this: CallCtx, name) {
+            return `hello ${name}`;
+          },
         ),
       }),
     });
@@ -46,7 +49,7 @@ describe("preludeOnly — the phase-gated per-run prelude pass (design §1.3, ov
       symbols: (symbol, z) => ({
         "sink/record": symbol.rosetta`sink/record: record a call for the test to observe`(
           { input: [z.string], output: [z.string] },
-          (s) => {
+          function (this: CallCtx, s) {
             calls.push(s);
             return s;
           },
@@ -86,7 +89,9 @@ describe("preludeOnly — the phase-gated per-run prelude pass (design §1.3, ov
       symbols: (symbol, z) => ({
         "chain/base-secret": symbol.rosetta`chain/base-secret: preludeOnly value contributed by A`(
           { input: [], output: [z.number], preludeOnly: true },
-          () => 7,
+          function (this: CallCtx) {
+            return 7;
+          },
         ),
       }),
     });
@@ -97,7 +102,7 @@ describe("preludeOnly — the phase-gated per-run prelude pass (design §1.3, ov
       symbols: (symbol, z) => ({
         "chain/note": symbol.rosetta`chain/note: record a number seen during B's prelude`(
           { input: [z.number], output: [z.number] },
-          (n) => {
+          function (this: CallCtx, n) {
             bSeen.push(n);
             return n;
           },
@@ -113,7 +118,7 @@ describe("preludeOnly — the phase-gated per-run prelude pass (design §1.3, ov
       symbols: (symbol, z) => ({
         "chain/note-c": symbol.rosetta`chain/note-c: record a number seen during C's prelude`(
           { input: [z.number], output: [z.number] },
-          (n) => {
+          function (this: CallCtx, n) {
             cSeen.push(n);
             return n;
           },
@@ -133,7 +138,9 @@ describe("preludeOnly — the phase-gated per-run prelude pass (design §1.3, ov
       symbols: (symbol, z) => ({
         "closure/secret": symbol.rosetta`closure/secret: preludeOnly source`(
           { input: [], output: [z.number], preludeOnly: true },
-          () => 99,
+          function (this: CallCtx) {
+            return 99;
+          },
         ),
       }),
       prelude: `

@@ -3,7 +3,7 @@
 // `bindTarget.set(verb, def)`; rosetta → `bindTarget.set(verb, def)`), just a different target
 // map. Design doc §1.3/§4 step 3.
 //
-// STAGE C CUT 4 (docs/plans/stage-c-corpse-deletion.md) retired `lower()`/`EnvCapability.apply()`
+// STAGE C CUT 4 retired `lower()`/`EnvCapability.apply()`
 // — the bind loop this file used to unit-test (with a synthetic `ctx.preludeScope`) now lives in
 // `env/vocabulary.ts`'s `processCapability`/`makeBindTarget`, which ALWAYS provides BOTH target
 // maps (`mainMap`/`preludeOnlyMap`) unconditionally — there is no longer a "ctx.preludeScope
@@ -19,10 +19,11 @@ import { EnvCapability } from "../capability.js";
 import { buildVocabulary } from "../../env/vocabulary.js";
 import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
 import { ARosettaProcedure } from "../../values/primitives/ARosettaProcedure.js";
-import { symbol } from "../../symbol/index.js";
+import * as symbol from "../../common/symbols/index.js";
 import * as z from "../scheme-zod/index.js";
 import { execInFrame } from "../../eval/generator-exec.js";
 import type { ResolvingAmbient } from "../../env/AmbientRuntime.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 
 const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
 
@@ -30,7 +31,9 @@ describe("buildVocabulary — routing preludeOnly symbols onto Vocabulary.prelud
   it("a preludeOnly rosetta binds onto Vocabulary.preludeOnly, NOT onto Vocabulary.map", async () => {
     const def = symbol.rosetta`prelude-only/verb: only visible while a prelude evaluates`(
       { input: [z.string], output: [z.string], preludeOnly: true },
-      (s) => s,
+      function (this: CallCtx, s) {
+        return s;
+      },
     );
     const cap = EnvCapability.define("test/prelude-only", { symbols: () => ({ "prelude-only/verb": def }) });
     const vocabulary = await buildVocabulary([cap], undefined, evalScheme);
@@ -43,7 +46,9 @@ describe("buildVocabulary — routing preludeOnly symbols onto Vocabulary.prelud
   it("an ORDINARY (non-preludeOnly) rosetta binds onto Vocabulary.map as before — no regression", async () => {
     const def = symbol.rosetta`ordinary/verb: a normal runtime verb`(
       { input: [z.string], output: [z.string] },
-      (s) => s,
+      function (this: CallCtx, s) {
+        return s;
+      },
     );
     const cap = EnvCapability.define("test/ordinary", { symbols: () => ({ "ordinary/verb": def }) });
     const vocabulary = await buildVocabulary([cap], undefined, evalScheme);
@@ -55,7 +60,9 @@ describe("buildVocabulary — routing preludeOnly symbols onto Vocabulary.prelud
   it("a preludeOnly NATIVE symbol also routes onto Vocabulary.preludeOnly (kind-agnostic)", async () => {
     const def = symbol.native`prelude-only/native-verb: native prelude-only op`(
       { input: [z.string], output: [z.string], preludeOnly: true },
-      (s) => s,
+      function (this: CallCtx, s) {
+        return s;
+      },
     );
     const cap = EnvCapability.define("test/prelude-only-native", {
       symbols: () => ({ "prelude-only/native-verb": def }),

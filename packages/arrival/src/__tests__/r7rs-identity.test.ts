@@ -77,7 +77,7 @@ describe("r7rs identity — eq?/eqv? string-identity fixes (regression guards)",
   });
 
   it("eqv? on two distinct make-string results is #f (R7RS § 6.1)", async () => {
-    const r = await evalScheme(`(eqv? (make-string 1 #\\a) (make-string 1 #\\a))`);
+    const r = await evalScheme(String.raw`(eqv? (make-string 1 #\a) (make-string 1 #\a))`);
     expect(truthy(r)).toBe(false);
   });
 });

@@ -1,12 +1,11 @@
 // Algebras-in-entities cell (wave 2): SchemeString's structure-algebras —
 // Functor (char map), Semigroup (string-append), Monoid ("" identity).
 // Migrated from the the dissolved fantasy-land bridge monkey-patch INTO the SchemeString
-// class body (plan-2026-06-10-algebras-in-entities.md).
+// class body.
 //
 // SchemeString HAS `arrival/tagless-final/equals` (wave-1 Setoid), so the law harness's
 // internal `equals` works directly — no custom eq needed.
 import fc from "fast-check";
-import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { describe, expect, it } from "vitest";
 import { AString } from "../AString.js";
 import { functorLaws, monoidLaws, semigroupLaws } from "./algebra-laws.js";

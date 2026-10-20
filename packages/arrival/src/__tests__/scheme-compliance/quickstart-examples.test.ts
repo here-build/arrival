@@ -5,11 +5,12 @@ import type { EnvWithInternals, ResolvingAmbient } from "../../env/AmbientRuntim
  */
 import { describe, expect, it } from "vitest";
 import { jsToScheme, toJS } from "../../membrane/rosetta.js";
-import { execOverFrame as exec, execStateOverFrame as execState } from "../../eval/generator-exec.js";
+import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../env/inference-env.js";
 import { EnvCapability } from "../../common/capability.js";
 import { applyCapability } from "../_fresh-env.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 
 describe("Quick Start Examples", () => {
   it("Basic execution example", async () => {
@@ -35,7 +36,9 @@ describe("Quick Start Examples", () => {
         symbols: (symbol, z) => ({
           "double-all": symbol.rosetta`double-all: doubles every element of a numeric list`(
             { input: [z.list(z.number)], output: [z.list(z.number)] },
-            (numbers) => numbers.map((x) => x * 2),
+            function (this: CallCtx, numbers) {
+              return numbers.map((x) => x * 2);
+            },
           ),
         }),
       }),
@@ -62,7 +65,7 @@ describe("Quick Start Examples", () => {
         symbols: (symbol, z) => ({
           "high-priority-users": symbol.rosetta`high-priority-users: filters users by priority`(
             { input: [z.dynamic], output: [z.dynamic] },
-            (rawUsers) => {
+            function (this: CallCtx, rawUsers) {
               const users = toJS(rawUsers) as Array<{ id: string; priority: number }>;
               return users.filter((u) => u.priority > 10) as never;
             },

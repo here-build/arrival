@@ -24,16 +24,14 @@
  * `CorpusRunner`/the harness capability (test/test-error/test-values macros, the scheme-side
  * comparator) are shared verbatim with the main corpus — a fresh env per spec file.
  */
-import fs from "fs";
+import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import { normalizeText, type Manifest, type Step, type TestStep } from "../chibi/manifest.js";
 import { buildSrfi1Manifest, SRFI1_TEST_PATH } from "../chibi/srfi1-manifest.js";
 import { registryCoherenceFindings, verdictFor } from "../chibi/registries-srfi1.js";
 import { CorpusRunner } from "../chibi/runner.js";
 
-if (!fs.existsSync(SRFI1_TEST_PATH)) {
-  throw new Error("srfi/1/test.sld — submodule not initialized (run: git submodule update --init)");
-} else {
+if (fs.existsSync(SRFI1_TEST_PATH)) {
   const manifest: Manifest = await buildSrfi1Manifest();
   // Pass A: R7RS-strict so car/cdr-of-empty test-error forms ride chibi goldens.
   const runner = await CorpusRunner.create(manifest, { strict: true });
@@ -54,12 +52,14 @@ if (!fs.existsSync(SRFI1_TEST_PATH)) {
       const label = rowLabel(step);
       switch (verdict.run) {
         case "it":
+          // eslint-disable-next-line sonarjs/assertions-in-tests -- the assertion is the throw: a non-pass outcome raises runner.failureError
           it(label, async () => {
             const outcome = await runner.outcomeFor(step);
             if (outcome.kind !== "pass") throw runner.failureError(step, outcome);
           });
           return;
         case "skip":
+          // eslint-disable-next-line sonarjs/assertions-in-tests -- skipped row: intentionally empty body (documents an excluded feature)
           it.skip(`${label} — excluded: ${verdict.feature}`.slice(0, 300), () => {});
           return;
         case "fails":
@@ -79,6 +79,7 @@ if (!fs.existsSync(SRFI1_TEST_PATH)) {
 
     const registerUnreadable = (step: Extract<Step, { kind: "unreadable" }>): void => {
       const label = `${normalizeText(step.text).slice(0, 160)}  ${SRFI1_TEST_PATH}:${step.line}`.slice(0, 300);
+      // eslint-disable-next-line sonarjs/assertions-in-tests -- skipped row: intentionally empty body (documents an excluded feature)
       it.skip(
         `${label} — excluded: unreadable [reader door: ${step.readerError.slice(0, 100)}]`.slice(0, 300),
         () => {},
@@ -137,4 +138,6 @@ if (!fs.existsSync(SRFI1_TEST_PATH)) {
       expect(registryCoherenceFindings(manifest)).toEqual([]);
     });
   });
+} else {
+  throw new Error("srfi/1/test.sld — submodule not initialized (run: git submodule update --init)");
 }

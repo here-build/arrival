@@ -35,6 +35,7 @@ import {
   type WriteSetResolver,
 } from "../../run/read-guard.js";
 import { serializeResourcePath } from "../path-algebra.js";
+import type { CallCtx } from "../CallCtx.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. checkReadWriteGuard — the pure function, direct
@@ -64,9 +65,9 @@ describe("checkReadWriteGuard — the pure guard function (§2.4)", () => {
     try {
       checkReadWriteGuard(entries, reads, writeSetOf);
       expect.unreachable();
-    } catch (e) {
-      expect(e).toBeInstanceOf(ReadYourDeferredWriteError);
-      const err = e as ReadYourDeferredWriteError;
+    } catch (error) {
+      expect(error).toBeInstanceOf(ReadYourDeferredWriteError);
+      const err = error as ReadYourDeferredWriteError;
       expect(err.effect.verbName).toBe("write!");
       expect(err.readKey).toBe("x");
       expect(err.readClock).toBe(1);
@@ -174,13 +175,16 @@ function makeCap(tracker: MemoryReadTracker) {
   let writeFires = 0;
   const cap = EnvCapability.define("test/read-guard", {
     symbols: (symbol, z) => ({
-      "read!": symbol.rosetta`read!: `({ input: [z.string], output: [z.undefinedResult] }, (key: string) => {
-        tracker.record(key);
-        return undefined;
-      }),
+      "read!": symbol.rosetta`read!: `(
+        { input: [z.string], output: [z.undefinedResult] },
+        function (this: CallCtx, key: string) {
+          tracker.record(key);
+          return undefined;
+        },
+      ),
       "write!": symbol.rosetta`write!: `(
         { input: [z.string], output: [z.undefinedResult], provenance: "sink" },
-        async (_key: string) => {
+        async function (this: CallCtx, _key: string) {
           writeFires++;
           return undefined;
         },

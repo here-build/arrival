@@ -108,6 +108,9 @@ export async function penetrateThroughCache(
     pathQueries?: readonly ResourcePath[];
     /** Resource-path effects from contract producers (post-decode). */
     pathEffects?: readonly ResourcePath[];
+    /** Replay served this call from the cache (view hit / effect tombstone) instead of firing.
+     *  The caller owns the invocation to mark (`Invocation.cached`); no ambient lookup. */
+    onServed?: () => void;
   },
   decodedArgs: readonly unknown[],
   fire: () => Promise<unknown>,
@@ -160,7 +163,10 @@ export async function penetrateThroughCache(
     }
     if (cache.mode === "replay") {
       const entry = await cache.get(key);
-      if (entry?.kind === "effect") return undefined;
+      if (entry?.kind === "effect") {
+        penetration.onServed?.();
+        return undefined;
+      }
     }
     const result = await fireWithPathELog(); // record always fires; replay miss = new intent
     await cache.set(key, { kind: "effect" });
@@ -177,7 +183,10 @@ export async function penetrateThroughCache(
       const pending = pendingFor(cache).get(key);
       if (pending !== undefined) return pending; // share the concurrent miss's fire
       const entry = await cache.get(key);
-      if (entry?.kind === "value") return entry.value; // hit → serve, never re-fire
+      if (entry?.kind === "value") {
+        penetration.onServed?.();
+        return entry.value; // hit → serve, never re-fire
+      }
     }
     return sharedFire(cache, key, true, fireWithPathELog);
   }

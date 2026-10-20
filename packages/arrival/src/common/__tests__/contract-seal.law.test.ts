@@ -17,14 +17,22 @@
  */
 import { describe, it, expect } from "vitest";
 import * as z from "../scheme-zod/index.js";
-import { symbol } from "../../symbol/index.js";
+import * as symbol from "../../common/symbols/index.js";
 import { withContractFields, withCallbackRoles } from "./../symbols/_bake.js";
 import { ContractSealError } from "../../errors.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 
 describe("contract seal (audit B3)", () => {
   it("P-CONTRACT-FROZEN — every factory's contract is frozen at instantiation", () => {
-    const native = symbol.native`seal-n: `({ input: [z.schemeValue], output: [z.schemeValue] }, (v) => v);
-    const rosetta = symbol.rosetta`seal-r: `({ input: [z.string], output: [z.string] }, (s) => s);
+    const native = symbol.native`seal-n: `(
+      { input: [z.schemeValue], output: [z.schemeValue] },
+      function (this: CallCtx, v) {
+        return v;
+      },
+    );
+    const rosetta = symbol.rosetta`seal-r: `({ input: [z.string], output: [z.string] }, function (this: CallCtx, s) {
+      return s;
+    });
     const sequence = symbol.sequence`seal-s: `({ input: [z.schemeValue], output: [z.schemeValue] }, ([v]) => v);
     const tagless = symbol.tagless`seal-t: doc`;
     for (const value of [native, rosetta, sequence, tagless]) {
@@ -33,7 +41,9 @@ describe("contract seal (audit B3)", () => {
   });
 
   it("N-CONTRACT-STAMP — direct field mutation on a baked contract throws", () => {
-    const value = symbol.rosetta`seal-mut: `({ input: [z.string], output: [z.string] }, (s) => s);
+    const value = symbol.rosetta`seal-mut: `({ input: [z.string], output: [z.string] }, function (this: CallCtx, s) {
+      return s;
+    });
     expect(() => {
       (value.contract as { cacheClass?: string }).cacheClass = "view";
     }).toThrow(TypeError);

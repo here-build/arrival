@@ -16,14 +16,11 @@
 //
 // These tests use the same Face machinery (_bake.ts) that real contracts rely on.
 
+/* eslint-disable @typescript-eslint/no-unused-vars -- type-level proofs: the consts exist only to be read via `typeof` */
 import { describe, expectTypeOf, test } from "vitest";
 
 import * as z from "../scheme-zod/index.js";
-import type { APair } from "../../values/primitives/APair.js";
-import type { ANil } from "../../values/primitives/ANil.js";
-import type { ACharacter } from "../../values/primitives/ACharacter.js";
 import type { AString } from "../../values/primitives/AString.js";
-import type { ABool } from "../../values/primitives/ABool.js";
 import type { AVector } from "../../values/primitives/AVector.js";
 import type { AJSArray } from "../../membrane/AJSArray.js";
 import type { AListAlike, SchemeValue } from "../../values/types.js";

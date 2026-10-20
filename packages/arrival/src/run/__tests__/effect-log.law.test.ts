@@ -17,11 +17,11 @@
  */
 import { describe, it, expect } from "vitest";
 import * as z from "../../common/scheme-zod/index.js";
-import { symbol } from "../../symbol/index.js";
-import { testCallCtx } from "../CallCtx.js";
+import * as symbol from "../../common/symbols/index.js";
+import { type CallCtx, testCallCtx } from "../CallCtx.js";
 
 import { exec } from "../../eval/generator-exec.js";
-import { RunContext, CONSTANT_CTX } from "../../run/RunContext.js";
+import { RunContext } from "../../run/RunContext.js";
 import { MemoryRunCache } from "../../run/run-cache.js";
 import { MemoryEffectLog, burst, BurstDrainError, type EffectEntry } from "../../run/effect-log.js";
 import { AExact } from "../../values/primitives/AExact.js";
@@ -34,7 +34,7 @@ function sinkDef(name: string) {
   let fires = 0;
   const def = symbol.rosetta`${name}: `(
     { input: [z.number], output: [z.undefinedResult], provenance: "sink" },
-    async (_n: number) => {
+    async function (this: CallCtx, _n: number) {
       fires++;
       return undefined;
     },
@@ -77,7 +77,7 @@ describe("EffectLog — the burst arm at the wrapper (W1)", () => {
     let viewFires = 0;
     const viewDef = symbol.rosetta`effect-log-view: `(
       { input: [z.number], output: [z.number], cacheClass: "view" },
-      (n: number) => {
+      function (this: CallCtx, n: number) {
         viewFires++;
         return n * 2;
       },
@@ -120,7 +120,7 @@ describe("EffectLog — the burst arm at the wrapper (W1)", () => {
       symbols: (symbol, z) => ({
         "fire!": symbol.rosetta`fire!: an effect`(
           { input: [z.number], output: [z.undefinedResult], provenance: "sink" },
-          (_n: number) => {
+          function (this: CallCtx, _n: number) {
             fires++;
             return undefined;
           },
@@ -131,8 +131,8 @@ describe("EffectLog — the burst arm at the wrapper (W1)", () => {
     const [result] = await exec("(fire! 1)", { capabilities: [cap], effects });
     expect(result).toBeUndefined(); // exec() unwraps through toJS — void ↔ JS undefined
     expect(fires).toBe(0);
-    // toMatchObject (not toEqual): the entry also carries `rawArgs` (the pre-decode boxed args,
-    // arrival-provenance-confirmation.md §5) — an additive field this law doesn't pin.
+    // toMatchObject (not toEqual): the entry also carries `rawArgs` (the pre-decode boxed args) —
+    // an additive field this law doesn't pin.
     expect(effects.entries).toMatchObject([{ index: 0, verbName: "fire!", decodedArgs: [1] }]);
   });
 });
@@ -169,9 +169,9 @@ describe("burst — the drain (§2.5, minus everything W3+ owns)", () => {
         if (entry.verbName === "b") throw failure;
       });
       expect.unreachable();
-    } catch (e) {
-      expect(e).toBeInstanceOf(BurstDrainError);
-      const err = e as BurstDrainError;
+    } catch (error) {
+      expect(error).toBeInstanceOf(BurstDrainError);
+      const err = error as BurstDrainError;
       expect(err.failure.entry.verbName).toBe("b");
       expect(err.failure.error).toBe(failure);
       expect(err.failure.remaining.map((r) => r.verbName)).toEqual(["c"]);

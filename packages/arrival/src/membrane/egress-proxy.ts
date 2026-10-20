@@ -107,7 +107,7 @@ export interface TierGate {
 
 /** egressContainerProxy options — membrane pair (materializer + mode + scope-owned
  *  cache) travels as a unit and cannot drift apart at a call site. */
-export interface EgressOpts {
+interface EgressOpts {
   /** Tier-state gate consulted BEFORE reader.read(key) on first materialization.
    *  Omitting is inert pass-through. */
   gate?: TierGate;
@@ -201,8 +201,17 @@ export function egressContainerProxy(
   const ensure = (key: PropertyKey): void => {
     if (typeof key !== "string" || !nameSet.has(key)) return;
     if (Object.prototype.hasOwnProperty.call(target, key)) return;
-    target[key] =
-      gate === undefined || gate.allows(key) ? materializeElement(reader.read(key), membrane) : gate.stubbedValue(key);
+    // defineProperty, not assignment: a `"__proto__"` entry must land as an OWN data prop, not hit the
+    // Object.prototype setter (flags match plain assignment: writable/enumerable/configurable).
+    Object.defineProperty(target, key, {
+      value:
+        gate === undefined || gate.allows(key)
+          ? materializeElement(reader.read(key), membrane)
+          : gate.stubbedValue(key),
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
   };
 
   const proxy = new Proxy(target, {

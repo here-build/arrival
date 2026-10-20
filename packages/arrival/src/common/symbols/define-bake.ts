@@ -204,14 +204,18 @@ export async function computeCapabilityExports(spec: ExportableSpec): Promise<Re
 // Eval `(define tmp body)` against scope via injected evalScheme (never import
 // generator-exec — boundary + cycle). Recover boxed value via scope.get(tmp).
 
-let tempCounter = 0;
+/** Per-bake temp-name counter (one object per `bakeDefines` call — no module counter). */
+interface TempCounter {
+  next: number;
+}
 
 async function evaluateBody(
   scope: SchemeEnv,
   evalScheme: EvalSchemeInto<SchemeEnv>,
+  counter: TempCounter,
   bodyString: string,
 ): Promise<unknown> {
-  const tempName = `%%arrival-define-tmp%%${tempCounter++}`;
+  const tempName = `%%arrival-define-tmp%%${counter.next++}`;
   await evalScheme(scope, `(define ${tempName} ${bodyString})`);
   return scope.get(tempName);
 }
@@ -227,9 +231,10 @@ async function evaluateBody(
 async function evaluateBodies(
   scope: SchemeEnv,
   evalScheme: EvalSchemeInto<SchemeEnv>,
+  counter: TempCounter,
   bodyStrings: readonly string[],
 ): Promise<unknown[]> {
-  const tempNames = bodyStrings.map(() => `%%arrival-define-tmp%%${tempCounter++}`);
+  const tempNames = bodyStrings.map(() => `%%arrival-define-tmp%%${counter.next++}`);
   const combinedSource = bodyStrings.map((body, i) => `(define ${tempNames[i]} ${body})`).join("\n");
   await evalScheme(scope, combinedSource);
   return tempNames.map((tempName) => scope.get(tempName));
@@ -380,11 +385,13 @@ export async function bindCapabilityDefines(args: BindCapabilityDefinesArgs): Pr
   // Evaluate + bind sequentially. Lambda forms pre-evaluated as one batch (shared RunContext);
   // eager entries interleaved evaluate-then-bindTarget.
   const lambdaValueByDef = new Map<DefineSymbolDef | DefineSyntaxSymbolDef, unknown>();
+  const counter: TempCounter = { next: 0 };
   {
     const lambdaEntries = entries.filter(([, def]) => isLambdaForm(parsedByDef.get(def)!));
     const lambdaValues = await evaluateBodies(
       scope,
       evalScheme,
+      counter,
       lambdaEntries.map(([, def]) => def.body),
     );
     for (let i = 0; i < lambdaEntries.length; i++) lambdaValueByDef.set(lambdaEntries[i][1], lambdaValues[i]);
@@ -392,7 +399,7 @@ export async function bindCapabilityDefines(args: BindCapabilityDefinesArgs): Pr
   for (const [verb, def] of entries) {
     const value = lambdaValueByDef.has(def)
       ? lambdaValueByDef.get(def)
-      : await evaluateBody(scope, evalScheme, def.body);
+      : await evaluateBody(scope, evalScheme, counter, def.body);
     if (def.kind === "define-syntax") {
       bindTarget(def).set(verb, buildMacro(verb, def, value));
       continue;

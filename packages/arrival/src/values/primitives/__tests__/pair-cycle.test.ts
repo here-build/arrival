@@ -17,9 +17,8 @@
  * markers. toJS must throw; toString must render.
  *
  * Also guards the iterator itself: element order/count (a duplicate-yield
- * regression shipped once), a list whose FIRST element is `'()` (the
- * empty-pair sentinel is `car === undefined && cdr is nil`, NOT `car is
- * nil` — a nil car is a legitimate element), and the empty-pair sentinel.
+ * regression shipped once), and a list whose FIRST element is `'()`
+ * (a nil car is a legitimate element).
  */
 
 // NOTE (2026-07-14): these cycles are tied through `__tieKnot`, the designed door, rather than by
@@ -59,13 +58,6 @@ describe("APair[Symbol.iterator]", () => {
     expect((items[1] as AExact).valueOf()).toBe(1);
   });
 
-  // [impl-pinning] pins the sentinel's exact internal shape (car undefined, cdr nil),
-  // not merely its externally observable emptiness.
-  it("the empty-pair sentinel (undefined car, nil cdr) iterates empty", () => {
-    const p = new APair(undefined as never, nil);
-    expect([...p]).toEqual([]);
-  });
-
   it("an improper tail is yielded as the last element", () => {
     // (1 . 2)
     const p = new APair(num(1), num(2));
@@ -98,7 +90,7 @@ describe("Pair.toJS — one-way array conversion", () => {
   // from the cycle throw — the metadata machinery is toString's alone.
   it("throws on a mark_cycles-annotated cycle too (metadata does not exempt)", () => {
     const p = new APair(num(1), nil);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     __tieKnot(p, "cdr", p);
     p.mark_cycles();
     expect(p.have_cycles()).toBe(true);

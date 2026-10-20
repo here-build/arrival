@@ -111,8 +111,8 @@ describe("F6 doors — every DECLARED notImplemented door fires at apply with te
     let caught: unknown;
     try {
       await exec(`(${id})`);
-    } catch (e) {
-      caught = e;
+    } catch (error) {
+      caught = error;
     }
     expect(caught, `expected (${id}) to throw`).toBeDefined();
     const direct = caught instanceof PurityError;
@@ -128,7 +128,7 @@ describe("F6 doors — every DECLARED notImplemented door fires at apply with te
    *  check rather than a byte-match against the declared reason: stays true regardless
    *  of phrasing, still fails loudly if a door's reason ever regresses to empty/near-empty. */
   function expectSubstantiveWhy(message: string): void {
-    const whyMatch = message.match(/\bWhy:\s*(.+)$/s);
+    const whyMatch = message.match(/\bWhy:(.+)$/s);
     expect(whyMatch, `expected a "Why:" reason clause in: ${message}`).not.toBeNull();
     expect(whyMatch![1].trim().length).toBeGreaterThan(15);
   }
@@ -146,7 +146,7 @@ describe("F6 doors — every DECLARED notImplemented door fires at apply with te
     },
   );
 
-  // DoorCause (docs/design-history/symbol-define-static-program-validation.md §3.3) — the causal-
+  // DoorCause — the causal-
   // chain UX's first link, wired through EVERY declared door: `common/capability.ts`'s door
   // bind arm derives `cause = { owner: <this capability's name>, needs: [] }` for a
   // `notImplemented` door (which never sets one itself), so the thrown message now leads

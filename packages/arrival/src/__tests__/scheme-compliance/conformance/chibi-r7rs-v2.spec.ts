@@ -2,10 +2,9 @@
  * Chibi harness v2 — the official chibi-scheme R7RS test suite, run per-form instead of
  * per-section (docs/test-suite-architecture.md F4).
  *
- * Landed ALONGSIDE v1 (`../chibi-r7rs.spec.ts` + `../chibi-harness.ts`), untouched and still
- * gating — v1/v2 coexistence was the deliberate migration plan. This is the SUNRISE runner
- * (`vitest.sunrise.config.ts`): red here is information (a documented gap becomes `it.fails`,
- * which flips loudly the day it's fixed), not the CI gate.
+ * Replaced the earlier whole-section v1 runner. It runs inside the default gate
+ * (`vitest.config.ts`'s scheme-compliance glob): a documented gap is an `it.fails` row,
+ * which flips loudly the day it's fixed.
  *
  * Three phases, one spec file:
  *   1. `buildManifest` (top-level await) — structural split + per-form reader parse + head-
@@ -19,8 +18,8 @@
  *      per test form, in CORPUS ORDER (a plain loop dispatching per row — NOT `it.each`
  *      partitioning, which would reorder registration and therefore execution).
  */
-import fs from "fs";
-import path from "path";
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildManifest, normalizeText, type Manifest, type Step, type TestStep } from "../chibi/manifest.js";
 import { registryCoherenceFindings, verdictFor } from "../chibi/registries.js";
@@ -28,9 +27,7 @@ import { CorpusRunner } from "../chibi/runner.js";
 
 const CHIBI_TESTS_PATH = path.resolve(import.meta.dirname, "../../../../vendor/chibi-scheme/tests/r7rs-tests.scm");
 
-if (!fs.existsSync(CHIBI_TESTS_PATH)) {
-  throw new Error("r7rs-tests.scm — submodule not initialized (run: git submodule update --init)");
-} else {
+if (fs.existsSync(CHIBI_TESTS_PATH)) {
   const manifest: Manifest = await buildManifest(CHIBI_TESTS_PATH);
   const runner = await CorpusRunner.create(manifest);
 
@@ -46,12 +43,14 @@ if (!fs.existsSync(CHIBI_TESTS_PATH)) {
       const label = rowLabel(step);
       switch (verdict.run) {
         case "it":
+          // eslint-disable-next-line sonarjs/assertions-in-tests -- the assertion is the throw: a non-pass outcome raises runner.failureError
           it(label, async () => {
             const outcome = await runner.outcomeFor(step);
             if (outcome.kind !== "pass") throw runner.failureError(step, outcome);
           });
           return;
         case "skip":
+          // eslint-disable-next-line sonarjs/assertions-in-tests -- skipped row: intentionally empty body (documents an excluded feature)
           it.skip(`${label} — excluded: ${verdict.feature}`.slice(0, 300), () => {});
           return;
         case "fails":
@@ -76,7 +75,7 @@ if (!fs.existsSync(CHIBI_TESTS_PATH)) {
       //
       // The label used to hardcode "complex tower (R7RS §6.2.3 omitted)" for EVERY unreadable
       // step — accurate when the complex tower was the only reader door in the corpus. The
-      // one-number rework (docs/design-history/arrival-one-number-rework.md §0.3/§2.5)
+      // one-number rework
       // added a second, unrelated reader door: an exact integer literal beyond
       // Number.isSafeInteger range now ParseErrors at read time instead of silently minting a
       // bigint (e.g. `4611686018427387904`, `9007199254740993`, and several
@@ -85,8 +84,9 @@ if (!fs.existsSync(CHIBI_TESTS_PATH)) {
       // it — classify by the actual reader error instead of assuming a single cause.
       const label = `${normalizeText(step.text).slice(0, 160)}  ${CHIBI_TESTS_PATH}:${step.line}`.slice(0, 300);
       const feature = step.readerError.includes("exceeds safe-integer range")
-        ? "exact literal beyond safe-integer range (docs/design-history/arrival-one-number-rework.md §0.3 — RATIO's safe-int-only exact components)"
+        ? "exact literal beyond safe-integer range (RATIO's safe-int-only exact components)"
         : "complex tower (R7RS §6.2.3 omitted)";
+      // eslint-disable-next-line sonarjs/assertions-in-tests -- skipped row: intentionally empty body (documents an excluded feature)
       it.skip(
         `${label} — excluded: ${feature} [reader door: ${step.readerError.slice(0, 100)}]`.slice(0, 300),
         () => {},
@@ -148,4 +148,6 @@ if (!fs.existsSync(CHIBI_TESTS_PATH)) {
       expect(registryCoherenceFindings(manifest)).toEqual([]);
     });
   });
+} else {
+  throw new Error("r7rs-tests.scm — submodule not initialized (run: git submodule update --init)");
 }

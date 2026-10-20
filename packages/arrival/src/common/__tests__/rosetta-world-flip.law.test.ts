@@ -14,8 +14,8 @@
  */
 import { describe, it, expect } from "vitest";
 import * as z from "../scheme-zod/index.js";
-import { symbol } from "../../symbol/index.js";
-import { makeCallCtx } from "../../run/CallCtx.js";
+import * as symbol from "../../common/symbols/index.js";
+import { type CallCtx, makeCallCtx } from "../../run/CallCtx.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { AString } from "../../values/primitives/AString.js";
 import { tf } from "../../values/tagless-final.js";
@@ -24,12 +24,14 @@ import type { SchemeValue } from "../../values/types.js";
 import type { ARosettaProcedure } from "../../values/primitives/ARosettaProcedure.js";
 
 function invoke(verb: ARosettaProcedure, ...args: SchemeValue[]): unknown {
-  return verb[tf("apply")](args, makeCallCtx(CONSTANT_CTX, undefined));
+  return verb[tf("apply")](args, makeCallCtx(CONSTANT_CTX));
 }
 
 describe("rosetta world-flip door (audit B2b)", () => {
   it("P-WORLD-FLIP — raw JS through the z.dynamic escape slot boxes at the membrane", async () => {
-    const verb = symbol.rosetta`wf-ok: `({ input: [z.string], output: [z.dynamic] }, (s) => ({ tag: s, n: 1 }));
+    const verb = symbol.rosetta`wf-ok: `({ input: [z.string], output: [z.dynamic] }, function (this: CallCtx, s) {
+      return { tag: s, n: 1 };
+    });
     await expect(invoke(verb, new AString("a"))).resolves.toBeDefined();
   });
 
@@ -64,9 +66,9 @@ describe("rosetta world-flip door (audit B2b)", () => {
 
   it("P-WORLD-FLIP-PASSTHROUGH — a dynamic INPUT may hand the impl a boxed value; returning raw JS derived from it is the sanctioned shape", async () => {
     // The overridable pattern post-fix: dynamic in (boxed operand), plain JS out.
-    const verb = symbol.rosetta`wf-derive: `({ input: [z.dynamic], output: [z.dynamic] }, (v) =>
-      v instanceof AString ? v["arrival/toJS"]() : String(v),
-    );
+    const verb = symbol.rosetta`wf-derive: `({ input: [z.dynamic], output: [z.dynamic] }, function (this: CallCtx, v) {
+      return v instanceof AString ? v["arrival/toJS"]() : String(v);
+    });
     await expect(invoke(verb, new AString("a"))).resolves.toBeDefined();
   });
 });

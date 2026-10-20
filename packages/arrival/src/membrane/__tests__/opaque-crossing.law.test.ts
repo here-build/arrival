@@ -1,6 +1,5 @@
 /**
- * LAW — the OPAQUE-CROSSING CONTRACT for `@arrival.private` classes (V's ruling,
- * docs/plans/infer-whiteroom-design.md §"V'S API RULING"): the foundation of the infer
+ * LAW — the OPAQUE-CROSSING CONTRACT for `@arrival.private` classes (V's API ruling): the foundation of the infer
  * API rework's `McpServer`/`LLMModel`/… handles.
  *
  * The contract, pinned row by row below:

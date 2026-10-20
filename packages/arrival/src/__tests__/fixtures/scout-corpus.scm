@@ -2,7 +2,7 @@
 ;
 ; Each non-comment, non-blank line is ONE corpus entry: a partial or whole scout program SOURCE.
 ; The conformance suite scans EVERY PREFIX of every entry and asserts that arrival's Layer-S
-; structural reader agrees with sift's reference reader (sift/src/sampler/prefix-oracle.ts) on every
+; structural reader agrees with sift's reference reader (the external sift sampler's prefix-oracle) on every
 ; shared structural field — and that the resumable session agrees with from-scratch analyze on every
 ; prefix. Lines are grouped (valid / truncated / misnested / mid-token) but the suite treats them
 ; uniformly; the grouping is for the human reader.

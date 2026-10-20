@@ -28,7 +28,7 @@ import { type MembraneExit, type SchemeValue } from "../types.js";
 import { type SeenMap, structuralEqual } from "../structural-equal.js";
 import { attestDeep, freshIfSingleton, isAttested } from "../attestation.js";
 import { is_promise } from "../value-guards.js";
-import { isSettleChain, settleEntry } from "./pending-entry.js";
+import { isSettleChain, pendEntry } from "./pending-entry.js";
 // Runtime import cycle (benign): jsToScheme is hoisted; called only inside get() at runtime.
 import { jsToScheme } from "../../membrane/rosetta.js";
 import type { SourceLocation } from "../../errors.js";
@@ -146,13 +146,11 @@ export class ADict extends AValue {
     const pluck = (v: SchemeValue): SchemeValue => (isAttested(this) ? attestDeep(freshIfSingleton(v)) : v);
     if (is_promise(entry)) {
       if (isSettleChain(entry)) return entry;
-      const cell = settleEntry(
+      return pendEntry(
         entry,
         (settled) => pluck(jsToScheme(CONSTANT_CTX, settled, {}, this.provenance)),
-        (boxed) => this.byKey.set(key, boxed),
+        (cell) => this.byKey.set(key, cell),
       );
-      this.byKey.set(key, cell);
-      return cell;
     }
     return pluck(entry);
   }
@@ -164,11 +162,6 @@ export class ADict extends AValue {
 
   keys(): string[] {
     return Object.keys(this.indexByName);
-  }
-
-  /** Canonical key objects, provenance intact — for a future key-preserving accessor. */
-  keyObjects(): readonly DictKey[] {
-    return Object.values(this.indexByName);
   }
 
   withProvenance(p: ReadonlySet<number>): ADict {

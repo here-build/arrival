@@ -18,7 +18,7 @@
  * once lacked region-scope on — `createRosettaWrapper`
  * (rosetta.ts) opened a region scope around every call; the baked `symbol.rosetta` `run`
  * wrapper (common/symbols/rosetta.ts) did not, so a `z.procedure` slot's decode fell back to
- * the shared, never-closing `DETACHED_SCOPE` (`DETACHED_SCOPE.runCtx = CONSTANT_CTX`) for
+ * a fresh never-closing `detachedScope()` (`runCtx = CONSTANT_CTX`) for
  * every capability verb. That gap is CLOSED: `run` now opens a region scope itself, gated on
  * `contractMayCarryCallable` (_bake.ts) — a bake-time check for a `z.procedure`/`z.dynamic`
  * input slot — with `runCtx: this.runCtx` (the invocation's LIVE context). The
@@ -27,13 +27,13 @@
  * regression this gap caused (a lambda calling a sink verb used to fire it inline instead of
  * enqueueing under an armed `effects` log).
  */
+import type { CallCtx } from "../../run/CallCtx.js";
 import { describe, expect, it } from "vitest";
 import * as z from "../../common/scheme-zod/index.js";
 import { toJS } from "../rosetta.js";
 import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
 import { closeRegionScope, openRegionScope, withRegionScope } from "../region-scope.js";
 import { CONSTANT_CTX, RunContext } from "../../run/RunContext.js";
-import type { SchemeValue } from "../../values/types.js";
 import { exec, execState } from "../../eval/generator-exec.js";
 import { EvalTrace, type Invocation } from "../../provenance/trace.js";
 import { EnvCapability } from "../../common/capability.js";
@@ -113,7 +113,7 @@ describe("a reverse lambda is region-bound to its invocation", () => {
 
     let before = 0;
     let result: unknown;
-    // A z.procedure() arg's decode must close over a live per-invocation scope, not DETACHED_SCOPE.
+    // A z.procedure() arg's decode must close over a live per-invocation scope, not detachedScope().
     const cap = EnvCapability.define("test/region-law-trace-nesting", {
       symbols: (symbol, z) => ({
         "region-law-capture": symbol.rosetta`region-law-capture: `(
@@ -189,13 +189,13 @@ describe("a reverse lambda is region-bound to its invocation", () => {
 
   it("BURST-BYPASS CLOSED: a lambda taken via z.procedure re-enters under the LIVE runCtx — a sink it calls ENQUEUES under an armed effects log, never fires inline", async () => {
     // This is the concrete regression the openRegionScope gap caused: before Ruling A, a
-    // `z.procedure` slot's decode fell back to `DETACHED_SCOPE` (`runCtx: CONSTANT_CTX`, no
+    // `z.procedure` slot's decode fell back to `detachedScope()` (`runCtx: CONSTANT_CTX`, no
     // `effects`) whenever no OTHER machinery happened to have a region scope ambient — so a
     // lambda handed to a capability verb, when it called a `sink`-role verb, re-entered under
     // `CONSTANT_CTX` and hit the run-cache/effects fast path (`runCache === undefined &&
     // runEffects === undefined`), firing the sink IMMEDIATELY instead of enqueueing it onto
     // the run's `effects` log — the burst arm's whole discipline (run/run-cache.ts's
-    // `penetrateThroughCache`, arrival-plexus-effect-burst.md §2.3) silently bypassed for any
+    // `penetrateThroughCache`) silently bypassed for any
     // sink reached through a reverse-lambda re-entry. Sound after the fix because the scope
     // opened around "call-with-lambda"'s own invocation carries `runCtx: this.runCtx` — the
     // SAME RunContext the outer `exec(..., { effects })` call minted — so the lambda's body
@@ -207,14 +207,14 @@ describe("a reverse lambda is region-bound to its invocation", () => {
       symbols: (symbol, z) => ({
         "sink!": symbol.rosetta`sink!: an effect a lambda re-entry may reach`(
           { input: [z.number], output: [z.undefinedResult], provenance: "sink" },
-          async (_n: number) => {
+          async function (this: CallCtx, _n: number) {
             sinkFires++;
             return undefined;
           },
         ),
         "call-with-lambda": symbol.rosetta`call-with-lambda: invoke the lambda arg once`(
           { input: [z.procedure()], output: [z.undefinedResult] },
-          async (lambdaWrapper: (...args: unknown[]) => unknown) => {
+          async function (this: CallCtx, lambdaWrapper: (...args: unknown[]) => unknown) {
             await lambdaWrapper();
             return undefined;
           },

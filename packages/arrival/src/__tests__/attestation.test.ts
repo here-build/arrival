@@ -1,14 +1,14 @@
-// Attestation core-walk suite (design: arrival-manifold/docs/attestation-design.md §1, return-walk stamp site). The registry (values/attestation.ts) is a
+// Attestation core-walk suite (return-walk stamp site). The registry (values/attestation.ts) is a
 // WeakSet keyed by box identity; the bakeRosetta return walk deep-attests SOURCE
 // rosetta returns (spine + leaves), the membrane wrappers inherit at the pluck
 // site, and computation drops attestation for free (fresh boxes). The manifold's
-// boundary/flow behavior is covered in arrival-manifold's attestation-flows suite;
+// boundary/flow behavior is covered in the manifold's own attestation-flows suite;
 // THIS suite pins the core mechanics those flows stand on.
 
 import { describe, expect, it } from "vitest";
 
 import * as z from "../common/scheme-zod/index.js";
-import { symbol } from "../symbol/index.js";
+import * as symbol from "../common/symbols/index.js";
 import { attest, attestDeep, freshIfSingleton, isAttested } from "../values/attestation.js";
 import { exec, execState } from "../eval/generator-exec.js";
 import { schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
@@ -20,17 +20,16 @@ import { ASymbol } from "../values/primitives/ASymbol.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { theVoid } from "../values/primitives/AVoid.js";
 import { tf } from "../values/tagless-final.js";
-import { AListAlike } from "../values/types.js";
-import { jsToScheme } from "../membrane/rosetta.js";
-import { CONSTANT_CTX } from "../run/RunContext.js";
-import { testCallCtx } from "../run/CallCtx.js";
+import { testCallCtx, type CallCtx } from "../run/CallCtx.js";
 
 /** A SOURCE rosetta (default — not pure) returning a fixed JS value; its apply term
  *  called direct-JS (no evaluator ctx) exercises the bake step-4 walk.
  *  The impl returns raw JS; the membrane boxes it and `attestDeep`s. An AValue
  *  in the impl return is a WorldFlipError. */
 const source = (impl: () => unknown) =>
-  symbol.rosetta`t: test source`({ input: [], output: [z.dynamic] }, () => impl());
+  symbol.rosetta`t: test source`({ input: [], output: [z.dynamic] }, function (this: CallCtx) {
+    return impl();
+  });
 
 function fire(proc: { ["arrival/tagless-final/apply"](args: any[], callCtx: any): any }, callCtx: any, ...args: any[]) {
   return proc["arrival/tagless-final/apply"](args, callCtx);
@@ -88,7 +87,12 @@ describe("bakeRosetta return walk (stamp site 1)", () => {
   });
 
   it("a PURE rosetta's return is NOT machine-attested (a transform, not a source)", async () => {
-    const pureDef = symbol.rosetta`p: pure transform`({ input: [], output: [z.number], provenance: "pipe" }, () => 42);
+    const pureDef = symbol.rosetta`p: pure transform`(
+      { input: [], output: [z.number], provenance: "pipe" },
+      function (this: CallCtx) {
+        return 42;
+      },
+    );
     expect(isAttested(await fire(pureDef, testCallCtx()))).toBe(false);
   });
 
@@ -134,9 +138,12 @@ describe("bakeRosetta return walk (stamp site 1)", () => {
     // World-flip rebaseline: a rosetta can no longer echo a boxed pair through
     // z.dynamic — the impl returns RAW JS and a coded slot (z.list) has the
     // membrane construct the pair spine, which the return walk then deep-attests.
-    const listSource = symbol.rosetta`t-list: pair-spine source`({ input: [], output: [z.list(z.number)] }, () => [
-      1, 2, 3,
-    ]);
+    const listSource = symbol.rosetta`t-list: pair-spine source`(
+      { input: [], output: [z.list(z.number)] },
+      function (this: CallCtx) {
+        return [1, 2, 3];
+      },
+    );
     const out = (await fire(listSource, testCallCtx())) as APair<any, any>;
     expect(out).toBeInstanceOf(APair);
     expect(isAttested(out)).toBe(true);
@@ -146,7 +153,12 @@ describe("bakeRosetta return walk (stamp site 1)", () => {
   });
 
   it("attests a vector's stored elements", async () => {
-    const vecSource = symbol.rosetta`t-vec: vector source`({ input: [], output: [z.vector(z.number)] }, () => [1, 2]);
+    const vecSource = symbol.rosetta`t-vec: vector source`(
+      { input: [], output: [z.vector(z.number)] },
+      function (this: CallCtx) {
+        return [1, 2];
+      },
+    );
     const out = (await fire(vecSource, testCallCtx())) as AVector;
     expect(out).toBeInstanceOf(AVector);
     expect(isAttested(out)).toBe(true);

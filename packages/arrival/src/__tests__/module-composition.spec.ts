@@ -15,7 +15,6 @@ import { describe, expect, it } from "vitest";
 import { AmbientRuntime, ResolvingAmbient } from "../env/AmbientRuntime.js";
 import type { ResolverSpec } from "../common/scheme-env.js";
 import { AExact } from "../values/primitives/AExact.js";
-import { CONSTANT_CTX } from "../run/RunContext.js";
 import { nil } from "../values/primitives/ANil.js";
 
 // The boxed sentinel a resolver answers with (resolvers box at their own boundary now).
@@ -30,7 +29,7 @@ describe("AmbientRuntime Module Composition", () => {
 
       const resolver1: ResolverSpec = {
         id: "resolver-1",
-        resolve: (name) => {
+        resolve: () => {
           callOrder.push("resolver-1");
           return undefined;
         },

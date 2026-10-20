@@ -5,9 +5,8 @@
  * remember to re-stamp. On-value means a builtin can only forget to *propagate*
  * (visible: empty result-set), never to *carry*.
  *
- * The JS→Scheme boxing membrane (`fromJs` + the boxer registry) lives in
- * `boxing.ts`, NOT here — see that file for why the registry's writer is kept off
- * this (leakable) class.
+ * The JS→Scheme boxing membrane (`fromJs`) lives in `boxing.ts`, NOT
+ * here — see that file for why the boxing switch is kept off this (leakable) class.
  *
  * Lineage: provenance-on-the-value is how-provenance — provenance as an
  * expression/circuit over operators, not a flat trace (Green, Karvounarakis &
@@ -25,7 +24,21 @@ import type { SourceLocation } from "../../errors.js";
 import type { MaybePromise } from "../../types/utility.js";
 import { ACallable } from "./ACallable.js";
 
-export const EMPTY_PROVENANCE: ReadonlySet<number> = new Set<number>();
+/** Shared empty set that THROWS on mutation — `Object.freeze` does not stop `Set#add`, and this
+ *  singleton is aliased by every un-stamped value, so one stray `.add` would stamp them all. */
+class FrozenEmptySet extends Set<number> {
+  override add(): never {
+    throw new TypeError("EMPTY_PROVENANCE is a shared frozen constant; copy it (new Set(p)) before mutating");
+  }
+  override delete(): never {
+    throw new TypeError("EMPTY_PROVENANCE is a shared frozen constant; copy it (new Set(p)) before mutating");
+  }
+  override clear(): never {
+    throw new TypeError("EMPTY_PROVENANCE is a shared frozen constant; copy it (new Set(p)) before mutating");
+  }
+}
+
+export const EMPTY_PROVENANCE: ReadonlySet<number> = Object.freeze(new FrozenEmptySet());
 
 /** `arrival/provenanceChildren` default — shared frozen empty so scalars allocate nothing. */
 const EMPTY_CHILDREN: readonly unknown[] = Object.freeze([]);
@@ -78,7 +91,7 @@ export abstract class AValue {
     return this[LOCATION];
   }
 
-  /** Compat shim for cross-package callers that read span as a method. */
+  /** Method form of `location`, for cross-package callers (arrival-cli form-emitter) that read the span as a call. */
   getLocation(): SourceLocation | undefined {
     return this.location;
   }

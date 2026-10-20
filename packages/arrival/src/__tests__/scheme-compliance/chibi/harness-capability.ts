@@ -1,20 +1,20 @@
 // Chibi harness v2 — harness-capability.ts
 // (docs/test-suite-architecture.md F4).
 //
-// A real `EnvCapability`, same shape v1's chibi-harness.ts uses (dogfooding the production
+// A real `EnvCapability`, same shape the earlier v1 harness used (dogfooding the production
 // env-assembly model) — but the comparison moves ENTIRELY into scheme (P4/P9/P7,
 // `docs/PRINCIPLES.md:85-160`):
 //
 //   - `test`/`test-assert`/`test-error`/`test-values`/`test-numeric-syntax` are macros that
 //     defer BOTH operands as thunks (`(lambda () expected)` / `(lambda () expr)`) — v1 evaluated
-//     `expected` eagerly (chibi-harness.ts:242-247), losing attribution when the expected
+//     `expected` eagerly, losing attribution when the expected
 //     expression itself doors.
 //   - `js-run-test` (native) invokes each thunk via `applyCallback` (the single reverse-membrane
 //     seam), catching each phase separately (`expected-eval` / `actual-eval`), then invokes a
 //     SCHEME-DEFINED comparator (also via `applyCallback`) on the two BOXED results — the shape
-//     already drafted, unused, at v1's `chibi-harness.ts:224-233` (`approx-equal?`), now wired
+//     already drafted, unused, in v1 (`approx-equal?`), now wired
 //     as the actual comparator instead of the JS-side `valueOf`/`String` duck-tolerance
-//     (`chibi-harness.ts:98-111`) that was the named P4 offender.
+//     in v1 that was the named P4 offender.
 //   - Only the boolean verdict crosses back out of the comparator call; failure reprs use the
 //     class-owned print protocol (`arrival/print`, values/print.ts), never `String(scheme value)`.
 //   - The comparator lambda is fetched via a second native hook (`js-register-comparator`),
@@ -27,8 +27,7 @@
 // derives section nesting structurally at collection time, so these forms become
 // `section-begin`/`section-end` steps the runner never executes — no runtime group-stack is
 // needed (unlike v1's `js-test-begin`/`js-test-end`).
-import { testCallCtx } from "../../../run/CallCtx.js";
-import type { CallCtx } from "../../../run/CallCtx.js";
+import { testCallCtx, type CallCtx } from "../../../run/CallCtx.js";
 import { EnvCapability } from "../../../common/capability.js";
 import { ACallable, applyCallback } from "../../../values/primitives/ACallable.js";
 import { ABool } from "../../../values/primitives/ABool.js";
@@ -69,7 +68,7 @@ export function createChibiHarnessV2(): { capability: EnvCapability; sink: Outco
       // boxed `ALambda` `chibi-test-equal?` defines to, invoked later via `applyCallback`.
       "js-register-comparator": symbol.native`js-register-comparator: fetch the scheme comparator lambda once`(
         { input: [z.lambda], output: [z.undefinedResult] },
-        (fn): AVoid => {
+        function (this: CallCtx, fn): AVoid {
           comparator = fn;
           return theVoid;
         },
@@ -95,15 +94,15 @@ export function createChibiHarnessV2(): { capability: EnvCapability; sink: Outco
             let expected: SchemeValue;
             try {
               expected = (await applyCallback(expectedThunk, [], thunkCtx)) as SchemeValue;
-            } catch (e) {
-              queue.push({ kind: "error", phase: "expected-eval", message: describeError(e) });
+            } catch (error) {
+              queue.push({ kind: "error", phase: "expected-eval", message: describeError(error) });
               return theVoid;
             }
             let actual: SchemeValue;
             try {
               actual = (await applyCallback(actualThunk, [], thunkCtx)) as SchemeValue;
-            } catch (e) {
-              queue.push({ kind: "error", phase: "actual-eval", message: describeError(e) });
+            } catch (error) {
+              queue.push({ kind: "error", phase: "actual-eval", message: describeError(error) });
               return theVoid;
             }
             try {
@@ -116,8 +115,8 @@ export function createChibiHarnessV2(): { capability: EnvCapability; sink: Outco
               const pass = verdict instanceof ABool ? verdict.value : Boolean(verdict);
               if (pass) queue.push({ kind: "pass" });
               else queue.push({ kind: "fail", expectedRepr: printValue(expected), actualRepr: printValue(actual) });
-            } catch (e) {
-              queue.push({ kind: "error", phase: "compare", message: describeError(e) });
+            } catch (error) {
+              queue.push({ kind: "error", phase: "compare", message: describeError(error) });
             }
             return theVoid;
           },
@@ -127,7 +126,7 @@ export function createChibiHarnessV2(): { capability: EnvCapability; sink: Outco
     prelude: `
     ;; The comparator — chibi's approximate float equality, structurally recursive over
     ;; pairs/vectors, falling back to the base equal? everywhere else. This is the "already
-    ;; drafted, unused" shape from v1 (chibi-harness.ts:220-233), now wired as the ACTUAL
+    ;; drafted, unused" shape from v1, now wired as the ACTUAL
     ;; comparator instead of a JS-side valueOf/String duck-tolerance.
     (define (chibi-test-equal? a b)
       (cond
@@ -200,7 +199,7 @@ export function createChibiHarnessV2(): { capability: EnvCapability; sink: Outco
     capability,
     sink: {
       drain(): StepOutcome[] {
-        const out = queue.slice();
+        const out = [...queue];
         queue.length = 0;
         return out;
       },

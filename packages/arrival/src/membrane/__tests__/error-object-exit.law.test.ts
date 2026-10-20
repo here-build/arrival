@@ -19,6 +19,7 @@
  *   a boundary violation. `message` / `name` stay readable — they are the data face.
  */
 
+import type { CallCtx } from "../../run/CallCtx.js";
 import { describe, expect, it } from "vitest";
 import { exec, execState } from "../../eval/generator-exec.js";
 import { toJS, errorToHost, jsToScheme } from "../rosetta.js";
@@ -102,7 +103,9 @@ describe("host Error inbound — stack collapses to absent", () => {
           { input: [], output: [z.dynamic] },
           // The impl returns a raw host Error, which crosses BORROWED (AJSObject
           // wrapper) — the cast names the post-crossing truth the borrow performs.
-          async () => new Error("host-boom") as unknown as SchemeValue,
+          async function (this: CallCtx) {
+            return new Error("host-boom") as unknown as SchemeValue;
+          },
         ),
       }),
     });

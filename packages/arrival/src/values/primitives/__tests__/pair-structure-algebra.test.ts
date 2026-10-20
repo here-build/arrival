@@ -1,7 +1,8 @@
+/* eslint-disable sonarjs/assertions-in-tests -- fc.assert throws on a failed property; it is the assertion */
 // Algebras-in-entities cell (wave 2): Pair's structure-algebras — Functor,
 // Filterable, Foldable, Traversable, Chain, Semigroup (list-append), Monoid
 // (nil identity). Migrated from the the dissolved fantasy-land bridge monkey-patch INTO the
-// Pair class body (plan-2026-06-10-algebras-in-entities.md).
+// Pair class body.
 //
 // Pair has NO `arrival/tagless-final/equals` BY DESIGN — `structuralEqual` IS its Setoid
 // (a self-recursive Pair instance would loop ∞; see the matrix in the plan). So
@@ -18,14 +19,8 @@ import { structuralEqual } from "../../structural-equal.js";
 import { functorLaws } from "./algebra-laws.js";
 import { AExact } from "../AExact.js";
 import { tf, type TaglessOp } from "../../tagless-final.js";
-import type { AList, AListAlike, SchemeValue } from "../../types.js";
-import {
-  unaryContour,
-  filterContour,
-  reduceContour,
-  idContour,
-  keepAllContour,
-} from "../../../__tests__/_contour-callback.js";
+import type { AListAlike } from "../../types.js";
+import { unaryContour, filterContour, reduceContour } from "../../../__tests__/_contour-callback.js";
 
 type FL = Record<string, any>;
 
@@ -140,22 +135,6 @@ describe("Pair — Foldable (reduce)", () => {
     );
     expect(collected).toEqual([1, 2, 3]);
   });
-  // [impl-pinning] pins zero fn calls over the sentinel, not just the returned value.
-  it("reduce on empty-pair sentinel returns the seed (no phantom element)", async () => {
-    let calls = 0;
-    // element-FIRST fn(element, acc); the sentinel never calls fn, so the seed is returned.
-    // @ts-expect-error empty-pair sentinel: car is undefined (not a SchemeValue) by design
-    const r = await new APair(undefined, nil)[tf("reduce")](
-      reduceContour((_element, acc: string) => {
-        calls++;
-        return acc;
-      }),
-      "SEED",
-      CONSTANT_CTX,
-    );
-    expect(calls).toBe(0);
-    expect(r).toBe("SEED");
-  });
 });
 
 // ----------------------------------------------------------------------
@@ -181,19 +160,6 @@ describe("Pair — Filterable (filter)", () => {
       CONSTANT_CTX,
     );
     expect(r).toBe(nil);
-  });
-  // [impl-pinning] pins that the predicate is never invoked over the sentinel.
-  it("filter on empty-pair sentinel does not call the predicate", async () => {
-    let calls = 0;
-    // @ts-expect-error empty-pair sentinel: car is undefined (not a SchemeValue) by design
-    await new APair(undefined, nil)[tf("filter")](
-      filterContour(() => {
-        calls++;
-        return true;
-      }),
-      CONSTANT_CTX,
-    );
-    expect(calls).toBe(0);
   });
 });
 

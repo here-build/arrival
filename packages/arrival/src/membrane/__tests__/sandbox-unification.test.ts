@@ -43,8 +43,8 @@ describe("R7RS eval/load are doors (not unbound)", () => {
     try {
       await exec(src);
       throw new Error(`expected purity door for: ${src}`);
-    } catch (e) {
-      const purity = e instanceof PurityError || (e as { cause?: unknown })?.cause instanceof PurityError;
+    } catch (error) {
+      const purity = error instanceof PurityError || (error as { cause?: unknown })?.cause instanceof PurityError;
       expect(purity).toBe(true);
     }
   });

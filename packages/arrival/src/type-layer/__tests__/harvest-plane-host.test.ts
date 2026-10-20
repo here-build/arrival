@@ -25,4 +25,13 @@ describe("harvestPlaneHost — name-level skip, not scheme/* prefix", () => {
     expect(names.has("member")).toBe(false);
     expect(names.has("string-split")).toBe(true);
   });
+
+  it("aliases harvest as their target's signature under the alias name", () => {
+    const { entries } = harvestPlaneHost(BASE_ROSTER, new Set());
+    const byName = Object.fromEntries(entries);
+    expect(byName["string-trim-left"]).toBe(byName["string-trim"]);
+    expect(byName["nil?"]).toBe(byName["null?"]);
+    expect(byName["string-trim"]).toBe("{\n  (s: string, criterion?: string | ((c: string) => unknown)): string;\n}");
+    expect(byName["nil?"]).toBeDefined();
+  });
 });

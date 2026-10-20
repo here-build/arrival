@@ -1,6 +1,5 @@
 /**
- * LAW — THE RUN-READER DOOR (V's DI ruling, docs/plans/rework-zone-guidelines.md
- * §"run-reader door": "discovery takes run context, extracts each symbol whose owning
+ * LAW — THE RUN-READER DOOR (V's DI ruling: "discovery takes run context, extracts each symbol whose owning
  * capability is an mcp capability, renders it in prelude"). The cross-cutting prerequisite
  * the MCP DI rework (§2 of the same doc) builds on: `ownerOf`/`symbolsOwnedBy`
  * (`run/CallCtx.ts`, surfaced on `/host-internals`).
@@ -20,7 +19,7 @@ import { describe, expect, it } from "vitest";
 
 import { EnvCapability } from "../../common/capability.js";
 import { execState } from "../../eval/generator-exec.js";
-import { ownerOf, symbolsOwnedBy } from "../CallCtx.js";
+import { type CallCtx, ownerOf, symbolsOwnedBy } from "../CallCtx.js";
 
 describe("run-reader door — symbolsOwnedBy / ownerOf", () => {
   it("filters a TWO-capability run to exactly each capability's own verbs", async () => {
@@ -28,7 +27,9 @@ describe("run-reader door — symbolsOwnedBy / ownerOf", () => {
       symbols: (symbol, z) => ({
         "run-reader-a-verb": symbol.rosetta`run-reader-a-verb: adds one`(
           { input: [z.number], output: [z.number] },
-          (n: number) => n + 1,
+          function (this: CallCtx, n: number) {
+            return n + 1;
+          },
         ),
       }),
     });
@@ -36,7 +37,9 @@ describe("run-reader door — symbolsOwnedBy / ownerOf", () => {
       symbols: (symbol, z) => ({
         "run-reader-b-verb": symbol.rosetta`run-reader-b-verb: doubles`(
           { input: [z.number], output: [z.number] },
-          (n: number) => n * 2,
+          function (this: CallCtx, n: number) {
+            return n * 2;
+          },
         ),
       }),
     });
@@ -62,7 +65,9 @@ describe("run-reader door — symbolsOwnedBy / ownerOf", () => {
       symbols: (symbol, z) => ({
         "rootscope-a-verb": symbol.rosetta`rootscope-a-verb: identity`(
           { input: [z.number], output: [z.number] },
-          (n: number) => n,
+          function (this: CallCtx, n: number) {
+            return n;
+          },
         ),
       }),
     });
@@ -70,7 +75,9 @@ describe("run-reader door — symbolsOwnedBy / ownerOf", () => {
       symbols: (symbol, z) => ({
         "rootscope-b-verb": symbol.rosetta`rootscope-b-verb: identity`(
           { input: [z.number], output: [z.number] },
-          (n: number) => n,
+          function (this: CallCtx, n: number) {
+            return n;
+          },
         ),
       }),
     });
@@ -94,7 +101,9 @@ describe("run-reader door — symbolsOwnedBy / ownerOf", () => {
       symbols: (symbol, z) => ({
         "repl-verb": symbol.rosetta`repl-verb: adds one`(
           { input: [z.number], output: [z.number] },
-          (n: number) => n + 1,
+          function (this: CallCtx, n: number) {
+            return n + 1;
+          },
         ),
       }),
     });

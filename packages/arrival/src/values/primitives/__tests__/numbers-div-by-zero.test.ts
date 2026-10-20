@@ -1,6 +1,5 @@
 // Inexact real div/mul prints R7RS +inf.0 / -inf.0 / +nan.0 (not "NaNNaNi").
 import { describe, expect, it } from "vitest";
-import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { AInexact } from "../AInexact.js";
 
 const inx = (real: number) => new AInexact(real);

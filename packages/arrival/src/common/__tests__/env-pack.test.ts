@@ -2,7 +2,7 @@
 // exclusively through `createRuntimeAssembler` — the ONE assembler `common/kernel.ts` still
 // hosts. Design + test matrix: the env-pack capability-DAG design §11 (2026-06-13).
 //
-// STAGE C CUT 4 (docs/plans/stage-c-corpse-deletion.md) retired `assembleEnv` (the BOOTSTRAP
+// STAGE C CUT 4 retired `assembleEnv` (the BOOTSTRAP
 // assembler, folding an `EnvPack` DAG onto a fresh base) — bootstrap assembly is
 // `env/vocabulary.ts`'s `buildVocabulary` now. `createRuntimeAssembler` SURVIVES (it applies
 // host-registered `EnvPack`s onto an ALREADY-LIVE env, backing `(require/extension :name)` — a

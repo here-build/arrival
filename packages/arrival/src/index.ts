@@ -63,7 +63,7 @@ export { ANil } from "./values/primitives/ANil.js";
 // top-level `symbol` (factory). Contract/CallCtx vocabulary for impl signatures and
 // tooling. Opt-in packs (overridable / schema / loader) live under `./capabilities`.
 export { EnvCapability } from "./common/capability.js";
-export { symbol } from "./symbol/index.js";
+export * as symbol from "./common/symbols/index.js";
 export type {
   VectorSpec,
   RestSpec,
@@ -78,8 +78,7 @@ export type { CallCtx } from "./run/CallCtx.js";
 // TIER RULE (hermeticity audit E3): a symbol earns the public tier over `/host-internals`
 // only when a real consumer constructs it from outside this package — not because it is
 // "dispatch machinery" or "the one construction site" in the abstract. `testCallCtx` is
-// exactly that case: `arrival-mcp`'s tool-factory tests (`packages/arrival-mcp/src/__tests__/
-// tool-factories.test.ts`) import it from `@here.build/arrival` (the root, not
+// exactly that case: the MCP package's tool-factory tests import it from `@here.build/arrival` (the root, not
 // `/host-internals`) to drive a bare `fire(def, testCallCtx(), …)` call outside a real run.
 // Demoting it would break that consumer; `makeCallCtx` ships alongside it rather than
 // splitting one construction pair across two tiers. Every OTHER dispatch-machinery symbol

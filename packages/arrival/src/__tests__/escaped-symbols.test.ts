@@ -18,6 +18,7 @@ import { execOverFrame as exec } from "../eval/generator-exec.js";
 import { jsToScheme } from "../membrane/rosetta.js";
 import { EnvCapability } from "../common/capability.js";
 import { applyCapability } from "./_fresh-env.js";
+import type { CallCtx } from "../run/CallCtx.js";
 
 async function execOne(expr: string, env: ResolvingAmbient = inferenceEnv.child("escaped-one")): Promise<any> {
   const results = await exec(expr, { env });
@@ -75,7 +76,12 @@ describe("Escaped Symbol Resolution", () => {
       await applyCapability(env, [
         EnvCapability.define("test/get-24", {
           symbols: (symbol, z) => ({
-            "get-24": symbol.rosetta`get-24: a zero-arg numeric source`({ input: [], output: [z.number] }, () => 24),
+            "get-24": symbol.rosetta`get-24: a zero-arg numeric source`(
+              { input: [], output: [z.number] },
+              function (this: CallCtx) {
+                return 24;
+              },
+            ),
           }),
         }),
       ]);
@@ -91,7 +97,9 @@ describe("Escaped Symbol Resolution", () => {
           symbols: (symbol, z) => ({
             "my function": symbol.rosetta`my function: doubles its argument`(
               { input: [z.number], output: [z.number] },
-              (x) => x * 2,
+              function (this: CallCtx, x) {
+                return x * 2;
+              },
             ),
           }),
         }),

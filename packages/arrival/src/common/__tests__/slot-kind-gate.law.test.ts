@@ -19,8 +19,9 @@
  */
 import { describe, it, expect } from "vitest";
 import * as z from "../scheme-zod/index.js";
-import { symbol } from "../../symbol/index.js";
+import * as symbol from "../../common/symbols/index.js";
 import { ContractSlotKindError } from "../../errors.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 
 class SomeHostThing {
   x = 1;
@@ -86,9 +87,17 @@ describe("slot-kind runtime gate (audit B2a)", () => {
 
   it("P-SLOT-KIND — each side's own honest slots still bake", () => {
     // rosetta: z.dynamic is the crossing's legitimate escape hatch
-    expect(() => symbol.rosetta`sk-r-ok: `({ input: [z.dynamic], output: [z.dynamic] }, (v) => v)).not.toThrow();
+    expect(() =>
+      symbol.rosetta`sk-r-ok: `({ input: [z.dynamic], output: [z.dynamic] }, function (this: CallCtx, v) {
+        return v;
+      }),
+    ).not.toThrow();
 
     // native: z.schemeValue is the contour's honest top type
-    expect(() => symbol.native`sk-n-ok: `({ input: [z.schemeValue], output: [z.schemeValue] }, (v) => v)).not.toThrow();
+    expect(() =>
+      symbol.native`sk-n-ok: `({ input: [z.schemeValue], output: [z.schemeValue] }, function (this: CallCtx, v) {
+        return v;
+      }),
+    ).not.toThrow();
   });
 });

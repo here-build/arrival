@@ -5,11 +5,12 @@
 // mint); §MEMBRANE-SEAM — bake-side crossing. docs/membrane.md §REGION — region-scope gate.
 //
 // Z.DYNAMIC-CALLABLE DOOR: a callable in a `z.dynamic` slot after the impl's first await
-// (past withRegionScope's sync save/restore) binds DETACHED_SCOPE/CONSTANT_CTX and bypasses
+// (past withRegionScope's sync save/restore) binds a detached scope/CONSTANT_CTX and bypasses
 // the effect burst. Ban bare callables at those slots; steer to `z.procedure` (sync marshal
 // under live scope). Compile-time: CrossingContract bans ContourOnly (`z.schemeValue`).
 // This runtime door guards what types cannot see — a callable VALUE in a legitimate dynamic slot.
 
+import { markCrossingRaise } from "../../membrane/crossing-raise.js";
 import * as z from "../scheme-zod/index.js";
 import { ZodError, ZodType } from "zod";
 import { AOpaqueHandle } from "../../values/primitives/AOpaqueHandle.js";
@@ -25,7 +26,12 @@ import { jsToScheme } from "../../membrane/rosetta.js";
 import { penetrateThroughCache } from "../../run/penetration.js";
 import { applyResourcePathCqs } from "../../run/resource-paths.js";
 import type { ResourcePath } from "../../run/path-algebra.js";
-import { closeRegionScope, openRegionScope, withRegionScope } from "../../membrane/region-scope.js";
+import {
+  closeRegionScope,
+  openRegionScope,
+  withRegionScope,
+  withRegionScopeCall,
+} from "../../membrane/region-scope.js";
 import { decodeKwargsStrict, drainDroppedKwargNotes } from "../kwargs-rejection.js";
 import { formatPositionalRejection } from "./positional-rejection.js";
 import type { SchemeValue } from "../../values/types.js";
@@ -346,12 +352,18 @@ _installRosettaMembraneApply(async (proc, args, callCtx) => {
     const runCache = callCtx.runCtx.cache;
     const burstLog = callCtx.runCtx.effects;
     const runReads = callCtx.runCtx.reads;
-    const fire = async (): Promise<unknown> =>
-      applyMembraneClosure(callCtx.runCtx, () =>
-        scope
-          ? withRegionScope(scope, () => m.hostImpl.call(callCtx, ...decodedArgs))
-          : m.hostImpl.call(callCtx, ...decodedArgs),
-      );
+    const fire = async (): Promise<unknown> => {
+      try {
+        return await applyMembraneClosure(callCtx.runCtx, () =>
+          scope
+            ? withRegionScopeCall(scope, () => m.hostImpl.call(callCtx, ...decodedArgs))
+            : m.hostImpl.call(callCtx, ...decodedArgs),
+        );
+      } catch (error) {
+        // A host impl that THROWS is a crossing that raised — recorded by the emission hook.
+        throw markCrossingRaise(error);
+      }
+    };
     // Fast-path: no cache, no effect-log, and no path-derived storage work → bare fire.
     // Path Q/E with armed cache/effects must enter penetrateThroughCache (I6–I8).
     const needsPathStorage =
@@ -368,6 +380,9 @@ _installRosettaMembraneApply(async (proc, args, callCtx) => {
               rawArgs: args,
               pathQueries: producedQueries,
               pathEffects: producedEffects,
+              onServed: () => {
+                if (inv && typeof inv.id === "number") inv.cached = true;
+              },
             },
             decodedArgs,
             fire,

@@ -75,6 +75,7 @@ describe("inbound registry — the declared, ordered claim table IS the law", ()
   });
 
   it("order is semantic: a PLAIN-prototype thenable is claimed by the plain-object row, not the promise door", () => {
+    // eslint-disable-next-line unicorn/no-thenable -- a plain-prototype thenable is the case under test
     const thenable = { then: 42, data: "not actually async" };
     const entered = jsToScheme(CONSTANT_CTX, thenable);
     expect(entered).toBeInstanceOf(AJSObject);
@@ -92,9 +93,9 @@ describe("inbound registry — the declared, ordered claim table IS the law", ()
       expect(() => jsToScheme(CONSTANT_CTX, exotic)).toThrow(NoLensError);
       try {
         jsToScheme(CONSTANT_CTX, exotic);
-      } catch (e) {
-        expect(e).toBeInstanceOf(NoLensError);
-        expect((e as NoLensError).kind).toBe("unbranded-class");
+      } catch (error) {
+        expect(error).toBeInstanceOf(NoLensError);
+        expect((error as NoLensError).kind).toBe("unbranded-class");
       }
     }
     // A host Error is its OWN declared lens (phase 2, no warn), carved out of the

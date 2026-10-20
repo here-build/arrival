@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { CONSTANT_CTX } from "../../run/RunContext.js";
 
 import { ABool } from "../../values/primitives/ABool.js";
 import { AString } from "../../values/primitives/AString.js";
@@ -23,7 +22,7 @@ import { ACharacter } from "../../values/primitives/ACharacter.js";
 // question as `(equal? unboxed unboxed)`. The chain plane boxes inconsistently (provenance-carrying
 // inputs → boxed result; literals → plain), so any program that deduplicates / `member?`s / set-ops
 // over derived values compares ACROSS the boxed↔unboxed boundary. If equal? is representation-strict
-// there, dedup silently fails — the sift/closure.scm browser hang (unbounded doubling).
+// there, dedup silently fails — the browser hang in a downstream closure program (unbounded doubling).
 //
 // Root cause: each primitive box's `arrival/tagless-final/equals` is `other instanceof X && content`, and
 // structuralEqual consults the Setoid BEFORE its valueOf content-check — so boxed-vs-unboxed short-

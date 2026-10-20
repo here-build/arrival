@@ -7,27 +7,23 @@
  * every rule below is enforced against that token, never a global flag.
  * Full map: `docs/membrane.md` §REGION.
  *
- * AMBIENT HOLDER: `z.procedure`'s `decode` is a plain zod-codec transform with no side
- * channel for "which invocation is this reverse crossing of". Both `toJS` and the
- * codec read the SAME ambient current region scope — same module-holder pattern as
- * `eval/dynamic-call-site.ts`. Single-threaded JS makes a module holder safe;
- * save/restore (`withRegionScope`) handles nesting. The wrapper CLOSES OVER whatever
- * scope is ambient at mint — never re-reads the holder later, so a late call still
- * sees the SAME (by then closed) scope. A second evaluation of this file in the same
- * isolate would split the holder (discipline degrades to DETACHED_SCOPE); that is a
- * bundler bug, detected at load.
+ * CURRENT SCOPE (P19): `z.procedure`'s `decode` is a plain zod-codec transform with no side
+ * channel for "which invocation is this reverse crossing of". Both `toJS` and the codec read
+ * the SAME current region scope — the `regionScope` slot of the crossing run's own
+ * `RunContext.ambient` (call-depth holder, `run/RunContext.ts`), installed by `withRegionScope`
+ * together with the `currentRun()` pointer for the SYNC window in which wrappers are minted.
+ * No module-level holder: concurrent runs hold different RunContexts, so their scopes cannot
+ * cross. The wrapper CLOSES OVER whatever scope is current at mint — never re-reads the
+ * holder later, so a late call still sees the SAME (by then closed) scope.
  *
  * Minting/opening a scope is the crossing seam's job (baked `symbol.rosetta` run,
- * scheme-zod `z.procedure`). This module owns the token shape, ambient holder, and doors.
+ * scheme-zod `z.procedure`). This module owns the token shape, the window, and doors.
  *
  * TRACK + HOST-SCHEDULE: counters (`pending`, `trackOrdinal`) are the track open/close
  * source of truth — a track is ONE re-entrant call, bracketed by `withRegionCall`'s
  * pending++/--. `noteTrackOpen`/`noteTrackClose` fire at those points; both are
- * flag-gated, detached, and no-op unless emission is on AND a TrackCoordinate/Sink pair
- * was ambiently installed when the scope OPENED (captured once — same reason
- * runCtx/dynSite are captured). Independent ambient pair (not shared with
- * eval/provenance-hooks.ts) to avoid cycle: region-scope → provenance-hooks → rosetta →
- * region-scope.
+ * detached and no-op unless the scope's run carries `RunContext.emission` (captured once at
+ * OPEN — same reason runCtx/dynSite are captured) and is not `silent`.
  *
  * Host-schedule rides the same scope: an order-dependent selector host (sort comparator
  * — env/srfi/srfi-95.ts) is one exported symbol invocation; comparator verdicts
@@ -39,12 +35,12 @@
  * missing piece is op-helpers routing through withRegionCall.
  */
 
-import { assertSingleLoad } from "../single-load.js";
-import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
+import { CONSTANT_CTX, withAmbient, type RunContext } from "../run/RunContext.js";
+import { currentRun, withCurrentRun } from "../run/current-run.js";
 import type { AValue } from "../values/primitives/AValue.js";
 import type { EgressMode, WrapperKey } from "../values/types.js";
 import { RegionEscapeError, RegionIncompleteError } from "../errors.js";
-import { emitHostSchedule, emitTrackClose, emitTrackOpen, isEmissionEnabled } from "../provenance/store/emit.js";
+import { claimInstanceOrdinal, emitHostSchedule, emitTrackClose, emitTrackOpen } from "../provenance/store/emit.js";
 import {
   appendOrdinal,
   type OrdinalPath,
@@ -90,6 +86,8 @@ export interface RegionScope {
   open: boolean;
   /** Reverse calls started but not yet settled. Read at close; decremented as each settles. */
   pending: number;
+  /** True only for {@link detachedScope} — no real crossing owns it. */
+  readonly detached?: true;
   /** Derived from the run's abort signal — never independently triggerable. */
   readonly signal: AbortSignal;
   /** Enclosing symbol invocation's RunContext — reverse-entry args mint under THIS. */
@@ -119,8 +117,8 @@ export interface RegionScope {
    */
   readonly egressProxies: WeakMap<AValue, Map<EgressMode, object>>;
 
-  /** TrackCoordinate captured AMBIENTLY at openRegionScope — undefined outside
-   *  withTrackCoordinate's install window. Closed over once, never re-read. */
+  /** TrackCoordinate taken from `runCtx.emission` at openRegionScope — undefined when
+   *  the scope's run carries no `emission`. Captured once at open, never re-read. */
   readonly trackCoordinate: TrackCoordinate | undefined;
   /** Paired sink — undefined exactly when trackCoordinate is. */
   readonly trackSink: TrackEmissionSink | undefined;
@@ -131,29 +129,42 @@ export interface RegionScope {
   readonly hostSchedule: HostScheduleTriple[];
 }
 
+/** Identity caches shared by every detached scope — KEYED RESIDENCY (P19): WeakMaps keyed by
+ *  the callable / container box itself, so lifetime = the key's and nothing is attributed to a
+ *  run (detached wrappers close over `CONSTANT_CTX`). Sharing them keeps `toJS(x) === toJS(x)`
+ *  outside any crossing while every MUTABLE scope field (`pending`, `open`, the track and
+ *  host-schedule counters) stays per-use. */
+const detachedWrapperCache: RegionScope["cache"] = new WeakMap();
+const detachedEgressProxies: RegionScope["egressProxies"] = new WeakMap();
+
 /**
  * Permanently-open fallback for a reverse-membrane wrapper minted OUTSIDE any real
- * crossing (trace/display, unit tests without ambient scope). Nothing to close; no
- * escape/incomplete rule. Shared by toJS and z.procedure so a callable crossing
- * either path outside a tracked invocation still gets ONE never-closing identity cache.
+ * crossing (trace/display, unit tests without a current scope). Nothing to close; no
+ * escape/incomplete rule. FRESH per use (P19: a shared mutable scope — `pending`,
+ * `hostSchedule` — would be global state); only the key-owned identity caches are shared
+ * (see above). A caller that must mint several wrappers under one detached scope (egress of
+ * a container) pins ONE and threads it (`MembraneExit.scope`).
  */
-export const DETACHED_SCOPE: RegionScope = {
-  open: true,
-  pending: 0,
-  // Lazy getter: neverAborts() constructs AbortController on first read (workerd).
-  get signal(): AbortSignal {
-    return neverAborts();
-  },
-  runCtx: CONSTANT_CTX,
-  dynSite: undefined,
-  cache: new WeakMap(),
-  egressProxies: new WeakMap(),
-  // No withTrackCoordinate → note*/recordHostScheduleVerdict no-op unconditionally.
-  trackCoordinate: undefined,
-  trackSink: undefined,
-  trackOrdinal: 0,
-  hostSchedule: [],
-};
+export function detachedScope(): RegionScope {
+  return {
+    open: true,
+    pending: 0,
+    detached: true,
+    // Lazy getter: neverAborts() constructs AbortController on first read (workerd).
+    get signal(): AbortSignal {
+      return neverAborts();
+    },
+    runCtx: CONSTANT_CTX,
+    dynSite: undefined,
+    cache: detachedWrapperCache,
+    egressProxies: detachedEgressProxies,
+    // CONSTANT_CTX carries no emission → note*/recordHostScheduleVerdict no-op unconditionally.
+    trackCoordinate: undefined,
+    trackSink: undefined,
+    trackOrdinal: 0,
+    hostSchedule: [],
+  };
+}
 
 /** Mint a fresh open scope for one symbol invocation. parentSignal from RunContext
  *  (undefined for CONSTANT_CTX) — derived via AbortSignal.any so this scope's listener
@@ -168,9 +179,9 @@ export function openRegionScope(opts: { runCtx: RunContext; dynSite: unknown }):
     dynSite: opts.dynSite,
     cache: new WeakMap(),
     egressProxies: new WeakMap(),
-    // Captured NOW from withTrackCoordinate ambient — never re-read (same as runCtx/dynSite).
-    trackCoordinate: _trackCoordinate,
-    trackSink: _trackSink,
+    // Captured NOW from the run's emission target — never re-read (same as runCtx/dynSite).
+    trackCoordinate: opts.runCtx.emission?.coordinate,
+    trackSink: opts.runCtx.emission,
     trackOrdinal: 0,
     hostSchedule: [],
   };
@@ -189,8 +200,8 @@ export function openRegionScope(opts: { runCtx: RunContext; dynSite: unknown }):
  * nextTrackOrdinal for trackOrdinal. Everything else fresh (WeakMap of closures and
  * in-flight comparator triples are not stream-derivable — fold.ts).
  *
- * coordinate/sink are explicit parameters, not ambient — recovery is a DO wake path,
- * not a live crossing seam with an ambient install window.
+ * coordinate/sink are explicit parameters, not read off `runCtx.emission` — recovery is a
+ * DO wake path that names the durable coordinate it is resuming.
  */
 export async function reconstructRegionScope(opts: {
   runCtx: RunContext;
@@ -261,87 +272,37 @@ export async function withRegionCall<T>(scope: RegionScope, fn: () => Promise<T>
   }
 }
 
-// ── Track / host-schedule emission ──
-// See preamble for independent ambient pair and host-schedule accumulation.
-
-/** Ambient track coordinate/sink — installed by withTrackCoordinate, captured into
- *  the scope by openRegionScope. Undefined outside an install window. */
-let _trackCoordinate: TrackCoordinate | undefined;
-let _trackSink: TrackEmissionSink | undefined;
-
-/** Install TrackCoordinate/Sink for the duration of a SYNCHRONOUS fn — save/restore,
- *  same idiom as withRegionScope. openRegionScope is sync at every real call site, so
- *  no async sibling (unlike withRecordCoordinateAsync). */
-export function withTrackCoordinate<T>(coordinate: TrackCoordinate, sink: TrackEmissionSink, fn: () => T): T {
-  const savedCoordinate = _trackCoordinate;
-  const savedSink = _trackSink;
-  _trackCoordinate = coordinate;
-  _trackSink = sink;
-  try {
-    return fn();
-  } finally {
-    _trackCoordinate = savedCoordinate;
-    _trackSink = savedSink;
-  }
-}
-
-// ── Silent-region mode ──
+// ── Silent mode ──
 //
-// SILENT REGION: doors and discipline fully active, stream emission OFF (γ whole-program
-// replay is also a silent region). Suppresses every note*/flush* site below PLUS
-// provenance-hooks notePotentialRosettaExit (mints); escape/incomplete doors stay active
-// (they read scope.open/pending, still mutated). Silence is an EMISSION concern, never a
-// discipline concern.
-//
-// SEPARATE ambient from _trackCoordinate/_trackSink (never a field on TrackCoordinate
-// or RegionScope): a coordinate is a per-PORT address SWAPPED by nested
-// withTrackCoordinate. If silence rode on the coordinate, that swap would drop it and
-// a mint under the nested coordinate could emit again. _silentRegion is save/restore
-// that no coordinate install touches — leak-proof by construction.
-//
-// NO "un-silence" primitive. Only withSilentRegion RETURNING (or its promise SETTLING)
-// restores the prior value — nested loud region inside silent stays silent for its life.
-//
-// Read by provenance-hooks (import direction safe: hooks already depend transitively on
-// this module via rosetta; reverse edge would cycle).
-
-let _silentRegion = false;
-
-/** Emission suppressed by an enclosing silent region? Checked early by every note/flush
- *  site and by provenance-hooks notePotentialRosettaExit. */
-export function isSilentRegion(): boolean {
-  return _silentRegion;
-}
-
-/** Run fn with silence raised for its ENTIRE dynamic extent. Async-SETTLE restore
- *  (mirrors withRecordCoordinateAsync): multi-tick replay stays silent until it finishes,
- *  not just until first pending Promise. Nests: silent-in-silent saves true, restores true. */
-export async function withSilentRegion<T>(fn: () => Promise<T>): Promise<T> {
-  const saved = _silentRegion;
-  _silentRegion = true;
-  try {
-    return await fn();
-  } finally {
-    _silentRegion = saved;
-  }
-}
+// SILENT RUN: doors and discipline fully active, stream emission OFF (γ whole-program
+// replay runs on a hermetic RunContext minted `silent: true`). `RunContext.silent` suppresses
+// every note*/flush* site below PLUS provenance-hooks notePotentialRosettaExit (mints);
+// escape/incomplete doors stay active (they read scope.open/pending, still mutated). Silence
+// is an EMISSION concern, never a discipline concern. It is a flag on the run, read as
+// `scope.runCtx.silent` — a concurrent loud run on the same isolate never sees it.
 
 /** One track event's RecordId — claims a FRESH trailing ordinal every call. Collision-
  *  freedom is structural: ProvenanceStore upsert dedupes on recordIdKey alone (not kind),
  *  so open and close sharing one id would collapse into ONE record. Correlate open/close
  *  by STREAM ORDER (seq), never id-matched pairing. */
 function mintTrackId(scope: RegionScope, coordinate: TrackCoordinate): RecordId {
+  // A scope opened off the run's emission shares ONE instance counter with every other event
+  // kind at that coordinate (port mints, sibling scopes) — id-only upsert would collapse them.
+  const emission = scope.runCtx.emission;
+  const ordinal =
+    emission !== undefined && emission.coordinate === coordinate
+      ? claimInstanceOrdinal(emission)
+      : scope.trackOrdinal++;
   return {
     templateHash: coordinate.templateHash,
-    ordinalPath: appendOrdinal(coordinate.ordinalPath, scope.trackOrdinal++),
+    ordinalPath: appendOrdinal(coordinate.ordinalPath, ordinal),
     regionEpoch: coordinate.regionEpoch,
   };
 }
 
-/** Fires at withRegionCall's pending++. No-ops unless emission on + coordinate/sink. */
+/** Fires at withRegionCall's pending++. No-ops unless the run emits (coordinate/sink) and is not silent. */
 function noteTrackOpen(scope: RegionScope): void {
-  if (!isEmissionEnabled()) return;
-  if (isSilentRegion()) return; // doors stay active, emission doesn't
+  if (scope.runCtx.silent) return; // doors stay active, emission doesn't
   const { trackCoordinate: coordinate, trackSink: sink } = scope;
   if (coordinate === undefined || sink === undefined) return;
   const id = mintTrackId(scope, coordinate);
@@ -351,8 +312,7 @@ function noteTrackOpen(scope: RegionScope): void {
 
 /** Fires at withRegionCall's pending-- (finally — settled true either way). Own fresh id. */
 function noteTrackClose(scope: RegionScope): void {
-  if (!isEmissionEnabled()) return;
-  if (isSilentRegion()) return; // doors stay active, emission doesn't
+  if (scope.runCtx.silent) return; // doors stay active, emission doesn't
   const { trackCoordinate: coordinate, trackSink: sink } = scope;
   if (coordinate === undefined || sink === undefined) return;
   const id = mintTrackId(scope, coordinate);
@@ -368,8 +328,7 @@ export function recordHostScheduleVerdict(
   right: OrdinalPath,
   verdict: number,
 ): void {
-  if (!isEmissionEnabled()) return;
-  if (isSilentRegion()) return; // never accumulate under silence
+  if (scope.runCtx.silent) return; // never accumulate under silence
   if (scope.trackCoordinate === undefined || scope.trackSink === undefined) return;
   scope.hostSchedule.push({ left, right, verdict });
 }
@@ -378,8 +337,7 @@ export function recordHostScheduleVerdict(
  *  (host call as a whole, not per-track). Drains hostSchedule first so double-close never
  *  double-flushes. Zero triples ⇒ emitHostSchedule itself no-ops. */
 function flushHostSchedule(scope: RegionScope): void {
-  if (!isEmissionEnabled()) return;
-  if (isSilentRegion()) return; // doors stay active, emission doesn't
+  if (scope.runCtx.silent) return; // doors stay active, emission doesn't
   if (scope.hostSchedule.length === 0) return;
   const { trackCoordinate: coordinate, trackSink: sink } = scope;
   if (coordinate === undefined || sink === undefined) return;
@@ -421,31 +379,49 @@ function raceRegionAbort<T>(value: PromiseLike<T>, signal: AbortSignal): Promise
   });
 }
 
-// ── Ambient current region scope ──
-// Ambient rather than RosettaOptions: z.procedure's codec has no parameter for it.
-// Single-threaded JS + save/restore around the owning call (same as evaluator's
-// dynamic-call-site). A second evaluation of this file splits the holder — detected
-// at load (`assertSingleLoad`), not merged onto globalThis.
+// ── Current region scope (call-depth slot of the crossing run) ──
 
-assertSingleLoad("membrane/region-scope");
-
-let current: RegionScope | undefined;
+/** The scope current inside a {@link withRegionScope} window whose run is the run-neutral
+ *  CONSTANT_CTX (frozen `ambient` — no per-run slot to hold it). This is the CONSTANT_CTX leg
+ *  of the SAME sync window `currentRun()` tolerates (docs/execution.md §1): set and restored
+ *  inside `withCurrentRun`'s synchronous body, so it can never be observed across an await,
+ *  and it only ever holds a scope whose `runCtx` is CONSTANT_CTX — nothing to attribute to a
+ *  run. Live runs never touch it. */
+let constantWindowScope: RegionScope | undefined;
 
 /** Scope a reverse wrapper should close over if minted RIGHT NOW — undefined outside
- *  any tracked crossing. Treat undefined as "no region discipline" (always-open
- *  passthrough), never as an error. */
+ *  any tracked crossing (no sync window open). Treat undefined as "no region discipline"
+ *  (always-open passthrough), never as an error. */
 export function currentRegionScope(): RegionScope | undefined {
-  return current;
+  const run = currentRun();
+  if (run === undefined) return undefined;
+  return Object.isFrozen(run.ambient) ? constantWindowScope : run.ambient.regionScope;
 }
 
-/** Install scope as ambient for the duration of fn (sync only — real callers mint
- *  wrappers synchronously; crossing's async work is outside this window). */
+/** Install scope as current for the duration of fn (sync only — real callers mint
+ *  wrappers synchronously; crossing's async work is outside this window): points
+ *  {@link currentRun} at `scope.runCtx` and fills that run's `regionScope` slot (for a
+ *  CONSTANT_CTX scope — detached or test-opened — the {@link constantWindowScope} leg). */
 export function withRegionScope<T>(scope: RegionScope, fn: () => T): T {
-  const saved = current;
-  current = scope;
-  try {
-    return fn();
-  } finally {
-    current = saved;
+  const { runCtx } = scope;
+  if (!Object.isFrozen(runCtx.ambient)) {
+    return withCurrentRun(runCtx, () => withAmbient(runCtx, "regionScope", scope, fn));
   }
+  return withCurrentRun(runCtx, () => {
+    const saved = constantWindowScope;
+    constantWindowScope = scope;
+    try {
+      return fn();
+    } finally {
+      constantWindowScope = saved;
+    }
+  });
+}
+
+/** {@link withRegionScope} for a SYNCHRONOUS call whose RETURN VALUE may be a thenable (a host
+ *  impl that is `async`, an egress element that is a pending promise): the window covers only
+ *  the call's synchronous prologue — the returned promise is passed through untouched and
+ *  never awaited inside the window, so the slot cannot leak across an await boundary. */
+export function withRegionScopeCall<T>(scope: RegionScope, call: () => T): T {
+  return withRegionScope(scope, () => ({ result: call() })).result;
 }

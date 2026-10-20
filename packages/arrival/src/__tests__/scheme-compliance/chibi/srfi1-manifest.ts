@@ -11,8 +11,8 @@
 // `buildManifestFromForms` classifies it exactly like a genuine top level (a `let` block
 // with nested tests, `test`/`test-error`/`test-values`/`test-assert` heads — all already
 // handled generically; nothing SRFI-1-specific reaches manifest.ts).
-import fs from "fs";
-import path from "path";
+import fs from "node:fs";
+import path from "node:path";
 import { parse as readerParse } from "../../../reader/parse.js";
 import { buildManifestFromForms, headSymbolName, splitTopLevelForms, type Manifest, type RawForm } from "./manifest.js";
 
@@ -60,7 +60,7 @@ async function findChildHeaded(kids: readonly RawForm[], head: string): Promise<
  *  `(run-tests)` signature, mirroring manifest.ts's own function-shorthand-define
  *  convention). */
 export async function extractSrfi1Body(corpusPath: string): Promise<RawForm[]> {
-  const text = fs.readFileSync(corpusPath, "utf-8");
+  const text = fs.readFileSync(corpusPath, "utf8");
   const topForms = splitTopLevelForms(text);
   if (topForms.length !== 1) {
     throw new Error(`chibi srfi-1 corpus: expected exactly 1 top-level form (define-library), got ${topForms.length}`);

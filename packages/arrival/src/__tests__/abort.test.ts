@@ -26,8 +26,11 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { exec, execExpr, parse } from "../eval/generator-exec.js";
+import { exec, execExpr, execState, parse } from "../eval/generator-exec.js";
+import { RunContextBusyError } from "../errors.js";
+import { EnvCapability } from "../common/capability.js";
 import { raceAbort } from "../eval/evaluator.js";
+import type { CallCtx } from "../run/CallCtx.js";
 
 describe("AbortSignal execution budget", () => {
   it("aborts an infinite loop when AbortSignal fires", async () => {
@@ -103,15 +106,15 @@ describe("AbortSignal execution budget", () => {
     try {
       await exec("(+ 1 2)", { signal: ctrl.signal });
       expect.fail("Should have thrown");
-    } catch (err) {
+    } catch (error) {
       // When no reason is supplied to abort(), the runtime supplies a default
       // (`new DOMException("aborted", "AbortError")` in modern Node / browsers).
       // We don't assert the exact constructor — runtimes vary in whether
       // DOMException is the constructor of choice — but the name must be
       // recognizable as an abort.
-      expect(err).toBeDefined();
-      const message = (err as Error)?.message ?? String(err);
-      const name = (err as Error)?.name ?? "";
+      expect(error).toBeDefined();
+      const message = (error as Error)?.message ?? String(error);
+      const name = (error as Error)?.name ?? "";
       expect(`${name} ${message}`.toLowerCase()).toMatch(/abort/);
     }
   });
@@ -200,5 +203,168 @@ describe("AbortSignal execution budget", () => {
     } finally {
       process.off("unhandledRejection", onUnhandled);
     }
+  });
+});
+
+let finallyRan = false;
+const markers: string[] = [];
+const probe = EnvCapability.define("test/abort-probe", {
+  symbols: (symbol, z) => ({
+    "mark!": symbol.rosetta`mark!: record that a finally body ran (test probe)`(
+      { input: [], output: [z.number] },
+      function (this: CallCtx) {
+        finallyRan = true;
+        return 1;
+      },
+    ),
+    "catch-mark!": symbol.rosetta`catch-mark!: record that a catch body ran (test probe)`(
+      { input: [], output: [z.number] },
+      function (this: CallCtx) {
+        markers.push("catch");
+        return 1;
+      },
+    ),
+    "fin-mark!": symbol.rosetta`fin-mark!: record that a finally body ran (test probe)`(
+      { input: [], output: [z.number] },
+      function (this: CallCtx) {
+        markers.push("finally");
+        return 1;
+      },
+    ),
+    "host-abort!": symbol.rosetta`host-abort!: throw an AbortError from an unrelated controller (test probe)`(
+      { input: [], output: [z.number] },
+      function (this: CallCtx) {
+        throw new DOMException("unrelated", "AbortError");
+      },
+    ),
+    "overflow!": symbol.rosetta`overflow!: throw a host stack overflow (test probe)`(
+      { input: [], output: [z.number] },
+      function (this: CallCtx) {
+        throw new RangeError("Maximum call stack size exceeded");
+      },
+    ),
+  }),
+});
+
+describe("abort reaches nested trampolines", () => {
+  it("pre-aborted signal rejects with the reason", async () => {
+    const ctrl = new AbortController();
+    ctrl.abort(new Error("stop-now"));
+    await expect(exec("(try 1 (catch (e) 2))", { signal: ctrl.signal })).rejects.toThrow(/stop-now/);
+  });
+
+  it("try/catch does not swallow an abort, and finally still runs", async () => {
+    const ctrl = new AbortController();
+    setTimeout(() => ctrl.abort(new Error("stop-now")), 50);
+    finallyRan = false;
+    const capabilities = [probe];
+    await expect(
+      exec("(try (let loop () (loop)) (catch (e) 1) (finally (mark!)))", { signal: ctrl.signal, capabilities }),
+    ).rejects.toThrow(/stop-now/);
+    // The outer trampoline awaits the try's own trampoline, so finally completed BEFORE exec settled.
+    expect(finallyRan).toBe(true);
+  });
+
+  it("a reused runCtx honors the NEW call's signal in nested loops", async () => {
+    const first = new AbortController();
+    const st = await execState("(define x 1)", { signal: first.signal });
+    first.abort();
+    const second = new AbortController();
+    setTimeout(() => second.abort(new Error("second-abort")), 50);
+    const t0 = performance.now();
+    await expect(
+      execState("(map (lambda (x) (let loop () (loop))) (list 1))", {
+        runCtx: st.runCtx,
+        scope: st.scope,
+        signal: second.signal,
+      }),
+    ).rejects.toThrow(/second-abort/);
+    expect(performance.now() - t0).toBeLessThan(3000);
+  });
+
+  it("a concurrent second call on an armed runCtx is a door", async () => {
+    const st = await execState("(define x 1)");
+    const ctrl = new AbortController();
+    const slow = execState("(let loop () (loop))", { runCtx: st.runCtx, scope: st.scope, signal: ctrl.signal });
+    const settled = slow.catch((error: unknown) => error);
+    await new Promise((r) => setTimeout(r, 50));
+    await expect(execState("1", { runCtx: st.runCtx, scope: st.scope })).rejects.toThrow(RunContextBusyError);
+    ctrl.abort();
+    await settled;
+    await expect(execState("1", { runCtx: st.runCtx, scope: st.scope })).resolves.toBeDefined();
+  });
+
+  it("catch does not intercept a host stack overflow; finally still runs", async () => {
+    finallyRan = false;
+    await expect(
+      exec("(try (overflow!) (catch (e) 'caught) (finally (mark!)))", { capabilities: [probe] }),
+    ).rejects.toThrow(/Maximum call stack/);
+    expect(finallyRan).toBe(true);
+  });
+
+  it("an aborted try on a reused runCtx never runs its catch, and nothing runs after exec settles", async () => {
+    const capabilities = [probe];
+    const st = await execState("(define x 1)", { capabilities });
+    markers.length = 0;
+    const ctrl = new AbortController();
+    setTimeout(() => ctrl.abort(new Error("custom-stop")), 50);
+    await expect(
+      execState("(try (do () (#f)) (catch (e) (catch-mark!)) (finally (fin-mark!)))", {
+        runCtx: st.runCtx,
+        scope: st.scope,
+        signal: ctrl.signal,
+        capabilities,
+      }),
+    ).rejects.toThrow(/custom-stop/);
+    expect(markers).toEqual(["finally"]);
+    expect(st.runCtx.bound.armed).toBe(false);
+    await new Promise((r) => setTimeout(r, 500));
+    expect(markers).toEqual(["finally"]);
+  });
+
+  it("a finally that never terminates is cut off after the grace window; exec rejects with the abort reason", async () => {
+    const ctrl = new AbortController();
+    setTimeout(() => ctrl.abort(new Error("custom-stop")), 50);
+    const t0 = performance.now();
+    await expect(exec("(try (do () (#f)) (finally (do () (#f))))", { signal: ctrl.signal })).rejects.toThrow(
+      /custom-stop/,
+    );
+    expect(performance.now() - t0).toBeLessThan(2000);
+  });
+
+  it("a host-raised AbortError from an unrelated controller stays catchable", async () => {
+    const ctrl = new AbortController();
+    await expect(
+      exec("(try (host-abort!) (catch (e) 'caught))", { signal: ctrl.signal, capabilities: [probe] }),
+    ).resolves.toBeDefined();
+  });
+
+  it("an execExpr that passes its own signal or budget on an armed runCtx is a door, not silently dropped", async () => {
+    const [one] = await parse("1");
+    const st = await execState("(define x 1)");
+    const ctrlA = new AbortController();
+    const slow = execState("(let loop () (loop))", { runCtx: st.runCtx, scope: st.scope, signal: ctrlA.signal });
+    const settled = slow.catch((error: unknown) => error);
+    await new Promise((r) => setTimeout(r, 50));
+    const ctrlB = new AbortController();
+    await expect(execExpr(one, { runCtx: st.runCtx, signal: ctrlB.signal })).rejects.toThrow(RunContextBusyError);
+    await expect(execExpr(one, { runCtx: st.runCtx, budgetMs: 100 })).rejects.toThrow(RunContextBusyError);
+    // genuinely nested (runCtx only) still inherits
+    await expect(execExpr(one, { runCtx: st.runCtx })).resolves.toBeDefined();
+    ctrlA.abort(new Error("abort-A"));
+    expect(await settled).toMatchObject({ message: expect.stringMatching(/abort-A/) });
+  });
+
+  it("a runCtx minted with a session signal stays abortable by it when a call passes none", async () => {
+    const [one] = await parse("1");
+    const session = new AbortController();
+    const st = await execState("(define x 1)", { signal: session.signal });
+    setTimeout(() => session.abort(new Error("session-over")), 50);
+    await expect(execState("(do () (#f))", { runCtx: st.runCtx, scope: st.scope })).rejects.toThrow(/session-over/);
+    // and the nested-entry path honours it too
+    const s2 = new AbortController();
+    const st2 = await execState("(define x 1)", { signal: s2.signal });
+    s2.abort(new Error("session-over-2"));
+    await expect(execExpr(one, { runCtx: st2.runCtx })).rejects.toThrow(/session-over-2/);
   });
 });

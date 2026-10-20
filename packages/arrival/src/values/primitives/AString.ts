@@ -7,6 +7,7 @@ import { AValue, EMPTY_PROVENANCE } from "./AValue.js";
 import type { ANumeric } from "../numbers.js";
 import { ACharacter } from "./ACharacter.js";
 import { withInputProvenance } from "../op-helpers.js";
+import type { RunContext } from "../../run/RunContext.js";
 import type { SourceLocation } from "../../errors.js";
 
 type StringLike = string | AString | { valueOf(): string };
@@ -107,8 +108,8 @@ export class AString extends AValue {
   // Element-count — code-point length. Characters carry no element ids, so this carries
   // the STRING's OWN provenance (unlike Pair/Vector element-union). Code-point length
   // (spread), so astral chars count once.
-  ["arrival/tagless-final/length"](_runCtx?: unknown): AValue | number {
-    return withInputProvenance([this], [...this.__string__].length);
+  ["arrival/tagless-final/length"](runCtx: RunContext): AValue | number {
+    return withInputProvenance(runCtx, [this], [...this.__string__].length);
   }
 
   ["arrival/tagless-final/concat"](other: AString): AString {

@@ -16,81 +16,98 @@
 // hot path, and the one useful line becomes unfindable among 400k identical ones.
 //
 // Same law as the note sink: a fact ABOUT the crossing belongs to the RUN, not to each value that
-// makes it. This test pins the bound.
+// makes it. This test pins the bound — and that the budget is PER RUN: lines land on the run's
+// NoteSink (core has no console), counts live per RunContext.
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
-import { setMembraneWarnings, warnMembrane } from "../membrane-warn.js";
+import { RunContext } from "../../run/RunContext.js";
+import { createNoteSink, type NoteSink } from "../../run/note-sink.js";
+import { warnMembrane } from "../membrane-warn.js";
 
-let warn: ReturnType<typeof vi.spyOn>;
+let notes: NoteSink;
+let run: RunContext;
 
 beforeEach(() => {
-  // Toggling OFF→ON clears the dedupe table, so each test starts from a clean slate without
-  // exporting a test-only reset (the toggle already had to exist).
-  setMembraneWarnings(false);
-  setMembraneWarnings(true);
-  warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-});
-
-afterEach(() => {
-  warn.mockRestore();
-  setMembraneWarnings(false);
-  setMembraneWarnings(true);
+  notes = createNoteSink();
+  run = new RunContext({ notes });
 });
 
 describe("POSITIVE — the warning still teaches", () => {
   it("the first crossing of a shape is reported, in full", () => {
-    warnMembrane("a JS `undefined`");
-    expect(warn).toHaveBeenCalledTimes(1);
-    const text = String(warn.mock.calls[0]![0]);
-    expect(text).toContain("[arrival membrane]");
-    expect(text).toContain("a JS `undefined`");
-    expect(text).toContain("no portable"); // the teaching clause survives
+    warnMembrane(run, "a JS `undefined`");
+    const lines = notes.drain();
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("[arrival membrane]");
+    expect(lines[0]).toContain("a JS `undefined`");
+    expect(lines[0]).toContain("no portable"); // the teaching clause survives
   });
 
   it("DISTINCT shapes each get their own report — the bound is per-shape, not global", () => {
-    warnMembrane("a JS `undefined`");
-    warnMembrane("a JS function");
-    warnMembrane("a unique symbol");
-    const texts = warn.mock.calls.map((c) => String(c[0]));
+    warnMembrane(run, "a JS `undefined`");
+    warnMembrane(run, "a JS function");
+    warnMembrane(run, "a unique symbol");
+    const texts = notes.drain();
     expect(texts.some((t) => t.includes("undefined"))).toBe(true);
     expect(texts.some((t) => t.includes("function"))).toBe(true);
     expect(texts.some((t) => t.includes("unique symbol"))).toBe(true);
   });
 
   it("a custom outcome is a distinct shape and is not swallowed by the default one", () => {
-    warnMembrane("a class instance", "crossed to a borrowed wrapper");
-    const text = String(warn.mock.calls[0]![0]);
-    expect(text).toContain("borrowed wrapper");
+    warnMembrane(run, "a class instance", "crossed to a borrowed wrapper");
+    expect(notes.drain()[0]).toContain("borrowed wrapper");
   });
 });
 
 // ─── THE NEGATIVE SIDE — the part that actually killed a process ────────────────────────────────
 describe("NEGATIVE — the warning cannot scale with the data", () => {
   it("400_000 identical crossings do NOT produce 400_000 lines", () => {
-    for (let i = 0; i < 400_000; i++) warnMembrane("a JS `undefined`");
-    // 3 reports + 1 suppression notice. NOT 400k. This is the whole point of the file: the number
-    // below must not be a function of the loop bound above.
-    expect(warn).toHaveBeenCalledTimes(4);
+    for (let i = 0; i < 400_000; i++) warnMembrane(run, "a JS `undefined`");
+    // The NoteSink dedups identical lines (the model needs the fact once): 1 teaching line + 1
+    // suppression notice. NOT 400k. This is the whole point of the file: the number below must not
+    // be a function of the loop bound above.
+    expect(notes.drain()).toHaveLength(2);
   });
 
   it("the suppression is ANNOUNCED — silence must never be mistaken for absence", () => {
-    for (let i = 0; i < 50; i++) warnMembrane("a JS `undefined`");
-    const texts = warn.mock.calls.map((c) => String(c[0]));
-    // Errors-as-doors: a truncation that is not signaled is a lie. The reader must be able to tell
-    // "it happened three times" from "it happened three times and then we stopped counting."
-    expect(texts.some((t) => t.includes("further identical crossings will not be reported"))).toBe(true);
+    for (let i = 0; i < 50; i++) warnMembrane(run, "a JS `undefined`");
+    // Errors-as-doors: a truncation that is not signaled is a lie.
+    expect(notes.drain().some((t) => t.includes("further identical crossings will not be reported"))).toBe(true);
   });
 
   it("the suppression notice itself is emitted ONCE, not once per suppressed crossing", () => {
-    for (let i = 0; i < 1000; i++) warnMembrane("a JS `undefined`");
-    const notices = warn.mock.calls.map((c) => String(c[0])).filter((t) => t.includes("further identical crossings"));
-    expect(notices).toHaveLength(1);
+    for (let i = 0; i < 1000; i++) warnMembrane(run, "a JS `undefined`");
+    expect(notes.drain().filter((t) => t.includes("further identical crossings"))).toHaveLength(1);
   });
 
-  it("disabled means SILENT — the bound is not a backdoor around the toggle", () => {
-    setMembraneWarnings(false);
-    for (let i = 0; i < 10; i++) warnMembrane("a JS `undefined`");
-    expect(warn).not.toHaveBeenCalled();
+  it("a run without a note sink is SILENT — core has no console to fall back on", () => {
+    const bare = new RunContext();
+    expect(() => {
+      for (let i = 0; i < 10; i++) warnMembrane(bare, "a JS `undefined`");
+    }).not.toThrow();
+  });
+});
+
+describe("PER RUN — the budget belongs to the run, not the process", () => {
+  it("two runs each get their own warnings and their own limit", () => {
+    const notesB = createNoteSink();
+    const runB = new RunContext({ notes: notesB });
+    for (let i = 0; i < 20; i++) {
+      warnMembrane(run, "a JS `undefined`");
+      warnMembrane(runB, "a JS `undefined`");
+    }
+    const a = notes.drain();
+    const b = notesB.drain();
+    expect(a).toHaveLength(2);
+    expect(b).toHaveLength(2);
+    expect(a).toEqual(b);
+  });
+
+  it("run A exhausting a shape does not silence run B", () => {
+    for (let i = 0; i < 10; i++) warnMembrane(run, "a JS function");
+    notes.drain();
+    const notesB = createNoteSink();
+    warnMembrane(new RunContext({ notes: notesB }), "a JS function");
+    expect(notesB.drain()).toHaveLength(1);
   });
 });

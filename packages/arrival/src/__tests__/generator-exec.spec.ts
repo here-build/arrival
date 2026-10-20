@@ -24,7 +24,7 @@ import { ANativeProcedure } from "../values/primitives/ANativeProcedure.js";
 // Local `exec` shadows the barrel export with the COMPLEX tier (execState), so every
 // call site below is unchanged and still reads the boxed SchemeValue[] it always did.
 async function exec(code: string, options?: ExecOptions): Promise<SchemeValue[]> {
-  return (await execState(code, options)).values.slice();
+  return [...(await execState(code, options)).values];
 }
 
 describe("generator-exec", () => {
@@ -252,17 +252,16 @@ describe("generator-exec", () => {
       expect((result as AExact).num).toBe(99);
     });
 
-    // Skip this test until we improve error object handling
-    it.skip("should bind error to catch variable", async () => {
+    it("should bind error to catch variable", async () => {
       const [result] = await exec(`
         (try
-          (error #f "test error")
+          (error "test error")
           (catch (e)
             (if (error-object? e)
                 (error-object-message e)
                 "not an error")))
       `);
-      expect(typeof result).toBe("string");
+      expect(String(result)).toBe("test error");
     });
 
     // Clause-execution/ordering is observed with a JS-side log (the same NO-scheme-set!
@@ -339,46 +338,14 @@ describe("generator-exec", () => {
       expect((result as AExact).num).toBe(3);
     });
 
-    // Skip until error-object? works correctly with generator evaluator
-    it.skip("should match specific error conditions", async () => {
+    it("should match specific error conditions", async () => {
       const [result] = await exec(`
         (guard (exn
           ((error-object? exn) (error-object-message exn))
           (else "unknown"))
-          (error #f "specific error"))
+          (error "specific error"))
       `);
-      expect(result).toBe("specific error");
-    });
-  });
-
-  // Skip parameterize tests for now - requires make-parameter macro support
-  describe.skip("parameterize", () => {
-    it("should create and use parameters", async () => {
-      const results = await exec(`
-        (define my-param (make-parameter 10))
-        (my-param)
-      `);
-      expect((results[1] as AExact).num).toBe(10);
-    });
-
-    it("should allow parameterize to rebind values", async () => {
-      const results = await exec(`
-        (define my-param (make-parameter 10))
-        (parameterize ((my-param 42))
-          (my-param))
-      `);
-      expect((results[1] as AExact).num).toBe(42);
-    });
-
-    it("should restore parameter values after parameterize", async () => {
-      const results = await exec(`
-        (define my-param (make-parameter 10))
-        (parameterize ((my-param 42))
-          (my-param))
-        (my-param)
-      `);
-      expect((results[1] as AExact).num).toBe(42);
-      expect((results[2] as AExact).num).toBe(10);
+      expect(String(result)).toBe("specific error");
     });
   });
 });

@@ -1,19 +1,18 @@
 /**
- * degradation.law.test.ts — door-set degradation (docs/design-history/
- * symbol-define-static-program-validation.md §3.7). The introspectable
+ * degradation.law.test.ts — door-set degradation. The introspectable
  * `DoorProcedure` + `DoorCause` shape (§3.3) stamps `needs: []` everywhere;
  * this law suite pins the MECHANISM that actually mints non-empty `needs` — the
  * `Contract.requiresConfig` auto-door, `Activation.degradation` (common/degradation.ts),
  * and `Vocabulary.degraded` (env/vocabulary.ts).
  *
- * STAGE C CUT 4 (docs/plans/stage-c-corpse-deletion.md) retired `lower()`/`assembleEnv`
+ * STAGE C CUT 4 retired `lower()`/`assembleEnv`
  * (and with them, the `degradation: "doors" | "forbid"` KNOB this suite used to pass
  * per-call): `env/vocabulary.ts`'s `processCapability` hardcodes the mode-independent
  * `"forbid"` posture unconditionally now. This is not a loss of coverage — D2 (the auto-door
  * ruling this file already documented) says the `requiresConfig` auto-door mints REGARDLESS
  * of mode; the "doors" rows below were always pinning "same outcome as forbid," so with no
  * mode knob left to vary, those rows collapse into the single mode-independent assertion they
- * were already proving. TRAILS CLEANUP (Tier 1, docs/plans/stage-c-corpse-deletion.md) went
+ * were already proving. TRAILS CLEANUP (Tier 1) went
  * one step further: `DegradationInfo.mode`/`.missingKeys`/`.active` had zero readers anywhere
  * (internal or external) once mode-independent, so they were retired outright — `DegradationInfo`
  * is now just its `.door(...)` minter, and `buildDegradationInfo` takes only `owner`.
@@ -63,6 +62,7 @@ import { PurityError } from "../../errors.js";
 import { nil } from "../../values/primitives/ANil.js";
 import { ResolvingAmbient, type EnvWithInternals } from "../../env/AmbientRuntime.js";
 import { execInFrame } from "../../eval/generator-exec.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 
 const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
 
@@ -156,7 +156,9 @@ function fixtureCapability(name: string): EnvCapability<any, any> {
     symbols: (symbol) => ({
       "fixture/verb": symbol.native`fixture/verb: reads via the fs`(
         { input: [], output: [sz.schemeValue], requiresConfig: ["fs"] },
-        () => nil,
+        function (this: CallCtx) {
+          return nil;
+        },
       ),
     }),
   });
@@ -177,8 +179,8 @@ describe("LAW 2 — an absent optional-enabling key lowers to a cause-carrying d
     let caught: unknown;
     try {
       (proc as DoorProcedure)["arrival/tagless-final/apply"]();
-    } catch (e) {
-      caught = e;
+    } catch (error) {
+      caught = error;
     }
     expect(caught).toBeInstanceOf(PurityError);
     const err = caught as PurityError;

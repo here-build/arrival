@@ -28,7 +28,7 @@ import {
 } from "./symbols/_bake.js";
 import { CallCtx } from "../run/CallCtx.js";
 // Value imports for `EnvCapability.define`'s injected `(symbol, z)` factory pair.
-// No cycle: `./symbols/index.js` and `./scheme-zod.js` sit below this file (capability imports
+// No cycle: `./symbols/index.js` and `./scheme-zod/index.js` sit below this file (capability imports
 // `./symbols/_bake.js` / ACallable; neither imports back up to `capability.ts`).
 import * as symbolFactories from "./symbols/index.js";
 import * as schemeZod from "./scheme-zod/index.js";
@@ -125,7 +125,7 @@ export interface CapabilitySpec<C extends ZodMap, R extends Record<string, Resou
 // `symbols` receives an injected `(symbol, z)` factory pair — the module-singleton
 // `symbol.rosetta`/`native`/… namespace + scheme-zod — typed so each impl's
 // `this.configuration`/`this.resources` are the declared `Config`/`Resources`, not
-// `unknown`. Reads ride the `associateActivation`/`CallCtx` channel every baked def
+// `unknown`. Reads ride the `associateCapability`/`CallCtx` channel every baked def
 // (native/rosetta/sequence) already carries. `symbols` is invoked EAGERLY, ONCE, at
 // `define()` time — the returned record does not depend on per-env config; only an
 // IMPL BODY'S runtime read of `this.configuration`/`.resources` is per-dispatch.

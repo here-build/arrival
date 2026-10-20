@@ -21,7 +21,7 @@ v1 mode-split: `(car '())` / `(cdr '())` only.
 
 - Pass A: SRFI-1 corpus runs strict — chibi `(test-error (car '()))` / `(cdr '())` are green.
 - Pass B: golden-loose asserts loose → nil via scheme `equal?`.
-- Inventory seed: `chibi/registries-srfi1.ts` → `MODE_SPLIT_INVENTORY`.
+- Inventory seed: `../chibi/registries-srfi1.ts` → `MODE_SPLIT_INVENTORY`.
 
 **Growing the fail-if registry:** append inventory row → ensure Pass A rides chibi under
 strict → add Pass B golden-loose pin. Do not re-add permanent EXPECTED_FAILURE only because
@@ -37,14 +37,14 @@ until a form needs Pass A; pass `{ strict: true }` the same way when promoting a
 
 ## Architecture
 
-Collection time (top-level `await`): `chibi/manifest.ts` splits the corpus into ordered
+Collection time (top-level `await`): `../chibi/manifest.ts` splits the corpus into ordered
 _steps_ — `setup`, `test`, `block`, `unreadable` (reader door), `section` — parses each form,
-and assigns a verdict from `chibi/registries.ts`: `it` / `it.fails` (known gap, flips loudly
+and assigns a verdict from `../chibi/registries.ts`: `it` / `it.fails` (known gap, flips loudly
 when fixed) / `it.skip` / `it.todo`.
 
-Test time: `chibi/runner.ts` (CorpusRunner) drives one shared env per spec file with a
+Test time: `../chibi/runner.ts` (CorpusRunner) drives one shared env per spec file with a
 monotone cursor — `outcomeFor(step)` executes pending setups, then the form itself, through a
-one-slot harness sink (`chibi/harness-capability.ts`). Comparison is scheme `equal?`, never a
+one-slot harness sink (`../chibi/harness-capability.ts`). Comparison is scheme `equal?`, never a
 JS-side duck-tolerance (P4). `CorpusRunnerOptions.strict` stamps every step's
 `execOverFrame` for that pass.
 

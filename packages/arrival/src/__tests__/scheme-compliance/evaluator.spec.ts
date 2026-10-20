@@ -31,7 +31,7 @@ import { type SchemeValue } from "../../values/types.js";
 describe("Generator Evaluator with Real Scheme Types", () => {
   // `ResolvingAmbient`, not the plain `AmbientRuntime` its raw evaluator-level content
   // would otherwise need: `execExprOverFrame(code, { env })` types `env` as `SchemeEnv` (V2,
-  // arrival-environment-privatization.md §II.3/D2), which `ResolvingAmbient`
+  // environment privatization D2), which `ResolvingAmbient`
   // structurally satisfies and plain `AmbientRuntime` does not — a byte-identical stand-in
   // here (no resolver ever registered), see the file header for why this test builds a
   // hand-rolled env instead of the default base.
@@ -39,8 +39,7 @@ describe("Generator Evaluator with Real Scheme Types", () => {
 
   beforeEach(() => {
     // Note: SchemeExact has num/denom (for rationals), not value
-    // RE-PINNED (one-number rework, RATIO — docs/design-history/arrival-one-number-rework.md
-    // §2.1): AExact's payload is a safe-int `number` now, not `bigint` — this hand-rolled test
+    // RE-PINNED (one-number rework, RATIO): AExact's payload is a safe-int `number` now, not `bigint` — this hand-rolled test
     // env's arithmetic helpers ported bigint accumulators/comparisons to plain number ones
     // (`0`→`0`, `BigInt(...)`→direct number use, the dead `typeof arg === "bigint"` arm
     // dropped since a raw host bigint is now an opaque pass-through the interpreter never
@@ -879,19 +878,19 @@ describe("Generator Evaluator with Real Scheme Types", () => {
       );
 
       // 10,000 levels of nesting
-      for (let i = 0; i < 10000; i++) {
+      for (let i = 0; i < 10_000; i++) {
         code = APair.fromArray(CONSTANT_CTX, [new ASymbol("+"), new AExact(1), code], false);
       }
 
       const result = await execExprOverFrame(code, { env });
-      expect(result).toEqual(new AExact(10001));
+      expect(result).toEqual(new AExact(10_001));
     });
 
     it("should handle deeply nested if expressions", async () => {
       // Create deeply nested ifs: (if #t (if #t (if #t ... 42 ...)))
       let code: SchemeValue = new AExact(42);
 
-      for (let i = 0; i < 10000; i++) {
+      for (let i = 0; i < 10_000; i++) {
         code = APair.fromArray(CONSTANT_CTX, [new ASymbol("if"), schemeTrue, code, new AExact(0)], false);
       }
 
@@ -913,10 +912,6 @@ describe("Generator Evaluator with Real Scheme Types", () => {
       // plain-JS exit: a symbol's toJS is apostrophe-prefixed (ASymbol's
       // documented, deferred opaque-exit marker — still design-pending).
       expect(String(result)).toBe("done"); // symbol egress = plain interned name (⚖️ 2026-07-14, constitution §2.1)
-    }, 15000);
+    }, 15_000);
   });
 });
-
-interface ANil {
-  toString(): string;
-}

@@ -15,7 +15,7 @@
 // Not display (that's `arrival/print`). Crossings call `jsToScheme`/`toJS` directly.
 //
 // REGION-DISCIPLINED (docs/membrane.md §REGION): wrapper closes over
-// `currentRegionScope() ?? DETACHED_SCOPE`, minted/cached on THAT scope's own `cache` —
+// `exit.scope ?? currentRegionScope() ?? detachedScope()`, minted/cached on THAT scope's own `cache` —
 // one cache a callable's host projection ever lives in, regardless of which door reached it.
 
 import { AValue } from "./AValue.js";
@@ -23,14 +23,14 @@ import type { MembraneExit, SchemeBounceMarker, SchemeValue, WrapperKey } from "
 import { tf } from "../tagless-final.js";
 import { applyMembraneClosure, type RunContext } from "../../run/RunContext.js";
 // CallCtx lives here-ward specifically so this file never transitively imports
-// common/scheme-zod.ts (would close a cycle that could leave z.instanceof codecs undefined).
+// common/scheme-zod/index.ts (would close a cycle that could leave z.instanceof codecs undefined).
 import { makeCallCtx, type CallCtx } from "../../run/CallCtx.js";
 import { PurityError } from "../../errors.js";
 // TYPE-ONLY: erased at compile — a real value import would close the scheme-zod cycle.
 import type { DoorSymbolDef } from "../../common/symbols/_bake.js";
 import { jsToScheme, toJS, type InvocationLike } from "../../membrane/rosetta.js";
 // Region discipline sits BELOW this file — safe runtime edge, no cycle.
-import { currentRegionScope, DETACHED_SCOPE, withRegionCall, withRegionScope } from "../../membrane/region-scope.js";
+import { currentRegionScope, detachedScope, withRegionCall, withRegionScopeCall } from "../../membrane/region-scope.js";
 import { withDynamicCallSite } from "../../eval/dynamic-call-site.js";
 import invariant from "tiny-invariant";
 import { ARosettaProcedure, _linkRosettaHostProjection } from "./ARosettaProcedure.js";
@@ -65,14 +65,22 @@ export function originalCallableOf(fn: object): ACallable | undefined {
   return WRAPPER_ORIGIN.get(fn);
 }
 
-/** Run-scoped mint-or-reuse: `(RunContext, host fn) → the ONE ARosettaProcedure`.
- *  Run-scoped so provenance ids from run A never pollute run B's numbering. */
-const HOST_FN_CACHE = new WeakMap<RunContext, WeakMap<(...args: unknown[]) => unknown, ARosettaProcedure>>();
+/** Receiver slot for a bare-fn crossing (no owning object). Module-local frozen key. */
+const NO_RECEIVER: object = Object.freeze({});
+
+/** Run-scoped mint-or-reuse: `(RunContext, receiver, host fn) → the ONE ARosettaProcedure`.
+ *  Run-scoped so provenance ids from run A never pollute run B's numbering; receiver-keyed
+ *  so the SAME fn read off two borrowed objects binds two different `this`. */
+const HOST_FN_CACHE = new WeakMap<
+  RunContext,
+  WeakMap<object, WeakMap<(...args: unknown[]) => unknown, ARosettaProcedure>>
+>();
 
 /**
  * INBOUND REVERSE-MEMBRANE LENS: bare host function → scheme-callable ARosettaProcedure.
- * When scheme applies it: args scheme→js, host fn runs, result js→scheme under the
- * CALLING invocation's runCtx. IDENTITY: mint-or-reuse per `(RunContext, fn)`.
+ * When scheme applies it: args scheme→js, host fn runs (with `this` = `receiver` when a
+ * borrowed object supplied one), result js→scheme under the CALLING invocation's runCtx.
+ * IDENTITY: mint-or-reuse per `(RunContext, receiver ?? none, fn)`.
  * Provenance stamps ONLY the first mint — later crossings answer the cached value
  * unchanged (procedure identity is load-bearing; unlike AOpaqueHandle).
  */
@@ -80,11 +88,18 @@ export function hostFnToCallable(
   ctx: RunContext,
   fn: (...args: unknown[]) => unknown,
   provenance: ReadonlySet<number>,
+  receiver?: object,
 ): ARosettaProcedure {
-  let byFn = HOST_FN_CACHE.get(ctx);
+  let byReceiver = HOST_FN_CACHE.get(ctx);
+  if (byReceiver === undefined) {
+    byReceiver = new WeakMap();
+    HOST_FN_CACHE.set(ctx, byReceiver);
+  }
+  const slot = receiver ?? NO_RECEIVER;
+  let byFn = byReceiver.get(slot);
   if (byFn === undefined) {
     byFn = new WeakMap();
-    HOST_FN_CACHE.set(ctx, byFn);
+    byReceiver.set(slot, byFn);
   }
   const cached = byFn.get(fn);
   if (cached !== undefined) return cached;
@@ -98,7 +113,7 @@ export function hostFnToCallable(
       hostApply: (args, callCtx): CallResult =>
         applyMembraneClosure(callCtx.runCtx, () => {
           const jsArgs = args.map((a) => toJS(a));
-          const result = fn(...jsArgs);
+          const result = Reflect.apply(fn, receiver, jsArgs);
           return result instanceof Promise
             ? result.then((r) => jsToScheme(callCtx.runCtx, r))
             : jsToScheme(callCtx.runCtx, result);
@@ -124,8 +139,15 @@ const WRAPPER_KEY: WrapperKey = "mem";
  * Region-disciplined: closes over scope AT MINT TIME, never re-reads ambient later.
  * `exit` when supplied is reused VERBATIM for the result leg; bare falls back to `toJS`.
  */
+/** JS calling convention: callbacks receive extra args (Array#map's index, array). Drop those
+ *  past a finite `arity.max`; too-few args are untouched so the scheme-side arity door still fires. */
+export function trimToArity(jsArgs: unknown[], callable: { readonly arity: Arity }): unknown[] {
+  const max = callable.arity.max;
+  return max !== null && jsArgs.length > max ? jsArgs.slice(0, max) : jsArgs;
+}
+
 function hostProjectionOf(self: ACallable, exit?: MembraneExit): (...args: unknown[]) => unknown {
-  const scope = currentRegionScope() ?? DETACHED_SCOPE;
+  const scope = exit?.scope ?? currentRegionScope() ?? detachedScope();
   let byKey = scope.cache.get(self);
   if (byKey === undefined) {
     byKey = new Map();
@@ -133,18 +155,21 @@ function hostProjectionOf(self: ACallable, exit?: MembraneExit): (...args: unkno
   }
   const cached = byKey.get(WRAPPER_KEY);
   if (cached) return cached;
-  const wrapper = (...jsArgs: unknown[]): Promise<unknown> =>
+  const wrapper = (...rawJsArgs: unknown[]): Promise<unknown> =>
     applyMembraneClosure(scope.runCtx, () =>
       withRegionCall(scope, async () => {
+        const jsArgs = trimToArity(rawJsArgs, self);
         // Args mint under the ENCLOSING invocation's runCtx (scope.runCtx), never CONSTANT_CTX.
         const schemeArgs = (await Promise.all(
           jsArgs.map(async (a) => jsToScheme(scope.runCtx, await a)),
         )) as SchemeValue[];
         const callCtx = makeCallCtx(scope.runCtx, scope.dynSite as InvocationLike | undefined);
         // Re-entry trace nests under the exporting invocation.
-        const raw = await withDynamicCallSite(scope.dynSite, () => applyCallback(self, schemeArgs, callCtx));
+        const raw = await withDynamicCallSite(scope.runCtx, scope.dynSite, () =>
+          applyCallback(self, schemeArgs, callCtx),
+        );
         invariant(!isBounceMarker(raw), "arrival/toJS: a reverse-membrane call resolved to a bounce token");
-        return withRegionScope(scope, () => (exit === undefined ? toJS(raw) : exit.element(raw)));
+        return withRegionScopeCall(scope, () => (exit === undefined ? toJS(raw) : exit.element(raw)));
       }),
     );
   byKey.set(WRAPPER_KEY, wrapper);

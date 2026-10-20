@@ -1,6 +1,5 @@
 /**
- * LAW — the first-class RUN CACHE (R2, arrival-mcp-rework-over-phases.md §2.2,
- * Q1/Q2 + Rulings A/B/D1). A run's durable twin is `(program, cache)`; these rows pin
+ * LAW — the first-class RUN CACHE (R2, Q1/Q2 + Rulings A/B/D1). A run's durable twin is `(program, cache)`; these rows pin
  * the mode law at the ONE interception chokepoint (the baked rosetta `run` wrapper,
  * gated on the R1 cache class + the `sink` lineage role) plus the normative
  * `canonicalJson`/`runCacheKey` content-keying algorithm.
@@ -19,12 +18,12 @@
  */
 import { describe, it, expect } from "vitest";
 import * as z from "../../common/scheme-zod/index.js";
-import { symbol } from "../../symbol/index.js";
-import { testCallCtx } from "../CallCtx.js";
+import * as symbol from "../../common/symbols/index.js";
+import { type CallCtx, testCallCtx } from "../CallCtx.js";
 
 import { EnvCapability } from "../../common/capability.js";
 import { exec } from "../../eval/generator-exec.js";
-import { RunContext, CONSTANT_CTX } from "../../run/RunContext.js";
+import { RunContext } from "../../run/RunContext.js";
 import { MemoryRunCache, canonicalJson, runCacheKey } from "../../run/run-cache.js";
 import { AExact } from "../../values/primitives/AExact.js";
 
@@ -73,7 +72,7 @@ function viewDef(name: string, impl?: (n: number) => Promise<number> | number) {
   let fires = 0;
   const def = symbol.rosetta`${name}: `(
     { input: [z.number], output: [z.number], cacheClass: "view" },
-    async (n: number) => {
+    async function (this: CallCtx, n: number) {
       fires++;
       return impl ? impl(n) : n * 2;
     },
@@ -102,7 +101,7 @@ describe("single-flight (D1) + eviction — at the wrapper", () => {
     let fires = 0;
     const def = symbol.rosetta`rc-pure-concurrent: `(
       { input: [z.number], output: [z.number], cacheClass: "pure" },
-      async (n: number) => {
+      async function (this: CallCtx, n: number) {
         fires++;
         await sleep(10);
         return n + 1;
@@ -119,7 +118,7 @@ describe("single-flight (D1) + eviction — at the wrapper", () => {
     let fires = 0;
     const def = symbol.rosetta`rc-sink-twice: `(
       { input: [z.number], output: [z.undefinedResult], provenance: "sink" },
-      async (_n: number) => {
+      async function (this: CallCtx, _n: number) {
         fires++;
         await sleep(5);
         return undefined;
@@ -169,29 +168,32 @@ function fixture() {
     symbols: (symbol, z) => ({
       peek: symbol.rosetta`peek: a boundary snapshot`(
         { input: [z.number], output: [z.number], cacheClass: "view" },
-        (n: number) => {
+        function (this: CallCtx, n: number) {
           counts.view++;
           return n * 2;
         },
       ),
       calc: symbol.rosetta`calc: contractually deterministic`(
         { input: [z.number], output: [z.number], cacheClass: "pure" },
-        (n: number) => {
+        function (this: CallCtx, n: number) {
           counts.pure++;
           return n + 100;
         },
       ),
       "fire!": symbol.rosetta`fire!: an effect`(
         { input: [z.number], output: [z.undefinedResult], provenance: "sink" },
-        (_n: number) => {
+        function (this: CallCtx, _n: number) {
           counts.sink++;
           return undefined;
         },
       ),
-      plain: symbol.rosetta`plain: unclassified`({ input: [z.number], output: [z.number] }, (n: number) => {
-        counts.plain++;
-        return n - 1;
-      }),
+      plain: symbol.rosetta`plain: unclassified`(
+        { input: [z.number], output: [z.number] },
+        function (this: CallCtx, n: number) {
+          counts.plain++;
+          return n - 1;
+        },
+      ),
     }),
   });
   return { cap, counts };

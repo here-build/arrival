@@ -8,21 +8,16 @@ import { AInexact } from "../values/primitives/AInexact.js";
 import { ABool, schemeFalse, schemeTrue } from "../values/primitives/ABool.js";
 import { ANil } from "../values/primitives/ANil.js";
 import { AVoid } from "../values/primitives/AVoid.js";
-import { AJSArray } from "./AJSArray.js";
-import { AJSObject } from "./AJSObject.js";
-import { hostFnToCallable, originalCallableOf } from "../values/primitives/ACallable.js";
 
 /**
- * JS → Scheme boxing: a single `typeof`-tag switch that constructs the right AValue
- * subtype for a raw host value (already-AValue short-circuits). Tag set is JS's fixed
- * typeof family + the two null-ish tags — closed, no plugins.
+ * JS → Scheme SCALAR boxing: a single `typeof`-tag switch that constructs the right AValue
+ * subtype for a raw host scalar (already-AValue short-circuits) — string, number, boolean,
+ * plus the two null-ish bottoms. Closed, no plugins.
  *
- * A single switch, not a registry: subtypes already extend AValue; object/function
- * boxers are plain construction. The function arm mints via hostFnToCallable — the
- * SAME reverse-membrane lens rosetta's INBOUND_CLAIMS function row uses (one mechanism,
- * two entry points; docs/membrane.md §CALLABLE-LENS is the law). Checks
- * originalCallableOf first so a reverse-membrane wrapper crossing back in re-admits as
- * its original callable.
+ * Containers and functions are NOT boxed here: they cross via `jsToScheme` (rosetta's
+ * inbound claims — object ladder, and the callable lens of docs/membrane.md §CALLABLE-LENS,
+ * which re-admits a reverse-membrane wrapper as its original callable). A non-null
+ * object or function reaching `fromJs` is a programmer error.
  *
  * Host bigint DOORS (NoLensError `"bigint"`) — same spirit as unique-symbol. Exact
  * numbers are safe-int ratios; convert with Number/bigintToNumber in the safe range
@@ -61,18 +56,16 @@ export function fromJs(ctx: RunContext, v: unknown, provenance: ReadonlySet<numb
       return provenance === EMPTY_PROVENANCE ? (v ? schemeTrue : schemeFalse) : new ABool(v, provenance);
     case "undefined":
       return new AVoid(provenance);
-    case "object":
-      // typeof [] === "object": JS array IS R7RS vector → AJSArray; plain object → AJSObject.
-      return Array.isArray(v) ? new AJSArray(v, provenance) : new AJSObject(v, provenance);
-    case "function": {
-      // docs/membrane.md §CALLABLE-LENS — bare host fn → reverse-membrane callable.
-      // Re-admission FIRST: hostProjectionOf wrapper re-admits as ORIGINAL callable (eq?).
-      const original = originalCallableOf(v as object);
-      return original ?? hostFnToCallable(ctx, v as (...args: unknown[]) => unknown, provenance);
-    }
     default:
-      // symbol and any future tag: not boxable here (symbols cross via membrane
+      // Containers and functions cross via jsToScheme (object ladder / callable lens rows):
+      // they need a ctx-threaded lens and, for functions, re-admission by identity.
+      // symbol and any future tag: not boxable here either (symbols cross via the
       // keyword/Symbol.for path). Programmer error, not a runtime one.
-      invariant(false, `fromJs: no boxer for typeof tag "${typeof v}"`);
+      invariant(
+        false,
+        typeof v === "object" || typeof v === "function"
+          ? "fromJs is the scalar boxer — containers/functions cross via jsToScheme"
+          : `fromJs: no boxer for typeof tag "${typeof v}"`,
+      );
   }
 }

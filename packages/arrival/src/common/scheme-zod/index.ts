@@ -12,6 +12,7 @@
 
 import * as z from "zod";
 import { applyMembraneClosure, CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
+import { currentRun, withCurrentRun } from "../../run/current-run.js";
 import { makeCallCtx } from "../../run/CallCtx.js";
 import { jsToScheme, type InvocationLike } from "../../membrane/rosetta.js";
 
@@ -33,10 +34,10 @@ import { AJSObject } from "../../membrane/AJSObject.js";
 import { AJSArray } from "../../membrane/AJSArray.js";
 import { markSpineAdopting } from "../spine-adoption.js";
 import { CodecFidelityError, R7RSError } from "../../errors.js";
-import { ALambda, DoorProcedure, applyCallback, ACallable } from "../../values/primitives/ACallable.js";
+import { ALambda, DoorProcedure, applyCallback, ACallable, trimToArity } from "../../values/primitives/ACallable.js";
 import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
 import { ARosettaProcedure } from "../../values/primitives/ARosettaProcedure.js";
-import { currentRegionScope, DETACHED_SCOPE, withRegionCall } from "../../membrane/region-scope.js";
+import { currentRegionScope, detachedScope, withRegionCall } from "../../membrane/region-scope.js";
 // Leaf with ZERO own imports — safe from scheme-zod cycles (same as rosetta.ts).
 import { withDynamicCallSite } from "../../eval/dynamic-call-site.js";
 import type { AListAlike, SchemeValue } from "../../values/types.js";
@@ -223,30 +224,22 @@ export const dynamic = dynamicSchema as CrossingOnly<typeof dynamicSchema> & Dyn
 // the wrong run.
 //
 // Priority:
-//   1. `_marshalRunCtx` — ambient this file installs. Callers with a live
-//      RunContext: `procedure()` encode/decode (`callCtx.runCtx` / closed-over
-//      `scope.runCtx`); `common/symbols/rosetta.ts` wraps its output-encode in
-//      `withMarshalCtx` (also what `instance` encode needs — no boxed operand).
-//   2. `currentRegionScope()?.runCtx` — same ambient `z.procedure` reverse-
-//      crossing decode uses for its wrapper cache. Open only when
-//      `carriesCallable` opens a scope; else absent.
+//   1. `currentRun()` — the sync-window pointer (run/current-run.ts, P19's one sanctioned
+//      ambient). Callers with a live RunContext open it via `withMarshalCtx`: `procedure()`
+//      encode/decode (`callCtx.runCtx` / closed-over `scope.runCtx`); `common/symbols/rosetta.ts`
+//      wraps its output-encode (also what `instance` encode needs — no boxed operand).
+//   2. `currentRegionScope()?.runCtx` — a region window sets the same pointer, so this is the
+//      belt to (1)'s braces. Open only when `carriesCallable` opens a scope; else absent.
 //   3. CONSTANT_CTX — nothing live (unit test calling `.parse`/`.encode` bare).
-let _marshalRunCtx: RunContext | undefined;
 
-/** Install `ctx` as ambient marshal ctx for a SYNCHRONOUS `fn` — save/restore
- *  (same idiom as `withRegionScope`; nesting restores outer on the way out). */
+/** Make `ctx` the marshal ctx for a SYNCHRONOUS `fn` — a `withCurrentRun` window
+ *  (nesting restores the outer pointer on the way out; a thenable body is a door). */
 export function withMarshalCtx<T>(ctx: RunContext, fn: () => T): T {
-  const saved = _marshalRunCtx;
-  _marshalRunCtx = ctx;
-  try {
-    return fn();
-  } finally {
-    _marshalRunCtx = saved;
-  }
+  return withCurrentRun(ctx, fn);
 }
 
 function marshalCtx(): RunContext {
-  return _marshalRunCtx ?? currentRegionScope()?.runCtx ?? CONSTANT_CTX;
+  return currentRun() ?? currentRegionScope()?.runCtx ?? CONSTANT_CTX;
 }
 
 // ── Scalar primitives ──────────────────────────────────────────────────────
@@ -837,7 +830,7 @@ export function instance<T extends object>(Ctor: new (...args: any[]) => T) {
  *
  * Decode is the typed half of reverse-membrane crossing
  * (`docs/membrane.md` §REGION): reads ambient `currentRegionScope()`, falls
- * back to `DETACHED_SCOPE` when decoded with no live crossing.
+ * back to `detachedScope()` when decoded with no live crossing.
  */
 export function procedure<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(input?: I, output?: O) {
   return named(
@@ -848,7 +841,7 @@ export function procedure<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(input?
       {
         // `as never` at marshal sites: generic ZodTypeAny makes in/out opaque.
         decode: (callable) => {
-          const scope = currentRegionScope() ?? DETACHED_SCOPE;
+          const scope = currentRegionScope() ?? detachedScope();
           // `"typed"` key in the two-level wrapper cache — pre-split single key
           // let whichever family crossed first serve its wrapper to the other
           // (docs/membrane.md §REGION).
@@ -861,9 +854,12 @@ export function procedure<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(input?
           if (cached) return cached;
           // Close over `scope` at decode — never re-read ambient at invoke time.
           // `withRegionCall` owns escape/pending/abort; this owns only marshaling.
-          const wrapper = (...jsArgs: unknown[]) =>
+          const wrapper = (...rawJsArgs: unknown[]) =>
             applyMembraneClosure(scope.runCtx, () =>
               withRegionCall(scope, async () => {
+                // JS calling convention (Array#map passes value,index,array): drop extras past a
+                // finite max arity. Too-few args still reach the scheme-side arity door.
+                const jsArgs = trimToArity(rawJsArgs, callable);
                 // Install closed-over `scope.runCtx` — invoke may run long after
                 // decode, when ambient scope is unrelated or undefined.
                 const schemeArgs = input
@@ -872,7 +868,7 @@ export function procedure<I extends z.ZodTypeAny, O extends z.ZodTypeAny>(input?
                 // Re-entry nests under exporting invocation (`scope.dynSite`);
                 // `withDynamicCallSite` for nested lambda re-entry.
                 const callCtx = makeCallCtx(scope.runCtx, scope.dynSite as InvocationLike | undefined);
-                const r = await withDynamicCallSite(scope.dynSite, () =>
+                const r = await withDynamicCallSite(scope.runCtx, scope.dynSite, () =>
                   applyCallback(callable, schemeArgs as SchemeValue[], callCtx),
                 );
                 return output ? withMarshalCtx(scope.runCtx, () => z.decode(output, r as never)) : r;

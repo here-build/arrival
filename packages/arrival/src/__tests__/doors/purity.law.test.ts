@@ -3,9 +3,9 @@
 // dataflow — dynamics (call/cc, dynamic-wind, make-parameter, delay/force), multi-
 // return (values family), and mutators (set!, set-car!, vector-set!, …) are omitted
 // BY DESIGN, each replaced with a teaching `PurityError` naming the reason and
-// (where honest) an alternative. Single law table — absorbs the former
-// `../purity-doors.test.ts` split (multi-return lived only there; missing mutators
-// list-set!/string-copy!/append!/bytevector-fill!/promise? lived in neither).
+// (where honest) an alternative. Single law table — covers multi-return
+// and the mutators (list-set!/string-copy!/append!/bytevector-fill!/promise?) alongside
+// the rest of the purity family.
 // Completeness target: every purity-class door declared in r7rs/binding,
 // r7rs/control, and the type packs' mutator doors has a row here (declared-doors.law
 // covers fire-at-apply for ALL doors; this law pins the purity REASON family + that
@@ -21,10 +21,10 @@ import { PurityError } from "../../errors.js";
 async function door(src: string): Promise<{ purity: boolean; message: string }> {
   try {
     await exec(src);
-  } catch (e) {
-    const direct = e instanceof PurityError;
-    const viaCause = (e as { cause?: unknown })?.cause instanceof PurityError;
-    return { purity: direct || viaCause, message: (e as Error)?.message ?? String(e) };
+  } catch (error) {
+    const direct = error instanceof PurityError;
+    const viaCause = (error as { cause?: unknown })?.cause instanceof PurityError;
+    return { purity: direct || viaCause, message: (error as Error)?.message ?? String(error) };
   }
   throw new Error(`expected a purity door for: ${src}`);
 }
@@ -75,9 +75,13 @@ const DYNAMICS_AND_MUTATORS: ReadonlyArray<readonly [name: string, src: string, 
   ["vector-set!", "(vector-set! (vector 1 2 3) 0 9)", /frozen by design|construct a new value/],
   ["vector-fill!", "(vector-fill! (vector 1 2 3) 0)", /frozen by design|construct a new value/],
   ["vector-copy!", "(vector-copy! (vector 1 2 3) 0 (vector 4 5 6))", /frozen by design|construct a new value/],
-  ["string-set!", "(string-set! (string #\\a #\\b) 0 #\\z)", /frozen by design|construct a new value/],
-  ["string-fill!", "(string-fill! (string #\\a #\\b) #\\z)", /frozen by design|construct a new value/],
-  ["string-copy!", "(string-copy! (string #\\a #\\b) 0 (string #\\c #\\d))", /frozen by design|construct a new value/],
+  ["string-set!", String.raw`(string-set! (string #\a #\b) 0 #\z)`, /frozen by design|construct a new value/],
+  ["string-fill!", String.raw`(string-fill! (string #\a #\b) #\z)`, /frozen by design|construct a new value/],
+  [
+    "string-copy!",
+    String.raw`(string-copy! (string #\a #\b) 0 (string #\c #\d))`,
+    /frozen by design|construct a new value/,
+  ],
   ["bytevector-u8-set!", "(bytevector-u8-set! (bytevector 1 2 3) 0 9)", /frozen by design|construct a new value/],
   [
     "bytevector-copy!",
@@ -111,6 +115,6 @@ describe("F6 doors — non-mutating copies still WORK (the sibling positive asse
   });
   it("bytevector-copy returns a fresh bytevector", async () => {
     const [v] = await exec("(bytevector-copy (bytevector 1 2 3))");
-    expect(Array.from(v as Iterable<number>)).toEqual([1, 2, 3]);
+    expect([...(v as Iterable<number>)]).toEqual([1, 2, 3]);
   });
 });

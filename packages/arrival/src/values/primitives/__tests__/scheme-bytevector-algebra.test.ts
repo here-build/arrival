@@ -3,9 +3,8 @@
 // single-byte, and prefix relationships (so Ord totality/antisymmetry and
 // Setoid symmetry/transitivity are actually exercised). equalClone forges a
 // fresh distinct-but-equal payload, exercising value equality a bare `===`
-// would miss. (Boxing track S1 — docs/plan-2026-06-10-boxing-track.md.)
+// would miss. (Boxing track S1.)
 import fc from "fast-check";
-import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { describe, expect, it } from "vitest";
 import { ABytevector } from "../ABytevector.js";
 import { ordLaws, semigroupLaws, setoidLaws } from "./algebra-laws.js";
@@ -19,7 +18,7 @@ const arb = fc
   )
   .map((bytes) => new ABytevector(Uint8Array.from(bytes)));
 
-const equalClone = (bv: ABytevector) => new ABytevector(bv.__bytevector__.slice());
+const equalClone = (bv: ABytevector) => new ABytevector([...bv.__bytevector__]);
 
 setoidLaws("SchemeBytevector", { arb, equalClone });
 ordLaws("SchemeBytevector", arb);

@@ -1,4 +1,4 @@
-// kwargs-rejection-tolerance — B5 (benchmark-defect-register.md): the third option for an
+// kwargs-rejection-tolerance — B5: the third option for an
 // unknown kwarg key, split BEFORE throwing:
 //   - NEAR a declared param (a typo, e.g. :pageSze vs :pageSize) → keep the hard door,
 //     now with a did-you-mean suffix (load-bearing constraint #7: the typo door must
@@ -14,7 +14,6 @@ import { describe, expect, it } from "vitest";
 import * as z from "../scheme-zod/index.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
-import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { decodeKwargsStrict, drainDroppedKwargNotes, KwargsRejectionError } from "../kwargs-rejection.js";
 
 const str = (s: string) => new AString(s);
@@ -55,8 +54,8 @@ describe("decodeKwargsStrict — far-unknown-key tolerance (B5)", () => {
         { query: z.string, pageSize: z.number.optional() },
         { query: str("x"), pageSze: num(5) },
       );
-    } catch (e) {
-      caught = e;
+    } catch (error) {
+      caught = error;
     }
     expect(caught).toBeInstanceOf(KwargsRejectionError);
     expect((caught as Error).message).toMatch(/:pageSze — unknown key \(did you mean :pageSize\?\)/);
@@ -70,8 +69,8 @@ describe("decodeKwargsStrict — far-unknown-key tolerance (B5)", () => {
         { query: z.string, pageSize: z.number.optional() },
         { query: str("x"), pageSze: num(5), limit: num(10) },
       );
-    } catch (e) {
-      caught = e;
+    } catch (error) {
+      caught = error;
     }
     expect(caught).toBeInstanceOf(KwargsRejectionError);
     expect((caught as Error).message).toMatch(/:pageSze/);
@@ -82,8 +81,8 @@ describe("decodeKwargsStrict — far-unknown-key tolerance (B5)", () => {
     let caught: unknown;
     try {
       decodeKwargsStrict("search", { query: z.string }, {});
-    } catch (e) {
-      caught = e;
+    } catch (error) {
+      caught = error;
     }
     expect(caught).toBeInstanceOf(KwargsRejectionError);
     expect((caught as Error).message).toBe("search: arguments rejected — 1 problem(s):\n  :query — missing (required)");
@@ -93,8 +92,8 @@ describe("decodeKwargsStrict — far-unknown-key tolerance (B5)", () => {
     let caught: unknown;
     try {
       decodeKwargsStrict("search", { query: z.string }, { limit: num(10) });
-    } catch (e) {
-      caught = e;
+    } catch (error) {
+      caught = error;
     }
     expect(caught).toBeInstanceOf(KwargsRejectionError);
     expect((caught as Error).message).toMatch(/:query — missing \(required\)/);

@@ -23,13 +23,13 @@ import { type JSWorldArray, type SchemeValue } from "../values/types.js";
 // Runtime import cycle (benign — see header): hoisted export function, runtime-only use.
 import { jsToScheme } from "./rosetta.js";
 import { is_promise } from "../values/value-guards.js";
-import { settleEntry } from "../values/primitives/pending-entry.js";
+import { pendEntry } from "../values/primitives/pending-entry.js";
 import { tf } from "../values/tagless-final.js";
 import { type ANil, nil } from "../values/primitives/ANil.js";
 import { AJSArrayList } from "../values/primitives/APair.js";
-import { accessHas, accessKeys, accessMember, NOT_FOUND } from "./interop-access.js";
-import { ForeignProxyFreezeError, InteropAccessError, strictGate } from "../errors.js";
-import { foldMemberName } from "./AJSObject.js";
+import { accessHas, accessKeys, accessMember, freezeBorrowedSource, NOT_FOUND } from "./interop-access.js";
+import { InteropAccessError, strictGate } from "../errors.js";
+import { foldMemberName } from "../values/key-name.js";
 import type { ACallable } from "../values/primitives/ACallable.js";
 
 /**
@@ -120,14 +120,14 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
     fn: Parameters<AVector["arrival/tagless-final/map"]>[0],
     runCtx: RunContext,
   ): AVector | Promise<AVector> {
-    return applyMembraneClosure(runCtx, () => this.vec()[tf("map")](fn, runCtx));
+    return applyMembraneClosure(runCtx, () => this.vec(runCtx)[tf("map")](fn, runCtx));
   }
 
   ["arrival/tagless-final/filter"](
     pred: Parameters<AVector["arrival/tagless-final/filter"]>[0],
     runCtx: RunContext,
   ): Promise<AVector> {
-    return applyMembraneClosure(runCtx, () => this.vec()[tf("filter")](pred, runCtx));
+    return applyMembraneClosure(runCtx, () => this.vec(runCtx)[tf("filter")](pred, runCtx));
   }
 
   ["arrival/tagless-final/reduce"]<Acc extends SchemeValue>(
@@ -135,30 +135,30 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
     initial: Acc,
     runCtx: RunContext,
   ): Acc | Promise<Acc> {
-    return applyMembraneClosure(runCtx, () => this.vec()[tf("reduce")](fn, initial, runCtx));
+    return applyMembraneClosure(runCtx, () => this.vec(runCtx)[tf("reduce")](fn, initial, runCtx));
   }
 
   ["arrival/tagless-final/sort"](
     comparator: Parameters<AVector["arrival/tagless-final/sort"]>[0],
     runCtx: RunContext,
   ): AVector {
-    return applyMembraneClosure(runCtx, () => this.vec()[tf("sort")](comparator, runCtx));
+    return applyMembraneClosure(runCtx, () => this.vec(runCtx)[tf("sort")](comparator, runCtx));
   }
 
   ["arrival/tagless-final/take"](n: number, runCtx: RunContext): AVector {
-    return applyMembraneClosure(runCtx, () => this.vec()[tf("take")](n, runCtx));
+    return applyMembraneClosure(runCtx, () => this.vec(runCtx)[tf("take")](n, runCtx));
   }
 
   ["arrival/tagless-final/drop"](n: number, runCtx: RunContext): AVector {
-    return applyMembraneClosure(runCtx, () => this.vec()[tf("drop")](n, runCtx));
+    return applyMembraneClosure(runCtx, () => this.vec(runCtx)[tf("drop")](n, runCtx));
   }
 
   ["arrival/tagless-final/take-while"](pred: ACallable, runCtx: RunContext): Promise<AVector> {
-    return applyMembraneClosure(runCtx, () => this.vec()[tf("take-while")](pred, runCtx));
+    return applyMembraneClosure(runCtx, () => this.vec(runCtx)[tf("take-while")](pred, runCtx));
   }
 
   ["arrival/tagless-final/drop-while"](pred: ACallable, runCtx: RunContext): Promise<AVector> {
-    return applyMembraneClosure(runCtx, () => this.vec()[tf("drop-while")](pred, runCtx));
+    return applyMembraneClosure(runCtx, () => this.vec(runCtx)[tf("drop-while")](pred, runCtx));
   }
 
   // SPINE READING of the borrowed array (AJSArrayList header: chart law). Asking a
@@ -176,7 +176,7 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
         alternative: "use `(vector-ref v 0)` for the first element, or `(vector->list v)`",
       });
       this.freezeSource();
-      return this.source.length > 0 ? this.elementAt(0) : nil;
+      return this.source.length > 0 ? this.elementAt(0, runCtx) : nil;
     });
   }
 
@@ -210,10 +210,10 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
   }
 
   // Length stamps the container grouping-fact, never the elements' union (R2).
-  ["arrival/tagless-final/length"](runCtx?: RunContext): AValue | number {
+  ["arrival/tagless-final/length"](runCtx: RunContext): AValue | number {
     return applyMembraneClosure(runCtx, () => {
       this.freezeSource();
-      return withInputProvenance([this], this.source.length);
+      return withInputProvenance(runCtx, [this], this.source.length);
     });
   }
 
@@ -243,8 +243,10 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
       // Promise-valued member is a lazy pending cell — settled box carries EMPTY
       // provenance, same as the sync read below.
       if (is_promise(raw))
-        return this.pendingCell(name, raw, (settled) => jsToScheme(CONSTANT_CTX, settled, {}, EMPTY_PROVENANCE));
-      const boxed: SchemeValue = jsToScheme(CONSTANT_CTX, raw, {}, EMPTY_PROVENANCE);
+        return this.pendingCell(name, raw, (settled) =>
+          jsToScheme(runCtx ?? CONSTANT_CTX, settled, {}, EMPTY_PROVENANCE),
+        );
+      const boxed: SchemeValue = jsToScheme(runCtx ?? CONSTANT_CTX, raw, {}, EMPTY_PROVENANCE);
       return boxed;
     });
   }
@@ -265,15 +267,16 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
 
   // Indexed access — boxes JUST element k (no full materialize). jsToScheme carries
   // THIS container's provenance so (vector-ref borrowed k) stamps identically to
-  // (vector->list borrowed). A CONSTANT_CTX mint would drop provenance.
+  // (vector->list borrowed). Mints under the reading run's ctx; CONSTANT_CTX only where no
+  // ctx is reachable (`vec()` materialization, a direct `elementAt` without a run).
   ["arrival/tagless-final/vector-ref"](k: number, runCtx?: RunContext): SchemeValue | Promise<SchemeValue> {
     return applyMembraneClosure(runCtx, () => {
       this.freezeSource();
       const raw = this.source[k];
       // Promise-valued element is a lazy pending cell; settled box takes the SAME boxing
       // as the sync path (container provenance + attestation inheritance).
-      if (is_promise(raw)) return this.pendingCell(k, raw, (settled) => this.boxElement(settled));
-      return this.boxElement(raw);
+      if (is_promise(raw)) return this.pendingCell(k, raw, (settled) => this.boxElement(settled, runCtx));
+      return this.boxElement(raw, runCtx);
     });
   }
 
@@ -289,12 +292,12 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
    * freshIfSingleton so a raw boolean surfaces as an attested clone, never the shared
    * flyweight.
    */
-  elementAt(i: number): SchemeValue {
+  elementAt(i: number, runCtx?: RunContext): SchemeValue {
     this.freezeSource();
-    return this.boxElement(this.source[i]);
+    return this.boxElement(this.source[i], runCtx);
   }
 
-  private boxElement(raw: unknown): SchemeValue {
+  private boxElement(raw: unknown, runCtx?: RunContext): SchemeValue {
     // HYGIENE LAW at the O(1) penetration point (docs/membrane.md §HYGIENE) — not an
     // O(n) constructor scan the lazy borrow exists to avoid. An AValue here is an
     // unobserved flip that jsToScheme would deep-re-stamp with this container's
@@ -305,7 +308,7 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
         "pushed into a borrowed JS store without crossing the membrane (an unobserved flip). Cross it " +
         "with `toJS` first, or hold it in an AVector.",
     );
-    const boxed: SchemeValue = jsToScheme(CONSTANT_CTX, raw, {}, this.provenance);
+    const boxed: SchemeValue = jsToScheme(runCtx ?? CONSTANT_CTX, raw, {}, this.provenance);
     return isAttested(this) ? attestDeep(freshIfSingleton(boxed)) : boxed;
   }
 
@@ -324,27 +327,19 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
     const hit = cells.get(key);
     if (hit !== undefined) return hit;
     const slot = cells;
-    const cell = settleEntry(raw, box, (boxed) => slot.set(key, boxed));
-    slot.set(key, cell);
-    return cell;
+    return pendEntry(raw, box, (cell) => slot.set(key, cell));
   }
 
   // Freeze contract — docs/membrane.md §BOXING. Idempotent (Object.isFrozen).
   // Always freezes on first read.
   private freezeSource(): void {
-    if (!Object.isFrozen(this.source)) {
-      try {
-        Object.freeze(this.source);
-      } catch (error) {
-        throw new ForeignProxyFreezeError(error);
-      }
-    }
+    freezeBorrowedSource(this.source);
   }
 
   // Box the borrowed source into an owned AVector through the membrane, once. Vector
   // algebra DELEGATES here. new AVector runs only at call time (cycle-avoidance of
   // implements-not-extends).
-  private vec(): AVector {
+  private vec(runCtx?: RunContext): AVector {
     this.freezeSource();
     // Each element through jsToScheme carrying THIS container's provenance — parallel
     // to AJSObject.get. Nested arrays/objects re-borrow faithfully.
@@ -354,7 +349,7 @@ export class AJSArray<S extends readonly unknown[] = readonly unknown[]> extends
       const inherit = isAttested(this);
       this.boxedVec = new AVector(
         this.source.map((v) => {
-          const boxed: SchemeValue = jsToScheme(CONSTANT_CTX, v, {}, this.provenance);
+          const boxed: SchemeValue = jsToScheme(runCtx ?? CONSTANT_CTX, v, {}, this.provenance);
           return inherit ? attestDeep(freshIfSingleton(boxed)) : boxed;
         }),
         this.provenance,

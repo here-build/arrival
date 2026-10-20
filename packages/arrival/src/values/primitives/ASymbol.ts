@@ -5,7 +5,7 @@ import { isSchemeString, isString, type SchemeStringLike, type SchemeValue } fro
 import { nil } from "./ANil.js";
 import type { CallResult } from "./ACallable.js";
 import { attachOffendingValue } from "../../errors.js";
-import { ASYMBOL_LITERAL, ASYMBOL_OBJECT, DATA } from "../../well-known/symbols.js";
+import { ASYMBOL_LITERAL, DATA } from "../../well-known/symbols.js";
 
 /**
  * Provenance × interning invariant: `SchemeSymbol.list[name]` is the canonical
@@ -62,7 +62,6 @@ export class ASymbol extends AValue {
    *  a string (named gensym) or number (anonymous `#:gN`); a gensym minted via the
    *  no-double-gensym path carries no slot at all — hence `?` + `string | number`. */
   static readonly literal = ASYMBOL_LITERAL;
-  static readonly object = ASYMBOL_OBJECT;
   readonly kind = "symbol" as const;
   /** Interned symbols carry their string name; a GENSYM carries a raw ES6 `symbol`
    *  as its name — the symbol IS the uniqueness (uninterned by construction, no
@@ -214,7 +213,7 @@ export class AKeywordSymbol extends ASymbol {
     const getter = target?.["arrival/tagless-final/get"];
     // `get` takes bare `runCtx` — pull it off `callCtx`.
     if (typeof getter === "function") return getter.call(target, this, callCtx.runCtx) as CallResult;
-    // B2 (benchmark-defect-register.md): a receiver with NO `arrival/tagless-final/get`
+    // B2: a receiver with NO `arrival/tagless-final/get`
     // term splits into two facts a bare `nil` fall-through would conflate:
     //   • nil (kind "nil", or a raw JS null/undefined reaching here) is a legitimate
     //     ABSENT receiver — `(:key nil)` stays nil (pinned by
@@ -228,7 +227,7 @@ export class AKeywordSymbol extends ASymbol {
     const kind = target instanceof AValue ? target.kind : typeof target;
     // OFFENDING_VALUE (errors.ts): names the receiver a downstream door can read off
     // `.provenance` — same discipline as op-helpers.ts's `stringValue` door (B1) and
-    // `arrival-manifold/bind.ts`'s ARGS_REJECTION.
+    // the manifold's bind-time ARGS_REJECTION.
     throw attachOffendingValue(
       new TypeError(
         `${String(this.__name__)} on a ${kind} — a ${kind} has no members to read (it declares no ` +

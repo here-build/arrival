@@ -1,5 +1,5 @@
 // symbols — the `symbol` namespace: one tagged-template factory per file, re-exported here.
-// `../symbol.js` does `export * as symbol from "./symbols/index.js"`. One-file-per-tag lets the
+// The package root (`src/index.ts`) re-exports it as `symbol`. One-file-per-tag lets the
 // bundler include only accessed tags. Shared machinery in ./_bake.js. Acyclic.
 //
 // docs/environments.md §SYMBOL-KINDS — authoritative per-kind table. Map is navigation only.

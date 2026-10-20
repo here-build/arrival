@@ -22,10 +22,9 @@ import { CARRIERS_TEXT } from "./carriers-text.generated.js";
 // references `list`/`car`/`map` + the carriers unqualified). The verbatim source is baked into
 // `carriers-text.generated.ts` at build time (scripts/gen-carriers-text.mjs) — reading it via
 // `node:fs` at runtime would break the browser/worker (Vite externalizes `node:fs`).
-let cachedVocabulary: string | undefined;
+const CARRIER_VOCABULARY: string = CARRIERS_TEXT.replaceAll(/^export /gm, "");
 function carrierVocabulary(): string {
-  cachedVocabulary ??= CARRIERS_TEXT.replaceAll(/^export /gm, "");
-  return cachedVocabulary;
+  return CARRIER_VOCABULARY;
 }
 
 export interface HarvestedPrelude {

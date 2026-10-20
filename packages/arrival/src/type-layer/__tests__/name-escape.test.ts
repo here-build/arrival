@@ -32,7 +32,7 @@ const CORPUS = [
   "$weird", // a literal `$` — escaped through `$dollar$`, still round-trips
 ];
 
-const TS_IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+const TS_IDENTIFIER = /^[A-Z_$][\w$]*$/i;
 
 describe("name-escape — the bifunctor lens", () => {
   it.each(CORPUS)("ROUND-TRIPS %j: unescapeName(escapeName(x)) === x", (name) => {

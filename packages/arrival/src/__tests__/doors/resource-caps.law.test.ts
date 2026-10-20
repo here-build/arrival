@@ -1,7 +1,7 @@
 // F6 — Doors (docs/test-suite-architecture.md F6, P5 errors-as-doors). Resource-cap
 // doors: `make-string`/`make-vector` allocation limits, the parser's nesting-depth
 // cap, and the execution wall-clock budget. STRONG-replaces the weak assertions in
-// `../sandbox-escape.test.ts`'s "CRITICAL: resource exhaustion (DoS vectors)" block
+// `src/membrane/__tests__/sandbox-escape.test.ts`'s "CRITICAL: resource exhaustion (DoS vectors)" block
 // (per the 2026-07-08 invariant-verdict sweep) — those tests only checked "something threw fast"; these assert
 // the ACTUAL teaching-door message, found by reading the real throw sites:
 //   - allocation cap: values/op-helpers.ts's `assertAllocatable`
@@ -27,7 +27,7 @@ describe("F6 doors — resource caps teach (allocation limit)", () => {
   // sandbox-escape.test.ts's original audit comment for why 1e8 is the right probe
   // value: below V8's cap, above ours).
   it("(make-string 1e8 ...) errors with the allocation-cap teaching message, not an engine leak", async () => {
-    await expect(exec("(make-string 100000000 #\\x)")).rejects.toThrow(
+    await expect(exec(String.raw`(make-string 100000000 #\x)`)).rejects.toThrow(
       /make-string: requested length \d+ exceeds allocation limit \d+/,
     );
   });
@@ -48,7 +48,7 @@ describe("F6 doors — resource caps teach (parser nesting depth)", () => {
   // "Ideally something like /nest|depth|too deep/i" — that "ideally" is made real
   // here, since the cap already exists and already teaches).
   it("deeply-nested input throws a graceful, named parse-depth door — not a stack overflow", async () => {
-    const deep = "(".repeat(10000) + "1" + ")".repeat(10000);
+    const deep = `${"(".repeat(10_000)}1${")".repeat(10_000)}`;
     await expect(exec(deep)).rejects.toThrow(/nest|depth|too deep/i);
     // Doubly-confirms the negative the v1 test asserted: whatever this throws, it
     // is definitely not the native overflow message.
@@ -68,5 +68,5 @@ describe("F6 doors — resource caps teach (wall-clock execution budget)", () =>
     await expect(exec("(let loop () (loop))", { budgetMs: 150 })).rejects.toThrow(
       /execution budget exceeded \([\d.]+ms\)/,
     );
-  }, 10000);
+  }, 10_000);
 });

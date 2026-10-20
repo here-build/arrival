@@ -9,9 +9,9 @@
 
 import invariant from "tiny-invariant";
 import { CONSTANT_CTX, type RunContext } from "../run/RunContext.js";
-import { makeCallCtx } from "../run/CallCtx.js";
+import { makeCallCtx, type CallCtx } from "../run/CallCtx.js";
 import { ACallable, applyCallback } from "./primitives/ACallable.js";
-import { currentRegionScope, isSilentRegion, recordHostScheduleVerdict } from "../membrane/region-scope.js";
+import { currentRegionScope, recordHostScheduleVerdict } from "../membrane/region-scope.js";
 
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "./primitives/AValue.js";
 import { type ABool, schemeFalse, schemeTrue } from "./primitives/ABool.js";
@@ -24,44 +24,26 @@ import { is_false, is_promise } from "../values/value-guards.js";
 import { type ANumeric } from "./numbers.js";
 import { type SchemeValue } from "./types.js";
 import { ACharacter } from "./primitives/ACharacter.js";
+import { ANil } from "./primitives/ANil.js";
 import { attachOffendingValue, ComparatorRequiredError } from "../errors.js";
 import { tf } from "./tagless-final.js";
 
-// Eager-stamp oracle flag: withInputProvenance/mintVerdict accumulate provenance.
-// TEST-ONLY oracle — OFF by default so production hot paths skip accumulation while
-// boxed-value discipline stays intact. Turned ON by CI agreement oracle and tests
-// that assume eager accumulation is live. Module-GLOBAL; upgrade path if a process
-// needs stamped AND unstamped envs simultaneously is a RunContext-carried flag.
-let eagerProvenanceOracleEnabled = false;
-
-/** Is the eager-stamp oracle live? Default FALSE. Reports the raw AMBIENT flag only —
- *  NOT the effective in-γ state withInputProvenance also consults. */
-export function isEagerProvenanceOracleEnabled(): boolean {
-  return eagerProvenanceOracleEnabled;
-}
-
-/** Opt out of (or back into) eager stamp accumulation process-wide. Values still box;
- *  OFF means EMPTY provenance outside a silent region. */
-export function setEagerProvenanceOracleEnabled(enabled: boolean): void {
-  eagerProvenanceOracleEnabled = enabled;
-}
-
 /**
- * EFFECTIVE accumulation switch: ambient flag OR "inside a silent region right now".
+ * EFFECTIVE accumulation switch, read off THE RUN (P17-P19: no module flag):
+ * `runCtx.eagerStamps` (test/CI agreement oracle; OFF in production so hot paths skip
+ * accumulation while boxing stays intact) OR `runCtx.silent` (γ/replay faces).
  *
  * WHY the OR is load-bearing: every γ/replay face re-executes a wire's body through
- * this SAME interpreter, wrapped in `withSilentRegion`. Ingress values carry recorded
+ * this SAME interpreter on a hermetic run minted `silent`. Ingress values carry recorded
  * stamp ids; the only mechanism that unions those ids into the egress's own
- * `.provenance` is this file's accumulation. If production default is OFF and γ did
- * not force accumulation on, replay would silently produce correct-looking values with
- * EMPTY provenance — breaking the wire-γ adjunction. Gating on `isSilentRegion()`
- * means every replay path is correct BY CONSTRUCTION.
+ * `.provenance` is accumulation. If γ did not force it on, replay would silently produce
+ * correct-looking values with EMPTY provenance — breaking the wire-γ adjunction.
  *
  * EXPORTED because hand-rolled `unionProvenance` sites (numeric arithmetic) import
  * this instead of duplicating the OR.
  */
-export function isEagerAccumulationActive(): boolean {
-  return eagerProvenanceOracleEnabled || isSilentRegion();
+export function isEagerAccumulationActive(runCtx: RunContext): boolean {
+  return runCtx.eagerStamps || runCtx.silent;
 }
 
 // Allocation cap — DoS defense for size-parameterized constructors
@@ -166,8 +148,7 @@ export interface AOrd {
 export const isOrd = (x: unknown): x is AOrd => x != null && typeof (x as Partial<AOrd>)[tf("lte")] === "function";
 const lte = (a: AOrd, b: unknown): boolean => Boolean(a[tf("lte")](b));
 
-const isNilValue = (x: unknown): boolean =>
-  x == null || (x as { constructor?: { name?: string } })?.constructor?.name === "ANil";
+const isNilValue = (x: unknown): boolean => x == null || x instanceof ANil;
 export function nilOrderCompare(a: unknown, b: unknown): -1 | 0 | 1 | undefined {
   const aN = isNilValue(a);
   const bN = isNilValue(b);
@@ -180,9 +161,9 @@ export const ORD_REL: Record<"<" | ">" | "<=" | ">=", (a: AOrd, b: AOrd) => bool
   "<=": (a, b) => lte(a, b),
   ">=": (a, b) => lte(b, a),
 };
-export function deriveOrd(sym: "<" | ">" | "<=" | ">="): (...args: unknown[]) => ABool {
+export function deriveOrd(sym: "<" | ">" | "<=" | ">="): (this: CallCtx, ...args: unknown[]) => ABool {
   const rel = ORD_REL[sym];
-  return (...args: unknown[]): ABool => {
+  return function (this: CallCtx, ...args: unknown[]): ABool {
     let verdict = true;
     for (let i = 0; i < args.length - 1; i++) {
       if (!rel(args[i] as AOrd, args[i + 1] as AOrd)) {
@@ -190,7 +171,7 @@ export function deriveOrd(sym: "<" | ">" | "<=" | ">="): (...args: unknown[]) =>
         break;
       }
     }
-    return mintVerdict(args, verdict);
+    return mintVerdict(this.runCtx, args, verdict);
   };
 }
 
@@ -321,15 +302,15 @@ export function isSchemeNumber(value: unknown): boolean {
  * RETURN-TYPE CAST — `fromJs(…) as T` is inherent: seam between layers modeling
  * values differently (provenance boxes; contract layer types by decoded shape).
  */
-export function withInputProvenance<T>(args: readonly unknown[], result: T): T {
+export function withInputProvenance<T>(runCtx: RunContext, args: readonly unknown[], result: T): T {
   // Oracle inactive skips accumulation, NOT boxing. "Inactive" is the EFFECTIVE
   // switch (ambient flag OR silent-region γ — see isEagerAccumulationActive).
-  if (!isEagerAccumulationActive()) {
+  if (!isEagerAccumulationActive(runCtx)) {
     if (result instanceof AValue) return result;
     const t = typeof result;
     if (t === "string" || t === "number" || t === "boolean") {
       // Host bigint is not boxable (NoLensError at fromJs).
-      return fromJs(CONSTANT_CTX, result, EMPTY_PROVENANCE) as T;
+      return fromJs(runCtx, result, EMPTY_PROVENANCE) as T;
     }
     return result;
   }
@@ -342,7 +323,7 @@ export function withInputProvenance<T>(args: readonly unknown[], result: T): T {
   const t = typeof result;
   if (t === "string" || t === "number" || t === "boolean") {
     const prov = inputs.length > 0 ? unionProvenance(inputs) : EMPTY_PROVENANCE;
-    return fromJs(CONSTANT_CTX, result, prov) as T;
+    return fromJs(runCtx, result, prov) as T;
   }
   return result;
 }
@@ -354,6 +335,6 @@ export const schemeBool = (v: boolean): ABool => (v ? schemeTrue : schemeFalse);
  * THE ONE boolean-verdict boxing point: provenance-free operands → eq?-stable flyweight;
  * stamped operands → fresh ABool carrying union. Every boolean-verdict site routes here.
  */
-export function mintVerdict(operands: readonly unknown[], verdict: boolean): ABool {
-  return withInputProvenance(operands, schemeBool(verdict));
+export function mintVerdict(runCtx: RunContext, operands: readonly unknown[], verdict: boolean): ABool {
+  return withInputProvenance(runCtx, operands, schemeBool(verdict));
 }

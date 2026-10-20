@@ -1,31 +1,30 @@
 /**
- * Q20b test-setup helper — install/restore the eager-stamp oracle for one suite.
+ * Eager-stamp test doors — a run that accumulates provenance (`eagerStamps: true`).
  *
- * The production default (op-helpers.ts) flipped to OFF: production hot paths no
- * longer accumulate provenance unless something explicitly opts in. Every suite
- * written BEFORE Q20b — the CI agreement oracle itself (`wireframe-agreement.law.
- * test.ts`/`w1-harness.ts`, the Q16 replay laws' recorded-ground-truth side/
- * `q16-harness.ts`, `_lineage-test-helpers.ts`'s `runRaw`) plus every standalone
- * suite that asserts real accumulated stamps off a genuine interpreter run or a
- * direct native-op call — was written against the old always-on default and must
- * explicitly opt back IN for its own lifetime, or every such assertion goes to
- * empty/flyweight and fails.
+ * Production runs mint with `eagerStamps: false`: hot paths skip accumulation unless
+ * something opts in. The suites that assert REAL accumulated stamps (CI agreement oracle,
+ * lineage goldens, conservation, standalone native-op calls) opt in PER RUN, not per
+ * process: the flag rides the `RunContext` (P17-P19: no global state), so concurrent
+ * runs with and without it never cross.
  *
- * Call once, at the top level of a test file (outside any `describe`) — vitest's
- * `beforeAll`/`afterAll` at file scope apply to the whole file's root suite. This
- * is the "shared setup helper" shape (over per-file duplicated beforeAll/afterAll
- * blocks): ~8 standalone suites call this one line instead of repeating the same
- * three-line pair, and the three shared harnesses (`_lineage-test-helpers.ts`,
- * `w1-harness.ts`, `q16-harness.ts`) do their own PER-CALL save/restore instead
- * (narrower — they're imported by files that may run interleaved with others in
- * the same worker, so a file-wide beforeAll would over-widen their effect).
+ * - `execEager` / `execStateEager` / `execOverFrameEager` / `execStateOverFrameEager`:
+ *   the exec doors with `eagerStamps: true` merged into the options.
+ * - `eagerRunCtx` / `eagerCallCtx()`: for direct native-op calls (`op.call(eagerCallCtx(), …)`).
  */
-import { beforeAll, afterAll } from "vitest";
-import { setEagerProvenanceOracleEnabled } from "../values/op-helpers.js";
+import { exec, execOverFrame, execState, execStateOverFrame } from "../eval/generator-exec.js";
+import { type CallCtx, testCallCtx } from "../run/CallCtx.js";
+import { RunContext } from "../run/RunContext.js";
 
-/** Force the oracle ON for this file's entire test run, restoring the (off) default
- *  afterward. Idempotent to call at most once per file, at the top level. */
-export function requireEagerOracle(): void {
-  beforeAll(() => setEagerProvenanceOracleEnabled(true));
-  afterAll(() => setEagerProvenanceOracleEnabled(false));
-}
+/** A run handle with eager stamping on — for direct-call tests. */
+export const eagerRunCtx: RunContext = new RunContext({ eagerStamps: true });
+
+/** A `CallCtx` over {@link eagerRunCtx} — `this` for a raw native op under test. */
+export const eagerCallCtx = (): CallCtx => testCallCtx({ runCtx: eagerRunCtx });
+
+export const execEager = ((code, options = {}) => exec(code, { ...options, eagerStamps: true })) as typeof exec;
+export const execStateEager = ((code, options = {}) =>
+  execState(code, { ...options, eagerStamps: true })) as typeof execState;
+export const execOverFrameEager = ((code, options) =>
+  execOverFrame(code, { ...options, eagerStamps: true })) as typeof execOverFrame;
+export const execStateOverFrameEager = ((code, options) =>
+  execStateOverFrame(code, { ...options, eagerStamps: true })) as typeof execStateOverFrame;

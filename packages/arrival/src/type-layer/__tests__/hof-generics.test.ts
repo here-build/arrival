@@ -9,7 +9,7 @@ import strings from "../../env/r7rs/strings.js";
 import srfi1 from "../../env/srfi/srfi-1.js";
 import { harvestContracts } from "../../__tests__/_symbols-harvest.js";
 
-const norm = (s: string) => s.replace(/\s+/g, " ").trim();
+const norm = (s: string) => s.replaceAll(/\s+/g, " ").trim();
 // harvestContracts / contractOf pulls the AEntity CONTRACT off each pack's minted `spec.symbols` entries.
 const contractsOf = (pack: { spec: { symbols?: unknown } }) => harvestContracts(pack.spec.symbols);
 
@@ -104,7 +104,7 @@ function infer(hofSig: string, bindings: string, call: string): string {
   };
   visit(sf);
   const diags = ts.getPreEmitDiagnostics(prog).filter((d) => d.category === ts.DiagnosticCategory.Error);
-  if (diags.length) {
+  if (diags.length > 0) {
     const msgs = diags.map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n")).join("; ");
     throw new Error(`infer failed: ${msgs}\n${source}`);
   }
@@ -159,7 +159,7 @@ describe("HOF generic inference (List|vector dual)", () => {
 
   it("filter type-guard keeps refined element", () => {
     const t = infer(FILTER, "declare const xs: List<number>;", "fn((n: number): n is 0 | 1 => n === 0 || n === 1, xs)");
-    expect(t).toMatch(/0|1/);
+    expect(t).toMatch(/[01]/);
   });
 
   it("filter boolean pred keeps T", () => {

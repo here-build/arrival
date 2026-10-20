@@ -4,12 +4,13 @@
  */
 import { describe, it, expect } from "vitest";
 import * as z from "../../common/scheme-zod/index.js";
-import { symbol } from "../../symbol/index.js";
+import * as symbol from "../../common/symbols/index.js";
 import {
   ResourcePathDeclarationError,
   ResourcePathRoleConflictError,
   ResourcePathShapeError,
 } from "../resource-paths.js";
+import type { CallCtx } from "../CallCtx.js";
 
 describe("resource-path bake (S2)", () => {
   it("P-BAKE-OK — rosetta with Q only / E only / both defines", () => {
@@ -20,7 +21,9 @@ describe("resource-path bake (S2)", () => {
           output: [z.string],
           queries: (s) => [["d", s]],
         },
-        (s) => s,
+        function (this: CallCtx, s) {
+          return s;
+        },
       ),
     ).not.toThrow();
 
@@ -31,7 +34,9 @@ describe("resource-path bake (S2)", () => {
           output: [z.undefinedResult],
           effects: (s) => [["d", s]],
         },
-        () => undefined,
+        function (this: CallCtx) {
+          return undefined;
+        },
       ),
     ).not.toThrow();
 
@@ -43,7 +48,9 @@ describe("resource-path bake (S2)", () => {
           queries: (s) => [["d", s]],
           effects: (s) => [["d", s]],
         },
-        (s) => s,
+        function (this: CallCtx, s) {
+          return s;
+        },
       ),
     ).not.toThrow();
   });
@@ -66,7 +73,9 @@ describe("resource-path bake (S2)", () => {
           output: [z.string],
           queries: () => [["d"]],
         },
-        () => "x",
+        function (this: CallCtx) {
+          return "x";
+        },
       ),
     ).toThrow(ResourcePathShapeError);
 
@@ -103,7 +112,9 @@ describe("resource-path bake (S2)", () => {
           queries: () => [["d"]],
           effects: () => [["d"]],
         },
-        () => "x",
+        function (this: CallCtx) {
+          return "x";
+        },
       ),
     ).toThrow(ResourcePathShapeError);
 
@@ -115,7 +126,9 @@ describe("resource-path bake (S2)", () => {
           output: [z.undefinedResult],
           effects: () => [["d"]],
         },
-        () => undefined,
+        function (this: CallCtx) {
+          return undefined;
+        },
       ),
     ).not.toThrow();
   });
@@ -136,7 +149,9 @@ describe("resource-path bake (S2)", () => {
           provenance: "sink",
           queries: (s: string) => [["d", s]],
         } as never,
-        () => undefined,
+        function (this: CallCtx) {
+          return undefined;
+        },
       ),
     ).toThrow(ResourcePathRoleConflictError);
 
@@ -150,7 +165,9 @@ describe("resource-path bake (S2)", () => {
           queries: (s: string) => [["d", s]],
           effects: (s: string) => [["d", s]],
         } as never,
-        () => undefined,
+        function (this: CallCtx) {
+          return undefined;
+        },
       ),
     ).toThrow(ResourcePathRoleConflictError);
 
@@ -163,7 +180,9 @@ describe("resource-path bake (S2)", () => {
           provenance: "sink",
           effects: (s: string) => [["d", s]],
         },
-        () => undefined,
+        function (this: CallCtx) {
+          return undefined;
+        },
       ),
     ).not.toThrow();
   });
@@ -197,7 +216,9 @@ describe("resource-path bake (S2)", () => {
           queries: (s: string) => [["d", s]],
           effects: (s: string) => [["d", s]],
         },
-        (s: string) => s,
+        function (this: CallCtx, s: string) {
+          return s;
+        },
       ),
     ).not.toThrow();
 
@@ -209,7 +230,9 @@ describe("resource-path bake (S2)", () => {
           output: [z.undefinedResult],
           effects: (s: string) => [["d", s]],
         },
-        () => undefined,
+        function (this: CallCtx) {
+          return undefined;
+        },
       ),
     ).not.toThrow();
   });
@@ -222,7 +245,9 @@ describe("resource-path bake (S2)", () => {
           output: [z.schemeValue],
           queries: () => [["x"]],
         } as any,
-        (x) => x,
+        function (this: CallCtx, x) {
+          return x;
+        },
       ),
     ).toThrow(ResourcePathDeclarationError);
 
@@ -233,7 +258,9 @@ describe("resource-path bake (S2)", () => {
           output: [z.schemeValue],
           effects: () => [["x"]],
         } as any,
-        (x) => x,
+        function (this: CallCtx, x) {
+          return x;
+        },
       ),
     ).toThrow(ResourcePathDeclarationError);
 
@@ -245,7 +272,9 @@ describe("resource-path bake (S2)", () => {
           queries: () => [["x"]],
           effects: () => [["x"]],
         } as any,
-        (x) => x,
+        function (this: CallCtx, x) {
+          return x;
+        },
       ),
     ).toThrow(ResourcePathDeclarationError);
   });
@@ -318,12 +347,14 @@ describe("resource-path bake (S2)", () => {
           output: [z.schemeValue],
           queries: () => [["x"]],
         } as any,
-        (x) => x,
+        function (this: CallCtx, x) {
+          return x;
+        },
       );
       expect.unreachable();
-    } catch (err) {
-      expect(err).toBeInstanceOf(ResourcePathDeclarationError);
-      expect((err as ResourcePathDeclarationError)["arrival/error-category"]).toBe("contract-shape");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ResourcePathDeclarationError);
+      expect((error as ResourcePathDeclarationError)["arrival/error-category"]).toBe("contract-shape");
     }
   });
 });

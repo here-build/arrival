@@ -4,7 +4,6 @@
 // fresh distinct-but-equal instance, exercising the value-equality (string-copy)
 // contract a bare `===` would miss.
 import fc from "fast-check";
-import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { describe, expect, it } from "vitest";
 import { AString } from "../AString.js";
 import { ordLaws, setoidLaws } from "./algebra-laws.js";
@@ -30,7 +29,7 @@ describe("SchemeString Setoid/Ord — totality boundaries", () => {
   it("equals is representation-blind (plain string matches by content); lte stays type-strict", () => {
     const a = new AString("a");
     // equals: a boxed string equals the SAME value UNBOXED (a plain JS string) — the representation-
-    // blindness that fixes dedup over chain-boxed strings (sift/closure.scm). Content still discriminates.
+    // blindness that fixes dedup over chain-boxed strings (a downstream closure program). Content still discriminates.
     expect(a[tf("equals")]("a")).toBe(true);
     expect(a[tf("equals")]("b")).toBe(false);
     expect(a[tf("equals")](42)).toBe(false);

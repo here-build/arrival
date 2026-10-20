@@ -6,7 +6,7 @@
  * `syntax-rules.ts`: `ref === capabilities.globalRoot`): a name OWNED ANYWHERE in the base
  * chain resolves, through `refFrame`, back to the SAME stable `globalRoot` sentinel.
  *
- * STAGE C CUT 3b (docs/plans/stage-c-corpse-deletion.md) retired the realm-singleton
+ * STAGE C CUT 3b retired the realm-singleton
  * `user_env`/`global_env` this file originally pinned the invariant against — re-pinned here
  * over a locally-built two-frame chain (root + child), the same SHAPE `user_env → global_env`
  * had, so the sentinel-stability claim survives unchanged. TRAILS CLEANUP (Tier 1) then retired
@@ -14,7 +14,7 @@
  * bench, zero production callers) — this suite now mints the sealed chain and constructs
  * `Capabilities` directly, which is exactly what the static used to do.
  *
- * ENV T3 RESTATEMENT (environment-resolution-chain.md §2 "hygiene sentinel", Frame/
+ * ENV T3 RESTATEMENT ("hygiene sentinel", Frame/
  * BakedBase type split, LANDED): the sentinel is the sealed `CompiledResolutionChain`
  * (BakedBase) itself, `sealResolutionChain(base)`'s ONE memoized artifact for this base — not
  * the base-leaf ENV. The uniqueness guarantee this test pins: one identity per baked base —

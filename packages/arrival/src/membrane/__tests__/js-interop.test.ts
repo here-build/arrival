@@ -46,7 +46,7 @@ describe("JS-interop: strings & booleans (boxed scheme faces — the Face split)
     // the raw-string no-provenance fast path was the pre-box string-identity leak). AString grafts
     // String.prototype, so string-ish interop (concat, spread, JSON) still reads naturally.
     expect(String(s)).toBe("abc");
-    expect(s + "!").toBe("abc!");
+    expect(`${s}!`).toBe("abc!");
     expect([...String(s)].length).toBe(3);
     expect(JSON.stringify(String(s))).toBe('"abc"');
   });
@@ -70,7 +70,7 @@ describe("JS-interop: characters", () => {
   // PROMOTED (RULINGS.md R1): ACharacter's toJS is the raw char — `exec`'s plain-JS
   // exit hands back "a" directly, not the boxed `.toString()` write-form "#\\a".
   it("char SHOULD coerce to the JS char", async () => {
-    const ch = await one("#\\a");
+    const ch = await one(String.raw`#\a`);
     expect(String(ch)).toBe("a");
   });
 });
@@ -91,7 +91,7 @@ describe("JS-interop: symbols", () => {
 describe("JS-interop: lists (Pair)", () => {
   it("a list is iterable from JS (spread / for-of / Array.from)", async () => {
     const lst = await one("(list 1 2 3)");
-    expect(Array.from(lst)).toHaveLength(3);
+    expect([...lst]).toHaveLength(3);
     let count = 0;
     for (const _ of lst) count++;
     expect(count).toBe(3);
@@ -114,7 +114,7 @@ describe("JS-interop: vectors", () => {
   // INVARIANT: a vector is iterable from JS like a Pair; elements coerce via valueOf
   it("a vector is iterable from JS like a Pair (spread / for-of / Array.from)", async () => {
     const vec = await one("(vector 1 2 3)");
-    expect(Array.from(vec).length).toBe(3);
+    expect([...vec].length).toBe(3);
     let count = 0;
     for (const _ of vec) count++;
     expect(count).toBe(3);
@@ -131,13 +131,13 @@ describe("JS-interop: bytevectors", () => {
   it("a bytevector is iterable from JS (spread / for-of / Array.from yield bytes)", async () => {
     const bv = await one("(bytevector 1 2 3)");
     expect([...bv]).toEqual([1, 2, 3]);
-    expect(Array.from(bv).length).toBe(3);
+    expect([...bv].length).toBe(3);
   });
 });
 
 describe("JS-interop: dicts / objects", () => {
   // Was: threw on the BigInt inside a plain-object dict's boxed AExact entries.
-  // Native-dict-provenance.md's ADict keeps entries inside a Map, which JSON.stringify
+  // The native-dict ADict keeps entries inside a Map, which JSON.stringify
   // doesn't serialize at all (no own enumerable indexed properties) — so it no longer
   // throws, but it also doesn't produce anything useful: it leaks ADict's OWN wrapper
   // shape (ctx/provenance/kind), not the dict's data. No primitive in this codebase

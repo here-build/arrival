@@ -3,8 +3,7 @@
 // `CouldBeList` (on a resolved return type) is the gate's core logic; the `[unknown] extends [R]`
 // nuke-guard keeps `if` / `car` / generic returns admissible so `(if …)` is never blocked.
 import { describe, expectTypeOf, test } from "vitest";
-import type { CouldBeList, List } from "../carriers.js";
-import { car, cdr, list, map } from "../carriers.js";
+import { type CouldBeList, type List, car, cdr, list, map } from "../carriers.js";
 
 describe("CouldBeList on RESOLVED return types — the gate's verdict", () => {
   test("list is a list", () => {

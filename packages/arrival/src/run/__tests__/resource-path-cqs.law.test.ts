@@ -6,8 +6,7 @@
  * SUPERSEDED (law-identity wave). Paths from contract producers after decode,
  * never from impl return.
  *
- * Suite: docs/working-proposals/cqs-reactivity/test-suite-design/SUITE.md
- * Law-identity: docs/working-proposals/cqs-reactivity/test-suite-design/law-identity/
+ * Law: docs/execution.md §12 RESOURCE-PATHS.
  */
 import { describe, it, expect } from "vitest";
 import { EnvCapability } from "../../common/capability.js";
@@ -15,7 +14,7 @@ import { exec } from "../../eval/generator-exec.js";
 import { CONSTANT_CTX, RunContext } from "../RunContext.js";
 import { MemoryRunCache } from "../run-cache.js";
 import { MemoryEffectLog } from "../effect-log.js";
-import { testCallCtx } from "../CallCtx.js";
+import { type CallCtx, testCallCtx } from "../CallCtx.js";
 import {
   MemoryResourcePathLog,
   ResourcePathConflictError,
@@ -78,7 +77,7 @@ function makePathCap(spies: SpyMap, opts?: { pathFnThrow?: "queries" | "effects"
           output: [z.string],
           queries: q("read", (d, id) => [["test", d, id]]),
         },
-        (d: string, id: string) => {
+        function (this: CallCtx, d: string, id: string) {
           track("read");
           return `${d}:${id}`;
         },
@@ -89,7 +88,7 @@ function makePathCap(spies: SpyMap, opts?: { pathFnThrow?: "queries" | "effects"
           output: [z.string],
           queries: q("read-all", (d) => [["test", d]]),
         },
-        (d: string) => {
+        function (this: CallCtx, d: string) {
           track("read-all");
           return `all:${d}`;
         },
@@ -100,7 +99,7 @@ function makePathCap(spies: SpyMap, opts?: { pathFnThrow?: "queries" | "effects"
           output: [z.undefinedResult],
           effects: e("write", (d, id) => [["test", d, id]]),
         },
-        (_d: string, _id: string) => {
+        function (this: CallCtx, _d: string, _id: string) {
           track("write");
           return undefined;
         },
@@ -111,7 +110,7 @@ function makePathCap(spies: SpyMap, opts?: { pathFnThrow?: "queries" | "effects"
           output: [z.undefinedResult],
           effects: e("write-all", (d) => [["test", d]]),
         },
-        (_d: string) => {
+        function (this: CallCtx, _d: string) {
           track("write-all");
           return undefined;
         },
@@ -125,7 +124,7 @@ function makePathCap(spies: SpyMap, opts?: { pathFnThrow?: "queries" | "effects"
             ["test", d, id2],
           ]),
         },
-        () => {
+        function (this: CallCtx) {
           track("write-many");
           return undefined;
         },
@@ -139,7 +138,7 @@ function makePathCap(spies: SpyMap, opts?: { pathFnThrow?: "queries" | "effects"
             ["test", d, id2],
           ]),
         },
-        (d: string, id1: string, id2: string) => {
+        function (this: CallCtx, d: string, id1: string, id2: string) {
           track("read-many");
           return `${d}:${id1}+${id2}`;
         },
@@ -151,7 +150,7 @@ function makePathCap(spies: SpyMap, opts?: { pathFnThrow?: "queries" | "effects"
           queries: q("upsert", (d, id) => [["test", d, id]]),
           effects: e("upsert", (d, id) => [["test", d, id]]),
         },
-        (d: string, id: string) => {
+        function (this: CallCtx, d: string, id: string) {
           track("upsert");
           return `row:${d}:${id}`;
         },
@@ -164,12 +163,12 @@ function makePathCap(spies: SpyMap, opts?: { pathFnThrow?: "queries" | "effects"
           queries: q("move", (src) => [["test", src]]),
           effects: e("move", (_src, dst) => [["test", dst]]),
         },
-        () => {
+        function (this: CallCtx) {
           track("move");
           return undefined;
         },
       ),
-      noop: symbol.rosetta`noop: `({ input: [z.string], output: [z.string] }, (x: string) => {
+      noop: symbol.rosetta`noop: `({ input: [z.string], output: [z.string] }, function (this: CallCtx, x: string) {
         track("noop");
         return x;
       }),
@@ -179,7 +178,7 @@ function makePathCap(spies: SpyMap, opts?: { pathFnThrow?: "queries" | "effects"
           output: [z.undefinedResult],
           effects: e("fail-impl", (d) => [["test", d]]),
         },
-        () => {
+        function (this: CallCtx) {
           track("fail-impl");
           throw new Error("plain-impl-boom");
         },
@@ -192,7 +191,7 @@ function makePathCap(spies: SpyMap, opts?: { pathFnThrow?: "queries" | "effects"
           // empty contribution: declared axis present but no path (R-O6: fn called)
           effects: e("impl-only-touch", () => []),
         },
-        () => {
+        function (this: CallCtx) {
           track("impl-only-touch");
           // would touch ["test","D"] in a real host — paths not from impl
           return undefined;
@@ -205,7 +204,7 @@ function makePathCap(spies: SpyMap, opts?: { pathFnThrow?: "queries" | "effects"
           output: [z.string],
           queries: q("read-decoded", (d, id) => [["test", d, id]]),
         },
-        (d: string, id: string) => {
+        function (this: CallCtx, d: string, id: string) {
           track("read-decoded");
           return `${d}:${id}`;
         },
@@ -216,7 +215,7 @@ function makePathCap(spies: SpyMap, opts?: { pathFnThrow?: "queries" | "effects"
           output: [z.undefinedResult],
           effects: e("write-decoded", (d, id) => [["test", d, id]]),
         },
-        () => {
+        function (this: CallCtx) {
           track("write-decoded");
           return undefined;
         },
@@ -447,9 +446,9 @@ describe("resource-path CQS door — core negatives (A-QUAD)", () => {
         runCtx: new RunContext({ resourcePaths: pathLog }),
       });
       expect.unreachable();
-    } catch (err) {
+    } catch (error) {
       // impl counts 1/1/0 — first read and write ran; second read doored
-      expectDoor(err);
+      expectDoor(error);
       expect(spies.read).toBe(1);
       expect(spies.write).toBe(1);
       expect(pathFnCalls.filter((c) => c.name === "read" && c.axis === "q").length).toBe(2);
@@ -467,8 +466,8 @@ describe("resource-path CQS door — core negatives (A-QUAD)", () => {
         runCtx: new RunContext({ resourcePaths: pathLog }),
       });
       expect.unreachable();
-    } catch (err) {
-      expectDoor(err);
+    } catch (error) {
+      expectDoor(error);
       expect(spies["write-many"]).toBe(1);
       expect(spies.read).toBe(1); // first read only; second doored
       expect(pathFnCalls.filter((c) => c.name === "read" && c.axis === "q").length).toBe(2);
@@ -484,10 +483,10 @@ describe("resource-path CQS door — core negatives (A-QUAD)", () => {
         runCtx: new RunContext({ resourcePaths: pathLog }),
       });
       expect.unreachable();
-    } catch (err) {
-      expect(err).not.toBeInstanceOf(ResourcePathConflictError);
-      expect(err).toMatchObject({ name: "ResourcePathProducerError" });
-      expect(String(err)).toMatch(/path-fn-queries-boom/);
+    } catch (error) {
+      expect(error).not.toBeInstanceOf(ResourcePathConflictError);
+      expect(error).toMatchObject({ name: "ResourcePathProducerError" });
+      expect(String(error)).toMatch(/path-fn-queries-boom/);
       expect(spies.read ?? 0).toBe(0);
     }
   });
@@ -501,10 +500,10 @@ describe("resource-path CQS door — core negatives (A-QUAD)", () => {
         runCtx: new RunContext({ resourcePaths: pathLog }),
       });
       expect.unreachable();
-    } catch (err) {
-      expect(err).not.toBeInstanceOf(ResourcePathConflictError);
-      expect(err).toMatchObject({ name: "ResourcePathProducerError" });
-      expect(String(err)).toMatch(/path-fn-effects-boom/);
+    } catch (error) {
+      expect(error).not.toBeInstanceOf(ResourcePathConflictError);
+      expect(error).toMatchObject({ name: "ResourcePathProducerError" });
+      expect(String(error)).toMatch(/path-fn-effects-boom/);
       expect(spies.write ?? 0).toBe(0);
     }
   });
@@ -557,8 +556,8 @@ describe("resource-path CQS door — 3a-complete", () => {
           runCtx: new RunContext({ resourcePaths: pathLog }),
         });
         expect.unreachable();
-      } catch (err) {
-        expectDoor(err);
+      } catch (error) {
+        expectDoor(error);
         expect(spies["write-many"]).toBe(1);
         expect(spies.read).toBe(1);
         expect(pathFnCalls.filter((c) => c.name === "read" && c.axis === "q").length).toBe(2);
@@ -575,8 +574,8 @@ describe("resource-path CQS door — 3a-complete", () => {
         runCtx: new RunContext({ resourcePaths: pathLog }),
       });
       expect.unreachable();
-    } catch (err) {
-      aQuad(err, spies, pathFnCalls, "read", { upsert: 1 });
+    } catch (error) {
+      aQuad(error, spies, pathFnCalls, "read", { upsert: 1 });
     }
   });
 
@@ -595,11 +594,11 @@ describe("resource-path CQS door — 3a-complete", () => {
         runCtx: new RunContext({ resourcePaths: pathLog }),
       });
       expect.unreachable();
-    } catch (err) {
-      expectDoor(err);
+    } catch (error) {
+      expectDoor(error);
       expect(spies.upsert).toBe(1); // second impl never ran
-      expect(err.message).toMatch(/hybrid/i);
-      expect(err.message).toMatch(/once per run/i);
+      expect(error.message).toMatch(/hybrid/i);
+      expect(error.message).toMatch(/once per run/i);
     }
     // A-CTRL: the pure-query door keeps the plain wording (no hybrid clause).
     const spies2: SpyMap = {};
@@ -610,9 +609,9 @@ describe("resource-path CQS door — 3a-complete", () => {
         runCtx: new RunContext({ resourcePaths: pathLog2 }),
       });
       expect.unreachable();
-    } catch (err) {
-      expectDoor(err);
-      expect(err.message).not.toMatch(/hybrid/i);
+    } catch (error) {
+      expectDoor(error);
+      expect(error.message).not.toMatch(/hybrid/i);
     }
   });
 
@@ -626,8 +625,8 @@ describe("resource-path CQS door — 3a-complete", () => {
         runCtx: new RunContext({ resourcePaths: pathLog }),
       });
       expect.unreachable();
-    } catch (err) {
-      aQuad(err, spies, pathFnCalls, "move", { "write-all": 1, "read-all": 1 });
+    } catch (error) {
+      aQuad(error, spies, pathFnCalls, "move", { "write-all": 1, "read-all": 1 });
       const flat = appendEvents.flat();
       expect(flat).toContainEqual(["test", "src"]);
       expect(flat).not.toContainEqual(["test", "dst"]);
@@ -655,8 +654,8 @@ describe("resource-path CQS door — 3a-complete", () => {
         runCtx: new RunContext({ resourcePaths: pathLog }),
       });
       expect.unreachable();
-    } catch (err) {
-      expect(err).toBeInstanceOf(ResourcePathConflictError);
+    } catch (error) {
+      expect(error).toBeInstanceOf(ResourcePathConflictError);
       expect(spies.upsert).toBe(1);
       expect(pathFnCalls.filter((c) => c.name === "upsert").length).toBeGreaterThanOrEqual(2);
     }
@@ -672,8 +671,8 @@ describe("resource-path CQS door — 3a-complete", () => {
         runCtx: new RunContext({ resourcePaths: pathLog }),
       });
       expect.unreachable();
-    } catch (err) {
-      expect(err).toBeInstanceOf(ResourcePathConflictError);
+    } catch (error) {
+      expect(error).toBeInstanceOf(ResourcePathConflictError);
       expect(spies.write).toBe(1);
       // first A + B succeeded; second A doored → read impl = 2
       expect(spies.read).toBe(2);
@@ -694,7 +693,7 @@ describe("resource-path CQS — producer shape + strictCQSstrings", () => {
               d: string,
             ) => readonly (readonly string[])[],
           },
-          () => {
+          function (this: CallCtx) {
             fires++;
             return undefined;
           },
@@ -717,7 +716,7 @@ describe("resource-path CQS — producer shape + strictCQSstrings", () => {
               d: string,
             ) => readonly (readonly string[])[],
           },
-          () => {
+          function (this: CallCtx) {
             fires++;
             return undefined;
           },
@@ -791,7 +790,7 @@ describe("resource-path CQS — seams (cache / burst / CONSTANT_CTX / ExecOption
             cacheClass: "view",
             queries: (id: string) => [["test", "v", id]],
           },
-          (id: string) => {
+          function (this: CallCtx, id: string) {
             readFires++;
             return `val:${id}`;
           },
@@ -802,7 +801,7 @@ describe("resource-path CQS — seams (cache / burst / CONSTANT_CTX / ExecOption
             output: [z.undefinedResult],
             effects: (id: string) => [["test", "v", id]],
           },
-          () => {
+          function (this: CallCtx) {
             writeFires++;
             return undefined;
           },
@@ -832,7 +831,7 @@ describe("resource-path CQS — seams (cache / burst / CONSTANT_CTX / ExecOption
             provenance: "sink",
             effects: (id: string) => [["test", "b", id]],
           },
-          () => {
+          function (this: CallCtx) {
             writeFires++;
             return undefined;
           },
@@ -843,7 +842,7 @@ describe("resource-path CQS — seams (cache / burst / CONSTANT_CTX / ExecOption
             output: [z.string],
             queries: (id: string) => [["test", "b", id]],
           },
-          (id: string) => {
+          function (this: CallCtx, id: string) {
             readFires++;
             return `r:${id}`;
           },
@@ -885,7 +884,7 @@ describe("resource-path CQS — seams (cache / burst / CONSTANT_CTX / ExecOption
       log: undefined,
     });
     // live membrane under CONSTANT_CTX (testCallCtx default)
-    const { symbol } = await import("../../symbol/index.js");
+    const symbol = await import("../../common/symbols/index.js");
     const z = await import("../../common/scheme-zod/index.js");
     const { AString } = await import("../../values/primitives/AString.js");
     let fires = 0;
@@ -895,7 +894,7 @@ describe("resource-path CQS — seams (cache / burst / CONSTANT_CTX / ExecOption
         output: [z.undefinedResult],
         effects: (id: string) => [["test", "c", id]],
       },
-      () => {
+      function (this: CallCtx) {
         fires++;
         return undefined;
       },
@@ -908,7 +907,9 @@ describe("resource-path CQS — seams (cache / burst / CONSTANT_CTX / ExecOption
         output: [z.string],
         queries: (id: string) => [["test", "c", id]],
       },
-      (id: string) => id,
+      function (this: CallCtx, id: string) {
+        return id;
+      },
     );
     await readProc["arrival/tagless-final/apply"]([new AString("1")], testCallCtx());
     expect(fires).toBe(1);

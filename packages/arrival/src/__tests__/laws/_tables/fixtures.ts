@@ -14,13 +14,12 @@
  */
 import { freshEnv } from "../../_fresh-env.js";
 import type { EnvWithInternals, ResolvingAmbient } from "../../../env/AmbientRuntime.js";
-import { execStateOverFrame } from "../../../eval/generator-exec.js";
+import { execStateOverFrameEager as execStateOverFrame } from "../../_require-eager-oracle.js";
 import { AValue } from "../../../values/primitives/AValue.js";
 import { APair } from "../../../values/primitives/APair.js";
 import { AVector } from "../../../values/primitives/AVector.js";
 import { AJSArray } from "../../../membrane/AJSArray.js";
 import { ADict } from "../../../values/primitives/ADict.js";
-import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { collapseProvenance } from "../../../provenance/provenance-collapse.js";
 import { toJS } from "../../../membrane/rosetta.js";
 import * as z from "../../../common/scheme-zod/index.js";
@@ -211,7 +210,7 @@ export function toPlain(value: unknown): unknown {
   // toJS result unwraps those too, so the comparison is genuinely deep either way.
   if (value instanceof AValue) return toPlain((value as AValue)["arrival/toJS"]());
   if (Array.isArray(value)) return value.map(toPlain);
-  if (value instanceof Uint8Array) return Array.from(value);
+  if (value instanceof Uint8Array) return [...value];
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, toPlain(v)]));
   }

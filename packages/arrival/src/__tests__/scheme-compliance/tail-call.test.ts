@@ -60,10 +60,14 @@
  */
 import { describe, expect, it } from "vitest";
 import type { EnvWithInternals, ResolvingAmbient } from "../../env/AmbientRuntime.js";
-import { execState, execStateOverFrame } from "../../eval/generator-exec.js";
+import {
+  execState,
+  execStateOverFrame,
+  type ExecOptions,
+  type ExecOptionsOverFrame,
+} from "../../eval/generator-exec.js";
 import { freshEnv } from "../_fresh-env.js";
 import { nil } from "../../values/primitives/ANil.js";
-import type { ExecOptions, ExecOptionsOverFrame } from "../../eval/generator-exec.js";
 import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
 
 /**
@@ -97,11 +101,11 @@ async function run(src: string): Promise<unknown> {
  * host-stack ceiling (so completion proves O(1)) and well under any heap
  * pressure (a collapsed loop retains single-digit MB regardless of depth).
  */
-const DEPTH = 50000;
+const DEPTH = 50_000;
 
 /** Per-test budget: one DEPTH loop runs in ~2s; the first test also pays the
  *  one-time lazy interpreter bootstrap. */
-const T = 30000;
+const T = 30_000;
 
 describe("tail-call optimization (R7RS §3.5)", () => {
   describe("positive — O(1) stack at 50k depth (would overflow pre-TCO)", () => {

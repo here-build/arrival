@@ -2,7 +2,7 @@
  * OFFENDING_VALUE — symbol-keyed metadata (errors.ts) riding a collection-type-error's
  * thrown object: the value a collection op refused because it wasn't a collection at
  * all (classically: a model-produced STRING that is actually a serialized payload it
- * forgot to parse). Mirrors `arrival-manifold/bind.ts`'s ARGS_REJECTION discipline —
+ * forgot to parse). Mirrors the manifold's ARGS_REJECTION discipline —
  * metadata on the error OBJECT, `error.message` untouched — so a downstream door can
  * read the offending value's `.provenance` and teach the right parser.
  *
@@ -27,8 +27,8 @@ async function catchEval(env: Awaited<ReturnType<typeof freshEnv>>, src: string)
   try {
     await execStateOverFrame(src, { env });
     throw new Error(`expected ${JSON.stringify(src)} to throw, it didn't`);
-  } catch (e) {
-    return e;
+  } catch (error) {
+    return error;
   }
 }
 
@@ -84,7 +84,7 @@ describe("OFFENDING_VALUE — collection-type-error metadata", () => {
   });
 
   it(
-    "SUPERSEDED by benchmark-defect-register.md's B2: (:key obj) on a STRING now throws, naming the\n" +
+    "SUPERSEDED by the benchmark-defect B2 fix: (:key obj) on a STRING now throws, naming the\n" +
       "     offending value — a string has no member protocol, so silently answering nil (the old\n" +
       "     behavior this test used to pin) is a type error wearing absence's clothes, not real absence.\n" +
       "     `(:key nil)` is the one receiver shape that still stays silently nil (real, legitimate\n" +
