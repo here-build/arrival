@@ -95,7 +95,7 @@ shouldn't exist is a placement bug (Wave B of the audit), not a knot-membership 
 tracked here so this map stays the single place a reader checks "is this layer really
 clean":
 
-- **reader** — **P4 is fixed on `main`**: `reader/extract-defines.ts` now imports `parse`
+- **reader** — **P4 is fixed on `main`**: the reader's define-extraction now imports `parse`
   directly from the sibling `reader/parse.ts`, closing the gratuitous round trip through
   `eval/generator-exec.ts` that used to make reader non-leaf. The LEGITIMATE `eval → reader`
   edge (e.g. `generator-exec.ts` parsing program text) is the knot depending on a leaf,

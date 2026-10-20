@@ -34,47 +34,62 @@ through every op that needs it (no value carries it — `AValue` dropped its per
 field; `run/RunContext.ts`'s own header names the removal), read off the threaded context at the
 one hermetic point, never off an ambient singleton.
 
-Four homes, by lifetime:
+Homes, by lifetime (P19 — no global state; RunContext is the container):
 
-- **RunContext** — state CONSTANT for one run yet DIFFERING between concurrent runs: strict
-  mode, the abort signal, the channels (§3). This is the run's identity.
-- **Global singletons** — state constant across ALL runs: `nil`/`#t`/`#f`/`eof`. These bear
-  no run-state, so they can be shared by reference. `car`-of-nil reads its strict projection
-  from the THREADED context, not from the constant `nil`, so a constant carries nothing
-  run-specific.
-- **Dynamic-extent holders** — state varying by CALL DEPTH within one run: the
-  exception-handler stack, the current call-site (`eval/dynamic-call-site.ts`), the current
-  region scope (membrane.md §REGION), and the provenance emission pair `_coordinate`/`_sink`
-  (`eval/provenance-hooks.ts`). Four holders total — the extent guarantee the last one
-  carries is stated at its own definition site, cited just below. These cannot ride a
-  constant-per-run handle and stay the holder family (the `dynamic-call-site.ts`
-  module-holder idiom, save/restore around the owning call, safe under single-threaded JS).
-  Each holder is module-local; a second evaluation of its file in the same isolate throws
-  `DuplicateModuleLoadError` (`src/single-load.ts`) instead of silently splitting or
-  merging onto `globalThis`. The composed resolver is **not** a holder: it rides
-  `CallCtx.resolver` (§CALLCTX).
+- **RunContext** — everything that varies between concurrent runs OR by call depth within one:
+  strict mode and the channels (§3), the `silent`/`eagerStamps` flags, and three
+  mutable holders each scoped to THIS run: `ambient` (call-depth slots `dynSite`/`regionScope`/
+  `track`, written only through the sync `withAmbient` window), `bound` (the CALL-scoped
+  signal + deadline, §5) and `observation` (the CALL-scoped tap + node filter). Concurrent
+  runs hold different RunContexts, so none of these can cross. (The abort signal and deadline
+  are NOT identity: they are per CALL, armed on the handle — §5.)
+- **Frozen global constants** — state constant across ALL runs: `nil`/`#t`/`#f`/`eof`,
+  `CONSTANT_CTX` (whose `ambient` is frozen — a `withAmbient` on it is a door). These bear no
+  run-state, so they can be shared by reference. `car`-of-nil reads its strict projection
+  from the THREADED context, not from the constant `nil`.
 - **Keyed residency** — a module-housed `WeakMap`/`WeakSet` keyed by a run-scoped object
   (typically `RunContext` itself); lifetime = the KEY's, not the module's. Used when a leaf
-  must hold run-associated state without importing the owning layer (a `WeakMap<RunContext,
-X>` needs no `RunContext` write access, only identity). Four sites, all independently
-  audit-found: `inFlight` (`run/penetration.ts` — the single-flight in-progress-promise table;
-  moved here from `run/run-cache.ts` when `penetrateThroughCache` did, audit P2 — cite
-  `penetration.ts`, not `run-cache.ts`),
-  `lifecycles` (`run/run-lifecycle.ts` — the disposal-callback table
-  `onRunContextDispose` reads and writes), `vocabularyByRunCtx` (`env/assemble-run.ts` — the
-  per-run `Vocabulary` a `CallCtx` dispatch looks up), `preludeDefinesByRunCtx`
-  (`env/assemble-run.ts` — the per-run prelude-define frame, R12's persistence mechanism).
-  A `WeakMap` entry dies with its key exactly like a `RunContext`-held field would; the
-  difference is WHERE the map lives, not how long an entry survives.
+  must hold run-associated state without importing the owning layer. Sites: `inFlight`
+  (`run/penetration.ts`), `lifecycles` (`run/run-lifecycle.ts`), `vocabularyByRunCtx` and
+  `preludeDefinesByRunCtx` (`env/assemble-run.ts`), `handlersByRun` (`env/r7rs/exceptions.ts`),
+  `emittedByRun` (`membrane/membrane-warn.ts`).
+- **Sync-window ambients — exactly two, one discipline.** (1) `currentRun()` /
+  `withCurrentRun(runCtx, fn)` (`run/current-run.ts`): codec seams (`toJS`/`fromJS`, membrane
+  crossings from host JS) carry no handle. (2) `constantWindowScope` (`membrane/region-scope.ts`):
+  the CONSTANT_CTX leg of the region-scope window — a scope whose run is the run-neutral
+  `CONSTANT_CTX` (frozen `ambient`) has no per-run slot, so `withRegionScope` parks it there. It is
+  set and restored INSIDE `withCurrentRun`'s synchronous body and only ever holds a scope whose
+  `runCtx` is CONSTANT_CTX, so it can never be observed across an await and carries nothing to
+  attribute to a run. Both are SYNC windows — interleave-free in a single-threaded isolate — and both
+  are guarded the same way: a body that returns a thenable throws `AmbientWindowError` (the
+  second via `withCurrentRun` wrapping it). Nothing else is a sanctioned ambient.
+- **Lazy immutable singletons and load-time wiring** — a module `let` that is assigned once and then
+  only read, carrying no run data: `hostProjectionOf`/`membraneApply` (`ANativeProcedure.ts`,
+  `ARosettaProcedure.ts`) and `mintPlainFrame`/`mintResolvingFrame` (`env/AmbientRuntime.ts`) are
+  import-cycle wiring seams set at module init; `_neverAborts` (`region-scope.ts`) is a lazily built
+  never-firing `AbortSignal` (`new AbortController()` is disallowed at workerd module-init scope).
+  The complete list, with each classification, is `module-let-allowlist.json` — shared by the
+  ESLint P19 guard and the drift alarm in `run/__tests__/concurrent-runs.law.test.ts`, which also
+  fails on a stale entry.
 
-The test for where a fact belongs: does it vary between concurrent runs (→ RunContext), never
-(→ global singleton), within one run by depth (→ holder), or does a leaf need it without an
-import edge to the owning layer (→ keyed residency)?
+**No legacy module holders remain.** The dynamic call site (`ambient.dynSite`), the current region
+scope (`ambient.regionScope`), the marshal ctx (`currentRun()`), the emission target and enable
+flag (`RunContext.emission`), region silence (`RunContext.silent`), eager stamping
+(`RunContext.eagerStamps`), the membrane-warning budget (per-run counts keyed by `RunContext`,
+lines onto `runCtx.notes` — core has no console) and the define-bake temp counter (per bake) are
+all migrated. The exception-handler stack (`env/r7rs/exceptions.ts` `handlersByRun`) is keyed
+residency — one stack per `RunContext`, isolated across concurrent runs. What is NOT yet per-track:
+the handler stack is per RUN, so two fan tracks of one run share it; giving each track its own
+stack is P18 Stage ii work (tracks as first-class), not a P19 hole. Pure memos that hold no run
+state are bounded and keyed by their input (e.g. the handlebars template cache in
+`arrival-modules`, an LRU keyed by template source — reachable from a pure `/runtime` export with
+no RunContext, so a per-run resource is unavailable there). The composed resolver is not a holder:
+it rides `CallCtx.resolver` (§CALLCTX). Shared "empty" constants (`EMPTY_PROVENANCE`,
+`ROOT_ORDINAL_PATH`) are tripwired: frozen, and the set throws on `add`/`delete`/`clear`.
 
-**The extent guarantee, stated where the holder lives (audit S1):**
-`_coordinate`/`_sink` (`eval/provenance-hooks.ts`) are per-isolate, not per-run — their own
-comment states the "at most one recording run per isolate" guarantee and names
-keyed-by-runCtx as the upgrade path if that ever stops holding.
+The test for where a fact belongs: does it vary between concurrent runs or by call depth
+(→ RunContext), never (→ frozen constant), or does a leaf need it without an import edge to
+the owning layer (→ keyed residency)? Nothing else is acceptable.
 
 _Enforcement sites: `run/RunContext.ts`, `eval/generator-exec.ts`._
 
@@ -83,7 +98,7 @@ _Enforcement sites: `run/RunContext.ts`, `eval/generator-exec.ts`._
 Two `RunContext` species exist; only the first bears run-state, and the charter (§1) rests
 on the other being run-NEUTRAL.
 
-- **Live-run** — minted by `new RunContext(...)` per `exec()`. Carries strict/signal and any
+- **Live-run** — minted by `new RunContext(...)` per `exec()`. Carries strict, the call bound (§5) and any
   armed subset of the channels (§3, plus the default-armed `resourcePaths`). This is the only
   species whose channels are non-`undefined`.
 - **`CONSTANT_CTX`** — the frozen, run-neutral context carried by values that OUTLIVE any run:
@@ -106,20 +121,30 @@ landing on the VALUE's own `.location` field (AValue) — no ctx involved, and n
 
 _Enforcement sites: `run/RunContext.ts`._
 
-## 3. CHANNELS — six independent seams, armed subset-wise
+## 3. CHANNELS — seven independent seams, armed subset-wise
 
 **`X | undefined ⇒ facility off.`** Each channel on `RunContext` is an independent per-run
 seam; `undefined` means that facility is off. A run may carry any subset — they are siblings,
-none a field of another. Five default off; **`resourcePaths` alone defaults ON** (see below).
+none a field of another. Six default off; **`resourcePaths` alone defaults ON** (see below).
 
-| Channel         | Facility when armed                                                | Off (`undefined`)        |
-| --------------- | ------------------------------------------------------------------ | ------------------------ |
-| `cache`         | membrane record/replay interception, per the mode law (§6)         | no interception          |
-| `effects`       | effect-burst gather arm — a `sink` enqueues instead of firing (§7) | a sink fires immediately |
-| `reads`         | read-tracking + the read∩write deferral guard (§8)                 | no tracking, no guard    |
-| `notes`         | model-facing bookkeeping sink (§9)                                 | notes dropped            |
-| `display`       | host `(display …)` affordance sink (§9)                            | no display verb bound    |
-| `resourcePaths` | per-run Q/E journal + the temporal-immutability door (§12)         | no journal, no door      |
+| Channel         | Facility when armed                                                    | Off (`undefined`)        |
+| --------------- | ---------------------------------------------------------------------- | ------------------------ |
+| `cache`         | membrane record/replay interception, per the mode law (§6)             | no interception          |
+| `effects`       | effect-burst gather arm — a `sink` enqueues instead of firing (§7)     | a sink fires immediately |
+| `reads`         | read-tracking + the read∩write deferral guard (§8)                     | no tracking, no guard    |
+| `notes`         | model-facing bookkeeping sink (§9)                                     | notes dropped            |
+| `display`       | host `(display …)` affordance sink (§9)                                | no display verb bound    |
+| `resourcePaths` | per-run Q/E journal + the temporal-immutability door (§12)             | no journal, no door      |
+| `emission`      | provenance records land in `{ store, payloads, regionId, coordinate }` | emission facility off    |
+
+**Run flags and the ambient holder (not channels).** `silent` (default `false`) marks a
+region-silent run — hermetic γ replay (`provenance/hermetic-env.ts`) mints with
+`silent: true, eagerStamps: true`; `eagerStamps` (default `false`) stamps on the value plane.
+`ambient` is the run's call-depth holder `{ dynSite?, regionScope?, track? }`, mutated only via
+`withAmbient(runCtx, key, value, fn)` — SYNC save/restore; a thenable-returning `fn` is refused
+(`AmbientWindowError`). `ExecOptions` carries `emission`/`silent`/`eagerStamps` through
+`assembleRun` and the `*OverFrame` family onto the ctor. `CONSTANT_CTX` has `emission`
+undefined, both flags false and a frozen `ambient`.
 
 **The one inverted default.** `resourcePaths` is a LAW channel, not an observability channel:
 an ordinary `new RunContext(...)` always mints a fresh `MemoryResourcePathLog`, so the CQS door
@@ -138,7 +163,7 @@ host passed a non-`undefined` value into `new RunContext(...)` (plus the `resour
 default above), read only at these two named sites.
 
 **One arming surface, stated once.** `ExecOptions`
-(`cache`/`effects`/`reads`/`notes`/`display`/`resourcePaths`/`strictCQSstrings`/`membraneClosure`)
+(`cache`/`effects`/`reads`/`notes`/`display`/`resourcePaths`/`emission`/`silent`/`eagerStamps`/`strictCQSstrings`/`membraneClosure`)
 is the public door: a field set rides `new RunContext(...)` onto the matching `RunContext` field;
 a field omitted leaves it `undefined`. The per-channel `ExecOptions` field docs and the
 `run/*` file headers describe the SAME wiring from two ends — the option is the entry, the
@@ -224,8 +249,9 @@ RunContext minted with NO vocabulary at all — `CONSTANT_CTX`, and the internal
 `this.configuration === undefined`, the SAME posture a capability with no configuration schema
 at all already has (and the SAME posture `capabilityResources` already documents for that path).
 A REUSED `runCtx` (`ExecOptions.runCtx`, REPL continuity) carries whatever table its OWN
-originating `assembleRun` call built — checked by vocabulary IDENTITY on reuse, never re-filled
-(a mismatch throws `RunContextVocabularyMismatchError`) — while a fresh `new RunContext(...)` a
+originating `assembleRun` call built — reused verbatim, never re-derived or re-filled (the
+`capabilities`/`config` of the reusing call are ignored, so there is no mismatch check to
+fail) — while a fresh `new RunContext(...)` a
 caller mints by hand outside `assembleRun` (the over-frame seam above) carries none.
 
 _Enforcement sites: `run/CallCtx.ts`, `run/RunContext.ts` (`capabilityConfigurations`),
@@ -248,14 +274,36 @@ states the mechanism they share.
   reference the trampoline reads — so every consumer observes abort state off one handle that
   cannot drift.
 
-**Span differs by entry, deliberately.** In `execState`/`exec` the deadline spans the WHOLE
-call — all top-level forms share one budget, so a sandbox program that splits a hang across
-several forms is still bounded. In `execExpr` the deadline is PER-FORM (one expression, one
-budget) — a cumulative multi-form bound there would need a shared `RunContext` no `execExpr`
-caller can inject yet.
+**Bounds are per call, armed on the run handle.** Each entry (`execState`/`exec`, `execExpr`,
+the over-frame twins) computes the absolute deadline ONCE (`now + budgetMs`) and arms
+`{ signal, deadline, budgetMs }` on `runCtx.bound` for the call's extent, disarming in `finally`.
+Every nested trampoline — `try` body/handlers/`finally`, HOF callbacks, named-let escapes, macro
+expansion, a `require` inside the call — reads that same holder, so one call's budget and signal
+bound it at every depth, and a REUSED `runCtx` (REPL) takes each call's fresh budget and signal,
+never the previous call's. A call that passes no `signal` falls back to the signal the run was
+minted with (a session signal), so a minted run stays abortable by it. All top-level forms share
+the one deadline (whole-call span). Nested `execExpr`/`execInFrame` on an armed handle INHERIT the
+bound and do not re-arm — but only when they pass neither `signal` nor `budgetMs`; supplying
+either on an armed handle, like arming it from a second call, throws `RunContextBusyError`
+(concurrent calls on one run handle are illegal — await the previous call, never silently drop
+the second caller's bound). Stated precisely: **one RunContext = one call at a time
+(`RunContextBusyError`); parallel runs = parallel RunContexts; a reused handle is a serialized
+session; intra-run fan (`map` over async ports) is not a second call.** `catch`/`guard` never intercept budget overruns, aborts of THIS
+call's signal, or host-runtime faults (stack overflow and kin): the clause is skipped, `finally`
+still runs, and the error rethrows. An `AbortError` raised by an unrelated host controller while
+the call's signal is not aborted is an ordinary, catchable failure.
 
-_Enforcement sites: `eval/evaluator.ts` (TICK check), `eval/generator-exec.ts` (the per-form
-loop, `execExpr`). Consumer view: §14 SESSIONS._
+**`finally` after an abort gets a grace window.** Once the call's signal has fired it is spent, so
+`finally` runs on the deadline alone — capped at `FINALLY_GRACE_MS` (250ms) from the moment it
+starts (or the call's own deadline, whichever is sooner). Cleanup still happens, but a `finally`
+that loops forever is cut off with `BudgetExceededError` (swallowed, per JS `finally` semantics);
+the call still rejects with the ORIGINAL abort reason. Nested `try` / HOF-callback / macro
+trampolines are awaited by their parent, never raced against the signal: the call settles only
+after every `catch`/`finally` has completed, so nothing runs after `exec` rejects and the bound
+is still armed (and the signal still the call's) while they do.
+
+_Enforcement sites: `run/RunContext.ts` (`RunBound`), `eval/evaluator.ts` (TICK check,
+`isUncatchable`), `eval/generator-exec.ts` (`armCall`, `runForms`). Consumer view: §14 SESSIONS._
 
 ## 6. MODE-LAW — record × replay × class
 
@@ -578,13 +626,31 @@ scope, they resolve through the run's capability base.
 can gain or lose tools mid-way without losing its state — `capabilities` decide what verbs _this
 call_ may use, `scope` decides what definitions persist.
 
+**Concurrency model.** One RunContext = one call at a time (`RunContextBusyError`); parallel
+runs = parallel RunContexts (the expected case, P19); a reused handle is a serialized session;
+intra-run fan is not a second call.
+
 **Budgets are per call and compose, first to fire wins.** A budget error ends the _call_, not the
 session — the scope and its definitions survive, so a REPL loop catches, reports, and continues. The
 two bounds (`budgetMs`, `signal`) and their edges are §5 BUDGETS.
 
 **The CLI over this surface.** `@here.build/arrival-cli` is a REPL over exactly this
-scope/capability surface — one `LexicalScope` per session, budgets per form, capabilities armed per
+scope/capability surface — one `LexicalScope` per session, budgets per call, capabilities armed per
 call. It is this library API's first consumer, not a different model.
+
+**Fans: `map`/`filter`/`for-each` and their vector/string siblings are dataflow fans (P18).**
+`map`, `vector-map`, `filter` and the for-each family (`for-each`, `vector-for-each`,
+`string-for-each`) are declared `provenance: "fan"`; the callback role is `element-transformer`
+(map family), `control` (filter's predicate) or `effect` (for-each — void egress, a terminal track
+with no product wire). `string-map` runs its tracks concurrently too but is still declared `pipe`
+with an explicit `element-transformer` role. Each element's callback application is its own
+track and the tracks run concurrently (`mapImpl` / `promise_all`), so **order among a fan's tracks
+is not observable** — the text order of the elements is a serialization, not meaning. Only
+`map`/`vector-map` are length-preserving (the count-cone prune); `for-each` returns void, so it
+never is. **A failing track aborts the call (crash-stop):** the first rejection fails the call and
+`RunBound.abortCall` cancels sibling tracks still in flight, so no port is called after the run is
+already lost (law: `__tests__/evaluator-run-axis.test.ts`, "W-R1: a rejected fan track cancels its
+siblings"). Concurrent runs are checked end to end by `run/__tests__/concurrent-runs.law.test.ts`.
 
 **Disposal is capability-owned, deliberately unexported.** `onRunContextDispose`
 (`run/run-lifecycle.ts`) registers a teardown to fire when a `RunContext` disposes; it sits

@@ -176,6 +176,16 @@ walk; closures reach them by lexical capture). Holds for bootstrap preludes AND 
 `(require/extension …)` packs — the require-extension surface. Full contract:
 docs/environments.md §7a; laws: `env/__tests__/prelude-persistence.law.test.ts`.
 
+## R13 — Closure nodes with capture edges: every callable value is a graph node (P17)
+
+A lambda literal, a material define used as a VALUE and a bare port-role name used as a value
+are `closure` nodes; free variables of an interior are CAPTURES (`capture:<name>` wires in the
+enclosing graph). This FLIPS the Q8a door ("a port-reaching define captured as a value throws
+`WireLocalityError`") and the W-7 bare-name `source`/`opaque` cut: `(emit! helper)` is a
+`closure{ref:define}` node, `(list src-a src-a)` two `closure{ref:port}` nodes; the builder never
+throws for a program that runs. Alias chasing (`(let ((g src-a)) (g 1))`) is a graph edge, no
+longer a LIMIT. Full contract: docs/PROVENANCE.md §1; laws: `provenance/__tests__/closure-nodes.law.test.ts`.
+
 ## Key taxonomy — PRINCIPLES P7 corollary
 
 Three key roles, one mechanism each:

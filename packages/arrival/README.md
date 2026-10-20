@@ -119,7 +119,8 @@ The subset is deep where it counts: **proper tail calls** via a flat trampoline
 — free multi-return packaging is the weak form of continuation arity, and a value's identity is a
 single construction site), the **full R7RS exception tower**, an **exact numeric tower**
 (safe-integer `AExact` — num/denom are JS safe integers; arithmetic that overflows
-throws; host `bigint` is not a Scheme number — `(+ (/ 1 3) (/ 2 3))` is exactly `1`),
+throws; host `bigint` is not a Scheme number — `(+ (/ 1 3) (/ 2 3))` is exactly `1`;
+see [`docs/numbers.md`](./docs/numbers.md)),
 **datum labels**. Twelve SRFIs
 assemble by default (1, 2, 8, 13, 26, 28, 43, 95, 128, 151, 189, 235 — `src/env/srfi/`);
 SRFI-8 (`receive`) is a teaching door — user-facing multiple-value binders are omitted by

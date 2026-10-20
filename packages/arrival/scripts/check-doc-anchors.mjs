@@ -15,7 +15,9 @@
  *   1. Dangling-ID    — every P#/R#/F# cite in src TS comments + docs .md files
  *                       resolves to a minting heading in its ledger.
  *   2. Dead links     — every intra-package .md link/mention in doc prose
- *                       resolves to an existing file.
+ *                       resolves to an existing file; and every package-rooted
+ *                       `docs/….md` path cited from src TS comments,
+ *                       eslint.config.mjs, or the vitest config files exists.
  *   3. ID uniqueness  — no two headings in a ledger mint the same number.
  *   4. Register lint  — SHOUT docs mint an ID series or are an allowlisted
  *                       canon; kebab docs mint no `## X# —` ledger heading.
@@ -25,21 +27,21 @@
  */
 
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
-import { join, dirname, resolve, basename } from "node:path";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const PKG_ROOT = resolve(HERE, "..");
-const DOCS = join(PKG_ROOT, "docs");
-const SRC = join(PKG_ROOT, "src");
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const PKG_ROOT = path.resolve(HERE, "..");
+const DOCS = path.join(PKG_ROOT, "docs");
+const SRC = path.join(PKG_ROOT, "src");
 
 // ── Ledgers: file + the regex that MINTS an ID heading in it ──────────────
 // PRINCIPLES mints `**P0.`; RULINGS mints `## R1 —`; test-suite mints `**F1 —`.
 const LEDGERS = {
-  P: { file: join(DOCS, "PRINCIPLES.md"), mint: /(?:^|\n)\*\*P(\d+)\./g, label: "PRINCIPLES.md" },
-  R: { file: join(DOCS, "RULINGS.md"), mint: /(?:^|\n)## R(\d+) —/g, label: "RULINGS.md" },
+  P: { file: path.join(DOCS, "PRINCIPLES.md"), mint: /(?:^|\n)\*\*P(\d+)\./g, label: "PRINCIPLES.md" },
+  R: { file: path.join(DOCS, "RULINGS.md"), mint: /(?:^|\n)## R(\d+) —/g, label: "RULINGS.md" },
   F: {
-    file: join(DOCS, "test-suite-architecture.md"),
+    file: path.join(DOCS, "test-suite-architecture.md"),
     mint: /(?:^|\n)\*\*F(\d+) —/g,
     label: "test-suite-architecture.md",
   },
@@ -53,7 +55,7 @@ const errors = [];
 // ── fs walk ───────────────────────────────────────────────────────────────
 function walk(dir, ext, out = []) {
   for (const name of readdirSync(dir)) {
-    const p = join(dir, name);
+    const p = path.join(dir, name);
     const st = statSync(p);
     if (st.isDirectory()) walk(p, ext, out);
     else if (name.endsWith(ext)) out.push(p);
@@ -102,8 +104,8 @@ function citationsIn(text) {
 // TS comment extractor — scan only comments, never code identifiers.
 function commentsOf(tsText) {
   let out = "";
-  for (const m of tsText.matchAll(/\/\*[\s\S]*?\*\//g)) out += m[0] + "\n";
-  for (const m of tsText.matchAll(/\/\/[^\n]*/g)) out += m[0] + "\n";
+  for (const m of tsText.matchAll(/\/\*[\s\S]*?\*\//g)) out += `${m[0]}\n`;
+  for (const m of tsText.matchAll(/\/\/[^\n]*/g)) out += `${m[0]}\n`;
   return out;
 }
 
@@ -117,7 +119,7 @@ function checkCites(sourceLabel, cites) {
 
 // docs/*.md (top-level only, per check-1 scope)
 for (const f of readdirSync(DOCS).filter((n) => n.endsWith(".md"))) {
-  checkCites(`docs/${f}`, citationsIn(readFileSync(join(DOCS, f), "utf8")));
+  checkCites(`docs/${f}`, citationsIn(readFileSync(path.join(DOCS, f), "utf8")));
 }
 // src/**/*.ts comments
 if (existsSync(SRC)) {
@@ -130,7 +132,7 @@ if (existsSync(SRC)) {
 // Metavariable placeholders in the README register legend — not real files.
 const REF_IGNORE = new Set(["SHOUT.md", "kebab-case.md"]);
 // Every .md basename anywhere under docs/ — a bare mention resolves if such a doc exists.
-const docBasenames = new Set(walk(DOCS, ".md").map((p) => basename(p)));
+const docBasenames = new Set(walk(DOCS, ".md").map((p) => path.basename(p)));
 
 // Collect .md references: markdown-link targets and bare/prefixed path mentions.
 // The lookbehind stops a cross-package suffix (`sift/docs/x.md`) from matching its
@@ -152,8 +154,13 @@ function inScopeRef(p) {
 
 function resolvesRef(fromDir, p) {
   // a bare mention resolves if a doc of that basename exists anywhere under docs/
-  if (docBasenames.has(basename(p))) return true;
-  const candidates = [resolve(fromDir, p), resolve(DOCS, p), resolve(PKG_ROOT, p), resolve(DOCS, basename(p))];
+  if (docBasenames.has(path.basename(p))) return true;
+  const candidates = [
+    path.resolve(fromDir, p),
+    path.resolve(DOCS, p),
+    path.resolve(PKG_ROOT, p),
+    path.resolve(DOCS, path.basename(p)),
+  ];
   for (const c of candidates) {
     if (!c.startsWith(PKG_ROOT)) continue; // escapes the package → out of scope (cross-package link)
     if (existsSync(c)) return true;
@@ -164,7 +171,7 @@ function resolvesRef(fromDir, p) {
 
 const allDocs = walk(DOCS, ".md");
 for (const f of allDocs) {
-  const dir = dirname(f);
+  const dir = path.dirname(f);
   const text = readFileSync(f, "utf8");
   for (const p of mdRefsIn(text)) {
     if (REF_IGNORE.has(p) || !inScopeRef(p)) continue;
@@ -172,12 +179,29 @@ for (const f of allDocs) {
   }
 }
 
+// Package-rooted `docs/….md` citations in code: src/**/*.ts comments plus the lint/test
+// configs (whose rule messages are user-facing). The lookbehind skips cross-package
+// prefixes (`sift/docs/x.md`); a doc cited only by bare name stays a docs-prose concern.
+const CODE_DOC_REF = /(?<![\w/.-])(docs\/[\w./-]+?\.md)\b/g;
+function checkCodeRefs(label, text) {
+  for (const m of text.matchAll(CODE_DOC_REF)) {
+    if (!existsSync(path.resolve(PKG_ROOT, m[1])))
+      errors.push(`[dead-link] ${label}: reference "${m[1]}" resolves to no existing file`);
+  }
+}
+if (existsSync(SRC)) {
+  for (const f of walk(SRC, ".ts")) checkCodeRefs(rel(f), commentsOf(readFileSync(f, "utf8")));
+}
+for (const n of readdirSync(PKG_ROOT).filter((n) => n === "eslint.config.mjs" || /^vitest.*\.config\.ts$/.test(n))) {
+  checkCodeRefs(n, readFileSync(path.join(PKG_ROOT, n), "utf8"));
+}
+
 // ── Register lint (check 4) ─────────────────────────────────────────────────
 const ID_MINTING_HEADING = /(?:^|\n)## [A-Z]\d+ —/; // a `## X# —` ledger heading
 for (const f of readdirSync(DOCS).filter((n) => n.endsWith(".md"))) {
   const stem = f.replace(/\.md$/, "");
   const isShout = /^[A-Z0-9]+$/.test(stem);
-  const text = readFileSync(join(DOCS, f), "utf8");
+  const text = readFileSync(path.join(DOCS, f), "utf8");
   const mintsID =
     /(?:^|\n)## [PRF]\d+ —/.test(text) || /(?:^|\n)\*\*[PRF]\d+[.—]/.test(text) || /(?:^|\n)\*\*[PRF]\d+ —/.test(text);
   if (isShout) {

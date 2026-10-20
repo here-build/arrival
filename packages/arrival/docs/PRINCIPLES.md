@@ -302,11 +302,68 @@ _Forbids:_ asserting private state when a public observation exists; documentati
 
 ---
 
+## VII. Execution
+
+**P17. Any code is a provenance graph.**
+_Source (user, verbatim):_ "We should support any code. Our provenance should be built around
+the assumption that any code produced — given we're fully controlling the interpreter and
+sandbox — can be represented as a provenance graph."
+The interpreter and the sandbox are ours, so there is no program the second interpreter is
+allowed to call "unrepresentable". A construct the graph cannot express (a lambda the lineage
+classifier files as a literal, a binding chain the builder refuses to follow) is not a limit of
+provenance — it is a hole in the representation, and the hole is ours to close.
+_Revealed by:_ `lineage.ts` classifying a lambda as a literal, and the wireframe builder's
+"no alias chasing" LIMIT — both declare a class of ordinary code outside the graph.
+_Forbids:_ "unsupported construct" as a terminal state for provenance; classifiers that
+degrade a program to a literal because its shape is inconvenient.
+
+**P18. The program is a dataflow graph; parallelism is an automatic property.**
+_Source (user, verbatim):_ "We operate within full immutability. From the Scheme perspective
+the code does not need async or call/cc, because the code is not a program — it's a dataflow
+graph. This is what enables automatic parallelization — and immutability is the required
+constraint here. This means parallelization is an automatic property. Even things like
+`(tool 1) (tool 2)` can be parallelized despite the existing named order — we just acknowledge
+that after a crash the execution should stop; this is the only stopping factor. Arrival Scheme
+is very similar to Datalog in some means."
+Text order is a serialization of the graph, not part of its meaning: independent nodes may run
+concurrently, and the ONLY stopping rule is a crash (once one node fails, the call stops).
+Datalog is the kin: a set of facts and derivations over immutable data, evaluated in whatever
+order the dependencies allow. Control is never speculated across a port: a branch whose
+condition depends on a port result waits for it — parallelism comes from independence, not
+from guessing.
+_Revealed by:_ the evaluator's `evaluateArgs` awaiting arguments serially, and
+`generator-exec`'s `runForms` running top-level forms in text order — while `map`/`filter`/
+`for-each` already fan out. The language is half-parallel by accident of which verb you reach for.
+_Forbids:_ order-dependence smuggled in as a semantic; `async`/`call/cc` surface in
+the language; speculating a branch across an unresolved port.
+
+**P19. No global state: RunContext is the container.**
+_Source (user, verbatim):_ "Parallel runs are not just possible — they are expected;
+RunContext is what acts as the interpreter container for parallelization. We should not have
+any global states — everything should be inside RunContext."
+Concurrent runs on one isolate are the EXPECTED case, not an edge. Anything that varies per run
+or per call depth lives on its `RunContext` (channels, flags, the `ambient` holder, the call
+`bound`, the `observation` arm). The tolerated module-level ambients are SYNC windows: the `currentRun`
+pointer (`run/current-run.ts`; codec seams carry no handle) and its CONSTANT*CTX region-scope
+leg (`constantWindowScope`, docs/execution.md §1) — interleave-free in a single-threaded isolate,
+and both tripwired against async bodies. Constants
+shared by all runs and keyed residency (a `WeakMap` keyed by a run object) are not state.
+\_Revealed by:* region-scope's `_silentRegion` and provenance-hooks' `_coordinate`/`_sink`
+async-settle holders, whose own comment concedes "at most one recording run per isolate".
+_Forbids:_ module-level `let` holders for run- or call-varying facts; a run that can only be
+correct when it is the sole run in the isolate; "per-isolate" as a documented guarantee.
+
+---
+
 ## Precedence
 
-When principles collide, the order is: **P0 (two-layer coherence) > P10/P11 (provenance
-truth) > P4/P5 (membrane strictness) > P8 (algebra uniformity) > P7 (representation
+When principles collide, the order is: **P0 (two-layer coherence) > P19 (no global
+state) > P10/P11 (provenance truth) > P17/P18 (any code is a graph; automatic parallelism) >
+P4/P5 (membrane strictness) > P8 (algebra uniformity) > P7 (representation
 authority) > everything else.** Rationale: the two-layer execution IS the machine — the rest
-describe how to keep it running. Provenance is the product; the membrane is what makes
+describe how to keep it running. P19 outranks provenance truth because a shared global makes
+concurrent runs corrupt each other's trace, so no provenance claim survives without it; the
+graph principles (P17/P18) follow because they define what provenance covers and how it may
+be scheduled. Provenance is the product; the membrane is what makes
 provenance sound; a uniform algebra is what makes the membrane's promises statable; authority
 placement is how the first three stay maintainable. Convenience never appears in this list.

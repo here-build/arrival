@@ -223,7 +223,8 @@ env-bound callable (`provenance/lineage-classifier-from-env.ts`), never guessed 
 or duck-read off an ad-hoc property (P7). Special forms `classify` models by shape
 (`if`/`cond`/`let`/`begin`/`and`/`or`/`lambda`/`do`) are kept in lock-step with
 `CLASSIFIED_SPECIAL_FORMS`; forms it does not model fall through and are safe only because
-the shadow skips them as macro-heads.
+the shadow skips them as macro-heads. A `lambda` classifies to a `closure` node (shape
+visible, cone ∅ at the definition site, body reaches ports when applied) — never a `literal`.
 
 **This section owns only the pre-execution LENS FACE. `PROVENANCE.md` owns runtime
 lineage** — the eager stamp, the trace-tap, the region/track/wire graph, γ-replay. The

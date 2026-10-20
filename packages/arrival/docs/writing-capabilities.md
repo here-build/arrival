@@ -10,7 +10,7 @@ ontology in `environments.md`. **This file is the author's how-to: the recipe yo
 with each law it rests on cited to its home in `environments.md`.**
 
 The per-API mechanics (the `symbol.*` factory roster, tagged-template syntax, exact bake-gate
-error texts) live in the JSDoc of the entry points: `common/symbol.ts`, `common/capability.ts`,
+error texts) live in the JSDoc of the entry points: `common/symbols/index.ts`, `common/capability.ts`,
 `rosetta.ts`, `common/scheme-zod/`, and (out of this repository)
 `@here.build/arrival-mcp`'s `McpEnvCapability` / `tool`.
 

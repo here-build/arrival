@@ -38,7 +38,9 @@ instantiation points, binders. Nodes are where P0's two interpretations must agr
 everything between nodes is wire. Ports are defined by MEANING (where the world touches
 the program), which is why the storage optimum and the user's ontology coincide (§8).
 
-- CHOSEN: a **pure-selector mux collapses INTO its wire** — its decision is a
+- CHOSEN: a **pure-selector mux collapses INTO its wire when its arms are cut-free** (an
+  arm holding a port, template-ref or fan keeps the mux a node — γ resolves a wire's node
+  params eagerly, so a collapsed untaken arm would be demanded; arms stay lazy) — its decision is a
   deterministic function of frozen ingress and is rederived by γ; recording it buys
   nothing replay cannot reconstruct. Only port-coupled muxes carry decision records.
   Corollary: pure-data conditionals no longer fragment segments — the wireframe shrinks
@@ -49,6 +51,36 @@ the program), which is why the storage optimum and the user's ontology coincide 
   Do not "fix" this by re-recording — the trade is the design.
 - CHOSEN: top-level program order (`begin`/`define` sequencing) is owned by the root
   binder chain — prospective-only; pure sequencing emits no runtime records.
+
+**CHOSEN — every callable VALUE that reaches wire space is a closure node with capture
+edges (P17).** A lambda literal, a material (port-reaching) define used as a value, and a
+bare port-role name used as a value are each a `closure` node: an inline lambda owns a PRIVATE
+interior template (I5, never spliced into the enclosing graph); a define/port closure is a
+by-reference node (`ref: define | port` — applying a port closure IS the crossing). The free
+lexical variables of an interior (closure, fan callback, loop) are its CAPTURES: one
+`capture:<name>` wire each in the ENCLOSING graph (an ordinary wire — a let-bound cut, a value
+define through the pruned root frame, an enclosing formal), emitted after every sibling cut
+exists so a `letrec` self/mutual capture is a graph cycle in the enclosing graph, never through a
+template. A fan callback that is not a lambda literal or a prelude/base name is a `fn` wire to a
+closure node; a `guard`/`try` containing a cut is a `guard` node (body wire, `selector{k}`/`arm{k}`
+wires reading the caught condition via `slot: "condition"`). Calls stay wire material (γ applies
+the value); `template-ref` and `recur` remain the only syntactic call cuts. A cut-free lambda
+stays wire text, like a pure-selector mux. Every bare-name cut is per OCCURRENCE (cons cell).
+Replay: a closure node γ's to a callable that instantiates its template per call (fresh node
+memo, one FrozenMints ledger, captures γ'd lazily and once on a nested hermetic base — a run
+handle executes one call at a time); a fan applies its verb to replay callables; a guard
+catches via the evaluator's own `guard`. Validators: `unboundSlots` (no wire slot is unbound at
+its level; every capture has exactly one wire), builder totality (the builder never throws for a
+program that runs).
+
+- EXCLUDED: lambda-as-literal (a callable whose body ports were collapsed to one mint),
+  alias refusal (`(let ((g src-a)) (g 1))` — alias chasing is now a graph edge), and capturing a
+  material define as an opaque payload.
+- LIMIT (closure design, named so they are not filed as closure bugs): runtime code absent from
+  the wireframe (macro-introduced ports, `eval`/`load`); host-determined call order (values
+  replay, order is the host-schedule record, §3 I3); a loop name escaping as a value (degrades
+  to `opaque`); closures over mutable state (none exist while mutators are doored); in-γ
+  closure calls are one step-walk step for the wire. Ledger: `closure nodes — …` STAGED rows.
 
 **CHOSEN — a wire is a closed arrival lambda.** `uneval` emits it lambda-lifted:
 parameters = ingress, `FV(body) ⊆ params ∪ prelude-names` (checked at emission —
@@ -150,7 +182,21 @@ fact (until a consumer demands it).
 ## 3. Tracks
 
 **CHOSEN — a track IS a wire whose expression is a first-class lambda** (captures =
-ingress); track invariants are wire laws at a membrane boundary. One concept.
+ingress); track invariants are wire laws at a membrane boundary. One concept. A closure CALL is
+a track under the same reading: it opens/closes at the closure's coordinate (`track-open`/
+`track-close`, no new record kind; ordinal path `[…enclosing, r_C, k]`, k = call instance) —
+`EvalContext.closureCall` threads the call's window lexically (a closure's calls nest under the
+window of the instance that DEFINED it — the wireframe's enclosing-graph nesting), ports inside
+emit at `[…enclosing, r_C, k, n]` under `hashGraph(closure.template)` (n = the window's event
+counter, shared with its track open/close), and the sites come from `WireframeProgram.closureSites`
+(body-list pair identity — the recording host must evaluate the SAME parsed forms it built the wireframe from).
+Replay instantiates per call.
+
+**CHOSEN — a rejected crossing is information.** A host impl that throws is recorded as a mint
+whose payload is `raised: true` (value = the condition message, no stamps); replay's source arm
+re-raises it (a scheme `guard` — in-γ, or the driver around a guard body's ingress — catches it).
+EXCLUDED: dropping rejections ("a rejected crossing mints nothing") — a guard clause taken because
+a port threw would be unreplayable. Validation/abort errors are not crossings and mint nothing.
 
 **CHOSEN — composition operator comes from the host role:**
 parallel (element/control) · chained (accumulator — `egress(Tᵢ) → ingress(Tᵢ₊₁)` is the
@@ -276,7 +322,7 @@ cheapness story doesn't quietly assume pure loop bodies:
 | mux decision (port-coupled muxes only, per §1's mux-collapse rule) | never — each is information                       |
 | fan instantiation                                                  | YES — ordinal runs under stable wiring            |
 | ingress binding                                                    | YES — stable wiring stores O(1)+count             |
-| track open/close                                                   | YES — counter deltas                              |
+| track open/close (incl. one per closure call)                      | YES — counter deltas                              |
 | host-schedule                                                      | never — the sequence IS the record                |
 
 Aggregation runs are PATH-SCOPED: a run is `(parent ordinal-path, start, count)` —
@@ -304,7 +350,14 @@ request retries and multi-request programs re-emit safely. The port-completeness
 **CHOSEN — two named hashes**: `template-hash` (spans STRIPPED — dedup and store
 identity; the same expression at two program sites shares storage) and `site-hash`
 (spans KEPT — plane identity; the two sites render as two wires). Conflating them
-either breaks dedup or merges distinct plane locations.
+either breaks dedup or merges distinct plane locations. A closure's interior content hash is
+`hashGraph(closure.template)` (identical lambdas share it; it is the template hash of every
+record of a port inside); its plane identity is `siteHash(hashGraph(enclosing), closure.span)`.
+Capture NAMES are content (α-ruling), capture WIRES are ordinary wires of the enclosing graph.
+Both are **SHA-256 truncated to 128 bits** (32 lowercase hex, `provenance/store/hash.ts`,
+domain-separated `template-v1` / `site-v1` / `payload-v1`; sync, `node:crypto` through
+`process.getBuiltinModule` with a bit-identical pure-JS fallback for browser bundles). The old
+32-bit FNV-1a survives only as the offload sampler's PRNG seed (`seed32`) — it claims no identity.
 
 **CHOSEN — stream order**: the stream's total order is EMISSION order (settlement
 order for async), keyed by a per-region monotonic sequence + region epoch. Counter
@@ -373,6 +426,8 @@ Two artifacts share the word "provenance" and must not be conflated:
   `unevalWire`/`WireEmission` in `provenance/uneval.ts` — a wireframe-BUILD-time production
   dependency, not analysis), and γ-replay (`gamma.ts`/`hermetic-env.ts`, `strata.md` §5's
   `env ⇄ provenance` charter).
+  The store/emission plane (`provenance/store/`, behind §7's aggregation and fold laws) is STAGED:
+  built and law-tested, not yet armed by production hosts.
 - **`@here.build/arrival-provenance`** (a separate package) owns the RETROSPECTIVE half:
   analysis of a FINISHED trace — `ObservableEvalTrace`, `buildUneval`/`Uneval`/
   `UnevalContainer` (`analysis/uneval.ts`), and the rest of `analysis/*` (flow graphs, region
@@ -429,6 +484,9 @@ stratum-1 question with stratum-3 material; that is why they go unused.
 | Law                                 | Statement                                                                                                                                                                                                                |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | wire-locality                       | FV(wire body) ⊆ params ∪ prelude-names, at emission                                                                                                                                                                      |
+| builder-totality                    | `buildWireframe` never throws for a program that runs (a `WireLocalityError` is a builder bug) — closure-nodes.law                                                                                                       |
+| no-unbound-slot                     | `unboundSlots(program)` is empty: every wire slot param is bound at its level (main ingress, template params, closure/fan/binder formals ∪ captures) and every capture has one wire                                      |
+| closure-replay                      | record-then-replay over the closure corpus: replayed value AND cone equal the eager run, FrozenMints never consult the world — closure-nodes.law (rows 1–30)                                                             |
 | wire-γ                              | apply(wire, recorded ingress) = recorded egress; subsumes segment losslessness, loop-free scope                                                                                                                          |
 | replay-nondeterminism               | frozen-payload replay stable under a deliberately mutated external world; interior gensym/source/clock programs generated                                                                                                |
 | agreement                           | eager-oracle cone == wireframe cone, generated corpus — SCOPED per the pure-mux precision trade (§1): exact on port-coupled decisions + non-mux segments; abstract both-arms on pure-mux wires                           |

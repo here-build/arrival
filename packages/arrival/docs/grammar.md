@@ -345,8 +345,8 @@ stay free to teach; the specs match ONLY the class.
 | `E-DICT-BAD-KEY`              | `{…}` key is not a `:keyword` / `"string"` / trailing-colon `key:` / unquote form (read time), or a substituted key folded to a non-string (eval time) |
 | `E-DICT-DUP-KEY`              | duplicate `{…}` key (read-time static, or post-quasiquote-substitution)                                                                                |
 | `E-DICT-INFIX-BANNED`         | `{…}` is infix-shaped (`{a * b}`) — the SRFI-105 curly-infix ban (§INFIX); steers to the prefix `(op …)` form                                          |
-| `E-LITERAL-DOT`               | `.` inside a `[…]`/`{…}` literal, or a dotted tail on `#(` / `#u8(`                                                                                     |
-| `E-DOT-EXTRA-ELEMENT`         | more than one datum after `.` in a paren list (`(a . b c)`, `(a . b . c)`)                                                                              |
+| `E-LITERAL-DOT`               | `.` inside a `[…]`/`{…}` literal, or a dotted tail on `#(` / `#u8(`                                                                                    |
+| `E-DOT-EXTRA-ELEMENT`         | more than one datum after `.` in a paren list (`(a . b c)`, `(a . b . c)`)                                                                             |
 | `E-EXPECTING-DATUM`           | quote-family prefix (`'`, `` ` ``, `,`, `,@`) dangling against a close delimiter                                                                       |
 | `E-UNTERMINATED`              | EOF inside an open string/list/literal                                                                                                                 |
 | `E-BRACKET-MISMATCH`          | close delimiter does not pair its opener (`(a]`)                                                                                                       |
@@ -355,6 +355,8 @@ stay free to teach; the specs match ONLY the class.
 | `E-LET-BRACKET-BINDING`       | a per-element bracket binding is malformed: wrong length (≠2; ≠2–3 for `do`), or a non-symbol (incl. a destructuring vector) in the name slot          |
 | `E-COND-BRACKET-CLAUSE`       | a `cond`/`case`/`do`-test bracket clause is empty (`[]`)                                                                                               |
 | `E-CASE-BRACKET-DATUM-LIST`   | a `case` clause's datum-list head is itself a bracket vector — the datum list is data, never bracket-converted (§CLAUSES, BG9)                         |
+| `E-BYTEVECTOR-ELEMENT`        | a `#u8(…)` element is not an exact integer 0..255 — never a silent `Uint8Array` wrap (`256` → 0, `-1` → 255)                                           |
+| `E-DATUM-LABEL-CYCLE`         | a datum label (`#n=` / `#n#`) refers to a datum still being read through a dict literal; cycles through a list or vector are legal                     |
 
 **One member-access rejection is code-less by design.** The `:key` accessor over a
 non-dict operand (`(:a 5)`) throws a plain `Error` — no stable `.code`, `errorClass`

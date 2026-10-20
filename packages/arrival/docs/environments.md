@@ -288,7 +288,7 @@ _undeclared_: `z.dynamic` does no transform, so the raw scheme callable would be
 the impl itself — possibly _after_ an `await`, by which point the synchronous region-scope
 window has closed and the reverse call would bind the detached scope. The machine forbids the
 unsafe shape rather than trying to marshal it safely: a callable crossing a `z.dynamic` slot is a
-teaching throw (`assertNotBareCallableInDynamicSlot`) steering the author to declare
+teaching throw (`buildDynamicSlotCheck`) steering the author to declare
 `z.procedure`. The _outbound_ direction is barred
 too, but by two distinct rules, not one: a rosetta returning a bare JS function is banned
 outright ("a rosetta result is never a bare JS function — provenance untraceable"), and a bare
@@ -304,7 +304,7 @@ a live callable (`z.procedure` or `z.dynamic` — `contractMayCarryCallable`). A
 no scope, touches no wrapper cache, pays zero cost. The scope's `runCtx` is the invocation's
 live context, so a reverse-lambda minted under it re-enters via `scope.runCtx` — a lambda
 calling a sink verb hits the effect-burst arm instead of firing inline. Binding to the shared
-`DETACHED_SCOPE` (`CONSTANT_CTX`) is precisely the burst-bypass hole the gate exists to close;
+`detachedScope()` (`CONSTANT_CTX`) is precisely the burst-bypass hole the gate exists to close;
 it is the fallback when _no_ real scope is open, never a target.
 
 **Enforcement sites:** `membrane/rosetta.ts`, `common/symbols/rosetta.ts`,

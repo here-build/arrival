@@ -61,7 +61,9 @@ invocation's run (`ACallable.ts`'s `hostFnToCallable`). This is the _inbound_ mi
 directions, not just one.
 
 **Identity, run-scoped.** The SAME host fn crossing in twice within one run answers
-the SAME callable (`eq?`) — a `(RunContext, fn)`-keyed mint-or-reuse cache, same
+the SAME callable (`eq?`) — a `(RunContext, fn)`-keyed mint-or-reuse cache
+(`(run, receiver, fn)` for a function read off a borrowed object: the object is the
+method's `this`, and the same fn on two objects is two callables), same
 run-locality reasoning as `AOpaqueHandle.for`'s own cache (provenance is minted from
 one run's own invocation numbering; a global cache would let a wrapper minted under
 run A accumulate ids from run B that mean nothing under run A's numbering).
@@ -166,7 +168,7 @@ registry in `rosetta.ts` (§INBOUND):
    polymorphic bytevector ops). A bare `Promise` into `jsToScheme` doors (the
    evaluator trampoline awaits before any inbound crossing). Host
    `bigint` is **not** raw — it DOORS (`NoLensError` kind `"bigint"`, same spirit as
-   unique-symbol): exact numbers are safe-integer ratios; convert with
+   unique-symbol): exact numbers are safe-integer ratios (`numbers.md`); convert with
    `Number`/`bigintToNumber` in the safe range (or pass an inexact/string) before
    re-crossing. Codecs that speak `bigint` on the host face (`z.bigint`) encode to
    `AExact` BEFORE the membrane.
@@ -463,7 +465,7 @@ scope it was minted against). Four functions operate it:
 - `openRegionScope` — mint a fresh, open scope for one invocation;
 - `withRegionCall` — run one reverse-lambda call under the scope's discipline
   (rules 1/3/4);
-- `withRegionScope` — install the scope as ambient for the synchronous window in which
+- `withRegionScope` — install the scope as the run's current scope for the synchronous window in which
   wrappers are minted;
 - `closeRegionScope` — called when the exporting invocation settles (rule 2).
 
@@ -481,17 +483,20 @@ arguments box under `scope.runCtx` — the invocation's LIVE context, the same h
 carrying the run's cache/effects/reads. A lambda calling a sink verb therefore hits the
 effect-burst arm (`this.runCtx.effects`) instead of firing inline. `CONSTANT_CTX` as
 the answer to "whose invocation is this?" is the provenance interpreter executing
-against a fake frame — the `DETACHED_SCOPE` degradation exists precisely for the
+against a fake frame — the `detachedScope()` degradation exists precisely for the
 _absence_ of a real scope (a trace/display projection, or a unit test calling
 `.parse()` directly), never as a target.
 
-**Why an ambient holder.** `z.procedure`'s decode is a plain zod-codec transform with
-no side channel for "which invocation is this a reverse crossing of." Rather than invent
-two plumbing conventions, both the codec path and `toJS` read the SAME
-module-local "current region scope" — the module-holder idiom `dynamic-call-site.ts`
-already uses, safe under single-threaded JS with save/restore around the owning call. A
-second evaluation of `membrane/region-scope.ts` in the same isolate throws
-`DuplicateModuleLoadError` rather than silently degrading discipline to `DETACHED_SCOPE`.
+**Why a current-scope window (and where it lives).** `z.procedure`'s decode is a plain
+zod-codec transform with no side channel for "which invocation is this a reverse crossing
+of." Rather than invent two plumbing conventions, both the codec path and `toJS` read the
+SAME "current region scope": the `regionScope` slot of the crossing run's own
+`RunContext.ambient`, filled by `withRegionScope` for the SYNC window in which wrappers are
+minted (together with the `currentRun()` pointer, `run/current-run.ts`). Because the slot
+lives on the run, two concurrent runs never see each other's scope (P19); a window whose body
+returns a thenable throws `AmbientWindowError` (`withRegionScopeCall` is the explicit form for
+a sync call whose returned promise is passed through). With no window open the discipline
+degrades to a FRESH `detachedScope()` per use — never a shared object.
 
 **Wrapper identity = (callable, scope, FAMILY).** The same callable exported twice
 through the same scope under the same family gets back the same host function
@@ -507,18 +512,18 @@ callable _first_ serve its wrapper to the other — the same defect class the
 arriving through a `z.dynamic` slot is _undeclared_: `z.dynamic` performs no transform, so
 the raw callable is marshaled by the impl itself — possibly _after_ the impl's first
 `await`, by which point `withRegionScope`'s synchronous save/restore has already
-reverted the ambient scope. A reverse call minted from that stale marshal binds
-`DETACHED_SCOPE`/`CONSTANT_CTX`, reopening exactly the burst-bypass hole region
+closed the window. A reverse call minted from that stale marshal binds
+a detached scope/`CONSTANT_CTX`, reopening exactly the burst-bypass hole region
 discipline exists to close. The fix is not to marshal a `z.dynamic` callable safely — it
 is to never let one land there: a bake-time door
-(`assertNotBareCallableInDynamicSlot`) makes the unsafe shape UNAUTHORED, steering the
+(`buildDynamicSlotCheck`) makes the unsafe shape UNAUTHORED, steering the
 author to declare `z.procedure` (whose decode marshals synchronously, at decode time,
 under the live scope). The gate is computed once at bake off the same normalized input
 vector every other bake gate reads; a lambda-free verb — the overwhelming majority —
 mints no scope, touches no wrapper cache, pays zero cost. (`environments.md §MEMBRANE-SEAM`
 carries the bake-side framing; the runtime discipline is here.)
 
-**The shallow-container gap.** `assertNotBareCallableInDynamicSlot`'s slot scan
+**The shallow-container gap.** `buildDynamicSlotCheck`'s slot scan
 (`common/symbols/rosetta.ts`'s `dynamicSlotPositions`) is SHALLOW ONLY: a bare `z.dynamic`
 nested inside a container schema (`z.list(z.dynamic)`) is not slot-checked, because a
 container carrying a REAL element codec unwraps at its OWN decode and a bare
@@ -557,7 +562,9 @@ this arm is its crossing — the same `toJS` path every other exit uses, so the
 exits cannot drift. A _raised_ error never reaches this arm; it takes the throw path.
 
 **Membrane-warn is bounded, per-crossing not per-value.** A non-portable host value
-materializing to `#void` emits a teaching warning — but only the first few times per
+materializing to `#void` emits a teaching warning — onto the run's note channel
+(`runCtx.notes`; a run with no sink drops it — core has no console), with the budget
+kept PER RUN (`warnMembrane(runCtx, …)`) — but only the first few times per
 _distinct shape_, then one suppression line, then silence. The fact belongs to the
 RUN, not to each value that crosses: a large payload whose values all trip the same
 warning would otherwise emit hundreds of thousands of identical lines and OOM the

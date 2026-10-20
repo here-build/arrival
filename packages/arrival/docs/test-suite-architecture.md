@@ -56,6 +56,13 @@ vs interpreter B over a shared corpus, divergence = throw.
 gap row cites its fix gate; every `it.todo` cites its staging gate; every `[INVERTS: gate]`
 transitional row is indexed here with the law row that replaces it. CI can then answer "what
 does green mean" mechanically: nothing red-expected is silently green, nothing green is a lie.
+Enforcement is a walker over EVERY `*.test.ts` / `*.spec.ts` under `src/` (not just the law
+families; `node_modules`, `dist`, `__benchmarks__`, `__experiments__` excluded): each `it.fails(`,
+`it.fails.each(`, `test.fails(` needs a `// @ledger: <id>` line directly above naming a GAPS or
+INVERSIONS row. A reverse check requires every GAPS/INVERSIONS row to be cited by at least one
+tag, and forbids any `it.fails` from citing a STAGED row. Exempt: chibi registry `run: "fails"`
+rows (`scheme-compliance/chibi/registries*.ts`), which are data governed by their own `gate`
+field; the two chibi dispatch specs are exempted by name in the walker.
 
 **F9 — Drift alarms (P16's sanctioned pins).** Pack symbol counts, anti-vacuity floors,
 registry completeness — each with its rationale string IN the table row.

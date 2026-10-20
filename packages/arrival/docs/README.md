@@ -40,20 +40,21 @@ at a level no local test names.
 Subsystem → its doc → the source it governs. Modules are named, not linked — search by the
 directory name; names survive `git mv`, links rot.
 
-| Subsystem               | Doc                          | Source                                                                                   |
-| ----------------------- | ---------------------------- | ---------------------------------------------------------------------------------------- |
-| Grammar / reader        | `grammar.md`                 | `src/reader/`                                                                            |
-| Environments / assembly | `environments.md`            | `src/env/`, `src/common/`                                                                |
-| Membrane / FFI crossing | `membrane.md`                | `src/membrane/`                                                                          |
-| Execution / run model   | `execution.md`               | `src/run/`, `src/eval/`                                                                  |
+| Subsystem               | Doc                          | Source                                                                                |
+| ----------------------- | ---------------------------- | ------------------------------------------------------------------------------------- |
+| Grammar / reader        | `grammar.md`                 | `src/reader/`                                                                         |
+| Environments / assembly | `environments.md`            | `src/env/`, `src/common/`                                                             |
+| Membrane / FFI crossing | `membrane.md`                | `src/membrane/`                                                                       |
+| Execution / run model   | `execution.md`               | `src/run/`, `src/eval/`                                                               |
 | Static-analysis plane   | `static-plane.md`            | `src/type-layer/`, `src/oracle/`, `src/static-validation/`, `@here.build/arrival-lsp` |
-| Provenance              | `PROVENANCE.md`              | `src/provenance/`                                                                        |
+| Provenance              | `PROVENANCE.md`              | `src/provenance/`                                                                     |
 | Loader / modules        | `environments.md` §LOADER    | `@here.build/arrival-modules`                                                         |
-| Errors / doors          | `grammar.md` §ERRORS         | `src/errors.ts`                                                                          |
-| Capability authoring    | `writing-capabilities.md`    | — (how-to over `src/common/`, `src/membrane/`)                                           |
-| LLM agent card          | `llm-agent-card.md`          | — (system-prompt surface; custdev-measured)                                              |
-| LLM language inventory  | `llm-language-guide.md`      | — (preferred vs compat; not the prompt)                                                  |
-| Test discipline         | `test-suite-architecture.md` | `src/__tests__/`                                                                         |
+| Errors / doors          | `grammar.md` §ERRORS         | `src/errors.ts`                                                                       |
+| Numeric tower           | `numbers.md`                 | `src/values/`, `src/reader/parsing.ts`, `src/env/r7rs/numeric.ts`                     |
+| Capability authoring    | `writing-capabilities.md`    | — (how-to over `src/common/`, `src/membrane/`)                                        |
+| LLM agent card          | `llm-agent-card.md`          | — (system-prompt surface; custdev-measured)                                           |
+| LLM language inventory  | `llm-language-guide.md`      | — (preferred vs compat; not the prompt)                                               |
+| Test discipline         | `test-suite-architecture.md` | `src/__tests__/`                                                                      |
 
 The ledgers and reference material are not subsystems:
 
@@ -85,7 +86,7 @@ Filename case is the normative-vs-explanatory signal, readable in `ls`:
   no ID series). A citation resolves to a heading here.
 - **`kebab-case.md` = explanation / how-to.** _Cites_ P/R IDs and `§ANCHOR`s; mints none:
   `grammar.md`, `environments.md`, `membrane.md`, `execution.md`, `static-plane.md`,
-  `writing-capabilities.md`, `test-suite-architecture.md`.
+  `numbers.md`, `writing-capabilities.md`, `test-suite-architecture.md`.
 
 The one exception: `grammar.md`'s **BG-series** (§BINDINGS, §CLAUSES) is a set of
 grammar-internal, section-scoped rule tags mirroring the evaluator's own local `Rn` numbering

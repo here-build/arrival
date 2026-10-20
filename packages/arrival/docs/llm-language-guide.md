@@ -21,7 +21,7 @@ models learn a second dialect and underuse the first. So:
 Edit the card when custdev shows underuse or oddities. Do not grow the card to enumerate
 aliases the runtime already accepts.
 
-Grammar: `grammar.md`. Coverage matrices: `reference/`. Custdev: `src/__custdev__/language-guide/`.
+Grammar: `grammar.md`. Coverage matrices: `reference/`. Custdev: `packages/arrival-language-guide/`.
 
 ---
 

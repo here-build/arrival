@@ -16,6 +16,7 @@ const chibi = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../ven
 if (!existsSync(path.join(chibi, ".git"))) process.exit(0);
 
 function git(...args) {
+  // eslint-disable-next-line sonarjs/no-os-command-from-path -- dev-only script deliberately invokes the developer's own `git` from PATH
   const r = spawnSync("git", args, { cwd: chibi, encoding: "utf8" });
   if (r.status !== 0) {
     process.stderr.write(r.stderr || r.stdout || `git ${args.join(" ")} failed\n`);
