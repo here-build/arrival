@@ -1028,7 +1028,8 @@ function outputOf(values: { hasOutput: boolean; output?: unknown; error?: unknow
 
 /** The spans whose values the graph's transforms read: each compute wire's own form (its
  *  result into a frame port) and each frame a compute wire feeds the `out` of. Hand them to
- *  `ExecutionCapture.retainSpans` before the run — the trace prunes them otherwise. */
+ *  `ExecutionCapture.retainSpans` before the run — the trace prunes them otherwise. Also each fan
+ *  host's call, whose element list orders the fan's tracks. */
 export function retainedSpans(plan: Plan): Set<string> {
   const spans = new Set<string>();
   for (const e of plan.edges) {
@@ -1037,6 +1038,13 @@ export function retainedSpans(plan: Plan): Set<string> {
     const consumer = e.to.key === plan.root.key ? undefined : plan.byKey.get(e.to.key);
     if (consumer?.kind === "frame" && e.to.port === portIds.out) spans.add(consumer.span);
   }
+  // A fan host's call: its element list is kept as the first callback enters, the only record
+  // of the authored element order the tracks are placed by (callbacks enter in timing order).
+  const walk = (f: PlanFrame): void => {
+    if ((f.frame === "par" || f.frame === "callback") && f.hostSite !== undefined) spans.add(f.hostSite);
+    for (const c of f.children) if (c.kind === "frame") walk(c);
+  };
+  walk(plan.root);
   return spans;
 }
 

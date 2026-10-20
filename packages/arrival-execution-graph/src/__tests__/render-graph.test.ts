@@ -2,7 +2,7 @@ import { disposeRunContext, execState, LexicalScope, parse } from "@here.build/a
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { buildPlan } from "../build-plan.js";
-import { createExecutionCapture } from "../capture.js";
+import { createExecutionCapture, ExecutionCapture } from "../capture.js";
 import { attachDataflow } from "../dataflow.js";
 import type { Plan, Vocabulary } from "../plan.js";
 import { type Progress, ProgressProjector } from "../progress.js";
@@ -37,6 +37,7 @@ async function planOf(body: string, designated = SYMBOLS): Promise<{ src: string
 async function completed(body: string, designated = SYMBOLS) {
   const { src, plan } = await planOf(body, designated);
   const capture = createExecutionCapture(designated);
+  capture.retainSpans(retainedSpans(plan));
   const { error } = await run(src, capture);
   const p = new ProgressProjector(plan, capture).update(error ? "rejected" : "resolved");
   return { plan, p, g: toRenderGraph(plan, p) };
@@ -324,6 +325,36 @@ describe("toRenderGraph — lines and blocks", () => {
     expect(text(t(toRenderGraph(plan, p, { selection: new Map([["map@3:0", 0]]) })).value)).toBe("nf:a!");
     // The edge out of the block carries its state.
     expect(g.edges.find((e) => e.from.node === t(g).id)?.state).toBe("resolved");
+  });
+
+  it("a fan's tracks stay in element order when a callback enters late (I14)", async () => {
+    // The evaluator parks a callback that ran past its 5ms window, so the others enter before
+    // it: the trace then holds tracks b, c, a. Replay exactly that: the first track's whole
+    // subtree enters last.
+    class Late extends ExecutionCapture {
+      override get invocationLog() {
+        const log = super.invocationLog;
+        const host = log.find((i) => String((i.node as { car?: unknown }).car) === "map");
+        const first = log.find((i) => i.parent === host && String((i.node as { car?: unknown }).car) === "ask");
+        const inFirst = (i: (typeof log)[number]) => {
+          for (let x: typeof i | null = i; x; x = x.parent) if (x === first) return true;
+          return false;
+        };
+        return [...log.filter((i) => !inFirst(i)), ...log.filter(inFirst)];
+      }
+    }
+    const body = `(map (lambda (i) (ask (string-append "n" (fetch i)))) (list "a" "b" "c"))`;
+    const { src, plan } = await planOf(body);
+    const capture = new Late(SYMBOLS);
+    capture.retainSpans(retainedSpans(plan));
+    await run(src, capture);
+    const late = capture.invocationLog.filter((i) => String((i.node as { car?: unknown }).car) === "ask");
+    expect(late.map((i) => i.id)).not.toEqual(late.map((i) => i.id).toSorted((x, y) => x - y));
+    const p = new ProgressProjector(plan, capture).update("resolved");
+    const at = (k: number) =>
+      text(transforms(toRenderGraph(plan, p, { selection: new Map([["map@3:0", k]]) }))[0]!.value);
+    expect([0, 1, 2].map(at)).toEqual(["nf:a!", "nf:b!", "nf:c!"]);
+    expect(text(transforms(toRenderGraph(plan, p))[0]!.value)).toBe("nf:c!");
   });
 
   it("a computation over params only is a line: its expression shown unless a step operand prints it", async () => {

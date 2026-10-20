@@ -137,6 +137,23 @@ function isCollectionLiteral(form: unknown): boolean {
   return false;
 }
 
+/** The elements of the first operand of `host` that is a proper list or a vector. */
+function elementsFrom(trace: CoreEvalTrace, host: Invocation, pruned: boolean): readonly unknown[] | undefined {
+  for (const o of readOperands(trace, host, pruned)) {
+    if (!o.hasValue) continue;
+    if (Array.isArray(o.value)) return [...o.value];
+    if (!isPair(o.value)) continue;
+    const out: unknown[] = [];
+    let cur: unknown = o.value;
+    while (isPair(cur)) {
+      out.push(cur.car);
+      cur = cur.cdr;
+    }
+    return out;
+  }
+  return undefined;
+}
+
 export class ExecutionCapture extends EvalTrace {
   readonly symbols: ReadonlySet<string>;
   readonly #captured = new WeakMap<Invocation, Captured>();
@@ -145,6 +162,8 @@ export class ExecutionCapture extends EvalTrace {
   /** Retained-span invocation → its value; parent invocation → span → the last such child's. */
   readonly #values = new WeakMap<Invocation, unknown>();
   readonly #operands = new WeakMap<Invocation, Map<string, unknown>>();
+  /** Element list of a retained-span call, kept as its first callback enters. */
+  readonly #elements = new WeakMap<Invocation, readonly unknown[]>();
 
   /** Moves on every enter and every exit. */
   get revision(): number {
@@ -159,6 +178,7 @@ export class ExecutionCapture extends EvalTrace {
     const baseEnter = this.enter;
     this.enter = action((...args: Parameters<typeof baseEnter>) => {
       const inv = baseEnter(...args);
+      if (this.#spans.size > 0) this.#keepElements(inv.parent);
       this.#bump();
       return inv;
     });
@@ -197,6 +217,18 @@ export class ExecutionCapture extends EvalTrace {
    *  on — values the trace would prune once the parent exits. */
   retainSpans(spans: Iterable<string>): void {
     for (const s of spans) this.#spans.add(s);
+  }
+
+  /** The element list of a fan host's call, kept when its span is retained (`retainSpans`), else read live from its
+   *  operands while the trace still holds them. */
+  elementsOf(host: Invocation): readonly unknown[] | undefined {
+    return this.#elements.get(host) ?? elementsFrom(this, host, host.state !== "running");
+  }
+
+  #keepElements(host: Invocation | null | undefined): void {
+    if (!host || this.#elements.has(host) || !this.#spans.has(scopeId(host.node))) return;
+    const list = elementsFrom(this, host, false);
+    if (list) this.#elements.set(host, list);
   }
 
   /** A retained invocation's value. */

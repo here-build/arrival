@@ -140,8 +140,9 @@ export interface FrameInstance {
 
 export interface Body {
   readonly owner: FrameInstance;
-  /** Track / iteration index; `-1` for a par's `unattributed` body. */
-  readonly ordinal: number;
+  /** Track / iteration index; `-1` for a par's `unattributed` body. A fan's tracks are in
+   *  ELEMENT order, which may reorder them as their elements become known. */
+  ordinal: number;
   /** Call-path prefix of the keys in this body (`""` at top level, `"site▸"` inside an inlined
    *  call). */
   readonly callPath: string;
@@ -271,6 +272,10 @@ export class ProgressProjector implements Progress {
   readonly #seen = new WeakMap<FrameInstance, Map<string, number>>();
   readonly #byElement = new WeakMap<FrameInstance, Map<unknown, Body[]>>();
   readonly #unindexed = new WeakMap<FrameInstance, Body[]>();
+  /** A fan's tracks in the order they entered (`bodies` is in element order). */
+  readonly #entered = new WeakMap<FrameInstance, Body[]>();
+  /** Fans whose tracks may still move to their element's place. */
+  readonly #unordered = new Set<FrameInstance>();
   /** The fixed slot of each body (movable slots exist only for deferred par roots). */
   readonly #slots = new WeakMap<Body, Slot>();
 
@@ -316,6 +321,7 @@ export class ProgressProjector implements Progress {
     }
     this.#retryPending();
     this.#decideBranches();
+    this.#orderFans();
     return this;
   }
 
@@ -453,6 +459,7 @@ export class ProgressProjector implements Progress {
     this.#places = new WeakMap();
     this.#instances = new WeakMap();
     this.#pending = [];
+    this.#unordered.clear();
     this.#openBranches.clear();
     this.#collapsed = new WeakSet();
     const root: FrameInstance = {
@@ -674,6 +681,8 @@ export class ProgressProjector implements Progress {
     if (span === t.bodyRoots[0]) {
       seen.set(span, (seen.get(span) ?? 0) + 1);
       const track = this.#newBody(frame, inv);
+      (this.#entered.get(frame) ?? this.#entered.set(frame, []).get(frame)!).push(track);
+      this.#unordered.add(frame);
       this.#countRoot(track, span);
       (this.#unindexed.get(frame) ?? this.#unindexed.set(frame, []).get(frame)!).push(track);
       return this.#trackSlot(track, span);
@@ -692,7 +701,7 @@ export class ProgressProjector implements Progress {
   /** A later callback form joins the track whose element it reads; duplicate elements and
    *  tracks whose element is unknown fall back to enter order. */
   #attribute(frame: FrameInstance, inv: Invocation, span: string): Body | "later" | "never" {
-    const tracks = frame.bodies;
+    const tracks = this.#entered.get(frame) ?? frame.bodies;
     const seen = this.#seen.get(frame)!;
     const byOrder = () => {
       const j = seen.get(span) ?? 0;
@@ -711,6 +720,46 @@ export class ProgressProjector implements Progress {
     seen.set(span, (seen.get(span) ?? 0) + 1);
     this.#countRoot(pick, span);
     return pick;
+  }
+
+  /**
+   * A fan's tracks run in the order the callbacks entered, which is timing: the evaluator parks
+   * a callback that ran long, so a later element can enter first. The tracks belong in the
+   * host's ELEMENT order (structure never depends on timing): each track takes the place of the
+   * element its first form read (the k-th track reading a repeated value takes its k-th place).
+   * A track whose element is unknown yet, or absent from the list, follows the known ones, in
+   * entry order. Settled once every track is placed or the host is.
+   */
+  #orderFans(): void {
+    const trace = this.trace;
+    if (!(trace instanceof ExecutionCapture)) return;
+    for (const frame of this.#unordered) {
+      const host = frame.invocation;
+      const params = frame.template.params;
+      const entered = this.#entered.get(frame) ?? [];
+      const elements = host && params.length === 1 ? trace.elementsOf(host) : undefined;
+      if (!elements) {
+        if (!host || params.length !== 1 || host.state !== "running") this.#unordered.delete(frame);
+        continue;
+      }
+      const used = new Set<number>();
+      let placed = 0;
+      const rank = entered.map((track) => {
+        const el = track.start && this.#readParam(track.start, params);
+        if (!el) return Infinity;
+        const k = elements.findIndex((e, i) => !used.has(i) && Object.is(e, el.value));
+        if (k === -1) return Infinity;
+        used.add(k);
+        placed++;
+        return k;
+      });
+      const order = entered.map((_, i) => i).sort((a, b) => rank[a]! - rank[b]! || a - b);
+      const next = order.map((i) => entered[i]!);
+      if (next.length === frame.bodies.length && next.some((b, i) => b !== frame.bodies[i]))
+        frame.bodies.splice(0, frame.bodies.length, ...next);
+      for (const [i, b] of frame.bodies.entries()) b.ordinal = i;
+      if (placed === entered.length || host!.state !== "running") this.#unordered.delete(frame);
+    }
   }
 
   #countRoot(track: Body, span: string): void {
