@@ -19,6 +19,7 @@ import {
   type AggregatableRecord,
 } from "../aggregate.js";
 import { ProvenanceStoreFake, RunStoreFake } from "../fakes.js";
+import { foldRegionStream } from "../fold.js";
 import { appendOrdinal, ROOT_ORDINAL_PATH, type RecordId } from "../ids.js";
 import type { ProvenanceStore } from "../interfaces.js";
 import type {
@@ -71,7 +72,7 @@ describe("isAggregatableKind / assertAggregatable — the never-list boundary", 
   });
 
   it("assertAggregatable throws NeverAggregatable, by name, for each never-list kind", () => {
-    const mint: MintRecord = { kind: "mint", id: idAt(0), seq: 1, payloadHash: "payload-v0:x" };
+    const mint: MintRecord = { kind: "mint", id: idAt(0), seq: 1, payloadHash: "payload-v1:x" };
     const mux: MuxDecisionRecord = { kind: "mux-decision", id: idAt(0), seq: 1, arm: 0 };
     const schedule: HostScheduleRecord = { kind: "host-schedule", id: idAt(0), seq: 1, triples: [] };
     for (const record of [mint, mux, schedule]) {
@@ -265,7 +266,7 @@ describe("AggregatingProvenanceStore — the write-side hook", () => {
     const runStore = new RunStoreFake();
     const agg = new AggregatingProvenanceStore(base, runStore);
 
-    const mint: MintRecord = { kind: "mint", id: idAt(0), seq: 1, payloadHash: "payload-v0:x" };
+    const mint: MintRecord = { kind: "mint", id: idAt(0), seq: 1, payloadHash: "payload-v1:x" };
     const mux: MuxDecisionRecord = { kind: "mux-decision", id: idAt(1), seq: 2, arm: 0 };
     const schedule: HostScheduleRecord = { kind: "host-schedule", id: idAt(2), seq: 3, triples: [] };
 
@@ -299,7 +300,7 @@ describe("AggregatingProvenanceStore — the write-side hook", () => {
     const base = new ProvenanceStoreFake();
     const runStore = new RunStoreFake();
     const agg = new AggregatingProvenanceStore(base, runStore);
-    const mint: MintRecord = { kind: "mint", id: idAt(0), seq: 1, payloadHash: "payload-v0:x" };
+    const mint: MintRecord = { kind: "mint", id: idAt(0), seq: 1, payloadHash: "payload-v1:x" };
     await agg.append(REGION, mint);
     expect(await agg.readStream(REGION)).toEqual(await base.readStream(REGION));
   });
@@ -317,5 +318,54 @@ describe("AggregatingProvenanceStore — the write-side hook", () => {
     const runs = await runStore.readRuns(REGION);
     expect(runs).toHaveLength(1);
     expect(runs[0]).toMatchObject({ kind: "track-close", start: 0, count: 1 });
+  });
+});
+
+describe("AggregatingProvenanceStore — idempotent re-emission (PROVENANCE.md §7)", () => {
+  it("re-appending an ordinal already inside the open run changes nothing: ordinals 0,1,2 then a retried 0 still store {start:0,count:3}", async () => {
+    const runStore = new RunStoreFake();
+    const agg = new AggregatingProvenanceStore(new ProvenanceStoreFake(), runStore);
+    for (const [i, o] of [0, 1, 2, 0].entries()) await agg.append(REGION, fanAt(o, i + 1));
+    await agg.flush(REGION);
+    const runs = await runStore.readRuns(REGION);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({ kind: "fan-instantiation", start: 0, count: 3 });
+  });
+
+  it("a retried ordinal after the run closed never narrows the stored run (RunStore upsert keeps the wider)", async () => {
+    const runStore = new RunStoreFake();
+    const agg = new AggregatingProvenanceStore(new ProvenanceStoreFake(), runStore);
+    for (const [i, o] of [0, 1, 2].entries()) await agg.append(REGION, fanAt(o, i + 1));
+    await agg.flush(REGION);
+    await agg.append(REGION, fanAt(0, 4)); // retry after the flush closed the run
+    await agg.flush(REGION);
+    const runs = await runStore.readRuns(REGION);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({ start: 0, count: 3 });
+  });
+});
+
+describe("AggregatingProvenanceStore.readStream — retry re-emission into a CLOSED run (PROVENANCE.md §7)", () => {
+  it("an ordinal re-emitted after its run closed surfaces once in readStream; fold.started stays 3", async () => {
+    const runStore = new RunStoreFake();
+    const agg = new AggregatingProvenanceStore(new ProvenanceStoreFake(), runStore);
+    for (let i = 0; i < 3; i++) await agg.append(REGION, trackOpenAt(i, i + 1));
+    await agg.flush(REGION);
+    await agg.append(REGION, trackOpenAt(1, 2)); // retry re-emits ordinal 1
+    await agg.flush(REGION);
+    const stream = await agg.readStream(REGION);
+    expect(stream.filter((r) => r.kind === "track-open")).toHaveLength(3);
+    expect(foldRegionStream(stream).started).toBe(3);
+  });
+});
+
+describe("AggregatingProvenanceStore.readStream — aggregated lifecycle facts stay visible to fold-as-recovery", () => {
+  it("track-open/close buffered into runs still count in foldRegionStream over readStream", async () => {
+    const agg = new AggregatingProvenanceStore(new ProvenanceStoreFake(), new RunStoreFake());
+    for (let i = 0; i < 3; i++) await agg.append(REGION, trackOpenAt(i, i + 1));
+    await agg.append(REGION, trackCloseAt(0, 4));
+    await agg.flush(REGION);
+    const folded = foldRegionStream(await agg.readStream(REGION));
+    expect(folded).toMatchObject({ started: 3, completed: 1, pending: 2 });
   });
 });

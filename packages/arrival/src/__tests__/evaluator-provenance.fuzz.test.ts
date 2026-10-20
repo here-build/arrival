@@ -19,7 +19,7 @@
  */
 
 import * as fc from "fast-check";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, it } from "vitest";
 
 import { exec } from "../eval/generator-exec.js";
 
@@ -76,15 +76,16 @@ function isExpectedRuntimeError(err: unknown): boolean {
 }
 
 describe("fuzz — evaluator crash safety", () => {
+  // eslint-disable-next-line sonarjs/assertions-in-tests -- the assertion is fc.assert(...), which throws on a counterexample
   it("never throws an unexpected error on randomly generated expressions", async () => {
     await fc.assert(
       fc.asyncProperty(arbExpr, async (program) => {
         try {
           await exec(program);
           return true;
-        } catch (err) {
-          if (!isExpectedRuntimeError(err)) {
-            console.error(`fuzz crash: program=${program} err=${String(err)}`);
+        } catch (error) {
+          if (!isExpectedRuntimeError(error)) {
+            console.error(`fuzz crash: program=${program} err=${String(error)}`);
             return false;
           }
           return true;

@@ -9,13 +9,9 @@ import type { EnvCapability } from "../../common/capability.js";
 import { ABytevector } from "../../values/primitives/ABytevector.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AVector } from "../../values/primitives/AVector.js";
-import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
+import { eagerCallCtx } from "../../__tests__/_require-eager-oracle.js";
 import { harvestContracts } from "../../__tests__/_symbols-harvest.js";
 import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
-import { testCallCtx } from "../../run/CallCtx.js";
-
-// this helper/execState needs the eager oracle ON
-requireEagerOracle();
 
 // Source op fns FROM THE CAPABILITY's inlined `symbols` (the bare *_OPS map was
 // inlined into the constructor; the capability default export is the single
@@ -40,7 +36,7 @@ const prov = (r: unknown) => [...((r as { provenance: ReadonlySet<number> }).pro
 
 describe("vector/bytevector builtins propagate input provenance (goal b)", () => {
   it("vector-copy carries the source's provenance", () => {
-    expect(prov(ops["vector-copy"](provVec([1, 2, 3])))).toEqual([42]);
+    expect(prov(ops["vector-copy"].call(eagerCallCtx(), provVec([1, 2, 3])))).toEqual([42]);
   });
   it("vector-map carries provenance", () => {
     // W8: proc is ACallable; raw ops are CallCtx-dispatch natives.
@@ -50,31 +46,31 @@ describe("vector/bytevector builtins propagate input provenance (goal b)", () =>
       contract: undefined,
       impl: (args) => args[0] as never,
     });
-    expect(prov(ops["vector-map"].call(testCallCtx(), id, provVec([1, 2])))).toEqual([42]);
+    expect(prov(ops["vector-map"].call(eagerCallCtx(), id, provVec([1, 2])))).toEqual([42]);
   });
   it("vector-append carries provenance", () => {
-    expect(prov(ops["vector-append"](provVec([1]), provVec([2])))).toEqual([42]);
+    expect(prov(ops["vector-append"].call(eagerCallCtx(), provVec([1]), provVec([2])))).toEqual([42]);
   });
   it("list->vector via vector(...) elements carries union provenance", () => {
     // `vector` unions its element provenance onto the container.
     const el = new AString("x", PROV);
-    expect(prov(ops["vector"](el))).toEqual([42]);
+    expect(prov(ops["vector"].call(eagerCallCtx(), el))).toEqual([42]);
   });
   it("bytevector-copy carries provenance", () => {
-    expect(prov(ops["bytevector-copy"](provBv([1, 2, 3])))).toEqual([42]);
+    expect(prov(ops["bytevector-copy"].call(eagerCallCtx(), provBv([1, 2, 3])))).toEqual([42]);
   });
   it("bytevector-append carries provenance", () => {
-    expect(prov(ops["bytevector-append"](provBv([1]), provBv([2])))).toEqual([42]);
+    expect(prov(ops["bytevector-append"].call(eagerCallCtx(), provBv([1]), provBv([2])))).toEqual([42]);
   });
 
   it("utf8->string returns a SchemeString (not a raw JS string) and carries provenance", () => {
-    const r = ops["utf8->string"](provBv([104, 105]));
+    const r = ops["utf8->string"].call(eagerCallCtx(), provBv([104, 105]));
     expect(r).toBeInstanceOf(AString);
     expect(r.valueOf()).toBe("hi");
     expect(prov(r)).toEqual([42]);
   });
   it("vector->string returns a SchemeString and carries provenance", () => {
-    const r = ops["vector->string"](provVec([new AString("a")]));
+    const r = ops["vector->string"].call(eagerCallCtx(), provVec([new AString("a")]));
     expect(r).toBeInstanceOf(AString);
   });
 });

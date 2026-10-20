@@ -15,6 +15,7 @@ import { WireLocalityError } from "../errors.js";
 
 import { writeFormWith } from "./slice.js";
 import { scopeId } from "./scope-id.js";
+import { literalElements } from "./surface.js";
 import { freeVars } from "./wireframe/free-vars.js";
 import type { EmittedWire, WireFrame, WireParam } from "./wireframe/types.js";
 
@@ -29,6 +30,18 @@ export interface WireEmission {
   /** Designated subterms CUT out of wire space: surface pair → wireframe node id.
    *  Each occurrence in `expr`/frames becomes a minted param wired to that node. */
   readonly cuts: ReadonlyMap<unknown, number>;
+  /** Bare-NAME cuts, keyed per OCCURRENCE: operand cons cell (whose `car` is the interned
+   *  role symbol) → node id. The symbol is interned, so identity-keying it (`cuts`) would
+   *  merge every occurrence of `src-a` in the graph into one node; the cell is unique per
+   *  (parent form, operand index). */
+  readonly occurrenceCuts?: ReadonlyMap<unknown, number>;
+  /** Cut → the node INPUT slot it denotes (a `do` result's loop var = the recur's `argK`). */
+  readonly cutSlots?: ReadonlyMap<unknown, string>;
+  /** Wire span override (site identity) for a body with no span of its own (a bare symbol). */
+  readonly span?: string;
+  /** The cons cell that HOLDS `expr` when `expr` is itself a bare-name occurrence cut
+   *  (`(emit! src-a)` — the wire body is just the symbol). */
+  readonly exprCell?: unknown;
   /** PURE program-prelude define names (the prelude-membership partition) — referenced BY NAME. */
   readonly preludeNames: ReadonlySet<string>;
   /** Port-reaching define names — must NEVER survive into a wire body as a free
@@ -56,6 +69,7 @@ function allSymbolNames(n: unknown, into: Set<string>, seen: Set<unknown>): void
     return;
   }
   if (kind === "vector") for (const el of (n as { __vector__: unknown[] }).__vector__) allSymbolNames(el, into, seen);
+  else if (kind === "dict") for (const el of literalElements(n) ?? []) allSymbolNames(el, into, seen);
 }
 
 /** Cut pairs occurring in the wire's body space (frames' RHSs then the body expr),
@@ -72,14 +86,24 @@ function collectCuts(e: WireEmission): unknown[] {
     }
     const kind = (n as { kind?: string }).kind;
     if (kind === "pair") {
-      walk((n as { car: unknown }).car);
+      if (e.occurrenceCuts?.has(n))
+        found.push(n); // operand cell whose car is a cut bare name
+      else walk((n as { car: unknown }).car);
       walk((n as { cdr: unknown }).cdr);
     } else if (kind === "vector") {
       for (const el of (n as { __vector__: unknown[] }).__vector__) walk(el);
+    } else if (kind === "dict") {
+      for (const el of literalElements(n) ?? []) walk(el); // `{…}` literal forms are evaluated
     }
   };
-  for (const frame of e.frames) for (const entry of frame.entries) walk(entry.rhs);
-  walk(e.expr);
+  for (const frame of e.frames) {
+    for (const entry of frame.entries) {
+      if (entry.cell !== undefined && e.occurrenceCuts?.has(entry.cell)) found.push(entry.cell);
+      else walk(entry.rhs);
+    }
+  }
+  if (e.exprCell !== undefined && e.occurrenceCuts?.has(e.exprCell)) found.push(e.exprCell);
+  else walk(e.expr);
   return found;
 }
 
@@ -87,23 +111,23 @@ function collectCuts(e: WireEmission): unknown[] {
  *  frames per each frame kind's scoping rule (let: parallel; let*: sequential;
  *  letrec/letrec*: recursive). Cuts contribute nothing (they become params). */
 function framedFreeVars(e: WireEmission): Set<string> {
-  const opts = { cuts: e.cuts };
-  let fv = freeVars(e.expr, opts);
+  const opts = { cuts: e.cuts, occurrenceCuts: e.occurrenceCuts };
+  let fv = freeVars(e.expr, { ...opts, formCell: e.exprCell });
   for (let i = e.frames.length - 1; i >= 0; i--) {
     const frame = e.frames[i];
     const names = new Set(frame.entries.map((en) => en.name));
     if (frame.kind === "let") {
       const next = new Set<string>([...fv].filter((n) => !names.has(n)));
-      for (const en of frame.entries) for (const n of freeVars(en.rhs, opts)) next.add(n);
+      for (const en of frame.entries) for (const n of freeVars(en.rhs, { ...opts, formCell: en.cell })) next.add(n);
       fv = next;
     } else if (frame.kind === "let*") {
       for (let j = frame.entries.length - 1; j >= 0; j--) {
         fv.delete(frame.entries[j].name);
-        for (const n of freeVars(frame.entries[j].rhs, opts)) fv.add(n);
+        for (const n of freeVars(frame.entries[j].rhs, { ...opts, formCell: frame.entries[j].cell })) fv.add(n);
       }
     } else {
       // letrec / letrec*: all names bind everywhere (inits included).
-      for (const en of frame.entries) for (const n of freeVars(en.rhs, opts)) fv.add(n);
+      for (const en of frame.entries) for (const n of freeVars(en.rhs, { ...opts, formCell: en.cell })) fv.add(n);
       fv = new Set<string>([...fv].filter((n) => !names.has(n)));
     }
   }
@@ -128,18 +152,20 @@ function framedFreeVars(e: WireEmission): Set<string> {
  *   tagless algebra under evaluation, never a JS closure.
  */
 export function unevalWire(e: WireEmission): EmittedWire {
-  const span = scopeId(e.expr);
+  const span = e.span ?? scopeId(e.expr);
 
   // 1 — ingress partition of the framed body's free variables.
   const slots: string[] = [];
   for (const name of framedFreeVars(e)) {
     if (e.materialNames.has(name)) {
+      // INTERNAL INVARIANT: the builder cuts every material-define occurrence used as a VALUE to a
+      // `closure{ref:define}` node (and every call to a `template-ref`), so a material name is
+      // never a free variable of a wire body. Reaching this is a builder bug, not a user error.
       throw new WireLocalityError(
         name,
         span,
-        `"${name}" is a port-reaching top-level define (wireframe material) — a wire may only ` +
-          `reference it as a CALL (which cuts to a template-ref node), never capture it as a value; ` +
-          `carrying it by name would let γ re-invoke its ports on replay`,
+        `internal: builder failed to cut a material-define occurrence ("${name}") — carrying a ` +
+          `port-reaching define by name would let γ re-invoke its ports on replay`,
       );
     }
     if (e.preludeNames.has(name)) continue; // pure prelude — reference BY NAME
@@ -163,17 +189,27 @@ export function unevalWire(e: WireEmission): EmittedWire {
     while (used.has(name) || e.isBaseName(name) || e.preludeNames.has(name)) name = `in${mint++}`;
     used.add(name);
     cutNames.set(pair, name);
-    const node = e.cuts.get(pair);
+    const node = e.cuts.get(pair) ?? e.occurrenceCuts?.get(pair);
     if (node === undefined) throw new WireLocalityError(name, span, "internal: collected cut has no node id");
-    cutRefs.push({ kind: "node", name, node });
+    const slot = e.cutSlots?.get(pair);
+    cutRefs.push(slot === undefined ? { kind: "node", name, node } : { kind: "node", name, node, slot });
   }
 
   // 3 — serialize: body with cut substitution, re-wrapped in its frames, closed.
-  const sub = (n: unknown): string | undefined => cutNames.get(n);
-  let body = writeFormWith(e.expr, sub);
+  const sub = (n: unknown): string | undefined => (e.occurrenceCuts?.has(n) ? undefined : cutNames.get(n));
+  const subCell = (cell: unknown): string | undefined => (e.occurrenceCuts?.has(cell) ? cutNames.get(cell) : undefined);
+  let body =
+    e.exprCell !== undefined && cutNames.has(e.exprCell)
+      ? cutNames.get(e.exprCell)!
+      : writeFormWith(e.expr, sub, subCell);
   for (let i = e.frames.length - 1; i >= 0; i--) {
     const frame = e.frames[i];
-    const binds = frame.entries.map((en) => `(${en.name} ${writeFormWith(en.rhs, sub)})`).join(" ");
+    const binds = frame.entries
+      .map(
+        (en) =>
+          `(${en.name} ${(en.cell === undefined ? undefined : cutNames.get(en.cell)) ?? writeFormWith(en.rhs, sub, subCell)})`,
+      )
+      .join(" ");
     body = `(${frame.kind} (${binds}) ${body})`;
   }
 

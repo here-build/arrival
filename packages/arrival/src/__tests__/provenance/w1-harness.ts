@@ -43,7 +43,6 @@ import * as z from "../../common/scheme-zod/index.js";
 import { EnvCapability } from "../../common/capability.js";
 import { reachableNodes } from "../../provenance/wireframe/loops.js";
 import type { WireframeGraph, WireframeProgram } from "../../provenance/wireframe/types.js";
-import { isEagerProvenanceOracleEnabled, setEagerProvenanceOracleEnabled } from "../../values/op-helpers.js";
 import { jsToScheme } from "../../membrane/rosetta.js";
 import type { CallCtx } from "../../run/CallCtx.js";
 import type { SchemeValue } from "../../values/types.js";
@@ -145,17 +144,11 @@ export async function runEagerCone(
   sources: Record<string, SourceShape>,
   registry: SourceRegistry,
 ): Promise<Set<string>> {
+  // eslint-disable-next-line sonarjs/pseudo-random -- unique-name nonce for test isolation, not security-sensitive
   const env = baseEnv.child(`w1-agreement-${Math.random().toString(36).slice(2)}`);
   for (const [op, shape] of Object.entries(sources)) await registry.register(env, op, shape);
-  // this helper/execState needs the eager oracle ON
-  const savedOracle = isEagerProvenanceOracleEnabled();
-  setEagerProvenanceOracleEnabled(true);
-  let values: readonly SchemeValue[];
-  try {
-    ({ values } = await execStateOverFrame(code, { env }));
-  } finally {
-    setEagerProvenanceOracleEnabled(savedOracle);
-  }
+  // The eager side needs real accumulation: opt this run in.
+  const { values } = await execStateOverFrame(code, { env, eagerStamps: true });
   const last = values[values.length - 1];
   const ids = collapseProvenance(last);
   return registry.opsOf(ids);
@@ -209,6 +202,19 @@ function graphSourceNames(
           for (const n of graphSourceNames(program, node.interior, node.interior.egress, seen)) names.add(n);
         }
         break;
+      case "closure": {
+        // A closure VALUE: a source-role port closure names its op; a define closure / inline
+        // lambda contributes the sources its body can reach when applied (conservative superset).
+        if (node.ref?.kind === "port") {
+          if (node.ref.role === "source") names.add(node.ref.op);
+        } else {
+          const inner = node.ref?.kind === "define" ? program.templates.get(node.ref.name)?.graph : node.template;
+          if (inner !== undefined && inner.egress !== null) {
+            for (const n of graphSourceNames(program, inner, inner.egress, seen)) names.add(n);
+          }
+        }
+        break;
+      }
       case "template-ref": {
         const tpl = program.templates.get(node.name);
         if (tpl !== undefined && tpl.graph.egress !== null) {

@@ -1,7 +1,7 @@
 /**
  * emit.test.ts — Q11a's own unit suite for `store/emit.ts` (docs/PROVENANCE.md §5;
  * §7 W3 port completeness). Direct, store-fake-backed exercise of the emission
- * core: the flag gate, all four kinds' record shapes, the header write-once, and —
+ * core: all four kinds' record shapes, the header write-once, and —
  * the W3 law's real grounding — idempotent upsert under request retry AND under
  * write-failure fault injection (§5 C2/D1, C3).
  *
@@ -17,7 +17,7 @@
  * `region-scope.ts` machinery in `src/__tests__/provenance/region-events.test.ts`
  * instead, mirroring `emission-hooks.test.ts`'s split from THIS file for Q11a.
  */
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_SEMANTICS_EPOCH,
@@ -29,62 +29,51 @@ import {
   emitTrackClose,
   emitTrackOpen,
   ensureStreamHeader,
-  isEmissionEnabled,
-  setEmissionEnabled,
+  claimInstanceOrdinal,
 } from "../emit.js";
+import type { RunEmission } from "../../../run/RunContext.js";
 import { PayloadStoreFake, ProvenanceStoreFake, ProvenanceWriteFailure } from "../fakes.js";
 import { recordIdKey, type RecordId } from "../ids.js";
 
 const ID_A: RecordId = { templateHash: "t-a", ordinalPath: [0], regionEpoch: "e0" };
 const REGION = "region-1";
 
-afterEach(() => {
-  // Every test using the flag restores it — the module default must survive test
-  // ordering (vitest may run files/describe blocks in any order).
-  setEmissionEnabled(false);
-});
-
-describe("the flag — default OFF, every emit* a provable no-op while disabled", () => {
-  it("isEmissionEnabled() defaults to false", () => {
-    expect(isEmissionEnabled()).toBe(false);
-  });
-
-  it("emitMint touches NEITHER store while disabled — zero seq allocation, zero append, zero payload put", async () => {
+describe("no enable flag (P19) — emission is the run's `emission`, builders always write", () => {
+  it("emitMint with a store writes immediately (no module gate to flip)", async () => {
     const store = new ProvenanceStoreFake();
     const payloads = new PayloadStoreFake();
     const record = await emitMint({ store, payloads, regionId: REGION, id: ID_A, value: "x", stampIds: [1] });
-    expect(record).toBeUndefined();
-    expect(await store.readStream(REGION)).toHaveLength(0);
-    await expect(payloads.get("payload-v0:00000000")).rejects.toThrow(); // never put, whatever the hash would be
+    expect(record).toBeDefined();
+    expect(await store.readStream(REGION)).toHaveLength(1);
   });
 
-  it("every emit* function returns undefined and appends nothing while disabled", async () => {
-    const store = new ProvenanceStoreFake();
-    await emitMuxDecision({ store, regionId: REGION, id: ID_A, arm: 0 });
-    await emitFanInstantiation({ store, regionId: REGION, id: ID_A });
-    await emitIngressBinding({ store, regionId: REGION, id: ID_A });
-    expect(await store.readStream(REGION)).toHaveLength(0);
+  it("claimInstanceOrdinal: one counter PER emission object — separate emissions never share or reset each other", () => {
+    const mk = (): RunEmission => ({
+      store: new ProvenanceStoreFake(),
+      payloads: new PayloadStoreFake(),
+      regionId: REGION,
+      coordinate: { templateHash: "t", ordinalPath: [0], regionEpoch: "e0" },
+    });
+    const a = mk();
+    const b = mk();
+    expect([
+      claimInstanceOrdinal(a),
+      claimInstanceOrdinal(a),
+      claimInstanceOrdinal(b),
+      claimInstanceOrdinal(a),
+    ]).toEqual([0, 1, 0, 2]);
   });
 
-  // Q11b
-  it("emitTrackOpen/emitTrackClose/emitHostSchedule are ALSO no-ops while disabled", async () => {
+  it("ensureStreamHeader writes the header once, never overwrites", async () => {
     const store = new ProvenanceStoreFake();
-    await emitTrackOpen({ store, regionId: REGION, id: ID_A });
-    await emitTrackClose({ store, regionId: REGION, id: ID_A, settled: true });
-    await emitHostSchedule({ store, regionId: REGION, id: ID_A, triples: [{ left: [0], right: [1], verdict: -1 }] });
-    expect(await store.readStream(REGION)).toHaveLength(0);
-  });
-
-  it("ensureStreamHeader writes nothing while disabled", async () => {
-    const store = new ProvenanceStoreFake();
-    await ensureStreamHeader(store, REGION);
-    expect(await store.getHeader(REGION)).toBeUndefined();
+    await ensureStreamHeader(store, REGION, "epoch-1");
+    await ensureStreamHeader(store, REGION, "epoch-2");
+    expect(await store.getHeader(REGION)).toEqual({ semanticsEpoch: "epoch-1" });
   });
 });
 
 describe("emitMint — payload lands before the record, value+stampIds round-trip (§5 D2)", () => {
   it("put the payload, then append a mint record referencing its hash", async () => {
-    setEmissionEnabled(true);
     const store = new ProvenanceStoreFake();
     const payloads = new PayloadStoreFake();
     const record = await emitMint({
@@ -109,7 +98,6 @@ describe("emitMint — payload lands before the record, value+stampIds round-tri
   });
 
   it("two mints with the SAME value+stampIds hash to the SAME payload hash (deterministic content address)", async () => {
-    setEmissionEnabled(true);
     const store = new ProvenanceStoreFake();
     const payloads = new PayloadStoreFake();
     const idB: RecordId = { templateHash: "t-b", ordinalPath: [1], regionEpoch: "e0" };
@@ -119,7 +107,6 @@ describe("emitMint — payload lands before the record, value+stampIds round-tri
   });
 
   it("a value that does not JSON.stringify (e.g. a BigInt) still hashes and stores, via the String() fallback", async () => {
-    setEmissionEnabled(true);
     const store = new ProvenanceStoreFake();
     const payloads = new PayloadStoreFake();
     const record = await emitMint({
@@ -127,7 +114,7 @@ describe("emitMint — payload lands before the record, value+stampIds round-tri
       payloads,
       regionId: REGION,
       id: ID_A,
-      value: 9007199254740993n,
+      value: 9_007_199_254_740_993n,
       stampIds: [],
     });
     expect(record).toBeDefined();
@@ -136,7 +123,6 @@ describe("emitMint — payload lands before the record, value+stampIds round-tri
 
 describe("W3 port completeness — idempotent upsert through the REAL emission functions, not the fake's raw append", () => {
   it("a retried emitMint (same RecordId, called twice) lands as ONE record — exactly once per id, not per call", async () => {
-    setEmissionEnabled(true);
     const store = new ProvenanceStoreFake();
     const payloads = new PayloadStoreFake();
     await emitMint({ store, payloads, regionId: REGION, id: ID_A, value: "v", stampIds: [1] });
@@ -148,7 +134,6 @@ describe("W3 port completeness — idempotent upsert through the REAL emission f
   });
 
   it("every kind (mint/mux-decision/fan-instantiation/ingress-binding/track-open/track-close/host-schedule) is independently idempotent under retry", async () => {
-    setEmissionEnabled(true);
     const store = new ProvenanceStoreFake();
     const payloads = new PayloadStoreFake();
 
@@ -205,7 +190,6 @@ describe("W3 port completeness — idempotent upsert through the REAL emission f
   });
 
   it("write-failure fault injection: a failed emitMint throws, never appends a partial/duplicate; the retry after clearing the fault succeeds exactly once", async () => {
-    setEmissionEnabled(true);
     const store = new ProvenanceStoreFake();
     const payloads = new PayloadStoreFake();
 
@@ -226,14 +210,12 @@ describe("W3 port completeness — idempotent upsert through the REAL emission f
 
 describe("ensureStreamHeader — §5 C6, write-once", () => {
   it("writes the default semantics epoch when no header exists yet", async () => {
-    setEmissionEnabled(true);
     const store = new ProvenanceStoreFake();
     await ensureStreamHeader(store, REGION);
     expect(await store.getHeader(REGION)).toEqual({ semanticsEpoch: DEFAULT_SEMANTICS_EPOCH });
   });
 
   it("never overwrites an already-written header", async () => {
-    setEmissionEnabled(true);
     const store = new ProvenanceStoreFake();
     await store.putHeader(REGION, { semanticsEpoch: "custom-epoch" });
     await ensureStreamHeader(store, REGION, "a-different-epoch");
@@ -243,7 +225,6 @@ describe("ensureStreamHeader — §5 C6, write-once", () => {
 
 describe("emitTrackOpen/emitTrackClose — §5 A6 row 5, Q11b", () => {
   it("emitTrackOpen appends a payload-free track-open record at the given id", async () => {
-    setEmissionEnabled(true);
     const store = new ProvenanceStoreFake();
     const record = await emitTrackOpen({ store, regionId: REGION, id: ID_A });
     expect(record).toBeDefined();
@@ -254,7 +235,6 @@ describe("emitTrackOpen/emitTrackClose — §5 A6 row 5, Q11b", () => {
   });
 
   it("emitTrackClose carries the settled flag (§4 R1's promise-pending distinction)", async () => {
-    setEmissionEnabled(true);
     const store = new ProvenanceStoreFake();
     const record = await emitTrackClose({ store, regionId: REGION, id: ID_A, settled: true });
     expect(record).toBeDefined();
@@ -266,7 +246,6 @@ describe("emitTrackOpen/emitTrackClose — §5 A6 row 5, Q11b", () => {
 
 describe("emitHostSchedule — §5 A6 row 6 + D5, Q11b", () => {
   it("carries the FULL comparator sequence in one record, inlined verdicts, replay-free", async () => {
-    setEmissionEnabled(true);
     const store = new ProvenanceStoreFake();
     const triples = [
       { left: [0], right: [1], verdict: -1 },
@@ -284,7 +263,6 @@ describe("emitHostSchedule — §5 A6 row 6 + D5, Q11b", () => {
   });
 
   it('zero triples never lands a record — "nothing happened" is not information worth a write', async () => {
-    setEmissionEnabled(true);
     const store = new ProvenanceStoreFake();
     const record = await emitHostSchedule({ store, regionId: REGION, id: ID_A, triples: [] });
     expect(record).toBeUndefined();

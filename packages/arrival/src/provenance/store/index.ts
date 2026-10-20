@@ -1,6 +1,6 @@
 // `store/` — retrospective-stream storage seam, interface-first leaf.
-// Nothing in `src/eval` / `src/values` imports this; emission, tiering, and
-// adapters build ON this, not the reverse.
+// Only `src/eval/provenance-hooks.ts` (via `store/emit`) imports this from the evaluator side, and
+// `src/values` imports nothing from it; emission, tiering, and adapters build ON this, not the reverse.
 //
 // Public subpath is a studio read-slice (types only): record shapes +
 // `EvidenceTier`. Write side (`emit*`/`fold*`/fakes) stays package-internal.

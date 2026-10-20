@@ -44,7 +44,6 @@ import {
   emitMuxDecision,
   emitTrackClose,
   emitTrackOpen,
-  setEmissionEnabled,
 } from "../../provenance/store/emit.js";
 import { PayloadStoreFake, ProvenanceStoreFake, ProvenanceWriteFailure } from "../../provenance/store/fakes.js";
 import { foldRegionState, foldRegionStream } from "../../provenance/store/fold.js";
@@ -56,11 +55,15 @@ import {
   reconstructRegionScope,
   recordHostScheduleVerdict,
   withRegionCall,
-  withTrackCoordinate,
   type TrackCoordinate,
   type TrackEmissionSink,
 } from "../../membrane/region-scope.js";
-import { CONSTANT_CTX } from "../../run/RunContext.js";
+import { CONSTANT_CTX, RunContext } from "../../run/RunContext.js";
+
+/** A live run whose emission target is `sink` at `coordinate` (what `openRegionScope` reads). */
+function trackRun(sink: TrackEmissionSink, coordinate: TrackCoordinate): RunContext {
+  return new RunContext({ emission: { ...sink, payloads: new PayloadStoreFake(), coordinate } });
+}
 
 /** A manually-controlled promise — the "no real timers" idiom `store/fakes.ts` uses
  *  for `PayloadStoreFake`'s virtual clock, applied here to control PROMISE
@@ -82,29 +85,24 @@ describe("W3 port completeness (docs/PROVENANCE.md §7 law table)", () => {
       "PER RECORD ID — idempotent under request retry/re-emission (a repeated real " +
       "emission call for the same logical event never duplicates in the stream)",
     async () => {
-      setEmissionEnabled(true);
-      try {
-        const store = new ProvenanceStoreFake();
-        const payloads = new PayloadStoreFake();
-        const mintId: RecordId = { templateHash: "mint", ordinalPath: [0], regionEpoch: "e0" };
-        const muxId: RecordId = { templateHash: "mux", ordinalPath: [1], regionEpoch: "e0" };
-        const fanId: RecordId = { templateHash: "fan", ordinalPath: [2], regionEpoch: "e0" };
-        const ingressId: RecordId = { templateHash: "ingress", ordinalPath: [3], regionEpoch: "e0" };
+      const store = new ProvenanceStoreFake();
+      const payloads = new PayloadStoreFake();
+      const mintId: RecordId = { templateHash: "mint", ordinalPath: [0], regionEpoch: "e0" };
+      const muxId: RecordId = { templateHash: "mux", ordinalPath: [1], regionEpoch: "e0" };
+      const fanId: RecordId = { templateHash: "fan", ordinalPath: [2], regionEpoch: "e0" };
+      const ingressId: RecordId = { templateHash: "ingress", ordinalPath: [3], regionEpoch: "e0" };
 
-        // Each kind's emission function called TWICE with the identical RecordId — a
-        // re-emission (the retry shape), never a fresh id per call.
-        for (let i = 0; i < 2; i++) {
-          await emitMint({ store, payloads, regionId: REGION, id: mintId, value: "v", stampIds: [1] });
-          await emitMuxDecision({ store, regionId: REGION, id: muxId, arm: 0 });
-          await emitFanInstantiation({ store, regionId: REGION, id: fanId });
-          await emitIngressBinding({ store, regionId: REGION, id: ingressId });
-        }
-
-        const stream = await store.readStream(REGION);
-        expect(stream).toHaveLength(4); // one record per DISTINCT id — never per emit call
-      } finally {
-        setEmissionEnabled(false);
+      // Each kind's emission function called TWICE with the identical RecordId — a
+      // re-emission (the retry shape), never a fresh id per call.
+      for (let i = 0; i < 2; i++) {
+        await emitMint({ store, payloads, regionId: REGION, id: mintId, value: "v", stampIds: [1] });
+        await emitMuxDecision({ store, regionId: REGION, id: muxId, arm: 0 });
+        await emitFanInstantiation({ store, regionId: REGION, id: fanId });
+        await emitIngressBinding({ store, regionId: REGION, id: ingressId });
       }
+
+      const stream = await store.readStream(REGION);
+      expect(stream).toHaveLength(4); // one record per DISTINCT id — never per emit call
     },
   );
 
@@ -113,32 +111,27 @@ describe("W3 port completeness (docs/PROVENANCE.md §7 law table)", () => {
       "retry that re-emits the identical record overwrites in place (§5 C2/D1's " +
       "idempotent-upsert contract, exercised through real emission, not just the fake)",
     async () => {
-      setEmissionEnabled(true);
-      try {
-        const store = new ProvenanceStoreFake();
-        const payloads = new PayloadStoreFake();
-        const id: RecordId = { templateHash: "mint-retry", ordinalPath: [0], regionEpoch: "e0" };
+      const store = new ProvenanceStoreFake();
+      const payloads = new PayloadStoreFake();
+      const id: RecordId = { templateHash: "mint-retry", ordinalPath: [0], regionEpoch: "e0" };
 
-        // The FIRST attempt fails mid-write (the CF-request-retry shape §5 C3 names) —
-        // nothing lands.
-        store.setWriteFailure(true);
-        await expect(
-          emitMint({ store, payloads, regionId: REGION, id, value: "v", stampIds: [] }),
-        ).rejects.toBeInstanceOf(ProvenanceWriteFailure);
-        expect(await store.readStream(REGION)).toHaveLength(0);
+      // The FIRST attempt fails mid-write (the CF-request-retry shape §5 C3 names) —
+      // nothing lands.
+      store.setWriteFailure(true);
+      await expect(
+        emitMint({ store, payloads, regionId: REGION, id, value: "v", stampIds: [] }),
+      ).rejects.toBeInstanceOf(ProvenanceWriteFailure);
+      expect(await store.readStream(REGION)).toHaveLength(0);
 
-        // The RETRY (clearing the fault, re-emitting the identical logical event)
-        // succeeds — and a THIRD re-emission after that still overwrites in place,
-        // never duplicates.
-        store.setWriteFailure(false);
-        await emitMint({ store, payloads, regionId: REGION, id, value: "v", stampIds: [] });
-        await emitMint({ store, payloads, regionId: REGION, id, value: "v", stampIds: [] });
+      // The RETRY (clearing the fault, re-emitting the identical logical event)
+      // succeeds — and a THIRD re-emission after that still overwrites in place,
+      // never duplicates.
+      store.setWriteFailure(false);
+      await emitMint({ store, payloads, regionId: REGION, id, value: "v", stampIds: [] });
+      await emitMint({ store, payloads, regionId: REGION, id, value: "v", stampIds: [] });
 
-        const stream = await store.readStream(REGION);
-        expect(stream).toHaveLength(1); // exactly once, per id — not per write attempt
-      } finally {
-        setEmissionEnabled(false);
-      }
+      const stream = await store.readStream(REGION);
+      expect(stream).toHaveLength(1); // exactly once, per id — not per write attempt
     },
   );
 });
@@ -154,23 +147,18 @@ describe("region events + host-schedule (docs/PROVENANCE.md §5 A6 rows 5-6, D5)
       "id would collapse the pair into one record) — correlation is by stream ORDER, " +
       "not shared identity (region-scope.ts's `mintTrackId` doc)",
     async () => {
-      setEmissionEnabled(true);
-      try {
-        const store = new ProvenanceStoreFake();
-        const openId: RecordId = { templateHash: "track", ordinalPath: [0], regionEpoch: "e0" };
-        const closeId: RecordId = { templateHash: "track", ordinalPath: [1], regionEpoch: "e0" };
+      const store = new ProvenanceStoreFake();
+      const openId: RecordId = { templateHash: "track", ordinalPath: [0], regionEpoch: "e0" };
+      const closeId: RecordId = { templateHash: "track", ordinalPath: [1], regionEpoch: "e0" };
 
-        for (let i = 0; i < 2; i++) {
-          await emitTrackOpen({ store, regionId: REGION, id: openId });
-          await emitTrackClose({ store, regionId: REGION, id: closeId, settled: true });
-        }
-
-        const stream = await store.readStream(REGION);
-        expect(stream).toHaveLength(2); // one per DISTINCT id, despite 4 emit calls
-        expect(new Set(stream.map((r) => r.kind))).toEqual(new Set(["track-open", "track-close"]));
-      } finally {
-        setEmissionEnabled(false);
+      for (let i = 0; i < 2; i++) {
+        await emitTrackOpen({ store, regionId: REGION, id: openId });
+        await emitTrackClose({ store, regionId: REGION, id: closeId, settled: true });
       }
+
+      const stream = await store.readStream(REGION);
+      expect(stream).toHaveLength(2); // one per DISTINCT id, despite 4 emit calls
+      expect(new Set(stream.map((r) => r.kind))).toEqual(new Set(["track-open", "track-close"]));
     },
   );
 
@@ -179,27 +167,22 @@ describe("region events + host-schedule (docs/PROVENANCE.md §5 A6 rows 5-6, D5)
       '"the sequence IS the record" (§5 A6 row 6), never aggregated, never split ' +
       "across multiple records for one host invocation",
     async () => {
-      setEmissionEnabled(true);
-      try {
-        const store = new ProvenanceStoreFake();
-        const id: RecordId = { templateHash: "sort-call", ordinalPath: [0], regionEpoch: "e0" };
-        const triples = [
-          { left: [0], right: [1], verdict: -1 },
-          { left: [1], right: [2], verdict: 1 },
-        ];
-        await emitHostSchedule({ store, regionId: REGION, id, triples });
-        // A retry of the SAME logical host invocation (identical id) overwrites in
-        // place — W3's exactly-once-per-id, applied to the one-kind-never-aggregates
-        // row.
-        await emitHostSchedule({ store, regionId: REGION, id, triples });
+      const store = new ProvenanceStoreFake();
+      const id: RecordId = { templateHash: "sort-call", ordinalPath: [0], regionEpoch: "e0" };
+      const triples = [
+        { left: [0], right: [1], verdict: -1 },
+        { left: [1], right: [2], verdict: 1 },
+      ];
+      await emitHostSchedule({ store, regionId: REGION, id, triples });
+      // A retry of the SAME logical host invocation (identical id) overwrites in
+      // place — W3's exactly-once-per-id, applied to the one-kind-never-aggregates
+      // row.
+      await emitHostSchedule({ store, regionId: REGION, id, triples });
 
-        const stream = await store.readStream(REGION);
-        expect(stream).toHaveLength(1);
-        expect(stream[0].kind).toBe("host-schedule");
-        expect(stream[0].kind === "host-schedule" && stream[0].triples).toEqual(triples);
-      } finally {
-        setEmissionEnabled(false);
-      }
+      const stream = await store.readStream(REGION);
+      expect(stream).toHaveLength(1);
+      expect(stream[0].kind).toBe("host-schedule");
+      expect(stream[0].kind === "host-schedule" && stream[0].triples).toEqual(triples);
     },
   );
 });
@@ -212,41 +195,34 @@ describe("stream fold + monotonicity + fold-as-recovery (docs/PROVENANCE.md §5 
       "was this region's state\" query also RECONSTRUCTS region state on DO wake after " +
       'eviction/hibernation (§5 C1: "the law is the recovery mechanism")',
     async () => {
-      setEmissionEnabled(true);
-      try {
-        const store = new ProvenanceStoreFake();
-        const sink: TrackEmissionSink = { store, regionId: REGION };
-        const coordinate: TrackCoordinate = { templateHash: "th-fold", ordinalPath: [0], regionEpoch: "e0" };
+      const store = new ProvenanceStoreFake();
+      const sink: TrackEmissionSink = { store, regionId: REGION };
+      const coordinate: TrackCoordinate = { templateHash: "th-fold", ordinalPath: [0], regionEpoch: "e0" };
 
-        const scope = withTrackCoordinate(coordinate, sink, () =>
-          openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined }),
-        );
-        await withRegionCall(scope, () => 1);
-        await withRegionCall(scope, () => 2);
-        recordHostScheduleVerdict(scope, [0], [1], -1);
-        closeRegionScope(scope);
+      const scope = openRegionScope({ runCtx: trackRun(sink, coordinate), dynSite: undefined });
+      await withRegionCall(scope, () => 1);
+      await withRegionCall(scope, () => 2);
+      recordHostScheduleVerdict(scope, [0], [1], -1);
+      closeRegionScope(scope);
 
-        // Detached emission — give its microtasks a turn (mirrors region-events.test.ts).
-        await Promise.resolve();
-        await Promise.resolve();
+      // Detached emission — give its microtasks a turn (mirrors region-events.test.ts).
+      await Promise.resolve();
+      await Promise.resolve();
 
-        // The "post-hoc query" answer.
-        const postHoc = await foldRegionState(store, REGION);
-        expect(postHoc.started).toBe(2);
-        expect(postHoc.completed).toBe(2);
-        expect(postHoc.pending).toBe(0);
-        expect(postHoc.hostSchedules).toHaveLength(1);
-        expect(postHoc.hostSchedules[0].triples).toEqual([{ left: [0], right: [1], verdict: -1 }]);
+      // The "post-hoc query" answer.
+      const postHoc = await foldRegionState(store, REGION);
+      expect(postHoc.started).toBe(2);
+      expect(postHoc.completed).toBe(2);
+      expect(postHoc.pending).toBe(0);
+      expect(postHoc.hostSchedules).toHaveLength(1);
+      expect(postHoc.hostSchedules[0].triples).toEqual([{ left: [0], right: [1], verdict: -1 }]);
 
-        // Simulate a DO wake after eviction/hibernation: nothing here re-reads the
-        // in-memory `scope` object — recompute PURELY from `store.readStream`, the SAME
-        // function, the SAME arguments. §5 C1's claim is that this is not a
-        // coincidence: fold-as-recovery IS calling `foldRegionState` again.
-        const reconstructed = await foldRegionState(store, REGION);
-        expect(reconstructed).toEqual(postHoc);
-      } finally {
-        setEmissionEnabled(false);
-      }
+      // Simulate a DO wake after eviction/hibernation: nothing here re-reads the
+      // in-memory `scope` object — recompute PURELY from `store.readStream`, the SAME
+      // function, the SAME arguments. §5 C1's claim is that this is not a
+      // coincidence: fold-as-recovery IS calling `foldRegionState` again.
+      const reconstructed = await foldRegionState(store, REGION);
+      expect(reconstructed).toEqual(postHoc);
     },
   );
 
@@ -255,75 +231,68 @@ describe("stream fold + monotonicity + fold-as-recovery (docs/PROVENANCE.md §5 
       "reordering (the stream's total order is settlement order for async, §5 D4) " +
       "never produces a state where more tracks are completed than were ever started",
     async () => {
-      setEmissionEnabled(true);
-      try {
-        const store = new ProvenanceStoreFake();
-        const sink: TrackEmissionSink = { store, regionId: REGION };
-        const coordinate: TrackCoordinate = { templateHash: "th-mono", ordinalPath: [0], regionEpoch: "e0" };
-        const scope = withTrackCoordinate(coordinate, sink, () =>
-          openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined }),
-        );
+      const store = new ProvenanceStoreFake();
+      const sink: TrackEmissionSink = { store, regionId: REGION };
+      const coordinate: TrackCoordinate = { templateHash: "th-mono", ordinalPath: [0], regionEpoch: "e0" };
+      const scope = openRegionScope({ runCtx: trackRun(sink, coordinate), dynSite: undefined });
 
-        // Call A opens FIRST but settles SECOND; call B opens SECOND but settles FIRST —
-        // the out-of-program-order settlement §5 D4 names. Both promises are manually
-        // controlled (no real timers), so the ordering below is deterministic.
-        const a = deferred<number>();
-        const b = deferred<number>();
-        const callA = withRegionCall(scope, () => a.promise);
-        const callB = withRegionCall(scope, () => b.promise);
+      // Call A opens FIRST but settles SECOND; call B opens SECOND but settles FIRST —
+      // the out-of-program-order settlement §5 D4 names. Both promises are manually
+      // controlled (no real timers), so the ordering below is deterministic.
+      const a = deferred<number>();
+      const b = deferred<number>();
+      const callA = withRegionCall(scope, () => a.promise);
+      const callB = withRegionCall(scope, () => b.promise);
 
-        b.resolve(2); // B settles first, despite starting second
-        await callB;
-        a.resolve(1);
-        await callA;
+      b.resolve(2); // B settles first, despite starting second
+      await callB;
+      a.resolve(1);
+      await callA;
 
-        closeRegionScope(scope);
-        await Promise.resolve();
-        await Promise.resolve();
+      closeRegionScope(scope);
+      await Promise.resolve();
+      await Promise.resolve();
 
-        const stream = await store.readStream(REGION);
-        // Monotonicity over EVERY prefix of the emission-ordered stream — never more
-        // completions than starts, at any point the stream is read.
-        for (let k = 1; k <= stream.length; k++) {
-          const prefixFold = foldRegionStream(stream.slice(0, k));
-          expect(prefixFold.completed).toBeLessThanOrEqual(prefixFold.started);
-          expect(prefixFold.pending).toBeGreaterThanOrEqual(0);
-        }
-        const finalFold = foldRegionStream(stream);
-        expect(finalFold.started).toBe(2);
-        expect(finalFold.completed).toBe(2);
-        expect(finalFold.pending).toBe(0);
-        // B's close (settled first) really did land BEFORE A's close (settled second) —
-        // the emission order reflects settlement order, not call/open order.
-        const closes = stream.filter((r) => r.kind === "track-close");
-        expect(closes.map((r) => r.seq)).toEqual([...closes.map((r) => r.seq)].toSorted((x, y) => x - y));
-
-        // RISK note (Q13, docs/PROVENANCE.md §7 stream fold + monotonicity): per-region seq must be settlement-
-        // ordered under injected delays — use the fakes' setSettleDelayTicks/step to
-        // prove it. Drive an INDEPENDENTLY-timed R2 payload settlement on its own
-        // virtual clock (PayloadStoreFake's OWN knobs) concurrently, and prove it never
-        // perturbs the ProvenanceStore stream's seq order or this region's fold — the
-        // two stores are genuinely independent timelines, exactly as §5 A1's tiering
-        // design assumes (`fold.ts` never reads `PayloadStore` at all).
-        const payloads = new PayloadStoreFake();
-        payloads.setValueSizeCapBytes(1); // force oversize -> "pending" tier
-        payloads.setSettleDelayTicks(5);
-        const oversizeHash = "payload-v0:mono-oversize";
-        await payloads.put(oversizeHash, { value: "a value bigger than one byte", stampIds: [] });
-        expect((await payloads.get(oversizeHash)).tier).toBe("pending");
-        await payloads.settle(oversizeHash, "settled"); // scheduled, not yet applied
-        payloads.step(3);
-        expect((await payloads.get(oversizeHash)).tier).toBe("pending"); // still mid-delay
-        payloads.step(2); // now at tick 5 — the scheduled settle applies
-        expect((await payloads.get(oversizeHash)).tier).toBe("r2");
-
-        // The region fold recomputed AFTER driving the payload store's independent
-        // clock is byte-identical to the one computed before — settlement timing on ONE
-        // store never leaks into the other's derived state.
-        expect(foldRegionStream(await store.readStream(REGION))).toEqual(finalFold);
-      } finally {
-        setEmissionEnabled(false);
+      const stream = await store.readStream(REGION);
+      // Monotonicity over EVERY prefix of the emission-ordered stream — never more
+      // completions than starts, at any point the stream is read.
+      for (let k = 1; k <= stream.length; k++) {
+        const prefixFold = foldRegionStream(stream.slice(0, k));
+        expect(prefixFold.completed).toBeLessThanOrEqual(prefixFold.started);
+        expect(prefixFold.pending).toBeGreaterThanOrEqual(0);
       }
+      const finalFold = foldRegionStream(stream);
+      expect(finalFold.started).toBe(2);
+      expect(finalFold.completed).toBe(2);
+      expect(finalFold.pending).toBe(0);
+      // B's close (settled first) really did land BEFORE A's close (settled second) —
+      // the emission order reflects settlement order, not call/open order.
+      const closes = stream.filter((r) => r.kind === "track-close");
+      expect(closes.map((r) => r.seq)).toEqual([...closes.map((r) => r.seq)].toSorted((x, y) => x - y));
+
+      // RISK note (Q13, docs/PROVENANCE.md §7 stream fold + monotonicity): per-region seq must be settlement-
+      // ordered under injected delays — use the fakes' setSettleDelayTicks/step to
+      // prove it. Drive an INDEPENDENTLY-timed R2 payload settlement on its own
+      // virtual clock (PayloadStoreFake's OWN knobs) concurrently, and prove it never
+      // perturbs the ProvenanceStore stream's seq order or this region's fold — the
+      // two stores are genuinely independent timelines, exactly as §5 A1's tiering
+      // design assumes (`fold.ts` never reads `PayloadStore` at all).
+      const payloads = new PayloadStoreFake();
+      payloads.setValueSizeCapBytes(1); // force oversize -> "pending" tier
+      payloads.setSettleDelayTicks(5);
+      const oversizeHash = "payload-v1:mono-oversize";
+      await payloads.put(oversizeHash, { value: "a value bigger than one byte", stampIds: [] });
+      expect((await payloads.get(oversizeHash)).tier).toBe("pending");
+      await payloads.settle(oversizeHash, "settled"); // scheduled, not yet applied
+      payloads.step(3);
+      expect((await payloads.get(oversizeHash)).tier).toBe("pending"); // still mid-delay
+      payloads.step(2); // now at tick 5 — the scheduled settle applies
+      expect((await payloads.get(oversizeHash)).tier).toBe("r2");
+
+      // The region fold recomputed AFTER driving the payload store's independent
+      // clock is byte-identical to the one computed before — settlement timing on ONE
+      // store never leaks into the other's derived state.
+      expect(foldRegionStream(await store.readStream(REGION))).toEqual(finalFold);
     },
   );
 
@@ -333,70 +302,63 @@ describe("stream fold + monotonicity + fold-as-recovery (docs/PROVENANCE.md §5 
       "(in-memory region state is a CACHE of the stream, never the source of truth, " +
       "§5 C1 EXCLUDED: production regions that exist only in memory)",
     async () => {
-      setEmissionEnabled(true);
-      try {
-        const store = new ProvenanceStoreFake();
-        const sink: TrackEmissionSink = { store, regionId: REGION };
-        const coordinate: TrackCoordinate = { templateHash: "th-evict", ordinalPath: [0], regionEpoch: "e0" };
+      const store = new ProvenanceStoreFake();
+      const sink: TrackEmissionSink = { store, regionId: REGION };
+      const coordinate: TrackCoordinate = { templateHash: "th-evict", ordinalPath: [0], regionEpoch: "e0" };
 
-        const scope = withTrackCoordinate(coordinate, sink, () =>
-          openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined }),
-        );
-        // One call completes CLEANLY before the crash.
-        await withRegionCall(scope, () => 1);
-        await Promise.resolve();
-        await Promise.resolve();
+      const scope = openRegionScope({ runCtx: trackRun(sink, coordinate), dynSite: undefined });
+      // One call completes CLEANLY before the crash.
+      await withRegionCall(scope, () => 1);
+      await Promise.resolve();
+      await Promise.resolve();
 
-        // A SECOND call starts but never settles before the simulated crash: the DO's
-        // JS heap (this test's `scope` object, and the never-resolving promise's own
-        // continuation) is discarded — nothing below ever resolves the deferred or
-        // calls `closeRegionScope(scope)` again. Only the durable stream survives.
-        const stuck = deferred<number>();
-        void withRegionCall(scope, () => stuck.promise).catch(() => {}); // fire-and-forget, like a crashed call
-        await Promise.resolve();
-        await Promise.resolve();
+      // A SECOND call starts but never settles before the simulated crash: the DO's
+      // JS heap (this test's `scope` object, and the never-resolving promise's own
+      // continuation) is discarded — nothing below ever resolves the deferred or
+      // calls `closeRegionScope(scope)` again. Only the durable stream survives.
+      const stuck = deferred<number>();
+      void withRegionCall(scope, () => stuck.promise).catch(() => {}); // fire-and-forget, like a crashed call
+      await Promise.resolve();
+      await Promise.resolve();
 
-        const beforeEviction = await foldRegionState(store, REGION);
-        expect(beforeEviction.started).toBe(2);
-        expect(beforeEviction.completed).toBe(1);
-        expect(beforeEviction.pending).toBe(1); // the stuck call, honestly reported
+      const beforeEviction = await foldRegionState(store, REGION);
+      expect(beforeEviction.started).toBe(2);
+      expect(beforeEviction.completed).toBe(1);
+      expect(beforeEviction.pending).toBe(1); // the stuck call, honestly reported
 
-        // "Forced eviction" — drop every in-memory reference (`scope` goes unused from
-        // here on; a real DO wake has no way to reach it either) and refold PURELY
-        // from the durable stream: SAME function, SAME arguments.
-        const afterEviction = await foldRegionState(store, REGION);
-        expect(afterEviction).toEqual(beforeEviction); // identical — the fold is pure
+      // "Forced eviction" — drop every in-memory reference (`scope` goes unused from
+      // here on; a real DO wake has no way to reach it either) and refold PURELY
+      // from the durable stream: SAME function, SAME arguments.
+      const afterEviction = await foldRegionState(store, REGION);
+      expect(afterEviction).toEqual(beforeEviction); // identical — the fold is pure
 
-        // Continue: a resumed scope seeded from that SAME fold correctly reports the
-        // crash as incomplete (I4, applied to recovery) — closing it immediately throws.
-        const resumed = await reconstructRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined, coordinate, sink });
-        expect(resumed.pending).toBe(1);
-        expect(() => closeRegionScope(resumed)).toThrow(/incomplete/);
+      // Continue: a resumed scope seeded from that SAME fold correctly reports the
+      // crash as incomplete (I4, applied to recovery) — closing it immediately throws.
+      const resumed = await reconstructRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined, coordinate, sink });
+      expect(resumed.pending).toBe(1);
+      expect(() => closeRegionScope(resumed)).toThrow(/incomplete/);
 
-        // A FRESH resumed scope (recovery re-attempted after detecting the crash above)
-        // mints its next track event past every ordinal already durable — no collision
-        // with the crashed call's own id (§5 C2/D1).
-        const resumedAgain = await reconstructRegionScope({
-          runCtx: CONSTANT_CTX,
-          dynSite: undefined,
-          coordinate,
-          sink,
-        });
-        await withRegionCall(resumedAgain, () => "recovered");
-        await Promise.resolve();
-        await Promise.resolve();
+      // A FRESH resumed scope (recovery re-attempted after detecting the crash above)
+      // mints its next track event past every ordinal already durable — no collision
+      // with the crashed call's own id (§5 C2/D1).
+      const resumedAgain = await reconstructRegionScope({
+        runCtx: CONSTANT_CTX,
+        dynSite: undefined,
+        coordinate,
+        sink,
+      });
+      await withRegionCall(resumedAgain, () => "recovered");
+      await Promise.resolve();
+      await Promise.resolve();
 
-        const finalStream = await store.readStream(REGION);
-        const ids = finalStream.map((r) => JSON.stringify(r.id));
-        expect(new Set(ids).size).toBe(ids.length); // every id still unique, even post-recovery
+      const finalStream = await store.readStream(REGION);
+      const ids = finalStream.map((r) => JSON.stringify(r.id));
+      expect(new Set(ids).size).toBe(ids.length); // every id still unique, even post-recovery
 
-        stuck.resolve(0); // let the abandoned promise settle so it never surfaces as an
-        // unhandled rejection in the test runner — the crashed call's OWN `finally`
-        // still fires in THIS test (JS doesn't actually crash), decrementing a
-        // `pending` counter on the original `scope` nothing reads anymore; harmless.
-      } finally {
-        setEmissionEnabled(false);
-      }
+      stuck.resolve(0); // let the abandoned promise settle so it never surfaces as an
+      // unhandled rejection in the test runner — the crashed call's OWN `finally`
+      // still fires in THIS test (JS doesn't actually crash), decrementing a
+      // `pending` counter on the original `scope` nothing reads anymore; harmless.
     },
   );
 
@@ -433,7 +395,7 @@ describe("I4 — completion, the async promise-pending door (§3 I4; its test ho
     "started = completed at region close — a region with any track still started-but-" +
       "not-completed throws the incomplete door at close time",
     async () => {
-      const scope = openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined });
+      const scope = openRegionScope({ runCtx: new RunContext(), dynSite: undefined });
       const held = deferred<number>();
       const call = withRegionCall(scope, () => held.promise); // started, deliberately never settled
       expect(scope.pending).toBe(1);
@@ -452,7 +414,7 @@ describe("I4 — completion, the async promise-pending door (§3 I4; its test ho
       "because region-close semantics live where regions themselves live (§5 C1/C3)",
     async () => {
       // Close BEFORE settlement: throws.
-      const scopeA = openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined });
+      const scopeA = openRegionScope({ runCtx: new RunContext(), dynSite: undefined });
       const heldA = deferred<number>();
       const callA = withRegionCall(scopeA, () => heldA.promise);
       expect(() => closeRegionScope(scopeA)).toThrow(/incomplete/);
@@ -461,7 +423,7 @@ describe("I4 — completion, the async promise-pending door (§3 I4; its test ho
 
       // Settle BEFORE close, on a FRESH scope: does NOT throw — "kept pending UNTIL
       // settled," never "forever poisoned by having been async at all."
-      const scopeB = openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined });
+      const scopeB = openRegionScope({ runCtx: new RunContext(), dynSite: undefined });
       const heldB = deferred<number>();
       const callB = withRegionCall(scopeB, () => heldB.promise);
       heldB.resolve(2);

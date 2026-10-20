@@ -19,8 +19,11 @@ import type { CallbackRoles } from "../../common/symbols/_bake.js";
 import type { PreludeMembership } from "../prelude.js";
 
 /** Which input of a node a wire feeds: `arg0…argN` (port/template-ref operands),
- *  `selector`/`selector0…` and `arm0…armN` (port-coupled mux), `source`/`source1…`
- *  (a fan's fanned containers), `out` (the graph egress port). */
+ *  `selector`/`selector0…` and `arm0…armN` (port-coupled mux, guard), `source`/`source1…`
+ *  (a fan's fanned containers), `out` (the graph egress port), `capture:<name>` (a closure /
+ *  fan / binder CAPTURE — the enclosing graph's supply of one free lexical variable of the
+ *  private interior), `fn` (a fan's callback VALUE when it is not a lambda literal or a
+ *  prelude/base name), `body` (a guard's protected body). */
 export type WireSlot = string;
 
 export interface WireConsumer {
@@ -28,14 +31,25 @@ export interface WireConsumer {
   readonly slot: WireSlot;
 }
 
-/** One wire parameter's DATAFLOW referent — parallel to `EmittedWire.params`.
+/** One wire parameter's DATAFLOW referent (`slot: "condition"` on a ref to a `guard` node
+ *  denotes the CAUGHT CONDITION value, not an input wire). — parallel to `EmittedWire.params`.
  *  - `slot`: program/template ingress — a free variable the run's environment (or a
  *    template's formal, or a region capture) binds; the name IS the param name.
  *  - `node`: a designated node's egress — the wire consumed a port/mux/fan/
- *    template-ref result; the surface subterm was CUT and replaced by this param. */
+ *    template-ref result; the surface subterm was CUT and replaced by this param.
+ *    With `slot`: the value of that node INPUT instead (the recur slot). */
 export type WireParam =
   | { readonly kind: "slot"; readonly name: string }
-  | { readonly kind: "node"; readonly name: string; readonly node: number };
+  | {
+      readonly kind: "node";
+      readonly name: string;
+      readonly node: number;
+      /** Which INPUT of `node` this param denotes, when the referent is not the node's own
+       *  result — a `recur` backedge (`do` result clause) denotes the NEXT value of loop var
+       *  K = the node's `argK` wire, so each loop var gets its own distinct param. Absent =
+       *  the node's egress value (every other cut). */
+      readonly slot?: string;
+    };
 
 /** A struct-fact TAG on a value wire. "Struct-fact wires are value wires carrying a
  *  fact TAG, not a second edge species" — ONE wire kind, this is metadata on it, never
@@ -97,8 +111,13 @@ export type WireframeNode =
       /** The lambda callback's formals — per-element ingress. A template wire's slot
        *  params beyond these are region CAPTURES (sealed at region open). */
       readonly elementParams?: readonly string[];
-      /** Bare-symbol callback (`(map inc xs)`) — no template graph; the name. */
+      /** Prelude/base-name callback (`(map inc xs)`) — no template graph; the name, referenced
+       *  BY NAME. A material define, port name, let-bound variable, or computed callback is a
+       *  `fn` WIRE instead (slot `"fn"`). */
       readonly fnOp?: string;
+      /** Free lexical variables of `template` the ENCLOSING graph supplies, first-encounter
+       *  order; each has exactly one wire at slot `capture:<name>` (sealed at region open, I2). */
+      readonly captures: readonly string[];
       /** Contract-extracted callback roles for the HOST verb, when supplied. */
       readonly callbackRoles?: CallbackRoles;
     }
@@ -122,6 +141,42 @@ export type WireframeNode =
       readonly cycles: boolean;
       readonly params: readonly string[];
       readonly interior: WireframeGraph;
+      /** Free lexical variables of `interior` (beyond `params` and the loop name) supplied by
+       *  the enclosing graph at `capture:<name>` wires — loop interiors have the fan's I2 hole. */
+      readonly captures: readonly string[];
+    }
+  /** EVERY callable VALUE that reaches wire space and is not a prelude/base name: a lambda
+   *  literal (`template`, its PRIVATE interior — I5), a material define used as a value
+   *  (`ref: define`), or a bare port-role name used as a value (`ref: port` — applying it IS
+   *  the crossing). Exactly one of `template`/`ref`. Calls stay wire material (the evaluator
+   *  applies the value inside γ). `template` slot params ⊆ `params ∪ rest ∪ captures`. */
+  | {
+      readonly kind: "closure";
+      readonly span: string;
+      readonly params: readonly string[];
+      readonly rest?: string;
+      readonly template?: WireframeGraph;
+      readonly ref?:
+        | { readonly kind: "define"; readonly name: string }
+        | {
+            readonly kind: "port";
+            readonly op: string;
+            readonly role: "source" | "sink" | "transparent" | "opaque" | "fan" | "loop";
+          };
+      /** Free lexical variables of `template` the ENCLOSING graph supplies (first-encounter
+       *  order); one `capture:<name>` wire each. Empty for ref closures. */
+      readonly captures: readonly string[];
+    }
+  /** `guard`/`try` whose body or clauses contain a cut: the protected `body` wire, then
+   *  `selector{k}`/`arm{k}` wires per clause (else arm last, no selector). Clause wires read the
+   *  caught condition through `{kind:"node", node: <this>, slot: "condition"}`. */
+  | {
+      readonly kind: "guard";
+      readonly op: "guard" | "try";
+      readonly span: string;
+      readonly var: string;
+      readonly clauses: number;
+      readonly hasFinally: boolean;
     }
   /** A loop's tail-recursive CONTINUATION — named-let's `(loop args…)` call
    *  inside its own body, or `do`'s implicit per-iteration step re-entry
@@ -165,6 +220,10 @@ export interface WireframeProgram {
   readonly membership: PreludeMembership;
   readonly templates: ReadonlyMap<string, DefineTemplate>;
   readonly main: WireframeGraph;
+  /** Emission side-table: each inline closure's (and fan lambda's) body list → its static address
+   *  (`eval/provenance-hooks.ts` `ClosureSite`). Pair identity — valid only for the SAME parsed forms
+   *  the run evaluates. Absent on hand-built programs. */
+  readonly closureSites?: ReadonlyMap<object, { readonly templateHash: string; readonly rootOrdinal: number }>;
 }
 
 /** A `let`-family scope frame the wire emitter re-wraps around a wire body — the
@@ -178,4 +237,7 @@ export interface WireFrame {
 export interface WireFrameEntry {
   readonly name: string;
   readonly rhs: unknown;
+  /** The cons cell HOLDING `rhs` (paren bindings), when known — a bare-name `rhs` that is an
+   *  occurrence cut is keyed by this cell, not by its interned symbol. */
+  readonly cell?: unknown;
 }

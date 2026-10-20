@@ -8,7 +8,6 @@
  */
 import { describe, it, expect, beforeAll } from "vitest";
 import { parse } from "../../eval/generator-exec.js";
-import { inferenceEnv } from "../../env/inference-env.js";
 import type { Classifier, DeclaredRole } from "../lineage.js";
 import { buildWireframe } from "../wireframe/builder.js";
 import { hashGraph, siteHash, rootOrdinalPath, siteOf, MAIN_PROGRAM_SITE } from "../wireframe/hash.js";

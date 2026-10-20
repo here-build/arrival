@@ -24,11 +24,10 @@ import { AJSObject } from "../../membrane/AJSObject.js";
 import { AJSArray } from "../../membrane/AJSArray.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
-import { APair } from "../../values/primitives/APair.js";
 import { jsToScheme } from "../../membrane/rosetta.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { execOverFrame as exec } from "../../eval/generator-exec.js";
-import { ANil, nil } from "../../values/primitives/ANil.js";
+import { nil } from "../../values/primitives/ANil.js";
 
 const PROV = new Set<number>([42]);
 
@@ -160,7 +159,7 @@ describe("SchemeJSObject.get — cached boundary-validated boxing", () => {
 
   it("withProvenance returns a wrapper with empty cache", () => {
     const obj = new AJSObject({ x: 1 }, PROV);
-    obj.get("x"); // populate cache
+    void obj.get("x"); // populate cache
     const clone = obj.withProvenance(new Set<number>([99]));
     // Clone holds the same source but boxes entries fresh with the new
     // provenance — identity does NOT cross-talk between provenance variants.

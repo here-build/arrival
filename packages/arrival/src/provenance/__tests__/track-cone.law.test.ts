@@ -26,8 +26,9 @@
  * frozen in. cone⁺ at replay level = the stamp set the boxed γ egress carries
  * (payloads round-trip value + stamp ids, §5 D2 — the containment laws are WHY).
  */
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { parse, execStateOverFrame as execState } from "../../eval/generator-exec.js";
+import { beforeAll, describe, expect, it } from "vitest";
+import { parse } from "../../eval/generator-exec.js";
+import { execStateOverFrameEager as execState } from "../../__tests__/_require-eager-oracle.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import {
@@ -42,26 +43,20 @@ import {
 import { buildWireframe } from "../../provenance/wireframe/builder.js";
 import { reachableNodesForDemand } from "../../provenance/wireframe/loops.js";
 import { FrozenMints, boxPayload, replayBetweenRecords, replayGraphEgress } from "../../provenance/replay.js";
-import { setEmissionEnabled } from "../../provenance/store/emit.js";
-import { ProvenanceStoreFake } from "../../provenance/store/fakes.js";
+import { PayloadStoreFake, ProvenanceStoreFake } from "../../provenance/store/fakes.js";
 import { foldRegionStream } from "../../provenance/store/fold.js";
 import {
   closeRegionScope,
   openRegionScope,
   recordHostScheduleVerdict,
-  withTrackCoordinate,
   type TrackCoordinate,
   type TrackEmissionSink,
 } from "../../membrane/region-scope.js";
-import { CONSTANT_CTX } from "../../run/RunContext.js";
+import { RunContext } from "../../run/RunContext.js";
 import type { EmittedWire, WireframeGraph } from "../../provenance/wireframe/types.js";
 import type { SchemeValue } from "../../values/types.js";
 import { recordRun, replayedCone, type RecordedRun } from "../../__tests__/provenance/q16-harness.js";
 import { SourceRegistry } from "../../__tests__/provenance/w1-harness.js";
-import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
-
-// this helper/execState needs the eager oracle ON
-requireEagerOracle();
 
 const ROLES: Record<string, DeclaredRole> = {
   "fetch-list": "source",
@@ -109,10 +104,6 @@ async function fanTemplateOf(code: string): Promise<WireframeGraph> {
 }
 
 beforeAll(async () => {});
-
-afterEach(() => {
-  setEmissionEnabled(false);
-});
 
 describe("track containment — STAMP arm (§3 I1 vs the eager oracle)", () => {
   const elements = [1, 2, 3];
@@ -301,7 +292,6 @@ describe("track separation (§3 I3: no spontaneous inter-track edges)", () => {
   it("order rides the host-schedule record, never a fabricated inter-track edge (§3 I3 LIMIT)", async () => {
     // ONE host invocation's comparator schedule, accumulated on the region scope and
     // flushed as ONE record at close — region-scope.ts's real Q11b machinery.
-    setEmissionEnabled(true);
     const store = new ProvenanceStoreFake();
     const REGION = "i3-host-schedule";
     const sink: TrackEmissionSink = { store, regionId: REGION };
@@ -311,10 +301,10 @@ describe("track separation (§3 I3: no spontaneous inter-track edges)", () => {
       [1, 2, -1], // track 1 vs track 2 → left first
       [0, 2, 1], // track 0 vs track 2 → right first
     ];
-    const scope = withTrackCoordinate(COORD, sink, () => openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined }));
+    const runCtx = new RunContext({ emission: { ...sink, payloads: new PayloadStoreFake(), coordinate: COORD } });
+    const scope = openRegionScope({ runCtx, dynSite: undefined });
     for (const [l, r, v] of verdicts) recordHostScheduleVerdict(scope, [l], [r], v);
     closeRegionScope(scope);
-    setEmissionEnabled(false);
     await Promise.resolve();
     await Promise.resolve();
 

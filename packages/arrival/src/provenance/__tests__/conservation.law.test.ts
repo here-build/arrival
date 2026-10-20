@@ -25,14 +25,14 @@ import { APair } from "../../values/primitives/APair.js";
 import { AVector } from "../../values/primitives/AVector.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AValue } from "../../values/primitives/AValue.js";
-import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
+import { type RunContext } from "../../run/RunContext.js";
 import { idContour, keepAllContour, filterContour, contourCallback } from "../../__tests__/_contour-callback.js";
 import { provOf } from "../../provenance/lineage.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { toJS, type InvocationLike } from "../../membrane/rosetta.js";
 import { EnvCapability, type SymbolFactory } from "../../common/capability.js";
 import { applyCapability } from "../../__tests__/_fresh-env.js";
-import { makeCallCtx } from "../../run/CallCtx.js";
+import { type CallCtx, makeCallCtx } from "../../run/CallCtx.js";
 import type * as schemeZod from "../../common/scheme-zod/index.js";
 import { ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { ARosettaProcedure } from "../../values/primitives/ARosettaProcedure.js";
@@ -41,10 +41,7 @@ import { nil } from "../../values/primitives/ANil.js";
 import { tf } from "../../values/tagless-final.js";
 import type { SchemeValue } from "../../values/types.js";
 import { run, runRaw, sNum, sStr } from "../../__tests__/_lineage-test-helpers.js";
-import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
-
-// this helper/execState needs the eager oracle ON
-requireEagerOracle();
+import { eagerRunCtx } from "../../__tests__/_require-eager-oracle.js";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PROPERTY GENERATOR — small typed Scheme-program grammar (§1 of the task).
@@ -119,10 +116,11 @@ interface Rng {
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
-    a = (a + 0x6d2b79f5) | 0;
+    // eslint-disable-next-line unicorn/prefer-math-trunc -- `| 0` is the int32 wrap of mulberry32, not a truncation
+    a = (a + 0x6d_2b_79_f5) | 0;
     let t = Math.imul(a ^ (a >>> 15), 1 | a);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
   };
 }
 
@@ -329,8 +327,9 @@ function invoke(
   // thread it through the apply term — the binder adapter no longer reconstructs it from
   // ambient state (Stage 1a). Still publishes the invocation on the ambient leaf too,
   // matching what a real dispatch does for nested lambda re-entry.
-  return withDynamicCallSite(opts?.currentInvocation, () =>
-    verb[tf("apply")](args as SchemeValue[], makeCallCtx(opts?.runCtx ?? CONSTANT_CTX, opts?.currentInvocation)),
+  const runCtx = opts?.runCtx ?? eagerRunCtx;
+  return withDynamicCallSite(runCtx, opts?.currentInvocation, () =>
+    verb[tf("apply")](args as SchemeValue[], makeCallCtx(runCtx, opts?.currentInvocation)),
   );
 }
 
@@ -375,7 +374,7 @@ describe("conservation — every input id survives to the output or the trace", 
       // `length` reads the CONTAINER's own flat grouping/length-fact stamp; `map`
       // PROXIES that stamp through unchanged. This fixture mints no container-level
       // grouping id, so the cone is EMPTY.
-      const xs = APair.fromArray(CONSTANT_CTX, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false);
+      const xs = APair.fromArray(eagerRunCtx, [sStr("a", 100), sStr("b", 101), sStr("c", 102)], false);
       const r = await runRaw(`(length (map (lambda (e) e) xs))`, { xs });
       expect(provOf(r)).toEqual([]);
     });
@@ -411,8 +410,8 @@ describe("conservation — every input id survives to the output or the trace", 
     const dropB = filterContour((x) => (x as AString).valueOf() !== "b");
 
     it("map PROXIES the container's own stamp through — Pair and Vector agree", async () => {
-      const pairOut = await Promise.resolve(mkStampedPair()[tf("map")](idFn, CONSTANT_CTX));
-      const vecOut = await Promise.resolve(mkStampedVector()[tf("map")](idFn, CONSTANT_CTX));
+      const pairOut = await Promise.resolve(mkStampedPair()[tf("map")](idFn, eagerRunCtx));
+      const vecOut = await Promise.resolve(mkStampedVector()[tf("map")](idFn, eagerRunCtx));
       expect(provOf(pairOut)).toEqual([7]);
       expect(provOf(vecOut)).toEqual([7]);
     });
@@ -425,22 +424,22 @@ describe("conservation — every input id survives to the output or the trace", 
           String(b.valueOf()),
         ) as unknown as import("../../values/types.js").SchemeValue;
       }, "locale-cmp");
-      const pairOut = mkStampedPair()[tf("sort")](cmp, CONSTANT_CTX);
-      const vecOut = mkStampedVector()[tf("sort")](cmp, CONSTANT_CTX);
+      const pairOut = mkStampedPair()[tf("sort")](cmp, eagerRunCtx);
+      const vecOut = mkStampedVector()[tf("sort")](cmp, eagerRunCtx);
       expect(provOf(pairOut)).toEqual([7]);
       expect(provOf(vecOut)).toEqual([7]);
     });
 
     it("filter (keep-all) PROVENANCES union(container's own stamp, survivors) — Pair and Vector agree", async () => {
-      const pairOut = await Promise.resolve(mkStampedPair()[tf("filter")](keepAll, CONSTANT_CTX));
-      const vecOut = await Promise.resolve(mkStampedVector()[tf("filter")](keepAll, CONSTANT_CTX));
+      const pairOut = await Promise.resolve(mkStampedPair()[tf("filter")](keepAll, eagerRunCtx));
+      const vecOut = await Promise.resolve(mkStampedVector()[tf("filter")](keepAll, eagerRunCtx));
       expect(provOf(pairOut)).toEqual([7, 100, 101]);
       expect(provOf(vecOut)).toEqual([7, 100, 101]);
     });
 
     it("filter (drop one) PROVENANCES union(container's own stamp, SURVIVING elements only) — Pair and Vector agree", async () => {
-      const pairOut = await Promise.resolve(mkStampedPair()[tf("filter")](dropB, CONSTANT_CTX));
-      const vecOut = await Promise.resolve(mkStampedVector()[tf("filter")](dropB, CONSTANT_CTX));
+      const pairOut = await Promise.resolve(mkStampedPair()[tf("filter")](dropB, eagerRunCtx));
+      const vecOut = await Promise.resolve(mkStampedVector()[tf("filter")](dropB, eagerRunCtx));
       expect(provOf(pairOut)).toEqual([7, 100]); // 101 (the dropped "b") never flows
       expect(provOf(vecOut)).toEqual([7, 100]);
     });
@@ -481,7 +480,9 @@ describe("mint-at-edge — ids appear only at declared crossings", () => {
     const verb = await wireRosetta((symbol, z) =>
       symbol.rosetta`echo: identity string`(
         { input: [z.string], output: [z.string], provenance: "pipe" },
-        (s: string) => s,
+        function (this: CallCtx, s: string) {
+          return s;
+        },
       ),
     );
     const { invocation, marked } = invocationWithId(42);
@@ -493,7 +494,12 @@ describe("mint-at-edge — ids appear only at declared crossings", () => {
 
   it("a source rosetta mints EXACTLY ONE fresh point per crossing, independent of arguments (two calls → two distinct ids)", async () => {
     const verb = await wireRosetta((symbol, z) =>
-      symbol.rosetta`strlen: length of a string`({ input: [z.string], output: [z.number] }, (s: string) => s.length),
+      symbol.rosetta`strlen: length of a string`(
+        { input: [z.string], output: [z.number] },
+        function (this: CallCtx, s: string) {
+          return s.length;
+        },
+      ),
     );
     const call1 = invocationWithId(101);
     const call2 = invocationWithId(202);
@@ -528,6 +534,6 @@ describe("named sheds — the only legal losses", () => {
     expect(egressed).toBe("a");
     // The trace keeps the lineage keyed by scope (P4/P12); the crossed-over JS value
     // itself carries no `provenance` property at all — not an empty one, ABSENT.
-    expect(Object.prototype.hasOwnProperty.call(Object(egressed), "provenance")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(new Object(egressed), "provenance")).toBe(false);
   });
 });

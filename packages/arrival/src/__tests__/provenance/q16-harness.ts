@@ -7,36 +7,42 @@
  * frozen stream (`FrozenMints`) γ replays against.
  *
  * ── Q16 DESIGN CALL (harness-level, named in replay.ts's D1 too) ──────────────────
- * Per-crossing RecordId minting is the WIREFRAME-WALKING DRIVER's job (the eventual
- * real installer `eval/provenance-hooks.ts`'s own header names for Q15/Q16-era work
- * — it would advance a `RecordCoordinate` per designated node). That driver does not
- * exist at HEAD, and the ambient-coordinate hook path can only carry ONE static id
- * per run (all mints would upsert-collide on it). So this harness STANDS IN for the
- * walking driver at the one place per-crossing granularity is reachable today — the
- * source registration itself: each crossing awaits `emitMint` (the REAL Q11a
- * emission core, against the REAL store fakes, flag-gated like production) under a
- * distinct RecordId whose templateHash encodes the op (`q16:<op>`) and whose
- * ordinalPath carries the per-run crossing ordinal. The emission CORE, ids, seq
- * allocation, payload shape (§5 D2: value + stamp ids), and read-back path are all
- * the real ones; only the DECIDING-WHEN caller is the harness.
+ * The hook path (`eval/provenance-hooks.ts`) mints a crossing's id from its closure-call WINDOW
+ * (`[…enclosing, r_C, k, n]`, §3) but does not know the OP, which replay's per-op ingress needs.
+ * So this harness STANDS IN for the hook at the one place the op is reachable — the source
+ * registration itself: each crossing awaits `emitMint` (the REAL Q11a emission core, against the
+ * REAL store fakes) under the id the hook would have minted (`mintId` over the call's own
+ * `CallCtx.closureCall` window), with the templateHash carrying the op (`q16:<op>`). The run is
+ * recorded with the program's REAL `closureSites` (wireframe over the same parse), so a record's
+ * ordinal path names the TRACK it ran under — its coordinate — independent of when it completed.
+ * Ids, seq allocation, payload shape (§5 D2: value + stamp ids), and read-back path are the real
+ * ones; only the DECIDING-WHEN caller is the harness.
  */
 import invariant from "tiny-invariant";
 import type { AmbientRuntime, ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { execStateOverFrame } from "../../eval/generator-exec.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
 import { toJS, jsToScheme } from "../../membrane/rosetta.js";
-import { CONSTANT_CTX } from "../../run/RunContext.js";
+import { CONSTANT_CTX, type RunEmission } from "../../run/RunContext.js";
 import * as z from "../../common/scheme-zod/index.js";
 import { EnvCapability } from "../../common/capability.js";
 import { AValue } from "../../values/primitives/AValue.js";
-import { emitMint, setEmissionEnabled } from "../../provenance/store/emit.js";
+import { compareOrdinalPaths } from "../../provenance/store/ids.js";
+import { emitMint } from "../../provenance/store/emit.js";
+import { currentCallNode, currentClosureCall } from "../../eval/dynamic-call-site.js";
+import { scopeId } from "../../provenance/scope-id.js";
+import { mintId } from "../../eval/provenance-hooks.js";
+import { parseProgram } from "../../eval/exec-phases.js";
+import { buildWireframe, type WireframeBuildOptions } from "../../provenance/wireframe/builder.js";
+import type { Classifier } from "../../provenance/lineage.js";
+import { CORPUS_BASE_NAMES, CORPUS_ROLES } from "./w1-corpus.js";
 import { PayloadStoreFake, ProvenanceStoreFake } from "../../provenance/store/fakes.js";
-import { FrozenMints } from "../../provenance/replay.js";
+import { FrozenMints, trackOfRecord, type PlaybackEntry, type TrackPath } from "../../provenance/replay.js";
 import type { Payload } from "../../provenance/store/interfaces.js";
 import type { MintRecord } from "../../provenance/store/records.js";
 import type { SchemeValue } from "../../values/types.js";
-import { isEagerProvenanceOracleEnabled, setEagerProvenanceOracleEnabled } from "../../values/op-helpers.js";
 import { applyCapability } from "../_fresh-env.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 
 // Same stamped-value constructors as w1-harness.ts (local copies, same rationale).
 const stampedStr = (s: string, p: number): SchemeValue => z.string.encode(s).withProvenance(new Set([p]));
@@ -64,7 +70,6 @@ export type RecordingShape =
 export class RecordingRegistry {
   private nextId = 1;
   private readonly idToOp = new Map<number, string>();
-  private ordinal = 0;
   /** Per-op live-invocation counts — the replay-nondeterminism laws assert a γ
    *  replay leaves every one of these at zero (the world was never consulted). */
   readonly calls = new Map<string, number>();
@@ -73,7 +78,9 @@ export class RecordingRegistry {
     readonly store: ProvenanceStoreFake,
     readonly payloads: PayloadStoreFake,
     readonly regionId: string,
-    readonly regionEpoch: string = "e0",
+    /** Live-completion scheduler (a LAW's lever): when set, every source call waits for it before
+     *  the world answers, so the order in which concurrent tracks' crossings COMPLETE is chosen. */
+    readonly completion?: CompletionScheduler,
   ) {}
 
   private mint(op: string): number {
@@ -104,6 +111,7 @@ export class RecordingRegistry {
    *  membrane, no auto-mint) is the honest home. Args arrive as raw scheme values;
    *  the impl runs `toJS` on each itself, as before. */
   async register(env: AmbientRuntime, op: string, shape: RecordingShape): Promise<void> {
+    const registry = this;
     await applyCapability(env, [
       EnvCapability.define(`test/q16-source-${op}`, {
         symbols: (symbol) => ({
@@ -113,25 +121,35 @@ export class RecordingRegistry {
             // `toJS`'s generic constraint (`T extends SchemeValue | null | undefined`) can't be
             // satisfied by an `unknown`-typed rest param without a cast; `any` here is the SAME
             // erasure the factory's own impl boundary already performs one layer down.
-            async (...args: any[]): Promise<SchemeValue> => {
+            async function (this: CallCtx, ...args: any[]): Promise<SchemeValue> {
               args = args.map((a) => toJS(a));
-              this.calls.set(op, (this.calls.get(op) ?? 0) + 1);
-              const callSeq = this.calls.get(op) ?? 1;
+              // The record id is claimed at call START (as the hook does for an async crossing): a
+              // fan starts its calls in index order, but they COMPLETE in whatever order the world answers.
+              const emission = this.runCtx.emission;
+              invariant(emission !== undefined, `q16 source "${op}" ran outside a recording run`);
+              const recordId = {
+                ...mintId(emission, this.closureCall ?? currentClosureCall(this.runCtx)),
+                // The op AND the static call site ride the template hash (store records carry no more).
+                templateHash: `q16:${op}|${scopeId(currentCallNode(this.runCtx))}`,
+              };
+              await registry.completion?.admit(op);
+              registry.calls.set(op, (registry.calls.get(op) ?? 0) + 1);
+              const callSeq = registry.calls.get(op) ?? 1;
               let boxed: unknown;
               let peeled: unknown;
               let stampIds: number[];
               if (shape === "num") {
-                const id = this.mint(op);
+                const id = registry.mint(op);
                 boxed = stampedNum(id, id);
                 peeled = id;
                 stampIds = [id];
               } else if (shape === "str") {
-                const id = this.mint(op);
+                const id = registry.mint(op);
                 peeled = `${op}#${id}`;
                 boxed = stampedStr(`${op}#${id}`, id);
                 stampIds = [id];
               } else if (shape === "echo") {
-                const id = this.mint(op);
+                const id = registry.mint(op);
                 const arg = args[0];
                 invariant(typeof arg === "number", `q16 echo source "${op}" expects a numeric argument`);
                 boxed = stampedNum(arg, id);
@@ -142,7 +160,7 @@ export class RecordingRegistry {
                 const peeledOut: Record<string, unknown> = {};
                 stampIds = [];
                 for (const field of shape.dict) {
-                  const id = this.mint(op);
+                  const id = registry.mint(op);
                   out[field] = stampedStr(`${op}.${field}#${id}`, id);
                   peeledOut[field] = `${op}.${field}#${id}`;
                   stampIds.push(id);
@@ -152,23 +170,19 @@ export class RecordingRegistry {
                 boxed = jsToScheme(CONSTANT_CTX, out);
                 peeled = peeledOut;
               } else {
-                const id = this.mint(op);
+                const id = registry.mint(op);
                 peeled = shape.value(callSeq - 1);
                 boxed = typeof peeled === "number" ? stampedNum(peeled, id) : stampedStr(String(peeled), id);
                 stampIds = [id];
               }
-              const record = await emitMint({
-                store: this.store,
-                payloads: this.payloads,
-                regionId: this.regionId,
-                id: { templateHash: `q16:${op}`, ordinalPath: [this.ordinal++], regionEpoch: this.regionEpoch },
+              await emitMint({
+                store: registry.store,
+                payloads: registry.payloads,
+                regionId: registry.regionId,
+                id: recordId,
                 value: peeled,
                 stampIds,
               });
-              invariant(
-                record !== undefined,
-                "q16 harness: emitMint no-oped — setEmissionEnabled(true) must wrap the record run",
-              );
               return boxed as SchemeValue;
             },
           ),
@@ -178,12 +192,25 @@ export class RecordingRegistry {
   }
 }
 
+function splitOnce(text: string, sep: string): [string, string] {
+  const at = text.indexOf(sep);
+  return [text.slice(0, at), text.slice(at + 1)];
+}
+
 /** One recorded crossing, read back THROUGH the store (never a side channel). */
 export interface RecordedMint {
   readonly op: string;
   readonly record: MintRecord;
   readonly payload: Payload;
+  /** The track (closure/fan-lambda call) the crossing ran under, relative to the run's root. */
+  readonly track: TrackPath;
+  /** The static crossing site: `scopeId` of the call expression the source ran under (a HOF's own
+   *  call for its element callbacks) — what a γ demand names. */
+  readonly site: string;
 }
+
+/** The run's root coordinate path (`RunEmission.coordinate`) — track paths are relative to it. */
+export const RECORD_ROOT: readonly number[] = [0];
 
 /** A finished record run: the program's egress (both faces), its eager cone, the
  *  recorded crossings in seq order, a ready-to-γ `FrozenMints`, and the live
@@ -206,49 +233,145 @@ let runCounter = 0;
  *  `recordRun` so a law can thaw the SAME stream twice (FIFO queues are consumed). */
 export function freezeMints(mints: readonly RecordedMint[]): FrozenMints {
   const frozen = new FrozenMints();
-  for (const m of mints) frozen.push(m.op, m.payload);
+  for (const m of inCallOrder(mints)) frozen.push(m.op, m.payload, m.track, m.site);
   return frozen;
+}
+
+/** Recorded mints in CALL-START order (their record-id ordinals). The stream is in COMPLETION order;
+ *  within one track calls are sequential and a fan starts its calls in index order, so start order is
+ *  the deterministic one a replay's FIFO per (op, track) must be fed in. */
+export function inCallOrder(mints: readonly RecordedMint[]): RecordedMint[] {
+  return mints.toSorted((a, b) => compareOrdinalPaths(a.record.id.ordinalPath, b.record.id.ordinalPath));
+}
+
+/** The whole-program playback face of a record: per-op payloads in stream order, each addressed by track. */
+export function playbackOf(run: { readonly mints: readonly RecordedMint[] }): Map<string, PlaybackEntry[]> {
+  const playback = new Map<string, PlaybackEntry[]>();
+  for (const m of inCallOrder(run.mints)) {
+    const entry: PlaybackEntry = { ...m.payload, track: m.track, site: m.site };
+    const q = playback.get(m.op);
+    if (q === undefined) playback.set(m.op, [entry]);
+    else q.push(entry);
+  }
+  return playback;
+}
+
+/** Fan hosts the corpus's base-name set does not list — resolvable in the hermetic base env. */
+const FAN_HOST_NAMES: ReadonlySet<string> = new Set([
+  "vector",
+  "vector-map",
+  "vector-for-each",
+  "for-each",
+  "string-for-each",
+]);
+
+/** The wireframe options a record run builds its closure sites with by default: the corpus's declared
+ *  roles, every recorded source a `source`. A replay passes the SAME options (`wireframe`). */
+export function recordWireframe(sources: Record<string, RecordingShape>): WireframeBuildOptions {
+  const classifier: Classifier = { roleOf: (op) => (op in sources ? "source" : CORPUS_ROLES[op]) };
+  return { classifier, isBaseName: (n) => CORPUS_BASE_NAMES.has(n) || FAN_HOST_NAMES.has(n) };
+}
+
+/**
+ * Chooses the order concurrent source calls COMPLETE in. Each call parks in `admit`; whenever the
+ * program is quiescent (a macrotask hop ⇒ every microtask-driven track has run to its next crossing)
+ * the scheduler releases ONE parked call, picked by `pick` from the park order. Logical, not
+ * wall-clock: the schedule is identical under any CPU load.
+ */
+export class CompletionScheduler {
+  private readonly parked: (() => void)[] = [];
+  private pumping = false;
+
+  constructor(private readonly pick: (parked: number) => number) {}
+
+  /** FIFO (calls complete in the order they began). */
+  static forward(): CompletionScheduler {
+    return new CompletionScheduler(() => 0);
+  }
+
+  /** LIFO — the latest-started parked call completes first. */
+  static reverse(): CompletionScheduler {
+    return new CompletionScheduler((n) => n - 1);
+  }
+
+  /** Seeded pseudo-random (mulberry32). */
+  static seeded(seed: number): CompletionScheduler {
+    let a = seed >>> 0;
+    return new CompletionScheduler((n) => {
+      a = (a + 0x6d_2b_79_f5) >>> 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return Math.floor((((t ^ (t >>> 14)) >>> 0) / 4_294_967_296) * n);
+    });
+  }
+
+  admit(_op: string): Promise<void> {
+    return new Promise<void>((resolve) => {
+      this.parked.push(resolve);
+      if (!this.pumping) void this.pump();
+    });
+  }
+
+  private async pump(): Promise<void> {
+    this.pumping = true;
+    try {
+      while (this.parked.length > 0) {
+        await new Promise<void>((r) => setTimeout(r, 0));
+        const [release] = this.parked.splice(this.pick(this.parked.length), 1);
+        release();
+      }
+    } finally {
+      this.pumping = false;
+    }
+  }
 }
 
 /**
  * THE record run: execute `code` in a fresh env (inheriting `baseEnv`'s assembled
- * base) with every source registered as a RECORDING source, emission flag ON for
- * exactly the run's extent; read the stream + payloads back through the store and
+ * base) with every source registered as a RECORDING source (they call `emitMint` directly — no
+ * enable flag exists, P19); read the stream + payloads back through the store and
  * return the frozen retrospective side.
  */
 export async function recordRun(
   baseEnv: ResolvingAmbient,
   code: string,
   sources: Record<string, RecordingShape>,
+  opts: { readonly wireframe?: WireframeBuildOptions; readonly completion?: CompletionScheduler } = {},
 ): Promise<RecordedRun> {
   const regionId = `q16-region-${runCounter++}`;
   const store = new ProvenanceStoreFake();
   const payloads = new PayloadStoreFake();
-  const registry = new RecordingRegistry(store, payloads, regionId);
+  const registry = new RecordingRegistry(store, payloads, regionId, opts.completion);
   const env = baseEnv.child(`q16-record-${regionId}`);
   for (const [op, shape] of Object.entries(sources)) await registry.register(env, op, shape);
 
-  // this helper/execState needs the eager oracle ON
-  const savedOracle = isEagerProvenanceOracleEnabled();
-  setEagerProvenanceOracleEnabled(true);
-  setEmissionEnabled(true);
-  let values: readonly SchemeValue[];
-  try {
-    ({ values } = await execStateOverFrame(code, { env }));
-  } finally {
-    setEmissionEnabled(false);
-    setEagerProvenanceOracleEnabled(savedOracle);
-  }
+  // The wireframe and the evaluator share ONE parse: closure sites are keyed by pair identity.
+  const program = await parseProgram(code);
+  const emission: RunEmission = {
+    store,
+    payloads,
+    regionId,
+    coordinate: { templateHash: "q16", ordinalPath: RECORD_ROOT, regionEpoch: "e0" },
+    closureSites: buildWireframe(program.forms, opts.wireframe ?? recordWireframe(sources)).closureSites,
+  };
+  const { values } = await execStateOverFrame(code, { env, eagerStamps: true, emission, program });
   const egressBoxed = values[values.length - 1];
 
   const stream = await store.readStream(regionId);
   const mints: RecordedMint[] = [];
   for (const record of stream) {
-    if (record.kind !== "mint") continue;
+    // Only the harness's own source crossings (`q16:<op>`); the hook's rosetta mints carry no op.
+    if (record.kind !== "mint" || !record.id.templateHash.startsWith("q16:")) continue;
     const stored = await payloads.get(record.payloadHash);
     const payload: Payload = { value: stored.value, stampIds: stored.stampIds };
-    const op = record.id.templateHash.startsWith("q16:") ? record.id.templateHash.slice(4) : record.id.templateHash;
-    mints.push({ op, record, payload });
+    const [op, site] = splitOnce(record.id.templateHash.slice(4), "|");
+    mints.push({
+      op,
+      site,
+      record,
+      payload,
+      track: trackOfRecord(record.id.ordinalPath, RECORD_ROOT),
+    });
   }
 
   return {

@@ -24,7 +24,6 @@
  */
 
 import * as fc from "fast-check";
-import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { describe, expect, it } from "vitest";
 
 import { AValue, EMPTY_PROVENANCE, pointProvenance, unionProvenance } from "../../values/primitives/AValue.js";
@@ -43,15 +42,6 @@ const arbProvenanceSet: fc.Arbitrary<ReadonlySet<number>> = fc
 const arbAValue: fc.Arbitrary<AValue> = fc
   .tuple(arbProvenanceSet, fc.boolean())
   .map(([prov, bool]) => new ABool(bool, prov));
-
-/** Permute an array deterministically — used to assert order-independence. */
-function permute<T>(arr: readonly T[], rng: fc.Arbitrary<number[]>): fc.Arbitrary<T[]> {
-  return rng.map((keys) => {
-    const indexed = arr.map((v, i) => [keys[i % keys.length] ?? i, v] as const);
-    indexed.sort((a, b) => a[0] - b[0]);
-    return indexed.map(([, v]) => v);
-  });
-}
 
 describe("unionProvenance — algebraic properties", () => {
   it("commutative: union over any permutation of args produces the same set", () => {

@@ -61,8 +61,12 @@ export function writeForm(node: unknown): string {
  *  subtree verbatim (the wire emitter substitutes each cut designated subterm with its minted
  *  param name, so the emitted wire lambda references node egresses by parameter, never by
  *  re-serializing the port call — the closed-wire-lambda rule). */
-export function writeFormWith(node: unknown, sub: (n: unknown) => string | undefined): string {
-  return writeDatum(node, new Set<unknown>(), sub);
+export function writeFormWith(
+  node: unknown,
+  sub: (n: unknown) => string | undefined,
+  subCell?: (cell: unknown) => string | undefined,
+): string {
+  return writeDatum(node, new Set<unknown>(), sub, subCell);
 }
 
 /** Re-serialize an inexact/number datum to a RE-PARSEABLE numeral. JS `String()` (via the boxed
@@ -78,7 +82,12 @@ function writeNumber(node: unknown): string {
   return String(node).replace(/(e[+-]?\d+)\.0$/i, "$1");
 }
 
-function writeDatum(node: unknown, seen: Set<unknown>, sub?: (n: unknown) => string | undefined): string {
+function writeDatum(
+  node: unknown,
+  seen: Set<unknown>,
+  sub?: (n: unknown) => string | undefined,
+  subCell?: (cell: unknown) => string | undefined,
+): string {
   // Substitution hook first (writeFormWith): a matched subtree is replaced verbatim, never descended.
   const replaced = sub?.(node);
   if (replaced !== undefined) return replaced;
@@ -99,7 +108,7 @@ function writeDatum(node: unknown, seen: Set<unknown>, sub?: (n: unknown) => str
       const parts: string[] = [];
       let cur: unknown = node;
       while (isPair(cur)) {
-        parts.push(writeDatum(cur.car, seen, sub));
+        parts.push(subCell?.(cur) ?? writeDatum(cur.car, seen, sub, subCell));
         cur = cur.cdr;
         // A substituted tail replaces the rest of the spine (a cut pair in cdr position).
         const tailSub = sub?.(cur);
@@ -107,9 +116,12 @@ function writeDatum(node: unknown, seen: Set<unknown>, sub?: (n: unknown) => str
           parts.push(".", tailSub);
           return `(${parts.join(" ")})`;
         }
-        invariant(!(isPair(cur) && seen.has(cur)), CYCLE);
+        if (isPair(cur)) {
+          invariant(!seen.has(cur), CYCLE);
+          seen.add(cur); // every spine cell, not just the head — a cdr-cycle never returns to the head
+        }
       }
-      if (kindOf(cur) !== "nil") parts.push(".", writeDatum(cur, seen, sub)); // improper/dotted tail
+      if (kindOf(cur) !== "nil") parts.push(".", writeDatum(cur, seen, sub, subCell)); // improper/dotted tail
       return `(${parts.join(" ")})`;
     }
     case "string":
@@ -117,7 +129,9 @@ function writeDatum(node: unknown, seen: Set<unknown>, sub?: (n: unknown) => str
     case "vector": {
       invariant(!seen.has(node), CYCLE);
       seen.add(node);
-      const body = (node as { __vector__: unknown[] }).__vector__.map((el) => writeDatum(el, seen, sub)).join(" ");
+      const body = (node as { __vector__: unknown[] }).__vector__
+        .map((el) => writeDatum(el, seen, sub, subCell))
+        .join(" ");
       // `evalElements` (AVector.ts) marks a `[…]` reader literal — re-emit its OWN read
       // syntax, not the R7RS `#(…)` constant syntax; the two re-parse to different
       // datum kinds under `quote` (a `[…]` re-read STAYS a `[…]` node), so silently
@@ -135,14 +149,14 @@ function writeDatum(node: unknown, seen: Set<unknown>, sub?: (n: unknown) => str
       // (`{,k 1 :b 2}` re-reads to the identical template; there is no static entry
       // for an unquote key, so the entry-map path below could never reproduce it).
       if (dict.literalForms !== undefined) {
-        return `{${dict.literalForms.map((el) => writeDatum(el, seen, sub)).join(" ")}}`;
+        return `{${dict.literalForms.map((el) => writeDatum(el, seen, sub, subCell)).join(" ")}}`;
       }
       // Plain runtime dict (`dict`-constructed or quasiquote-folded): serialize each
       // entry as `name: value` (the suffix-colon key spelling — Parser.ts's
       // `make_dict_literal` flips it back to the `:name` keyword canonical form on
       // re-read), recursing into each value; a non-datum value still hits the loud
       // default throw below, as it must.
-      const parts = dict.keys().map((name) => `${name}: ${writeDatum(dict.get(name), seen, sub)}`);
+      const parts = dict.keys().map((name) => `${name}: ${writeDatum(dict.get(name), seen, sub, subCell)}`);
       return `{${parts.join(" ")}}`;
     }
     case "bytevector":
@@ -184,11 +198,39 @@ export function defineNameOf(form: unknown): string | null {
   return null;
 }
 
-/** Every symbol name referenced anywhere in a form's tree (cycle-guarded, kind-discriminated).
- *  Coarse by design — the closure wants an over-approximation, not lexical-scope precision. */
+/** Every symbol name referenced anywhere in a form's EVALUATED tree (cycle-guarded,
+ *  kind-discriminated). Coarse by design — the closure wants an over-approximation, not
+ *  lexical-scope precision. Two exactness rules keep it honest in both directions:
+ *    - `{…}` dict literals (`literalForms`) and `[…]` vectors are EVALUATED forms — descended
+ *      (skipping them under-attributes: `(let* ((b {:x a})) (fetch b))` must reach `a`);
+ *    - `(quote datum)` is DATA — skipped; `quasiquote` descends only its unquoted parts. */
 export function referencedSymbols(form: unknown): Set<string> {
   const out = new Set<string>();
   const seen = new Set<unknown>();
+  const walkQuasi = (n: unknown, depth: number): void => {
+    if (n === null || typeof n !== "object" || seen.has(n)) return;
+    seen.add(n);
+    if (isPair(n)) {
+      if (isSymbol(n.car)) {
+        const hn = symName(n.car);
+        if ((hn === "unquote" || hn === "unquote-splicing") && isPair(n.cdr)) {
+          if (depth === 1) walk(n.cdr.car);
+          else walkQuasi(n.cdr.car, depth - 1);
+          return;
+        }
+        if (hn === "quasiquote" && isPair(n.cdr)) {
+          walkQuasi(n.cdr.car, depth + 1);
+          return;
+        }
+      }
+      walkQuasi(n.car, depth);
+      walkQuasi(n.cdr, depth);
+      return;
+    }
+    const kind = kindOf(n);
+    if (kind === "vector") for (const el of (n as { __vector__: unknown[] }).__vector__) walkQuasi(el, depth);
+    else if (kind === "dict") for (const el of (n as DuckDict).literalForms ?? []) walkQuasi(el, depth);
+  };
   const walk = (n: unknown): void => {
     if (n === null || typeof n !== "object" || seen.has(n)) return;
     seen.add(n);
@@ -197,11 +239,22 @@ export function referencedSymbols(form: unknown): Set<string> {
       return;
     }
     if (isPair(n)) {
+      if (isSymbol(n.car) && isPair(n.cdr)) {
+        const head = symName(n.car);
+        if (head === "quote") return; // data, not references
+        if (head === "quasiquote") {
+          out.add(head);
+          walkQuasi(n.cdr.car, 1);
+          return;
+        }
+      }
       walk(n.car);
       walk(n.cdr);
       return;
     }
-    if (kindOf(n) === "vector") for (const el of (n as { __vector__: unknown[] }).__vector__) walk(el);
+    const kind = kindOf(n);
+    if (kind === "vector") for (const el of (n as { __vector__: unknown[] }).__vector__) walk(el);
+    else if (kind === "dict") for (const el of (n as DuckDict).literalForms ?? []) walk(el);
   };
   walk(form);
   return out;
@@ -285,11 +338,22 @@ export function buildSlice(trace: EvalTrace, outputNode: unknown): Slice {
     return added;
   };
   for (const sym of anchorSymbols) keepName(sym);
+  // `referencedSymbols` is a pure walk of one form; memoize it so each kept form is scanned once
+  // across all fixpoint passes.
+  const refsOf = new Map<unknown, ReadonlySet<string>>();
+  const refsFor = (node: unknown): ReadonlySet<string> => {
+    let refs = refsOf.get(node);
+    if (refs === undefined) {
+      refs = referencedSymbols(node);
+      refsOf.set(node, refs);
+    }
+    return refs;
+  };
   let changed = true;
   while (changed) {
     changed = false;
     for (const node of kept) {
-      for (const sym of referencedSymbols(node)) {
+      for (const sym of refsFor(node)) {
         if (keepName(sym)) changed = true;
       }
     }

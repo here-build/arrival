@@ -8,6 +8,8 @@
  * Excluded: keywords, gensyms, quoted/vector data.
  */
 
+import { bindingEntries, clauseElements, literalElements } from "../surface.js";
+
 // Local duck Pair/Symbol (same per-file convention as prelude/slice).
 type DuckPair = { car: unknown; cdr: unknown };
 type DuckSymbol = { __name__: string | symbol };
@@ -58,6 +60,10 @@ function formalNames(formals: unknown): string[] {
 export interface FreeVarsOptions {
   /** Cut subterms are opaque holes — not this body's FV. */
   readonly cuts?: ReadonlyMap<unknown, unknown>;
+  /** Bare-name occurrence cuts keyed by the operand cons cell holding the symbol. */
+  readonly occurrenceCuts?: ReadonlyMap<unknown, unknown>;
+  /** The cons cell holding `form` itself, when `form` is a bare-name occurrence. */
+  readonly formCell?: unknown;
 }
 
 /** Free names in first-encounter order (drives wire param order). */
@@ -66,18 +72,27 @@ export function freeVars(form: unknown, opts: FreeVarsOptions = {}): Set<string>
   const seen = new Set<unknown>();
 
   const walkBody = (body: unknown, bound: ReadonlySet<string>): void => {
-    for (const f of chainOf(body)) walk(f, bound);
+    walkCells(body, bound);
   };
 
-  const walk = (n: unknown, bound: ReadonlySet<string>): void => {
+  const walk = (n: unknown, bound: ReadonlySet<string>, cell?: unknown): void => {
     if (opts.cuts?.has(n)) return;
     if (isSymbol(n)) {
+      if (cell !== undefined && opts.occurrenceCuts?.has(cell)) return; // cut bare-name occurrence
       const name = nameOf(n);
       if (name === null || isKeywordName(name)) return;
       if (!bound.has(name)) out.add(name);
       return;
     }
-    if (!isPair(n)) return;
+    if (!isPair(n)) {
+      // `[…]` / `{…}` literals are EVALUATED (their elements are expressions).
+      const els = literalElements(n);
+      if (els !== undefined && !seen.has(n)) {
+        seen.add(n);
+        for (const el of els) walk(el, bound);
+      }
+      return;
+    }
     if (seen.has(n)) return;
     seen.add(n);
 
@@ -106,23 +121,17 @@ export function freeVars(form: unknown, opts: FreeVarsOptions = {}): Set<string>
               const afterName = n.cdr.cdr;
               if (!isPair(afterName)) return;
               const names: string[] = loopName === null ? [] : [loopName];
-              for (const b of chainOf(afterName.car)) {
-                if (isPair(b) && isSymbol(b.car)) {
-                  const bn = nameOf(b.car);
-                  if (bn !== null) names.push(bn);
-                  if (isPair(b.cdr)) walk(b.cdr.car, bound);
-                }
+              for (const b of bindingEntries(afterName.car)) {
+                names.push(b.name);
+                if (b.rest.length > 0) walk(b.rest[0], bound, b.cells?.[0]);
               }
               walkBody(afterName.cdr, new Set([...bound, ...names]));
               return;
             }
             const names: string[] = [];
-            for (const b of chainOf(n.cdr.car)) {
-              if (isPair(b) && isSymbol(b.car)) {
-                const bn = nameOf(b.car);
-                if (bn !== null) names.push(bn);
-                if (isPair(b.cdr)) walk(b.cdr.car, bound);
-              }
+            for (const b of bindingEntries(n.cdr.car)) {
+              names.push(b.name);
+              if (b.rest.length > 0) walk(b.rest[0], bound, b.cells?.[0]);
             }
             walkBody(n.cdr.cdr, new Set([...bound, ...names]));
             return;
@@ -130,12 +139,9 @@ export function freeVars(form: unknown, opts: FreeVarsOptions = {}): Set<string>
           case "let*": {
             if (!isPair(n.cdr)) return;
             let cur = new Set(bound);
-            for (const b of chainOf(n.cdr.car)) {
-              if (isPair(b) && isSymbol(b.car)) {
-                if (isPair(b.cdr)) walk(b.cdr.car, cur);
-                const bn = nameOf(b.car);
-                if (bn !== null) cur = new Set([...cur, bn]);
-              }
+            for (const b of bindingEntries(n.cdr.car)) {
+              if (b.rest.length > 0) walk(b.rest[0], cur, b.cells?.[0]);
+              cur = new Set([...cur, b.name]);
             }
             walkBody(n.cdr.cdr, cur);
             return;
@@ -144,16 +150,13 @@ export function freeVars(form: unknown, opts: FreeVarsOptions = {}): Set<string>
           case "letrec*": {
             if (!isPair(n.cdr)) return;
             const names: string[] = [];
-            const inits: unknown[] = [];
-            for (const b of chainOf(n.cdr.car)) {
-              if (isPair(b) && isSymbol(b.car)) {
-                const bn = nameOf(b.car);
-                if (bn !== null) names.push(bn);
-                if (isPair(b.cdr)) inits.push(b.cdr.car);
-              }
+            const inits: { form: unknown; cell: unknown }[] = [];
+            for (const b of bindingEntries(n.cdr.car)) {
+              names.push(b.name);
+              if (b.rest.length > 0) inits.push({ form: b.rest[0], cell: b.cells?.[0] });
             }
             const all = new Set([...bound, ...names]);
-            for (const init of inits) walk(init, all);
+            for (const init of inits) walk(init.form, all, init.cell);
             walkBody(n.cdr.cdr, all);
             return;
           }
@@ -161,18 +164,20 @@ export function freeVars(form: unknown, opts: FreeVarsOptions = {}): Set<string>
             if (!isPair(n.cdr)) return;
             const names: string[] = [];
             const laters: unknown[] = [];
-            for (const b of chainOf(n.cdr.car)) {
-              if (isPair(b) && isSymbol(b.car)) {
-                const bn = nameOf(b.car);
-                if (bn !== null) names.push(bn);
-                const rest = chainOf(b.cdr);
-                if (rest.length > 0) walk(rest[0], bound);
-                for (const step of rest.slice(1)) laters.push(step);
-              }
+            for (const b of bindingEntries(n.cdr.car, false)) {
+              names.push(b.name);
+              if (b.rest.length > 0) walk(b.rest[0], bound, b.cells?.[0]);
+              for (const step of b.rest.slice(1)) laters.push(step);
             }
             const inner = new Set([...bound, ...names]);
             for (const step of laters) walk(step, inner);
-            walkBody(n.cdr.cdr, inner);
+            // test clause `(test result…)` (or bracket) is evaluated in the loop scope;
+            // then the per-iteration commands.
+            const afterBindings = n.cdr.cdr;
+            if (isPair(afterBindings)) {
+              for (const el of clauseElements(afterBindings.car) ?? []) walk(el, inner);
+              walkBody(afterBindings.cdr, inner);
+            }
             return;
           }
           case "define": {
@@ -202,7 +207,7 @@ export function freeVars(form: unknown, opts: FreeVarsOptions = {}): Set<string>
             // Explicit shape so catch/finally markers are not free names.
             // Catch var binds only its handlers.
             if (!isPair(n.cdr)) return;
-            walk(n.cdr.car, bound);
+            walk(n.cdr.car, bound, n.cdr);
             for (const clause of chainOf(n.cdr.cdr)) {
               if (!isPair(clause) || !isSymbol(clause.car)) continue;
               const marker = nameOf(clause.car);
@@ -219,24 +224,37 @@ export function freeVars(form: unknown, opts: FreeVarsOptions = {}): Set<string>
             }
             return;
           }
-          case "cond": {
-            for (const clause of chainOf(n.cdr)) {
-              if (!isPair(clause)) continue;
-              const test = clause.car;
-              if (!(isSymbol(test) && nameOf(test) === "else")) walk(test, bound);
-              for (const bodyForm of chainOf(clause.cdr)) {
-                if (isSymbol(bodyForm) && nameOf(bodyForm) === "=>") continue;
-                walk(bodyForm, bound);
-              }
+          case "guard": {
+            // (guard (var clause…) body…): body in the outer scope; var binds in the clauses only.
+            if (!isPair(n.cdr)) return;
+            const spec = n.cdr.car;
+            if (isPair(spec)) {
+              const varName = isSymbol(spec.car) ? nameOf(spec.car) : null;
+              const inner = varName === null ? bound : new Set([...bound, varName]);
+              walkCondClauses(spec.cdr, inner);
             }
+            walkBody(n.cdr.cdr, bound);
+            return;
+          }
+          case "cond": {
+            walkCondClauses(n.cdr, bound);
             return;
           }
           case "case": {
             const parts = chainOf(n.cdr);
-            if (parts.length > 0) walk(parts[0], bound);
+            if (parts.length > 0) walk(parts[0], bound, n.cdr);
             for (const clause of parts.slice(1)) {
-              if (!isPair(clause)) continue;
-              walkBody(clause.cdr, bound);
+              const els = clauseElements(clause);
+              if (els === undefined) continue;
+              els.forEach((bodyForm, i) => {
+                if (i === 0) return;
+                let cell: unknown;
+                if (isPair(clause)) {
+                  cell = clause;
+                  for (let k = 0; k < i && isPair(cell); k++) cell = (cell as DuckPair).cdr;
+                }
+                walk(bodyForm, bound, cell);
+              });
             }
             return;
           }
@@ -247,7 +265,7 @@ export function freeVars(form: unknown, opts: FreeVarsOptions = {}): Set<string>
           case "and":
           case "or":
           case "set!": {
-            for (const el of chainOf(n.cdr)) walk(el, bound);
+            walkCells(n.cdr, bound);
             return;
           }
           default:
@@ -255,7 +273,38 @@ export function freeVars(form: unknown, opts: FreeVarsOptions = {}): Set<string>
         }
       }
     }
-    for (const el of chainOf(n)) walk(el, bound);
+    walkCells(n, bound);
+  };
+
+  /** Walk a chain by CELL (bare-name occurrence cuts are keyed per cell); dotted tail too. */
+  const walkCells = (list: unknown, bound: ReadonlySet<string>): void => {
+    let cur: unknown = list;
+    while (isPair(cur)) {
+      walk(cur.car, bound, cur);
+      cur = cur.cdr;
+    }
+    if (kindOf(cur) !== "nil" && cur !== undefined && cur !== null) walk(cur, bound);
+  };
+
+  const walkCondClauses = (clauses: unknown, bound: ReadonlySet<string>): void => {
+    for (const clause of chainOf(clauses)) {
+      const parts = clauseElements(clause);
+      if (parts === undefined || parts.length === 0) continue;
+      // Paren clauses expose their cons cells (bare-name occurrence cuts are keyed per cell).
+      const cellOf = (i: number): unknown => {
+        if (!isPair(clause)) return undefined;
+        let cur: unknown = clause;
+        for (let k = 0; k < i && isPair(cur); k++) cur = (cur as DuckPair).cdr;
+        return cur;
+      };
+      const test = parts[0];
+      if (!(isSymbol(test) && nameOf(test) === "else")) walk(test, bound, cellOf(0));
+      parts.forEach((bodyForm, i) => {
+        if (i === 0) return;
+        if (isSymbol(bodyForm) && nameOf(bodyForm) === "=>") return;
+        walk(bodyForm, bound, cellOf(i));
+      });
+    }
   };
 
   /** Quasiquote: unquote at depth 1 re-enters expression space (R7RS nesting). */
@@ -281,6 +330,6 @@ export function freeVars(form: unknown, opts: FreeVarsOptions = {}): Set<string>
     for (const el of chainOf(n)) walkQuasi(el, depth, bound);
   };
 
-  walk(form, new Set<string>());
+  walk(form, new Set<string>(), opts.formCell);
   return out;
 }

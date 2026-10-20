@@ -121,9 +121,8 @@ export function isAggregatableKind(kind: ProvenanceRecord["kind"]): kind is Aggr
   return AGGREGATABLE_KINDS.has(kind as AggregatableRecordKind);
 }
 
-/** Thrown by `assertAggregatable` for a never-list kind. A "teaching door"
- *  (`.claude/skills/errors-as-doors`): names WHICH kinds are forbidden and WHY,
- *  not just that this call failed. */
+/** Thrown by `assertAggregatable` for a never-list kind. A "teaching door":
+ *  names WHICH kinds are forbidden and WHY, not just that this call failed. */
 export class NeverAggregatable extends Error {
   constructor(kind: string) {
     super(
@@ -388,6 +387,9 @@ export class AggregatingProvenanceStore implements ProvenanceStore {
     const keyStr = runKeyString(key);
     const m = this.openMap(regionId);
     const open = m.get(keyStr);
+    if (open !== undefined && ordinal >= open.start && ordinal < open.start + open.count) {
+      return; // idempotent re-emission (§7): this ordinal is already in the open run
+    }
     if (open !== undefined && open.start + open.count === ordinal) {
       open.count += 1; // O(1) — no store write for this instance
       return;
@@ -423,17 +425,40 @@ export class AggregatingProvenanceStore implements ProvenanceStore {
     for (const regionId of this.openByRegion.keys()) await this.flush(regionId);
   }
 
-  // Everything else is a pure pass-through — aggregation is exclusively an
-  // `append`-side concern; `readStream` keeps `ProvenanceStore`'s EXISTING
-  // contract byte-for-byte stable (fold-as-recovery over `readStream` is
-  // untouched by this). A caller that wants the compacted view reads
-  // `RunStore.readRuns` additionally, never instead.
+  // Everything else is a pure pass-through. `readStream` is the base stream PLUS the facts of every
+  // CLOSED run, unfolded (seq 0 — runs discard seq, see the module doc): fold-as-recovery
+  // (`foldRegionStream`, `nextTrackOrdinal`) reads track-open/close and fan/ingress facts from
+  // `readStream`, so a stream that omitted the aggregated kinds would recover `started: 0` and
+  // re-mint colliding ordinals. Runs still open (unflushed) are not durable and are not shown.
   async allocateSeq(regionId: RegionId) {
     return this.base.allocateSeq(regionId);
   }
 
-  async readStream(regionId: RegionId) {
-    return this.base.readStream(regionId);
+  async readStream(regionId: RegionId): Promise<readonly ProvenanceRecord[]> {
+    const raw = await this.base.readStream(regionId);
+    const runs = await this.runs.readRuns(regionId);
+    if (runs.length === 0) return raw;
+    // De-dup by (kind, templateHash, regionEpoch, ordinalPath): a retry that re-emits an
+    // ordinal already inside a CLOSED run opens an overlapping run-of-one (§7: exactly once
+    // per record id). Raw records win; the first unfolded fact for a key wins.
+    const seen = new Set<string>();
+    const keyOf = (kind: string, id: RecordId) =>
+      JSON.stringify([kind, id.templateHash, id.regionEpoch, ordinalPathKey(id.ordinalPath)]);
+    for (const r of raw) seen.add(keyOf(r.kind, r.id));
+    const unfolded: ProvenanceRecord[] = [];
+    for (const run of runs) {
+      for (const fact of unfoldRun(run)) {
+        const k = keyOf(fact.kind, fact.id);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        unfolded.push(
+          fact.kind === "track-close"
+            ? { kind: "track-close", id: fact.id, seq: 0, settled: true }
+            : { kind: fact.kind, id: fact.id, seq: 0 },
+        );
+      }
+    }
+    return [...raw, ...unfolded];
   }
 
   async getHeader(regionId: RegionId) {

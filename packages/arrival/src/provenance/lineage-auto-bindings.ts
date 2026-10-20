@@ -16,10 +16,9 @@
  * infer id (unreachable from the `reactions` value) — the aliasing dissolves because
  * each capture is scoped to one invocation's symbol resolutions.
  *
- * Generalizes the `argProvenance → buildInputsProvenance`
- * `slot→producer-id[]` map (rosetta.ts's `argProvenance` capture +
- * llm-plane-arrival-env/prompt.ts's `buildInputsProvenance`) — same shape, built for the
- * carrier's free leaf slots from `deepProvenance(symbol-value)` instead of `.prompt` kwargs.
+ * Generalizes the `argProvenance` `slot→producer-id[]` map (rosetta.ts's `argProvenance`
+ * capture) — same shape, built for the carrier's free leaf slots from
+ * `deepProvenance(symbol-value)` instead of `.prompt` kwargs.
  *
  * HOOK. An `AutoBindings` instance attaches to an `EvalTrace` explicitly
  * (flag-gated); when present, `exit` records the invocation's symbol resolutions
@@ -29,17 +28,17 @@ import { deepProvenance } from "./deep-provenance.js";
 import type { Bindings, LineageNode } from "./lineage.js";
 
 /** The free LEAF/SOURCE slots a classified skeleton references — the slots an auto-binding
- *  must resolve. Duplicates lineage-shadow.ts's `collectSlots` (kept here so this module
- *  stays self-contained). Descends a `field`'s focused child
+ *  must resolve. Descends a `field`'s focused child
  *  only — siblings were pruned at classify.
  *
- *  DIVERGES from `collectSlots`: the `fan` arm here ALSO descends `n.template` (the
+ *  The `fan` arm ALSO descends `n.template` (the
  *  per-element body's free slots), so this collects strictly MORE slots — any free var
  *  captured inside a `(map (lambda (e) … outer …) xs)` body. Intentional (those slots need
- *  per-value resolution too); when folded into `walk` in M1, keep this superset. */
+ *  per-value resolution too); keep this superset. */
 export function slotsOf(n: LineageNode, out: Set<string> = new Set()): Set<string> {
   switch (n.kind) {
     case "literal":
+    case "closure": // definition site binds nothing at runtime (cone ∅); body slots are formals/captures, not auto-binding targets
       return out;
     case "leaf":
       out.add(n.slot);
@@ -86,7 +85,7 @@ export class AutoBindings {
    *  value carried, at THIS invocation).
    *
    *  RETENTION CAVEAT (flag-ON only): holds O(invocations-that-resolved-a-provenanced-
-   *  symbol) entries for the whole run — does NOT participate in
+   *  symbol) entries for the whole run (until `EvalTrace.clear()`) — does NOT participate in
    *  `EvalTrace.#pruneChildProvenance`'s mid-run shedding. Fine for today's bounded
    *  programs; before a real LOOPING run, either pruning should also drop the
    *  `byInvocation` entry for a pruned invocation, or capture should scope to the
@@ -136,12 +135,11 @@ export class AutoBindings {
   }
 
   /**
-   * Assemble a `Bindings` for a classified skeleton's free LEAF/SOURCE slots — the auto
-   * analogue of `bindingsForSkeleton` (lineage-shadow.ts), but each slot resolves to
-   * the producer ids the RUNTIME VALUE carried (per-value), not `provOf(env.get(slot))`
+   * Assemble a `Bindings` for a classified skeleton's free LEAF/SOURCE slots — each slot
+   * resolves to the producer ids the RUNTIME VALUE carried (per-value), not `provOf(env.get(slot))`
    * (which reads the top-level env where a lambda-param leaf like `reactions` isn't even
    * bound). `slots` is the set the skeleton references (the consumer reads it off
-   * `classify`'s tree via `collectSlots`).
+   * `classify`'s tree via {@link slotsOf}).
    */
   bindingsFor(slots: Iterable<string>): Bindings {
     const b: Record<string, readonly number[]> = {};

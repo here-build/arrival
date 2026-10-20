@@ -5,7 +5,7 @@
  * `emitHostSchedule` directly, this file drives them through REAL region discipline —
  * `openRegionScope`/`withRegionCall`/`closeRegionScope`, exactly the machinery
  * `membrane/region.law.test.ts` already exercises for the escape/incomplete doors —
- * with a `TrackCoordinate`/`TrackEmissionSink` installed around the run. Mirrors
+ * with a `RunEmission` carried by the scope's `RunContext`. Mirrors
  * `emission-hooks.test.ts`'s split from `store/__tests__/emit.test.ts` for Q11a.
  *
  * The three things this file exists to prove that the direct unit suite cannot:
@@ -19,7 +19,7 @@
  *      the "flush happens even though the incomplete door still throws" ordering
  *      decision `closeRegionScope`'s own doc calls out.
  */
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { toJS } from "../../membrane/rosetta.js";
 import { ANativeProcedure } from "../../values/primitives/ANativeProcedure.js";
@@ -28,20 +28,22 @@ import {
   openRegionScope,
   recordHostScheduleVerdict,
   withRegionScope,
-  withTrackCoordinate,
   type TrackCoordinate,
-  type TrackEmissionSink,
 } from "../../membrane/region-scope.js";
-import { CONSTANT_CTX } from "../../run/RunContext.js";
-import { ProvenanceStoreFake } from "../../provenance/store/fakes.js";
-import { setEmissionEnabled } from "../../provenance/store/emit.js";
+import { RunContext } from "../../run/RunContext.js";
+import { PayloadStoreFake, ProvenanceStoreFake } from "../../provenance/store/fakes.js";
 
 const COORD: TrackCoordinate = { templateHash: "th-track", ordinalPath: [0], regionEpoch: "e0" };
 const REGION = "region-events";
 
-afterEach(() => {
-  setEmissionEnabled(false);
-});
+/** A live run whose emission lands in `store` (or no emission at all when omitted). */
+function liveRun(store?: ProvenanceStoreFake): RunContext {
+  return new RunContext(
+    store === undefined
+      ? {}
+      : { emission: { store, payloads: new PayloadStoreFake(), regionId: REGION, coordinate: COORD } },
+  );
+}
 
 /** A trivial one-arg echo callable — same shape `membrane/region.law.test.ts` uses;
  *  enough surface for open/close counting, indifferent to what it computes. */
@@ -68,12 +70,11 @@ function makeThrowingProc(): ANativeProcedure {
 }
 
 describe("track-open/track-close: real B3 counters through withRegionCall", () => {
-  it("flag ON + coordinate/sink installed: one call yields exactly one track-open and one track-close", async () => {
-    setEmissionEnabled(true);
+  it("run with `emission`: one call yields exactly one track-open and one track-close", async () => {
     const store = new ProvenanceStoreFake();
-    const sink: TrackEmissionSink = { store, regionId: REGION };
+    const runCtx = liveRun(store);
 
-    const scope = withTrackCoordinate(COORD, sink, () => openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined }));
+    const scope = openRegionScope({ runCtx, dynSite: undefined });
     const wrapper = withRegionScope(scope, () => toJS(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
 
     expect(await wrapper(41)).toBe(41); // sanity: the real call still works
@@ -95,11 +96,10 @@ describe("track-open/track-close: real B3 counters through withRegionCall", () =
   });
 
   it("TWO calls through the SAME scope claim four DISTINCT track ordinals (2 opens + 2 closes, never colliding)", async () => {
-    setEmissionEnabled(true);
     const store = new ProvenanceStoreFake();
-    const sink: TrackEmissionSink = { store, regionId: REGION };
+    const runCtx = liveRun(store);
 
-    const scope = withTrackCoordinate(COORD, sink, () => openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined }));
+    const scope = openRegionScope({ runCtx, dynSite: undefined });
     const wrapper = withRegionScope(scope, () => toJS(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
 
     await wrapper(1);
@@ -119,11 +119,10 @@ describe("track-open/track-close: real B3 counters through withRegionCall", () =
   });
 
   it("a REJECTING call still emits track-close settled:true — finally fires on the reject path too", async () => {
-    setEmissionEnabled(true);
     const store = new ProvenanceStoreFake();
-    const sink: TrackEmissionSink = { store, regionId: REGION };
+    const runCtx = liveRun(store);
 
-    const scope = withTrackCoordinate(COORD, sink, () => openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined }));
+    const scope = openRegionScope({ runCtx, dynSite: undefined });
     const wrapper = withRegionScope(scope, () => toJS(makeThrowingProc()) as (...a: unknown[]) => Promise<unknown>);
 
     await expect(wrapper()).rejects.toThrow(/deliberate failure/);
@@ -139,12 +138,11 @@ describe("track-open/track-close: real B3 counters through withRegionCall", () =
     expect(closes[0].kind === "track-close" && closes[0].settled).toBe(true);
   });
 
-  it("flag OFF: the SAME calls produce the SAME results, and NOTHING lands in the store — byte-identical, sunset", async () => {
-    setEmissionEnabled(false);
+  it("no `emission`: the SAME calls produce the SAME results, and NOTHING lands in the store — byte-identical, sunset", async () => {
     const store = new ProvenanceStoreFake();
-    const sink: TrackEmissionSink = { store, regionId: REGION };
+    const runCtx = liveRun(); // no emission on the run — facility off
 
-    const scope = withTrackCoordinate(COORD, sink, () => openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined }));
+    const scope = openRegionScope({ runCtx, dynSite: undefined });
     const wrapper = withRegionScope(scope, () => toJS(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
 
     expect(await wrapper(41)).toBe(41);
@@ -156,12 +154,9 @@ describe("track-open/track-close: real B3 counters through withRegionCall", () =
     expect(await store.readStream(REGION)).toHaveLength(0);
   });
 
-  it("flag ON but NO coordinate/sink installed (today's actual production shape — nothing wires this yet): no-ops, same result", async () => {
-    setEmissionEnabled(true);
-    // No withTrackCoordinate wrapper — exactly what every real call site looks like
-    // today (rosetta.ts's `openRegionScope` call is unchanged; nothing installs a
-    // TrackCoordinate ambiently yet).
-    const scope = openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined });
+  it("NO emission on the run (the default shape): no-ops, same result", async () => {
+    // No emission on the run — exactly what every ordinary call site looks like.
+    const scope = openRegionScope({ runCtx: liveRun(), dynSite: undefined });
     const wrapper = withRegionScope(scope, () => toJS(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
     expect(await wrapper(41)).toBe(41);
     expect(() => closeRegionScope(scope)).not.toThrow();
@@ -172,10 +167,9 @@ describe("track-open/track-close: real B3 counters through withRegionCall", () =
 
 describe("host-schedule: accumulate-then-flush-at-close (§5 D5)", () => {
   it("closeRegionScope flushes ALL accumulated triples as ONE HostScheduleRecord", async () => {
-    setEmissionEnabled(true);
     const store = new ProvenanceStoreFake();
-    const sink: TrackEmissionSink = { store, regionId: REGION };
-    const scope = withTrackCoordinate(COORD, sink, () => openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined }));
+    const runCtx = liveRun(store);
+    const scope = openRegionScope({ runCtx, dynSite: undefined });
 
     recordHostScheduleVerdict(scope, [0], [1], -1);
     recordHostScheduleVerdict(scope, [1], [2], 1);
@@ -196,10 +190,9 @@ describe("host-schedule: accumulate-then-flush-at-close (§5 D5)", () => {
   });
 
   it("zero verdicts recorded: close flushes nothing — no empty HostScheduleRecord", async () => {
-    setEmissionEnabled(true);
     const store = new ProvenanceStoreFake();
-    const sink: TrackEmissionSink = { store, regionId: REGION };
-    const scope = withTrackCoordinate(COORD, sink, () => openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined }));
+    const runCtx = liveRun(store);
+    const scope = openRegionScope({ runCtx, dynSite: undefined });
 
     closeRegionScope(scope);
     await Promise.resolve();
@@ -209,10 +202,9 @@ describe("host-schedule: accumulate-then-flush-at-close (§5 D5)", () => {
   });
 
   it("the schedule flushes even when close ALSO throws the incomplete door (independent concerns)", async () => {
-    setEmissionEnabled(true);
     const store = new ProvenanceStoreFake();
-    const sink: TrackEmissionSink = { store, regionId: REGION };
-    const scope = withTrackCoordinate(COORD, sink, () => openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined }));
+    const runCtx = liveRun(store);
+    const scope = openRegionScope({ runCtx, dynSite: undefined });
     const wrapper = withRegionScope(scope, () => toJS(makeEcho()) as (...a: unknown[]) => Promise<unknown>);
 
     recordHostScheduleVerdict(scope, [0], [1], 1);
@@ -227,11 +219,10 @@ describe("host-schedule: accumulate-then-flush-at-close (§5 D5)", () => {
     await call; // let the in-flight call settle — nothing lingers as an unhandled rejection
   });
 
-  it("flag OFF: recordHostScheduleVerdict never accumulates, close never emits", async () => {
-    setEmissionEnabled(false);
+  it("no `emission`: recordHostScheduleVerdict never accumulates, close never emits", async () => {
     const store = new ProvenanceStoreFake();
-    const sink: TrackEmissionSink = { store, regionId: REGION };
-    const scope = withTrackCoordinate(COORD, sink, () => openRegionScope({ runCtx: CONSTANT_CTX, dynSite: undefined }));
+    const runCtx = liveRun(); // no emission on the run — facility off
+    const scope = openRegionScope({ runCtx, dynSite: undefined });
 
     recordHostScheduleVerdict(scope, [0], [1], -1);
     expect(scope.hostSchedule).toHaveLength(0); // never accumulated while off

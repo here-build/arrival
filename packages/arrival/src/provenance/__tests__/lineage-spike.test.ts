@@ -8,7 +8,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { parse } from "../../eval/generator-exec.js";
-import { inferenceEnv } from "../../env/inference-env.js";
+import { reachesPort } from "../prelude.js";
 import { classify, fullCone, countCone, type Classifier, type LineageNode } from "../../provenance/lineage.js";
 
 const C: Classifier = {
@@ -224,8 +224,37 @@ describe("lineage spike — begin / and / or / lambda", () => {
 
   it("a `lambda` literal contributes NO provenance at its definition site", async () => {
     const n = await skeleton(`(lambda (x) (* x x))`);
-    expect(n).toEqual({ kind: "literal" });
+    expect(n).toEqual({
+      kind: "closure",
+      params: ["x"],
+      body: {
+        kind: "merge",
+        op: "*",
+        children: [
+          { kind: "leaf", slot: "x" },
+          { kind: "leaf", slot: "x" },
+        ],
+      },
+    });
     expect(fullCone(n, {})).toEqual([]);
+  });
+
+  it("a closure body reaches a port (reachesPort); the definition site's cone stays empty", async () => {
+    const n = await skeleton(`(lambda (x) (infer x))`);
+    expect(n.kind).toBe("closure");
+    expect(reachesPort(n)).toBe(true);
+    expect(fullCone(n, { infer: [9], x: [1] })).toEqual([]);
+    expect(reachesPort(await skeleton(`(lambda (x) (+ x 1))`))).toBe(false);
+  });
+
+  it("selector coupling flows through a let-bound port-reaching closure", async () => {
+    const [ast] = await parse(`(let ((h (lambda (x) (infer x)))) (if (h 1) 1 2))`);
+    const n = classify(ast, C);
+    // the let body is an `if` whose selector `(h 1)` is a call of the closure: the closure node
+    // itself is prov-bearing, so the subst-visible binding keeps the lambda body reachable.
+    const [lam] = await parse(`(lambda (x) (infer x))`);
+    expect(reachesPort(classify(lam, C))).toBe(true);
+    expect(n.kind).not.toBe("closure");
   });
 });
 

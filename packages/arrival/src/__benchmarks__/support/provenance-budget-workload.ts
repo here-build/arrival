@@ -63,8 +63,9 @@
 // header); the fakes/aggregation/tiering runtime values live at their own leaf modules, same
 // import shape as the sibling `provenance-emit.bench.test.ts` / gate-suite `q16-harness.ts`.
 import { AggregatingProvenanceStore } from "../../provenance/store/aggregate.js";
-import { emitMuxDecision, setEmissionEnabled } from "../../provenance/store/emit.js";
+import { emitMuxDecision } from "../../provenance/store/emit.js";
 import { PayloadStoreFake, ProvenanceStoreFake, RunStoreFake } from "../../provenance/store/fakes.js";
+import { contentHash } from "../../provenance/store/hash.js";
 import type { PayloadHash, RegionId } from "../../provenance/store/ids.js";
 import type { ProvenanceRecord } from "../../provenance/store/records.js";
 import { PayloadTierMachine, type PayloadEvidenceEnvelope } from "../../provenance/store/tiering.js";
@@ -78,7 +79,7 @@ export const WORKLOAD_SHAPE = {
   rosettaCalls: 30,
   rosettaPayloadBytes: 500,
   /** A.2 intro: "5 fans over 100/500/1k/5k/10k elements (Σ≈16.6k)." */
-  fanSizes: [100, 500, 1000, 5000, 10000] as const,
+  fanSizes: [100, 500, 1000, 5000, 10_000] as const,
   /** A.1's "Loop records (no RLE)... fixed by aggregation" — the 2 PURE loops of
    *  the "3 loops to 10⁴" row. */
   pureLoopCount: 2,
@@ -101,7 +102,7 @@ export const DEFAULT_RING_CAP_BYTES = 6 * 1024 * 1024; // "~4-8MB, configurable"
 // Byte estimation — same idiom as `store/fakes.ts`'s own `estimateSizeBytes` (a
 // fault-injection/accounting convenience, never correctness-load-bearing), kept as
 // a separate small copy for the same "this leaf has no reason to import a private
-// helper" reason `store/emit.ts`'s `hashPayload` states for its own FNV copy.
+// helper" reason `store/emit.ts`'s `hashPayload` is private.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function estimateBytes(value: unknown): number {
@@ -112,18 +113,11 @@ export function estimateBytes(value: unknown): number {
   }
 }
 
-/** A payload's content-hash — a small hand-rolled FNV-1a, the SAME idiom
- *  `store/emit.ts`'s private `hashPayload` uses (this harness cannot import that
- *  private function, and has no reason to depend on the module for four lines of
- *  math — see this repo's own established idiom for exactly this situation). */
+/** A payload's content-hash — the shared SHA-256/128 identity (`store/hash.ts`), under the bench's
+ *  own domain so bench payloads never alias production ones. */
 function hashOf(templateHash: string, ordinal: number, value: unknown): PayloadHash {
   const tagged = `${templateHash}#${ordinal}:${estimateBytes(value)}`;
-  let h = 0x81_1c_9d_c5;
-  for (let i = 0; i < tagged.length; i++) {
-    h ^= tagged.codePointAt(i) ?? 0;
-    h = Math.imul(h, 0x01_00_01_93);
-  }
-  return `bench-payload-v0:${(h >>> 0).toString(16).padStart(8, "0")}`;
+  return `bench-payload-v1:${contentHash("bench-payload-v1", tagged)}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -274,102 +268,96 @@ export interface WorkloadReport {
  *  every field traceable to an Appendix A row (module doc). Mints route through
  *  the ring/tier pipeline; the four aggregatable kinds route through
  *  `AggregatingProvenanceStore`; mux decisions (never-list) route through the real
- *  `emitMuxDecision` (the flag-gated emission core — this function flips the flag
- *  ON for its own extent, restoring it in `finally`). */
+ *  `emitMuxDecision` (the emission core — no enable flag exists, P19). */
 export async function runReferenceWorkload(h: WorkloadHarness): Promise<WorkloadReport> {
-  setEmissionEnabled(true);
-  try {
-    // ── 30 rosetta calls: trackOpen → mint(≈500B) → trackClose ──────────────
-    const rosettaHashes: PayloadHash[] = [];
-    for (let i = 0; i < WORKLOAD_SHAPE.rosettaCalls; i++) {
-      const templateHash = `rosetta-${i}`;
-      await emitAggregatableRun(h, "track-open", templateHash, [], 1);
-      const hash = await mintThroughRing(h, templateHash, 0, "x".repeat(WORKLOAD_SHAPE.rosettaPayloadBytes), [i]);
-      rosettaHashes.push(hash);
-      await emitAggregatableRun(h, "track-close", templateHash, [], 1);
-    }
-    // Flush here — each rosetta call's trackOpen/trackClose is its own natural
-    // "port" (§4: "flush AT PORTS... durability boundaries coincide with
-    // meaning boundaries"), so this category's runs close before the fan
-    // category opens its own (never mixed into one combined delta below).
-    await h.aggregating.flush(h.regionId);
-    const runsAfterRosetta = (await h.runs.readRuns(h.regionId)).length;
-
-    // ── 5 fans over 100/500/1k/5k/10k, Σ≈16.6k, RLE-aggregated ──────────────
-    let fanRawFacts = 0;
-    for (const [fanIndex, size] of WORKLOAD_SHAPE.fanSizes.entries()) {
-      const templateHash = `fan-${fanIndex}`;
-      await emitAggregatableRun(h, "fan-instantiation", templateHash, [], size);
-      await emitAggregatableRun(h, "ingress-binding", templateHash, [], size);
-      fanRawFacts += size * 2;
-    }
-    await h.aggregating.flush(h.regionId);
-    const runsAfterFans = (await h.runs.readRuns(h.regionId)).length;
-    const fanRuns = runsAfterFans - runsAfterRosetta;
-
-    // ── 2 pure loops to 10⁴: stable-wiring ingress-binding, aggregated ──────
-    for (let loopIndex = 0; loopIndex < WORKLOAD_SHAPE.pureLoopCount; loopIndex++) {
-      const templateHash = `pure-loop-${loopIndex}`;
-      await emitAggregatableRun(h, "ingress-binding", templateHash, [], WORKLOAD_SHAPE.pureLoopIterations);
-    }
-    await h.aggregating.flush(h.regionId);
-    const runsAfterPureLoops = (await h.runs.readRuns(h.regionId)).length;
-    const pureLoopRuns = runsAfterPureLoops - runsAfterFans;
-    const pureLoopRawFacts = WORKLOAD_SHAPE.pureLoopCount * WORKLOAD_SHAPE.pureLoopIterations;
-
-    // ── 1 agent loop to 10⁴: mint (≈2KB) per iteration — IRREDUCIBLE ────────
-    const agentLoopHashes: PayloadHash[] = [];
-    const agentTemplateHash = "agent-loop";
-    for (let i = 0; i < WORKLOAD_SHAPE.agentLoopIterations; i++) {
-      const hash = await mintThroughRing(h, agentTemplateHash, i, "y".repeat(WORKLOAD_SHAPE.agentLoopPayloadBytes), [
-        1000 + i,
-      ]);
-      // Sample sparsely (every 500th) — enough for tier-honesty spot checks
-      // without retaining a 10⁴-entry hash array of our own.
-      if (i % 500 === 0) agentLoopHashes.push(hash);
-    }
-
-    // ── one nested map (10k×10): path-scoped, runs never span parents ──────
-    const nestedTemplateHash = "nested-map-inner";
-    for (let outer = 0; outer < WORKLOAD_SHAPE.nestedOuter; outer++) {
-      await emitAggregatableRun(h, "ingress-binding", nestedTemplateHash, [outer], WORKLOAD_SHAPE.nestedInner);
-    }
-    await h.aggregating.flush(h.regionId);
-    const runsAfterNested = (await h.runs.readRuns(h.regionId)).length;
-    const nestedRuns = runsAfterNested - runsAfterPureLoops;
-    const nestedInnerRawFacts = WORKLOAD_SHAPE.nestedOuter * WORKLOAD_SHAPE.nestedInner;
-
-    // ── port-coupled mux decisions — A.2's pure-mux-collapse fix (bounded) ──
-    for (let i = 0; i < WORKLOAD_SHAPE.portCoupledMuxDecisions; i++) {
-      await emitMuxDecision({
-        store: h.aggregating,
-        regionId: h.regionId,
-        id: { templateHash: "port-coupled-mux", ordinalPath: [i], regionEpoch: "e0" },
-        arm: i % 2,
-      });
-    }
-
-    return {
-      regionId: h.regionId,
-      counts: {
-        rosettaCalls: WORKLOAD_SHAPE.rosettaCalls,
-        fanRawFacts,
-        fanRuns,
-        pureLoopRawFacts,
-        pureLoopRuns,
-        agentLoopMints: WORKLOAD_SHAPE.agentLoopIterations,
-        nestedOuterIterations: WORKLOAD_SHAPE.nestedOuter,
-        nestedInnerRawFacts,
-        nestedRuns,
-        muxDecisions: WORKLOAD_SHAPE.portCoupledMuxDecisions,
-      },
-      sampleMintHashes: { rosetta: rosettaHashes, agentLoop: agentLoopHashes },
-      ringBytesResidentFinal: h.ringBytesResident,
-      flushedBytesTotal: h.flushedBytesTotal,
-    };
-  } finally {
-    setEmissionEnabled(false);
+  // ── 30 rosetta calls: trackOpen → mint(≈500B) → trackClose ──────────────
+  const rosettaHashes: PayloadHash[] = [];
+  for (let i = 0; i < WORKLOAD_SHAPE.rosettaCalls; i++) {
+    const templateHash = `rosetta-${i}`;
+    await emitAggregatableRun(h, "track-open", templateHash, [], 1);
+    const hash = await mintThroughRing(h, templateHash, 0, "x".repeat(WORKLOAD_SHAPE.rosettaPayloadBytes), [i]);
+    rosettaHashes.push(hash);
+    await emitAggregatableRun(h, "track-close", templateHash, [], 1);
   }
+  // Flush here — each rosetta call's trackOpen/trackClose is its own natural
+  // "port" (§4: "flush AT PORTS... durability boundaries coincide with
+  // meaning boundaries"), so this category's runs close before the fan
+  // category opens its own (never mixed into one combined delta below).
+  await h.aggregating.flush(h.regionId);
+  const runsAfterRosetta = (await h.runs.readRuns(h.regionId)).length;
+
+  // ── 5 fans over 100/500/1k/5k/10k, Σ≈16.6k, RLE-aggregated ──────────────
+  let fanRawFacts = 0;
+  for (const [fanIndex, size] of WORKLOAD_SHAPE.fanSizes.entries()) {
+    const templateHash = `fan-${fanIndex}`;
+    await emitAggregatableRun(h, "fan-instantiation", templateHash, [], size);
+    await emitAggregatableRun(h, "ingress-binding", templateHash, [], size);
+    fanRawFacts += size * 2;
+  }
+  await h.aggregating.flush(h.regionId);
+  const runsAfterFans = (await h.runs.readRuns(h.regionId)).length;
+  const fanRuns = runsAfterFans - runsAfterRosetta;
+
+  // ── 2 pure loops to 10⁴: stable-wiring ingress-binding, aggregated ──────
+  for (let loopIndex = 0; loopIndex < WORKLOAD_SHAPE.pureLoopCount; loopIndex++) {
+    const templateHash = `pure-loop-${loopIndex}`;
+    await emitAggregatableRun(h, "ingress-binding", templateHash, [], WORKLOAD_SHAPE.pureLoopIterations);
+  }
+  await h.aggregating.flush(h.regionId);
+  const runsAfterPureLoops = (await h.runs.readRuns(h.regionId)).length;
+  const pureLoopRuns = runsAfterPureLoops - runsAfterFans;
+  const pureLoopRawFacts = WORKLOAD_SHAPE.pureLoopCount * WORKLOAD_SHAPE.pureLoopIterations;
+
+  // ── 1 agent loop to 10⁴: mint (≈2KB) per iteration — IRREDUCIBLE ────────
+  const agentLoopHashes: PayloadHash[] = [];
+  const agentTemplateHash = "agent-loop";
+  for (let i = 0; i < WORKLOAD_SHAPE.agentLoopIterations; i++) {
+    const hash = await mintThroughRing(h, agentTemplateHash, i, "y".repeat(WORKLOAD_SHAPE.agentLoopPayloadBytes), [
+      1000 + i,
+    ]);
+    // Sample sparsely (every 500th) — enough for tier-honesty spot checks
+    // without retaining a 10⁴-entry hash array of our own.
+    if (i % 500 === 0) agentLoopHashes.push(hash);
+  }
+
+  // ── one nested map (10k×10): path-scoped, runs never span parents ──────
+  const nestedTemplateHash = "nested-map-inner";
+  for (let outer = 0; outer < WORKLOAD_SHAPE.nestedOuter; outer++) {
+    await emitAggregatableRun(h, "ingress-binding", nestedTemplateHash, [outer], WORKLOAD_SHAPE.nestedInner);
+  }
+  await h.aggregating.flush(h.regionId);
+  const runsAfterNested = (await h.runs.readRuns(h.regionId)).length;
+  const nestedRuns = runsAfterNested - runsAfterPureLoops;
+  const nestedInnerRawFacts = WORKLOAD_SHAPE.nestedOuter * WORKLOAD_SHAPE.nestedInner;
+
+  // ── port-coupled mux decisions — A.2's pure-mux-collapse fix (bounded) ──
+  for (let i = 0; i < WORKLOAD_SHAPE.portCoupledMuxDecisions; i++) {
+    await emitMuxDecision({
+      store: h.aggregating,
+      regionId: h.regionId,
+      id: { templateHash: "port-coupled-mux", ordinalPath: [i], regionEpoch: "e0" },
+      arm: i % 2,
+    });
+  }
+
+  return {
+    regionId: h.regionId,
+    counts: {
+      rosettaCalls: WORKLOAD_SHAPE.rosettaCalls,
+      fanRawFacts,
+      fanRuns,
+      pureLoopRawFacts,
+      pureLoopRuns,
+      agentLoopMints: WORKLOAD_SHAPE.agentLoopIterations,
+      nestedOuterIterations: WORKLOAD_SHAPE.nestedOuter,
+      nestedInnerRawFacts,
+      nestedRuns,
+      muxDecisions: WORKLOAD_SHAPE.portCoupledMuxDecisions,
+    },
+    sampleMintHashes: { rosetta: rosettaHashes, agentLoop: agentLoopHashes },
+    ringBytesResidentFinal: h.ringBytesResident,
+    flushedBytesTotal: h.flushedBytesTotal,
+  };
 }
 
 /** The "store's own accounting" of in-memory record/run METADATA volume — real

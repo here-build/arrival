@@ -5,7 +5,7 @@
  * emission core directly, this file drives it through a REAL interpreted program —
  * a rosetta-registered source, run under a tap (`EvalTrace`, exactly the
  * mechanism `membrane/region.law.test.ts` and `w1-harness.ts` already use), with a
- * `RecordCoordinate`/`EmissionSink` installed around the run.
+ * `RunEmission` (store ports + region + coordinate) carried by the run's `RunContext`.
  *
  * The two things this file exists to prove that the direct unit suite cannot:
  *   1. the hook actually reads `ctx.currentInvocation.isProvenancePoint` correctly
@@ -13,27 +13,24 @@
  *      hand-built `RecordId`/payload;
  *   2. "sunset byte-identical when off" is true of the REAL program result, not just
  *      "the emit* functions no-op in isolation" — the SAME program, same env, same
- *      inputs, produces an identical `toJS` result whether the flag is on or
- *      off (the sidecar is provably inert on the primary execution path).
+ *      inputs, produces an identical `toJS` result whether the run carries `emission` or
+ *      not (the sidecar is provably inert on the primary execution path).
  */
-import { afterEach, describe, expect, it } from "vitest";
+import type { CallCtx } from "../../run/CallCtx.js";
+import { describe, expect, it } from "vitest";
 import { type ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { EvalTrace } from "../../provenance/trace.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { toJS } from "../../membrane/rosetta.js";
-import { withRecordCoordinateAsync, type EmissionSink, type RecordCoordinate } from "../../eval/provenance-hooks.js";
+import type { RecordCoordinate } from "../../eval/provenance-hooks.js";
+import type { RunEmission } from "../../run/RunContext.js";
 import { PayloadStoreFake, ProvenanceStoreFake } from "../../provenance/store/fakes.js";
-import { setEmissionEnabled } from "../../provenance/store/emit.js";
 import { EnvCapability } from "../../common/capability.js";
 import { applyCapability } from "../../__tests__/_fresh-env.js";
 
 const COORD: RecordCoordinate = { templateHash: "th-source", ordinalPath: [0], regionEpoch: "e0" };
 const REGION = "region-emission-hooks";
-
-afterEach(() => {
-  setEmissionEnabled(false);
-});
 
 /** One rosetta source, mirroring `w1-harness.ts`'s `SourceRegistry.register("num")`
  *  shape (a fresh env, a plain synchronous numeric return — baked `symbol.rosetta`
@@ -46,7 +43,9 @@ async function registerSource(env: ResolvingAmbient): Promise<void> {
       symbols: (symbol, z) => ({
         "fetch-item": symbol.rosetta`fetch-item: a zero-arg numeric source`(
           { input: [], output: [z.number] },
-          () => 42,
+          function (this: CallCtx) {
+            return 42;
+          },
         ),
       }),
     }),
@@ -54,16 +53,15 @@ async function registerSource(env: ResolvingAmbient): Promise<void> {
 }
 
 describe("the real port site: a rosetta crossing through evaluator.ts's generic apply", () => {
-  it("flag ON + coordinate/sink installed: exactly one MintRecord lands, payload = the rosetta's return value", async () => {
-    setEmissionEnabled(true);
+  it("run with `emission`: exactly one MintRecord lands, payload = the rosetta's return value", async () => {
     const store = new ProvenanceStoreFake();
     const payloads = new PayloadStoreFake();
-    const sink: EmissionSink = { store, payloads, regionId: REGION };
+    const emission: RunEmission = { store, payloads, regionId: REGION, coordinate: COORD };
     const trace = new EvalTrace();
     const env = inferenceEnv.child("emission-hooks-on");
     await registerSource(env);
 
-    const result = await withRecordCoordinateAsync(COORD, sink, () => execState("(fetch-item)", { env, tap: trace }));
+    const result = await execState("(fetch-item)", { env, tap: trace, emission });
     expect(toJS(result.values[0])).toBe(42);
 
     // Emission is DETACHED (fire-and-forget off the settled Promise) — give its
@@ -78,16 +76,15 @@ describe("the real port site: a rosetta crossing through evaluator.ts's generic 
     expect(payload.value).toBe(42);
   });
 
-  it("flag OFF: the same program produces the SAME result, and NOTHING lands in the store — byte-identical, sunset", async () => {
-    setEmissionEnabled(false);
+  it("`silent` run: the same program produces the SAME result, and NOTHING lands in the store — byte-identical", async () => {
     const store = new ProvenanceStoreFake();
     const payloads = new PayloadStoreFake();
-    const sink: EmissionSink = { store, payloads, regionId: REGION };
+    const emission: RunEmission = { store, payloads, regionId: REGION, coordinate: COORD };
     const trace = new EvalTrace();
     const env = inferenceEnv.child("emission-hooks-off");
     await registerSource(env);
 
-    const result = await withRecordCoordinateAsync(COORD, sink, () => execState("(fetch-item)", { env, tap: trace }));
+    const result = await execState("(fetch-item)", { env, tap: trace, emission, silent: true });
     expect(toJS(result.values[0])).toBe(42);
 
     await Promise.resolve();
@@ -96,37 +93,51 @@ describe("the real port site: a rosetta crossing through evaluator.ts's generic 
     expect(await store.readStream(REGION)).toHaveLength(0);
   });
 
-  it("flag ON but NO coordinate/sink installed (today's actual production shape — nothing wires this yet): no-ops, same result", async () => {
-    setEmissionEnabled(true);
+  it("NO emission on the run (today's default production shape): no-ops, same result", async () => {
     const trace = new EvalTrace();
     const env = inferenceEnv.child("emission-hooks-no-coordinate");
     await registerSource(env);
 
-    // No withRecordCoordinate wrapper — exactly what every real call site looks like
-    // today, since the wireframe-walking driver (Q15/Q16) that would install one
-    // doesn't exist yet.
+    // No `emission` option — facility off, exactly what an ordinary call looks like.
     const result = await execState("(fetch-item)", { env, tap: trace });
     expect(toJS(result.values[0])).toBe(42);
     // No assertion is possible against "the store" here — there IS no sink; the point
     // of this row is that the run completes identically without one, i.e. the hook's
-    // `coordinate === undefined || sink === undefined` early return is exercised on a
+    // `emission === undefined` early return is exercised on a
     // REAL call, not just reasoned about.
   });
 
-  it("a non-rosetta call (a plain native procedure) never mints, even with a coordinate/sink installed", async () => {
-    setEmissionEnabled(true);
+  it("a non-rosetta call (a plain native procedure) never mints, even with an emission target", async () => {
     const store = new ProvenanceStoreFake();
     const payloads = new PayloadStoreFake();
-    const sink: EmissionSink = { store, payloads, regionId: REGION };
+    const emission: RunEmission = { store, payloads, regionId: REGION, coordinate: COORD };
     const trace = new EvalTrace();
     const env = inferenceEnv.child("emission-hooks-non-rosetta");
 
-    const result = await withRecordCoordinateAsync(COORD, sink, () => execState("(+ 1 2)", { env, tap: trace }));
+    const result = await execState("(+ 1 2)", { env, tap: trace, emission });
     expect(toJS(result.values[0])).toBe(3);
 
     await Promise.resolve();
     await Promise.resolve();
 
     expect(await store.readStream(REGION)).toHaveLength(0);
+  });
+
+  it("three port mints of one run store THREE distinct records (RecordId carries the per-crossing ordinal)", async () => {
+    const store = new ProvenanceStoreFake();
+    const payloads = new PayloadStoreFake();
+    const emission: RunEmission = { store, payloads, regionId: REGION, coordinate: COORD };
+    const trace = new EvalTrace();
+    const env = inferenceEnv.child("emission-hooks-three");
+    await registerSource(env);
+
+    await execState("(list (fetch-item) (fetch-item) (fetch-item))", { env, tap: trace, emission });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const mints = (await store.readStream(REGION)).filter((r) => r.kind === "mint");
+    expect(mints).toHaveLength(3);
+    expect(new Set(mints.map((m) => m.id.ordinalPath.join("."))).size).toBe(3);
+    for (const m of mints) expect(m.id.ordinalPath.slice(0, COORD.ordinalPath.length)).toEqual(COORD.ordinalPath);
   });
 });

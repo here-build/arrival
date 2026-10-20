@@ -26,8 +26,9 @@
  * row). The begin-sink finding (3) is deliberately EXERCISED in track-cone.law's
  * effect rows, where replay is shown to be MORE precise than the abstract cone.
  */
+import type { CallCtx } from "../../run/CallCtx.js";
 import * as fc from "fast-check";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { execState, execStateOverFrame, parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { toJS } from "../../membrane/rosetta.js";
@@ -37,7 +38,6 @@ import { freeVars } from "../../provenance/wireframe/free-vars.js";
 import { hermeticEnv } from "../../provenance/hermetic-env.js";
 import { BASE_ROSTER } from "../../env/base-roster.js";
 import {
-  FrozenMints,
   ReplayScopeError,
   SENTINEL_BASE,
   boxPayload,
@@ -45,9 +45,8 @@ import {
   replayGraphEgress,
   replayProgramWithPlayback,
 } from "../../provenance/replay.js";
-import { setEmissionEnabled } from "../../provenance/store/emit.js";
 import { UnboundVariableError } from "../../errors.js";
-import type { Payload } from "../../provenance/store/interfaces.js";
+import { walkGraphReplay } from "../../provenance/replay-walk.js";
 import type { EmittedWire, WireframeGraph } from "../../provenance/wireframe/types.js";
 import { EnvCapability } from "../../common/capability.js";
 import { applyCapability } from "../../__tests__/_fresh-env.js";
@@ -61,10 +60,12 @@ import {
   type CorpusEntry,
 } from "../../__tests__/provenance/w1-corpus.js";
 import {
+  CompletionScheduler,
   freezeMints,
+  playbackOf,
   recordRun,
+  recordWireframe,
   replayedCone,
-  type RecordedRun,
   type RecordingShape,
 } from "../../__tests__/provenance/q16-harness.js";
 
@@ -74,17 +75,6 @@ const corpusIsBaseName = (n: string): boolean => CORPUS_BASE_NAMES.has(n);
 async function wfCorpus(code: string) {
   const forms = await parse(code);
   return buildWireframe(forms, { classifier: corpusClassifier, isBaseName: corpusIsBaseName });
-}
-
-/** Per-op payload queues for the whole-program playback face. */
-function playbackOf(run: RecordedRun): Map<string, Payload[]> {
-  const playback = new Map<string, Payload[]>();
-  for (const m of run.mints) {
-    const q = playback.get(m.op);
-    if (q === undefined) playback.set(m.op, [m.payload]);
-    else q.push(m.payload);
-  }
-  return playback;
 }
 
 /** The corpus rows the PER-WIRE γ composition claims (loop-free, fan-free — §1's
@@ -102,10 +92,6 @@ const PER_WIRE_CLASSES = new Set<CorpusEntry["klass"]>([
 ]);
 
 beforeAll(async () => {});
-
-afterEach(() => {
-  setEmissionEnabled(false); // module-global flag; recordRun restores
-});
 
 describe("wire-γ (§4 CHOSEN: the frame is abstract interpretation, loop-free scope)", () => {
   // apply(wire, recorded ingress) = recorded egress; sources bind frozen mint payloads and are never re-invoked
@@ -209,11 +195,104 @@ describe("wire-γ (§4 CHOSEN: the frame is abstract interpretation, loop-free s
     (entry) => {
       it(`${entry.code}`, async () => {
         const run = await recordRun(inferenceEnv, entry.code, entry.sources);
-        const replayed = await replayProgramWithPlayback({ source: entry.code, playback: playbackOf(run) });
+        const replayed = await replayProgramWithPlayback({
+          source: entry.code,
+          playback: playbackOf(run),
+          wireframe: recordWireframe(entry.sources),
+        });
         expect(replayed.value).toEqual(run.egress);
       });
     },
   );
+});
+
+// P18: the program is a dataflow graph, so a fan's tracks run concurrently and the order they COMPLETE
+// in is not observable. A record addresses each crossing by the TRACK it ran under; replay demands it
+// by the same coordinate — so the replayed value is a function of the record, never of live timing.
+describe("completion-order invariance (D1: payloads are addressed by track, not by arrival order)", () => {
+  const FAN_PROGRAMS = [
+    ...W1_CORPUS.filter((e) => e.klass === "nested-regions").map((e) => ({ name: e.name, code: e.code })),
+    { name: "map-two-crossings", code: "(map (lambda (x) (+ (fetch-item x) (fetch-item x))) (list 1 2 3))" },
+    {
+      name: "map-in-map-in-map",
+      code: "(map (lambda (a) (map (lambda (b) (map (lambda (c) (fetch-item c)) b)) a)) (list (list (list 1 2) (list 3)) (list (list 4 5))))",
+    },
+    {
+      name: "closure-called-from-fan",
+      code: "(let ((f (lambda (v) (* 2 (fetch-item v))))) (map (lambda (row) (map f row)) (list (list 1 2) (list 3 4))))",
+    },
+    {
+      name: "dropped-direct-call-then-read",
+      code: "(begin (fetch-item 1) (+ (fetch-item 2) 0))",
+    },
+    {
+      name: "dropped-calls-in-a-fan-track",
+      code: "(map (lambda (v) (begin (fetch-item v) (+ (fetch-item v) 0))) (list 1 2 3))",
+    },
+    {
+      name: "same-site-twice-in-one-track",
+      code: "(define (grab x) (fetch-item x)) (map (lambda (v) (list (grab v) (grab v))) (list 1 2))",
+    },
+    { name: "direct-port-map", code: "(map fetch-item (list 1 2 3))" },
+    { name: "direct-port-filter", code: "(filter fetch-item (list 1 2 3))" },
+    { name: "direct-port-vector-map", code: "(vector-map fetch-item (vector 1 2 3))" },
+    {
+      name: "direct-port-for-each-then-read",
+      code: "(begin (for-each fetch-item (list 1 2)) (list (fetch-item 0) (fetch-item 0)))",
+    },
+    { name: "nested-direct-port-map", code: "(map (lambda (r) (map fetch-item r)) (list (list 1 2) (list 3 4)))" },
+    {
+      name: "fan-beside-sequential-crossing",
+      code: "(let ((head (fetch-item 0))) (list head (map (lambda (v) (+ head (fetch-item v))) (list 1 2 3))))",
+    },
+  ];
+  const SOURCES: Record<string, RecordingShape> = { "fetch-item": "num" };
+  const SCHEDULES: readonly [string, () => CompletionScheduler][] = [
+    ["forward", () => CompletionScheduler.forward()],
+    ["reverse", () => CompletionScheduler.reverse()],
+    ...[1, 2, 3, 4, 5].map((seed): [string, () => CompletionScheduler] => [
+      `seeded(${seed})`,
+      () => CompletionScheduler.seeded(seed),
+    ]),
+  ];
+
+  describe.each(FAN_PROGRAMS)("$name", ({ code }) => {
+    it.each(SCHEDULES)("playback and γ reproduce the record completed %s", async (_name, schedule) => {
+      const run = await recordRun(inferenceEnv, code, SOURCES, { completion: schedule() });
+      const wireframe = recordWireframe(SOURCES);
+
+      const replayed = await replayProgramWithPlayback({ source: code, playback: playbackOf(run), wireframe });
+      expect(replayed.value).toEqual(run.egress);
+
+      const program = buildWireframe(await parse(code), wireframe);
+      expect((await replayGraphEgress({ program, frozen: freezeMints(run.mints) })).value).toEqual(run.egress);
+      const walked = walkGraphReplay({ program, frozen: freezeMints(run.mints) });
+      let step = await walked.next();
+      while (step.done !== true) step = await walked.next();
+      expect(step.value.value).toEqual(run.egress);
+    });
+  });
+
+  it("the lever bites: reversing live completion changes what the live run computed", async () => {
+    const code = FAN_PROGRAMS[0].code;
+    const forward = await recordRun(inferenceEnv, code, SOURCES, { completion: CompletionScheduler.forward() });
+    const reverse = await recordRun(inferenceEnv, code, SOURCES, { completion: CompletionScheduler.reverse() });
+    expect(reverse.egress).not.toEqual(forward.egress);
+    // ... and the record does NOT arrive in call order — the stream is in completion order
+    expect(reverse.mints.map((m) => m.track)).not.toEqual(forward.mints.map((m) => m.track));
+  });
+
+  it("a record with no coordinates degrades to plain per-op FIFO (sequential programs, offload ingress)", async () => {
+    const code = "(list (fetch-item 0) (fetch-item 1))";
+    const run = await recordRun(inferenceEnv, code, SOURCES);
+    const bare = new Map([["fetch-item", run.mints.map((m) => m.payload)]]);
+    const replayed = await replayProgramWithPlayback({
+      source: code,
+      playback: bare,
+      wireframe: recordWireframe(SOURCES),
+    });
+    expect(replayed.value).toEqual(run.egress);
+  });
 });
 
 describe("replay-nondeterminism (§4 R1 + §7: frozen-payload replay stable under a mutated world)", () => {
@@ -246,7 +325,7 @@ describe("replay-nondeterminism (§4 R1 + §7: frozen-payload replay stable unde
           for (const op of Object.keys(SOURCES)) {
             symbols[op] = symbol.rosetta`${op}: mutated-world source (offset +1000)`(
               { input: [], output: [z.number] },
-              () => {
+              function (this: CallCtx) {
                 calls.set(op, (calls.get(op) ?? 0) + 1);
                 return 1000 + (calls.get(op) ?? 0);
               },
@@ -314,13 +393,9 @@ describe("replay-nondeterminism (§4 R1 + §7: frozen-payload replay stable unde
     expect(run.mints).toHaveLength(2);
 
     const before = (await run.store.readStream(run.regionId)).length;
-    setEmissionEnabled(true); // emission live — the SILENT region must still suppress everything
-    let replayed;
-    try {
-      replayed = await replayProgramWithPlayback({ source: code, playback: playbackOf(run) });
-    } finally {
-      setEmissionEnabled(false);
-    }
+    // The replay runs on a hermetic RunContext minted `silent` with NO emission target — it
+    // has no way to write to `run.store` (P19: emission rides the run, not an enable flag).
+    const replayed = await replayProgramWithPlayback({ source: code, playback: playbackOf(run) });
     expect(replayed.value).toEqual(run.egress);
     const after = (await run.store.readStream(run.regionId)).length;
     expect(after).toBe(before); // the identical crossings happened again; nothing new landed
@@ -441,7 +516,7 @@ describe("effect-track replay-between-records (§4 CHOSEN, §7 sub-gate)", () =>
         symbols: (symbol, z) => ({
           "emit-step!": symbol.rosetta`emit-step!: mutated-world effect echo (×100)`(
             { input: [z.number], output: [z.number] },
-            (x) => {
+            function (this: CallCtx, x) {
               liveCalls++;
               return x * 100;
             },
@@ -463,17 +538,12 @@ describe("effect-track replay-between-records (§4 CHOSEN, §7 sub-gate)", () =>
   it("an INCOMPLETE region refuses replay-between-records (fold-checked, I4's post-hoc mirror)", async () => {
     const run = await recordRun(inferenceEnv, foldProgram([1, 2]), { "emit-step!": "echo" });
     // Fabricate an eviction-shaped stream state: a track opened, never closed.
-    setEmissionEnabled(true);
-    try {
-      const { emitTrackOpen } = await import("../../provenance/store/emit.js");
-      await emitTrackOpen({
-        store: run.store,
-        regionId: run.regionId,
-        id: { templateHash: "q16:pending-track", ordinalPath: [99], regionEpoch: "e0" },
-      });
-    } finally {
-      setEmissionEnabled(false);
-    }
+    const { emitTrackOpen } = await import("../../provenance/store/emit.js");
+    await emitTrackOpen({
+      store: run.store,
+      regionId: run.regionId,
+      id: { templateHash: "q16:pending-track", ordinalPath: [99], regionEpoch: "e0" },
+    });
     await expect(
       replayBetweenRecords({
         store: run.store,

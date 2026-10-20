@@ -27,7 +27,7 @@ import type { EnvCapability } from "../common/capability.js";
 import type { EvalPreludeInto, EvalSchemeInto } from "../common/scheme-env.js";
 import { assembleRun } from "../env/assemble-run.js";
 import { execState, execInFrame } from "../eval/generator-exec.js";
-import type { RunContext } from "../run/RunContext.js";
+import type { RunContext, RunEmission } from "../run/RunContext.js";
 
 /** Bake seam for basePack `symbol.define` / `defineSyntax` — `execInFrame`, same
  *  internal path as generator-exec's capability bake (no public-exec bootstrap gate). */
@@ -56,6 +56,26 @@ export interface HermeticEnv {
   readonly scope: SessionScope;
   readonly capabilities: readonly EnvCapability[];
   readonly config?: object;
+  /**
+   * LEASE a hermetic base over the same packs/prelude, distinct from this one and from every
+   * other outstanding lease. A run handle executes one call at a time, so a replay closure
+   * APPLIED inside a γ (a native procedure running on this base's run) — possibly several at once
+   * (`map` callbacks) — must instantiate on a different run each. Pooled: released bases are reused.
+   */
+  readonly lease: () => Promise<HermeticLease>;
+}
+
+export interface HermeticLease {
+  readonly env: HermeticEnv;
+  readonly release: () => void;
+}
+
+const envByRun = new WeakMap<RunContext, HermeticEnv>();
+
+/** Lease for a call running ON `running` (a run minted by some `hermeticEnv`); `fallback` stands in
+ *  for a foreign run. */
+export function leaseNestedEnv(fallback: HermeticEnv, running: RunContext): Promise<HermeticLease> {
+  return (envByRun.get(running) ?? fallback).lease();
 }
 
 export async function hermeticEnv(
@@ -63,6 +83,9 @@ export async function hermeticEnv(
   prelude: string,
   ingress: IngressBindings = {},
   config?: object,
+  /** A SILENT emission target — carries only the coordinate + closure sites so closure calls open
+   *  windows (never writes: the run is silent). Playback replay addresses payloads by them. */
+  emission?: RunEmission,
 ): Promise<HermeticEnv> {
   // Own RunContext (not via execState, which would dispose it at its call's end) —
   // must outlive prelude eval and every later γ against this base.
@@ -71,6 +94,10 @@ export async function hermeticEnv(
     config,
     evalScheme: replayEvalScheme,
     evalPrelude: replayEvalPrelude,
+    // Hermetic γ: region-silent, value-plane eager stamps (P19 — flags ride the run, not a global).
+    silent: true,
+    eagerStamps: true,
+    emission,
   });
   const scope = LexicalScope.fresh("provenance-hermetic-replay") as LexicalScopeWithInternals<SessionScope>;
   // Prelude as ordinary top-level into persistent root (header: non-discarded bindings).
@@ -79,5 +106,17 @@ export async function hermeticEnv(
   }
   // Ingress after prelude — wins on name collision.
   for (const [name, value] of Object.entries(ingress)) scope.env.bind(name, value);
-  return { runCtx, scope, capabilities: basePacks, config };
+  const free: HermeticEnv[] = [];
+  const env: HermeticEnv = {
+    runCtx,
+    scope,
+    capabilities: basePacks,
+    config,
+    lease: async () => {
+      const leased = free.pop() ?? (await hermeticEnv(basePacks, prelude, {}, config, emission));
+      return { env: leased, release: () => void free.push(leased) };
+    },
+  };
+  envByRun.set(runCtx, env);
+  return env;
 }

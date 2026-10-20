@@ -149,6 +149,18 @@ describe("PayloadTierMachine.snapshot — the async pre-pass a sync TierGate nee
   });
 });
 
+describe("PayloadTierMachine.snapshot — only the unknown-hash door is swallowed", () => {
+  it("a store failure other than PayloadNotFound propagates — the gate never fails open on an I/O error", async () => {
+    const store = new PayloadStoreFake();
+    const boom = new Error("r2 unavailable");
+    store.get = async () => {
+      throw boom;
+    };
+    const machine = new PayloadTierMachine(store);
+    await expect(machine.snapshot(["h-any"])).rejects.toBe(boom);
+  });
+});
+
 describe("tierGateFromSnapshot — egress-proxy integration (Q14's NOTE)", () => {
   it("allows every key when nothing is payload-tracked (keyToHash always undefined) — the byte-stable default", () => {
     const gate = tierGateFromSnapshot(() => undefined, new Map());

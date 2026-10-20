@@ -42,7 +42,7 @@ export type OrdinalPath = readonly number[];
  *  appended. Not itself a valid `RecordId.ordinalPath` for any real designated node
  *  (every node gets at least its root ordinal, per the comment above) — exists as the
  *  base case composition ops build from. */
-export const ROOT_ORDINAL_PATH: OrdinalPath = [];
+export const ROOT_ORDINAL_PATH: OrdinalPath = Object.freeze([]);
 
 /** Append one ordinal — a nested fan/loop INSTANCE's index — to a path. The
  *  z-axis ("instance-ordinal space") composition primitive: nested regions

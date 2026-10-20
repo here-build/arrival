@@ -34,6 +34,10 @@ import type { AListAlike, SchemeValue } from "../values/types.js";
 
 export type InvocationState = "running" | "resolved" | "rejected";
 
+/** Heads whose children carry the branch outcome the snapshot materializes
+ *  (`trace-snapshot.ts` isBranchChild reads the same set). */
+export const BRANCH_HEADS: ReadonlySet<string> = new Set(["if", "cond", "case", "when", "unless"]);
+
 function headNameOf(node: APair<SchemeValue, SchemeValue>): string | null {
   const head = (node as { car: unknown }).car;
   if (head === null || typeof head !== "object" || !("__name__" in head)) return null;
@@ -106,7 +110,8 @@ export class Invocation {
   isProvenancePoint = false;
   /** Rosetta `resultWithProvenance` meta; never crosses into scheme. */
   metadata: unknown = undefined;
-  /** `(infer …)` cache hit vs fresh — set at bind via `markInferCached`. */
+  /** `(infer …)` cache hit vs fresh. Written by the rosetta membrane when a replay-mode RunCache
+   *  serves the call (`penetrateThroughCache` `onServed`); read by snapshots and tooling. */
   cached: boolean | undefined = undefined;
   /** R7RS §3.5 tail flag from evaluator (not inferred). Labels proper-TCO vs stack growth. */
   tailPosition = false;
@@ -155,8 +160,6 @@ const STATS_PER_ENTRY_OVERHEAD_BYTES = 128;
 
 export class EvalTrace implements EvalTap {
   readonly records = new Map<APair<SchemeValue, SchemeValue>, NodeRecord>();
-  /** Task → creating invocations. One task, many invs across HOF iterations; first is canonical. */
-  readonly invocationByTask = new Map<object, Invocation[]>();
   /** Symbol-resolution log — symbol eval skips enter/exit. */
   readonly symbolValues = new WeakMap<Invocation, Map<string, unknown>>();
 
@@ -215,27 +218,6 @@ export class EvalTrace implements EvalTap {
     return this.#authoritativeProvenance.has(set);
   }
 
-  bindTask(task: object, invocation: Invocation): void {
-    let list = this.invocationByTask.get(task);
-    if (!list) {
-      list = [];
-      this.invocationByTask.set(task, list);
-    }
-    if (!list.includes(invocation)) list.push(invocation);
-  }
-
-  markInferCached = (invocation: Invocation, cached: boolean): void => {
-    invocation.cached = cached;
-  };
-
-  invocationFor(task: object): Invocation | undefined {
-    return this.invocationByTask.get(task)?.[0];
-  }
-
-  invocationsFor(task: object): readonly Invocation[] {
-    return this.invocationByTask.get(task) ?? [];
-  }
-
   /** Minting invocation for a provenance id (id − `#logBaseId` indexes the log). */
   invocationById(provenanceId: number): Invocation | undefined {
     const idx = provenanceId - this.#logBaseId;
@@ -255,6 +237,7 @@ export class EvalTrace implements EvalTap {
     return inv === undefined ? undefined : (headNameOf(inv.node) ?? undefined);
   }
 
+  /** The value `name` resolved to inside `inv` (public read API — external trace consumers use it). */
   symbolValueIn(inv: Invocation, name: string): unknown {
     return this.symbolValues.get(inv)?.get(name);
   }
@@ -346,15 +329,19 @@ export class EvalTrace implements EvalTap {
    * Without this, deep TCO retains O(depth) Sets per inv → O(n²) GC freeze.
    * Keep predicate matches snapshot materialization (point + point's children),
    * plus `filter` heads (region rebuild needs pred children — deliberate divergence).
-   * Scaffolding `.value` cleared too (parent already holds returned refs).
+   * Scaffolding `.value` cleared too (parent already holds returned refs) — EXCEPT children
+   * of branch heads: the snapshot materializes a branch test/arm value (the decision pill's
+   * runtime outcome), so only their provenance Set is dropped.
    */
   #pruneChildProvenance(inv: Invocation): void {
     if (inv.isProvenancePoint) return;
-    if (headNameOf(inv.node) === "filter") return;
+    const head = headNameOf(inv.node);
+    if (head === "filter") return;
+    const keepValue = head !== null && BRANCH_HEADS.has(head);
     for (const child of inv.children) {
       if (child.isProvenancePoint) continue;
       if (child.provenance.size > 0) child.provenance = EMPTY_PROVENANCE;
-      child.value = undefined;
+      if (!keepValue) child.value = undefined;
     }
   }
 
@@ -375,7 +362,7 @@ export class EvalTrace implements EvalTap {
         "(call it after a run's exec/execState promise resolves, not from inside a tap callback).",
     );
     this.records.clear();
-    this.invocationByTask.clear();
+    this.autoBindings?.byInvocation.clear();
     this.#invocationLog.length = 0;
     this.#logBaseId = this.#nextId;
     this.#mintedSinceReset = 0;

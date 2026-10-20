@@ -14,15 +14,12 @@ import type { EnvWithInternals, ResolvingAmbient } from "../../env/AmbientRuntim
  * STOP before building the IR. It doesn't fail.
  */
 import { describe, it, expect } from "vitest";
-import { parse, execStateOverFrame as execState } from "../../eval/generator-exec.js";
+import { parse } from "../../eval/generator-exec.js";
+import { execStateOverFrameEager as execState } from "../../__tests__/_require-eager-oracle.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { APair } from "../../values/primitives/APair.js";
 import { classify, fullCone, type Classifier, type LineageNode, provOf } from "../../provenance/lineage.js";
 import { sStr } from "../../__tests__/_lineage-test-helpers.js";
-import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
-
-// this helper/execState needs the eager oracle ON
-requireEagerOracle();
 
 const C: Classifier = {
   roleOf: (op) =>
@@ -41,6 +38,8 @@ function countNodes(n: LineageNode): number {
     case "leaf":
     case "source":
       return 1;
+    case "closure":
+      return 1 + countNodes(n.body);
     case "pipe":
       return 1 + countNodes(n.child);
     case "field":

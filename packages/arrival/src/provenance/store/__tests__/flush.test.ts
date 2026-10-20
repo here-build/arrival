@@ -13,6 +13,7 @@ import { describe, expect, it } from "vitest";
 import { ProvenanceRing } from "../flush.js";
 import { ProvenanceStoreFake, ProvenanceWriteFailure } from "../fakes.js";
 import type { RecordId } from "../ids.js";
+import type { ProvenanceStore } from "../interfaces.js";
 import type { ProvenanceRecord } from "../records.js";
 
 function trackOpen(id: RecordId, seq: number): ProvenanceRecord {
@@ -198,5 +199,40 @@ describe("ProvenanceRing.preHibernate — the DO's forced pre-hibernation flush"
     const store = new ProvenanceStoreFake();
     const ring = new ProvenanceRing(store);
     await expect(ring.preHibernate()).resolves.toBeUndefined();
+  });
+});
+
+describe("ProvenanceRing.flush — concurrent flushes never lose a record appended mid-flush", () => {
+  it("flush A suspended mid-write, flush B, then a new append: the new record survives A's resumption", async () => {
+    const inner = new ProvenanceStoreFake();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let first = true;
+    const store: ProvenanceStore = {
+      allocateSeq: (r) => inner.allocateSeq(r),
+      readStream: (r) => inner.readStream(r),
+      getHeader: (r) => inner.getHeader(r),
+      putHeader: (r, h) => inner.putHeader(r, h),
+      async append(r, rec) {
+        if (first) {
+          first = false;
+          await gate; // flush A parks here, mid-write
+        }
+        return inner.append(r, rec);
+      },
+    };
+    const ring = new ProvenanceRing(store);
+    const idOf = (n: number): RecordId => ({ templateHash: "t", ordinalPath: [n], regionEpoch: "e0" });
+    await ring.append(REGION, trackOpen(idOf(0), 1));
+    const flushA = ring.flush(REGION);
+    const flushB = ring.flush(REGION);
+    await new Promise((r) => setTimeout(r, 0)); // let an unserialized B run to completion
+    await ring.append(REGION, trackOpen(idOf(1), 2)); // lands while A is suspended
+    release();
+    await Promise.all([flushA, flushB]);
+    await ring.flush(REGION);
+    const stream = await inner.readStream(REGION);
+    expect(stream.map((r) => r.id.ordinalPath[0]).toSorted()).toEqual([0, 1]);
+    expect(ring.buffered(REGION)).toHaveLength(0);
   });
 });

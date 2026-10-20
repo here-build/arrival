@@ -18,9 +18,10 @@
  * wire-locality's by-name row, asserted one layer down (partition + hermetic
  * assembler); the wire-level half is now asserted directly above it.
  */
+import type { CallCtx } from "../../run/CallCtx.js";
 import * as fc from "fast-check";
 import { describe, it, expect, beforeAll } from "vitest";
-import { parse, exec, execState, execStateOverFrame } from "../../eval/generator-exec.js";
+import { parse, execState, execStateOverFrame } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import type { Classifier, DeclaredRole } from "../../provenance/lineage.js";
 import { classifyProgramPrelude, buildPreludeSource } from "../../provenance/prelude.js";
@@ -29,11 +30,9 @@ import { BASE_ROSTER } from "../../env/base-roster.js";
 import { buildWireframe } from "../../provenance/wireframe/builder.js";
 import { freeVars } from "../../provenance/wireframe/free-vars.js";
 import type { WireframeGraph } from "../../provenance/wireframe/types.js";
-import { WireLocalityError } from "../../errors.js";
 import { scopeId } from "../../provenance/scope-id.js";
 import { toJS } from "../../membrane/rosetta.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
-import { isEagerProvenanceOracleEnabled, setEagerProvenanceOracleEnabled } from "../../values/op-helpers.js";
 import { EnvCapability } from "../../common/capability.js";
 import { applyCapability } from "../../__tests__/_fresh-env.js";
 import {
@@ -83,11 +82,11 @@ describe("wire-locality (§1 CHOSEN: a wire is a closed arrival lambda) — FLIP
       }
       expect(wiresChecked).toBeGreaterThan(0);
 
-      // NEGATIVE direction: the check is AT EMISSION — a wire that would capture a
-      // port-reaching define as a value is never minted; the door throws while the
-      // builder assembles, not in a later audit pass.
-      const violating = await parse("(define (helper x) (src-a x))\n(emit! helper)");
-      expect(() => buildWireframe(violating, { classifier: CLASSIFIER, isBaseName })).toThrow(WireLocalityError);
+      // A material define used as a VALUE is no longer a door (Q8a FLIPPED): it is cut to a
+      // `closure{ref:define}` node, so the builder never throws for a program that runs.
+      const asValue = await parse("(define (helper x) (src-a x))\n(emit! helper)");
+      const built = buildWireframe(asValue, { classifier: CLASSIFIER, isBaseName });
+      expect(built.main.nodes.some((n) => n.kind === "closure" && n.ref?.kind === "define")).toBe(true);
     },
   );
 
@@ -195,12 +194,16 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
     );
   });
 
-  it("a pure-selector mux collapses INTO its wire and carries no decision record of its own — only port-coupled muxes reach the retrospective stream (§1 CHOSEN, A2)", async () => {
-    const program = await wfCorpus(`(if #t (src-a) (src-b))`);
+  it("a pure-selector mux with cut-free arms collapses INTO its wire and carries no decision record of its own — only port-coupled muxes reach the retrospective stream (§1 CHOSEN, A2)", async () => {
+    const program = await wfCorpus(`(if #t 1 2)`);
     expect(program.main.nodes.some((n) => n.kind === "mux")).toBe(false);
-    // the two sources ARE designated nodes (they're Rosetta-IN crossings), just not
-    // gated behind a mux node — confirming the collapse, not a designation failure.
-    expect(program.main.nodes.filter((n) => n.kind === "source")).toHaveLength(2);
+
+    // W-9: a pure selector over arms that CONTAIN ports does not collapse — γ resolves a wire's
+    // node params eagerly, so a collapsed wire would demand the untaken arm's port. The mux
+    // stays (arms lazy); both sources are still designated nodes.
+    const lazy = await wfCorpus(`(if #t (src-a) (src-b))`);
+    expect(lazy.main.nodes.some((n) => n.kind === "mux")).toBe(true);
+    expect(lazy.main.nodes.filter((n) => n.kind === "source")).toHaveLength(2);
 
     const portCoupled = await wfCorpus(`(if (positive? (src-a)) 1 2)`);
     expect(portCoupled.main.nodes.some((n) => n.kind === "mux")).toBe(true);
@@ -217,19 +220,28 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
   // surfaced by this corpus (named distinctly, not conflated with the three).
   // ═══════════════════════════════════════════════════════════════════════════
   describe("KNOWN LIMIT (Q8a, documented) — letrec local-closure mux under-designation", () => {
-    // @ledger: Q9 finding — builder.ts: "A local closure (letrec-bound lambda)
+    // Q9 finding — builder.ts: "A local closure (letrec-bound lambda)
     // wrapping a port under-designates a mux whose selector calls it (classify
     // never expands call sites into callee bodies)". Empirically: the selector
     // `(positive? (get))` cannot see that `get` resolves to a lambda wrapping
     // `fetch-item`, so `selectorReachesPort` returns false and the WHOLE if
     // collapses into ONE pure wire (no `mux` node) instead of a port-coupled one.
+    // W-9 narrowed the SYMPTOM: when the arms hold ports (as here, `src-a`/`src-b`) the mux now
+    // stays lazy on the arms' cuts alone, so the program below designates a mux regardless of
+    // selector visibility. The LIMIT itself (selector reachability through a closure) is
+    // unchanged and still observable with cut-free arms — the ledger row below keeps it honest.
+    it("a letrec-closure selector over port-holding arms still gets a mux (arms-with-cuts rule, W-9)", async () => {
+      const program = await wfCorpus(
+        `(letrec ((get (lambda () (fetch-item 0)))) (if (positive? (get)) (src-a) (src-b)))`,
+      );
+      expect(program.main.nodes.some((n) => n.kind === "mux")).toBe(true);
+    });
+
     // @ledger: letrec local-closure mux under-designation
     it.fails(
-      "a letrec-bound closure wrapping a port, called from a mux selector, SHOULD designate a port-coupled `mux` node (the selector genuinely reaches fetch-item transitively) — it does not",
+      "a letrec-bound closure wrapping a port, called from a mux selector over cut-free arms, SHOULD designate a port-coupled `mux` node (the selector genuinely reaches fetch-item transitively) — it does not",
       async () => {
-        const program = await wfCorpus(
-          `(letrec ((get (lambda () (fetch-item 0)))) (if (positive? (get)) (src-a) (src-b)))`,
-        );
+        const program = await wfCorpus(`(letrec ((get (lambda () (fetch-item 0)))) (if (positive? (get)) 1 2))`);
         expect(program.main.nodes.some((n) => n.kind === "mux")).toBe(true);
       },
     );
@@ -253,7 +265,7 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
   });
 
   describe("KNOWN LIMIT (Q8a, documented) — non-tail begin sink sequencing", () => {
-    // @ledger: Q9 finding — builder.ts: "A sink cut in non-tail begin position
+    // Q9 finding — builder.ts: "A sink cut in non-tail begin position
     // leaves the wire a sequencing reference to the sink node (D6 territory) —
     // tolerated, not modeled." Empirically: `(begin (emit! (src-a)) (src-b))`'s
     // egress wire is `(begin in0 in1)` where `in0` is a NODE reference to the
@@ -279,7 +291,9 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
             symbols: (symbol, z) => ({
               "emit!": symbol.rosetta`emit!: identity passthrough (sink echo)`(
                 { input: [z.dynamic], output: [z.dynamic] },
-                (x: import("../../values/types.js").SchemeValue) => x,
+                function (this: CallCtx, x: import("../../values/types.js").SchemeValue) {
+                  return x;
+                },
               ),
             }),
           }),
@@ -295,28 +309,19 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
     );
   });
 
-  describe("KNOWN LIMIT (Q8a, documented) — cond => receiver approximation", () => {
-    // @ledger: Q9 finding — builder.ts's `buildCondMux`: "A `=>` clause's receiver
-    // is approximated as the arm — its applied-to-test threading is
-    // classifyCond's `combine(\"=>\")`, deferred here." Structurally: the arm wire
-    // closes over the RAW receiver lambda `(lambda (x) …)`, whose own formal `x`
-    // shadows the free-variable it would need if it genuinely modeled "the
-    // receiver APPLIED to the test's value" — so a receiver that returns `x`
-    // unchanged wires as a CLOSED, ZERO-PARAM lambda (the wire believes this arm
-    // has no ingress at all), when the correct modeling would show a dependency on
-    // whatever produced the test's value.
-    // @ledger: cond => receiver approximation loses test-value dependency
-    it.fails(
-      "a `=>` receiver that returns its bound parameter untouched SHOULD wire with a non-empty param list (it depends on the test's value) — it wires as a closed, zero-param lambda",
-      async () => {
-        const forms = await parse(`(cond ((src-a) => (lambda (x) x)) (else (fetch-item 0)))`);
-        const program = buildWireframe(forms, { classifier: corpusClassifier, isBaseName: corpusIsBaseName });
-        const muxNode = program.main.nodes.findIndex((n) => n.kind === "mux");
-        const armWire = program.main.wires.find((w) => w.consumer.node === muxNode && w.consumer.slot === "arm0");
-        expect(armWire).toBeDefined();
-        expect(armWire?.params.length ?? 0).toBeGreaterThan(0);
-      },
-    );
+  describe("cond => receiver — FLIPPED (W-6 follow-through)", () => {
+    // Was a KNOWN LIMIT: the arm wire closed over the RAW receiver lambda `(lambda (x) …)`, whose
+    // own formal shadowed the dependency on the test's value (a closed, zero-param arm). The
+    // arm is now the faithful `(proc test)` — the test's cuts are shared nodes — so the
+    // receiver's dependency on whatever produced the test value is wired.
+    it("a `=>` receiver that returns its bound parameter wires with a non-empty param list (it depends on the test's value)", async () => {
+      const forms = await parse(`(cond ((src-a) => (lambda (x) x)) (else (fetch-item 0)))`);
+      const program = buildWireframe(forms, { classifier: corpusClassifier, isBaseName: corpusIsBaseName });
+      const muxNode = program.main.nodes.findIndex((n) => n.kind === "mux");
+      const armWire = program.main.wires.find((w) => w.consumer.node === muxNode && w.consumer.slot === "arm0");
+      expect(armWire).toBeDefined();
+      expect(armWire?.params.length ?? 0).toBeGreaterThan(0);
+    });
   });
 
   describe("do-loop result clause wires back to the recur node — FLIPPED (Q9 finding 4)", () => {
@@ -406,30 +411,19 @@ describe("W1 agreement (§7: eager-oracle cone == wireframe cone, SCOPED per the
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // ORACLE FLAG — production default is OFF. This suite's agreement corpus still
-  // runs the eager oracle via `w1-harness.ts`'s `runEagerCone` forcing it on
-  // per-call (save/restore around its own `execState`), not via an ambient default.
+  // ORACLE FLAG — a per-RUN flag (`RunContext.eagerStamps`), default OFF. This suite's
+  // agreement corpus runs the eager oracle via `w1-harness.ts`'s `runEagerCone`, which
+  // opts its own run in with `eagerStamps: true` — nothing ambient to set or restore.
   // ═══════════════════════════════════════════════════════════════════════════
   describe("oracle flag — the Q20 read seam", () => {
-    it("defaults to OFF in production (Q20b) — this suite's corpus above forced it on internally, per-call, via w1-harness.ts's runEagerCone", () => {
-      expect(isEagerProvenanceOracleEnabled()).toBe(false);
-    });
-
-    it("round-trips via the test-only setter, restored after", () => {
-      expect(isEagerProvenanceOracleEnabled()).toBe(false);
-      setEagerProvenanceOracleEnabled(true);
-      try {
-        expect(isEagerProvenanceOracleEnabled()).toBe(true);
-      } finally {
-        setEagerProvenanceOracleEnabled(false); // restore — module-level flag, other tests read it
-      }
-      expect(isEagerProvenanceOracleEnabled()).toBe(false);
-    });
-
-    it("the agreement corpus above ran under the oracle FORCED ON internally (w1-harness.ts's runEagerCone) — CI keeps exercising the oracle regardless of the production default (Q20b's own gate: \"oracle mode still runs the agreement corpus in CI\")", () => {
-      // Ambient flag is back at the (off) default here — the corpus never touched
-      // it ambiently, it forced it on and restored it, per call, inside runEagerCone.
-      expect(isEagerProvenanceOracleEnabled()).toBe(false);
+    it("a default run mints eagerStamps:false; the harness run opts in per run", async () => {
+      const off = await execStateOverFrame("1", { env: inferenceEnv.child("oracle-flag-off") });
+      expect(off.runCtx.eagerStamps).toBe(false);
+      const on = await execStateOverFrame("1", { env: inferenceEnv.child("oracle-flag-on"), eagerStamps: true });
+      expect(on.runCtx.eagerStamps).toBe(true);
+      // Opting one run in leaves the next default run untouched (no leak).
+      const after = await execStateOverFrame("1", { env: inferenceEnv.child("oracle-flag-after") });
+      expect(after.runCtx.eagerStamps).toBe(false);
     });
   });
 });

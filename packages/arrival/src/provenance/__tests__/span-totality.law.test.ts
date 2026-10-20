@@ -22,7 +22,7 @@ import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { EvalTrace } from "../../provenance/trace.js";
 import { APair } from "../../values/primitives/APair.js";
-import { symbol } from "../../symbol/index.js";
+import * as symbol from "../../common/symbols/index.js";
 import * as z from "../../common/scheme-zod/index.js";
 import { parseDefineBody } from "../../common/symbols/define-bake.js";
 
@@ -37,6 +37,7 @@ function spanless(value: unknown, out: APair<any, any>[] = [], seen = new Set<un
 }
 
 const run = async (src: string) => {
+  // eslint-disable-next-line sonarjs/pseudo-random -- unique env name only; not security-relevant
   const env = inferenceEnv.child(`span-totality-${Math.random().toString(36).slice(2)}`);
   const { values } = await execState(src, { env });
   return values[values.length - 1]; // last top-level form's value (defines yield void)

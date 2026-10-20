@@ -133,7 +133,10 @@ export class RunStoreFake implements RunStore {
       byKey = new Map();
       this.runs.set(regionId, byKey);
     }
-    byKey.set(runStorageKey(regionId, run), run);
+    const key = runStorageKey(regionId, run);
+    const prior = byKey.get(key);
+    // a re-put is a re-close of the SAME run: never narrower than what is stored (§7 idempotence)
+    byKey.set(key, prior !== undefined && prior.count > run.count ? prior : run);
   }
 
   async readRuns(regionId: RegionId): Promise<readonly AggregationRun[]> {
@@ -157,6 +160,7 @@ interface PayloadSlot {
   tier: PayloadTier;
   value: unknown;
   stampIds: readonly number[];
+  raised?: true;
   /** Privacy-LIMIT plumbing — set once at `put`, survives every subsequent tier
    *  transition (including `evict`/`applySettle`'s degrade-to-`stub`) unchanged. */
   retention: RetentionClass;
@@ -259,6 +263,7 @@ export class PayloadStoreFake implements PayloadStore {
       tier: oversize ? "pending" : "do",
       value: payload.value,
       stampIds: payload.stampIds,
+      ...(payload.raised === true ? { raised: true as const } : {}),
       retention: payload.retention ?? "standard",
       scheduled: undefined,
     });
@@ -271,6 +276,7 @@ export class PayloadStoreFake implements PayloadStore {
       tier: slot.tier,
       value: slot.tier === "stub" ? undefined : slot.value,
       stampIds: slot.stampIds,
+      ...(slot.raised === true ? { raised: true as const } : {}),
       retention: slot.retention,
     };
   }

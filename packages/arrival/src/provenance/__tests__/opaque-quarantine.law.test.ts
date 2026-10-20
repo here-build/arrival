@@ -21,7 +21,6 @@
  */
 import { describe, expect, it } from "vitest";
 import { parse } from "../../eval/generator-exec.js";
-import { inferenceEnv } from "../../env/inference-env.js";
 import { classify, countOpaqueNodes, type Classifier } from "../../provenance/lineage.js";
 
 // Mirrors lineage-spike.test.ts's spike classifier — a minimal, deterministic

@@ -100,7 +100,7 @@ describe("foldRegionStream — the payload-free/payload-bearing kinds it deliber
   it("mint/mux-decision/fan-instantiation/ingress-binding contribute NOTHING to region/track state", () => {
     const id = (t: string): RecordId => ({ templateHash: t, ordinalPath: [0], regionEpoch: "e0" });
     const records: ProvenanceRecord[] = [
-      { kind: "mint", id: id("m"), seq: 1, payloadHash: "payload-v0:0" },
+      { kind: "mint", id: id("m"), seq: 1, payloadHash: "payload-v1:0" },
       { kind: "mux-decision", id: id("x"), seq: 2, arm: 0 },
       { kind: "fan-instantiation", id: id("f"), seq: 3 },
       { kind: "ingress-binding", id: id("i"), seq: 4 },
@@ -176,7 +176,7 @@ describe("nextTrackOrdinal — §5 C2/D1 collision avoidance for a resumed scope
         kind: "mint",
         id: { templateHash: COORD.templateHash, ordinalPath: [0, 7], regionEpoch: COORD.regionEpoch },
         seq: 1,
-        payloadHash: "payload-v0:0",
+        payloadHash: "payload-v1:0",
       },
     ];
     expect(nextTrackOrdinal(records, COORD)).toBe(0);

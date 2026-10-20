@@ -22,6 +22,7 @@ import type { TierGate } from "../../membrane/egress-proxy.js";
 interface RingSlot {
   readonly value: unknown;
   readonly stampIds: readonly number[];
+  readonly raised?: true;
   readonly retention: RetentionClass;
   stubbed: boolean;
 }
@@ -48,6 +49,7 @@ export interface PayloadEvidenceEnvelope {
   readonly storageTier: PayloadTier;
   readonly value: unknown | undefined;
   readonly stampIds: readonly number[];
+  readonly raised?: true;
   readonly retention: RetentionClass;
 }
 
@@ -70,6 +72,7 @@ export class PayloadTierMachine {
     this.ring.set(hash, {
       value: payload.value,
       stampIds: payload.stampIds,
+      ...(payload.raised === true ? { raised: true as const } : {}),
       retention: payload.retention ?? "standard",
       stubbed: false,
     });
@@ -79,7 +82,12 @@ export class PayloadTierMachine {
   async flush(hash: PayloadHash): Promise<void> {
     const slot = this.ring.get(hash);
     if (slot === undefined || slot.stubbed) throw new PayloadNotRingResident(hash);
-    await this.store.put(hash, { value: slot.value, stampIds: slot.stampIds, retention: slot.retention });
+    await this.store.put(hash, {
+      value: slot.value,
+      stampIds: slot.stampIds,
+      ...(slot.raised === true ? { raised: true as const } : {}),
+      retention: slot.retention,
+    });
     this.ring.delete(hash);
   }
 
@@ -112,6 +120,7 @@ export class PayloadTierMachine {
         storageTier,
         value: slot.stubbed ? undefined : slot.value,
         stampIds: slot.stampIds,
+        ...(slot.raised === true ? { raised: true as const } : {}),
         retention: slot.retention,
       };
     }
@@ -121,6 +130,7 @@ export class PayloadTierMachine {
       storageTier: rec.tier,
       value: rec.value,
       stampIds: rec.stampIds,
+      ...(rec.raised === true ? { raised: true as const } : {}),
       retention: rec.retention,
     };
   }
@@ -131,7 +141,11 @@ export class PayloadTierMachine {
     for (const hash of hashes) {
       try {
         out.set(hash, await this.read(hash));
-      } catch {}
+      } catch (error) {
+        // Only the unknown-hash door means "absent". Any other failure must surface: an absent
+        // entry reads as "untracked" to `tierGateFromSnapshot`, i.e. allowed — a fail-open gate.
+        if (!(error instanceof Error && error.name === "PayloadNotFound")) throw error;
+      }
     }
     return out;
   }

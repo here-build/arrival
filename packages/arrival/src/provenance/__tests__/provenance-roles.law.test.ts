@@ -1,6 +1,6 @@
 /**
  * LAW (staged) — V1/V2/V4 role-vocabulary rows (docs/PROVENANCE.md §2 "Declaration
- * vocabulary"; docs/PROVENANCE-PLAN.md Cluster V).
+ * vocabulary").
  *
  * V3 (opaque quarantine drift alarm) is DELIBERATELY NOT duplicated here — its
  * counted-walk machinery lives in the sibling `opaque-quarantine.law.test.ts`.
@@ -20,9 +20,9 @@
  * time. A rosetta fn defaults to `"source"`; declare `"pipe"` when it genuinely
  * propagates input provenance.
  */
+import type { CallCtx } from "../../run/CallCtx.js";
 import { describe, it, expect } from "vitest";
 import { parse } from "../../eval/generator-exec.js";
-import { inferenceEnv } from "../../env/inference-env.js";
 import {
   classify,
   fullCone,
@@ -34,24 +34,19 @@ import {
 import { classifierFromEnv } from "../../provenance/lineage-classifier-from-env.js";
 import { buildWireframe } from "../../provenance/wireframe/builder.js";
 import * as z from "../../common/scheme-zod/index.js";
-import { symbol } from "../../symbol/index.js";
-import type { AEntity, ProvenanceRole } from "../../common/symbols/_bake.js";
-import { EnvCapability } from "../../common/capability.js";
-import { declaresAccChain, withCallbackRoles, type CallbackRoles } from "../../common/symbols/_bake.js";
-import type { NativeSymbolDef } from "../../values/primitives/ANativeProcedure.js";
-import type {
-  RosettaSymbolDef,
-  SequenceSymbolDef,
-  TaglessGuardSymbolDef,
-  TaglessSymbolDef,
+import * as symbol from "../../common/symbols/index.js";
+import {
+  type ProvenanceRole,
+  declaresAccChain,
+  withCallbackRoles,
+  type CallbackRoles,
+  type RosettaSymbolDef,
+  type SequenceSymbolDef,
+  type TaglessGuardSymbolDef,
+  type TaglessSymbolDef,
 } from "../../common/symbols/_bake.js";
-
-/** Test-only cast: pull a minted value's `.contract` (typed `unknown` on the class — see
- *  ACallable.ts) back to its known CONTRACT shape. Stage A2: the factories mint the
- *  runtime A-value directly now; the def they used to RETURN rides `.contract` on it. */
-function contractOf<T>(v: { contract: unknown }): T {
-  return v.contract as T;
-}
+import { EnvCapability } from "../../common/capability.js";
+import type { NativeSymbolDef } from "../../values/primitives/ANativeProcedure.js";
 import { ProvenanceRoleShapeError, PreludeMembershipError } from "../../errors.js";
 import { classifyProgramPrelude, assertPreludeEligible } from "../../provenance/prelude.js";
 import { applyCapability, freshEnv } from "../../__tests__/_fresh-env.js";
@@ -64,6 +59,13 @@ import vectors from "../../env/r7rs/vectors.js";
 import binding from "../../env/r7rs/binding.js";
 import equality from "../../env/r7rs/equality.js";
 import { harvestContracts } from "../../__tests__/_symbols-harvest.js";
+
+/** Test-only cast: pull a minted value's `.contract` (typed `unknown` on the class — see
+ *  ACallable.ts) back to its known CONTRACT shape. Stage A2: the factories mint the
+ *  runtime A-value directly now; the def they used to RETURN rides `.contract` on it. */
+function contractOf<T>(v: { contract: unknown }): T {
+  return v.contract as T;
+}
 
 /** Resolved callback roles off a pack's REAL exported def (the data plane Q3/Q8a read) —
  *  same `.spec.symbols` access idiom as the `*-contract-precision.test.ts` files. */
@@ -89,12 +91,19 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       // set every scheme value carries), a same-named but semantically unrelated field.
       expect(
         contractOf<NativeSymbolDef>(
-          symbol.native`v1-default-native: `({ input: [z.schemeValue], output: [z.schemeValue] }, (v) => v),
+          symbol.native`v1-default-native: `(
+            { input: [z.schemeValue], output: [z.schemeValue] },
+            function (this: CallCtx, v) {
+              return v;
+            },
+          ),
         ).provenance,
       ).toBe("pipe");
       expect(
         contractOf<RosettaSymbolDef>(
-          symbol.rosetta`v1-default-rosetta: `({ input: [z.string], output: [z.string] }, (s) => s),
+          symbol.rosetta`v1-default-rosetta: `({ input: [z.string], output: [z.string] }, function (this: CallCtx, s) {
+            return s;
+          }),
         ).provenance,
       ).toBe("source");
       expect(
@@ -117,7 +126,9 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
         contractOf<NativeSymbolDef>(
           symbol.native`v1-role-pipe: `(
             { input: [z.schemeValue], output: [z.schemeValue], provenance: "pipe" },
-            (v) => v,
+            function (this: CallCtx, v) {
+              return v;
+            },
           ),
         ).provenance,
       ).toBe("pipe");
@@ -125,20 +136,29 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
         contractOf<NativeSymbolDef>(
           symbol.native`v1-role-fan: `(
             { input: [z.lambda, z.schemeValue], output: [z.schemeValue], provenance: "fan" },
-            (f, v) => v,
+            function (this: CallCtx, f, v) {
+              return v;
+            },
           ),
         ).provenance,
       ).toBe("fan");
       expect(
         contractOf<RosettaSymbolDef>(
-          symbol.rosetta`v1-role-source: `({ input: [z.string], output: [z.string], provenance: "source" }, (s) => s),
+          symbol.rosetta`v1-role-source: `(
+            { input: [z.string], output: [z.string], provenance: "source" },
+            function (this: CallCtx, s) {
+              return s;
+            },
+          ),
         ).provenance,
       ).toBe("source");
       expect(
         contractOf<NativeSymbolDef>(
           symbol.native`v1-role-loop: `(
             { input: [z.schemeValue], output: [z.schemeValue], provenance: "loop" },
-            (v) => v,
+            function (this: CallCtx, v) {
+              return v;
+            },
           ),
         ).provenance,
       ).toBe("loop");
@@ -146,20 +166,29 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
         contractOf<NativeSymbolDef>(
           symbol.native`v1-role-opaque: `(
             { input: [z.schemeValue], output: [z.schemeValue], provenance: "opaque" },
-            (v) => v,
+            function (this: CallCtx, v) {
+              return v;
+            },
           ),
         ).provenance,
       ).toBe("opaque");
       expect(
         contractOf<NativeSymbolDef>(
-          symbol.native`v1-role-sink: `({ input: [z.schemeValue], output: [], provenance: "sink" }, (): [] => []),
+          symbol.native`v1-role-sink: `(
+            { input: [z.schemeValue], output: [], provenance: "sink" },
+            function (this: CallCtx): [] {
+              return [];
+            },
+          ),
         ).provenance,
       ).toBe("sink");
       expect(
         contractOf<NativeSymbolDef>(
           symbol.native`v1-role-transparent: `(
             { input: [z.schemeValue], output: [], provenance: "transparent" },
-            (): [] => [],
+            function (this: CallCtx): [] {
+              return [];
+            },
           ),
         ).provenance,
       ).toBe("transparent");
@@ -190,7 +219,7 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
     // a LIVE type-level field on the cross-package spec. Live mint/forward is
     // `Contract.provenance` at bake time (`mintsPoint` when not `"pipe"`).
     // (The static-side `rosettaPureOf` per-env registry is DELETED — write-only
-    // after Q2/Q3, see docs/working-proposals/rosetta-registry-dissolution.md.)
+    // after Q2/Q3.)
     // `common/capability.ts`'s
     // own `SymbolDeclaration` doc names this explicitly as a permanent (not
     // migration-remnant) arm: "Gone from `foundations/arrival/**` itself, but
@@ -226,8 +255,19 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       // Stage A2: each factory now mints the runtime A-value directly — `contractOf`
       // pulls the baked CONTRACT (still non-optional `provenance`) back off it.
       const defs: { provenance: ProvenanceRole }[] = [
-        contractOf(symbol.native`v1-complete-native: `({ input: [z.schemeValue], output: [z.schemeValue] }, (v) => v)),
-        contractOf(symbol.rosetta`v1-complete-rosetta: `({ input: [z.string], output: [z.string] }, (s) => s)),
+        contractOf(
+          symbol.native`v1-complete-native: `(
+            { input: [z.schemeValue], output: [z.schemeValue] },
+            function (this: CallCtx, v) {
+              return v;
+            },
+          ),
+        ),
+        contractOf(
+          symbol.rosetta`v1-complete-rosetta: `({ input: [z.string], output: [z.string] }, function (this: CallCtx, s) {
+            return s;
+          }),
+        ),
         contractOf(
           symbol.sequence`v1-complete-sequence: `(
             { input: [z.schemeValue], output: [z.schemeValue] },
@@ -275,13 +315,17 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       expect(() =>
         symbol.native`v1-drift-sink-egress: sink declaring a real return`(
           { input: [z.schemeValue], output: [z.schemeValue], provenance: "sink" },
-          (v) => v,
+          function (this: CallCtx, v) {
+            return v;
+          },
         ),
       ).toThrow(ProvenanceRoleShapeError);
       expect(() =>
         symbol.native`v1-drift-transparent-egress: transparent declaring a real return`(
           { input: [z.schemeValue], output: [z.schemeValue], provenance: "transparent" },
-          (v) => v,
+          function (this: CallCtx, v) {
+            return v;
+          },
         ),
       ).toThrow(ProvenanceRoleShapeError);
       // Consistent counterpart — a truly zero-item output vector passes.
@@ -289,7 +333,9 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
         contractOf<NativeSymbolDef>(
           symbol.native`v1-drift-sink-ok: sink with no egress wire`(
             { input: [z.schemeValue], output: [], provenance: "sink" },
-            (): [] => [],
+            function (this: CallCtx): [] {
+              return [];
+            },
           ),
         ).provenance,
       ).toBe("sink");
@@ -299,7 +345,9 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       expect(() =>
         symbol.native`v1-drift-fan-no-lambda: fan with no proc to apply`(
           { input: [z.schemeValue], output: [z.schemeValue], provenance: "fan" },
-          (v) => v,
+          function (this: CallCtx, v) {
+            return v;
+          },
         ),
       ).toThrow(ProvenanceRoleShapeError);
       // Consistent counterpart — a lambda arm present passes.
@@ -307,7 +355,9 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
         contractOf<NativeSymbolDef>(
           symbol.native`v1-drift-fan-ok: fan with a proc to apply`(
             { input: [z.lambda, z.schemeValue], output: [z.schemeValue], provenance: "fan" },
-            (f, v) => v,
+            function (this: CallCtx, f, v) {
+              return v;
+            },
           ),
         ).provenance,
       ).toBe("fan");
@@ -322,7 +372,9 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
       expect(() =>
         symbol.native`v1-drift-pipe-with-lambda: pipe host, real lambda arg — not a contradiction`(
           { input: [z.lambda, z.schemeValue], output: [z.schemeValue], provenance: "pipe" },
-          (f, v) => v,
+          function (this: CallCtx, f, v) {
+            return v;
+          },
         ),
       ).not.toThrow();
     },
@@ -375,7 +427,7 @@ describe("V1 — declared provenance role (§2 CHOSEN: one role per symbol decla
   );
 });
 
-describe("V2 — declaration-driven classifier (§2; PROVENANCE-PLAN.md Q3)", () => {
+describe("V2 — declaration-driven classifier (§2; Q3)", () => {
   it(
     "the classifier reads ONLY the declared `provenance` role — the `isRosettaIn` " +
       "heuristic and the `.fanout` duck-read off a bound function are DELETED, not " +
@@ -478,7 +530,7 @@ describe("V2 — declaration-driven classifier (§2; PROVENANCE-PLAN.md Q3)", ()
   );
 });
 
-describe("V2-Q4 — callback-role drift door + acc chain + stamp path (§2/§3; PROVENANCE-PLAN.md Q4)", () => {
+describe("V2-Q4 — callback-role drift door + acc chain + stamp path (§2/§3; Q4)", () => {
   it(
     "drift-door extension: a declaration CONTRADICTING decidable shape throws " +
       "ProvenanceRoleShapeError at bake (void-egress arms are DECIDED `effect`; a role " +
@@ -490,7 +542,9 @@ describe("V2-Q4 — callback-role drift door + acc chain + stamp path (§2/§3; 
       expect(() =>
         symbol.native`q4-bad-effect: declared transformer under void egress`(
           { input: [z.lambda], output: [z.undefinedResult], callbackRoles: ["element-transformer"] },
-          () => theVoid,
+          function (this: CallCtx) {
+            return theVoid;
+          },
         ),
       ).toThrow(ProvenanceRoleShapeError);
       // Agreeing with the DECIDED arm passes — declaration may restate shape.
@@ -498,7 +552,9 @@ describe("V2-Q4 — callback-role drift door + acc chain + stamp path (§2/§3; 
         contractOf<NativeSymbolDef>(
           symbol.native`q4-ok-effect: declared effect under void egress`(
             { input: [z.lambda], output: [z.undefinedResult], callbackRoles: ["effect"] },
-            () => theVoid,
+            function (this: CallCtx) {
+              return theVoid;
+            },
           ),
         ).callbackRoles,
       ).toEqual(["effect"]);
@@ -506,14 +562,18 @@ describe("V2-Q4 — callback-role drift door + acc chain + stamp path (§2/§3; 
       expect(() =>
         symbol.native`q4-phantom: roles with no lambda arm`(
           { input: [z.string], output: [z.string], callbackRoles: ["control"] },
-          (s) => s,
+          function (this: CallCtx, s) {
+            return s;
+          },
         ),
       ).toThrow(ProvenanceRoleShapeError);
       // MORE roles than lambda arms → door (same phantom-callback contradiction).
       expect(() =>
         symbol.native`q4-excess: two roles, one lambda arm`(
           { input: [z.lambda, z.schemeValue], output: [z.schemeValue], callbackRoles: ["control", "control"] },
-          (f, v) => v,
+          function (this: CallCtx, f, v) {
+            return v;
+          },
         ),
       ).toThrow(ProvenanceRoleShapeError);
       // Overriding the fan DEFAULT (element-transformer) to control does NOT door —
@@ -527,7 +587,9 @@ describe("V2-Q4 — callback-role drift door + acc chain + stamp path (§2/§3; 
               provenance: "fan",
               callbackRoles: ["control"],
             },
-            (f, v) => v,
+            function (this: CallCtx, f, v) {
+              return v;
+            },
           ),
         ).callbackRoles,
       ).toEqual(["control"]);
@@ -579,7 +641,9 @@ describe("V2-Q4 — callback-role drift door + acc chain + stamp path (§2/§3; 
           symbols: (symbol, z) => ({
             "q4-stamp": symbol.native`q4-stamp: synthetic fan`(
               { input: [z.lambda, z.schemeValue], output: [z.schemeValue], provenance: "fan" },
-              (f, v) => v,
+              function (this: CallCtx, f, v) {
+                return v;
+              },
             ),
           }),
         }),
@@ -589,7 +653,7 @@ describe("V2-Q4 — callback-role drift door + acc chain + stamp path (§2/§3; 
   );
 });
 
-describe("V4 — cone-traversal termination over cyclic binder nodes (§1; PROVENANCE-PLAN.md Q8a′)", () => {
+describe("V4 — cone-traversal termination over cyclic binder nodes (§1; Q8a′)", () => {
   it(
     "fullCone/countCone/fieldCone over a `binder{cycles: true}` node TERMINATES — a " +
       "cyclic loop-carried dependency never sends the walker into unbounded recursion " +
@@ -647,7 +711,7 @@ describe("V4 — cone-traversal termination over cyclic binder nodes (§1; PROVE
   );
 });
 
-describe("Q7 — program prelude: PURE-only membership, the REJECTED direction (§1 CHOSEN round 2 A3, narrowed round 3 M1; PROVENANCE-PLAN.md Q7)", () => {
+describe("Q7 — program prelude: PURE-only membership, the REJECTED direction (§1 CHOSEN round 2 A3, narrowed round 3 M1; Q7)", () => {
   it(
     "a define wrapping a fetch-role (source) rosetta is refused prelude membership — " +
       "directly (its own body crosses the port) AND transitively (a caller that never " +
@@ -680,8 +744,8 @@ describe("Q7 — program prelude: PURE-only membership, the REJECTED direction (
         let caught: unknown;
         try {
           assertPreludeEligible(name, membership);
-        } catch (e) {
-          caught = e;
+        } catch (error) {
+          caught = error;
         }
         expect(caught).toBeInstanceOf(PreludeMembershipError);
         expect((caught as PreludeMembershipError).message).toMatch(/port/i);

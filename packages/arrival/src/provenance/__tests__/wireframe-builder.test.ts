@@ -8,13 +8,14 @@
  */
 import { describe, it, expect, beforeAll } from "vitest";
 import { parse } from "../../eval/generator-exec.js";
-import { inferenceEnv } from "../../env/inference-env.js";
 import type { Classifier, DeclaredRole } from "../lineage.js";
 import { buildWireframe } from "../wireframe/builder.js";
+import { classifyProgramPrelude } from "../prelude.js";
+import { referencedSymbols } from "../slice.js";
 import type { Wire, WireframeGraph, WireframeProgram } from "../wireframe/types.js";
 import { freeVars } from "../wireframe/free-vars.js";
 import { reachableNodes } from "../wireframe/loops.js";
-import { WireLocalityError } from "../../errors.js";
+import { unboundSlots } from "../wireframe/validate.js";
 
 // Declared roles (Q3's shape — synthetic here; production reads `.provenanceRole`).
 const ROLES: Record<string, DeclaredRole> = {
@@ -148,14 +149,14 @@ describe("Q8a builder core — selector-cone reachability decides mux fate (§1 
     expect(kinds(p.main)).toContain("template-ref");
   });
 
-  it("a pure mux WRAPPING a port keeps the mux in the wire and cuts only the port", async () => {
-    // Selector (> x 0) is pure → the if collapses; the source in the arm is still
-    // a node (a wire body structurally contains no source).
+  it("a pure-selector mux WRAPPING a port stays a (lazy) mux — arms with cuts do not collapse (W-9)", async () => {
+    // Selector (> x 0) is pure, but the arm holds a source: folding it into one wire would make
+    // γ demand the (possibly unrecorded) port eagerly. Cut-free arms still collapse (above).
     const p = await wf("(if (> x 0) (src-a) y)");
-    expect(kinds(p.main).sort()).toEqual(["port", "source"]);
-    const w = wireTo(p.main, "out");
-    expect(w?.source).toContain("(if (> x 0) in0 y)");
-    expect(w?.params.toSorted()).toEqual(["in0", "x", "y"]);
+    expect(kinds(p.main).sort()).toEqual(["mux", "port", "source"]);
+    const sel = p.main.wires.find((w) => w.consumer.slot === "selector");
+    expect(sel?.source).toBe("(lambda (x) (> x 0))");
+    expect(p.main.wires.find((w) => w.consumer.slot === "arm0")?.source).toBe("(lambda (in0) in0)");
   });
 });
 
@@ -281,7 +282,8 @@ describe("Q8a′ builder core — loop-shaped binders get REAL backedge-wired in
     // The terminal arm's port lands as a designated node INSIDE the private
     // interior — never spliced into the enclosing graph `p.main` (I5's
     // discipline, extended to loop interiors).
-    expect(binder.interior.nodes.map((n) => n.kind).sort()).toEqual(["port", "recur", "source"]);
+    // (the pure `(> i 3)` selector's arm holds the source, so the `if` stays a lazy mux — W-9)
+    expect(binder.interior.nodes.map((n) => n.kind).sort()).toEqual(["mux", "port", "recur", "source"]);
     expect(p.main.nodes.some((n) => n.kind === "source")).toBe(false);
 
     // A `do` loop's step position is equally wireframed — the step IS the
@@ -376,9 +378,20 @@ describe("Q8a builder core — dropped top-level forms and program order (§1 D6
 });
 
 describe("Q8a — unevalWire's emission-time door (wire-locality)", () => {
-  it("a port-reaching define captured as a VALUE throws WireLocalityError (never a payload, never by-name)", async () => {
-    const forms = await parse("(define (helper x) (src-a x))\n(emit! helper)");
-    expect(() => buildWireframe(forms, { classifier: C, isBaseName })).toThrow(WireLocalityError);
+  it("a port-reaching define used as a VALUE is a closure{ref:define} node (Q8a FLIPPED: no longer a door)", async () => {
+    const p = await wf("(define (helper x) (src-a x))\n(emit! helper)");
+    expect(kinds(p.main)).toEqual(["sink", "closure"]); // the sink is the last form: no egress port
+    const closure = p.main.nodes[1];
+    expect(closure).toMatchObject({
+      kind: "closure",
+      params: ["x"],
+      captures: [],
+      ref: { kind: "define", name: "helper" },
+    });
+    const arg = p.main.wires.find((w) => w.consumer.slot === "arg0");
+    expect(arg?.source).toBe("(lambda (in0) in0)");
+    expect(arg?.paramRefs).toEqual([{ kind: "node", name: "in0", node: 1 }]);
+    expect(unboundSlots(p)).toEqual([]);
   });
 
   it("every emitted wire is CLOSED: re-parsing its source yields FV ⊆ prelude ∪ base (params lambda-bound)", async () => {
@@ -434,5 +447,271 @@ describe("Q8a — freeVars models `try` (evalTry's exact shape; mirrors collect-
     const [form] = await parse("(try (only-body-call x))");
     const fv = freeVars(form);
     expect([...fv].sort()).toEqual(["only-body-call", "x"].sort());
+  });
+});
+
+// W-P1 — prelude membership soundness: a port NAMED anywhere in a define form makes it
+// wireframe material, even where classify() (one expression, structurally) sees none.
+describe("W-P1 — port-reaching defines are never prelude (name-scan witness beside classify)", () => {
+  it.each([
+    ["lambda RHS", "(define f (lambda (x) (src-a x)))\n(f 1)"],
+    ["non-final body position", "(define (f x) (emit! x) (+ x 1))\n(f 1)"],
+    ["lambda passed to a non-fan HOF", "(define (f xs) (for-each (lambda (x) (emit! x)) xs))\n(f (list 1))"],
+  ])("%s → material, not prelude", async (_label, code) => {
+    const p = await wf(code);
+    const name = code.match(/\(define \(?(\w+)/)![1];
+    expect(p.membership.wireframe.has(name)).toBe(true);
+    expect(p.prelude.names.has(name)).toBe(false);
+    expect(p.prelude.source).not.toContain("src-a");
+    expect(p.prelude.source).not.toContain("emit!");
+  });
+
+  it("a dict-literal RHS naming a port is material (referencedSymbols descends {…})", async () => {
+    const forms = await parse("(define cfg {:a (src-a 1)})");
+    const m = classifyProgramPrelude(forms, C);
+    expect(m.wireframe.has("cfg")).toBe(true);
+  });
+
+  it("a genuinely pure define stays prelude", async () => {
+    const p = await wf("(define (inc n) (+ n 1))\n(inc 1)");
+    expect(p.prelude.names.has("inc")).toBe(true);
+  });
+});
+
+// W-P1b — referencedSymbols: dict literals are evaluated forms; quoted data is not.
+describe("referencedSymbols — dict literals descended, quote skipped, quasiquote unquotes kept", () => {
+  it('(let* ((a (ask "1")) (b {:x a})) (fetch b)) reaches `a` through the dict literal', async () => {
+    const [form] = await parse('(let* ((a (ask "1")) (b {:x a})) (fetch b))');
+    expect(referencedSymbols(form).has("a")).toBe(true);
+    const [dict] = await parse("{:x a}");
+    expect([...referencedSymbols(dict)]).toContain("a");
+  });
+
+  it("quoted data is not a reference", async () => {
+    const [form] = await parse("(b (quote a))");
+    expect(referencedSymbols(form).has("a")).toBe(false);
+    expect(referencedSymbols(form).has("b")).toBe(true);
+    const [tick] = await parse("(b 'a)");
+    expect(referencedSymbols(tick).has("a")).toBe(false);
+  });
+
+  it("quasiquote: template symbols are data, unquoted parts are references", async () => {
+    const [form] = await parse("`(a ,b (c ,@d))");
+    const refs = referencedSymbols(form);
+    expect(refs.has("a")).toBe(false);
+    expect(refs.has("c")).toBe(false);
+    expect(refs.has("b")).toBe(true);
+    expect(refs.has("d")).toBe(true);
+  });
+});
+
+// W-P2 — a material VALUE define is walked in main as a growing frame (not a zero-param template).
+describe("W-P2 — value defines of port results", () => {
+  it('(define plan (src-a 1)) (list plan "b") builds: source + port, egress wire over the source', async () => {
+    const p = await wf('(define plan (src-a 1))\n(list plan "b")');
+    expect(p.templates.has("plan")).toBe(false);
+    expect(kinds(p.main).sort()).toEqual(["port", "source"]);
+    const w = wireTo(p.main, "out")!;
+    expect(w.paramRefs).toEqual([
+      { kind: "node", name: "in0", node: p.main.nodes.findIndex((n) => n.kind === "source") },
+    ]);
+    expect(w.source).toBe('(lambda (in0) (let* ((plan in0)) (list plan "b")))');
+  });
+
+  it("unreached value defines are pruned from a wire (no over-attribution)", async () => {
+    const p = await wf("(define plan (src-a 1))\n(define other (src-b 2))\n(list plan 3)");
+    expect(kinds(p.main).filter((k) => k === "source")).toHaveLength(2);
+    const w = wireTo(p.main, "out")!;
+    expect(w.paramRefs).toHaveLength(1);
+    expect(w.source).not.toContain("other");
+  });
+
+  it("a value define chain keeps transitive entries; a pure-RHS mixed define is a frame entry", async () => {
+    const p = await wf("(define a (src-a 1))\n(define b (+ a 1))\n(emit! b)");
+    const sink = p.main.nodes.findIndex((n) => n.kind === "sink");
+    const w = p.main.wires.find((x) => x.consumer.node === sink)!;
+    expect(w.source).toBe("(lambda (in0) (let* ((a in0) (b (+ a 1))) b))");
+  });
+});
+
+// W-A1 — the bracket/curly surface is evaluated; the builder must see ports inside it.
+describe("W-A1 — bracket bindings and [..]/{..} literals", () => {
+  it("(let* ([a (src-a 1)] [b (+ a 1)]) (emit! b)) cuts the source", async () => {
+    const p = await wf("(let* ([a (src-a 1)] [b (+ a 1)]) (emit! b))");
+    expect(kinds(p.main).sort()).toEqual(["port", "sink", "source"]);
+    const sink = p.main.nodes.findIndex((n) => n.kind === "sink");
+    const w = p.main.wires.find((x) => x.consumer.node === sink)!;
+    expect(w.source).not.toContain("src-a");
+    expect(w.paramRefs.some((r) => r.kind === "node")).toBe(true);
+  });
+
+  it("whole-list bracket bindings (let [a (src-a 1)] …) and paren-list-of-bracket-entries", async () => {
+    for (const code of ["(let [a (src-a 1)] (emit! a))", "(let ([a (src-a 1)]) (emit! a))"]) {
+      const p = await wf(code);
+      expect(kinds(p.main).sort(), code).toEqual(["port", "sink", "source"]);
+    }
+  });
+
+  it("(emit! [1 (src-a 2)]) — the source inside a vector literal is cut", async () => {
+    const p = await wf("(emit! [1 (src-a 2)])");
+    expect(kinds(p.main).sort()).toEqual(["sink", "source"]);
+    const sink = p.main.nodes.findIndex((n) => n.kind === "sink");
+    expect(p.main.wires.find((x) => x.consumer.node === sink)!.source).toBe("(lambda (in0) [1 in0])");
+  });
+
+  it("(emit! {:a (src-a 2)}) — the source inside a dict literal is cut", async () => {
+    const p = await wf("(emit! {:a (src-a 2)})");
+    expect(kinds(p.main).sort()).toEqual(["sink", "source"]);
+    const sink = p.main.nodes.findIndex((n) => n.kind === "sink");
+    expect(p.main.wires.find((x) => x.consumer.node === sink)!.source).toBe("(lambda (in0) {:a in0})");
+  });
+
+  it("a free variable inside a literal is wire ingress (freeVars descends [..]/{..})", async () => {
+    const p = await wf("(emit! [x {:k y}])");
+    const sink = p.main.nodes.findIndex((n) => n.kind === "sink");
+    expect(p.main.wires.find((w) => w.consumer.node === sink)!.params).toEqual(["x", "y"]);
+  });
+
+  it("(define cfg {:a (src-a 1)}) is material and its source lands in main", async () => {
+    const p = await wf("(define cfg {:a (src-a 1)})\n(emit! (:a cfg))");
+    expect(p.membership.wireframe.has("cfg")).toBe(true);
+    expect(kinds(p.main).sort()).toEqual(["sink", "source"]);
+  });
+
+  it("bracket cond clauses and bracket do bindings/clauses are read", async () => {
+    const c = await wf("(cond [(positive? (src-a 1)) (src-b 2)] [else 0])");
+    expect(kinds(c.main)).toContain("mux");
+    const d = await wf("(do ([i 0 (+ i 1)]) [(= i 2) i] (emit! i))");
+    const binder = d.main.nodes.find((n) => n.kind === "binder");
+    expect(binder?.kind === "binder" && binder.params).toEqual(["i"]);
+  });
+
+  it("selector reachability sees through bracket bindings (classify twin)", async () => {
+    const p = await wf("(let ([y (src-a 1)]) (if (positive? y) 1 2))");
+    expect(kinds(p.main)).toContain("mux");
+  });
+});
+
+// W-A3 — `guard`: the clause var is bound in the clauses; ports in clauses and body land.
+describe("W-A3 — guard", () => {
+  it("(guard (e (#t (emit! e))) (src-a 1)) — a guard NODE: body wire, clause wires read the caught condition (W-A3 FLIPPED)", async () => {
+    const p = await wf("(guard (e (#t (emit! e))) (src-a 1))");
+    expect(kinds(p.main)).toEqual(["guard", "source", "sink", "port"]);
+    expect(p.main.nodes[0]).toMatchObject({ kind: "guard", op: "guard", var: "e", clauses: 1, hasFinally: false });
+    const into = (slot: string, node = 0) =>
+      p.main.wires.find((w) => w.consumer.node === node && w.consumer.slot === slot)!;
+    expect(into("body").source).toBe("(lambda (in0) (begin in0))");
+    expect(into("selector0").source).toBe("(lambda (in0) (let ((e in0)) #t))");
+    expect(into("selector0").paramRefs).toEqual([{ kind: "node", name: "in0", node: 0, slot: "condition" }]);
+    expect(into("arm0").source).toBe("(lambda (in0 in1) (let ((e in0)) in1))");
+    // the sink's own arg wire reads the caught condition too
+    expect(into("arg0", 2).paramRefs).toEqual([{ kind: "node", name: "in0", node: 0, slot: "condition" }]);
+    expect(p.main.wires.find((w) => w.consumer.slot === "out")?.source).toBe("(lambda (in0) in0)");
+    expect(unboundSlots(p)).toEqual([]);
+  });
+
+  it("the clause var shadows an outer name inside the clause only", async () => {
+    const [form] = await parse("(guard (e (#t e)) (f e))");
+    expect([...freeVars(form)].sort()).toEqual(["e", "f"]); // body's `e` is the OUTER e
+    const [form2] = await parse("(guard (e (#t (g e))) 1)");
+    expect([...freeVars(form2)]).toEqual(["g"]);
+  });
+});
+
+// W-7 — bare-name cuts are per OCCURRENCE (operand cell), not per interned symbol.
+describe("W-7 — bare role names: one node per occurrence, real spans", () => {
+  it('(list src-a src-a) → two closure{ref:port} nodes, spans from the parent form (never "?")', async () => {
+    const p = await wf("(list src-a src-a)");
+    const sources = p.main.nodes.filter((n) => n.kind === "closure" && n.ref?.kind === "port" && n.ref.op === "src-a");
+    expect(sources).toHaveLength(2);
+    for (const n of sources) expect(n.span).toMatch(/^list@/);
+    const w = wireTo(p.main, "out")!;
+    expect(w.source).toBe("(lambda (in0 in1) (list in0 in1))");
+    expect(w.paramRefs.map((r) => (r.kind === "node" ? r.node : -1))).toEqual([0, 1]);
+  });
+
+  it("occurrences under different parents carry different spans", async () => {
+    const p = await wf("(list (list src-a)\n(list src-a))");
+    const sources = p.main.nodes.filter((n) => n.kind === "closure");
+    expect(sources).toHaveLength(2);
+    expect(new Set(sources.map((n) => n.span)).size).toBe(2);
+  });
+
+  it("a shadowing binder is not rewritten", async () => {
+    const p = await wf("(list src-a (lambda (src-a) (list src-a)))");
+    expect(p.main.nodes.filter((n) => n.kind === "closure")).toHaveLength(1);
+    expect(wireTo(p.main, "out")!.source).toBe("(lambda (in0) (list in0 (lambda (src-a) (list src-a))))");
+  });
+
+  it("(emit! src-a) — the wire body IS the occurrence", async () => {
+    const p = await wf("(emit! src-a)");
+    const sink = p.main.nodes.findIndex((n) => n.kind === "sink");
+    expect(p.main.wires.find((w) => w.consumer.node === sink)!.source).toBe("(lambda (in0) in0)");
+  });
+});
+
+// W-A2 — `do` result clause: one param per loop var, each at its own recur slot.
+describe("W-A2 — do result wire", () => {
+  it('params map to DISTINCT recur slots; span is the do form\'s, never "?"', async () => {
+    const p = await wf("(do ((i 0 (+ i 1)) (acc (list) (cons (src-a i) acc))) ((= i 2) (cons i acc)))");
+    const binder = p.main.nodes.find((n) => n.kind === "binder");
+    expect(binder?.kind).toBe("binder");
+    if (binder?.kind !== "binder") return;
+    const g = binder.interior;
+    const out = g.wires.find((w) => w.consumer.slot === "out")!;
+    const recur = g.nodes.findIndex((n) => n.kind === "recur");
+    expect(out.paramRefs).toEqual([
+      { kind: "node", name: "in0", node: recur, slot: "arg0" },
+      { kind: "node", name: "in1", node: recur, slot: "arg1" },
+    ]);
+    expect(out.span).toMatch(/^do@/);
+    expect(out.source).toBe("(lambda (in0 in1) (let ((i in0) (acc in1)) (cons i acc)))");
+  });
+
+  it("a bare-symbol result form takes the do form's span", async () => {
+    const p = await wf("(do ((i 0 (+ i 1))) ((= i 2) i))");
+    const binder = p.main.nodes.find((n) => n.kind === "binder");
+    if (binder?.kind !== "binder") throw new Error("no binder");
+    expect(binder.interior.wires.find((w) => w.consumer.slot === "out")!.span).toMatch(/^do@/);
+  });
+});
+
+// W-6 — case / and / or with a port-reaching key/operand stay lazy muxes.
+describe("W-6 — case/and/or are muxes when a selector reaches a port", () => {
+  it("(case (src-a) ((1) (src-b)) (else 0)) → case mux: one selector per non-else clause, arm per clause", async () => {
+    const p = await wf("(case (src-a) ((1) (src-b)) (else 0))");
+    const mux = p.main.nodes.findIndex((n) => n.kind === "mux");
+    expect(p.main.nodes[mux]).toMatchObject({ kind: "mux", op: "case", arms: 2 });
+    const slots = p.main.wires
+      .filter((w) => w.consumer.node === mux)
+      .map((w) => w.consumer.slot)
+      .sort();
+    expect(slots).toEqual(["arm0", "arm1", "selector0"]);
+    // the key's source is ONE node shared by the selector wire(s), not duplicated
+    expect(kinds(p.main).filter((k) => k === "source")).toHaveLength(2); // src-a key + src-b arm
+    expect(p.main.wires.find((w) => w.consumer.slot === "selector0")!.source).toBe(
+      "(lambda (in0) (case in0 ((1) #t) (else #f)))",
+    );
+  });
+
+  it("(and (positive? (src-a)) (src-b)) → and mux: selector = first operand, arm0 = the rest", async () => {
+    const p = await wf("(and (positive? (src-a)) (src-b))");
+    const mux = p.main.nodes.findIndex((n) => n.kind === "mux");
+    expect(p.main.nodes[mux]).toMatchObject({ kind: "mux", op: "and", arms: 1 });
+    expect(wireTo(p.main, "selector")?.source).toBe("(lambda (in0) (positive? in0))");
+    expect(p.main.wires.find((w) => w.consumer.slot === "arm0")?.source).toBe("(lambda (in0) in0)");
+  });
+
+  it("(or a b c) with a port in b nests: the arm is itself an `or` mux over (b c)", async () => {
+    const p = await wf("(or x (positive? (src-a)) (src-b))");
+    const muxes = p.main.nodes.filter((n) => n.kind === "mux");
+    expect(muxes).toHaveLength(2);
+    expect(muxes.every((m) => m.kind === "mux" && m.op === "or")).toBe(true);
+  });
+
+  it("a port only in the LAST and/or operand does not force a mux (pure prefix)", async () => {
+    // nothing earlier can reach a port; the item-9 rule (arms with cuts) governs the rest
+    const p = await wf("(and (> x 0) y)");
+    expect(kinds(p.main)).toEqual(["port"]);
   });
 });

@@ -45,7 +45,7 @@ export function scopeId(node: unknown): string {
 /** Marker in `.prompt` generated-lambda source (`parse(…, \`dotprompt:${path}\`)`).
  *  A scope containing this was minted on the resolver's `(infer/run …)`, not the
  *  author's call site. */
-export const DOTPROMPT_SOURCE_MARKER = "@dotprompt:";
+const DOTPROMPT_SOURCE_MARKER = "@dotprompt:";
 
 /** Minimal parent-chain shape for `userCallSite` (keeps this leaf import-free). */
 export interface ScopedParented {

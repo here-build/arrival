@@ -22,14 +22,13 @@
  * deliberately wrong `recordedEgress` in the verification pool) to exercise the
  * REJECT arm, since this executor cannot organically disagree with itself.
  */
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import { parse } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import type { Classifier } from "../../provenance/lineage.js";
 import { buildWireframe } from "../../provenance/wireframe/builder.js";
 import { hashGraph } from "../../provenance/wireframe/hash.js";
-import { setEmissionEnabled } from "../../provenance/store/emit.js";
 import type { Payload } from "../../provenance/store/interfaces.js";
 import type { TemplateHash } from "../../provenance/store/ids.js";
 import type { WireframeProgram } from "../../provenance/wireframe/types.js";
@@ -86,10 +85,6 @@ async function buildFixture(): Promise<{
 
 beforeAll(async () => {});
 
-afterEach(() => {
-  setEmissionEnabled(false); // module-global flag; recordRun restores
-});
-
 describe("§4 C5 — self-contained request/response wire format", () => {
   // @ledger: Q18. Every field a `DrillInRequest`/`DrillInResponse` carries is a plain,
   // JSON-able value (task item 1's own requirement) — `structuredClone` (the actual
@@ -131,9 +126,9 @@ describe("§4 C6 first disjunct — epoch-mismatch refusal (task item 2)", () =>
     try {
       await executor.drillIn(request);
       expect.unreachable();
-    } catch (err) {
-      expect(err).toBeInstanceOf(EpochRefusalError);
-      const e = err as EpochRefusalError;
+    } catch (error) {
+      expect(error).toBeInstanceOf(EpochRefusalError);
+      const e = error as EpochRefusalError;
       expect(e.requestEpoch).toBe(EPOCH_B);
       expect(e.executorEpoch).toBe(EPOCH_A);
       expect(e.regionId).toBe(run.regionId);
@@ -157,8 +152,8 @@ describe("§4 C6 first disjunct — epoch-mismatch refusal (task item 2)", () =>
     try {
       await executor.drillIn(request);
       expect.unreachable();
-    } catch (err) {
-      expect((err as EpochRefusalError).reason).toBe("verification-disabled");
+    } catch (error) {
+      expect((error as EpochRefusalError).reason).toBe("verification-disabled");
     }
   });
 });
@@ -215,10 +210,10 @@ describe("§4 C6 second disjunct — sampled wire-γ verification (task item 3)"
     try {
       await executor.drillIn(request);
       expect.unreachable();
-    } catch (err) {
-      const e = err as EpochRefusalError;
+    } catch (error) {
+      const e = error as EpochRefusalError;
       expect(e.reason).toBe("verification-disagreed");
-      expect(e.message).toMatch(new RegExp(templateHash.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+      expect(e.message).toMatch(new RegExp(templateHash.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)));
     }
 
     // And the stream is NEVER trusted off a disagreement — a later no-pool request
@@ -227,8 +222,8 @@ describe("§4 C6 second disjunct — sampled wire-γ verification (task item 3)"
     try {
       await executor.drillIn({ templateHash, ingress, streamEpoch: EPOCH_B, regionId: run.regionId });
       expect.unreachable();
-    } catch (err) {
-      expect((err as EpochRefusalError).reason).toBe("no-verification-offered");
+    } catch (error) {
+      expect((error as EpochRefusalError).reason).toBe("no-verification-offered");
     }
   });
 
@@ -246,8 +241,8 @@ describe("§4 C6 second disjunct — sampled wire-γ verification (task item 3)"
     try {
       await executor.drillIn(request);
       expect.unreachable();
-    } catch (err) {
-      expect((err as EpochRefusalError).reason).toBe("no-verification-offered");
+    } catch (error) {
+      expect((error as EpochRefusalError).reason).toBe("no-verification-offered");
     }
   });
 });
@@ -299,7 +294,7 @@ describe("unresolvable template-hash — a foreign/stale hash is a teaching door
     const { program, ingress, run } = await buildFixture();
     const executor = new SameProcessExecutor({ program, semanticsEpoch: EPOCH_A });
     const request: DrillInRequest = {
-      templateHash: "template-v0:deadbeef",
+      templateHash: "template-v1:deadbeefdeadbeefdeadbeefdeadbeef",
       ingress,
       streamEpoch: EPOCH_A,
       regionId: run.regionId,

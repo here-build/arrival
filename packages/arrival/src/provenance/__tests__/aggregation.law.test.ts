@@ -94,7 +94,7 @@ describe("Q12 aggregation (docs/PROVENANCE.md §5 A6, round-3 m4)", () => {
       "the write-side hook never routes them into a run (they land in the base store, " +
       "one raw record per emission, exactly as before this node existed)",
     async () => {
-      const mint: MintRecord = { kind: "mint", id: idAt(0), seq: 1, payloadHash: "payload-v0:x" };
+      const mint: MintRecord = { kind: "mint", id: idAt(0), seq: 1, payloadHash: "payload-v1:x" };
       const mux: MuxDecisionRecord = { kind: "mux-decision", id: idAt(1), seq: 2, arm: 0 };
       const schedule: HostScheduleRecord = { kind: "host-schedule", id: idAt(2), seq: 3, triples: [] };
 

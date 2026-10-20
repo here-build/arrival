@@ -3,10 +3,10 @@
  *
  * `deepProvenance` yields numeric invocation ids (`[1]`, `[5]`), and before this API the
  * ids were dead ends: no exported query answered "which tool produced this value?" by
- * name (`invocationFor` keys on TASK objects, not ids — it returns undefined for an
- * ordinal). This pins the whole documented path, over the public surface only:
+ * name from an ordinal. This pins the whole documented path, over the public surface only:
  * source verb → exec with tap → deepProvenance → toolNameFor.
  */
+import type { CallCtx } from "../../run/CallCtx.js";
 import { describe, expect, it } from "vitest";
 
 import { deepProvenance } from "../deep-provenance.js";
@@ -19,11 +19,15 @@ const weather = EnvCapability.define("test/weather", {
   symbols: (symbol, z) => ({
     "forecast-for": symbol.rosetta`forecast-for: the current forecast for a city`(
       { input: [z.string], output: [z.string], provenance: "source" },
-      async (city) => `cloudy in ${city}`,
+      async function (this: CallCtx, city) {
+        return `cloudy in ${city}`;
+      },
     ),
     "scan-output": symbol.rosetta`scan-output: the scanner's verdict line`(
       { input: [], output: [z.string], provenance: "source" },
-      async () => "evil.exe",
+      async function (this: CallCtx) {
+        return "evil.exe";
+      },
     ),
   }),
 });

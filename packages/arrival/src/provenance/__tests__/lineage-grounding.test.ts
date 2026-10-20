@@ -35,8 +35,8 @@
  * are arbitrary-but-fixed; the INVARIANT under test is the grounded/ungrounded
  * SHAPE per leaf, not the id values.
  */
+import type { CallCtx } from "../../run/CallCtx.js";
 import { describe, it, expect } from "vitest";
-import { is_nil, is_pair } from "../../values/value-guards.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { sStr, runRaw, type EnvSetup } from "../../__tests__/_lineage-test-helpers.js";
 import { ANil } from "../../values/primitives/ANil.js";
@@ -60,11 +60,15 @@ const sources: EnvSetup = async (env) => {
     symbols: (symbol, z) => ({
       "source-a": symbol.native`source-a: fake source (A)`(
         { input: [z.schemeValue], output: [z.schemeValue], provenance: "source" },
-        () => sStr("SRC-A", MINT_A),
+        function (this: CallCtx) {
+          return sStr("SRC-A", MINT_A);
+        },
       ),
       "source-b": symbol.native`source-b: fake source (B)`(
         { input: [z.schemeValue], output: [z.schemeValue], provenance: "source" },
-        () => sStr("SRC-B", MINT_B),
+        function (this: CallCtx) {
+          return sStr("SRC-B", MINT_B);
+        },
       ),
     }),
   });

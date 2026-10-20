@@ -19,6 +19,7 @@
  * fold LAW holds at any N by construction (a pure fold over whatever `readStream`
  * returns); the fakes-based benchmark is what proves the numbers hold AT SCALE.
  */
+// eslint-disable-next-line import-x/no-unresolved -- virtual module provided by the workerd pool (types: ./workerd/ambient.d.ts)
 import { env, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 

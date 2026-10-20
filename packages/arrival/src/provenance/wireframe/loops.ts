@@ -50,26 +50,8 @@
  *     WHOLE departure. `reachableNodes` is kept as the un-graded call (every
  *     existing caller) for `"value"` demand, byte-stable.
  */
-import { APair } from "../../values/primitives/APair.js";
-import { ASymbol } from "../../values/primitives/ASymbol.js";
+import { bindingEntries, clauseElements } from "../surface.js";
 import type { WireframeGraph } from "./types.js";
-
-function opName(x: unknown): string {
-  const v = (x as { valueOf?: () => unknown })?.valueOf?.();
-  return typeof v === "string" || typeof v === "symbol" ? String(v) : String(x);
-}
-
-/** Elements of a proper pair chain (mirrors builder.ts's own private copy — the
- *  established per-file convention, see e.g. `wireframe/free-vars.ts`'s header). */
-function chainOf(n: unknown): unknown[] {
-  const out: unknown[] = [];
-  let cur: unknown = n;
-  while (cur instanceof APair) {
-    out.push(cur.car);
-    cur = cur.cdr;
-  }
-  return out;
-}
 
 /** One `do` binding: `(var init step?)`. `step` is NEVER absent in the returned
  *  shape — R7RS: an omitted step has "the same effect as if `(<variable> <init>
@@ -89,19 +71,13 @@ export interface DoBinding {
  *  tolerance (walks whatever bindings ARE well-formed; a caller building a graph
  *  from a malformed program has bigger problems than this parser catching it). */
 export function parseDoBindings(bindingList: unknown): DoBinding[] {
-  const out: DoBinding[] = [];
-  let n: unknown = bindingList;
-  while (n instanceof APair) {
-    const b = n.car;
-    n = n.cdr;
-    if (!(b instanceof APair) || !(b.car instanceof ASymbol)) continue;
-    const afterName = b.cdr;
-    const init = afterName instanceof APair ? afterName.car : undefined;
-    const stepRest = afterName instanceof APair ? afterName.cdr : undefined;
-    const step = stepRest instanceof APair ? stepRest.car : b.car; // R7RS default: carry the var itself
-    out.push({ name: opName(b.car), init, step });
-  }
-  return out;
+  // Bracket entries `[var init step?]` read like paren ones (`normalizeBindings`' twin);
+  // the whole-list bracket form is a runtime door for `do`, so it yields nothing here.
+  return bindingEntries(bindingList, false).map((b) => ({
+    name: b.name,
+    init: b.rest[0],
+    step: b.rest.length > 1 ? b.rest[1] : b.symbol, // R7RS default: carry the var itself
+  }));
 }
 
 export interface DoClause {
@@ -114,8 +90,9 @@ export interface DoClause {
 export const EMPTY_DO_CLAUSE: DoClause = { test: undefined, resultForms: [] };
 
 export function parseDoClause(clause: unknown): DoClause {
-  if (!(clause instanceof APair)) return EMPTY_DO_CLAUSE;
-  return { test: clause.car, resultForms: chainOf(clause.cdr) };
+  const parts = clauseElements(clause); // bracket `[test result…]` ≡ paren clause
+  if (parts === undefined || parts.length === 0) return EMPTY_DO_CLAUSE;
+  return { test: parts[0], resultForms: parts.slice(1) };
 }
 
 /** Every node index reachable backward from `from` within one `WireframeGraph`.
@@ -143,7 +120,12 @@ export function reachableNodesForDemand(graph: WireframeGraph, from: number, dem
     const isFanNode = expanding !== undefined && expanding.kind === "fan";
     for (const w of graph.wires) {
       if (w.consumer.node !== idx) continue;
-      const isStructuralProducer = isFanNode && w.consumer.slot.startsWith("source");
+      // A non-length-preserving fan's callback VALUE (`fn` wire) decides the count (predicate);
+      // a length-preserving fan's `fn` wire is pruned under count demand.
+      const isStructuralProducer =
+        isFanNode &&
+        (w.consumer.slot.startsWith("source") ||
+          (w.consumer.slot === "fn" && expanding.kind === "fan" && !expanding.lengthPreserving));
       if (demand === "count" && w.fact === undefined && !isStructuralProducer) continue;
       for (const ref of w.paramRefs) {
         if (ref.kind === "node" && !visited.has(ref.node)) stack.push(ref.node);

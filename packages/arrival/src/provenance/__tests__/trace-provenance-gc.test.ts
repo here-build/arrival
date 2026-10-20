@@ -14,6 +14,7 @@
  * constructor `startId` floor for the process-restart seam. Ledger-building and
  * value-prefix capping are consumer POLICY — that lives in arrival-manifold, not here.
  */
+import type { CallCtx } from "../../run/CallCtx.js";
 import { describe, expect, it } from "vitest";
 
 import { EnvCapability } from "../../common/capability.js";
@@ -28,7 +29,9 @@ function bigTextCapability(size: number) {
     symbols: (symbol, z) => ({
       "big-text": symbol.rosetta`big-text: a tool response big enough to matter for byte accounting`(
         { input: [], output: [z.string], provenance: "source" },
-        async () => "x".repeat(size),
+        async function (this: CallCtx) {
+          return "x".repeat(size);
+        },
       ),
     }),
   });
@@ -90,7 +93,7 @@ describe("EvalTrace.stats() / .points() / .clear() — explicit provenance GC", 
       symbols: (symbol, z) => ({
         "mid-run": symbol.rosetta`mid-run: calls clear() on its OWN still-open trace mid-call`(
           { input: [], output: [z.string], provenance: "source" },
-          async () => {
+          async function (this: CallCtx) {
             try {
               trace.clear();
             } catch {
@@ -109,7 +112,7 @@ describe("EvalTrace.stats() / .points() / .clear() — explicit provenance GC", 
   });
 
   it("startId floors the id counter for a fresh trace continuing a prior instance", async () => {
-    const trace = new EvalTrace(500_000, 1_000);
+    const trace = new EvalTrace(500_000, 1000);
     expect(trace.invocationById(999)).toBeUndefined();
 
     const cap = bigTextCapability(5);
@@ -117,7 +120,7 @@ describe("EvalTrace.stats() / .points() / .clear() — explicit provenance GC", 
     expect(toJS(values[0])).toBe("xxxxx");
 
     const [point] = [...trace.points()];
-    expect(point!.id).toBeGreaterThanOrEqual(1_000);
+    expect(point!.id).toBeGreaterThanOrEqual(1000);
     expect(trace.invocationById(point!.id)?.value).toBeDefined();
     // Ids below the floor are never resolvable — this instance never minted them.
     expect(trace.invocationById(0)).toBeUndefined();

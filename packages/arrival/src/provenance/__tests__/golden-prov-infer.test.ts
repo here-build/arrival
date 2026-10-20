@@ -45,6 +45,7 @@
  * `inferSources` setup (the deterministic rosetta fixtures), passed to the
  * shared `runRaw` via its setup hook; the `prov`/`value` wrappers stay local.
  */
+import type { CallCtx } from "../../run/CallCtx.js";
 import { describe, it, expect } from "vitest";
 import { AValue } from "../../values/primitives/AValue.js";
 import { provOf } from "../../provenance/lineage.js";
@@ -83,11 +84,15 @@ const inferSources: EnvSetup = async (env) => {
       // infer-x / infer-y: scalar sources, each minting a single fixed leaf.
       "infer-x": symbol.native`infer-x: fake scalar source (X)`(
         { input: [z.schemeValue], output: [z.schemeValue], provenance: "source" },
-        () => sStr("RESULT-X", MINT_X),
+        function (this: CallCtx) {
+          return sStr("RESULT-X", MINT_X);
+        },
       ),
       "infer-y": symbol.native`infer-y: fake scalar source (Y)`(
         { input: [z.schemeValue], output: [z.schemeValue], provenance: "source" },
-        () => sStr("RESULT-Y", MINT_Y),
+        function (this: CallCtx) {
+          return sStr("RESULT-Y", MINT_Y);
+        },
       ),
       // infer-dict: a structured source whose fields carry DISTINCT per-field ids, so a
       // field projection has something to narrow FROM (two ids) TO (one id). The raw
@@ -97,7 +102,9 @@ const inferSources: EnvSetup = async (env) => {
       // shallow, lazy-entries wrap).
       "infer-dict": symbol.native`infer-dict: fake structured source`(
         { input: [z.schemeValue], output: [z.schemeValue], provenance: "source" },
-        () => jsToScheme(CONSTANT_CTX, { field: sStr("FV", FIELD_ID), other: sStr("OV", OTHER_ID) }) as never,
+        function (this: CallCtx) {
+          return jsToScheme(CONSTANT_CTX, { field: sStr("FV", FIELD_ID), other: sStr("OV", OTHER_ID) }) as never;
+        },
       ),
     }),
   });

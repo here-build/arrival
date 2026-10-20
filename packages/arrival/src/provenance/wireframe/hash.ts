@@ -11,26 +11,27 @@
  * RecordId uniqueness is NOT this hash's job — `rootOrdinalPath` / OrdinalPath
  * keep multi-site content collisions free without leaking position into content.
  *
+ * Capture lists are content but hashed ONLY when non-empty (fan/binder), so every pre-closure
+ * hash stays byte-stable. A closure's interior content hash is `hashGraph(closure.template)`
+ * (spans stripped: two identical lambdas share it); its plane identity is
+ * `siteHash(hashGraph(enclosing), closure.span)`.
+ *
  * α-RULING: NOT α-invariant. Bound-variable spelling is in source/params; hashing
  * more distinctions is safer than De Bruijn (wrong α could unify free-name semantics).
  * Same source twice → same hash; α-renamed → different (pinned by tests).
  */
+import { contentHash } from "../store/hash.js";
 import type { OrdinalPath, SiteHash, TemplateHash } from "../store/ids.js";
 import type { Wire, WireframeGraph, WireframeNode, WireParam } from "./types.js";
 
-/** FNV-1a content-hash idiom (local; not imported from chain hashing). */
-function fnv1a(prefix: string, canonical: string): string {
-  const tagged = `${prefix}|${canonical}`;
-  let h = 0x81_1c_9d_c5;
-  for (let i = 0; i < tagged.length; i++) {
-    h ^= tagged.codePointAt(i) ?? 0;
-    h = Math.imul(h, 0x01_00_01_93);
-  }
-  return (h >>> 0).toString(16).padStart(8, "0");
+/** Domain-separated content hash (SHA-256/128 — `store/hash.ts`). */
+function tagged(domain: string, canonical: string): string {
+  return contentHash(domain, canonical);
 }
 
 function canonicalParamRef(ref: WireParam): string {
-  return ref.kind === "slot" ? `slot:${ref.name}` : `node:${ref.name}:${ref.node}`;
+  if (ref.kind === "slot") return `slot:${ref.name}`;
+  return ref.slot === undefined ? `node:${ref.name}:${ref.node}` : `node:${ref.name}:${ref.node}:${ref.slot}`;
 }
 
 /** Span excluded; fact tag included (content). */
@@ -64,6 +65,7 @@ function canonicalNode(node: WireframeNode): string {
         `fnOp:${node.fnOp ?? ""}`,
         `roles:${node.callbackRoles ? JSON.stringify(node.callbackRoles) : ""}`,
         `template:${node.template ? hashGraph(node.template) : ""}`,
+        ...(node.captures.length > 0 ? [`captures:${node.captures.join(",")}`] : []),
       ].join("/");
     case "binder":
       return [
@@ -72,7 +74,19 @@ function canonicalNode(node: WireframeNode): string {
         `cycles:${node.cycles}`,
         `params:${node.params.join(",")}`,
         `interior:${hashGraph(node.interior)}`,
+        ...(node.captures.length > 0 ? [`captures:${node.captures.join(",")}`] : []),
       ].join("/");
+    case "closure":
+      return [
+        "closure",
+        `params:${node.params.join(",")}`,
+        `rest:${node.rest ?? ""}`,
+        `ref:${node.ref ? `${node.ref.kind}:${node.ref.kind === "define" ? node.ref.name : node.ref.op}` : ""}`,
+        `captures:${node.captures.join(",")}`,
+        `template:${node.template ? hashGraph(node.template) : ""}`,
+      ].join("/");
+    case "guard":
+      return `guard:${node.op}:${node.var}:${node.clauses}:${node.hasFinally}`;
     case "recur":
       return "recur";
     case "template-ref":
@@ -86,11 +100,11 @@ export function hashGraph(graph: WireframeGraph): TemplateHash {
   const nodesCanon = graph.nodes.map(canonicalNode).join("|");
   const wiresCanon = graph.wires.map(canonicalWire).join("|");
   const canonical = `nodes:${nodesCanon}##wires:${wiresCanon}##egress:${graph.egress ?? "none"}`;
-  return fnv1a("template-v0", canonical);
+  return tagged("template-v1", canonical);
 }
 
 export function siteHash(templateHash: TemplateHash, site: string): SiteHash {
-  return fnv1a("site-v0", `${templateHash}::${site}`);
+  return tagged("site-v1", `${templateHash}::${site}`);
 }
 
 /** Sentinel site for program.main (single static instantiation). */

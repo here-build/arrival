@@ -22,11 +22,13 @@
  *      which is exactly the skeleton⋈stream join the studio overlay renders.
  *
  * What this spike deliberately does NOT have: the coordinate ADVANCE primitive —
- * `withRecordCoordinateAsync` installs one static coordinate for the whole run, so
+ * `RunContext.emission` carries one static coordinate for the whole run, so
  * this program has exactly one mint-designated node. A multi-port program needs
- * the driver tap to advance the ambient coordinate per designated enter.
+ * the driver tap to advance the run's coordinate per designated enter. (Repeated
+ * crossings of that one node are told apart by the per-crossing instance ordinal
+ * appended to the coordinate's ordinal path.)
  */
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { ensureInferenceEnvPopulated, execStateOverFrame, parse } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../env/inference-env.js";
 import { type ResolvingAmbient } from "../env/AmbientRuntime.js";
@@ -36,20 +38,21 @@ import { toJS } from "../membrane/rosetta.js";
 import type { EvalTap } from "../eval/evaluator.js";
 import type { Classifier, DeclaredRole } from "../provenance/lineage.js";
 import { buildWireframe } from "../provenance/wireframe/builder.js";
+import { baseNamePredicate } from "../provenance/base-names.js";
 import { hashGraph, rootOrdinalPath, siteHash, siteOf } from "../provenance/wireframe/hash.js";
 import { scopeId } from "../provenance/scope-id.js";
-import { withRecordCoordinateAsync, type EmissionSink, type RecordCoordinate } from "../eval/provenance-hooks.js";
+import type { RecordCoordinate } from "../eval/provenance-hooks.js";
+import type { RunEmission } from "../run/RunContext.js";
 // `store/index.js` is a curated studio read-slice (type-only) — fakes/emit runtime values
 // live at their own leaf modules (same shape as the sibling __benchmarks__ files).
-import { setEmissionEnabled } from "../provenance/store/emit.js";
 import { PayloadStoreFake, ProvenanceStoreFake } from "../provenance/store/fakes.js";
 import { APair } from "../values/primitives/APair.js";
-import type { AListAlike } from "../values/types.js";
+import type { AListAlike, SchemeValue } from "../values/types.js";
+import type { CallCtx } from "../run/CallCtx.js";
 
 const ROLES: Record<string, DeclaredRole> = { "fetch-item": "source" };
 const CLASSIFIER: Classifier = { roleOf: (op) => ROLES[op] };
-const BASE = new Set(["+", "*"]);
-const isBaseName = (n: string): boolean => BASE.has(n);
+const isBaseName = baseNamePredicate(inferenceEnv); // production predicate: env membership ∪ cxr synthesis
 
 const REGION = "region-walking-driver-spike";
 const EPOCH = "spike-epoch-0";
@@ -65,7 +68,9 @@ async function registerSource(env: ResolvingAmbient): Promise<void> {
       symbols: (symbol, z) => ({
         "fetch-item": symbol.rosetta`fetch-item: a zero-arg numeric source`(
           { input: [], output: [z.number] },
-          () => 42,
+          function (this: CallCtx) {
+            return 42;
+          },
         ),
       }),
     }),
@@ -91,10 +96,6 @@ beforeAll(async () => {
   await ensureInferenceEnvPopulated();
 });
 
-afterEach(() => {
-  setEmissionEnabled(false);
-});
-
 describe("walking-driver spike: skeleton from parse, meat from the live walk", () => {
   it("skeleton-derived coordinate → thin-tap walk → mint record lands → joins back to the skeleton node", async () => {
     // ── 1. SKELETON (parse-time, run-neutral — no run exists yet) ──────────────
@@ -111,15 +112,14 @@ describe("walking-driver spike: skeleton from parse, meat from the live walk", (
     const designatedSpans = new Set(program.main.nodes.map((n) => siteOf(n)));
 
     // ── 2. ARM the run (run-time from here on) ─────────────────────────────────
-    setEmissionEnabled(true);
     const store = new ProvenanceStoreFake();
     const payloads = new PayloadStoreFake();
-    const sink: EmissionSink = { store, payloads, regionId: REGION };
     const coordinate: RecordCoordinate = {
       templateHash,
       ordinalPath: rootOrdinalPath(sourceIdx),
       regionEpoch: EPOCH,
     };
+    const emission: RunEmission = { store, payloads, regionId: REGION, coordinate };
 
     const env = inferenceEnv.child("walking-driver-spike");
     await registerSource(env);
@@ -129,9 +129,7 @@ describe("walking-driver spike: skeleton from parse, meat from the live walk", (
     const nodeFilter = (node: AListAlike): boolean => node instanceof APair && designatedSpans.has(scopeId(node));
 
     // ── 3. WALK — execute the SAME parsed form the skeleton was built from ────
-    const result = await withRecordCoordinateAsync(coordinate, sink, () =>
-      execStateOverFrame(forms[0], { env, tap, nodeFilter }),
-    );
+    const result = await execStateOverFrame(forms[0], { env, tap, nodeFilter, emission });
     expect(toJS(result.values[0], {})).toBe(48); // (+ 6 42) — the run itself is undisturbed
 
     // Emission is a detached sidecar (fire-and-forget off settlement) — let its
@@ -142,7 +140,7 @@ describe("walking-driver spike: skeleton from parse, meat from the live walk", (
     // ── 4. THE WALK WAS PRUNED — only designated forms reached the tap ─────────
     // Located Pairs in the program: (+ …), (* 2 3), (fetch-item). Designated: the
     // source crossing and the egress form. The pure interior never fires.
-    expect(enters).toContain(scopeId(forms[0] as APair)); // the egress form (port{out} span)
+    expect(enters).toContain(scopeId(forms[0] as APair<SchemeValue, SchemeValue>)); // the egress form (port{out} span)
     expect(enters).toContain(sourceNode.span); // the source crossing
     expect(enters).toHaveLength(2); // and NOTHING else — (* 2 3) pruned by nodeFilter
 
@@ -151,7 +149,8 @@ describe("walking-driver spike: skeleton from parse, meat from the live walk", (
     const mints = stream.filter((r) => r.kind === "mint");
     expect(mints).toHaveLength(1);
     expect(mints[0].id.templateHash).toBe(templateHash);
-    expect(mints[0].id.ordinalPath).toEqual(rootOrdinalPath(sourceIdx));
+    // The coordinate's own ordinal path, plus the crossing's instance ordinal (0: the first).
+    expect(mints[0].id.ordinalPath).toEqual([...rootOrdinalPath(sourceIdx), 0]);
     const payload = await payloads.get(mints[0].payloadHash);
     expect(payload.value).toBe(42);
 
@@ -164,32 +163,31 @@ describe("walking-driver spike: skeleton from parse, meat from the live walk", (
     expect(siteHash(mints[0].id.templateHash, siteOf(resolvedNode))).toBe(renderKey);
   });
 
-  it("unarmed (flag off): same program, same tap — zero records, byte-identical result", async () => {
-    setEmissionEnabled(false);
+  it("silent run (emission target set): same program, same tap — zero records, byte-identical result", async () => {
     const forms = await parse(PROGRAM);
     const program = buildWireframe(forms, { classifier: CLASSIFIER, isBaseName });
     const designatedSpans = new Set(program.main.nodes.map((n) => siteOf(n)));
 
     const store = new ProvenanceStoreFake();
     const payloads = new PayloadStoreFake();
-    const sink: EmissionSink = { store, payloads, regionId: REGION };
     const coordinate: RecordCoordinate = {
       templateHash: hashGraph(program.main),
       ordinalPath: [0],
       regionEpoch: EPOCH,
     };
+    const emission: RunEmission = { store, payloads, regionId: REGION, coordinate };
 
     const env = inferenceEnv.child("walking-driver-spike-off");
     await registerSource(env);
 
     const enters: string[] = [];
-    const result = await withRecordCoordinateAsync(coordinate, sink, () =>
-      execStateOverFrame(forms[0], {
-        env,
-        tap: thinDriverTap(enters),
-        nodeFilter: (node) => node instanceof APair && designatedSpans.has(scopeId(node)),
-      }),
-    );
+    const result = await execStateOverFrame(forms[0], {
+      env,
+      tap: thinDriverTap(enters),
+      nodeFilter: (node) => node instanceof APair && designatedSpans.has(scopeId(node)),
+      emission,
+      silent: true,
+    });
     expect(toJS(result.values[0], {})).toBe(48);
 
     await Promise.resolve();

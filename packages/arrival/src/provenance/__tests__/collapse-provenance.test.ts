@@ -9,19 +9,14 @@
  */
 import { describe, it, expect } from "vitest";
 import type { EnvWithInternals, ResolvingAmbient } from "../../env/AmbientRuntime.js";
-import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { collapseProvenance } from "../../provenance/provenance-collapse.js";
-import { execStateOverFrame as execState } from "../../eval/generator-exec.js";
+import { execStateOverFrameEager as execState } from "../../__tests__/_require-eager-oracle.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AVector } from "../../values/primitives/AVector.js";
 import { APair } from "../../values/primitives/APair.js";
 import { AJSArray } from "../../membrane/AJSArray.js";
 import { nil } from "../../values/primitives/ANil.js";
-import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
-
-// this helper/execState needs the eager oracle ON
-requireEagerOracle();
 
 const stamped = (s: string, ...points: number[]) => new AString(s, new Set(points));
 const sorted = (set: Set<number>) => [...set].sort((a, b) => a - b);

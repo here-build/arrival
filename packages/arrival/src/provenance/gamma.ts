@@ -1,11 +1,11 @@
 /**
  * γ = `hermeticApply(wire, ingress)`: apply the wire lambda to recorded ingress
- * in a hermetic env under a SILENT region (doors/discipline on, stream emission
+ * in a hermetic env on a SILENT run (doors/discipline on, stream emission
  * off). Named composition, not new machinery:
  *
  *   1. `hermeticEnv` — base packs + program prelude + ingress on fresh
  *      `RunContext`/`LexicalScope`;
- *   2. `withSilentRegion` over the whole apply;
+ *   2. the hermetic run is minted `silent` (RunContext.silent) — nothing emits;
  *   3. textual application `` `(${wire.source} ${params…})` `` — wire params
  *      already bound by name into the hermetic root scope.
  *
@@ -18,7 +18,6 @@ import { exec, execState } from "../eval/generator-exec.js";
 import type { EnvCapability } from "../common/capability.js";
 import { BASE_ROSTER } from "../env/base-roster.js";
 import type { SchemeValue } from "../values/types.js";
-import { withSilentRegion } from "../membrane/region-scope.js";
 import { hermeticEnv, type HermeticEnv, type IngressBindings } from "./hermetic-env.js";
 import type { LexicalScopeWithInternals } from "../eval/LexicalScope.js";
 import { IngressBindingError } from "../errors.js";
@@ -36,7 +35,7 @@ export interface HermeticApplyOptions {
 }
 
 /**
- * γ under silent region. Returns peeled egress (`exec` → plain JS) for comparison
+ * γ on a silent hermetic run. Returns peeled egress (`exec` → plain JS) for comparison
  * with recorded mint payloads (`apply(wire, recorded ingress) === recorded egress`).
  *
  * Missing ingress for a declared param is a caller bug — fails here via
@@ -45,20 +44,18 @@ export interface HermeticApplyOptions {
 export async function hermeticApply(opts: HermeticApplyOptions): Promise<unknown> {
   const { wire, ingress, basePacks, prelude, config } = opts;
   assertIngressCovers(wire, ingress);
-  return withSilentRegion(async () => {
-    // Standard-base fold is THIS call site's job — `hermeticEnv` never hardcodes
-    // `BASE_ROSTER` (see that module). Live ambient always inherited full base.
-    const base = await hermeticEnv([...basePacks, ...BASE_ROSTER], prelude, ingress, config);
-    // Apply wire lambda to its own params by name — already bound in hermetic scope.
-    // `capabilities`/`config`/`runCtx` match the assemble-run reuse-identity tuple.
-    const [egress] = await exec(wireApplication(wire), {
-      capabilities: base.capabilities,
-      config: base.config,
-      scope: base.scope,
-      runCtx: base.runCtx,
-    });
-    return egress;
+  // Standard-base fold is THIS call site's job — `hermeticEnv` never hardcodes
+  // `BASE_ROSTER` (see that module). Live ambient always inherited full base.
+  const base = await hermeticEnv([...basePacks, ...BASE_ROSTER], prelude, ingress, config);
+  // Apply wire lambda to its own params by name — already bound in hermetic scope.
+  // `capabilities`/`config`/`runCtx` match the assemble-run reuse-identity tuple.
+  const [egress] = await exec(wireApplication(wire), {
+    capabilities: base.capabilities,
+    config: base.config,
+    scope: base.scope,
+    runCtx: base.runCtx,
   });
+  return egress;
 }
 
 // ── Boxed γ face (replay walks many wires against one prebuilt base) ─────────
@@ -78,7 +75,7 @@ function wireApplication(wire: EmittedWire): string {
 
 /**
  * γ against a prebuilt hermetic base; returns BOXED egress (provenance intact).
- * Caller owns silent region (one wrap per graph walk) and the base (empty ingress).
+ * Caller owns the base (empty ingress), minted silent by `hermeticEnv`.
  * Each call binds this wire's ingress in a FRESH child of `base.scope`.
  * Reuses `runCtx` + the same capabilities/config tuple `hermeticEnv` minted.
  */

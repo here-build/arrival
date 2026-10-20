@@ -44,6 +44,7 @@ interface BufferedRecord {
 export class ProvenanceRing {
   private readonly buffers = new Map<RegionId, BufferedRecord[]>();
   private now = 0;
+  private readonly flushing = new Map<RegionId, Promise<void>>();
 
   constructor(
     private readonly store: ProvenanceStore,
@@ -87,12 +88,26 @@ export class ProvenanceRing {
    *  overwrites and the rest for the first time — "a failed write kills the request...
    *  the idempotent record ids make the retry's re-emission safe," exactly. */
   async flush(regionId: RegionId): Promise<void> {
+    // Serialized per region: a flush suspended mid-write must not interleave with another that
+    // drains the same buffer, or its late truncation would drop records appended in between.
+    const prior = this.flushing.get(regionId) ?? Promise.resolve();
+    const run = prior.catch(() => {}).then(() => this.drain(regionId));
+    this.flushing.set(regionId, run);
+    try {
+      await run;
+    } finally {
+      if (this.flushing.get(regionId) === run) this.flushing.delete(regionId);
+    }
+  }
+
+  private async drain(regionId: RegionId): Promise<void> {
     const buf = this.buffers.get(regionId);
     if (buf === undefined || buf.length === 0) return;
-    for (const entry of buf) {
-      await this.store.append(regionId, entry.record);
+    const batch = buf.length; // records appended while we write belong to the next flush
+    for (let i = 0; i < batch; i++) {
+      await this.store.append(regionId, buf[i].record);
     }
-    buf.length = 0;
+    buf.splice(0, batch);
   }
 
   /** Advance the ring's virtual clock — no I/O, no store access; a test calls this

@@ -4,14 +4,13 @@
  *
  * Three honest layers, same shape as `exec-seam.bench.test.ts`'s own three-layer split:
  *
- *   1. flag OFF   — `emitMint` called N times while disabled: the byte-identical
- *                   cost, i.e. what every real call site pays TODAY (nothing wires a
- *                   coordinate/sink in production yet, so this is also the current
- *                   steady-state cost of the `notePotentialRosettaExit` hook itself).
- *   2. flag ON    — `emitMint` called N times against `ProvenanceStoreFake`/
+ *   1. no emission — `notePotentialRosettaExit` called N times on a run with no
+ *                   `RunContext.emission`: the byte-identical cost, i.e. what every
+ *                   real call site pays TODAY (one field read per generic apply).
+ *   2. emitting   — `emitMint` called N times against `ProvenanceStoreFake`/
  *                   `PayloadStoreFake`: hash + payload put + seq allocation + append,
- *                   the full per-record cost once a coordinate/sink IS installed.
- *   3. the other three kinds ON — `emitMuxDecision`/`emitFanInstantiation`/
+ *                   the full per-record cost once a run's emission target IS set.
+ *   3. the other three kinds — `emitMuxDecision`/`emitFanInstantiation`/
  *                   `emitIngressBinding` (no payload hashing/put — cheaper than a mint
  *                   by construction: per §4's record-kinds table, these three kinds
  *                   carry no payload of their own).
@@ -22,19 +21,15 @@
  * emission CORE's own overhead.
  */
 import { describe, it, expect } from "vitest";
-import {
-  emitFanInstantiation,
-  emitIngressBinding,
-  emitMint,
-  emitMuxDecision,
-  setEmissionEnabled,
-} from "../provenance/store/emit.js";
+import { emitFanInstantiation, emitIngressBinding, emitMint, emitMuxDecision } from "../provenance/store/emit.js";
+import { notePotentialRosettaExit } from "../eval/provenance-hooks.js";
 import { PayloadStoreFake, ProvenanceStoreFake } from "../provenance/store/fakes.js";
 import type { RecordId } from "../provenance/store/ids.js";
-import { execState } from "../eval/generator-exec.js";
+import { execStateOverFrame } from "../eval/generator-exec.js";
 import { inferenceEnv } from "../env/inference-env.js";
-import { CONSTANT_CTX } from "../run/RunContext.js";
-import { setEagerProvenanceOracleEnabled, withInputProvenance } from "../values/op-helpers.js";
+import type { EnvWithInternals, ResolvingAmbient } from "../env/AmbientRuntime.js";
+import { CONSTANT_CTX, RunContext } from "../run/RunContext.js";
+import { withInputProvenance } from "../values/op-helpers.js";
 import { jsToScheme } from "../membrane/rosetta.js";
 // In-package bench: the module-internal storage write (hermetic-Environment ruling — no public set).
 
@@ -53,74 +48,62 @@ function idAt(i: number): RecordId {
   return { templateHash: `t-${i}`, ordinalPath: [i], regionEpoch: "e0" };
 }
 
-describe("emission overhead — flag OFF (the byte-identical/sunset cost)", () => {
-  it(`layer 1 — emitMint × ${ITERATIONS}, flag OFF: the cost every real call site pays today`, async () => {
-    setEmissionEnabled(false);
+describe("emission overhead — no emission on the run (the byte-identical/sunset cost)", () => {
+  it(`layer 1 — notePotentialRosettaExit × ${ITERATIONS}, no emission: the cost every real call site pays today`, () => {
+    const runCtx = new RunContext();
+    const value = jsToScheme(CONSTANT_CTX, 1);
+    const start = performance.now();
+    for (let i = 0; i < ITERATIONS; i++) notePotentialRosettaExit(runCtx, { id: i, isProvenancePoint: true }, value);
+    report("notePotentialRosettaExit (no emission)", ITERATIONS, performance.now() - start);
+    expect(runCtx.emission).toBeUndefined();
+  });
+});
+
+describe("emission overhead — emitting (real store/payload work per record)", () => {
+  it(`layer 2 — emitMint × ${ITERATIONS}: hash + payload put + seq alloc + append`, async () => {
     const store = new ProvenanceStoreFake();
     const payloads = new PayloadStoreFake();
     const start = performance.now();
     for (let i = 0; i < ITERATIONS; i++) {
-      const record = await emitMint({ store, payloads, regionId: REGION, id: idAt(i), value: i, stampIds: [i] });
-      expect(record).toBeUndefined(); // no-op, proven per-iteration, not just once
+      const record = await emitMint({
+        store,
+        payloads,
+        regionId: REGION,
+        id: idAt(i),
+        value: { i, note: "a small mint payload" },
+        stampIds: [i, i + 1],
+      });
+      expect(record).toBeDefined();
     }
-    report("emitMint (flag OFF)", ITERATIONS, performance.now() - start);
-  });
-});
-
-describe("emission overhead — flag ON (real store/payload work per record)", () => {
-  it(`layer 2 — emitMint × ${ITERATIONS}, flag ON: hash + payload put + seq alloc + append`, async () => {
-    setEmissionEnabled(true);
-    try {
-      const store = new ProvenanceStoreFake();
-      const payloads = new PayloadStoreFake();
-      const start = performance.now();
-      for (let i = 0; i < ITERATIONS; i++) {
-        const record = await emitMint({
-          store,
-          payloads,
-          regionId: REGION,
-          id: idAt(i),
-          value: { i, note: "a small mint payload" },
-          stampIds: [i, i + 1],
-        });
-        expect(record).toBeDefined();
-      }
-      report("emitMint (flag ON)", ITERATIONS, performance.now() - start);
-      expect(await store.readStream(REGION)).toHaveLength(ITERATIONS);
-    } finally {
-      setEmissionEnabled(false);
-    }
+    report("emitMint", ITERATIONS, performance.now() - start);
+    expect(await store.readStream(REGION)).toHaveLength(ITERATIONS);
   });
 
-  it(`layer 3 — the payload-free kinds × ${ITERATIONS} each, flag ON: mux-decision / fan-instantiation / ingress-binding`, async () => {
-    setEmissionEnabled(true);
-    try {
-      const store = new ProvenanceStoreFake();
+  // eslint-disable-next-line sonarjs/assertions-in-tests -- benchmark: records timings, asserts nothing by design
+  it(`layer 3 — the payload-free kinds × ${ITERATIONS} each: mux-decision / fan-instantiation / ingress-binding`, async () => {
+    const store = new ProvenanceStoreFake();
 
-      const muxStart = performance.now();
-      for (let i = 0; i < ITERATIONS; i++) await emitMuxDecision({ store, regionId: REGION, id: idAt(i), arm: i % 2 });
-      report("emitMuxDecision (flag ON)", ITERATIONS, performance.now() - muxStart);
+    const muxStart = performance.now();
+    for (let i = 0; i < ITERATIONS; i++) await emitMuxDecision({ store, regionId: REGION, id: idAt(i), arm: i % 2 });
+    report("emitMuxDecision", ITERATIONS, performance.now() - muxStart);
 
-      const fanStart = performance.now();
-      for (let i = 0; i < ITERATIONS; i++)
-        await emitFanInstantiation({
-          store,
-          regionId: REGION,
-          id: { templateHash: `fan-${i}`, ordinalPath: [i], regionEpoch: "e0" },
-        });
-      report("emitFanInstantiation (flag ON)", ITERATIONS, performance.now() - fanStart);
+    const fanStart = performance.now();
+    for (let i = 0; i < ITERATIONS; i++)
+      await emitFanInstantiation({
+        store,
+        regionId: REGION,
+        id: { templateHash: `fan-${i}`, ordinalPath: [i], regionEpoch: "e0" },
+      });
+    report("emitFanInstantiation", ITERATIONS, performance.now() - fanStart);
 
-      const ingressStart = performance.now();
-      for (let i = 0; i < ITERATIONS; i++)
-        await emitIngressBinding({
-          store,
-          regionId: REGION,
-          id: { templateHash: `ingress-${i}`, ordinalPath: [i], regionEpoch: "e0" },
-        });
-      report("emitIngressBinding (flag ON)", ITERATIONS, performance.now() - ingressStart);
-    } finally {
-      setEmissionEnabled(false);
-    }
+    const ingressStart = performance.now();
+    for (let i = 0; i < ITERATIONS; i++)
+      await emitIngressBinding({
+        store,
+        regionId: REGION,
+        id: { templateHash: `ingress-${i}`, ordinalPath: [i], regionEpoch: "e0" },
+      });
+    report("emitIngressBinding", ITERATIONS, performance.now() - ingressStart);
   });
 });
 
@@ -137,13 +120,16 @@ describe("Q20b — eager-oracle accumulation overhead: default-OFF vs forced-ON 
   const EXEC_ITERATIONS = 2000;
   const WARMUP_ITERATIONS = 500;
 
-  async function runExecLoop(iterations: number): Promise<number> {
-    const env = inferenceEnv.child(`q20b-bench-${Math.random().toString(36).slice(2)}`);
+  async function runExecLoop(iterations: number, eagerStamps: boolean): Promise<number> {
+    const env = inferenceEnv.child(
+      // eslint-disable-next-line sonarjs/pseudo-random -- unique-name nonce for test isolation, not security-sensitive
+      `q20b-bench-${Math.random().toString(36).slice(2)}`,
+    ) as EnvWithInternals<ResolvingAmbient>;
     env.bind("a", jsToScheme(CONSTANT_CTX, 10, {}, new Set([100])));
     env.bind("b", jsToScheme(CONSTANT_CTX, 20, {}, new Set([200])));
     const start = performance.now();
     for (let i = 0; i < iterations; i++) {
-      await execState(`(string-append "sum=" (number->string (+ a (* b 2) ${i})))`, { env });
+      await execStateOverFrame(`(string-append "sum=" (number->string (+ a (* b 2) ${i})))`, { env, eagerStamps });
     }
     return performance.now() - start;
   }
@@ -154,23 +140,15 @@ describe("Q20b — eager-oracle accumulation overhead: default-OFF vs forced-ON 
   // in-process comes out ~40% faster regardless of which flag value it used. Warm
   // BOTH variants (discarded) before measuring EITHER, so the recorded numbers
   // isolate the accumulation delta instead of this cold-start artifact.
+  // eslint-disable-next-line sonarjs/assertions-in-tests -- benchmark: records timings, asserts nothing by design
   it(`exec × ${EXEC_ITERATIONS}, oracle OFF (Q20b production default) vs FORCED ON (CI agreement oracle), both JIT-warmed first`, async () => {
-    setEagerProvenanceOracleEnabled(false);
-    await runExecLoop(WARMUP_ITERATIONS);
-    setEagerProvenanceOracleEnabled(true);
-    await runExecLoop(WARMUP_ITERATIONS);
+    await runExecLoop(WARMUP_ITERATIONS, false);
+    await runExecLoop(WARMUP_ITERATIONS, true);
 
-    setEagerProvenanceOracleEnabled(false);
-    const offElapsed = await runExecLoop(EXEC_ITERATIONS);
+    const offElapsed = await runExecLoop(EXEC_ITERATIONS, false);
     report("exec, arithmetic+string-append (oracle OFF, Q20b default)", EXEC_ITERATIONS, offElapsed);
 
-    setEagerProvenanceOracleEnabled(true);
-    let onElapsed: number;
-    try {
-      onElapsed = await runExecLoop(EXEC_ITERATIONS);
-    } finally {
-      setEagerProvenanceOracleEnabled(false);
-    }
+    const onElapsed = await runExecLoop(EXEC_ITERATIONS, true);
     report("exec, arithmetic+string-append (oracle ON, CI agreement mode)", EXEC_ITERATIONS, onElapsed);
 
     const deltaPct = ((onElapsed - offElapsed) / onElapsed) * 100;
@@ -186,33 +164,27 @@ describe("Q20b — eager-oracle accumulation overhead: default-OFF vs forced-ON 
   // shape of arrival-sampler's actual hot loop (~513 interpreter calls per
   // decode-step, no re-parse per call), where the saving is NOT amortized
   // against parse overhead.
+  // eslint-disable-next-line sonarjs/assertions-in-tests -- benchmark: records timings, asserts nothing by design
   it(`withInputProvenance × ${EXEC_ITERATIONS * 10} direct calls, oracle OFF vs FORCED ON (the sampler's actual hot-loop shape)`, () => {
     const DIRECT_ITERATIONS = EXEC_ITERATIONS * 10;
     const a = jsToScheme(CONSTANT_CTX, 10, {}, new Set([100]));
     const b = jsToScheme(CONSTANT_CTX, 20, {}, new Set([200]));
 
-    const runDirectLoop = (iterations: number): number => {
+    const OFF = new RunContext({});
+    const ON = new RunContext({ eagerStamps: true });
+    const runDirectLoop = (runCtx: RunContext, iterations: number): number => {
       const start = performance.now();
-      for (let i = 0; i < iterations; i++) withInputProvenance([a, b], i);
+      for (let i = 0; i < iterations; i++) withInputProvenance(runCtx, [a, b], i);
       return performance.now() - start;
     };
 
-    setEagerProvenanceOracleEnabled(false);
-    runDirectLoop(DIRECT_ITERATIONS); // warmup
-    setEagerProvenanceOracleEnabled(true);
-    runDirectLoop(DIRECT_ITERATIONS); // warmup
+    runDirectLoop(OFF, DIRECT_ITERATIONS); // warmup
+    runDirectLoop(ON, DIRECT_ITERATIONS); // warmup
 
-    setEagerProvenanceOracleEnabled(false);
-    const offElapsed = runDirectLoop(DIRECT_ITERATIONS);
+    const offElapsed = runDirectLoop(OFF, DIRECT_ITERATIONS);
     report("withInputProvenance direct (oracle OFF, Q20b default)", DIRECT_ITERATIONS, offElapsed);
 
-    setEagerProvenanceOracleEnabled(true);
-    let onElapsed: number;
-    try {
-      onElapsed = runDirectLoop(DIRECT_ITERATIONS);
-    } finally {
-      setEagerProvenanceOracleEnabled(false);
-    }
+    const onElapsed = runDirectLoop(ON, DIRECT_ITERATIONS);
     report("withInputProvenance direct (oracle ON, CI agreement mode)", DIRECT_ITERATIONS, onElapsed);
 
     const deltaPct = ((onElapsed - offElapsed) / onElapsed) * 100;

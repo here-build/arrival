@@ -15,8 +15,9 @@ import { toJS } from "../membrane/rosetta.js";
 import type { APair } from "../values/primitives/APair.js";
 import type { SchemeValue } from "../values/types.js";
 
+import { EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
 import { scopeId } from "./scope-id.js";
-import type { EvalTrace, InvocationState } from "./trace.js";
+import { BRANCH_HEADS, type EvalTrace, type InvocationState } from "./trace.js";
 
 /** Exactly the Invocation fields the flow-graph build reads. The AST `node` is a
  *  plain Pair, shared by reference — its identity is load-bearing (cells and
@@ -28,7 +29,7 @@ export interface PlainInv {
    *  is the ONE field that is NOT structured-clone-safe: a clone loses the prototype,
    *  cross-snapshot identity, and the symbol-keyed `__location__`. A2 must project it
    *  to a plain shape before `postMessage`. See the structured-clone contract in this
-   *  file's header and `arrival-chain`'s `src/__tests__/trace-snapshot-clone.test.ts`. */
+   *  file's header. */
   node: APair<SchemeValue, SchemeValue>;
   /** Pre-derived `scopeId(node)` (`head@line:col`) — the clone-safe twin of `node`.
    *  `scopeId` reads the symbol-keyed `__location__` off the live Pair, which
@@ -69,11 +70,10 @@ export interface PlainTrace {
   invocations: PlainInv[];
 }
 
-/** The branch heads whose children carry decision-relevant values. A child of one
+/** Branch heads ({@link BRANCH_HEADS}) whose children carry decision-relevant values. A child of one
  *  of these is a branch TEST or chosen-ARM evaluation; we materialize its `value`
  *  so the region build can substitute the runtime outcome into a readable decision
  *  pill (`fails is empty → yes`). Bounded — a branch has a few children, not O(n). */
-const BRANCH_HEADS: ReadonlySet<string> = new Set(["if", "cond", "case", "when", "unless"]);
 const headName = (node: APair<SchemeValue, SchemeValue> | undefined): string | undefined => {
   const car = (node as { car?: unknown } | undefined)?.car;
   const n = (car as { __name__?: unknown } | undefined)?.__name__;
@@ -86,8 +86,8 @@ const headName = (node: APair<SchemeValue, SchemeValue> | undefined): string | u
 const errText = (e: unknown): string | undefined =>
   e instanceof Error ? e.message : e == null ? undefined : String(e);
 
-/** Shared empty set for invocations whose provenance the build never reads. */
-const NO_PROVENANCE: ReadonlySet<number> = new Set();
+/** Shared empty set for invocations whose provenance the build never reads (throws on mutation). */
+const NO_PROVENANCE: ReadonlySet<number> = EMPTY_PROVENANCE;
 
 export function snapshotTrace(trace: EvalTrace): PlainTrace {
   const byId = new Map<number, PlainInv>();

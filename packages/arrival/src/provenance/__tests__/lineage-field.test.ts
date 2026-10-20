@@ -1,6 +1,6 @@
 /**
- * v0.2 — the FIELD / lens carrier (design
- * arrival/packages/arrival-provenance/docs/static-lineage-v02-lens-carrier.md
+ * v0.2 — the FIELD / lens carrier (design:
+ * ../arrival-provenance/docs/static-lineage-v02-lens-carrier.md,
  * §"The carrier", §"The viz constraint", "Decisions resolved"). Proves the new
  * `field` LineageNode — the static form of trace.ts's runtime field-point — and
  * that it:
@@ -24,7 +24,6 @@
  */
 import { describe, it, expect } from "vitest";
 import { parse } from "../../eval/generator-exec.js";
-import { inferenceEnv } from "../../env/inference-env.js";
 import {
   classify,
   fullCone,

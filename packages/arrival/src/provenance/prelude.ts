@@ -40,7 +40,7 @@ import { PreludeMembershipError } from "../errors.js";
 // Kind-discriminated duck typing over the reader's Pair/Symbol — mirrors slice.ts's
 // private `isPair`/`isSymbol`/`symName` (same package, same convention; not exported
 // there, so a tiny local copy — every provenance/ file that walks raw forms writes its
-// own, see extract-defines.ts). The concrete APair/ASymbol instances still flow into
+// own). The concrete APair/ASymbol instances still flow into
 // `classify()` unchanged; this file's own traversal never needs their static types.
 type DuckPair = { car: unknown; cdr: unknown };
 type DuckSymbol = { __name__: string | symbol };
@@ -96,6 +96,8 @@ export function reachesPort(n: LineageNode): boolean {
       return true; // the three graph-layer crossing kinds
     case "opaque":
       return true; // conservative: an unauditable black box MAY reach a port
+    case "closure":
+      return reachesPort(n.body);
     case "pipe":
     case "field":
       return reachesPort(n.child);
@@ -129,8 +131,7 @@ export interface PreludeMembership {
  * Partition a program's top-level defines into PURE vs WIREFRAME-MATERIAL. `classifier`
  * is the declaration-driven `Classifier` (`provenance/lineage-classifier-from-env.ts`'s
  * `classifierFromEnv(env)` in production; a synthetic `Classifier` in tests). Non-define
- * top-level forms are ignored (same scope as `extract-defines.ts` — this module
- * partitions DEFINES, not general forms).
+ * top-level forms are ignored (this module partitions DEFINES, not general forms).
  */
 export function classifyProgramPrelude(forms: readonly SchemeValue[], classifier: Classifier): PreludeMembership {
   const refsOf = new Map<string, ReadonlySet<string>>();
@@ -148,7 +149,15 @@ export function classifyProgramPrelude(forms: readonly SchemeValue[], classifier
   const wireframe = new Set<string>();
   const reasons = new Map<string, string>();
 
-  // Pass 0 — DIRECT port reach: classify() sees only THIS define's own body.
+  // Pass 0 — DIRECT port reach, two independent witnesses (either marks material):
+  //   (a) classify() over the define's final body expression — gives the teaching reason;
+  //   (b) a ROLE-BEARING NAME anywhere in the define form (minus its own name). classify()
+  //       sees one expression structurally: it returns `literal` for a lambda (so
+  //       `(define f (lambda (x) (src x)))` looked pure), reads only the LAST body form
+  //       (`defineBodyOf`), and never enters a lambda passed to a non-fan HOF. The name scan
+  //       over-approximates (a shadowing local named like a source also trips) — the SAFE
+  //       side: a false MATERIAL costs a template; a false PURE lets γ re-invoke a port.
+  const PORT_ROLES: ReadonlySet<string> = new Set(["source", "sink", "transparent", "opaque"]);
   for (const name of names) {
     const body = bodyOf.get(name);
     const tree: LineageNode = body === undefined ? { kind: "literal" } : classify(body as SchemeValue, classifier);
@@ -159,6 +168,20 @@ export function classifyProgramPrelude(forms: readonly SchemeValue[], classifier
         `its own body crosses a port directly (a source/sink/transparent membrane crossing, ` +
           `or an opaque black box) — port-reaching defines are wireframe material, never prelude`,
       );
+      continue;
+    }
+    for (const ref of refsOf.get(name) ?? []) {
+      if (ref === name) continue;
+      const role = classifier.roleOf(ref);
+      if (role === undefined || !PORT_ROLES.has(role)) continue;
+      wireframe.add(name);
+      reasons.set(
+        name,
+        `it names "${ref}" (a ${role} port) somewhere in its form — inside a lambda, a non-final ` +
+          `body position, or a higher-order argument, where the structural classifier cannot see; ` +
+          `port-reaching defines are wireframe material, never prelude`,
+      );
+      break;
     }
   }
 

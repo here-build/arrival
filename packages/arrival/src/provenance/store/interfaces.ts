@@ -36,6 +36,10 @@ export type RetentionClass = "standard" | "sensitive";
 export interface Payload {
   readonly value: unknown;
   readonly stampIds: readonly number[];
+  /** The crossing REJECTED: `value` is the raised condition's message, `stampIds` is empty. Replay's
+   *  source arm re-raises it instead of minting (a rejected crossing is information — a `guard`
+   *  clause taken because a port threw must be replayable). Survives every tier like `stampIds`. */
+  readonly raised?: true;
   readonly retention?: RetentionClass;
 }
 
@@ -61,6 +65,10 @@ export interface PayloadRecord {
   readonly tier: PayloadTier;
   readonly value: unknown | undefined;
   readonly stampIds: readonly number[];
+  /** The crossing REJECTED: `value` is the raised condition's message, `stampIds` is empty. Replay's
+   *  source arm re-raises it instead of minting (a rejected crossing is information — a `guard`
+   *  clause taken because a port threw must be replayable). Survives every tier like `stampIds`. */
+  readonly raised?: true;
   readonly retention: RetentionClass;
 }
 
@@ -107,9 +115,9 @@ export interface ProvenanceStore {
  *  four aggregatable kinds — fan-instantiation/ingress-binding/track-open/
  *  track-close — buffered in memory and materialized here ONLY when a run
  *  closes, never one write per instance). This keeps `ProvenanceStore.append`/
- *  `readStream`'s EXISTING contract byte-for-byte stable — fold-as-recovery
- *  over `readStream` needs no changes; a reader that wants the compacted view
- *  reads `readRuns` ADDITIONALLY, never instead. See `aggregate.ts`'s module doc
+ *  `append`'s EXISTING contract stable; `readStream` of the aggregating decorator
+ *  also unfolds closed runs (seq 0) so fold-as-recovery sees every fact; a reader that wants
+ *  the compacted view reads `readRuns` ADDITIONALLY, never instead. See `aggregate.ts`'s module doc
  *  for the full routing diagram and the losslessness law (`unfoldRun`) that
  *  proves a run answers the same reads as its expansion. */
 export interface RunStore {
@@ -119,8 +127,8 @@ export interface RunStore {
    *  PORTS"). Idempotent by the run's own key (kind, templateHash,
    *  regionEpoch, parentOrdinalPath, start) — same upsert-by-key contract shape
    *  as `ProvenanceStore.append`; a run re-`putRun`'d under the identical key
-   *  overwrites (assumed a wider/more-complete re-close of the same run, never
-   *  a duplicate). */
+   *  keeps the WIDER of the two (a re-close of the same run, never a duplicate and
+   *  never a narrowing). */
   putRun(regionId: RegionId, run: AggregationRun): Promise<void>;
 
   /** The region's compacted runs — `readStream`'s counterpart for the

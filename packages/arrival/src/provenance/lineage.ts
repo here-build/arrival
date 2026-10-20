@@ -1,6 +1,6 @@
 /**
  * CARRIER CORE — lineage data model + static chunk classifier.
- * Pre-execution lens: docs/static-plane.md §THE FOUR READERS 4.4
+ * Pre-execution lens: docs/static-plane.md §4.4 STATIC LINEAGE CLASSIFIER
  * (docs/PROVENANCE.md owns runtime stamp/trace/replay — cross-link, don't duplicate).
  *
  * Provenance is a static lineage TREE (pipe / merge / fan / mux), minted only at
@@ -36,7 +36,8 @@
 import { ASymbol } from "../values/primitives/ASymbol.js";
 import { APair } from "../values/primitives/APair.js";
 import { AValue } from "../values/primitives/AValue.js";
-import type { SchemeValue } from "../values/types.js";
+import type { ProvenanceRole } from "../common/symbols/_bake.js";
+import { bindingEntries, clauseElements, literalElements } from "./surface.js";
 
 /** Exhaustiveness helper for LineageNode walkers — shared by sibling modules. */
 export function assertNever(x: never): never {
@@ -60,7 +61,10 @@ export type PathStep =
 
 /** Static lineage skeleton. Runtime fills leaf/source slots with stamp sets. */
 export type LineageNode =
-  | { readonly kind: "literal" } // self-evaluating / lambda — never carries provenance
+  | { readonly kind: "literal" } // self-evaluating — never carries provenance
+  // `lambda`: shape visible, cone ∅ at the definition site (walk contributes nothing), but the
+  // body MAY reach ports when applied (reachesPort / selector coupling through let-bound closures).
+  | { readonly kind: "closure"; readonly params: readonly string[]; readonly body: LineageNode }
   | { readonly kind: "leaf"; readonly slot: string }
   | { readonly kind: "source"; readonly op: string } // Rosetta-in mint
   | { readonly kind: "pipe"; readonly op: string; readonly child: LineageNode } // ≤1 prov input
@@ -94,10 +98,8 @@ export type LineageNode =
       readonly children: readonly LineageNode[];
     };
 
-/** Declared-role vocabulary, local union (not imported from `_bake.ts`) so this
- *  module stays value-guards+primitives only. Must stay lock-step with
- *  `ProvenanceRole` in common/symbols. */
-export type DeclaredRole = "pipe" | "fan" | "source" | "sink" | "transparent" | "loop" | "opaque";
+/** Declared-role vocabulary — the one `ProvenanceRole` union (type-only import: no runtime edge). */
+export type DeclaredRole = ProvenanceRole;
 
 /**
  * Operator roles from DECLARATION only — never guessed from name or duck-read
@@ -115,7 +117,7 @@ function opName(x: unknown): string {
 }
 
 /**
- * Special forms `classify` models by shape (switch in classifyWith). Live env
+ * Special forms `classify` models by shape (switch in classify). Live env
  * resolves them as SPECIAL_FORMS macros — consumers that skip "macro heads" must
  * EXCLUDE these. Keep this set lock-step with that switch.
  *
@@ -213,8 +215,9 @@ function memberRead(head: unknown, args: unknown[]): { step: PathStep; argExpr: 
 }
 
 /** Pull the parameter symbols out of a lambda's formal list — `(it)` → ["it"],
- *  `(a b)` → ["a","b"]. A variadic/rest tail (`(a . r)`, or a bare symbol formal)
- *  is ignored for binding (the element flows in via the leading positionals only).*/
+ *  `(a b)` → ["a","b"]. A dotted rest tail (`(a . r)`) or a bare-symbol formal (`r`) is
+ *  INCLUDED: it shadows an outer binding of the same name inside the body, and treating
+ *  it as an element leaf over-approximates (never under) what flows in. */
 function lambdaParams(formals: unknown): string[] {
   const out: string[] = [];
   let n: unknown = formals;
@@ -222,6 +225,7 @@ function lambdaParams(formals: unknown): string[] {
     if (n.car instanceof ASymbol) out.push(opName(n.car));
     n = n.cdr;
   }
+  if (n instanceof ASymbol) out.push(opName(n));
   return out;
 }
 
@@ -262,18 +266,32 @@ function combine(op: string, nodes: readonly LineageNode[]): LineageNode {
 /** Let-family transparency: bound symbol → classify(RHS). Wireframe builder
  *  threads its let-walk subst so selectors resolve through bindings. */
 export type Subst = ReadonlyMap<string, LineageNode>;
-const NO_SUBST: Subst = new Map();
+/** Shared empty subst: frozen so no call site can mutate the default for every classify. */
+const NO_SUBST: Subst = Object.freeze(
+  Object.assign(new Map<string, LineageNode>(), {
+    set(): never {
+      throw new TypeError("NO_SUBST is frozen — copy it (new Map(subst)) before extending");
+    },
+  }),
+);
 
 /**
  * Static lineage skeleton from AST — no evaluation. Pipe/merge by bearing-operand
  * count; special forms by shape (file header). Optional `subst` seeds let
  * transparency from outside (wireframe selector reachability).
  */
-export function classify(ast: SchemeValue, c: Classifier, subst: Subst = NO_SUBST): LineageNode {
-  return classifyWith(ast, c, subst);
-}
-
-function classifyWith(ast: unknown, c: Classifier, subst: Subst): LineageNode {
+export function classify(ast: unknown, c: Classifier, subst: Subst = NO_SUBST): LineageNode {
+  // `[…]` / `{…}` literals are evaluated: a pure constructor over their element cones
+  // (keyword keys are self-evaluating — skipped, they carry nothing).
+  const literal = literalElements(ast);
+  if (literal !== undefined) {
+    return combine(
+      "literal-form",
+      literal
+        .filter((el) => !(el instanceof ASymbol && opName(el).startsWith(":")))
+        .map((el) => classify(el, c, subst)),
+    );
+  }
   if (isLiteral(ast)) return { kind: "literal" };
   if (ast instanceof ASymbol) {
     const slot = opName(ast);
@@ -305,10 +323,15 @@ function classifyWith(ast: unknown, c: Classifier, subst: Subst): LineageNode {
         // Value-select: union of operand cones, no predicate-taint.
         return combine(
           form,
-          operands(ast as APair<any, any>).map((a) => classifyWith(a, c, subst)),
+          operands(ast as APair<any, any>).map((a) => classify(a, c, subst)),
         );
-      case "lambda":
-        return { kind: "literal" };
+      case "lambda": {
+        if (!(rest instanceof APair)) return { kind: "literal" };
+        const params = lambdaParams(rest.car);
+        const extended = new Map(subst);
+        for (const p of params) extended.set(p, { kind: "leaf", slot: p });
+        return { kind: "closure", params, body: classifyBegin(rest.cdr, c, extended) };
+      }
       case "quote":
         return { kind: "literal" };
       case "do":
@@ -326,7 +349,7 @@ function classifyWith(ast: unknown, c: Classifier, subst: Subst): LineageNode {
   // cdr/cadr/rest stay pipes (over-approx — consumers pin keyword/car/index only).
   const projected = memberRead(head, args);
   if (projected !== null) {
-    const child = classifyWith(projected.argExpr, c, subst);
+    const child = classify(projected.argExpr, c, subst);
     // Absorption: field-under-field keeps base + ONE step (no composed path).
     // Keyword-priority: runtime `accessorField` sees only keyword heads, so
     // `(:verdict (car x))` → {field:"verdict"}, not {car}.
@@ -354,40 +377,40 @@ function classifyWith(ast: unknown, c: Classifier, subst: Subst): LineageNode {
       op: fanOp,
       introduces: c.roleOf(fanOp) === "source",
       lengthPreserving,
-      source: classifyWith(args[1], c, subst),
+      source: classify(args[1], c, subst),
       // eslint-disable-next-line unicorn/no-negated-condition -- omit template when the fan has none
       ...(template !== undefined ? { template } : {}),
     };
   }
 
   if (role === "sink") {
-    const children = args.map((a) => classifyWith(a, c, subst)).filter(isProvBearing);
+    const children = args.map((a) => classify(a, c, subst)).filter(isProvBearing);
     return { kind: "sink", op, children };
   }
 
   if (role === "transparent") {
     const combined = combine(
       op,
-      args.map((a) => classifyWith(a, c, subst)),
+      args.map((a) => classify(a, c, subst)),
     );
     return isProvBearing(combined) ? { kind: "transparent", op, child: combined } : combined;
   }
 
   if (role === "loop") {
     // Same binder shape as named-let / do special forms.
-    const children = args.map((a) => classifyWith(a, c, subst)).filter(isProvBearing);
+    const children = args.map((a) => classify(a, c, subst)).filter(isProvBearing);
     return { kind: "binder", op, cycles: true, children };
   }
 
   if (role === "opaque") {
-    const children = args.map((a) => classifyWith(a, c, subst)).filter(isProvBearing);
+    const children = args.map((a) => classify(a, c, subst)).filter(isProvBearing);
     return { kind: "opaque", op, children };
   }
 
   // pipe or undefined → pure-application default.
   return combine(
     op,
-    args.map((a) => classifyWith(a, c, subst)),
+    args.map((a) => classify(a, c, subst)),
   );
 }
 
@@ -398,8 +421,8 @@ function classifyIf(rest: unknown, c: Classifier, subst: Subst): LineageNode {
   const then_ = afterTest instanceof APair ? afterTest.car : undefined;
   const elseRest = afterTest instanceof APair ? afterTest.cdr : undefined;
   const else_ = elseRest instanceof APair ? elseRest.car : undefined;
-  const arms = [then_, else_].filter((a) => a !== undefined).map((a) => classifyWith(a, c, subst));
-  return { kind: "mux", op: "if", selector: classifyWith(test, c, subst), arms };
+  const arms = [then_, else_].filter((a) => a !== undefined).map((a) => classify(a, c, subst));
+  return { kind: "mux", op: "if", selector: classify(test, c, subst), arms };
 }
 
 /** `(when/unless test body…)` ≡ a one-armed `if` over `(begin body…)`. */
@@ -407,7 +430,7 @@ function classifyGuardedBody(rest: unknown, c: Classifier, subst: Subst, op: str
   if (!(rest instanceof APair)) return { kind: "literal" };
   const test = rest.car;
   const body = classifyBegin(rest.cdr, c, subst);
-  return { kind: "mux", op, selector: classifyWith(test, c, subst), arms: [body] };
+  return { kind: "mux", op, selector: classify(test, c, subst), arms: [body] };
 }
 
 /**
@@ -420,29 +443,27 @@ function classifyCond(rest: unknown, c: Classifier, subst: Subst): LineageNode {
   const arms: LineageNode[] = [];
   let node: unknown = rest;
   while (node instanceof APair) {
-    const clause = node.car;
+    const parts = clauseElements(node.car); // bracket `[test body…]` ≡ paren clause
     node = node.cdr;
-    if (!(clause instanceof APair)) continue;
-    const test = clause.car;
-    const body = clause.cdr;
+    if (parts === undefined || parts.length === 0) continue;
+    const test = parts[0];
+    const body = parts.slice(1);
 
     if (isSym(test, "else")) {
-      arms.push(classifyBegin(body, c, subst)); // else: no selector, the body is the value
+      arms.push(classifyBody(body, c, subst)); // else: no selector, the body is the value
       continue;
     }
 
-    const testNode = classifyWith(test, c, subst);
+    const testNode = classify(test, c, subst);
     tests.push(testNode);
 
-    if (body instanceof APair && isSym(body.car, "=>")) {
+    if (body.length > 0 && isSym(body[0], "=>")) {
       // (test => proc): arm value is (proc test) — proc's operand cone unioned
       // with the test cone (the test value flows into the arm).
-      const procRest = body.cdr;
-      const procNode =
-        procRest instanceof APair ? classifyWith(procRest.car, c, subst) : ({ kind: "literal" } as LineageNode);
+      const procNode = body.length > 1 ? classify(body[1], c, subst) : ({ kind: "literal" } as LineageNode);
       arms.push(combine("=>", [procNode, testNode]));
-    } else if (body instanceof APair) {
-      arms.push(classifyBegin(body, c, subst));
+    } else if (body.length > 0) {
+      arms.push(classifyBody(body, c, subst));
     } else {
       arms.push(testNode); // `(test)` with no body returns the test value itself
     }
@@ -463,7 +484,9 @@ function classifyLet(rest: unknown, c: Classifier, subst: Subst, sequential: boo
   if (rest.car instanceof ASymbol) {
     const afterName = rest.cdr;
     if (!(afterName instanceof APair)) return { kind: "literal" };
-    const rhss = letBindingValues(afterName.car).map((v) => classifyWith(v, c, subst));
+    const rhss = bindingEntries(afterName.car).map((b) =>
+      b.rest.length > 0 ? classify(b.rest[0], c, subst) : ({ kind: "literal" } as LineageNode),
+    );
     const body = classifyBegin(afterName.cdr, c, subst);
     return { kind: "binder", op: "named-let", cycles: true, children: [...rhss, body].filter(isProvBearing) };
   }
@@ -475,30 +498,14 @@ function classifyLet(rest: unknown, c: Classifier, subst: Subst, sequential: boo
   // RHS in the OUTER subst (parallel); `let*`/`letrec` extend as they go.
   const sequentialSubst = new Map(subst);
   const parallelOuterSubst = subst;
-  let bindNode: unknown = bindings;
-  while (bindNode instanceof APair) {
-    const binding = bindNode.car;
-    bindNode = bindNode.cdr;
-    if (!(binding instanceof APair) || !(binding.car instanceof ASymbol)) continue;
-    const name = opName(binding.car);
-    const rhsExpr = binding.cdr instanceof APair ? binding.cdr.car : undefined;
+  for (const entry of bindingEntries(bindings)) {
     const rhsSubst = sequential ? sequentialSubst : parallelOuterSubst;
-    const rhsNode = rhsExpr === undefined ? ({ kind: "literal" } as LineageNode) : classifyWith(rhsExpr, c, rhsSubst);
-    sequentialSubst.set(name, rhsNode);
+    const rhsNode =
+      entry.rest.length === 0 ? ({ kind: "literal" } as LineageNode) : classify(entry.rest[0], c, rhsSubst);
+    sequentialSubst.set(entry.name, rhsNode);
   }
 
   return classifyBegin(body, c, sequentialSubst);
-}
-
-function letBindingValues(bindings: unknown): unknown[] {
-  const out: unknown[] = [];
-  let n: unknown = bindings;
-  while (n instanceof APair) {
-    const b = n.car;
-    if (b instanceof APair && b.cdr instanceof APair) out.push(b.cdr.car);
-    n = n.cdr;
-  }
-  return out;
 }
 
 /**
@@ -506,36 +513,25 @@ function letBindingValues(bindings: unknown): unknown[] {
  * Conservative barrier — classify every init/step/test/result/body, flat union.
  * deferred: per-iteration attribution / real backedge topology.
  *
- * Raw surface pairs only (not evaluator normalizeBindings) — bracket-clause
- * surface is unmodeled (same gap class as case/while/quasiquote).
+ * Bracket bindings/clauses are read via `surface.ts` (normalizeBindings /
+ * normalizeClause twins). `case`/`while`/… stay unmodeled by shape.
  */
 function classifyDo(rest: unknown, c: Classifier, subst: Subst): LineageNode {
   if (!(rest instanceof APair)) return { kind: "literal" };
   const children: LineageNode[] = [];
 
-  let bindNode: unknown = rest.car;
-  while (bindNode instanceof APair) {
-    const binding = bindNode.car;
-    bindNode = bindNode.cdr;
-    if (!(binding instanceof APair)) continue;
-    let exprNode: unknown = binding.cdr; // skip the var name itself
-    while (exprNode instanceof APair) {
-      children.push(classifyWith(exprNode.car, c, subst));
-      exprNode = exprNode.cdr;
-    }
+  // Bracket entries `[var init step?]` read like paren ones (normalizeBindings' twin).
+  for (const entry of bindingEntries(rest.car, false)) {
+    for (const form of entry.rest) children.push(classify(form, c, subst));
   }
 
   // (test result…) body… — the test/result clause, then the per-iteration commands.
   const afterBindings = rest.cdr;
   if (afterBindings instanceof APair) {
-    let clauseNode: unknown = afterBindings.car;
-    while (clauseNode instanceof APair) {
-      children.push(classifyWith(clauseNode.car, c, subst));
-      clauseNode = clauseNode.cdr;
-    }
+    for (const form of clauseElements(afterBindings.car) ?? []) children.push(classify(form, c, subst));
     let bodyNode: unknown = afterBindings.cdr;
     while (bodyNode instanceof APair) {
-      children.push(classifyWith(bodyNode.car, c, subst));
+      children.push(classify(bodyNode.car, c, subst));
       bodyNode = bodyNode.cdr;
     }
   }
@@ -551,7 +547,12 @@ function classifyBegin(body: unknown, c: Classifier, subst: Subst): LineageNode 
     last = n.car;
     n = n.cdr;
   }
-  return last === undefined ? { kind: "literal" } : classifyWith(last, c, subst);
+  return last === undefined ? { kind: "literal" } : classify(last, c, subst);
+}
+
+/** `classifyBegin` over an already-split body list. */
+function classifyBody(body: readonly unknown[], c: Classifier, subst: Subst): LineageNode {
+  return body.length === 0 ? { kind: "literal" } : classify(body.at(-1), c, subst);
 }
 
 /** Runtime bindings: a slot/source name → the provenance ids it carries. */
@@ -565,6 +566,7 @@ export type Bindings = Record<string, readonly number[]>;
 function walk(n: LineageNode, b: Bindings, out: Set<number>, opts: { countOnly?: boolean; demand?: PathStep }): void {
   switch (n.kind) {
     case "literal":
+    case "closure": // definition site contributes nothing to any cone
       return;
     case "leaf":
       (b[n.slot] ?? []).forEach((x) => out.add(x));
@@ -637,7 +639,7 @@ export function provOf(v: unknown): number[] {
   return v instanceof AValue ? [...v.provenance].toSorted((a, b) => a - b) : [];
 }
 
-export function sameStep(a: PathStep, z: PathStep): boolean {
+function sameStep(a: PathStep, z: PathStep): boolean {
   if ("field" in a) return "field" in z && a.field === z.field;
   if ("car" in a) return "car" in z;
   return "index" in z && a.index === z.index;
@@ -656,7 +658,7 @@ export function fieldCone(n: LineageNode, b: Bindings, step: PathStep): number[]
 
 /** Named location only: keyword field → bare name; positional car/index → null
  *  (forwards). Index stays on `.step` for fan axis; never a fields key. */
-export function stepKey(step: PathStep): string | null {
+function stepKey(step: PathStep): string | null {
   if ("field" in step) return step.field;
   return null;
 }
@@ -690,6 +692,8 @@ export function countOpaqueNodes(n: LineageNode): number {
     case "leaf":
     case "source":
       return 0;
+    case "closure":
+      return countOpaqueNodes(n.body);
     case "pipe":
     case "transparent":
     case "field":

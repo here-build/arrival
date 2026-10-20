@@ -22,7 +22,6 @@ import { buildWireframe } from "../provenance/wireframe/builder.js";
 import { hashGraph } from "../provenance/wireframe/hash.js";
 // `store/index.js` is a curated studio read-slice (type-only) — fakes/tiering/emit runtime
 // values live at their own leaf modules (same shape as `support/provenance-budget-workload.ts`).
-import { setEmissionEnabled } from "../provenance/store/emit.js";
 import { PayloadStoreFake } from "../provenance/store/fakes.js";
 import type { Payload } from "../provenance/store/interfaces.js";
 import { PayloadTierMachine } from "../provenance/store/tiering.js";
@@ -34,7 +33,8 @@ import {
   type OffloadIngress,
   type VerificationCandidate,
 } from "../provenance/offload.js";
-import { CORPUS_BASE_NAMES, CORPUS_ROLES } from "../__tests__/provenance/w1-corpus.js";
+import { CORPUS_ROLES } from "../__tests__/provenance/w1-corpus.js";
+import { baseNamePredicate } from "../provenance/base-names.js";
 import { recordRun, type RecordedMint } from "../__tests__/provenance/q16-harness.js";
 import {
   createWorkloadHarness,
@@ -45,7 +45,7 @@ import {
 } from "./support/provenance-budget-workload.js";
 
 const corpusClassifier: Classifier = { roleOf: (op) => CORPUS_ROLES[op] };
-const corpusIsBaseName = (n: string): boolean => CORPUS_BASE_NAMES.has(n);
+const corpusIsBaseName = baseNamePredicate(inferenceEnv); // production predicate: env membership ∪ cxr synthesis
 
 beforeAll(async () => {
   await ensureInferenceEnvPopulated();
@@ -95,7 +95,7 @@ describe("C1 — reference workload completes with full provenance inside 128MB 
     const report = await runReferenceWorkload(h);
 
     expect(report.counts.rosettaCalls).toBe(30);
-    expect(report.counts.fanRawFacts).toBe(2 * (100 + 500 + 1000 + 5000 + 10000));
+    expect(report.counts.fanRawFacts).toBe(2 * (100 + 500 + 1000 + 5000 + 10_000));
     expect(report.counts.fanRuns).toBe(WORKLOAD_SHAPE.fanSizes.length * 2);
     expect(report.counts.pureLoopRawFacts).toBe(2 * 10_000);
     expect(report.counts.pureLoopRuns).toBe(2);
@@ -346,24 +346,19 @@ describe("break-order probe 3 — ring misconfiguration (undersized ring → bac
     const h = createWorkloadHarness("probe3-region", /* ringCapBytes */ 1); // pathologically undersized
     const N = 50;
     const hashes: string[] = [];
-    setEmissionEnabled(true);
-    try {
-      for (let i = 0; i < N; i++) {
-        const seq = await h.aggregating.allocateSeq(h.regionId);
-        const value = `payload-${i}`;
-        const hash = `probe3-${i}`;
-        h.tierMachine.ringPut(hash, { value, stampIds: [i] });
-        await h.aggregating.append(h.regionId, {
-          kind: "mint",
-          id: { templateHash: "probe3", ordinalPath: [i], regionEpoch: "e0" },
-          seq,
-          payloadHash: hash,
-        });
-        await h.tierMachine.flush(hash); // the backstop: cap=1 byte means every put immediately exceeds it
-        hashes.push(hash);
-      }
-    } finally {
-      setEmissionEnabled(false);
+    for (let i = 0; i < N; i++) {
+      const seq = await h.aggregating.allocateSeq(h.regionId);
+      const value = `payload-${i}`;
+      const hash = `probe3-${i}`;
+      h.tierMachine.ringPut(hash, { value, stampIds: [i] });
+      await h.aggregating.append(h.regionId, {
+        kind: "mint",
+        id: { templateHash: "probe3", ordinalPath: [i], regionEpoch: "e0" },
+        seq,
+        payloadHash: hash,
+      });
+      await h.tierMachine.flush(hash); // the backstop: cap=1 byte means every put immediately exceeds it
+      hashes.push(hash);
     }
 
     // Never data loss: every payload — despite the pathological ring cap forcing a

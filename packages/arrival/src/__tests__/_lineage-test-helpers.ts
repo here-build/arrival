@@ -18,7 +18,6 @@ import type { AString } from "../values/primitives/AString.js";
 import type { AValue } from "../values/primitives/AValue.js";
 import { jsToScheme } from "../membrane/rosetta.js";
 import { provOf } from "../provenance/lineage.js";
-import { isEagerProvenanceOracleEnabled, setEagerProvenanceOracleEnabled } from "../values/op-helpers.js";
 import type { SchemeValue } from "../values/types.js";
 
 /** Stamp a single source-id onto a string input (the per-element id carrier). Codec
@@ -48,11 +47,10 @@ let seq = 0;
  * provenance/box discipline off the result (`provOf`, `deepIds`, `collapseProvenance`),
  * a boxed-state concern (RULINGS.md R1), not the SIMPLE tier's plain-JS exit.
  *
- * Q20b: production default is OFF; every caller of this helper is an eager-oracle
+ * Production runs mint `eagerStamps: false`; every caller of this helper is an eager-oracle
  * GOLDEN (golden-prov-*, lineage-*, conservation.law.test.ts) that needs REAL
- * accumulation to freeze anything meaningful. Forces the oracle ON for exactly this
- * run's extent, save/restoring the ambient value (not a hardcoded default) so nested
- * or interleaved use is safe.
+ * accumulation to freeze anything meaningful. The run opts in via `eagerStamps: true` —
+ * a per-run flag, so interleaved runs never see each other's setting.
  */
 export async function runRaw(
   src: string,
@@ -62,14 +60,8 @@ export async function runRaw(
   const env = inferenceEnv.child(`lin-test-${seq++}`) as EnvWithInternals<ResolvingAmbient>;
   await setup?.(env);
   for (const [k, v] of Object.entries(binds)) env.bind(k, jsToScheme(CONSTANT_CTX, v));
-  const savedOracle = isEagerProvenanceOracleEnabled();
-  setEagerProvenanceOracleEnabled(true);
-  try {
-    const [r] = (await execStateOverFrame(src, { env })).values;
-    return r;
-  } finally {
-    setEagerProvenanceOracleEnabled(savedOracle);
-  }
+  const [r] = (await execStateOverFrame(src, { env, eagerStamps: true })).values;
+  return r;
 }
 
 export const run = async (src: string, binds: Record<string, unknown> = {}, setup?: EnvSetup): Promise<number[]> =>

@@ -9,7 +9,8 @@
 import { describe, it, expect } from "vitest";
 import type { EnvWithInternals, ResolvingAmbient } from "../../env/AmbientRuntime.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
-import { execStateOverFrame as execState, parse } from "../../eval/generator-exec.js";
+import { parse } from "../../eval/generator-exec.js";
+import { execStateOverFrameEager as execState } from "../../__tests__/_require-eager-oracle.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { AVector } from "../../values/primitives/AVector.js";
 import { APair } from "../../values/primitives/APair.js";
@@ -17,10 +18,6 @@ import { AValue } from "../../values/primitives/AValue.js";
 import type { SchemeValue } from "../../values/types.js";
 import { classify, fullCone, type Classifier, provOf } from "../../provenance/lineage.js";
 import { sStr, sNum, run, runRaw } from "../../__tests__/_lineage-test-helpers.js";
-import { requireEagerOracle } from "../../__tests__/_require-eager-oracle.js";
-
-// this helper/execState needs the eager oracle ON
-requireEagerOracle();
 
 // `seq` numbers the BESPOKE per-`it` envs below (each builds its own env to install
 // a rosetta fixture); the shared run/runRaw own a separate counter.
@@ -201,8 +198,8 @@ describe("v0.1 FINALIZATION GATES (G1–G7)", () => {
 
   // G6 — carrier-coercion soundness: provenance survives the standard transforms
   // across ALL carriers; no coercion silently drops a provenance box.
-  // Pair is pinned by golden-prov-fan.test.ts's A13 row (it.fails, per the same
-  // sweep); the runnable golden below pins the SchemeVector carrier (the
+  // Pair is pinned by golden-prov-fan.test.ts's A13 row (a passing `it` — "A13 leak
+  // is CLOSED"); the runnable golden below pins the SchemeVector carrier (the
   // remaining constructible one) under the
   // EAGER engine — the oracle the static path must reproduce. AJSArray is a
   // membrane wrapper (no public constructor here) and is asserted only via the

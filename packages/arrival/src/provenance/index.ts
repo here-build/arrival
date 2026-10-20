@@ -4,7 +4,8 @@
 // Surfaces:
 //   - Trace capture — `EvalTrace` / `Invocation` / `NodeRecord` / `snapshotTrace`
 //   - Scope identity — `scopeId` / `headOf` / `userCallSite`
-//   - Wireframe plane — `buildWireframe`, slice/defines, `hermeticApply` (γ)
+//   - Wireframe plane — `buildWireframe` (+ `baseNamePredicate(env)`, its production
+//     `isBaseName`), slice/defines, `hermeticApply` (γ)
 //   - Lineage classifier — `classify` / `fieldResolve` (static plane + analysis consumers)
 //
 // Reactive `ObservableEvalTrace` lives in `@here.build/arrival-provenance`
@@ -39,6 +40,7 @@ export {
   type WireframeProgram,
 } from "./wireframe/types.js";
 export { buildWireframe, type WireframeBuildOptions } from "./wireframe/builder.js";
+export { baseNamePredicate } from "./base-names.js";
 export { hermeticApply, type HermeticApplyOptions } from "./gamma.js";
 
 // Cross-package reads from arrival-provenance `/analysis` (lineage engine stays core).

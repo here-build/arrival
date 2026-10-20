@@ -23,6 +23,7 @@
  * page size is well below this harness's record counts) rather than assuming one
  * call returns everything.
  */
+// eslint-disable-next-line import-x/no-unresolved -- virtual module provided by the workerd runtime (types: ./ambient.d.ts)
 import { DurableObject } from "cloudflare:workers";
 
 import { recordIdKey } from "../../provenance/store/ids.js";

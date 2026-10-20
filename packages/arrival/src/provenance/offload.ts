@@ -17,12 +17,13 @@
  * EPOCH: mismatch without pool (or policy off) → `EpochRefusalError`.
  * With pool: deterministic sample under current semantics vs recorded egresses;
  * all agree → trust stream (`regionId→streamEpoch` cache); any disagree → refuse.
- * Sampling: FNV-seeded xorshift32 by regionId — reproducible, no Math.random.
+ * Sampling: FNV-seeded (`seed32`) xorshift32 by regionId — reproducible, no Math.random.
  */
 import type { AmbientValue } from "../env/AmbientRuntime.js";
 import type { EnvCapability } from "../common/capability.js";
 import { boxPayload, FrozenMints, replayGraphEgress, ReplayScopeError } from "./replay.js";
 import { hashGraph } from "./wireframe/hash.js";
+import { seed32 } from "./store/hash.js";
 import type { RegionId, TemplateHash } from "./store/ids.js";
 import type { EvidenceTier, Payload } from "./store/interfaces.js";
 import type { WireframeGraph, WireframeProgram } from "./wireframe/types.js";
@@ -82,22 +83,12 @@ export class EpochRefusalError extends Error {
 /** Small by design — wrong interpreters disagree early. */
 export const DEFAULT_SAMPLE_SIZE = 3;
 
-/** FNV-1a seed (local copy — no store/hash import for four lines). */
-function fnvSeed(text: string): number {
-  let h = 0x81_1c_9d_c5;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.codePointAt(i) ?? 0;
-    h = Math.imul(h, 0x01_00_01_93);
-  }
-  return h >>> 0;
-}
-
 /** Deterministic partial Fisher–Yates; seed = regionId. Sorted indices. */
 export function sampledIndices(seed: string, poolSize: number, sampleSize: number): readonly number[] {
   const n = Math.max(0, Math.min(sampleSize, poolSize));
   if (n === 0) return [];
   const pool = Array.from({ length: poolSize }, (_, i) => i);
-  let state = fnvSeed(seed) || 1;
+  let state = seed32(seed) || 1;
   const nextUint32 = (): number => {
     state ^= state << 13;
     state >>>= 0;
@@ -151,6 +142,7 @@ function indexProgramGraphs(program: WireframeProgram): ReadonlyMap<TemplateHash
     for (const node of graph.nodes) {
       if (node.kind === "fan" && node.template !== undefined) visit(node.template);
       else if (node.kind === "binder") visit(node.interior);
+      else if (node.kind === "closure" && node.template !== undefined) visit(node.template);
     }
   };
   visit(program.main);
