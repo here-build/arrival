@@ -475,6 +475,15 @@ class Join {
   private readonly claimed = new Set<PlanKey>();
   /** Plan items some wireframe node resolved to. */
   private readonly joined = new Set<PlanKey>();
+  /** A `do` result clause drawn after its loop: the loop's value is whatever these producers
+   *  yield, so the consumers of the loop's `out` are rewired to them (`finish`) — a wire from
+   *  outside the loop into the loop's own `out` would close a cycle through the frame. */
+  private readonly exits: {
+    readonly loop: PlanKey;
+    readonly producers: readonly Producer[];
+    readonly via?: string;
+    readonly wire: WireShape;
+  }[] = [];
   /** A region's free variables: interior graph → name → what its `capture:<name>` wire reads. */
   private readonly captured = new Map<WireframeGraph, Map<string, Producer[]>>();
 
@@ -969,7 +978,18 @@ class Join {
     target: { to: End; kind: PlanEdge["kind"] },
   ): void {
     const via = IDENTITY.test(wire.source) ? undefined : wire.source;
-    for (const { key, port, control } of producers) {
+    let sources = producers;
+    if (ctx.binder === "do" && target.to.key === ctx.owner.key && target.to.port === "out") {
+      // The result clause: what the loop yields. Drawn after the loop, its producers lie outside
+      // it; the loop's own final-value ports are the value flowing to its own `out`.
+      const own = (p: Producer) => p.key === ctx.owner.key;
+      if (producers.some((p) => !own(p) && !this.isAncestor(ctx.owner, p.key))) {
+        this.exits.push({ loop: ctx.owner.key, producers, ...(via === undefined ? {} : { via }), wire: shape });
+        return;
+      }
+      sources = producers.filter((p) => !own(p));
+    }
+    for (const { key, port, control } of sources) {
       const kind = control === true ? "control" : target.kind;
       this.edges.push({ from: { key, port }, to: target.to, kind, ...(via === undefined ? {} : { via }), wire: shape });
     }
@@ -1096,6 +1116,7 @@ class Join {
       // already draws that, no single producer does.
       if (ref.slot === "condition") return [];
       const node = ctx.graph.nodes.at(ref.node);
+      if (node?.kind === "recur" && ctx.binder === "do") return this.finalValue(ctx, ref.slot);
       return node ? this.nodeProducers(ctx, node, ref.node, scope, intoOwnerOut, seen) : [];
     });
   }
@@ -1122,7 +1143,7 @@ class Join {
     intoOwnerOut: boolean,
     seen: Set<number>,
   ): Producer[] {
-    if (node.kind === "recur") return this.recurProducer(ctx, node.span, intoOwnerOut);
+    if (node.kind === "recur") return this.recurProducer(ctx, intoOwnerOut);
     if (node.kind === "closure") {
       // A lambda's value is the frame drawn for its body; a named procedure as a value carries
       // no step's data.
@@ -1158,16 +1179,22 @@ class Join {
   }
 
   /** All-tail: the recursion's value IS the loop's result. A non-tail named let reads its inner
-   *  iteration's result. A `do` result clause reads a loop variable's final value (arrival:
-   *  the recur node's `argK` slot), but the plan draws the result clause once, AFTER the loop
-   *  frame (it runs once, not per iteration), and the frame has no port for a variable's final
-   *  value — its `in:<var>` ports are what each iteration reads. Dropped and counted. */
-  private recurProducer(ctx: Context, span: string, intoOwnerOut: boolean): Producer[] {
+   *  iteration's result. (A `do` result clause is `finalValue`.) */
+  private recurProducer(ctx: Context, intoOwnerOut: boolean): Producer[] {
     if (intoOwnerOut || ctx.owner.tail === true) return [];
-    if (ctx.binder !== "do") return [{ key: ctx.owner.key, port: "out" }];
+    return [{ key: ctx.owner.key, port: "out" }];
+  }
+
+  /** A `do` result clause reads loop variable K's final value (arrival: the recur node's `argK`
+   *  slot). The loop's `in:<var>` ports are what each iteration reads; the value after the last
+   *  iteration leaves on its own `out:<var>` port, wired like any other producer. */
+  private finalValue(ctx: Context, slot: string | undefined): Producer[] {
+    const k = slot === undefined ? undefined : operandIndex(slot, "arg");
+    const name = k === undefined ? undefined : ctx.owner.params[k];
+    if (name !== undefined) return [{ key: ctx.owner.key, port: `out:${name}` }];
     this.drop(
       "recur-value",
-      `recur ${span}: a do result reads a loop variable's final value; ${ctx.owner.key} has no port for it, not linked`,
+      `recur: a do result reads ${slot ?? "a loop variable"}, which ${ctx.owner.key} does not bind`,
     );
     return [];
   }
@@ -1214,11 +1241,33 @@ class Join {
 
   // ── rewrites ──
 
+  /** Consumers of a loop's `out` read its result clause's producers instead (see `exits`). The
+   *  consumer's own wire, if any, stays; otherwise the clause's shape rides the edge. */
+  private withExits(): PlanEdge[] {
+    if (this.exits.length === 0) return this.edges;
+    return this.edges.flatMap((e) => {
+      const exits = this.exits.filter((x) => x.loop === e.from.key && e.from.port === "out" && e.kind !== "recur");
+      return exits.length === 0
+        ? [e]
+        : exits.flatMap((x) =>
+            x.producers.map(
+              (p): PlanEdge => ({
+                from: { key: p.key, port: p.port },
+                to: e.to,
+                kind: p.control === true ? "control" : e.kind,
+                ...(e.via === undefined ? (x.via === undefined ? {} : { via: x.via }) : { via: e.via }),
+                wire: e.wire ?? { ...x.wire, id: `${x.wire.id}→${e.to.key}:${e.to.port}` },
+              }),
+            ),
+          );
+    });
+  }
+
   /** An edge leaving a frame passes through its `out`, innermost first (arms belong to their
    *  branch; a recur backedge leaves its arm by definition). Then dedupe. */
   finish(): PlanEdge[] {
     const routed: PlanEdge[] = [];
-    for (const edge of this.edges) {
+    for (const edge of this.withExits()) {
       if (edge.kind === "recur") {
         routed.push(edge);
         continue;

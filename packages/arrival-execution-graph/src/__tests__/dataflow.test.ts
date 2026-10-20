@@ -393,19 +393,19 @@ describe("attachDataflow — honest degradation", () => {
     `);
   });
 
-  it("a do result clause reads the recur node as a value: dropped", async () => {
+  it("a do result clause reads the loop variable's final value from the loop's out:<var> port", async () => {
     const p = await joined(`(do ((i 0 (+ i 1)) (acc "" (ask acc))) ((= i 2) (fetch acc)))`);
     expect(edges(p)).toMatchInlineSnapshot(`
       "
-      do@4:0:out -> <program>:out
+      fetch@4:48:out -> <program>:out
       do@4:0:in:i -> do@4:0:in:i [recur]
       do@4:0:in:acc -> ask@4:27:in:arg0
       ask@4:27:out -> do@4:0:in:acc [recur]
-      fetch@4:48:out -> do@4:0:out
-      ! dataflow: 8 wires, 5 edges, dropped 1 (recur-value 1), dead-binding 3, 0 steps without a node
-      ! recur do@4:0: a do result reads a loop variable's final value; do@4:0 has no port for it, not linked
+      do@4:0:out:acc -> fetch@4:48:in:arg0
+      ! dataflow: 8 wires, 5 edges, dropped 0, dead-binding 3, 0 steps without a node
       "
     `);
+    expect(p.dataflow).toEqual({ status: "complete", missing: 0 });
   });
 
   it("bracket let* bindings join like paren ones", async () => {
@@ -539,5 +539,53 @@ describe("wire shapes", () => {
     const fanIn = p.edges.filter((e) => e.wire?.op === "string-append" && e.to.key === "<program>");
     expect(fanIn).toHaveLength(2);
     expect(new Set(fanIn.map((e) => e.wire!.id)).size).toBe(1);
+  });
+});
+
+describe("attachDataflow — a do exit clause runs after the loop", () => {
+  const EXIT = `(do ((i 0 (+ i 1)) (acc "" (ask acc))) ((= i 2) (fetch (string-append (number->string i) acc))))`;
+
+  it("no edge enters the loop's own out from outside it; the result goes to the loop's consumers", async () => {
+    const p = await joined(`(ask ${EXIT})`);
+    const loop = p.edges.find((e) => e.kind === "recur")!.from.key;
+    expect(p.edges.filter((e) => e.to.key === loop && e.to.port === "out")).toEqual([]);
+    expect(p.edges.filter((e) => e.from.key === loop && e.from.port === "out")).toEqual([]);
+    expect(edges(p)).toMatch(/fetch@\d+:\d+:out -> ask@4:0:in:arg0/);
+  });
+
+  it("a result step is a sibling of the loop, not inside it", async () => {
+    const p = await joined(EXIT);
+    const loop = p.root.children.find((c) => c.kind === "frame" && c.frame === "loop");
+    expect(loop?.kind === "frame" && loop.children.some((c) => c.key.startsWith("fetch@"))).toBe(false);
+    expect(p.root.children.some((c) => c.kind === "step" && c.key.startsWith("fetch@"))).toBe(true);
+  });
+
+  it("the exit step's loop-variable reads are wired from the loop's out:<var> ports", async () => {
+    const p = await joined(EXIT);
+    const lines = edges(p);
+    expect(lines).toContain("do@4:0:out:i -> fetch@4:48:in:arg0");
+    expect(lines).toContain("do@4:0:out:acc -> fetch@4:48:in:arg0");
+    expect(p.dataflow).toEqual({ status: "complete", missing: 0 });
+  });
+
+  it("no non-recur cycle", async () => {
+    const p = await joined(`(ask ${EXIT})`);
+    const next = new Map<string, string[]>();
+    for (const e of p.edges) {
+      if (e.kind === "recur") continue;
+      // a frame's ports are one node
+      next.set(e.from.key, [...(next.get(e.from.key) ?? []), e.to.key]);
+    }
+    const state = new Map<string, 1 | 2>();
+    const cyclic = (k: string): boolean => {
+      if (state.get(k) === 2) return false;
+      if (state.get(k) === 1) return true;
+      state.set(k, 1);
+      const hit = (next.get(k) ?? []).some((n) => n !== k && cyclic(n));
+      state.set(k, 2);
+      return hit;
+    };
+    // loop → its interior (ports feed children) is containment, not a wire cycle: check siblings only
+    expect([...next.keys()].some((k) => cyclic(k))).toBe(false);
   });
 });

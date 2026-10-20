@@ -115,8 +115,10 @@ export interface PlanFrame {
 export type PlanItem = PlanStep | PlanFrame;
 
 /** `out`, `control` (branch selector), `in:arg<k>` (step operand), `in:<param>` (frame
- *  ingress). A frame port is fed from outside and read from inside; `out` the reverse. */
-export type PlanPort = "out" | "control" | `in:${string}`;
+ *  ingress), `out:<param>` (a `do` loop's variable after its last iteration, read by the result
+ *  clause drawn after the loop). A frame port is fed from outside and read from inside; `out`
+ *  and `out:<param>` the reverse. */
+export type PlanPort = "out" | "control" | `in:${string}` | `out:${string}`;
 
 /** A step into a value — the same shape as arrival's lineage `PathStep`. */
 export type PathStep = { field: string } | { car: true } | { index: number };

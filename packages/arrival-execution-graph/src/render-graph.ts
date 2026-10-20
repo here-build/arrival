@@ -336,7 +336,7 @@ function errorText(e: unknown): string {
 }
 
 function sideOf(port: string): RenderPort["side"] {
-  if (port === portIds.out) return "out";
+  if (port === portIds.out || port.startsWith("out:")) return "out";
   return port === portIds.control ? "control" : "in";
 }
 
@@ -455,11 +455,12 @@ class Builder {
       else if (id === portIds.control) control = true;
       else if (!seen.has(id)) {
         seen.add(id);
-        ins.push({ id, side: sideOf(id), label: id.slice(3) });
+        ins.push({ id, side: sideOf(id), label: id.slice(id.indexOf(":") + 1) });
       }
     }
     return [
-      ...ins,
+      ...ins.filter((p) => p.side === "in"),
+      ...ins.filter((p) => p.side === "out"),
       ...(control ? [{ id: portIds.control, side: "control" as const }] : []),
       ...(out ? [{ id: portIds.out, side: "out" as const }] : []),
     ];

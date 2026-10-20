@@ -7,7 +7,7 @@ import { attachDataflow } from "../dataflow.js";
 import type { Plan, Vocabulary } from "../plan.js";
 import { type Progress, ProgressProjector } from "../progress.js";
 import { followed, retainedSpans, toRenderGraph } from "../render-graph.js";
-import type { RenderFrame, RenderGraph, RenderStep, RenderTransform } from "../types.js";
+import { type RenderFrame, type RenderGraph, type RenderStep, type RenderTransform } from "../types.js";
 import { Gate, ioCapability, run, start, until } from "./program-harness.js";
 
 // Designated functions are program-defined; `io` is the async host port the gate can hold.
@@ -558,6 +558,60 @@ describe("toRenderGraph — actual, completed run", () => {
   it("do: the exit test is not an extra iteration", async () => {
     const { g } = await completed(CORPUS.doLoop!);
     expect(frames(g, "loop")[0]!.instances).toHaveLength(2);
+  });
+
+  describe("do: the exit clause runs after the loop", () => {
+    const EXIT = `(do ((i 0 (+ i 1))) ((= i 2) (fetch (number->string i))) (ask "body"))`;
+
+    /** Sibling-level graph of the non-recur edges (order included): an endpoint lifts to the child
+     *  of the edge's lowest common ancestor frame; an end on that frame's own port is containment. */
+    const cyclic = (g: RenderGraph): boolean => {
+      const parentOf = (id: string) => g.nodes.find((n) => n.id === id)?.parent ?? null;
+      const chain = (id: string) => {
+        const c = [id];
+        for (let p = parentOf(id); p !== null; p = parentOf(p)) c.push(p);
+        return c;
+      };
+      const next = new Map<string, string[]>();
+      for (const e of g.edges) {
+        if (e.kind === "recur") continue;
+        const [a, b] = [chain(e.from.node), chain(e.to.node)];
+        const common = a.find((x) => b.includes(x));
+        if (common === undefined || common === e.from.node || common === e.to.node) continue;
+        const [from, to] = [a[a.indexOf(common) - 1]!, b[b.indexOf(common) - 1]!];
+        if (from !== to) next.set(from, [...(next.get(from) ?? []), to]);
+      }
+      const state = new Map<string, 1 | 2>();
+      const visit = (k: string): boolean => {
+        if (state.get(k) === 2) return false;
+        if (state.get(k) === 1) return true;
+        state.set(k, 1);
+        const hit = (next.get(k) ?? []).some(visit);
+        state.set(k, 2);
+        return hit;
+      };
+      return [...next.keys()].some(visit);
+    };
+
+    it("potential and actual: nothing outside the loop feeds its out; no non-recur cycle", async () => {
+      const { plan, g } = await completed(EXIT);
+      for (const graph of [toRenderGraph(plan), g]) {
+        const loop = frames(graph, "loop")[0]!;
+        expect(graph.edges.filter((e) => e.to.node === loop.id && e.to.port === "out")).toEqual([]);
+        expect(cyclic(graph)).toBe(false);
+      }
+    });
+
+    it("the exit step reads the loop variable from the loop's out:<var> port; the step stays outside the loop", async () => {
+      const { plan } = await completed(EXIT);
+      const g = toRenderGraph(plan);
+      const loop = frames(g, "loop")[0]!;
+      const exit = g.nodes.find((n) => n.kind === "step" && n.id.startsWith("fetch@"))!;
+      expect(exit.parent).toBe(loop.parent);
+      expect(loop.ports).toContainEqual({ id: "out:i", side: "out", label: "i" });
+      expect(g.edges.some((e) => e.from.node === loop.id && e.from.port === "out:i")).toBe(true);
+      expect(plan.dataflow).toEqual({ status: "complete", missing: 0 });
+    });
   });
 
   it("(map ask xs): the bare callback step carries the par's state", async () => {
