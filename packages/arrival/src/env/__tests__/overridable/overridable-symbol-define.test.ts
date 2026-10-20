@@ -1,5 +1,5 @@
 // overridable-symbol-define.test.ts — W4-H2b pack migration rows for `arrival/overridable`
-// (docs/design-history/symbol-define-static-program-validation.md §1/§2/§4). Companion to
+//. Companion to
 // the pre-existing `overridable.test.ts`, which stays the behavioral baseline (define, override,
 // default, structured s/* forms, teaching-door messages) — this file pins ONLY the migration-
 // specific facts:
@@ -177,7 +177,7 @@ describe("arrival/overridable — the §3.4 macro firewall: `name`'s formal posi
 describe("arrival/overridable — boxed-state access still round-trips (R1 sanity, not a re-test of the baseline)", () => {
   it("execState().values still carries the resolved AString post-migration", async () => {
     async function boxedExec(code: string, options?: ExecOptions) {
-      return (await execState(code, options)).values.slice();
+      return [...(await execState(code, options)).values];
     }
     const result = await boxedExec(`(define/overridable city (s/string) "Berlin") city`, {
       capabilities,

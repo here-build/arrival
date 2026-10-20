@@ -1,5 +1,5 @@
 // control-symbol-define-migration.test.ts — W4-H2 pack-migration law rows for
-// `scheme/r7rs/control` (docs/design-history/symbol-define-static-program-validation.md §1/§2.1/§3.3b/§4.2).
+// `scheme/r7rs/control`.
 //
 // This pack is the narrowest possible migration case, narrower even than H1's
 // binding.ts (which at least had two `define-syntax` macros): control.ts's ENTIRE
@@ -54,7 +54,7 @@ import { freshEnv } from "../../../__tests__/_fresh-env.js";
 import { buildVocabulary } from "../../vocabulary.js";
 import { execInFrame } from "../../../eval/generator-exec.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
-import type { AEntity, DoorSymbolDef } from "../../../common/symbols/_bake.js";
+import type { DoorSymbolDef } from "../../../common/symbols/_bake.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
 const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
@@ -141,8 +141,8 @@ describe("ROW 3 — contract teaching: firing a door throws the name@owner Purit
     let caught: unknown;
     try {
       bound["arrival/tagless-final/apply"]();
-    } catch (e) {
-      caught = e;
+    } catch (error) {
+      caught = error;
     }
     expect(caught).toBeInstanceOf(PurityError);
     const err = caught as PurityError;
@@ -163,15 +163,15 @@ describe("ROW 4 — FV law: N/A structurally (no symbol.define body exists to wa
     let caught: unknown;
     try {
       await buildVocabulary([controlPack], undefined, evalScheme);
-    } catch (e) {
+    } catch (error) {
       if (
-        e instanceof DefineLocalityError ||
-        e instanceof DefineForwardReferenceError ||
-        e instanceof ProvenanceRoleShapeError
+        error instanceof DefineLocalityError ||
+        error instanceof DefineForwardReferenceError ||
+        error instanceof ProvenanceRoleShapeError
       ) {
-        caught = e;
+        caught = error;
       } else {
-        throw e;
+        throw error;
       }
     }
     expect(caught).toBeUndefined();

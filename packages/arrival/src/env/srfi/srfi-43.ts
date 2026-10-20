@@ -1,6 +1,10 @@
 // SRFI-43 — vector library (pure ops only; arrival vectors are immutable). Scheme-bootstrap
 // capability.
 //
+// CALLBACK ORDER follows SRFI-133, not SRFI-43: folds call `(kons acc elt)` (SRFI-43
+// proper is `(kons i state elt)`) and vector-count/-index/-any/-every call `(pred elt)`
+// with no index argument. Ported SRFI-43 code that expects the index will mis-bind.
+//
 // DEPS: every body below calls `vector-length`/`vector-ref` (scheme/vectors),
 // `=`/`+`/`-`/`<`/`>`/`quotient` (scheme/numeric), and `not` (scheme/equality) —
 // the complete cross-capability free-name set, each a declared `deps` edge

@@ -12,11 +12,9 @@
 //
 // SINGLE SOURCE: `srfi/index.ts` adds this to `allSrfi`, so `base-packs.ts` assembles it.
 import dedent from "dedent";
-import { resolveMethod } from "../../common/symbols/_bake.js";
 import type { MaybePromise } from "../../types/utility.js";
 import { EnvCapability } from "../../common/capability.js";
-import { attachOffendingValue } from "../../errors.js";
-import { tf } from "../../values/tagless-final.js";
+import { requireTerm } from "../pack-helpers.js";
 import type { SchemeValue } from "../../values/types.js";
 
 export default EnvCapability.define("scheme/srfi-95", {
@@ -27,7 +25,7 @@ export default EnvCapability.define("scheme/srfi-95", {
         // arrival/tagless-final/sort protocol — APair/AVector/AJSArray, every SchemeValue
         // member this dispatch could ever see), not host-blind — z.schemeValue is the typed
         // replacement for z.unknown() at exactly this kind of native scheme-value slot
-        // (scheme-zod.ts), matching the sibling term-dispatch receiver `length` (lists.ts).
+        // (common/scheme-zod/index.ts), matching the sibling term-dispatch receiver `length` (lists.ts).
         // comparator: a callable predicate, not bare unknown — AValue.ts's single source of
         // truth declares `arrival/tagless-final/sort`'s own param as exactly
         // `(a: unknown, b: unknown) => unknown` (mirrored by deriveSortCompare, op-helpers.ts),
@@ -60,17 +58,9 @@ export default EnvCapability.define("scheme/srfi-95", {
       },
       (args, runCtx) => {
         const [seq, comparator] = args;
-        const m = resolveMethod(seq, tf("sort"));
-        if (m === undefined) {
-          throw attachOffendingValue(
-            new TypeError(
-              `sort: the ${seq == null ? String(seq) : typeof seq} operand does not support sort (no ${tf("sort")}).`,
-            ),
-            seq,
-          );
-        }
+        const m = requireTerm(seq, "sort");
         // The per-primitive sort term algebra (module header) declares a SchemeValue return —
-        // `resolveMethod`'s TermMethod is `unknown` (it resolves ANY term method, not sort's own
+        // `requireTerm`'s method is `unknown`-returning (it resolves ANY term method, not sort's own
         // protocol specifically), so this states that documented invariant, not a blind widening.
         return m.call(seq, comparator, runCtx) as MaybePromise<SchemeValue>;
       },

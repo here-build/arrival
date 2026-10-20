@@ -18,7 +18,6 @@
 // unchanged.
 import { describe, expect, it } from "vitest";
 
-import type { AEntity } from "../../../common/symbols/_bake.js";
 import type { EmitCtx } from "../../../emit/emit-rule.js";
 import {
   ArrayLit,

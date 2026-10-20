@@ -39,8 +39,8 @@ describe("null? on an empty BORROWED array — the loose/strict divergence", () 
     let caught: unknown;
     try {
       await exec(`(null? xs)`, { env: emptyArrayEnv(), strict: true });
-    } catch (e) {
-      caught = e;
+    } catch (error) {
+      caught = error;
     }
     expect(caught).toBeInstanceOf(PortabilityError);
     const err = caught as PortabilityError;

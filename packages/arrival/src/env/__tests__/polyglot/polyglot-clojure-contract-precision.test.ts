@@ -7,7 +7,7 @@ import polyglotClojure from "../../polyglot/polyglot-clojure.js";
 import type { AEntity } from "../../../common/symbols/_bake.js";
 import { signatureOf } from "../../../type-layer/schema-to-ts.js";
 
-const norm = (s: string) => s.replace(/\s+/g, " ").trim();
+const norm = (s: string) => s.replaceAll(/\s+/g, " ").trim();
 
 // `spec.symbols` IS the record.
 const symbols = (polyglotClojure.spec.symbols ?? {}) as Record<string, AEntity>;

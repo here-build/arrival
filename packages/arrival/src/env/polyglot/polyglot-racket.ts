@@ -1,4 +1,4 @@
-// @here.build/arrival/polyglot-racket — the Racket dialect pack (see
+// arrival's polyglot-racket pack — the Racket dialect pack (see
 // polyglot.ts's header for the sibling-pack map).
 //
 // Two families:

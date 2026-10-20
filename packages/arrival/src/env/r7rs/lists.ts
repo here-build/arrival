@@ -23,7 +23,7 @@
 // `BASE_PACKS` — the C3 linearization needs `lists` already resolved before
 // `srfi-235` loads onto it.
 
-// Installs the global \`TypeError.invariant\` assertion helper used by the
+// Installs the global `TypeError.invariant` assertion helper used by the
 // list-bounds and circular-list guards below (side-effect import).
 import "@here.build/error-invariant";
 import { adoptSpine } from "../../membrane/adopt-spine.js";
@@ -31,17 +31,16 @@ import dedent from "dedent";
 import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import { applyCallback, type ACallable } from "../../values/primitives/ACallable.js";
 import { CallCtx } from "../../run/CallCtx.js";
-import { resolveMethod } from "../../common/symbols/_bake.js";
 import type { MaybePromise } from "../../types/utility.js";
-import { withInputProvenance } from "../../values/op-helpers.js";
+import { assertAllocatable, toIndex, withInputProvenance } from "../../values/op-helpers.js";
 import { schemeFalse } from "../../values/primitives/ABool.js";
 import invariant from "tiny-invariant";
 import { APair, concatPair, isCircularList } from "../../values/primitives/APair.js";
-import { is_applyable, is_false, is_promise } from "../../values/value-guards.js";
+import { is_applyable, is_false, is_lambda, is_promise } from "../../values/value-guards.js";
 import { type, typeErrorMessage } from "../../membrane/typecheck.js";
 import { attachOffendingValue, CarrierMismatchError } from "../../errors.js";
 import { eqv, structuralEqual } from "../../values/structural-equal.js";
-import { to_array } from "../pack-helpers.js";
+import { exactly, freshBinding, provesArray, requireTerm, to_array } from "../pack-helpers.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
 import { printValue } from "../../values/print.js";
 import { theVoid } from "../../values/primitives/AVoid.js";
@@ -57,7 +56,7 @@ import { tf } from "../../values/tagless-final.js";
 import type { AListAlike, SchemeValue } from "../../values/types.js";
 // TYPE-ONLY import of the compiler-facing Contract.emit surface (emit-rule.ts
 // imports nothing back from this tree).
-import type { EmitCtx, EmitRule } from "../../emit/emit-rule.js";
+import type { EmitRule } from "../../emit/emit-rule.js";
 import {
   ArrayLit,
   Arrow,
@@ -69,7 +68,6 @@ import {
   Method,
   Ref,
   Spread,
-  type Binding,
   type BinOp,
   type R,
 } from "../../emit/residual-lite.js";
@@ -101,6 +99,21 @@ function requireListArg(verb: string, list: unknown): void {
     ),
     list,
   );
+}
+
+/** Index/count door shared by make-list / list-ref / list-tail: a negative or fractional
+ *  index must not fall out of a `for (i < count)` loop as "0 steps" or "ceil(count) steps". */
+function listIndex(verb: string, k: unknown): number {
+  const n = toIndex(k);
+  if (!Number.isInteger(n) || n < 0) {
+    throw attachOffendingValue(
+      new TypeError(
+        `${verb}: expected a non-negative exact integer, got ${String(printValue(k as SchemeValue)).slice(0, 60)}`,
+      ),
+      k,
+    );
+  }
+  return n;
 }
 
 function isProperList(obj: SchemeValue): boolean {
@@ -146,7 +159,7 @@ const lengthImpl = function (this: CallCtx, obj: unknown): AExact | AInexact {
   }
   if (typeof obj === "object" && "length" in obj) {
     const len = obj.length;
-    if (typeof len === "number") return withInputProvenance([obj], new AExact(len));
+    if (typeof len === "number") return withInputProvenance(this.runCtx, [obj], new AExact(len));
   }
   throw attachOffendingValue(
     new TypeError(`length: the ${typeof obj} operand does not support length (no arrival/tagless-final/length).`),
@@ -229,19 +242,6 @@ function mapImpl(
 //   length / list-ref — provesArray: proven → direct property/index; unknown → shim.
 // ════════════════════════════════════════════════════════════════════════════
 
-/** Fixed-arity refusal: wrong arity is a static defect → `ctx.door`, not a walker
- *  crash on `undefined`. Same helper as numeric/equality emit. */
-function exactly<T>(ctx: EmitCtx<R>, sym: string, args: readonly T[], n: number): readonly T[] {
-  if (args.length !== n) ctx.door(`\`${sym}\` wants exactly ${n} argument${n === 1 ? "" : "s"}, got ${args.length}`);
-  return args;
-}
-
-/** `EmitCtx.fresh` is typed `unknown` in arrival core (residual algebra stays in the
- *  compiler package); cast once to Binding — no rule touches `fresh` raw. */
-function freshBinding(ctx: EmitCtx<R>, hint: string): Binding {
-  return ctx.fresh(hint) as Binding;
-}
-
 // ── cons — representation collapse, three-way tail gate ────────────────────────────
 // Lists/pairs/vectors lower to arrays, but list-tail and dotted-tail need DIFFERENT
 // array literals: list tail → `[x, ...xs]` (spread); scalar tail → `[x, xs]` (no
@@ -251,9 +251,6 @@ function freshBinding(ctx: EmitCtx<R>, hint: string): Binding {
 //   provesScalar → 2-element literal
 //   unknown      → runtime `cons` shim (Array.isArray at runtime)
 // Unconditional spread on unknown reintroduces that crash.
-const provesArray = (f: { list?: true; pair?: true; nonEmptyList?: true } | undefined): boolean =>
-  f?.list === true || f?.pair === true || f?.nonEmptyList === true;
-
 /** Disjoint complement of provesArray: a scalar fact rules OUT array-shape. A mixed
  *  union (`string | number[]`) claims neither (∀-walk) and falls to the shim. */
 const provesScalar = (f: { stringy?: true; numeric?: true; boolean?: true } | undefined): boolean =>
@@ -359,15 +356,7 @@ export default EnvCapability.define("scheme/lists", {
         const [fn, ...lists] = args;
         if (lists.length === 1) {
           const seq = lists[0];
-          const m = resolveMethod(seq, tf("map"));
-          if (m === undefined) {
-            throw attachOffendingValue(
-              new TypeError(
-                `map: the ${seq == null ? String(seq) : typeof seq} operand does not support map (no ${tf("map")}).`,
-              ),
-              seq,
-            );
-          }
+          const m = requireTerm(seq, "map");
           return m.call(seq, fn, runCtx) as MaybePromise<SchemeValue>;
         }
         return multiListMap(fn, lists as readonly AListAlike[], runCtx);
@@ -381,6 +370,10 @@ export default EnvCapability.define("scheme/lists", {
         input: [z.lambda],
         inputRest: z.listAlike,
         output: [z.undefinedResult],
+        // P18: for-each is a fan whose tracks are the callback applications; its callback is an
+        // `effect` (void egress — no product wire). Order among tracks is not observable.
+        provenance: "fan",
+        callbackRoles: ["effect"],
         type: dedent`
           {
             <T>(f: (x: T) => unknown, xs: List<T>): void;
@@ -413,7 +406,7 @@ export default EnvCapability.define("scheme/lists", {
         emit: consEmitRule,
       },
       function (this: CallCtx, car, cdr) {
-        return withInputProvenance([car, cdr], new APair(car as SchemeValue, cdr as SchemeValue));
+        return withInputProvenance(this.runCtx, [car, cdr], new APair(car as SchemeValue, cdr as SchemeValue));
       },
     ),
 
@@ -430,7 +423,7 @@ export default EnvCapability.define("scheme/lists", {
       },
       function (this: CallCtx, ...args: SchemeValue[]): SchemeValue {
         const result = args.reduceRight((list, item) => new APair(item, list), nil);
-        return withInputProvenance(args, result);
+        return withInputProvenance(this.runCtx, args, result);
       },
     ),
 
@@ -476,8 +469,17 @@ export default EnvCapability.define("scheme/lists", {
       function (this: CallCtx, fn, ...rest) {
         invariant(rest.length > 0, "apply: requires an argument list as the final argument");
         const spread = listToArray(rest.at(-1) as AListAlike);
+        const args = [...rest.slice(0, -1), ...spread];
+        // Tail position (R7RS §3.5): the evaluator granted `canBounce`, so a lambda callee hands
+        // back its body generator for the caller's trampoline instead of nesting a run() per
+        // level (which overflowed the host stack at ~20k). The grant is consumed here, not
+        // forwarded: `fn` sees an ordinary ctx.
+        if (this.canBounce === true && is_lambda(fn)) {
+          const { canBounce: _granted, ...calleeCtx } = this;
+          return fn[tf("apply")](args, calleeCtx, true) as SchemeValue | Promise<SchemeValue>;
+        }
         // Thread whole CallCtx (not just runCtx) so invocation provenance reaches fn.
-        return applyCallback(fn, [...rest.slice(0, -1), ...spread], this) as SchemeValue | Promise<SchemeValue>;
+        return applyCallback(fn, args, this) as SchemeValue | Promise<SchemeValue>;
       },
     ),
 
@@ -493,14 +495,16 @@ export default EnvCapability.define("scheme/lists", {
         `,
       },
       function (this: CallCtx, k: unknown, fill?: unknown): AListAlike {
-        const count = typeof k === "number" ? k : (k as { valueOf(): number }).valueOf();
+        const count = listIndex("make-list", k);
+        // O(1) cap check BEFORE the cons loop materializes `count` cells — see assertAllocatable.
+        assertAllocatable(count, "make-list");
         const value: SchemeValue = fill === undefined ? schemeFalse : (fill as SchemeValue);
         let result: AListAlike = nil;
         for (let i = 0; i < count; i++) {
           result = new APair(value, result);
         }
         // Stamp head only — internal cells share lineage.
-        return withInputProvenance(fill === undefined ? [k] : [k, fill], result);
+        return withInputProvenance(this.runCtx, fill === undefined ? [k] : [k, fill], result);
       },
     ),
 
@@ -516,7 +520,7 @@ export default EnvCapability.define("scheme/lists", {
         `,
       },
       function (list, k) {
-        const count = k.valueOf();
+        const count = listIndex("list-tail", k);
         let current: SchemeValue = list;
         for (let i = 0; i < count; i++) {
           TypeError.invariant(current instanceof APair, `list-tail: list too short`);
@@ -538,7 +542,7 @@ export default EnvCapability.define("scheme/lists", {
         emit: listRefEmitRule,
       },
       function (this: CallCtx, list, k) {
-        const count = k.valueOf();
+        const count = listIndex("list-ref", k);
         let current: SchemeValue = list;
         for (let i = 0; i < count; i++) {
           TypeError.invariant(current instanceof APair, `list-ref: list too short`);
@@ -569,12 +573,17 @@ export default EnvCapability.define("scheme/lists", {
         if (list instanceof ANil) return nil;
         if (!(list instanceof APair)) return list;
         TypeError.invariant(!isCircularList(list), "list-copy: circular list");
-        const copy = (lst: SchemeValue): SchemeValue => {
-          if (lst instanceof ANil) return nil;
-          if (!(lst instanceof APair)) return lst; // improper list tail
-          return new APair(lst.car, copy(lst.cdr));
-        };
-        return withInputProvenance([list], copy(list));
+        // Iterative (a recursive copy overflows the stack on long lists): collect cars,
+        // then cons them back onto the original dangling tail (nil, or an improper tail).
+        const cars: SchemeValue[] = [];
+        let tail: SchemeValue = list;
+        while (tail instanceof APair) {
+          cars.push(tail.car);
+          tail = tail.cdr;
+        }
+        let copy: SchemeValue = tail instanceof ANil ? nil : tail;
+        for (let i = cars.length - 1; i >= 0; i--) copy = new APair(cars[i]!, copy as AListAlike);
+        return withInputProvenance(this.runCtx, [list], copy);
       },
     ),
 

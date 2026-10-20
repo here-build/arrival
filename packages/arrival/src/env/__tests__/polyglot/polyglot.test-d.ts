@@ -22,7 +22,7 @@
 
 import { describe, expectTypeOf, test } from "vitest";
 import * as z from "../../../common/scheme-zod/index.js";
-import { symbol } from "../../../symbol/index.js";
+import * as symbol from "../../../common/symbols/index.js";
 import { type DecodedReturn } from "../../../common/symbols/_bake.js";
 import type { SchemeValue } from "../../../values/types.js";
 
@@ -56,7 +56,9 @@ describe("scheme/polyglot Contract precision — wrong-typed impls must NOT comp
       symbol.native`hasmember-proof: proof`(
         { input: [z.custom<unknown>(), z.custom<unknown>()], output: [z.boolean] },
         // @ts-expect-error — must return boolean, not a bare number
-        (obj: unknown, key: unknown): number => 42,
+        function (_obj: unknown, _key: unknown): number {
+          return 42;
+        },
       );
     }
     expectTypeOf<true>().toEqualTypeOf<true>();
@@ -67,7 +69,9 @@ describe("scheme/polyglot Contract precision — wrong-typed impls must NOT comp
       symbol.native`memberkeys-proof: proof`(
         { input: [z.custom<unknown>()], output: [z.array(z.string)] },
         // @ts-expect-error — must return string[], not number[]
-        (obj: unknown): number[] => [1, 2, 3],
+        function (_obj: unknown): number[] {
+          return [1, 2, 3];
+        },
       );
     }
     expectTypeOf<true>().toEqualTypeOf<true>();
@@ -78,7 +82,9 @@ describe("scheme/polyglot Contract precision — wrong-typed impls must NOT comp
       symbol.native`dict-proof: proof`(
         { input: z.array(z.custom<unknown>()), output: [z.record(z.string, z.custom<unknown>())] },
         // @ts-expect-error — must return Record<string, unknown>, not an array
-        (...args: unknown[]): unknown[] => args,
+        function (...args: unknown[]): unknown[] {
+          return args;
+        },
       );
     }
     expectTypeOf<true>().toEqualTypeOf<true>();
@@ -89,7 +95,9 @@ describe("scheme/polyglot Contract precision — wrong-typed impls must NOT comp
       symbol.native`readmember-proof: proof`(
         { input: [z.custom<unknown>(), z.custom<unknown>()], output: [z.schemeValue] },
         // @ts-expect-error — must return SchemeValue, not a bare number
-        (obj: unknown, key: unknown): number => 42,
+        function (_obj: unknown, _key: unknown): number {
+          return 42;
+        },
       );
     }
     expectTypeOf<true>().toEqualTypeOf<true>();

@@ -4,8 +4,7 @@
  * This suite pins the DOORS, not behavior: every bitwise verb — the numeric-pack
  * five (`bitwise-and`/`bitwise-ior`/`bitwise-xor`/`bitwise-not`/`arithmetic-shift`),
  * the sugarcoat aliases (`|` `&` `~` `>>` `<<`), and srfi-151's `bit-count` — must reject
- * with the dragons door, never compute. Rationale (env/srfi/srfi-151.ts header +
- * docs/design-history/arrival-one-number-rework.md): under the one-number
+ * with the dragons door, never compute. Rationale (env/srfi/srfi-151.ts header): under the one-number
  * representation, exact integers are safe-range JS numbers, and JS's native bitwise
  * operators silently truncate to 32 bits — a confident-wrong-answer factory above
  * 2^31. Doors, not dragons.
@@ -21,6 +20,7 @@ import { describe, expect, it } from "vitest";
 import srfi151 from "../srfi-151.js";
 
 async function mk() {
+  // eslint-disable-next-line sonarjs/pseudo-random -- unique test env-name suffix, not security-sensitive
   const env = sandboxedEnv.child(`s151-${Math.random().toString(36).slice(2)}`);
   await applyCapability(env, [srfi151]);
   return (src: string) => execOverFrame(src, { env });
@@ -50,8 +50,8 @@ describe("bitwise family — doored in full (here lieth the dragons)", () => {
     await expect(run(form)).rejects.toThrow(/is not available[\s\S]*dragons/);
   });
 
-  it("the door names the rework doc (the rejection teaches)", async () => {
+  it("the door names the 32-bit truncation hazard (the rejection teaches)", async () => {
     const run = await mk();
-    await expect(run("(bit-count 7)")).rejects.toThrow(/arrival-one-number-rework/);
+    await expect(run("(bit-count 7)")).rejects.toThrow(/truncates to 32 bits/);
   });
 });

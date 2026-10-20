@@ -1,5 +1,5 @@
 // lists-symbol-define-migration.test.ts — W4-H2 pack-migration law rows for
-// `scheme/lists` (docs/design-history/symbol-define-static-program-validation.md §1/§2.1/§3.3b/§4.2).
+// `scheme/lists`.
 //
 // Unlike control.ts's H2 sibling (ALL doors) this pack is ALREADY the shape §4.2's
 // Pass 2 exists to migrate a pack TOWARD: 17 `symbol.native` + 1 `symbol.sequence`
@@ -189,8 +189,8 @@ describe("ROW 3 — contract teaching: firing a door throws the name@owner Purit
     let caught: unknown;
     try {
       bound["arrival/tagless-final/apply"]();
-    } catch (e) {
-      caught = e;
+    } catch (error) {
+      caught = error;
     }
     expect(caught).toBeInstanceOf(PurityError);
     const err = caught as PurityError;
@@ -206,8 +206,8 @@ describe("ROW 4 — FV law: N/A structurally (no symbol.define body exists to wa
     let caught: unknown;
     try {
       await buildVocabulary([listsPack], undefined, evalScheme);
-    } catch (e) {
-      caught = e;
+    } catch (error) {
+      caught = error;
     }
     expect(caught).toBeUndefined();
     expect(caught).not.toBeInstanceOf(DefineLocalityError);

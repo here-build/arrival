@@ -25,15 +25,18 @@ import {
   deriveOrd,
   schemeBool as bool,
   stringValue,
-  toIndex,
   withInputProvenance,
 } from "../../values/op-helpers.js";
 import { collapseProvenance, taintString } from "../../provenance/provenance-collapse.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
+import { AInexact } from "../../values/primitives/AInexact.js";
 import { APair } from "../../values/primitives/APair.js";
 import { nil } from "../../values/primitives/ANil.js";
 import { ACharacter } from "../../values/primitives/ACharacter.js";
+import { attachOffendingValue } from "../../errors.js";
+import { type } from "../../membrane/typecheck.js";
+import { sliceRange, to_array } from "../pack-helpers.js";
 import { is_promise } from "../../values/value-guards.js";
 import { promise_all } from "../../utils/promises.js";
 import { EnvCapability } from "../../common/capability.js";
@@ -48,7 +51,47 @@ import {
   rational_re,
 } from "../../reader/lexical-grammar.js";
 import { parse_complex, parse_float, parse_integer, parse_rational } from "../../reader/parsing.js";
-import type { AListAlike, SchemeValue } from "../../values/types.js";
+import type { AListAlike } from "../../values/types.js";
+
+/** Body of the four string-ci ordering predicates: `holds` must pass between every
+ *  adjacent pair of FOLDED strings (R7RS § 6.7 defines `string-ci…?` via
+ *  `string-foldcase`, the same fold `string-foldcase` applies — `toLowerCase` is NOT a
+ *  fold: "Straße" and "STRASSE" fold together but do not lowercase together). Mirrors
+ *  `ciOrder` in chars.ts. */
+function ciOrder(holds: (a: string, b: string) => boolean) {
+  return function (this: CallCtx, ...strs: unknown[]) {
+    let verdict = true;
+    for (let i = 0; i < strs.length - 1; i++) {
+      if (!holds(foldCase(stringValue(strs[i])), foldCase(stringValue(strs[i + 1])))) {
+        verdict = false;
+        break;
+      }
+    }
+    return withInputProvenance(this.runCtx, strs, bool(verdict));
+  };
+}
+
+/** A string-map result element must be a character (R7RS § 6.7: "proc must return a
+ *  character") — a number/string/list is a taught error, never silently stringified. A
+ *  host callback's bare one-code-point string is a character's image, so it passes. */
+function mappedChar(c: unknown): string {
+  if (c instanceof ACharacter) return charValue(c);
+  if (typeof c === "string" && [...c].length === 1) return c;
+  throw attachOffendingValue(
+    new TypeError(
+      `string-map: the procedure must return a character, got ${type(c)} (build strings with string-append)`,
+    ),
+    c,
+  );
+}
+
+/** R7RS § 6.2.5 infinities and NaN — `string->number` accepts them (radix-independent). */
+const SPECIAL_REALS: Record<string, number | undefined> = {
+  "+inf.0": Number.POSITIVE_INFINITY,
+  "-inf.0": Number.NEGATIVE_INFINITY,
+  "+nan.0": Number.NaN,
+  "-nan.0": Number.NaN,
+};
 
 export default EnvCapability.define("scheme/strings", {
   symbols: (symbol, z) => ({
@@ -62,7 +105,7 @@ export default EnvCapability.define("scheme/strings", {
         // Both the length and (when present) the filling char contribute lineage —
         // `(make-string n user-char)` should remember user-char as a source even
         // though the length is what dictates the result's size.
-        return withInputProvenance(char === undefined ? [k] : [k, char], new AString(c.repeat(len)));
+        return withInputProvenance(this.runCtx, char === undefined ? [k] : [k, char], new AString(c.repeat(len)));
       },
     ),
 
@@ -70,14 +113,14 @@ export default EnvCapability.define("scheme/strings", {
       { input: [], inputRest: z.char, output: [z.string] },
       // Union of every character argument — same shape as `vector` below.
       function (this: CallCtx, ...chars) {
-        return withInputProvenance(chars, new AString(chars.map(charValue).join("")));
+        return withInputProvenance(this.runCtx, chars, new AString(chars.map(charValue).join("")));
       },
     ),
 
     "string-length": symbol.native`string-length: number of characters in the string`(
       { input: [z.string], output: [z.exact] },
       function (this: CallCtx, str) {
-        return withInputProvenance([str], new AExact([...stringValue(str)].length));
+        return withInputProvenance(this.runCtx, [str], new AExact([...stringValue(str)].length));
       },
     ),
 
@@ -93,7 +136,7 @@ export default EnvCapability.define("scheme/strings", {
         if (!Number.isInteger(idx) || idx < 0 || idx >= chars.length) {
           throw new RangeError(`string-ref: index ${idx} out of range for a string of length ${chars.length}`);
         }
-        return withInputProvenance([str, k], new ACharacter(chars[idx]));
+        return withInputProvenance(this.runCtx, [str, k], new ACharacter(chars[idx]));
       },
     ),
 
@@ -112,7 +155,7 @@ export default EnvCapability.define("scheme/strings", {
           const first = stringValue(strs[0]);
           verdict = strs.slice(1).every((s) => stringValue(s) === first);
         }
-        return withInputProvenance(strs, bool(verdict));
+        return withInputProvenance(this.runCtx, strs, bool(verdict));
       },
     ),
 
@@ -140,67 +183,31 @@ export default EnvCapability.define("scheme/strings", {
       function (this: CallCtx, ...strs) {
         let verdict = true;
         if (strs.length >= 2) {
-          const first = stringValue(strs[0]).toLowerCase();
-          verdict = strs.slice(1).every((s) => stringValue(s).toLowerCase() === first);
+          const first = foldCase(stringValue(strs[0]));
+          verdict = strs.slice(1).every((s) => foldCase(stringValue(s)) === first);
         }
-        return withInputProvenance(strs, bool(verdict));
+        return withInputProvenance(this.runCtx, strs, bool(verdict));
       },
     ),
 
     "string-ci<?": symbol.native`string-ci<?: case-insensitive strictly-increasing order`(
       { input: [], inputRest: z.string, output: [z.boolean] },
-      function (this: CallCtx, ...strs) {
-        let verdict = true;
-        for (let i = 0; i < strs.length - 1; i++) {
-          if (stringValue(strs[i]).toLowerCase() >= stringValue(strs[i + 1]).toLowerCase()) {
-            verdict = false;
-            break;
-          }
-        }
-        return withInputProvenance(strs, bool(verdict));
-      },
+      ciOrder((a, b) => a < b),
     ),
 
     "string-ci>?": symbol.native`string-ci>?: case-insensitive strictly-decreasing order`(
       { input: [], inputRest: z.string, output: [z.boolean] },
-      function (this: CallCtx, ...strs) {
-        let verdict = true;
-        for (let i = 0; i < strs.length - 1; i++) {
-          if (stringValue(strs[i]).toLowerCase() <= stringValue(strs[i + 1]).toLowerCase()) {
-            verdict = false;
-            break;
-          }
-        }
-        return withInputProvenance(strs, bool(verdict));
-      },
+      ciOrder((a, b) => a > b),
     ),
 
     "string-ci<=?": symbol.native`string-ci<=?: case-insensitive non-decreasing order`(
       { input: [], inputRest: z.string, output: [z.boolean] },
-      function (this: CallCtx, ...strs) {
-        let verdict = true;
-        for (let i = 0; i < strs.length - 1; i++) {
-          if (stringValue(strs[i]).toLowerCase() > stringValue(strs[i + 1]).toLowerCase()) {
-            verdict = false;
-            break;
-          }
-        }
-        return withInputProvenance(strs, bool(verdict));
-      },
+      ciOrder((a, b) => a <= b),
     ),
 
     "string-ci>=?": symbol.native`string-ci>=?: case-insensitive non-increasing order`(
       { input: [], inputRest: z.string, output: [z.boolean] },
-      function (this: CallCtx, ...strs) {
-        let verdict = true;
-        for (let i = 0; i < strs.length - 1; i++) {
-          if (stringValue(strs[i]).toLowerCase() < stringValue(strs[i + 1]).toLowerCase()) {
-            verdict = false;
-            break;
-          }
-        }
-        return withInputProvenance(strs, bool(verdict));
-      },
+      ciOrder((a, b) => a >= b),
     ),
 
     "string-append": symbol.native`string-append: concatenation of all string arguments`(
@@ -221,8 +228,7 @@ export default EnvCapability.define("scheme/strings", {
       },
       function (this: CallCtx, str, start, end) {
         const chars = [...stringValue(str)];
-        const startIdx = start === undefined ? 0 : toIndex(start);
-        const endIdx = end === undefined ? chars.length : toIndex(end);
+        const { start: startIdx, end: endIdx } = sliceRange("string->list", chars.length, start, end, "string");
         let result: AListAlike = nil;
         for (let i = endIdx - 1; i >= startIdx; i--) result = new APair(new ACharacter(chars[i]), result);
         return result;
@@ -232,12 +238,7 @@ export default EnvCapability.define("scheme/strings", {
     "list->string": symbol.native`list->string: string built from a list of characters`(
       { input: [z.listAlike], output: [z.string] },
       function (this: CallCtx, list) {
-        const chars: string[] = [];
-        let current: SchemeValue = list;
-        while (current && current !== nil && current instanceof APair) {
-          chars.push(charValue(current.car));
-          current = current.cdr;
-        }
+        const chars = to_array("list->string")(list).map(charValue);
         return new AString(chars.join(""));
       },
     ),
@@ -246,11 +247,10 @@ export default EnvCapability.define("scheme/strings", {
       { input: [z.string, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.string] },
       function (this: CallCtx, str, start, end) {
         const chars = [...stringValue(str)];
-        const startIdx = start === undefined ? 0 : toIndex(start);
-        const endIdx = end === undefined ? chars.length : toIndex(end);
+        const { start: startIdx, end: endIdx } = sliceRange("string-copy", chars.length, start, end, "string");
         // The copy is a fresh allocation but semantically the same lineage as `str`
         // (start/end indices don't carry meaning here, they shape the slice).
-        return withInputProvenance([str], new AString(chars.slice(startIdx, endIdx).join("")));
+        return withInputProvenance(this.runCtx, [str], new AString(chars.slice(startIdx, endIdx).join("")));
       },
     ),
 
@@ -264,21 +264,21 @@ export default EnvCapability.define("scheme/strings", {
     "string-upcase": symbol.native`string-upcase: uppercase form of the string`(
       { input: [z.string], output: [z.string] },
       function (this: CallCtx, str) {
-        return withInputProvenance([str], new AString(stringValue(str).toUpperCase()));
+        return withInputProvenance(this.runCtx, [str], new AString(stringValue(str).toUpperCase()));
       },
     ),
 
     "string-downcase": symbol.native`string-downcase: lowercase form of the string`(
       { input: [z.string], output: [z.string] },
       function (this: CallCtx, str) {
-        return withInputProvenance([str], new AString(stringValue(str).toLowerCase()));
+        return withInputProvenance(this.runCtx, [str], new AString(stringValue(str).toLowerCase()));
       },
     ),
 
     "string-foldcase": symbol.native`string-foldcase: case-folded form of the string`(
       { input: [z.string], output: [z.string] },
       function (this: CallCtx, str) {
-        return withInputProvenance([str], new AString(foldCase(stringValue(str))));
+        return withInputProvenance(this.runCtx, [str], new AString(foldCase(stringValue(str))));
       },
     ),
 
@@ -310,7 +310,8 @@ export default EnvCapability.define("scheme/strings", {
       },
       function (this: CallCtx, proc, ...strings) {
         invariant(strings.length > 0, "string-map: expected at least one string");
-        const strs = strings.map(stringValue);
+        // Code points, like string-length / string-ref — never UTF-16 units.
+        const strs = strings.map((s) => [...stringValue(s)]);
         const minLen = Math.min(...strs.map((s) => s.length));
         const results: unknown[] = [];
         for (let i = 0; i < minLen; i++) {
@@ -324,10 +325,7 @@ export default EnvCapability.define("scheme/strings", {
             ),
           );
         }
-        const join = (chars: unknown[]) =>
-          new AString(
-            chars.map((c) => (c instanceof ACharacter ? charValue(c) : typeof c === "string" ? c : String(c))).join(""),
-          );
+        const join = (chars: unknown[]) => new AString(chars.map(mappedChar).join(""));
         // proc may be an async membrane callback → await before joining, so the result
         // is a real string, not "[object Promise][object Promise]…" (see vector-map).
         if (results.some(is_promise)) {
@@ -346,6 +344,9 @@ export default EnvCapability.define("scheme/strings", {
         input: [z.lambda],
         inputRest: z.string,
         output: [z.undefinedResult],
+        // P18: fan of effect tracks (see for-each, r7rs/lists.ts).
+        provenance: "fan",
+        callbackRoles: ["effect"],
         type: dedent`
           {
             (f: (c: string) => unknown, s: string): void;
@@ -355,7 +356,7 @@ export default EnvCapability.define("scheme/strings", {
       },
       function (this: CallCtx, proc, ...strings): AVoid | Promise<AVoid> {
         invariant(strings.length > 0, "string-for-each: expected at least one string");
-        const strs = strings.map(stringValue);
+        const strs = strings.map((s) => [...stringValue(s)]);
         const minLen = Math.min(...strs.map((s) => s.length));
         const pending: unknown[] = [];
         for (let i = 0; i < minLen; i++) {
@@ -373,56 +374,64 @@ export default EnvCapability.define("scheme/strings", {
       },
     ),
 
-    // `substring` and `string->number` are genuine R7RS. `native` means the
-    // (identity) zod contract never runs — the impls receive Scheme values directly.
-    // String fold-with-separator is SRFI-13 `string-join` (list first); the sep-first
-    // polyglot spelling `join` lives in scheme/polyglot. Substring search is SRFI-13
-    // `string-contains` / `string-contains?`.
+    // `substring` is genuine R7RS. `string->number` is R7RS plus end-trim (see TRIM
+    // on the impl). `native` means the (identity) zod contract never runs — the
+    // impls receive Scheme values directly. String fold-with-separator is SRFI-13
+    // `string-join` (list first); the sep-first polyglot spelling `join` lives in
+    // scheme/polyglot. Substring search is SRFI-13 `string-contains` /
+    // `string-contains?`.
     substring: symbol.native`substring: the slice of the string between start and end`(
       { input: [z.string, z.schemeNumber, z.schemeNumber.optional()], output: [z.string] },
       function (this: CallCtx, string, start, end) {
-        // `string` is an AString (grafted String.prototype), the indices AExact/AInexact —
-        // unwrap to the JS string + numeric indices the slice operates on. `substring(s,
-        // undefined)` means "to the end", so a missing `end` stays undefined.
-        return new AString(
-          stringValue(string).substring(
-            Number(coerceNumeric(start).valueOf()),
-            end === undefined ? undefined : Number(coerceNumeric(end).valueOf()),
-          ),
-        );
+        // `string` is an AString (grafted String.prototype), the indices AExact/AInexact.
+        // Code-point slice with a taught range error — JS `substring` would swap
+        // reversed bounds and clamp/zero out-of-range ones.
+        const chars = [...stringValue(string)];
+        const range = sliceRange("substring", chars.length, start, end, "string");
+        return new AString(chars.slice(range.start, range.end).join(""));
       },
     ),
 
-    "string->number": symbol.native`string->number: parse the string as a number, or #f (R7RS)`(
-      { input: [z.string, z.number.optional()], output: [z.union([z.number, z.boolean])] },
-      function (this: CallCtx, arg, radix) {
-        const str = stringValue(arg);
-        const base = radix === undefined ? 10 : Number(coerceNumeric(radix).valueOf());
-        try {
-          if (str.match(rational_bare_re) || str.match(rational_re)) {
-            return parse_rational(str, base);
-          } else if (str.match(complex_bare_re) || str.match(complex_re)) {
-            // R7RS: pure imaginary must have explicit sign (+3i or -3i, not 3i)
-            // Reject patterns like "3i", "33i", "3.3i" without leading sign
-            if (/^#?[iexobd]*[0-9.]+i$/i.test(str)) {
-              return bool(false);
+    "string->number":
+      symbol.native`string->number: parse the string as a number, or #f; surrounding whitespace is shed`(
+        { input: [z.string, z.number.optional()], output: [z.union([z.number, z.boolean])] },
+        function (this: CallCtx, arg, radix) {
+          // TRIM (not R7RS §6.2.6): ends shed before the numeral match. Spec-faithful
+          // `#f` on `" 42 "` is the worse teaching — padded digits are the common
+          // paste. Internal whitespace (`"1 2"`) still `#f`. Not gated on strict: this
+          // is procedure QoL, not a reader-literal portability control. Numerals
+          // dispatch over the reader's leaf parsers (reader/parsing.ts); the
+          // `+inf.0` / `-inf.0` / `+nan.0` constants are matched first because the
+          // reader resolves them as self-evaluating constants, not numeral shapes.
+          const str = stringValue(arg).trim();
+          const special = SPECIAL_REALS[str.toLowerCase()];
+          if (special !== undefined) return new AInexact(special);
+          const base = radix === undefined ? 10 : Number(coerceNumeric(radix).valueOf());
+          try {
+            if (str.match(rational_bare_re) || str.match(rational_re)) {
+              return parse_rational(str, base);
+            } else if (str.match(complex_bare_re) || str.match(complex_re)) {
+              // R7RS: pure imaginary must have explicit sign (+3i or -3i, not 3i)
+              // Reject patterns like "3i", "33i", "3.3i" without leading sign
+              if (/^#?[iexobd]*[0-9.]+i$/i.test(str)) {
+                return bool(false);
+              }
+              return parse_complex(str, base);
+            } else {
+              const valid_bare = (base === 10 && !/e/i.test(str)) || base === 16;
+              if ((str.match(int_bare_re) && valid_bare) || str.match(int_re)) {
+                return parse_integer(str, base);
+              }
+              if (float_re.test(str)) {
+                return parse_float(str);
+              }
             }
-            return parse_complex(str, base);
-          } else {
-            const valid_bare = (base === 10 && !/e/i.test(str)) || base === 16;
-            if ((str.match(int_bare_re) && valid_bare) || str.match(int_re)) {
-              return parse_integer(str, base);
-            }
-            if (float_re.test(str)) {
-              return parse_float(str);
-            }
+          } catch {
+            // Invalid number format - return #f per R7RS
+            return bool(false);
           }
-        } catch {
-          // Invalid number format - return #f per R7RS
           return bool(false);
-        }
-        return bool(false);
-      },
-    ),
+        },
+      ),
   }),
 });

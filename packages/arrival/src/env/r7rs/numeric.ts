@@ -8,13 +8,10 @@
  *   2. coercion + error-naming — `coerceNumeric` each arg, naming the bad index;
  *   3. codec marshalling — per-arg decode → `fn` → `out.fromJS`.
  *
- * `NumSpec.in`/`inRest`/`out` are real `z.ZodTypeAny` schemas from scheme-zod.ts —
+ * `NumSpec.in`/`inRest`/`out` are real `z.ZodTypeAny` schemas from common/scheme-zod/index.ts —
  * ONE vocabulary, consumed by both `marshalCall` (runtime) and `contractFromSpec`
  * (type-inference face). `marshalCall`'s doc below carries the two identity
  * special-cases (`z.schemeNumber`, `z.boolean`) this surfaces.
- *
- * Comparison ops resolve directly through the numeric core — no Tier-2 HalfBaked
- * speculative evaluation branch exists for them.
  */
 
 import * as z from "../../common/scheme-zod/index.js";
@@ -25,9 +22,11 @@ import invariant from "tiny-invariant";
 import "@here.build/error-invariant";
 import type { Contract, RestSpec, VectorSpec } from "../../common/symbols/_bake.js";
 import { EnvCapability } from "../../common/capability.js";
-import type { EmitCtx, EmitRule } from "../../emit/emit-rule.js";
-import { Bin, Binding, Call, Lit, Method, Ref, Un, type BinOp, type R } from "../../emit/residual-lite.js";
+import type { EmitRule } from "../../emit/emit-rule.js";
+import { Arrow, Bin, Binding, Call, Lit, Method, Ref, Un, type BinOp, type R } from "../../emit/residual-lite.js";
 import type { RunContext } from "../../run/RunContext.js";
+import { exactly, freshBinding } from "../pack-helpers.js";
+import { ANil } from "../../values/primitives/ANil.js";
 import { CallCtx } from "../../run/CallCtx.js";
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "../../values/primitives/AValue.js";
 import type { ABool } from "../../values/primitives/ABool.js";
@@ -137,7 +136,7 @@ function nativeNumericOp(name: string, spec: NumSpec): (this: CallCtx, ...args: 
     // (`isEagerAccumulationActive` — ambient flag OR silent-region γ, op-helpers.ts's
     // own doc), so arithmetic ops honor the eager-accumulation default AND still
     // accumulate correctly inside a replay's hermetic re-execution.
-    const provenance = isEagerAccumulationActive()
+    const provenance = isEagerAccumulationActive(runCtx)
       ? unionProvenance(callArgs.filter((a): a is AValue => a instanceof AValue))
       : EMPTY_PROVENANCE;
     let converted: ANumeric[];
@@ -155,7 +154,7 @@ function nativeNumericOp(name: string, spec: NumSpec): (this: CallCtx, ...args: 
     // R8 mint (RULINGS.md R8, op-helpers.mintVerdict): every boolean verdict boxes —
     // provenance-free operands get the eq?-stable flyweight, stamped operands a fresh
     // ABool carrying the union.
-    if (typeof result === "boolean") return mintVerdict(callArgs, result);
+    if (typeof result === "boolean") return mintVerdict(runCtx, callArgs, result);
     return result;
   };
 
@@ -174,10 +173,13 @@ function nativeNumericOp(name: string, spec: NumSpec): (this: CallCtx, ...args: 
  * unboxed `boolean` would be a bare value inside the membrane (P4), not just an
  * allocation shortcut.
  */
-function nativeTypePredicate(name: string, predicate: (n: ANumeric) => boolean): (...args: unknown[]) => unknown {
-  const fn = (value: unknown): ABool => {
+function nativeTypePredicate(
+  name: string,
+  predicate: (n: ANumeric) => boolean,
+): (this: CallCtx, ...args: unknown[]) => unknown {
+  const fn = function (this: CallCtx, value: unknown): ABool {
     if (!isSchemeNumber(value)) {
-      return mintVerdict([value], false);
+      return mintVerdict(this.runCtx, [value], false);
     }
     try {
       // ctx-neutral by design: `converted` is consulted for its numeric SHAPE only
@@ -185,9 +187,9 @@ function nativeTypePredicate(name: string, predicate: (n: ANumeric) => boolean):
       // coerceNumeric's default ctx param is inert here, unlike the mint-and-return
       // sites elsewhere in this file.
       const converted = coerceNumeric(value);
-      return mintVerdict([value], predicate(converted));
+      return mintVerdict(this.runCtx, [value], predicate(converted));
     } catch {
-      return mintVerdict([value], false);
+      return mintVerdict(this.runCtx, [value], false);
     }
   };
   Object.defineProperty(fn, "name", { value: name });
@@ -300,47 +302,33 @@ function boxInteger(exact: boolean, value: number): ANumeric {
   return exact ? new AExact(value) : new AInexact(value);
 }
 
-const quotientFn = (a: ANumeric, b: ANumeric): ANumeric => {
-  const p = toIntegerPair(a, b, "quotient");
-  invariant(p.bv !== 0, "quotient: division by zero");
-  return boxInteger(p.bothExact, truncDiv(p.av, p.bv));
-};
+/** Floor modulo (sign of the divisor). `((a % b) + b) % b` loses precision once the
+ *  sum passes 2^53, so shift the remainder by `b` only when the signs differ. */
+function floorMod(a: number, b: number): number {
+  const r = a % b;
+  if (r === 0) return 0; // also normalizes -0
+  return r < 0 === b < 0 ? r : r + b;
+}
 
-const remainderFn = (a: ANumeric, b: ANumeric): ANumeric => {
-  const p = toIntegerPair(a, b, "remainder");
-  invariant(p.bv !== 0, "remainder: division by zero");
-  return boxInteger(p.bothExact, p.av % p.bv);
-};
+/** One integer-division op: coerce to an integer pair, door on a zero divisor, box with
+ *  exactness contagion. `name` threads into the error text. */
+const integerDivision =
+  (name: string, compute: (a: number, b: number) => number) =>
+  (a: ANumeric, b: ANumeric): ANumeric => {
+    const p = toIntegerPair(a, b, name);
+    invariant(p.bv !== 0, `${name}: division by zero`);
+    return boxInteger(p.bothExact, compute(p.av, p.bv));
+  };
 
-const moduloFn = (a: ANumeric, b: ANumeric): ANumeric => {
-  const p = toIntegerPair(a, b, "modulo");
-  invariant(p.bv !== 0, "modulo: division by zero");
-  return boxInteger(p.bothExact, ((p.av % p.bv) + p.bv) % p.bv);
-};
+const remainderOf = (a: number, b: number): number => a % b;
 
-const floorQuotientFn = (a: ANumeric, b: ANumeric): ANumeric => {
-  const p = toIntegerPair(a, b, "floor-quotient");
-  invariant(p.bv !== 0, "floor-quotient: division by zero");
-  return boxInteger(p.bothExact, floorDiv(p.av, p.bv));
-};
-
-const floorRemainderFn = (a: ANumeric, b: ANumeric): ANumeric => {
-  const p = toIntegerPair(a, b, "floor-remainder");
-  invariant(p.bv !== 0, "floor-remainder: division by zero");
-  return boxInteger(p.bothExact, ((p.av % p.bv) + p.bv) % p.bv);
-};
-
-const truncateQuotientFn = (a: ANumeric, b: ANumeric): ANumeric => {
-  const p = toIntegerPair(a, b, "truncate-quotient");
-  invariant(p.bv !== 0, "truncate-quotient: division by zero");
-  return boxInteger(p.bothExact, truncDiv(p.av, p.bv));
-};
-
-const truncateRemainderFn = (a: ANumeric, b: ANumeric): ANumeric => {
-  const p = toIntegerPair(a, b, "truncate-remainder");
-  invariant(p.bv !== 0, "truncate-remainder: division by zero");
-  return boxInteger(p.bothExact, p.av % p.bv);
-};
+const quotientFn = integerDivision("quotient", truncDiv);
+const remainderFn = integerDivision("remainder", remainderOf);
+const moduloFn = integerDivision("modulo", floorMod);
+const floorQuotientFn = integerDivision("floor-quotient", floorDiv);
+const floorRemainderFn = integerDivision("floor-remainder", floorMod);
+const truncateQuotientFn = integerDivision("truncate-quotient", truncDiv);
+const truncateRemainderFn = integerDivision("truncate-remainder", remainderOf);
 
 // abs/zero?/positive?/negative? — box-native (§2.2 encode-edge law): operate on the
 // already-coerced ANumeric and return/answer directly off ITS OWN exactness, never
@@ -673,13 +661,12 @@ const atanFn = (y: number, x?: number): number => (x === undefined ? Math.atan(y
 // Scheme exact integers are safe-range JS numbers, and JS's native bitwise operators
 // (`|` `&` `^` `~` `<<` `>>`) silently coerce their operands to 32 BITS — every result on
 // a value wider than 2^31 is silent corruption, precisely the wrong-value class the
-// one-number representation (docs/design-history/arrival-one-number-rework.md) exists to
-// abolish. Correct wide bitwise needs the arbitrary-precision ALU that representation
+// one-number representation exists to abolish. Correct wide bitwise needs the arbitrary-precision ALU that representation
 // deliberately gave up. Arrival's domain (LLM orchestration) has produced zero demand for
 // bitwise (no in-repo .scm uses it); when a real demand lands, implement via split-limb
 // words over safe integers — NEVER via the JS operators. Until then: doors, not dragons.
 const BITWISE_DOOR =
-  "doored under the one-number representation (safe-integer exacts, no bigints): JS bitwise operators truncate to 32 bits — silent corruption above 2^31; here lieth the dragons. See the Bitwise section note in env/r7rs/numeric.ts and arrival-one-number-rework.md";
+  "doored under the one-number representation (safe-integer exacts, no bigints): JS bitwise operators truncate to 32 bits — silent corruption above 2^31; here lieth the dragons. See the Bitwise section note in env/r7rs/numeric.ts";
 
 // ════════════════════════════════════════════════════════════════════════════
 // Reused op specs / cores — shared by the canonical R7RS bindings below.
@@ -741,7 +728,7 @@ function wrapOrd(
         }
       }
       // R8 mint — the whole chain's operand union, not just the deciding pair (mirrors deriveOrd).
-      return mintVerdict(args, verdict);
+      return mintVerdict(this.runCtx, args, verdict);
     }
     return numeric.call(this, ...args);
   };
@@ -754,7 +741,7 @@ function wrapOrd(
 // nil-tolerance (nil operand → #f/nil-as-bottom). Strict mode (RunContext.strict,
 // off `this.runCtx`) gates loose off — an all-constant compare like `(= '() '())`
 // carries no operand to thread strict, so the run ctx is the only honest source.
-const isNilOperand = (v) => v == null || v?.constructor?.name === "ANil";
+const isNilOperand = (v) => v == null || v instanceof ANil;
 const isNumberOperand = (v) => v instanceof AExact || v instanceof AInexact;
 const flLteNum = (a, b) => a[tf("lte")](b);
 const LOOSE_NUM_PAIR = {
@@ -784,7 +771,7 @@ function loosePairOrder(sym, a, b) {
     throw new TypeError(`${sym}: cannot compare ${describeLoose(a)} and ${describeLoose(b)} — incompatible types.`);
   return ORD_FROM_LE[sym](le_ab, le_ba);
 }
-function looseOrderChain(sym, args) {
+function looseOrderChain(runCtx: RunContext, sym, args) {
   let verdict = true;
   for (let i = 0; i < args.length - 1; i++) {
     if (!loosePairOrder(sym, args[i], args[i + 1])) {
@@ -793,7 +780,7 @@ function looseOrderChain(sym, args) {
     }
   }
   // R8 mint — always boxed, matching applyNumeric/wrapOrd's uniform exit.
-  return mintVerdict(args, verdict);
+  return mintVerdict(runCtx, args, verdict);
 }
 function looseCompare(sym, core: (this: CallCtx, ...a: unknown[]) => unknown) {
   // strict rides `this.runCtx` (cannot ride CONSTANT_CTX operands). `core.call(this, …)`
@@ -806,8 +793,8 @@ function looseCompare(sym, core: (this: CallCtx, ...a: unknown[]) => unknown) {
     }
     if (args.some(isNilOperand)) {
       // R8 mint — always boxed, matching looseOrderChain's uniform exit.
-      if (sym === "=") return mintVerdict(args, args.every(isNilOperand));
-      return looseOrderChain(sym, args);
+      if (sym === "=") return mintVerdict(this.runCtx, args, args.every(isNilOperand));
+      return looseOrderChain(this.runCtx, sym, args);
     }
     return core.call(this, ...args);
   };
@@ -883,14 +870,14 @@ const numberToStringFn = function (this: CallCtx, z: unknown, radix?: unknown): 
     s = base === 10 ? n.toString() : n.real.toString(base);
   }
   // Same eager-accumulation gate as `applyNumeric` above.
-  const provenance = isEagerAccumulationActive()
+  const provenance = isEagerAccumulationActive(this.runCtx)
     ? unionProvenance(radixArg === undefined ? [n] : [n, radixArg])
     : EMPTY_PROVENANCE;
   return new AString(s, provenance);
 };
 
 // ════════════════════════════════════════════════════════════════════════════
-// `NumSpec.in`/`inRest`/`out` are the real scheme-zod.ts schemas — `contractFromSpec`
+// `NumSpec.in`/`inRest`/`out` are the real common/scheme-zod/index.ts schemas — `contractFromSpec`
 // is a trivial projection, and `marshalCall` runs the SAME schema at call time: one
 // vocabulary, not two.
 //
@@ -1048,26 +1035,10 @@ const NUMBER_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
           }
         `,
 };
-const EXACT_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
-  input: [z.schemeValue],
-  output: [z.boolean],
-  type: dedent`
-          {
-            (x: unknown): x is number;
-            <T>(x: T): x is Extract<T, number>;
-          }
-        `,
-};
-const INEXACT_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
-  input: [z.schemeValue],
-  output: [z.boolean],
-  type: dedent`
-          {
-            (x: unknown): x is number;
-            <T>(x: T): x is Extract<T, number>;
-          }
-        `,
-};
+// Same contract three ways: the three predicates differ in what they TEST, not in the
+// JS-side type they narrow to.
+const EXACT_GUARD = NUMBER_GUARD;
+const INEXACT_GUARD = NUMBER_GUARD;
 
 const QUOTIENT_REMAINDER_PRODUCT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
   input: [z.schemeNumber, z.schemeNumber],
@@ -1129,12 +1100,6 @@ const NUMBER_TO_STRING_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
 // law fixes the algorithm per symbol. Comparisons and zero? are fact-gated (Law A).
 // ════════════════════════════════════════════════════════════════════════════
 
-/** Fixed-arity refusal: wrong arity → `ctx.door`, not a walker crash on undefined. */
-function exactly<T>(ctx: EmitCtx<R>, sym: string, args: readonly T[], n: number): readonly T[] {
-  if (args.length !== n) ctx.door(`\`${sym}\` wants exactly ${n} argument${n === 1 ? "" : "s"}, got ${args.length}`);
-  return args;
-}
-
 // ── §7 one-number: + - * / — left folds, zero ctx reads ─────────────────────────────
 // One JS number payload; left folds print flat (`a + b + c`).
 const foldBin = (op: BinOp, args: readonly R[]): R => args.reduce((acc, a) => Bin(op, acc, a));
@@ -1181,9 +1146,22 @@ const quotientEmitRule: EmitRule<R> = {
 const moduloEmitRule: EmitRule<R> = {
   call: (args, ctx) => {
     const [a, n] = exactly(ctx, "modulo", args, 2);
-    // JS `%` is a REMAINDER (sign-of-dividend); `((a % n) + n) % n` is the one
-    // correct sign-of-divisor modulo algorithm over it (Appendix B).
-    return Bin("%", Bin("+", Bin("%", a!, n!), n!), n!);
+    // JS `%` is a REMAINDER (sign-of-dividend); floor-modulo corrects it by `+ n` only when
+    // r is nonzero and its sign differs from n's. The textbook `((a % n) + n) % n` computes
+    // `r + n` first, which leaves the safe-integer range for n near 2^53 (a=2^53-2,
+    // n=2^53-1 → wrong); here `r + n` happens only in the sign-differs case, where
+    // |r + n| < |n|, so it is exact. Residual-lite has no conditional or comma node, so the
+    // value-select is `(differs && r + n) || r` — sound because r + n is nonzero there
+    // (|r| < |n|). `a` and `n` are each evaluated exactly ONCE (call-site operands may carry
+    // effects): both bind as IIFE params, the remainder as a nested one.
+    const pa = freshBinding(ctx, "a");
+    const pn = freshBinding(ctx, "n");
+    const pr = freshBinding(ctx, "r");
+    const [ra, rn, rr] = [Ref(pa), Ref(pn), Ref(pr)];
+    const differs = Bin("&&", Bin("!==", rr, Lit(0)), Bin("!==", Bin("<", rr, Lit(0)), Bin("<", rn, Lit(0))));
+    const select = Bin("||", Bin("&&", differs, Bin("+", rr, rn)), rr);
+    const inner = Arrow([pa, pn], Call(Arrow([pr], select), [Bin("%", ra, rn)]));
+    return Call(inner, [a!, n!]);
   },
 };
 
@@ -1489,7 +1467,7 @@ export default EnvCapability.define("scheme/numeric", {
       NUMBER_GUARD,
       function (this: CallCtx, ...args: unknown[]): ABool {
         const [value] = args;
-        return mintVerdict([value], isSchemeNumber(value));
+        return mintVerdict(this.runCtx, [value], isSchemeNumber(value));
       },
     ),
     "1+": symbol.native`1+: increment by one`(

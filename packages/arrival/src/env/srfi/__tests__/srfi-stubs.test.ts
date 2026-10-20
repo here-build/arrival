@@ -33,10 +33,10 @@ async function fire(
 ): Promise<{ door: boolean; message: string }> {
   try {
     await run(src);
-  } catch (e) {
-    const direct = e instanceof PurityError;
-    const viaCause = (e as { cause?: unknown })?.cause instanceof PurityError;
-    return { door: direct || viaCause, message: (e as Error)?.message ?? String(e) };
+  } catch (error) {
+    const direct = error instanceof PurityError;
+    const viaCause = (error as { cause?: unknown })?.cause instanceof PurityError;
+    return { door: direct || viaCause, message: (error as Error)?.message ?? String(error) };
   }
   throw new Error(`expected a teaching door for: ${src}`);
 }

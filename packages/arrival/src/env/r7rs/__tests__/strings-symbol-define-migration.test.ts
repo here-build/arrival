@@ -1,5 +1,5 @@
 // strings-symbol-define-migration.test.ts — W4-H2 pack-migration audit row for
-// `scheme/strings` (docs/design-history/symbol-define-static-program-validation.md §1/§2/§4).
+// `scheme/strings`.
 //
 // THE FINDING (structural, verified against HEAD and the pack's entire git
 // history via `git log --all -p --follow -- src/env/r7rs/strings.ts`): this
@@ -42,7 +42,6 @@
 import { describe, expect, it } from "vitest";
 import { execStateOverFrame as execState } from "../../../eval/generator-exec.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
-import type { AEntity } from "../../../common/symbols/_bake.js";
 import stringsPack from "../strings.js";
 import srfi13Pack from "../../srfi/srfi-13.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
@@ -125,7 +124,7 @@ describe("ROW 3 — bake sanity: the pack lowers cleanly and behaves unregressed
 
   it("a representative door (string-set!, the purity omission) still teaches rather than mutating", async () => {
     const env = await freshEnv();
-    await expect(execState("(string-set! (make-string 3 #\\a) 0 #\\b)", { env })).rejects.toThrow();
+    await expect(execState(String.raw`(string-set! (make-string 3 #\a) 0 #\b)`, { env })).rejects.toThrow();
   });
 });
 

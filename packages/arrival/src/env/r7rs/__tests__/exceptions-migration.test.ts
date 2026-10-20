@@ -1,5 +1,5 @@
-// exceptions-migration.test.ts — SYMBOL.DEFINE W4 law rows for `scheme/r7rs/exceptions`
-// (docs/design-history/symbol-define-static-program-validation.md §4). Behavioral
+// exceptions-migration.test.ts — SYMBOL.DEFINE W4 law rows for `scheme/r7rs/exceptions`.
+// Behavioral
 // semantic-equivalence for guard/raise is already covered by
 // `../../../__tests__/generator-exec.spec.ts`'s "guard (R7RS exception handling)" suite
 // and the chibi R7RS conformance corpus (`../../../__tests__/scheme-compliance/
@@ -17,12 +17,11 @@ import { describe, expect, it } from "vitest";
 import { execStateOverFrame, type ExecOptionsOverFrame } from "../../../eval/generator-exec.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
 import type { SchemeValue } from "../../../values/types.js";
-import type { AEntity } from "../../../common/symbols/_bake.js";
 import exceptionsPack from "../exceptions.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
 async function exec(code: string, options: ExecOptionsOverFrame): Promise<SchemeValue[]> {
-  return (await execStateOverFrame(code, options)).values.slice();
+  return [...(await execStateOverFrame(code, options)).values];
 }
 
 const symbols = harvestContracts(exceptionsPack.spec.symbols);

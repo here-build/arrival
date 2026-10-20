@@ -1,5 +1,5 @@
 // syntax-symbol-define-migration.test.ts — W4-H2b pack-migration law rows for
-// `scheme/r7rs/syntax` (docs/design-history/symbol-define-static-program-validation.md §4.2). Same narrow shape as r7rs/binding's H1 rows: this pack's
+// `scheme/r7rs/syntax`. Same narrow shape as r7rs/binding's H1 rows: this pack's
 // ENTIRE former `prelude` was three `define-macro` forms (`define-syntax`,
 // `let-syntax`, `letrec-syntax`) and nothing else — zero `symbol.define`
 // value/procedure defines to migrate, so no Pass-2 contract-authoring rows and
@@ -68,10 +68,10 @@ import { Macro } from "../../../eval/Macro.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
 import { buildVocabulary } from "../../vocabulary.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
+import type { DefineSyntaxSymbolDef } from "../../../common/symbols/_bake.js";
+import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
 const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
-import type { AEntity, DefineSyntaxSymbolDef } from "../../../common/symbols/_bake.js";
-import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
 const symbols = harvestContracts(syntaxPack.spec.symbols);
 
@@ -154,8 +154,8 @@ describe("ROW 3 — semantic equivalence: unchanged runtime behavior vs. the pre
     let caught: unknown;
     try {
       await exec("(begin (let-syntax ((sq (syntax-rules () ((_ x) (* x x))))) (sq 5)) (sq 7))", { env });
-    } catch (e) {
-      caught = e;
+    } catch (error) {
+      caught = error;
     }
     expect(caught).toBeDefined();
   });
@@ -202,8 +202,8 @@ describe("ROW 4 — the validator's macro-firewall row still holds (binder posit
         env,
         staticValidation: "on",
       });
-    } catch (e) {
-      caught = e;
+    } catch (error) {
+      caught = error;
     }
     expect(caught).toBeDefined();
     // Under-report, never lie (§3.4's own framing): the whole call is firewalled

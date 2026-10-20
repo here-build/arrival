@@ -27,13 +27,11 @@
 import { describe, expect, it } from "vitest";
 import dedent from "dedent";
 import polyglot from "../../polyglot/polyglot.js";
-import type { AEntity } from "../../../common/symbols/_bake.js";
 import { signatureOf } from "../../../type-layer/schema-to-ts.js";
 import { ADict } from "../../../values/primitives/ADict.js";
-import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
-const norm = (s: string) => s.replace(/\s+/g, " ").trim();
+const norm = (s: string) => s.replaceAll(/\s+/g, " ").trim();
 
 // `symbols` is a builder (activation) => Record<string, AEntity> for this capability —
 // call it with an empty (unused) activation shape; polyglot's symbols builder never reads
@@ -73,7 +71,7 @@ describe("scheme/polyglot Contract precision — the real exported ops reject wr
     expect(def.out.safeEncode([["a", 2]]).success).toBe(false);
   });
 
-  it("dict: output is an ADict-accepting schema (native-dict-provenance.md) — accepts an ADict, rejects a plain object", () => {
+  it("dict: output is an ADict-accepting schema — accepts an ADict, rejects a plain object", () => {
     const def = nativeDef("dict");
     // v2 `dict()` is the open-record codec whose SCHEME face is `ADict | dict-shaped-AJSObject`.
     // A raw ADict decodes (its `arrival/toJS` record); a plain JS object / array / scalar is

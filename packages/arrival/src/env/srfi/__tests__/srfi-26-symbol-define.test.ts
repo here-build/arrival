@@ -1,5 +1,4 @@
 // srfi-26-symbol-define.test.ts — W4 pack migration rows for `scheme/srfi-26`
-// (docs/design-history/symbol-define-static-program-validation.md §1/§2.1/§3.4/§4).
 //
 // `cut`/`cute` are the spec's own named hard case for the §2.1 bake FV law (rev 2's
 // "second live catch, macro-flavored"): their expansions introduce the placeholder
@@ -34,7 +33,6 @@ import { EnvCapability } from "../../../common/capability.js";
 import { exec, execOverFrame, execInFrame } from "../../../eval/generator-exec.js";
 import { applyCapability, freshEnv } from "../../../__tests__/_fresh-env.js";
 import { buildVocabulary } from "../../vocabulary.js";
-import { DefineForwardReferenceError, DefineLocalityError, ProvenanceRoleShapeError } from "../../../errors.js";
 import srfi26 from "../srfi-26.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
@@ -75,7 +73,9 @@ describe("scheme/srfi-26 — cut/cute expansion equivalence (semantic-equivalenc
     let calls = 0;
     const cap = EnvCapability.define("test/srfi-26-cute-once", {
       symbols: (symbol, z) => ({
-        "bump!": symbol.rosetta`bump!: JS-side call counter`({ input: [], output: [z.number] }, () => ++calls),
+        "bump!": symbol.rosetta`bump!: JS-side call counter`({ input: [], output: [z.number] }, function () {
+          return ++calls;
+        }),
       }),
     });
     await applyCapability(env, [cap]);
@@ -131,17 +131,6 @@ describe("scheme/srfi-26 — the contract-enforcement row: cut/cute are contract
 describe("scheme/srfi-26 — the §2.1 bake FV law passes (baked standalone, zero declared deps)", () => {
   it("bakes cleanly with NO deps declared — never DefineLocalityError/DefineForwardReferenceError/ProvenanceRoleShapeError", async () => {
     await expect(buildVocabulary([srfi26], undefined, evalScheme)).resolves.not.toThrow();
-  });
-
-  it("(regression pin) none of the FV/forward-ref/role drift doors fire for this pack's real bake", async () => {
-    try {
-      await buildVocabulary([srfi26], undefined, evalScheme);
-    } catch (error) {
-      expect(error).not.toBeInstanceOf(DefineLocalityError);
-      expect(error).not.toBeInstanceOf(DefineForwardReferenceError);
-      expect(error).not.toBeInstanceOf(ProvenanceRoleShapeError);
-      throw error; // any OTHER failure is a real regression — surface it
-    }
   });
 });
 

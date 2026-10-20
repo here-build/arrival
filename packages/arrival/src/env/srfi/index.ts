@@ -1,4 +1,4 @@
-// @here.build/arrival/srfi — the unified SRFI palette.
+// arrival's srfi pack — the unified SRFI palette.
 //
 // Every SRFI we ship as a scheme-bootstrap capability, importable from ONE subpath:
 //   import { allSrfi } from "./srfi/index.js";

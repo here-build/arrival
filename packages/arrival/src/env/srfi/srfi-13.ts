@@ -38,8 +38,9 @@ import { AExact } from "../../values/primitives/AExact.js";
 import { APair } from "../../values/primitives/APair.js";
 import { nil } from "../../values/primitives/ANil.js";
 import { ACharacter } from "../../values/primitives/ACharacter.js";
-import { is_false, is_promise } from "../../values/value-guards.js";
+import { is_callable_value, is_false, is_promise } from "../../values/value-guards.js";
 import { promise_all } from "../../utils/promises.js";
+import { attachOffendingValue } from "../../errors.js";
 import { to_array } from "../pack-helpers.js";
 import type { AListAlike } from "../../values/types.js";
 
@@ -55,6 +56,11 @@ const START_END =
 const KMP = "low-level KMP search machinery is not shipped; use string-contains / string-index";
 const CMP =
   "SRFI-13 comparison names without ? are not bound — use R7RS string=? / string<? / string-ci=? family (scheme/strings + equality)";
+// SUBSET doors (string-every/any/fold/replace/titlecase, ...) cover small pure functions that
+// could trivially be live. Which of them ship is polyglot by observation, not SRFI-13
+// completeness: arrival is a full R7RS sandbox that behaves like what models expect Scheme to
+// be, so a verb ships when models reach for it across dialects and doors with a redirect
+// to the live primitives when they do not.
 const SUBSET =
   "not in the shipped SRFI-13 pure subset (no char-sets, no start/end, agent grain); compose from string->list / filter / list->string / substring / string-append or the live SRFI-13 verbs";
 
@@ -137,7 +143,8 @@ const DOORS = {
 // ── criterion machinery ──────────────────────────────────────────────────────
 // SRFI-13 criteria: we honestly support a CHAR (equality) or a ONE-ARG PREDICATE
 // (a scheme callable, invoked exactly the way srfi-1's `find` invokes its matcher —
-// truthiness is `!is_false && !is_nil`, and an async membrane callback is awaited).
+// truthiness is R7RS: only `#f` is false, so `'()` and `0` count as a match — and an
+// async membrane callback is awaited).
 // SRFI-13 char-sets are NOT supported (no charset type here).
 
 const isWhitespace = (c: string): boolean => /\s/u.test(c);
@@ -174,6 +181,16 @@ function afterFlags<T>(flags: boolean[] | Promise<boolean[]>, fn: (f: boolean[])
   return is_promise(flags) ? (flags as Promise<boolean[]>).then(fn) : fn(flags as boolean[]);
 }
 
+/** Harvest image of the trim trio. Zod `z.lambda.optional()` prints as a required
+ *  lambda (`schema-to-ts` paramList does not emit `?`; lambda is not a char). Same
+ *  char|pred union as string-index/count; optional because the default is
+ *  whitespace. A char's TS image is `string`. */
+const TRIM_TYPE = dedent`
+  {
+    (s: string, criterion?: string | ((c: string) => unknown)): string;
+  }
+`;
+
 /** Shared body of the trim trio — `side` picks which end(s) shed matching chars.
  * `function(this: CallCtx, ...)` (not an arrow) — the returned closure is bound
  * directly as a `symbol.native` impl, so dispatch delivers the live ctx via `this`
@@ -182,6 +199,14 @@ function afterFlags<T>(flags: boolean[] | Promise<boolean[]>, fn: (f: boolean[])
  * result mint below. */
 function trimImpl(name: string, side: "both" | "left" | "right") {
   return function (this: CallCtx, str: AString, criterion?: ACallable): AString | Promise<AString> {
+    // Native contracts are type-only: a number/string criterion would reach the predicate
+    // call as an opaque "not applicable", so name the op and the two honest shapes here.
+    if (criterion !== undefined && !(criterion instanceof ACharacter) && !is_callable_value(criterion)) {
+      throw attachOffendingValue(
+        new TypeError(`${name}: criterion must be a character or a one-argument procedure, got ${type(criterion)}`),
+        criterion,
+      );
+    }
     const chars = [...stringValue(str)];
     const runCtx = this.runCtx;
     // Default criterion: whitespace (SRFI-13's char-set:whitespace, sans charsets).
@@ -194,6 +219,7 @@ function trimImpl(name: string, side: "both" | "left" | "right") {
       // A trim is a slice — same lineage rule as string-copy (the criterion shapes
       // the slice, but a char criterion is still a value input; include it).
       return withInputProvenance(
+        this.runCtx,
         criterion === undefined ? [str] : [str, criterion],
         new AString(chars.slice(start, end).join("")),
       );
@@ -213,8 +239,25 @@ function sliceImpl(name: string, pick: (chars: string[], k: number) => string[])
       `${name}: index ${k} out of range for a string of length ${chars.length}`,
     );
     // A slice — same lineage rule as string-copy (n shapes the slice, no meaning of its own).
-    return withInputProvenance([str], new AString(pick(chars, k).join("")));
+    return withInputProvenance(this.runCtx, [str], new AString(pick(chars, k).join("")));
   };
+}
+
+/** The target length of a pad op — a non-negative integer, else a taught error
+ *  (`(string-pad "abc" 2.5)` must not silently answer "abc"). */
+function padLength(name: string, len: unknown): number {
+  const k = toIndex(len);
+  if (!Number.isInteger(k) || k < 0) {
+    throw attachOffendingValue(new RangeError(`${name}: length must be a non-negative integer, got ${k}`), len);
+  }
+  return k;
+}
+
+/** A Scheme string (or host string) element, else a taught error — `stringValue`
+ *  would silently stringify a number. */
+function requireString(name: string, v: unknown, what: string): string {
+  if (v instanceof AString || typeof v === "string") return stringValue(v);
+  throw attachOffendingValue(new TypeError(`${name}: ${what} must be a string, got ${type(v)}`), v);
 }
 
 export default EnvCapability.define("scheme/srfi-13", {
@@ -222,7 +265,7 @@ export default EnvCapability.define("scheme/srfi-13", {
     "string-null?": symbol.native`string-null?: #t iff the string is empty (SRFI-13)`(
       { input: [z.string], output: [z.boolean] },
       function (this: CallCtx, str): ABool {
-        return withInputProvenance([str], schemeBool(stringValue(str).length === 0));
+        return withInputProvenance(this.runCtx, [str], schemeBool(stringValue(str).length === 0));
       },
     ),
 
@@ -230,14 +273,22 @@ export default EnvCapability.define("scheme/srfi-13", {
     "string-prefix?": symbol.native`string-prefix?: #t iff s starts with prefix — (string-prefix? prefix s) (SRFI-13)`(
       { input: [z.string, z.string], output: [z.boolean] },
       function (this: CallCtx, prefix, str): ABool {
-        return withInputProvenance([prefix, str], schemeBool(stringValue(str).startsWith(stringValue(prefix))));
+        return withInputProvenance(
+          this.runCtx,
+          [prefix, str],
+          schemeBool(stringValue(str).startsWith(stringValue(prefix))),
+        );
       },
     ),
 
     "string-suffix?": symbol.native`string-suffix?: #t iff s ends with suffix — (string-suffix? suffix s) (SRFI-13)`(
       { input: [z.string, z.string], output: [z.boolean] },
       function (this: CallCtx, suffix, str): ABool {
-        return withInputProvenance([suffix, str], schemeBool(stringValue(str).endsWith(stringValue(suffix))));
+        return withInputProvenance(
+          this.runCtx,
+          [suffix, str],
+          schemeBool(stringValue(str).endsWith(stringValue(suffix))),
+        );
       },
     ),
 
@@ -257,7 +308,7 @@ export default EnvCapability.define("scheme/srfi-13", {
           const chars = [...stringValue(str)];
           return afterFlags(criterionFlags(criterion, chars, this.runCtx), (f) => {
             const i = f.indexOf(true);
-            return withInputProvenance([str, criterion], i === -1 ? schemeBool(false) : new AExact(i));
+            return withInputProvenance(this.runCtx, [str, criterion], i === -1 ? schemeBool(false) : new AExact(i));
           });
         },
       ),
@@ -278,7 +329,7 @@ export default EnvCapability.define("scheme/srfi-13", {
           const runCtx = this.runCtx;
           return afterFlags(criterionFlags(criterion, chars, runCtx), (f) => {
             const n = f.reduce((acc, hit) => acc + (hit ? 1 : 0), 0);
-            return withInputProvenance([str, criterion], new AExact(n));
+            return withInputProvenance(this.runCtx, [str, criterion], new AExact(n));
           });
         },
       ),
@@ -343,13 +394,13 @@ export default EnvCapability.define("scheme/srfi-13", {
     // string-trim-left is a non-index synonym of official left trim (compat).
     "string-trim":
       symbol.native`string-trim: the left end shed of whitespace, or of chars matching a char/one-arg predicate (SRFI-13; no charsets)`(
-        { input: [z.string, z.lambda.optional()], output: [z.string] },
+        { input: [z.string, z.lambda.optional()], output: [z.string], type: TRIM_TYPE },
         trimImpl("string-trim", "left"),
       ),
 
     "string-trim-both":
       symbol.native`string-trim-both: both ends shed of whitespace, or of chars matching a char/one-arg predicate (SRFI-13; no charsets)`(
-        { input: [z.string, z.lambda.optional()], output: [z.string] },
+        { input: [z.string, z.lambda.optional()], output: [z.string], type: TRIM_TYPE },
         trimImpl("string-trim-both", "both"),
       ),
 
@@ -357,7 +408,7 @@ export default EnvCapability.define("scheme/srfi-13", {
 
     "string-trim-right":
       symbol.native`string-trim-right: the right end shed of whitespace, or of chars matching a char/one-arg predicate (SRFI-13; no charsets)`(
-        { input: [z.string, z.lambda.optional()], output: [z.string] },
+        { input: [z.string, z.lambda.optional()], output: [z.string], type: TRIM_TYPE },
         trimImpl("string-trim-right", "right"),
       ),
 
@@ -369,14 +420,14 @@ export default EnvCapability.define("scheme/srfi-13", {
         { input: [z.string, z.schemeNumber, z.char.optional()], output: [z.string] },
         function (this: CallCtx, str, len, char): AString {
           const chars = [...stringValue(str)];
-          const k = toIndex(len);
+          const k = padLength("string-pad", len);
           // O(1) cap check BEFORE `.repeat` allocates — see assertAllocatable.
           assertAllocatable(k, "string-pad");
           const fill = char === undefined ? " " : charValue(char);
           const text =
             chars.length >= k ? chars.slice(chars.length - k).join("") : fill.repeat(k - chars.length) + chars.join("");
           // Like make-string: a present fill char contributes lineage; the length shapes only.
-          return withInputProvenance(char === undefined ? [str] : [str, char], new AString(text));
+          return withInputProvenance(this.runCtx, char === undefined ? [str] : [str, char], new AString(text));
         },
       ),
 
@@ -385,18 +436,18 @@ export default EnvCapability.define("scheme/srfi-13", {
         { input: [z.string, z.schemeNumber, z.char.optional()], output: [z.string] },
         function (this: CallCtx, str, len, char): AString {
           const chars = [...stringValue(str)];
-          const k = toIndex(len);
+          const k = padLength("string-pad-right", len);
           assertAllocatable(k, "string-pad-right");
           const fill = char === undefined ? " " : charValue(char);
           const text = chars.length >= k ? chars.slice(0, k).join("") : chars.join("") + fill.repeat(k - chars.length);
-          return withInputProvenance(char === undefined ? [str] : [str, char], new AString(text));
+          return withInputProvenance(this.runCtx, char === undefined ? [str] : [str, char], new AString(text));
         },
       ),
 
     "string-reverse": symbol.native`string-reverse: a reversed copy of the string (SRFI-13)`(
       { input: [z.string], output: [z.string] },
       function (this: CallCtx, str): AString {
-        return withInputProvenance([str], new AString([...stringValue(str)].toReversed().join("")));
+        return withInputProvenance(this.runCtx, [str], new AString([...stringValue(str)].toReversed().join("")));
       },
     ),
 
@@ -407,15 +458,22 @@ export default EnvCapability.define("scheme/srfi-13", {
     "string-contains": symbol.native`string-contains: index of the first occurrence of sub, or #f (SRFI-13)`(
       { input: [z.string, z.string], output: [z.union([z.exact, z.boolean])] },
       function (this: CallCtx, str, sub) {
-        const i = stringValue(str).indexOf(stringValue(sub));
-        return withInputProvenance([str, sub], i === -1 ? schemeBool(false) : new AExact(i));
+        const text = stringValue(str);
+        const i = text.indexOf(stringValue(sub));
+        // `indexOf` counts UTF-16 units; string-length / string-ref / string-index count
+        // code points — convert so the answer indexes the same way they do.
+        return withInputProvenance(
+          this.runCtx,
+          [str, sub],
+          i === -1 ? schemeBool(false) : new AExact([...text.slice(0, i)].length),
+        );
       },
     ),
 
     "string-contains?": symbol.native`string-contains?: #t iff str contains sub (SRFI-13)`(
       { input: [z.string, z.string], output: [z.boolean] },
       function (this: CallCtx, str, sub) {
-        return withInputProvenance([str, sub], schemeBool(stringValue(str).includes(stringValue(sub))));
+        return withInputProvenance(this.runCtx, [str, sub], schemeBool(stringValue(str).includes(stringValue(sub))));
       },
     ),
 
@@ -432,10 +490,11 @@ export default EnvCapability.define("scheme/srfi-13", {
         },
         function (this: CallCtx, list, delimiter) {
           const parts = to_array("string-join")(list);
-          const sep = delimiter === undefined ? " " : stringValue(delimiter);
+          const strs = parts.map((p, i) => requireString("string-join", p, `element ${i}`));
+          const sep = delimiter === undefined ? " " : requireString("string-join", delimiter, "the delimiter");
           // Collapsing op: fold the list to one string, then re-stamp the DEEP union of
           // every element's lineage (+ the delimiter's) — see string-append.
-          return taintString(parts.map(stringValue).join(sep), collapseProvenance(list, delimiter));
+          return taintString(strs.join(sep), collapseProvenance(list, delimiter));
         },
       ),
 
@@ -449,7 +508,8 @@ export default EnvCapability.define("scheme/srfi-13", {
           // Output `z.schemeValue` images to `unknown`, but the impl `APair.fromArray`s the tokens — it
           // returns a proper list of token strings. Author-assert `List<string>`. criterion stays
           // `unknown` (a char OR a one-arg predicate — a char's `string` image would misread as "a
-          // whole string"; the docstring teaches the domain), matching the sibling trim/index ops.
+          // whole string"; the docstring teaches the domain). index/trim spell that slot as
+          // `string | pred`; tokenize keeps unknown so a whole-string argument does not typecheck.
           type: "(str: string, criterion?: unknown) => List<string>",
         },
         function (this: CallCtx, str, criterion): AListAlike | Promise<AListAlike> {
@@ -517,7 +577,8 @@ export default EnvCapability.define("scheme/srfi-13", {
           const prov = collapseProvenance(str, delimiter);
           return APair.fromArray(
             this.runCtx,
-            s.split(delimiterStr).map((piece) => taintString(piece, prov)),
+            // Empty delimiter splits per CHARACTER (code point), not per UTF-16 unit.
+            (delimiterStr === "" ? [...s] : s.split(delimiterStr)).map((piece) => taintString(piece, prov)),
           );
         },
       ),

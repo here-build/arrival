@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
 import polyglotClojure from "../../polyglot/polyglot-clojure.js";
 
 async function exec(code: string, options: ExecOptionsOverFrame) {
-  return (await execStateOverFrame(code, options)).values.slice();
+  return [...(await execStateOverFrame(code, options)).values];
 }
 
 describe("@here.build/arrival/polyglot-clojure", () => {

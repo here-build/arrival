@@ -1,19 +1,21 @@
 // srfi-13-contract-precision.test.ts — HARVEST-signature precision for srfi-13's Contract-bearing
 // ops (the `Contract.type` author-assertion axis; see srfi-1-contract-precision.test.ts's header for
-// the axis distinction). Three ops get an override; the other fifteen are already precise and are
-// left alone (a regression guard below asserts a representative sample stays zod-derived).
+// the axis distinction). List-of-string ops plus criterion ops whose zod image lies (required
+// lambda, or `z.schemeValue` → unknown) carry an override; scalar-in/scalar-out ops stay
+// zod-derived (a regression guard below asserts a representative sample).
 //
-// The three overridden ops all share the same root defect: an op that genuinely returns / consumes a
-// LIST-OF-STRINGS, but whose zod contract can only spell the list slot as `z.schemeValue` (→ `unknown`) —
-// scheme-zod has no element-typed list schema — so the harvest loses the element type. The author
-// knows it: each impl `to_array`s / `APair.fromArray`s strings. `List<string>` (from carriers.ts's
-// ambient vocabulary) is the honest, informative image.
+// List-of-string (scheme-zod has no element-typed list schema):
 //   • string-join     — `z.schemeValue` list input → `unknown`; `z.union([z.string,z.schemeString])` output
 //                        → the redundant `string | string`. Both collapse to `(list: List<string>,
 //                        delimiter?: string) => string`.
 //   • string-tokenize — `z.schemeValue` output → `unknown`, but it returns a proper list of token strings.
 //   • string-split    — `z.schemeValue` output → `unknown` (list of pieces); the `string | char` delimiter
 //                        images to the redundant `string | string` (both print `string`).
+//
+// Criterion (char OR one-arg predicate; optional on trim/tokenize):
+//   • string-index / string-count / the trim trio — `z.lambda` prints as a required
+//     `(...args: unknown[]) => unknown`. `type:` recovers char|pred (a char's TS image is
+//     `string`) and, for trim, optionality (default whitespace).
 import { describe, expect, it } from "vitest";
 import srfi13 from "../srfi-13.js";
 import type { AEntity } from "../../../common/symbols/_bake.js";
@@ -66,5 +68,12 @@ describe("scheme/srfi-13 Contract harvest precision — already-precise ops stay
     expect(signatureOf(def("string-count"))).toBe(
       "{\n  (s: string, criterion: string | ((c: string) => unknown)): number;\n}",
     );
+  });
+
+  it("string-trim / string-trim-both / string-trim-right: optional char|pred criterion (zod harvests a required lambda)", () => {
+    const trim = "{\n  (s: string, criterion?: string | ((c: string) => unknown)): string;\n}";
+    expect(signatureOf(def("string-trim"))).toBe(trim);
+    expect(signatureOf(def("string-trim-both"))).toBe(trim);
+    expect(signatureOf(def("string-trim-right"))).toBe(trim);
   });
 });

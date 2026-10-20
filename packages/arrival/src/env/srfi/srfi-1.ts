@@ -59,20 +59,19 @@
 // %any-null? / %some / %any / %every / %every-value / zip use that idiom. take/drop are
 // tagless dispatchers. validate:false unused — evidence-gated only.
 import { type CallCtx, makeCallCtx } from "../../run/CallCtx.js";
-import { withContractFields, resolveMethod, withCallbackRoles } from "../../common/symbols/_bake.js";
+import { withContractFields, withCallbackRoles } from "../../common/symbols/_bake.js";
 import type { MaybePromise } from "../../types/utility.js";
 import dedent from "dedent";
 import { EnvCapability } from "../../common/capability.js";
-import type { EmitCtx, EmitRule } from "../../emit/emit-rule.js";
-import { Arrow, Bin, Call, Lit, Method, Ref, type Binding, type R } from "../../emit/residual-lite.js";
-import { attachOffendingValue } from "../../errors.js";
+import type { EmitRule } from "../../emit/emit-rule.js";
+import { doorSymbols, exactly, freshBinding, requireTerm } from "../pack-helpers.js";
+import { Arrow, Bin, Call, Lit, Method, Ref, type R } from "../../emit/residual-lite.js";
 import { is_false } from "../../values/value-guards.js";
 import { ANil } from "../../values/primitives/ANil.js";
 import { schemeFalse } from "../../values/primitives/ABool.js";
 import { maybeThen } from "../../utils/promises.js";
 import { applyCallback, type ACallable } from "../../values/primitives/ACallable.js";
 import { type RunContext } from "../../run/RunContext.js";
-import { tf } from "../../values/tagless-final.js";
 import type { AListAlike, SchemeValue } from "../../values/types.js";
 import equality from "../r7rs/equality.js";
 import exceptions from "../r7rs/exceptions.js";
@@ -115,6 +114,11 @@ const DOORS = {
   "lset-diff+intersection!": LSET_BANG,
 
   // not-in-subset — pure but unshipped (doors, not silence)
+  // Which pure names ship and which door (take-right, drop-right, split-at, ... are trivial
+  // and still doored) is polyglot by observation, not SRFI completeness: arrival is a full
+  // R7RS sandbox that behaves like what models expect Scheme to be, so a name is implemented
+  // when models reach for it across dialects, and doored with a compositional redirect (the
+  // text below) when they do not. A door here is a measured omission, not an oversight.
   xcons: "tiny HOF sugar (lambda (d a) (cons a d)) — write cons flipped or a lambda",
   "cons*": "rest-as-tail constructor not shipped; nest cons / list with last cdr",
   "circular-list": "cycle construction is outside the immutable subset; circular *detection* is length+ → #f",
@@ -202,16 +206,6 @@ function findImpl(arg: ACallable, list: AListAlike, runCtx: RunContext): SchemeV
 // Clean run branch needs pred RETURN facts — TypeFacts has none today.
 // ════════════════════════════════════════════════════════════════════════════
 
-function exactly<T>(ctx: EmitCtx<R>, sym: string, args: readonly T[], n: number): readonly T[] {
-  if (args.length !== n) ctx.door(`\`${sym}\` wants exactly ${n} argument${n === 1 ? "" : "s"}, got ${args.length}`);
-  return args;
-}
-
-/** `EmitCtx.fresh` typed `unknown` in core; cast once to Binding. */
-function freshBinding(ctx: EmitCtx<R>, hint: string): Binding {
-  return ctx.fresh(hint) as Binding;
-}
-
 // ── filter — Law T on the predicate's verdict ───────────────────────────────────────
 // Conservative: `(x) => f(x) !== false`. Provably-boolean pred (or read register): bare f.
 // Single-list only.
@@ -229,7 +223,7 @@ const filterEmitRule: EmitRule<R> = {
 export default EnvCapability.define("scheme/srfi-1", {
   // See the file header: the complete cross-capability free-name set of the define
   // bodies below, order-matched to base-packs.ts's C3 tail (exceptions, lists).
-  // B3 (benchmark-defect-register.md): `vectors` added so `%list-nth` can normalize a
+  // B3: `vectors` added so `%list-nth` can normalize a
   // vector-shaped receiver (`vector?`/`vector->list`, both r7rs/vectors.ts) before
   // walking it as a pair spine — see that helper's own comment. Positioned BEFORE
   // `lists` (not appended) to match `polyglot-clojure.ts`'s own precedence
@@ -239,16 +233,14 @@ export default EnvCapability.define("scheme/srfi-1", {
   deps: [equality, numeric, exceptions, vectors, lists],
   symbols: (symbol, z) => {
     // The list identity for every spine-walking verb below — the SHARED `z.listAlike`
-    // (scheme-zod.ts), not a local union. It is spine-ADOPTING: a slot declared with it
+    // (common/scheme-zod/index.ts), not a local union. It is spine-ADOPTING: a slot declared with it
     // takes the SPINE READING of its argument, so a borrowed JS array (every MCP tool's JSON
     // array arrives as one, `kind="vector"`) is projected onto an `AJSArrayList` view — same
     // backing store, same provenance, O(1) — and a boxed AVector is copied onto a shallow
     // pair spine, before any body or impl sees it. An EMPTY array or vector becomes `nil`.
     const listAlike = z.listAlike;
     // Sole inventory for silent→door coverage of the rest of SRFI-1 (see DOORS).
-    const DOOR_SYMBOLS = Object.fromEntries(
-      Object.entries(DOORS).map(([name, reason]) => [name, symbol.notImplemented`${name}: ${reason}`]),
-    );
+    const DOOR_SYMBOLS = doorSymbols(DOORS);
     return {
       // input is a plain FIXED 2-tuple (pred, seq) — NOT z.tuple([z.schemeValue], z.schemeValue)'s
       // unbounded rest (filter's impl is strictly binary: `const [pred, seq] = args`, always
@@ -285,15 +277,7 @@ export default EnvCapability.define("scheme/srfi-1", {
         },
         (args, runCtx) => {
           const [pred, seq] = args;
-          const m = resolveMethod(seq, tf("filter"));
-          if (m === undefined) {
-            throw attachOffendingValue(
-              new TypeError(
-                `filter: the ${seq == null ? String(seq) : typeof seq} operand does not support filter (no ${tf("filter")}).`,
-              ),
-              seq,
-            );
-          }
+          const m = requireTerm(seq, "filter");
           // `resolveMethod`'s own return type is `unknown` (it's a bare tagless-final term
           // lookup, possibly async) — the cast states what the `filter` term contract actually
           // guarantees (a scheme value, or a promise of one, in the receiver's own
@@ -329,7 +313,7 @@ export default EnvCapability.define("scheme/srfi-1", {
       // capability data resolving through the ordinary chain, which also makes it
       // typo-suggestible for free (see src/unbound-variable.ts).
       fold: symbol.notImplemented`fold: SRFI-1's bare fold is not bound under this name — use reduce (left fold, fn(element, acc) convention, explicit seed) or fold-right (right-associative); both are bound here`,
-      find: symbol.native`find: first list element matching the predicate, else nil`(
+      find: symbol.native`find: first list element matching the predicate, else #f`(
         {
           input: [z.lambda, z.listAlike],
           output: [z.schemeValue],
@@ -409,6 +393,12 @@ export default EnvCapability.define("scheme/srfi-1", {
       // collection type is honest for every call site. `n` normalizes via `.valueOf()`,
       // the vectors.ts `vector-ref` idiom.
       //
+      // List take/drop clamp an over-long n silently (no error), unlike `string-take` (SRFI-13
+      // range error). Polyglot by observation: arrival is a full R7RS sandbox that behaves like
+      // what models expect Scheme to be — general programming intuition plus a variety of
+      // dialects (Clojure/Haskell/slice semantics) — so the list verbs follow the slicing
+      // convention while the string verbs keep their SRFI contract. See also APair.ts take/drop.
+      //
       // Strict types over silent tolerance: SRFI-1's "lis may be any value once n hits 0"
       // tolerance is not honored — `(take xs 0)` on a non-collection receiver is a type
       // error, not '() (see the file header's DEVIATIONS).
@@ -425,15 +415,7 @@ export default EnvCapability.define("scheme/srfi-1", {
         },
         (args, runCtx) => {
           const [xs, n] = args;
-          const m = resolveMethod(xs, tf("take"));
-          if (m === undefined) {
-            throw attachOffendingValue(
-              new TypeError(
-                `take: the ${xs == null ? String(xs) : typeof xs} operand does not support take (no ${tf("take")}).`,
-              ),
-              xs,
-            );
-          }
+          const m = requireTerm(xs, "take");
           const k = typeof n === "number" ? n : (n as { valueOf(): number }).valueOf();
           return m.call(xs, k, runCtx) as MaybePromise<SchemeValue>;
         },
@@ -457,15 +439,7 @@ export default EnvCapability.define("scheme/srfi-1", {
         },
         (args, runCtx) => {
           const [xs, n] = args;
-          const m = resolveMethod(xs, tf("drop"));
-          if (m === undefined) {
-            throw attachOffendingValue(
-              new TypeError(
-                `drop: the ${xs == null ? String(xs) : typeof xs} operand does not support drop (no ${tf("drop")}).`,
-              ),
-              xs,
-            );
-          }
+          const m = requireTerm(xs, "drop");
           const k = typeof n === "number" ? n : (n as { valueOf(): number }).valueOf();
           return m.call(xs, k, runCtx) as MaybePromise<SchemeValue>;
         },
@@ -576,10 +550,10 @@ export default EnvCapability.define("scheme/srfi-1", {
       // teaching surface first…tenth rely on). Named-let idiom (see the file header's
       // PERF PROTOCOL note); enforcement stays on.
       //
-      // B3 (benchmark-defect-register.md) — a vector-shaped receiver (AVector/AJSArray)
+      // B3 — a vector-shaped receiver (AVector/AJSArray)
       // normalizes to a genuine pair/nil list FIRST, via `vector->list` (array-length-
       // bounded — terminates by construction, never a cdr-walk). This is NOT the same
-      // hazard the register's own load-bearing warning names: that warning is about
+      // hazard of the load-bearing warning on this idiom: that warning is about
       // walking a vector's OWN loose `cdr` in a `(if (null? xs) … (loop (cdr xs)))` loop,
       // which never reaches `null?` because a vector's `cdr` never becomes `ANil`.
       // `vector->list` never cdr-walks a vector — it indexes `[0, length)` directly — so
@@ -826,7 +800,7 @@ export default EnvCapability.define("scheme/srfi-1", {
 
       // remove — SRFI-1: keep the elements that do NOT satisfy pred (the predicate twin of
       // delete). The base sandbox carries no external collection library, so this is the sole
-      // remove binding; the inference plane copies it by name (bridge.ts). Contract mirrors
+      // remove binding; the inference plane copies it by name. Contract mirrors
       // `filter`'s representation-BLIND shape (z.schemeValue seq/out), NOT listAlike: the body
       // delegates to filter's term dispatch, so remove inherits filter's polymorphism over
       // the receiver's own representation — narrowing here would break what delegation buys.

@@ -1,5 +1,4 @@
 // srfi-1-symbol-define.test.ts — W4/H3 pack migration rows for `scheme/srfi-1`
-// (docs/design-history/symbol-define-static-program-validation.md §1/§2.1/§4/§4.5).
 //
 // Dep edges (current pack): `deps: [equality, numeric, exceptions, lists]` —
 // NATIVE free names (`not`/`equal?`/`pair?`/`null?`, `+`/`-`/…) + BASE free names
@@ -29,7 +28,7 @@
 //      unshipped names are doors.
 import { describe, expect, it } from "vitest";
 import { EnvCapability } from "../../../common/capability.js";
-import { exec, execOverFrame, execStateOverFrame, execInFrame } from "../../../eval/generator-exec.js";
+import { execOverFrame, execStateOverFrame, execInFrame } from "../../../eval/generator-exec.js";
 import { envFromCapabilities, freshEnv } from "../../../__tests__/_fresh-env.js";
 import { buildVocabulary } from "../../vocabulary.js";
 import { DefineLocalityError } from "../../../errors.js";

@@ -12,6 +12,12 @@
 // directly, unconditionally. JS-native packs are not BASE_PACKS roots; deps is enough.
 // `lists` is already positioned in the C3 tail block (see base-packs.ts's own header).
 //
+// Comparators are likewise plain tagged lists, `(list 'comparator type-test equality
+// ordering)`, so a hand-written list of that shape is accepted as a comparator (forgeable, as
+// with srfi-189's Maybe/Either). Polyglot by observation: arrival is a full R7RS sandbox that
+// behaves like what models expect Scheme to be, and models construct and inspect such shapes
+// as ordinary lists; the structural contract below catches malformed ones, not forged ones.
+//
 // Contract choices:
 //   - `comparator` is modeled precisely, not as opaque `z.schemeValue`: SRFI-128's own
 //     representation here is `(list 'comparator type-test equality ordering)` — a
@@ -51,7 +57,11 @@ export default EnvCapability.define("scheme/srfi-128", {
   symbols: (symbol, z) => {
     // The SRFI-128 comparator's own representation: `(list 'comparator type-test
     // equality ordering)` — see the file header's contract-choices note.
-    const comparatorSchema = z.list([z.symbol, z.lambda, z.lambda, z.lambda]);
+    // The ordering slot admits #f (SRFI-128 permits `ordering = #f`), matching what
+    // make-comparator accepts — an output schema stricter than the input would leak a raw
+    // zod error on the legal call `(make-comparator t eq #f)`.
+    const orderingSlot = z.union([z.lambda, z.booleanFalse]);
+    const comparatorSchema = z.list([z.symbol, z.lambda, z.lambda, orderingSlot]);
     return {
       "make-comparator":
         symbol.define`make-comparator: bundle (type-test equality ordering) into a comparator — a 4th hash arg is accepted for SRFI-128 source-compat but IGNORED (arrival has no value-hash)`(
@@ -61,7 +71,7 @@ export default EnvCapability.define("scheme/srfi-128", {
           // (never calls it), so a bare `z.lambda` contract would wrongly reject the
           // legal call `(make-comparator t eq #f)`.
           {
-            input: [z.lambda, z.lambda, z.union([z.lambda, z.booleanFalse])],
+            input: [z.lambda, z.lambda, orderingSlot],
             inputRest: z.schemeValue,
             output: [comparatorSchema],
           },
@@ -88,7 +98,7 @@ export default EnvCapability.define("scheme/srfi-128", {
 
       "comparator-ordering-predicate":
         symbol.define`comparator-ordering-predicate: the ordering (less-than) procedure c was built with`(
-          { input: [comparatorSchema], output: [z.lambda] },
+          { input: [comparatorSchema], output: [orderingSlot] },
           `(lambda (c) (cadddr c))`,
         ),
 

@@ -1,4 +1,4 @@
-// @here.build/arrival/polyglot — shared core of the cross-dialect idiom family.
+// arrival's polyglot pack — shared core of the cross-dialect idiom family.
 //
 // Four sibling packs:
 //   scheme/polyglot          (this file) — shared core every dialect stands on
@@ -28,6 +28,9 @@
 // Wiring-only → pause-trivial. cut/cute ship as SRFI-26. Sole definition site.
 
 import { EnvCapability } from "../../common/capability.js";
+import { attachOffendingValue } from "../../errors.js";
+import { printValue } from "../../values/print.js";
+import { is_promise } from "../../values/value-guards.js";
 import type { CallCtx } from "../../run/CallCtx.js";
 import dedent from "dedent";
 import { schemeBool, stringValue } from "../../values/op-helpers.js";
@@ -41,7 +44,6 @@ import { AVector } from "../../values/primitives/AVector.js";
 import { APair } from "../../values/primitives/APair.js";
 import { type SchemeValue } from "../../values/types.js";
 import { type AValue } from "../../values/primitives/AValue.js";
-import { printValue } from "../../values/print.js";
 import { to_array } from "../pack-helpers.js";
 import equality from "../r7rs/equality.js";
 import lists from "../r7rs/lists.js";
@@ -91,9 +93,7 @@ function collectMembers(
   if (typeof keysTerm !== "function" || typeof getter !== "function") return new AVector([]);
   const names = keysTerm.call(obj, ctx.runCtx);
   const reads = names.map((key) => getter.call(obj, key, ctx.runCtx));
-  const isThenable = (v: unknown): v is Promise<SchemeValue> =>
-    typeof (v as { then?: unknown } | null)?.then === "function";
-  if (reads.some(isThenable)) {
+  if (reads.some(is_promise)) {
     return Promise.all(reads.map((v) => Promise.resolve(v))).then(
       (settled) => new AVector(settled.map((value, i) => build(names[i]!, value as SchemeValue))),
     );
@@ -105,7 +105,7 @@ function collectMembers(
 //
 // `applicable` — a function-position argument in THIS pack: a callable value OR a
 // symbol. Keyword accessors are first-class functions in the polyglot family (a
-// keyword is a real ASymbol carrying its own `apply`, keyword-tagless-apply.md) —
+// keyword is a real ASymbol carrying its own `apply`) —
 // NOT a member of the `ACallable` union `z.lambda` tests. A bare `z.lambda` on
 // these positions would reject the family's own documented idiom, so every
 // position this pack APPLIES directly is `z.lambda | z.symbol`. Duplicated (not
@@ -117,7 +117,7 @@ export default EnvCapability.define("scheme/polyglot", {
   // cons) are the only cross-capability free names this core's define bodies
   // reach.
   deps: [equality, lists],
-  // `:`-prefixed symbols are self-evaluating (keyword-tagless-apply.md) — `ASymbol`
+  // `:`-prefixed symbols are self-evaluating — `ASymbol`
   // itself carries `apply` — so this pack contributes no resolvers, only symbols.
   // A PLAIN record — a builder-function form would make the pack statically
   // un-enumerable, hiding `compose` from srfi-235's own FV allowlist.
@@ -139,7 +139,7 @@ export default EnvCapability.define("scheme/polyglot", {
         // Promise-valued entry, its lazy pending cell (a Promise OF the settled box —
         // pending-entry.ts), which the async dispatch wrapper awaits before encoding.
         // `z.schemeValue` is the identity term for "a polymorphic accessor's operand"
-        // (scheme-zod.ts's own worked example).
+        // (common/scheme-zod/index.ts's own worked example).
         { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
         function (this: CallCtx, obj: unknown, key: unknown): SchemeValue | Promise<SchemeValue> {
           if (obj == null) return nil;
@@ -198,7 +198,7 @@ export default EnvCapability.define("scheme/polyglot", {
       ),
       // `dict` — the Scheme-side companion to the `:key` accessor and the `@` read:
       // build an open-key map from interleaved `:key value` pairs. A keyword in arg
-      // position self-evaluates to itself (a real ASymbol — keyword-tagless-apply.md),
+      // position self-evaluates to itself (a real ASymbol),
       // so its key is read the same way a bare quoted symbol's would be: stringify and
       // strip a leading `:` if present. The serializer prints it back as `(dict …)`
       // and arrival-chain-view transpiles it to a JS/Python object literal. (Plain
@@ -224,6 +224,16 @@ export default EnvCapability.define("scheme/polyglot", {
         // `(dict …)` call would mint its ADict + every key's ASymbol run-invisible,
         // outside the run's ctx.
         function (this: CallCtx, ...args: unknown[]): ADict {
+          if (args.length % 2 !== 0) {
+            throw attachOffendingValue(
+              new TypeError(
+                `dict: expected interleaved key/value pairs, got ${args.length} arguments — the last key ` +
+                  `${String(printValue(args.at(-1) as SchemeValue)).slice(0, 40)} has no value (write (dict :a 1 :b 2), ` +
+                  `or give the dangling key a value; a silently dropped trailing key would lose data)`,
+              ),
+              args.at(-1),
+            );
+          }
           const byName = new Map<string, [DictKey, SchemeValue]>();
           for (let i = 0; i + 1 < args.length; i += 2) {
             const raw = args[i];
@@ -360,6 +370,22 @@ export default EnvCapability.define("scheme/polyglot", {
       // boundary once per element, so a `z.list()` codec (an O(n) spine decode)
       // would turn one interleave into O(n²) decode work; `z.schemeValue`'s instanceof
       // check keeps the recursive boundary flat.
+      // %with-span-of — stamp a freshly-built call form with the span of the user's own step
+      // form. Threading macros (-> ->> ~> ~>>) rebuild `(f a)` into `(f a x)` as span-less
+      // cells; without this the evaluator stamps them with the USE-SITE span, so a trace cannot
+      // tell a step's calls from the threading form itself. Only a span-less PAIR is stamped
+      // (same rule as the evaluator's use-site stamp) and a located user pair is never touched;
+      // when the step carries no span (e.g. a bare symbol the reader did not locate) the form
+      // comes back unchanged and the use-site span applies.
+      "%with-span-of":
+        symbol.native`%with-span-of: give a freshly-built form the source span of the user form it was derived from (private helper for threading macros)`(
+          { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
+          function (this: CallCtx, userForm: SchemeValue, fresh: SchemeValue) {
+            const loc = userForm instanceof APair || userForm instanceof ASymbol ? userForm.location : undefined;
+            if (loc === undefined || !(fresh instanceof APair) || fresh.location !== undefined) return fresh;
+            return fresh.withLocation(loc);
+          },
+        ),
       "%interleave":
         symbol.define`%interleave: zip ks and vs into a flat (k v k v …) list — the dict/apply argument shape (private helper)`(
           { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },

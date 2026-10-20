@@ -1,4 +1,4 @@
-// @here.build/arrival/polyglot-clojure — the Clojure dialect pack (see
+// arrival's polyglot-clojure pack — the Clojure dialect pack (see
 // polyglot.ts's header for the sibling-pack map).
 //
 // Two families:
@@ -11,7 +11,7 @@
 //   well-known Clojure symbol gets a REAL binding, not a teaching-stub door —
 //   when the semantics are implementable without IO/mutation/macro machinery.
 //   (The genuinely-impure cousin — println — is doored instead, in
-//   env/polyglot-stubs.ts's Clojure section.)
+//   env/polyglot/polyglot-stubs.ts's Clojure section.)
 //
 // NOTE: `str` ships on scheme/polyglot (shared core — sugarcoat `@{…}` lowers to
 // it; not dialect-only). `first` (SRFI-1) and `curry` (srfi-235) are ALREADY
@@ -32,7 +32,7 @@
 //
 // DEPS: cross-capability free names (the FV-locality rule is stated once in
 // polyglot.ts's header) —
-//   scheme/polyglot (core) — @ @keys dict %interleave compose str
+//   scheme/polyglot (core) — @ @keys dict %interleave %with-span-of compose str
 //   srfi-1                 — filter reduce
 //   equality               — null? pair? string? repr dict?
 //   numeric                — + =
@@ -50,9 +50,11 @@ import dedent from "dedent";
 import { CallCtx } from "../../run/CallCtx.js";
 import { type, typeErrorMessage } from "../../membrane/typecheck.js";
 import { attachOffendingValue } from "../../errors.js";
+import { resolveMethod } from "../../common/symbols/_bake.js";
+import { tf } from "../../values/tagless-final.js";
+import { asVector, toIndex } from "../../values/op-helpers.js";
 import { APair } from "../../values/primitives/APair.js";
-import { ANil, nil } from "../../values/primitives/ANil.js";
-import { theVoid } from "../../values/primitives/AVoid.js";
+import { ANil } from "../../values/primitives/ANil.js";
 import type { SchemeValue } from "../../values/types.js";
 import polyglot from "./polyglot.js";
 import equality from "../r7rs/equality.js";
@@ -79,8 +81,8 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
              x
              (let ((form (car forms)))
                \`(-> ,(if (pair? form)
-                          (cons (car form) (cons x (cdr form)))
-                          (list form x))
+                          (%with-span-of form (cons (car form) (cons x (cdr form))))
+                          (%with-span-of form (list form x)))
                     ,@(cdr forms)))))`,
         { macroAttribute: "expression" },
       ),
@@ -91,8 +93,8 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
              x
              (let ((form (car forms)))
                \`(->> ,(if (pair? form)
-                           (append form (list x))
-                           (list form x))
+                           (%with-span-of form (append form (list x)))
+                           (%with-span-of form (list form x)))
                      ,@(cdr forms)))))`,
           { macroAttribute: "expression" },
         ),
@@ -106,41 +108,59 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
       // STDLIB COMPLETION — pure functions over primitives already bound elsewhere
       // ═══════════════════════════════════════════════════════════════════════════
       // nth — Clojure: (nth coll index) is index-FIRST, collection second (opposite
-      // R7RS list-ref). Walks pairs; also accepts a raw JS array (membrane face).
-      // Out-of-range on a proper list → nil; improper tail at the index → void.
-      nth: symbol.native`nth: the element at index (Clojure — index first; polymorphic over array/pair)`(
+      // R7RS list-ref). Walks pairs; also accepts a vector (boxed or borrowed JS array).
+      // A negative / fractional index or one past the end is a door, never nil / void /
+      // a wrapped element — Clojure's own `nth` throws there too.
+      nth: symbol.native`nth: the element at index (Clojure — index first; polymorphic over vector/pair)`(
         {
           input: [z.schemeNumber, z.schemeValue],
           output: [z.schemeValue],
           type: dedent`
           {
-            <T>(index: number, list: List<T>): T | null;
-            <T>(index: number, list: readonly T[]): T | null;
+            <T>(index: number, list: List<T>): T;
+            <T>(index: number, list: readonly T[]): T;
           }
         `,
         },
         function (this: CallCtx, index: SchemeValue, obj: SchemeValue) {
-          const idx = Number(index);
+          const idx = toIndex(index);
+          if (!Number.isInteger(idx) || idx < 0) {
+            throw attachOffendingValue(
+              new TypeError(`nth: index must be a non-negative exact integer, got ${String(idx)}`),
+              index,
+            );
+          }
           if (obj instanceof APair) {
             let node: APair<SchemeValue, SchemeValue> = obj;
-            let count = 0;
-            while (count < idx) {
+            for (let count = 0; count < idx; count++) {
               const next = node.cdr;
-              if (!next || next instanceof ANil || node.have_cycles("cdr")) {
-                return nil;
-              }
               if (!(next instanceof APair)) {
-                return theVoid;
+                throw attachOffendingValue(
+                  new RangeError(`nth: index ${idx} out of range for a list of length ${count + 1}`),
+                  obj,
+                );
+              }
+              if (node.have_cycles("cdr")) {
+                throw attachOffendingValue(new TypeError(`nth: can't index into a circular list`), obj);
               }
               node = next;
-              count++;
             }
             return node.car;
-          } else if (Array.isArray(obj)) {
-            return obj[idx];
-          } else {
-            throw attachOffendingValue(new TypeError(typeErrorMessage("nth", type(obj), "array or pair", 2)), obj);
           }
+          if (obj instanceof ANil) {
+            throw attachOffendingValue(new RangeError(`nth: index ${idx} out of range for an empty list`), obj);
+          }
+          if (Array.isArray(obj) || resolveMethod(obj, tf("vector?")) !== undefined) {
+            const arr = asVector(obj, "nth");
+            if (idx >= arr.length) {
+              throw attachOffendingValue(
+                new RangeError(`nth: index ${idx} out of range for a vector of length ${arr.length}`),
+                obj,
+              );
+            }
+            return arr[idx]!;
+          }
+          throw attachOffendingValue(new TypeError(typeErrorMessage("nth", type(obj), "vector or pair", 2)), obj);
         },
       ),
 
@@ -200,6 +220,11 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
         `(lambda (ks vs) (apply dict (%interleave ks vs)))`,
       ),
       // frequencies — reduce-dispatched coll (list|vector|nil). Keys via repr → string dict face.
+      // Keyed by repr, so 1 and "1" collide into one bucket (strings key as themselves, other
+      // values by their repr). Polyglot by observation: arrival is a full R7RS sandbox that
+      // behaves like what models expect Scheme to be, and the string-keyed dict face (JS-object /
+      // Python-dict-of-str-keys intuition) is what models expect from a counting dict; the
+      // collision is the accepted price of that face. group-by below shares it.
       frequencies:
         symbol.define`frequencies: Clojure — a dict of each distinct element to its occurrence count (non-string elements key by repr)`(
           {

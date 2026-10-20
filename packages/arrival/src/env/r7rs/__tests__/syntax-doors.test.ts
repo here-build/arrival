@@ -14,9 +14,9 @@ const SYNTAX_DOOR_NAMES = ["include", "include-ci", "cond-expand", "define-libra
 const door = async (src: string) => {
   try {
     await exec(src);
-  } catch (e) {
-    const purity = e instanceof PurityError || (e as { cause?: unknown })?.cause instanceof PurityError;
-    return { purity, message: (e as Error)?.message ?? String(e) };
+  } catch (error) {
+    const purity = error instanceof PurityError || (error as { cause?: unknown })?.cause instanceof PurityError;
+    return { purity, message: (error as Error)?.message ?? String(error) };
   }
   throw new Error(`expected purity door for: ${src}`);
 };

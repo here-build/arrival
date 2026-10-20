@@ -4,11 +4,10 @@
  * Why this file was inverted
  * ---------------------------
  * This file used to pin the bigint-rational representation (`AExact = (num:
- * bigint, denom: bigint)`, arbitrary precision). `docs/design-history/
- * arrival-one-number-rework.md` replaced that with
+ * bigint, denom: bigint)`, arbitrary precision). the one-number rework replaced that with
  * **RATIO**: `AExact = (num: number, denom: number)`, both JS `number`s,
  * `Number.isSafeInteger` at all times, gcd-normalized, `denom > 0`. The load
- * -bearing invariant (its §0.2-§0.3): exact arithmetic on safe operands is
+ * -bearing invariant (of the numeric model, see numeric-one-number.test.ts): exact arithmetic on safe operands is
  * exact — but the moment a result's numerator or denominator would leave
  * safe-integer range, the operation THROWS a teaching error instead of
  * silently widening to bigint or silently rounding to a float. This is the
@@ -86,7 +85,7 @@ describe("r7rs numbers — RATIO exactness (safe-int rationals, plan §2.0/§2.1
     // nil-as-array. There is no rational face outside scheme space.
     const r = await evalScheme("(/ 1 3)");
     expect(typeof r).toBe("number");
-    expect(r).toBeCloseTo(0.333333333333, 10);
+    expect(r).toBeCloseTo(0.333_333_333_333, 10);
   });
 });
 
@@ -216,9 +215,8 @@ describe("r7rs numbers — passing invariants (regression guards, unchanged by t
   });
 
   it("inexact->exact is bound and does NOT throw on a safe-range rational (0.5 → exact 1/2)", async () => {
-    // NOTE for the reader/Gate: docs/design-history/arrival-one-
-    // number-rework.md §2.1 has a line reading "`inexact->exact 0.5` →
-    // error" in its resolved-decisions list. Verified against the
+    // NOTE for the reader/Gate: the rework's original resolved-decisions list read
+    // "`inexact->exact 0.5` → error". Verified against the
     // ACTUALLY LANDED implementation (Sweeps 1-4): `(inexact->exact
     // 0.5)` does not throw — 0.5's simplestInRange approximation is the
     // small, safe rational 1/2, well within the safe-int component
@@ -268,10 +266,10 @@ describe("r7rs numbers — passing invariants (regression guards, unchanged by t
     // boxes are NOT eqv?/equal? (§0.6) — a stable sort must preserve their
     // relative input order among equal-valued elements.
     const sorted = await evalScheme("(sort (list 1 1.0 2 2.0) >)");
-    const values = Array.from(sorted as ArrayLike<unknown>).map(num);
+    const values = [...(sorted as Iterable<unknown>)].map(num);
     expect(values).toEqual([2, 2, 1, 1]);
     const exactness = await evalScheme("(map exact? (sort (list 1 1.0 2 2.0) >))");
-    expect(Array.from(exactness as ArrayLike<unknown>).map(truthy)).toEqual([true, false, true, false]);
+    expect([...(exactness as Iterable<unknown>)].map(truthy)).toEqual([true, false, true, false]);
   });
 
   it('(string->number "10/2") reduces to exact 5 (integral rational, safe components)', async () => {

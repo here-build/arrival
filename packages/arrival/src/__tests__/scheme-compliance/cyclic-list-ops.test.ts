@@ -57,11 +57,7 @@ describe("list ops on a RUNTIME-cyclic list terminate (no spin / stack overflow)
       matcher: undefined,
     },
   ])("$title", async ({ op, matcher }) => {
-    if (matcher) {
-      await expect(run(cyclic(op))).rejects.toThrow(matcher);
-    } else {
-      await expect(run(cyclic(op))).rejects.toThrow();
-    }
+    await (matcher ? expect(run(cyclic(op))).rejects.toThrow(matcher) : expect(run(cyclic(op))).rejects.toThrow());
   });
 });
 

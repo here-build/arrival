@@ -15,8 +15,8 @@
 // arrival-core-owned claim: the Contract's own `emit` field is wired, and its `call`
 // builds the expected tree in isolation from the compiler.
 import { describe, expect, it } from "vitest";
+import { exec } from "../../../eval/generator-exec.js";
 
-import type { AEntity } from "../../../common/symbols/_bake.js";
 import type { EmitCtx } from "../../../emit/emit-rule.js";
 import { Bin, Binding, Call, Lit, Method, Ref, Un, type R } from "../../../emit/residual-lite.js";
 import numericPack from "../numeric.js";
@@ -58,6 +58,44 @@ function testCtx(over: Partial<EmitCtx<R>> = {}): EmitCtx<R> {
 
 const ref = (name: string): R => Ref(Binding(name));
 
+/** Floor-modulo reference over safe integers: sign of the divisor, exact (no `r + n` unless signs differ). */
+const floorMod = (a: number, n: number): number => {
+  const r = a % n;
+  return r !== 0 && r < 0 !== n < 0 ? r + n : r;
+};
+
+type Val = number | boolean | ((...args: Val[]) => Val);
+
+/** Tiny residual-lite interpreter for the node kinds the modulo rule emits (no eval). */
+function evaluate(r: R, env: ReadonlyMap<string, Val>): Val {
+  switch (r.t) {
+    case "Ref":
+      return env.get(r.binding.text)!;
+    case "Lit":
+      return (r.value as { value: number }).value;
+    case "Bin": {
+      const l = evaluate(r.left, env) as number;
+      if (r.op === "&&") return l && evaluate(r.right, env);
+      if (r.op === "||") return l || evaluate(r.right, env);
+      const rt = evaluate(r.right, env) as number;
+      const ops: Partial<Record<string, (x: number, y: number) => Val>> = {
+        "+": (x, y) => x + y,
+        "%": (x, y) => x % y,
+        "<": (x, y) => x < y,
+        "!==": (x, y) => x !== y,
+      };
+      return ops[r.op]!(l, rt);
+    }
+    case "Arrow":
+      return (...args) =>
+        evaluate(r.body, new Map([...env, ...r.params.map((p, idx): [string, Val] => [p.pattern.text, args[idx]!])]));
+    case "Call":
+      return (evaluate(r.callee, env) as (...a: Val[]) => Val)(...r.args.map((x) => evaluate(x, env)));
+    default:
+      throw new Error(`evaluate: unexpected ${r.t}`);
+  }
+}
+
 describe("numeric Contract.emit — the Phase-2 relocation drill (quotient/modulo/=)", () => {
   it("quotient: the Contract carries the emit rule; call builds Math.trunc(a / b)", () => {
     const def = nativeDef("quotient");
@@ -74,13 +112,44 @@ describe("numeric Contract.emit — the Phase-2 relocation drill (quotient/modul
     expect(() => def.emit!.call([ref("a"), ref("b"), ref("c")], testCtx())).toThrow(/wants exactly 2 arguments/);
   });
 
-  it("modulo: the Contract carries the emit rule; call builds ((a % n) + n) % n", () => {
+  it("modulo: the Contract carries the emit rule; the residual is floor-modulo, evaluating a and n once", async () => {
     const def = nativeDef("modulo");
     expect(def.emit).toBeDefined();
     expect(def.narrows).toBeUndefined();
-    const [a, n] = [ref("a"), ref("n")];
-    const residual = def.emit!.call([a, n], testCtx());
-    expect(residual).toEqual(Bin("%", Bin("+", Bin("%", a, n), n), n));
+    let temps = 0;
+    const ctx = testCtx({ fresh: (hint) => Binding(`${hint}${temps++}`) });
+    const residual = def.emit!.call([ref("A"), ref("N")], ctx) as R;
+    // `a` and `n` are each read exactly once, as the IIFE's call arguments.
+    expect(residual).toMatchObject({ t: "Call", args: [ref("A"), ref("N")] });
+    const modulo = (a: number, n: number): number =>
+      evaluate(
+        residual,
+        new Map<string, Val>([
+          ["A", a],
+          ["N", n],
+        ]),
+      ) as number;
+    // Golden: agrees with the runtime floorMod, incl. near 2^53 where `(a % n) + n` overflows.
+    const MAX = Number.MAX_SAFE_INTEGER;
+    const cases: [number, number][] = [
+      [MAX - 1, MAX], // 2^53-2 mod 2^53-1: the old `((a % n) + n) % n` rounded wrong here
+      [-(MAX - 1), MAX],
+      [MAX - 1, -MAX],
+      [-(MAX - 1), -MAX],
+      [-7, 2],
+      [7, -2],
+      [-7, -2],
+      [7, 2],
+      [-4, 2],
+      [0, 5],
+      [0, -5],
+    ];
+    for (const [a, n] of cases) {
+      const runtime = (await exec(`(modulo ${a} ${n})`)).at(-1);
+      expect(runtime, `runtime ${a} mod ${n}`).toBe(floorMod(a, n) + 0);
+      expect(modulo(a, n) + 0, `emitted ${a} mod ${n}`).toBe(runtime);
+    }
+    expect(modulo(MAX - 1, MAX)).toBe(MAX - 1);
   });
 
   it("modulo: a mis-arity call doors", () => {

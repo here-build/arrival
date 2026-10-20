@@ -29,7 +29,7 @@ const capabilities = [overridableCapability];
 // never matches. This wrapper only restores the boxed-result access this file always
 // used — it does not touch that pre-existing bug.)
 async function exec(code: string, options?: ExecOptions) {
-  return (await execState(code, options)).values.slice();
+  return [...(await execState(code, options)).values];
 }
 
 describe("arrival/overridable — plain define plus validation, through the consumer door", () => {

@@ -2,8 +2,7 @@
  * define-bake roster harvest — real-instantiate every pack that migration
  * receipts used to pin, plus the full BASE_ROSTER.
  *
- * Addresses eng-review G1/G2 and longcat Attacks 1+6 (arrival-test-redundancy
- * proposal): a synthetic `(define x 1)` law is not pack coverage. This harvest
+ * Addresses eng-review G1/G2 and longcat Attacks 1+6: a synthetic `(define x 1)` law is not pack coverage. This harvest
  * calls `buildVocabulary([pack], …)` on each real capability export.
  *
  * Meta-gate: every BASE_ROSTER name appears in the harvested set (no silent
@@ -12,12 +11,11 @@
  * Does NOT replace:
  * - `symbol-define.law.test.ts` (mechanism / FV / sequential-RHS on test-local caps)
  * - Per-pack *behavior* suites (semantic verb equivalence)
- * - Negative pre-fix throw pins (catalogued in
- *   docs/design-history/test-redundancy-receipts-2026-07-25.md — must move home
- *   before migration-file delete)
+ * - Negative pre-fix throw pins (must move home
+ *   before the migration files are deleted)
  */
 import { readdirSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { execInFrame } from "../../eval/generator-exec.js";
@@ -153,7 +151,7 @@ const ALLOWED_MIGRATION_RECEIPTS = new Set([
 
 function walkTsFiles(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
-    const p = join(dir, name);
+    const p = path.join(dir, name);
     if (statSync(p).isDirectory()) walkTsFiles(p, out);
     else if (name.endsWith(".ts")) out.push(p);
   }
@@ -163,7 +161,7 @@ function walkTsFiles(dir: string, out: string[] = []): string[] {
 describe("migration-receipt filename gate", () => {
   it("no *symbol-define* test file exists outside the allowlist (blocks new receipts)", () => {
     const found = walkTsFiles(ENV_ROOT)
-      .map((abs) => relative(ENV_ROOT, abs).split("\\").join("/"))
+      .map((abs) => path.relative(ENV_ROOT, abs).split("\\").join("/"))
       .filter((rel) => /symbol-define/i.test(rel) && rel.endsWith(".test.ts"));
     const unexpected = found.filter((rel) => !ALLOWED_MIGRATION_RECEIPTS.has(rel));
     const missing = [...ALLOWED_MIGRATION_RECEIPTS].filter((rel) => !found.includes(rel));

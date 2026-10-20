@@ -31,7 +31,7 @@
 // only here, at the type level.
 import { describe, expectTypeOf, test } from "vitest";
 import * as z from "../../../common/scheme-zod/index.js";
-import { symbol } from "../../../symbol/index.js";
+import * as symbol from "../../../common/symbols/index.js";
 import { type DecodedArgs, type DecodedArgsWithRest, type DecodedReturn } from "../../../common/symbols/_bake.js";
 import type { AVector } from "../../../values/primitives/AVector.js";
 import type { AExact } from "../../../values/primitives/AExact.js";
@@ -40,7 +40,7 @@ import type { AJSArray } from "../../../membrane/AJSArray.js";
 import type { SchemeValue } from "../../../values/types.js";
 
 // v2 vector is the AVector|AJSArray union codec — SCHEME face = AVector | AJSArray, JS face = SchemeValue[].
-const svec = z.vector(z.schemeValue);
+const _svec = z.vector(z.schemeValue);
 
 describe("scheme/vectors Contract precision — element/return precision (z.custom<unknown>() → z.schemeValue/z.vector)", () => {
   test("vector: NEW z.array(z.schemeValue) decodes SchemeValue[], matching the impl's own (...objs: SchemeValue[]) body — and make-vector's own fill-slot convention", () => {
@@ -48,13 +48,13 @@ describe("scheme/vectors Contract precision — element/return precision (z.cust
   });
 
   test("vector-append: NEW z.array(z.vector(z.schemeValue)) decodes (AVector | AJSArray)[] on the scheme face — matches every OTHER accessor's z.vector convention in this file", () => {
-    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof svec>>, "scheme">>().toEqualTypeOf<
+    expectTypeOf<DecodedArgs<ReturnType<typeof z.array<typeof _svec>>, "scheme">>().toEqualTypeOf<
       (AVector | AJSArray)[]
     >();
   });
 
   test("vector-ref: NEW input [z.vector(z.schemeValue), z.schemeNumber] decodes [AVector | AJSArray, AExact|AInexact], not [unknown, …]", () => {
-    expectTypeOf<DecodedArgs<[typeof svec, typeof z.schemeNumber], "scheme">>().toEqualTypeOf<
+    expectTypeOf<DecodedArgs<[typeof _svec, typeof z.schemeNumber], "scheme">>().toEqualTypeOf<
       [AVector | AJSArray, AExact | AInexact]
     >();
   });
@@ -71,7 +71,7 @@ describe("scheme/vectors Contract precision — negative proof", () => {
       symbol.native`vm: proof`(
         { input: [z.lambda], inputRest: z.vector(z.schemeValue), output: [z.vector(z.schemeValue)] },
         // @ts-expect-error — rest args decode via z.vector (AVector | AJSArray), annotating them string is wrong
-        (proc: (...args: unknown[]) => SchemeValue, ...vectors: string[]): AVector => {
+        function (proc: (...args: unknown[]) => SchemeValue, ...vectors: string[]): AVector {
           void proc;
           void vectors;
           return vectors as unknown as AVector;

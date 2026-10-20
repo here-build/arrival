@@ -10,12 +10,11 @@ import { exec, execInFrame } from "../../../eval/generator-exec.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
 import { buildVocabulary } from "../../vocabulary.js";
 import type { ResolvingAmbient } from "../../AmbientRuntime.js";
-
-const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
-import type { AEntity } from "../../../common/symbols/_bake.js";
 import { PurityError } from "../../../errors.js";
 import { DoorProcedure } from "../../../values/primitives/ACallable.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
+
+const evalScheme = (env: unknown, src: unknown): unknown => execInFrame(src as string, env as ResolvingAmbient);
 
 const symbols = harvestContracts(bindingPack.spec.symbols);
 
@@ -24,10 +23,10 @@ const DOOR_NAMES = ["set!", "values", "call-with-values", "let-values", "let*-va
 const door = async (src: string): Promise<{ purity: boolean; message: string }> => {
   try {
     await exec(src);
-  } catch (e) {
-    const direct = e instanceof PurityError;
-    const viaCause = (e as { cause?: unknown })?.cause instanceof PurityError;
-    return { purity: direct || viaCause, message: (e as Error)?.message ?? String(e) };
+  } catch (error) {
+    const direct = error instanceof PurityError;
+    const viaCause = (error as { cause?: unknown })?.cause instanceof PurityError;
+    return { purity: direct || viaCause, message: (error as Error)?.message ?? String(error) };
   }
   throw new Error(`expected a purity door for: ${src}`);
 };

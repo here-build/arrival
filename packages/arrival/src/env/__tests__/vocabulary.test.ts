@@ -1,12 +1,10 @@
 // vocabulary.test.ts — Stage B1: `buildVocabulary` (the Vocabulary artifact) + `assembleRun` +
-// exec's `vocabularyPath` internal routing (generator-exec.ts). See
-// docs/plans/stage-b-runcontext-absorbs-assembly.md for the full model this pins.
+// exec's `vocabularyPath` internal routing (generator-exec.ts).
 
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
 import { EnvCapability } from "../../common/capability.js";
-import { symbol } from "../../symbol/index.js";
 import * as sz from "../../common/scheme-zod/index.js";
 import type { EvalSchemeInto } from "../../common/scheme-env.js";
 import { buildVocabulary } from "../vocabulary.js";
@@ -68,7 +66,9 @@ describe("buildVocabulary — requiresConfig doors + degraded surfacing", () => 
       symbols: (symbol) => ({
         "fixture/verb": symbol.native`fixture/verb: reads via the fs`(
           { input: [], output: [sz.schemeValue], requiresConfig: ["fs"] },
-          () => nil,
+          function () {
+            return nil;
+          },
         ),
       }),
     });
@@ -101,11 +101,15 @@ describe("buildVocabulary — preludeOnly separation", () => {
       symbols: (symbol, z) => ({
         "prelude-only/verb": symbol.rosetta`prelude-only/verb: assembly-time-only`(
           { input: [z.string], output: [z.string], preludeOnly: true },
-          (s: string) => s,
+          function (s: string) {
+            return s;
+          },
         ),
         "ordinary/verb": symbol.rosetta`ordinary/verb: a normal runtime verb`(
           { input: [z.string], output: [z.string] },
-          (s: string) => s,
+          function (s: string) {
+            return s;
+          },
         ),
       }),
     });
@@ -124,7 +128,9 @@ describe("buildVocabulary — key===name violation", () => {
     const cap = EnvCapability.define("test/vocab-key-mismatch", {
       symbols: (symbol, z) => ({
         // Declared under "right-name" but placed under a DIFFERENT record key.
-        "wrong-key": symbol.native`right-name: doc`({ input: [], output: [z.schemeValue] }, () => nil),
+        "wrong-key": symbol.native`right-name: doc`({ input: [], output: [z.schemeValue] }, function () {
+          return nil;
+        }),
       }),
     });
     await expect(buildVocabulary([cap], undefined, noopEvalScheme)).rejects.toBeInstanceOf(SymbolKeyMismatchError);
@@ -236,7 +242,9 @@ describe("exec — vocabularyPath end-to-end integration", () => {
         ),
         "fixture/verb": symbol.native`fixture/verb: gated on fs`(
           { input: [], output: [sz.schemeValue], requiresConfig: ["fs"] },
-          () => nil,
+          function () {
+            return nil;
+          },
         ),
       }),
     });

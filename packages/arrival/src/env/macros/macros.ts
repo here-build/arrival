@@ -13,14 +13,34 @@
 import { EnvCapability } from "../../common/capability.js";
 import { Syntax } from "../../eval/Syntax.js";
 import { AmbientRuntime } from "../AmbientRuntime.js";
-import { extract_patterns, restore_data_gensyms, transform_syntax } from "../../eval/syntax-rules.js";
+import { restore_data_gensyms } from "../../eval/syntax-rules.js";
+import { extract_patterns } from "../../eval/syntax-rules/match.js";
+import { transform_syntax } from "../../eval/syntax-rules/transcribe.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { APair } from "../../values/primitives/APair.js";
+import { SyntaxRulesError } from "../../eval/syntax-rules/error.js";
+import { ArrivalError, EvalError, isHostRuntimeBug } from "../../errors.js";
 import { Resolver } from "../../eval/Resolver.js";
 import type { LexicalScopeWithInternals } from "../../eval/LexicalScope.js";
 import type { TransformerArgs } from "../../eval/Macro.js";
 import type { SchemeValue } from "../../values/types.js";
 import { ANil } from "../../values/primitives/ANil.js";
+
+/** Source location of a macro USE (a bare atom form carries none). */
+function useSiteLocation(code: SchemeValue) {
+  return code instanceof APair ? code.location : undefined;
+}
+
+/** The macro's rule patterns as written — what the "no matching syntax" door teaches. */
+function ruleShapes(macro: SchemeValue): string {
+  const shapes: string[] = [];
+  let rules: SchemeValue = macro instanceof APair ? macro.cdr : macro;
+  if (macro instanceof APair && macro.car instanceof ASymbol && macro.cdr instanceof APair) rules = macro.cdr.cdr;
+  for (; rules instanceof APair; rules = rules.cdr) {
+    if (rules.car instanceof APair) shapes.push(rules.car.car.toString());
+  }
+  return shapes.join(" | ");
+}
 
 export default EnvCapability.define("scheme/macros", {
   symbols: (symbol) => ({
@@ -111,24 +131,18 @@ export default EnvCapability.define("scheme/macros", {
               TypeError.invariant(rules.car instanceof APair, "syntax-rules: malformed rule");
               const rule = rules.car.car;
               TypeError.invariant(rules.car.cdr instanceof APair, "syntax-rules: malformed rule");
-              // `expr` is a TEMPLATE HANDLE, not a proven SchemeValue: `transform_syntax`
-              // and `restore_data_gensyms` both take and return `unknown`, so `unknown` is
-              // the honest contract here — no `as SchemeValue`.
-              let expr: unknown = rules.car.cdr.car;
+              let expr: SchemeValue = rules.car.cdr.car;
               const bindings = extract_patterns(rule, code, symbols, ellipsis, {
                 // capabilities' globalRoot is the unshadowed-base hygiene identity.
                 useResolver,
                 defResolver,
                 capabilities: defResolver.capabilities,
-                ctx: runCtx,
               });
               if (bindings) {
                 const names = []; // transform_syntax appends the renamed template names
                 const new_expr = transform_syntax({
                   bindings,
-                  // `expr` stays `unknown` above; transform_syntax's domain is SchemeValue —
-                  // assert at this ONE call boundary, not by widening the reassignment.
-                  expr: expr as SchemeValue,
+                  expr,
                   symbols,
                   scope: defChild,
                   names,
@@ -153,10 +167,21 @@ export default EnvCapability.define("scheme/macros", {
               rules = rules.cdr;
             }
           } catch (error_) {
-            (error_ as Error).message += `\nin macro:\n  ${macro.toString()}`;
-            throw error_;
+            // Engine rejections become the syntax-rules door: an ArrivalError carrying the
+            // hint and the USE-SITE location. Doors that are already ArrivalErrors (budget,
+            // meter) and host-runtime defects pass through untouched.
+            if (!(error_ instanceof Error) || error_ instanceof ArrivalError || isHostRuntimeBug(error_)) throw error_;
+            throw new SyntaxRulesError(error_.message, {
+              hint: error_ instanceof EvalError ? error_.hint : undefined,
+              location: useSiteLocation(code),
+              macro: macro.toString(),
+              cause: error_,
+            });
           }
-          throw new Error(`syntax-rules: no matching syntax in macro ${code.toString()}`);
+          throw new SyntaxRulesError(`syntax-rules: no matching syntax in macro ${code.toString()}`, {
+            hint: `this macro accepts: ${ruleShapes(macro)}`,
+            location: useSiteLocation(code),
+          });
         },
         this,
         defResolver,

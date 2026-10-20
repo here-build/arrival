@@ -1,5 +1,4 @@
 // srfi-128-symbol-define.test.ts — W4/H2b pack migration rows for `scheme/srfi-128`
-// (docs/design-history/symbol-define-static-program-validation.md §1/§2.1/§4).
 //
 // THE LUCK CLASS, BOTH FLAVORS AT ONCE (srfi-128.ts's header): `pair?`/`eq?`/
 // `null?`/`boolean?`/`string?`/`symbol?`/`symbol->string`/`equal?`/`not`
@@ -92,7 +91,7 @@ describe("scheme/srfi-128 — comparator behavior equivalence (semantic-equivale
   it("default-comparator's total order ranks by type first, then within-type — matches the baseline suite's cross-type case", async () => {
     const env = await freshEnv();
     const [numBeforeStr] = await execOverFrame('(<? (default-comparator) 1 "a")', { env });
-    const [charBeforeStr] = await execOverFrame(`(<? (default-comparator) #\\a "aa")`, { env });
+    const [charBeforeStr] = await execOverFrame(String.raw`(<? (default-comparator) #\a "aa")`, { env });
     const [symBeforeNull] = await execOverFrame("(<? (default-comparator) 'sym '())", { env });
     const [falseBeforeTrue] = await execOverFrame("(<? (default-comparator) #f #t)", { env });
     expect(numBeforeStr).toBe(true);

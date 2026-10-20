@@ -1,5 +1,5 @@
-// schema-symbol-define-migration.test.ts — W4-H2b pack migration rows for `arrival/schema`
-// (docs/design-history/symbol-define-static-program-validation.md §1/§2/§4). This pack's
+// schema-symbol-define-migration.test.ts — W4-H2b pack migration rows for `arrival/schema`.
+// This pack's
 // former `prelude` was 13 pure `define`s and zero macros (unlike its `arrival/overridable`
 // sibling, which carried the one macro) — every entry below is now `kind: "define"`, and the
 // hard invariant this file pins is the ONE the migration brief calls out explicitly:
@@ -88,7 +88,7 @@ describe("arrival/schema — structural: no prelude field, every symbol is kind:
 
   it("declares deps on exactly the five packs its bodies call (lists/equality/strings/numeric/exceptions)", () => {
     const names = (schemaCapability.spec.deps ?? []).map((d) => d.name);
-    expect(names.sort()).toEqual(
+    expect(names.toSorted()).toEqual(
       ["scheme/equality", "scheme/lists", "scheme/numeric", "scheme/r7rs/exceptions", "scheme/strings"].sort(),
     );
   });

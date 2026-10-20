@@ -18,7 +18,7 @@
 
 import { describe, expectTypeOf, test } from "vitest";
 import * as z from "../../../common/scheme-zod/index.js";
-import { symbol } from "../../../symbol/index.js";
+import * as symbol from "../../../common/symbols/index.js";
 import { type DecodedArgs, type DecodedReturn } from "../../../common/symbols/_bake.js";
 import type { SchemeValue } from "../../../values/types.js";
 import type { ACharacter } from "../../../values/primitives/ACharacter.js";
@@ -35,14 +35,14 @@ describe("scheme/strings Contract precision — array-element tightening (string
 });
 
 describe("scheme/strings Contract precision — list-shaped slots (string->list output / list->string input)", () => {
-  const listSchema = z.union([z.pair, z.nil]);
+  const _listSchema = z.union([z.pair, z.nil]);
 
   test("NEW shape: [z.union([z.pair, z.nil])] decodes the OUTPUT to APair | null, not unknown (string->list) — nil's JS face is null, not ANil; AList is the scheme face", () => {
-    expectTypeOf<DecodedReturn<[typeof listSchema]>>().toEqualTypeOf<[SchemeValue, SchemeValue] | null>();
+    expectTypeOf<DecodedReturn<[typeof _listSchema]>>().toEqualTypeOf<[SchemeValue, SchemeValue] | null>();
   });
 
   test("NEW shape: [z.union([z.pair, z.nil])] decodes the INPUT to [APair | null], not [unknown] (list->string)", () => {
-    expectTypeOf<DecodedArgs<[typeof listSchema]>>().toEqualTypeOf<[[SchemeValue, SchemeValue] | null]>();
+    expectTypeOf<DecodedArgs<[typeof _listSchema]>>().toEqualTypeOf<[[SchemeValue, SchemeValue] | null]>();
   });
 });
 
@@ -54,7 +54,9 @@ describe("scheme/strings Contract precision — regression guard: wrong-typed im
       symbol.native`s: proof`(
         { input: z.array(z.char), output: [z.string] },
         // @ts-expect-error — elements decode via z.schemeChar (ACharacter), annotating them string is wrong
-        (...chars: string[]): AString => chars as unknown as AString,
+        function (...chars: string[]): AString {
+          return chars as unknown as AString;
+        },
       );
     }
     expectTypeOf<true>().toEqualTypeOf<true>();
@@ -65,7 +67,9 @@ describe("scheme/strings Contract precision — regression guard: wrong-typed im
       symbol.native`sl: proof`(
         { input: [z.string], output: [z.union([z.pair, z.nil])] },
         // @ts-expect-error — output decodes to APair | ANil, returning a string is wrong
-        (str: AString): string => str.valueOf(),
+        function (str: AString): string {
+          return str.valueOf();
+        },
       );
     }
     expectTypeOf<true>().toEqualTypeOf<true>();
@@ -76,7 +80,9 @@ describe("scheme/strings Contract precision — regression guard: wrong-typed im
       symbol.native`ls: proof`(
         { input: [z.union([z.pair, z.nil])], output: [z.string] },
         // @ts-expect-error — arg decodes to APair | ANil, annotating it string is wrong
-        (list: string): AString => list as unknown as AString,
+        function (list: string): AString {
+          return list as unknown as AString;
+        },
       );
     }
     expectTypeOf<true>().toEqualTypeOf<true>();

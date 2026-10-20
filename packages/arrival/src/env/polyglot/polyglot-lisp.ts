@@ -1,4 +1,4 @@
-// @here.build/arrival/polyglot-lisp — the Common Lisp dialect pack (see
+// arrival's polyglot-lisp pack — the Common Lisp dialect pack (see
 // polyglot.ts's header for the sibling-pack map).
 //
 // The smallest of the three dialect packs, by design: CL's list-manipulation
@@ -7,7 +7,7 @@
 // the NAME is missing, not the behavior. `type-of`, `setf`, `defun`, `loop`,
 // `nreverse`, `gethash`, `getf`, `with-open-file` — the genuinely impure/
 // reflective/macro-only CL cousins — are doored instead, in the Common Lisp
-// section of env/polyglot-stubs.ts.
+// section of env/polyglot/polyglot-stubs.ts.
 //
 // DEPS: cross-capability free names (the FV-locality rule is stated once in
 // polyglot.ts's header) —

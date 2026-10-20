@@ -1,7 +1,7 @@
 // THE SEARCH FAMILY MAY NOT LIE — memq / memv / member / assq / assv / assoc.
 //
 //   EVERY "NOTHING HERE" MUST NAME WHICH NOTHING IT IS.
-//   (benchmark-defect-register.md — the governing diagnosis of the 89×2 run)
+//   (the governing diagnosis of the 89×2 benchmark run)
 //
 // These six verbs answer `#f` for "not found". They ALSO used to answer `#f` for:
 //
@@ -44,8 +44,8 @@ const run = async (code: string, bindings: Record<string, unknown> = {}): Promis
       ),
     });
     return `OK ${JSON.stringify(toJS(values[0], {}))}`;
-  } catch (e) {
-    return `DOOR ${e instanceof Error ? e.message : String(e)}`;
+  } catch (error) {
+    return `DOOR ${error instanceof Error ? error.message : String(error)}`;
   }
 };
 

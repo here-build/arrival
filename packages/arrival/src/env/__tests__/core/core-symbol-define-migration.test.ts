@@ -1,5 +1,4 @@
 // core-symbol-define-migration.test.ts — W4 pack migration rows for `scheme/core`
-// (docs/design-history/symbol-define-static-program-validation.md §1/§2.1/§4).
 //
 // SCOPE: this pack's `symbols` record is MOSTLY out of scope for this wave — the 20
 // `symbol.keyword` entries are `KEYWORD_SYNTAX_BASELINE` itself (define-bake.ts:91),
@@ -55,7 +54,7 @@ describe("scheme/core — the §2.1 bake FV locality law", () => {
   });
 
   it("(regression pin) the live-catch shape — a scheme body calling pair?/not with NO declared deps — throws DefineLocalityError", async () => {
-    const env = await freshEnv();
+    await freshEnv();
     // Deliberately NO `deps` field — the exact shape `core.ts` had: a bare `symbols`
     // record with no dep declaration; `pair?`/`not` resolved via the two-phase
     // bootstrap's runtime guarantee, invisible to the static FV law. The `single`

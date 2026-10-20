@@ -42,7 +42,7 @@ describe("@here.build/arrival/srfi", () => {
   });
   it("SRFI-13 string library", async () => {
     const num = await withCap(srfi13, "s13");
-    expect(await num('(string-index "abc" #\\b)')).toBe(1);
+    expect(await num(String.raw`(string-index "abc" #\b)`)).toBe(1);
   });
   it("SRFI-43 vectors", async () => {
     const num = await withCap(srfi43, "s43");
@@ -95,6 +95,7 @@ describe("@here.build/arrival/srfi", () => {
 // Assembles srfi-1 EXPLICITLY (the accessors are not registered globally this round).
 describe("@here.build/arrival/srfi-1 — positional accessors", () => {
   async function accEnv() {
+    // eslint-disable-next-line sonarjs/pseudo-random -- unique test env-name suffix, not security-sensitive
     const env = sandboxedEnv.child(`s1acc-${Math.random().toString(36).slice(2)}`);
     await applyCapability(env, [srfi1]);
     const num = async (src: string) => Number((await execOverFrame(src, { env }))[0]);
@@ -203,6 +204,7 @@ describe("SRFI-95 sort — contract element precision", () => {
 
 describe("SRFI-95 sort — end-to-end behavior (previously uncovered via the builtin dispatch)", () => {
   async function sortEnv() {
+    // eslint-disable-next-line sonarjs/pseudo-random -- unique test env-name suffix, not security-sensitive
     const env = sandboxedEnv.child(`s95-${Math.random().toString(36).slice(2)}`);
     await applyCapability(env, [srfi95]);
     // execState (COMPLEX tier): toJS wants BOXED values — `exec` already unwraps.
@@ -234,6 +236,7 @@ describe("SRFI-95 sort — end-to-end behavior (previously uncovered via the bui
   // src/__tests__/sort-lambda-comparator.test.ts with both `<` and `>` — not duplicated
   // here. Supporting lambda comparators is real feature work (a sync lambda eval path,
   // or an async sort). The IDEAL row below stays `it.fails` until that lands.
+  // @ledger: async sort comparator support
   it.fails("IDEAL: a lambda less? comparator sorts descending (needs async sort)", async () => {
     const raw = await sortEnv();
     const [result] = await raw("(sort (list 1 3 2) (lambda (a b) (> a b)))");

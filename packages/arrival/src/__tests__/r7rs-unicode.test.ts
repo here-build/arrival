@@ -39,16 +39,16 @@ describe("r7rs unicode — passing invariants (regression guards)", () => {
   it("char->integer on ASCII returns the ASCII codepoint", async () => {
     // Sanity: the bug only surfaces for code points > 0xFFFF. ASCII path
     // works fine via charCodeAt(0).
-    const r = await evalScheme("(char->integer #\\A)");
+    const r = await evalScheme(String.raw`(char->integer #\A)`);
     expect(num(r)).toBe(65);
   });
 
-  it("char-foldcase on a single-folded char (#\\A → #\\a) works", async () => {
+  it(String.raw`char-foldcase on a single-folded char (#\A → #\a) works`, async () => {
     // Only ß-class chars (where Unicode fold expands to 2+ chars) trip the
     // truncation bug. ASCII fold is fine.
     // `exec` (RULINGS.md R1) now returns the plain-JS unwrap: ACharacter's toJS is
     // the RAW char (write-form "#\\a" was the boxed `.toString()`, no longer read here).
-    const r = await evalScheme("(char-foldcase #\\A)");
+    const r = await evalScheme(String.raw`(char-foldcase #\A)`);
     expect(String(r)).toBe("a");
   });
 });
@@ -59,8 +59,8 @@ describe("r7rs unicode — Unicode/codepoint fixes (regression guards)", () => {
     // UTF-16 code unit — for U+1F600 (😀) the high surrogate 0xD83D = 55,357, not the
     // actual code point 128,512). R7RS § 6.6: `char->integer` returns the Unicode
     // scalar value; now uses a code-point API and returns it correctly.
-    const r = await evalScheme("(char->integer #\\😀)");
-    expect(num(r)).toBe(128512);
+    const r = await evalScheme(String.raw`(char->integer #\😀)`);
+    expect(num(r)).toBe(128_512);
   });
 
   it("integer->char round-trips a non-BMP code point", async () => {
@@ -74,10 +74,10 @@ describe("r7rs unicode — Unicode/codepoint fixes (regression guards)", () => {
     //
     // FIXED: round-trips to 128,512 correctly now.
     const r = await evalScheme("(char->integer (integer->char 128512))");
-    expect(num(r)).toBe(128512);
+    expect(num(r)).toBe(128_512);
   });
 
-  it("char-foldcase #\\ß returns #\\ß (multi-char folds are identity per R7RS § 6.6)", async () => {
+  it(String.raw`char-foldcase #\ß returns #\ß (multi-char folds are identity per R7RS § 6.6)`, async () => {
     // R7RS § 6.6: char-foldcase takes a character and returns a character.
     // When Unicode fold would expand a single char to multiple chars
     // (Eszett ß → "ss"), R7RS specifies the operation returns the original
@@ -89,7 +89,7 @@ describe("r7rs unicode — Unicode/codepoint fixes (regression guards)", () => {
     // FIXED: returns #\ß unchanged now (multi-char folds are identity per R7RS).
     // `exec` (RULINGS.md R1) now returns the plain-JS unwrap: ACharacter's toJS is
     // the RAW char, not the boxed `.toString()` write-form.
-    const r = await evalScheme("(char-foldcase #\\ß)");
+    const r = await evalScheme(String.raw`(char-foldcase #\ß)`);
     expect(String(r)).toBe("ß");
   });
 
@@ -102,7 +102,7 @@ describe("r7rs unicode — Unicode/codepoint fixes (regression guards)", () => {
     // predicate returns #f.
     //
     // FIXED: returns #t for CJK ideographs now.
-    const r = await evalScheme("(char-alphabetic? #\\漢)");
+    const r = await evalScheme(String.raw`(char-alphabetic? #\漢)`);
     expect(Boolean((r as { valueOf?: () => unknown })?.valueOf?.() ?? r)).toBe(true);
   });
 
@@ -120,6 +120,6 @@ describe("r7rs unicode — Unicode/codepoint fixes (regression guards)", () => {
     // `__name__` entirely (RULINGS.md R1's §9 ASymbol-adjacent deferral applies to
     // ACharacter's name too: only the raw char crosses).
     const [r] = (await execState("(integer->char 7)", { env })).values;
-    expect(String(r)).toBe("#\\alarm");
+    expect(String(r)).toBe(String.raw`#\alarm`);
   });
 });

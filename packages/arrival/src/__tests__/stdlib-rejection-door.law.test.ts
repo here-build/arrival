@@ -55,8 +55,8 @@ const run = async (code: string, bindings: Record<string, unknown> = {}): Promis
       ),
     });
     return `OK ${JSON.stringify(toJS(values[0], {}))}`;
-  } catch (e) {
-    return `DOOR ${e instanceof Error ? e.message : String(e)}`;
+  } catch (error) {
+    return `DOOR ${error instanceof Error ? error.message : String(error)}`;
   }
 };
 

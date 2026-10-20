@@ -13,11 +13,9 @@
 // (`.success` is `true`, not `false`) until the fix narrows the element schema.
 import { describe, expect, it } from "vitest";
 import bytevectorsPack from "../bytevectors.js";
-import type { AEntity } from "../../../common/symbols/_bake.js";
 import { ABytevector } from "../../../values/primitives/ABytevector.js";
 import { AExact } from "../../../values/primitives/AExact.js";
 import { AString } from "../../../values/primitives/AString.js";
-import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
 const symbols = harvestContracts(bytevectorsPack.spec.symbols);

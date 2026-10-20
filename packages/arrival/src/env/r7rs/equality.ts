@@ -32,6 +32,7 @@ import { ADict } from "../../values/primitives/ADict.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { eq, eqv, structuralEqual } from "../../values/structural-equal.js";
 import { EnvCapability } from "../../common/capability.js";
+import { exactly, provesArray } from "../pack-helpers.js";
 import { is_false } from "../../values/value-guards.js";
 import { is_callable, is_macro } from "../../eval/guards.js";
 import { ANil } from "../../values/primitives/ANil.js";
@@ -41,7 +42,7 @@ import { schemeBool as bool, mintVerdict, stringValue, withInputProvenance } fro
 import { printValue } from "../../values/print.js";
 import { SchemeValue } from "../../values/types.js";
 // TYPE-ONLY import of the compiler-facing Contract.emit surface.
-import type { EmitCtx, EmitRule } from "../../emit/emit-rule.js";
+import type { EmitRule } from "../../emit/emit-rule.js";
 import { Bin, Call, Lit, Member, Un, type R } from "../../emit/residual-lite.js";
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -52,12 +53,6 @@ import { Bin, Call, Lit, Member, Un, type R } from "../../emit/residual-lite.js"
 // together on the harvested row (narrowsMembersOf reads them capability-agnostic).
 // pair? is tagless-guard — those fields land via declaration-site object-spread.
 // ════════════════════════════════════════════════════════════════════════════
-
-/** Fixed-arity refusal: wrong arity → `ctx.door`, not a walker crash on undefined. */
-function exactly<T>(ctx: EmitCtx<R>, sym: string, args: readonly T[], n: number): readonly T[] {
-  if (args.length !== n) ctx.door(`\`${sym}\` wants exactly ${n} argument${n === 1 ? "" : "s"}, got ${args.length}`);
-  return args;
-}
 
 // ─── Law T: not ────────────────────────────────────────────────────────────────────
 // `!c` when operand is provably boolean (or read-register); else `c === false`
@@ -75,9 +70,6 @@ const notEmitRule: EmitRule<R> = {
 // TOTAL over ANY value — bare `.length` is wrong-code: `(null? "")` would be true
 // (strings carry .length). Clean form only when argFacts PROVE array representation;
 // unproven → runtime shim (Array.isArray).
-const provesArray = (f: { list?: true; pair?: true; nonEmptyList?: true } | undefined): boolean =>
-  f?.list === true || f?.pair === true || f?.nonEmptyList === true;
-
 const nullQEmitRule: EmitRule<R> = {
   call: (args, ctx) => {
     const [xs] = exactly(ctx, "null?", args, 1);
@@ -155,7 +147,7 @@ export default EnvCapability.define("scheme/equality", {
       function (s) {
         const name = s.__name__;
         const str = typeof name === "string" ? name : (name as symbol).toString();
-        return withInputProvenance([s], new AString(str));
+        return withInputProvenance(this.runCtx, [s], new AString(str));
       },
     ),
     "string->symbol": symbol.native`string->symbol: a symbol whose name is the string's characters`(
@@ -164,7 +156,7 @@ export default EnvCapability.define("scheme/equality", {
         // deferred: ASymbol interns into the permanent global table (no per-run ctx on
         // AValue) — `(string->symbol unique)` mint-loops grow unbounded until ambient
         // run-context restores per-run scoping.
-        return withInputProvenance([s], new ASymbol(stringValue(s)));
+        return withInputProvenance(this.runCtx, [s], new ASymbol(stringValue(s)));
       },
     ),
 
@@ -198,7 +190,7 @@ export default EnvCapability.define("scheme/equality", {
     "equal?": symbol.native`equal?: representation-blind structural equality`(
       { input: [z.schemeValue, z.schemeValue], output: [z.boolean], emit: equalQEmitRule },
       function (this: CallCtx, a, b) {
-        return mintVerdict([a, b], structuralEqual(a, b));
+        return mintVerdict(this.runCtx, [a, b], structuralEqual(a, b));
       },
     ),
 
@@ -206,14 +198,14 @@ export default EnvCapability.define("scheme/equality", {
     "eq?": symbol.native`eq?: pointer/scalar-grade identity`(
       { input: [z.schemeValue, z.schemeValue], output: [z.boolean] },
       function (this: CallCtx, x, y) {
-        return mintVerdict([x, y], eq(x, y));
+        return mintVerdict(this.runCtx, [x, y], eq(x, y));
       },
     ),
 
     "eqv?": symbol.native`eqv?: eq? plus explicit number/char equality`(
       { input: [z.schemeValue, z.schemeValue], output: [z.boolean] },
       function (this: CallCtx, x, y) {
-        return mintVerdict([x, y], eqv(x, y));
+        return mintVerdict(this.runCtx, [x, y], eqv(x, y));
       },
     ),
 
@@ -340,8 +332,8 @@ export default EnvCapability.define("scheme/equality", {
     // `dict?` — Racket's dict predicate, the missing counterpart to our native `{…}` /
     // `(dict …)` open-key map (polyglot.ts). We ship the type but had no predicate for
     // it — a genuine gap, not a design omission (see `env/polyglot/polyglot-stubs.ts`'s
-    // header for that distinction). A native dict is an `ADict` instance
-    // (native-dict-provenance.md); the fallback below still recognizes a genuinely
+    // header for that distinction). A native dict is an `ADict` instance;
+    // the fallback below still recognizes a genuinely
     // foreign `AJSObject` (a borrowed JS object — arrays box separately as `AJSArray`,
     // so they never reach this branch), kept so a dict-shaped value from a tool result
     // still answers `dict?` without being an `ADict`. A scalar, an array, or any other

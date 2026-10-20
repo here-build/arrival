@@ -24,6 +24,13 @@
 // () (maybe-ref (nothing))))` must see its handler invoked exactly as any other
 // raise would; a real `deps` edge on `exceptions` is the honest way to keep that.
 //
+// FORGEABLE BY DESIGN: Maybe/Either are plain tagged lists, so `(just? '(just 5))` is #t —
+// a hand-written list is indistinguishable from one built by `just`. Polyglot by observation:
+// arrival is a full R7RS sandbox that behaves like what models expect Scheme to be, and
+// models write and match these shapes as ordinary quoted lists (the convention in most Scheme
+// dialects and in tagged-union idiom generally). There is no nominal sealing to defeat or
+// rely on; nothing downstream treats a Just/Right as a capability or a trust marker.
+//
 // Contract choices:
 //   - Maybe/Either VALUES themselves (the tagged lists `(just x)`/`(nothing)`/
 //     `(left x)`/`(right x)` build and every predicate/accessor/combinator reads) are

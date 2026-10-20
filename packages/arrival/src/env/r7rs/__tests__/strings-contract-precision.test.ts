@@ -37,16 +37,15 @@
 import { describe, expect, it } from "vitest";
 import stringsPack from "../strings.js";
 import dedent from "dedent";
-const norm = (s: string) => s.replace(/\s+/g, " ").trim();
 import { signatureOf } from "../../../type-layer/schema-to-ts.js";
-import type { AEntity } from "../../../common/symbols/_bake.js";
 import { AString } from "../../../values/primitives/AString.js";
 import { ACharacter } from "../../../values/primitives/ACharacter.js";
 import { APair } from "../../../values/primitives/APair.js";
 import { nil } from "../../../values/primitives/ANil.js";
-import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 import { ANativeProcedure } from "../../../values/primitives/ANativeProcedure.js";
+
+const norm = (s: string) => s.replaceAll(/\s+/g, " ").trim();
 
 const probeFn = new ANativeProcedure({
   name: "probe-fn",

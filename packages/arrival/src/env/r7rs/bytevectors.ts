@@ -17,12 +17,32 @@
  */
 
 import dedent from "dedent";
+import invariant from "tiny-invariant";
 import type { CallCtx } from "../../run/CallCtx.js";
 import { ABytevector } from "../../values/primitives/ABytevector.js";
 import { AString } from "../../values/primitives/AString.js";
-import { asBytevector, schemeBool, stringValue, toIndex, withInputProvenance } from "../../values/op-helpers.js";
+import {
+  asBytevector,
+  assertAllocatable,
+  schemeBool,
+  stringValue,
+  toIndex,
+  withInputProvenance,
+} from "../../values/op-helpers.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { EnvCapability } from "../../common/capability.js";
+import { attachOffendingValue } from "../../errors.js";
+import { sliceRange } from "../pack-helpers.js";
+
+/** A byte is an exact integer in 0..255 — `Uint8Array` would otherwise wrap 256 → 0,
+ *  -1 → 255 and truncate 1.5 → 1, silently minting a different byte than the one named. */
+function byteValue(verb: string, b: unknown): number {
+  const n = toIndex(b);
+  if (!Number.isInteger(n) || n < 0 || n > 255) {
+    throw attachOffendingValue(new RangeError(`${verb}: a byte is an exact integer in 0..255, got ${String(n)}`), b);
+  }
+  return n;
+}
 
 export default EnvCapability.define("scheme/bytevectors", {
   symbols: (symbol, z) => ({
@@ -57,11 +77,16 @@ export default EnvCapability.define("scheme/bytevectors", {
     "make-bytevector": symbol.native`make-bytevector: a bytevector of length k filled with byte`(
       { input: [z.schemeNumber, z.schemeNumber.optional()], output: [z.bytevector] },
       function (this: CallCtx, k, byte) {
-        const arr = new Uint8Array(toIndex(k));
+        const len = toIndex(k);
+        // Allocation cap + non-negative-integer door BEFORE the typed array materializes
+        // (a negative length otherwise leaks a raw RangeError, an oversized one kills the host).
+        assertAllocatable(len, "make-bytevector");
+        invariant(Number.isInteger(len), `make-bytevector: length must be an exact integer, got ${len}`);
+        const arr = new Uint8Array(len);
         if (byte !== undefined) {
-          arr.fill(toIndex(byte));
+          arr.fill(byteValue("make-bytevector", byte));
         }
-        return withInputProvenance([byte], new ABytevector(arr));
+        return withInputProvenance(this.runCtx, [byte], new ABytevector(arr));
       },
     ),
 
@@ -73,7 +98,11 @@ export default EnvCapability.define("scheme/bytevectors", {
       // is that same op's own precedent for "this slot is a scheme number".
       { input: [], inputRest: z.schemeNumber, output: [z.bytevector] },
       function (this: CallCtx, ...bytes) {
-        return withInputProvenance(bytes, new ABytevector(new Uint8Array(bytes.map(toIndex))));
+        return withInputProvenance(
+          this.runCtx,
+          bytes,
+          new ABytevector(new Uint8Array(bytes.map((b) => byteValue("bytevector", b)))),
+        );
       },
     ),
 
@@ -87,7 +116,14 @@ export default EnvCapability.define("scheme/bytevectors", {
     "bytevector-u8-ref": symbol.native`bytevector-u8-ref: the byte at index k`(
       { input: [z.bytevector, z.schemeNumber], output: [z.number] },
       function (this: CallCtx, bv, k) {
-        return new AExact(asBytevector(bv, "bytevector-u8-ref")[toIndex(k)]!);
+        const view = asBytevector(bv, "bytevector-u8-ref");
+        const idx = toIndex(k);
+        if (!Number.isInteger(idx) || idx < 0 || idx >= view.byteLength) {
+          throw new RangeError(
+            `bytevector-u8-ref: index ${idx} out of range for a bytevector of length ${view.byteLength}`,
+          );
+        }
+        return new AExact(view[idx]!);
       },
     ),
 
@@ -103,12 +139,8 @@ export default EnvCapability.define("scheme/bytevectors", {
       { input: [z.bytevector, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.bytevector] },
       function (this: CallCtx, bv, start, end) {
         const view = asBytevector(bv, "bytevector-copy");
-        return withInputProvenance(
-          [bv],
-          new ABytevector(
-            view.slice(start === undefined ? 0 : toIndex(start), end === undefined ? view.byteLength : toIndex(end)),
-          ),
-        );
+        const range = sliceRange("bytevector-copy", view.byteLength, start, end, "bytevector");
+        return withInputProvenance(this.runCtx, [bv], new ABytevector(view.slice(range.start, range.end)));
       },
     ),
 
@@ -127,7 +159,7 @@ export default EnvCapability.define("scheme/bytevectors", {
           result.set(view, offset);
           offset += view.byteLength;
         }
-        return withInputProvenance(bvs, new ABytevector(result));
+        return withInputProvenance(this.runCtx, bvs, new ABytevector(result));
       },
     ),
 
@@ -135,16 +167,11 @@ export default EnvCapability.define("scheme/bytevectors", {
       { input: [z.bytevector, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.string] },
       function (this: CallCtx, bv, start, end) {
         const view = asBytevector(bv, "utf8->string");
+        const range = sliceRange("utf8->string", view.byteLength, start, end, "bytevector");
         return withInputProvenance(
+          this.runCtx,
           [bv],
-          new AString(
-            new TextDecoder("utf-8").decode(
-              view.subarray(
-                start === undefined ? 0 : toIndex(start),
-                end === undefined ? view.byteLength : toIndex(end),
-              ),
-            ),
-          ),
+          new AString(new TextDecoder("utf-8").decode(view.subarray(range.start, range.end))),
         );
       },
     ),
@@ -152,13 +179,11 @@ export default EnvCapability.define("scheme/bytevectors", {
       { input: [z.string, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.bytevector] },
       function (this: CallCtx, str, start, end) {
         const s_str = stringValue(str);
+        const range = sliceRange("string->utf8", s_str.length, start, end, "string");
         return withInputProvenance(
+          this.runCtx,
           [str],
-          new ABytevector(
-            new TextEncoder().encode(
-              s_str.slice(start === undefined ? 0 : toIndex(start), end === undefined ? s_str.length : toIndex(end)),
-            ),
-          ),
+          new ABytevector(new TextEncoder().encode(s_str.slice(range.start, range.end))),
         );
       },
     ),

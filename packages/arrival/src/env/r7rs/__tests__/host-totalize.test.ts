@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import hostPack, { HOST_DOOR_NAMES } from "../host.js";
 import { exec } from "../../../eval/generator-exec.js";
 import { freshEnv } from "../../../__tests__/_fresh-env.js";
-import type { AEntity } from "../../../common/symbols/_bake.js";
 import { PurityError } from "../../../errors.js";
 import { DoorProcedure } from "../../../values/primitives/ACallable.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
@@ -13,9 +12,9 @@ const symbols = harvestContracts(hostPack.spec.symbols);
 const door = async (src: string) => {
   try {
     await exec(src);
-  } catch (e) {
-    const purity = e instanceof PurityError || (e as { cause?: unknown })?.cause instanceof PurityError;
-    return { purity, message: (e as Error)?.message ?? String(e) };
+  } catch (error) {
+    const purity = error instanceof PurityError || (error as { cause?: unknown })?.cause instanceof PurityError;
+    return { purity, message: (error as Error)?.message ?? String(error) };
   }
   throw new Error(`expected purity door for: ${src}`);
 };

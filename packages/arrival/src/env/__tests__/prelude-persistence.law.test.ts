@@ -39,7 +39,9 @@ describe("prelude-define persistence (audit B4)", () => {
     symbols: (symbol, sz) => ({
       "prelude-symbol": symbol.rosetta`prelude-symbol: assembly-time-only`(
         { input: [sz.string], output: [sz.string], preludeOnly: true },
-        (s) => `secret:${s}`,
+        function (s) {
+          return `secret:${s}`;
+        },
       ),
     }),
   });
@@ -80,7 +82,9 @@ describe("prelude-define persistence (audit B4)", () => {
     const cap = EnvCapability.define("test/prelude-persist-shadow", {
       prelude: `(define shadowed "prelude")`,
       symbols: (symbol, sz) => ({
-        shadowed: symbol.rosetta`shadowed: vocabulary-bound`({ input: [], output: [sz.string] }, () => "vocabulary"),
+        shadowed: symbol.rosetta`shadowed: vocabulary-bound`({ input: [], output: [sz.string] }, function () {
+          return "vocabulary";
+        }),
       }),
     });
     // prelude define wins over the vocabulary binding…
@@ -100,13 +104,17 @@ describe("prelude-define persistence (audit B4)", () => {
       symbols: (symbol, sz) => ({
         "which-x": symbol.rosetta`which-x: assembly-time twin`(
           { input: [], output: [sz.string], preludeOnly: true },
-          () => "assembly",
+          function () {
+            return "assembly";
+          },
         ),
       }),
     });
     const capB = EnvCapability.define("test/prelude-collide-b", {
       symbols: (symbol, sz) => ({
-        "which-x": symbol.rosetta`which-x: runtime twin`({ input: [], output: [sz.string] }, () => "runtime"),
+        "which-x": symbol.rosetta`which-x: runtime twin`({ input: [], output: [sz.string] }, function () {
+          return "runtime";
+        }),
       }),
     });
     const results = await exec("(list (from-prelude) (which-x))", {
@@ -122,7 +130,9 @@ describe("prelude-define persistence (audit B4)", () => {
       symbols: (symbol, sz) => ({
         "mint-stamp": symbol.rosetta`mint-stamp: per-run stamp`(
           { input: [], output: [sz.number], preludeOnly: true },
-          () => ++stamp,
+          function () {
+            return ++stamp;
+          },
         ),
       }),
     });

@@ -21,7 +21,7 @@
 
 import { describe, expectTypeOf, test } from "vitest";
 import * as z from "../../../common/scheme-zod/index.js";
-import { symbol } from "../../../symbol/index.js";
+import * as symbol from "../../../common/symbols/index.js";
 import { type DecodedArgs } from "../../../common/symbols/_bake.js";
 import type { ANumeric } from "../../../values/numbers.js";
 import type { ABytevector } from "../../../values/primitives/ABytevector.js";
@@ -53,7 +53,9 @@ describe("bytevector Contract precision — negative proofs (wrong-typed impl mu
       symbol.native`bv: proof`(
         { input: z.array(z.schemeNumber), output: [z.bytevector] },
         // @ts-expect-error — elements decode via z.schemeNumber (ANumeric), annotating them string is wrong
-        (...bytes: string[]): ABytevector => bytes as unknown as ABytevector,
+        function (...bytes: string[]): ABytevector {
+          return bytes as unknown as ABytevector;
+        },
       );
     }
     expectTypeOf<true>().toEqualTypeOf<true>();
@@ -64,7 +66,9 @@ describe("bytevector Contract precision — negative proofs (wrong-typed impl mu
       symbol.native`bva: proof`(
         { input: z.array(z.bytevector), output: [z.bytevector] },
         // @ts-expect-error — elements decode via z.bytevector (ABytevector), annotating them number is wrong
-        (...bvs: number[]): ABytevector => bvs as unknown as ABytevector,
+        function (...bvs: number[]): ABytevector {
+          return bvs as unknown as ABytevector;
+        },
       );
     }
     expectTypeOf<true>().toEqualTypeOf<true>();

@@ -19,7 +19,7 @@ import polyglot from "../../polyglot/polyglot.js";
 // call site passing its own `env` is unchanged and still reads the boxed SchemeValue[]
 // it always did.
 async function exec(code: string, options: ExecOptionsOverFrame) {
-  return (await execStateOverFrame(code, options)).values.slice();
+  return [...(await execStateOverFrame(code, options)).values];
 }
 
 describe("@here.build/arrival/polyglot (shared core)", () => {
@@ -63,7 +63,7 @@ describe("@here.build/arrival/polyglot (shared core)", () => {
 
   it("deps shrink to [equality, lists] — the whole cross-capability reach of the shrunk core", () => {
     const names = (polyglot.spec.deps ?? []).map((d) => d.name);
-    expect(names.sort()).toEqual(["scheme/equality", "scheme/lists"]);
+    expect(names.toSorted()).toEqual(["scheme/equality", "scheme/lists"]);
   });
 });
 

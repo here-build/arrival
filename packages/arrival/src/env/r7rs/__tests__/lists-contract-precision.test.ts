@@ -26,11 +26,9 @@
 import { describe, expect, it } from "vitest";
 import listsPack from "../lists.js";
 import dedent from "dedent";
-const norm = (s: string) => s.replace(/\s+/g, " ").trim();
 import { signatureOf } from "../../../type-layer/schema-to-ts.js";
-import type { AEntity } from "../../../common/symbols/_bake.js";
 import { APair } from "../../../values/primitives/APair.js";
-import { ANil, nil } from "../../../values/primitives/ANil.js";
+import { nil } from "../../../values/primitives/ANil.js";
 import { AExact } from "../../../values/primitives/AExact.js";
 import { AString } from "../../../values/primitives/AString.js";
 import { CONSTANT_CTX } from "../../../run/RunContext.js";
@@ -39,6 +37,8 @@ import type { SchemeValue } from "../../../values/types.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 import { ANativeProcedure } from "../../../values/primitives/ANativeProcedure.js";
 import { theVoid } from "../../../values/primitives/AVoid.js";
+
+const norm = (s: string) => s.replaceAll(/\s+/g, " ").trim();
 
 const symbols = harvestContracts(listsPack.spec.symbols);
 
@@ -227,7 +227,7 @@ describe("scheme/lists Contract precision — blanket sweep: genuinely-variadic-
         def.out.safeParse(["anything"]).success && def.out.safeParse([{ garbage: true }]).success;
       if (inputStillDegraded && outputStillDegraded) stragglers.push(name);
     }
-    expect(stragglers.sort()).toEqual([]);
+    expect(stragglers.toSorted()).toEqual([]);
   });
 
   it("sanity: the pack exports exactly 22 symbols (the scope this review must cover)", () => {

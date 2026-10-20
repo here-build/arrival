@@ -15,19 +15,16 @@
  */
 import { describe, it, expect } from "vitest";
 import type { EnvWithInternals, ResolvingAmbient } from "../../AmbientRuntime.js";
-import { execOverFrame, execStateOverFrame } from "../../../eval/generator-exec.js";
+import {
+  execOverFrameEager as execOverFrame,
+  execStateOverFrameEager as execStateOverFrame,
+} from "../../../__tests__/_require-eager-oracle.js";
 // In-package test: internal-module access (the barrel export retired — privatization V5).
 import { inferenceEnv as sandboxedEnv } from "../../inference-env.js";
 import { applyCapability } from "../../../__tests__/_fresh-env.js";
-import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { AString } from "../../../values/primitives/AString.js";
 import { AValue } from "../../../values/primitives/AValue.js";
 import srfi28 from "../srfi-28.js";
-import { requireEagerOracle } from "../../../__tests__/_require-eager-oracle.js";
-
-// Q20b: format's provenance assertions run real programs through exec/execState —
-// force the oracle ON for this file's lifetime.
-requireEagerOracle();
 
 const stamped = (s: string, ...points: number[]) => new AString(s, new Set(points));
 const sorted = (set: Set<number>) => [...set].sort((a, b) => a - b);
@@ -127,8 +124,8 @@ describe("format — ~s vs ~a on a string (quoted vs bare)", () => {
     { name: "~s renders a string quoted", input: '(format "~s" "hi")', value: '"hi"' },
     {
       name: "~s escapes embedded quotes and backslashes (re-readable write form)",
-      input: '(format "~s" "a\\"b")',
-      value: '"a\\"b"',
+      input: String.raw`(format "~s" "a\"b")`,
+      value: String.raw`"a\"b"`,
     },
   ])("$name", async ({ input, value }) => {
     expect(js(await run(input))).toBe(value);

@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
 import polyglotLisp from "../../polyglot/polyglot-lisp.js";
 
 async function exec(code: string, options: ExecOptionsOverFrame) {
-  return (await execStateOverFrame(code, options)).values.slice();
+  return [...(await execStateOverFrame(code, options)).values];
 }
 
 describe("@here.build/arrival/polyglot-lisp", () => {

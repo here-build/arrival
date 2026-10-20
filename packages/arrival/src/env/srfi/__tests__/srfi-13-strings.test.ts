@@ -12,16 +12,13 @@
  */
 import { describe, it, expect } from "vitest";
 import type { EnvWithInternals, ResolvingAmbient } from "../../AmbientRuntime.js";
-import { CONSTANT_CTX } from "../../../run/RunContext.js";
-import { execOverFrame, execStateOverFrame, execInFrame } from "../../../eval/generator-exec.js";
+import {
+  execOverFrameEager as execOverFrame,
+  execStateOverFrameEager as execStateOverFrame,
+} from "../../../__tests__/_require-eager-oracle.js";
 import { inferenceEnv } from "../../inference-env.js";
 import { AString } from "../../../values/primitives/AString.js";
 import { AValue } from "../../../values/primitives/AValue.js";
-import { requireEagerOracle } from "../../../__tests__/_require-eager-oracle.js";
-
-// Q20b: SRFI-13's provenance assertions run real programs — force the oracle ON
-// for this file's lifetime.
-requireEagerOracle();
 
 const stamped = (s: string, ...points: number[]) => new AString(s, new Set(points));
 const sorted = (set: Set<number>) => [...set].sort((a, b) => a - b);
@@ -74,10 +71,10 @@ describe("string-prefix? / string-suffix? — SRFI-13 affix-first argument order
 
 describe("string-index — index of first match, or #f (char OR predicate)", () => {
   it.each([
-    { name: "char criterion — match", input: '(string-index "abc" #\\b)', value: 1 },
-    { name: "char criterion — no match", input: '(string-index "abc" #\\z)', value: false },
-    { name: "index 0 is truthy in an if", input: '(if (string-index "abc" #\\a) 1 0)', value: 1 },
-    { name: "index 0 is a real (non-#f) index", input: '(string-index "abc" #\\a)', value: 0 },
+    { name: "char criterion — match", input: String.raw`(string-index "abc" #\b)`, value: 1 },
+    { name: "char criterion — no match", input: String.raw`(string-index "abc" #\z)`, value: false },
+    { name: "index 0 is truthy in an if", input: String.raw`(if (string-index "abc" #\a) 1 0)`, value: 1 },
+    { name: "index 0 is a real (non-#f) index", input: String.raw`(string-index "abc" #\a)`, value: 0 },
     {
       name: "predicate criterion — named predicate",
       input: '(string-index "hello world" char-whitespace?)',
@@ -88,7 +85,7 @@ describe("string-index — index of first match, or #f (char OR predicate)", () 
       input: '(string-index "abc123" (lambda (c) (char-numeric? c)))',
       value: 3,
     },
-    { name: "empty string never matches", input: '(string-index "" #\\a)', value: false },
+    { name: "empty string never matches", input: String.raw`(string-index "" #\a)`, value: false },
   ])("$name", async ({ input, value }) => {
     expect(js(await run(input))).toBe(value);
   });
@@ -96,9 +93,9 @@ describe("string-index — index of first match, or #f (char OR predicate)", () 
 
 describe("string-count — how many chars match", () => {
   it.each([
-    { name: "char criterion", input: '(string-count "banana" #\\a)', value: 3 },
+    { name: "char criterion", input: String.raw`(string-count "banana" #\a)`, value: 3 },
     { name: "predicate criterion", input: '(string-count "a1b2c3" char-numeric?)', value: 3 },
-    { name: "empty string counts zero", input: '(string-count "" #\\a)', value: 0 },
+    { name: "empty string counts zero", input: String.raw`(string-count "" #\a)`, value: 0 },
   ])("$name", async ({ input, value }) => {
     expect(js(await run(input))).toBe(value);
   });
@@ -142,10 +139,10 @@ describe("string-trim family — SRFI-13 left/right/both; char/predicate criteri
       value: "hi  ",
     },
     { name: "default: string-trim-right", input: '(string-trim-right "  hi  ")', value: "  hi" },
-    { name: "char criterion: string-trim", input: '(string-trim "xxhixx" #\\x)', value: "hixx" },
+    { name: "char criterion: string-trim", input: String.raw`(string-trim "xxhixx" #\x)`, value: "hixx" },
     {
       name: "char criterion: string-trim-both",
-      input: '(string-trim-both "xxhixx" #\\x)',
+      input: String.raw`(string-trim-both "xxhixx" #\x)`,
       value: "hi",
     },
     {
@@ -174,7 +171,7 @@ describe("string-pad / string-pad-right — to EXACTLY len (SRFI-13 truncation)"
       input: '(string-pad-right "7" 3)',
       value: "7  ",
     },
-    { name: "custom pad char", input: '(string-pad "7" 3 #\\0)', value: "007" },
+    { name: "custom pad char", input: String.raw`(string-pad "7" 3 #\0)`, value: "007" },
     {
       name: "string-pad TRUNCATES too-long input, keeps the tail",
       input: '(string-pad "hello" 3)',
@@ -277,22 +274,22 @@ describe("string-split — SRFI-152 literal-delimiter split", () => {
     },
     {
       name: "character delimiter — count, behaviorally identical to string form",
-      input: '(length (string-split "a,b,c" #\\,))',
+      input: String.raw`(length (string-split "a,b,c" #\,))`,
       value: 3,
     },
     {
       name: "character delimiter — second field",
-      input: '(cadr (string-split "a,b,c" #\\,))',
+      input: String.raw`(cadr (string-split "a,b,c" #\,))`,
       value: "b",
     },
     {
       name: "character delimiter — absent delimiter yields one field",
-      input: '(car (string-split "abc" #\\,))',
+      input: String.raw`(car (string-split "abc" #\,))`,
       value: "abc",
     },
     {
       name: "character delimiter — empty subject yields '()",
-      input: '(null? (string-split "" #\\,))',
+      input: String.raw`(null? (string-split "" #\,))`,
       value: true,
     },
   ])("$name", async ({ input, value }) => {
@@ -313,7 +310,7 @@ describe("string-split — SRFI-152 literal-delimiter split", () => {
   // to the single-char string it denotes; string-only behavior is unchanged.
 
   it("a character delimiter still taints pieces with the source string's lineage", async () => {
-    const r = await runBoxed("(car (string-split name #\\,))", { name: stamped("Alloy,exe", 7) });
+    const r = await runBoxed(String.raw`(car (string-split name #\,))`, { name: stamped("Alloy,exe", 7) });
     expect(r).toBeInstanceOf(AValue);
     expect(sorted((r as AValue).provenance as Set<number>)).toEqual([7]);
     expect(js(r)).toBe("Alloy");

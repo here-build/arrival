@@ -29,11 +29,9 @@
 
 import { describe, expect, it } from "vitest";
 import numericPack from "../numeric.js";
-import type { AEntity } from "../../../common/symbols/_bake.js";
 import { AExact } from "../../../values/primitives/AExact.js";
 import { AInexact } from "../../../values/primitives/AInexact.js";
 import { APair } from "../../../values/primitives/APair.js";
-import { CONSTANT_CTX } from "../../../run/RunContext.js";
 import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 
 const symbols = harvestContracts(numericPack.spec.symbols);

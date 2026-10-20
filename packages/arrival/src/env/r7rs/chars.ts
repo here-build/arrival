@@ -22,6 +22,26 @@ import { AExact } from "../../values/primitives/AExact.js";
 import { ACharacter } from "../../values/primitives/ACharacter.js";
 import { EnvCapability } from "../../common/capability.js";
 
+/** Unicode simple case fold of one character. When the fold would expand to several
+ *  characters (ß → "ss") there is no single-char result, so the input is its own fold —
+ *  R7RS § 6.6, shared by char-foldcase and the char-ci family. `toLowerCase` is NOT a
+ *  fold: it leaves final sigma ς apart from σ. */
+function foldChar(c: string): string {
+  const folded = foldCase(c);
+  return [...folded].length === 1 ? folded : c;
+}
+
+/** Body of the four char-ci ordering predicates: `holds` must pass between every
+ *  adjacent pair of folded characters. */
+function ciOrder(holds: (a: string, b: string) => boolean) {
+  return function (this: CallCtx, ...chars: unknown[]) {
+    for (let i = 0; i < chars.length - 1; i++) {
+      if (!holds(foldChar(charValue(chars[i])), foldChar(charValue(chars[i + 1])))) return schemeFalse;
+    }
+    return schemeTrue;
+  };
+}
+
 export default EnvCapability.define("scheme/chars", {
   symbols: (symbol, z) => ({
     // Char harvest image is string (single-char); no separate ambient Char carrier.
@@ -66,49 +86,29 @@ export default EnvCapability.define("scheme/chars", {
       { input: [], inputRest: z.char, output: [z.boolean] },
       function (this: CallCtx, ...chars) {
         if (chars.length < 2) return schemeTrue;
-        const first = charValue(chars[0]).toLowerCase();
-        return bool(chars.slice(1).every((c) => charValue(c).toLowerCase() === first));
+        const first = foldChar(charValue(chars[0]));
+        return bool(chars.slice(1).every((c) => foldChar(charValue(c)) === first));
       },
     ),
 
     "char-ci<?": symbol.native`char-ci<?: case-insensitive strictly-increasing order`(
       { input: [], inputRest: z.char, output: [z.boolean] },
-      function (this: CallCtx, ...chars) {
-        for (let i = 0; i < chars.length - 1; i++) {
-          if (charValue(chars[i]).toLowerCase() >= charValue(chars[i + 1]).toLowerCase()) return schemeFalse;
-        }
-        return schemeTrue;
-      },
+      ciOrder((a, b) => a < b),
     ),
 
     "char-ci>?": symbol.native`char-ci>?: case-insensitive strictly-decreasing order`(
       { input: [], inputRest: z.char, output: [z.boolean] },
-      function (this: CallCtx, ...chars) {
-        for (let i = 0; i < chars.length - 1; i++) {
-          if (charValue(chars[i]).toLowerCase() <= charValue(chars[i + 1]).toLowerCase()) return schemeFalse;
-        }
-        return schemeTrue;
-      },
+      ciOrder((a, b) => a > b),
     ),
 
     "char-ci<=?": symbol.native`char-ci<=?: case-insensitive non-decreasing order`(
       { input: [], inputRest: z.char, output: [z.boolean] },
-      function (this: CallCtx, ...chars) {
-        for (let i = 0; i < chars.length - 1; i++) {
-          if (charValue(chars[i]).toLowerCase() > charValue(chars[i + 1]).toLowerCase()) return schemeFalse;
-        }
-        return schemeTrue;
-      },
+      ciOrder((a, b) => a <= b),
     ),
 
     "char-ci>=?": symbol.native`char-ci>=?: case-insensitive non-increasing order`(
       { input: [], inputRest: z.char, output: [z.boolean] },
-      function (this: CallCtx, ...chars) {
-        for (let i = 0; i < chars.length - 1; i++) {
-          if (charValue(chars[i]).toLowerCase() < charValue(chars[i + 1]).toLowerCase()) return schemeFalse;
-        }
-        return schemeTrue;
-      },
+      ciOrder((a, b) => a >= b),
     ),
 
     // R7RS § 6.6: each predicate returns #t iff the character's Unicode general
@@ -209,14 +209,14 @@ export default EnvCapability.define("scheme/chars", {
     "char-foldcase": symbol.native`char-foldcase: case-folded form of the character`(
       { input: [z.char], output: [z.char] },
       function (this: CallCtx, char) {
-        const c = charValue(char);
-        const folded = foldCase(c);
         // R7RS § 6.6: char-foldcase returns a character (single Unicode scalar).
-        // When fold would expand to MULTIPLE chars (Eszett ß → "ss", Greek final
-        // sigma, etc.), there is no single-char result, so the operation MUST
-        // return the input unchanged. Truncating to `folded[0]` produces a
-        // different character (ß → s) which violates the round-trip identity.
-        return [...folded].length === 1 ? new ACharacter(folded) : char;
+        // When fold would expand to MULTIPLE chars (Eszett ß → "ss"), there is no
+        // single-char result, so foldChar returns the input unchanged. Truncating to
+        // `folded[0]` produces a different character (ß → s) which violates the
+        // round-trip identity.
+        const c = charValue(char);
+        const folded = foldChar(c);
+        return folded === c ? char : new ACharacter(folded);
       },
     ),
 

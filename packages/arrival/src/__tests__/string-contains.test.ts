@@ -12,17 +12,14 @@
  */
 import { describe, it, expect } from "vitest";
 import type { EnvWithInternals, ResolvingAmbient } from "../env/AmbientRuntime.js";
-import { CONSTANT_CTX } from "../run/RunContext.js";
-import { execOverFrame, execStateOverFrame } from "../eval/generator-exec.js";
+import {
+  execOverFrameEager as execOverFrame,
+  execStateOverFrameEager as execStateOverFrame,
+} from "./_require-eager-oracle.js";
 import { inferenceEnv } from "../env/inference-env.js";
 import { AString } from "../values/primitives/AString.js";
 import { AExact } from "../values/primitives/AExact.js";
 import { AValue } from "../values/primitives/AValue.js";
-import { requireEagerOracle } from "./_require-eager-oracle.js";
-
-// Q20b: string-contains's provenance assertions run real programs — force the
-// oracle ON for this file's lifetime.
-requireEagerOracle();
 
 const stamped = (s: string, ...points: number[]) => new AString(s, new Set(points));
 const sorted = (set: Set<number>) => [...set].sort((a, b) => a - b);

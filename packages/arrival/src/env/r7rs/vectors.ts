@@ -1,22 +1,22 @@
 /**
  * Vector value-domain primitives (R7RS Section 6.8). A vector is exactly a
- * boxed \`SchemeVector\` so the container carries provenance and hosts algebra
- * instances. The mutating members of the family (\`vector-set!\`,
- * \`vector-fill!\`, \`vector-copy!\`) are OMITTED by the purity invariant (frozen
+ * boxed `SchemeVector` so the container carries provenance and hosts algebra
+ * instances. The mutating members of the family (`vector-set!`,
+ * `vector-fill!`, `vector-copy!`) are OMITTED by the purity invariant (frozen
  * entities, doored in this pack); only the non-mutating constructors,
- * accessors, and the higher-order \`vector-map\` / \`vector-for-each\` (which await
+ * accessors, and the higher-order `vector-map` / `vector-for-each` (which await
  * async membrane callbacks before settling) live here.
  *
  * Each op declares a SCHEME-IDENTITY zod contract (no codec, no runtime
  * validation — "zod for types purely") and an impl bound raw. Vector args are
- * \`z.vector()\`, indices the \`schemeNumber\` tower, predicate/length returns the
+ * `z.vector()`, indices the `schemeNumber` tower, predicate/length returns the
  * JS-boolean/number scheme-zod codecs. The representation-blind boundaries —
- * element/list returns (\`vector\`'s elements, \`vector-ref\`/\`vector->list\`'s
- * returns) — are \`z.schemeValue\` (same runtime acceptance, precise static output
- * \`SchemeValue\`). The HOF callback is the types-only \`z.custom\` procedure; its
- * variadic vector rest (\`vector-map\`/\`vector-for-each\`) and \`vector-append\`'s
- * args are \`inputRest\`/\`z.array\` over \`z.vector()\` (see the sibling
- * \`__tests__/vectors-contract-precision.test.ts\` / \`vectors.test-d.ts\`).
+ * element/list returns (`vector`'s elements, `vector-ref`/`vector->list`'s
+ * returns) — are `z.schemeValue` (same runtime acceptance, precise static output
+ * `SchemeValue`). The HOF callback is the types-only `z.custom` procedure; its
+ * variadic vector rest (`vector-map`/`vector-for-each`) and `vector-append`'s
+ * args are `inputRest`/`z.array` over `z.vector()` (see the sibling
+ * `__tests__/vectors-contract-precision.test.ts` / `vectors.test-d.ts`).
  */
 
 import dedent from "dedent";
@@ -42,10 +42,13 @@ import {
   toIndex,
   withInputProvenance,
 } from "../../values/op-helpers.js";
+import { sliceRange, to_array } from "../pack-helpers.js";
 
 import { EnvCapability } from "../../common/capability.js";
 import { attachOffendingValue } from "../../errors.js";
 import { tf } from "../../values/tagless-final.js";
+
+const listToArray = to_array("list->vector");
 
 export default EnvCapability.define("scheme/vectors", {
   symbols: (symbol, z) => ({
@@ -61,22 +64,22 @@ export default EnvCapability.define("scheme/vectors", {
         `,
       },
       function (this: CallCtx, k, fill): AVector {
-        const len = Number(typeof k === "number" ? k : (k as AExact).valueOf());
-        // O(1) cap check BEFORE Array.from materializes \`len\` slots — see
-        // assertAllocatable. \`Array.from({length})\` on an oversized count hangs
+        const len = toIndex(k);
+        // O(1) cap check BEFORE Array.from materializes `len` slots — see
+        // assertAllocatable. `Array.from({length})` on an oversized count hangs
         // for >10s.
         assertAllocatable(len, "make-vector");
         // Materialize the fill into every slot AT construction. The fill slot takes any
         // scheme value by design (z.schemeValue / SchemeValue) — a provided fill has crossed
-        // the membrane (JS null→nil), and the no-fill case maps each slot to \`theVoid\`
-        // (the membrane's own undefined→theVoid image) rather than a raw \`undefined\`,
-        // which would leak an unboxed slot. Folding the slot into \`Array.from\`'s map
-        // (vs a follow-up \`arr.fill\`) keeps it inside that single boundary.
+        // the membrane (JS null→nil), and the no-fill case maps each slot to `theVoid`
+        // (the membrane's own undefined→theVoid image) rather than a raw `undefined`,
+        // which would leak an unboxed slot. Folding the slot into `Array.from`'s map
+        // (vs a follow-up `arr.fill`) keeps it inside that single boundary.
         const slot: SchemeValue = fill === undefined ? theVoid : fill;
         const arr = Array.from({ length: len }, () => slot);
         // Boxed into SchemeVector so the container carries provenance and hosts
         // algebra instances. Elements (if AValues) still carry their own provenance.
-        return withInputProvenance([fill], new AVector(arr));
+        return withInputProvenance(this.runCtx, [fill], new AVector(arr));
       },
     ),
 
@@ -96,7 +99,7 @@ export default EnvCapability.define("scheme/vectors", {
         `,
       },
       function (this: CallCtx, ...objs) {
-        return withInputProvenance(objs, new AVector([...objs]));
+        return withInputProvenance(this.runCtx, objs, new AVector([...objs]));
       },
     ),
 
@@ -118,7 +121,7 @@ export default EnvCapability.define("scheme/vectors", {
       function (this: CallCtx, ...vectors): AVector {
         const arrays = vectors.map((v) => asVector(v, "vector-append"));
         // eslint-disable-next-line unicorn/prefer-spread -- dynamic list of arrays; concat(...arrays) is the variadic join
-        return withInputProvenance(vectors, new AVector(([] as SchemeValue[]).concat(...arrays)));
+        return withInputProvenance(this.runCtx, vectors, new AVector(([] as SchemeValue[]).concat(...arrays)));
       },
     ),
 
@@ -205,8 +208,7 @@ export default EnvCapability.define("scheme/vectors", {
       },
       function (this: CallCtx, vec, start, end): SchemeValue {
         const arr = asVector(vec, "vector->list");
-        const s = start === undefined ? 0 : toIndex(start);
-        const e = end === undefined ? arr.length : toIndex(end);
+        const { start: s, end: e } = sliceRange("vector->list", arr.length, start, end, "vector");
         // vec is unknown (asVector accepts raw arrays); CONSTANT_CTX — AValue carries no per-value ctx.
         return APair.fromArray(CONSTANT_CTX, arr.slice(s, e));
       },
@@ -223,13 +225,9 @@ export default EnvCapability.define("scheme/vectors", {
         `,
       },
       function (this: CallCtx, list): AVector {
-        const result: SchemeValue[] = [];
-        let current: SchemeValue = list;
-        while (current instanceof APair) {
-          result.push(current.car);
-          current = current.cdr;
-        }
-        return withInputProvenance([list], new AVector(result));
+        // to_array doors circular and improper lists (the hand-rolled walk looped into
+        // "Invalid array length" on a cycle and silently dropped a dotted tail).
+        return withInputProvenance(this.runCtx, [list], new AVector(listToArray(list)));
       },
     ),
 
@@ -246,14 +244,13 @@ export default EnvCapability.define("scheme/vectors", {
       },
       function (this: CallCtx, vec, start, end): AString {
         const arr = asVector(vec, "vector->string");
-        const s = start === undefined ? 0 : toIndex(start);
-        const e = end === undefined ? arr.length : toIndex(end);
+        const { start: s, end: e } = sliceRange("vector->string", arr.length, start, end, "vector");
         let result = "";
         for (let i = s; i < e; i++) {
           const ch = arr[i];
           result += ch instanceof ACharacter ? charValue(ch) : String(ch);
         }
-        return withInputProvenance([vec], new AString(result));
+        return withInputProvenance(this.runCtx, [vec], new AString(result));
       },
     ),
 
@@ -268,14 +265,14 @@ export default EnvCapability.define("scheme/vectors", {
         `,
       },
       function (this: CallCtx, str, start, end): AVector {
-        const s_str = stringValue(str);
-        const s = start === undefined ? 0 : toIndex(start);
-        const e = end === undefined ? s_str.length : toIndex(end);
+        // Code points, not UTF-16 units — the same indexing string-length/string-ref use.
+        const chars = [...stringValue(str)];
+        const { start: s, end: e } = sliceRange("string->vector", chars.length, start, end, "string");
         const result: SchemeValue[] = [];
         for (let i = s; i < e; i++) {
-          result.push(new ACharacter(s_str[i]));
+          result.push(new ACharacter(chars[i]));
         }
-        return withInputProvenance([str], new AVector(result));
+        return withInputProvenance(this.runCtx, [str], new AVector(result));
       },
     ),
 
@@ -291,9 +288,8 @@ export default EnvCapability.define("scheme/vectors", {
       },
       function (this: CallCtx, vec, start, end): AVector {
         const arr = asVector(vec, "vector-copy");
-        const s = start === undefined ? 0 : toIndex(start);
-        const e = end === undefined ? arr.length : toIndex(end);
-        return withInputProvenance([vec], new AVector(arr.slice(s, e)));
+        const { start: s, end: e } = sliceRange("vector-copy", arr.length, start, end, "vector");
+        return withInputProvenance(this.runCtx, [vec], new AVector(arr.slice(s, e)));
       },
     ),
 
@@ -329,15 +325,15 @@ export default EnvCapability.define("scheme/vectors", {
           result.push(applyCallback(proc, elements, this) as SchemeValue);
         }
         // proc may be an async membrane callback → its results are JS Promises. Mirror
-        // the list \`map\` (r7rs/lists.ts): if any slot is a promise, await them all so the
+        // the list `map` (r7rs/lists.ts): if any slot is a promise, await them all so the
         // returned vector holds SETTLED values (not "[object Promise]") and provenance
         // is preserved. (errors-as-doors note: silent leak defeats boxing goal-b.)
         if (result.some(is_promise)) {
           return (promise_all(result) as Promise<SchemeValue[]>).then((resolved) =>
-            withInputProvenance(vectors, new AVector(resolved)),
+            withInputProvenance(this.runCtx, vectors, new AVector(resolved)),
           );
         }
-        return withInputProvenance(vectors, new AVector(result));
+        return withInputProvenance(this.runCtx, vectors, new AVector(result));
       },
     ),
 
@@ -347,6 +343,9 @@ export default EnvCapability.define("scheme/vectors", {
         input: [z.lambda],
         inputRest: z.vector(),
         output: [z.undefinedResult],
+        // P18: fan of effect tracks (see for-each, r7rs/lists.ts).
+        provenance: "fan",
+        callbackRoles: ["effect"],
         type: dedent`
           {
             <T>(f: (x: T) => unknown, v: readonly T[]): void;

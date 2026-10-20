@@ -34,7 +34,6 @@ function contractDef(pack: { spec: { symbols?: unknown } }, name: string) {
 /** `._zod.def.type` of a zod schema, unwrapping ONE `.optional()` layer if present
  *  (srfi-95's comparator slot is `.optional()`; the other two slots are bare). */
 function schemaKind(s: unknown): string {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- introspecting zod's internal def, not public API
   const def = (s as any)._zod.def;
   return def.type === "optional" ? def.innerType._zod.def.type : def.type;
 }
@@ -44,7 +43,6 @@ function schemaKind(s: unknown): string {
  *  item list; a direct cast to `{ _zod: { def: { items: unknown[] } } }` doesn't compile —
  *  `$ZodTypeDef`, the generic base `.def` type, has no `items` field). */
 function tupleItems(s: unknown): unknown[] {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- introspecting zod's internal def, not public API
   return (s as any)._zod.def.items;
 }
 

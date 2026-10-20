@@ -1,7 +1,8 @@
-// @here.build/arrival/r7rs/host — R7RS §6.13 / §6.14 doors-only.
+// arrival's r7rs/host pack — R7RS §6.13 / §6.14 doors-only.
 // Pure inference plane: no ports, no ambient system. implement-or-door totalized.
 // call-with-input-string lives in srfi-stubs (SRFI-6).
 import { EnvCapability } from "../../common/capability.js";
+import { doorSymbols } from "../pack-helpers.js";
 
 const IO =
   "ports & IO are omitted from arrival by design — it is a pure inference plane with no IO surface; an ambient read/write has no value-construction site for provenance. Return the value from your dataflow instead of streaming it out";
@@ -80,8 +81,5 @@ const DOORS = {
 export const HOST_DOOR_NAMES = Object.keys(DOORS) as (keyof typeof DOORS)[];
 
 export default EnvCapability.define("scheme/r7rs/host", {
-  symbols: (symbol) =>
-    Object.fromEntries(
-      Object.entries(DOORS).map(([name, reason]) => [name, symbol.notImplemented`${name}: ${reason}`]),
-    ),
+  symbols: () => doorSymbols(DOORS),
 });

@@ -1,4 +1,4 @@
-// assemble-run.test.ts — Stage B2 (docs/plans/stage-b-runcontext-absorbs-assembly.md): the
+// assemble-run.test.ts — Stage B2: the
 // PER-RUN PRELUDE PASS on the vocabulary path. `env/vocabulary.ts`'s `buildVocabulary` only
 // COLLECTS `.spec.prelude` text (C3-ordered, identity-deduped); `env/assemble-run.ts`'s
 // `assembleRun` is where it now EXECUTES — once per RunContext, THIS run's runCtx threaded
@@ -148,7 +148,9 @@ describe("assembleRun — preludeOnly overlay: invisible from user code, visible
       symbols: (symbol, sz) => ({
         "prelude-only/secret": symbol.rosetta`prelude-only/secret: assembly-time-only`(
           { input: [], output: [sz.string], preludeOnly: true },
-          () => "SECRET",
+          function () {
+            return "SECRET";
+          },
         ),
       }),
     });
@@ -177,7 +179,9 @@ describe("assembleRun — preludeOnly overlay: invisible from user code, visible
       symbols: (symbol, sz) => ({
         "prelude-only/secret": symbol.rosetta`prelude-only/secret: visible only while a prelude evaluates`(
           { input: [], output: [sz.string], preludeOnly: true },
-          () => "SECRET-42",
+          function () {
+            return "SECRET-42";
+          },
         ),
         "store-closure!":
           symbol.native`store-closure!: stash a prelude-minted closure (raw scheme value) into this run's resources`(

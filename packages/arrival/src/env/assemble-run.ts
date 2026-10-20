@@ -39,7 +39,7 @@ import type { RunCache } from "../run/run-cache.js";
 import type { EffectLog } from "../run/effect-log.js";
 import type { ReadGuard } from "../run/read-guard.js";
 import type { ResourcePathLog } from "../run/resource-paths.js";
-import { RunContext, type MembraneClosure } from "../run/RunContext.js";
+import { RunContext, type MembraneClosure, type RunEmission } from "../run/RunContext.js";
 import { buildVocabulary, type Vocabulary } from "./vocabulary.js";
 import { type EnvWithInternals, ResolvingAmbient } from "./AmbientRuntime.js";
 import invariant from "tiny-invariant";
@@ -67,6 +67,12 @@ export interface AssembleRunOptions {
   readonly display?: DisplaySink;
   /** Host wrap around membrane interactions — see RunContext.membraneClosure. */
   readonly membraneClosure?: MembraneClosure;
+  /** See RunContext.emission (channel 7). Unset ⇒ emission off. */
+  readonly emission?: RunEmission;
+  /** See RunContext.silent. Default false. */
+  readonly silent?: boolean;
+  /** See RunContext.eagerStamps. Default false. */
+  readonly eagerStamps?: boolean;
   /** Reuse an existing RunContext (REPL continuity). The run carries its own vocabulary, so
    *  `capabilities`/`config` are ignored on this path and no prelude re-runs. */
   readonly runCtx?: RunContext;
@@ -126,6 +132,9 @@ export async function assembleRun(opts: AssembleRunOptions): Promise<RunContext>
     notes: opts.notes,
     display: opts.display,
     membraneClosure: opts.membraneClosure,
+    emission: opts.emission,
+    silent: opts.silent,
+    eagerStamps: opts.eagerStamps,
     capabilityConfigurations: vocabulary.configsByCapability,
     vocabulary: vocabulary.map,
     degraded: vocabulary.degraded,

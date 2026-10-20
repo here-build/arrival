@@ -99,7 +99,9 @@ export class AmbientRuntime {
     // Syntax.__merge_env__). LexicalScope.kind compares by symbol identity —
     // string coercion would break hygiene. Display sites wrap with `String(...)`.
     public __name__: string | symbol = "anonymous",
-    public __env__: Record<string | symbol, AmbientValue> = {},
+    // Null-prototype storage: binding names are user-controlled, and a prototype-bearing
+    // record would let `toString`/`__proto__` collide with Object.prototype members.
+    public __env__: Record<string | symbol, AmbientValue> = Object.create(null),
     public __parent__: AmbientRuntime | null = null,
   ) {}
 
@@ -109,7 +111,7 @@ export class AmbientRuntime {
 
   /** Null-parent plain frame. Isolated root — no `__parent__`. */
   static root(name?: string | symbol, bindings?: Record<string | symbol, AmbientValue>): AmbientRuntime {
-    return mintPlainFrame(name, bindings, null);
+    return mintPlainFrame(name, bindings && Object.assign(Object.create(null), bindings), null);
   }
 
   /**
@@ -124,7 +126,7 @@ export class AmbientRuntime {
   child(name?: string | symbol, bindings?: Record<string | symbol, AmbientValue>): AmbientRuntime;
   child(
     name: string | symbol = `child of ${String(this.__name__) || "unknown"}`,
-    bindings: Record<string | symbol, AmbientValue> = {},
+    bindings: Record<string | symbol, AmbientValue> = Object.create(null),
   ): AmbientRuntime {
     return this instanceof ResolvingAmbient
       ? mintResolvingFrame(name, bindings, this)
@@ -326,12 +328,12 @@ export class ResolvingAmbient extends AmbientRuntime implements SchemeEnv {
 
   /** Null-parent resolving frame. Isolated root — no `__parent__`. */
   static override root(name?: string | symbol, bindings?: Record<string | symbol, AmbientValue>): ResolvingAmbient {
-    return mintResolvingFrame(name, bindings, null);
+    return mintResolvingFrame(name, bindings && Object.assign(Object.create(null), bindings), null);
   }
 
   override child(
     name: string | symbol = `child of ${String(this.__name__) || "unknown"}`,
-    bindings: Record<string | symbol, AmbientValue> = {},
+    bindings: Record<string | symbol, AmbientValue> = Object.create(null),
   ): ResolvingAmbient {
     return mintResolvingFrame(name, bindings, this);
   }
