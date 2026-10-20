@@ -32,7 +32,7 @@
 // class its firewall treats as opaque). `eval/exec-phases.ts` imports `validateProgram`/
 // `vocabularyFromChain` from here, and `eval/generator-exec.ts` imports
 // `StaticValidationError` from here, back — the evaluator calls this pass at parse phase,
-// before the first form evaluates (line 7 above). `docs/strata.md` §3 names this the
+// before the first form evaluates (see the preamble's opening paragraph). `docs/strata.md` §3 names this the
 // declared exception to "static-validation is one-directional above the knot."
 
 import type { SourceLocation } from "../errors.js";
@@ -65,7 +65,7 @@ export interface Diagnostic {
     | "unbound-symbol" // bucket a (key: the unknown name)
     | "bound-to-door" // bucket b (key: the door — a cause-less/needs-less door's own teaching reason is the cure)
     | "missing-configuration" // bucket c (key: the config key — assembled mode: a door whose need is config)
-    | "arity-mismatch"; // bucket d — DEFERRED, no producer yet
+    | "arity-mismatch"; // bucket d — DEFERRED statically (the runtime door is ArityMismatchError)
   /** Every reference this ONE cause explains, in program order — never a lone "first site". */
   readonly sites: readonly SiteRef[];
   /** Host-facing: cause first, then the site list. Identities as `name @ capability`, never a hash. */

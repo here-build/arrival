@@ -40,15 +40,11 @@ function parseBigInt(str: string, radix: number = 10): bigint {
   return negative ? -result : result;
 }
 
-// Safe-integer gate for exact literals (docs/design-history/arrival-one-number-rework.md
-// §0.3/§2.5): a source literal whose exact magnitude would leave `Number.isSafeInteger`
+// Safe-integer gate for exact literals: a source literal whose exact magnitude would leave `Number.isSafeInteger`
 // range THROWS a teaching ParseError rather than silently truncating or minting an
 // impossible AExact component — the RATIO design has no bignum escape hatch.
-// DRIFT ALARM: reader's twin of `values/numbers.ts`'s private `parseSafeIntLiteral` —
-// same law, duplicated rather than imported, because that helper belongs to
-// `parseNumber` (a deliberately separate, non-dual-use host utility) while
-// parse_rational/parse_integer/parse_float here are the reader's LIVE path (also called
-// by `string->number`, env/r7rs/strings.ts).
+// parse_rational/parse_integer/parse_float here are the one number-literal parser: the reader's
+// LIVE path, also called by `string->number` (env/r7rs/strings.ts).
 const PARSE_SAFE_MAX = BigInt(Number.MAX_SAFE_INTEGER);
 const PARSE_SAFE_MIN = BigInt(Number.MIN_SAFE_INTEGER);
 
@@ -153,8 +149,7 @@ export function parse_rational(arg: string, radix = 10, loc?: SourceLocation): A
     return new AInexact(Number(numBig) / Number(denomBig), EMPTY_PROVENANCE, loc);
   }
   // Components gated BEFORE the mint (never decline-to-parse: a rejected rational token
-  // must throw, not fall through to `parse_symbol` —
-  // docs/design-history/arrival-one-number-rework.md §1's named hazard).
+  // must throw, not fall through to `parse_symbol` — the named hazard of the one-number design).
   return mintExact(
     toSafeExactComponent(numBig, arg),
     toSafeExactComponent(denomBig, arg),
@@ -410,7 +405,8 @@ export function parse_argument(arg: string, strict = false, loc?: SourceLocation
       return parse_character(arg, loc);
     }
     // characters with more than one codepoint
-    const m = arg.match(/#\\(.+)/);
+    // Anchored: an unanchored match let a symbol like `##\a` pass as a character.
+    const m = arg.match(/^#\\(.+)$/s);
     if (m && ucs2decode(m[1]).length === 1) {
       return parse_character(arg, loc);
     }

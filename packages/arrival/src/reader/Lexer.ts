@@ -93,7 +93,6 @@ export class Lexer {
   private _state!: symbol | null;
   private _next!: number | null;
   private _token!: string | null;
-  private readonly _prev_char!: string;
 
   constructor(input: string, { whitespace = false } = {}) {
     Object.defineProperty(this, "__input__", {

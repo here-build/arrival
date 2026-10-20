@@ -18,8 +18,8 @@ describe("vector-hash / #() constant vectors", () => {
     let err: unknown;
     try {
       await readAst(input);
-    } catch (e) {
-      err = e;
+    } catch (error) {
+      err = error;
     }
     expect(err, "expected E-LITERAL-DOT, but succeeded").toBeDefined();
     expect(errorClass(err)).toBe("E-LITERAL-DOT");

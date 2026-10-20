@@ -33,6 +33,7 @@
 
 import { APair } from "../values/primitives/APair.js";
 import { ASymbol } from "../values/primitives/ASymbol.js";
+import { AVector } from "../values/primitives/AVector.js";
 import type { SourceLocation } from "../errors.js";
 import type { SchemeValue } from "../values/types.js";
 
@@ -79,6 +80,36 @@ function chainOf(n: unknown): unknown[] {
     cur = cur.cdr;
   }
   if (cur instanceof ASymbol) out.push(cur);
+  return out;
+}
+
+/** One binding of a binder form: its name (null for a gensym) and the forms after it —
+ *  `[init]` for let-family, `[init, step…]` for `do`. */
+interface BindingEntry {
+  readonly name: string | null;
+  readonly rest: unknown[];
+}
+
+/** The binding list of a let-family / `do` form, read the way the evaluator's
+ *  `normalizeBindings` reads it (evaluator.ts): a bracket whole-list `[a 1 b 2]` (let-family
+ *  only — `do` refuses it, a runtime door) pairs elements up; a paren list holds `(name init…)`
+ *  pairs or bracket `[name init…]` entries. `#(…)` and malformed entries yield nothing here —
+ *  the evaluator doors them. ONE reader for every binder arm. */
+function readBindings(bindings: unknown, allowWholeList: boolean): BindingEntry[] {
+  const out: BindingEntry[] = [];
+  const entry = (name: unknown, rest: unknown[]): void => {
+    if (name instanceof ASymbol) out.push({ name: nameOf(name), rest });
+  };
+  if (bindings instanceof AVector) {
+    if (!bindings.evalElements || !allowWholeList) return out;
+    const els = bindings.__vector__;
+    for (let i = 0; i + 1 < els.length; i += 2) entry(els[i], [els[i + 1]]);
+    return out;
+  }
+  for (const b of chainOf(bindings)) {
+    if (b instanceof AVector && b.evalElements) entry(b.__vector__[0], b.__vector__.slice(1));
+    else if (b instanceof APair) entry(b.car, chainOf(b.cdr));
+  }
   return out;
 }
 
@@ -148,15 +179,30 @@ export function collectReferences(form: SchemeValue, opts: CollectReferencesOpti
 
   /** Walk a BODY SEQUENCE with the internal-define letrec* pre-pass: the
    *  sequence's own definition names bind for EVERY form in it, both directions. */
-  const walkBody = (body: unknown, bound: ReadonlySet<string>, span: SourceLocation | undefined): void => {
-    const forms = chainOf(body);
+  const walkForms = (forms: readonly unknown[], bound: ReadonlySet<string>, span: SourceLocation | undefined): void => {
     const names: string[] = [];
-    for (const f of forms) {
-      const def = definitionOf(f);
-      if (def !== null) names.push(def.name);
-    }
+    const collect = (fs: readonly unknown[]): void => {
+      for (const f of fs) {
+        const def = definitionOf(f);
+        if (def !== null) names.push(def.name);
+        // `(begin (define …))` splices into the enclosing body (R7RS §5.3.2).
+        else if (f instanceof APair && f.car instanceof ASymbol && nameOf(f.car) === "begin") collect(chainOf(f.cdr));
+      }
+    };
+    collect(forms);
     const inner = names.length === 0 ? bound : new Set([...bound, ...names]);
     for (const f of forms) walk(f, inner, span);
+  };
+  const walkBody = (body: unknown, bound: ReadonlySet<string>, span: SourceLocation | undefined): void => {
+    walkForms(chainOf(body), bound, span);
+  };
+  /** A cond/case clause body: `=>` is structural, not a variable. */
+  const walkClauseBody = (body: unknown, bound: ReadonlySet<string>, span: SourceLocation | undefined): void => {
+    walkForms(
+      chainOf(body).filter((f) => !(f instanceof ASymbol && nameOf(f) === "=>")),
+      bound,
+      span,
+    );
   };
 
   const walk = (n: unknown, bound: ReadonlySet<string>, span: SourceLocation | undefined): void => {
@@ -201,23 +247,17 @@ export function collectReferences(form: SchemeValue, opts: CollectReferencesOpti
               const afterName = n.cdr.cdr;
               if (!(afterName instanceof APair)) return;
               const names: string[] = loopName === null ? [] : [loopName];
-              for (const b of chainOf(afterName.car)) {
-                if (b instanceof APair && b.car instanceof ASymbol) {
-                  const bn = nameOf(b.car);
-                  if (bn !== null) names.push(bn);
-                  if (b.cdr instanceof APair) walk(b.cdr.car, bound, loc);
-                }
+              for (const b of readBindings(afterName.car, true)) {
+                if (b.name !== null) names.push(b.name);
+                if (b.rest.length > 0) walk(b.rest[0], bound, loc);
               }
               walkBody(afterName.cdr, new Set([...bound, ...names]), loc);
               return;
             }
             const names: string[] = [];
-            for (const b of chainOf(n.cdr.car)) {
-              if (b instanceof APair && b.car instanceof ASymbol) {
-                const bn = nameOf(b.car);
-                if (bn !== null) names.push(bn);
-                if (b.cdr instanceof APair) walk(b.cdr.car, bound, loc); // parallel: inits see outer
-              }
+            for (const b of readBindings(n.cdr.car, true)) {
+              if (b.name !== null) names.push(b.name);
+              if (b.rest.length > 0) walk(b.rest[0], bound, loc); // parallel: inits see outer
             }
             walkBody(n.cdr.cdr, new Set([...bound, ...names]), loc);
             return;
@@ -225,12 +265,9 @@ export function collectReferences(form: SchemeValue, opts: CollectReferencesOpti
           case "let*": {
             if (!(n.cdr instanceof APair)) return;
             let cur: ReadonlySet<string> = bound;
-            for (const b of chainOf(n.cdr.car)) {
-              if (b instanceof APair && b.car instanceof ASymbol) {
-                if (b.cdr instanceof APair) walk(b.cdr.car, cur, loc); // sequential: init sees priors
-                const bn = nameOf(b.car);
-                if (bn !== null) cur = new Set([...cur, bn]);
-              }
+            for (const b of readBindings(n.cdr.car, true)) {
+              if (b.rest.length > 0) walk(b.rest[0], cur, loc); // sequential: init sees priors
+              if (b.name !== null) cur = new Set([...cur, b.name]);
             }
             walkBody(n.cdr.cdr, cur, loc);
             return;
@@ -240,12 +277,9 @@ export function collectReferences(form: SchemeValue, opts: CollectReferencesOpti
             if (!(n.cdr instanceof APair)) return;
             const names: string[] = [];
             const inits: unknown[] = [];
-            for (const b of chainOf(n.cdr.car)) {
-              if (b instanceof APair && b.car instanceof ASymbol) {
-                const bn = nameOf(b.car);
-                if (bn !== null) names.push(bn);
-                if (b.cdr instanceof APair) inits.push(b.cdr.car);
-              }
+            for (const b of readBindings(n.cdr.car, true)) {
+              if (b.name !== null) names.push(b.name);
+              if (b.rest.length > 0) inits.push(b.rest[0]);
             }
             const all = new Set([...bound, ...names]); // recursive: all names bind everywhere
             for (const init of inits) walk(init, all, loc);
@@ -258,14 +292,10 @@ export function collectReferences(form: SchemeValue, opts: CollectReferencesOpti
             if (!(n.cdr instanceof APair)) return;
             const names: string[] = [];
             const laters: unknown[] = [];
-            for (const b of chainOf(n.cdr.car)) {
-              if (b instanceof APair && b.car instanceof ASymbol) {
-                const bn = nameOf(b.car);
-                if (bn !== null) names.push(bn);
-                const rest = chainOf(b.cdr);
-                if (rest.length > 0) walk(rest[0], bound, loc); // init: outer scope
-                for (const step of rest.slice(1)) laters.push(step);
-              }
+            for (const b of readBindings(n.cdr.car, false)) {
+              if (b.name !== null) names.push(b.name);
+              if (b.rest.length > 0) walk(b.rest[0], bound, loc); // init: outer scope
+              for (const step of b.rest.slice(1)) laters.push(step);
             }
             const inner = new Set([...bound, ...names]);
             for (const step of laters) walk(step, inner, loc);
@@ -331,10 +361,7 @@ export function collectReferences(form: SchemeValue, opts: CollectReferencesOpti
               if (!(clause instanceof APair)) continue;
               const test = clause.car;
               if (!(test instanceof ASymbol && nameOf(test) === "else")) walk(test, bound, loc);
-              for (const bodyForm of chainOf(clause.cdr)) {
-                if (bodyForm instanceof ASymbol && nameOf(bodyForm) === "=>") continue;
-                walk(bodyForm, bound, loc);
-              }
+              walkClauseBody(clause.cdr, bound, loc);
             }
             return;
           }
@@ -344,18 +371,23 @@ export function collectReferences(form: SchemeValue, opts: CollectReferencesOpti
             for (const clause of parts.slice(1)) {
               if (!(clause instanceof APair)) continue;
               // clause.car is a datum list (or `else`) — data, skipped.
-              walkBody(clause.cdr, bound, loc);
+              walkClauseBody(clause.cdr, bound, loc);
             }
+            return;
+          }
+          case "when":
+          case "unless":
+          case "while": {
+            // (when test body…): the test is an expression, the body a define-capable sequence.
+            if (!(n.cdr instanceof APair)) return;
+            walk(n.cdr.car, bound, loc);
+            walkBody(n.cdr.cdr, bound, loc);
             return;
           }
           case "begin":
           case "if":
-          case "when":
-          case "unless":
           case "and":
-          case "or":
-          case "while":
-          case "set!": {
+          case "or": {
             // Non-binding special forms: the head is evaluator syntax, never a
             // variable — walk operands only. `begin` bodies get the internal-define
             // pre-pass (R7RS splicing).

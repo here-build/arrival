@@ -44,9 +44,9 @@ describe("vector-bracket / […] vectors", () => {
     async ({ input, mode }) => {
       let err: unknown;
       try {
-        mode === "read" ? await readAst(input) : await evalJson(input);
-      } catch (e) {
-        err = e;
+        await (mode === "read" ? readAst(input) : evalJson(input));
+      } catch (error) {
+        err = error;
       }
       expect(err, "expected E-LITERAL-DOT, but succeeded").toBeDefined();
       expect(errorClass(err)).toBe("E-LITERAL-DOT");
@@ -58,9 +58,9 @@ describe("vector-bracket / […] vectors", () => {
     async ({ input, mode }) => {
       let err: unknown;
       try {
-        mode === "read" ? await readAst(input) : await evalJson(input);
-      } catch (e) {
-        err = e;
+        await (mode === "read" ? readAst(input) : evalJson(input));
+      } catch (error) {
+        err = error;
       }
       expect(err, "expected E-UNTERMINATED, but succeeded").toBeDefined();
       expect(errorClass(err)).toBe("E-UNTERMINATED");
@@ -72,9 +72,9 @@ describe("vector-bracket / […] vectors", () => {
     async ({ input, mode }) => {
       let err: unknown;
       try {
-        mode === "read" ? await readAst(input) : await evalJson(input);
-      } catch (e) {
-        err = e;
+        await (mode === "read" ? readAst(input) : evalJson(input));
+      } catch (error) {
+        err = error;
       }
       expect(err, "expected E-BRACKET-UNEXPECTED, but succeeded").toBeDefined();
       expect(errorClass(err)).toBe("E-BRACKET-UNEXPECTED");
@@ -87,9 +87,9 @@ describe("vector-bracket / […] vectors", () => {
   ])("door E-BRACKET-MISMATCH · $name", async ({ input, mode }) => {
     let err: unknown;
     try {
-      mode === "read" ? await readAst(input) : await evalJson(input);
-    } catch (e) {
-      err = e;
+      await (mode === "read" ? readAst(input) : evalJson(input));
+    } catch (error) {
+      err = error;
     }
     expect(err, "expected E-BRACKET-MISMATCH, but succeeded").toBeDefined();
     expect(errorClass(err)).toBe("E-BRACKET-MISMATCH");

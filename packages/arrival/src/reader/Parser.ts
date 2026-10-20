@@ -28,21 +28,15 @@
 import { DatumReference } from "./DatumReference.js";
 import { foldcase_string } from "./foldcase.js";
 import * as specials from "./specials.js";
-import {
-  is_builtin,
-  is_bytevector_literal,
-  is_directive,
-  is_literal,
-  is_special,
-  is_symbol_extension,
-  is_vector_literal,
-} from "./token-guards.js";
+import { is_bytevector_literal, is_directive, is_special, is_vector_literal } from "./token-guards.js";
+import type { TokenMeta } from "./tokenize.js";
 import { EOF, eof } from "../values/primitives/EOF.js";
 import { ParseError, type SourceLocation, Unterminated } from "../errors.js";
 import { Lexer } from "./Lexer.js";
 // These deps form an import cycle with the value/eval modules; ES6 live bindings
 // resolve it, since they're referenced only inside methods, not at module-eval time.
 import { ABytevector } from "../values/primitives/ABytevector.js";
+import { AExact } from "../values/primitives/AExact.js";
 import { AVector } from "../values/primitives/AVector.js";
 import { parse_argument } from "./parsing.js";
 import { AString } from "../values/primitives/AString.js";
@@ -52,7 +46,7 @@ import { EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
 import { isUnquoteForm, suffixKeyName } from "./dict-grammar.js";
 import { ADict, staticDictKey } from "../values/primitives/ADict.js";
 import type { AListAlike, SchemeValue } from "../values/types.js";
-import { ANil, nil } from "../values/primitives/ANil.js";
+import { nil } from "../values/primitives/ANil.js";
 import invariant from "tiny-invariant";
 
 // Nesting-depth cap: rejects deep input at PARSE time before it overflows the
@@ -62,13 +56,6 @@ import invariant from "tiny-invariant";
 // descent depth. Cap sits below the most fragile consumer's overflow floor (a
 // recursive evaluator overflows ~3,500) and far above any real s-expression depth.
 const maxNestingDepth = 2000;
-
-export interface TokenMeta {
-  token: string;
-  col: number;
-  offset: number;
-  line: number;
-}
 
 interface ParserOptions {
   meta?: boolean;
@@ -81,14 +68,22 @@ interface ParserOptions {
   strict?: boolean;
 }
 
+// `#!fold-case` (R7RS §2.1) folds identifiers, character NAMES and #-literals (`#T`) — never
+// string contents, `|…|` symbols, or a single-char literal (`#\A` is the char `A`, not `a`).
+function foldToken(token: string): string {
+  if (token.startsWith('"') || token.includes("|")) return token;
+  if (token.startsWith("#\\")) {
+    const name = token.slice(2);
+    return [...name].length > 1 ? token.slice(0, 2) + foldcase_string(name) : token;
+  }
+  return foldcase_string(token);
+}
+
 function defaultFormatter(token: { token: string; col: number; offset: number; line: number }) {
   return token;
 }
 
 export class Parser {
-  // Re-exported so callers can `instanceof Parser.Unterminated` without importing from ./errors.
-  public static readonly Unterminated = Unterminated;
-
   __lexer__!: Lexer;
   private readonly _formatter!: (token: TokenMeta) => TokenMeta;
   private readonly _meta!: boolean;
@@ -171,14 +166,16 @@ export class Parser {
       if (token!.token === "#;") {
         this.skip();
         if (this.__lexer__.peek() === eof) throw new Unterminated("syntax error: eof found after comment");
-        await this._read_object();
+        // `peek()` above may stop on atmosphere (`#;;\n`, `#; #|c|#`): the commented datum is
+        // still owed, so EOF after the skipped atmosphere is the same dangling `#;`.
+        if ((await this._read_object()) === eof) throw new Unterminated("syntax error: eof found after comment");
         continue;
       }
       break;
     }
     token = this._formatter(token);
     if (this._state.fold_case) {
-      token.token = foldcase_string(token.token);
+      token.token = foldToken(token.token);
     }
     if (this._meta) {
       return token;
@@ -215,16 +212,6 @@ export class Parser {
     const token = await this.peek();
     this.skip();
     return token;
-  }
-
-  match_datum_label(token: string) {
-    const m = token.match(/^#(\d+)=$/);
-    return m?.[1] ?? null;
-  }
-
-  match_datum_ref(token: string) {
-    const m = token.match(/^#(\d+)#$/);
-    return m?.[1] ?? null;
   }
 
   /**
@@ -283,7 +270,15 @@ export class Parser {
     return token === "}";
   }
 
-  async read_list(openLoc?: SourceLocation, { dotted = true }: { dotted?: boolean } = {}): Promise<AListAlike> {
+  async read_list(
+    openLoc?: SourceLocation,
+    {
+      dotted = true,
+      what = "list",
+      open = "(",
+      at = openLoc,
+    }: { dotted?: boolean; what?: string; open?: string; at?: SourceLocation } = {},
+  ): Promise<AListAlike> {
     // ACCUMULATE-THEN-CONSTRUCT (readonly-slot contract): collect the elements (+ each cell's
     // location) left-to-right, then build the spine in ONE right fold — no in-place tail
     // append. The improper dot-tail seeds the fold. An element may be a DatumReference
@@ -299,7 +294,7 @@ export class Parser {
     while (true) {
       const token = await this.peek();
       if (token === eof) {
-        break;
+        throw new Unterminated(`unterminated ${what} '${open}'`, at);
       }
       if (typeof token === "string" && this.is_close(token)) {
         this._exitNesting(token, this._getLocation());
@@ -500,50 +495,74 @@ export class Parser {
     return object;
   }
 
-  balanced(): boolean {
-    return this._state.parentheses === 0;
-  }
-
-  ballancing_error(expr: SchemeValue, prev: SchemeValue): never {
-    const count = this._state.parentheses;
-    let e: Error & { __code__?: string[] };
-    if (count < 0) {
-      e = new Error("Parser: unexpected parenthesis");
-      e.__code__ = [`${String(prev)})`];
-    } else {
-      e = new Error("Parser: expected parenthesis but eof found");
-      const re = new RegExp(String.raw`\){${count}}$`);
-      e.__code__ = [String(expr).replace(re, "")];
-    }
-    throw e;
+  // A `#n#` element of a vector (`#(…)`/`[…]`) or dict (`{…}`) literal is replaced by its
+  // datum HERE when the label is already complete (unlike a pair, which `_resolve_pair`
+  // patches after the fact). A referent still being read — a cycle through the literal
+  // itself — has no value yet: a vector keeps the placeholder for `_resolve_object` to
+  // patch in place (a cyclic vector literal is legal), a dict (whose entries are indexed
+  // at construction) doors.
+  private settleReferences(
+    elements: SchemeValue[],
+    loc: SourceLocation | null | undefined,
+    cycleOk: boolean,
+  ): SchemeValue[] {
+    return elements.map((el) => {
+      if (!(el instanceof DatumReference)) return el;
+      if (!(el.data instanceof Promise)) return el.data as SchemeValue;
+      if (cycleOk) return el as unknown as SchemeValue;
+      throw new ParseError(
+        `datum label #${el.name}# refers to a datum still being read — a circular reference through a dict literal is not supported; build the cycle through a list or vector`,
+        loc ?? undefined,
+        "E-DATUM-LABEL-CYCLE",
+      );
+    });
   }
 
   // Resolves nested reader-internal DatumReference placeholders inside a freshly parsed
-  // datum. APair is the only structure the reader emits that can carry a nested ref, so
-  // it's the sole recursive case; every other SchemeValue is a leaf and passes through
-  // (a top-level ref is already unwrapped by read_object before this runs).
-  async _resolve_object(object: SchemeValue): Promise<SchemeValue> {
+  // datum. APair is the only structure that can carry a LIVE nested ref (vector/dict
+  // literals settle theirs at construction — `settleReferences`), so it's the sole
+  // recursive case; but a vector/dict element may itself be a pair holding one, so those
+  // are walked too. Every other SchemeValue is a leaf and passes through (a top-level ref
+  // is already unwrapped by read_object before this runs).
+  async _resolve_object(object: SchemeValue, seen: Set<unknown> = new Set()): Promise<SchemeValue> {
     if (object instanceof APair) {
-      return this._resolve_pair(object);
+      return this._resolve_pair(object, seen);
+    }
+    if (seen.has(object)) return object;
+    if (object instanceof AVector) {
+      seen.add(object);
+      // Patch a still-pending `#n#` in place — a vector literal's only knot-tying path
+      // (the element array is a plain array behind a `readonly` type; no APair-style door).
+      const slots = object.__vector__ as SchemeValue[];
+      for (const [i, el] of slots.entries()) {
+        if (el instanceof DatumReference) slots[i] = (await el.valueOf()) as SchemeValue;
+        else await this._resolve_object(el, seen);
+      }
+    } else if (object instanceof ADict && object.literalForms !== undefined) {
+      seen.add(object);
+      for (const el of object.literalForms) await this._resolve_object(el, seen);
     }
     return object;
   }
 
-  async _resolve_pair(pair: AListAlike): Promise<AListAlike> {
+  async _resolve_pair(pair: AListAlike, seen: Set<unknown> = new Set()): Promise<AListAlike> {
     // Datum-label resolution IS the knot-tying case: `#0=(1 #0#)` closes a cycle no
     // construction order can express, so the placeholder patch goes through the door
     // (one of its three named consumers). Patch-not-recurse on the resolved branch keeps
-    // the walk cycle-safe (the resolved value may BE an ancestor of this walk).
+    // the walk cycle-safe (the resolved value may BE an ancestor of this walk); `seen`
+    // bounds the walk through shared vector/dict referents.
     if (pair instanceof APair) {
+      if (seen.has(pair)) return pair;
+      seen.add(pair);
       if (pair.car instanceof DatumReference) {
         __tieKnot(pair, "car", (await pair.car.valueOf()) as SchemeValue);
-      } else if (pair.car instanceof APair) {
-        await this._resolve_pair(pair.car);
+      } else {
+        await this._resolve_object(pair.car, seen);
       }
       if (pair.cdr instanceof DatumReference) {
         __tieKnot(pair, "cdr", (await pair.cdr.valueOf()) as SchemeValue);
-      } else if (pair.cdr instanceof APair) {
-        await this._resolve_pair(pair.cdr);
+      } else {
+        await this._resolve_object(pair.cdr, seen);
       }
     }
     return pair;
@@ -563,7 +582,12 @@ export class Parser {
       if (is_vector_literal(token)) {
         this.skip();
         this._enterNesting(")");
-        const list = await this.read_list(undefined, { dotted: false });
+        const list = await this.read_list(undefined, {
+          dotted: false,
+          what: "vector literal",
+          open: "#(",
+          at: loc ?? undefined,
+        });
         // R7RS literals are immutable — AVector itself has no mutation surface
         // (vector-set!/fill! are notImplemented stubs), so no freeze is needed. Shallow
         // cdr-walk collects elements as the honest `SchemeValue[]` the vector holds —
@@ -573,70 +597,83 @@ export class Parser {
         for (let node: unknown = list; node instanceof APair; node = node.cdr) {
           items.push(node.car);
         }
-        return new AVector(items, EMPTY_PROVENANCE, loc);
+        return new AVector(this.settleReferences(items, loc, true), EMPTY_PROVENANCE, loc);
       }
       if (is_bytevector_literal(token)) {
         this.skip();
         this._enterNesting(")");
-        const list = await this.read_list(undefined, { dotted: false });
+        const list = await this.read_list(undefined, {
+          dotted: false,
+          what: "bytevector literal",
+          open: "#u8(",
+          at: loc ?? undefined,
+        });
         // Immutable, same rationale as the vector literal case above.
-        if (list instanceof ANil) {
-          return new ABytevector(new Uint8Array(0), EMPTY_PROVENANCE, loc);
+        const bytes: number[] = [];
+        for (let node: unknown = list; node instanceof APair; node = node.cdr) {
+          const el = node.car;
+          // R7RS §6.9: a bytevector literal holds exact integers 0..255 — anything else is a
+          // door, never a silent Uint8Array wrap (`256` → 0, `-1` → 255, `a` → NaN → 0).
+          if (!(el instanceof AExact && el.isInteger && el.num >= 0 && el.num <= 255)) {
+            throw new ParseError(
+              `bytevector literal elements must be exact integers 0..255, got ${String(el)} — write #u8(1 2 255)`,
+              node.location ?? loc ?? undefined,
+              "E-BYTEVECTOR-ELEMENT",
+            );
+          }
+          bytes.push(el.num);
         }
-        const arr = list.to_array(false) as number[];
-        return new ABytevector(
-          new Uint8Array(arr.map((v) => (typeof v === "number" ? v : Number(v)))),
-          EMPTY_PROVENANCE,
-          loc,
-        );
+        return new ABytevector(new Uint8Array(bytes), EMPTY_PROVENANCE, loc);
       }
-      // Only builtin prefixes expand here; no parse-time user macros.
+      // Only the fixed builtin prefixes expand here (quote family, #attachment); no
+      // parse-time user macros — see specials.ts.
       const special = specials.get(token);
-      const builtin = is_builtin(token);
       this.skip();
-      let expr: any;
-      const is_symbol = is_symbol_extension(token);
       // A quote-family prefix dangling against a close delimiter (e.g. the trailing-
       // unquote `{:a ,}`, or `')`) is a MISSING DATUM — door it here, BEFORE the datum
       // read, or the stray-close machinery throws its less-teaching error first. Any
       // close counts, not just `)` (the literals brought `]`/`}` into datum position).
       const peeked = await this.peek();
       const was_close = typeof peeked === "string" && [")", "]", "}"].includes(peeked);
-      if (was_close && is_literal(token)) {
+      if (was_close) {
         throw new ParseError(`Parse Error: expecting datum after '${token}'`, loc ?? undefined, "E-EXPECTING-DATUM");
       }
-      const object = is_symbol ? undefined : await this._read_object();
+      const object = await this._read_object();
       if (object === eof) {
         throw new Unterminated("Expecting expression, eof found");
       }
-      // Every registered special is BUILTIN reader syntax (quote/quasiquote/unquote, #(...),
-      // #u8(...), #attachment) expanding into a list the interpreter evaluates later — no
+      // Every registered special is BUILTIN reader syntax (quote/quasiquote/unquote,
+      // #attachment) expanding into a list the interpreter evaluates later — no
       // user-registered reader macros exist (that would require evaluating at parse time).
-      invariant(builtin, () => `Parse Error: non-builtin reader extension ${special.symbol} is unsupported`);
       // `object` may still be a DatumReference placeholder here — the reader-internal
       // channel `_resolve_pair` patches before the form leaves the reader.
-      if (is_literal(token)) {
-        // INNER cell (`(object . ())`, the quoted argument's own spine) carries `loc`
-        // too — quote-family prefix location threaded at construction on BOTH cells
-        // (see AValue.ts location channel).
-        const inner = new APair(object as SchemeValue, nil, EMPTY_PROVENANCE, loc);
-        expr = new APair(special.symbol, inner, EMPTY_PROVENANCE, loc);
-      } else {
-        expr = new APair(special.symbol, object as SchemeValue, EMPTY_PROVENANCE, loc);
-      }
-      return expr;
+      // INNER cell (`(object . ())`, the quoted argument's own spine) carries `loc`
+      // too — quote-family prefix location threaded at construction on BOTH cells
+      // (see AValue.ts location channel).
+      const inner = new APair(object as SchemeValue, nil, EMPTY_PROVENANCE, loc);
+      return new APair(special.symbol, inner, EMPTY_PROVENANCE, loc);
     }
-    const ref = this.match_datum_ref(token);
+    // The Lexer's datum-label state accumulates until a `#`/`=` terminator, so `#1(1#` arrives as ONE
+    // token. Only `#n#` / `#n=` are labels; any other `#<digit>…` token is invalid, never a symbol.
+    if (/^#\d/.test(token) && !/^#\d+[#=]$/.test(token)) {
+      throw new ParseError(`Invalid Syntax: invalid token ${token}`, undefined, "E-LEXER-INVALID-TOKEN");
+    }
+    const ref = /^#(\d+)#$/.exec(token)?.[1] ?? null;
     if (ref !== null) {
       this.skip();
       invariant((+ref) in this._refs, `Parse Error: invalid datum label #${ref}#`);
       return new DatumReference(ref, this._refs[+ref] as SchemeValue);
     }
-    const ref_label = this.match_datum_label(token);
+    const ref_label = /^#(\d+)=$/.exec(token)?.[1] ?? null;
     if (ref_label !== null) {
       this.skip();
-      this._refs[+ref_label] = this._read_object() as SchemeValue | Promise<SchemeValue>;
-      return this._refs[+ref_label] as SchemeValue | Promise<SchemeValue>;
+      const pending = this._read_object() as Promise<SchemeValue>;
+      this._refs[+ref_label] = pending;
+      // Once the labeled datum is complete, later `#n#` see it directly (not the promise) —
+      // vector/dict literals can only take a finished referent (see `settleReferences`).
+      const labeled = await pending;
+      this._refs[+ref_label] = labeled;
+      return labeled;
     } else if (token === "[") {
       // `[…]` VECTOR literal (Clojure/JSON array shape). The node is an immutable AVector
       // (a parsed literal is shared AST — quote hands it out as immutable data, like
@@ -646,7 +683,7 @@ export class Parser {
       this._enterNesting("]");
       this.skip();
       const elements = await this.read_literal_elements("]", false, "vector literal");
-      const vec = new AVector(elements, EMPTY_PROVENANCE, loc);
+      const vec = new AVector(this.settleReferences(elements, loc, true), EMPTY_PROVENANCE, loc);
       vec.evalElements = true;
       return vec;
     } else if (token === "]") {
@@ -661,7 +698,7 @@ export class Parser {
       // quote. See read_literal_elements (comma rule) / make_dict_literal (key doors,
       // including the infix-intent ban).
       const elements = await this.read_literal_elements("}", true, "dict literal");
-      return this.make_dict_literal(elements, loc ?? undefined);
+      return this.make_dict_literal(this.settleReferences(elements, loc, false), loc ?? undefined);
     } else if (this.is_curly_close(token)) {
       // Stray/mismatched `}` (read_literal_elements consumes its own close) — e.g. a `}`
       // inside a `(` list. _exitNesting always throws here; the post-chain throw below

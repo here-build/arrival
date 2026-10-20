@@ -1,6 +1,5 @@
 /**
- * static-validation.law.test.ts — THE STATIC VALIDATION PASS (docs/design-history/
- * symbol-define-static-program-validation.md §3). Pins the law rows the
+ * static-validation.law.test.ts — THE STATIC VALIDATION PASS. Pins the law rows the
  * spec names:
  *
  *  LAW 1 (FLAGSHIP, end-to-end): a program using `(require …)` under a doors-degraded,
@@ -65,6 +64,7 @@ import { vocabularyFromChain } from "../../static-validation/vocabulary.js";
 import type { AmbientValue } from "../../env/AmbientRuntime.js";
 import type { DoorSymbolDef } from "../../common/symbols/_bake.js";
 import { PurityError } from "../../errors.js";
+import type { CallCtx } from "../../run/CallCtx.js";
 
 // ── Fixture helpers ────────────────────────────────────────────────────────────────
 
@@ -74,7 +74,7 @@ const chainOf = (entries: Record<string, AmbientValue>) =>
   new CompiledResolutionChain(new Map<string | symbol, AmbientValue>(Object.entries(entries)));
 
 const door = (name: string, reason: string, cause?: DoorSymbolDef["cause"]): DoorProcedure =>
-  new DoorProcedure({ kind: "door", name, reason, ...(cause !== undefined ? { cause } : {}) });
+  new DoorProcedure({ kind: "door", name, reason, ...(cause === undefined ? {} : { cause }) });
 
 /** A loader-shaped fixture (mirrors `arrival/loader`'s `fs` posture the way
  *  degradation.law.test.ts's fixture does — no cross-package dep on the real loader):
@@ -91,17 +91,24 @@ function loaderLike(name: string, onProbe: () => void): EnvCapability<any, any> 
       fs: z.custom<{ readFile: (p: string) => Promise<string> }>((v) => v !== null && typeof v === "object").optional(),
     },
     symbols: (symbol) => ({
-      "probe!": symbol.native`probe!: JS-side effect counter`({ input: [], output: [sz.schemeValue] }, () => {
-        onProbe();
-        return nil;
-      }),
+      "probe!": symbol.native`probe!: JS-side effect counter`(
+        { input: [], output: [sz.schemeValue] },
+        function (this: CallCtx) {
+          onProbe();
+          return nil;
+        },
+      ),
       require: symbol.native`require: no-op (satisfied fixture)`(
         { input: [sz.schemeValue], output: [sz.schemeValue], requiresConfig: ["fs"] },
-        () => nil,
+        function (this: CallCtx) {
+          return nil;
+        },
       ),
       "require/extension": symbol.native`require/extension: no-op (satisfied fixture)`(
         { input: [sz.schemeValue], output: [sz.schemeValue], requiresConfig: ["fs"] },
-        () => nil,
+        function (this: CallCtx) {
+          return nil;
+        },
       ),
     }),
   });
@@ -120,8 +127,8 @@ describe("LAW 1 — flagship: (require …) under a doors-degraded loader-less a
     let caught: unknown;
     try {
       await exec(program, { capabilities: [cap], config: {}, staticValidation: "on" });
-    } catch (e) {
-      caught = e;
+    } catch (error) {
+      caught = error;
     }
     expect(caught).toBeInstanceOf(StaticValidationError);
     const err = caught as StaticValidationError;
@@ -364,7 +371,7 @@ function requiresConfigCapability(name: string, onRun: () => void): EnvCapabilit
     symbols: (symbol) => ({
       "fs/read": symbol.rosetta`fs/read: reads a path via the configured filesystem`(
         { input: [sz.string], output: [sz.string], requiresConfig: ["fs"] },
-        async (path: string) => {
+        async function (this: CallCtx, path: string) {
           onRun();
           return path.toUpperCase();
         },
@@ -382,8 +389,8 @@ describe("LAW 8 — Stage 3: `requiresConfig` auto-mints a cause-carrying door, 
     let caught: unknown;
     try {
       await exec(program, { capabilities: [cap], config: {}, staticValidation: "on" });
-    } catch (e) {
-      caught = e;
+    } catch (error) {
+      caught = error;
     }
     expect(caught).toBeInstanceOf(StaticValidationError);
     const err = caught as StaticValidationError;
@@ -411,8 +418,8 @@ describe("LAW 8 — Stage 3: `requiresConfig` auto-mints a cause-carrying door, 
     let caught: unknown;
     try {
       await exec(program, { capabilities: [cap], config: {} }); // staticValidation left off — reaches the door at runtime
-    } catch (e) {
-      caught = e;
+    } catch (error) {
+      caught = error;
     }
     expect(caught).toBeInstanceOf(PurityError);
     const err = caught as PurityError;

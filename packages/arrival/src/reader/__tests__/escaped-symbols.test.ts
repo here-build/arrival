@@ -76,10 +76,10 @@ describe("Escaped Symbol Resolution", () => {
 
     it("should handle pipes inside escaped symbols", async () => {
       // R7RS §7.1.1: `\|` inside `|...|` is a literal `|` in the symbol's name.
-      const result = await execOne(`
+      const result = await execOne(String.raw`
         (begin
-          (define |foo\\|bar| "pipe inside")
-          |foo\\|bar|)
+          (define |foo\|bar| "pipe inside")
+          |foo\|bar|)
       `);
       expect(result).toBe("pipe inside");
     });

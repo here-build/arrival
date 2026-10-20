@@ -55,7 +55,7 @@ describe("@here.build/arrival/grammar.ebnf", () => {
 
   it("does not mention Sugarcoat productions", () => {
     const src = ebnfSource();
-    expect(src).not.toMatch(/\bit\b.*anaphor/i);
+    expect(src).not.toMatch(/\bit\b.+anaphor/i);
     expect(src).not.toMatch(/I-expression|method-dot|at-expr/);
   });
 });

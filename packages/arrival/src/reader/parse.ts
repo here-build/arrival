@@ -19,16 +19,11 @@ export const parse = async (arg: ParseInput, source?: string, strict = false): P
     parser.parse(arg);
   }
   const result: SchemeValue[] = [];
-  let prev;
   while (true) {
     const expr = await parser.read_object();
-    if (!parser.balanced()) {
-      parser.ballancing_error(expr, prev);
-    }
     if (expr === eof) {
       break;
     }
-    prev = expr;
     result.push(expr);
   }
   return result;

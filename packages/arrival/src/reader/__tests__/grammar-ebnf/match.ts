@@ -29,17 +29,17 @@ export type MatchResult = {
 };
 
 class EbnfSyntaxError extends Error {
-  constructor(message: string, readonly line: number, readonly col: number) {
+  constructor(
+    message: string,
+    readonly line: number,
+    readonly col: number,
+  ) {
     super(`${message} at ${line}:${col}`);
     this.name = "EbnfSyntaxError";
   }
 }
 
-type Tok =
-  | { k: "id"; v: string }
-  | { k: "lit"; v: string }
-  | { k: "re"; v: string }
-  | { k: "sym"; v: string };
+type Tok = { k: "id"; v: string } | { k: "lit"; v: string } | { k: "re"; v: string } | { k: "sym"; v: string };
 
 function locOf(text: string, i: number): { line: number; col: number } {
   let line = 1;
@@ -69,7 +69,7 @@ function tokenize(text: string): Tok[] {
     }
     if (c === "(" && text[i + 1] === "*") {
       const end = text.indexOf("*)", i + 2);
-      if (end < 0) fail("unterminated (* comment *)");
+      if (end === -1) fail("unterminated (* comment *)");
       i = end + 2;
       continue;
     }
@@ -107,10 +107,10 @@ function tokenize(text: string): Tok[] {
       out.push({ k: "lit", v });
       continue;
     }
-    if (/[A-Za-z]/.test(c)) {
+    if (/[A-Z]/i.test(c)) {
       const start = i;
       i++;
-      while (i < n && /[A-Za-z0-9-]/.test(text[i])) i++;
+      while (i < n && /[A-Z0-9-]/i.test(text[i])) i++;
       out.push({ k: "id", v: text.slice(start, i) });
       continue;
     }
@@ -134,7 +134,7 @@ function parseRules(text: string): Map<string, Expr> {
     // name the token instead.
     return peek() ? `${peek()!.k}:${"v" in peek()! ? (peek() as { v: string }).v : ""}` : "eof";
   };
-  const expect = (k: Tok["k"], v?: string) => {
+  const expectTok = (k: Tok["k"], v?: string) => {
     const t = peek();
     if (!t || t.k !== k || (v !== undefined && t.v !== v)) {
       throw new EbnfSyntaxError(`expected ${v ?? k}, got ${loc()}`, 0, 0);
@@ -164,19 +164,19 @@ function parseRules(text: string): Map<string, Expr> {
     if (t.k === "sym" && t.v === "[") {
       take();
       const x = parseExpr();
-      expect("sym", "]");
+      expectTok("sym", "]");
       return { t: "opt", x };
     }
     if (t.k === "sym" && t.v === "{") {
       take();
       const x = parseExpr();
-      expect("sym", "}");
+      expectTok("sym", "}");
       return { t: "rep", x };
     }
     if (t.k === "sym" && t.v === "(") {
       take();
       const x = parseExpr();
-      expect("sym", ")");
+      expectTok("sym", ")");
       return x;
     }
     if (t.k === "id") {
@@ -193,8 +193,8 @@ function parseRules(text: string): Map<string, Expr> {
       let re: RegExp;
       try {
         re = new RegExp(t.v, "uy");
-      } catch (e) {
-        throw new EbnfSyntaxError(`invalid regex ${JSON.stringify(t.v)}: ${String(e)}`, 0, 0);
+      } catch (error) {
+        throw new EbnfSyntaxError(`invalid regex ${JSON.stringify(t.v)}: ${String(error)}`, 0, 0);
       }
       return { t: "re", re, source: t.v };
     }
@@ -203,10 +203,10 @@ function parseRules(text: string): Map<string, Expr> {
 
   const rules = new Map<string, Expr>();
   while (i < toks.length) {
-    const name = expect("id") as { k: "id"; v: string };
-    expect("sym", "=");
+    const name = expectTok("id") as { k: "id"; v: string };
+    expectTok("sym", "=");
     const expr = parseExpr();
-    expect("sym", ";");
+    expectTok("sym", ";");
     if (rules.has(name.v)) throw new EbnfSyntaxError(`duplicate rule ${name.v}`, 0, 0);
     rules.set(name.v, expr);
   }

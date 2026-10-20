@@ -104,8 +104,8 @@ export async function evalError(input: string): Promise<unknown> {
   try {
     await evalJson(input);
     return undefined;
-  } catch (e) {
-    return e;
+  } catch (error) {
+    return error;
   }
 }
 

@@ -76,9 +76,9 @@ describe("curly-braces / {…} dict literals", () => {
   ])("door E-DICT-ODD-ARITY · $name", async ({ input, mode }) => {
     let err: unknown;
     try {
-      mode === "read" ? await readAst(input) : await evalJson(input);
-    } catch (e) {
-      err = e;
+      await (mode === "read" ? readAst(input) : evalJson(input));
+    } catch (error) {
+      err = error;
     }
     expect(err, "expected E-DICT-ODD-ARITY, but succeeded").toBeDefined();
     expect(errorClass(err)).toBe("E-DICT-ODD-ARITY");
@@ -93,9 +93,9 @@ describe("curly-braces / {…} dict literals", () => {
   ])("door E-DICT-BAD-KEY · $name", async ({ input, mode }) => {
     let err: unknown;
     try {
-      mode === "read" ? await readAst(input) : await evalJson(input);
-    } catch (e) {
-      err = e;
+      await (mode === "read" ? readAst(input) : evalJson(input));
+    } catch (error) {
+      err = error;
     }
     expect(err, "expected E-DICT-BAD-KEY, but succeeded").toBeDefined();
     expect(errorClass(err)).toBe("E-DICT-BAD-KEY");
@@ -113,9 +113,9 @@ describe("curly-braces / {…} dict literals", () => {
   ])("door E-DICT-DUP-KEY · $name", async ({ input, mode }) => {
     let err: unknown;
     try {
-      mode === "read" ? await readAst(input) : await evalJson(input);
-    } catch (e) {
-      err = e;
+      await (mode === "read" ? readAst(input) : evalJson(input));
+    } catch (error) {
+      err = error;
     }
     expect(err, "expected E-DICT-DUP-KEY, but succeeded").toBeDefined();
     expect(errorClass(err)).toBe("E-DICT-DUP-KEY");
@@ -126,9 +126,9 @@ describe("curly-braces / {…} dict literals", () => {
     async ({ input, mode }) => {
       let err: unknown;
       try {
-        mode === "read" ? await readAst(input) : await evalJson(input);
-      } catch (e) {
-        err = e;
+        await (mode === "read" ? readAst(input) : evalJson(input));
+      } catch (error) {
+        err = error;
       }
       expect(err, "expected E-EXPECTING-DATUM, but succeeded").toBeDefined();
       expect(errorClass(err)).toBe("E-EXPECTING-DATUM");
@@ -140,9 +140,9 @@ describe("curly-braces / {…} dict literals", () => {
     async ({ input, mode }) => {
       let err: unknown;
       try {
-        mode === "read" ? await readAst(input) : await evalJson(input);
-      } catch (e) {
-        err = e;
+        await (mode === "read" ? readAst(input) : evalJson(input));
+      } catch (error) {
+        err = error;
       }
       expect(err, "expected E-LITERAL-DOT, but succeeded").toBeDefined();
       expect(errorClass(err)).toBe("E-LITERAL-DOT");
@@ -154,9 +154,9 @@ describe("curly-braces / {…} dict literals", () => {
     async ({ input, mode }) => {
       let err: unknown;
       try {
-        mode === "read" ? await readAst(input) : await evalJson(input);
-      } catch (e) {
-        err = e;
+        await (mode === "read" ? readAst(input) : evalJson(input));
+      } catch (error) {
+        err = error;
       }
       expect(err, "expected E-UNTERMINATED, but succeeded").toBeDefined();
       expect(errorClass(err)).toBe("E-UNTERMINATED");
@@ -168,9 +168,9 @@ describe("curly-braces / {…} dict literals", () => {
     async ({ input, mode }) => {
       let err: unknown;
       try {
-        mode === "read" ? await readAst(input) : await evalJson(input);
-      } catch (e) {
-        err = e;
+        await (mode === "read" ? readAst(input) : evalJson(input));
+      } catch (error) {
+        err = error;
       }
       expect(err, "expected E-BRACKET-UNEXPECTED, but succeeded").toBeDefined();
       expect(errorClass(err)).toBe("E-BRACKET-UNEXPECTED");
@@ -182,9 +182,9 @@ describe("curly-braces / {…} dict literals", () => {
     async ({ input, mode }) => {
       let err: unknown;
       try {
-        mode === "read" ? await readAst(input) : await evalJson(input);
-      } catch (e) {
-        err = e;
+        await (mode === "read" ? readAst(input) : evalJson(input));
+      } catch (error) {
+        err = error;
       }
       expect(err, "expected any error, but succeeded").toBeDefined();
     },

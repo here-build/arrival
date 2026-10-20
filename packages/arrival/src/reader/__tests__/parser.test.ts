@@ -57,16 +57,16 @@ describe("Parser — atoms", () => {
     expect(await readOne("#false")).toBe("#f");
   });
 
-  it("reads #\\' as the apostrophe character, not a quote", async () => {
-    expect(await readOne("#\\'")).toBe("#\\'");
+  it(String.raw`reads #\' as the apostrophe character, not a quote`, async () => {
+    expect(await readOne(String.raw`#\'`)).toBe(String.raw`#\'`);
   });
 
-  it('reads #\\" as the double-quote character, not a string opener', async () => {
-    expect(await readOne('#\\"')).toBe('#\\"');
+  it(String.raw`reads #\" as the double-quote character, not a string opener`, async () => {
+    expect(await readOne(String.raw`#\"`)).toBe(String.raw`#\"`);
   });
 
-  it("reads #\\' inside a list as a character, not a quote", async () => {
-    const [form] = await readAll("(char=? x #\\')");
+  it(String.raw`reads #\' inside a list as a character, not a quote`, async () => {
+    const [form] = await readAll(String.raw`(char=? x #\')`);
     const items = (form as APair<any, any>).to_array(false);
     expect(items[2]).toBeInstanceOf(ACharacter);
     expect((items[2] as ACharacter).valueOf()).toBe("'");
@@ -175,28 +175,28 @@ describe("Parser — bar-quoted symbols (R7RS §7.1.1 |...|)", () => {
     expect((sym as ASymbol).valueOf()).toBe("");
   });
 
-  it("decodes an escaped bar \\| to a literal |", async () => {
-    const [sym] = await readAll("|with\\|bar|");
+  it(String.raw`decodes an escaped bar \| to a literal |`, async () => {
+    const [sym] = await readAll(String.raw`|with\|bar|`);
     expect((sym as ASymbol).valueOf()).toBe("with|bar");
   });
 
-  it("decodes an inline hex escape \\x41; to its codepoint", async () => {
-    const [sym] = await readAll("|x\\x41;y|");
+  it(String.raw`decodes an inline hex escape \x41; to its codepoint`, async () => {
+    const [sym] = await readAll(String.raw`|x\x41;y|`);
     expect((sym as ASymbol).valueOf()).toBe("xAy");
   });
 
-  it("decodes the mnemonic escapes \\t \\n \\r inside bars", async () => {
-    const [sym] = await readAll("|a\\tb\\nc\\rd|");
+  it(String.raw`decodes the mnemonic escapes \t \n \r inside bars`, async () => {
+    const [sym] = await readAll(String.raw`|a\tb\nc\rd|`);
     expect((sym as ASymbol).valueOf()).toBe("a\tb\nc\rd");
   });
 
-  it("decodes the mnemonic escapes \\a (alarm) and \\b (backspace)", async () => {
-    const [sym] = await readAll("|x\\ay\\bz|");
-    expect((sym as ASymbol).valueOf()).toBe("x\x07y\bz");
+  it(String.raw`decodes the mnemonic escapes \a (alarm) and \b (backspace)`, async () => {
+    const [sym] = await readAll(String.raw`|x\ay\bz|`);
+    expect((sym as ASymbol).valueOf()).toBe("x\u0007y\bz");
   });
 
   it("rejects an unrecognized backslash escape", async () => {
-    await expect(readAll("|bad\\qescape|")).rejects.toThrow();
+    await expect(readAll(String.raw`|bad\qescape|`)).rejects.toThrow();
   });
 
   it("round-trips a symbol that needs bars through toString(true) and back through the reader", async () => {
@@ -208,7 +208,7 @@ describe("Parser — bar-quoted symbols (R7RS §7.1.1 |...|)", () => {
   });
 
   it("round-trips a symbol whose name itself contains a bar and a backslash", async () => {
-    const [sym] = await readAll("|with\\|bar|");
+    const [sym] = await readAll(String.raw`|with\|bar|`);
     const printed = (sym as ASymbol).toString(true);
     const [reparsed] = await readAll(printed);
     expect((reparsed as ASymbol).valueOf()).toBe((sym as ASymbol).valueOf());

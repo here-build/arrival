@@ -14,8 +14,8 @@ export async function readerErrorCode(input: string): Promise<string | undefined
   try {
     await parse(input);
     return undefined;
-  } catch (e) {
-    for (let cur = e; cur instanceof Error; cur = cur.cause as Error | undefined) {
+  } catch (error) {
+    for (let cur = error; cur instanceof Error; cur = cur.cause as Error | undefined) {
       const code = (cur as { code?: unknown }).code;
       if (typeof code === "string") return code;
     }

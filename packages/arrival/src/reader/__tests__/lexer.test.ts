@@ -34,9 +34,9 @@ describe("Lexer — atoms & numbers", () => {
     { name: "booleans", input: "#t #f", tokens: ["#t", "#f"] },
     { name: "boolean long spellings", input: "#true #false", tokens: ["#true", "#false"] },
     { name: "boolean long spelling in a list", input: "(#true)", tokens: ["(", "#true", ")"] },
-    { name: "char literal", input: "#\\a", tokens: ["#\\a"] },
-    { name: "apostrophe char", input: "#\\'", tokens: ["#\\'"] },
-    { name: "double-quote char", input: '#\\"', tokens: ['#\\"'] },
+    { name: "char literal", input: String.raw`#\a`, tokens: [String.raw`#\a`] },
+    { name: "apostrophe char", input: String.raw`#\'`, tokens: [String.raw`#\'`] },
+    { name: "double-quote char", input: String.raw`#\"`, tokens: [String.raw`#\"`] },
   ])("tokenizes $name", ({ input, tokens }) => {
     expect(lex(input)).toEqual(tokens);
   });
@@ -46,16 +46,16 @@ describe("Lexer — character payloads that are also delimiters", () => {
   it.each([
     {
       name: "apostrophe in a list (must not become a quote)",
-      input: "(char=? x #\\')",
-      tokens: ["(", "char=?", "x", "#\\'", ")"],
+      input: String.raw`(char=? x #\')`,
+      tokens: ["(", "char=?", "x", String.raw`#\'`, ")"],
     },
     {
       name: "double-quote in a list (must not open a string)",
-      input: '(char=? x #\\")',
-      tokens: ["(", "char=?", "x", '#\\"', ")"],
+      input: String.raw`(char=? x #\")`,
+      tokens: ["(", "char=?", "x", String.raw`#\"`, ")"],
     },
-    { name: "comma char", input: "#\\,", tokens: ["#\\,"] },
-    { name: "open-paren char", input: "#\\(", tokens: ["#\\("] },
+    { name: "comma char", input: String.raw`#\,`, tokens: [String.raw`#\,`] },
+    { name: "open-paren char", input: String.raw`#\(`, tokens: [String.raw`#\(`] },
   ])("tokenizes $name", ({ input, tokens }) => {
     expect(lex(input)).toEqual(tokens);
   });
@@ -82,7 +82,7 @@ describe("Lexer — structure", () => {
 describe("Lexer — strings & quote sugar", () => {
   it.each([
     { name: "string literal as one token", input: '"hello world"', tokens: ['"hello world"'] },
-    { name: "escapes inside a string kept as one token", input: '"a\\"b"', tokens: ['"a\\"b"'] },
+    { name: "escapes inside a string kept as one token", input: String.raw`"a\"b"`, tokens: [String.raw`"a\"b"`] },
     { name: "quote prefix", input: "'x", tokens: ["'", "x"] },
     { name: "quasiquote prefix", input: "`x", tokens: ["`", "x"] },
     { name: "unquote prefix", input: ",x", tokens: [",", "x"] },

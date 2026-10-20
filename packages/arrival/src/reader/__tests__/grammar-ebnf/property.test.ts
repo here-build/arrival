@@ -24,8 +24,8 @@ const ATOMS = [
   "#false",
   "#null",
   '"hi"',
-  '"a\\nb"',
-  "#\\space",
+  String.raw`"a\nb"`,
+  String.raw`#\space`,
   "|Picnic Tables|",
   "@",
   "@keys",
@@ -93,6 +93,40 @@ describe("generated programs: Parser and eBNF both accept", () => {
         expect(got.ok, `over-reject ${JSON.stringify(input)} at ${got.pos}`).toBe(true);
       }),
       { numRuns: 400 },
+    );
+  });
+
+  // Deterministic pins: the counterexamples that once surfaced (and their seeds) can never flake silently.
+  it("pinned counterexamples (reader and grammar agree on accept/reject)", async () => {
+    const pinned = [
+      "||`",
+      "|a|`",
+      '||"',
+      "|x|;",
+      "#\\\n;(",
+      "#;;\n",
+      "[:`]",
+      "#1(1#",
+      String.raw`##\|`,
+      String.raw`##\a`,
+      "`",
+      "a `",
+      "|| '",
+      "'",
+    ];
+    for (const input of pinned) {
+      const readerOk = await readerAccepts(input);
+      expect(matchGrammar(g, input).ok, `grammar vs reader on ${JSON.stringify(input)}`).toBe(readerOk);
+    }
+  });
+
+  it("seed -69648676 path 154 stays green", async () => {
+    await fc.assert(
+      fc.asyncProperty(fc.string({ unit: fc.constantFrom(...DELIM_ALPHABET), maxLength: 5 }), async (input) => {
+        if (!(await readerAccepts(input))) return;
+        expect(matchGrammar(g, input).ok, `over-reject ${JSON.stringify(input)}`).toBe(true);
+      }),
+      { numRuns: 400, seed: -69_648_676, path: "154" },
     );
   });
 

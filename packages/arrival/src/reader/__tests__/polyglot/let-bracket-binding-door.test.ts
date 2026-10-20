@@ -23,8 +23,8 @@ import { exec } from "../../../eval/generator-exec.js";
 const doorError = async (src: string): Promise<Error & { cause?: unknown }> => {
   try {
     await exec(src);
-  } catch (e) {
-    return e as Error & { cause?: unknown };
+  } catch (error) {
+    return error as Error & { cause?: unknown };
   }
   throw new Error(`expected a bracket-binding door for: ${src}`);
 };
@@ -100,7 +100,7 @@ describe("bracket bindings — R2b per-element (Racket) consumption", () => {
       "(let* ([lat1-r (exact->inexact (/ (* 1 3.14159) 180))]) lat1-r)",
       "(let* ((lat1-r (exact->inexact (/ (* 1 3.14159) 180)))) lat1-r)",
     );
-    expect(value).toBeCloseTo(3.14159 / 180);
+    expect(value).toBeCloseTo(3.141_59 / 180);
   });
 });
 

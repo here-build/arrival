@@ -34,8 +34,8 @@ async function readOne(src: string, options?: ConstructorParameters<typeof Parse
 async function bans(src: string): Promise<{ code: string | undefined; message: string }> {
   try {
     await readOne(src);
-  } catch (e) {
-    return { code: (e as { code?: string })?.code, message: (e as Error)?.message ?? String(e) };
+  } catch (error) {
+    return { code: (error as { code?: string })?.code, message: (error as Error)?.message ?? String(error) };
   }
   throw new Error(`expected a ban door for: ${src}`);
 }

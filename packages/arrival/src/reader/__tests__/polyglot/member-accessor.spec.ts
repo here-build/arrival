@@ -25,8 +25,8 @@ describe("member-accessor / (:key …) accessor mechanics", () => {
       let err: unknown;
       try {
         await evalJson(input);
-      } catch (e) {
-        err = e;
+      } catch (error) {
+        err = error;
       }
       expect(err, "expected any error, but succeeded").toBeDefined();
       expect(errorClass(err)).toBeUndefined();

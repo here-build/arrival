@@ -11,7 +11,7 @@
 
   Scope. Reader CFG of datums. Not evaluator well-formedness (let-binding
   shape). Not Sugarcoat. Not env vocabulary. Reader-time doors (E-DICT-*,
-  E-LITERAL-DOT, E-DOT-EXTRA-ELEMENT, infix) teach; this CFG may over-accept
+  E-LITERAL-DOT, E-DOT-EXTRA-ELEMENT, E-BYTEVECTOR-ELEMENT, E-DATUM-LABEL-CYCLE, infix) teach; this CFG may over-accept
   them. Doors after read may reject a string this grammar accepts.
 
   Start symbol: program. Multiple top-level datums, including none.
@@ -97,7 +97,9 @@ bytevector = '#u8(' , { atmosphere } , [ datum , { { atmosphere } , datum } , { 
 (* grammar.md §LITERALS. Comma and a lone JSON `:` are atmosphere here, not datums. *)
 vec-lit = '[' , { lit-atmosphere } , [ datum , { { lit-atmosphere } , datum } , { lit-atmosphere } ] , ']' ;
 dict-lit = '{' , { lit-atmosphere } , [ datum , { { lit-atmosphere } , datum } , { lit-atmosphere } ] , '}' ;
-lit-atmosphere = atmosphere | ',' | ':' ;
+(* A bare `:` separator only; `:` fused to following non-delimiter chars (`:a`, `:\``) is
+   one token, so it belongs to `identifier`, not to the atmosphere. *)
+lit-atmosphere = atmosphere | ',' | ?/:(?=$|[\s()[\]{}',])/? ;
 
 (* R7RS §7.1.2 labels. Sampling rarely emits them; the reader accepts them. *)
 label-def = ?/#\d+=/? , { atmosphere } , datum ;
@@ -108,8 +110,10 @@ simple = string | character | boolean | hash-const | number | bar-symbol | ident
 string = ?/"(?:\\[\s\S]|[^\\"])*"/? ;
 
 (* Lexer character state runs to the next boundary, including a delimiter as the
-   first char after `#\`. Classification (char vs symbol) is parse_argument. *)
-character = ?/#\\[\s\S][^\s()[\]{}',]*(?=$|[\s()[\]{}',])/? ;
+   first char after `#\`; a whitespace payload (`#\<space>`, `#\<newline>`) ends the
+   token at once. Classification (char vs symbol) is parse_argument. *)
+character = ?/#\\\s/?
+          | ?/#\\[^\s][^\s()[\]{}',]*(?=$|[\s()[\]{}',])/? ;
 
 boolean = ?/#false(?=$|[\s()[\]{}',])/?
         | ?/#true(?=$|[\s()[\]{}',])/?
@@ -128,8 +132,13 @@ prefixed-number = ?/#(?:[eidobx]#)?[eidobx][+-]?[0-9a-fA-F]+(?:\/[0-9a-fA-F]+)?(
 
 plain-number = ?/[+-]?(?:[0-9]+\/[0-9]+|(?:[0-9]+\.[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?|[0-9]+(?:[eE][+-]?[0-9]+)?)(?=$|[\s()[\]{}',])/? ;
 
-(* R7RS §7.1.1 `|…|`. Spaces and delimiters are legal inside the bars. *)
-bar-symbol = ?/\|(?:\\[\s\S]|[^\\|])*\|/? ;
+(* R7RS §7.1.1 `|…|`. Spaces and delimiters are legal inside the bars. A bar segment
+   also composes with adjacent non-delimiter characters into ONE symbol token
+   (`:|24|`, `a|b c|d`, `||`` is the symbol named backtick): the Lexer's symbol
+   state runs to the next boundary outside the bars, so `"` `;` backtick right
+   after a closing bar are symbol content, never a new string / comment /
+   quasiquote. Leading exclusions mirror `identifier`. *)
+bar-symbol = ?/(?!\.(?:$|[\s()[\]{}',]))(?!#\|)(?!#;)(?![;"`])(?=[^\s()[\]{}',]*\|)(?:[^\s()[\]{}',|]|\|(?:\\[\s\S]|[^\\|])*\|)+/? ;
 
 (*
   Any non-delimiter run that is not a more specific simple. Negative lookaheads:

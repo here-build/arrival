@@ -21,8 +21,8 @@ import { exec } from "../../../eval/generator-exec.js";
 const doorError = async (src: string): Promise<Error & { cause?: unknown }> => {
   try {
     await exec(src);
-  } catch (e) {
-    return e as Error & { cause?: unknown };
+  } catch (error) {
+    return error as Error & { cause?: unknown };
   }
   throw new Error(`expected a bracket-clause door for: ${src}`);
 };
