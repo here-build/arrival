@@ -3,7 +3,7 @@
 Customer development where the customer is an LLM writing **Scheme programs**, and
 the product under test is the **language guide** (not a tool API).
 
-Adapted from `inhuman/docs/inhuman-custdev.md`. Same loop, different surface:
+Adapted from a sibling project's custdev protocol. Same loop, different surface:
 
 | Inhuman custdev                 | This experiment                         |
 | ------------------------------- | --------------------------------------- |
@@ -202,12 +202,12 @@ task's `invite` set. Example: filter/project task solved with alists and `assoc`
 
 ```bash
 # from packages/arrival
-node --experimental-strip-types src/__custdev__/language-guide/run-round.mts
+node --experimental-strip-types src/run-round.mts
 # optional:
 GUIDELINES=./docs/llm-agent-card.md \
 MODELS=longcat,fable \
 TASKS=filter-project,nested-path \
-node --experimental-strip-types src/__custdev__/language-guide/run-round.mts
+node --experimental-strip-types src/run-round.mts
 ```
 
 Opt-in only (real model calls). Not a CI gate.

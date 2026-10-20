@@ -1,0 +1,25 @@
+{
+  "name": "@here.build/arrival-language-guide",
+  "version": "0.0.0",
+  "private": true,
+  "description": "LLM customer-development harness for the arrival language guide (task suite, round runner, scorer)",
+  "license": "MIT",
+  "author": "here.build",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "round": "node --experimental-strip-types src/run-round.mts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@here.build/arrival": "workspace:^"
+  },
+  "devDependencies": {
+    "@here.build/eslint-configs": "0.9.0",
+    "@here.build/tsconfig": "0.9.0",
+    "@types/node": "24.0.0",
+    "eslint": "9.39.5",
+    "typescript": "6.0.3"
+  }
+}

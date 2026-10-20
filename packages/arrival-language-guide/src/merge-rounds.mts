@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * Merge per-model round JSON files written in parallel into one panel report.
  * Usage:
@@ -6,6 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+// @ts-expect-error TS5097 — node --experimental-strip-types needs the literal .mts specifier; tsconfig does not enable allowImportingTsExtensions
 import { acceptanceGate, summarize } from "./score.mts";
 
 const files = process.argv.slice(2);
@@ -42,7 +44,7 @@ for (const c of cells) {
   b.n++;
   if (c.exec_ok) b.exec++;
   if (c.oracle_ok) b.oracle++;
-  if ((c.oddities as string[]).length) b.odd++;
+  if ((c.oddities as string[]).length > 0) b.odd++;
   if (c.underuse) b.under++;
 }
 
@@ -86,7 +88,7 @@ const merged = {
 };
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const out = path.join(HERE, "__custdev-output__", `merged-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
+const out = path.join(HERE, "__custdev-output__", `merged-${new Date().toISOString().replaceAll(/[:.]/g, "-")}.json`);
 fs.writeFileSync(out, JSON.stringify(merged, null, 2));
 console.log(JSON.stringify({ summary, byModel, acceptance: gate, failCount: fails.length }, null, 2));
 console.log(`wrote ${out}`);

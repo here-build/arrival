@@ -1,9 +1,10 @@
+#!/usr/bin/env node
 /**
  * Language-guide custdev round runner.
  *
  * Opt-in: fires real models. Not a CI gate.
  *
- *   pnpm exec tsx src/__custdev__/language-guide/run-round.mts
+ *   pnpm exec tsx src/run-round.mts
  *   MODELS=longcat,fable TASKS=filter-project pnpm exec tsx …
  */
 import { execFileSync, execSync } from "node:child_process";
@@ -18,6 +19,7 @@ import {
   sha256,
   summarize,
   type Invite,
+  // @ts-expect-error TS5097 — node --experimental-strip-types needs the literal .mts specifier; tsconfig does not enable allowImportingTsExtensions
 } from "./score.mts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -52,6 +54,7 @@ function parseList(env: string | undefined, fallback: string[]): string[] {
 
 function which(cmd: string): boolean {
   try {
+    // eslint-disable-next-line sonarjs/os-command -- `cmd` is only ever a hard-coded CLI name from this file (grok/claude); opt-in dev tool
     execSync(`command -v ${cmd}`, { stdio: "pipe" });
     return true;
   } catch {
@@ -61,6 +64,7 @@ function which(cmd: string): boolean {
 
 function callGrok(model: string, prompt: string): string {
   const out = execFileSync(
+    // eslint-disable-next-line sonarjs/no-os-command-from-path -- opt-in dev tool deliberately drives the developer's own `grok` CLI from PATH
     "grok",
     [
       "-p",
@@ -88,6 +92,7 @@ function callClaude(model: string, prompt: string): string {
   // --bare currently fails OAuth in this environment ("Not logged in"). Instead:
   // replace the system prompt so monorepo CLAUDE.md cannot bias the language card.
   const out = execFileSync(
+    // eslint-disable-next-line sonarjs/no-os-command-from-path -- opt-in dev tool deliberately drives the developer's own `claude` CLI from PATH
     "claude",
     [
       "-p",
@@ -108,8 +113,8 @@ async function execProgram(
   fixture: string,
   program: string,
 ): Promise<{ ok: boolean; value: unknown; error: string | null }> {
-  // Dynamic import so the script still loads if dist is stale until we call.
-  const { exec } = await import("../../../dist/index.js");
+  // Dynamic import so the script still loads if the arrival build is stale until we call.
+  const { exec } = await import("@here.build/arrival");
   const source = `${fixture}\n${program}`;
   try {
     const values = await exec(source);
@@ -120,7 +125,7 @@ async function execProgram(
       else if (last === undefined) last = v;
     }
     // Prefer last defined value; if all null (only defines), take last
-    last = values.length ? values[values.length - 1] : undefined;
+    last = values.length > 0 ? values[values.length - 1] : undefined;
     // Skip trailing void from defines: walk back to first non-null
     for (let i = values.length - 1; i >= 0; i--) {
       if (values[i] !== null && values[i] !== undefined) {
@@ -129,8 +134,8 @@ async function execProgram(
       }
     }
     return { ok: true, value: last, error: null };
-  } catch (e) {
-    return { ok: false, value: null, error: e instanceof Error ? e.message : String(e) };
+  } catch (error) {
+    return { ok: false, value: null, error: error instanceof Error ? error.message : String(error) };
   }
 }
 
@@ -146,7 +151,7 @@ async function main() {
   // Single source of truth: docs/llm-agent-card.md (override with GUIDELINES=).
   const guidelinesPath = process.env.GUIDELINES
     ? path.resolve(process.env.GUIDELINES)
-    : path.resolve(HERE, "../../../docs/llm-agent-card.md");
+    : path.resolve(HERE, "../../arrival/docs/llm-agent-card.md");
   if (!fs.existsSync(guidelinesPath)) {
     console.error(`[custdev] guidelines missing: ${guidelinesPath}`);
     process.exit(2);
@@ -193,8 +198,8 @@ async function main() {
       let callErr: string | null = null;
       try {
         raw = model.kind === "grok" ? callGrok(model.model, prompt) : callClaude(model.model, prompt);
-      } catch (e) {
-        callErr = e instanceof Error ? e.message : String(e);
+      } catch (error_) {
+        callErr = error_ instanceof Error ? error_.message : String(error_);
       }
 
       const program = raw ? extractSchemeFence(raw) : null;
@@ -204,10 +209,7 @@ async function main() {
       let error: string | null = callErr;
       let score = scoreProgram("", task.invite, task.invite_any !== false, false);
 
-      if (!program) {
-        error = error ?? "no scheme fence in model output";
-        console.log("NO_PROGRAM");
-      } else {
+      if (program) {
         const run = await execProgram(task.fixture, program);
         exec_ok = run.ok;
         value = run.value;
@@ -217,6 +219,9 @@ async function main() {
         console.log(
           `${oracle_ok ? "ORACLE_OK" : exec_ok ? "EXEC_OK_ORACLE_FAIL" : "EXEC_FAIL"} odd=${score.oddities.length} under=${score.underuse}`,
         );
+      } else {
+        error = error ?? "no scheme fence in model output";
+        console.log("NO_PROGRAM");
       }
 
       cells.push({
@@ -267,7 +272,7 @@ async function main() {
   };
 
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  const outPath = path.join(OUT_DIR, `round-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
+  const outPath = path.join(OUT_DIR, `round-${new Date().toISOString().replaceAll(/[:.]/g, "-")}.json`);
   fs.writeFileSync(outPath, JSON.stringify(report, null, 2));
 
   console.log("\n=== SUMMARY ===");
@@ -279,7 +284,7 @@ async function main() {
   process.exit(gate.ok ? 0 : 1);
 }
 
-main().catch((e) => {
-  console.error(e);
+main().catch((error) => {
+  console.error(error);
   process.exit(2);
 });

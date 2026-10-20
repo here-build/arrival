@@ -41,7 +41,7 @@ const ODDITY_PATTERNS: Array<[string, RegExp]> = [
   ["display", /\bdisplay\b/],
   ["write", /(?<![a-z-])write(?![a-z-])/],
   ["newline", /\bnewline\b/],
-  ["load", /(?<![a-z-\/])load(?![a-z-])/],
+  ["load", /(?<![a-z-/])load(?![a-z-])/],
   ["eval", /(?<![a-z-])eval(?![a-z-])/],
   ["open-input-file", /\bopen-input-file\b|\bwith-output-to-file\b|\bread-line\b/],
   ["hash-ref", /\bmake-hash\b|\bhash-ref\b|\bhash-set!\b|\bgethash\b/],
@@ -68,13 +68,13 @@ const TOLERATED_PATTERNS: Array<[string, RegExp]> = [
   ["~>", /~>>?|~>/],
   ["assoc-ref", /\bassoc-ref\b/],
   ["true-false", /(?<![a-z:#-])true(?![a-z-])|(?<![a-z:#-])false(?![a-z-])/],
-  ["suffix-key", /\{[^}]*\b[a-zA-Z_][\w-]*:\s/],
-  ["hash-colon", /#:[a-zA-Z_]/],
+  ["suffix-key", /\{[^}]*\b[a-z_][\w-]*:\s/i],
+  ["hash-colon", /#:[a-z_]/i],
 ];
 
 const PREFERRED_PATTERNS: Array<[string, RegExp]> = [
   ["dict", /\(dict\b|\{:/],
-  ["keyword-access", /\(:[a-zA-Z*][\w*!?\-+.$%&=<>:/]*\b|\(@\s/],
+  ["keyword-access", /\(:[a-z*][\w*!?\-+.$%&=<>:/]*\b|\(@\s/i],
   ["thread", /\(->>\b|\(->\b/],
   ["get-in", /\bget-in\b/],
   ["assoc-in", /\bassoc-in\b|\bupdate-in\b/],
@@ -90,7 +90,7 @@ const PREFERRED_PATTERNS: Array<[string, RegExp]> = [
 
 /** Strip ;-to-EOL comments so prose like "return values" does not trip oddity scans. */
 function stripComments(src: string): string {
-  return src.replace(/;.*$/gm, "");
+  return src.replaceAll(/;.*$/gm, "");
 }
 
 function hits(src: string, patterns: Array<[string, RegExp]>): string[] {
@@ -151,11 +151,11 @@ export function deepEqual(a: unknown, b: unknown): boolean {
 }
 
 export function extractSchemeFence(text: string): string | null {
-  const m = text.match(/```(?:scheme|scm|lisp|racket)?\s*\n([\s\S]*?)```/i);
+  const m = text.match(/```(?:scheme|scm|lisp|racket)?[^\S\n]*\n([\s\S]*?)```/i);
   if (m) return m[1]!.trim();
   // bare program fallback: first paren form through end
   const i = text.indexOf("(");
-  if (i >= 0) return text.slice(i).trim();
+  if (i !== -1) return text.slice(i).trim();
   return null;
 }
 
