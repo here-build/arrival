@@ -1,0 +1,981 @@
+/**
+ * GraphView — renders an already-computed RenderGraph: measure → ELK layout → positioned boxes.
+ *
+ * STATIC LAYOUT: every node renders twice — once as a structure-only SKELETON in a hidden
+ * measuring layer (no values, no states, no picker), once positioned at its laid-out box with
+ * the painted instance's states and values. The skeleton layer is a pure function of the graph's
+ * structure (`structureOf`), so it re-renders, and the view re-measures, only when the structure
+ * changes; a selection, a progress tick or a value repaints the positioned layer on the existing
+ * layout. Painted boxes take the laid-out size and every value line is clamped (styles.css), so
+ * no value can push a box past it. A ResizeObserver on the skeletons still catches font loads.
+ *
+ * ROW DOCKS: the skeleton marks each operand row and the result row with `data-port`; their
+ * measured centres become the leaf's port positions, so a wire lands on the row it feeds.
+ *
+ * Each layout request takes a generation number and only the latest one lands. Paint order is
+ * areas (outer → inner, the graph's parents-first order), then the wire layer, then wire labels,
+ * transforms and step cards — a wire deep inside an area never vanishes under a shallower area,
+ * and cards sit above the wires that dock on them.
+ */
+import {
+  type KeyboardEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+import { isPair, kindOf, listItems, listLength } from "./datum.js";
+import { defaultEngine, type ElkEngine } from "./elk-engine.js";
+import { edgeLabel, edgeText, FRAME_RADIUS, isPage, isStub, layout } from "./layout.js";
+import {
+  type Box,
+  edgeLabelKey,
+  type GraphMode,
+  type InstanceRef,
+  type LaidOutGraph,
+  type Point,
+  portBase,
+  portKey,
+  type RenderFrame,
+  type RenderEdge,
+  type RenderGraph,
+  type RenderInstance,
+  type RenderNode,
+  type RenderState,
+  type RenderStep,
+  type RenderTransform,
+  type Size,
+  type SkippedBecause,
+} from "./types.js";
+
+export interface StepContentProps {
+  symbol: string;
+  input: RenderStep["input"];
+  output: RenderStep["output"];
+  state: RenderState;
+  mode: GraphMode;
+  instance: InstanceRef;
+  /** Why a `skipped` step did not run. */
+  skippedBecause?: SkippedBecause;
+}
+
+export interface GraphViewProps {
+  graph: RenderGraph;
+  mode: GraphMode;
+  /** Renders a step card's CONTENTS; the card chrome (border, state bar), ports and wires stay
+   *  ours. Measured with values absent: mark operand rows `data-port="in:<slot>"` and the result
+   *  row `data-port="out"` to dock wires on them; contents past the measured box are clipped. */
+  renderNode?: (p: StepContentProps) => ReactNode;
+  /** A picker tab was chosen (`ordinal`), or the "live" control asked to follow the run again
+   *  (`undefined`). `frameId` is the z-frame's id. */
+  onSelect?: (frameId: string, ordinal: number | undefined) => void;
+  /** Defaults to the main-thread `elk.bundled.js` engine; `createWorkerEngine` moves layout off it. */
+  engine?: ElkEngine;
+  /** Called after each relayout lands, with its duration in ms (measure + ELK + apply). */
+  onLayout?: (ms: number) => void;
+}
+
+const RELAYOUT_DEBOUNCE_MS = 50;
+/** A structure that keeps changing still lands at least this often. */
+const RELAYOUT_MAX_WAIT_MS = 250;
+/** Past this many instances the picker is a stepper `‹ k/N ›`. */
+export const TAB_CAP = 16;
+
+// ── Values ───────────────────────────────────────────────────────────────────
+
+const PREVIEW_MAX = 120;
+
+/** Arrival's own print protocol: every AValue answers `["arrival/print"]()`. */
+const isPrintable = (v: unknown): v is { "arrival/print": () => string } =>
+  v != null && typeof (v as Record<string, unknown>)["arrival/print"] === "function";
+
+/** A JS string, a boxed `String`, or arrival's string box. */
+const isString = (v: unknown): boolean =>
+  typeof v === "string" || Object.prototype.toString.call(v) === "[object String]" || kindOf(v) === "string";
+
+/** The host JS value behind arrival's membrane box (`AJSObject`, `AJSArray`), if `v` is one. */
+function hostSource(v: unknown): object | undefined {
+  const source = (v as { source?: unknown }).source;
+  const kind = kindOf(v);
+  if (kind === "object" && typeof source === "object" && source !== null) return source;
+  return kind === "vector" && Array.isArray(source) ? source : undefined;
+}
+
+/** `v` written as data: scheme values in their written form, strings quoted, host objects and
+ *  arrays as `{key: value}` / `[a, b]`. Past the top level a sequence reads as its length and
+ *  past the second a record as `{…}`; a long collection stops once the preview is full. */
+function valueText(v: unknown, depth: number): string {
+  if (isString(v)) return JSON.stringify(String(v));
+  if (v === null || (typeof v !== "object" && typeof v !== "function")) return String(v);
+  const host = hostSource(v);
+  if (host) return valueText(host, depth);
+  if (isPair(v) && listLength(v) !== undefined) return sequenceText("(", " ", ")", listItems(v), depth);
+  if (kindOf(v) === "vector") return sequenceText("#(", " ", ")", (v as { __vector__: unknown[] }).__vector__, depth);
+  if (isPrintable(v)) return v["arrival/print"]();
+  if (typeof v === "function") return "#<procedure>";
+  if (Array.isArray(v)) return sequenceText("[", ", ", "]", v, depth);
+  if (depth >= 2) return "{…}";
+  const fields = joined(Object.keys(v), ", ", (k) => {
+    const key = /^[$_a-z][\w$]*$/i.test(k) ? k : JSON.stringify(k);
+    return `${key}: ${valueText((v as Record<string, unknown>)[k], depth + 1)}`;
+  });
+  return `{${fields}}`;
+}
+
+function sequenceText(open: string, sep: string, close: string, items: readonly unknown[], depth: number): string {
+  if (depth >= 1) return `${open}${items.length} ${plural(items.length, "item")}${close}`;
+  return open + joined(items, sep, (x) => valueText(x, depth + 1)) + close;
+}
+
+/** `items` written and joined, ending in `…` once the preview is full. */
+function joined<T>(items: readonly T[], sep: string, text: (x: T) => string): string {
+  const parts: string[] = [];
+  let length = 0;
+  for (const x of items) {
+    if (length > PREVIEW_MAX) {
+      parts.push("…");
+      break;
+    }
+    const part = text(x);
+    parts.push(part);
+    length += part.length + sep.length;
+  }
+  return parts.join(sep);
+}
+
+/** One-line preview of a runtime value, truncated. */
+export function preview(v: unknown): string {
+  const text = valueText(v, 0);
+  return text.length > PREVIEW_MAX ? `${text.slice(0, PREVIEW_MAX - 1)}…` : text;
+}
+
+/** A result value: prose for a string (as harness reads an answer), mono data for the rest. */
+function ValueText({ value }: { value: unknown }) {
+  const prose = isString(value);
+  const text = prose ? String(value) : preview(value);
+  return (
+    <span className="eg-value" data-type={prose ? "prose" : "data"} title={text}>
+      {text.length > 400 ? `${text.slice(0, 399)}…` : text}
+    </span>
+  );
+}
+
+// ── States → words ───────────────────────────────────────────────────────────
+
+const SKIP_REASON: Record<SkippedBecause, string> = {
+  "not-taken": "not taken",
+  "not-reached": "not reached",
+};
+
+/** The small-caps verb a state adds to a card's head (a resolved card says nothing). */
+function verbOf(state: RenderState, skippedBecause: SkippedBecause | undefined): string {
+  switch (state) {
+    case "running":
+      return "running";
+    case "rejected":
+      return "failed";
+    case "cancelled":
+      return "cancelled";
+    case "skipped":
+      return skippedBecause ? SKIP_REASON[skippedBecause] : "skipped";
+    default:
+      return "";
+  }
+}
+
+const plural = (n: number, word: string): string => (n === 1 ? word : `${word}s`);
+
+const isDeviation = (s: RenderState): boolean => s === "running" || s === "rejected" || s === "cancelled";
+
+// ── Step cards ───────────────────────────────────────────────────────────────
+
+/** The card as a sentence: symbol · verb; the operands, one muted line each; a hairline; the
+ *  result. The result row exists in actual mode whatever the state, so a card's rows — and its
+ *  size — depend only on the mode and the operands. */
+export function DefaultStepContent({
+  symbol,
+  input,
+  output,
+  state,
+  mode,
+  skippedBecause,
+}: StepContentProps): ReactNode {
+  const verb = verbOf(state, skippedBecause);
+  let result: ReactNode = (
+    <span className="eg-value" data-empty="">
+      {" "}
+    </span>
+  );
+  if (output.hasValue) result = <ValueText value={output.value} />;
+  else if (output.error !== undefined)
+    result = (
+      <span
+        className="eg-value"
+        {...(state === "cancelled" ? { "data-empty": "" } : { "data-tone": "danger" })}
+        title={output.error}
+      >
+        {output.error}
+      </span>
+    );
+  return (
+    <>
+      <div className="eg-head" data-anchor="head">
+        <span className="eg-symbol">{symbol}</span>
+        <span className="eg-verb eg-label">
+          {verb}
+          {state === "running" && <span className="eg-spinner" aria-hidden />}
+        </span>
+      </div>
+      {input.map((a) => {
+        // A keyword argument is one row, `:key value`, in both modes.
+        const key = a.slot.startsWith(":") ? `${a.slot} ` : "";
+        const text = key + (mode === "actual" && a.hasValue ? preview(a.value) : a.source);
+        return (
+          <span key={a.slot} className="eg-row" data-port={`in:${a.slot}`} title={text}>
+            {text}
+          </span>
+        );
+      })}
+      {mode === "actual" && (
+        <div className="eg-result" data-port="out">
+          {result}
+        </div>
+      )}
+    </>
+  );
+}
+
+interface StepBoxProps {
+  step: RenderStep;
+  mode: GraphMode;
+  renderNode: (p: StepContentProps) => ReactNode;
+  style?: React.CSSProperties;
+}
+
+function StepBox({ step, mode, renderNode, style }: StepBoxProps) {
+  const { symbol, input, output, state, instance, skippedBecause } = step;
+  return (
+    <div className="eg-step" style={style} data-state={state} {...(step.unplanned ? { "data-unplanned": "" } : {})}>
+      {renderNode({ symbol, input, output, state, mode, instance, ...(skippedBecause ? { skippedBecause } : {}) })}
+    </div>
+  );
+}
+
+// ── Transforms ───────────────────────────────────────────────────────────────
+
+function TransformBox({ t, mode, style }: { t: RenderTransform; mode: GraphMode; style?: React.CSSProperties }) {
+  return (
+    <div className="eg-transform" style={style} data-state={t.state} title={t.text}>
+      <span className="eg-label">{t.op}</span>
+      <span className="eg-expr">{t.text}</span>
+      {mode === "actual" && (
+        <span className="eg-value-line" data-port="out">
+          {t.hasValue ? (
+            preview(t.value)
+          ) : (
+            <span className="eg-value" data-empty="">
+              —
+            </span>
+          )}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ── Areas ────────────────────────────────────────────────────────────────────
+
+/** What an area says about how its passes run — the render graph's caption, else the kind's. */
+function captionOf(f: RenderFrame): string | undefined {
+  if (f.caption !== undefined) return f.caption;
+  switch (f.frame) {
+    case "par":
+      return "in parallel";
+    case "loop":
+      return "in loop";
+    case "callback":
+      return `×? via ${f.label}`;
+    default:
+      return undefined;
+  }
+}
+
+const paramsOf = (f: RenderFrame): string[] =>
+  f.ports.filter((p) => p.side === "in").map((p) => p.label ?? portBase(p.id).replace(/^in:/, ""));
+
+/** The program's own top-level sequence says nothing: it is the page. */
+const hasHead = (f: RenderFrame): boolean => !(f.frame === "seq" && isPage(f));
+
+/** The structural half of an area's head: caption, name, function tab. Measured. */
+function HeadTitle({ frame }: { frame: RenderFrame }) {
+  const caption = captionOf(frame);
+  if (frame.frame === "call") {
+    return (
+      <>
+        <span className="eg-fn-tab">
+          <span className="eg-frame-title">ƒ</span>
+          {frame.symbol === undefined ? (
+            <span className="eg-frame-title">{frame.label}</span>
+          ) : (
+            <span className="eg-symbol">{frame.symbol}</span>
+          )}
+          <span className="eg-frame-title">({paramsOf(frame).join(" ")})</span>
+        </span>
+        {caption !== undefined && <span className="eg-label">{caption}</span>}
+      </>
+    );
+  }
+  // A callback's caption already names its host.
+  const name = frame.frame === "callback" && frame.caption === undefined ? undefined : frame.label;
+  return (
+    <>
+      {frame.symbol !== undefined && <span className="eg-symbol">{frame.symbol}</span>}
+      {caption !== undefined && <span className="eg-label">{caption}</span>}
+      {name && (
+        <span className="eg-frame-title">{frame.frame === "branch" && !frame.caption ? `? ${name}` : name}</span>
+      )}
+    </>
+  );
+}
+
+function countText(f: RenderFrame): string | undefined {
+  const p = f.progress;
+  if (!p) return undefined;
+  const settled = p.resolved + p.rejected + (p.cancelled ?? 0);
+  return p.total === undefined ? `${settled} done` : `${settled} of ${p.total}`;
+}
+
+interface PickerProps {
+  frame: RenderFrame & { instances: RenderInstance[] };
+  onSelect: GraphViewProps["onSelect"];
+}
+
+/** The instance picker: tabs `#k` (a dot for deviations only), a stepper past `TAB_CAP`; follows
+ *  the run until a click pins it, and a "live" control unpins. Arrow keys move along. */
+function Picker({ frame, onSelect }: PickerProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  const all = frame.instances;
+  const selected = frame.selected ?? all.at(-1)?.ordinal;
+  const at = Math.max(
+    0,
+    all.findIndex((i) => i.ordinal === selected),
+  );
+  const pick = (index: number) => {
+    onSelect?.(frame.id, all[Math.max(0, Math.min(all.length - 1, index))]!.ordinal);
+  };
+  const onKeyDown = (e: KeyboardEvent) => {
+    const moves: Partial<Record<string, number>> = {
+      ArrowLeft: at - 1,
+      ArrowRight: at + 1,
+      Home: 0,
+      End: all.length - 1,
+    };
+    const next = moves[e.key];
+    if (next === undefined) return;
+    e.preventDefault();
+    pick(next);
+    requestAnimationFrame(() =>
+      ref.current
+        ?.querySelector<HTMLElement>(`[data-index="${Math.max(0, Math.min(all.length - 1, next))}"], .eg-stepper-text`)
+        ?.focus(),
+    );
+  };
+  const live = frame.pinned && (
+    <button type="button" className="eg-live" title="Follow the run" onClick={() => onSelect?.(frame.id, undefined)}>
+      live
+    </button>
+  );
+  // What can widen the strip: the dots (deviation states) and the live control.
+  const content = `${all.map((i) => (isDeviation(i.state) ? "•" : "")).join(",")}|${frame.pinned === true}`;
+  const stepper = useStepper(ref, all.length, content);
+  if (stepper) {
+    const cur = all[at]!;
+    return (
+      <div ref={ref} className="eg-tabs" role="group" aria-label="instance" onKeyDown={onKeyDown}>
+        <button
+          type="button"
+          className="eg-step-btn"
+          aria-label="previous"
+          disabled={at === 0}
+          onClick={() => pick(at - 1)}
+        >
+          ‹
+        </button>
+        <span className="eg-stepper-text" tabIndex={0} aria-live="polite">
+          {at + 1}/{all.length}
+        </span>
+        {isDeviation(cur.state) && <span className="eg-dot" data-state={cur.state} />}
+        <button
+          type="button"
+          className="eg-step-btn"
+          aria-label="next"
+          disabled={at === all.length - 1}
+          onClick={() => pick(at + 1)}
+        >
+          ›
+        </button>
+        {live}
+      </div>
+    );
+  }
+  return (
+    <div ref={ref} className="eg-tabs" role="tablist" aria-label="instance" onKeyDown={onKeyDown}>
+      {all.map((inst, i) => (
+        <button
+          key={inst.ordinal}
+          type="button"
+          role="tab"
+          className="eg-tab"
+          data-index={i}
+          aria-selected={i === at}
+          tabIndex={i === at ? 0 : -1}
+          onClick={() => pick(i)}
+        >
+          #{inst.ordinal + 1}
+          {isDeviation(inst.state) && <span className="eg-dot" data-state={inst.state} />}
+        </button>
+      ))}
+      {live}
+    </div>
+  );
+}
+
+/**
+ * Tabs or the stepper: past `TAB_CAP`, or when the tabs overflow the head's tail (the area's
+ * width is static, the instance count is not). An overflow at `n` instances and tail width `w`
+ * keeps the stepper for every count ≥ n at width ≤ w; a wider tail tries tabs again. Paint-only:
+ * the measured head reserves a constant picker room the stepper always fits in.
+ */
+function useStepper(ref: React.RefObject<HTMLDivElement | null>, count: number, content: string): boolean {
+  const [width, setWidth] = useState(0);
+  const [overflowed, setOverflowed] = useState<{ count: number; width: number } | null>(null);
+  useLayoutEffect(() => {
+    const tail = ref.current?.parentElement;
+    if (!tail || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setWidth(tail.clientWidth));
+    ro.observe(tail);
+    return () => ro.disconnect();
+  }, [ref]);
+  const stepper = count > TAB_CAP || (overflowed !== null && count >= overflowed.count && width <= overflowed.width);
+  useLayoutEffect(() => {
+    const tail = ref.current?.parentElement;
+    if (stepper || !tail) return;
+    // A layout measurement: the overflow is only known after the tabs paint.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (tail.scrollWidth > tail.clientWidth + 1) setOverflowed({ count, width: tail.clientWidth });
+  }, [ref, stepper, count, width, content]);
+  return stepper;
+}
+
+interface FrameBoxProps {
+  frame: RenderFrame;
+  mode: GraphMode;
+  first?: boolean;
+  onSelect?: GraphViewProps["onSelect"];
+  style?: React.CSSProperties;
+}
+
+/** An area: a whisper box with its head above the border; an arm is a lane titled by its guard;
+ *  a collapsed frame (a recursion stub) is a pill. */
+function FrameBox({ frame, mode, first, onSelect, style }: FrameBoxProps) {
+  const attrs = {
+    className: "eg-frame",
+    style,
+    "data-state": frame.state,
+    "data-frame": frame.frame,
+    ...(isStub(frame) ? { "data-collapsed": "" } : {}),
+    ...(first ? { "data-first": "" } : {}),
+  };
+  if (frame.frame === "arm") {
+    return (
+      <div {...attrs}>
+        <div className="eg-lane-title">
+          <span>{frame.label}</span>
+          {frame.state === "skipped" && <span className="eg-label">{verbOf("skipped", frame.skippedBecause)}</span>}
+        </div>
+      </div>
+    );
+  }
+  if (frame.collapsed) {
+    return (
+      <div {...attrs}>
+        <StubTitle frame={frame} />
+      </div>
+    );
+  }
+  const count = countText(frame);
+  const picker = mode === "actual" && frame.instances && frame.instances.length > 0;
+  if (!hasHead(frame)) return <div {...attrs} />;
+  return (
+    <div {...attrs}>
+      <div className="eg-frame-head">
+        <HeadTitle frame={frame} />
+        <div className="eg-frame-tail">
+          {picker && <Picker frame={frame as PickerProps["frame"]} onSelect={onSelect} />}
+          {count !== undefined && <span className="eg-count">{count}</span>}
+          {frame.state === "skipped" && <span className="eg-label">{verbOf("skipped", frame.skippedBecause)}</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** `↺ name` — a recursion stub (the glyph leads, whether or not the label already carries it). */
+function StubTitle({ frame }: { frame: RenderFrame }) {
+  const name = (frame.symbol ?? frame.label).replaceAll("↺", "").trim();
+  return (
+    <>
+      <span className="eg-frame-title">{frame.frame === "call" ? "↺" : "▸"}</span>
+      <span className={frame.symbol === undefined ? "eg-frame-title" : "eg-symbol"}>{name}</span>
+    </>
+  );
+}
+
+/** The measured half of a frame: its head (or lane title, or pill) — structure only. */
+function FrameSkeleton({ frame, mode }: { frame: RenderFrame; mode: GraphMode }) {
+  if (frame.frame === "arm") {
+    return (
+      <div className="eg-frame" data-frame="arm">
+        <div className="eg-lane-title">
+          <span>{frame.label}</span>
+        </div>
+      </div>
+    );
+  }
+  if (frame.collapsed) {
+    return (
+      <div className="eg-frame" data-frame={frame.frame} data-collapsed="">
+        <StubTitle frame={frame} />
+      </div>
+    );
+  }
+  return (
+    <div className="eg-frame" data-frame={frame.frame}>
+      {hasHead(frame) && (
+        <div className="eg-frame-head">
+          <HeadTitle frame={frame} />
+          {/* A z-frame's picker gets a constant room, whatever its instance count: the stepper,
+              the count and the "live" control always fit, and tabs are used when they fit too. */}
+          {mode === "actual" && frame.instances !== undefined && <span className="eg-picker-room" />}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const EdgeLabel = ({ edge, style }: { edge: RenderEdge; style?: React.CSSProperties }) => {
+  const label = edgeLabel(edge);
+  return (
+    label && (
+      <span className="eg-edge-label" data-label={label.kind} style={style} title={label.text}>
+        {label.text}
+      </span>
+    )
+  );
+};
+
+// ── Wires ────────────────────────────────────────────────────────────────────
+
+const toward = (p: Point, q: Point, len: number): Point => {
+  const l = Math.hypot(q.x - p.x, q.y - p.y) || 1;
+  return { x: p.x + ((q.x - p.x) / l) * len, y: p.y + ((q.y - p.y) / l) * len };
+};
+
+/** A polyline with rounded corners (radius clamped to half of each adjacent segment). */
+function roundedPath(pts: Point[], radius: number): string {
+  let d = `M${pts[0]!.x},${pts[0]!.y}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const [a, b, c] = [pts[i - 1]!, pts[i]!, pts[i + 1]!];
+    const r = Math.min(radius, Math.hypot(b.x - a.x, b.y - a.y) / 2, Math.hypot(c.x - b.x, c.y - b.y) / 2);
+    const p1 = toward(b, a, r);
+    const p2 = toward(b, c, r);
+    d += ` L${p1.x},${p1.y} Q${b.x},${b.y} ${p2.x},${p2.y}`;
+  }
+  const last = pts.at(-1)!;
+  return `${d} L${last.x},${last.y}`;
+}
+
+const horizontal = (a: Point, b: Point): boolean => Math.abs(a.y - b.y) < 0.5;
+
+/** At most one jog, leaving and entering horizontally, left to right. */
+function isSimple(pts: Point[]): boolean {
+  const [a, b] = [pts[0]!, pts.at(-1)!];
+  return (pts.length === 2 || pts.length === 4) && b.x > a.x && horizontal(a, pts[1]!) && horizontal(pts.at(-2)!, b);
+}
+
+/** Whether a curve between the route's ends would cross a card: its bounding box (inset by a
+ *  hair, so the two docked cards themselves do not count) meets any leaf box. */
+function curveHitsBox(pts: Point[], obstacles: readonly Box[]): boolean {
+  const [a, b] = [pts[0]!, pts.at(-1)!];
+  const [x0, x1, y0, y1] = [Math.min(a.x, b.x) + 1, Math.max(a.x, b.x) - 1, Math.min(a.y, b.y), Math.max(a.y, b.y)];
+  return obstacles.some((o) => o.x < x1 && o.x + o.width > x0 && o.y < y1 + 1 && o.y + o.height > y0 - 1);
+}
+
+/**
+ * A wire's shape. ELK routes orthogonally (that is what spaces the channels); a SIMPLE route — at
+ * most one jog, leaving and entering horizontally, running left to right — is redrawn as
+ * harness's horizontal-tangent S-curve between the two docks. Such a curve stays inside the
+ * jog's own bounding box, which ELK kept clear between two adjacent layers, so it crosses no box
+ * the route did not. Longer routes (around areas, into a `control` port from above, backwards)
+ * keep ELK's channels, with soft corners.
+ */
+function wirePath(pts: Point[], obstacles: readonly Box[]): string {
+  const [a, b] = [pts[0]!, pts.at(-1)!];
+  if (!isSimple(pts) || curveHitsBox(pts, obstacles)) return roundedPath(pts, 10);
+  const dx = Math.abs(b.x - a.x);
+  if (dx < 48) {
+    const mx = (a.x + b.x) / 2;
+    return `M${a.x},${a.y} C${mx},${a.y} ${mx},${b.y} ${b.x},${b.y}`;
+  }
+  const h = Math.max(24, Math.min(dx / 2, 90));
+  return `M${a.x},${a.y} C${a.x + h},${a.y} ${b.x - h},${b.y} ${b.x},${b.y}`;
+}
+
+const midpoint = (a: Point, b: Point): Point => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+
+/** Where a wire's label pill sits: on the wire — the curve's midpoint for a simple S-curve,
+ *  else the middle of the route's longest segment. ELK's label box only reserves the room. */
+function labelCentre(pts: Point[], obstacles: readonly Box[]): Point {
+  const [a, b] = [pts[0]!, pts.at(-1)!];
+  if (isSimple(pts) && !curveHitsBox(pts, obstacles)) return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  let best = 0;
+  for (let i = 1; i < pts.length - 1; i++)
+    if (
+      Math.hypot(pts[i + 1]!.x - pts[i]!.x, pts[i + 1]!.y - pts[i]!.y) >
+      Math.hypot(pts[best + 1]!.x - pts[best]!.x, pts[best + 1]!.y - pts[best]!.y)
+    )
+      best = i;
+  return { x: (pts[best]!.x + pts[best + 1]!.x) / 2, y: (pts[best]!.y + pts[best + 1]!.y) / 2 };
+}
+
+function arrowHead(pts: Point[]): string {
+  const tip = pts.at(-1)!;
+  const from = pts.at(-2)!;
+  const l = Math.hypot(tip.x - from.x, tip.y - from.y) || 1;
+  const [ux, uy] = [(tip.x - from.x) / l, (tip.y - from.y) / l];
+  const [bx, by] = [tip.x - ux * 6, tip.y - uy * 6];
+  return `M${tip.x},${tip.y} L${bx - uy * 3},${by + ux * 3} L${bx + uy * 3},${by - ux * 3} Z`;
+}
+
+/** Wires carry `data-kind` and `data-state`; styles.css dims the not-yet-real ones. Area ports
+ *  that a wire crosses get a hollow ring. Only the loop return has an arrowhead. */
+function EdgeLayer({ graph, laid, obstacles }: { graph: RenderGraph; laid: LaidOutGraph; obstacles: readonly Box[] }) {
+  const wired = new Set(
+    graph.edges
+      .filter((e) => laid.edges.has(e.id))
+      .flatMap((e) => [portKey(e.from.node, e.from.port), portKey(e.to.node, e.to.port)]),
+  );
+  return (
+    <svg className="eg-edges" width={laid.width} height={laid.height}>
+      {graph.edges.map((e) => {
+        const pts = laid.edges.get(e.id);
+        if (!pts || pts.length < 2) return null;
+        const recur = e.kind === "recur";
+        return (
+          <g key={e.id} className="eg-edge" data-kind={e.kind} {...(e.state ? { "data-state": e.state } : {})}>
+            <path className="eg-edge-line" d={recur ? roundedPath(pts, FRAME_RADIUS) : wirePath(pts, obstacles)} />
+            {recur && <path className="eg-arrow" d={arrowHead(pts)} />}
+          </g>
+        );
+      })}
+      {graph.nodes.flatMap((n) => {
+        if (n.kind !== "frame" || isPage(n)) return [];
+        return n.ports.map((p) => {
+          const pt = laid.ports.get(portKey(n.id, p.id));
+          if (!pt || !wired.has(portKey(n.id, p.id))) return null;
+          return (
+            <g key={portKey(n.id, p.id)}>
+              <circle className="eg-port" cx={pt.x} cy={pt.y} r={2.5} />
+              {/* outside the area, so it never overprints a child's content; a call's tab
+                  already names its params */}
+              {p.label && n.frame !== "call" && p.side !== "control" && (
+                <text
+                  className="eg-port-label"
+                  x={pt.x + (p.side === "out" ? 5 : -5)}
+                  y={pt.y - 5}
+                  textAnchor={p.side === "out" ? "start" : "end"}
+                >
+                  {p.label}
+                </text>
+              )}
+            </g>
+          );
+        });
+      })}
+    </svg>
+  );
+}
+
+// ── Structure ────────────────────────────────────────────────────────────────
+
+const boxStyle = (b: Box): React.CSSProperties => ({ left: b.x, top: b.y, width: b.width, height: b.height });
+
+const sameSizes = (a: ReadonlyMap<string, number | Size>, b: ReadonlyMap<string, number | Size>): boolean =>
+  a.size === b.size && [...a].every(([k, s]) => JSON.stringify(b.get(k)) === JSON.stringify(s));
+
+/** Everything that can move a box or a wire: ids, nesting, ports, the text a skeleton prints
+ *  (symbols, operand sources, captions, labels, transform expressions), wire endpoints and
+ *  labels, collapse, and the mode (which decides whether a card has a result row). Selection,
+ *  instances, states and values are not in it — they repaint on the existing layout. */
+export function structureOf(graph: RenderGraph, mode: GraphMode): string {
+  return JSON.stringify([
+    mode,
+    graph.nodes.map((n) => {
+      const common = [n.kind, n.id, n.parent, n.ports];
+      if (n.kind === "step") return [...common, n.symbol, n.input.map((a) => [a.slot, a.source])];
+      if (n.kind === "transform") return [...common, n.op, n.text];
+      return [...common, n.frame, n.label, n.symbol, n.caption, n.collapsed === true, n.instances !== undefined];
+    }),
+    graph.edges.map((e) => [e.id, e.kind, e.from, e.to, edgeText(e)]),
+  ]);
+}
+
+/** A node as the skeleton layer draws it: its structure, none of its run. */
+function Skeleton({
+  node,
+  mode,
+  renderNode,
+}: {
+  node: RenderNode;
+  mode: GraphMode;
+  renderNode: (p: StepContentProps) => ReactNode;
+}) {
+  if (node.kind === "frame") return <FrameSkeleton frame={node} mode={mode} />;
+  const state: RenderState = mode === "actual" ? "pending" : "potential";
+  if (node.kind === "transform")
+    return <TransformBox t={{ ...node, state, hasValue: false, value: undefined }} mode={mode} />;
+  return (
+    <StepBox
+      step={{
+        ...node,
+        state,
+        input: node.input.map(({ slot, source }) => ({ slot, source, hasValue: false })),
+        output: { hasValue: false },
+        unplanned: false,
+      }}
+      mode={mode}
+      renderNode={renderNode}
+    />
+  );
+}
+
+/** The element whose box is a node's measured size: a step or transform box, an area's head, an
+ *  arm's lane title, a stub pill. */
+const MEASURED = ".eg-step, .eg-transform, .eg-frame[data-collapsed], .eg-frame-head, .eg-lane-title";
+
+export function GraphView({
+  graph,
+  mode,
+  renderNode = DefaultStepContent,
+  onSelect,
+  engine,
+  onLayout,
+}: GraphViewProps) {
+  const [laid, setLaid] = useState<LaidOutGraph | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const measureEls = useRef(new Map<string, HTMLElement>());
+  const sizes = useRef<Map<string, Size>>(new Map());
+  const anchors = useRef<Map<string, number>>(new Map());
+  const generation = useRef(0);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const pendingSince = useRef<number | null>(null);
+  const measureMs = useRef(0);
+  const landing = useRef<number | null>(null);
+  const latest = useRef({ graph, engine, onLayout });
+  useLayoutEffect(() => {
+    latest.current = { graph, engine, onLayout };
+  }, [graph, engine, onLayout]);
+
+  const relayout = useCallback(async () => {
+    const gen = ++generation.current;
+    const started = performance.now() - measureMs.current;
+    const { graph: g, engine: e } = latest.current;
+    try {
+      const out = await layout(g, sizes.current, e ?? defaultEngine, anchors.current);
+      if (gen !== generation.current) return; // a newer request superseded this one
+      landing.current = started;
+      setLaid(out);
+      setError(null);
+    } catch (error_: unknown) {
+      if (gen === generation.current) setError(error_ instanceof Error ? error_.message : String(error_));
+    }
+  }, []);
+
+  /** Trailing debounce with a max wait: a burst of changes settles into one relayout, but a
+   *  structure that never stops changing still lands every `RELAYOUT_MAX_WAIT_MS`. */
+  const schedule = useCallback(() => {
+    const now = performance.now();
+    pendingSince.current ??= now;
+    clearTimeout(timer.current);
+    const wait = Math.max(0, Math.min(RELAYOUT_DEBOUNCE_MS, pendingSince.current + RELAYOUT_MAX_WAIT_MS - now));
+    timer.current = setTimeout(() => {
+      pendingSince.current = null;
+      void relayout();
+    }, wait);
+  }, [relayout]);
+
+  /** Read every skeleton's size and row docks; schedule a relayout when any changed (or `force`). */
+  const measure = useCallback(
+    (force: boolean) => {
+      const t0 = performance.now();
+      const nextSizes = new Map<string, Size>();
+      const nextAnchors = new Map<string, number>();
+      for (const [id, wrapper] of measureEls.current) {
+        const el = wrapper.querySelector<HTMLElement>(MEASURED) ?? wrapper;
+        const r = el.getBoundingClientRect();
+        nextSizes.set(id, { width: Math.ceil(r.width), height: Math.ceil(r.height) });
+        if (!el.matches(".eg-step, .eg-transform")) continue;
+        const head = el.querySelector<HTMLElement>("[data-anchor=head]");
+        for (const row of [...el.querySelectorAll<HTMLElement>("[data-port]"), ...(head ? [head] : [])]) {
+          const port = row.dataset.port ?? "out";
+          const key = portKey(id, port);
+          if (nextAnchors.has(key)) continue;
+          const rr = row.getBoundingClientRect();
+          nextAnchors.set(key, Math.round(rr.top - r.top + rr.height / 2));
+        }
+      }
+      measureMs.current = performance.now() - t0;
+      if (!force && sameSizes(nextSizes, sizes.current) && sameSizes(nextAnchors, anchors.current)) return;
+      sizes.current = nextSizes;
+      anchors.current = nextAnchors;
+      schedule();
+    },
+    [schedule],
+  );
+
+  // The skeleton layer re-renders, and the view re-measures, only on a structural change.
+  const structure = useMemo(() => structureOf(graph, mode), [graph, mode]);
+  // The graph as of its last structural change: what the skeletons are drawn from.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const structural = useMemo(() => graph, [structure]);
+  useLayoutEffect(() => measure(true), [structure, renderNode, engine, measure]);
+
+  useLayoutEffect(() => {
+    if (landing.current === null) return;
+    latest.current.onLayout?.(performance.now() - landing.current);
+    landing.current = null;
+  }, [laid]);
+
+  useEffect(() => {
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => measure(false));
+    for (const el of measureEls.current.values()) ro.observe(el);
+    return () => ro.disconnect();
+  }, [structure, renderNode, measure]);
+
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const skeletons = useMemo(() => {
+    const g = structural;
+    const measured = (id: string) => (el: HTMLElement | null) => {
+      if (el) measureEls.current.set(id, el);
+      else measureEls.current.delete(id);
+    };
+    return (
+      <div className="eg-measure-layer" aria-hidden>
+        {g.nodes.map((n) => (
+          <div key={`n:${n.id}`} ref={measured(n.id)} className="eg-measured">
+            <Skeleton node={n} mode={mode} renderNode={renderNode} />
+          </div>
+        ))}
+        {g.edges.map((e) => {
+          const text = edgeText(e);
+          return (
+            text !== undefined && (
+              <div key={`l:${e.id}`} ref={measured(edgeLabelKey(e.id))} className="eg-measured">
+                <EdgeLabel edge={e} />
+              </div>
+            )
+          );
+        })}
+      </div>
+    );
+  }, [structural, mode, renderNode]);
+
+  const { unplacedInvocations, droppedEdges, notes, dataflow } = graph.diagnostics;
+  const frames = graph.nodes.filter((n): n is RenderFrame => n.kind === "frame");
+  // The first arm of each condition: the lane without a divider above it.
+  const firstArms = new Set(
+    new Map(
+      frames
+        .filter((f) => f.frame === "arm")
+        .toReversed()
+        .map((a) => [a.parent, a.id]),
+    ).values(),
+  );
+  const leaves = graph.nodes.filter((n): n is RenderStep | RenderTransform => n.kind !== "frame");
+  const obstacles = laid ? [...leaves, ...frames.filter(isStub)].flatMap((n) => laid.boxes.get(n.id) ?? []) : [];
+
+  return (
+    <div className="eg-graph" data-mode={mode}>
+      {skeletons}
+      {(unplacedInvocations > 0 || droppedEdges > 0) && (
+        <div className="eg-message eg-badge" data-tone="warning" title={notes.join("\n")}>
+          {unplacedInvocations > 0 && `${unplacedInvocations} unplaced`}{" "}
+          {droppedEdges > 0 && `${droppedEdges} edges dropped`}
+        </div>
+      )}
+      {dataflow && dataflow.status !== "complete" && (
+        <div
+          className="eg-message eg-banner"
+          data-tone="warning"
+          role="status"
+          {...(dataflow.reason ? { title: dataflow.reason } : {})}
+        >
+          {dataflow.status === "unavailable"
+            ? "Data edges unavailable for this program (an arrival limitation) — steps are shown without them; a missing edge does not mean independence."
+            : `Dataflow partial — ${dataflow.missing} ${plural(dataflow.missing, "link")} could not be traced.`}
+        </div>
+      )}
+      {error && (
+        <div className="eg-message" data-tone="danger">
+          layout failed: {error}
+        </div>
+      )}
+      {laid && (
+        // Until a new layout lands the previous one stays up; ids it lacks simply don't render.
+        <div className="eg-canvas" style={{ width: laid.width, height: laid.height }}>
+          {frames.map((f) => {
+            const b = laid.boxes.get(f.id);
+            return (
+              b && (
+                <FrameBox
+                  key={f.id}
+                  frame={f}
+                  mode={mode}
+                  first={firstArms.has(f.id)}
+                  {...(onSelect ? { onSelect } : {})}
+                  style={boxStyle(b)}
+                />
+              )
+            );
+          })}
+          <EdgeLayer graph={graph} laid={laid} obstacles={obstacles} />
+          {graph.edges.map((e) => {
+            const pts = laid.edges.get(e.id);
+            if (!pts || pts.length < 2 || edgeText(e) === undefined) return null;
+            // A routed wire's label has its room reserved by ELK; a loop return's sits on the
+            // contour's rising left run. Either way the pill is centred on the wire.
+            if (e.kind !== "recur" && !laid.labels.has(e.id)) return null;
+            const c = e.kind === "recur" ? midpoint(pts.at(-3)!, pts.at(-2)!) : labelCentre(pts, obstacles);
+            return <EdgeLabel key={e.id} edge={e} style={{ left: c.x, top: c.y, translate: "-50% -50%" }} />;
+          })}
+          {leaves.map((n) => {
+            const b = laid.boxes.get(n.id);
+            if (!b) return null;
+            return n.kind === "step" ? (
+              <StepBox key={n.id} step={n} mode={mode} renderNode={renderNode} style={boxStyle(b)} />
+            ) : (
+              <TransformBox key={n.id} t={n} mode={mode} style={boxStyle(b)} />
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
