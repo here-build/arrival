@@ -3,10 +3,10 @@
 What an arrival-scheme program **will do** over a set of named symbols, and what it **has done /
 is doing** — one React component, one graph vocabulary.
 
-| Mode | Answers | Built from |
-|------|---------|------------|
+| Mode            | Answers                                                                                                                                                    | Built from        |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
 | **`potential`** | Every call site of a designated symbol, inside the control structures that decide how often and in what order it runs, wired by the dataflow between them. | The program text. |
-| **`actual`** | The same graph instantiated from a live trace: a track per element, an iteration per loop turn, a value and a state on every step. | The run's trace. |
+| **`actual`**    | The same graph instantiated from a live trace: a track per element, an iteration per loop turn, a value and a state on every step.                         | The run's trace.  |
 
 ## Install
 
@@ -18,11 +18,7 @@ pnpm add @here.build/arrival-execution-graph @here.build/arrival react react-dom
 
 ```tsx
 import { execState, LexicalScope } from "@here.build/arrival";
-import {
-  createExecutionCapture,
-  ExecutionGraph,
-  loadVocabulary,
-} from "@here.build/arrival-execution-graph";
+import { createExecutionCapture, ExecutionGraph, loadVocabulary } from "@here.build/arrival-execution-graph";
 import "@here.build/arrival-execution-graph/styles.css";
 
 const symbols = ["ask", "fetch"];
@@ -31,7 +27,13 @@ const vocabulary = await loadVocabulary(capabilities); // the capabilities the p
 // One fresh capture per run, passed as the run's `tap`.
 const trace = createExecutionCapture(symbols);
 const abort = new AbortController();
-const run = execState(program, { scope: LexicalScope.fresh("run"), capabilities, config: {}, tap: trace, signal: abort.signal });
+const run = execState(program, {
+  scope: LexicalScope.fresh("run"),
+  capabilities,
+  config: {},
+  tap: trace,
+  signal: abort.signal,
+});
 
 <ExecutionGraph
   program={program}
@@ -82,17 +84,17 @@ defaults following `prefers-color-scheme`. The defaults sit in `:where()`, so an
 }
 ```
 
-| Property | Role |
-|----------|------|
-| `--eg-fg`, `--eg-muted` | Primary and supporting text; edges. |
-| `--eg-bg`, `--eg-border` | Canvas and step fill; box borders. |
-| `--eg-dot`, `--eg-dot-strength` | The canvas dot grid's colour (defaults to `--eg-fg`) and a multiplier on its opacity. |
-| `--eg-accent` | Running. |
-| `--eg-danger` | Rejected, `✕ message`, errors. |
-| `--eg-warning` | Cancelled, diagnostics badge, dataflow banner. |
-| `--eg-recur` | Recursion edges (defaults to `--eg-accent`). |
-| `--eg-font`, `--eg-font-mono`, `--eg-font-size`, `--eg-font-size-small` | Type. |
-| `--eg-pad-y`, `--eg-pad-x`, `--eg-gap`, `--eg-radius` | Box spacing and corners. |
+| Property                                                                | Role                                                                                  |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `--eg-fg`, `--eg-muted`                                                 | Primary and supporting text; edges.                                                   |
+| `--eg-bg`, `--eg-border`                                                | Canvas and step fill; box borders.                                                    |
+| `--eg-dot`, `--eg-dot-strength`                                         | The canvas dot grid's colour (defaults to `--eg-fg`) and a multiplier on its opacity. |
+| `--eg-accent`                                                           | Running.                                                                              |
+| `--eg-danger`                                                           | Rejected, `✕ message`, errors.                                                        |
+| `--eg-warning`                                                          | Cancelled, diagnostics badge, dataflow banner.                                        |
+| `--eg-recur`                                                            | Recursion edges (defaults to `--eg-accent`).                                          |
+| `--eg-font`, `--eg-font-mono`, `--eg-font-size`, `--eg-font-size-small` | Type.                                                                                 |
+| `--eg-pad-y`, `--eg-pad-x`, `--eg-gap`, `--eg-radius`                   | Box spacing and corners.                                                              |
 
 ## Known limits
 
