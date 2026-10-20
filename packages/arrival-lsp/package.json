@@ -1,6 +1,6 @@
 {
   "name": "@here.build/arrival-lsp",
-  "version": "0.9.9",
+  "version": "0.10.0",
   "description": "Scheme language service (type lens over TypeScript LS) — browser worker + node. PRE prelude, virtual-TS emit host, diagnostics/completions/hover lifted to Scheme spans.",
   "homepage": "https://github.com/here-build/arrival#readme",
   "bugs": {

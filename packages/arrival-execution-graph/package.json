@@ -1,6 +1,6 @@
 {
   "name": "@here.build/arrival-execution-graph",
-  "version": "0.9.9",
+  "version": "0.10.0",
   "description": "Execution graph for arrival-scheme programs — the potential plan and the actual progress over named symbols, as one React component",
   "keywords": [
     "arrival",

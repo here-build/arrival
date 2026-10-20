@@ -1,6 +1,6 @@
 {
   "name": "@here.build/arrival-syntax",
-  "version": "0.9.9",
+  "version": "0.10.0",
   "description": "Span-preserving Scheme s-expression forest for Arrival — parseSexprs, not the evaluator reader",
   "keywords": [
     "arrival",
