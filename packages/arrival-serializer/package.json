@@ -1,6 +1,6 @@
 {
   "name": "@here.build/arrival-serializer",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "description": "S-expression serializer for Arrival - converts JavaScript objects to Scheme/Lisp representations",
   "keywords": [
     "arrival",
