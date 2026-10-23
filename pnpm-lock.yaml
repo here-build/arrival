@@ -237,6 +237,24 @@ importers:
         specifier: 4.1.11
         version: 4.1.11(@types/node@24.13.6)(jsdom@26.1.0)(lightningcss@1.33.0)(tsx@4.23.15)(yaml@2.9.0)
 
+  packages/arrival-env:
+    devDependencies:
+      '@here.build/eslint-configs':
+        specifier: 0.9.0
+        version: 0.9.0(@typescript-eslint/eslint-plugin@8.55.0(@typescript-eslint/parser@8.55.0(eslint@9.39.5)(typescript@6.0.3))(eslint@9.39.5)(typescript@6.0.3))(@typescript-eslint/utils@8.68.0(eslint@9.39.5)(typescript@6.0.3))(eslint@9.39.5)(typescript@6.0.3)
+      '@here.build/tsconfig':
+        specifier: 0.9.0
+        version: 0.9.0
+      '@types/node':
+        specifier: 24.0.0
+        version: 24.0.0
+      eslint:
+        specifier: 9.39.5
+        version: 9.39.5
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+
   packages/arrival-execution-graph:
     dependencies:
       '@here.build/arrival':
@@ -480,8 +498,8 @@ importers:
   packages/arrival-serializer:
     dependencies:
       '@here.build/arrival-env':
-        specifier: 0.9.0
-        version: 0.9.0
+        specifier: workspace:^
+        version: link:../arrival-env
     devDependencies:
       '@here.build/arrival':
         specifier: workspace:^
@@ -1380,9 +1398,6 @@ packages:
 
   '@expressive-code/plugin-text-markers@0.44.2':
     resolution: {integrity: sha512-SNI7EgUSiADqbqUzzMbj1ZeC/r2pa5eg3KyFOGAd3a7EsIA4qzjXQLp+ODWQtHVDKFCdGs4J3ovSJUqvKIK96g==}
-
-  '@here.build/arrival-env@0.9.0':
-    resolution: {integrity: sha512-kP0W/CjxVMW7PS+OseLIdCudp3lygCuM5MDfruti0jlz1PaKd3dSsx7XAH3MVTJFX5yAS8qOlQoHf4bMvVWNgg==}
 
   '@here.build/editor-theme@0.9.0':
     resolution: {integrity: sha512-agAXz/vouTpro6WWsdq7SB1a6psfGEb05eAE3hRHXirYC0SQ3S5ZcpVrMeZCh2sHD61g3ayvpAROcHDM0hlnPA==}
@@ -6866,8 +6881,6 @@ snapshots:
   '@expressive-code/plugin-text-markers@0.44.2':
     dependencies:
       '@expressive-code/core': 0.44.2
-
-  '@here.build/arrival-env@0.9.0': {}
 
   '@here.build/editor-theme@0.9.0':
     dependencies:

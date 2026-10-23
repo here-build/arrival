@@ -10,8 +10,9 @@ Lisp was born in 1958 for AI research — the first language built _for_ AI. arr
 Lisp dialect built for AI _as the user_: the agent writes the programs.
 
 This repository is the public home of the `@here.build/arrival*` family, published by
-[here.build](https://here.build). Shared floor packages (`@here.build/tsconfig`, `collections`,
-`editor-theme`, …) live in [here-build/commons](https://github.com/here-build/commons).
+[here.build](https://here.build). `@here.build/arrival-env` lives in this repository.
+Shared floor packages (`@here.build/tsconfig`, `collections`, `editor-theme`, …) live in
+[here-build/commons](https://github.com/here-build/commons).
 
 Agents are good at intent and bad at materialization. Arrival is a faithful R7RS sandbox
 without `set!` or `call/cc`, so the executed output is predictable. Syntax is extended toward
@@ -73,6 +74,7 @@ All names are `@here.build/<dir>`.
 - [`arrival-syntax`](./packages/arrival-syntax/README.md) — span-preserving Scheme s-expression forest (`parseSexprs`). MIT
 - [`arrival-sugarcoat`](./packages/arrival-sugarcoat/README.md) — reversible Scheme ↔ sugarcoat view. MIT
 - [`arrival-modules`](./packages/arrival-modules/README.md) — `(require …)`; yaml/toml/handlebars are optional subpaths. MIT
+- [`arrival-env`](./packages/arrival-env/README.md) — `Symbol.toSExpr` / `Symbol.SExpr` protocol, no interpreter. MIT
 - [`arrival-serializer`](./packages/arrival-serializer/README.md) — JS → compact s-expressions. MIT
 - [`arrival-overridable-lens`](./packages/arrival-overridable-lens/README.md) — static read of `(define/overridable …)`. MIT
 

@@ -235,9 +235,9 @@ export function markInteropBoundary(target: object | Function): void {
 /**
  * `@arrival.private` — declaratively seal a host class as an interop boundary, so
  * Scheme can't reach its prototype members (`(:field x)`/`(@ x :field)` → nil).
- * Wraps {@link markInteropBoundary}, which uses the MODULE-PRIVATE boundary symbol —
- * the only correct one. Never brand with `Symbol.for("scheme:interop-boundary")`:
- * that registry-global symbol differs from the one the check reads, and is forgeable.
+ * Wraps {@link markInteropBoundary}. The brand is
+ * `Symbol.for("scheme:interop-boundary")` — the same key a host stamps when it
+ * cannot import this module. A private `Symbol(...)` would not match that stamp.
  *
  * Usable as a TC39 class decorator (stage-3 form) or a plain call:
  *

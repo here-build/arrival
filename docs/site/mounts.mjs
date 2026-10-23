@@ -63,6 +63,12 @@ export const mounts = [
     label: "@here.build/arrival-codemirror",
   },
   {
+    source: "packages/arrival-env/README.md",
+    out: "packages/arrival-env.md",
+    order: 13,
+    label: "@here.build/arrival-env",
+  },
+  {
     source: "packages/arrival-internals-types-prelude/README.md",
     out: "packages/arrival-internals-types-prelude.md",
     order: 4,

@@ -291,7 +291,7 @@ Racket's reading already equals the rewrite.
 ## 7. MEMBER-ACCESS — two syntaxes over one interop read
 
 _(This section owns the SYNTAX face of member access. The read MECHANISM — the interop
-policy, the prototype-walk boundary, the module-local capability brand — lives in
+policy, the prototype-walk boundary, the registry capability brand — lives in
 `docs/membrane.md §MEMBER-READ`, its canonical home. Cross-link, don't restate.)_
 
 **Two surface syntaxes read a member, and both bottom out in ONE interop read.** `@` /

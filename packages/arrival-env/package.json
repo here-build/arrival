@@ -1,0 +1,57 @@
+{
+  "name": "@here.build/arrival-env",
+  "version": "0.10.1",
+  "description": "Type definitions and protocol for Arrival S-expression serialization",
+  "keywords": [
+    "arrival",
+    "s-expressions",
+    "serialization",
+    "lisp"
+  ],
+  "homepage": "https://github.com/here-build/arrival#readme",
+  "bugs": {
+    "url": "https://github.com/here-build/arrival/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/here-build/arrival.git",
+    "directory": "packages/arrival-env"
+  },
+  "license": "MIT",
+  "author": "here.build",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "sideEffects": true,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src",
+    "!**/__tests__",
+    "!**/*.test.*",
+    "!**/*.stories.*"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@here.build/eslint-configs": "0.9.0",
+    "@here.build/tsconfig": "0.9.0",
+    "@types/node": "24.0.0",
+    "eslint": "9.39.5",
+    "typescript": "6.0.3"
+  }
+}

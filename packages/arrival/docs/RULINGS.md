@@ -192,8 +192,10 @@ Three key roles, one mechanism each:
 
 - **algebra instruction keys** → strings (`arrival/...`) — every static interpreter
   consumes instruction names as data (P0's N-interpreter argument);
-- **capability brands** → module-local symbols, never `Symbol.for` — a
-  globally-reachable brand is forgeable, and forgeability is escape;
+- **capability brands** → `Symbol.for` with a stable string key. The key is the
+  compatibility surface across package copies (plexus stamps
+  `scheme:interop-boundary` without importing arrival). A private `Symbol(...)`
+  splits the brand per copy;
 - **metadata slots** → `Symbol.for` — enumeration-invisible, and survives dual
   module instances.
 

@@ -168,8 +168,12 @@ mixed:
   `arrival/class`) are STRINGS — every static interpreter (type lens, oracle, lineage
   classifier, trace, MCP harvest) consumes instruction names as data (P0's N-interpreter
   clause); symbols would privilege the runtime pair.
-- **Capability brands** (INTEROP_BOUNDARY) are MODULE-LOCAL symbols, never `Symbol.for` — a
-  registry symbol is forgeable from any code and a forged brand is an escape vector.
+- **Capability brands** (INTEROP_BOUNDARY) are `Symbol.for` with a stable string key.
+  The key is how a host that cannot import the binding — plexus stamps
+  `scheme:interop-boundary` on `PlexusModel` — still shares the brand. A private
+  `Symbol(...)` splits it per package copy. Internal sentinels (`NOT_FOUND`,
+  `OFFENDING_VALUE`) stay `Symbol(...)`: a registry key there is a signal a foreign
+  object can mint.
 - **Metadata slots** (LOCATION, CYCLES, REF, DATA) are `Symbol.for` — enumeration-invisible
   (reader metadata never leaks into user-shaped data) and stable across duplicate module
   instances, which is what registry symbols uniquely buy.

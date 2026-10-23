@@ -24,12 +24,13 @@ import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { execOverFrame, execStateOverFrame, execOverFrame as gexec } from "../../eval/generator-exec.js";
 import { inferenceEnv } from "../../env/inference-env.js";
 import { INTEROP_BOUNDARY } from "../../well-known/symbols.js";
-import { accessMember, isInteropBoundary } from "../interop-access.js";
+import { accessMember, hasInheritedInteropStamp, isInteropBoundary } from "../interop-access.js";
 import { InteropAccessError } from "../../errors.js";
 import { AString } from "../../values/primitives/AString.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { AValue } from "../../values/primitives/AValue.js";
 import { jsToScheme } from "../rosetta.js";
+import { AJSObject } from "../AJSObject.js";
 
 // ============================================================================
 // CRITICAL: sandbox escape vectors
@@ -430,19 +431,19 @@ describe("CRITICAL: write-side prototype pollution (S6)", () => {
     expect(String(new ASymbol("__proto__"))).toBe("__proto__");
   });
 
-  it("INTEROP_BOUNDARY is not forgeable from the global Symbol registry", async () => {
-    // A module-local Symbol() is never equal to a registry symbol of any key.
-    expect(Symbol.for("scheme:interop-boundary")).not.toBe(INTEROP_BOUNDARY);
-    // Behavioral half: branding with the registry symbol does not make a boundary.
-    const FORGED: unique symbol = Symbol.for("scheme:interop-boundary");
-    class Forged {
-      static [FORGED] = true;
-      [FORGED] = true;
-      secret() {
-        return 1;
-      }
+  it("INTEROP_BOUNDARY is Symbol.for('scheme:interop-boundary')", () => {
+    const key = Symbol.for("scheme:interop-boundary");
+    expect(INTEROP_BOUNDARY).toBe(key);
+    class Engine {
+      static [key] = true;
+      kind = "engine";
     }
-    expect(isInteropBoundary(Forged.prototype)).toBe(false);
-    expect(isInteropBoundary(Object.getPrototypeOf(new Forged()))).toBe(false);
+    class Driver extends Engine {
+      name = "openai";
+    }
+    const driver = new Driver();
+    expect(isInteropBoundary(Engine.prototype)).toBe(true);
+    expect(hasInheritedInteropStamp(driver)).toBe(true);
+    expect(jsToScheme(CONSTANT_CTX, driver)).toBeInstanceOf(AJSObject);
   });
 });

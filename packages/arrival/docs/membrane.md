@@ -437,13 +437,12 @@ is any global constructor's prototype (identity-checked, so a spoofed
 `constructor.name` still fails); so is any arrival value class — the family rule keys
 off the own `[CLASS]` brand, so no primitive carries a per-class boundary stamp.
 
-**The capability brand is module-local, never `Symbol.for` (P7 key taxonomy).**
-`INTEROP_BOUNDARY` and the `NOT_FOUND` sentinel are `Symbol(...)`, unreachable from
-outside the module's closure. A registry-global symbol (`Symbol.for(...)`) is forgeable
-from sandbox code, which could stamp its own boundary markers, strip ours, or spoof the
-not-found signal — forgeability is escape. `@arrival.private` seals a host class
-through this same module-private symbol; branding with the registry symbol silently
-seals nothing.
+**The capability brand is a registry symbol (P7 key taxonomy).**
+`INTEROP_BOUNDARY` is `Symbol.for("scheme:interop-boundary")`, so a host that cannot
+import the binding — plexus stamps `PlexusModel` with that key — still shares the
+brand. A private `Symbol(...)` would split it per package copy. `NOT_FOUND` stays
+`Symbol(...)`: it is an internal sentinel, and a registry key would let foreign code
+mint the absence signal. `@arrival.private` writes the same registry symbol.
 
 **Enforcement sites:** `membrane/interop-access.ts`, `membrane/AJSObject.ts`,
 `membrane/AJSArray.ts`, `values/primitives/ADict.ts`, `env/polyglot/polyglot.ts`.

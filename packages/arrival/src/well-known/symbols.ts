@@ -42,11 +42,14 @@ export const LOCATION = Symbol.for("__location__");
 
 /**
  * Opt-in interop-boundary stamp on a host class / prototype.
- * Module-local `Symbol(...)`, deliberately NOT in the global registry: a host class cannot
- * forge the brand with `Symbol.for("scheme:interop-boundary")`. Re-exported from
- * `membrane/interop-access.ts` as the stamp consumers already import.
+ *
+ * Wire key is `"scheme:interop-boundary"` (historical). `Symbol.for`, not
+ * `Symbol(...)`: a host that cannot import this binding — plexus stamps
+ * `PlexusModel` with the same key — must observe the same symbol. A private
+ * symbol splits the brand per package copy. Re-exported from
+ * `membrane/interop-access.ts`.
  */
-export const INTEROP_BOUNDARY = Symbol("scheme:interop-boundary");
+export const INTEROP_BOUNDARY: unique symbol = Symbol.for("scheme:interop-boundary");
 
 // ── hygiene / frames ────────────────────────────────────────────────────────
 
