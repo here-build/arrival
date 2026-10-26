@@ -184,13 +184,22 @@ fact (until a consumer demands it).
 **CHOSEN — a track IS a wire whose expression is a first-class lambda** (captures =
 ingress); track invariants are wire laws at a membrane boundary. One concept. A closure CALL is
 a track under the same reading: it opens/closes at the closure's coordinate (`track-open`/
-`track-close`, no new record kind; ordinal path `[…enclosing, r_C, k]`, k = call instance) —
-`EvalContext.closureCall` threads the call's window lexically (a closure's calls nest under the
-window of the instance that DEFINED it — the wireframe's enclosing-graph nesting), ports inside
-emit at `[…enclosing, r_C, k, n]` under `hashGraph(closure.template)` (n = the window's event
-counter, shared with its track open/close), and the sites come from `WireframeProgram.closureSites`
-(body-list pair identity — the recording host must evaluate the SAME parsed forms it built the wireframe from).
-Replay instantiates per call.
+`track-close`, no new record kind; ordinal path `[…caller, r_C, k]`, k = call instance) — a
+closure's call nests under the window of the track that CALLED it, when the call runs in an apply
+site's synchronous prologue (a direct call, or a host verb starting its callbacks); a call made
+outside one (a verb calling back after an await) nests under the instance that DEFINED the closure.
+k counts the caller window's calls per site index `r_C` (not per site: two sites sharing an index
+in different template graphs still get distinct paths). Ports inside emit at `[…caller, r_C, k, n]`
+under `hashGraph(closure.template)` (n = the window's event counter, shared with its track
+open/close), and the sites come from `WireframeProgram.closureSites` (body-list pair identity — the
+recording host must evaluate the SAME parsed forms it built the wireframe from). Replay
+instantiates per call, numbering by the same rule (`replay.ts` `callerInstance`).
+EXCLUDED: lexical nesting under the DEFINING instance for every call. Calls within one track are
+sequential, but calls into one closure from SEVERAL tracks start in an order set by how those
+tracks interleave — evaluator yields are wall-clock-timed — so a definer-window k is not
+reproducible between record and replay. LIMIT: a call path no longer mirrors the wireframe's
+enclosing-graph nesting when the caller is not the definer; no consumer resolves paths that way
+today (the store's `registerSite`/`resolveSite` reverse index has no production caller yet).
 
 **CHOSEN — a rejected crossing is information.** A host impl that throws is recorded as a mint
 whose payload is `raised: true` (value = the condition message, no stamps); replay's source arm

@@ -51,6 +51,7 @@ import { APair } from "../values/primitives/APair.js";
 import { nil } from "../values/primitives/ANil.js";
 import { toJS, jsToScheme } from "../membrane/rosetta.js";
 import { CONSTANT_CTX, type RunContext, type RunEmission } from "../run/RunContext.js";
+import type { CallCtx } from "../run/CallCtx.js";
 import type { SchemeValue } from "../values/types.js";
 import type { EnvCapability } from "../common/capability.js";
 import { applyWireInEnv } from "./gamma.js";
@@ -91,20 +92,48 @@ const trackKey = (track: TrackPath): string => track.join(".");
 
 /** One graph INSTANCE's track state in a γ replay: where it runs, and the per-site call counters of
  *  its window (shared with the template instances it calls inline, mirroring the recorder's
- *  per-window counters). Keyed by the node object — node indexes repeat across template graphs. */
+ *  per-window counters). Keyed by node INDEX, as the recorder keys by `ClosureSite.rootOrdinal`:
+ *  two sites with one index (from different template graphs) share a counter, so every call made
+ *  from this window gets a distinct `[…track, idx, k]`. */
 export interface TrackInstance {
   readonly track: TrackPath;
-  readonly calls: Map<WireframeNode, number>;
+  readonly calls: Map<number, number>;
 }
 
 export const rootInstance = (track: TrackPath = []): TrackInstance => ({ track, calls: new Map() });
 
-/** The window of the NEXT call of closure/fan `node` made from `instance`: `[…track, idx, k]`.
- *  Claimed synchronously at call start — the recorder claims `k` the same way. */
-export function claimCall(instance: TrackInstance, node: WireframeNode, idx: number): TrackInstance {
-  const k = instance.calls.get(node) ?? 0;
-  instance.calls.set(node, k + 1);
+/** The window of the NEXT call of the closure/fan at node index `idx` made from `instance`:
+ *  `[…track, idx, k]`. Claimed synchronously at call start — the recorder claims `k` the same way. */
+export function claimCall(instance: TrackInstance, idx: number): TrackInstance {
+  const k = instance.calls.get(idx) ?? 0;
+  instance.calls.set(idx, k + 1);
   return rootInstance([...instance.track, idx, k]);
+}
+
+/** The γ instance whose graph is running on each hermetic run. A run executes one instance at a
+ *  time (leases are exclusive; a template-ref inlines on the same instance), so a run-keyed slot,
+ *  set for the instance's duration and restored after, names the CALLER of any closure applied on
+ *  that run. Run-scoped side table, like `hermetic-env.ts`'s `envByRun`. */
+const instanceOnRun = new WeakMap<RunContext, TrackInstance>();
+
+/** Mark `instance` as running on `runCtx` until the returned `leave()`. */
+export function enterInstance(runCtx: RunContext, instance: TrackInstance): () => void {
+  const previous = instanceOnRun.get(runCtx);
+  instanceOnRun.set(runCtx, instance);
+  return () => {
+    if (previous === undefined) instanceOnRun.delete(runCtx);
+    else instanceOnRun.set(runCtx, previous);
+  };
+}
+
+/** The instance a closure call is numbered on. Inside an apply site's synchronous prologue (a direct
+ *  call, or a host verb starting its callbacks) it is the CALLER's: calls within one caller track are
+ *  sequential, so their order cannot depend on how sibling tracks interleave. Outside one (a verb
+ *  calling back after an await) it is the defining instance. The recorder applies the same rule
+ *  (`openClosureCall`'s caller window in evaluator.ts). */
+function callerInstance(ctx: ReplayCtx, callCtx: CallCtx): TrackInstance {
+  const inPrologue = "closureCall" in callCtx.runCtx.ambient;
+  return (inPrologue ? instanceOnRun.get(callCtx.runCtx) : undefined) ?? ctx.instance;
 }
 
 /** A recorded payload, optionally addressed by the track it was minted under. */
@@ -334,8 +363,10 @@ export function closureValue(
     name: `γ-closure@${node.span}`,
     arity,
     impl: async (args, callCtx) => {
-      // Synchronously, before any await: this call's coordinate is its start order within its track.
-      const call = node.template === undefined ? undefined : claimCall(ctx.instance, node, idx);
+      // Synchronously, before any await: this call's coordinate is its start order within the
+      // caller's track.
+      const caller = callerInstance(ctx, callCtx);
+      const call = node.template === undefined ? undefined : claimCall(caller, idx);
       if (node.ref?.kind === "port") return portCrossing(ctx, node as ClosureNode & { ref: { kind: "port" } });
       if (node.ref?.kind === "define") {
         const template = ctx.program.templates.get(node.ref.name);
@@ -349,15 +380,7 @@ export function closureValue(
         const lease = await leaseNestedEnv(ctx.base, callCtx.runCtx);
         try {
           // A define'd function is not a track: its crossings run in the caller's window (recorder parity).
-          return await replayGraphIn(
-            lease.env,
-            ctx.program,
-            template.graph,
-            ctx.frozen,
-            slots,
-            undefined,
-            ctx.instance,
-          );
+          return await replayGraphIn(lease.env, ctx.program, template.graph, ctx.frozen, slots, undefined, caller);
         } finally {
           lease.release();
         }
@@ -368,15 +391,7 @@ export function closureValue(
       const lease = await leaseNestedEnv(ctx.base, callCtx.runCtx);
       try {
         const slots = { ...bindFormals(node.params, node.rest, args), ...(await captures(lease.env)) };
-        return await replayGraphIn(
-          lease.env,
-          ctx.program,
-          node.template,
-          ctx.frozen,
-          slots,
-          undefined,
-          call ?? ctx.instance,
-        );
+        return await replayGraphIn(lease.env, ctx.program, node.template, ctx.frozen, slots, undefined, call ?? caller);
       } finally {
         lease.release();
       }
@@ -426,7 +441,7 @@ export function fanTemplateValue(
     arity: { min: elementParams.length, max: elementParams.length },
     impl: async (args, callCtx) => {
       // Element i's call is track `[…, r_fan, i]` — claimed in start order, before any await.
-      const call = claimCall(ctx.instance, node, idx);
+      const call = claimCall(ctx.instance, idx);
       const lease = await leaseNestedEnv(ctx.base, callCtx.runCtx);
       try {
         const slots = { ...bindFormals(elementParams, undefined, args), ...(await captures(lease.env)) };
@@ -515,13 +530,33 @@ async function replayGraphIn(
   frozen: FrozenMints,
   slots: IngressBindings,
   decisions: ReadonlyMap<number, number> | undefined,
+  instance: TrackInstance,
+  goal?: GraphGoal,
+): Promise<SchemeValue> {
+  const leave = enterInstance(base.runCtx, instance);
+  try {
+    return await replayGraphInstance(base, program, graph, frozen, slots, decisions, instance, goal);
+  } finally {
+    leave();
+  }
+}
+
+/** Alternative demand root (default: the graph's egress) — `fanCaptureSlots` demands capture wires. */
+type GraphGoal = (h: {
+  wireFor: (node: number, slot: string) => Wire;
+  gammaWire: (w: EmittedWire) => Promise<SchemeValue>;
+}) => Promise<SchemeValue>;
+
+async function replayGraphInstance(
+  base: HermeticEnv,
+  program: WireframeProgram,
+  graph: WireframeGraph,
+  frozen: FrozenMints,
+  slots: IngressBindings,
+  decisions: ReadonlyMap<number, number> | undefined,
   /** This graph instance's track + call counters (D1). */
   instance: TrackInstance,
-  /** Alternative demand root (default: the graph's egress) — `fanCaptureSlots` demands capture wires. */
-  goal?: (h: {
-    wireFor: (node: number, slot: string) => Wire;
-    gammaWire: (w: EmittedWire) => Promise<SchemeValue>;
-  }) => Promise<SchemeValue>,
+  goal?: GraphGoal,
 ): Promise<SchemeValue> {
   const nodeMemo = new Map<number, SchemeValue>();
   /** guard idx → the caught condition (`{node: guard, slot: "condition"}` refs read it). */

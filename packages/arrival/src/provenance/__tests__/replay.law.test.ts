@@ -273,6 +273,48 @@ describe("completion-order invariance (D1: payloads are addressed by track, not 
     });
   });
 
+  // The evaluator yields to the event loop on a wall-clock budget (evaluator.ts TICK: > 5ms since
+  // the last yield), so on a loaded machine a fan row can pause mid-body and a sibling row's calls
+  // start first. A seeded clock that jumps at random reads forces those yields deterministically:
+  // replay must still put each payload at the call that recorded it.
+  describe("evaluator yields mid-fan (wall-clock budget) do not move payloads between tracks", () => {
+    /** `performance.now` that jumps 10ms on a seeded ~30% of reads, so TICK yields at arbitrary steps. */
+    async function withJumpyClock<T>(seed: number, fn: () => Promise<T>): Promise<T> {
+      const real = performance.now.bind(performance);
+      let a = seed >>> 0;
+      let skew = 0;
+      performance.now = () => {
+        a = (a + 0x6d_2b_79_f5) >>> 0;
+        if (((a >>> 8) & 0xff) < 77) skew += 10;
+        return real() + skew;
+      };
+      try {
+        return await fn();
+      } finally {
+        performance.now = real;
+      }
+    }
+
+    const PROGRAMS = FAN_PROGRAMS.filter((p) =>
+      ["closure-called-from-fan", "nested-direct-port-map", "same-site-twice-in-one-track"].includes(p.name),
+    );
+    describe.each(PROGRAMS)("$name", ({ code }) => {
+      it.each([1, 2, 3, 4, 5, 6])("yield pattern %i, under each completion schedule", async (yieldSeed) => {
+        for (const schedule of [CompletionScheduler.seeded(2), CompletionScheduler.seeded(4)]) {
+          const run = await recordRun(inferenceEnv, code, SOURCES, { completion: schedule });
+          const wireframe = recordWireframe(SOURCES);
+          const program = buildWireframe(await parse(code), wireframe);
+          await withJumpyClock(yieldSeed, async () => {
+            const replayed = await replayProgramWithPlayback({ source: code, playback: playbackOf(run), wireframe });
+            expect(replayed.value).toEqual(run.egress);
+            const graph = await replayGraphEgress({ program, frozen: freezeMints(run.mints) });
+            expect(graph.value).toEqual(run.egress);
+          });
+        }
+      });
+    });
+  });
+
   it("the lever bites: reversing live completion changes what the live run computed", async () => {
     const code = FAN_PROGRAMS[0].code;
     const forward = await recordRun(inferenceEnv, code, SOURCES, { completion: CompletionScheduler.forward() });

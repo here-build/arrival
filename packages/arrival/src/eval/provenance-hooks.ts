@@ -54,22 +54,25 @@ export interface ClosureSite {
 
 /**
  * One closure CALL's emission window — a TRACK (docs/PROVENANCE.md §3): ports inside the call emit
- * under `coordinate` (= `[...enclosing, rootOrdinal, k]`, k = this call's instance among its
- * parent's calls of the site), and the call opens/closes a track record at it. Threaded LEXICALLY on
- * `EvalContext.closureCall` (a closure's calls nest under the window of the graph instance that
- * DEFINED it — exactly the wireframe's enclosing-graph nesting), and held on run-scoped state: the
- * per-site call counters live on the parent window / the run's emission, never module state.
+ * under `coordinate` (= `[...parent, rootOrdinal, k]`, k = this call's instance among the parent's
+ * calls of that site index), and the call opens/closes a track record at it. The parent is the
+ * CALLER's window when the call runs in an apply site's synchronous prologue — calls within one
+ * track are sequential, so `k` cannot depend on how sibling tracks interleave — else the window
+ * that DEFINED the closure (evaluator.ts picks it; replay.ts `callerInstance` mirrors the rule).
+ * Held on run-scoped state: the counters live on the parent window / the run's emission, never
+ * module state.
  */
 export interface ClosureCallWindow {
   readonly coordinate: RecordCoordinate;
-  /** Next call ordinal per closure site, for calls whose DEFINING instance is this window. */
-  readonly calls: Map<ClosureSite, number>;
+  /** Next call ordinal per closure site INDEX (`ClosureSite.rootOrdinal`), for calls whose parent is
+   *  this window. Keyed by index, not site, so two sites sharing an index still get distinct paths. */
+  readonly calls: Map<number, number>;
   /** Next instance ordinal for events (port mints, track open/close) at this window. */
   instance: number;
 }
 
-/** Run-scoped root counters: the calls whose defining graph is the run's own root coordinate. */
-const rootCalls = new WeakMap<RunEmission, Map<ClosureSite, number>>();
+/** Run-scoped root counters: the calls whose parent is the run's own root coordinate. */
+const rootCalls = new WeakMap<RunEmission, Map<number, number>>();
 
 /**
  * Open a closure call's window and its track (`track-open` now; the returned `close()` emits
@@ -89,11 +92,11 @@ export function openClosureCall(
   const silent = runCtx.silent;
   let counters = parent?.calls;
   if (counters === undefined) {
-    counters = rootCalls.get(emission) ?? new Map<ClosureSite, number>();
+    counters = rootCalls.get(emission) ?? new Map<number, number>();
     rootCalls.set(emission, counters);
   }
-  const k = counters.get(site) ?? 0;
-  counters.set(site, k + 1);
+  const k = counters.get(site.rootOrdinal) ?? 0;
+  counters.set(site.rootOrdinal, k + 1);
   const base = parent?.coordinate ?? emission.coordinate;
   const coordinate: RecordCoordinate = {
     templateHash: site.templateHash,

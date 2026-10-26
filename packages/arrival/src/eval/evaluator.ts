@@ -1331,13 +1331,16 @@ function* evalLambda(rest: SchemeValue, ctx: EvalContext): EvalGenerator {
     // else fall back to lexical ctx. Read in the synchronous prologue so a later
     // finally-restore is harmless (bodyCtx already captured it).
     const dynamicInv = currentDynamicCallSite(callCtx.runCtx) ?? ctx.currentInvocation;
-    // Closure-node emission window (P17): a registered lambda's CALL is a track. Gated on the run
-    // carrying `emission.closureSites` — one field read when off.
-    const opened = openClosureCall(callCtx.runCtx, ctx.closureCall, callCtx.runCtx.emission?.closureSites?.get(body));
-    // A lambda that is NOT a track (a define'd function: its template instantiates inline in the
-    // caller's graph) runs its body in the CALLER's window — the apply site published it — not the
-    // definer's; crossings inside it belong to whichever track called it.
+    // The CALLER's window, published by the apply site for its synchronous prologue; outside one
+    // (a host verb calling back after an await) the definer's.
     const callerWindow = "closureCall" in callCtx.runCtx.ambient ? callCtx.runCtx.ambient.closureCall : ctx.closureCall;
+    // Closure-node emission window (P17): a registered lambda's CALL is a track, numbered among its
+    // caller's calls (provenance-hooks.ts `ClosureCallWindow`). Gated on the run carrying
+    // `emission.closureSites` — one field read when off.
+    const opened = openClosureCall(callCtx.runCtx, callerWindow, callCtx.runCtx.emission?.closureSites?.get(body));
+    // A lambda that is NOT a track (a define'd function: its template instantiates inline in the
+    // caller's graph) runs its body in the caller's window too; crossings inside it belong to
+    // whichever track called it.
     // Body starts in tail position (preamble TAIL PROPAGATION).
     const bodyCtx: EvalContext = {
       ...ctx,

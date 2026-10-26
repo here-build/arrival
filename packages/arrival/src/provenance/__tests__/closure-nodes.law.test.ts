@@ -506,22 +506,44 @@ describe("closure nodes — closure-call coordinates (step 8)", () => {
     expect(ids.size).toBe(stream.length);
   });
 
-  it("calls of a closure DEFINED inside a closure call nest under the defining call's window", async () => {
+  it("a closure DEFINED inside a closure call but called from the root nests under the root (its caller)", async () => {
     const code = `(let ((f (lambda (a) (lambda (b) (src-a (+ a b)))))) (list ((f 1) 1) ((f 2) 2)))`;
     const { program, stream, egress } = await recordWithClosureSites(code);
     expect(egress).toEqual([20, 40]);
-    const outer = program.main.nodes.findIndex((n) => n.kind === "closure");
+    const outer = program.main.nodes.find((n) => n.kind === "closure");
+    if (outer?.kind !== "closure" || outer.template === undefined) throw new Error("expected inline closure");
+    const inner = outer.template.nodes.findIndex((n) => n.kind === "closure");
     const mints = stream.filter((r) => r.kind === "mint");
-    // outer calls k = 0, 1; each defines one inner closure whose single call is k = 0 under it
-    expect(mints.map((m) => [m.id.ordinalPath[1], m.id.ordinalPath[2]])).toEqual([
-      [outer, 0],
-      [outer, 1],
-    ]);
-    expect(mints.every((m) => m.id.ordinalPath.length === 6)).toBe(true); // [0, rO, kO, rI, kI, n]
-    expect(mints.map((m) => m.id.ordinalPath[4])).toEqual([0, 0]);
+    // [0, r_inner, k, n]: directly under the run's coordinate, not under f's call window
+    expect(mints.every((m) => m.id.ordinalPath.length === 4)).toBe(true);
+    expect(mints.map((m) => m.id.ordinalPath[1])).toEqual([inner, inner]);
+    // the root window numbers its calls per site index, so the two inner calls get distinct k
+    const ks = mints.map((m) => m.id.ordinalPath[2]);
+    expect(new Set(ks).size).toBe(2);
+    expect(new Set(stream.map((r) => JSON.stringify(r.id))).size).toBe(stream.length);
     const fold = foldRegionStream(stream);
     expect(fold.started).toBe(4); // 2 outer + 2 inner calls
     expect(fold.pending).toBe(0);
+  });
+
+  it("calls into one closure from several fan rows nest under each row's window, numbered within the row", async () => {
+    const code = `(let ((f (lambda (v) (src-a v)))) (map (lambda (row) (map f row)) (list (list 1 2) (list 3 4))))`;
+    const { program, stream, egress } = await recordWithClosureSites(code);
+    expect(egress).toEqual([
+      [10, 20],
+      [30, 40],
+    ]);
+    const fan = program.main.nodes.findIndex((n) => n.kind === "fan");
+    const f = program.main.nodes.findIndex((n) => n.kind === "closure");
+    const mints = stream.filter((r) => r.kind === "mint");
+    // [0, r_fan, row, r_f, k, n]: under row `row`'s window, k = the call's index within that row
+    const coords = mints.map((m) => m.id.ordinalPath.slice(0, 5)).sort((a, b) => a[2] - b[2] || a[4] - b[4]);
+    expect(coords).toEqual([
+      [0, fan, 0, f, 0],
+      [0, fan, 0, f, 1],
+      [0, fan, 1, f, 0],
+      [0, fan, 1, f, 1],
+    ]);
   });
 
   it("a silent run emits nothing (closure windows are an emission concern only)", async () => {

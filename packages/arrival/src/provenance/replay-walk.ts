@@ -56,6 +56,7 @@ import {
   reraise,
   ReplayScopeError,
   type ReplayCtx,
+  enterInstance,
   rootInstance,
   type TrackInstance,
   selectorCountOf,
@@ -552,6 +553,12 @@ export async function* walkGraphReplay(opts: ReplayWalkOptions): AsyncGenerator<
   // THE STANDARD-BASE FOLD — this call site's own responsibility, not `hermeticEnv`'s
   // (see that module's own header; `replay.ts`'s `replayGraphEgress` mirrors this).
   const base = await hermeticEnv([...basePacks, ...BASE_ROSTER], program.prelude.source, {}, config);
-  const boxed = yield* graphEgressStep(base, program, graph, frozen, slots, decisions, rootInstance());
-  return { boxed, value: toJS(boxed) };
+  const root = rootInstance();
+  const leave = enterInstance(base.runCtx, root);
+  try {
+    const boxed = yield* graphEgressStep(base, program, graph, frozen, slots, decisions, root);
+    return { boxed, value: toJS(boxed) };
+  } finally {
+    leave();
+  }
 }
