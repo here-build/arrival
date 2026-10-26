@@ -49,7 +49,6 @@ import {
   ResourcePathShapeError,
   type ResourcePathFn,
 } from "../../run/resource-paths.js";
-import { AValue } from "../../values/primitives/AValue.js";
 
 // ── 1. Args-vector spec + decoded-type inference ─────────────────────────────
 
@@ -133,7 +132,7 @@ export type DecodedArgsWithRest<
   F extends Face = "js",
 > = Rest extends z.ZodTypeAny
   ? I extends readonly z.ZodTypeAny[]
-    ? SpecInfer<I, F> extends infer Head extends readonly ("js" extends F ? unknown : AValue)[]
+    ? SpecInfer<I, F> extends infer Head extends readonly unknown[]
       ? [...Head, ...ProjectFace<Rest, F>[]]
       : never
     : never

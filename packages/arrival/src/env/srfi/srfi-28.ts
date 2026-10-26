@@ -36,7 +36,6 @@
 // the arrival printer, being display-only, differs from R7RS `write`). Non-string args
 // render identically under `~a` and `~s`.
 
-import type { CallCtx } from "../../run/CallCtx.js";
 import { EnvCapability } from "../../common/capability.js";
 import { stringValue, isSchemeNumber } from "../../values/op-helpers.js";
 import { collapseProvenance, taintString } from "../../provenance/provenance-collapse.js";
@@ -103,7 +102,7 @@ export default EnvCapability.define("scheme/srfi-28", {
         // representation-BLIND scheme-value identity — since a directive-fill arg
         // can be ANY scheme value (rendered via `displayOf`/`writeOf`).
         { input: [z.union([z.string, z.boolean])], inputRest: z.schemeValue, output: [z.string] },
-        function (this: CallCtx, head: AString | ABool | undefined, ...tail: unknown[]): AString {
+        function (head, ...tail) {
           // ── Resolve destination vs format string ───────────────────────────────
           // SRFI-28: `head` IS the format string. SRFI-48/CL: `head` is a
           // destination; we admit `#f` only, and then `tail[0]` is the format.
@@ -179,6 +178,7 @@ export default EnvCapability.define("scheme/srfi-28", {
                   [],
                 );
               }
+              // isSchemeNumber is not a type guard (its valueOf arm admits any number-valued object).
               const num = typeof n === "number" ? n : Number((n as { valueOf(): number | bigint }).valueOf());
               let rendered = decimals === undefined ? String(num) : num.toFixed(decimals);
               if (width !== undefined && rendered.length < width) {

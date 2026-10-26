@@ -11,7 +11,7 @@
 import invariant from "tiny-invariant";
 import { resolveMethod } from "../common/symbols/_bake.js";
 import { notImplemented } from "../common/symbols/notImplemented.js";
-import { attachOffendingValue } from "../errors.js";
+import { attachOffendingValue, R7RSError } from "../errors.js";
 import { toIndex } from "../values/op-helpers.js";
 import { tf, type TaglessOp } from "../values/tagless-final.js";
 import { APair, isCircularList } from "../values/primitives/APair.js";
@@ -20,8 +20,15 @@ import { AVector } from "../values/primitives/AVector.js";
 import { AJSArray } from "../membrane/AJSArray.js";
 import { adoptSpine } from "../membrane/adopt-spine.js";
 import type { SchemeValue } from "../values/types.js";
+import type { AValue } from "../values/primitives/AValue.js";
 import type { EmitCtx } from "../emit/emit-rule.js";
 import type { Binding, R } from "../emit/residual-lite.js";
+
+/** The member-protocol face of a scheme value. R7RSError is the one SchemeValue
+ *  outside AValue; it declares no member terms, so it reads as term-less. */
+export function asReceiver(value: SchemeValue): AValue | null {
+  return value instanceof R7RSError ? null : value;
+}
 
 function describeTail(node: unknown): string {
   try {
@@ -71,10 +78,13 @@ export function to_array(name: string): (list: SchemeValue) => SchemeValue[] {
   };
 }
 
+/** AValue's declared signature for the tagless-final term `op`. */
+type TermOf<K extends TaglessOp> = NonNullable<AValue[`arrival/tagless-final/${K}`]>;
+
 /** The tagless-final term method `op` on `value`, or a teaching door when the operand
  *  carries no such algebra (TOTALIC: a missing term is a type error, never a silent
  *  coercion). One home for the "operand does not support X" door. */
-export function requireTerm(value: unknown, op: TaglessOp): (this: unknown, ...args: unknown[]) => unknown {
+export function requireTerm<K extends TaglessOp>(value: unknown, op: K): TermOf<K> {
   const m = resolveMethod(value, tf(op));
   if (m === undefined) {
     throw attachOffendingValue(
@@ -84,7 +94,8 @@ export function requireTerm(value: unknown, op: TaglessOp): (this: unknown, ...a
       value,
     );
   }
-  return m;
+  // resolveMethod only checks that the key holds a function; AValue declares its signature.
+  return m as TermOf<K>;
 }
 
 /** Resolve an optional `[start, end)` pair against a sequence of `len` elements.

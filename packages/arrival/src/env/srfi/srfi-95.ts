@@ -12,10 +12,8 @@
 //
 // SINGLE SOURCE: `srfi/index.ts` adds this to `allSrfi`, so `base-packs.ts` assembles it.
 import dedent from "dedent";
-import type { MaybePromise } from "../../types/utility.js";
 import { EnvCapability } from "../../common/capability.js";
 import { requireTerm } from "../pack-helpers.js";
-import type { SchemeValue } from "../../values/types.js";
 
 export default EnvCapability.define("scheme/srfi-95", {
   symbols: (symbol, z) => ({
@@ -59,10 +57,7 @@ export default EnvCapability.define("scheme/srfi-95", {
       (args, runCtx) => {
         const [seq, comparator] = args;
         const m = requireTerm(seq, "sort");
-        // The per-primitive sort term algebra (module header) declares a SchemeValue return —
-        // `requireTerm`'s method is `unknown`-returning (it resolves ANY term method, not sort's own
-        // protocol specifically), so this states that documented invariant, not a blind widening.
-        return m.call(seq, comparator, runCtx) as MaybePromise<SchemeValue>;
+        return m.call(seq, comparator, runCtx);
       },
     ),
   }),

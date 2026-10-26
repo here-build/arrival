@@ -30,7 +30,6 @@ import { adoptSpine } from "../../membrane/adopt-spine.js";
 import dedent from "dedent";
 import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
 import { applyCallback, type ACallable } from "../../values/primitives/ACallable.js";
-import { CallCtx } from "../../run/CallCtx.js";
 import type { MaybePromise } from "../../types/utility.js";
 import { assertAllocatable, toIndex, withInputProvenance } from "../../values/op-helpers.js";
 import { schemeFalse } from "../../values/primitives/ABool.js";
@@ -40,7 +39,7 @@ import { is_applyable, is_false, is_lambda, is_promise } from "../../values/valu
 import { type, typeErrorMessage } from "../../membrane/typecheck.js";
 import { attachOffendingValue, CarrierMismatchError } from "../../errors.js";
 import { eqv, structuralEqual } from "../../values/structural-equal.js";
-import { exactly, freshBinding, provesArray, requireTerm, to_array } from "../pack-helpers.js";
+import { asReceiver, exactly, freshBinding, provesArray, to_array } from "../pack-helpers.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
 import { printValue } from "../../values/print.js";
 import { theVoid } from "../../values/primitives/AVoid.js";
@@ -51,7 +50,7 @@ import { AString } from "../../values/primitives/AString.js";
 import { ABytevector } from "../../values/primitives/ABytevector.js";
 import { EnvCapability } from "../../common/capability.js";
 import { call_function } from "../../eval/call-function.js";
-import { promise_all } from "../../utils/promises.js";
+import { maybeThen, settleAll } from "../../utils/promises.js";
 import { tf } from "../../values/tagless-final.js";
 import type { AListAlike, SchemeValue } from "../../values/types.js";
 // TYPE-ONLY import of the compiler-facing Contract.emit surface (emit-rule.ts
@@ -93,7 +92,7 @@ function requireListArg(verb: string, list: unknown): void {
   if (list instanceof APair || list instanceof ANil) return;
   throw attachOffendingValue(
     new TypeError(
-      `${verb}: expected a list, got ${type(list)}: ${String(printValue(list as SchemeValue)).slice(0, 60)}. ` +
+      `${verb}: expected a list, got ${type(list)}: ${String(printValue(list)).slice(0, 60)}. ` +
         `(${verb} returns #f for "not found" — so a non-list here would have silently answered "not found" ` +
         `about a value it never searched.)`,
     ),
@@ -107,9 +106,7 @@ function listIndex(verb: string, k: unknown): number {
   const n = toIndex(k);
   if (!Number.isInteger(n) || n < 0) {
     throw attachOffendingValue(
-      new TypeError(
-        `${verb}: expected a non-negative exact integer, got ${String(printValue(k as SchemeValue)).slice(0, 60)}`,
-      ),
+      new TypeError(`${verb}: expected a non-negative exact integer, got ${String(printValue(k)).slice(0, 60)}`),
       k,
     );
   }
@@ -140,43 +137,12 @@ function nonListAppendOperandError(item: SchemeValue): CarrierMismatchError {
   return new CarrierMismatchError("append", type(item));
 }
 
-const lengthImpl = function (this: CallCtx, obj: unknown): AExact | AInexact {
-  // R7RS length is an exact integer — box to AExact, matching string-length.
-  if (obj == null) return new AExact(0);
-  // Operand's own `arrival/tagless-final/length` — carries element provenance and
-  // circular-list check. TOTALIC: no length algebra → type error, never silent 0.
-  // Bare `.length` fallback for non-term carriers (membrane-wrapped JS arrays).
-  const m = (obj as Record<string, unknown>)[tf("length")];
-  if (typeof m === "function") {
-    const result: unknown = m.call(obj, this.runCtx);
-    // Real terms return AExact/AInexact only (P4). A raw number here is a producer
-    // bug — fail loudly rather than re-box.
-    invariant(
-      result instanceof AExact || result instanceof AInexact,
-      `length: a term's own length must be a boxed count (bare-value-purge/P4) — got ${typeof result}`,
-    );
-    return result;
-  }
-  if (typeof obj === "object" && "length" in obj) {
-    const len = obj.length;
-    if (typeof len === "number") return withInputProvenance(this.runCtx, [obj], new AExact(len));
-  }
-  throw attachOffendingValue(
-    new TypeError(`length: the ${typeof obj} operand does not support length (no arrival/tagless-final/length).`),
-    obj,
-  );
-};
-
 // Multi-list `map` is a ZIP: corresponding elements, truncate to shortest.
-function multiListMap(
-  fn: ACallable,
-  lists: readonly AListAlike[],
-  runCtx: RunContext,
-): SchemeValue | Promise<SchemeValue> {
+function multiListMap(fn: ACallable, lists: readonly SchemeValue[], runCtx: RunContext): MaybePromise<SchemeValue> {
   if (lists.some((list) => list instanceof ANil)) return nil;
   const arrays = lists.map((l) => listToArray(l));
   const len = Math.min(...arrays.map((a) => a.length));
-  const results: SchemeValue[] = [];
+  const results: MaybePromise<SchemeValue>[] = [];
   for (let i = 0; i < len; i++) {
     results.push(
       call_function(
@@ -186,23 +152,14 @@ function multiListMap(
       ),
     );
   }
-  if (results.some(is_promise)) {
-    return (promise_all(results) as Promise<unknown[]>).then((resolved) =>
-      APair.fromArray(CONSTANT_CTX, resolved as SchemeValue[]),
-    );
-  }
-  return APair.fromArray(CONSTANT_CTX, results);
+  return maybeThen(settleAll(results), (resolved) => APair.fromArray(CONSTANT_CTX, resolved));
 }
 
 // mapImpl vs multiListMap differ on improper-list error text: mapImpl's per-arg
 // isProperList raises "map: argument N is not a list"; multiListMap lets listToArray
 // raise its own circular-list error. for-each must thread `this.runCtx`, never CONSTANT_CTX.
-function mapImpl(
-  runCtx: RunContext,
-  fn: SchemeValue,
-  lists: readonly AListAlike[],
-): SchemeValue | Promise<SchemeValue> {
-  // is_applyable is structural, not a TS guard — assert for call_function's param type.
+function mapImpl(runCtx: RunContext, fn: ACallable, lists: readonly AListAlike[]): MaybePromise<SchemeValue> {
+  // Contracts are type-only: the runtime procedure check stays.
   invariant(is_applyable(fn), `map: the first argument is not a procedure`);
   const is_list = isProperList;
   for (const [i, arg] of lists.entries()) {
@@ -213,21 +170,14 @@ function mapImpl(
   }
 
   const arrays = lists.map((l) => listToArray(l));
-  const length = Math.min(...arrays.map((a: SchemeValue[]) => a.length));
+  const length = Math.min(...arrays.map((a) => a.length));
 
-  const results: SchemeValue[] = [];
+  const results: MaybePromise<SchemeValue>[] = [];
   for (let i = 0; i < length; i++) {
-    const args = arrays.map((arr: SchemeValue[]) => arr[i]);
-    results.push(call_function(fn as Parameters<typeof call_function>[0], args, { runCtx }));
+    const args = arrays.map((arr) => arr[i]);
+    results.push(call_function(fn, args, { runCtx }));
   }
-
-  const hasPromises = results.some(is_promise);
-  if (hasPromises) {
-    return (promise_all(results) as Promise<unknown[]>).then((resolved) =>
-      APair.fromArray(CONSTANT_CTX, resolved as SchemeValue[]),
-    );
-  }
-  return APair.fromArray(CONSTANT_CTX, results);
+  return maybeThen(settleAll(results), (resolved) => APair.fromArray(CONSTANT_CTX, resolved));
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -356,10 +306,17 @@ export default EnvCapability.define("scheme/lists", {
         const [fn, ...lists] = args;
         if (lists.length === 1) {
           const seq = lists[0];
-          const m = requireTerm(seq, "map");
-          return m.call(seq, fn, runCtx) as MaybePromise<SchemeValue>;
+          const m = asReceiver(seq)?.[tf("map")];
+          if (m === undefined) {
+            // Same taught error as requireTerm (whose untyped return would need a cast).
+            throw attachOffendingValue(
+              new TypeError(`map: the ${typeof seq} operand does not support map (no ${tf("map")}).`),
+              seq,
+            );
+          }
+          return m.call(seq, fn, runCtx);
         }
-        return multiListMap(fn, lists as readonly AListAlike[], runCtx);
+        return multiListMap(fn, lists, runCtx);
       },
     ),
     // R7RS 6.4 — for-each: map for side effects, unspecified result.
@@ -382,8 +339,8 @@ export default EnvCapability.define("scheme/lists", {
           }
         `,
       },
-      // `this: CallCtx` threads runCtx into mapImpl (not CONSTANT_CTX).
-      function (this: CallCtx, fn, ...lists) {
+      // Thread `this.runCtx` into mapImpl (not CONSTANT_CTX).
+      function (fn, ...lists) {
         const ret = mapImpl(this.runCtx, fn, lists);
         // R7RS unspecified → theVoid on the scheme face.
         if (is_promise(ret)) {
@@ -405,8 +362,8 @@ export default EnvCapability.define("scheme/lists", {
         `,
         emit: consEmitRule,
       },
-      function (this: CallCtx, car, cdr) {
-        return withInputProvenance(this.runCtx, [car, cdr], new APair(car as SchemeValue, cdr as SchemeValue));
+      function (car, cdr) {
+        return withInputProvenance(this.runCtx, [car, cdr], new APair(car, cdr));
       },
     ),
 
@@ -421,7 +378,7 @@ export default EnvCapability.define("scheme/lists", {
           }
         `,
       },
-      function (this: CallCtx, ...args: SchemeValue[]): SchemeValue {
+      function (...args) {
         const result = args.reduceRight((list, item) => new APair(item, list), nil);
         return withInputProvenance(this.runCtx, args, result);
       },
@@ -445,7 +402,32 @@ export default EnvCapability.define("scheme/lists", {
         `,
         emit: lengthEmitRule,
       },
-      lengthImpl,
+      function (obj) {
+        // R7RS length is an exact integer — box to AExact, matching string-length.
+        if (obj == null) return new AExact(0);
+        // Operand's own `arrival/tagless-final/length` — carries element provenance and
+        // circular-list check. TOTALIC: no length algebra → type error, never silent 0.
+        // Bare `.length` fallback for non-term carriers (membrane-wrapped JS arrays).
+        const m = asReceiver(obj)?.[tf("length")];
+        if (m !== undefined) {
+          const result = m.call(obj, this.runCtx);
+          // Real terms return AExact/AInexact only (P4). A raw number here is a producer
+          // bug — fail loudly rather than re-box.
+          invariant(
+            result instanceof AExact || result instanceof AInexact,
+            `length: a term's own length must be a boxed count (bare-value-purge/P4) — got ${typeof result}`,
+          );
+          return result;
+        }
+        if (typeof obj === "object" && "length" in obj) {
+          const len = obj.length;
+          if (typeof len === "number") return withInputProvenance(this.runCtx, [obj], new AExact(len));
+        }
+        throw attachOffendingValue(
+          new TypeError(`length: the ${typeof obj} operand does not support length (no arrival/tagless-final/length).`),
+          obj,
+        );
+      },
     ),
 
     apply: symbol.native`apply: call fn with the leading args prepended to the final list argument`(
@@ -466,9 +448,10 @@ export default EnvCapability.define("scheme/lists", {
         emit: applyEmitRule,
       },
       // listToArray doors improper/atom final arg (no non-iterable spread crash).
-      function (this: CallCtx, fn, ...rest) {
-        invariant(rest.length > 0, "apply: requires an argument list as the final argument");
-        const spread = listToArray(rest.at(-1) as AListAlike);
+      function (fn, ...rest) {
+        const last = rest.at(-1);
+        invariant(last !== undefined, "apply: requires an argument list as the final argument");
+        const spread = listToArray(last);
         const args = [...rest.slice(0, -1), ...spread];
         // Tail position (R7RS §3.5): the evaluator granted `canBounce`, so a lambda callee hands
         // back its body generator for the caller's trampoline instead of nesting a run() per
@@ -476,10 +459,11 @@ export default EnvCapability.define("scheme/lists", {
         // forwarded: `fn` sees an ordinary ctx.
         if (this.canBounce === true && is_lambda(fn)) {
           const { canBounce: _granted, ...calleeCtx } = this;
-          return fn[tf("apply")](args, calleeCtx, true) as SchemeValue | Promise<SchemeValue>;
+          // Cast: Impl's return type has no bounce-marker arm; ANativeProcedure's apply passes the marker through.
+          return fn[tf("apply")](args, calleeCtx, true) as MaybePromise<SchemeValue>;
         }
         // Thread whole CallCtx (not just runCtx) so invocation provenance reaches fn.
-        return applyCallback(fn, args, this) as SchemeValue | Promise<SchemeValue>;
+        return applyCallback(fn, args, this);
       },
     ),
 
@@ -494,11 +478,11 @@ export default EnvCapability.define("scheme/lists", {
           }
         `,
       },
-      function (this: CallCtx, k: unknown, fill?: unknown): AListAlike {
+      function (k, fill) {
         const count = listIndex("make-list", k);
         // O(1) cap check BEFORE the cons loop materializes `count` cells — see assertAllocatable.
         assertAllocatable(count, "make-list");
-        const value: SchemeValue = fill === undefined ? schemeFalse : (fill as SchemeValue);
+        const value = fill === undefined ? schemeFalse : fill;
         let result: AListAlike = nil;
         for (let i = 0; i < count; i++) {
           result = new APair(value, result);
@@ -541,7 +525,7 @@ export default EnvCapability.define("scheme/lists", {
         `,
         emit: listRefEmitRule,
       },
-      function (this: CallCtx, list, k) {
+      function (list, k) {
         const count = listIndex("list-ref", k);
         let current: SchemeValue = list;
         for (let i = 0; i < count; i++) {
@@ -567,7 +551,7 @@ export default EnvCapability.define("scheme/lists", {
           }
         `,
       },
-      function (this: CallCtx, list) {
+      function (list) {
         // instanceof ANil (not === nil): Nil clones from provenance stamping must
         // not fall through to the improper-list alias branch.
         if (list instanceof ANil) return nil;
@@ -582,7 +566,7 @@ export default EnvCapability.define("scheme/lists", {
           tail = tail.cdr;
         }
         let copy: SchemeValue = tail instanceof ANil ? nil : tail;
-        for (let i = cars.length - 1; i >= 0; i--) copy = new APair(cars[i]!, copy as AListAlike);
+        for (let i = cars.length - 1; i >= 0; i--) copy = new APair(cars[i], copy);
         return withInputProvenance(this.runCtx, [list], copy);
       },
     ),
@@ -600,8 +584,8 @@ export default EnvCapability.define("scheme/lists", {
           }
         `,
       },
-      function (this: CallCtx, obj, list) {
-        let current: unknown = list;
+      function (obj, list) {
+        let current: SchemeValue = list;
         requireListArg("memq", list);
         TypeError.invariant(!isCircularList(list), "memq: circular list");
         while (current instanceof APair) {
@@ -622,8 +606,8 @@ export default EnvCapability.define("scheme/lists", {
           }
         `,
       },
-      function (this: CallCtx, obj, list) {
-        let current: unknown = list;
+      function (obj, list) {
+        let current: SchemeValue = list;
         // isCircularList needs a Pair — ANil short-circuits.
         requireListArg("memv", list);
         TypeError.invariant(!(list instanceof APair && isCircularList(list)), "memv: circular list");
@@ -645,8 +629,8 @@ export default EnvCapability.define("scheme/lists", {
           }
         `,
       },
-      function (this: CallCtx, obj, alist) {
-        let current: unknown = alist;
+      function (obj, alist) {
+        let current: SchemeValue = alist;
         TypeError.invariant(!(alist instanceof APair && isCircularList(alist)), "assq: circular list");
         requireListArg("assq", alist);
         while (current instanceof APair) {
@@ -655,7 +639,7 @@ export default EnvCapability.define("scheme/lists", {
           // adoptSpine projects borrowed arrays onto the spine chart (O(1)); genuine
           // cons cells and non-pair entries pass through (R7RS leniency on bare values).
           // Affordance at point of use — does not promote alists to dicts.
-          const pair = adoptSpine(current.car) as SchemeValue;
+          const pair = adoptSpine(current.car);
           if (pair instanceof APair && pair.car === obj) return pair;
           current = current.cdr;
         }
@@ -673,13 +657,13 @@ export default EnvCapability.define("scheme/lists", {
           }
         `,
       },
-      function (this: CallCtx, obj, alist) {
-        let current: unknown = alist;
+      function (obj, alist) {
+        let current: SchemeValue = alist;
         TypeError.invariant(!(alist instanceof APair && isCircularList(alist)), "assv: circular list");
         requireListArg("assv", alist);
         while (current instanceof APair) {
           // ENTRY ADOPTION — see assq.
-          const pair = adoptSpine(current.car) as SchemeValue;
+          const pair = adoptSpine(current.car);
           if (pair instanceof APair && eqv(pair.car, obj)) return pair;
           current = current.cdr;
         }
@@ -701,8 +685,8 @@ export default EnvCapability.define("scheme/lists", {
         // compare is `control` (equality selector decides which sublist egresses).
         callbackRoles: ["control"],
       },
-      function (this: CallCtx, obj, list, compare) {
-        let current: unknown = list;
+      function (obj, list, compare) {
+        let current: SchemeValue = list;
         requireListArg("member", list);
         TypeError.invariant(!(list instanceof APair && isCircularList(list)), "member: circular list");
         while (current instanceof APair) {
@@ -734,19 +718,19 @@ export default EnvCapability.define("scheme/lists", {
         `,
         callbackRoles: ["control"],
       },
-      function (this: CallCtx, obj, alist, compare?: SchemeValue) {
-        let current: unknown = alist;
+      function (obj, alist, compare) {
+        let current: SchemeValue = alist;
         TypeError.invariant(!(alist instanceof APair && isCircularList(alist)), "assoc: circular list");
         requireListArg("assoc", alist);
         while (current instanceof APair) {
           // ENTRY ADOPTION — see assq.
-          const pair = adoptSpine(current.car) as SchemeValue;
+          const pair = adoptSpine(current.car);
           if (pair instanceof APair) {
             const hit =
               compare === undefined
                 ? structuralEqual(obj, pair.car)
                 : !is_false(
-                    call_function(compare as Parameters<typeof call_function>[0], [obj, pair.car], {
+                    call_function(compare, [obj, pair.car], {
                       runCtx: this.runCtx,
                     }),
                   );
@@ -769,7 +753,7 @@ export default EnvCapability.define("scheme/lists", {
           }
         `,
       },
-      function (this: CallCtx, ...items: SchemeValue[]): SchemeValue {
+      function (...items) {
         // Fresh list: clone every segment, then splice clones (append! is doored).
         const is_list = isProperList;
         // Spine adoption HERE: contract is z.array(z.schemeValue) (last arg may be
@@ -777,7 +761,7 @@ export default EnvCapability.define("scheme/lists", {
         // including the last — a borrowed JS array or boxed vector read as spine splices
         // as a list; a non-sequence last arg is untouched, so `(append '(1 2) 3)` still
         // builds `(1 2 . 3)`.
-        items = items.map((item) => adoptSpine(item) as SchemeValue);
+        items = items.map((item) => adoptSpine(item));
         const cloned = items.map((item) => (item instanceof APair ? item.clone() : item));
         return cloned.reduce((acc, item, idx) => {
           // Non-last must be proper lists (P5); last may be any value (improper tail).
@@ -814,7 +798,7 @@ export default EnvCapability.define("scheme/lists", {
           }
         `,
       },
-      function (this: CallCtx, arg) {
+      function (arg) {
         if (arg instanceof ANil) {
           return nil;
         }

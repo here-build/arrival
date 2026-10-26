@@ -30,7 +30,8 @@
 import { EnvCapability } from "../../common/capability.js";
 import { attachOffendingValue } from "../../errors.js";
 import { printValue } from "../../values/print.js";
-import { is_promise } from "../../values/value-guards.js";
+import { maybeThen, settleAll } from "../../utils/promises.js";
+import type { MaybePromise } from "../../types/utility.js";
 import type { CallCtx } from "../../run/CallCtx.js";
 import dedent from "dedent";
 import { schemeBool, stringValue } from "../../values/op-helpers.js";
@@ -44,7 +45,7 @@ import { AVector } from "../../values/primitives/AVector.js";
 import { APair } from "../../values/primitives/APair.js";
 import { type SchemeValue } from "../../values/types.js";
 import { type AValue } from "../../values/primitives/AValue.js";
-import { to_array } from "../pack-helpers.js";
+import { asReceiver, to_array } from "../pack-helpers.js";
 import equality from "../r7rs/equality.js";
 import lists from "../r7rs/lists.js";
 
@@ -57,19 +58,41 @@ import lists from "../r7rs/lists.js";
 // function) answers nil/false/() — never a value's internal provenance/kind.
 
 /** The ONE home of member-key normalization (`@`/`@?` + the `:key` accessor's
- *  string route): valueOf-unwrap a boxed key, refuse nil/null keys, stringify,
- *  strip the leading `:` accessor sigil. Receivers fold the RESULT (ADict's
- *  `foldKeyName` handles the SchemeValue route the keyword accessor takes). */
-function normalizeMemberKey(key: unknown): string | null {
-  const rawKey = (key as { valueOf?: () => unknown })?.valueOf?.() ?? key;
+ *  string route): valueOf-unwrap a boxed key, refuse nil keys, stringify, strip the
+ *  leading `:` accessor sigil. Receivers fold the RESULT (ADict's `foldKeyName`
+ *  handles the SchemeValue route the keyword accessor takes). */
+function normalizeMemberKey(key: SchemeValue | string): string | null {
+  const rawKey = key.valueOf();
   if (rawKey == null || rawKey instanceof ANil) return null;
   let keyStr = String(rawKey);
   if (keyStr.startsWith(":")) keyStr = keyStr.slice(1);
   return keyStr;
 }
 
-/** Enumerate a receiver's own members through its OWN terms — `keys`, then `get` per key —
- *  and build an OWNED vector from the results.
+/** `@` — term dispatch. A term-less receiver, a null key, or a null obj is nil. */
+export function readMember(ctx: CallCtx, obj: AValue | null, key: SchemeValue | string): MaybePromise<SchemeValue> {
+  if (obj == null) return nil;
+  const normalizedKey = normalizeMemberKey(key);
+  if (normalizedKey === null) return nil;
+  return obj["arrival/tagless-final/get"]?.(normalizedKey, ctx.runCtx) ?? nil;
+}
+
+/** `@?` — the raw boolean. Callers box it with `schemeBool`. */
+export function hasMember(ctx: CallCtx, obj: AValue | null, key: SchemeValue | string): boolean {
+  if (obj == null) return false;
+  const normalizedKey = normalizeMemberKey(key);
+  if (normalizedKey === null) return false;
+  return obj["arrival/tagless-final/has"]?.(normalizedKey, ctx.runCtx) ?? false;
+}
+
+/** `@keys` names, unboxed. A term-less receiver has none. */
+export function memberNames(ctx: CallCtx, obj: AValue | null): string[] {
+  return obj?.["arrival/tagless-final/keys"]?.(ctx.runCtx) ?? [];
+}
+
+/** A receiver's own members as `[name, value]`, read through its OWN terms — `keys`,
+ *  then `get` per name. Names come from the receiver, so they skip key normalization.
+ *  A receiver lacking either term has no entries.
  *
  *  NOT `toJS` + `Object.values` + `jsToScheme`. That round trip unwraps a borrowed
  *  container to its `source` by identity, enumerates whatever the store holds, and re-borrows
@@ -78,27 +101,36 @@ function normalizeMemberKey(key: unknown): string | null {
  *  never leaves scheme space, so the hazard cannot arise regardless of what the receiver
  *  borrows.
  *
- *  Term-less receiver ⇒ empty vector, matching `@keys`: absence is the semantics.
- *
  *  A Promise-valued member (a lazy pending cell — pending-entry.ts) makes the whole read
- *  async: unlike `@`, which hands its single cell to the dispatch wrapper to await, a vector
- *  cannot be minted until every element has settled. */
+ *  async: unlike `@`, which hands its single cell to the dispatch wrapper to await, an entry
+ *  list cannot be built until every value has settled. */
+export function memberEntries(ctx: CallCtx, obj: AValue | null): MaybePromise<MemberEntry[]> {
+  const keys = obj?.["arrival/tagless-final/keys"];
+  const get = obj?.["arrival/tagless-final/get"];
+  if (obj == null || keys === undefined || get === undefined) return [];
+  const names = keys.call(obj, ctx.runCtx);
+  const reads = names.map((name) => get.call(obj, name, ctx.runCtx));
+  return maybeThen(settleAll(reads), (values) => names.map((name, i): MemberEntry => [name, values[i]!]));
+}
+
+export type MemberEntry = readonly [name: string, value: SchemeValue];
+
+/** A `dict` argument position: a keyword/symbol/string stays itself; anything else
+ *  stringifies with one leading `:` stripped. Fold-name identity is `foldKeyName`. */
+export function asDictKey(raw: SchemeValue): DictKey {
+  return raw instanceof ASymbol || raw instanceof AString || raw instanceof ACharacter
+    ? raw
+    : new AString(String(raw).replace(/^:/, ""));
+}
+
+/** `@values` / `@entries` — an OWNED vector over `memberEntries`; term-less ⇒ empty,
+ *  matching `@keys`: absence is the semantics. */
 function collectMembers(
   ctx: CallCtx,
-  obj: unknown,
+  obj: AValue | null,
   build: (key: string, value: SchemeValue) => SchemeValue,
-): AVector | Promise<AVector> {
-  const keysTerm = obj == null ? undefined : (obj as Partial<AValue>)["arrival/tagless-final/keys"];
-  const getter = obj == null ? undefined : (obj as Partial<AValue>)["arrival/tagless-final/get"];
-  if (typeof keysTerm !== "function" || typeof getter !== "function") return new AVector([]);
-  const names = keysTerm.call(obj, ctx.runCtx);
-  const reads = names.map((key) => getter.call(obj, key, ctx.runCtx));
-  if (reads.some(is_promise)) {
-    return Promise.all(reads.map((v) => Promise.resolve(v))).then(
-      (settled) => new AVector(settled.map((value, i) => build(names[i]!, value as SchemeValue))),
-    );
-  }
-  return new AVector(reads.map((value, i) => build(names[i]!, value as SchemeValue)));
+): MaybePromise<AVector> {
+  return maybeThen(memberEntries(ctx, obj), (entries) => new AVector(entries.map(([k, v]) => build(k, v))));
 }
 
 // ─── Contract vocabulary local to this pack ─────────────────────────────────────
@@ -141,24 +173,16 @@ export default EnvCapability.define("scheme/polyglot", {
         // `z.schemeValue` is the identity term for "a polymorphic accessor's operand"
         // (common/scheme-zod/index.ts's own worked example).
         { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
-        function (this: CallCtx, obj: unknown, key: unknown): SchemeValue | Promise<SchemeValue> {
-          if (obj == null) return nil;
-          const keyStr = normalizeMemberKey(key);
-          if (keyStr === null) return nil;
-          const getter = (obj as Partial<AValue>)["arrival/tagless-final/get"];
-          return typeof getter === "function" ? getter.call(obj, keyStr, this.runCtx) : nil;
+        function (obj, key) {
+          return readMember(this, asReceiver(obj), key);
         },
       ),
       "@?": symbol.native`@?: #t iff obj has the member key`(
         // The verdict is the boxed scheme face (schemeBool flyweight — Face split; the
         // raw JS boolean the has term returns is a protocol-layer detail).
         { input: [z.schemeValue, z.schemeValue], output: [z.boolean] },
-        function (this: CallCtx, obj: unknown, key: unknown) {
-          if (obj == null) return schemeBool(false);
-          const keyStr = normalizeMemberKey(key);
-          if (keyStr === null) return schemeBool(false);
-          const has = (obj as Partial<AValue>)["arrival/tagless-final/has"];
-          return schemeBool(typeof has === "function" ? has.call(obj, keyStr, this.runCtx) : false);
+        function (obj, key) {
+          return schemeBool(hasMember(this, asReceiver(obj), key));
         },
       ),
       "@keys": symbol.native`@keys: the own member keys of obj, as a vector`(
@@ -169,20 +193,18 @@ export default EnvCapability.define("scheme/polyglot", {
         // teach `fold over (@keys d)` as the iteration idiom. Owned AVector, matching
         // `@values`/`@entries`: one return convention across the trio.
         { input: [z.schemeValue], output: [z.vector(z.string)] },
-        function (this: CallCtx, obj: unknown) {
-          const keys = obj == null ? undefined : (obj as Partial<AValue>)["arrival/tagless-final/keys"];
-          const names = typeof keys === "function" ? keys.call(obj, this.runCtx) : [];
+        function (obj) {
           // Mint each key string under the live invocation ctx — `this.runCtx`,
           // carried by `this: CallCtx` (dispatch's `hostImpl.apply(makeCallCtx(runCtx),
           // args)`, common/capability.ts). Under CONSTANT_CTX the result strings mint
           // run-invisible: outside the run's cache and effect tracking.
-          return new AVector(names.map((k) => new AString(k)));
+          return new AVector(memberNames(this, asReceiver(obj)).map((k) => new AString(k)));
         },
       ),
       "@values": symbol.native`@values: the own member values of obj, as a vector`(
         { input: [z.schemeValue], output: [z.vector(z.schemeValue)] },
-        function (this: CallCtx, obj: unknown) {
-          return collectMembers(this, obj, (_key, value) => value);
+        function (obj) {
+          return collectMembers(this, asReceiver(obj), (_key, value) => value);
         },
       ),
       "@entries": symbol.native`@entries: the own members of obj as (key . value) pairs, in a vector`(
@@ -192,8 +214,8 @@ export default EnvCapability.define("scheme/polyglot", {
         // present, so it is a vector. Reading `(cdr entry)` yields the value itself; a
         // 2-list would yield a one-element list wrapping it.
         { input: [z.schemeValue], output: [z.vector(z.pair)] },
-        function (this: CallCtx, obj: unknown) {
-          return collectMembers(this, obj, (key, value) => new APair(new AString(key), value));
+        function (obj) {
+          return collectMembers(this, asReceiver(obj), (key, value) => new APair(new AString(key), value));
         },
       ),
       // `dict` — the Scheme-side companion to the `:key` accessor and the `@` read:
@@ -223,12 +245,12 @@ export default EnvCapability.define("scheme/polyglot", {
         // runCtx), args)`), and an arrow-fn impl structurally cannot read `this` — every
         // `(dict …)` call would mint its ADict + every key's ASymbol run-invisible,
         // outside the run's ctx.
-        function (this: CallCtx, ...args: unknown[]): ADict {
+        function (...args) {
           if (args.length % 2 !== 0) {
             throw attachOffendingValue(
               new TypeError(
                 `dict: expected interleaved key/value pairs, got ${args.length} arguments — the last key ` +
-                  `${String(printValue(args.at(-1) as SchemeValue)).slice(0, 40)} has no value (write (dict :a 1 :b 2), ` +
+                  `${String(printValue(args.at(-1)!)).slice(0, 40)} has no value (write (dict :a 1 :b 2), ` +
                   `or give the dangling key a value; a silently dropped trailing key would lose data)`,
               ),
               args.at(-1),
@@ -236,15 +258,11 @@ export default EnvCapability.define("scheme/polyglot", {
           }
           const byName = new Map<string, [DictKey, SchemeValue]>();
           for (let i = 0; i + 1 < args.length; i += 2) {
-            const raw = args[i];
-            const key: DictKey =
-              raw instanceof ASymbol || raw instanceof AString || raw instanceof ACharacter
-                ? raw
-                : new AString(String(raw).replace(/^:/, ""));
-            byName.set(foldKeyName(key), [key, args[i + 1] as SchemeValue]);
+            const key = asDictKey(args[i]!);
+            byName.set(foldKeyName(key), [key, args[i + 1]!]);
           }
           return new ADict([...byName.values()]);
-        } as unknown as (...args: SchemeValue[]) => ADict,
+        },
       ),
 
       // ═══════════════════════════════════════════════════════════════════════════
@@ -273,7 +291,7 @@ export default EnvCapability.define("scheme/polyglot", {
           output: [z.string],
           type: "(...args: unknown[]) => string",
         },
-        function (this: CallCtx, ...args: SchemeValue[]): AString {
+        function (...args) {
           const parts = args.map((x) =>
             typeof x === "string" || x instanceof AString ? stringValue(x) : printValue(x),
           );
@@ -292,7 +310,7 @@ export default EnvCapability.define("scheme/polyglot", {
           output: [z.union([z.string, z.string])],
           type: "(separator: string, list: List<string>) => string",
         },
-        function (this: CallCtx, separator: SchemeValue, list: SchemeValue): AString {
+        function (separator, list) {
           const joined = to_array("join")(list).map(stringValue).join(stringValue(separator));
           return taintString(joined, collapseProvenance(separator, list));
         },
@@ -380,7 +398,7 @@ export default EnvCapability.define("scheme/polyglot", {
       "%with-span-of":
         symbol.native`%with-span-of: give a freshly-built form the source span of the user form it was derived from (private helper for threading macros)`(
           { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
-          function (this: CallCtx, userForm: SchemeValue, fresh: SchemeValue) {
+          function (userForm, fresh) {
             const loc = userForm instanceof APair || userForm instanceof ASymbol ? userForm.location : undefined;
             if (loc === undefined || !(fresh instanceof APair) || fresh.location !== undefined) return fresh;
             return fresh.withLocation(loc);

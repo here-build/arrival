@@ -18,7 +18,6 @@
 
 import dedent from "dedent";
 import invariant from "tiny-invariant";
-import type { CallCtx } from "../../run/CallCtx.js";
 import { ABytevector } from "../../values/primitives/ABytevector.js";
 import { AString } from "../../values/primitives/AString.js";
 import {
@@ -57,7 +56,7 @@ export default EnvCapability.define("scheme/bytevectors", {
           }
         `,
       },
-      function (this: CallCtx, obj) {
+      function (obj) {
         // Polymorphic by design: scheme producers mint SchemeBytevector, but raw
         // binary legitimately flows from FFI through the membrane unboxed (it
         // preserves Uint8Array identity), and a raw Uint8Array/ArrayBuffer/
@@ -76,7 +75,7 @@ export default EnvCapability.define("scheme/bytevectors", {
 
     "make-bytevector": symbol.native`make-bytevector: a bytevector of length k filled with byte`(
       { input: [z.schemeNumber, z.schemeNumber.optional()], output: [z.bytevector] },
-      function (this: CallCtx, k, byte) {
+      function (k, byte) {
         const len = toIndex(k);
         // Allocation cap + non-negative-integer door BEFORE the typed array materializes
         // (a negative length otherwise leaks a raw RangeError, an oversized one kills the host).
@@ -97,7 +96,7 @@ export default EnvCapability.define("scheme/bytevectors", {
       // toIndex(b) below, exactly like make-bytevector's byte/k args — z.schemeNumber
       // is that same op's own precedent for "this slot is a scheme number".
       { input: [], inputRest: z.schemeNumber, output: [z.bytevector] },
-      function (this: CallCtx, ...bytes) {
+      function (...bytes) {
         return withInputProvenance(
           this.runCtx,
           bytes,
@@ -108,14 +107,14 @@ export default EnvCapability.define("scheme/bytevectors", {
 
     "bytevector-length": symbol.native`bytevector-length: number of bytes in the bytevector`(
       { input: [z.bytevector], output: [z.number] },
-      function (this: CallCtx, bv) {
+      function (bv) {
         return new AExact(asBytevector(bv, "bytevector-length").byteLength);
       },
     ),
 
     "bytevector-u8-ref": symbol.native`bytevector-u8-ref: the byte at index k`(
       { input: [z.bytevector, z.schemeNumber], output: [z.number] },
-      function (this: CallCtx, bv, k) {
+      function (bv, k) {
         const view = asBytevector(bv, "bytevector-u8-ref");
         const idx = toIndex(k);
         if (!Number.isInteger(idx) || idx < 0 || idx >= view.byteLength) {
@@ -123,7 +122,7 @@ export default EnvCapability.define("scheme/bytevectors", {
             `bytevector-u8-ref: index ${idx} out of range for a bytevector of length ${view.byteLength}`,
           );
         }
-        return new AExact(view[idx]!);
+        return new AExact(view[idx]);
       },
     ),
 
@@ -137,7 +136,7 @@ export default EnvCapability.define("scheme/bytevectors", {
 
     "bytevector-copy": symbol.native`bytevector-copy: a fresh copy of the bytevector (or slice)`(
       { input: [z.bytevector, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.bytevector] },
-      function (this: CallCtx, bv, start, end) {
+      function (bv, start, end) {
         const view = asBytevector(bv, "bytevector-copy");
         const range = sliceRange("bytevector-copy", view.byteLength, start, end, "bytevector");
         return withInputProvenance(this.runCtx, [bv], new ABytevector(view.slice(range.start, range.end)));
@@ -150,7 +149,7 @@ export default EnvCapability.define("scheme/bytevectors", {
       // FFI polymorphism asBytevector tolerates stays a runtime-only property,
       // unaffected by this types-only schema (see the module doc comment).
       { input: [], inputRest: z.bytevector, output: [z.bytevector] },
-      function (this: CallCtx, ...bvs) {
+      function (...bvs) {
         const views = bvs.map((bv) => asBytevector(bv, "bytevector-append"));
         const totalLen = views.reduce((sum, v) => sum + v.byteLength, 0);
         const result = new Uint8Array(totalLen);
@@ -165,7 +164,7 @@ export default EnvCapability.define("scheme/bytevectors", {
 
     "utf8->string": symbol.native`utf8->string: decode a bytevector slice as UTF-8`(
       { input: [z.bytevector, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.string] },
-      function (this: CallCtx, bv, start, end) {
+      function (bv, start, end) {
         const view = asBytevector(bv, "utf8->string");
         const range = sliceRange("utf8->string", view.byteLength, start, end, "bytevector");
         return withInputProvenance(
@@ -177,7 +176,7 @@ export default EnvCapability.define("scheme/bytevectors", {
     ),
     "string->utf8": symbol.native`string->utf8: encode a string slice as UTF-8 bytes`(
       { input: [z.string, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.bytevector] },
-      function (this: CallCtx, str, start, end) {
+      function (str, start, end) {
         const s_str = stringValue(str);
         const range = sliceRange("string->utf8", s_str.length, start, end, "string");
         return withInputProvenance(

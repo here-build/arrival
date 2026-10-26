@@ -21,7 +21,10 @@ import dedent from "dedent";
 import { type } from "../../membrane/typecheck.js";
 import { type RunContext } from "../../run/RunContext.js";
 import { ACallable, applyCallback } from "../../values/primitives/ACallable.js";
-import { type CallCtx, makeCallCtx } from "../../run/CallCtx.js";
+import { makeCallCtx } from "../../run/CallCtx.js";
+import type { Impl } from "../../common/symbols/_bake.js";
+import type * as Z from "../../common/scheme-zod/index.js";
+import type { ZodOptional } from "zod";
 import { EnvCapability } from "../../common/capability.js";
 import {
   assertAllocatable,
@@ -31,18 +34,16 @@ import {
   toIndex,
   withInputProvenance,
 } from "../../values/op-helpers.js";
-import { type ABool } from "../../values/primitives/ABool.js";
 import { collapseProvenance, taintString } from "../../provenance/provenance-collapse.js";
 import { AString } from "../../values/primitives/AString.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { APair } from "../../values/primitives/APair.js";
 import { nil } from "../../values/primitives/ANil.js";
 import { ACharacter } from "../../values/primitives/ACharacter.js";
-import { is_callable_value, is_false, is_promise } from "../../values/value-guards.js";
-import { promise_all } from "../../utils/promises.js";
+import { is_callable_value, is_false } from "../../values/value-guards.js";
+import { maybeThen, settleAll } from "../../utils/promises.js";
 import { attachOffendingValue } from "../../errors.js";
 import { to_array } from "../pack-helpers.js";
-import type { AListAlike } from "../../values/types.js";
 
 // ── implement-or-door inventory (official SRFI-13 names not live in this pack) ─
 // R7RS peers (scheme/strings) cover string?/make-string/string/length/ref/append/
@@ -155,11 +156,7 @@ const isWhitespace = (c: string): boolean => /\s/u.test(c);
  * a defaulted CONSTANT_CTX would run every trim/index/count/tokenize predicate
  * unmetered, off cache/effects/abort, regardless of what the invoking run actually
  * configured. Every caller below threads its own `this.runCtx`. */
-function criterionFlags(
-  criterion: ACallable,
-  chars: readonly string[],
-  runCtx: RunContext,
-): boolean[] | Promise<boolean[]> {
+function criterionFlags(criterion: ACallable, chars: readonly string[], runCtx: RunContext) {
   if (criterion instanceof ACharacter) {
     const ch = charValue(criterion);
     return chars.map((c) => c === ch);
@@ -168,17 +165,9 @@ function criterionFlags(
   // No live invocation reaches this leaf (only a bare `runCtx` one hop away) — a real CallCtx
   // with invocation undefined, degraded exactly as the pre-CallCtx-threading path.
   const results = chars.map((c) => applyCallback(criterion, [new ACharacter(c)], makeCallCtx(runCtx)));
-  const collapse = (rs: unknown[]) => rs.map((v) => !is_false(v)); // R7RS: only #f is false
   // pred may be an async membrane callback → await before deciding (see string-map).
-  if (results.some(is_promise)) {
-    return (promise_all(results) as Promise<unknown[]>).then(collapse);
-  }
-  return collapse(results);
-}
-
-/** Sync-or-async continuation over the flags — keeps every op's happy path synchronous. */
-function afterFlags<T>(flags: boolean[] | Promise<boolean[]>, fn: (f: boolean[]) => T): T | Promise<T> {
-  return is_promise(flags) ? (flags as Promise<boolean[]>).then(fn) : fn(flags as boolean[]);
+  // R7RS: only #f is false.
+  return maybeThen(settleAll(results), (rs) => rs.map((v) => !is_false(v)));
 }
 
 /** Harvest image of the trim trio. Zod `z.lambda.optional()` prints as a required
@@ -192,13 +181,14 @@ const TRIM_TYPE = dedent`
 `;
 
 /** Shared body of the trim trio — `side` picks which end(s) shed matching chars.
- * `function(this: CallCtx, ...)` (not an arrow) — the returned closure is bound
- * directly as a `symbol.native` impl, so dispatch delivers the live ctx via `this`
- * (capability.ts's `hostImpl.apply(makeCallCtx(runCtx), args)`); threaded into
- * `criterionFlags` (a user predicate must observe the run's real ctx) and into the
- * result mint below. */
-function trimImpl(name: string, side: "both" | "left" | "right") {
-  return function (this: CallCtx, str: AString, criterion?: ACallable): AString | Promise<AString> {
+ * Typed by the trio's shared contract. A `function` (not an arrow): dispatch delivers
+ * the live ctx via `this`, threaded into `criterionFlags` (a user predicate must
+ * observe the run's real ctx) and into the result mint below. */
+function trimImpl(
+  name: string,
+  side: "both" | "left" | "right",
+): Impl<[typeof Z.string, ZodOptional<typeof Z.lambda>], [typeof Z.string], undefined, "scheme"> {
+  return function (str, criterion) {
     // Native contracts are type-only: a number/string criterion would reach the predicate
     // call as an opaque "not applicable", so name the op and the two honest shapes here.
     if (criterion !== undefined && !(criterion instanceof ACharacter) && !is_callable_value(criterion)) {
@@ -211,7 +201,7 @@ function trimImpl(name: string, side: "both" | "left" | "right") {
     const runCtx = this.runCtx;
     // Default criterion: whitespace (SRFI-13's char-set:whitespace, sans charsets).
     const flags = criterion === undefined ? chars.map(isWhitespace) : criterionFlags(criterion, chars, runCtx);
-    return afterFlags(flags, (f) => {
+    return maybeThen(flags, (f) => {
       let start = 0;
       let end = chars.length;
       if (side !== "right") while (start < end && f[start]) start++;
@@ -228,10 +218,12 @@ function trimImpl(name: string, side: "both" | "left" | "right") {
 }
 
 /** Shared body of take/drop and their -right twins — n out of range is an error (SRFI-13).
- * `function(this: CallCtx, ...)` (not an arrow) — same dispatch-`this` reasoning as
- * `trimImpl` above. */
-function sliceImpl(name: string, pick: (chars: string[], k: number) => string[]) {
-  return function (this: CallCtx, str: unknown, n: unknown): AString {
+ * Typed by their shared contract; a `function` for the dispatch `this`, as `trimImpl`. */
+function sliceImpl(
+  name: string,
+  pick: (chars: string[], k: number) => string[],
+): Impl<[typeof Z.string, typeof Z.schemeNumber], [typeof Z.string], undefined, "scheme"> {
+  return function (str, n) {
     const chars = [...stringValue(str)];
     const k = toIndex(n);
     invariant(
@@ -264,7 +256,7 @@ export default EnvCapability.define("scheme/srfi-13", {
   symbols: (symbol, z) => ({
     "string-null?": symbol.native`string-null?: #t iff the string is empty (SRFI-13)`(
       { input: [z.string], output: [z.boolean] },
-      function (this: CallCtx, str): ABool {
+      function (str) {
         return withInputProvenance(this.runCtx, [str], schemeBool(stringValue(str).length === 0));
       },
     ),
@@ -272,7 +264,7 @@ export default EnvCapability.define("scheme/srfi-13", {
     // SRFI-13 argument order: the AFFIX comes first — (string-prefix? prefix s).
     "string-prefix?": symbol.native`string-prefix?: #t iff s starts with prefix — (string-prefix? prefix s) (SRFI-13)`(
       { input: [z.string, z.string], output: [z.boolean] },
-      function (this: CallCtx, prefix, str): ABool {
+      function (prefix, str) {
         return withInputProvenance(
           this.runCtx,
           [prefix, str],
@@ -283,7 +275,7 @@ export default EnvCapability.define("scheme/srfi-13", {
 
     "string-suffix?": symbol.native`string-suffix?: #t iff s ends with suffix — (string-suffix? suffix s) (SRFI-13)`(
       { input: [z.string, z.string], output: [z.boolean] },
-      function (this: CallCtx, suffix, str): ABool {
+      function (suffix, str) {
         return withInputProvenance(
           this.runCtx,
           [suffix, str],
@@ -304,9 +296,9 @@ export default EnvCapability.define("scheme/srfi-13", {
           }
         `,
         },
-        function (this: CallCtx, str, criterion): AExact | ABool | Promise<AExact | ABool> {
+        function (str, criterion) {
           const chars = [...stringValue(str)];
-          return afterFlags(criterionFlags(criterion, chars, this.runCtx), (f) => {
+          return maybeThen(criterionFlags(criterion, chars, this.runCtx), (f) => {
             const i = f.indexOf(true);
             return withInputProvenance(this.runCtx, [str, criterion], i === -1 ? schemeBool(false) : new AExact(i));
           });
@@ -324,10 +316,10 @@ export default EnvCapability.define("scheme/srfi-13", {
           }
         `,
         },
-        function (this: CallCtx, str, criterion): AExact | Promise<AExact> {
+        function (str, criterion) {
           const chars = [...stringValue(str)];
           const runCtx = this.runCtx;
-          return afterFlags(criterionFlags(criterion, chars, runCtx), (f) => {
+          return maybeThen(criterionFlags(criterion, chars, runCtx), (f) => {
             const n = f.reduce((acc, hit) => acc + (hit ? 1 : 0), 0);
             return withInputProvenance(this.runCtx, [str, criterion], new AExact(n));
           });
@@ -418,7 +410,7 @@ export default EnvCapability.define("scheme/srfi-13", {
     "string-pad":
       symbol.native`string-pad: right-justified to exactly len — pads on the left with char (default space), truncates from the left when too long (SRFI-13)`(
         { input: [z.string, z.schemeNumber, z.char.optional()], output: [z.string] },
-        function (this: CallCtx, str, len, char): AString {
+        function (str, len, char) {
           const chars = [...stringValue(str)];
           const k = padLength("string-pad", len);
           // O(1) cap check BEFORE `.repeat` allocates — see assertAllocatable.
@@ -434,7 +426,7 @@ export default EnvCapability.define("scheme/srfi-13", {
     "string-pad-right":
       symbol.native`string-pad-right: left-justified to exactly len — pads on the right with char (default space), truncates on the right when too long (SRFI-13)`(
         { input: [z.string, z.schemeNumber, z.char.optional()], output: [z.string] },
-        function (this: CallCtx, str, len, char): AString {
+        function (str, len, char) {
           const chars = [...stringValue(str)];
           const k = padLength("string-pad-right", len);
           assertAllocatable(k, "string-pad-right");
@@ -446,7 +438,7 @@ export default EnvCapability.define("scheme/srfi-13", {
 
     "string-reverse": symbol.native`string-reverse: a reversed copy of the string (SRFI-13)`(
       { input: [z.string], output: [z.string] },
-      function (this: CallCtx, str): AString {
+      function (str) {
         return withInputProvenance(this.runCtx, [str], new AString([...stringValue(str)].toReversed().join("")));
       },
     ),
@@ -457,7 +449,7 @@ export default EnvCapability.define("scheme/srfi-13", {
     // the strings they searched.
     "string-contains": symbol.native`string-contains: index of the first occurrence of sub, or #f (SRFI-13)`(
       { input: [z.string, z.string], output: [z.union([z.exact, z.boolean])] },
-      function (this: CallCtx, str, sub) {
+      function (str, sub) {
         const text = stringValue(str);
         const i = text.indexOf(stringValue(sub));
         // `indexOf` counts UTF-16 units; string-length / string-ref / string-index count
@@ -472,7 +464,7 @@ export default EnvCapability.define("scheme/srfi-13", {
 
     "string-contains?": symbol.native`string-contains?: #t iff str contains sub (SRFI-13)`(
       { input: [z.string, z.string], output: [z.boolean] },
-      function (this: CallCtx, str, sub) {
+      function (str, sub) {
         return withInputProvenance(this.runCtx, [str, sub], schemeBool(stringValue(str).includes(stringValue(sub))));
       },
     ),
@@ -488,7 +480,7 @@ export default EnvCapability.define("scheme/srfi-13", {
           // folds to one string. `List<string>` (carriers.ts vocabulary) is the honest, informative image.
           type: "(list: List<string>, delimiter?: string) => string",
         },
-        function (this: CallCtx, list, delimiter) {
+        function (list, delimiter) {
           const parts = to_array("string-join")(list);
           const strs = parts.map((p, i) => requireString("string-join", p, `element ${i}`));
           const sep = delimiter === undefined ? " " : requireString("string-join", delimiter, "the delimiter");
@@ -512,17 +504,16 @@ export default EnvCapability.define("scheme/srfi-13", {
           // `string | pred`; tokenize keeps unknown so a whole-string argument does not typecheck.
           type: "(str: string, criterion?: unknown) => List<string>",
         },
-        function (this: CallCtx, str, criterion): AListAlike | Promise<AListAlike> {
+        function (str, criterion) {
           const chars = [...stringValue(str)];
           const runCtx = this.runCtx;
           const flags =
             criterion === undefined ? chars.map((c) => !isWhitespace(c)) : criterionFlags(criterion, chars, runCtx);
-          return afterFlags(flags, (f) => {
+          return maybeThen(flags, (f) => {
             // Splitting op: each token is a fresh derived string — taint each with the
             // source's lineage so list elements stay grounded (cf. string-split below).
             const prov = collapseProvenance(str, criterion);
-            // Only `taintString` (always an AString) is ever pushed below — narrow off the
-            // unused raw-`string` arm so `APair.fromArray` sees the honest `SchemeValue[]`.
+            // Empty-array start needs its element type spelled.
             const tokens: AString[] = [];
             let current = "";
             for (const [i, char] of chars.entries()) {
@@ -561,7 +552,7 @@ export default EnvCapability.define("scheme/srfi-13", {
           // single `string` delimiter. Both recovered by the author assertion.
           type: "(str: string, delimiter: string) => List<string>",
         },
-        function (this: CallCtx, str, delimiter) {
+        function (str, delimiter) {
           const s = stringValue(str);
           // SRFI-152 refinement over plain JS `.split`: an empty subject is NO fields.
           if (s === "") return nil;

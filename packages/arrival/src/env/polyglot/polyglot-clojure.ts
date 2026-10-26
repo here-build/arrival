@@ -55,14 +55,56 @@ import { tf } from "../../values/tagless-final.js";
 import { asVector, toIndex } from "../../values/op-helpers.js";
 import { APair } from "../../values/primitives/APair.js";
 import { ANil } from "../../values/primitives/ANil.js";
+import { ADict, foldKeyName, type DictKey } from "../../values/primitives/ADict.js";
+import { AString } from "../../values/primitives/AString.js";
+import { applyCallback } from "../../values/primitives/ACallable.js";
+import { is_applyable } from "../../values/value-guards.js";
+import { maybeThen } from "../../utils/promises.js";
 import type { SchemeValue } from "../../values/types.js";
-import polyglot from "./polyglot.js";
+import type { AValue } from "../../values/primitives/AValue.js";
+import type { MaybePromise } from "../../types/utility.js";
+import { asReceiver, to_array } from "../pack-helpers.js";
+import polyglot, { asDictKey, memberEntries, readMember } from "./polyglot.js";
 import equality from "../r7rs/equality.js";
 import numeric from "../r7rs/numeric.js";
 import strings from "../r7rs/strings.js";
 import vectors from "../r7rs/vectors.js";
 import lists from "../r7rs/lists.js";
 import srfi1 from "../srfi/srfi-1.js";
+
+/** Rebuild `d` with `k` set to `v`. A term-less receiver (nil included) mints a one-key dict.
+ *  An existing fold-name keeps its position; the new pair is last-write-wins. */
+function dictSet(ctx: CallCtx, d: AValue | null, k: SchemeValue, v: SchemeValue): MaybePromise<ADict> {
+  return maybeThen(memberEntries(ctx, d), (entries) => {
+    const byName = new Map<string, [DictKey, SchemeValue]>(
+      entries.map(([name, value]) => [name, [new AString(name), value]]),
+    );
+    const key = asDictKey(k);
+    byName.set(foldKeyName(key), [key, v]);
+    return new ADict([...byName.values()]);
+  });
+}
+
+function getIn(ctx: CallCtx, obj: SchemeValue, ks: SchemeValue): MaybePromise<SchemeValue> {
+  const keys = to_array("get-in")(ks);
+  const step = (node: SchemeValue, i: number): MaybePromise<SchemeValue> =>
+    i >= keys.length ? node : maybeThen(readMember(ctx, asReceiver(node), keys[i]!), (next) => step(next, i + 1));
+  return step(obj, 0);
+}
+
+function assocIn(ctx: CallCtx, obj: SchemeValue, ks: SchemeValue, v: SchemeValue): MaybePromise<SchemeValue> {
+  const keys = to_array("assoc-in")(ks);
+  if (keys.length === 0) return v;
+  const step = (node: SchemeValue, i: number): MaybePromise<ADict> => {
+    const receiver = asReceiver(node);
+    const key = keys[i]!;
+    if (i === keys.length - 1) return dictSet(ctx, receiver, key, v);
+    return maybeThen(readMember(ctx, receiver, key), (child) =>
+      maybeThen(step(child, i + 1), (built) => dictSet(ctx, receiver, key, built)),
+    );
+  };
+  return step(obj, 0);
+}
 
 // See polyglot.ts's own note: a one-line local const is cheaper than a cross-pack
 // named export for a pure contract-vocabulary helper. Same definition, same
@@ -122,7 +164,7 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
           }
         `,
         },
-        function (this: CallCtx, index: SchemeValue, obj: SchemeValue) {
+        function (index, obj) {
           const idx = toIndex(index);
           if (!Number.isInteger(idx) || idx < 0) {
             throw attachOffendingValue(
@@ -169,30 +211,22 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
       // `@` read protocol's whole point) and the result is whatever is stored — both
       // honestly `z.schemeValue`.
       "get-in":
-        symbol.define`get-in: Clojure — read a value nested ks-deep through dicts (or anything @ reads); nil if any step misses`(
+        symbol.native`get-in: Clojure — read a value nested ks-deep through dicts (or anything @ reads); nil if any step misses`(
           { input: [z.schemeValue, z.list()], output: [z.schemeValue] },
-          `(lambda (obj ks)
-         (if (null? ks)
-             obj
-             (get-in (@ obj (car ks)) (cdr ks))))`,
+          function (obj, ks) {
+            return getIn(this, obj, ks);
+          },
         ),
-      // assoc-in — Clojure: a NEW obj with the value at nested path ks set to v,
-      // building missing intermediate dicts as needed (see %dict-set). Output is
-      // `z.schemeValue`, not `z.dict()`: with an EMPTY path the result is v itself —
-      // any value — by definition.
+      // Empty path returns v itself — any value — so the output stays z.schemeValue.
       "assoc-in":
-        symbol.define`assoc-in: Clojure — a NEW obj with the value at nested path ks set to v, minting missing intermediate dicts on demand`(
+        symbol.native`assoc-in: Clojure — a NEW obj with the value at nested path ks set to v, minting missing intermediate dicts on demand`(
           { input: [z.schemeValue, z.list(), z.schemeValue], output: [z.schemeValue] },
-          `(lambda (obj ks v)
-         (if (null? ks)
-             v
-             (if (null? (cdr ks))
-                 (%dict-set obj (car ks) v)
-                 (%dict-set obj (car ks) (assoc-in (@ obj (car ks)) (cdr ks) v)))))`,
+          function (obj, ks, v) {
+            return assocIn(this, obj, ks, v);
+          },
         ),
-      // update-in — f unary updater via applicable. type: pins 3-arg shape (callable would collapse).
       "update-in":
-        symbol.define`update-in: Clojure — assoc-in the result of applying f to the value currently at nested path ks`(
+        symbol.native`update-in: Clojure — assoc-in the result of applying f to the value currently at nested path ks`(
           {
             input: [z.schemeValue, z.list(), applicable],
             output: [z.schemeValue],
@@ -202,8 +236,14 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
           }
         `,
           },
-          `(lambda (obj ks f)
-         (assoc-in obj ks (f (get-in obj ks))))`,
+          function (obj, ks, f) {
+            if (!is_applyable(f)) {
+              throw new TypeError("update-in: expected a procedure or keyword accessor");
+            }
+            return maybeThen(getIn(this, obj, ks), (cur) =>
+              maybeThen(applyCallback(f, [cur], this), (next) => assocIn(this, obj, ks, next)),
+            );
+          },
         ),
       // zipmap — dict of ks→vs. type: string keys preferred; unknown keys still → string dict face.
       zipmap: symbol.define`zipmap: Clojure — a dict pairing each key in ks with the value at the same position in vs`(
@@ -406,29 +446,19 @@ export default EnvCapability.define("scheme/polyglot-clojure", {
            ((dict? xs) (= (length (@keys xs)) 0))
            (else #f)))`,
       ),
-      // %dict-set — a dict with key k rebuilt to value v, everything else preserved
-      // (dicts are immutable — see HASH_TABLE_REASON in srfi-stubs.ts). Applied to nil
-      // it builds a fresh single-key dict (@keys nil = '()), which is exactly what
-      // assoc-in needs to create missing intermediate maps on demand — so `d` is
-      // honestly `z.schemeValue` (dict OR nil), never `z.dict()`. `@keys` returns a raw JS
-      // array (not a scheme list — filter/map need the term protocol), so
-      // `vector->list` (R7RS §6.8 — a raw JS array is representation-blind as a
-      // vector here, per z.vector) lifts it first.
-      // k v are placed LAST (not first): `dict` normalizes a keyword / symbol / string
-      // key to the same fold-name as an already-stored string key (stringify, strip a
-      // leading `:`), and resolves duplicate fold-names last-write-wins. So no explicit
-      // exclusion is needed: k v simply overwrite whatever ks/vs already wrote for the
-      // same key — a plain `equal?` scan couldn't catch that (a pluck closure is never
-      // `equal?` to a string), but dict's fold-name dedup does.
+      // %dict-set — dictSet. Immutable rebuild. A term-less receiver (nil included)
+      // mints a one-key dict, which is how assoc-in creates missing intermediate maps,
+      // so `d` stays `z.schemeValue` (dict OR nil), never `z.dict()`. An existing
+      // fold-name keeps its position; the new pair is last-write-wins. frequencies
+      // and group-by still scheme-call this binding.
       "%dict-set":
-        symbol.define`%dict-set: a NEW dict with key k set to v, everything else preserved; applied to nil it mints a fresh single-key dict (private helper)`(
+        symbol.native`%dict-set: a NEW dict with key k set to v, everything else preserved; applied to nil it mints a fresh single-key dict (private helper)`(
           // k: keyword/symbol/string (dict's own normalization is the semantics);
           // v: anything. Output IS unconditionally a dict.
           { input: [z.schemeValue, z.schemeValue, z.schemeValue], output: [z.dict()] },
-          `(lambda (d k v)
-         (let* ((ks (vector->list (@keys d)))
-                (vs (map (lambda (key) (@ d key)) ks)))
-           (apply dict (append (%interleave ks vs) (list k v)))))`,
+          function (d, k, v) {
+            return dictSet(this, asReceiver(d), k, v);
+          },
         ),
     };
   },

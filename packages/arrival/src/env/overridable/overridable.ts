@@ -18,7 +18,6 @@ import { TypeTagError } from "../../errors.js";
 import { EnvCapability } from "../../common/capability.js";
 import { toJS } from "../../membrane/rosetta.js";
 import { stripOptionalSuffix, tagToJsonSchema } from "../../common/schema-tag.js";
-import type { SchemeValue } from "../../values/types.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { schemaCapability } from "../schema/schema.js";
 
@@ -34,7 +33,7 @@ function lowerTag(jsTag: unknown, bindingName: string): z.ZodType {
     // rather than throwing — correct for the wire-schema/HTTP projections, but `{}` lowers to a
     // permissive validator that would silently accept ANY override. So an empty lowering DOORS here.
     if (Object.keys(json).length === 0) throw new Error("tag lowered to an empty (unconstrained) schema");
-    return z.fromJSONSchema(json as Parameters<typeof z.fromJSONSchema>[0]);
+    return z.fromJSONSchema(json);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     throw new TypeTagError(bindingName, "unrecognized-tag", `${JSON.stringify(jsTag)} (${reason})`);
@@ -78,12 +77,13 @@ export const overridableCapability = EnvCapability.define("arrival/overridable",
           type: "(name: symbol, type: string|list, default: any): any",
         },
         function (nameSym, typeTag, defaultVal) {
+          // define/overridable always passes the quoted name; sz.dynamic types it only as SchemeValue.
           const bindingName = (nameSym as ASymbol).literal();
-          const jsTag = toJS(typeTag as SchemeValue);
+          const jsTag = toJS(typeTag);
           const zodType = lowerTag(jsTag, bindingName);
 
           const hasOverride = Object.prototype.hasOwnProperty.call(this.configuration.params, bindingName);
-          const raw = hasOverride ? this.configuration.params[bindingName] : toJS(defaultVal as SchemeValue);
+          const raw = hasOverride ? this.configuration.params[bindingName] : toJS(defaultVal);
           const source = hasOverride ? "an environment override" : "the in-form default";
 
           const outcome = zodType.safeParse(raw);

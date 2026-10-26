@@ -16,7 +16,6 @@
 // Bodies route through machinery natives (%handler-car/cdr, %with-restore, …)
 // rather than bare car/cdr/try. deferred: fold onto plain forms (both bakeable).
 import { EnvCapability } from "../../common/capability.js";
-import type { CallCtx } from "../../run/CallCtx.js";
 import { R7RSError } from "../../errors.js";
 import { AString } from "../../values/primitives/AString.js";
 import { ANil, nil } from "../../values/primitives/ANil.js";
@@ -42,7 +41,7 @@ export default EnvCapability.define("scheme/r7rs/exceptions", {
     "%raise": symbol.native`%raise: throw obj directly (machinery — the R7RS forms build on this)`(
       // Arbitrary data (§6.11). Output undefinedResult — always throws.
       { input: [z.schemeValue], output: [z.undefinedResult] },
-      function (this: CallCtx, obj) {
+      function (obj) {
         throw obj;
       },
     ),
@@ -51,15 +50,15 @@ export default EnvCapability.define("scheme/r7rs/exceptions", {
       // Stack is a proper list; no typed "list of procedures" schema → z.schemeValue.
       { input: [], output: [z.schemeValue] },
       // this.runCtx is the WeakMap key. Absent ⇒ empty stack.
-      function (): SchemeValue {
-        return (handlersByRun.get(this.runCtx) ?? nil) as SchemeValue;
+      function () {
+        return handlersByRun.get(this.runCtx) ?? nil;
       },
     ),
     "%set-handlers!": symbol.native`%set-handlers!: replace the exception-handler stack (machinery)`(
       // Same list shape as %current-handlers; output always nil.
       { input: [z.schemeValue], output: [z.nil] },
       function (handlers) {
-        handlersByRun.set(this.runCtx, handlers as SchemeValue);
+        handlersByRun.set(this.runCtx, handlers);
         return nil;
       },
     ),
@@ -74,7 +73,7 @@ export default EnvCapability.define("scheme/r7rs/exceptions", {
         inputRest: z.schemeValue,
         output: [z.error],
       },
-      function (this: CallCtx, message, ...irritants) {
+      function (message, ...irritants) {
         const msg = message instanceof AString ? message.valueOf() : String(message);
         return new R7RSError(msg, ...irritants);
       },
@@ -86,28 +85,28 @@ export default EnvCapability.define("scheme/r7rs/exceptions", {
     // `car`/`cdr`/`cons` directly (see the file header).
     "%handlers-empty?": symbol.native`%handlers-empty?: is the exception-handler stack empty (machinery)`(
       { input: [z.schemeValue], output: [z.boolean] },
-      function (this: CallCtx, stack) {
+      function (stack) {
         return bool(stack instanceof ANil);
       },
     ),
     "%handler-car": symbol.native`%handler-car: the top handler of a non-empty exception-handler stack (machinery)`(
       { input: [z.schemeValue], output: [z.schemeValue] },
-      function (this: CallCtx, stack) {
+      function (stack) {
         invariant(stack instanceof APair, "%handler-car: the exception-handler stack is empty");
-        return stack.car as SchemeValue;
+        return stack.car;
       },
     ),
     "%handler-cdr": symbol.native`%handler-cdr: the exception-handler stack minus its top handler (machinery)`(
       { input: [z.schemeValue], output: [z.schemeValue] },
-      function (this: CallCtx, stack) {
+      function (stack) {
         invariant(stack instanceof APair, "%handler-cdr: the exception-handler stack is empty");
-        return stack.cdr as SchemeValue;
+        return stack.cdr;
       },
     ),
     "%push-handler": symbol.native`%push-handler: prepend handler onto the exception-handler stack (machinery)`(
       { input: [z.schemeValue, z.schemeValue], output: [z.schemeValue] },
       function (handler, stack) {
-        return new APair(handler as SchemeValue, stack as SchemeValue);
+        return new APair(handler, stack);
       },
     ),
     // The finally-discipline, kept out of scheme-level `try`/`finally` (see the
@@ -137,9 +136,9 @@ export default EnvCapability.define("scheme/r7rs/exceptions", {
     "%error-object-from-irritants":
       symbol.native`%error-object-from-irritants: build an R7RS error object from a message and a scheme list of irritants (machinery)`(
         { input: [z.string, z.schemeValue], output: [z.error] },
-        function (this: CallCtx, message, irritantsList) {
+        function (message, irritantsList) {
           const msg = message instanceof AString ? message.valueOf() : String(message);
-          const irritants = to_array("error")(irritantsList as SchemeValue);
+          const irritants = to_array("error")(irritantsList);
           return new R7RSError(msg, ...irritants);
         },
       ),

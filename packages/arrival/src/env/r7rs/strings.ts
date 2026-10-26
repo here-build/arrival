@@ -13,7 +13,8 @@
 import foldCase from "fold-case";
 import dedent from "dedent";
 import { applyCallback } from "../../values/primitives/ACallable.js";
-import { CallCtx } from "../../run/CallCtx.js";
+import type { Impl } from "../../common/symbols/_bake.js";
+import type * as Z from "../../common/scheme-zod/index.js";
 import invariant from "tiny-invariant";
 
 import {
@@ -38,9 +39,9 @@ import { attachOffendingValue } from "../../errors.js";
 import { type } from "../../membrane/typecheck.js";
 import { sliceRange, to_array } from "../pack-helpers.js";
 import { is_promise } from "../../values/value-guards.js";
-import { promise_all } from "../../utils/promises.js";
+import { maybeThen, promise_all, settleAll } from "../../utils/promises.js";
 import { EnvCapability } from "../../common/capability.js";
-import { type AVoid, theVoid } from "../../values/primitives/AVoid.js";
+import { theVoid } from "../../values/primitives/AVoid.js";
 import {
   complex_bare_re,
   complex_re,
@@ -58,8 +59,8 @@ import type { AListAlike } from "../../values/types.js";
  *  `string-foldcase`, the same fold `string-foldcase` applies — `toLowerCase` is NOT a
  *  fold: "Straße" and "STRASSE" fold together but do not lowercase together). Mirrors
  *  `ciOrder` in chars.ts. */
-function ciOrder(holds: (a: string, b: string) => boolean) {
-  return function (this: CallCtx, ...strs: unknown[]) {
+function ciOrder(holds: (a: string, b: string) => boolean): Impl<[], [typeof Z.boolean], typeof Z.string, "scheme"> {
+  return function (...strs) {
     let verdict = true;
     for (let i = 0; i < strs.length - 1; i++) {
       if (!holds(foldCase(stringValue(strs[i])), foldCase(stringValue(strs[i + 1])))) {
@@ -97,7 +98,7 @@ export default EnvCapability.define("scheme/strings", {
   symbols: (symbol, z) => ({
     "make-string": symbol.native`make-string: a string of k copies of a fill character`(
       { input: [z.schemeNumber, z.char.optional()], output: [z.string] },
-      function (this: CallCtx, k, char) {
+      function (k, char) {
         const len = Number(coerceNumeric(k).valueOf());
         // O(1) cap check BEFORE `.repeat(len)` allocates — see assertAllocatable.
         assertAllocatable(len, "make-string");
@@ -112,21 +113,21 @@ export default EnvCapability.define("scheme/strings", {
     string: symbol.native`string: a string built from the character arguments`(
       { input: [], inputRest: z.char, output: [z.string] },
       // Union of every character argument — same shape as `vector` below.
-      function (this: CallCtx, ...chars) {
+      function (...chars) {
         return withInputProvenance(this.runCtx, chars, new AString(chars.map(charValue).join("")));
       },
     ),
 
     "string-length": symbol.native`string-length: number of characters in the string`(
       { input: [z.string], output: [z.exact] },
-      function (this: CallCtx, str) {
+      function (str) {
         return withInputProvenance(this.runCtx, [str], new AExact([...stringValue(str)].length));
       },
     ),
 
     "string-ref": symbol.native`string-ref: the character at index k`(
       { input: [z.string, z.schemeNumber], output: [z.char] },
-      function (this: CallCtx, str, k) {
+      function (str, k) {
         // Bounds-checked (R7RS §6.7: "k must be a valid index") — an out-of-range index
         // raises a clean, catchable RangeError here, matching list-ref's error quality
         // (never a leaky internal "charValue is not iterable" from constructing
@@ -149,7 +150,7 @@ export default EnvCapability.define("scheme/strings", {
 
     "string=?": symbol.native`string=?: typed equivalence over strings`(
       { input: [], inputRest: z.string, output: [z.boolean] },
-      function (this: CallCtx, ...strs) {
+      function (...strs) {
         let verdict = true;
         if (strs.length >= 2) {
           const first = stringValue(strs[0]);
@@ -180,7 +181,7 @@ export default EnvCapability.define("scheme/strings", {
 
     "string-ci=?": symbol.native`string-ci=?: case-insensitive string equivalence`(
       { input: [], inputRest: z.string, output: [z.boolean] },
-      function (this: CallCtx, ...strs) {
+      function (...strs) {
         let verdict = true;
         if (strs.length >= 2) {
           const first = foldCase(stringValue(strs[0]));
@@ -216,7 +217,7 @@ export default EnvCapability.define("scheme/strings", {
       // nested structure (a list/vector/array of inference-stamped values) is hoisted,
       // not just the top-level AValue args. Without this, `(string-append prefix
       // (string-join parts ""))` forgets where `parts` came from. See provenance-collapse.ts.
-      function (this: CallCtx, ...strs) {
+      function (...strs) {
         return taintString(strs.map(stringValue).join(""), collapseProvenance(...strs));
       },
     ),
@@ -226,7 +227,7 @@ export default EnvCapability.define("scheme/strings", {
         input: [z.string, z.schemeNumber.optional(), z.schemeNumber.optional()],
         output: [z.union([z.pair, z.nil])],
       },
-      function (this: CallCtx, str, start, end) {
+      function (str, start, end) {
         const chars = [...stringValue(str)];
         const { start: startIdx, end: endIdx } = sliceRange("string->list", chars.length, start, end, "string");
         let result: AListAlike = nil;
@@ -237,7 +238,7 @@ export default EnvCapability.define("scheme/strings", {
 
     "list->string": symbol.native`list->string: string built from a list of characters`(
       { input: [z.listAlike], output: [z.string] },
-      function (this: CallCtx, list) {
+      function (list) {
         const chars = to_array("list->string")(list).map(charValue);
         return new AString(chars.join(""));
       },
@@ -245,7 +246,7 @@ export default EnvCapability.define("scheme/strings", {
 
     "string-copy": symbol.native`string-copy: a fresh copy of the string (or slice)`(
       { input: [z.string, z.schemeNumber.optional(), z.schemeNumber.optional()], output: [z.string] },
-      function (this: CallCtx, str, start, end) {
+      function (str, start, end) {
         const chars = [...stringValue(str)];
         const { start: startIdx, end: endIdx } = sliceRange("string-copy", chars.length, start, end, "string");
         // The copy is a fresh allocation but semantically the same lineage as `str`
@@ -263,21 +264,21 @@ export default EnvCapability.define("scheme/strings", {
     // result still traces to the original infer/query call.
     "string-upcase": symbol.native`string-upcase: uppercase form of the string`(
       { input: [z.string], output: [z.string] },
-      function (this: CallCtx, str) {
+      function (str) {
         return withInputProvenance(this.runCtx, [str], new AString(stringValue(str).toUpperCase()));
       },
     ),
 
     "string-downcase": symbol.native`string-downcase: lowercase form of the string`(
       { input: [z.string], output: [z.string] },
-      function (this: CallCtx, str) {
+      function (str) {
         return withInputProvenance(this.runCtx, [str], new AString(stringValue(str).toLowerCase()));
       },
     ),
 
     "string-foldcase": symbol.native`string-foldcase: case-folded form of the string`(
       { input: [z.string], output: [z.string] },
-      function (this: CallCtx, str) {
+      function (str) {
         return withInputProvenance(this.runCtx, [str], new AString(foldCase(stringValue(str))));
       },
     ),
@@ -308,30 +309,23 @@ export default EnvCapability.define("scheme/strings", {
         // proc's return BECOMES the output character — `element-transformer`.
         callbackRoles: ["element-transformer"],
       },
-      function (this: CallCtx, proc, ...strings) {
+      function (proc, ...strings) {
         invariant(strings.length > 0, "string-map: expected at least one string");
         // Code points, like string-length / string-ref — never UTF-16 units.
         const strs = strings.map((s) => [...stringValue(s)]);
         const minLen = Math.min(...strs.map((s) => s.length));
-        const results: unknown[] = [];
-        for (let i = 0; i < minLen; i++) {
-          // Seam-routed: `proc` is a callable VALUE (membrane-boxed), not a bare fn. `this` IS
-          // the whole CallCtx dispatch built — thread it, not just `this.runCtx`.
-          results.push(
-            applyCallback(
-              proc,
-              strs.map((s) => new ACharacter(s[i])),
-              this,
-            ),
-          );
-        }
-        const join = (chars: unknown[]) => new AString(chars.map(mappedChar).join(""));
+        // Seam-routed: `proc` is a callable VALUE (membrane-boxed), not a bare fn. `this` IS
+        // the whole CallCtx dispatch built — thread it, not just `this.runCtx`.
+        const results = Array.from({ length: minLen }, (_, i) =>
+          applyCallback(
+            proc,
+            strs.map((s) => new ACharacter(s[i])),
+            this,
+          ),
+        );
         // proc may be an async membrane callback → await before joining, so the result
         // is a real string, not "[object Promise][object Promise]…" (see vector-map).
-        if (results.some(is_promise)) {
-          return (promise_all(results) as Promise<unknown[]>).then(join);
-        }
-        return join(results);
+        return maybeThen(settleAll(results), (chars) => new AString(chars.map(mappedChar).join("")));
       },
     ),
 
@@ -354,22 +348,21 @@ export default EnvCapability.define("scheme/strings", {
           }
         `,
       },
-      function (this: CallCtx, proc, ...strings): AVoid | Promise<AVoid> {
+      function (proc, ...strings) {
         invariant(strings.length > 0, "string-for-each: expected at least one string");
         const strs = strings.map((s) => [...stringValue(s)]);
         const minLen = Math.min(...strs.map((s) => s.length));
-        const pending: unknown[] = [];
-        for (let i = 0; i < minLen; i++) {
-          // `this` IS the whole CallCtx dispatch built — thread it, not just `this.runCtx`.
-          const ret = applyCallback(
+        // `this` IS the whole CallCtx dispatch built — thread it, not just `this.runCtx`.
+        const rets = Array.from({ length: minLen }, (_, i) =>
+          applyCallback(
             proc,
             strs.map((s) => new ACharacter(s[i])),
             this,
-          );
-          if (is_promise(ret)) pending.push(ret);
-        }
+          ),
+        );
+        const pending = rets.filter(is_promise);
         // R7RS "unspecified" is theVoid on the scheme face.
-        if (pending.length > 0) return (promise_all(pending) as Promise<unknown[]>).then(() => theVoid);
+        if (pending.length > 0) return promise_all(pending).then(() => theVoid);
         return theVoid;
       },
     ),
@@ -382,7 +375,7 @@ export default EnvCapability.define("scheme/strings", {
     // `string-contains?`.
     substring: symbol.native`substring: the slice of the string between start and end`(
       { input: [z.string, z.schemeNumber, z.schemeNumber.optional()], output: [z.string] },
-      function (this: CallCtx, string, start, end) {
+      function (string, start, end) {
         // `string` is an AString (grafted String.prototype), the indices AExact/AInexact.
         // Code-point slice with a taught range error — JS `substring` would swap
         // reversed bounds and clamp/zero out-of-range ones.
@@ -395,7 +388,7 @@ export default EnvCapability.define("scheme/strings", {
     "string->number":
       symbol.native`string->number: parse the string as a number, or #f; surrounding whitespace is shed`(
         { input: [z.string, z.number.optional()], output: [z.union([z.number, z.boolean])] },
-        function (this: CallCtx, arg, radix) {
+        function (arg, radix) {
           // TRIM (not R7RS §6.2.6): ends shed before the numeral match. Spec-faithful
           // `#f` on `" 42 "` is the worse teaching — padded digits are the common
           // paste. Internal whitespace (`"1 2"`) still `#f`. Not gated on strict: this

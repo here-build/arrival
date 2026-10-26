@@ -58,7 +58,7 @@
 // recursion never re-crosses the boundary (one cold decode per outer call). %list-nth /
 // %any-null? / %some / %any / %every / %every-value / zip use that idiom. take/drop are
 // tagless dispatchers. validate:false unused — evidence-gated only.
-import { type CallCtx, makeCallCtx } from "../../run/CallCtx.js";
+import { makeCallCtx } from "../../run/CallCtx.js";
 import { withContractFields, withCallbackRoles } from "../../common/symbols/_bake.js";
 import type { MaybePromise } from "../../types/utility.js";
 import dedent from "dedent";
@@ -166,18 +166,13 @@ const DOORS = {
 // `find-tail`) because it recurses over the predicate and unwraps an async generator-lambda
 // result. Procedure-only matcher (no host RegExp).
 //
-// Precision-typed to match its own Contract (below): `arg` is `z.lambda` → `ACallable`
-// (scheme-side callable VALUE; bare host fns refused — mint via hostFnToCallable).
-// `list`'s car/cdr decode `unknown` off `z.pair`'s default `APair<unknown, unknown>`
-// generic — every recursive/return site that hands a car/cdr back through this
-// SchemeValue-returning fn casts it. findImpl carries no runtime pair-or-nil check
-// of its own (`symbol.native` contracts are TYPE-ONLY and never validated at runtime),
-// so the cast restates the TS-declared `AListAlike` shape, not a runtime-verified one.
+// Params match its Contract (below): `arg` is `z.lambda` → `ACallable`, `list` is
+// `z.listAlike` → `AListAlike`. Returns a promise when the predicate is async.
 // `runCtx` is a required parameter (not a defaulted CONSTANT_CTX) — a plain recursive
 // call (not a dispatch-bound `this: CallCtx`) can't recover the live ctx any other
 // way, so it's threaded explicitly through every recursive step. The `find` binding
 // below is the thin dispatch-bound wrapper that supplies it from `this.runCtx`.
-function findImpl(arg: ACallable, list: AListAlike, runCtx: RunContext): SchemeValue {
+function findImpl(arg: ACallable, list: AListAlike, runCtx: RunContext): MaybePromise<SchemeValue> {
   if (list instanceof ANil) {
     // SRFI-1: `find` returns #f on no-match — '() is R7RS-truthy, so it can't double
     // as the miss sentinel the way it would in a nil-as-false dialect.
@@ -189,8 +184,9 @@ function findImpl(arg: ACallable, list: AListAlike, runCtx: RunContext): SchemeV
     if (!is_false(value)) {
       return list.car;
     }
+    // cdr reads as SchemeValue; a z.listAlike spine's tail is a list (not checked at runtime).
     return findImpl(arg, list.cdr as AListAlike, runCtx);
-  }) as SchemeValue;
+  });
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -278,12 +274,7 @@ export default EnvCapability.define("scheme/srfi-1", {
         (args, runCtx) => {
           const [pred, seq] = args;
           const m = requireTerm(seq, "filter");
-          // `resolveMethod`'s own return type is `unknown` (it's a bare tagless-final term
-          // lookup, possibly async) — the cast states what the `filter` term contract actually
-          // guarantees (a scheme value, or a promise of one, in the receiver's own
-          // representation), mirroring this file's established "typecheck is not a TS guard;
-          // re-state it" idiom (see `findImpl` above).
-          return m.call(seq, pred, runCtx) as MaybePromise<SchemeValue>;
+          return m.call(seq, pred, runCtx);
         },
       ),
       // The DECLARED acc-chain marker ("fold declares acc chain"): reduce's f is the
@@ -332,7 +323,7 @@ export default EnvCapability.define("scheme/srfi-1", {
         // Thin dispatch-bound wrapper: supplies the recursive findImpl with the live
         // `this.runCtx` (findImpl itself recurses via a plain call, so it cannot recover
         // ctx off `this`). `arg` is `z.lambda` → ACallable.
-        function (this: CallCtx, arg: ACallable, list: AListAlike) {
+        function (arg, list) {
           return findImpl(arg, list, this.runCtx);
         },
       ),
@@ -416,8 +407,8 @@ export default EnvCapability.define("scheme/srfi-1", {
         (args, runCtx) => {
           const [xs, n] = args;
           const m = requireTerm(xs, "take");
-          const k = typeof n === "number" ? n : (n as { valueOf(): number }).valueOf();
-          return m.call(xs, k, runCtx) as MaybePromise<SchemeValue>;
+          const k = n.valueOf();
+          return m.call(xs, k, runCtx);
         },
       ),
 
@@ -440,8 +431,8 @@ export default EnvCapability.define("scheme/srfi-1", {
         (args, runCtx) => {
           const [xs, n] = args;
           const m = requireTerm(xs, "drop");
-          const k = typeof n === "number" ? n : (n as { valueOf(): number }).valueOf();
-          return m.call(xs, k, runCtx) as MaybePromise<SchemeValue>;
+          const k = n.valueOf();
+          return m.call(xs, k, runCtx);
         },
       ),
 

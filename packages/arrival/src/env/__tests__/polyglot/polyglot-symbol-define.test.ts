@@ -106,10 +106,10 @@ describe("scheme/polyglot family — deps are real edges (§2.1 luck-into-struct
     expect(removed).toEqual([1, 2]);
   });
 
-  it("scheme/polyglot-racket ALONE: dict-ref's %dict-guard reaches the exceptions capability's error", async () => {
+  it("scheme/polyglot-racket ALONE: dict-ref's teaching door still fires (native throw, same text)", async () => {
     const env = await envFromCapabilities([polyglotRacket]);
     await expect(execStateOverFrame('(dict-ref "not-a-dict" :a)', { env })).rejects.toThrow(
-      /dict-ref: expected a dict/, // error (exceptions) — the door composes through the dep edge
+      /dict-ref: expected a dict/,
     );
   });
 });

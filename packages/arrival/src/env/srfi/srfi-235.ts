@@ -16,7 +16,6 @@
 //   • curry       — not SRFI-235; arity-aware partial application + procedure-min-arity.
 import { EnvCapability } from "../../common/capability.js";
 import dedent from "dedent";
-import type { CallCtx } from "../../run/CallCtx.js";
 import { is_callable_value } from "../../values/value-guards.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import polyglot from "../polyglot/polyglot.js";
@@ -121,7 +120,7 @@ export default EnvCapability.define("scheme/srfi-235", {
 
     // `procedure-min-arity` — curry's remaining native: arity introspection off
     // `ACallable.arity`, or JS `Function.length` when the value is a bare host function.
-    // No recursion, no invocation — no `this: CallCtx` / runCtx thread.
+    // No recursion, no invocation — no runCtx thread.
     "procedure-min-arity":
       symbol.native`procedure-min-arity: the minimum argument count fn accepts (arity introspection for scheme-authored combinators like curry)`(
         {
@@ -133,7 +132,8 @@ export default EnvCapability.define("scheme/srfi-235", {
           }
         `,
         },
-        function (this: CallCtx, fn: unknown): AExact {
+        function (fn) {
+          // Natives aren't validated at runtime, so a bare host fn can still land here.
           const min = is_callable_value(fn) ? fn.arity.min : (fn as (...args: unknown[]) => unknown).length;
           return new AExact(min);
         },

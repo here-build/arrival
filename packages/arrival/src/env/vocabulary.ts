@@ -43,7 +43,6 @@ import {
 import { buildDegradationInfo, collectDegraded, type DegradedCapability } from "../common/degradation.js";
 import { bindCapabilityDefines } from "../common/symbols/define-bake.js";
 import type { AEntity, DefineSymbolDef, DefineSyntaxSymbolDef, RosettaSymbolDef } from "../common/symbols/_bake.js";
-import type { AliasSymbolDef } from "../common/symbols/alias.js";
 import type { PreludeBindTarget } from "../common/kernel.js";
 import { linearizeDag } from "../common/dag-linearize.js";
 import type { EvalSchemeInto } from "../common/scheme-env.js";
@@ -130,6 +129,7 @@ function makeBindTarget(
 ): (def: AEntity) => PreludeBindTarget {
   return (def) => ({
     set: (name: string, value: unknown) => {
+      // PreludeBindTarget.set takes `unknown` (common/kernel.ts).
       bakeEnv.bind(name, value as AmbientValue);
       // STORED value — raw `__env__` read, not `.get()`
       // (which quotes APair for host; vocabulary must hold chain-lookup shape).
@@ -146,9 +146,9 @@ function bindDirect(
   mainMap: Map<string, AmbientValue>,
   bakeEnv: EnvWithInternals<ResolvingAmbient>,
   name: string,
-  value: unknown,
+  value: AmbientValue,
 ): void {
-  bakeEnv.bind(name, value as AmbientValue);
+  bakeEnv.bind(name, value);
   mainMap.set(name, bakeEnv.__env__[name]);
 }
 
@@ -164,10 +164,10 @@ async function processCapability(
 ): Promise<{ configuration: Record<string, unknown>; degraded: DegradedCapability | undefined }> {
   const capabilityName = cap.name;
   const spec = cap.spec;
-  const symbolsRec = (spec.symbols ?? {}) as Record<string, SymbolDeclaration>;
+  const symbolsRec = spec.symbols ?? {};
 
-  const schema = spec.configuration ? z.object(spec.configuration as Record<string, z.ZodTypeAny>) : z.object({});
-  const configuration = schema.parse(config ?? {}) as Record<string, unknown>;
+  const schema = spec.configuration ? z.object(spec.configuration) : z.object({});
+  const configuration = schema.parse(config ?? {});
   // requiresConfig auto-door fires unconditionally (D2, common/degradation.ts).
   const degradation = buildDegradationInfo(capabilityName);
 
@@ -181,12 +181,12 @@ async function processCapability(
     let def: SymbolDeclaration = rawDef;
     const viaAlias = isAliasDef(rawDef);
     if (viaAlias) {
-      const targetDef = symbolsRec[(rawDef as AliasSymbolDef).target];
+      const targetDef = symbolsRec[rawDef.target];
       if (targetDef === undefined) {
-        throw new AliasTargetError(capabilityName, name, (rawDef as AliasSymbolDef).target, "missing-target");
+        throw new AliasTargetError(capabilityName, name, rawDef.target, "missing-target");
       }
       if (isAliasDef(targetDef)) {
-        throw new AliasTargetError(capabilityName, name, (rawDef as AliasSymbolDef).target, "chained-alias");
+        throw new AliasTargetError(capabilityName, name, rawDef.target, "chained-alias");
       }
       def = targetDef;
     }
@@ -230,6 +230,7 @@ async function processCapability(
     }
 
     if (def instanceof ARosettaProcedure) {
+      // ARosettaProcedure.contract is `unknown`; symbol.rosetta always stores a RosettaSymbolDef.
       const contract = def.contract as RosettaSymbolDef;
       if (!viaAlias && contract.name !== name) throw new SymbolKeyMismatchError(capabilityName, name, contract.name);
       const missingRosetta = missingRequiresConfig(contract.requiresConfig, configuration);
@@ -254,6 +255,7 @@ async function processCapability(
     if (def instanceof DoorProcedure) {
       if (!viaAlias && def.door.name !== name) throw new SymbolKeyMismatchError(capabilityName, name, def.door.name);
       if (def.door.cause === undefined) {
+        // `cause` is readonly on the door; stamped once here at bake time.
         (def.door as { cause?: { owner: string; needs: readonly never[] } }).cause = {
           owner: capabilityName,
           needs: [],
@@ -280,6 +282,7 @@ async function processCapability(
     if (!viaAlias && valueEntity !== undefined && valueEntity.name !== name) {
       throw new SymbolKeyMismatchError(capabilityName, name, valueEntity.name);
     }
+    // def's declared type still admits AliasSymbolDef; aliases were resolved above.
     bindDirect(mainMap, bakeEnv, name, def as AmbientValue);
   }
 

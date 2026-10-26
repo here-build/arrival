@@ -4,13 +4,14 @@
 import { describe, expect, it } from "vitest";
 import dedent from "dedent";
 import polyglotClojure from "../../polyglot/polyglot-clojure.js";
-import type { AEntity } from "../../../common/symbols/_bake.js";
+import { harvestContracts } from "../../../__tests__/_symbols-harvest.js";
 import { signatureOf } from "../../../type-layer/schema-to-ts.js";
 
 const norm = (s: string) => s.replaceAll(/\s+/g, " ").trim();
 
-// `spec.symbols` IS the record.
-const symbols = (polyglotClojure.spec.symbols ?? {}) as Record<string, AEntity>;
+// spec.symbols entries are minted A-values. harvestContracts pulls the AEntity
+// contract (kind "define" / "native", plus Contract.type) off each one.
+const symbols = harvestContracts(polyglotClojure.spec.symbols ?? {});
 
 function defineDef(name: string) {
   const def = symbols[name];
@@ -81,7 +82,9 @@ describe("scheme/polyglot-clojure Contract.type — mapv/filterv/partial/juxt ha
 
 describe("scheme/polyglot-clojure Contract.type — optional collection/dict harvest", () => {
   it("update-in: three-arg shape with unary updater", () => {
-    expect(norm(signatureOf(defineDef("update-in")))).toBe(
+    const def = symbols["update-in"];
+    if (def === undefined) throw new Error("polyglot-clojure pack: no symbol named update-in");
+    expect(norm(signatureOf(def))).toBe(
       norm(dedent`
         {
           (obj: unknown, ks: List<unknown>, f: (cur: unknown) => unknown): unknown;

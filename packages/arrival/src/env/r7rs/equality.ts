@@ -25,7 +25,6 @@ import { AJSArray } from "../../membrane/AJSArray.js";
 import { strictGate } from "../../errors.js";
 import dedent from "dedent";
 import { withContractFields } from "../../common/symbols/_bake.js";
-import type { CallCtx } from "../../run/CallCtx.js";
 import { ABool, schemeFalse, schemeTrue } from "../../values/primitives/ABool.js";
 import { AJSObject } from "../../membrane/AJSObject.js";
 import { ADict } from "../../values/primitives/ADict.js";
@@ -113,7 +112,7 @@ export default EnvCapability.define("scheme/equality", {
       // z.schemeValue BY DESIGN: unwrap accepts raw JS boolean OR boxed ABool.
       // z.boolean would reject the raw half. Output is always ABool flyweight.
       { input: [], inputRest: z.schemeValue, output: [z.boolean] },
-      function (this: CallCtx, ...bools) {
+      function (...bools) {
         if (bools.length < 2) return schemeTrue;
         // Representation-blind: raw JS boolean OR boxed ABool (rosetta membrane).
         const unwrap = (b: SchemeValue): boolean | undefined => {
@@ -130,7 +129,7 @@ export default EnvCapability.define("scheme/equality", {
     // R7RS 6.5 — NOT representation-blind: only ASymbol (no plain-JS symbol codec).
     "symbol=?": symbol.native`symbol=?: typed equivalence over symbols`(
       { input: [z.symbol, z.symbol], inputRest: z.symbol, output: [z.boolean] },
-      function (this: CallCtx, ...syms) {
+      function (...syms) {
         if (syms.length < 2) return schemeTrue;
         const first = syms[0];
         if (!(first instanceof ASymbol)) return schemeFalse;
@@ -172,7 +171,7 @@ export default EnvCapability.define("scheme/equality", {
         `,
       },
       // Callable excluding macros — includes membrane SchemeJSFunction (typeof "object").
-      function (this: CallCtx, obj) {
+      function (obj) {
         return new ABool(is_callable(obj) && !is_macro(obj));
       },
     ),
@@ -180,7 +179,7 @@ export default EnvCapability.define("scheme/equality", {
     // value→string print protocol (values/print.ts). deferred: 2-arg write-mode form.
     repr: symbol.native`repr: render a value to its external representation string`(
       { input: [z.schemeValue], output: [z.string] },
-      function (this: CallCtx, obj) {
+      function (obj) {
         return new AString(printValue(obj));
       },
     ),
@@ -189,7 +188,7 @@ export default EnvCapability.define("scheme/equality", {
     // provenance-free path uses bool's shared flyweight.
     "equal?": symbol.native`equal?: representation-blind structural equality`(
       { input: [z.schemeValue, z.schemeValue], output: [z.boolean], emit: equalQEmitRule },
-      function (this: CallCtx, a, b) {
+      function (a, b) {
         return mintVerdict(this.runCtx, [a, b], structuralEqual(a, b));
       },
     ),
@@ -197,14 +196,14 @@ export default EnvCapability.define("scheme/equality", {
     // R7RS 6.1 — pointer/scalar identity; both delegate to structural-equal.ts.
     "eq?": symbol.native`eq?: pointer/scalar-grade identity`(
       { input: [z.schemeValue, z.schemeValue], output: [z.boolean] },
-      function (this: CallCtx, x, y) {
+      function (x, y) {
         return mintVerdict(this.runCtx, [x, y], eq(x, y));
       },
     ),
 
     "eqv?": symbol.native`eqv?: eq? plus explicit number/char equality`(
       { input: [z.schemeValue, z.schemeValue], output: [z.boolean] },
-      function (this: CallCtx, x, y) {
+      function (x, y) {
         return mintVerdict(this.runCtx, [x, y], eqv(x, y));
       },
     ),
@@ -212,7 +211,7 @@ export default EnvCapability.define("scheme/equality", {
     // R7RS 6.3 — only #f is falsy; is_false (not `!value` — ABool is truthy in JS).
     not: symbol.native`not: #t iff value is #f (the only scheme-falsy)`(
       { input: [z.schemeValue], output: [z.boolean], emit: notEmitRule },
-      function (this: CallCtx, value) {
+      function (value) {
         return bool(is_false(value));
       },
     ),
@@ -232,7 +231,7 @@ export default EnvCapability.define("scheme/equality", {
           }
         `,
       },
-      function (this: CallCtx, obj) {
+      function (obj) {
         return bool(obj instanceof AString);
       },
     ),
@@ -284,7 +283,7 @@ export default EnvCapability.define("scheme/equality", {
       // vector, not a list. The two modes disagree ON PURPOSE, which is what `strictGate`
       // exists to express — the cost of the loose answer is one value reading #t to both
       // `null?` and `vector?`, and strict declines to pay it.
-      function (this: CallCtx, obj) {
+      function (obj) {
         if (obj instanceof ANil) return bool(true);
         if (obj instanceof AJSArray && obj.source.length === 0) {
           strictGate(this.runCtx, {
@@ -314,7 +313,7 @@ export default EnvCapability.define("scheme/equality", {
         `,
       },
       // harvest `type:` is the dual boolean guard
-      function (this: CallCtx, obj) {
+      function (obj) {
         return bool(obj instanceof ABool);
       },
     ),
@@ -350,7 +349,7 @@ export default EnvCapability.define("scheme/equality", {
           }
         `,
         },
-        function (this: CallCtx, obj): ABool {
+        function (obj) {
           return new ABool(obj instanceof AJSObject || obj instanceof ADict);
         },
       ),
@@ -368,7 +367,7 @@ export default EnvCapability.define("scheme/equality", {
       },
       // A circular list is NOT a proper list (R7RS); detect runtime cycles too
       // (have_cycles below only catches reader #0= cycles).
-      function (this: CallCtx, obj) {
+      function (obj) {
         if (obj instanceof APair && isCircularList(obj)) {
           return schemeFalse;
         }

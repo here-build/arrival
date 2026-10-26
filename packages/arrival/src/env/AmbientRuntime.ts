@@ -21,7 +21,7 @@ export type BindingName = string | symbol | ASymbol | AString;
 export type AmbientValue = SchemeValue | Macro | Syntax | AmbientRuntime | RegExp;
 
 function ownProps(obj: object): (string | symbol)[] {
-  return [...(Object.keys(obj) as (string | symbol)[]), ...Object.getOwnPropertySymbols(obj)];
+  return [...Object.keys(obj), ...Object.getOwnPropertySymbols(obj)];
 }
 
 /** File-local constructor captures — protected ctor is only callable from each class's
@@ -154,8 +154,8 @@ export class AmbientRuntime {
    * lives only on {@link ResolvingAmbient}; plain frame is own → parent.
    */
   _lookupWithResolvers(name: string | symbol, ctx?: RunContext): AmbientValue | undefined {
-    if (Object.hasOwn(this.__env__, name as string)) {
-      return this.__env__[name as string];
+    if (Object.hasOwn(this.__env__, name)) {
+      return this.__env__[name];
     }
 
     return this.__parent__?._lookupWithResolvers(name, ctx);
@@ -178,10 +178,7 @@ export class AmbientRuntime {
     // keyword-accessor resolver (same catchall path as `c[ad]+r`).
     const { throwError = true, ctx } = options;
 
-    let name: string | symbol = symbol as string | symbol;
-    if (symbol instanceof ASymbol || symbol instanceof AString) {
-      name = symbol.valueOf();
-    }
+    const name = symbol instanceof ASymbol || symbol instanceof AString ? symbol.valueOf() : symbol;
 
     const directValue = this._lookupWithResolvers(name, ctx);
     if (directValue !== undefined) {
@@ -276,7 +273,7 @@ function bind(this: AmbientRuntime, name: BindingName, value: AmbientValue): voi
   } else {
     key = name;
   }
-  this.__env__[key as string] = value;
+  this.__env__[key] = value;
 }
 
 Object.defineProperty(AmbientRuntime.prototype, "bind", {
@@ -372,14 +369,15 @@ export class ResolvingAmbient extends AmbientRuntime implements SchemeEnv {
    * Resolver returns `undefined` = "not mine" — never a found nil.
    */
   override _lookupWithResolvers(name: string | symbol, ctx?: RunContext): AmbientValue | undefined {
-    if (Object.hasOwn(this.__env__, name as string)) {
-      return this.__env__[name as string];
+    if (Object.hasOwn(this.__env__, name)) {
+      return this.__env__[name];
     }
 
     for (const resolver of this.__resolvers__) {
       const result = resolver.resolve(String(name), ctx);
       if (result !== undefined) {
         assertResolvedBinding(result, name, resolver.id);
+        // ResolvedBinding is wider than AmbientValue; the check above only rejects raw scalars.
         return result as AmbientValue;
       }
     }

@@ -21,18 +21,18 @@
 
 import dedent from "dedent";
 import { applyCallback } from "../../values/primitives/ACallable.js";
-import { CallCtx } from "../../run/CallCtx.js";
 import { CONSTANT_CTX } from "../../run/RunContext.js";
 import { withContractFields } from "../../common/symbols/_bake.js";
 import { AVector } from "../../values/primitives/AVector.js";
-import { type AVoid, theVoid } from "../../values/primitives/AVoid.js";
+import { theVoid } from "../../values/primitives/AVoid.js";
 import { AString } from "../../values/primitives/AString.js";
 import { type SchemeValue } from "../../values/types.js";
 import { ACharacter } from "../../values/primitives/ACharacter.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { APair } from "../../values/primitives/APair.js";
 import { is_promise } from "../../values/value-guards.js";
-import { promise_all } from "../../utils/promises.js";
+import { maybeThen, promise_all, settleAll } from "../../utils/promises.js";
+import type { MaybePromise } from "../../types/utility.js";
 import invariant from "tiny-invariant";
 import {
   assertAllocatable,
@@ -63,7 +63,7 @@ export default EnvCapability.define("scheme/vectors", {
           }
         `,
       },
-      function (this: CallCtx, k, fill): AVector {
+      function (k, fill) {
         const len = toIndex(k);
         // O(1) cap check BEFORE Array.from materializes `len` slots — see
         // assertAllocatable. `Array.from({length})` on an oversized count hangs
@@ -98,7 +98,7 @@ export default EnvCapability.define("scheme/vectors", {
           }
         `,
       },
-      function (this: CallCtx, ...objs) {
+      function (...objs) {
         return withInputProvenance(this.runCtx, objs, new AVector([...objs]));
       },
     ),
@@ -118,10 +118,9 @@ export default EnvCapability.define("scheme/vectors", {
         `,
       },
       // vector() decodes the scheme face to AVector | AJSArray (borrowed array), not AVector only.
-      function (this: CallCtx, ...vectors): AVector {
+      function (...vectors) {
         const arrays = vectors.map((v) => asVector(v, "vector-append"));
-        // eslint-disable-next-line unicorn/prefer-spread -- dynamic list of arrays; concat(...arrays) is the variadic join
-        return withInputProvenance(this.runCtx, vectors, new AVector(([] as SchemeValue[]).concat(...arrays)));
+        return withInputProvenance(this.runCtx, vectors, new AVector(arrays.flat()));
       },
     ),
 
@@ -150,7 +149,7 @@ export default EnvCapability.define("scheme/vectors", {
           }
         `,
       },
-      function (this: CallCtx, vec): AExact {
+      function (vec) {
         return new AExact(asVector(vec, "vector-length").length);
       },
     ),
@@ -169,11 +168,10 @@ export default EnvCapability.define("scheme/vectors", {
         `,
       },
       // Dispatch to the operand's own arrival/tagless-final/vector-ref (a SchemeVector or a
-      // borrowed AJSArray) — no asVector/instanceof reach-around. `vec` stays `unknown`
-      // (not narrowed to AVector) deliberately: the protocol admits a borrowed AJSArray
-      // too, which is NOT an AVector instance. A non-vector declares no such method →
-      // a clear throw (vector-ref on a non-vector IS an error, unlike the #f of vector?).
-      function (this: CallCtx, vec, k): SchemeValue {
+      // borrowed AJSArray, both in z.vector()'s scheme face) — no asVector/instanceof
+      // reach-around. Contracts are type-only, so a non-vector can still arrive at runtime:
+      // it declares no such method → a clear throw (unlike the #f of vector?).
+      function (vec, k) {
         const m = vec[tf("vector-ref")];
         if (typeof m !== "function") {
           throw attachOffendingValue(
@@ -181,8 +179,8 @@ export default EnvCapability.define("scheme/vectors", {
             vec,
           );
         }
-        const idx = typeof k === "number" ? k : (k as AExact).valueOf();
-        return (m as (i: number, runCtx?: unknown) => SchemeValue).call(vec, idx as number, this.runCtx);
+        const idx = typeof k === "number" ? k : k.valueOf();
+        return m.call(vec, idx, this.runCtx);
       },
     ),
 
@@ -206,7 +204,7 @@ export default EnvCapability.define("scheme/vectors", {
           }
         `,
       },
-      function (this: CallCtx, vec, start, end): SchemeValue {
+      function (vec, start, end) {
         const arr = asVector(vec, "vector->list");
         const { start: s, end: e } = sliceRange("vector->list", arr.length, start, end, "vector");
         // vec is unknown (asVector accepts raw arrays); CONSTANT_CTX — AValue carries no per-value ctx.
@@ -224,7 +222,7 @@ export default EnvCapability.define("scheme/vectors", {
           }
         `,
       },
-      function (this: CallCtx, list): AVector {
+      function (list) {
         // to_array doors circular and improper lists (the hand-rolled walk looped into
         // "Invalid array length" on a cycle and silently dropped a dotted tail).
         return withInputProvenance(this.runCtx, [list], new AVector(listToArray(list)));
@@ -242,7 +240,7 @@ export default EnvCapability.define("scheme/vectors", {
           }
         `,
       },
-      function (this: CallCtx, vec, start, end): AString {
+      function (vec, start, end) {
         const arr = asVector(vec, "vector->string");
         const { start: s, end: e } = sliceRange("vector->string", arr.length, start, end, "vector");
         let result = "";
@@ -264,7 +262,7 @@ export default EnvCapability.define("scheme/vectors", {
           }
         `,
       },
-      function (this: CallCtx, str, start, end): AVector {
+      function (str, start, end) {
         // Code points, not UTF-16 units — the same indexing string-length/string-ref use.
         const chars = [...stringValue(str)];
         const { start: s, end: e } = sliceRange("string->vector", chars.length, start, end, "string");
@@ -286,7 +284,7 @@ export default EnvCapability.define("scheme/vectors", {
           }
         `,
       },
-      function (this: CallCtx, vec, start, end): AVector {
+      function (vec, start, end) {
         const arr = asVector(vec, "vector-copy");
         const { start: s, end: e } = sliceRange("vector-copy", arr.length, start, end, "vector");
         return withInputProvenance(this.runCtx, [vec], new AVector(arr.slice(s, e)));
@@ -313,27 +311,24 @@ export default EnvCapability.define("scheme/vectors", {
           }
         `,
       },
-      function (this: CallCtx, proc, ...vectors) {
+      function (proc, ...vectors) {
         invariant(vectors.length > 0, "vector-map: expected at least one vector argument");
         const arrays = vectors.map((v) => asVector(v, "vector-map"));
         const minLen = Math.min(...arrays.map((a) => a.length));
-        const result: SchemeValue[] = [];
+        const result: MaybePromise<SchemeValue>[] = [];
         for (let i = 0; i < minLen; i++) {
           const elements = arrays.map((a) => a[i]);
           // Seam-routed: `proc` is a callable VALUE now, not a bare fn. `this` IS the whole
           // CallCtx dispatch built — thread it, not just `this.runCtx`.
-          result.push(applyCallback(proc, elements, this) as SchemeValue);
+          result.push(applyCallback(proc, elements, this));
         }
         // proc may be an async membrane callback → its results are JS Promises. Mirror
         // the list `map` (r7rs/lists.ts): if any slot is a promise, await them all so the
         // returned vector holds SETTLED values (not "[object Promise]") and provenance
         // is preserved. (errors-as-doors note: silent leak defeats boxing goal-b.)
-        if (result.some(is_promise)) {
-          return (promise_all(result) as Promise<SchemeValue[]>).then((resolved) =>
-            withInputProvenance(this.runCtx, vectors, new AVector(resolved)),
-          );
-        }
-        return withInputProvenance(this.runCtx, vectors, new AVector(result));
+        return maybeThen(settleAll(result), (resolved) =>
+          withInputProvenance(this.runCtx, vectors, new AVector(resolved)),
+        );
       },
     ),
 
@@ -354,11 +349,11 @@ export default EnvCapability.define("scheme/vectors", {
           }
         `,
       },
-      function (this: CallCtx, proc, ...vectors): AVoid | Promise<AVoid> {
+      function (proc, ...vectors) {
         invariant(vectors.length > 0, "vector-for-each: expected at least one vector argument");
         const arrays = vectors.map((v) => asVector(v, "vector-for-each"));
         const minLen = Math.min(...arrays.map((a) => a.length));
-        const pending: unknown[] = [];
+        const pending: Promise<unknown>[] = [];
         for (let i = 0; i < minLen; i++) {
           const elements = arrays.map((a) => a[i]);
           // `this` IS the whole CallCtx dispatch built — thread it, not just `this.runCtx`.
@@ -368,7 +363,7 @@ export default EnvCapability.define("scheme/vectors", {
         // Await any async side effects before returning, so for-each does not complete
         // while promises are still outstanding. R7RS "unspecified" is theVoid on the
         // scheme face (was a bare JS undefined).
-        if (pending.length > 0) return (promise_all(pending) as Promise<unknown[]>).then(() => theVoid);
+        if (pending.length > 0) return promise_all(pending).then(() => theVoid);
         return theVoid;
       },
     ),

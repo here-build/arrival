@@ -15,14 +15,13 @@ import { Syntax } from "../../eval/Syntax.js";
 import { AmbientRuntime } from "../AmbientRuntime.js";
 import { restore_data_gensyms } from "../../eval/syntax-rules.js";
 import { extract_patterns } from "../../eval/syntax-rules/match.js";
-import { transform_syntax } from "../../eval/syntax-rules/transcribe.js";
+import { transform_syntax, type GensymRecord } from "../../eval/syntax-rules/transcribe.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
 import { APair } from "../../values/primitives/APair.js";
 import { SyntaxRulesError } from "../../eval/syntax-rules/error.js";
 import { ArrivalError, EvalError, isHostRuntimeBug } from "../../errors.js";
 import { Resolver } from "../../eval/Resolver.js";
 import type { LexicalScopeWithInternals } from "../../eval/LexicalScope.js";
-import type { TransformerArgs } from "../../eval/Macro.js";
 import type { SchemeValue } from "../../values/types.js";
 import { ANil } from "../../values/primitives/ANil.js";
 
@@ -45,11 +44,10 @@ function ruleShapes(macro: SchemeValue): string {
 export default EnvCapability.define("scheme/macros", {
   symbols: (symbol) => ({
     "syntax-rules": symbol.macro`syntax-rules`(function (
-      this: AmbientRuntime,
-      macro: SchemeValue,
+      macro,
       // `resolver` is the evaluator's resolver at define-syntax time (threaded through
       // Macro.invoke), carrying the run's capability base.
-      { resolver: defSiteResolver }: TransformerArgs,
+      { resolver: defSiteResolver },
     ) {
       // deferred: freeze def-scope identifiers at definition time.
       // Def-time Resolver: define-syntax env is the hygiene identity root; capabilities
@@ -68,12 +66,12 @@ export default EnvCapability.define("scheme/macros", {
         return symbols;
       }
 
-      function validate_identifiers(node) {
-        while (!(node instanceof ANil)) {
-          const x = node.car;
-          TypeError.invariant(x instanceof ASymbol, "syntax-rules: wrong identifier");
+      function validate_identifiers(node: SchemeValue): void {
+        while (node instanceof APair) {
+          TypeError.invariant(node.car instanceof ASymbol, "syntax-rules: wrong identifier");
           node = node.cdr;
         }
+        TypeError.invariant(node instanceof ANil, "syntax-rules: wrong identifier");
       }
 
       TypeError.invariant(macro instanceof APair, "syntax-rules: malformed macro form");
@@ -85,11 +83,10 @@ export default EnvCapability.define("scheme/macros", {
       }
       const syntax = new Syntax(
         function (
-          this: AmbientRuntime,
-          code: SchemeValue,
+          code,
           // `runCtx` is the EXPANDING run's live context (threaded through Syntax.expand):
           // expansion's minted cells charge THAT run's meter, never the defining run's.
-          { macro_expand, resolver: useSiteResolver, runCtx }: TransformerArgs,
+          { macro_expand, resolver: useSiteResolver, runCtx },
         ) {
           // Use-site Resolver: the evaluator's resolver at expansion time. NOT a fresh
           // `new Resolver(this)`, which would re-derive a wrong globalRoot from the null-rooted
@@ -101,6 +98,7 @@ export default EnvCapability.define("scheme/macros", {
           // expansion, copy its symbol-keyed gensyms up into the parent and unwrap.
           let useScope = useResolver.scope;
           if (useScope.kind === "merge") {
+            // Write door: binding into a scope needs the internals view (see AmbientRuntime.ts).
             const parent = useScope.parent as LexicalScopeWithInternals;
             for (const [sym, value] of useScope.ownSymbolEntries()) {
               // Evaluator-frame-family write, not an assembly write (hermeticity audit P6):
@@ -139,7 +137,7 @@ export default EnvCapability.define("scheme/macros", {
                 capabilities: defResolver.capabilities,
               });
               if (bindings) {
-                const names = []; // transform_syntax appends the renamed template names
+                const names: GensymRecord[] = []; // transform_syntax appends the renamed template names
                 const new_expr = transform_syntax({
                   bindings,
                   expr,

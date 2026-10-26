@@ -20,21 +20,18 @@ import invariant from "tiny-invariant";
 // `TypeError.invariant` is a global augmentation — import explicitly so correctness
 // doesn't depend on load order.
 import "@here.build/error-invariant";
-import type { Contract, RestSpec, VectorSpec } from "../../common/symbols/_bake.js";
+import type { Contract, DecodedReturn, Impl } from "../../common/symbols/_bake.js";
 import { EnvCapability } from "../../common/capability.js";
 import type { EmitRule } from "../../emit/emit-rule.js";
 import { Arrow, Bin, Binding, Call, Lit, Method, Ref, Un, type BinOp, type R } from "../../emit/residual-lite.js";
 import type { RunContext } from "../../run/RunContext.js";
 import { exactly, freshBinding } from "../pack-helpers.js";
 import { ANil } from "../../values/primitives/ANil.js";
-import { CallCtx } from "../../run/CallCtx.js";
 import { AValue, EMPTY_PROVENANCE, unionProvenance } from "../../values/primitives/AValue.js";
-import type { ABool } from "../../values/primitives/ABool.js";
 import { AExact } from "../../values/primitives/AExact.js";
 import { AInexact } from "../../values/primitives/AInexact.js";
 import { AString } from "../../values/primitives/AString.js";
 import { APair } from "../../values/primitives/APair.js";
-import type { SchemeValue } from "../../values/types.js";
 import { type ANumeric, exactISqrt, complexDoor, isComplex, schemeCompare, toReal } from "../../values/numbers.js";
 import {
   coerceNumeric,
@@ -54,18 +51,39 @@ import { tf } from "../../values/tagless-final.js";
 // nativeNumericOp — pack's per-op wrapper (R8 mintVerdict, A4 always-box).
 // ════════════════════════════════════════════════════════════════════════════
 
-interface NumSpec {
-  in: z.ZodTypeAny[];
-  inRest?: z.ZodTypeAny;
-  out: z.ZodTypeAny;
-  fn: (...jsArgs: any[]) => any;
+/** What `fn` sees for one slot: `z.schemeNumber` passes the box through untouched
+ *  (`decodeArg`/`encodeResult` identity); every other schema decodes to its JS face. */
+type NumJs<S extends z.ZodTypeAny> = S extends typeof z.schemeNumber ? ANumeric : z.output<S>;
+type NumJsTuple<I extends readonly z.ZodTypeAny[]> = { -readonly [K in keyof I]: NumJs<I[K]> };
+type NumArgs<I extends readonly z.ZodTypeAny[], Rest extends z.ZodTypeAny | undefined> = Rest extends z.ZodTypeAny
+  ? [...NumJsTuple<I>, ...NumJs<Rest>[]]
+  : NumJsTuple<I>;
+
+interface NumSpec<
+  I extends readonly z.ZodTypeAny[],
+  O extends z.ZodTypeAny,
+  Rest extends z.ZodTypeAny | undefined = undefined,
+> {
+  in: I;
+  inRest?: Rest;
+  out: O;
+  fn: (...jsArgs: NumArgs<I, Rest>) => NumJs<O>;
   /** Zero-arg identity mint — ONLY `+`/`*` (`(+)` ⇒ 0, `(*)` ⇒ 1) declare this.
    * The identity literal must carry the invoking run's ctx, never CONSTANT_CTX, and
    * `fn`'s own signature has no ctx parameter — so `marshalCall` intercepts the
    * zero-arg case BEFORE calling `fn`, minting the identity here under the real
    * runCtx it's threaded (never falls through to `fn`, which stays unreachable
    * on zero args — see addFn/mulFn below). */
-  zeroArgIdentity?: (ctx: RunContext) => unknown;
+  zeroArgIdentity?: (ctx: RunContext) => NumJs<O>;
+}
+
+/** Spec constructor — infers the schema tuple and checks `fn` against it. */
+function numSpec<
+  const I extends readonly z.ZodTypeAny[],
+  O extends z.ZodTypeAny,
+  Rest extends z.ZodTypeAny | undefined = undefined,
+>(spec: NumSpec<I, O, Rest>): NumSpec<I, O, Rest> {
+  return spec;
 }
 
 /**
@@ -81,6 +99,7 @@ interface NumSpec {
  *     safe: `z.schemeNumber` is a module singleton.
  */
 function decodeArg(name: string, index: number, schema: z.ZodTypeAny, arg: unknown): unknown {
+  // Widened: TS sees no overlap between an arbitrary schema type and the singleton's.
   if ((schema as unknown) === z.schemeNumber) {
     TypeError.invariant(arg instanceof AExact || arg instanceof AInexact, `${name}: argument ${index} type mismatch`);
     return arg;
@@ -102,18 +121,23 @@ function decodeArg(name: string, index: number, schema: z.ZodTypeAny, arg: unkno
  * union of the CALL's operand provenance, not a single result's) — an ABool minted
  * here would be the wrong box, silently overwritten downstream.
  */
-function encodeResult(schema: z.ZodTypeAny, result: unknown): unknown {
+function encodeResult<O extends z.ZodTypeAny>(schema: O, result: NumJs<O>): unknown {
+  // Widened: see decodeArg.
   if ((schema as unknown) === z.schemeNumber || (schema as unknown) === z.boolean) return result;
-  return z.encode(schema, result as never);
+  // Past the identity cases NumJs<O> is z.output<O>; TS can't narrow the conditional.
+  return z.encode(schema, result as z.output<O>);
 }
 
 /**
  * Raw marshalling — arity guard + per-arg schema decode + `fn` + output encode,
- * WITHOUT the provenance/coerce layer. `nativeNumericOp` runs it after coercion;
- * inline misc ops (`lcm`, `>>`, `<<`) run it too (bypass provenance); `floor/`/
- * `truncate/` skip it and call the carved fns directly.
+ * WITHOUT the provenance/coerce layer. `nativeNumericOp` runs it after coercion.
  */
-function marshalCall(name: string, spec: NumSpec, args: unknown[], runCtx?: RunContext): unknown {
+function marshalCall<I extends readonly z.ZodTypeAny[], O extends z.ZodTypeAny, Rest extends z.ZodTypeAny | undefined>(
+  name: string,
+  spec: NumSpec<I, O, Rest>,
+  args: readonly unknown[],
+  runCtx?: RunContext,
+): unknown {
   const { in: inSchemas, inRest, out, fn, zeroArgIdentity } = spec;
   const minArgs = inSchemas.length;
   TypeError.invariant(args.length >= minArgs, `${name}: expected at least ${minArgs} args, got ${args.length}`);
@@ -126,12 +150,16 @@ function marshalCall(name: string, spec: NumSpec, args: unknown[], runCtx?: RunC
     const schema = i < inSchemas.length ? inSchemas[i] : inRest!;
     return decodeArg(name, i, schema, arg);
   });
-  const jsResult = fn(...jsArgs);
-  return encodeResult(out, jsResult);
+  // Each slot was decoded by its own schema above; TS can't track that per index.
+  return encodeResult(out, fn(...(jsArgs as NumArgs<I, Rest>)));
 }
 
-function nativeNumericOp(name: string, spec: NumSpec): (this: CallCtx, ...args: unknown[]) => unknown {
-  const applyNumeric = (callArgs: unknown[], runCtx: RunContext): unknown => {
+function nativeNumericOp<
+  I extends readonly z.ZodTypeAny[],
+  O extends z.ZodTypeAny,
+  Rest extends z.ZodTypeAny | undefined,
+>(name: string, spec: NumSpec<I, O, Rest>): Impl<I, readonly [O], Rest, "scheme"> {
+  const applyNumeric = (callArgs: readonly unknown[], runCtx: RunContext): unknown => {
     // Gated on the SAME effective switch `withInputProvenance` uses
     // (`isEagerAccumulationActive` — ambient flag OR silent-region γ, op-helpers.ts's
     // own doc), so arithmetic ops honor the eager-accumulation default AND still
@@ -149,7 +177,7 @@ function nativeNumericOp(name: string, spec: NumSpec): (this: CallCtx, ...args: 
       const detail = badIndex === -1 ? "argument type mismatch" : `argument ${badIndex} is ${type(callArgs[badIndex])}`;
       throw new TypeError(`Cannot apply ${name} to (${typeNames}): ${detail}`, { cause: error });
     }
-    const result: unknown = marshalCall(name, spec, converted, runCtx);
+    const result = marshalCall(name, spec, converted, runCtx);
     if (provenance.size > 0 && result instanceof AValue) return result.withProvenance(provenance);
     // R8 mint (RULINGS.md R8, op-helpers.mintVerdict): every boolean verdict boxes —
     // provenance-free operands get the eq?-stable flyweight, stamped operands a fresh
@@ -158,12 +186,17 @@ function nativeNumericOp(name: string, spec: NumSpec): (this: CallCtx, ...args: 
     return result;
   };
 
-  const fn = function (this: CallCtx, ...args: unknown[]): unknown {
-    return applyNumeric(args, this.runCtx);
+  const fn: Impl<I, readonly [O], Rest, "scheme"> = function (...args) {
+    // `encodeResult(out, …)` / `mintVerdict` produce the scheme face of `out`; the
+    // marshalling path above is untyped per slot.
+    return applyNumeric(args, this.runCtx) as DecodedReturn<readonly [O], "scheme">;
   };
   Object.defineProperty(fn, "name", { value: name });
   return fn;
 }
+
+/** Impl shape of the tower-type predicates (`NUMBER_GUARD`'s contract). */
+type TypePredicateImpl = Impl<typeof NUMBER_GUARD.input, typeof NUMBER_GUARD.output, undefined, "scheme">;
 
 /**
  * R7RS tower-type predicates (`complex?`/`real?`/`rational?`/`integer?`/`exact?`/…/
@@ -173,11 +206,8 @@ function nativeNumericOp(name: string, spec: NumSpec): (this: CallCtx, ...args: 
  * unboxed `boolean` would be a bare value inside the membrane (P4), not just an
  * allocation shortcut.
  */
-function nativeTypePredicate(
-  name: string,
-  predicate: (n: ANumeric) => boolean,
-): (this: CallCtx, ...args: unknown[]) => unknown {
-  const fn = function (this: CallCtx, value: unknown): ABool {
+function nativeTypePredicate(name: string, predicate: (n: ANumeric) => boolean): TypePredicateImpl {
+  const fn: TypePredicateImpl = function (value) {
     if (!isSchemeNumber(value)) {
       return mintVerdict(this.runCtx, [value], false);
     }
@@ -203,21 +233,17 @@ function nativeTypePredicate(
 // ── Arithmetic helpers (exactness-preserving) ───────────────────────────────────
 
 function schemeAdd(a: ANumeric, b: ANumeric): ANumeric {
-  if (a instanceof AInexact || b instanceof AInexact) {
-    const aVal = a instanceof AExact ? a.valueOf() : a.real;
-    const bVal = b instanceof AExact ? b.valueOf() : b.real;
-    return new AInexact(aVal + bVal);
-  }
-  return (a as AExact).add(b as AExact);
+  if (a instanceof AExact && b instanceof AExact) return a.add(b);
+  const aVal = a instanceof AExact ? a.valueOf() : a.real;
+  const bVal = b instanceof AExact ? b.valueOf() : b.real;
+  return new AInexact(aVal + bVal);
 }
 
 function schemeSub(a: ANumeric, b: ANumeric): ANumeric {
-  if (a instanceof AInexact || b instanceof AInexact) {
-    const aVal = a instanceof AExact ? a.valueOf() : a.real;
-    const bVal = b instanceof AExact ? b.valueOf() : b.real;
-    return new AInexact(aVal - bVal);
-  }
-  return (a as AExact).sub(b as AExact);
+  if (a instanceof AExact && b instanceof AExact) return a.sub(b);
+  const aVal = a instanceof AExact ? a.valueOf() : a.real;
+  const bVal = b instanceof AExact ? b.valueOf() : b.real;
+  return new AInexact(aVal - bVal);
 }
 
 function schemeNegate(a: ANumeric): ANumeric {
@@ -228,21 +254,17 @@ function schemeNegate(a: ANumeric): ANumeric {
 }
 
 function schemeMul(a: ANumeric, b: ANumeric): ANumeric {
-  if (a instanceof AInexact || b instanceof AInexact) {
-    const aVal = a instanceof AExact ? a.valueOf() : a.real;
-    const bVal = b instanceof AExact ? b.valueOf() : b.real;
-    return new AInexact(aVal * bVal);
-  }
-  return (a as AExact).mul(b as AExact);
+  if (a instanceof AExact && b instanceof AExact) return a.mul(b);
+  const aVal = a instanceof AExact ? a.valueOf() : a.real;
+  const bVal = b instanceof AExact ? b.valueOf() : b.real;
+  return new AInexact(aVal * bVal);
 }
 
 function schemeDiv(a: ANumeric, b: ANumeric): ANumeric {
-  if (a instanceof AInexact || b instanceof AInexact) {
-    const aVal = a instanceof AExact ? a.valueOf() : a.real;
-    const bVal = b instanceof AExact ? b.valueOf() : b.real;
-    return new AInexact(aVal / bVal);
-  }
-  return (a as AExact).div(b as AExact);
+  if (a instanceof AExact && b instanceof AExact) return a.div(b);
+  const aVal = a instanceof AExact ? a.valueOf() : a.real;
+  const bVal = b instanceof AExact ? b.valueOf() : b.real;
+  return new AInexact(aVal / bVal);
 }
 
 // Zero-arg case is intercepted by marshalCall's `zeroArgIdentity` (below the spec)
@@ -593,18 +615,6 @@ const denominatorFn = (x: ANumeric): ANumeric => {
 
 const squareFn = (x: ANumeric): ANumeric => schemeMul(x, x);
 
-/** R7RS exact-integer-sqrt: (s . r) with s² ≤ n < (s+1)² and n = s² + r. Product pair.
- *  `s*s`/`s²` can't overflow: `exactISqrt`'s own contract guarantees `s*s ≤ n`, and `n`
- *  is already a safe-int AExact field — no checked helper needed. */
-const exactIntegerSqrtFn = function (this: CallCtx, n: unknown): APair<AExact, AExact> {
-  const a = coerceNumeric(n, this.runCtx);
-  invariant(a instanceof AExact && a.denom === 1, "exact-integer-sqrt: exact integer required");
-  invariant(a.num >= 0, "exact-integer-sqrt: non-negative integer required");
-  const s = exactISqrt(a.num);
-  const r = a.num - s * s;
-  return new APair(new AExact(s), new AExact(r));
-};
-
 /** Simplest rational in [x, y] (x ≤ y). R7RS-style recursive invert of fractional parts. */
 function simplestInRange(x: number, y: number): { num: number; denom: number } {
   if (y < x) return simplestInRange(y, x);
@@ -624,19 +634,6 @@ function simplestInRange(x: number, y: number): { num: number; denom: number } {
   // n + 1/(p/q) = n + q/p = (n*p + q)/p
   return { num: fx * inv.num + inv.denom, denom: inv.num };
 }
-
-const rationalizeFn = function (this: CallCtx, x: unknown, e: unknown): ANumeric {
-  const xv = coerceNumeric(x, this.runCtx);
-  const ev = coerceNumeric(e, this.runCtx);
-  const xr = toReal(xv);
-  const er = Math.abs(toReal(ev));
-  invariant(Number.isFinite(xr) && Number.isFinite(er), "rationalize: finite reals required");
-  const { num, denom } = simplestInRange(xr - er, xr + er);
-  if (xv instanceof AExact && ev instanceof AExact) {
-    return new AExact(num, denom);
-  }
-  return new AInexact(num / denom);
-};
 
 // ── Transcendentals ─────────────────────────────────────────────────────────────────
 
@@ -673,9 +670,9 @@ const BITWISE_DOOR =
 // JS-shaped aliases (`**` `%` `==` `|` `&` `~` `>>` `<<`) live in scheme/sugarcoat.
 // ════════════════════════════════════════════════════════════════════════════
 
-const exptSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: schemeExpt };
-const remainderSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: remainderFn };
-const numEqSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.boolean, fn: numEqFn };
+const exptSpec = numSpec({ in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: schemeExpt });
+const remainderSpec = numSpec({ in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: remainderFn });
+const numEqSpec = numSpec({ in: [z.schemeNumber], inRest: z.schemeNumber, out: z.boolean, fn: numEqFn });
 
 const exptOp = nativeNumericOp("expt", exptSpec);
 const remainderOp = nativeNumericOp("remainder", remainderSpec);
@@ -683,10 +680,10 @@ const numEqOp = nativeNumericOp("=", numEqSpec);
 
 // The numeric comparison cores (provenance), wrapped by `wrapOrd`
 // (FL-Ord fallback) and `looseCompare` (nil-tolerant overlay) below.
-const ltSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.boolean, fn: ltFn };
-const gtSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.boolean, fn: gtFn };
-const lteSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.boolean, fn: lteFn };
-const gteSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.boolean, fn: gteFn };
+const ltSpec = numSpec({ in: [z.schemeNumber], inRest: z.schemeNumber, out: z.boolean, fn: ltFn });
+const gtSpec = numSpec({ in: [z.schemeNumber], inRest: z.schemeNumber, out: z.boolean, fn: gtFn });
+const lteSpec = numSpec({ in: [z.schemeNumber], inRest: z.schemeNumber, out: z.boolean, fn: lteFn });
+const gteSpec = numSpec({ in: [z.schemeNumber], inRest: z.schemeNumber, out: z.boolean, fn: gteFn });
 
 const ltOp = nativeNumericOp("<", ltSpec);
 const gtOp = nativeNumericOp(">", gtSpec);
@@ -699,28 +696,30 @@ const gteOp = nativeNumericOp(">=", gteSpec);
 // strict-mode gate. Numbers fall through to the numeric core.
 // ════════════════════════════════════════════════════════════════════════════
 
+type CompareSym = "<" | ">" | "<=" | ">=";
+/** Impl shape shared by `=`/`<`/`>`/`<=`/`>=` (the chain specs' contract). */
+type ChainImpl = Impl<typeof ltSpec.in, readonly [typeof ltSpec.out], typeof z.schemeNumber, "scheme">;
+
 /**
  * Wrap a NUMERIC operator with the FL-Ord fallback. FL-Ord only intercepts NON-NUMERIC
  * ordered entities; a number falls through to `numeric(...)` (ORD_REL is a TOTAL-order
  * shortcut WRONG for the partial numeric order, and the numeric op carries provenance
  * the FL branch can't).
  */
-function wrapOrd(
-  numeric: (this: CallCtx, ...a: unknown[]) => unknown,
-  sym: "<" | ">" | "<=" | ">=",
-): (this: CallCtx, ...a: unknown[]) => unknown {
+function wrapOrd(numeric: ChainImpl, sym: CompareSym): ChainImpl {
   const rel = ORD_REL[sym];
   const isOrdEntity = (x: unknown): x is AOrd => isOrd(x) && !isSchemeNumber(x);
-  // `function(this: CallCtx, …)` (not an arrow) — `looseCompare` below calls this via
-  // `core.call(this, …)`, forwarding the SAME ctx `numeric` (ltOp/gtOp/…, itself
-  // `this.runCtx`-dependent post the nativeNumericOp rework) needs; an arrow here
-  // would silently drop that forwarded `this` on every `numeric(...)` call below.
-  const fn = function (this: CallCtx, ...args: unknown[]): unknown {
-    if (args.length >= 2 && args.some(isOrdEntity)) {
+  // `function` (not an arrow) — `looseCompare` below calls this via `core.call(this, …)`,
+  // forwarding the SAME ctx `numeric` (ltOp/gtOp/…) needs; an arrow here would
+  // silently drop that forwarded `this` on every `numeric(...)` call below.
+  const fn: ChainImpl = function (...args) {
+    // Natives are unvalidated: non-numeric Ord entities arrive here despite the contract.
+    const values: readonly unknown[] = args;
+    if (values.length >= 2 && values.some(isOrdEntity)) {
       let verdict = true;
-      for (let i = 0; i < args.length - 1; i++) {
-        const a = args[i];
-        const b = args[i + 1];
+      for (let i = 0; i < values.length - 1; i++) {
+        const a = values[i];
+        const b = values[i + 1];
         if (!isOrdEntity(a) || !isOrdEntity(b)) return numeric.call(this, ...args); // mixed → numeric path's clear error
         if (!rel(a, b)) {
           verdict = false;
@@ -728,7 +727,7 @@ function wrapOrd(
         }
       }
       // R8 mint — the whole chain's operand union, not just the deciding pair (mirrors deriveOrd).
-      return mintVerdict(this.runCtx, args, verdict);
+      return mintVerdict(this.runCtx, values, verdict);
     }
     return numeric.call(this, ...args);
   };
@@ -741,24 +740,24 @@ function wrapOrd(
 // nil-tolerance (nil operand → #f/nil-as-bottom). Strict mode (RunContext.strict,
 // off `this.runCtx`) gates loose off — an all-constant compare like `(= '() '())`
 // carries no operand to thread strict, so the run ctx is the only honest source.
-const isNilOperand = (v) => v == null || v instanceof ANil;
-const isNumberOperand = (v) => v instanceof AExact || v instanceof AInexact;
-const flLteNum = (a, b) => a[tf("lte")](b);
-const LOOSE_NUM_PAIR = {
+const isNilOperand = (v: unknown): boolean => v == null || v instanceof ANil;
+const isNumberOperand = (v: unknown): v is ANumeric => v instanceof AExact || v instanceof AInexact;
+const flLteNum = (a: ANumeric, b: ANumeric): boolean => a[tf("lte")](b);
+const LOOSE_NUM_PAIR: Record<"=" | CompareSym, (a: ANumeric, b: ANumeric) => boolean> = {
   "=": (a, b) => flLteNum(a, b) && flLteNum(b, a),
   "<": (a, b) => flLteNum(a, b) && !flLteNum(b, a),
   ">": (a, b) => flLteNum(b, a) && !flLteNum(a, b),
   "<=": (a, b) => flLteNum(a, b),
   ">=": (a, b) => flLteNum(b, a),
 };
-const ORD_FROM_LE = {
+const ORD_FROM_LE: Record<CompareSym, (ab: boolean, ba: boolean) => boolean> = {
   "<": (ab, ba) => ab && !ba,
   ">": (ab, ba) => ba && !ab,
   "<=": (ab) => ab,
   ">=": (_ab, ba) => ba,
 };
-const describeLoose = (v) => (v instanceof AValue ? v.kind : v == null ? String(v) : typeof v);
-function loosePairOrder(sym, a, b) {
+const describeLoose = (v: unknown): string => (v instanceof AValue ? v.kind : v == null ? String(v) : typeof v);
+function loosePairOrder(sym: CompareSym, a: unknown, b: unknown): boolean {
   const nilCmp = nilOrderCompare(a, b);
   if (nilCmp !== undefined)
     return sym === "<" ? nilCmp < 0 : sym === ">" ? nilCmp > 0 : sym === "<=" ? nilCmp <= 0 : nilCmp >= 0;
@@ -771,7 +770,7 @@ function loosePairOrder(sym, a, b) {
     throw new TypeError(`${sym}: cannot compare ${describeLoose(a)} and ${describeLoose(b)} — incompatible types.`);
   return ORD_FROM_LE[sym](le_ab, le_ba);
 }
-function looseOrderChain(runCtx: RunContext, sym, args) {
+function looseOrderChain(runCtx: RunContext, sym: CompareSym, args: readonly unknown[]) {
   let verdict = true;
   for (let i = 0; i < args.length - 1; i++) {
     if (!loosePairOrder(sym, args[i], args[i + 1])) {
@@ -782,99 +781,27 @@ function looseOrderChain(runCtx: RunContext, sym, args) {
   // R8 mint — always boxed, matching applyNumeric/wrapOrd's uniform exit.
   return mintVerdict(runCtx, args, verdict);
 }
-function looseCompare(sym, core: (this: CallCtx, ...a: unknown[]) => unknown) {
+function looseCompare(sym: "=" | CompareSym, core: ChainImpl): ChainImpl {
   // strict rides `this.runCtx` (cannot ride CONSTANT_CTX operands). `core.call(this, …)`
   // required — a bare `core(...)` leaves `this.runCtx` undefined.
-  const fn = function (this: CallCtx, ...args) {
+  const fn: ChainImpl = function (...args) {
+    // Natives are unvalidated: nil / non-numeric operands arrive here despite the contract.
+    const values: readonly unknown[] = args;
     if (this.runCtx.strict === true) {
-      if (!args.every(isNumberOperand))
+      if (!values.every(isNumberOperand))
         throw new TypeError(`${sym}: strict mode is R7RS-numeric — a non-number operand is rejected.`);
       return core.call(this, ...args);
     }
-    if (args.some(isNilOperand)) {
+    if (values.some(isNilOperand)) {
       // R8 mint — always boxed, matching looseOrderChain's uniform exit.
-      if (sym === "=") return mintVerdict(this.runCtx, args, args.every(isNilOperand));
-      return looseOrderChain(this.runCtx, sym, args);
+      if (sym === "=") return mintVerdict(this.runCtx, values, values.every(isNilOperand));
+      return looseOrderChain(this.runCtx, sym, values);
     }
     return core.call(this, ...args);
   };
   Object.defineProperty(fn, "name", { value: sym });
   return fn;
 }
-
-// ════════════════════════════════════════════════════════════════════════════
-// Inline misc ops — own coercion + `marshalCall` (bypass provenance layer), never
-// `nativeNumericOp`.
-// ════════════════════════════════════════════════════════════════════════════
-
-// Native impls must be `function` (not arrows) and pass `this.runCtx` into `coerceNumeric`.
-// (q . r) product — multi-return is doored on binding. `floorQuotientFn`/
-// `floorRemainderFn` accept EITHER ANumeric kind via `toIntegerPair`, so no
-// pre-conversion to AExact is needed — the callee re-derives via `toInteger`.
-const floorSlashFn = function (this: CallCtx, n1: unknown, n2: unknown): unknown {
-  const a = coerceNumeric(n1, this.runCtx);
-  const b = coerceNumeric(n2, this.runCtx);
-  const q = floorQuotientFn(a, b);
-  const r = floorRemainderFn(a, b);
-  return new APair(q as SchemeValue, r as SchemeValue);
-};
-
-const truncateSlashFn = function (this: CallCtx, n1: unknown, n2: unknown): unknown {
-  const a = coerceNumeric(n1, this.runCtx);
-  const b = coerceNumeric(n2, this.runCtx);
-  const q = truncateQuotientFn(a, b);
-  const r = truncateRemainderFn(a, b);
-  return new APair(q as SchemeValue, r as SchemeValue);
-};
-
-const onePlusFn = function (this: CallCtx, n: unknown): ANumeric {
-  const converted = coerceNumeric(n, this.runCtx);
-  const one = new AExact(1);
-  return addFn(converted, one);
-};
-
-const oneMinusFn = function (this: CallCtx, n: unknown): ANumeric {
-  const converted = coerceNumeric(n, this.runCtx);
-  const one = new AExact(1);
-  return subFn(converted, one);
-};
-
-const inexactFn = function (this: CallCtx, z: unknown): AInexact {
-  const n = coerceNumeric(z, this.runCtx);
-  if (n instanceof AInexact) return n;
-  return new AInexact(n.num / n.denom);
-};
-
-const exactFn = function (this: CallCtx, z: unknown): AExact {
-  const n = coerceNumeric(z, this.runCtx);
-  if (n instanceof AExact) return n;
-  const real = n.real;
-  TypeError.invariant(Number.isFinite(real), "Cannot convert infinity or NaN to exact");
-  if (Number.isInteger(real)) return mintExact(real, 1, undefined, "inexact->exact");
-  const { num, denom } = floatToRational(real);
-  return mintExact(num, denom, undefined, "inexact->exact");
-};
-
-// Boxed (RULINGS.md R1) — see NUMBER_TO_STRING_CONTRACT's doc for why a raw return
-// would crash `exec`'s uniform plain-JS exit. Carries the union of the operand(s)'
-// own provenance.
-const numberToStringFn = function (this: CallCtx, z: unknown, radix?: unknown): AString {
-  const n = coerceNumeric(z, this.runCtx);
-  const radixArg = radix === undefined ? undefined : coerceNumeric(radix, this.runCtx);
-  const base = radixArg === undefined ? 10 : Number(radixArg.valueOf());
-  let s: string;
-  if (n instanceof AExact) {
-    s = n.denom === 1 ? n.num.toString(base) : `${n.num.toString(base)}/${n.denom.toString(base)}`;
-  } else {
-    // Inexact mark preservation (R7RS § 6.2): `(number->string 5.0)` must stay "5.0".
-    s = base === 10 ? n.toString() : n.real.toString(base);
-  }
-  // Same eager-accumulation gate as `applyNumeric` above.
-  const provenance = isEagerAccumulationActive(this.runCtx)
-    ? unionProvenance(radixArg === undefined ? [n] : [n, radixArg])
-    : EMPTY_PROVENANCE;
-  return new AString(s, provenance);
-};
 
 // ════════════════════════════════════════════════════════════════════════════
 // `NumSpec.in`/`inRest`/`out` are the real common/scheme-zod/index.ts schemas — `contractFromSpec`
@@ -900,7 +827,11 @@ const numberToStringFn = function (this: CallCtx, z: unknown, radix?: unknown): 
 /** Map a NumSpec's schemas to a real `symbol.native` Contract — 1-tuple output
  *  (the common case). `floor/`/`truncate/`'s 2-value output and the bespoke
  *  (non-NumSpec) ops below build their Contract by hand. */
-function contractFromSpec(spec: NumSpec): Contract<VectorSpec, VectorSpec, RestSpec> {
+function contractFromSpec<
+  I extends readonly z.ZodTypeAny[],
+  O extends z.ZodTypeAny,
+  Rest extends z.ZodTypeAny | undefined,
+>(spec: NumSpec<I, O, Rest>): Contract<I, readonly [O], Rest> {
   return { input: spec.in, inputRest: spec.inRest, output: [spec.out] };
 }
 
@@ -910,57 +841,57 @@ function contractFromSpec(spec: NumSpec): Contract<VectorSpec, VectorSpec, RestS
 // shared object. Every `symbols` entry below is a LITERAL `symbol.native` call.
 // ════════════════════════════════════════════════════════════════════════════
 
-const addSpec: NumSpec = {
+const addSpec = numSpec({
   in: [],
   inRest: z.schemeNumber,
   out: z.schemeNumber,
   fn: addFn,
   zeroArgIdentity: (_ctx) => new AExact(0),
-};
-const subSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: subFn };
-const mulSpec: NumSpec = {
+});
+const subSpec = numSpec({ in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: subFn });
+const mulSpec = numSpec({
   in: [],
   inRest: z.schemeNumber,
   out: z.schemeNumber,
   fn: mulFn,
   zeroArgIdentity: (_ctx) => new AExact(1),
-};
-const divSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: divFn };
+});
+const divSpec = numSpec({ in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: divFn });
 // `quotient` uses `z.schemeNumber` in/out, NOT `z.bigint`: it shares the same
 // box-native `toIntegerPair` door every other integer-division op uses (bypasses the
 // loose codecs entirely, same reasoning as `schemeAbs`/`schemeFloor`), so a type
 // mismatch names the argument and expects an "integer", not a bigint-shaped message.
-const quotientSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: quotientFn };
-const moduloSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: moduloFn };
-const floorQuotientSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: floorQuotientFn };
-const floorRemainderSpec: NumSpec = { in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: floorRemainderFn };
-const truncateQuotientSpec: NumSpec = {
+const quotientSpec = numSpec({ in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: quotientFn });
+const moduloSpec = numSpec({ in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: moduloFn });
+const floorQuotientSpec = numSpec({ in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: floorQuotientFn });
+const floorRemainderSpec = numSpec({ in: [z.schemeNumber, z.schemeNumber], out: z.schemeNumber, fn: floorRemainderFn });
+const truncateQuotientSpec = numSpec({
   in: [z.schemeNumber, z.schemeNumber],
   out: z.schemeNumber,
   fn: truncateQuotientFn,
-};
-const truncateRemainderSpec: NumSpec = {
+});
+const truncateRemainderSpec = numSpec({
   in: [z.schemeNumber, z.schemeNumber],
   out: z.schemeNumber,
   fn: truncateRemainderFn,
-};
-const numeratorSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: numeratorFn };
-const denominatorSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: denominatorFn };
-const squareSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: squareFn };
-const makeRectangularSpec: NumSpec = {
+});
+const numeratorSpec = numSpec({ in: [z.schemeNumber], out: z.schemeNumber, fn: numeratorFn });
+const denominatorSpec = numSpec({ in: [z.schemeNumber], out: z.schemeNumber, fn: denominatorFn });
+const squareSpec = numSpec({ in: [z.schemeNumber], out: z.schemeNumber, fn: squareFn });
+const makeRectangularSpec = numSpec({
   in: [z.looseNumber, z.looseNumber],
   out: z.schemeNumber,
   fn: (): ANumeric => complexDoor(),
-};
-const makePolarSpec: NumSpec = {
+});
+const makePolarSpec = numSpec({
   in: [z.looseNumber, z.looseNumber],
   out: z.schemeNumber,
   fn: (): ANumeric => complexDoor(),
-};
-const realPartSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() };
-const imagPartSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() };
-const magnitudeSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() };
-const angleSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() };
+});
+const realPartSpec = numSpec({ in: [z.schemeNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() });
+const imagPartSpec = numSpec({ in: [z.schemeNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() });
+const magnitudeSpec = numSpec({ in: [z.schemeNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() });
+const angleSpec = numSpec({ in: [z.schemeNumber], out: z.schemeNumber, fn: (): ANumeric => complexDoor() });
 // abs/zero?/positive?/negative?/gcd/lcm/floor/ceiling/truncate/round are ALL
 // box-native (`z.schemeNumber` in/out, `fn` operates on ANumeric directly) — none of
 // them touch `z.looseNumber`/`z.looseAnyNumber` in OUTPUT position, which is precisely
@@ -968,30 +899,30 @@ const angleSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: (): 
 // mechanism: encode never runs a shape-guessing codec on these because `fn`'s return is
 // already the correctly (in)exact box. A future op that DOES need loose-number OUTPUT
 // should follow this same pattern rather than reintroducing the shape-guessing bug.
-const absSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: schemeAbs };
-const gcdSpec: NumSpec = {
+const absSpec = numSpec({ in: [z.schemeNumber], out: z.schemeNumber, fn: schemeAbs });
+const gcdSpec = numSpec({
   in: [],
   inRest: z.schemeNumber,
   out: z.schemeNumber,
   fn: gcdFn,
   zeroArgIdentity: (_ctx) => new AExact(0),
-};
-const maxSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: maxFn };
-const minSpec: NumSpec = { in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: minFn };
-const zeroSpec: NumSpec = { in: [z.schemeNumber], out: z.boolean, fn: isZeroFn };
-const positiveSpec: NumSpec = { in: [z.schemeNumber], out: z.boolean, fn: isPositiveFn };
-const negativeSpec: NumSpec = { in: [z.schemeNumber], out: z.boolean, fn: isNegativeFn };
+});
+const maxSpec = numSpec({ in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: maxFn });
+const minSpec = numSpec({ in: [z.schemeNumber], inRest: z.schemeNumber, out: z.schemeNumber, fn: minFn });
+const zeroSpec = numSpec({ in: [z.schemeNumber], out: z.boolean, fn: isZeroFn });
+const positiveSpec = numSpec({ in: [z.schemeNumber], out: z.boolean, fn: isPositiveFn });
+const negativeSpec = numSpec({ in: [z.schemeNumber], out: z.boolean, fn: isNegativeFn });
 // odd?/even? use `z.integer`, NOT `z.bigint`: `z.integer` decodes either
 // AExact/AInexact to a safe-int `number` and doors on a non-integer/out-of-range
 // operand with an "integer" message, matching R7RS's own domain for these two
 // predicates.
-const oddSpec: NumSpec = { in: [z.integer], out: z.boolean, fn: isOddFn };
-const evenSpec: NumSpec = { in: [z.integer], out: z.boolean, fn: isEvenFn };
-const floorSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: schemeFloor };
-const ceilingSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: schemeCeiling };
-const truncateSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: schemeTruncate };
-const roundSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: schemeRound };
-const sqrtSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: sqrtFn };
+const oddSpec = numSpec({ in: [z.integer], out: z.boolean, fn: isOddFn });
+const evenSpec = numSpec({ in: [z.integer], out: z.boolean, fn: isEvenFn });
+const floorSpec = numSpec({ in: [z.schemeNumber], out: z.schemeNumber, fn: schemeFloor });
+const ceilingSpec = numSpec({ in: [z.schemeNumber], out: z.schemeNumber, fn: schemeCeiling });
+const truncateSpec = numSpec({ in: [z.schemeNumber], out: z.schemeNumber, fn: schemeTruncate });
+const roundSpec = numSpec({ in: [z.schemeNumber], out: z.schemeNumber, fn: schemeRound });
+const sqrtSpec = numSpec({ in: [z.schemeNumber], out: z.schemeNumber, fn: sqrtFn });
 // Transcendentals: DECODE stays `z.looseNumber` (permissive — accepts +nan.0/+inf.0,
 // lossily divides a non-integer exact rational; unaffected by the encode-edge bug,
 // which is an ENCODE-direction issue). OUTPUT flips `z.looseNumber` → `z.inexact`
@@ -999,33 +930,32 @@ const sqrtSpec: NumSpec = { in: [z.schemeNumber], out: z.schemeNumber, fn: sqrtF
 // ALWAYS constructs AInexact, never re-derives exactness from the result's shape, so
 // `(exact? (sin 0))` can't accidentally come back `#t` just because `Math.sin(0)`
 // happens to be the safe integer `0`.
-const expSpec: NumSpec = { in: [z.looseNumber], out: z.inexact, fn: Math.exp };
-const logSpec: NumSpec = { in: [z.looseNumber], inRest: z.looseNumber, out: z.inexact, fn: logFn };
-const sinSpec: NumSpec = { in: [z.looseNumber], out: z.inexact, fn: Math.sin };
-const cosSpec: NumSpec = { in: [z.looseNumber], out: z.inexact, fn: Math.cos };
-const tanSpec: NumSpec = { in: [z.looseNumber], out: z.inexact, fn: Math.tan };
-const asinSpec: NumSpec = { in: [z.looseNumber], out: z.inexact, fn: Math.asin };
-const acosSpec: NumSpec = { in: [z.looseNumber], out: z.inexact, fn: Math.acos };
-const atanSpec: NumSpec = { in: [z.looseNumber], inRest: z.looseNumber, out: z.inexact, fn: atanFn };
-const lcmSpec: NumSpec = {
+const expSpec = numSpec({ in: [z.looseNumber], out: z.inexact, fn: Math.exp });
+const logSpec = numSpec({ in: [z.looseNumber], inRest: z.looseNumber, out: z.inexact, fn: logFn });
+const sinSpec = numSpec({ in: [z.looseNumber], out: z.inexact, fn: Math.sin });
+const cosSpec = numSpec({ in: [z.looseNumber], out: z.inexact, fn: Math.cos });
+const tanSpec = numSpec({ in: [z.looseNumber], out: z.inexact, fn: Math.tan });
+const asinSpec = numSpec({ in: [z.looseNumber], out: z.inexact, fn: Math.asin });
+const acosSpec = numSpec({ in: [z.looseNumber], out: z.inexact, fn: Math.acos });
+const atanSpec = numSpec({ in: [z.looseNumber], inRest: z.looseNumber, out: z.inexact, fn: atanFn });
+const lcmSpec = numSpec({
   in: [],
   inRest: z.schemeNumber,
   out: z.schemeNumber,
   fn: lcmFn,
   zeroArgIdentity: (_ctx) => new AExact(1),
-};
+});
 
 // ── Bespoke contracts — ops whose impl does NOT come from `nativeNumericOp`/`NumSpec`
-// (own coercion + bespoke `marshalCall` wrapper, or no NumSpec), so their Contract is
-// hand-declared to match the impl's OWN JS signature (input) and narrowest return type
-// (output) — never a `NumSpec` borrowed from an unrelated helper. ─────────────────────
+// (own coercion), so their Contract is hand-declared. `as const` keeps the schema
+// tuples literal, so each impl's params and return are inferred from its contract. ──
 
 /** Type-predicate contracts — total boolean at runtime; dual type-guard harvest.
  *  Every scheme number (exact AND inexact) decodes to a plain JS `number` — there is
  *  no JS-side type that distinguishes "exact" from "inexact" (that distinction is a
  *  scheme-plane box-class fact, not a JS shape one), so `NUMBER_GUARD`/`EXACT_GUARD`
  *  both narrow to `number`, never `bigint`. */
-const NUMBER_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
+const NUMBER_GUARD = {
   input: [z.schemeValue],
   output: [z.boolean],
   type: dedent`
@@ -1034,63 +964,77 @@ const NUMBER_GUARD: Contract<VectorSpec, VectorSpec, RestSpec> = {
             <T>(x: T): x is Extract<T, number>;
           }
         `,
-};
+} as const;
 // Same contract three ways: the three predicates differ in what they TEST, not in the
 // JS-side type they narrow to.
 const EXACT_GUARD = NUMBER_GUARD;
 const INEXACT_GUARD = NUMBER_GUARD;
 
-const QUOTIENT_REMAINDER_PRODUCT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
+const QUOTIENT_REMAINDER_PRODUCT_CONTRACT = {
   input: [z.schemeNumber, z.schemeNumber],
   output: [z.pair],
-};
+} as const;
 
 /** exact-integer-sqrt → (s . r); one non-neg exact integer input. */
-const EXACT_ISQRT_PRODUCT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
+const EXACT_ISQRT_PRODUCT_CONTRACT = {
   input: [z.schemeNumber],
   output: [z.pair],
-};
+} as const;
 
-const ONE_ARG_NUM_OUTPUT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
+const ONE_ARG_NUM_OUTPUT_CONTRACT = {
   input: [z.schemeNumber],
   output: [z.schemeNumber],
-};
+} as const;
 
-/** `>>`/`<<` — `(a: unknown, b: unknown) => ANumeric`. `shiftRightFn`/`shiftLeftFn`
- *  `coerceNumeric` both operands before `marshalCall(arithmeticShiftSpec, …)` (which
- *  doors at runtime if not integer-shaped) — the wide `schemeNumber` is the honest
- *  declared domain; integer narrowing is `arithmeticShiftSpec`'s own runtime check. */
-const TWO_ARG_NUM_OUTPUT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
+/** `rationalize` — two scheme numbers in, one out. */
+const TWO_ARG_NUM_OUTPUT_CONTRACT = {
   input: [z.schemeNumber, z.schemeNumber],
   output: [z.schemeNumber],
-};
+} as const;
 
-/** `inexact`/`exact->inexact` — `(z: unknown) => AInexact` (narrower than the generic
- *  scheme-number union, matching `inexactFn`'s declared return). Input `z.schemeNumber`
- *  (`inexactFn` `coerceNumeric`s first). */
-const INEXACT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
+/** `inexact`/`exact->inexact` — output `z.inexact` (narrower than the generic
+ *  scheme-number union). The impl `coerceNumeric`s its input first. */
+const INEXACT_CONTRACT = {
   input: [z.schemeNumber],
   output: [z.inexact],
-};
+} as const;
 
-/** `exact`/`inexact->exact` — `(z: unknown) => AExact` (narrower than the generic
- *  scheme-number union, matching `exactFn`'s declared return). Input `z.schemeNumber`
- *  (`exactFn` `coerceNumeric`s first). */
-const EXACT_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
+/** `exact`/`inexact->exact` — output `z.exact` (narrower than the generic
+ *  scheme-number union). The impl `coerceNumeric`s its input first. */
+const EXACT_CONTRACT = {
   input: [z.schemeNumber],
   output: [z.exact],
+} as const;
+
+// Shared by two bindings each, so typed from the contract rather than inlined.
+// Native impls must be `function` (not arrows) and pass `this.runCtx` into `coerceNumeric`.
+const inexactFn: Impl<typeof INEXACT_CONTRACT.input, typeof INEXACT_CONTRACT.output, undefined, "scheme"> = function (
+  z,
+) {
+  const n = coerceNumeric(z, this.runCtx);
+  if (n instanceof AInexact) return n;
+  return new AInexact(n.num / n.denom);
 };
 
-/** `number->string` — `(z: unknown, radix?: unknown) => AString` (boxed, carrying the
- *  union of its operands' provenance — RULINGS.md R1: `exec`'s SIMPLE tier calls `toJS`
- *  on every result, which strict-doors a raw value; a bare-JS return would crash any
- *  top-level `(number->string …)` call). The `z.string` contract's DECODED type is still
- *  `string` (it names what the value represents, not the native's return shape). Both
- *  `z`/`radix` are `z.schemeNumber` — `numberToStringFn` `coerceNumeric`s each. */
-const NUMBER_TO_STRING_CONTRACT: Contract<VectorSpec, VectorSpec, RestSpec> = {
+const exactFn: Impl<typeof EXACT_CONTRACT.input, typeof EXACT_CONTRACT.output, undefined, "scheme"> = function (z) {
+  const n = coerceNumeric(z, this.runCtx);
+  if (n instanceof AExact) return n;
+  const real = n.real;
+  TypeError.invariant(Number.isFinite(real), "Cannot convert infinity or NaN to exact");
+  if (Number.isInteger(real)) return mintExact(real, 1, undefined, "inexact->exact");
+  const { num, denom } = floatToRational(real);
+  return mintExact(num, denom, undefined, "inexact->exact");
+};
+
+/** `number->string` — returns a boxed AString carrying the union of its operands'
+ *  provenance (RULINGS.md R1: `exec`'s SIMPLE tier calls `toJS` on every result, which
+ *  strict-doors a raw value; a bare-JS return would crash any top-level
+ *  `(number->string …)` call). Both `z`/`radix` are `z.schemeNumber` — the impl
+ *  `coerceNumeric`s each. */
+const NUMBER_TO_STRING_CONTRACT = {
   input: [z.schemeNumber, z.schemeNumber.optional()],
   output: [z.string],
-};
+} as const;
 
 // ════════════════════════════════════════════════════════════════════════════
 // Contract.emit — + / - / * / / quotient / modulo / = / comparisons / zero?
@@ -1275,13 +1219,33 @@ export default EnvCapability.define("scheme/numeric", {
       nativeNumericOp("denominator", denominatorSpec),
     ),
     square: symbol.native`square: n * n`(contractFromSpec(squareSpec), nativeNumericOp("square", squareSpec)),
+    // `s*s` can't overflow: `exactISqrt` guarantees `s*s ≤ n`, and `n` is already a
+    // safe-int AExact field — no checked helper needed.
     "exact-integer-sqrt": symbol.native`exact-integer-sqrt: (s . r) with s² ≤ n < (s+1)² and n = s² + r`(
       EXACT_ISQRT_PRODUCT_CONTRACT,
-      exactIntegerSqrtFn as (...args: unknown[]) => unknown,
+      function (n) {
+        const a = coerceNumeric(n, this.runCtx);
+        invariant(a instanceof AExact && a.denom === 1, "exact-integer-sqrt: exact integer required");
+        invariant(a.num >= 0, "exact-integer-sqrt: non-negative integer required");
+        const s = exactISqrt(a.num);
+        const r = a.num - s * s;
+        return new APair(new AExact(s), new AExact(r));
+      },
     ),
     rationalize: symbol.native`rationalize: simplest rational within e of x`(
       TWO_ARG_NUM_OUTPUT_CONTRACT,
-      rationalizeFn as (...args: unknown[]) => unknown,
+      function (x, e) {
+        const xv = coerceNumeric(x, this.runCtx);
+        const ev = coerceNumeric(e, this.runCtx);
+        const xr = toReal(xv);
+        const er = Math.abs(toReal(ev));
+        invariant(Number.isFinite(xr) && Number.isFinite(er), "rationalize: finite reals required");
+        const { num, denom } = simplestInRange(xr - er, xr + er);
+        if (xv instanceof AExact && ev instanceof AExact) {
+          return new AExact(num, denom);
+        }
+        return new AInexact(num / denom);
+      },
     ),
     "make-rectangular": symbol.native`make-rectangular: DOORED (complex unsupported)`(
       contractFromSpec(makeRectangularSpec),
@@ -1446,54 +1410,60 @@ export default EnvCapability.define("scheme/numeric", {
 
     // JS-shaped aliases (** % == | & ~ >> <<) live in scheme/sugarcoat — not R7RS.
 
-    // ── Inline misc ops (own coercion + marshalled call; no provenance layer) ─────
-    // Each impl below has a CONCRETE fixed-arity signature (unlike nativeNumericOp/
-    // nativeTypePredicate's erased `(...args: unknown[]) => unknown`), so it doesn't
-    // satisfy the loose `Contract<VectorSpec,VectorSpec,RestSpec>` without erasing the
-    // arity first — same boundary as rosetta.ts/sequence.ts's `run` cross, cast once
-    // per declaration.
+    // ── Inline misc ops (own coercion; no provenance layer) ─────────────────────
+    // Native impls must be `function` (not arrows) and pass `this.runCtx` into
+    // `coerceNumeric`. (q . r) product — multi-return is doored on binding. The
+    // quotient/remainder fns accept EITHER ANumeric kind via `toIntegerPair`.
     "floor/": symbol.native`floor/: floor quotient and remainder as pair (q . r)`(
       QUOTIENT_REMAINDER_PRODUCT_CONTRACT,
-      floorSlashFn as (...args: unknown[]) => unknown,
+      function (n1, n2) {
+        const a = coerceNumeric(n1, this.runCtx);
+        const b = coerceNumeric(n2, this.runCtx);
+        return new APair(floorQuotientFn(a, b), floorRemainderFn(a, b));
+      },
     ),
     "truncate/": symbol.native`truncate/: truncate quotient and remainder as pair (q . r)`(
       QUOTIENT_REMAINDER_PRODUCT_CONTRACT,
-      truncateSlashFn as (...args: unknown[]) => unknown,
-    ),
-    // R8 mint: boxes + forwards the operand's provenance (see nativeTypePredicate's doc
-    // for why an unboxed native return is a P4 violation). Rest-param shape matches Impl's
-    // variadic contract — no arity-erasing cast needed.
-    "number?": symbol.native`number?: #t for any number`(
-      NUMBER_GUARD,
-      function (this: CallCtx, ...args: unknown[]): ABool {
-        const [value] = args;
-        return mintVerdict(this.runCtx, [value], isSchemeNumber(value));
+      function (n1, n2) {
+        const a = coerceNumeric(n1, this.runCtx);
+        const b = coerceNumeric(n2, this.runCtx);
+        return new APair(truncateQuotientFn(a, b), truncateRemainderFn(a, b));
       },
     ),
-    "1+": symbol.native`1+: increment by one`(
-      ONE_ARG_NUM_OUTPUT_CONTRACT,
-      onePlusFn as (...args: unknown[]) => unknown,
-    ),
-    "1-": symbol.native`1-: decrement by one`(
-      ONE_ARG_NUM_OUTPUT_CONTRACT,
-      oneMinusFn as (...args: unknown[]) => unknown,
-    ),
-    inexact: symbol.native`inexact: exact→inexact conversion`(
-      INEXACT_CONTRACT,
-      inexactFn as (...args: unknown[]) => unknown,
-    ),
-    exact: symbol.native`exact: inexact→exact conversion`(EXACT_CONTRACT, exactFn as (...args: unknown[]) => unknown),
-    "exact->inexact": symbol.native`exact->inexact: R5RS spelling of inexact`(
-      INEXACT_CONTRACT,
-      inexactFn as (...args: unknown[]) => unknown,
-    ),
-    "inexact->exact": symbol.native`inexact->exact: R5RS spelling of exact`(
-      EXACT_CONTRACT,
-      exactFn as (...args: unknown[]) => unknown,
-    ),
+    // R8 mint: boxes + forwards the operand's provenance (see nativeTypePredicate's doc
+    // for why an unboxed native return is a P4 violation).
+    "number?": symbol.native`number?: #t for any number`(NUMBER_GUARD, function (value) {
+      return mintVerdict(this.runCtx, [value], isSchemeNumber(value));
+    }),
+    "1+": symbol.native`1+: increment by one`(ONE_ARG_NUM_OUTPUT_CONTRACT, function (n) {
+      return addFn(coerceNumeric(n, this.runCtx), new AExact(1));
+    }),
+    "1-": symbol.native`1-: decrement by one`(ONE_ARG_NUM_OUTPUT_CONTRACT, function (n) {
+      return subFn(coerceNumeric(n, this.runCtx), new AExact(1));
+    }),
+    inexact: symbol.native`inexact: exact→inexact conversion`(INEXACT_CONTRACT, inexactFn),
+    exact: symbol.native`exact: inexact→exact conversion`(EXACT_CONTRACT, exactFn),
+    "exact->inexact": symbol.native`exact->inexact: R5RS spelling of inexact`(INEXACT_CONTRACT, inexactFn),
+    "inexact->exact": symbol.native`inexact->exact: R5RS spelling of exact`(EXACT_CONTRACT, exactFn),
     "number->string": symbol.native`number->string: format a number in a radix`(
       NUMBER_TO_STRING_CONTRACT,
-      numberToStringFn as (...args: unknown[]) => unknown,
+      function (z, radix) {
+        const n = coerceNumeric(z, this.runCtx);
+        const radixArg = radix === undefined ? undefined : coerceNumeric(radix, this.runCtx);
+        const base = radixArg === undefined ? 10 : Number(radixArg.valueOf());
+        let s: string;
+        if (n instanceof AExact) {
+          s = n.denom === 1 ? n.num.toString(base) : `${n.num.toString(base)}/${n.denom.toString(base)}`;
+        } else {
+          // Inexact mark preservation (R7RS § 6.2): `(number->string 5.0)` must stay "5.0".
+          s = base === 10 ? n.toString() : n.real.toString(base);
+        }
+        // Same eager-accumulation gate as `applyNumeric` above.
+        const provenance = isEagerAccumulationActive(this.runCtx)
+          ? unionProvenance(radixArg === undefined ? [n] : [n, radixArg])
+          : EMPTY_PROVENANCE;
+        return new AString(s, provenance);
+      },
     ),
   }),
 });

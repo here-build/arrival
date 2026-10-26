@@ -86,6 +86,33 @@ describe("@here.build/arrival/polyglot-clojure — stdlib completion (Bucket A)"
     expect(await str('(let ((d (dict "a" 1))) (assoc-in d (list "a") 99) (:a d))')).toBe("1");
   });
 
+  const truthy = async (src: string) => str(`(if ${src} "yes" "no")`);
+
+  it("get-in — empty path returns the object; a miss at any step is nil, including a step through a stored nil", async () => {
+    expect(await truthy("(equal? (get-in (dict :a 1) '()) (dict :a 1))")).toBe("yes");
+    expect(await truthy("(null? (get-in (dict :a 1) (list :nope)))")).toBe("yes");
+    expect(await truthy("(null? (get-in (dict :a '()) (list :a :b)))")).toBe("yes");
+  });
+
+  it("assoc-in — empty path returns v, nil root mints a dict, original is unchanged, key order and fold-name survive", async () => {
+    expect(await str("(assoc-in (dict :a 1) '() 5)")).toBe("5");
+    expect(await str("(let ((d (dict :a 1))) (assoc-in d '() 5) (:a d))")).toBe("1");
+    expect(await str("(get-in (assoc-in '() (list :a :b) 1) (list :a :b))")).toBe("1");
+    expect(await str("(let ((d (dict :a (dict :b 1)))) (assoc-in d (list :a :b) 9) (get-in d (list :a :b)))")).toBe(
+      "1",
+    );
+    expect(await str("(get-in (assoc-in (dict :a 1 :b 2) (list :a) 9) (list :a))")).toBe("9");
+    expect(await truthy('(equal? (dict-keys (assoc-in (dict :a 1 :b 2) (list :a) 9)) (list "a" "b"))')).toBe("yes");
+    expect(await str('(dict-ref (assoc-in (dict "a" 1) (list :a) 2) "a")')).toBe("2");
+    expect(await str('(dict-count (assoc-in (dict "a" 1) (list :a) 2))')).toBe("1");
+  });
+
+  it("update-in — a missing key hands the updater nil", async () => {
+    expect(await str("(get-in (update-in (dict) (list :a) (lambda (x) (if (null? x) 1 (+ x 1)))) (list :a))")).toBe(
+      "1",
+    );
+  });
+
   it("zipmap — a dict pairing keys with vals at the same position", async () => {
     expect(await str('(:a (zipmap (list "a" "b") (list 1 2)))')).toBe("1");
     expect(await str('(:b (zipmap (list "a" "b") (list 1 2)))')).toBe("2");

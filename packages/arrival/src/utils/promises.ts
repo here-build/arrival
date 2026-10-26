@@ -15,24 +15,31 @@
 // dependency is the value-kernel predicate `is_promise` (values/value-guards.ts).
 
 import { is_promise } from "../values/value-guards.js";
+import type { MaybePromise } from "../types/utility.js";
 
 /** HOF result-collection awaits one level when the whole collection is needed. */
-export function promise_all(arg: unknown[]): Promise<unknown[]> {
+export function promise_all<T>(arg: readonly MaybePromise<T>[]): Promise<T[]> {
   return Promise.all(arg);
+}
+
+/** Sync-fast-path `promise_all`: an all-settled list stays synchronous (no microtask);
+ *  any pending slot makes the whole list a promise. Pair with `maybeThen`. */
+export function settleAll<T>(arg: readonly MaybePromise<T>[]): MaybePromise<T[]> {
+  return arg.some(is_promise) ? promise_all(arg) : (arg as T[]);
 }
 
 /** Sync-fast-path `then`: apply `fn` to a maybe-promise WITHOUT taxing the sync
  *  case with a microtask. A synchronous value stays synchronous (the trampoline's
  *  performance contract); a promise chains. The single-promise seam for "the
  *  callback might be async". */
-export function maybeThen(
-  value: unknown,
-  fn: (x: unknown) => unknown,
-  error: ((e: unknown) => void) | null = null,
-): unknown {
+export function maybeThen<T, U>(
+  value: MaybePromise<T>,
+  fn: (x: T) => MaybePromise<U>,
+  error: ((e: unknown) => MaybePromise<U>) | null = null,
+): MaybePromise<U> {
   if (is_promise(value)) {
-    const ret = (value as Promise<unknown>).then(fn);
+    const ret = (value as Promise<T>).then(fn);
     return error === null ? ret : ret.catch(error);
   }
-  return fn(value);
+  return fn(value as T);
 }
