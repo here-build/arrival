@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { exec } from "../../../eval/generator-exec.js";
+import { exec, execStateOverFrame } from "../../../eval/generator-exec.js";
+import { jsToScheme } from "../../../membrane/rosetta.js";
+import { CONSTANT_CTX } from "../../../run/RunContext.js";
+import { inferenceEnv } from "../../inference-env.js";
 
 const run = async (src: string) => (await exec(src))[0];
 
@@ -111,5 +114,18 @@ describe("string-trim family criterion", () => {
   });
   it("only #f is a miss for a predicate criterion ('() is a match)", async () => {
     expect(await run('(string-index "abc" (lambda (c) \'()))')).toBe(0);
+  });
+});
+
+describe("string-for-each with an async host callback", () => {
+  it("waits for every callback before returning", async () => {
+    const seen: string[] = [];
+    const visit = async (c: unknown) => {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      seen.push(String(c));
+    };
+    const env = inferenceEnv.child("string-for-each-async", { visit: jsToScheme(CONSTANT_CTX, visit) });
+    await execStateOverFrame('(string-for-each visit "ab")', { env });
+    expect(seen.toSorted()).toEqual(["a", "b"]);
   });
 });

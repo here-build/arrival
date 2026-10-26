@@ -145,3 +145,11 @@ describe("scheme/r7rs/exceptions — declared symbols carry the migrated kinds",
     expect((exceptionsPack.spec as { prelude?: string }).prelude).toBeUndefined();
   });
 });
+
+describe("scheme/r7rs/error-objects — non-error receivers", () => {
+  it("error-object-irritants of a non-error is the empty list", async () => {
+    const env = await freshEnv();
+    const { values } = await execStateOverFrame(`(null? (error-object-irritants 5))`, { env });
+    expect(String(values[0])).toBe("#t");
+  });
+});
