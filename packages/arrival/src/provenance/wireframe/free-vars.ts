@@ -72,7 +72,25 @@ export function freeVars(form: unknown, opts: FreeVarsOptions = {}): Set<string>
   const seen = new Set<unknown>();
 
   const walkBody = (body: unknown, bound: ReadonlySet<string>): void => {
-    walkCells(body, bound);
+    let bodyBound = bound;
+    if (!bound.has("define")) {
+      const defined: string[] = [];
+      for (const form of chainOf(body)) {
+        if (!isPair(form) || !isSymbol(form.car) || nameOf(form.car) !== "define") continue;
+        if (!isPair(form.cdr)) continue;
+        const target = form.cdr.car;
+        const dn = isPair(target)
+          ? isSymbol(target.car)
+            ? nameOf(target.car)
+            : null
+          : isSymbol(target)
+            ? nameOf(target)
+            : null;
+        if (dn !== null) defined.push(dn);
+      }
+      if (defined.length > 0) bodyBound = new Set([...bound, ...defined]);
+    }
+    walkCells(body, bodyBound);
   };
 
   const walk = (n: unknown, bound: ReadonlySet<string>, cell?: unknown): void => {
@@ -207,20 +225,27 @@ export function freeVars(form: unknown, opts: FreeVarsOptions = {}): Set<string>
             // Explicit shape so catch/finally markers are not free names.
             // Catch var binds only its handlers.
             if (!isPair(n.cdr)) return;
-            walk(n.cdr.car, bound, n.cdr);
-            for (const clause of chainOf(n.cdr.cdr)) {
-              if (!isPair(clause) || !isSymbol(clause.car)) continue;
-              const marker = nameOf(clause.car);
+            let cur: unknown = n.cdr;
+            while (isPair(cur)) {
+              const clause = cur.car;
+              const marker =
+                isPair(clause) && isSymbol(clause.car) && !bound.has(nameOf(clause.car) ?? "")
+                  ? nameOf(clause.car)
+                  : null;
               if (marker === "catch") {
-                const rest = clause.cdr;
-                if (!isPair(rest)) continue;
-                const varSpec = rest.car;
-                const varName = isPair(varSpec) && isSymbol(varSpec.car) ? nameOf(varSpec.car) : null;
-                const inner = varName === null ? bound : new Set([...bound, varName]);
-                walkBody(rest.cdr, inner);
+                const rest = (clause as DuckPair).cdr;
+                if (isPair(rest)) {
+                  const varSpec = rest.car;
+                  const varName = isPair(varSpec) && isSymbol(varSpec.car) ? nameOf(varSpec.car) : null;
+                  const inner = varName === null ? bound : new Set([...bound, varName]);
+                  walkBody(rest.cdr, inner);
+                }
               } else if (marker === "finally") {
-                walkBody(clause.cdr, bound);
+                walkBody((clause as DuckPair).cdr, bound);
+              } else {
+                walk(clause, bound, cur);
               }
+              cur = cur.cdr;
             }
             return;
           }
@@ -309,15 +334,25 @@ export function freeVars(form: unknown, opts: FreeVarsOptions = {}): Set<string>
 
   /** Quasiquote: unquote at depth 1 re-enters expression space (R7RS nesting). */
   const walkQuasi = (n: unknown, depth: number, bound: ReadonlySet<string>): void => {
-    if (!isPair(n)) return;
+    if (!isPair(n)) {
+      const els =
+        literalElements(n) ??
+        (kindOf(n) === "vector" ? (n as { __vector__?: readonly unknown[] }).__vector__ : undefined);
+      if (els !== undefined && !seen.has(n)) {
+        seen.add(n);
+        for (const el of els) walkQuasi(el, depth, bound);
+      }
+      return;
+    }
     if (seen.has(n)) return;
     seen.add(n);
     const head = n.car;
     if (isSymbol(head)) {
       const hn = nameOf(head);
       if (hn === "unquote" || hn === "unquote-splicing") {
-        const arg = isPair(n.cdr) ? n.cdr.car : undefined;
-        if (depth === 1) walk(arg, bound);
+        const argCell = isPair(n.cdr) ? n.cdr : undefined;
+        const arg = argCell?.car;
+        if (depth === 1) walk(arg, bound, argCell);
         else walkQuasi(arg, depth - 1, bound);
         return;
       }
@@ -327,7 +362,19 @@ export function freeVars(form: unknown, opts: FreeVarsOptions = {}): Set<string>
         return;
       }
     }
-    for (const el of chainOf(n)) walkQuasi(el, depth, bound);
+    let cur: unknown = n;
+    while (isPair(cur)) {
+      walkQuasi(cur.car, depth, bound);
+      cur = cur.cdr;
+      if (isPair(cur) && isSymbol(cur.car)) {
+        const cn = nameOf(cur.car);
+        if (cn === "unquote" || cn === "unquote-splicing" || cn === "quasiquote") {
+          walkQuasi(cur, depth, bound);
+          return;
+        }
+      }
+    }
+    if (kindOf(cur) !== "nil" && cur !== undefined && cur !== null) walkQuasi(cur, depth, bound);
   };
 
   walk(form, new Set<string>(), opts.formCell);

@@ -58,7 +58,7 @@
 // recursion never re-crosses the boundary (one cold decode per outer call). %list-nth /
 // %any-null? / %some / %any / %every / %every-value / zip use that idiom. take/drop are
 // tagless dispatchers. validate:false unused — evidence-gated only.
-import { makeCallCtx } from "../../run/CallCtx.js";
+import { type CallCtx } from "../../run/CallCtx.js";
 import { withContractFields, withCallbackRoles } from "../../common/symbols/_bake.js";
 import type { MaybePromise } from "../../types/utility.js";
 import dedent from "dedent";
@@ -71,7 +71,6 @@ import { ANil } from "../../values/primitives/ANil.js";
 import { schemeFalse } from "../../values/primitives/ABool.js";
 import { maybeThen } from "../../utils/promises.js";
 import { applyCallback, type ACallable } from "../../values/primitives/ACallable.js";
-import { type RunContext } from "../../run/RunContext.js";
 import type { AListAlike, SchemeValue } from "../../values/types.js";
 import equality from "../r7rs/equality.js";
 import exceptions from "../r7rs/exceptions.js";
@@ -172,20 +171,20 @@ const DOORS = {
 // call (not a dispatch-bound `this: CallCtx`) can't recover the live ctx any other
 // way, so it's threaded explicitly through every recursive step. The `find` binding
 // below is the thin dispatch-bound wrapper that supplies it from `this.runCtx`.
-function findImpl(arg: ACallable, list: AListAlike, runCtx: RunContext): MaybePromise<SchemeValue> {
+function findImpl(arg: ACallable, list: AListAlike, callCtx: CallCtx): MaybePromise<SchemeValue> {
   if (list instanceof ANil) {
     // SRFI-1: `find` returns #f on no-match — '() is R7RS-truthy, so it can't double
     // as the miss sentinel the way it would in a nil-as-false dialect.
     return schemeFalse;
   }
-  return maybeThen(applyCallback(arg, [list.car], makeCallCtx(runCtx)), function (value) {
+  return maybeThen(applyCallback(arg, [list.car], callCtx), function (value) {
     // R7RS truthiness: only #f is false — a '()-returning predicate IS a match
     // (matches some/every/if; nil is never treated as false here).
     if (!is_false(value)) {
       return list.car;
     }
     // cdr reads as SchemeValue; a z.listAlike spine's tail is a list (not checked at runtime).
-    return findImpl(arg, list.cdr as AListAlike, runCtx);
+    return findImpl(arg, list.cdr as AListAlike, callCtx);
   });
 }
 
@@ -324,7 +323,7 @@ export default EnvCapability.define("scheme/srfi-1", {
         // `this.runCtx` (findImpl itself recurses via a plain call, so it cannot recover
         // ctx off `this`). `arg` is `z.lambda` → ACallable.
         function (arg, list) {
-          return findImpl(arg, list, this.runCtx);
+          return findImpl(arg, list, this);
         },
       ),
 

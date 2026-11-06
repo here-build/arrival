@@ -1068,12 +1068,14 @@ class Walker {
     });
   }
 
-  /** `(try body (catch (e) handler…) (finally expr…))`. */
+  /** `(try body… (catch (e) handler…) (finally expr…))`. */
   private walkTry(form: DuckPair, ctx: Ctx): void {
-    const [body, ...clauses] = elements(form.cdr);
+    const items = elements(form.cdr);
+    const isClause = (x: unknown, name: string): x is DuckPair => isPair(x) && nameIs(x.car, name);
+    const body = items.filter((x) => !isClause(x, "catch") && !isClause(x, "finally"));
     const clause = (name: string): unknown[] => {
-      const c = clauses.find((x) => isPair(x) && nameIs(x.car, name));
-      return c === undefined ? [] : elements((c as DuckPair).cdr);
+      const c = items.find((x) => isClause(x, name));
+      return c === undefined ? [] : elements(c.cdr);
     };
     const [variableList, ...handler] = clause("catch");
     const variable = elements(variableList)[0];
@@ -1081,7 +1083,7 @@ class Walker {
       form,
       ctx,
       "try",
-      [body],
+      body,
       handler,
       (c) => {
         const env = new Env(c.env);
@@ -1095,7 +1097,8 @@ class Walker {
   private walkQuasi(template: unknown, ctx: Ctx, depth: number): void {
     const items =
       bracketItems(template) ??
-      (kindOf(template) === "vector" ? (template as { __vector__: unknown[] }).__vector__ : undefined);
+      (kindOf(template) === "vector" ? (template as { __vector__: unknown[] }).__vector__ : undefined) ??
+      (kindOf(template) === "dict" ? (template as { literalForms?: unknown[] }).literalForms : undefined);
     if (items) {
       for (const el of items) this.walkQuasi(el, ctx, depth);
       return;
@@ -1112,7 +1115,13 @@ class Walker {
       return;
     }
     let c: unknown = template;
-    for (; isPair(c); c = c.cdr) this.walkQuasi(c.car, ctx, depth);
+    for (; isPair(c); c = c.cdr) {
+      this.walkQuasi(c.car, ctx, depth);
+      if (isPair(c.cdr) && (nameIs(c.cdr.car, "unquote") || nameIs(c.cdr.car, "unquote-splicing"))) {
+        this.walkQuasi(c.cdr, ctx, depth);
+        return;
+      }
+    }
     this.walkQuasi(c, ctx, depth);
   }
 }

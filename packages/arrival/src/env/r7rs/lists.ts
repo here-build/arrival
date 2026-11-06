@@ -29,7 +29,7 @@ import "@here.build/error-invariant";
 import { adoptSpine } from "../../membrane/adopt-spine.js";
 import dedent from "dedent";
 import { CONSTANT_CTX, type RunContext } from "../../run/RunContext.js";
-import { applyCallback, type ACallable } from "../../values/primitives/ACallable.js";
+import { applyCallback, wrapLambdaArgs, type ACallable } from "../../values/primitives/ACallable.js";
 import type { MaybePromise } from "../../types/utility.js";
 import { assertAllocatable, toIndex, withInputProvenance } from "../../values/op-helpers.js";
 import { schemeFalse } from "../../values/primitives/ABool.js";
@@ -452,7 +452,7 @@ export default EnvCapability.define("scheme/lists", {
         const last = rest.at(-1);
         invariant(last !== undefined, "apply: requires an argument list as the final argument");
         const spread = listToArray(last);
-        const args = [...rest.slice(0, -1), ...spread];
+        const args = wrapLambdaArgs([...rest.slice(0, -1), ...spread], this.invocation.currentInvocation);
         // Tail position (R7RS §3.5): the evaluator granted `canBounce`, so a lambda callee hands
         // back its body generator for the caller's trampoline instead of nesting a run() per
         // level (which overflowed the host stack at ~20k). The grant is consumed here, not

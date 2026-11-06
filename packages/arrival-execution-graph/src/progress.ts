@@ -612,7 +612,9 @@ export class ProgressProjector implements Progress {
       case "loop": {
         if (t.iterationMarker !== undefined) return this.#routeMarked(frame, inv, span);
         if (!isRoot) return undefined;
-        if (t.host !== undefined && (span === t.bodyRoots[0] || frame.bodies.length === 0)) {
+        if (t.recurSpans === undefined && (span === t.bodyRoots[0] || frame.bodies.length === 0)) {
+          const prev = last(frame.bodies);
+          if (prev) prev.next = inv;
           return this.#slotOf(this.#newBody(frame, inv));
         }
         return this.#slotOf(last(frame.bodies) ?? this.#newBody(frame, frame.invocation));

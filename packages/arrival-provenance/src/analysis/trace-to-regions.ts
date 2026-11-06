@@ -192,6 +192,11 @@ const listOf = (v: unknown): unknown[] => {
   for (let c = asPair(v); c; c = asPair(c.cdr)) out.push(c.car);
   return out;
 };
+const seqOf = (v: unknown): unknown[] => {
+  if (asPair(v)) return listOf(v);
+  const vec = (v as { __vector__?: unknown } | null)?.__vector__;
+  return Array.isArray(vec) ? vec : [];
+};
 /** Annotate a symbol with its resolved runtime value — `(sym) => "(value)" | ""`. */
 type Annotate = (sym: string) => string;
 const NO_ANNOTATE: Annotate = () => "";
@@ -291,8 +296,8 @@ const bindingValueExpr = (letNode: unknown, sym: string): { valExpr: unknown } |
   const parts = listOf(letNode);
   // named let: slot 1 is the loop name (a symbol), bindings shift to slot 2.
   const bindings = symOf(parts[1]) === undefined ? parts[1] : parts[2];
-  for (const b of listOf(bindings)) {
-    const bp = listOf(b); // (name valExpr)
+  for (const b of seqOf(bindings)) {
+    const bp = seqOf(b); // (name valExpr) or [name valExpr]
     if (symOf(bp[0]) === sym) return { valExpr: bp[1] };
   }
   return undefined;
@@ -305,12 +310,31 @@ const resolveRaw = (
   sym: string,
   valueById: (id: number) => unknown,
 ): { value: unknown; producerId?: number } | undefined => {
+  let curSym = sym;
   for (let anc = decision.parent; anc; anc = anc.parent) {
     if (!LET_FORMS.has(headOf(anc))) continue;
-    const found = bindingValueExpr(anc.node, sym);
+    const isStar = headOf(anc) === "let*" || headOf(anc) === "letrec";
+    let found = bindingValueExpr(anc.node, curSym);
+    while (found !== undefined && isStar) {
+      const alias = symOf(found.valExpr);
+      if (alias === undefined || alias.startsWith(":") || alias === curSym) break;
+      curSym = alias;
+      const next = bindingValueExpr(anc.node, curSym);
+      if (next === undefined) break;
+      found = next;
+    }
     if (found === undefined) continue;
-    if (asPair(found.valExpr)) {
-      const producer = anc.children.find((c) => c.node === found.valExpr);
+    const alias = symOf(found.valExpr);
+    if (alias !== undefined && !alias.startsWith(":")) {
+      curSym = alias;
+      continue;
+    }
+    const lowered =
+      (found.valExpr as { "arrival/tagless-final/lower"?: () => unknown } | null)?.[
+        "arrival/tagless-final/lower"
+      ]?.() ?? found.valExpr;
+    if (asPair(lowered)) {
+      const producer = anc.children.find((c) => c.node === lowered);
       // `producerId` is the invocation that computed the binding — a candidate
       // data-input wire (drawn only when it's a rendered provenance point).
       return producer ? { value: valueById(producer.id), producerId: producer.id } : undefined;
@@ -583,6 +607,9 @@ export interface RegionWalkCtx {
    *  provenance would smear in compared-against elements — a Pareto test folds the whole
    *  pool). Absent when the trace runs without the sidecar. */
   boundPointsOf?: (id: number, name: string) => readonly number[];
+  /** Live symbol-resolution map for an invocation (`trace.symbolValues.get(live)`), used
+   *  when a decision operand or filter collection is a bare symbol not bound by an enclosing let. */
+  symbolValuesOf?: (id: number) => ReadonlyMap<string, unknown> | undefined;
   /** Collectors filled during the walk (knot→arm control wires, knot→operand data
    *  wires) — read after the walk to append the decision edges. */
   knotArm: { knot: number; arm: number }[];
@@ -669,13 +696,22 @@ function filterDecision(inv: PlainInv, applChildren: PlainInv[], ctx: RegionWalk
   const addOrigins = (ps: Iterable<number>): void => resolveInto(ps, origins);
   // Per-element: pred invocation provenance (prune-exempt for filter children).
   for (const c of applChildren) addOrigins(ctx.liveProvenanceById(c.id));
+  const argNodes = new Set(astArgs(inv.node));
+  const argChildren = inv.children.filter((arg) => argNodes.has(arg.node));
   // Fallback: eval'd-once args' values, DEEP — covers pred whose comparisons happened
-  // outside this subtree.
-  if (origins.size === 0)
-    for (const arg of inv.children) {
-      if (arg.children.length > 0) continue;
+  // outside this subtree (including compound inline collection args and bare symbol args).
+  if (origins.size === 0) {
+    for (const arg of argChildren) {
       addOrigins(deepProvenance(ctx.liveValueById(arg.id)));
+      addOrigins(ctx.liveProvenanceById(arg.id));
+      addOrigins(ctx.livePointsUnder(arg.id));
     }
+  }
+  if (origins.size === 0 && ctx.symbolValuesOf) {
+    for (const v of ctx.symbolValuesOf(inv.id)?.values() ?? []) {
+      addOrigins(deepProvenance(v));
+    }
+  }
   if (origins.size === 0) return undefined; // static — degenerate, dissolve
   // PER-ELEMENT VERDICTS. Pairing key = ELEMENT's OWN origins (predicate OUTCOME's
   // provenance is wrong — Pareto test folds compared-AGAINST elements). Two reads:
@@ -683,10 +719,15 @@ function filterDecision(inv: PlainInv, applChildren: PlainInv[], ctx: RegionWalk
   //  2. POSITIONAL (fallback): eval'd-once collection arg aligning with applications.
   // Neither available ⇒ no verdicts; the aggregate `condition` stays honest.
   const param = ctx.boundPointsOf ? predParamOf(inv.node) : undefined;
-  const collection = inv.children
-    .filter((arg) => arg.children.length === 0)
-    .map((arg) => listElements(ctx.liveValueById(arg.id)))
-    .find((els) => els.length >= applChildren.length);
+  const collection =
+    argChildren
+      .map((arg) => collectionElements(ctx.liveValueById(arg.id)))
+      .find((els) => els.length >= applChildren.length) ??
+    (ctx.symbolValuesOf
+      ? [...(ctx.symbolValuesOf(inv.id)?.values() ?? [])]
+          .map(collectionElements)
+          .find((els) => els.length >= applChildren.length)
+      : undefined);
   const verdicts =
     param !== undefined || collection
       ? applChildren.flatMap((c, j) => {
@@ -697,7 +738,10 @@ function filterDecision(inv: PlainInv, applChildren: PlainInv[], ctx: RegionWalk
           return [{ kept: schemeTruth(ctx.liveValueById(c.id)) !== false, origins: [...elementOrigins] }];
         })
       : undefined;
-  const id = applChildren[0]!.id; // a pred application never becomes a region itself — free id
+  // A non-point pred application never becomes a region itself — free id; if every pred
+  // application IS a provenance point, mint a non-colliding negative id below OUTPUT_ID (-1).
+  const nonPointAppl = applChildren.find((c) => !c.isProvenancePoint);
+  const id = nonPointAppl ? nonPointAppl.id : -inv.id - 2;
   for (const from of origins) ctx.knotInputs.push({ knot: id, from });
   return {
     kind: "decision",
@@ -714,6 +758,14 @@ function listElements(v: unknown): unknown[] {
   const out: unknown[] = [];
   for (let cur = v; cur instanceof APair; cur = cur.cdr) out.push(cur.car);
   return out;
+}
+
+/** The elements of a Scheme list or vector, in order — `[]` for non-collection values. */
+function collectionElements(v: unknown): unknown[] {
+  if (v instanceof APair) return listElements(v);
+  const vec = (v as { __vector__?: unknown } | null)?.__vector__;
+  if (Array.isArray(vec)) return vec;
+  return Array.isArray(v) ? v : [];
 }
 
 /** The ARGUMENT sub-ASTs of a call node `(head arg…)` — the cdr chain's cars. Used to
@@ -738,6 +790,56 @@ function predParamOf(node: unknown): string | undefined {
   return first !== null && first !== undefined && typeof first === "object" && typeof first.__name__ === "string"
     ? first.__name__
     : undefined;
+}
+
+/**
+ * Shared branch-operand wiring used by both `regionsAt` and `TraceRegionFold.#isWired` so
+ * incremental and one-shot dynamic-capability gates never drift.
+ */
+export function wireBranchDecision(
+  inv: PlainInv,
+  ctx: Pick<RegionWalkCtx, "pointIds" | "valueById" | "liveValueById" | "livePointsUnder" | "symbolValuesOf">,
+): { wired: Set<string>; inputs: number[] } {
+  const wired = new Set<string>();
+  const inputs: number[] = [];
+  for (const { sym, producerId } of decisionInputProducers(inv, ctx.valueById)) {
+    let origins = ctx.pointIds.has(producerId)
+      ? [producerId]
+      : [...valueProvenance(ctx.liveValueById(producerId))]
+          .map((p) => resolveOriginVia(p))
+          .filter((o) => ctx.pointIds.has(o));
+    // Pruned pluck value (`(:big (car (infer …)))`): its stamped provenance was GC'd, but the
+    // infer point survives in the live subtree — recover the origins structurally.
+    if (origins.length === 0) origins = [...ctx.livePointsUnder(producerId)];
+    if (origins.length === 0) continue;
+    wired.add(sym);
+    inputs.push(...origins);
+  }
+  const testNode = listOf(inv.node)[1];
+  if (testNode !== undefined) {
+    const testChild = asPair(testNode) ? inv.children.find((c) => c.node === testNode) : undefined;
+    for (const sym of symbolsIn(testNode)) {
+      if (wired.has(sym)) continue;
+      const symVal =
+        ctx.symbolValuesOf?.(inv.id)?.get(sym) ??
+        (testChild ? ctx.symbolValuesOf?.(testChild.id)?.get(sym) : undefined);
+      if (symVal !== undefined) {
+        const origins = [...deepProvenance(symVal)].map((p) => resolveOriginVia(p)).filter((o) => ctx.pointIds.has(o));
+        if (origins.length > 0) {
+          wired.add(sym);
+          inputs.push(...origins);
+        }
+      }
+    }
+    if (wired.size === 0 && testChild) {
+      const origins = ctx.pointIds.has(testChild.id) ? [testChild.id] : [...ctx.livePointsUnder(testChild.id)];
+      if (origins.length > 0) {
+        wired.add(symbolsIn(testNode)[0] ?? "__test__");
+        inputs.push(...origins);
+      }
+    }
+  }
+  return { wired, inputs };
 }
 
 /**
@@ -821,8 +923,9 @@ export function regionsAt(inv: PlainInv, ctx: RegionWalkCtx): Region[] {
     // ARGUMENT is recognized by its node being one of the form's own argument ASTs;
     // element applications' nodes are the lambda/body, never an argument position.
     const argNodes = new Set(astArgs(inv.node));
+    const isFilter = headOf(inv) === "filter";
     const applChildren = inv.children.filter(
-      (c) => (c.children.length > 0 || c.isProvenancePoint) && !argNodes.has(c.node),
+      (c) => (isFilter || c.children.length > 0 || c.isProvenancePoint) && !argNodes.has(c.node),
     );
     // An iteration that flattens to nothing meaningful is dropped; `incoming`
     // keeps the RAW count so the banner can say "10 incoming, 5 mattered". A map
@@ -881,8 +984,12 @@ export function regionsAt(inv: PlainInv, ctx: RegionWalkCtx): Region[] {
   // marker just says "here's where the decision was made". An arm with no rendered
   // content this time (a bare-atom route) yields nothing → no marker either.
   if (BRANCH_FORMS.has(headOf(inv)) && ctx.liveBranchScopes.has(scopeId(inv.node))) {
-    const inner = inv.children.flatMap((c) => regionsAt(c, ctx));
-    if (inner.length === 0) return [];
+    const testNode = listOf(inv.node)[1];
+    const testChild =
+      testNode !== undefined && asPair(testNode) ? inv.children.find((c) => c.node === testNode) : undefined;
+    const testRegions = testChild ? regionsAt(testChild, ctx) : [];
+    const inner = inv.children.filter((c) => c !== testChild).flatMap((c) => regionsAt(c, ctx));
+    if (inner.length === 0) return testRegions;
     // Data-in: each operand traces (through plumbing) to the inference(s) that
     // produced it. Follow the operand back to its inference origin(s) and wire those
     // into the decision — a literal-rooted operand resolves to none (static, nothing
@@ -894,21 +1001,7 @@ export function regionsAt(inv: PlainInv, ctx: RegionWalkCtx): Region[] {
     //
     // An operand that resolves to ≥1 inference origin is WIRED: its value arrives on a
     // data wire, so the pill shows only its name (the value lives at the wire source).
-    const wired = new Set<string>();
-    const inputs: number[] = [];
-    for (const { sym, producerId } of decisionInputProducers(inv, ctx.valueById)) {
-      let origins = ctx.pointIds.has(producerId)
-        ? [producerId]
-        : [...valueProvenance(ctx.liveValueById(producerId))]
-            .map((p) => resolveOriginVia(p))
-            .filter((o) => ctx.pointIds.has(o));
-      // Pruned pluck value (`(:big (car (infer …)))`): its stamped provenance was GC'd, but the
-      // infer point survives in the live subtree — recover the origins structurally.
-      if (origins.length === 0) origins = [...ctx.livePointsUnder(producerId)];
-      if (origins.length === 0) continue;
-      wired.add(sym);
-      inputs.push(...origins);
-    }
+    const { wired, inputs } = wireBranchDecision(inv, ctx);
     // DYNAMIC-PROVENANCE GATE: a decision renders only when its outcome is
     // genuinely INDETERMINATE from the trace's dynamic data — i.e. at least one tested
     // operand traces back to an inference. A purely static test (`(if #t …)`, a
@@ -916,11 +1009,12 @@ export function regionsAt(inv: PlainInv, ctx: RegionWalkCtx): Region[] {
     // degenerate: its result was fixed before the run, so it carries no decision the
     // reader can act on. Dissolve it — flatten to the gated work, no marker, no control
     // arm. We could only decide it because nothing inferred fed it; that's the tell.
-    if (wired.size === 0) return inner;
+    if (wired.size === 0) return [...testRegions, ...inner];
     const arm = lastRegionId(inner);
     if (arm !== undefined) ctx.knotArm.push({ knot: inv.id, arm });
     for (const from of inputs) ctx.knotInputs.push({ knot: inv.id, from });
     return [
+      ...testRegions,
       {
         kind: "decision",
         id: inv.id,
@@ -1264,15 +1358,32 @@ function buildRegions(snap: PlainTrace, trace: EvalTrace): RegionGraph {
   const livePointsUnder = (id: number): number[] => {
     const root = liveById.get(id);
     if (!root) return [];
-    const out: number[] = [];
+    const out = new Set<number>();
+    const addContribs = (inv: Invocation): void => {
+      if (!inv.symbolContributions) return;
+      for (const s of inv.symbolContributions) {
+        for (const p of s) {
+          const o = resolveOriginVia(p);
+          if (pointIds.has(o)) out.add(o);
+        }
+      }
+    };
+    addContribs(root);
     const stack: Invocation[] = [...root.children];
     while (stack.length > 0) {
       const n = stack.pop()!;
       if (n.isProvenancePoint) {
-        if (pointIds.has(n.id)) out.push(n.id);
-      } else stack.push(...n.children);
+        if (pointIds.has(n.id)) out.add(n.id);
+      } else {
+        addContribs(n);
+        stack.push(...n.children);
+      }
     }
-    return out;
+    return [...out];
+  };
+  const symbolValuesOf = (id: number): ReadonlyMap<string, unknown> | undefined => {
+    const live = liveById.get(id);
+    return live ? trace.symbolValues.get(live) : undefined;
   };
 
   // Edges (Hasse transitive reduction) over the points, in ascending id order.
@@ -1300,6 +1411,7 @@ function buildRegions(snap: PlainTrace, trace: EvalTrace): RegionGraph {
     liveValueById,
     liveProvenanceById,
     livePointsUnder,
+    symbolValuesOf,
     // The narrowing-verdict pairing key (see RegionWalkCtx.boundPointsOf) — the sidecar
     // scoped to the live invocation's subtree. Sidecar-less traces leave it unset.
     boundPointsOf: auto

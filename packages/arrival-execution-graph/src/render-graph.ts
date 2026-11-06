@@ -862,8 +862,11 @@ class Builder {
   #outputLength(inst: FrameInstance): number | undefined {
     const inv = inst.invocation;
     if (inv?.state !== "resolved") return undefined;
-    const captured = this.progress!.trace instanceof ExecutionCapture ? this.progress!.trace.captured(inv) : undefined;
-    return listLength(captured?.hasOutput ? captured.output : inv.value);
+    const cap = this.progress!.trace instanceof ExecutionCapture ? this.progress!.trace : undefined;
+    const captured = cap?.captured(inv);
+    if (captured?.hasOutput) return listLength(captured.output);
+    const retained = cap?.retainedValue(inv);
+    return listLength(retained ? retained.value : inv.value);
   }
 
   // ── transforms and edges ───────────────────────────────────────────────────────────────

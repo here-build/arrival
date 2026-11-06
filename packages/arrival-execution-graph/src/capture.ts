@@ -142,6 +142,7 @@ function elementsFrom(trace: CoreEvalTrace, host: Invocation, pruned: boolean): 
   for (const o of readOperands(trace, host, pruned)) {
     if (!o.hasValue) continue;
     if (Array.isArray(o.value)) return [...o.value];
+    if (kindOf(o.value) === "vector") return [...(o.value as { __vector__: readonly unknown[] }).__vector__];
     if (!isPair(o.value)) continue;
     const out: unknown[] = [];
     let cur: unknown = o.value;

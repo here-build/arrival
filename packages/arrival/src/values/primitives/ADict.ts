@@ -169,6 +169,11 @@ export class ADict extends AValue {
     return new ADict([...this.byKey.entries()], p, this.location, this.literalForms);
   }
 
+  override *["arrival/provenanceChildren"](): Iterable<unknown> {
+    yield* this.byKey.keys();
+    yield* this.byKey.values();
+  }
+
   // Code-position lowering: `{…}` reader-literal lowers ONCE, cached, to `(dict …)`.
   // Non-literal ADict answers null (self-evaluating).
   ["arrival/tagless-final/lower"](): APair<SchemeValue, SchemeValue> | null {

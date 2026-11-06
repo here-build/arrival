@@ -111,6 +111,8 @@ export type WireframeNode =
       /** The lambda callback's formals — per-element ingress. A template wire's slot
        *  params beyond these are region CAPTURES (sealed at region open). */
       readonly elementParams?: readonly string[];
+      /** Dotted/bare rest formal of the lambda callback, when variadic. */
+      readonly elementRest?: string;
       /** Prelude/base-name callback (`(map inc xs)`) — no template graph; the name, referenced
        *  BY NAME. A material define, port name, let-bound variable, or computed callback is a
        *  `fn` WIRE instead (slot `"fn"`). */
@@ -209,6 +211,8 @@ export interface WireframeGraph {
 /** A port-reaching top-level define's template subgraph (wireframe material). */
 export interface DefineTemplate {
   readonly params: readonly string[];
+  readonly rest?: string;
+  readonly captures?: readonly string[];
   readonly graph: WireframeGraph;
 }
 

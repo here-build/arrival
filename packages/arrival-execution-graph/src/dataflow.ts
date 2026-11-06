@@ -37,7 +37,6 @@ import {
 import {
   type Binding,
   bindingsOf,
-  bracketItems,
   isKeyword,
   isPair,
   isSymbol,
@@ -114,6 +113,8 @@ interface Context {
   readonly role?: string;
   /** Binder interior: the binder op (`named-let`, `do`). */
   readonly binder?: string;
+  /** Pruned `do` binder whose result clause holds steps in `owner`. */
+  readonly prunedBinder?: { readonly parent: Context; readonly index: number };
 }
 
 const isFrame = (item: PlanItem | undefined): item is PlanFrame => item?.kind === "frame";
@@ -358,8 +359,13 @@ const CONDITIONALS = new Set(["if", "when", "unless", "cond", "case"]);
 /** and/or: the value of the operand that short-circuits is the form's value. */
 const SHORT_CIRCUIT: ReadonlySet<string> = new Set(["and", "or"]);
 
-/** The sub-forms of a form, positionally: a list's items, a `[…]` literal's elements. */
-const partsOf = (form: unknown): unknown[] => (isPair(form) ? listItems(form) : (bracketItems(form) ?? []));
+/** The sub-forms of a form, positionally: a list's items, a `[…]`/`#(…)` vector's or `{…}` literal's elements. */
+const partsOf = (form: unknown): unknown[] => {
+  if (isPair(form)) return listItems(form);
+  if (kindOf(form) === "vector") return (form as { __vector__: unknown[] }).__vector__;
+  if (kindOf(form) === "dict") return (form as { literalForms?: unknown[] }).literalForms ?? [];
+  return [];
+};
 
 /** Where a (piece of a) wire sits: the program form it is (`span`; an arm's own span when the
  *  value is an atom with no form — `unlocated`), and the frame holding it when not the
@@ -549,7 +555,20 @@ class Join {
     if (node.kind === "closure") return this.openClosure(ctx, node);
     const item = this.item(ctx, node);
     if (node.kind === "binder") {
-      if (!isFrame(item)) return this.unopened(node.interior, `${node.op} ${node.span}`);
+      if (!isFrame(item)) {
+        if (node.op === "do") {
+          return [
+            {
+              graph: node.interior,
+              path: ctx.path,
+              owner: ctx.owner,
+              binder: "do",
+              prunedBinder: { parent: ctx, index },
+            },
+          ];
+        }
+        return this.unopened(node.interior, `${node.op} ${node.span}`);
+      }
       this.claimed.add(item.key);
       return [{ graph: node.interior, path: ctx.path, owner: item, binder: node.op }];
     }
@@ -709,8 +728,9 @@ class Join {
     const item = this.item(ctx, node);
     switch (node.kind) {
       case "port":
-        return this.egress(ctx);
+        return ctx.prunedBinder ? "elided" : this.egress(ctx);
       case "recur": {
+        if (ctx.prunedBinder) return "elided";
         const k = operandIndex(slot, "arg") ?? 0;
         return { to: { key: ctx.owner.key, port: this.paramPort(ctx.owner, k) }, scope: ctx.owner, kind: "recur" };
       }
@@ -962,7 +982,9 @@ class Join {
           this.hop(clauses, raise);
         } else if (raise && isFrame(handler)) push(clauseValue(wc[0], sc[0]), raise, handler);
       } else {
-        push(pick(w, sf, 1), f, f);
+        const isTryClause = (x: unknown): boolean => isPair(x) && (nameIs(x.car, "catch") || nameIs(x.car, "finally"));
+        const lastBodyIdx = w.slice(1).findLastIndex((x) => !isTryClause(x));
+        if (lastBodyIdx !== -1) push(pick(w, sf, 1 + lastBodyIdx), f, f);
         const [wc, sc] = [catchOf(w), catchOf(sf)];
         if (raise && isFrame(handler) && wc.length > 1) push(pick(wc, sc, wc.length - 1), raise, handler);
       }
@@ -1017,7 +1039,7 @@ class Join {
         if (isPair(f)) {
           index.set(scopeId(f), f);
           for (let c: unknown = f; isPair(c); c = c.cdr) visit(c.car);
-        } else for (const el of bracketItems(f) ?? []) visit(el);
+        } else for (const el of partsOf(f)) visit(el);
       };
       for (const f of this.forms) visit(f);
       this.surface = index;
@@ -1172,6 +1194,19 @@ class Join {
       // A region the skeleton pruned (no steps inside) is transparent: its inputs' producers
       // flow straight through — a pruned mux's selector as a decision (`control`).
       seen.add(index);
+      if (node.kind === "binder" && node.op === "do") {
+        const innerCtx: Context = {
+          graph: node.interior,
+          path: ctx.path,
+          owner: ctx.owner,
+          binder: "do",
+          prunedBinder: { parent: ctx, index },
+        };
+        const outProducers = node.interior.wires
+          .filter((w) => node.interior.nodes.at(w.consumer.node)?.kind === "port")
+          .flatMap((w) => this.producers(innerCtx, this.liveRefs(w, false), scope, false, new Set()));
+        if (outProducers.length > 0) return outProducers;
+      }
       return ctx.graph.wires
         .filter((w) => w.consumer.node === index)
         .flatMap((w) => {
@@ -1195,6 +1230,12 @@ class Join {
    *  slot). The loop's `in:<var>` ports are what each iteration reads; the value after the last
    *  iteration leaves on its own `out:<var>` port, wired like any other producer. */
   private finalValue(ctx: Context, slot: string | undefined): Producer[] {
+    if (ctx.prunedBinder && slot !== undefined) {
+      const { parent, index } = ctx.prunedBinder;
+      return parent.graph.wires
+        .filter((w) => w.consumer.node === index && w.consumer.slot === slot)
+        .flatMap((w) => this.producers(parent, this.liveRefs(w, false), parent.owner, false, new Set([index])));
+    }
     const k = slot === undefined ? undefined : operandIndex(slot, "arg");
     const name = k === undefined ? undefined : ctx.owner.params[k];
     if (name !== undefined) return [{ key: ctx.owner.key, port: `out:${name}` }];

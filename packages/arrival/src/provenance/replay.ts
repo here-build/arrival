@@ -289,7 +289,7 @@ const listOf = (items: readonly SchemeValue[]): SchemeValue =>
   items.reduceRight<SchemeValue>((tail, head) => new APair(head, tail), nil);
 
 /** Formals → name-keyed ingress: positional params, the rest formal gets the remaining args as a list. */
-function bindFormals(
+export function bindFormals(
   params: readonly string[],
   rest: string | undefined,
   args: readonly SchemeValue[],
@@ -376,9 +376,9 @@ export function closureValue(
         // A sink-tail template has no value egress: calling it is an effect, its value is void
         // (LIMIT: the effect's own ports are not re-demanded — they are sinks, nothing to replay).
         if (template.graph.egress === null) return theVoid;
-        const slots = bindFormals(template.params, undefined, args);
         const lease = await leaseNestedEnv(ctx.base, callCtx.runCtx);
         try {
+          const slots = { ...bindFormals(template.params, template.rest, args), ...(await captures(lease.env)) };
           // A define'd function is not a track: its crossings run in the caller's window (recorder parity).
           return await replayGraphIn(lease.env, ctx.program, template.graph, ctx.frozen, slots, undefined, caller);
         } finally {
@@ -438,13 +438,13 @@ export function fanTemplateValue(
   const elementParams = node.elementParams ?? [];
   return new ANativeProcedure({
     name: `γ-fan@${node.span}`,
-    arity: { min: elementParams.length, max: elementParams.length },
+    arity: { min: elementParams.length, max: node.elementRest === undefined ? elementParams.length : null },
     impl: async (args, callCtx) => {
       // Element i's call is track `[…, r_fan, i]` — claimed in start order, before any await.
       const call = claimCall(ctx.instance, idx);
       const lease = await leaseNestedEnv(ctx.base, callCtx.runCtx);
       try {
-        const slots = { ...bindFormals(elementParams, undefined, args), ...(await captures(lease.env)) };
+        const slots = { ...bindFormals(elementParams, node.elementRest, args), ...(await captures(lease.env)) };
         return await replayGraphIn(lease.env, ctx.program, template, ctx.frozen, slots, undefined, call);
       } finally {
         lease.release();
@@ -694,9 +694,13 @@ async function replayGraphInstance(
             `template "${node.name}" is absent or has no egress — nothing to replay`,
           );
         }
-        const args: Record<string, AmbientValue> = {};
-        for (let k = 0; k < template.params.length; k++) {
-          args[template.params[k]] = await gammaWire(wireFor(idx, `arg${k}`));
+        const argValues: SchemeValue[] = [];
+        for (let k = 0; graph.wires.some((w) => w.consumer.node === idx && w.consumer.slot === `arg${k}`); k++) {
+          argValues.push(await gammaWire(wireFor(idx, `arg${k}`)));
+        }
+        const args: Record<string, AmbientValue> = { ...bindFormals(template.params, template.rest, argValues) };
+        for (const capName of template.captures ?? []) {
+          args[capName] = await gammaWire(wireFor(idx, `capture:${capName}`));
         }
         // decisions index THIS graph's nodes; a template graph has its own node space (A6).
         value = await replayGraphIn(base, program, template.graph, frozen, args, undefined, instance);

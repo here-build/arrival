@@ -46,8 +46,10 @@ export function listItems(list: unknown): unknown[] {
 /** The forms after the head of a call form. */
 export const operandForms = (node: unknown): unknown[] => (isPair(node) ? listItems(node.cdr) : []);
 
-/** Length of a proper list value; `undefined` for anything else. */
+/** Length of a proper list or vector value; `undefined` for anything else. */
 export function listLength(v: unknown): number | undefined {
+  if (kindOf(v) === "vector") return (v as { __vector__: readonly unknown[] }).__vector__.length;
+  if (Array.isArray(v)) return v.length;
   let n = 0;
   let cur = v;
   for (; isPair(cur); cur = cur.cdr) n++;

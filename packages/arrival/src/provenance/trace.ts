@@ -27,6 +27,7 @@ import { TraceBudgetError } from "../errors.js";
 import { AValue, EMPTY_PROVENANCE } from "../values/primitives/AValue.js";
 import { AString } from "../values/primitives/AString.js";
 import { AutoBindings } from "./lineage-auto-bindings.js";
+import { collapseProvenance } from "./provenance-collapse.js";
 import type { EvalTap } from "../eval/evaluator.js";
 import { APair } from "../values/primitives/APair.js";
 import type { ASymbol } from "../values/primitives/ASymbol.js";
@@ -63,7 +64,23 @@ function accessorField(node: APair<SchemeValue, SchemeValue>): string | null {
  * Control-flow restriction is rosetta wrappers, not here.
  */
 function computeProvenance(inv: Invocation, trace: EvalTrace): ReadonlySet<number> {
-  if (inv.isProvenancePoint) return trace.markAuthoritativeProvenance(new Set<number>([inv.id]));
+  if (inv.isProvenancePoint) {
+    const head = headNameOf(inv.node);
+    if (head !== null && (BRANCH_HEADS.has(head) || head === "update" || head === "update-in")) {
+      const out = new Set<number>([inv.id]);
+      if (inv.value instanceof AValue) {
+        for (const p of inv.value.provenance) out.add(p);
+      }
+      for (const child of inv.children) {
+        for (const p of child.provenance) out.add(p);
+      }
+      if (inv.symbolContributions) {
+        for (const s of inv.symbolContributions) for (const p of s) out.add(p);
+      }
+      return trace.markAuthoritativeProvenance(out);
+    }
+    return trace.markAuthoritativeProvenance(new Set<number>([inv.id]));
+  }
 
   const field = accessorField(inv.node);
 
@@ -418,9 +435,12 @@ export class EvalTrace implements EvalTap {
       const name = (symbol as { __name__?: unknown }).__name__;
       if (typeof name === "string") map.set(name, value);
 
-      if (value instanceof AValue && value.provenance.size > 0) {
-        if (!invocation.symbolContributions) invocation.symbolContributions = new Set();
-        invocation.symbolContributions.add(value.provenance);
+      if (value instanceof AValue) {
+        const prov = value.provenance.size > 0 ? value.provenance : collapseProvenance(value);
+        if (prov.size > 0) {
+          if (!invocation.symbolContributions) invocation.symbolContributions = new Set();
+          invocation.symbolContributions.add(prov);
+        }
       }
     } catch (error) {
       if (!this.#symbolTapWarned) {

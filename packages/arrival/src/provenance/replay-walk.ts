@@ -43,6 +43,7 @@ import { hermeticEnv, type HermeticEnv, type IngressBindings } from "./hermetic-
 import {
   applyFan,
   applyGuardBody,
+  bindFormals,
   type GuardOutcome,
   ReplayRaise,
   sourceValue,
@@ -239,9 +240,26 @@ async function* nodeValueStep(
           `template "${node.name}" is absent or has no egress — nothing to replay`,
         );
       }
-      const args: Record<string, AmbientValue> = {};
-      for (let k = 0; k < template.params.length; k++) {
-        args[template.params[k]] = yield* gammaWireStep(
+      const argValues: SchemeValue[] = [];
+      for (let k = 0; graph.wires.some((w) => w.consumer.node === idx && w.consumer.slot === `arg${k}`); k++) {
+        argValues.push(
+          yield* gammaWireStep(
+            base,
+            program,
+            graph,
+            frozen,
+            slots,
+            decisions,
+            cache,
+            wireFor(graph, idx, `arg${k}`),
+            idx,
+            `arg${k}`,
+          ),
+        );
+      }
+      const args: Record<string, AmbientValue> = { ...bindFormals(template.params, template.rest, argValues) };
+      for (const capName of template.captures ?? []) {
+        args[capName] = yield* gammaWireStep(
           base,
           program,
           graph,
@@ -249,9 +267,9 @@ async function* nodeValueStep(
           slots,
           decisions,
           cache,
-          wireFor(graph, idx, `arg${k}`),
+          wireFor(graph, idx, `capture:${capName}`),
           idx,
-          `arg${k}`,
+          `capture:${capName}`,
         );
       }
       value = yield* graphEgressStep(base, program, template.graph, frozen, args, undefined, cache.instance); // decisions index this graph only (A6)

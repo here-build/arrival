@@ -34,8 +34,8 @@ import {
   resolveOriginVia,
   routeOf,
   upstreamOfPoint,
-  valueProvenance,
   walkSpine,
+  wireBranchDecision,
   type FinalizeCtx,
   type Region,
   type RegionEdge,
@@ -207,6 +207,9 @@ export class TraceRegionFold {
     // Slice new invocations by index cursor — O(Δ), not O(total) re-scan. Log is `enter`
     // order = ascending id (fold order), so slice is ordered (no sort).
     const log = this.#trace.invocationLog;
+    if (log.length < this.#logCursor || (log.length > 0 && this.#logCursor > 0 && !this.#liveById.has(log[0]!.id))) {
+      this.#reset();
+    }
     const fresh: Invocation[] = log.slice(this.#logCursor);
     this.#logCursor = log.length;
     // Refresh running mirrors even with NO new invocations — an in-flight infer can
@@ -246,21 +249,22 @@ export class TraceRegionFold {
     // without provenance. `#refreshRunning` repairs both when the live flag flips
     // (`#promoteLatePoint`); the root case is stable (parentless from birth).
 
-    // ── recursion + branch signals (extend the monotonic sets) ────────────────────
-    this.#extendSignals(fresh);
-
-    // ── loop spines (extend in O(Δ) so current() never re-DFSs the recursion) ──────
-    this.#extendSpines(fresh);
-
     // ── points + Hasse edges (ascending id) ───────────────────────────────────────
-    // New points, ascending id (sorted). A point's children's provenance refers only to
-    // lower ids, so upstream closure is complete when processed.
+    // Register new points BEFORE `#extendSignals` so `#isWired` sees newly arrived points
+    // in `#pointIds` during the same delta.
     for (const inv of fresh) {
       if (!inv.isProvenancePoint) continue;
       const plain = this.#invById.get(inv.id)!;
       this.#points.push(plain);
       this.#pointIds.add(inv.id);
     }
+
+    // ── recursion + branch signals (extend the monotonic sets) ────────────────────
+    this.#extendSignals(fresh);
+
+    // ── loop spines (extend in O(Δ) so current() never re-DFSs the recursion) ──────
+    this.#extendSpines(fresh);
+
     // Hasse edges/reach extended in ascending POINT id (topological order `addPointToHasse`
     // assumes). New points already ascending in `fresh`.
     for (const inv of fresh) {
@@ -307,19 +311,8 @@ export class TraceRegionFold {
     // Mirror of from-scratch `livePointsUnder`: topmost provenance points in invocation's
     // live subtree, for pluck-off-infer operands whose stamped value was GC-pruned. MUST match
     // one-shot exactly or parity test trips.
-    const livePointsUnder = (id: number): number[] => {
-      const root = this.#liveById.get(id);
-      if (!root) return [];
-      const out: number[] = [];
-      const stack: Invocation[] = [...root.children];
-      while (stack.length > 0) {
-        const n = stack.pop()!;
-        if (n.isProvenancePoint) {
-          if (this.#pointIds.has(n.id)) out.push(n.id);
-        } else stack.push(...n.children);
-      }
-      return out;
-    };
+    const livePointsUnder = (id: number): number[] => this.#livePointsUnder(id);
+    const symbolValuesOf = (id: number): ReadonlyMap<string, unknown> | undefined => this.#symbolValuesOf(id);
 
     // Mirror of from-scratch `boundPointsOf` — sidecar scoped to live invocation's subtree,
     // narrowing-verdict pairing key. MUST match one-shot exactly (parity).
@@ -376,6 +369,7 @@ export class TraceRegionFold {
       liveValueById,
       liveProvenanceById,
       livePointsUnder,
+      symbolValuesOf,
       boundPointsOf,
       knotArm,
       knotInputs,
@@ -424,21 +418,84 @@ export class TraceRegionFold {
    *  child's late provenance change is Phase-2. The common streaming shape (an infer reading
    *  PRIOR results via let-bindings) resolves its arg subtree before parking, so upstream is
    *  complete when first added. */
+  #reset(): void {
+    this.#logCursor = 0;
+    this.#invById.clear();
+    this.#liveById.clear();
+    this.#runningIds.clear();
+    this.#rootIds.length = 0;
+    this.#points.length = 0;
+    this.#pointIds.clear();
+    this.#reach.clear();
+    this.#baseEdges.length = 0;
+    this.#recursiveHeads.clear();
+    this.#loopBodies.clear();
+    this.#loopSpines.clear();
+    this.#bodyEntryOf.clear();
+    this.#branchInvsByScope.clear();
+    this.#branchRouteByInv.clear();
+    this.#liveBranchScopes = new Set<string>();
+    this.#dynamicCapableScopes.clear();
+    this.#wiredChecked.clear();
+    this.#pendingDefine = false;
+    this.#valCache.clear();
+    this.#iterCache.clear();
+    this.#shapeGen += 1;
+  }
+
+  #livePointsUnder(id: number): number[] {
+    const root = this.#liveById.get(id);
+    if (!root) return [];
+    const out = new Set<number>();
+    const addContribs = (inv: Invocation): void => {
+      if (!inv.symbolContributions) return;
+      for (const s of inv.symbolContributions) {
+        for (const p of s) {
+          const o = resolveOriginVia(p);
+          if (this.#pointIds.has(o)) out.add(o);
+        }
+      }
+    };
+    addContribs(root);
+    const stack: Invocation[] = [...root.children];
+    while (stack.length > 0) {
+      const n = stack.pop()!;
+      if (n.isProvenancePoint) {
+        if (this.#pointIds.has(n.id)) out.add(n.id);
+      } else {
+        addContribs(n);
+        stack.push(...n.children);
+      }
+    }
+    return [...out];
+  }
+
+  #symbolValuesOf(id: number): ReadonlyMap<string, unknown> | undefined {
+    const live = this.#liveById.get(id);
+    return live ? this.#trace.symbolValues.get(live) : undefined;
+  }
+
   #refreshRunning(): void {
     if (this.#runningIds.size === 0) return;
+    const toPromote: [Invocation, PlainInv][] = [];
+    const settledIds: number[] = [];
     for (const id of this.#runningIds) {
       const live = this.#liveById.get(id);
       const plain = this.#invById.get(id);
       if (!live || !plain) {
-        this.#runningIds.delete(id);
+        settledIds.push(id);
         continue;
       }
       // LATE POINT PROMOTION — the mirror froze `isProvenancePoint` at ingest, but a
       // streaming host marks the point at the provider crossing, which can land AFTER a
-      // tick ingested the invocation mid-arg-evaluation. Without promotion the leaf stays
-      // invisible forever (the points pass walks only fresh invocations). Promote while
-      // still running so the render shows the in-flight card, not just the settled one.
-      if (live.isProvenancePoint && !plain.isProvenancePoint) this.#promoteLatePoint(live, plain);
+      // tick ingested the invocation mid-arg-evaluation. Flip `plain.isProvenancePoint` in
+      // pass 1 so children settling in the same tick see their parent as a point, then run
+      // `#promoteLatePoint` in pass 2 after all children's provenance sets are refreshed.
+      if (live.isProvenancePoint && !plain.isProvenancePoint) {
+        plain.isProvenancePoint = true;
+        plain.metadata = live.metadata;
+        toPromote.push([live, plain]);
+      }
       if (live.state === "running") continue; // in flight — re-check next tick.
       const isPoint = plain.isProvenancePoint;
       const isRoot = plain.parent === null;
@@ -455,6 +512,12 @@ export class TraceRegionFold {
       // Provenance materialized for children-of-points + roots (snapshot predicate);
       // computed at live invocation's exit, so re-copy now it has settled.
       if (plain.parent?.isProvenancePoint || isRoot) plain.provenance = new Set(live.provenance);
+      settledIds.push(id);
+    }
+    for (const [live, plain] of toPromote) {
+      this.#promoteLatePoint(live, plain);
+    }
+    for (const id of settledIds) {
       this.#runningIds.delete(id);
     }
   }
@@ -629,13 +692,14 @@ export class TraceRegionFold {
 
   /** ≥1 tested operand traces to an infer point — EXACTLY `regionsAt`'s `wired.size > 0`. */
   #isWired(inv: PlainInv, valueById: (id: number) => unknown): boolean {
-    for (const { producerId } of decisionInputProducers(inv, valueById)) {
-      if (this.#pointIds.has(producerId)) return true;
-      for (const p of valueProvenance(this.#liveById.get(producerId)?.value)) {
-        if (this.#pointIds.has(resolveOriginVia(p))) return true;
-      }
-    }
-    return false;
+    const { wired } = wireBranchDecision(inv, {
+      pointIds: this.#pointIds,
+      valueById,
+      liveValueById: (id) => this.#liveById.get(id)?.value,
+      livePointsUnder: (id) => this.#livePointsUnder(id),
+      symbolValuesOf: (id) => this.#symbolValuesOf(id),
+    });
+    return wired.size > 0;
   }
 
   /** Every operand producer SETTLED (not running) — "not wired" verdict is final
@@ -647,6 +711,9 @@ export class TraceRegionFold {
     };
     for (const { producerId } of decisionInputProducers(inv, valueById)) {
       if (this.#liveById.get(producerId)?.state === "running") return false;
+    }
+    for (const child of inv.children) {
+      if (this.#liveById.get(child.id)?.state === "running") return false;
     }
     return true;
   }

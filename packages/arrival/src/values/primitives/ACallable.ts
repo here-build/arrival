@@ -24,7 +24,7 @@ import { tf } from "../tagless-final.js";
 import { applyMembraneClosure, type RunContext } from "../../run/RunContext.js";
 // CallCtx lives here-ward specifically so this file never transitively imports
 // common/scheme-zod/index.ts (would close a cycle that could leave z.instanceof codecs undefined).
-import { makeCallCtx, type CallCtx } from "../../run/CallCtx.js";
+import { makeCallCtx, withResolvedCallee, type CallCtx } from "../../run/CallCtx.js";
 import { PurityError } from "../../errors.js";
 // TYPE-ONLY: erased at compile — a real value import would close the scheme-zod cycle.
 import type { DoorSymbolDef } from "../../common/symbols/_bake.js";
@@ -294,5 +294,41 @@ export function applyCallback(
       ? "not applicable: bare host function (mint an ANativeProcedure / ARosettaProcedure / hostFnToCallable)"
       : `not applicable: ${fn === null ? "null" : typeof fn === "object" ? "a non-callable value" : typeof fn}`,
   );
-  return fn[tf("apply")](args, callCtx, false) as MaybePromise<SchemeValue>;
+  return fn[tf("apply")](args, withResolvedCallee(callCtx, fn), false) as MaybePromise<SchemeValue>;
+}
+
+/**
+ * Re-install the dynamic call site on every invocation of a lambda VALUE passed
+ * as an arg. Native HOFs (reduce/fold/find) recurse via promise chains, so
+ * iteration N+1 fires from a microtask AFTER the outer evaluatePair's finally
+ * restored the holder. Without per-call re-install, iteration ≥1 inherits the
+ * WRONG dynamic parent.
+ */
+export function wrapLambdaArgs(args: SchemeValue[], dynSite: unknown): SchemeValue[] {
+  let out: SchemeValue[] | null = null;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a instanceof ALambda) {
+      if (!out) out = [...args];
+      out[i] = wrapLambdaValue(a, dynSite);
+    }
+  }
+  return out ?? args;
+}
+
+/** Re-install dynamic call site on each HOF-arg lambda invocation. Delegates to
+ *  the original's apply term inside {@link withDynamicCallSite}; the holder is
+ *  read in the runner's synchronous prologue, so the finally-restore never races
+ *  the bounced body. */
+function wrapLambdaValue(lambda: ALambda, dynSite: unknown): ALambda {
+  const wrapped = new ALambda({
+    name: lambda.name,
+    arity: lambda.arity,
+    scope: lambda.scope,
+    runner: (values, callCtx, canBounce) =>
+      withDynamicCallSite(callCtx.runCtx, dynSite, () => lambda[tf("apply")](values, callCtx, canBounce)),
+  });
+  wrapped.__name__ = lambda.__name__;
+  wrapped.__params__ = lambda.__params__;
+  return wrapped;
 }

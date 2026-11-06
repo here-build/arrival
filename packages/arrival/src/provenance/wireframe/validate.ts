@@ -46,7 +46,15 @@ function interiorOf(
     case "fan":
       return node.template === undefined
         ? undefined
-        : { graph: node.template, bound: [...(node.elementParams ?? []), ...node.captures], captures: node.captures };
+        : {
+            graph: node.template,
+            bound: [
+              ...(node.elementParams ?? []),
+              ...(node.elementRest === undefined ? [] : [node.elementRest]),
+              ...node.captures,
+            ],
+            captures: node.captures,
+          };
     case "binder":
       return { graph: node.interior, bound: [...node.params, ...node.captures], captures: node.captures };
     default:
@@ -80,6 +88,19 @@ export function unboundSlots(program: WireframeProgram, opts: UnboundSlotsOption
           }
         }
         check(interior.graph, here, new Set(interior.bound));
+      } else if (node.kind === "closure" || node.kind === "template-ref") {
+        const declared = new Set(
+          node.kind === "closure" ? node.captures : (program.templates.get(node.name)?.captures ?? []),
+        );
+        for (const name of declared) {
+          const n = into.filter((w) => w.consumer.slot === `capture:${name}`).length;
+          if (n !== 1) out.push({ graph: here, wire: -1, name: `capture:${name}` });
+        }
+        for (const w of into) {
+          if (w.consumer.slot.startsWith("capture:") && !declared.has(w.consumer.slot.slice("capture:".length))) {
+            out.push({ graph: here, wire: -1, name: w.consumer.slot });
+          }
+        }
       }
       if (node.kind === "guard") {
         if (into.filter((w) => w.consumer.slot === "body").length !== 1)
@@ -94,6 +115,12 @@ export function unboundSlots(program: WireframeProgram, opts: UnboundSlotsOption
   };
 
   check(program.main, "main", opts.declaredIngress ?? new Set());
-  for (const [name, t] of program.templates) check(t.graph, `template:${name}`, new Set(t.params));
+  for (const [name, t] of program.templates) {
+    check(
+      t.graph,
+      `template:${name}`,
+      new Set([...t.params, ...(t.rest === undefined ? [] : [t.rest]), ...(t.captures ?? [])]),
+    );
+  }
   return out;
 }

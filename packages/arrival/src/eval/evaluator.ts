@@ -115,16 +115,10 @@ import {
 import { ANativeProcedure } from "../values/primitives/ANativeProcedure.js";
 import { is_applyable, is_false, is_lambda, is_promise } from "../values/value-guards.js";
 import { is_callable, is_expandable, is_macro } from "./guards.js";
-import { ALambda, type CallResult } from "../values/primitives/ACallable.js";
+import { ALambda, wrapLambdaArgs, type CallResult } from "../values/primitives/ACallable.js";
 import { makeCallCtx, type CallCtx } from "../run/CallCtx.js";
 import type { InvocationLike } from "../membrane/rosetta.js";
-import {
-  currentDynamicCallSite,
-  enterCallSite,
-  enterDynamicCallSite,
-  withDynamicCallSite,
-  type Invocation,
-} from "./dynamic-call-site.js";
+import { currentDynamicCallSite, enterCallSite, enterDynamicCallSite, type Invocation } from "./dynamic-call-site.js";
 // Retrospective-stream emission hook (off unless the run carries `emission`) —
 // see provenance-hooks.ts for the port-site rationale.
 import { notePotentialRosettaExit, openClosureCall, type ClosureCallWindow } from "./provenance-hooks.js";
@@ -276,43 +270,7 @@ const NESTED_RUN_STACK_LIMIT = 16;
 // building the body ctx, so a lambda body runs with the DYNAMIC parent (the call site), not
 // the LEXICAL one captured at creation. Without it, a native JS HOF iterating a user lambda
 // severs the parent chain at the HOF boundary — DNF path reconstruction needs the call-site
-// parent.
-
-/**
- * Re-install the dynamic call site on every invocation of a lambda VALUE passed
- * as an arg. Native HOFs (reduce/fold/find) recurse via promise chains, so
- * iteration N+1 fires from a microtask AFTER the outer evaluatePair's finally
- * restored the holder. Without per-call re-install, iteration ≥1 inherits the
- * WRONG dynamic parent.
- */
-function wrapLambdaArgs(args: SchemeValue[], dynSite: Invocation | undefined): SchemeValue[] {
-  let out: SchemeValue[] | null = null;
-  for (let i = 0; i < args.length; i++) {
-    const a = args[i];
-    if (is_lambda(a)) {
-      if (!out) out = [...args];
-      out[i] = wrapLambdaValue(a, dynSite);
-    }
-  }
-  return out ?? args;
-}
-
-/** Re-install dynamic call site on each HOF-arg lambda invocation. Delegates to
- *  the original's apply term inside {@link withDynamicCallSite}; the holder is
- *  read in the runner's synchronous prologue, so the finally-restore never races
- *  the bounced body. */
-function wrapLambdaValue(lambda: ALambda, dynSite: Invocation | undefined): ALambda {
-  const wrapped = new ALambda({
-    name: lambda.name,
-    arity: lambda.arity,
-    scope: lambda.scope,
-    runner: (values, callCtx, canBounce) =>
-      withDynamicCallSite(callCtx.runCtx, dynSite, () => lambda[tf("apply")](values, callCtx, canBounce)),
-  });
-  wrapped.__name__ = lambda.__name__;
-  wrapped.__params__ = lambda.__params__;
-  return wrapped;
-}
+// parent. `wrapLambdaArgs` lives in `values/primitives/ACallable.ts`.
 
 interface DataMarked {
   [DATA]?: boolean;
@@ -1950,7 +1908,14 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
   // plain WeakMap miss (no-op) for every callable with no activation (lambdas, resource-less
   // capabilities' procs, …).
   const dynSite = ctx.currentInvocation;
-  const callCtx = makeCallCtx(ctx.runCtx, dynSite as InvocationLike | undefined, undefined, proc, ctx.resolver);
+  const callCtx = makeCallCtx(
+    ctx.runCtx,
+    dynSite as InvocationLike | undefined,
+    undefined,
+    proc,
+    ctx.resolver,
+    ctx.closureCall,
+  );
 
   // A callable VALUE dispatches through its apply term. An ALambda in tail position
   // hands back a Bounce so a self-recursive `=>` collapses (TCO); an ANativeProcedure/
@@ -1966,6 +1931,7 @@ function* applyArrowProc(proc: SchemeValue, arg: SchemeValue, ctx: EvalContext):
     if (ctx.tail) return yield { tailCall: { generator: r.generator } } as unknown as SchemeValue;
     return yield { call: r.generator, tail: true };
   }
+  notePotentialRosettaExit(ctx.runCtx, dynSite, r as SchemeValue | Promise<SchemeValue>, ctx.closureCall);
   return is_promise(r) ? yield r : (r as SchemeValue);
 }
 

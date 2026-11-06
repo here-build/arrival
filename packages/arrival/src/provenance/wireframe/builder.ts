@@ -55,6 +55,7 @@
 import type { SchemeValue } from "../../values/types.js";
 import { APair } from "../../values/primitives/APair.js";
 import { ASymbol } from "../../values/primitives/ASymbol.js";
+import { AVector } from "../../values/primitives/AVector.js";
 import { schemeFalse, schemeTrue } from "../../values/primitives/ABool.js";
 import { nil } from "../../values/primitives/ANil.js";
 import { EMPTY_PROVENANCE } from "../../values/primitives/AValue.js";
@@ -98,8 +99,11 @@ interface BuildCtx {
   readonly reachClassifier: Classifier;
   readonly preludeNames: ReadonlySet<string>;
   readonly materialNames: ReadonlySet<string>;
-  /** Formals of each material FUNCTION define (a `closure{ref:define}` node's `params`). */
+  /** Formals of each material FUNCTION define (a `closure{ref:define}` node's `params` / `rest`). */
   readonly defineParams: ReadonlyMap<string, readonly string[]>;
+  readonly defineRests: ReadonlyMap<string, string>;
+  /** Captures of top-level value defines referenced by each material FUNCTION define. */
+  readonly defineCaptures: ReadonlyMap<string, readonly string[]>;
   readonly isBaseName: (name: string) => boolean;
   /** Collected across every builder: lambda body list (pair identity) → closure site (emission). */
   readonly closureSites: Map<object, { templateHash: string; rootOrdinal: number }>;
@@ -520,11 +524,14 @@ class GraphBuilder {
       if (env.recur !== undefined && env.recur.name === name) {
         node = { kind: "opaque", op: name, span };
       } else if (this.bctx.materialNames.has(name)) {
+        const rest = this.bctx.defineRests.get(name);
+        const captures = this.bctx.defineCaptures.get(name) ?? [];
         node = {
           kind: "closure",
           span,
           params: this.bctx.defineParams.get(name) ?? [],
-          captures: [],
+          ...(rest === undefined ? {} : { rest }),
+          captures,
           ref: { kind: "define", name },
         };
       } else {
@@ -535,6 +542,9 @@ class GraphBuilder {
       }
       if (node === undefined) return;
       const id = this.addNode(node);
+      if (node.kind === "closure" && node.captures.length > 0) {
+        this.pendingCaptures.push({ node: id, names: node.captures, env, span });
+      }
       if (site === null) this.cuts.set(expr, id);
       else this.occurrenceCuts.set(site.cell, id);
       return;
@@ -694,7 +704,13 @@ class GraphBuilder {
         return;
       }
       if (this.bctx.materialNames.has(op)) {
-        this.cuts.set(expr, this.buildArgNode({ kind: "template-ref", name: op, span: scopeId(expr) }, expr, env));
+        const span = scopeId(expr);
+        const id = this.buildArgNode({ kind: "template-ref", name: op, span }, expr, env);
+        const captures = this.bctx.defineCaptures.get(op) ?? [];
+        if (captures.length > 0) {
+          this.pendingCaptures.push({ node: id, names: captures, env, span });
+        }
+        this.cuts.set(expr, id);
         return;
       }
       const role = this.bctx.classifier.roleOf(op);
@@ -876,7 +892,13 @@ class GraphBuilder {
 
   /** Quasiquote: only unquote bodies re-enter expression space (depth-counted). */
   private walkQuasi(n: unknown, depth: number, env: WalkEnv): void {
-    if (!(n instanceof APair)) return;
+    if (!(n instanceof APair)) {
+      const els = literalElements(n) ?? (n instanceof AVector ? n.__vector__ : undefined);
+      if (els !== undefined) {
+        for (const el of els) this.walkQuasi(el, depth, env);
+      }
+      return;
+    }
     if (n.car instanceof ASymbol) {
       const hn = opName(n.car);
       if (hn === "unquote" || hn === "unquote-splicing") {
@@ -895,7 +917,15 @@ class GraphBuilder {
     while (cur instanceof APair) {
       this.walkQuasi(cur.car, depth, env);
       cur = cur.cdr;
+      if (cur instanceof APair && cur.car instanceof ASymbol) {
+        const cn = opName(cur.car);
+        if (cn === "unquote" || cn === "unquote-splicing" || cn === "quasiquote") {
+          this.walkQuasi(cur, depth, env);
+          return;
+        }
+      }
     }
+    if (cur !== nil && cur !== undefined && cur !== null) this.walkQuasi(cur, depth, env);
   }
 
   /** Let-family transparent to designation; named let → binder with interior. */
@@ -935,7 +965,8 @@ class GraphBuilder {
       partial.push(frameEntry(entry));
     }
     const bodyEnv: WalkEnv = { subst: extended, frames: [...env.frames, fullFrame], recur: env.recur };
-    for (const b of sitesOf(expr, rest.cdr)) this.walkForCuts(b.value, bodyEnv, b);
+    const { env: innerBodyEnv, forms } = this.enterBody(sitesOf(expr, rest.cdr), bodyEnv);
+    for (const b of forms) this.walkForCuts(b.value, innerBodyEnv, b);
   }
 
   // ── node constructors ──────────────────────────────────────────────────────
@@ -1052,26 +1083,31 @@ class GraphBuilder {
     const lengthPreserving = op === "map" || op === "vector-map";
     let template: WireframeGraph | undefined;
     let elementParams: string[] | undefined;
+    let elementRest: string | undefined;
+    let formals: string[] | undefined;
     let fnOp: string | undefined;
     let fnWire = false;
     let siteKey: object | undefined;
     if (fn instanceof APair && fn.car instanceof ASymbol && opName(fn.car) === "lambda" && fn.cdr instanceof APair) {
-      const params = lambdaParams(fn.cdr.car);
+      const parsed = lambdaFormals(fn.cdr.car);
+      const allFormals = parsed.rest === undefined ? parsed.params : [...parsed.params, parsed.rest];
       const interior = new GraphBuilder(this.bctx);
       const intSubst = new Map(env.subst);
-      for (const p of params) intSubst.set(p, LEAF(p));
+      for (const p of allFormals) intSubst.set(p, LEAF(p));
       // frames: [] — non-element slots are region captures (I2), supplied by `capture:` wires.
       const intEnv: WalkEnv = { subst: intSubst, frames: [] };
       interior.walkBody(sitesOf(fn, fn.cdr.cdr), intEnv, "egress");
       template = interior.finish();
-      elementParams = params;
+      elementParams = parsed.params;
+      elementRest = parsed.rest;
+      formals = allFormals;
       siteKey = fn.cdr.cdr;
     } else if (fn instanceof ASymbol && this.isByName(fn, env)) {
       fnOp = opName(fn);
     } else if (fn !== undefined) {
       fnWire = true;
     }
-    const captures = template !== undefined && elementParams !== undefined ? captureNames(template, elementParams) : [];
+    const captures = template !== undefined && formals !== undefined ? captureNames(template, formals) : [];
     const roles = this.bctx.callbackRolesOf?.(op);
     const span = scopeId(expr);
     const id = this.addNode({
@@ -1083,6 +1119,8 @@ class GraphBuilder {
       ...(template !== undefined ? { template } : {}),
       // eslint-disable-next-line unicorn/no-negated-condition -- omit elementParams when undeclared
       ...(elementParams !== undefined ? { elementParams } : {}),
+      // eslint-disable-next-line unicorn/no-negated-condition -- omit elementRest when undeclared
+      ...(elementRest !== undefined ? { elementRest } : {}),
       // eslint-disable-next-line unicorn/no-negated-condition -- omit fnOp when the callback is not a named op
       ...(fnOp !== undefined ? { fnOp } : {}),
       captures,
@@ -1225,14 +1263,16 @@ function isFunctionDefine(form: APair<SchemeValue, SchemeValue>): boolean {
 }
 
 /** Formals + body SITES of a wireframe-material FUNCTION define (function form or lambda RHS). */
-function defineShape(form: APair<SchemeValue, SchemeValue>): { params: string[]; bodySites: Site[] } {
+function defineShape(form: APair<SchemeValue, SchemeValue>): { params: string[]; rest?: string; bodySites: Site[] } {
   const rest = form.cdr;
   if (!(rest instanceof APair)) return { params: [], bodySites: [] };
   const target = rest.car;
-  if (target instanceof APair) return { params: lambdaParams(target.cdr), bodySites: sitesOf(form, rest.cdr) };
+  if (target instanceof APair) {
+    return { ...lambdaFormals(target.cdr), bodySites: sitesOf(form, rest.cdr) };
+  }
   const rhs = rest.cdr instanceof APair ? rest.cdr.car : undefined;
   if (rhs instanceof APair && rhs.car instanceof ASymbol && opName(rhs.car) === "lambda" && rhs.cdr instanceof APair) {
-    return { params: lambdaParams(rhs.cdr.car), bodySites: sitesOf(rhs, rhs.cdr.cdr) };
+    return { ...lambdaFormals(rhs.cdr.car), bodySites: sitesOf(rhs, rhs.cdr.cdr) };
   }
   return { params: [], bodySites: rest.cdr instanceof APair ? [{ value: rhs, cell: rest.cdr, parent: form }] : [] };
 }
@@ -1256,10 +1296,14 @@ export function buildWireframe(forms: readonly SchemeValue[], opts: WireframeBui
   }
   const templateNames = new Set([...membership.wireframe].filter((n) => !valueDefineNames.has(n)));
   const defineParams = new Map<string, readonly string[]>();
+  const defineRests = new Map<string, string>();
+  const defineCaptures = new Map<string, readonly string[]>();
   for (const form of forms) {
     const name = defineNameOf(form);
     if (name !== null && templateNames.has(name) && form instanceof APair && isFunctionDefine(form)) {
-      defineParams.set(name, defineShape(form).params);
+      const shape = defineShape(form);
+      defineParams.set(name, shape.params);
+      if (shape.rest !== undefined) defineRests.set(name, shape.rest);
     }
   }
   const bctx: BuildCtx = {
@@ -1270,22 +1314,40 @@ export function buildWireframe(forms: readonly SchemeValue[], opts: WireframeBui
     preludeNames: membership.pure,
     materialNames: templateNames,
     defineParams,
+    defineRests,
+    defineCaptures,
     closureSites: new Map(),
     isBaseName: opts.isBaseName,
     // eslint-disable-next-line unicorn/no-negated-condition -- omit callbackRolesOf when the caller did not supply it
     ...(opts.callbackRolesOf !== undefined ? { callbackRolesOf: opts.callbackRolesOf } : {}),
   };
 
+  // Pre-seed valueDefineNames as port-reaching leaves for function templates that reference them.
+  const valueDefineSubst = new Map<string, LineageNode>();
+  for (const vName of valueDefineNames) {
+    valueDefineSubst.set(vName, { kind: "source", op: vName });
+  }
+
   const templates = new Map<string, DefineTemplate>();
   for (const form of forms) {
     const name = defineNameOf(form);
     if (name === null || !templateNames.has(name) || !(form instanceof APair) || !isFunctionDefine(form)) continue;
-    const { params, bodySites } = defineShape(form);
+    const { params, rest, bodySites } = defineShape(form);
+    const formals = rest === undefined ? params : [...params, rest];
     const g = new GraphBuilder(bctx);
-    const subst = new Map<string, LineageNode>(params.map((p) => [p, LEAF(p)]));
+    const subst = new Map<string, LineageNode>(valueDefineSubst);
+    for (const p of formals) subst.set(p, LEAF(p));
     const env: WalkEnv = { subst, frames: [] };
     g.walkBody(bodySites, env, "egress");
-    templates.set(name, { params, graph: g.finish() });
+    const graph = g.finish();
+    const captures = captureNames(graph, formals).filter((c) => valueDefineNames.has(c));
+    if (captures.length > 0) defineCaptures.set(name, captures);
+    templates.set(name, {
+      params,
+      ...(rest === undefined ? {} : { rest }),
+      ...(captures.length === 0 ? {} : { captures }),
+      graph,
+    });
   }
 
   const main = new GraphBuilder(bctx);

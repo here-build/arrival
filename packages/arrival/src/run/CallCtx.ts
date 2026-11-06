@@ -114,11 +114,11 @@ export function symbolsOwnedBy(runCtx: RunContext, capability: object): Readonly
  * dispatch (`evaluatePair`, `applyArrowProc`), which already holds `ctx.resolver`. */
 export function makeCallCtx(
   runCtx: RunContext,
-  currentInvocation?: InvocationLike,
+  currentInvocation: InvocationLike | undefined = runCtx.ambient.dynSite as InvocationLike | undefined,
   argProvenance?: readonly ReadonlySet<number>[],
   resolvedValue?: unknown,
   resolver?: Resolver,
-  closureCall?: ClosureCallWindow,
+  closureCall: ClosureCallWindow | undefined = runCtx.ambient.closureCall,
 ): CallCtx {
   const owner =
     typeof resolvedValue === "object" && resolvedValue !== null ? capabilityByValue.get(resolvedValue) : undefined;
@@ -133,6 +133,29 @@ export function makeCallCtx(
       ? {
           configuration: runCtx.capabilityConfigurations?.get(owner.capability),
           resources: owner.readsResources ? resolveCapabilityResources(runCtx, owner.capability) : undefined,
+        }
+      : {}),
+  };
+}
+
+/** Re-derive `configuration`/`resources` for a callback `callee` invoked through `applyCallback`,
+ *  stripping caller-only `canBounce` and falling back to `runCtx.ambient` when `callCtx` omitted
+ *  the active call site or closure window. */
+export function withResolvedCallee(callCtx: CallCtx, callee: unknown): CallCtx {
+  const owner = typeof callee === "object" && callee !== null ? capabilityByValue.get(callee) : undefined;
+  const currentInvocation =
+    callCtx.invocation.currentInvocation ?? (callCtx.runCtx.ambient.dynSite as InvocationLike | undefined);
+  const closureCall = callCtx.closureCall ?? callCtx.runCtx.ambient.closureCall;
+  const { canBounce: _canBounce, configuration: _configuration, resources: _resources, ...rest } = callCtx;
+  return {
+    ...rest,
+    invocation: { currentInvocation },
+    ...(closureCall === undefined ? {} : { closureCall }),
+    // eslint-disable-next-line unicorn/no-negated-condition -- include configuration/resources only when the value has an owner
+    ...(owner !== undefined
+      ? {
+          configuration: callCtx.runCtx.capabilityConfigurations?.get(owner.capability),
+          resources: owner.readsResources ? resolveCapabilityResources(callCtx.runCtx, owner.capability) : undefined,
         }
       : {}),
   };

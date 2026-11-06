@@ -62,6 +62,7 @@ function canonicalNode(node: WireframeNode): string {
         node.op,
         `len:${node.lengthPreserving}`,
         `elParams:${node.elementParams ? node.elementParams.join(",") : ""}`,
+        ...(node.elementRest === undefined ? [] : [`elRest:${node.elementRest}`]),
         `fnOp:${node.fnOp ?? ""}`,
         `roles:${node.callbackRoles ? JSON.stringify(node.callbackRoles) : ""}`,
         `template:${node.template ? hashGraph(node.template) : ""}`,

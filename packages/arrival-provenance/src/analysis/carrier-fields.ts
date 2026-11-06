@@ -168,6 +168,144 @@ function headSymbol(node: unknown): string | null {
 /** Collection ops `classify` models as a per-element fan template (mirrors the arrival
  *  classifier's FAN_OPS — fan-ness is not structural, so it's a tiny enumerated set). */
 const FAN_OPS: ReadonlySet<string> = new Set(["map", "filter", "vector-map"]);
+const LET_HEADS: ReadonlySet<string> = new Set(["let", "let*", "letrec", "letrec*"]);
+
+function symName(v: unknown): string | null {
+  if (v !== null && typeof v === "object" && "__name__" in v) {
+    const n = (v as { __name__: unknown }).__name__;
+    if (typeof n === "string") return n;
+  }
+  return null;
+}
+
+function seqElements(v: unknown): Ast[] {
+  if (isPair(v)) {
+    const out: Ast[] = [];
+    let cur: unknown = v;
+    while (isPair(cur)) {
+      out.push(cur.car);
+      cur = cur.cdr;
+    }
+    return out;
+  }
+  const vec = (v as { __vector__?: unknown } | null)?.__vector__;
+  return Array.isArray(vec) ? (vec as Ast[]) : [];
+}
+
+function loweredNode(v: unknown): unknown {
+  return (v as { "arrival/tagless-final/lower"?: () => unknown } | null)?.["arrival/tagless-final/lower"]?.() ?? v;
+}
+
+function letBindingsOf(node: unknown): { name: string; valExpr: Ast }[] {
+  const parts = operandsOf(node);
+  if (parts.length === 0) return [];
+  const bindingsNode = symName(parts[0]) === null ? parts[0] : parts[1];
+  const out: { name: string; valExpr: Ast }[] = [];
+  for (const b of seqElements(bindingsNode)) {
+    const bp = seqElements(b);
+    const name = symName(bp[0]);
+    if (name !== null && bp.length >= 2) {
+      out.push({ name, valExpr: bp[1]! });
+    }
+  }
+  return out;
+}
+
+function letContextFor(
+  inv: Invocation,
+  classifier: Classifier,
+): {
+  subst: Map<string, LineageNode>;
+  scopeForArg: (argExpr: Ast, baseScope: Set<number>) => { scope: Set<number>; roots: Invocation[] };
+} {
+  const ancestors: Invocation[] = [];
+  for (let p = inv.parent; p !== null; p = p.parent) {
+    if (LET_HEADS.has(headSymbol(p.node) ?? "")) ancestors.push(p);
+  }
+  ancestors.reverse();
+
+  const subst = new Map<string, LineageNode>();
+  const rhsInvByName = new Map<string, Invocation | undefined>();
+  const depsByName = new Map<string, Set<string>>();
+
+  for (const anc of ancestors) {
+    const isSeq = headSymbol(anc.node) !== "let";
+    const outerSubst = new Map(subst);
+    for (const { name, valExpr } of letBindingsOf(anc.node)) {
+      const rawSlots = slotsOf(classify(valExpr, classifier));
+      const rhsNode = classify(valExpr, classifier, isSeq ? subst : outerSubst);
+      const lowered = loweredNode(valExpr);
+      const rhsInv = anc.children.find((c) => c.node === lowered);
+      if (collectFieldNodes(rhsNode).length > 0) {
+        subst.set(name, rhsNode);
+        rhsInvByName.set(name, rhsInv);
+        depsByName.set(name, rawSlots);
+      } else if (subst.has(name)) {
+        subst.delete(name);
+        rhsInvByName.delete(name);
+        depsByName.delete(name);
+      }
+    }
+  }
+
+  const scopeForArg = (argExpr: Ast, baseScope: Set<number>): { scope: Set<number>; roots: Invocation[] } => {
+    const loweredArg = loweredNode(argExpr);
+    const argInv = inv.children.find((c) => c.node === loweredArg);
+    if (subst.size === 0) {
+      return { scope: baseScope, roots: argInv ? [argInv] : [] };
+    }
+    const queue = [...slotsOf(classify(argExpr, classifier))];
+    const visited = new Set<string>();
+    const extraRoots: Invocation[] = [];
+    while (queue.length > 0) {
+      const s = queue.pop()!;
+      if (visited.has(s)) continue;
+      visited.add(s);
+      const rInv = rhsInvByName.get(s);
+      if (rInv) extraRoots.push(rInv);
+      for (const dep of depsByName.get(s) ?? []) queue.push(dep);
+    }
+    if (extraRoots.length === 0) {
+      return { scope: baseScope, roots: argInv ? [argInv] : [] };
+    }
+    const scope = new Set(baseScope);
+    for (const rInv of extraRoots) {
+      for (const id of subtreeIds(rInv)) scope.add(id);
+    }
+    return { scope, roots: [...(argInv ? [argInv] : []), ...extraRoots] };
+  };
+
+  return { subst, scopeForArg };
+}
+
+function inlineSourceProducers(
+  roots: readonly Invocation[],
+  key: string,
+  classifier: Classifier,
+  consumer: number,
+): number[] {
+  const producers = new Set<number>();
+  const stack: Invocation[] = [...roots];
+  while (stack.length > 0) {
+    const cur = stack.pop()!;
+    if (cur.id === consumer || cur.isProvenancePoint) continue;
+    const skel = classify(cur.node as Ast, classifier);
+    if (skel.kind === "field" && "field" in skel.step && skel.step.field === key && !hasKeywordField(skel.child)) {
+      const pStack: Invocation[] = [...cur.children];
+      while (pStack.length > 0) {
+        const p = pStack.pop()!;
+        if (p.isProvenancePoint) {
+          if (p.id !== consumer) producers.add(p.id);
+        } else {
+          pStack.push(...p.children);
+        }
+      }
+      continue;
+    }
+    stack.push(...cur.children);
+  }
+  return [...producers];
+}
 
 /**
  * A `Classifier` derived from the TRACE — no env, no caller-supplied source list. The source ops
@@ -212,12 +350,15 @@ export function carrierFieldEdges(
   for (const inv of trace.invocationLog) {
     if (!inv.isProvenancePoint) continue; // consumers are the source-points (infer/effect calls)
     const consumer = inv.id;
-    const scope = subtreeIds(inv); // resolve this consumer's slots only against ITS subtree's bindings
+    const baseScope = subtreeIds(inv); // resolve this consumer's slots only against ITS subtree's bindings
+    const { subst, scopeForArg } = letContextFor(inv, classifier);
     for (const argExpr of operandsOf(inv.node)) {
-      for (const fieldNode of collectFieldNodes(classify(argExpr, classifier))) {
+      const { scope, roots } = scopeForArg(argExpr, baseScope);
+      for (const fieldNode of collectFieldNodes(classify(argExpr, classifier, subst))) {
         const { base, key } = fieldResolve(fieldNode, scopedBindings(auto, scope, slotsOf(fieldNode)));
         if (key === null) continue; // positional-forward (car / index) — no pin (D-v02-4)
-        for (const producer of base) {
+        const producers = base.length > 0 ? base : inlineSourceProducers(roots, key, classifier, consumer);
+        for (const producer of producers) {
           if (producer === consumer) continue; // self-edge — a mid-flight artifact (matches statechart.ts:176)
           const edge = `${producer}>${consumer}`;
           (out.get(edge) ?? out.set(edge, new Set<string>()).get(edge)!).add(key);

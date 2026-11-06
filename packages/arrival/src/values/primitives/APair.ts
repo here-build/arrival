@@ -596,11 +596,12 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
   // Async-aware reduce, SRFI fold `fn(element, acc)`, left fold.
   // `(reduce - 100 '(1 2 3 4 5))` = -97, NOT the FL acc-first 85.
   async ["arrival/tagless-final/reduce"]<Acc>(fn: ACallable, initial: Acc, runCtx: RunContext): Promise<Acc> {
+    const callCtx = makeCallCtx(runCtx);
     let acc = initial;
     let node: unknown = this;
     while (node instanceof APair) {
       const p = node;
-      acc = (await applyCallback(fn, [p.car, acc], makeCallCtx(runCtx))) as Acc;
+      acc = (await applyCallback(fn, [p.car, acc], callCtx)) as Acc;
       node = p.cdr;
     }
     return acc;
@@ -640,10 +641,11 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
 
   // SRFI-1 take-while — SEQUENTIAL (stop at first falsy). LENGTH-CHANGING.
   async ["arrival/tagless-final/take-while"](pred: ACallable, runCtx: RunContext): Promise<AListAlike> {
+    const callCtx = makeCallCtx(runCtx);
     const out: SchemeValue[] = [];
     let node: unknown = this;
     while (node instanceof APair) {
-      const verdict = await applyCallback(pred, [node.car], makeCallCtx(runCtx));
+      const verdict = await applyCallback(pred, [node.car], callCtx);
       if (is_false(verdict)) break; // R7RS: only #f is false
       out.push(node.car);
       node = node.cdr;
@@ -653,9 +655,10 @@ export class APair<Car extends SchemeValue, Cdr extends SchemeValue> extends AVa
 
   // SRFI-1 drop-while — SHARED tail, sequential pred.
   async ["arrival/tagless-final/drop-while"](pred: ACallable, runCtx: RunContext): Promise<SchemeValue> {
+    const callCtx = makeCallCtx(runCtx);
     let node: SchemeValue = this;
     while (node instanceof APair) {
-      const verdict = await applyCallback(pred, [node.car], makeCallCtx(runCtx));
+      const verdict = await applyCallback(pred, [node.car], callCtx);
       if (is_false(verdict)) return node; // R7RS: only #f is false
       node = node.cdr as SchemeValue;
     }

@@ -209,8 +209,9 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
       }
       return withInputProvenance(runCtx, [this, ...out], new AVector(out));
     }
+    const callCtx = makeCallCtx(runCtx);
     for (const v of this.__vector__) {
-      const verdict = await applyCallback(arg, [v], makeCallCtx(runCtx));
+      const verdict = await applyCallback(arg, [v], callCtx);
       if (!is_false(verdict)) out.push(v); // R7RS: only #f is false
     }
     return withInputProvenance(runCtx, [this, ...out], new AVector(out));
@@ -228,8 +229,9 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
       alternative: "reduce the list form via (vector->list v)",
     });
 
+    const callCtx = makeCallCtx(runCtx);
     let acc = initial;
-    for (const v of this.__vector__) acc = (await applyCallback(fn, [v, acc], makeCallCtx(runCtx))) as Acc;
+    for (const v of this.__vector__) acc = (await applyCallback(fn, [v, acc], callCtx)) as Acc;
     return acc;
   }
 
@@ -271,9 +273,10 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
       rule: "`take-while` (SRFI-1) operates on lists; a vector is not a list",
       alternative: "(list->vector (take-while pred (vector->list v)))",
     });
+    const callCtx = makeCallCtx(runCtx);
     const out: SchemeValue[] = [];
     for (const v of this.__vector__) {
-      const verdict = await applyCallback(pred, [v], makeCallCtx(runCtx));
+      const verdict = await applyCallback(pred, [v], callCtx);
       if (is_false(verdict)) break;
       out.push(v);
     }
@@ -286,9 +289,10 @@ export class AVector<T extends SchemeValue = SchemeValue> extends AValue {
       rule: "`drop-while` (SRFI-1) operates on lists; a vector is not a list",
       alternative: "(list->vector (drop-while pred (vector->list v)))",
     });
+    const callCtx = makeCallCtx(runCtx);
     let i = 0;
     for (; i < this.__vector__.length; i++) {
-      const verdict = await applyCallback(pred, [this.__vector__[i]!], makeCallCtx(runCtx));
+      const verdict = await applyCallback(pred, [this.__vector__[i]!], callCtx);
       if (is_false(verdict)) break;
     }
     const out = this.__vector__.slice(i);
