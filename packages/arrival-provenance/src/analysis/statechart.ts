@@ -140,17 +140,24 @@ export function traceToStatechart(trace: EvalTrace, opts: { fieldEdges?: Map<str
   //    provenance id resolves to a real producer point. (A non-point that resolves
   //    to nothing — only possible mid-flight — is dropped.) The per-edge field PINS
   //    are supplied separately by the carrier (`carrierFieldEdges`, step 5).
+  const symbolsOf = new Map<number, Iterable<ReadonlySet<number>>>();
+  for (const rec of trace.records.values()) {
+    for (const inv of rec.bindings) {
+      if (inv.isProvenancePoint && inv.symbolContributions) symbolsOf.set(inv.id, inv.symbolContributions);
+    }
+  }
   const upstream = new Map<number, Set<number>>();
   for (const [id, inv] of points) {
     const ups = new Set<number>();
-    // The upstream infers feeding this point are ⋃ child.provenance over its
-    // direct children — iterate that straight through, no intermediate union set.
+    const take = (u: number): void => {
+      const r = resolvePoint(points, u);
+      if (r && r.origin !== id) ups.add(r.origin);
+    };
     for (const child of inv.children) {
-      for (const u of child.provenance) {
-        const r = resolvePoint(points, u);
-        if (!r || r.origin === id) continue;
-        ups.add(r.origin);
-      }
+      for (const u of child.provenance) take(u);
+    }
+    for (const s of symbolsOf.get(id) ?? []) {
+      for (const u of s) take(u);
     }
     upstream.set(id, ups);
   }

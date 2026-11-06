@@ -57,13 +57,23 @@ export function traceToChain(trace: EvalTrace): ProvenanceChain {
   // structured-output membrane (`(:verdict (car reactions))`, `(:next …)`) forwards
   // the producer's own point rather than a field-point that truncates to it — so each
   // provenance id IS already its origin point (no `fieldPointMeta` walk needed).
+  const symbolsOf = new Map<number, Iterable<ReadonlySet<number>>>();
+  for (const rec of trace.records.values()) {
+    for (const inv of rec.bindings) {
+      if (inv.isProvenancePoint && inv.symbolContributions) symbolsOf.set(inv.id, inv.symbolContributions);
+    }
+  }
   const upstreamOf = new Map<number, number[]>();
   for (const x of points) {
     const up = new Set<number>();
+    const take = (p: number): void => {
+      if (p !== x.id && pointIds.has(p)) up.add(p);
+    };
     for (const child of x.children) {
-      for (const p of child.provenance) {
-        if (p !== x.id && pointIds.has(p)) up.add(p);
-      }
+      for (const p of child.provenance) take(p);
+    }
+    for (const s of symbolsOf.get(x.id) ?? []) {
+      for (const p of s) take(p);
     }
     upstreamOf.set(x.id, [...up]);
   }

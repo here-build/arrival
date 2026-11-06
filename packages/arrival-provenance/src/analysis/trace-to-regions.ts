@@ -516,13 +516,19 @@ export function addPointToHasse(
 
 /** x's in-graph upstream origin set: ⋃ over x's children of child.provenance, origin-
  *  resolved (identity under forward) and kept iff it's a point and not x. */
-export function upstreamOfPoint(x: PlainInv, pointIds: ReadonlySet<number>): Set<number> {
+export function upstreamOfPoint(
+  x: PlainInv,
+  pointIds: ReadonlySet<number>,
+  symbols?: Iterable<ReadonlySet<number>> | null,
+): Set<number> {
   const up = new Set<number>();
-  for (const c of x.children)
-    for (const p of c.provenance) {
-      const o = resolveOriginVia(p);
-      if (o !== x.id && pointIds.has(o)) up.add(o);
-    }
+  const take = (p: number): void => {
+    const o = resolveOriginVia(p);
+    if (o !== x.id && pointIds.has(o)) up.add(o);
+  };
+  for (const c of x.children) for (const p of c.provenance) take(p);
+  // A bare-symbol argument is no invocation: its provenance lands on the point itself.
+  for (const s of symbols ?? []) for (const p of s) take(p);
   return up;
 }
 
@@ -815,7 +821,9 @@ export function regionsAt(inv: PlainInv, ctx: RegionWalkCtx): Region[] {
     // ARGUMENT is recognized by its node being one of the form's own argument ASTs;
     // element applications' nodes are the lambda/body, never an argument position.
     const argNodes = new Set(astArgs(inv.node));
-    const applChildren = inv.children.filter((c) => c.children.length > 0 && !argNodes.has(c.node));
+    const applChildren = inv.children.filter(
+      (c) => (c.children.length > 0 || c.isProvenancePoint) && !argNodes.has(c.node),
+    );
     // An iteration that flattens to nothing meaningful is dropped; `incoming`
     // keeps the RAW count so the banner can say "10 incoming, 5 mattered". A map
     // application is FROZEN once it has resolved (its subtree no longer grows —
@@ -846,7 +854,7 @@ export function regionsAt(inv: PlainInv, ctx: RegionWalkCtx): Region[] {
     // computed before the fan), never as an element: counting it as one is exactly the
     // phantom-11th bug this split fixes.
     const argRegions = inv.children
-      .filter((c) => c.children.length > 0 && argNodes.has(c.node))
+      .filter((c) => (c.children.length > 0 || c.isProvenancePoint) && argNodes.has(c.node))
       .flatMap((c) => regionsAt(c, ctx));
     // Degenerate container (mapped/filtered over non-inference data) → drop it; a live
     // gated selection still shows its decision (pure-pred filters have empty bodies).
@@ -1271,7 +1279,7 @@ function buildRegions(snap: PlainTrace, trace: EvalTrace): RegionGraph {
   const reach = new Map<number, Set<number>>();
   const edges: RegionEdge[] = [];
   for (const x of [...points].sort((a, b) => a.id - b.id)) {
-    const up = upstreamOfPoint(x, pointIds);
+    const up = upstreamOfPoint(x, pointIds, liveById.get(x.id)?.symbolContributions);
     const { edges: added } = addPointToHasse(x.id, up, reach);
     edges.push(...added);
   }

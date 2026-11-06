@@ -17,6 +17,7 @@
 import { EnvCapability, execState, LexicalScope } from "@here.build/arrival";
 import { describe, expect, it } from "vitest";
 
+import { traceToChain, traceToStatechart } from "../analysis.js";
 import { EvalTrace, TraceRegionFold, traceToRegions, type Invocation, type Region } from "../index.js";
 
 type Leaf = Extract<Region, { kind: "leaf" }>;
@@ -103,5 +104,60 @@ describe("TraceRegionFold — late point promotion (streaming-host marking race)
     expect(settled).toHaveLength(1);
     expect(settled[0]!.state).toBe("resolved");
     expect(settled[0]!.value).toBe("SRC:q");
+  });
+
+  it("retains childless point leaves in fanout args/bodies and wires bare-symbol provenance across regions, fold, statechart, and chain", async () => {
+    const trace = new EvalTrace();
+    const capability = EnvCapability.define("test/bare-symbol-fanout", {
+      symbols: (symbol, z) => ({
+        "list-items": symbol.rosetta`list-items: inline collection producer`(
+          { input: [z.string], output: [z.list(z.string)] },
+          (dir) => [`${dir}/a`, `${dir}/b`],
+        ),
+        "read-item": symbol.rosetta`read-item: leaf-only map body taking a bare symbol`(
+          { input: [z.string], output: [z.string] },
+          (path) => `content:${path}`,
+        ),
+        summarize: symbol.rosetta`summarize: consumer taking a bare symbol`(
+          { input: [z.string], output: [z.string] },
+          (merged) => `summary:${merged}`,
+        ),
+      }),
+    });
+
+    const program = `
+      (define items (map (lambda (f) (read-item f)) (list-items "src")))
+      (define merged (apply string-append items))
+      (summarize merged)
+    `;
+    await execState(program, { scope: LexicalScope.fresh("bare-sym-test"), tap: trace, capabilities: [capability] });
+
+    const regions = traceToRegions(trace);
+    expect(TraceRegionFold.fromTrace(trace)).toEqual(regions);
+
+    const leaves = leavesOf(regions.roots);
+    const [listItems, readA, readB, summarize] = leaves;
+    expect(leaves.map((l) => l.label)).toEqual(["list-items", "read-item", "read-item", "summarize"]);
+    expect(regions.roots.map((r) => r.kind)).toEqual(["leaf", "fanout", "leaf", "output"]);
+    expect(regions.edges).toEqual([
+      { from: listItems!.id, to: readA!.id, kind: "data" },
+      { from: listItems!.id, to: readB!.id, kind: "data" },
+      { from: readA!.id, to: summarize!.id, kind: "data" },
+      { from: readB!.id, to: summarize!.id, kind: "data" },
+      { from: summarize!.id, to: -1, kind: "data" },
+    ]);
+
+    expect(traceToStatechart(trace).edges).toEqual([
+      { from: listItems!.id, to: readA!.id, kind: "forward" },
+      { from: listItems!.id, to: summarize!.id, kind: "forward" },
+      { from: readA!.id, to: summarize!.id, kind: "forward" },
+    ]);
+    expect(traceToChain(trace).edges).toEqual([
+      { from: listItems!.id, to: readA!.id },
+      { from: listItems!.id, to: readB!.id },
+      { from: listItems!.id, to: summarize!.id },
+      { from: readA!.id, to: summarize!.id },
+      { from: readB!.id, to: summarize!.id },
+    ]);
   });
 });

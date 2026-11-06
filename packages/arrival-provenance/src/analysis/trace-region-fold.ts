@@ -266,7 +266,7 @@ export class TraceRegionFold {
     for (const inv of fresh) {
       if (!inv.isProvenancePoint) continue;
       const plain = this.#invById.get(inv.id)!;
-      const up = upstreamOfPoint(plain, this.#pointIds);
+      const up = upstreamOfPoint(plain, this.#pointIds, this.#liveById.get(plain.id)?.symbolContributions);
       const { edges: added } = addPointToHasse(plain.id, up, this.#reach);
       this.#baseEdges.push(...added);
     }
@@ -479,7 +479,7 @@ export class TraceRegionFold {
     while (i > 0 && points[i - 1]!.id > plain.id) i--;
     points.splice(i, 0, plain);
     this.#pointIds.add(plain.id);
-    const up = upstreamOfPoint(plain, this.#pointIds);
+    const up = upstreamOfPoint(plain, this.#pointIds, live.symbolContributions);
     const { edges: added } = addPointToHasse(plain.id, up, this.#reach);
     // Base edges stay grouped ascending by target point (parity with from-scratch).
     const edges = this.#baseEdges;
